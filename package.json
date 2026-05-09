@@ -12,7 +12,11 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview"
   },
-  "dependencies": {},
+  "dependencies": {
+    "dompurify": "^3.2.4",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
+  },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "electron": "^33.3.2",

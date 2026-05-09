@@ -1,0 +1,19 @@
+:root[data-theme='dark'] {
+  --color-bg: #1e1e1e;
+  --color-surface: #252526;
+  --color-border: #3c3c3c;
+  --color-text: #e8e8e8;
+  --color-muted: #a8a8a8;
+  --color-accent: #58a6ff;
+  --color-danger: #ff7b72;
+  --font-ui: system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-size-sm: 12px;
+  --font-size-code: 13px;
+  --font-weight-heading: 600;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --radius-sm: 4px;
+  --recents-width: 260px;
+}

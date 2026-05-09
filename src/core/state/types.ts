@@ -11,11 +11,14 @@ export interface Document {
   readonly lastModified: string | null
 }
 
+export type ThemeMode = 'light' | 'dark' | 'system'
+
 export interface AppState {
   readonly documentsById: Map<string, Document>
   readonly recentDocumentIds: string[]
   readonly currentDocumentId: string | null
   readonly editorContent: string
+  readonly themeMode: ThemeMode
 }
 
 /** Upsert payload for explicit opens; `lastOpened` is always overwritten by the transition. */
@@ -27,3 +30,4 @@ export type AppAction =
   | { readonly type: 'OPEN_EXPLICIT'; readonly document: DocumentInput }
   | { readonly type: 'ACTIVATE_FROM_RECENT_LIST'; readonly documentId: string }
   | { readonly type: 'EDITOR_CHANGE'; readonly content: string }
+  | { readonly type: 'SET_THEME_MODE'; readonly mode: ThemeMode }

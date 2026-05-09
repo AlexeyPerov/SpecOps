@@ -71,4 +71,12 @@ describe('reduceAppState', () => {
     expect(state.editorContent).toBe('edited')
     expect(state.documentsById.get('a')!.content).toBe('A')
   })
+
+  it('SET_THEME_MODE updates theme preference only', () => {
+    let state = createInitialAppState()
+    expect(state.themeMode).toBe('system')
+    state = reduceAppState(state, { type: 'SET_THEME_MODE', mode: 'dark' }, t0)
+    expect(state.themeMode).toBe('dark')
+    expect(state.documentsById.size).toBe(0)
+  })
 })

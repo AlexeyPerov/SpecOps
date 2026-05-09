@@ -5,7 +5,8 @@ export function createInitialAppState(): AppState {
     documentsById: new Map(),
     recentDocumentIds: [],
     currentDocumentId: null,
-    editorContent: ''
+    editorContent: '',
+    themeMode: 'system'
   }
 }
 
@@ -25,6 +26,9 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
   switch (action.type) {
     case 'EDITOR_CHANGE':
       return { ...state, editorContent: action.content }
+
+    case 'SET_THEME_MODE':
+      return { ...state, themeMode: action.mode }
 
     case 'OPEN_EXPLICIT': {
       const doc: Document = {

@@ -141,3 +141,15 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Electron
+dist/
+dist-electron/
+out/
+*.log
+.DS_Store
+
+
+# Specs
+/specs/
+

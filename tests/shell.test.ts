@@ -17,7 +17,14 @@ const mockSpecOps: SpecOpsPreloadApi = {
   readTextFile: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
   createMarkdownInWorkspace: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
   setWatchedDocPath: vi.fn(async () => {}),
-  onExternalFileChanged: vi.fn(() => () => {})
+  onExternalFileChanged: vi.fn(() => () => {}),
+  writeTextFile: vi.fn(async () => ({ ok: true as const, mtimeIso: '2026-01-01T00:00:00.000Z' })),
+  pickOpenMarkdownFile: vi.fn(async () => ({ canceled: true as const })),
+  pickSaveMarkdownFile: vi.fn(async () => ({ canceled: true as const })),
+  promptDirtyNavigation: vi.fn(async () => 'discard' as const),
+  confirmDeleteFile: vi.fn(async () => false),
+  renamePathOnDisk: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
+  unlinkFilePath: vi.fn(async () => ({ ok: false as const, reason: 'stub' }))
 }
 
 describe('UPH-01 shell (TEST-02 harness)', () => {

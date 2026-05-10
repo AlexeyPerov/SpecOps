@@ -16,6 +16,26 @@ export type CreateMarkdownResult =
   | Readonly<{ ok: true; absolutePath: string }>
   | Readonly<{ ok: false; reason: string }>
 
+export type WriteTextFileResult =
+  | Readonly<{ ok: true; mtimeIso: string }>
+  | Readonly<{ ok: false; reason: string }>
+
+export type PickOpenMarkdownFileResult =
+  | Readonly<{ canceled: true }>
+  | Readonly<{ canceled: false; filePath: string }>
+
+export type PickSaveMarkdownFileResult =
+  | Readonly<{ canceled: true }>
+  | Readonly<{ canceled: false; filePath: string }>
+
+export type DirtyNavigationChoice = 'save' | 'discard' | 'cancel'
+
+export type RenamePathResult =
+  | Readonly<{ ok: true; mtimeIso: string }>
+  | Readonly<{ ok: false; reason: string }>
+
+export type UnlinkPathResult = Readonly<{ ok: true }> | Readonly<{ ok: false; reason: string }>
+
 export type ExternalFileChangedPayload = Readonly<{
   path: string
   content: string
@@ -38,4 +58,19 @@ export type SpecOpsPreloadApi = Readonly<{
   }) => Promise<CreateMarkdownResult>
   setWatchedDocPath: (absolutePath: string | null) => Promise<void>
   onExternalFileChanged: (callback: (payload: ExternalFileChangedPayload) => void) => () => void
+  writeTextFile: (payload: {
+    absolutePath: string
+    content: string
+  }) => Promise<WriteTextFileResult>
+  pickOpenMarkdownFile: () => Promise<PickOpenMarkdownFileResult>
+  pickSaveMarkdownFile: (payload?: {
+    defaultPath?: string
+  }) => Promise<PickSaveMarkdownFileResult>
+  promptDirtyNavigation: () => Promise<DirtyNavigationChoice>
+  confirmDeleteFile: (basename: string) => Promise<boolean>
+  renamePathOnDisk: (payload: {
+    fromPath: string
+    toPath: string
+  }) => Promise<RenamePathResult>
+  unlinkFilePath: (absolutePath: string) => Promise<UnlinkPathResult>
 }>

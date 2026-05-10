@@ -9,6 +9,7 @@ import {
   isEditorDirty,
   isFolderExpanded
 } from '../../core/state/fileListPresentation'
+import { pathBasename, replaceBasename, stableDocIdForPath } from '../../core/util/paths'
 import { attachPreviewChrome, mountPreview, previewErrorSnippet } from '../previewHost'
 
 export interface RendererBootContext {
@@ -39,16 +40,6 @@ const SAMPLE_DOC_B: DocumentInput = {
   content: '# Bravo\n\nSecond document.\n\n[Example](https://example.com)\n',
   path: null,
   lastModified: null
-}
-
-function pathBasename(p: string): string {
-  const norm = p.replace(/\\/g, '/')
-  const i = norm.lastIndexOf('/')
-  return i >= 0 ? norm.slice(i + 1) : norm
-}
-
-function stableDocIdForPath(absolutePath: string): string {
-  return absolutePath.replace(/\\/g, '/')
 }
 
 function triggerWorkspaceMotion(workspaceEl: HTMLElement): void {
@@ -141,6 +132,10 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   root.innerHTML = `
     <header class="app-toolbar" role="banner">
+      <button type="button" id="btn-open-markdown" class="toolbar-btn">Open…</button>
+      <button type="button" id="btn-save" class="toolbar-btn">Save</button>
+      <button type="button" id="btn-save-as" class="toolbar-btn">Save As…</button>
+      <button type="button" id="btn-new-untitled" class="toolbar-btn">New untitled</button>
       <button type="button" id="btn-workspace-folder" class="toolbar-btn">Workspace folder…</button>
       <button type="button" id="btn-new-markdown" class="toolbar-btn">New markdown in workspace…</button>
       <button type="button" id="btn-seed-demos" class="toolbar-btn">Seed demo documents</button>
@@ -250,6 +245,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
       <button type="button" role="menuitem" class="context-menu-item" data-action="reveal"${hasPath ? '' : ' disabled'}>Reveal in folder</button>
       <button type="button" role="menuitem" class="context-menu-item" data-action="remove">Remove from recents</button>
       <button type="button" role="menuitem" class="context-menu-item" data-action="copy-path"${hasPath ? '' : ' disabled'}>Copy path</button>
+      <button type="button" role="menuitem" class="context-menu-item" data-action="rename-file"${hasPath ? '' : ' disabled'}>Rename file…</button>
+      <button type="button" role="menuitem" class="context-menu-item" data-action="delete-file"${hasPath ? '' : ' disabled'}>Delete file…</button>
       <button type="button" role="menuitem" class="context-menu-item" data-action="copy-name">Copy filename</button>
     `
     contextMenu.hidden = false
@@ -274,6 +271,145 @@ export function bootRenderer(ctx: RendererBootContext): void {
     const path =
       st.currentDocumentId !== null ? st.documentsById.get(st.currentDocumentId)?.path ?? null : null
     await specOps.setWatchedDocPath(path && path.trim() ? path : null)
+  }
+
+  function openLoadedDocument(absPath: string, content: string, lastModified: string | null): void {
+    const id = stableDocIdForPath(absPath)
+    store.dispatch({
+      type: 'OPEN_EXPLICIT',
+      document: {
+        id,
+        title: pathBasename(absPath).replace(/\.md$/i, '') || id,
+        content,
+        path: absPath,
+        lastModified
+      }
+    })
+    schedulePreview.flush()
+  }
+
+  async function openMarkdownFromAbsolutePath(absPath: string): Promise<void> {
+    const read = await specOps.readTextFile(absPath)
+    if (!read.ok) {
+      window.alert(`Could not open file (${read.reason}).`)
+      return
+    }
+    openLoadedDocument(absPath, read.content, read.mtimeIso)
+  }
+
+  async function saveCurrentBuffer(): Promise<boolean> {
+    const st = store.getState()
+    const id = st.currentDocumentId
+    if (!id) return false
+    const doc = st.documentsById.get(id)
+    if (!doc) return false
+    const body = st.editorContent
+    const targetPath = doc.path?.trim()
+    if (targetPath) {
+      const wr = await specOps.writeTextFile({ absolutePath: targetPath, content: body })
+      if (!wr.ok) {
+        window.alert(`Save failed (${wr.reason}).`)
+        return false
+      }
+      store.dispatch({
+        type: 'SYNC_DOCUMENT_FROM_DISK',
+        documentId: id,
+        content: body,
+        lastModified: wr.mtimeIso
+      })
+      schedulePreview.flush()
+      return true
+    }
+    const pick = await specOps.pickSaveMarkdownFile({
+      defaultPath: doc.title ? `${doc.title}.md` : undefined
+    })
+    if (pick.canceled) return false
+    const wr = await specOps.writeTextFile({ absolutePath: pick.filePath, content: body })
+    if (!wr.ok) {
+      window.alert(`Save failed (${wr.reason}).`)
+      return false
+    }
+    store.dispatch({
+      type: 'REPARENT_DOCUMENT',
+      oldDocumentId: id,
+      newAbsolutePath: pick.filePath,
+      content: body,
+      lastModified: wr.mtimeIso
+    })
+    void syncWatchPath()
+    schedulePreview.flush()
+    return true
+  }
+
+  async function saveCurrentBufferAs(): Promise<boolean> {
+    const st = store.getState()
+    const id = st.currentDocumentId
+    if (!id) return false
+    const doc = st.documentsById.get(id)
+    if (!doc) return false
+    const body = st.editorContent
+    const pick = await specOps.pickSaveMarkdownFile({
+      defaultPath: doc.path ?? (doc.title ? `${doc.title}.md` : undefined)
+    })
+    if (pick.canceled) return false
+    const wr = await specOps.writeTextFile({ absolutePath: pick.filePath, content: body })
+    if (!wr.ok) {
+      window.alert(`Save failed (${wr.reason}).`)
+      return false
+    }
+    const newId = stableDocIdForPath(pick.filePath)
+    if (newId === id) {
+      store.dispatch({
+        type: 'SYNC_DOCUMENT_FROM_DISK',
+        documentId: id,
+        content: body,
+        lastModified: wr.mtimeIso
+      })
+    } else {
+      store.dispatch({
+        type: 'REPARENT_DOCUMENT',
+        oldDocumentId: id,
+        newAbsolutePath: pick.filePath,
+        content: body,
+        lastModified: wr.mtimeIso
+      })
+    }
+    void syncWatchPath()
+    schedulePreview.flush()
+    return true
+  }
+
+  async function runAfterDirtyPrompt(action: () => void | Promise<void>): Promise<void> {
+    const st = store.getState()
+    if (!isEditorDirty(st)) {
+      await Promise.resolve(action())
+      return
+    }
+    const choice = await specOps.promptDirtyNavigation()
+    if (choice === 'cancel') return
+    if (choice === 'discard') {
+      const sid = st.currentDocumentId
+      if (sid) {
+        const d = st.documentsById.get(sid)
+        if (d) store.dispatch({ type: 'EDITOR_CHANGE', content: d.content })
+      }
+      await Promise.resolve(action())
+      return
+    }
+    const saved = await saveCurrentBuffer()
+    if (!saved) return
+    await Promise.resolve(action())
+  }
+
+  function collectDroppedMarkdownPaths(dt: DataTransfer | null): string[] {
+    const out: string[] = []
+    const files = dt?.files
+    if (!files?.length) return out
+    for (let i = 0; i < files.length; i++) {
+      const raw = (files[i] as File & { path?: string }).path
+      if (typeof raw === 'string' && raw.toLowerCase().endsWith('.md')) out.push(raw)
+    }
+    return out
   }
 
   store.subscribe(() => {
@@ -321,9 +457,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
       return
     }
     const btn = target?.closest<HTMLButtonElement>('button.recent-item[data-recent-doc-id]')
-    if (!btn?.dataset.recentDocId) return
-    store.dispatch({ type: 'ACTIVATE_FROM_RECENT_LIST', documentId: btn.dataset.recentDocId })
-    requestAnimationFrame(() => schedulePreview.flush())
+    const docId = btn?.dataset.recentDocId
+    if (!docId) return
+    void runAfterDirtyPrompt(() => {
+      store.dispatch({ type: 'ACTIVATE_FROM_RECENT_LIST', documentId: docId })
+      requestAnimationFrame(() => schedulePreview.flush())
+    })
   })
 
   recentsListRoot.addEventListener('contextmenu', (event) => {
@@ -360,6 +499,54 @@ export function bootRenderer(ctx: RendererBootContext): void {
         void navigator.clipboard.writeText(name)
         break
       }
+      case 'rename-file': {
+        if (!doc.path) break
+        const currentBase = pathBasename(doc.path)
+        const nv = window.prompt('New file name', currentBase)
+        if (nv === null) break
+        let nextName = nv.trim().replace(/[/\\]/g, '')
+        if (!nextName) break
+        if (!nextName.toLowerCase().endsWith('.md')) nextName += '.md'
+        const newPath = replaceBasename(doc.path, nextName)
+        void (async () => {
+          const latest = store.getState()
+          const d = latest.documentsById.get(doc.id)
+          if (!d?.path) return
+          const rn = await specOps.renamePathOnDisk({ fromPath: d.path, toPath: newPath })
+          if (!rn.ok) {
+            window.alert(`Rename failed (${rn.reason}).`)
+            return
+          }
+          store.dispatch({
+            type: 'REPARENT_DOCUMENT',
+            oldDocumentId: d.id,
+            newAbsolutePath: newPath,
+            content: latest.editorContent,
+            lastModified: rn.mtimeIso
+          })
+          void syncWatchPath()
+          schedulePreview.flush()
+        })()
+        break
+      }
+      case 'delete-file': {
+        const pathToDelete = doc.path
+        if (!pathToDelete) break
+        const base = pathBasename(pathToDelete)
+        void (async () => {
+          const okDel = await specOps.confirmDeleteFile(base)
+          if (!okDel) return
+          const ul = await specOps.unlinkFilePath(pathToDelete)
+          if (!ul.ok) {
+            window.alert(`Delete failed (${ul.reason}).`)
+            return
+          }
+          store.dispatch({ type: 'DROP_DOCUMENT', documentId: doc.id })
+          void syncWatchPath()
+          schedulePreview.flush()
+        })()
+        break
+      }
       default:
         break
     }
@@ -384,8 +571,41 @@ export function bootRenderer(ctx: RendererBootContext): void {
     })()
   })
 
+  root.querySelector('#btn-open-markdown')!.addEventListener('click', () => {
+    void runAfterDirtyPrompt(async () => {
+      const pick = await specOps.pickOpenMarkdownFile()
+      if (pick.canceled) return
+      await openMarkdownFromAbsolutePath(pick.filePath)
+    })
+  })
+
+  root.querySelector('#btn-save')!.addEventListener('click', () => {
+    void saveCurrentBuffer()
+  })
+
+  root.querySelector('#btn-save-as')!.addEventListener('click', () => {
+    void saveCurrentBufferAs()
+  })
+
+  root.querySelector('#btn-new-untitled')!.addEventListener('click', () => {
+    void runAfterDirtyPrompt(() => {
+      const id = `untitled:${crypto.randomUUID()}`
+      store.dispatch({
+        type: 'OPEN_EXPLICIT',
+        document: {
+          id,
+          title: 'Untitled',
+          content: '',
+          path: null,
+          lastModified: null
+        }
+      })
+      schedulePreview.flush()
+    })
+  })
+
   root.querySelector('#btn-new-markdown')!.addEventListener('click', () => {
-    void (async () => {
+    void runAfterDirtyPrompt(async () => {
       const folder = store.getState().workspaceFolderPath
       if (!folder) {
         window.alert('Choose a workspace folder first.')
@@ -415,18 +635,20 @@ export function bootRenderer(ctx: RendererBootContext): void {
         }
       })
       schedulePreview.flush()
-    })()
+    })
   })
 
   root.querySelector('#btn-seed-demos')!.addEventListener('click', () => {
-    const t0 = new Date().toISOString()
-    store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_B }, t0)
-    store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_A }, t0)
-    schedulePreview.flush()
+    void runAfterDirtyPrompt(() => {
+      const t0 = new Date().toISOString()
+      store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_B }, t0)
+      store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_A }, t0)
+      schedulePreview.flush()
+    })
   })
 
   root.querySelector('#btn-open-fixture')!.addEventListener('click', () => {
-    void (async () => {
+    void runAfterDirtyPrompt(async () => {
       const docPath = await specOps.resolveRepoPath('fixtures', 'sample', 'readme.md')
       store.dispatch({
         type: 'OPEN_EXPLICIT',
@@ -439,7 +661,26 @@ export function bootRenderer(ctx: RendererBootContext): void {
         }
       })
       schedulePreview.flush()
-    })()
+    })
+  })
+
+  root.addEventListener('dragover', (e) => {
+    e.preventDefault()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+  })
+  root.addEventListener('drop', (e) => {
+    e.preventDefault()
+    const paths = collectDroppedMarkdownPaths(e.dataTransfer)
+    const first = paths[0]
+    if (!first) return
+    void runAfterDirtyPrompt(() => openMarkdownFromAbsolutePath(first))
+  })
+
+  window.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault()
+      void saveCurrentBuffer()
+    }
   })
 
   externalReload.addEventListener('click', () => {

@@ -54,3 +54,11 @@ export type AppAction =
       readonly lastModified: string | null
     }
   | { readonly type: 'SET_WORKSPACE_FOLDER'; readonly path: string | null }
+  | {
+      readonly type: 'REPARENT_DOCUMENT'
+      readonly oldDocumentId: string
+      readonly newAbsolutePath: string
+      readonly content: string
+      readonly lastModified: string | null
+    }
+  | { readonly type: 'DROP_DOCUMENT'; readonly documentId: string }

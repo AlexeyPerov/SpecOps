@@ -1,5 +1,6 @@
 import { folderKeyForDocumentPath, groupsForPresentation } from './fileListPresentation'
 import type { AppAction, AppState, Document } from './types'
+import { pathBasename, stableDocIdForPath } from '../util/paths'
 
 export function createInitialAppState(): AppState {
   return {
@@ -89,6 +90,69 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
 
     case 'SET_WORKSPACE_FOLDER':
       return { ...state, workspaceFolderPath: action.path }
+
+    case 'REPARENT_DOCUMENT': {
+      const doc = state.documentsById.get(action.oldDocumentId)
+      if (!doc) return state
+      const newId = stableDocIdForPath(action.newAbsolutePath)
+      const documentsById = new Map(state.documentsById)
+      documentsById.delete(action.oldDocumentId)
+      const base = pathBasename(action.newAbsolutePath)
+      const title = base.replace(/\.md$/i, '') || base
+      documentsById.set(newId, {
+        ...doc,
+        id: newId,
+        title,
+        path: action.newAbsolutePath,
+        content: action.content,
+        lastModified: action.lastModified
+      })
+      const recentDocumentIds = dedupeRecents(
+        state.recentDocumentIds.map((id) => (id === action.oldDocumentId ? newId : id))
+      )
+      let currentDocumentId = state.currentDocumentId
+      let editorContent = state.editorContent
+      if (state.currentDocumentId === action.oldDocumentId) {
+        currentDocumentId = newId
+        editorContent = action.content
+      }
+      let expandedFolderGroups = state.expandedFolderGroups
+      if (state.fileListGrouping === 'folder') {
+        const oldFk = folderKeyForDocumentPath(doc.path)
+        const newFk = folderKeyForDocumentPath(action.newAbsolutePath)
+        expandedFolderGroups = expandedFolderGroups.map((k) => (k === oldFk ? newFk : k))
+      }
+      return {
+        ...state,
+        documentsById,
+        recentDocumentIds,
+        currentDocumentId,
+        editorContent,
+        expandedFolderGroups
+      }
+    }
+
+    case 'DROP_DOCUMENT': {
+      if (!state.documentsById.has(action.documentId)) return state
+      const documentsById = new Map(state.documentsById)
+      documentsById.delete(action.documentId)
+      const filtered = state.recentDocumentIds.filter((id) => id !== action.documentId)
+      let currentDocumentId = state.currentDocumentId
+      let editorContent = state.editorContent
+      if (state.currentDocumentId === action.documentId) {
+        currentDocumentId = filtered[0] ?? null
+        editorContent = currentDocumentId
+          ? documentsById.get(currentDocumentId)?.content ?? ''
+          : ''
+      }
+      return {
+        ...state,
+        documentsById,
+        recentDocumentIds: filtered,
+        currentDocumentId,
+        editorContent
+      }
+    }
 
     case 'OPEN_EXPLICIT': {
       const doc: Document = {

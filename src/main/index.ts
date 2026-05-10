@@ -11,6 +11,8 @@ import {
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 
+import { createSaveQueue } from './saveSerialize'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 /** Project root when bundled under `<root>/out/main`. */
@@ -71,6 +73,18 @@ function watchSlotFor(senderId: number): WatchSlot {
   }
   return slot
 }
+
+function assertAbsoluteNormalizedPath(p: string): string | null {
+  try {
+    const r = normalize(resolve(p.trim()))
+    if (!isAbsolute(r)) return null
+    return r
+  } catch {
+    return null
+  }
+}
+
+const saveQueue = createSaveQueue()
 
 function stopDocWatcher(slot: WatchSlot): void {
   if (slot.debounceTimer) {
@@ -216,6 +230,114 @@ function registerSpecOpsHandlers(): void {
       })
     } catch {
       /* ignore */
+    }
+  })
+
+  ipcMain.handle(
+    'specops:write-text-file',
+    async (event, payload: { absolutePath: unknown; content: unknown }) => {
+      const wcId = event.sender.id
+      return saveQueue.enqueue(wcId, async () => {
+        const target = assertAbsoluteNormalizedPath(String(payload?.absolutePath ?? ''))
+        const content = typeof payload?.content === 'string' ? payload.content : null
+        if (!target || content === null) {
+          return { ok: false as const, reason: 'invalid_payload' }
+        }
+        try {
+          await fs.mkdir(dirname(target), { recursive: true })
+          await fs.writeFile(target, content, 'utf8')
+          const stat = await fs.stat(target)
+          return { ok: true as const, mtimeIso: stat.mtime.toISOString() }
+        } catch {
+          return { ok: false as const, reason: 'write_error' }
+        }
+      })
+    }
+  )
+
+  ipcMain.handle('specops:pick-open-markdown-file', async (event) => {
+    const win =
+      BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
+    const res = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }]
+    })
+    if (res.canceled || !res.filePaths[0]) return { canceled: true as const }
+    return { canceled: false as const, filePath: normalize(res.filePaths[0]) }
+  })
+
+  ipcMain.handle(
+    'specops:pick-save-markdown-file',
+    async (event, payload?: { defaultPath?: string }) => {
+      const win =
+        BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
+      const res = await dialog.showSaveDialog(win, {
+        defaultPath: typeof payload?.defaultPath === 'string' ? payload.defaultPath : undefined,
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      })
+      if (res.canceled || !res.filePath) return { canceled: true as const }
+      let fp = normalize(res.filePath)
+      if (!fp.toLowerCase().endsWith('.md')) fp += '.md'
+      return { canceled: false as const, filePath: fp }
+    }
+  )
+
+  ipcMain.handle('specops:dirty-navigation-prompt', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow()
+    if (!win) return 'cancel' as const
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Unsaved changes',
+      message: 'Save changes before continuing?',
+      buttons: ['Save', 'Discard', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2
+    })
+    if (response === 0) return 'save' as const
+    if (response === 1) return 'discard' as const
+    return 'cancel' as const
+  })
+
+  ipcMain.handle('specops:confirm-delete-file', async (event, basename: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow()
+    if (!win) return false
+    const name = typeof basename === 'string' && basename.trim() ? basename : 'this file'
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Delete file',
+      message: `Delete "${name}" permanently?`,
+      buttons: ['Delete', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1
+    })
+    return response === 0
+  })
+
+  ipcMain.handle(
+    'specops:rename-path-on-disk',
+    async (_evt, payload: { fromPath: unknown; toPath: unknown }) => {
+      const from = assertAbsoluteNormalizedPath(String(payload?.fromPath ?? ''))
+      const to = assertAbsoluteNormalizedPath(String(payload?.toPath ?? ''))
+      if (!from || !to || from === to) return { ok: false as const, reason: 'invalid_path' }
+      try {
+        await fs.rename(from, to)
+        const stat = await fs.stat(to)
+        return { ok: true as const, mtimeIso: stat.mtime.toISOString() }
+      } catch {
+        return { ok: false as const, reason: 'rename_error' }
+      }
+    }
+  )
+
+  ipcMain.handle('specops:unlink-file-path', async (_evt, absPath: unknown) => {
+    const target =
+      typeof absPath === 'string' ? assertAbsoluteNormalizedPath(absPath) : null
+    if (!target) return { ok: false as const, reason: 'invalid_path' }
+    try {
+      await fs.unlink(target)
+      return { ok: true as const }
+    } catch {
+      return { ok: false as const, reason: 'unlink_error' }
     }
   })
 }

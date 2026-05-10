@@ -1,7 +1,10 @@
 import type { IpcRendererEvent } from 'electron'
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  DirtyNavigationChoice,
   ExternalFileChangedPayload,
+  PickOpenMarkdownFileResult,
+  PickSaveMarkdownFileResult,
   ReadMarkdownAssetPayload,
   SpecOpsPreloadApi
 } from './specOpsApi'
@@ -27,7 +30,17 @@ const api: SpecOpsPreloadApi = {
       callback(payload)
     ipcRenderer.on('specops:external-file-changed', listener)
     return () => ipcRenderer.removeListener('specops:external-file-changed', listener)
-  }
+  },
+  writeTextFile: (payload) => ipcRenderer.invoke('specops:write-text-file', payload),
+  pickOpenMarkdownFile: () =>
+    ipcRenderer.invoke('specops:pick-open-markdown-file') as Promise<PickOpenMarkdownFileResult>,
+  pickSaveMarkdownFile: (payload) =>
+    ipcRenderer.invoke('specops:pick-save-markdown-file', payload) as Promise<PickSaveMarkdownFileResult>,
+  promptDirtyNavigation: () =>
+    ipcRenderer.invoke('specops:dirty-navigation-prompt') as Promise<DirtyNavigationChoice>,
+  confirmDeleteFile: (basename) => ipcRenderer.invoke('specops:confirm-delete-file', basename),
+  renamePathOnDisk: (payload) => ipcRenderer.invoke('specops:rename-path-on-disk', payload),
+  unlinkFilePath: (absolutePath) => ipcRenderer.invoke('specops:unlink-file-path', absolutePath)
 }
 
 contextBridge.exposeInMainWorld('specOps', api)

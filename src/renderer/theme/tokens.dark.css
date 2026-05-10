@@ -16,4 +16,7 @@
   --space-md: 12px;
   --radius-sm: 4px;
   --recents-width: 260px;
+  --motion-file-switch-ms: 180ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-context-menu: 0 4px 16px rgba(0, 0, 0, 0.45);
 }

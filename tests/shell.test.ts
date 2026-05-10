@@ -11,7 +11,13 @@ const mockSpecOps: SpecOpsPreloadApi = {
   getAppVersion: () => '0-test',
   getPlatform: () => 'darwin',
   resolveRepoPath: vi.fn(async (...segments: string[]) => '/virtual/' + segments.join('/')),
-  readMarkdownAsset: vi.fn(async () => ({ ok: false as const, reason: 'stub' }))
+  readMarkdownAsset: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
+  pickWorkspaceFolder: vi.fn(async () => null),
+  revealInFolder: vi.fn(async () => {}),
+  readTextFile: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
+  createMarkdownInWorkspace: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
+  setWatchedDocPath: vi.fn(async () => {}),
+  onExternalFileChanged: vi.fn(() => () => {})
 }
 
 describe('UPH-01 shell (TEST-02 harness)', () => {

@@ -54,6 +54,7 @@ export function sanitizePreviewHtml(html: string, domWindow: Window): string {
     ALLOW_DATA_ATTR: false,
     ALLOWED_TAGS: [...PREVIEW_ALLOWED_TAGS],
     ALLOWED_ATTR: [...PREVIEW_ALLOWED_ATTR],
-    KEEP_CONTENT: false
+    /** Required so text nodes survive sanitization under jsdom + DOMPurify 3.x with an explicit tag allow-list. */
+    KEEP_CONTENT: true
   })
 }

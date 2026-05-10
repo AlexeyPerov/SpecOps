@@ -1,4 +1,5 @@
 import type { SpecOpsPreloadApi } from '../../preload/specOpsApi'
+import { markdownRendererIdFromEnv } from '../../app/markdownComposition'
 import { createAppServices } from '../../app/services'
 import { createAppStore } from '../../core/state/store'
 import { bootRenderer } from '../boot/rendererBoot'
@@ -16,7 +17,10 @@ if (!appRoot) {
 }
 
 const store = createAppStore()
-const services = createAppServices()
+// Allowed `VITE_MARKDOWN_RENDERER`: `html` (default), `astJson` (debug AST preview).
+const services = createAppServices({
+  markdownRenderer: markdownRendererIdFromEnv(import.meta.env.VITE_MARKDOWN_RENDERER)
+})
 
 bootRenderer({
   root: appRoot,

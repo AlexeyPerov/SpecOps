@@ -1,25 +1,25 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`markdown resilience snapshots (TEST-04) > hostile-uris.md 1`] = `"<p><a></a></p><p></p>"`;
+exports[`markdown resilience snapshots (TEST-04) > hostile-uris.md 1`] = `"<p><a>bad</a></p><p>![](data:image/svg+xml,)</p>"`;
 
-exports[`markdown resilience snapshots (TEST-04) > malformed.md 1`] = `"<p></p><p></p>"`;
+exports[`markdown resilience snapshots (TEST-04) > malformed.md 1`] = `"<p>&lt;&lt;&lt; not really markdown &gt;&gt;&gt; {{{ broken</p><p>unclosed \`backticks</p>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/blockquote.md 1`] = `"<blockquote><p></p><p></p></blockquote>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/blockquote.md 1`] = `"<blockquote><p>Quoted line one.</p><p>Quoted line two.</p></blockquote>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/code-fence.md 1`] = `"<pre><code></code></pre>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/code-fence.md 1`] = `"<pre><code>const x = 1</code></pre>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/heading.md 1`] = `"<h1></h1><h1></h1><h2></h2><h3></h3>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/heading.md 1`] = `"<h1>Headings</h1><h1>Alpha</h1><h2>Bravo</h2><h3>Charlie</h3>"`;
 
 exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/image.md 1`] = `"<p><img src="relative-image.png" alt=""></p>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/inline-code.md 1`] = `"<p><code></code></p>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/inline-code.md 1`] = `"<p>Use <code>inline code</code> in a sentence.</p>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/link.md 1`] = `"<p><a href="https://example.com"></a></p>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/link.md 1`] = `"<p>See <a href="https://example.com">Example</a> for more.</p>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/list-ordered.md 1`] = `"<ol><li><p></p></li><li><p></p></li><li><p></p></li></ol>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/list-ordered.md 1`] = `"<ol><li><p>First</p></li><li><p>Second</p></li><li><p>Third</p></li></ol>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/list-unordered.md 1`] = `"<ul><li><p></p></li><li><p></p></li><li><p></p></li></ul>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/list-unordered.md 1`] = `"<ul><li><p>Apple</p></li><li><p>Banana</p></li><li><p>Cherry</p></li></ul>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/paragraph-emphasis.md 1`] = `"<p><em></em><strong></strong></p>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/paragraph-emphasis.md 1`] = `"<p>Paragraph with <em>emphasis</em> and <strong>strong</strong> text.</p>"`;
 
-exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/thematic-break.md 1`] = `"<p></p><hr><p></p>"`;
+exports[`markdown sanitized HTML snapshots (TEST-03) > fr01/thematic-break.md 1`] = `"<p>Above</p><hr><p>Below</p>"`;

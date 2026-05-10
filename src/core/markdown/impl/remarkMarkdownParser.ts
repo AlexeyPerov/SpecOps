@@ -1,5 +1,6 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
 import type { Root } from 'mdast'
 
 import type { MarkdownParser } from '../MarkdownParser'
@@ -11,7 +12,7 @@ import { mdastRootToSpecOps } from './mdastToSpecOpsAst'
 export class RemarkMarkdownParser implements MarkdownParser {
   parse(markdown: string): ParseMarkdownResult {
     try {
-      const tree = unified().use(remarkParse).parse(markdown) as Root
+      const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown) as Root
       try {
         const ast = mdastRootToSpecOps(tree)
         return { ok: true, ast }

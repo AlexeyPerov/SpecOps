@@ -40,9 +40,18 @@ const fr01Files = [
   'inline-code.md'
 ] as const
 
+const test09Files = ['table.md', 'task-list.md', 'strikethrough.md'] as const
+
 describe('markdown sanitized HTML snapshots (TEST-03)', () => {
   it.each(fr01Files)('fr01/%s', (file) => {
     const md = readFx(`fixtures/markdown/fr01/${file}`)
+    expect(pipelineHtml(md)).toMatchSnapshot()
+  })
+})
+
+describe('markdown GFM snapshots (TEST-09)', () => {
+  it.each(test09Files)('test09/%s', (file) => {
+    const md = readFx(`fixtures/markdown/test09/${file}`)
     expect(pipelineHtml(md)).toMatchSnapshot()
   })
 })

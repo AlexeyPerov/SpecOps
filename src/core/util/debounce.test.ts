@@ -27,4 +27,15 @@ describe('debounce', () => {
     expect(fn).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })
+
+  it('cancel skips trailing invocation', () => {
+    vi.useFakeTimers()
+    const fn = vi.fn()
+    const d = debounce(fn, 250)
+    d()
+    d.cancel()
+    vi.advanceTimersByTime(250)
+    expect(fn).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
 })

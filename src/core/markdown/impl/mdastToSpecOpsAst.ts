@@ -5,13 +5,18 @@ import type {
   LinkReference,
   ListContent,
   PhrasingContent,
-  Root
+  Root,
+  Table,
+  TableCell,
+  TableRow
 } from 'mdast'
 import type {
   MarkdownAstBlock,
   MarkdownAstInline,
   MarkdownAstRoot,
-  MarkdownListItemBlock
+  MarkdownListItemBlock,
+  MarkdownTableCellBlock,
+  MarkdownTableRowBlock
 } from '../types'
 
 /** Visible-ish fallback when encountering unsupported mdast nodes (never throws). */
@@ -40,6 +45,10 @@ function convertPhrasing(nodes: readonly PhrasingContent[]): MarkdownAstInline[]
 }
 
 function convertPhrasingNode(node: PhrasingContent): MarkdownAstInline[] {
+  if ((node as { type: string }).type === 'delete') {
+    const d = node as unknown as { type: 'delete'; children: PhrasingContent[] }
+    return [{ type: 'delete', children: convertPhrasing(d.children as readonly PhrasingContent[]) }]
+  }
   switch (node.type) {
     case 'text':
       return [{ type: 'text', value: node.value }]
@@ -120,12 +129,36 @@ function unsupportedInlineFallback(node: PhrasingContent): MarkdownAstInline[] {
   return [{ type: 'text', value: `[${node.type}]` }]
 }
 
+function convertTableCell(cell: TableCell): MarkdownTableCellBlock {
+  return {
+    type: 'tableCell',
+    children: convertPhrasing(cell.children as readonly PhrasingContent[])
+  }
+}
+
+function convertTableRow(row: TableRow): MarkdownTableRowBlock {
+  return {
+    type: 'tableRow',
+    children: row.children.filter((c): c is TableCell => c.type === 'tableCell').map(convertTableCell)
+  }
+}
+
+function convertTable(node: Table): MarkdownAstBlock {
+  const rows = node.children.filter((r): r is TableRow => r.type === 'tableRow').map(convertTableRow)
+  const rawAlign = node.align ?? []
+  const align = rawAlign.map((a): 'left' | 'center' | 'right' | null =>
+    a === 'left' || a === 'center' || a === 'right' ? a : null
+  )
+  return { type: 'table', align, children: rows }
+}
+
 function convertListChildren(children: readonly ListContent[]): MarkdownListItemBlock[] {
   return children.flatMap((c): MarkdownListItemBlock[] => {
     if (c.type !== 'listItem') return []
     return [
       {
         type: 'listItem',
+        checked: c.checked ?? null,
         children: convertBlocksWithoutDefinitions(c.children)
       }
     ]
@@ -183,6 +216,8 @@ function convertBlock(node: BlockContent | DefinitionContent): MarkdownAstBlock 
         lang: node.lang ?? undefined,
         value: node.value
       }
+    case 'table':
+      return convertTable(node)
     case 'html':
       return paragraphFromLiteral(stripHtmlTags(node.value))
     default:

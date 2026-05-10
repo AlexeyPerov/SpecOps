@@ -1,5 +1,11 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`markdown GFM snapshots (TEST-09) > test09/strikethrough.md 1`] = `"<p><del>removed</del> and kept.</p>"`;
+
+exports[`markdown GFM snapshots (TEST-09) > test09/table.md 1`] = `"<table><thead><tr><th>Col A</th><th align="center">Col B</th></tr></thead><tbody><tr><td>x</td><td align="center"><strong>y</strong></td></tr></tbody></table>"`;
+
+exports[`markdown GFM snapshots (TEST-09) > test09/task-list.md 1`] = `"<ul><li><input type="checkbox" disabled="" checked=""> <p>Done item</p></li><li><input type="checkbox" disabled=""> <p>Todo item</p></li></ul>"`;
+
 exports[`markdown resilience snapshots (TEST-04) > hostile-uris.md 1`] = `"<p><a>bad</a></p><p>![](data:image/svg+xml,)</p>"`;
 
 exports[`markdown resilience snapshots (TEST-04) > malformed.md 1`] = `"<p>&lt;&lt;&lt; not really markdown &gt;&gt;&gt; {{{ broken</p><p>unclosed \`backticks</p>"`;

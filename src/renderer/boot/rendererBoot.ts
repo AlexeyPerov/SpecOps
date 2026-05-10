@@ -4,6 +4,15 @@ import type { AppStore } from '../../core/state/store'
 import type { DocumentInput } from '../../core/state/types'
 import { debounce } from '../../core/util/debounce'
 import {
+  buildSearchPattern,
+  findMatchCovering,
+  findNext,
+  findPrevious,
+  replaceAllLiteral,
+  type FindReplaceFlags
+} from '../../core/editor/findReplace'
+import { createEditorHistory } from '../editor/editorHistory'
+import {
   documentIdForAbsolutePath,
   groupsForPresentation,
   isEditorDirty,
@@ -169,9 +178,35 @@ export function bootRenderer(ctx: RendererBootContext): void {
           <button type="button" id="external-file-reload" class="toolbar-btn external-file-banner-btn">Reload</button>
           <button type="button" id="external-file-dismiss" class="toolbar-btn external-file-banner-btn">Dismiss</button>
         </div>
-        <div class="workspace-columns">
+          <div class="workspace-columns">
           <div class="editor-pane">
-            <textarea data-testid="editor" id="editor" class="editor-field" aria-label="Markdown editor" spellcheck="false"></textarea>
+            <div id="find-panel" class="find-panel" hidden>
+              <div class="find-panel-grid">
+                <label class="find-field-label"><span class="find-field-caption">Find</span>
+                  <input type="text" id="find-input" class="find-field-input" autocomplete="off" spellcheck="false" />
+                </label>
+                <label class="find-field-label"><span class="find-field-caption">Replace</span>
+                  <input type="text" id="replace-input" class="find-field-input" autocomplete="off" spellcheck="false" />
+                </label>
+              </div>
+              <div class="find-panel-toolbar">
+                <label class="find-option"><input type="checkbox" id="find-case" /> Case sensitive</label>
+                <label class="find-option"><input type="checkbox" id="find-regex" /> Regex</label>
+                <label class="find-option"><input type="checkbox" id="editor-wrap" /> Wrap</label>
+                <label class="find-option"><input type="checkbox" id="editor-line-numbers" /> Line numbers</label>
+                <span id="find-error" class="find-error" hidden></span>
+                <span class="find-toolbar-spacer"></span>
+                <button type="button" id="find-prev" class="toolbar-btn find-action-btn">Previous</button>
+                <button type="button" id="find-next" class="toolbar-btn find-action-btn">Next</button>
+                <button type="button" id="find-replace" class="toolbar-btn find-action-btn">Replace</button>
+                <button type="button" id="find-replace-all" class="toolbar-btn find-action-btn">Replace all</button>
+                <button type="button" id="find-close" class="toolbar-btn find-action-btn">Close</button>
+              </div>
+            </div>
+            <div class="editor-main">
+              <div id="line-gutter" class="line-gutter" aria-hidden="true" hidden></div>
+              <textarea data-testid="editor" id="editor" class="editor-field" aria-label="Markdown editor" spellcheck="false"></textarea>
+            </div>
           </div>
           <div data-testid="preview" id="preview" class="preview-pane"></div>
         </div>
@@ -181,6 +216,20 @@ export function bootRenderer(ctx: RendererBootContext): void {
   `
 
   const editor = root.querySelector<HTMLTextAreaElement>('#editor')!
+  const findPanel = root.querySelector<HTMLElement>('#find-panel')!
+  const findInput = root.querySelector<HTMLInputElement>('#find-input')!
+  const replaceInput = root.querySelector<HTMLInputElement>('#replace-input')!
+  const findCase = root.querySelector<HTMLInputElement>('#find-case')!
+  const findRegex = root.querySelector<HTMLInputElement>('#find-regex')!
+  const editorWrap = root.querySelector<HTMLInputElement>('#editor-wrap')!
+  const editorLineNumbers = root.querySelector<HTMLInputElement>('#editor-line-numbers')!
+  const findError = root.querySelector<HTMLElement>('#find-error')!
+  const findPrevBtn = root.querySelector<HTMLButtonElement>('#find-prev')!
+  const findNextBtn = root.querySelector<HTMLButtonElement>('#find-next')!
+  const findReplaceBtn = root.querySelector<HTMLButtonElement>('#find-replace')!
+  const findReplaceAllBtn = root.querySelector<HTMLButtonElement>('#find-replace-all')!
+  const findCloseBtn = root.querySelector<HTMLButtonElement>('#find-close')!
+  const lineGutter = root.querySelector<HTMLElement>('#line-gutter')!
   const previewEl = root.querySelector<HTMLElement>('#preview')!
   const recentsListRoot = root.querySelector<HTMLElement>('[data-testid="recents-list"]')!
   const workspaceEl = root.querySelector<HTMLElement>('.workspace')!
@@ -228,6 +277,172 @@ export function bootRenderer(ctx: RendererBootContext): void {
   }
 
   const schedulePreview = debounce(() => void runPreview(), 250)
+
+  /** Undo/redo owns Ctrl/Cmd+Z when the stack applies; avoid mixing with native textarea undo. */
+  const HISTORY_DEPTH = 75
+  const editorHistory = createEditorHistory(HISTORY_DEPTH)
+  let suppressHistory = false
+  let prevHistoryDocId: string | null = store.getState().currentDocumentId
+
+  function snapshotEditor(): { value: string; selStart: number; selEnd: number } {
+    return {
+      value: editor.value,
+      selStart: editor.selectionStart,
+      selEnd: editor.selectionEnd
+    }
+  }
+
+  function pushHistoryIfChanged(): void {
+    if (suppressHistory) return
+    const snap = snapshotEditor()
+    const top = editorHistory.peekUndo()
+    if (
+      top &&
+      top.value === snap.value &&
+      top.selStart === snap.selStart &&
+      top.selEnd === snap.selEnd
+    ) {
+      return
+    }
+    editorHistory.push(snap)
+  }
+
+  const scheduleHistoryPush = debounce(() => pushHistoryIfChanged(), 250)
+
+  function refreshLineGutter(): void {
+    if (lineGutter.hidden) return
+    const lines = editor.value.split('\n')
+    lineGutter.innerHTML = lines
+      .map((_ln, i) => `<div class="line-gutter-line">${String(i + 1)}</div>`)
+      .join('')
+    lineGutter.scrollTop = editor.scrollTop
+  }
+
+  function scrollCaretIntoView(): void {
+    const pos = Math.min(editor.selectionStart, editor.selectionEnd)
+    const lineNo = editor.value.slice(0, pos).split('\n').length - 1
+    const cs = getComputedStyle(editor)
+    let lineHeight = parseFloat(cs.lineHeight)
+    if (!Number.isFinite(lineHeight)) {
+      const fs = parseFloat(cs.fontSize)
+      lineHeight = Number.isFinite(fs) ? fs * 1.35 : 18
+    }
+    const padTop = parseFloat(cs.paddingTop) || 0
+    const target = Math.max(0, lineNo * lineHeight + padTop - editor.clientHeight / 2 + lineHeight / 2)
+    editor.scrollTop = Math.min(target, Math.max(0, editor.scrollHeight - editor.clientHeight))
+    refreshLineGutter()
+  }
+
+  function readFindFlags(): FindReplaceFlags {
+    return { caseSensitive: findCase.checked, regex: findRegex.checked }
+  }
+
+  function refreshFindPatternError(): void {
+    const flags = readFindFlags()
+    const raw = findInput.value
+    if (!flags.regex || !raw.trim()) {
+      findError.hidden = true
+      findError.textContent = ''
+      return
+    }
+    const built = buildSearchPattern(raw, flags)
+    if (built.ok) {
+      findError.hidden = true
+      findError.textContent = ''
+    } else {
+      findError.textContent = built.error
+      findError.hidden = false
+    }
+  }
+
+  function setFindPanel(open: boolean): void {
+    findPanel.hidden = !open
+    refreshFindPatternError()
+  }
+
+  function applyEditorChange(nextValue: string, selStart: number, selEnd: number): void {
+    suppressHistory = true
+    editor.value = nextValue
+    editor.selectionStart = selStart
+    editor.selectionEnd = selEnd
+    store.dispatch({ type: 'EDITOR_CHANGE', content: nextValue })
+    suppressHistory = false
+    refreshLineGutter()
+    schedulePreview()
+  }
+
+  function applyUndoRedoSnapshot(snap: { value: string; selStart: number; selEnd: number }): void {
+    suppressHistory = true
+    editor.value = snap.value
+    editor.selectionStart = snap.selStart
+    editor.selectionEnd = snap.selEnd
+    store.dispatch({ type: 'EDITOR_CHANGE', content: snap.value })
+    suppressHistory = false
+    refreshLineGutter()
+    schedulePreview.flush()
+    scheduleHistoryPush.cancel()
+  }
+
+  function applyFindNext(): void {
+    refreshFindPatternError()
+    const flags = readFindFlags()
+    const needle = findInput.value
+    const built = buildSearchPattern(needle, flags)
+    if (!built.ok) return
+    const m = findNext(editor.value, editor.selectionStart, editor.selectionEnd, needle, flags)
+    if (!m) return
+    editor.focus()
+    editor.selectionStart = m.start
+    editor.selectionEnd = m.end
+    scrollCaretIntoView()
+  }
+
+  function applyFindPrevious(): void {
+    refreshFindPatternError()
+    const flags = readFindFlags()
+    const needle = findInput.value
+    const built = buildSearchPattern(needle, flags)
+    if (!built.ok) return
+    const m = findPrevious(editor.value, editor.selectionStart, editor.selectionEnd, needle, flags)
+    if (!m) return
+    editor.focus()
+    editor.selectionStart = m.start
+    editor.selectionEnd = m.end
+    scrollCaretIntoView()
+  }
+
+  function applyReplace(): void {
+    refreshFindPatternError()
+    const flags = readFindFlags()
+    const needle = findInput.value
+    const repl = replaceInput.value
+    const built = buildSearchPattern(needle, flags)
+    if (!built.ok) return
+    const cov = findMatchCovering(editor.value, editor.selectionStart, editor.selectionEnd, needle, flags)
+    if (cov) {
+      editorHistory.push(snapshotEditor())
+      const next = editor.value.slice(0, cov.start) + repl + editor.value.slice(cov.end)
+      const caret = cov.start + repl.length
+      applyEditorChange(next, caret, caret)
+      scheduleHistoryPush.cancel()
+      return
+    }
+    applyFindNext()
+  }
+
+  function applyReplaceAll(): void {
+    refreshFindPatternError()
+    const flags = readFindFlags()
+    const needle = findInput.value
+    const repl = replaceInput.value
+    const built = buildSearchPattern(needle, flags)
+    if (!built.ok) return
+    editorHistory.push(snapshotEditor())
+    const next = replaceAllLiteral(editor.value, needle, repl, flags)
+    const pos = Math.min(editor.selectionStart, next.length)
+    applyEditorChange(next, pos, pos)
+    scheduleHistoryPush.cancel()
+  }
 
   function hideContextMenu(): void {
     contextMenu.hidden = true
@@ -414,8 +629,17 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   store.subscribe(() => {
     const st = store.getState()
+    if (st.currentDocumentId !== prevHistoryDocId) {
+      editorHistory.clear()
+      scheduleHistoryPush.cancel()
+      prevHistoryDocId = st.currentDocumentId
+    }
     if (editor.value !== st.editorContent) {
+      suppressHistory = true
       editor.value = st.editorContent
+      suppressHistory = false
+      scheduleHistoryPush.cancel()
+      refreshLineGutter()
     }
     syncSelectsFromState()
     renderRecents(recentsListRoot, store)
@@ -437,6 +661,35 @@ export function bootRenderer(ctx: RendererBootContext): void {
   editor.addEventListener('input', () => {
     store.dispatch({ type: 'EDITOR_CHANGE', content: editor.value })
     schedulePreview()
+    scheduleHistoryPush()
+  })
+
+  editor.addEventListener('scroll', () => {
+    lineGutter.scrollTop = editor.scrollTop
+  })
+
+  findInput.addEventListener('input', () => refreshFindPatternError())
+  findRegex.addEventListener('change', () => refreshFindPatternError())
+  findCase.addEventListener('change', () => refreshFindPatternError())
+
+  editorWrap.addEventListener('change', () => {
+    editor.classList.toggle('editor-field--wrap', editorWrap.checked)
+  })
+
+  editorLineNumbers.addEventListener('change', () => {
+    const on = editorLineNumbers.checked
+    lineGutter.hidden = !on
+    if (on) refreshLineGutter()
+    else lineGutter.innerHTML = ''
+  })
+
+  findPrevBtn.addEventListener('click', () => applyFindPrevious())
+  findNextBtn.addEventListener('click', () => applyFindNext())
+  findReplaceBtn.addEventListener('click', () => applyReplace())
+  findReplaceAllBtn.addEventListener('click', () => applyReplaceAll())
+  findCloseBtn.addEventListener('click', () => {
+    setFindPanel(false)
+    editor.focus()
   })
 
   sortSelect.addEventListener('change', () => {
@@ -561,7 +814,14 @@ export function bootRenderer(ctx: RendererBootContext): void {
   )
 
   document.body.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideContextMenu()
+    if (e.key !== 'Escape') return
+    if (!findPanel.hidden) {
+      setFindPanel(false)
+      editor.focus()
+      e.preventDefault()
+      return
+    }
+    hideContextMenu()
   })
 
   root.querySelector('#btn-workspace-folder')!.addEventListener('click', () => {
@@ -677,9 +937,55 @@ export function bootRenderer(ctx: RendererBootContext): void {
   })
 
   window.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+    const mod = e.metaKey || e.ctrlKey
+    const ek = e.key.toLowerCase()
+
+    if (mod && ek === 's') {
       e.preventDefault()
       void saveCurrentBuffer()
+      return
+    }
+
+    if (mod && ek === 'f') {
+      e.preventDefault()
+      if (!findPanel.hidden) {
+        setFindPanel(false)
+        editor.focus()
+        refreshFindPatternError()
+        return
+      }
+      setFindPanel(true)
+      findInput.focus()
+      findInput.select()
+      refreshFindPatternError()
+      return
+    }
+
+    if (mod && ek === 'h') {
+      e.preventDefault()
+      setFindPanel(true)
+      replaceInput.focus()
+      replaceInput.select()
+      refreshFindPatternError()
+      return
+    }
+
+    if (document.activeElement === editor) {
+      if (mod && ek === 'z' && !e.shiftKey) {
+        const prev = editorHistory.undo(snapshotEditor())
+        if (prev) {
+          e.preventDefault()
+          applyUndoRedoSnapshot(prev)
+        }
+        return
+      }
+      if ((mod && ek === 'z' && e.shiftKey) || (mod && ek === 'y' && !e.shiftKey)) {
+        const next = editorHistory.redo(snapshotEditor())
+        if (next) {
+          e.preventDefault()
+          applyUndoRedoSnapshot(next)
+        }
+      }
     }
   })
 

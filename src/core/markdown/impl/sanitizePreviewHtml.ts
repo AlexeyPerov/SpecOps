@@ -19,6 +19,7 @@ const PREVIEW_ALLOWED_TAGS = [
   'blockquote',
   'br',
   'code',
+  'del',
   'em',
   'h1',
   'h2',
@@ -28,15 +29,34 @@ const PREVIEW_ALLOWED_TAGS = [
   'h6',
   'hr',
   'img',
+  'input',
   'li',
   'ol',
   'p',
   'pre',
   'strong',
+  'table',
+  'tbody',
+  'td',
+  'th',
+  'thead',
+  'tr',
   'ul'
 ] as const
 
-const PREVIEW_ALLOWED_ATTR = ['href', 'src', 'alt', 'title', 'start'] as const
+const PREVIEW_ALLOWED_ATTR = [
+  'href',
+  'src',
+  'alt',
+  'title',
+  'start',
+  'align',
+  'colspan',
+  'rowspan',
+  'type',
+  'checked',
+  'disabled'
+] as const
 
 export function sanitizePreviewHtml(html: string, domWindow: Window): string {
   const purify = DOMPurify(domWindow)
@@ -45,6 +65,17 @@ export function sanitizePreviewHtml(html: string, domWindow: Window): string {
     if (hookEvent.attrName !== 'href' && hookEvent.attrName !== 'src') return
     const raw = String(hookEvent.attrValue ?? '').trim()
     if (!isAllowedPreviewUri(raw)) {
+      hookEvent.keepAttr = false
+    }
+  })
+  purify.addHook('uponSanitizeAttribute', (node, hookEvent) => {
+    if (node.nodeName !== 'INPUT') return
+    const name = hookEvent.attrName.toLowerCase()
+    if (name !== 'type' && name !== 'checked' && name !== 'disabled') {
+      hookEvent.keepAttr = false
+      return
+    }
+    if (name === 'type' && String(hookEvent.attrValue ?? '').toLowerCase().trim() !== 'checkbox') {
       hookEvent.keepAttr = false
     }
   })

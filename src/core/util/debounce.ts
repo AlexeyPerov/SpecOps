@@ -2,6 +2,7 @@
 export interface DebouncedFunction {
   (): void
   flush(): void
+  cancel(): void
 }
 
 export function debounce(fn: () => void, waitMs: number): DebouncedFunction {
@@ -19,6 +20,11 @@ export function debounce(fn: () => void, waitMs: number): DebouncedFunction {
     clearTimeout(timer)
     timer = undefined
     fn()
+  }
+
+  wrapped.cancel = () => {
+    clearTimeout(timer)
+    timer = undefined
   }
 
   return wrapped

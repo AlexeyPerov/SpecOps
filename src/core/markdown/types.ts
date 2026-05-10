@@ -14,6 +14,7 @@ export type MarkdownAstBlock =
   | MarkdownBlockquoteBlock
   | MarkdownListBlock
   | MarkdownCodeBlockBlock
+  | MarkdownTableBlock
 
 export interface MarkdownHeadingBlock {
   readonly type: 'heading'
@@ -44,7 +45,25 @@ export interface MarkdownListBlock {
 
 export interface MarkdownListItemBlock {
   readonly type: 'listItem'
+  /** GFM task list; `null`/`undefined` when not a task item. */
+  readonly checked?: boolean | null
   readonly children: readonly MarkdownAstBlock[]
+}
+
+export interface MarkdownTableBlock {
+  readonly type: 'table'
+  readonly align: readonly ('left' | 'center' | 'right' | null)[]
+  readonly children: readonly MarkdownTableRowBlock[]
+}
+
+export interface MarkdownTableRowBlock {
+  readonly type: 'tableRow'
+  readonly children: readonly MarkdownTableCellBlock[]
+}
+
+export interface MarkdownTableCellBlock {
+  readonly type: 'tableCell'
+  readonly children: readonly MarkdownAstInline[]
 }
 
 export interface MarkdownCodeBlockBlock {
@@ -61,6 +80,7 @@ export type MarkdownAstInline =
   | MarkdownLinkInline
   | MarkdownImageInline
   | MarkdownBreakInline
+  | MarkdownDeleteInline
 
 export interface MarkdownTextInline {
   readonly type: 'text'
@@ -98,6 +118,11 @@ export interface MarkdownImageInline {
 
 export interface MarkdownBreakInline {
   readonly type: 'break'
+}
+
+export interface MarkdownDeleteInline {
+  readonly type: 'delete'
+  readonly children: readonly MarkdownAstInline[]
 }
 
 /** Stable boundary codes for EH-01 / EH-05 / EH-06 results. */

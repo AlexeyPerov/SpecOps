@@ -3,6 +3,8 @@ import type {
   MarkdownAst,
   MarkdownAstBlock,
   MarkdownAstInline,
+  MarkdownListItemBlock,
+  MarkdownTableBlock,
   RenderMarkdownResult
 } from '../types'
 import { MarkdownIssueCodes } from '../types'
@@ -77,14 +79,47 @@ function renderBlock(block: MarkdownAstBlock): string {
       const escaped = escapeText(block.value)
       return `<pre><code>${escaped}</code></pre>`
     }
+    case 'table':
+      return renderTable(block)
     default:
       return ''
   }
 }
 
-function renderListItem(item: { readonly children: readonly MarkdownAstBlock[] }): string {
+function renderTable(block: MarkdownTableBlock): string {
+  const rows = block.children
+  if (!rows.length) return '<table></table>'
+  const align = block.align
+  function cellAttrs(colIndex: number): string {
+    const a = align[colIndex] ?? null
+    if (!a) return ''
+    return ` align="${escapeAttr(a)}"`
+  }
+  const headerRow = rows[0]!
+  const bodyRows = rows.slice(1)
+  const ths = headerRow.children
+    .map((cell, i) => `<th${cellAttrs(i)}>${cell.children.map(renderInline).join('')}</th>`)
+    .join('')
+  const thead = `<thead><tr>${ths}</tr></thead>`
+  const tbody =
+    bodyRows.length === 0
+      ? ''
+      : `<tbody>${bodyRows
+          .map(
+            (row) =>
+              `<tr>${row.children.map((cell, i) => `<td${cellAttrs(i)}>${cell.children.map(renderInline).join('')}</td>`).join('')}</tr>`
+          )
+          .join('')}</tbody>`
+  return `<table>${thead}${tbody}</table>`
+}
+
+function renderListItem(item: MarkdownListItemBlock): string {
+  const cb =
+    item.checked === true || item.checked === false
+      ? `<input type="checkbox" disabled${item.checked ? ' checked' : ''} /> `
+      : ''
   const inner = item.children.map(renderBlock).join('')
-  return `<li>${inner}</li>`
+  return `<li>${cb}${inner}</li>`
 }
 
 function renderInline(node: MarkdownAstInline): string {
@@ -110,6 +145,8 @@ function renderInline(node: MarkdownAstInline): string {
         node.title !== undefined ? ` title="${escapeAttr(node.title)}"` : ''
       return `<img src="${escapeAttr(node.url)}" alt="${escapeAttr(node.alt)}"${title} />`
     }
+    case 'delete':
+      return `<del>${node.children.map(renderInline).join('')}</del>`
     default:
       return ''
   }

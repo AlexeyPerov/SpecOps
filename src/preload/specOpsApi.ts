@@ -1,3 +1,8 @@
+import type {
+  PreferencesPersistedV1,
+  SessionPersistedV1
+} from '../core/state/sessionCodec'
+
 /** Typed surface exposed to the renderer via `contextBridge`. */
 export type ReadMarkdownAssetPayload = Readonly<{
   docPath: string
@@ -42,6 +47,12 @@ export type ExternalFileChangedPayload = Readonly<{
   mtimeIso: string | null
 }>
 
+export type DraftRecoveryChoice = 'recover' | 'discard'
+
+export type PersistedDraftPayload =
+  | Readonly<{ version: 1; documentId: string; content: string; updatedAtIso: string }>
+  | null
+
 export type SpecOpsPreloadApi = Readonly<{
   ping: () => 'pong'
   getAppVersion: () => string
@@ -73,4 +84,14 @@ export type SpecOpsPreloadApi = Readonly<{
     toPath: string
   }) => Promise<RenamePathResult>
   unlinkFilePath: (absolutePath: string) => Promise<UnlinkPathResult>
+  readPreferences: () => Promise<PreferencesPersistedV1>
+  writePreferences: (prefs: PreferencesPersistedV1) => Promise<void>
+  readSession: () => Promise<SessionPersistedV1 | null>
+  writeSession: (session: SessionPersistedV1) => Promise<void>
+  readDraft: (documentId: string) => Promise<PersistedDraftPayload>
+  writeDraft: (payload: { documentId: string; content: string }) => Promise<void>
+  clearDraft: (documentId: string) => Promise<void>
+  listDraftIds: () => Promise<string[]>
+  promptDraftRecovery: () => Promise<DraftRecoveryChoice>
+  onMenuCommand: (callback: (commandId: string) => void) => () => void
 }>

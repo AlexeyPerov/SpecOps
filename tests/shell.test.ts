@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createAppServices } from '../src/app/services'
 import { createAppStore } from '../src/core/state/store'
+import { DEFAULT_PREFERENCES_V1 } from '../src/core/state/sessionCodec'
 import type { SpecOpsPreloadApi } from '../src/preload/specOpsApi'
 import { bootRenderer } from '../src/renderer/boot/rendererBoot'
 
@@ -24,7 +25,17 @@ const mockSpecOps: SpecOpsPreloadApi = {
   promptDirtyNavigation: vi.fn(async () => 'discard' as const),
   confirmDeleteFile: vi.fn(async () => false),
   renamePathOnDisk: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
-  unlinkFilePath: vi.fn(async () => ({ ok: false as const, reason: 'stub' }))
+  unlinkFilePath: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
+  readPreferences: vi.fn(async () => DEFAULT_PREFERENCES_V1),
+  writePreferences: vi.fn(async () => {}),
+  readSession: vi.fn(async () => null),
+  writeSession: vi.fn(async () => {}),
+  readDraft: vi.fn(async () => null),
+  writeDraft: vi.fn(async () => {}),
+  clearDraft: vi.fn(async () => {}),
+  listDraftIds: vi.fn(async () => []),
+  promptDraftRecovery: vi.fn(async () => 'discard' as const),
+  onMenuCommand: vi.fn(() => () => {})
 }
 
 describe('UPH-01 shell (TEST-02 harness)', () => {

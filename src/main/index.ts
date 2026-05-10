@@ -9,8 +9,10 @@ import {
   isAbsolute
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 
+import { createApplicationMenu } from './menu'
+import { registerPersistenceIpc } from './persistence'
 import { createSaveQueue } from './saveSerialize'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -367,6 +369,8 @@ function createWindow(): void {
 
 void app.whenReady().then(() => {
   registerSpecOpsHandlers()
+  registerPersistenceIpc(app)
+  Menu.setApplicationMenu(createApplicationMenu(app))
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

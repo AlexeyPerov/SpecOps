@@ -61,6 +61,28 @@ body {
   color: var(--color-muted);
 }
 
+.dirty-indicator {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-heading);
+  color: var(--color-accent);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.toolbar-autosave {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.toolbar-autosave input {
+  cursor: pointer;
+}
+
 .app-body {
   flex: 1;
   display: grid;
@@ -214,6 +236,13 @@ body {
   min-height: 0;
   flex: 1;
   position: relative;
+  border-radius: var(--radius-sm);
+  transition: outline-color 120ms var(--ease-standard);
+}
+
+.workspace[data-drag-active='true'] {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: 2px;
 }
 
 .workspace-columns {

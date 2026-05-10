@@ -40,7 +40,21 @@ const api: SpecOpsPreloadApi = {
     ipcRenderer.invoke('specops:dirty-navigation-prompt') as Promise<DirtyNavigationChoice>,
   confirmDeleteFile: (basename) => ipcRenderer.invoke('specops:confirm-delete-file', basename),
   renamePathOnDisk: (payload) => ipcRenderer.invoke('specops:rename-path-on-disk', payload),
-  unlinkFilePath: (absolutePath) => ipcRenderer.invoke('specops:unlink-file-path', absolutePath)
+  unlinkFilePath: (absolutePath) => ipcRenderer.invoke('specops:unlink-file-path', absolutePath),
+  readPreferences: () => ipcRenderer.invoke('specops:read-preferences'),
+  writePreferences: (prefs) => ipcRenderer.invoke('specops:write-preferences', prefs),
+  readSession: () => ipcRenderer.invoke('specops:read-session'),
+  writeSession: (session) => ipcRenderer.invoke('specops:write-session', session),
+  readDraft: (documentId) => ipcRenderer.invoke('specops:read-draft', documentId),
+  writeDraft: (payload) => ipcRenderer.invoke('specops:write-draft', payload),
+  clearDraft: (documentId) => ipcRenderer.invoke('specops:clear-draft', documentId),
+  listDraftIds: () => ipcRenderer.invoke('specops:list-draft-ids'),
+  promptDraftRecovery: () => ipcRenderer.invoke('specops:prompt-draft-recovery'),
+  onMenuCommand: (callback) => {
+    const listener = (_event: IpcRendererEvent, commandId: unknown) => callback(String(commandId ?? ''))
+    ipcRenderer.on('specops:menu-command', listener)
+    return () => ipcRenderer.removeListener('specops:menu-command', listener)
+  }
 }
 
 contextBridge.exposeInMainWorld('specOps', api)

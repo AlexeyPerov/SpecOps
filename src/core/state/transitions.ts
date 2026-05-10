@@ -12,7 +12,10 @@ export function createInitialAppState(): AppState {
     fileListSort: 'lastOpened',
     fileListGrouping: 'none',
     expandedFolderGroups: [],
-    workspaceFolderPath: null
+    workspaceFolderPath: null,
+    autosaveEnabled: false,
+    editorSoftWrap: true,
+    editorLineNumbers: true
   }
 }
 
@@ -90,6 +93,15 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
 
     case 'SET_WORKSPACE_FOLDER':
       return { ...state, workspaceFolderPath: action.path }
+
+    case 'SET_AUTOSAVE_ENABLED':
+      return { ...state, autosaveEnabled: action.enabled }
+
+    case 'SET_EDITOR_SOFT_WRAP':
+      return { ...state, editorSoftWrap: action.enabled }
+
+    case 'SET_EDITOR_LINE_NUMBERS':
+      return { ...state, editorLineNumbers: action.enabled }
 
     case 'REPARENT_DOCUMENT': {
       const doc = state.documentsById.get(action.oldDocumentId)

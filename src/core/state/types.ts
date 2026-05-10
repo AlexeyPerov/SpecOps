@@ -31,6 +31,12 @@ export interface AppState {
   readonly expandedFolderGroups: readonly string[]
   /** Single workspace root for Task 12 MVP create-file flow */
   readonly workspaceFolderPath: string | null
+  /** DEF-06 default false */
+  readonly autosaveEnabled: boolean
+  /** DEF-07 default true */
+  readonly editorSoftWrap: boolean
+  /** DEF-08 default true */
+  readonly editorLineNumbers: boolean
 }
 
 /** Upsert payload for explicit opens; `lastOpened` is always overwritten by the transition. */
@@ -62,3 +68,6 @@ export type AppAction =
       readonly lastModified: string | null
     }
   | { readonly type: 'DROP_DOCUMENT'; readonly documentId: string }
+  | { readonly type: 'SET_AUTOSAVE_ENABLED'; readonly enabled: boolean }
+  | { readonly type: 'SET_EDITOR_SOFT_WRAP'; readonly enabled: boolean }
+  | { readonly type: 'SET_EDITOR_LINE_NUMBERS'; readonly enabled: boolean }

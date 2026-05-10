@@ -19,6 +19,10 @@ import {
   isFolderExpanded
 } from '../../core/state/fileListPresentation'
 import { pathBasename, replaceBasename, stableDocIdForPath } from '../../core/util/paths'
+import {
+  serializePreferencesFromState,
+  serializeSessionFromState
+} from '../../core/state/sessionCodec'
 import { attachPreviewChrome, mountPreview, previewErrorSnippet } from '../previewHost'
 
 export interface RendererBootContext {
@@ -149,6 +153,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
       <button type="button" id="btn-new-markdown" class="toolbar-btn">New markdown in workspace…</button>
       <button type="button" id="btn-seed-demos" class="toolbar-btn">Seed demo documents</button>
       <button type="button" id="btn-open-fixture" class="toolbar-btn">Open fixture sample</button>
+      <span id="dirty-indicator" class="dirty-indicator" hidden aria-live="polite">Modified</span>
+      <label class="toolbar-autosave"><input type="checkbox" id="editor-autosave" /> Autosave</label>
       <span id="theme-controls-slot"></span>
       <span id="status-line" class="status-line"></span>
     </header>
@@ -240,6 +246,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const externalReload = root.querySelector<HTMLButtonElement>('#external-file-reload')!
   const externalDismiss = root.querySelector<HTMLButtonElement>('#external-file-dismiss')!
   const statusLine = root.querySelector<HTMLElement>('#status-line')!
+  const dirtyIndicator = root.querySelector<HTMLElement>('#dirty-indicator')!
+  const editorAutosave = root.querySelector<HTMLInputElement>('#editor-autosave')!
 
   attachPreviewChrome(previewEl)
 
@@ -309,6 +317,18 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   const scheduleHistoryPush = debounce(() => pushHistoryIfChanged(), 250)
 
+  let prevPrefsJson = ''
+  let prevSessionJson = ''
+  let prevDirty = false
+
+  const schedulePrefsPersist = debounce(() => {
+    void specOps.writePreferences(serializePreferencesFromState(store.getState()))
+  }, 400)
+
+  const scheduleSessionPersist = debounce(() => {
+    void specOps.writeSession(serializeSessionFromState(store.getState()))
+  }, 500)
+
   function refreshLineGutter(): void {
     if (lineGutter.hidden) return
     const lines = editor.value.split('\n')
@@ -358,6 +378,23 @@ export function bootRenderer(ctx: RendererBootContext): void {
   function setFindPanel(open: boolean): void {
     findPanel.hidden = !open
     refreshFindPatternError()
+  }
+
+  function toggleFindPanelShortcut(): void {
+    if (!findPanel.hidden) {
+      setFindPanel(false)
+      editor.focus()
+      return
+    }
+    setFindPanel(true)
+    findInput.focus()
+    findInput.select()
+  }
+
+  function openReplacePanelShortcut(): void {
+    setFindPanel(true)
+    replaceInput.focus()
+    replaceInput.select()
   }
 
   function applyEditorChange(nextValue: string, selStart: number, selEnd: number): void {
@@ -533,6 +570,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
         lastModified: wr.mtimeIso
       })
       schedulePreview.flush()
+      void specOps.clearDraft(id)
       return true
     }
     const pick = await specOps.pickSaveMarkdownFile({
@@ -553,6 +591,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     })
     void syncWatchPath()
     schedulePreview.flush()
+    void specOps.clearDraft(id)
     return true
   }
 
@@ -580,6 +619,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
         content: body,
         lastModified: wr.mtimeIso
       })
+      void specOps.clearDraft(id)
     } else {
       store.dispatch({
         type: 'REPARENT_DOCUMENT',
@@ -588,11 +628,23 @@ export function bootRenderer(ctx: RendererBootContext): void {
         content: body,
         lastModified: wr.mtimeIso
       })
+      void specOps.clearDraft(id)
     }
     void syncWatchPath()
     schedulePreview.flush()
     return true
   }
+
+  const scheduleDraftWrite = debounce(() => {
+    const st = store.getState()
+    const id = st.currentDocumentId
+    if (!id || !isEditorDirty(st)) return
+    void specOps.writeDraft({ documentId: id, content: st.editorContent })
+  }, 750)
+
+  const scheduleAutosave = debounce(() => {
+    void saveCurrentBuffer()
+  }, 1000)
 
   async function runAfterDirtyPrompt(action: () => void | Promise<void>): Promise<void> {
     const st = store.getState()
@@ -605,6 +657,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     if (choice === 'discard') {
       const sid = st.currentDocumentId
       if (sid) {
+        void specOps.clearDraft(sid)
         const d = st.documentsById.get(sid)
         if (d) store.dispatch({ type: 'EDITOR_CHANGE', content: d.content })
       }
@@ -641,6 +694,41 @@ export function bootRenderer(ctx: RendererBootContext): void {
       scheduleHistoryPush.cancel()
       refreshLineGutter()
     }
+
+    editorWrap.checked = st.editorSoftWrap
+    editor.classList.toggle('editor-field--wrap', st.editorSoftWrap)
+    editorLineNumbers.checked = st.editorLineNumbers
+    lineGutter.hidden = !st.editorLineNumbers
+    if (st.editorLineNumbers) refreshLineGutter()
+    editorAutosave.checked = st.autosaveEnabled
+
+    dirtyIndicator.hidden = !isEditorDirty(st)
+
+    const pj = JSON.stringify(serializePreferencesFromState(st))
+    if (pj !== prevPrefsJson) {
+      prevPrefsJson = pj
+      schedulePrefsPersist()
+    }
+    const sj = JSON.stringify(serializeSessionFromState(st))
+    if (sj !== prevSessionJson) {
+      prevSessionJson = sj
+      scheduleSessionPersist()
+    }
+
+    const dirty = isEditorDirty(st)
+    if (prevDirty && !dirty && st.currentDocumentId) {
+      void specOps.clearDraft(st.currentDocumentId)
+    }
+    prevDirty = dirty
+    if (dirty && st.currentDocumentId) {
+      scheduleDraftWrite()
+    }
+
+    const doc = st.currentDocumentId ? st.documentsById.get(st.currentDocumentId) : undefined
+    if (st.autosaveEnabled && doc?.path?.trim() && dirty) {
+      scheduleAutosave()
+    }
+
     syncSelectsFromState()
     renderRecents(recentsListRoot, store)
 
@@ -662,6 +750,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     store.dispatch({ type: 'EDITOR_CHANGE', content: editor.value })
     schedulePreview()
     scheduleHistoryPush()
+    scheduleDraftWrite()
   })
 
   editor.addEventListener('scroll', () => {
@@ -673,14 +762,15 @@ export function bootRenderer(ctx: RendererBootContext): void {
   findCase.addEventListener('change', () => refreshFindPatternError())
 
   editorWrap.addEventListener('change', () => {
-    editor.classList.toggle('editor-field--wrap', editorWrap.checked)
+    store.dispatch({ type: 'SET_EDITOR_SOFT_WRAP', enabled: editorWrap.checked })
   })
 
   editorLineNumbers.addEventListener('change', () => {
-    const on = editorLineNumbers.checked
-    lineGutter.hidden = !on
-    if (on) refreshLineGutter()
-    else lineGutter.innerHTML = ''
+    store.dispatch({ type: 'SET_EDITOR_LINE_NUMBERS', enabled: editorLineNumbers.checked })
+  })
+
+  editorAutosave.addEventListener('change', () => {
+    store.dispatch({ type: 'SET_AUTOSAVE_ENABLED', enabled: editorAutosave.checked })
   })
 
   findPrevBtn.addEventListener('click', () => applyFindPrevious())
@@ -924,16 +1014,59 @@ export function bootRenderer(ctx: RendererBootContext): void {
     })
   })
 
+  let dragDepth = 0
   root.addEventListener('dragover', (e) => {
     e.preventDefault()
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
   })
   root.addEventListener('drop', (e) => {
+    dragDepth = 0
+    delete workspaceEl.dataset.dragActive
     e.preventDefault()
     const paths = collectDroppedMarkdownPaths(e.dataTransfer)
     const first = paths[0]
     if (!first) return
     void runAfterDirtyPrompt(() => openMarkdownFromAbsolutePath(first))
+  })
+
+  root.addEventListener('dragenter', (e) => {
+    const types = e.dataTransfer?.types ? [...e.dataTransfer.types] : []
+    if (types.includes('Files')) {
+      dragDepth++
+      workspaceEl.dataset.dragActive = 'true'
+    }
+  })
+  root.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (dragDepth === 0) delete workspaceEl.dataset.dragActive
+  })
+
+  specOps.onMenuCommand((cmd) => {
+    switch (cmd) {
+      case 'open-file':
+        root.querySelector<HTMLButtonElement>('#btn-open-markdown')?.click()
+        break
+      case 'open-workspace-folder':
+        root.querySelector<HTMLButtonElement>('#btn-workspace-folder')?.click()
+        break
+      case 'new-untitled':
+        root.querySelector<HTMLButtonElement>('#btn-new-untitled')?.click()
+        break
+      case 'save':
+        void saveCurrentBuffer()
+        break
+      case 'save-as':
+        void saveCurrentBufferAs()
+        break
+      case 'find':
+        toggleFindPanelShortcut()
+        break
+      case 'find-replace':
+        openReplacePanelShortcut()
+        break
+      default:
+        break
+    }
   })
 
   window.addEventListener('keydown', (e) => {
@@ -948,25 +1081,13 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
     if (mod && ek === 'f') {
       e.preventDefault()
-      if (!findPanel.hidden) {
-        setFindPanel(false)
-        editor.focus()
-        refreshFindPatternError()
-        return
-      }
-      setFindPanel(true)
-      findInput.focus()
-      findInput.select()
-      refreshFindPatternError()
+      toggleFindPanelShortcut()
       return
     }
 
     if (mod && ek === 'h') {
       e.preventDefault()
-      setFindPanel(true)
-      replaceInput.focus()
-      replaceInput.select()
-      refreshFindPatternError()
+      openReplacePanelShortcut()
       return
     }
 

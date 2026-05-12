@@ -25,8 +25,18 @@ function doc(d: Partial<Document> & Pick<Document, 'id'>): Document {
 
 function stateWith(docs: Document[], recentIds: string[], overrides?: Partial<AppState>): AppState {
   const map = new Map(docs.map((d) => [d.id, d]))
+  const base = createInitialAppState()
+  const active = base.projectsById.get(base.activeProjectId)!
+  const patched = {
+    ...active,
+    documentsById: map,
+    recentDocumentIds: recentIds
+  }
+  const projectsById = new Map(base.projectsById)
+  projectsById.set(base.activeProjectId, patched)
   return {
-    ...createInitialAppState(),
+    ...base,
+    projectsById,
     documentsById: map,
     recentDocumentIds: recentIds,
     ...overrides

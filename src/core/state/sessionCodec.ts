@@ -45,8 +45,20 @@ export const DEFAULT_PREFERENCES_V1: PreferencesPersistedV1 = {
 
 /** Merge persisted prefs onto baseline AppState (session/doc fields unchanged). */
 export function mergePreferencesIntoState(base: AppState, prefs: PreferencesPersistedV1): AppState {
+  const projectsById = new Map(base.projectsById)
+  const active = projectsById.get(base.activeProjectId)
+  if (active) {
+    projectsById.set(base.activeProjectId, {
+      ...active,
+      fileListSort: prefs.fileListSort,
+      fileListGrouping: prefs.fileListGrouping,
+      expandedFolderGroups: [...prefs.expandedFolderGroups],
+      workspaceFolderPath: prefs.workspaceFolderPath
+    })
+  }
   return {
     ...base,
+    projectsById,
     themeMode: prefs.themeMode,
     fileListSort: prefs.fileListSort,
     fileListGrouping: prefs.fileListGrouping,
@@ -89,8 +101,21 @@ export function mergeSessionIntoState(
   const editorContent =
     currentDocumentId !== null ? documentsById.get(currentDocumentId)?.content ?? '' : ''
 
+  const projectsById = new Map(base.projectsById)
+  const active = projectsById.get(base.activeProjectId)
+  if (active) {
+    projectsById.set(base.activeProjectId, {
+      ...active,
+      documentsById,
+      recentDocumentIds,
+      currentDocumentId,
+      editorContent
+    })
+  }
+
   return {
     ...base,
+    projectsById,
     documentsById,
     recentDocumentIds,
     currentDocumentId,

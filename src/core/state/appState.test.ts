@@ -79,4 +79,28 @@ describe('reduceAppState', () => {
     expect(state.themeMode).toBe('dark')
     expect(state.documentsById.size).toBe(0)
   })
+
+  it('creates/switches/removes projects with isolated recents', () => {
+    let state = createInitialAppState()
+    state = reduceAppState(state, { type: 'OPEN_EXPLICIT', document: doc({ id: 'a', content: 'A' }) }, t0)
+    state = reduceAppState(
+      state,
+      { type: 'CREATE_PROJECT', projectId: 'p2', workspaceFolderPath: '/workspace/p2' },
+      t1
+    )
+    state = reduceAppState(state, { type: 'SET_ACTIVE_PROJECT', projectId: 'p2' }, t1)
+    expect(state.currentDocumentId).toBeNull()
+    expect(state.recentDocumentIds).toEqual([])
+    expect(state.workspaceFolderPath).toBe('/workspace/p2')
+    state = reduceAppState(state, { type: 'OPEN_EXPLICIT', document: doc({ id: 'b', content: 'B' }) }, t2)
+    expect(state.recentDocumentIds).toEqual(['b'])
+
+    state = reduceAppState(state, { type: 'SET_ACTIVE_PROJECT', projectId: 'default' }, t2)
+    expect(state.recentDocumentIds).toEqual(['a'])
+    expect(state.currentDocumentId).toBe('a')
+
+    state = reduceAppState(state, { type: 'REMOVE_PROJECT', projectId: 'p2' }, t2)
+    expect(state.projectsById.has('p2')).toBe(false)
+    expect(state.activeProjectId).toBe('default')
+  })
 })

@@ -19,18 +19,23 @@ export type FileListGrouping = 'none' | 'folder'
 
 export const UNGROUPED_FOLDER_KEY = '__ungrouped__'
 
-export interface AppState {
+export interface ProjectState {
   readonly documentsById: Map<string, Document>
   readonly recentDocumentIds: string[]
   readonly currentDocumentId: string | null
   readonly editorContent: string
-  readonly themeMode: ThemeMode
+  /** Single workspace root for Task 12 MVP create-file flow */
+  readonly workspaceFolderPath: string | null
   readonly fileListSort: FileListSort
   readonly fileListGrouping: FileListGrouping
   /** When grouping by folder, folder keys listed here are expanded in the recents list. */
   readonly expandedFolderGroups: readonly string[]
-  /** Single workspace root for Task 12 MVP create-file flow */
-  readonly workspaceFolderPath: string | null
+}
+
+export interface AppState {
+  readonly projectsById: Map<string, ProjectState>
+  readonly activeProjectId: string
+  readonly themeMode: ThemeMode
   /** DEF-06 default false */
   readonly autosaveEnabled: boolean
   /** DEF-07 default true */
@@ -39,6 +44,18 @@ export interface AppState {
   readonly editorLineNumbers: boolean
   /** Recents sidebar width in pixels (persisted in preferences). */
   readonly recentsPaneWidthPx: number
+  /**
+   * Transitional mirrors of active project fields used by pre-Task-6 callers.
+   * Keep in sync with `projectsById.get(activeProjectId)`.
+   */
+  readonly documentsById: Map<string, Document>
+  readonly recentDocumentIds: string[]
+  readonly currentDocumentId: string | null
+  readonly editorContent: string
+  readonly workspaceFolderPath: string | null
+  readonly fileListSort: FileListSort
+  readonly fileListGrouping: FileListGrouping
+  readonly expandedFolderGroups: readonly string[]
 }
 
 /** Upsert payload for explicit opens; `lastOpened` is always overwritten by the transition. */
@@ -47,6 +64,13 @@ export type DocumentInput = Omit<Document, 'lastOpened'> & {
 }
 
 export type AppAction =
+  | {
+      readonly type: 'CREATE_PROJECT'
+      readonly projectId: string
+      readonly workspaceFolderPath?: string | null
+    }
+  | { readonly type: 'SET_ACTIVE_PROJECT'; readonly projectId: string }
+  | { readonly type: 'REMOVE_PROJECT'; readonly projectId: string }
   | { readonly type: 'OPEN_EXPLICIT'; readonly document: DocumentInput }
   | { readonly type: 'ACTIVATE_FROM_RECENT_LIST'; readonly documentId: string }
   | { readonly type: 'EDITOR_CHANGE'; readonly content: string }

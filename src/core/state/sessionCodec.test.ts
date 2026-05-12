@@ -41,9 +41,19 @@ describe('sessionCodec (TEST-10 helpers)', () => {
       lastModified: null as string | null
     }
     let s = createInitialAppState()
+    const active = s.projectsById.get(s.activeProjectId)!
+    const projectsById = new Map(s.projectsById)
+    projectsById.set(s.activeProjectId, {
+      ...active,
+      documentsById: new Map([[doc.id, doc]]),
+      recentDocumentIds: [doc.id],
+      currentDocumentId: doc.id,
+      editorContent: doc.content
+    })
     s = reduceAppState(
       {
         ...s,
+        projectsById,
         documentsById: new Map([[doc.id, doc]]),
         recentDocumentIds: [doc.id],
         currentDocumentId: doc.id,
@@ -90,6 +100,7 @@ describe('sessionCodec (TEST-10 helpers)', () => {
     expect(merged.currentDocumentId).toBe('a')
     expect(merged.editorContent).toBe('hello')
     expect(merged.documentsById.get('a')?.content).toBe('hello')
+    expect(merged.projectsById.get(merged.activeProjectId)?.currentDocumentId).toBe('a')
   })
 
   it('refreshSessionDocumentsFromDisk skips missing files', async () => {

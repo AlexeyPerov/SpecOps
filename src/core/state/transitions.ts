@@ -1,22 +1,67 @@
 import { folderKeyForDocumentPath, groupsForPresentation } from './fileListPresentation'
-import type { AppAction, AppState, Document } from './types'
+import type { AppAction, AppState, Document, ProjectState } from './types'
 import { pathBasename, stableDocIdForPath } from '../util/paths'
 
-export function createInitialAppState(): AppState {
+export const DEFAULT_PROJECT_ID = 'default'
+
+function createInitialProjectState(): ProjectState {
   return {
     documentsById: new Map(),
     recentDocumentIds: [],
     currentDocumentId: null,
     editorContent: '',
-    themeMode: 'system',
+    workspaceFolderPath: null,
     fileListSort: 'lastOpened',
     fileListGrouping: 'none',
-    expandedFolderGroups: [],
-    workspaceFolderPath: null,
+    expandedFolderGroups: []
+  }
+}
+
+function withActiveProject(state: AppState, project: ProjectState): AppState {
+  return {
+    ...state,
+    documentsById: project.documentsById,
+    recentDocumentIds: project.recentDocumentIds,
+    currentDocumentId: project.currentDocumentId,
+    editorContent: project.editorContent,
+    workspaceFolderPath: project.workspaceFolderPath,
+    fileListSort: project.fileListSort,
+    fileListGrouping: project.fileListGrouping,
+    expandedFolderGroups: project.expandedFolderGroups
+  }
+}
+
+function activeProject(state: AppState): ProjectState {
+  return state.projectsById.get(state.activeProjectId) ?? createInitialProjectState()
+}
+
+function patchActiveProject(state: AppState, patch: Partial<ProjectState>): AppState {
+  const current = activeProject(state)
+  const next: ProjectState = { ...current, ...patch }
+  const projectsById = new Map(state.projectsById)
+  projectsById.set(state.activeProjectId, next)
+  return withActiveProject({ ...state, projectsById }, next)
+}
+
+export function createInitialAppState(): AppState {
+  const initialProject = createInitialProjectState()
+  const projectsById = new Map<string, ProjectState>([[DEFAULT_PROJECT_ID, initialProject]])
+  return {
+    projectsById,
+    activeProjectId: DEFAULT_PROJECT_ID,
+    themeMode: 'system',
     autosaveEnabled: false,
     editorSoftWrap: true,
     editorLineNumbers: true,
-    recentsPaneWidthPx: 260
+    recentsPaneWidthPx: 260,
+    documentsById: initialProject.documentsById,
+    recentDocumentIds: initialProject.recentDocumentIds,
+    currentDocumentId: initialProject.currentDocumentId,
+    editorContent: initialProject.editorContent,
+    workspaceFolderPath: initialProject.workspaceFolderPath,
+    fileListSort: initialProject.fileListSort,
+    fileListGrouping: initialProject.fileListGrouping,
+    expandedFolderGroups: initialProject.expandedFolderGroups
   }
 }
 
@@ -33,23 +78,52 @@ function dedupeRecents(ids: readonly string[]): string[] {
 
 /** Pure state reducer — inject `nowIso` for deterministic tests (NR-01 / DATA-01 / DATA-08). */
 export function reduceAppState(state: AppState, action: AppAction, nowIso: string): AppState {
+  if (action.type === 'CREATE_PROJECT') {
+    if (state.projectsById.has(action.projectId)) return state
+    const project: ProjectState = {
+      ...createInitialProjectState(),
+      workspaceFolderPath: action.workspaceFolderPath ?? null
+    }
+    const projectsById = new Map(state.projectsById)
+    projectsById.set(action.projectId, project)
+    return { ...state, projectsById }
+  }
+
+  if (action.type === 'SET_ACTIVE_PROJECT') {
+    const project = state.projectsById.get(action.projectId)
+    if (!project) return state
+    return withActiveProject({ ...state, activeProjectId: action.projectId }, project)
+  }
+
+  if (action.type === 'REMOVE_PROJECT') {
+    if (!state.projectsById.has(action.projectId)) return state
+    if (state.projectsById.size <= 1) return state
+    const projectsById = new Map(state.projectsById)
+    projectsById.delete(action.projectId)
+    if (action.projectId !== state.activeProjectId) {
+      return { ...state, projectsById }
+    }
+    const [nextId, nextProject] = projectsById.entries().next().value as [string, ProjectState]
+    return withActiveProject({ ...state, projectsById, activeProjectId: nextId }, nextProject)
+  }
+
   switch (action.type) {
     case 'EDITOR_CHANGE':
-      return { ...state, editorContent: action.content }
+      return patchActiveProject(state, { editorContent: action.content })
 
     case 'SET_THEME_MODE':
       return { ...state, themeMode: action.mode }
 
     case 'SET_FILE_LIST_SORT':
-      return { ...state, fileListSort: action.sort }
+      return patchActiveProject(state, { fileListSort: action.sort })
 
     case 'SET_FILE_LIST_GROUPING': {
       if (action.grouping === 'none') {
-        return { ...state, fileListGrouping: 'none', expandedFolderGroups: [] }
+        return patchActiveProject(state, { fileListGrouping: 'none', expandedFolderGroups: [] })
       }
-      const next: AppState = { ...state, fileListGrouping: 'folder' }
+      const next = patchActiveProject(state, { fileListGrouping: 'folder' })
       const keys = groupsForPresentation(next).map((g) => g.key)
-      return { ...next, expandedFolderGroups: [...keys] }
+      return patchActiveProject(next, { expandedFolderGroups: [...keys] })
     }
 
     case 'TOGGLE_FOLDER_EXPANDED': {
@@ -57,7 +131,7 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
       const nextExpanded = state.expandedFolderGroups.includes(fk)
         ? state.expandedFolderGroups.filter((k) => k !== fk)
         : [...state.expandedFolderGroups, fk]
-      return { ...state, expandedFolderGroups: nextExpanded }
+      return patchActiveProject(state, { expandedFolderGroups: nextExpanded })
     }
 
     case 'REMOVE_FROM_RECENTS': {
@@ -70,12 +144,7 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
           ? state.documentsById.get(currentDocumentId)?.content ?? ''
           : ''
       }
-      return {
-        ...state,
-        recentDocumentIds: filtered,
-        currentDocumentId,
-        editorContent
-      }
+      return patchActiveProject(state, { recentDocumentIds: filtered, currentDocumentId, editorContent })
     }
 
     case 'SYNC_DOCUMENT_FROM_DISK': {
@@ -89,11 +158,11 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
       })
       const editorContent =
         state.currentDocumentId === action.documentId ? action.content : state.editorContent
-      return { ...state, documentsById, editorContent }
+      return patchActiveProject(state, { documentsById, editorContent })
     }
 
     case 'SET_WORKSPACE_FOLDER':
-      return { ...state, workspaceFolderPath: action.path }
+      return patchActiveProject(state, { workspaceFolderPath: action.path })
 
     case 'SET_AUTOSAVE_ENABLED':
       return { ...state, autosaveEnabled: action.enabled }
@@ -141,14 +210,13 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
         const newFk = folderKeyForDocumentPath(action.newAbsolutePath)
         expandedFolderGroups = expandedFolderGroups.map((k) => (k === oldFk ? newFk : k))
       }
-      return {
-        ...state,
+      return patchActiveProject(state, {
         documentsById,
         recentDocumentIds,
         currentDocumentId,
         editorContent,
         expandedFolderGroups
-      }
+      })
     }
 
     case 'DROP_DOCUMENT': {
@@ -164,13 +232,12 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
           ? documentsById.get(currentDocumentId)?.content ?? ''
           : ''
       }
-      return {
-        ...state,
+      return patchActiveProject(state, {
         documentsById,
         recentDocumentIds: filtered,
         currentDocumentId,
         editorContent
-      }
+      })
     }
 
     case 'OPEN_EXPLICIT': {
@@ -193,24 +260,19 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
         }
       }
 
-      return {
-        ...state,
+      return patchActiveProject(state, {
         documentsById,
         recentDocumentIds,
         currentDocumentId: doc.id,
         editorContent: doc.content,
         expandedFolderGroups
-      }
+      })
     }
 
     case 'ACTIVATE_FROM_RECENT_LIST': {
       const doc = state.documentsById.get(action.documentId)
       if (!doc) return state
-      return {
-        ...state,
-        currentDocumentId: doc.id,
-        editorContent: doc.content
-      }
+      return patchActiveProject(state, { currentDocumentId: doc.id, editorContent: doc.content })
     }
   }
 }

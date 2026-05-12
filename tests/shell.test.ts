@@ -7,8 +7,9 @@ import { createInitialAppState } from '../src/core/state/transitions'
 import { DEFAULT_PREFERENCES_V1 } from '../src/core/state/sessionCodec'
 import type { SpecOpsPreloadApi } from '../src/preload/specOpsApi'
 import { bootRenderer } from '../src/renderer/boot/rendererBoot'
+import { SPEC_OPS_MENU_COMMANDS } from '../src/ipc/specOpsIpc'
 
-let lastMenuListener: ((commandId: string) => void) | null = null
+let lastMenuListener: ((commandId: Parameters<SpecOpsPreloadApi['onMenuCommand']>[0] extends (arg: infer T) => void ? T : never) => void) | null = null
 
 const mockSpecOps: SpecOpsPreloadApi = {
   ping: () => 'pong',
@@ -120,7 +121,7 @@ describe('UPH-01 shell (TEST-02 harness)', () => {
     })
 
     expect(lastMenuListener).toBeTypeOf('function')
-    lastMenuListener!('misc-seed-demos')
+    lastMenuListener!(SPEC_OPS_MENU_COMMANDS.miscSeedDemos)
 
     await vi.waitFor(() => {
       expect((document.querySelector('[data-testid="editor"]') as HTMLTextAreaElement).value).toContain(

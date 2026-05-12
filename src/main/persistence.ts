@@ -7,6 +7,7 @@ import type {
   SessionDocumentPersistedV1 as PersistedSessionDocumentV1,
   SessionPersistedV1 as PersistedSessionV1
 } from '../core/state/sessionCodec'
+import { SPEC_OPS_IPC } from '../ipc/specOpsIpc'
 import { DEFAULT_PREFERENCES_V1 } from '../core/state/sessionCodec'
 
 export type { PersistedPreferencesV1, PersistedSessionDocumentV1, PersistedSessionV1 }
@@ -215,9 +216,9 @@ export async function listDraftDocumentIds(app: App): Promise<string[]> {
 export type DraftRecoveryChoice = 'recover' | 'discard'
 
 export function registerPersistenceIpc(app: App): void {
-  ipcMain.handle('specops:read-preferences', async () => readPreferencesFile(app))
+  ipcMain.handle(SPEC_OPS_IPC.readPreferences, async () => readPreferencesFile(app))
 
-  ipcMain.handle('specops:write-preferences', async (_evt, prefs: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.writePreferences, async (_evt, prefs: unknown) => {
     const base = await readPreferencesFile(app)
     const p = prefs as Partial<PersistedPreferencesV1>
     const merged: PersistedPreferencesV1 = {
@@ -257,21 +258,21 @@ export function registerPersistenceIpc(app: App): void {
     await writePreferencesFile(app, merged)
   })
 
-  ipcMain.handle('specops:read-session', async () => readSessionFile(app))
+  ipcMain.handle(SPEC_OPS_IPC.readSession, async () => readSessionFile(app))
 
-  ipcMain.handle('specops:write-session', async (_evt, session: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.writeSession, async (_evt, session: unknown) => {
     const s = session as PersistedSessionV1
     if (!s || s.version !== 1) return
     await writeSessionFile(app, s)
   })
 
-  ipcMain.handle('specops:read-draft', async (_evt, documentId: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.readDraft, async (_evt, documentId: unknown) => {
     if (typeof documentId !== 'string' || !documentId) return null
     return readDraftFile(app, documentId)
   })
 
   ipcMain.handle(
-    'specops:write-draft',
+    SPEC_OPS_IPC.writeDraft,
     async (_evt, payload: { documentId: unknown; content: unknown }) => {
       const documentId = typeof payload?.documentId === 'string' ? payload.documentId : ''
       const content = typeof payload?.content === 'string' ? payload.content : null
@@ -284,14 +285,14 @@ export function registerPersistenceIpc(app: App): void {
     }
   )
 
-  ipcMain.handle('specops:clear-draft', async (_evt, documentId: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.clearDraft, async (_evt, documentId: unknown) => {
     if (typeof documentId !== 'string' || !documentId) return
     await clearDraftFile(app, documentId)
   })
 
-  ipcMain.handle('specops:list-draft-ids', async () => listDraftDocumentIds(app))
+  ipcMain.handle(SPEC_OPS_IPC.listDraftIds, async () => listDraftDocumentIds(app))
 
-  ipcMain.handle('specops:prompt-draft-recovery', async (event) => {
+  ipcMain.handle(SPEC_OPS_IPC.promptDraftRecovery, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow()
     if (!win) return 'discard' as DraftRecoveryChoice
     const { response } = await dialog.showMessageBox(win, {

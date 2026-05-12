@@ -2,6 +2,7 @@ import type {
   PreferencesPersistedV1,
   SessionPersistedV1
 } from '../core/state/sessionCodec'
+import type { SpecOpsMenuCommand } from '../ipc/specOpsIpc'
 
 /** Typed surface exposed to the renderer via `contextBridge`. */
 export type ReadMarkdownAssetPayload = Readonly<{
@@ -93,7 +94,7 @@ export type SpecOpsPreloadApi = Readonly<{
   clearDraft: (documentId: string) => Promise<void>
   listDraftIds: () => Promise<string[]>
   promptDraftRecovery: () => Promise<DraftRecoveryChoice>
-  onMenuCommand: (callback: (commandId: string) => void) => () => void
+  onMenuCommand: (callback: (commandId: SpecOpsMenuCommand) => void) => () => void
   /** Notify main window to reload preferences from disk (after settings window saves). */
   notifyPreferencesChanged: () => void
   onPreferencesChanged: (callback: () => void) => () => void

@@ -11,6 +11,7 @@ import {
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 
+import { SPEC_OPS_IPC } from '../ipc/specOpsIpc'
 import { createApplicationMenu } from './menu'
 import { registerPersistenceIpc } from './persistence'
 import { createSaveQueue } from './saveSerialize'
@@ -111,19 +112,19 @@ function stopDocWatcher(slot: WatchSlot): void {
 }
 
 function registerSpecOpsHandlers(): void {
-  ipcMain.on('specops:get-app-version', (event) => {
+  ipcMain.on(SPEC_OPS_IPC.getAppVersion, (event) => {
     event.returnValue = app.getVersion()
   })
-  ipcMain.on('specops:get-platform', (event) => {
+  ipcMain.on(SPEC_OPS_IPC.getPlatform, (event) => {
     event.returnValue = process.platform
   })
 
-  ipcMain.handle('specops:resolve-repo-path', (_evt, segments: string[]) => {
+  ipcMain.handle(SPEC_OPS_IPC.resolveRepoPath, (_evt, segments: string[]) => {
     return join(repoRoot(), ...segments)
   })
 
   ipcMain.handle(
-    'specops:read-markdown-asset',
+    SPEC_OPS_IPC.readMarkdownAsset,
     async (_evt, payload: { docPath: string; relativeUrl: string }) => {
       try {
         const { docPath, relativeUrl } = payload
@@ -154,7 +155,7 @@ function registerSpecOpsHandlers(): void {
     }
   )
 
-  ipcMain.handle('specops:pick-workspace-folder', async (event) => {
+  ipcMain.handle(SPEC_OPS_IPC.pickWorkspaceFolder, async (event) => {
     const win =
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
     const res = await dialog.showOpenDialog(win, {
@@ -164,12 +165,12 @@ function registerSpecOpsHandlers(): void {
     return res.filePaths[0]
   })
 
-  ipcMain.handle('specops:reveal-in-folder', async (_evt, filePath: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.revealInFolder, async (_evt, filePath: unknown) => {
     if (typeof filePath !== 'string' || !filePath.trim()) return
     shell.showItemInFolder(normalize(filePath))
   })
 
-  ipcMain.handle('specops:read-text-file', async (_evt, absolutePath: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.readTextFile, async (_evt, absolutePath: unknown) => {
     try {
       if (typeof absolutePath !== 'string' || !absolutePath.trim()) {
         return { ok: false as const, reason: 'invalid_path' }
@@ -188,7 +189,7 @@ function registerSpecOpsHandlers(): void {
   })
 
   ipcMain.handle(
-    'specops:create-markdown-in-workspace',
+    SPEC_OPS_IPC.createMarkdownInWorkspace,
     async (_evt, payload: { folderPath: unknown; baseName: unknown }) => {
       const folderPath = payload?.folderPath
       if (typeof folderPath !== 'string' || !folderPath.trim()) {
@@ -213,7 +214,7 @@ function registerSpecOpsHandlers(): void {
     }
   )
 
-  ipcMain.handle('specops:set-watched-doc-path', async (event, filePath: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.setWatchedDocPath, async (event, filePath: unknown) => {
     const slot = watchSlotFor(event.sender.id)
     stopDocWatcher(slot)
     if (typeof filePath !== 'string' || !filePath.trim()) return
@@ -241,7 +242,7 @@ function registerSpecOpsHandlers(): void {
               }
               const content = await fs.readFile(target, 'utf8')
               slot.lastSeenMtimeMs = stat.mtimeMs
-              event.sender.send('specops:external-file-changed', {
+              event.sender.send(SPEC_OPS_IPC.externalFileChanged, {
                 path: target,
                 content,
                 mtimeIso: stat.mtime.toISOString()
@@ -258,7 +259,7 @@ function registerSpecOpsHandlers(): void {
   })
 
   ipcMain.handle(
-    'specops:write-text-file',
+    SPEC_OPS_IPC.writeTextFile,
     async (event, payload: { absolutePath: unknown; content: unknown }) => {
       const wcId = event.sender.id
       return saveQueue.enqueue(wcId, async () => {
@@ -280,7 +281,7 @@ function registerSpecOpsHandlers(): void {
     }
   )
 
-  ipcMain.handle('specops:pick-open-markdown-file', async (event) => {
+  ipcMain.handle(SPEC_OPS_IPC.pickOpenMarkdownFile, async (event) => {
     const win =
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
     const res = await dialog.showOpenDialog(win, {
@@ -292,7 +293,7 @@ function registerSpecOpsHandlers(): void {
   })
 
   ipcMain.handle(
-    'specops:pick-save-markdown-file',
+    SPEC_OPS_IPC.pickSaveMarkdownFile,
     async (event, payload?: { defaultPath?: string }) => {
       const win =
         BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
@@ -307,7 +308,7 @@ function registerSpecOpsHandlers(): void {
     }
   )
 
-  ipcMain.handle('specops:dirty-navigation-prompt', async (event) => {
+  ipcMain.handle(SPEC_OPS_IPC.dirtyNavigationPrompt, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow()
     if (!win) return 'cancel' as const
     const { response } = await dialog.showMessageBox(win, {
@@ -323,7 +324,7 @@ function registerSpecOpsHandlers(): void {
     return 'cancel' as const
   })
 
-  ipcMain.handle('specops:confirm-delete-file', async (event, basename: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.confirmDeleteFile, async (event, basename: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow()
     if (!win) return false
     const name = typeof basename === 'string' && basename.trim() ? basename : 'this file'
@@ -339,7 +340,7 @@ function registerSpecOpsHandlers(): void {
   })
 
   ipcMain.handle(
-    'specops:rename-path-on-disk',
+    SPEC_OPS_IPC.renamePathOnDisk,
     async (_evt, payload: { fromPath: unknown; toPath: unknown }) => {
       const from = assertAbsoluteNormalizedPath(String(payload?.fromPath ?? ''))
       const to = assertAbsoluteNormalizedPath(String(payload?.toPath ?? ''))
@@ -354,7 +355,7 @@ function registerSpecOpsHandlers(): void {
     }
   )
 
-  ipcMain.handle('specops:unlink-file-path', async (_evt, absPath: unknown) => {
+  ipcMain.handle(SPEC_OPS_IPC.unlinkFilePath, async (_evt, absPath: unknown) => {
     const target =
       typeof absPath === 'string' ? assertAbsoluteNormalizedPath(absPath) : null
     if (!target) return { ok: false as const, reason: 'invalid_path' }
@@ -450,9 +451,9 @@ void app.whenReady().then(async () => {
   registerSpecOpsHandlers()
   registerPersistenceIpc(app)
 
-  ipcMain.on('specops:notify-preferences-changed', () => {
+  ipcMain.on(SPEC_OPS_IPC.notifyPreferencesChanged, () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
-    mainWindow.webContents.send('specops:preferences-changed-main')
+    mainWindow.webContents.send(SPEC_OPS_IPC.preferencesChangedMain)
   })
 
   Menu.setApplicationMenu(

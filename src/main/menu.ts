@@ -1,5 +1,6 @@
 import type { App } from 'electron'
 import { BrowserWindow, Menu } from 'electron'
+import { SPEC_OPS_IPC, SPEC_OPS_MENU_COMMANDS, type SpecOpsMenuCommand } from '../ipc/specOpsIpc'
 
 export interface ApplicationMenuHandlers {
   readonly openSettings: () => void
@@ -7,9 +8,9 @@ export interface ApplicationMenuHandlers {
 
 /** Desktop menu wiring for FR-49 / AC-32 (command surfaces). */
 export function createApplicationMenu(app: App, handlers: ApplicationMenuHandlers): Menu {
-  const send = (commandId: string): void => {
+  const send = (commandId: SpecOpsMenuCommand): void => {
     const w = BrowserWindow.getFocusedWindow()
-    w?.webContents.send('specops:menu-command', commandId)
+    w?.webContents.send(SPEC_OPS_IPC.menuCommand, commandId)
   }
 
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -37,24 +38,24 @@ export function createApplicationMenu(app: App, handlers: ApplicationMenuHandler
         {
           label: 'Open…',
           accelerator: 'CmdOrCtrl+O',
-          click: () => send('open-file')
+          click: () => send(SPEC_OPS_MENU_COMMANDS.openFile)
         },
         { type: 'separator' },
         {
           label: 'New untitled',
           accelerator: 'CmdOrCtrl+N',
-          click: () => send('new-untitled')
+          click: () => send(SPEC_OPS_MENU_COMMANDS.newUntitled)
         },
         { type: 'separator' },
         {
           label: 'Save',
           accelerator: 'CmdOrCtrl+S',
-          click: () => send('save')
+          click: () => send(SPEC_OPS_MENU_COMMANDS.save)
         },
         {
           label: 'Save As…',
           accelerator: 'CmdOrCtrl+Shift+S',
-          click: () => send('save-as')
+          click: () => send(SPEC_OPS_MENU_COMMANDS.saveAs)
         },
         { type: 'separator' },
         {
@@ -62,19 +63,19 @@ export function createApplicationMenu(app: App, handlers: ApplicationMenuHandler
           submenu: [
             {
               label: 'Workspace folder…',
-              click: () => send('misc-workspace-folder')
+              click: () => send(SPEC_OPS_MENU_COMMANDS.miscWorkspaceFolder)
             },
             {
               label: 'New markdown in workspace…',
-              click: () => send('misc-new-markdown')
+              click: () => send(SPEC_OPS_MENU_COMMANDS.miscNewMarkdown)
             },
             {
               label: 'Seed demo documents',
-              click: () => send('misc-seed-demos')
+              click: () => send(SPEC_OPS_MENU_COMMANDS.miscSeedDemos)
             },
             {
               label: 'Open fixture sample',
-              click: () => send('misc-open-fixture')
+              click: () => send(SPEC_OPS_MENU_COMMANDS.miscOpenFixture)
             }
           ]
         },
@@ -102,12 +103,12 @@ export function createApplicationMenu(app: App, handlers: ApplicationMenuHandler
         {
           label: 'Find…',
           accelerator: 'CmdOrCtrl+F',
-          click: () => send('find')
+          click: () => send(SPEC_OPS_MENU_COMMANDS.find)
         },
         {
           label: 'Replace…',
           accelerator: 'CmdOrCtrl+H',
-          click: () => send('find-replace')
+          click: () => send(SPEC_OPS_MENU_COMMANDS.findReplace)
         }
       ]
     }

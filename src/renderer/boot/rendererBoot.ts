@@ -23,6 +23,7 @@ import {
   serializePreferencesFromState,
   serializeSessionFromState
 } from '../../core/state/sessionCodec'
+import { SPEC_OPS_MENU_COMMANDS } from '../../ipc/specOpsIpc'
 import { attachPreviewChrome, mountPreview, previewErrorSnippet } from '../previewHost'
 import { buildEditorHighlightHtml } from '../editor/editorHighlight'
 import { getScrollFraction, setScrollFraction } from '../editor/scrollSync'
@@ -1074,13 +1075,11 @@ export function bootRenderer(ctx: RendererBootContext): void {
     }
   })
 
-  document.body.addEventListener(
-    'click',
-    () => {
-      hideContextMenu()
-    },
-    true
-  )
+  // Bubble phase only: capture-phase would run before the menu item's click handler and clear
+  // `contextDocId`, making every context-menu action a no-op (see REMOVE_FROM_RECENTS, etc.).
+  document.body.addEventListener('click', () => {
+    hideContextMenu()
+  })
 
   document.body.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return
@@ -1155,34 +1154,34 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   specOps.onMenuCommand((cmd) => {
     switch (cmd) {
-      case 'open-file':
+      case SPEC_OPS_MENU_COMMANDS.openFile:
         root.querySelector<HTMLButtonElement>('#btn-open-markdown')?.click()
         break
-      case 'misc-workspace-folder':
+      case SPEC_OPS_MENU_COMMANDS.miscWorkspaceFolder:
         miscPickWorkspaceFolder()
         break
-      case 'misc-new-markdown':
+      case SPEC_OPS_MENU_COMMANDS.miscNewMarkdown:
         miscNewMarkdownInWorkspace()
         break
-      case 'misc-seed-demos':
+      case SPEC_OPS_MENU_COMMANDS.miscSeedDemos:
         miscSeedDemos()
         break
-      case 'misc-open-fixture':
+      case SPEC_OPS_MENU_COMMANDS.miscOpenFixture:
         miscOpenFixture()
         break
-      case 'new-untitled':
+      case SPEC_OPS_MENU_COMMANDS.newUntitled:
         root.querySelector<HTMLButtonElement>('#btn-new-untitled')?.click()
         break
-      case 'save':
+      case SPEC_OPS_MENU_COMMANDS.save:
         void saveCurrentBuffer()
         break
-      case 'save-as':
+      case SPEC_OPS_MENU_COMMANDS.saveAs:
         void saveCurrentBufferAs()
         break
-      case 'find':
+      case SPEC_OPS_MENU_COMMANDS.find:
         toggleFindPanelShortcut()
         break
-      case 'find-replace':
+      case SPEC_OPS_MENU_COMMANDS.findReplace:
         openReplacePanelShortcut()
         break
       default:

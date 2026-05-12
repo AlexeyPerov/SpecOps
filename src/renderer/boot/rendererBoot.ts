@@ -14,9 +14,7 @@ import {
 import { createEditorHistory } from '../editor/editorHistory'
 import {
   documentIdForAbsolutePath,
-  groupsForPresentation,
-  isEditorDirty,
-  isFolderExpanded
+  isEditorDirty
 } from '../../core/state/fileListPresentation'
 import { selectActiveProject, selectCurrentDocumentPath } from '../../core/state/selectors'
 import { pathBasename, replaceBasename, stableDocIdForPath } from '../../core/util/paths'
@@ -24,7 +22,8 @@ import {
   serializePreferencesFromState,
   serializeSessionFromState
 } from '../../core/state/sessionCodec'
-import { SPEC_OPS_MENU_COMMANDS } from '../../ipc/specOpsIpc'
+import { executeMenuCommand } from '../features/menu/menuCommands'
+import { renderRecents, triggerWorkspaceMotion } from '../features/recents/recentsView'
 import { attachPreviewChrome, mountPreview, previewErrorSnippet } from '../previewHost'
 import { buildEditorHighlightHtml } from '../editor/editorHighlight'
 import { getScrollFraction, setScrollFraction } from '../editor/scrollSync'
@@ -57,90 +56,6 @@ const SAMPLE_DOC_B: DocumentInput = {
   content: '# Bravo\n\nSecond document.\n\n[Example](https://example.com)\n',
   path: null,
   lastModified: null
-}
-
-function triggerWorkspaceMotion(workspaceEl: HTMLElement): void {
-  const msRaw = getComputedStyle(workspaceEl).getPropertyValue('--motion-file-switch-ms').trim()
-  const ms = parseFloat(msRaw) || 180
-  workspaceEl.classList.remove('workspace--transition')
-  requestAnimationFrame(() => {
-    workspaceEl.classList.add('workspace--transition')
-    window.setTimeout(() => workspaceEl.classList.remove('workspace--transition'), ms)
-  })
-}
-
-function renderRecents(listRoot: HTMLElement, store: AppStore): void {
-  const state = store.getState()
-  listRoot.innerHTML = ''
-
-  if (!state.recentDocumentIds.length) {
-    const empty = document.createElement('div')
-    empty.className = 'recents-empty'
-    empty.textContent = 'No documents yet'
-    listRoot.appendChild(empty)
-    return
-  }
-
-  const groups = groupsForPresentation(state)
-
-  if (state.fileListGrouping === 'none') {
-    const flat = groups[0]
-    const ul = document.createElement('ul')
-    ul.className = 'recent-items'
-    ul.setAttribute('role', 'list')
-    for (const id of flat.ids) appendRecentRow(ul, id, state)
-    listRoot.appendChild(ul)
-    return
-  }
-
-  const wrap = document.createElement('div')
-  wrap.className = 'recent-groups'
-  for (const g of groups) {
-    const section = document.createElement('section')
-    section.className = 'recent-group'
-    section.dataset.folderKey = g.key
-
-    const headerBtn = document.createElement('button')
-    headerBtn.type = 'button'
-    headerBtn.className = 'recent-group-header'
-    headerBtn.dataset.folderKey = g.key
-    const expanded = isFolderExpanded(state, g.key)
-    headerBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false')
-    headerBtn.innerHTML = `<span class="recent-group-chevron">${expanded ? '▾' : '▸'}</span><span class="recent-group-label">${g.label}</span>`
-
-    const ul = document.createElement('ul')
-    ul.className = 'recent-items'
-    ul.setAttribute('role', 'list')
-    ul.hidden = !expanded
-    for (const id of g.ids) appendRecentRow(ul, id, state)
-
-    section.appendChild(headerBtn)
-    section.appendChild(ul)
-    wrap.appendChild(section)
-  }
-  listRoot.appendChild(wrap)
-}
-
-function appendRecentRow(ul: HTMLElement, id: string, state: ReturnType<AppStore['getState']>): void {
-  const doc = state.documentsById.get(id)
-  const label = doc?.title?.trim() || id
-
-  const li = document.createElement('li')
-  li.dataset.recentDocId = id
-
-  const btn = document.createElement('button')
-  btn.type = 'button'
-  btn.className = 'recent-item'
-  btn.dataset.recentDocId = id
-  btn.textContent = label
-
-  if (state.currentDocumentId === id) {
-    btn.setAttribute('aria-current', 'true')
-    btn.classList.add('recent-item--selected')
-  }
-
-  li.appendChild(btn)
-  ul.appendChild(li)
 }
 
 /** Wire SpeOps renderer shell (UPH-01 three-pane). */
@@ -854,7 +769,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     }
 
     syncSelectsFromState()
-    renderRecents(recentsListRoot, store)
+    renderRecents(recentsListRoot, st)
 
     if (prevSelection !== undefined && prevSelection !== project.currentDocumentId) {
       triggerWorkspaceMotion(workspaceEl)
@@ -1166,40 +1081,22 @@ export function bootRenderer(ctx: RendererBootContext): void {
   })
 
   specOps.onMenuCommand((cmd) => {
-    switch (cmd) {
-      case SPEC_OPS_MENU_COMMANDS.openFile:
-        root.querySelector<HTMLButtonElement>('#btn-open-markdown')?.click()
-        break
-      case SPEC_OPS_MENU_COMMANDS.miscWorkspaceFolder:
-        miscPickWorkspaceFolder()
-        break
-      case SPEC_OPS_MENU_COMMANDS.miscNewMarkdown:
-        miscNewMarkdownInWorkspace()
-        break
-      case SPEC_OPS_MENU_COMMANDS.miscSeedDemos:
-        miscSeedDemos()
-        break
-      case SPEC_OPS_MENU_COMMANDS.miscOpenFixture:
-        miscOpenFixture()
-        break
-      case SPEC_OPS_MENU_COMMANDS.newUntitled:
-        root.querySelector<HTMLButtonElement>('#btn-new-untitled')?.click()
-        break
-      case SPEC_OPS_MENU_COMMANDS.save:
+    executeMenuCommand(cmd, {
+      openFile: () => root.querySelector<HTMLButtonElement>('#btn-open-markdown')?.click(),
+      newUntitled: () => root.querySelector<HTMLButtonElement>('#btn-new-untitled')?.click(),
+      save: () => {
         void saveCurrentBuffer()
-        break
-      case SPEC_OPS_MENU_COMMANDS.saveAs:
+      },
+      saveAs: () => {
         void saveCurrentBufferAs()
-        break
-      case SPEC_OPS_MENU_COMMANDS.find:
-        toggleFindPanelShortcut()
-        break
-      case SPEC_OPS_MENU_COMMANDS.findReplace:
-        openReplacePanelShortcut()
-        break
-      default:
-        break
-    }
+      },
+      miscWorkspaceFolder: miscPickWorkspaceFolder,
+      miscNewMarkdown: miscNewMarkdownInWorkspace,
+      miscSeedDemos: miscSeedDemos,
+      miscOpenFixture: miscOpenFixture,
+      find: toggleFindPanelShortcut,
+      findReplace: openReplacePanelShortcut
+    })
   })
 
   window.addEventListener('keydown', (e) => {

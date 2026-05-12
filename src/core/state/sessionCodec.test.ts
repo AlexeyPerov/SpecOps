@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { chatStateFromPersisted } from '../chat/chatState'
 import {
   DEFAULT_PREFERENCES_V1,
   isRecoverableDraft,
@@ -111,6 +112,44 @@ describe('sessionCodec (TEST-10 helpers)', () => {
     expect(merged.editorContent).toBe('hello')
     expect(merged.documentsById.get('a')?.content).toBe('hello')
     expect(merged.projectsById.get(merged.activeProjectId)?.currentDocumentId).toBe('a')
+    expect(merged.projectsById.get('default')?.chat.threadsById.size).toBe(0)
+  })
+
+  it('serializeSessionFromState round-trip preserves empty project chat state', () => {
+    const s = createInitialAppState()
+    const blob = serializeSessionFromState(s)
+    const merged = mergeSessionIntoState(createInitialAppState(), blob)
+    const proj = merged.projectsById.get(merged.activeProjectId)!
+    expect(proj.chat.threadsById.size).toBe(0)
+    expect(proj.chat.messagesByThreadId.size).toBe(0)
+    expect(proj.chat.activeThreadId).toBeNull()
+  })
+
+  it('serializeSessionFromState round-trip preserves synthetic chat', () => {
+    const synth = chatStateFromPersisted({
+      threads: [{ id: 't1', title: 'T', createdAtIso: '2026-01-01T00:00:00.000Z' }],
+      activeThreadId: 't1',
+      messagesByThread: [
+        {
+          threadId: 't1',
+          messages: [
+            { id: 'm1', role: 'user', body: 'hi', createdAtIso: '2026-01-02T00:00:00.000Z' }
+          ]
+        }
+      ]
+    })
+    let s = createInitialAppState()
+    const activeId = s.activeProjectId
+    const active = s.projectsById.get(activeId)!
+    const projectsById = new Map(s.projectsById)
+    projectsById.set(activeId, { ...active, chat: synth })
+    s = { ...s, projectsById }
+    const blob = serializeSessionFromState(s)
+    const merged = mergeSessionIntoState(createInitialAppState(), blob)
+    const chat = merged.projectsById.get(activeId)!.chat
+    expect(chat.activeThreadId).toBe('t1')
+    expect(chat.threadsById.get('t1')?.title).toBe('T')
+    expect(chat.messagesByThreadId.get('t1')?.[0]?.body).toBe('hi')
   })
 
   it('refreshSessionDocumentsFromDisk skips missing files', async () => {

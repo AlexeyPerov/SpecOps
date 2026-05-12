@@ -1,5 +1,7 @@
 /** Canonical document record (Architecture §4.2 + UI path fields). */
 
+import type { ChatState } from '../chat/types'
+
 export interface Document {
   readonly id: string
   readonly title: string
@@ -20,6 +22,8 @@ export type FileListGrouping = 'none' | 'folder'
 export const UNGROUPED_FOLDER_KEY = '__ungrouped__'
 
 export interface ProjectState {
+  /** Stub chat slice (RR-03); future blobs may live under `userData/specops/projects/<id>/chats/`. */
+  readonly chat: ChatState
   readonly documentsById: Map<string, Document>
   readonly recentDocumentIds: string[]
   readonly currentDocumentId: string | null

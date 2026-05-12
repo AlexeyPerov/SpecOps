@@ -83,6 +83,17 @@ body {
   cursor: pointer;
 }
 
+.toolbar-project {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.toolbar-project .recents-select {
+  min-width: 7.5rem;
+  max-width: 12rem;
+}
+
 .app-body {
   flex: 1;
   display: grid;

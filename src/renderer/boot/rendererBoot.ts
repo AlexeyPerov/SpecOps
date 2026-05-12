@@ -23,6 +23,7 @@ import {
   serializeSessionFromState
 } from '../../core/state/sessionCodec'
 import { executeMenuCommand } from '../features/menu/menuCommands'
+import { wireProjectSwitcher } from '../features/projects/projectSwitcher'
 import { renderRecents, triggerWorkspaceMotion } from '../features/recents/recentsView'
 import { attachPreviewChrome, mountPreview, previewErrorSnippet } from '../previewHost'
 import { buildEditorHighlightHtml } from '../editor/editorHighlight'
@@ -68,6 +69,11 @@ export function bootRenderer(ctx: RendererBootContext): void {
       <button type="button" id="btn-save" class="toolbar-btn">Save</button>
       <button type="button" id="btn-save-as" class="toolbar-btn">Save As…</button>
       <button type="button" id="btn-new-untitled" class="toolbar-btn">New untitled</button>
+      <label class="toolbar-project">
+        <span class="visually-hidden">Active project</span>
+        <select id="project-switcher" class="recents-select" aria-label="Active project"></select>
+      </label>
+      <button type="button" id="btn-add-project" class="toolbar-btn">Add project…</button>
       <span id="dirty-indicator" class="dirty-indicator" hidden aria-live="polite">Modified</span>
       <label class="toolbar-autosave"><input type="checkbox" id="editor-autosave" /> Autosave</label>
       <span id="theme-controls-slot"></span>
@@ -636,6 +642,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
     if (!saved) return
     await Promise.resolve(action())
   }
+
+  wireProjectSwitcher({ root, store, specOps, runAfterDirtyPrompt })
 
   function collectDroppedMarkdownPaths(dt: DataTransfer | null): string[] {
     const out: string[] = []

@@ -26,6 +26,8 @@ Desktop Markdown editor with live sanitized preview, built with **Electron**, **
 
 **Security baseline:** `nodeIntegration: false`, **`contextIsolation: true`**, **`sandbox: true`** on `BrowserWindow`; untrusted preview HTML is sanitized (`NFR-06`–`NFR-08`).
 
+**Refactoring iteration 1:** agent-oriented module boundaries, nested `ProjectState`, shared IPC contracts, and related execution tasks are documented under [`specs/refactoring-iter-1/`](specs/refactoring-iter-1/ExecutionPlan.md) ([`ExecutionPlan.md`](specs/refactoring-iter-1/ExecutionPlan.md), [`RefactoringRequirements.md`](specs/refactoring-iter-1/RefactoringRequirements.md), [`AgentArchitecture.md`](specs/refactoring-iter-1/AgentArchitecture.md)).
+
 ## Phase coverage (representative requirement IDs)
 
 Implementation pointers are indicative; specs remain authoritative.

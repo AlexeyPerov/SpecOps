@@ -1,3 +1,4 @@
+import { createEmptyChatState } from '../chat/chatState'
 import { folderKeyForDocumentPath, groupsForPresentation } from './fileListPresentation'
 import type { AppAction, AppState, Document, ProjectState } from './types'
 import { pathBasename, stableDocIdForPath } from '../util/paths'
@@ -6,6 +7,7 @@ export const DEFAULT_PROJECT_ID = 'default'
 
 function createInitialProjectState(): ProjectState {
   return {
+    chat: createEmptyChatState(),
     documentsById: new Map(),
     recentDocumentIds: [],
     currentDocumentId: null,

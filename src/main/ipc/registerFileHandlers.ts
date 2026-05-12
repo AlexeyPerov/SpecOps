@@ -1,19 +1,14 @@
 import { promises as fs } from 'node:fs'
-import { dirname, isAbsolute, normalize, resolve } from 'node:path'
+import { dirname, normalize } from 'node:path'
 import type { BrowserWindow, Dialog, IpcMain } from 'electron'
 
 import { SPEC_OPS_IPC } from '../../ipc/specOpsIpc'
+import {
+  normalizeAbsolutePathArg,
+  normalizeRenamePathsPayload,
+  normalizeWriteTextFilePayload
+} from '../../ipc/ipcPayloadNormalize'
 import type { createSaveQueue } from '../saveSerialize'
-
-function assertAbsoluteNormalizedPath(p: string): string | null {
-  try {
-    const r = normalize(resolve(p.trim()))
-    if (!isAbsolute(r)) return null
-    return r
-  } catch {
-    return null
-  }
-}
 
 export function registerFileHandlers(
   ipc: IpcMain,
@@ -49,11 +44,11 @@ export function registerFileHandlers(
     async (event, payload: { absolutePath: unknown; content: unknown }) => {
       const wcId = event.sender.id
       return saveQueue.enqueue(wcId, async () => {
-        const target = assertAbsoluteNormalizedPath(String(payload?.absolutePath ?? ''))
-        const content = typeof payload?.content === 'string' ? payload.content : null
-        if (!target || content === null) {
+        const parsed = normalizeWriteTextFilePayload(payload)
+        if (!parsed) {
           return { ok: false as const, reason: 'invalid_payload' }
         }
+        const { absolutePath: target, content } = parsed
         try {
           await fs.mkdir(dirname(target), { recursive: true })
           await fs.writeFile(target, content, 'utf8')
@@ -95,9 +90,9 @@ export function registerFileHandlers(
   )
 
   ipc.handle(SPEC_OPS_IPC.renamePathOnDisk, async (_evt, payload: { fromPath: unknown; toPath: unknown }) => {
-    const from = assertAbsoluteNormalizedPath(String(payload?.fromPath ?? ''))
-    const to = assertAbsoluteNormalizedPath(String(payload?.toPath ?? ''))
-    if (!from || !to || from === to) return { ok: false as const, reason: 'invalid_path' }
+    const paths = normalizeRenamePathsPayload(payload)
+    if (!paths) return { ok: false as const, reason: 'invalid_path' }
+    const { fromPath: from, toPath: to } = paths
     try {
       await fs.rename(from, to)
       const stat = await fs.stat(to)
@@ -108,7 +103,7 @@ export function registerFileHandlers(
   })
 
   ipc.handle(SPEC_OPS_IPC.unlinkFilePath, async (_evt, absPath: unknown) => {
-    const target = typeof absPath === 'string' ? assertAbsoluteNormalizedPath(absPath) : null
+    const target = normalizeAbsolutePathArg(absPath)
     if (!target) return { ok: false as const, reason: 'invalid_path' }
     try {
       await fs.unlink(target)

@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/pro
 import { dirname, join } from 'node:path'
 import { BrowserWindow, dialog, ipcMain, type App } from 'electron'
 
+import { tryParseChatStatePersisted } from '../core/chat/chatState'
 import type {
   PreferencesPersistedV1 as PersistedPreferencesV1,
   SessionDocumentPersistedV1 as PersistedSessionDocumentV1,
@@ -134,6 +135,9 @@ function parseSession(raw: string): PersistedSessionV1 | null {
             lastOpened: d.lastOpened,
             content: d.content
           }))
+        const chat = tryParseChatStatePersisted(
+          (p as { chat?: unknown }).chat
+        )
         return {
           projectId: p.projectId,
           workspaceFolderPath: p.workspaceFolderPath,
@@ -142,7 +146,8 @@ function parseSession(raw: string): PersistedSessionV1 | null {
           expandedFolderGroups: p.expandedFolderGroups.filter((x): x is string => typeof x === 'string'),
           recentDocumentIds: p.recentDocumentIds.filter((id): id is string => typeof id === 'string'),
           documents,
-          currentDocumentId: p.currentDocumentId
+          currentDocumentId: p.currentDocumentId,
+          ...(chat ? { chat } : {})
         }
       })
     return {

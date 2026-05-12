@@ -1,7 +1,16 @@
 import type { AppState, Document } from './types'
+import {
+  chatStateFromPersisted,
+  chatStateToPersisted,
+  type ChatStatePersistedV1
+} from '../chat/chatState'
 import { selectActiveProject } from './selectors'
 
-/** Mirrors main-process persisted preferences JSON v1. */
+/**
+ * Session/preferences codec for nested multi-project state (v2).
+ * Per-project chat payloads are embedded in session projects for the stub; future
+ * split blobs may live under `userData/specops/projects/<projectId>/chats/` (RR-04.5).
+ */
 export interface PreferencesPersistedV1 {
   readonly version: 2
   readonly themeMode: AppState['themeMode']
@@ -33,6 +42,8 @@ export interface SessionProjectPersistedV1 {
   readonly recentDocumentIds: readonly string[]
   readonly documents: readonly SessionDocumentPersistedV1[]
   readonly currentDocumentId: string | null
+  /** Optional stub chat snapshot; omitted in older v2 files. */
+  readonly chat?: ChatStatePersistedV1
 }
 
 export interface SessionPersistedV1 {
@@ -114,6 +125,7 @@ export function mergeSessionIntoState(
       currentDocumentId !== null ? documentsById.get(currentDocumentId)?.content ?? '' : ''
 
     projectsById.set(project.projectId, {
+      chat: chatStateFromPersisted(project.chat),
       documentsById,
       recentDocumentIds,
       currentDocumentId,
@@ -172,7 +184,8 @@ export function serializeSessionFromState(state: AppState): SessionPersistedV1 {
       expandedFolderGroups: [...project.expandedFolderGroups],
       recentDocumentIds: [...project.recentDocumentIds],
       documents,
-      currentDocumentId: project.currentDocumentId
+      currentDocumentId: project.currentDocumentId,
+      chat: chatStateToPersisted(project.chat)
     })
   }
   return {

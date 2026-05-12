@@ -48,7 +48,6 @@ async function buildInitialState(): Promise<ReturnType<typeof createInitialAppSt
     prefsRaw && typeof prefsRaw === 'object'
       ? { ...DEFAULT_PREFERENCES_V1, ...(prefsRaw as PreferencesPersistedV1) }
       : DEFAULT_PREFERENCES_V1
-
   let state = mergePreferencesIntoState(createInitialAppState(), prefs)
 
   let sessionBlob: SessionPersistedV1 | null = null
@@ -58,16 +57,24 @@ async function buildInitialState(): Promise<ReturnType<typeof createInitialAppSt
     sessionBlob = null
   }
 
-  if (sessionBlob && sessionBlob.version === 1 && sessionBlob.documents.length > 0) {
-    const refreshed = await refreshSessionDocumentsFromDisk(sessionBlob.documents, (p) =>
-      window.specOps.readTextFile(p)
+  if (sessionBlob && sessionBlob.version === 2 && sessionBlob.projects.length > 0) {
+    const refreshedProjects = await Promise.all(
+      sessionBlob.projects.map(async (project) => {
+        const refreshed = await refreshSessionDocumentsFromDisk(project.documents, (p) =>
+          window.specOps.readTextFile(p)
+        )
+        const surviving = new Set(refreshed.map((d) => d.id))
+        const recentFiltered = project.recentDocumentIds.filter((id) => surviving.has(id))
+        return {
+          ...project,
+          documents: refreshed,
+          recentDocumentIds: recentFiltered
+        }
+      })
     )
-    const surviving = new Set(refreshed.map((d) => d.id))
-    const recentFiltered = sessionBlob.recentDocumentIds.filter((id) => surviving.has(id))
     state = mergeSessionIntoState(state, {
       ...sessionBlob,
-      documents: refreshed,
-      recentDocumentIds: recentFiltered
+      projects: refreshedProjects
     })
   }
 

@@ -58,7 +58,7 @@ function clampRecentsPaneWidthPx(raw: unknown): number {
 function parsePreferences(raw: string): PersistedPreferencesV1 {
   try {
     const o = JSON.parse(raw) as Partial<PersistedPreferencesV1>
-    if (o.version !== undefined && o.version !== 1) return DEFAULT_PREFERENCES_V1
+    if (o.version !== undefined && o.version !== 2) return DEFAULT_PREFERENCES_V1
     const themeMode =
       o.themeMode === 'light' || o.themeMode === 'dark' || o.themeMode === 'system'
         ? o.themeMode
@@ -76,7 +76,7 @@ function parsePreferences(raw: string): PersistedPreferencesV1 {
         ? o.workspaceFolderPath
         : null
     return {
-      version: 1,
+      version: 2,
       themeMode,
       fileListSort,
       fileListGrouping,
@@ -95,34 +95,61 @@ function parsePreferences(raw: string): PersistedPreferencesV1 {
 function parseSession(raw: string): PersistedSessionV1 | null {
   try {
     const o = JSON.parse(raw) as Partial<PersistedSessionV1>
-    if (o.version !== 1 || !Array.isArray(o.documents) || !Array.isArray(o.recentDocumentIds)) {
+    if (o.version !== 2 || !Array.isArray(o.projects) || typeof o.activeProjectId !== 'string') {
       return null
     }
-    const documents = o.documents
-      .filter((d): d is PersistedSessionDocumentV1 => {
+    const projects = o.projects
+      .filter((p): p is PersistedSessionV1['projects'][number] => {
         return (
-          typeof d === 'object' &&
-          d !== null &&
-          typeof (d as PersistedSessionDocumentV1).id === 'string' &&
-          typeof (d as PersistedSessionDocumentV1).title === 'string' &&
-          typeof (d as PersistedSessionDocumentV1).content === 'string' &&
-          typeof (d as PersistedSessionDocumentV1).lastOpened === 'string'
+          typeof p === 'object' &&
+          p !== null &&
+          typeof p.projectId === 'string' &&
+          (typeof p.workspaceFolderPath === 'string' || p.workspaceFolderPath === null) &&
+          (p.fileListSort === 'lastOpened' || p.fileListSort === 'title' || p.fileListSort === 'path') &&
+          (p.fileListGrouping === 'none' || p.fileListGrouping === 'folder') &&
+          Array.isArray(p.expandedFolderGroups) &&
+          Array.isArray(p.recentDocumentIds) &&
+          Array.isArray(p.documents) &&
+          (typeof p.currentDocumentId === 'string' || p.currentDocumentId === null)
         )
       })
-      .map((d) => ({
-        id: d.id,
-        title: d.title,
-        path: typeof d.path === 'string' || d.path === null ? d.path : null,
-        lastModified: typeof d.lastModified === 'string' || d.lastModified === null ? d.lastModified : null,
-        lastOpened: d.lastOpened,
-        content: d.content
-      }))
-    const recentDocumentIds = o.recentDocumentIds.filter((id): id is string => typeof id === 'string')
-    const currentDocumentId =
-      typeof o.currentDocumentId === 'string' || o.currentDocumentId === null
-        ? o.currentDocumentId
-        : null
-    return { version: 1, recentDocumentIds, documents, currentDocumentId }
+      .map((p) => {
+        const documents = p.documents
+          .filter((d): d is PersistedSessionDocumentV1 => {
+            return (
+              typeof d === 'object' &&
+              d !== null &&
+              typeof d.id === 'string' &&
+              typeof d.title === 'string' &&
+              typeof d.content === 'string' &&
+              typeof d.lastOpened === 'string'
+            )
+          })
+          .map((d) => ({
+            id: d.id,
+            title: d.title,
+            path: typeof d.path === 'string' || d.path === null ? d.path : null,
+            lastModified:
+              typeof d.lastModified === 'string' || d.lastModified === null ? d.lastModified : null,
+            lastOpened: d.lastOpened,
+            content: d.content
+          }))
+        return {
+          projectId: p.projectId,
+          workspaceFolderPath: p.workspaceFolderPath,
+          fileListSort: p.fileListSort,
+          fileListGrouping: p.fileListGrouping,
+          expandedFolderGroups: p.expandedFolderGroups.filter((x): x is string => typeof x === 'string'),
+          recentDocumentIds: p.recentDocumentIds.filter((id): id is string => typeof id === 'string'),
+          documents,
+          currentDocumentId: p.currentDocumentId
+        }
+      })
+    return {
+      version: 2,
+      activeProjectId: o.activeProjectId,
+      projects
+    }
   } catch {
     return null
   }
@@ -222,7 +249,7 @@ export function registerPersistenceIpc(app: App): void {
     const base = await readPreferencesFile(app)
     const p = prefs as Partial<PersistedPreferencesV1>
     const merged: PersistedPreferencesV1 = {
-      version: 1,
+      version: 2,
       themeMode:
         p.themeMode === 'light' || p.themeMode === 'dark' || p.themeMode === 'system'
           ? p.themeMode
@@ -262,7 +289,7 @@ export function registerPersistenceIpc(app: App): void {
 
   ipcMain.handle(SPEC_OPS_IPC.writeSession, async (_evt, session: unknown) => {
     const s = session as PersistedSessionV1
-    if (!s || s.version !== 1) return
+    if (!s || s.version !== 2) return
     await writeSessionFile(app, s)
   })
 

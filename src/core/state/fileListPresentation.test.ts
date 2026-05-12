@@ -27,10 +27,19 @@ function stateWith(docs: Document[], recentIds: string[], overrides?: Partial<Ap
   const map = new Map(docs.map((d) => [d.id, d]))
   const base = createInitialAppState()
   const active = base.projectsById.get(base.activeProjectId)!
+  const projectOverrides = {
+    currentDocumentId: overrides?.currentDocumentId ?? active.currentDocumentId,
+    editorContent: overrides?.editorContent ?? active.editorContent,
+    workspaceFolderPath: overrides?.workspaceFolderPath ?? active.workspaceFolderPath,
+    fileListSort: overrides?.fileListSort ?? active.fileListSort,
+    fileListGrouping: overrides?.fileListGrouping ?? active.fileListGrouping,
+    expandedFolderGroups: overrides?.expandedFolderGroups ?? active.expandedFolderGroups
+  }
   const patched = {
     ...active,
     documentsById: map,
-    recentDocumentIds: recentIds
+    recentDocumentIds: recentIds,
+    ...projectOverrides
   }
   const projectsById = new Map(base.projectsById)
   projectsById.set(base.activeProjectId, patched)
@@ -39,7 +48,13 @@ function stateWith(docs: Document[], recentIds: string[], overrides?: Partial<Ap
     projectsById,
     documentsById: map,
     recentDocumentIds: recentIds,
-    ...overrides
+    ...overrides,
+    currentDocumentId: patched.currentDocumentId,
+    editorContent: patched.editorContent,
+    workspaceFolderPath: patched.workspaceFolderPath,
+    fileListSort: patched.fileListSort,
+    fileListGrouping: patched.fileListGrouping,
+    expandedFolderGroups: [...patched.expandedFolderGroups]
   }
 }
 
@@ -138,7 +153,10 @@ describe('isEditorDirty', () => {
     const d = doc({ id: 'x', title: 'x', content: 'orig' })
     let s = stateWith([d], ['x'], { currentDocumentId: 'x', editorContent: 'orig' })
     expect(isEditorDirty(s)).toBe(false)
-    s = { ...s, editorContent: 'edited' }
+    const active = s.projectsById.get(s.activeProjectId)!
+    const projectsById = new Map(s.projectsById)
+    projectsById.set(s.activeProjectId, { ...active, editorContent: 'edited' })
+    s = { ...s, projectsById, editorContent: 'edited' }
     expect(isEditorDirty(s)).toBe(true)
   })
 })

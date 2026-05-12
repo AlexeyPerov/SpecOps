@@ -1,8 +1,9 @@
 import type { AppState, Document } from './types'
+import { selectActiveProject } from './selectors'
 
 /** Mirrors main-process persisted preferences JSON v1. */
 export interface PreferencesPersistedV1 {
-  readonly version: 1
+  readonly version: 2
   readonly themeMode: AppState['themeMode']
   readonly fileListSort: AppState['fileListSort']
   readonly fileListGrouping: AppState['fileListGrouping']
@@ -23,15 +24,25 @@ export interface SessionDocumentPersistedV1 {
   readonly content: string
 }
 
-export interface SessionPersistedV1 {
-  readonly version: 1
+export interface SessionProjectPersistedV1 {
+  readonly projectId: string
+  readonly workspaceFolderPath: string | null
+  readonly fileListSort: AppState['fileListSort']
+  readonly fileListGrouping: AppState['fileListGrouping']
+  readonly expandedFolderGroups: readonly string[]
   readonly recentDocumentIds: readonly string[]
   readonly documents: readonly SessionDocumentPersistedV1[]
   readonly currentDocumentId: string | null
 }
 
+export interface SessionPersistedV1 {
+  readonly version: 2
+  readonly activeProjectId: string
+  readonly projects: readonly SessionProjectPersistedV1[]
+}
+
 export const DEFAULT_PREFERENCES_V1: PreferencesPersistedV1 = {
-  version: 1,
+  version: 2,
   themeMode: 'system',
   fileListSort: 'lastOpened',
   fileListGrouping: 'none',
@@ -76,87 +87,111 @@ export function mergeSessionIntoState(
   base: AppState,
   session: SessionPersistedV1
 ): AppState {
-  const documentsById = new Map<string, Document>()
-  const seen = new Set<string>()
-  for (const d of session.documents) {
-    if (seen.has(d.id)) continue
-    seen.add(d.id)
-    const doc: Document = {
-      id: d.id,
-      title: d.title,
-      path: d.path,
-      lastModified: d.lastModified,
-      lastOpened: d.lastOpened,
-      content: d.content
-    }
-    documentsById.set(d.id, doc)
-  }
-
-  const recentDocumentIds = session.recentDocumentIds.filter((id) => documentsById.has(id))
-  let currentDocumentId =
-    session.currentDocumentId !== null && documentsById.has(session.currentDocumentId)
-      ? session.currentDocumentId
-      : recentDocumentIds[0] ?? null
-
-  const editorContent =
-    currentDocumentId !== null ? documentsById.get(currentDocumentId)?.content ?? '' : ''
-
   const projectsById = new Map(base.projectsById)
-  const active = projectsById.get(base.activeProjectId)
-  if (active) {
-    projectsById.set(base.activeProjectId, {
-      ...active,
+  for (const project of session.projects) {
+    const documentsById = new Map<string, Document>()
+    const seen = new Set<string>()
+    for (const d of project.documents) {
+      if (seen.has(d.id)) continue
+      seen.add(d.id)
+      const doc: Document = {
+        id: d.id,
+        title: d.title,
+        path: d.path,
+        lastModified: d.lastModified,
+        lastOpened: d.lastOpened,
+        content: d.content
+      }
+      documentsById.set(d.id, doc)
+    }
+
+    const recentDocumentIds = project.recentDocumentIds.filter((id) => documentsById.has(id))
+    const currentDocumentId =
+      project.currentDocumentId !== null && documentsById.has(project.currentDocumentId)
+        ? project.currentDocumentId
+        : recentDocumentIds[0] ?? null
+    const editorContent =
+      currentDocumentId !== null ? documentsById.get(currentDocumentId)?.content ?? '' : ''
+
+    projectsById.set(project.projectId, {
       documentsById,
       recentDocumentIds,
       currentDocumentId,
-      editorContent
+      editorContent,
+      workspaceFolderPath: project.workspaceFolderPath,
+      fileListSort: project.fileListSort,
+      fileListGrouping: project.fileListGrouping,
+      expandedFolderGroups: [...project.expandedFolderGroups]
     })
   }
+
+  const activeProjectId = projectsById.has(session.activeProjectId)
+    ? session.activeProjectId
+    : base.activeProjectId
+  const activeProject = projectsById.get(activeProjectId) ?? selectActiveProject(base)
 
   return {
     ...base,
     projectsById,
-    documentsById,
-    recentDocumentIds,
-    currentDocumentId,
-    editorContent
+    activeProjectId,
+    documentsById: activeProject.documentsById,
+    recentDocumentIds: activeProject.recentDocumentIds,
+    currentDocumentId: activeProject.currentDocumentId,
+    editorContent: activeProject.editorContent,
+    workspaceFolderPath: activeProject.workspaceFolderPath,
+    fileListSort: activeProject.fileListSort,
+    fileListGrouping: activeProject.fileListGrouping,
+    expandedFolderGroups: activeProject.expandedFolderGroups
   }
 }
 
 /** Snapshot baseline documents + ordering for session.json (Document.content = saved baseline). */
 export function serializeSessionFromState(state: AppState): SessionPersistedV1 {
-  const documents: SessionDocumentPersistedV1[] = []
-  const seen = new Set<string>()
-  for (const id of state.recentDocumentIds) {
-    const doc = state.documentsById.get(id)
-    if (!doc || seen.has(id)) continue
-    seen.add(id)
-    documents.push({
-      id: doc.id,
-      title: doc.title,
-      path: doc.path,
-      lastModified: doc.lastModified,
-      lastOpened: doc.lastOpened,
-      content: doc.content
+  const projects: SessionProjectPersistedV1[] = []
+  for (const [projectId, project] of state.projectsById.entries()) {
+    const documents: SessionDocumentPersistedV1[] = []
+    const seen = new Set<string>()
+    for (const id of project.recentDocumentIds) {
+      const doc = project.documentsById.get(id)
+      if (!doc || seen.has(id)) continue
+      seen.add(id)
+      documents.push({
+        id: doc.id,
+        title: doc.title,
+        path: doc.path,
+        lastModified: doc.lastModified,
+        lastOpened: doc.lastOpened,
+        content: doc.content
+      })
+    }
+    projects.push({
+      projectId,
+      workspaceFolderPath: project.workspaceFolderPath,
+      fileListSort: project.fileListSort,
+      fileListGrouping: project.fileListGrouping,
+      expandedFolderGroups: [...project.expandedFolderGroups],
+      recentDocumentIds: [...project.recentDocumentIds],
+      documents,
+      currentDocumentId: project.currentDocumentId
     })
   }
   return {
-    version: 1,
-    recentDocumentIds: [...state.recentDocumentIds],
-    documents,
-    currentDocumentId: state.currentDocumentId
+    version: 2,
+    activeProjectId: state.activeProjectId,
+    projects
   }
 }
 
 /** Preferences snapshot derived from AppState. */
 export function serializePreferencesFromState(state: AppState): PreferencesPersistedV1 {
+  const project = selectActiveProject(state)
   return {
-    version: 1,
+    version: 2,
     themeMode: state.themeMode,
-    fileListSort: state.fileListSort,
-    fileListGrouping: state.fileListGrouping,
-    expandedFolderGroups: [...state.expandedFolderGroups],
-    workspaceFolderPath: state.workspaceFolderPath,
+    fileListSort: project.fileListSort,
+    fileListGrouping: project.fileListGrouping,
+    expandedFolderGroups: [...project.expandedFolderGroups],
+    workspaceFolderPath: project.workspaceFolderPath,
     autosaveEnabled: state.autosaveEnabled,
     editorSoftWrap: state.editorSoftWrap,
     editorLineNumbers: state.editorLineNumbers,

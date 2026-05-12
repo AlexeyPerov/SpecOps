@@ -1,5 +1,6 @@
 import type { AppState } from './types'
 import { UNGROUPED_FOLDER_KEY } from './types'
+import { selectActiveProject } from './selectors'
 
 /** Parent directory key for grouping (renderer-safe, no Node path). */
 export function folderKeyForDocumentPath(pathStr: string | null): string {
@@ -11,14 +12,15 @@ export function folderKeyForDocumentPath(pathStr: string | null): string {
 }
 
 export function orderedRecentIds(state: AppState): string[] {
-  const ids = [...state.recentDocumentIds]
-  if (state.fileListSort === 'lastOpened') return ids
+  const project = selectActiveProject(state)
+  const ids = [...project.recentDocumentIds]
+  if (project.fileListSort === 'lastOpened') return ids
 
-  const docs = state.documentsById
+  const docs = project.documentsById
   const sortKey = (id: string): string => {
     const d = docs.get(id)
     if (!d) return id
-    if (state.fileListSort === 'title') return (d.title || id).toLowerCase()
+    if (project.fileListSort === 'title') return (d.title || id).toLowerCase()
     return (d.path ?? '\uffff').toLowerCase()
   }
 
@@ -38,8 +40,9 @@ export interface RecentPresentationGroup {
 }
 
 export function groupsForPresentation(state: AppState): RecentPresentationGroup[] {
+  const project = selectActiveProject(state)
   const ordered = orderedRecentIds(state)
-  if (state.fileListGrouping === 'none') {
+  if (project.fileListGrouping === 'none') {
     return [{ key: '_flat', label: '', ids: ordered }]
   }
 
@@ -64,20 +67,23 @@ export function groupsForPresentation(state: AppState): RecentPresentationGroup[
 }
 
 export function isFolderExpanded(state: AppState, folderKey: string): boolean {
-  if (state.fileListGrouping !== 'folder') return true
-  return state.expandedFolderGroups.includes(folderKey)
+  const project = selectActiveProject(state)
+  if (project.fileListGrouping !== 'folder') return true
+  return project.expandedFolderGroups.includes(folderKey)
 }
 
 export function isEditorDirty(state: AppState): boolean {
-  if (state.currentDocumentId === null) return state.editorContent.length > 0
-  const doc = state.documentsById.get(state.currentDocumentId)
+  const project = selectActiveProject(state)
+  if (project.currentDocumentId === null) return project.editorContent.length > 0
+  const doc = project.documentsById.get(project.currentDocumentId)
   if (!doc) return false
-  return doc.content !== state.editorContent
+  return doc.content !== project.editorContent
 }
 
 export function documentIdForAbsolutePath(state: AppState, absolutePath: string): string | undefined {
+  const project = selectActiveProject(state)
   const norm = absolutePath.replace(/\\/g, '/')
-  for (const [id, doc] of state.documentsById) {
+  for (const [id, doc] of project.documentsById) {
     const p = doc.path?.replace(/\\/g, '/')
     if (p === norm) return id
   }

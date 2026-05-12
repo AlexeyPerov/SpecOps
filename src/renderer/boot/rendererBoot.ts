@@ -18,6 +18,7 @@ import {
   isEditorDirty,
   isFolderExpanded
 } from '../../core/state/fileListPresentation'
+import { selectActiveProject, selectCurrentDocumentPath } from '../../core/state/selectors'
 import { pathBasename, replaceBasename, stableDocIdForPath } from '../../core/util/paths'
 import {
   serializePreferencesFromState,
@@ -290,6 +291,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
   async function runPreview(): Promise<void> {
     const seq = ++previewSeq
     const st = store.getState()
+    const project = selectActiveProject(st)
     const parseResult = services.parser.parse(st.editorContent)
 
     let html: string
@@ -301,7 +303,9 @@ export function bootRenderer(ctx: RendererBootContext): void {
     }
 
     const docPath =
-      st.currentDocumentId !== null ? st.documentsById.get(st.currentDocumentId)?.path ?? null : null
+      project.currentDocumentId !== null
+        ? project.documentsById.get(project.currentDocumentId)?.path ?? null
+        : null
 
     if (seq !== previewSeq) return
 
@@ -317,7 +321,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const HISTORY_DEPTH = 75
   const editorHistory = createEditorHistory(HISTORY_DEPTH)
   let suppressHistory = false
-  let prevHistoryDocId: string | null = store.getState().currentDocumentId
+  let prevHistoryDocId: string | null = selectActiveProject(store.getState()).currentDocumentId
 
   function snapshotEditor(): { value: string; selStart: number; selEnd: number } {
     return {
@@ -533,7 +537,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   function openContextMenu(clientX: number, clientY: number, docId: string): void {
     const st = store.getState()
-    const doc = st.documentsById.get(docId)
+    const project = selectActiveProject(st)
+    const doc = project.documentsById.get(docId)
     if (!doc) return
     contextDocId = docId
     const hasPath = Boolean(doc.path?.trim())
@@ -556,17 +561,16 @@ export function bootRenderer(ctx: RendererBootContext): void {
   }
 
   function syncSelectsFromState(): void {
-    const st = store.getState()
-    sortSelect.value = st.fileListSort
-    groupSelect.value = st.fileListGrouping
+    const project = selectActiveProject(store.getState())
+    sortSelect.value = project.fileListSort
+    groupSelect.value = project.fileListGrouping
   }
 
   let prevSelection: string | null | undefined
 
   async function syncWatchPath(): Promise<void> {
     const st = store.getState()
-    const path =
-      st.currentDocumentId !== null ? st.documentsById.get(st.currentDocumentId)?.path ?? null : null
+    const path = selectCurrentDocumentPath(st)
     await specOps.setWatchedDocPath(path && path.trim() ? path : null)
   }
 
@@ -596,11 +600,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   async function saveCurrentBuffer(): Promise<boolean> {
     const st = store.getState()
-    const id = st.currentDocumentId
+    const project = selectActiveProject(st)
+    const id = project.currentDocumentId
     if (!id) return false
-    const doc = st.documentsById.get(id)
+    const doc = project.documentsById.get(id)
     if (!doc) return false
-    const body = st.editorContent
+    const body = project.editorContent
     const targetPath = doc.path?.trim()
     if (targetPath) {
       const wr = await specOps.writeTextFile({ absolutePath: targetPath, content: body })
@@ -642,11 +647,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   async function saveCurrentBufferAs(): Promise<boolean> {
     const st = store.getState()
-    const id = st.currentDocumentId
+    const project = selectActiveProject(st)
+    const id = project.currentDocumentId
     if (!id) return false
-    const doc = st.documentsById.get(id)
+    const doc = project.documentsById.get(id)
     if (!doc) return false
-    const body = st.editorContent
+    const body = project.editorContent
     const pick = await specOps.pickSaveMarkdownFile({
       defaultPath: doc.path ?? (doc.title ? `${doc.title}.md` : undefined)
     })
@@ -682,9 +688,10 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   const scheduleDraftWrite = debounce(() => {
     const st = store.getState()
-    const id = st.currentDocumentId
+    const project = selectActiveProject(st)
+    const id = project.currentDocumentId
     if (!id || !isEditorDirty(st)) return
-    void specOps.writeDraft({ documentId: id, content: st.editorContent })
+    void specOps.writeDraft({ documentId: id, content: project.editorContent })
   }, 750)
 
   const scheduleAutosave = debounce(() => {
@@ -693,6 +700,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   async function runAfterDirtyPrompt(action: () => void | Promise<void>): Promise<void> {
     const st = store.getState()
+    const project = selectActiveProject(st)
     if (!isEditorDirty(st)) {
       await Promise.resolve(action())
       return
@@ -700,10 +708,10 @@ export function bootRenderer(ctx: RendererBootContext): void {
     const choice = await specOps.promptDirtyNavigation()
     if (choice === 'cancel') return
     if (choice === 'discard') {
-      const sid = st.currentDocumentId
+      const sid = project.currentDocumentId
       if (sid) {
         void specOps.clearDraft(sid)
-        const d = st.documentsById.get(sid)
+        const d = project.documentsById.get(sid)
         if (d) store.dispatch({ type: 'EDITOR_CHANGE', content: d.content })
       }
       await Promise.resolve(action())
@@ -734,7 +742,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   function miscNewMarkdownInWorkspace(): void {
     void runAfterDirtyPrompt(async () => {
-      const folder = store.getState().workspaceFolderPath
+      const folder = selectActiveProject(store.getState()).workspaceFolderPath
       if (!folder) {
         window.alert('Choose a workspace folder first.')
         return
@@ -794,16 +802,17 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   function syncShellFromStore(): void {
     const st = store.getState()
+    const project = selectActiveProject(st)
     document.documentElement.style.setProperty('--recents-width', `${st.recentsPaneWidthPx}px`)
 
-    if (st.currentDocumentId !== prevHistoryDocId) {
+    if (project.currentDocumentId !== prevHistoryDocId) {
       editorHistory.clear()
       scheduleHistoryPush.cancel()
-      prevHistoryDocId = st.currentDocumentId
+      prevHistoryDocId = project.currentDocumentId
     }
-    if (editor.value !== st.editorContent) {
+    if (editor.value !== project.editorContent) {
       suppressHistory = true
-      editor.value = st.editorContent
+      editor.value = project.editorContent
       suppressHistory = false
       scheduleHistoryPush.cancel()
       refreshLineGutter()
@@ -829,15 +838,17 @@ export function bootRenderer(ctx: RendererBootContext): void {
     }
 
     const dirty = isEditorDirty(st)
-    if (prevDirty && !dirty && st.currentDocumentId) {
-      void specOps.clearDraft(st.currentDocumentId)
+    if (prevDirty && !dirty && project.currentDocumentId) {
+      void specOps.clearDraft(project.currentDocumentId)
     }
     prevDirty = dirty
-    if (dirty && st.currentDocumentId) {
+    if (dirty && project.currentDocumentId) {
       scheduleDraftWrite()
     }
 
-    const doc = st.currentDocumentId ? st.documentsById.get(st.currentDocumentId) : undefined
+    const doc = project.currentDocumentId
+      ? project.documentsById.get(project.currentDocumentId)
+      : undefined
     if (st.autosaveEnabled && doc?.path?.trim() && dirty) {
       scheduleAutosave()
     }
@@ -845,13 +856,13 @@ export function bootRenderer(ctx: RendererBootContext): void {
     syncSelectsFromState()
     renderRecents(recentsListRoot, store)
 
-    if (prevSelection !== undefined && prevSelection !== st.currentDocumentId) {
+    if (prevSelection !== undefined && prevSelection !== project.currentDocumentId) {
       triggerWorkspaceMotion(workspaceEl)
       void syncWatchPath()
     }
-    prevSelection = st.currentDocumentId
+    prevSelection = project.currentDocumentId
 
-    root.dataset.currentDocId = st.currentDocumentId ?? ''
+    root.dataset.currentDocId = project.currentDocumentId ?? ''
 
     refreshEditorHighlight()
   }
@@ -1002,7 +1013,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
     const btn = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('button[data-action]')
     if (!btn || btn.disabled || !contextDocId) return
     const st = store.getState()
-    const doc = st.documentsById.get(contextDocId)
+    const project = selectActiveProject(st)
+    const doc = project.documentsById.get(contextDocId)
     hideContextMenu()
     if (!doc) return
 
@@ -1033,7 +1045,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
         const newPath = replaceBasename(doc.path, nextName)
         void (async () => {
           const latest = store.getState()
-          const d = latest.documentsById.get(doc.id)
+          const latestProject = selectActiveProject(latest)
+          const d = latestProject.documentsById.get(doc.id)
           if (!d?.path) return
           const rn = await specOps.renamePathOnDisk({ fromPath: d.path, toPath: newPath })
           if (!rn.ok) {
@@ -1044,7 +1057,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
             type: 'REPARENT_DOCUMENT',
             oldDocumentId: d.id,
             newAbsolutePath: newPath,
-            content: latest.editorContent,
+            content: latestProject.editorContent,
             lastModified: rn.mtimeIso
           })
           void syncWatchPath()
@@ -1264,11 +1277,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   specOps.onExternalFileChanged((payload) => {
     const st = store.getState()
+    const project = selectActiveProject(st)
     const docId = documentIdForAbsolutePath(st, payload.path)
     if (!docId) return
-    const isCurrent = st.currentDocumentId === docId
+    const isCurrent = project.currentDocumentId === docId
     if (isCurrent && isEditorDirty(st)) {
-      if (payload.content === st.editorContent) {
+      if (payload.content === project.editorContent) {
         return
       }
       pendingExternal = {

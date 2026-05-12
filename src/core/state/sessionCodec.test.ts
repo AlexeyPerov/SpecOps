@@ -63,7 +63,7 @@ describe('sessionCodec (TEST-10 helpers)', () => {
       '2026-01-01T00:00:00.000Z'
     )
     const snap = serializeSessionFromState(s)
-    expect(snap.documents[0]?.content).toBe('baseline')
+    expect(snap.projects[0]?.documents[0]?.content).toBe('baseline')
   })
 
   it('serializePreferencesFromState includes editor preference flags', () => {
@@ -83,17 +83,27 @@ describe('sessionCodec (TEST-10 helpers)', () => {
   it('mergeSessionIntoState restores documents and editor baseline', () => {
     const base = mergePreferencesIntoState(createInitialAppState(), DEFAULT_PREFERENCES_V1)
     const merged = mergeSessionIntoState(base, {
-      version: 1,
-      recentDocumentIds: ['a'],
-      currentDocumentId: 'a',
-      documents: [
+      version: 2,
+      activeProjectId: 'default',
+      projects: [
         {
-          id: 'a',
-          title: 'Note',
-          path: null,
-          lastModified: null,
-          lastOpened: '2026-01-01T00:00:00.000Z',
-          content: 'hello'
+          projectId: 'default',
+          workspaceFolderPath: null,
+          fileListSort: 'lastOpened',
+          fileListGrouping: 'none',
+          expandedFolderGroups: [],
+          recentDocumentIds: ['a'],
+          currentDocumentId: 'a',
+          documents: [
+            {
+              id: 'a',
+              title: 'Note',
+              path: null,
+              lastModified: null,
+              lastOpened: '2026-01-01T00:00:00.000Z',
+              content: 'hello'
+            }
+          ]
         }
       ]
     })

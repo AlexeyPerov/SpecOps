@@ -91,8 +91,19 @@ describe('UPH-01 shell (TEST-02 harness)', () => {
       path: null,
       lastModified: null
     }
+    const base = createInitialAppState()
+    const active = base.projectsById.get(base.activeProjectId)!
+    const projectsById = new Map(base.projectsById)
+    projectsById.set(base.activeProjectId, {
+      ...active,
+      documentsById: new Map([[doc.id, doc]]),
+      recentDocumentIds: [doc.id],
+      currentDocumentId: doc.id,
+      editorContent: doc.content
+    })
     const store = createAppStore({
-      ...createInitialAppState(),
+      ...base,
+      projectsById,
       documentsById: new Map([[doc.id, doc]]),
       recentDocumentIds: [doc.id],
       currentDocumentId: doc.id,

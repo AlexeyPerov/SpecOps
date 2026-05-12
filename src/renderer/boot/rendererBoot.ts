@@ -25,6 +25,7 @@ import {
 } from '../../core/state/sessionCodec'
 import { attachPreviewChrome, mountPreview, previewErrorSnippet } from '../previewHost'
 import { buildEditorHighlightHtml } from '../editor/editorHighlight'
+import { getScrollFraction, setScrollFraction } from '../editor/scrollSync'
 
 export interface RendererBootContext {
   readonly root: HTMLElement
@@ -255,6 +256,17 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   attachPreviewChrome(previewEl)
 
+  let suppressEditorScrollFromSync = false
+  let suppressPreviewScrollFromSync = false
+
+  function syncPreviewFromEditor(): void {
+    suppressPreviewScrollFromSync = true
+    setScrollFraction(previewEl, getScrollFraction(editor))
+    queueMicrotask(() => {
+      suppressPreviewScrollFromSync = false
+    })
+  }
+
   let previewSeq = 0
 
   let pendingExternal: {
@@ -295,6 +307,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     await mountPreview(previewEl, html, docPath, specOps)
 
     if (seq !== previewSeq) return
+    syncPreviewFromEditor()
   }
 
   const schedulePreview = debounce(() => void runPreview(), 250)
@@ -906,6 +919,23 @@ export function bootRenderer(ctx: RendererBootContext): void {
   editor.addEventListener('scroll', () => {
     lineGutter.scrollTop = editor.scrollTop
     syncEditorHighlightScroll()
+    if (suppressEditorScrollFromSync) return
+    suppressPreviewScrollFromSync = true
+    setScrollFraction(previewEl, getScrollFraction(editor))
+    queueMicrotask(() => {
+      suppressPreviewScrollFromSync = false
+    })
+  })
+
+  previewEl.addEventListener('scroll', () => {
+    if (suppressPreviewScrollFromSync) return
+    suppressEditorScrollFromSync = true
+    setScrollFraction(editor, getScrollFraction(previewEl))
+    lineGutter.scrollTop = editor.scrollTop
+    syncEditorHighlightScroll()
+    queueMicrotask(() => {
+      suppressEditorScrollFromSync = false
+    })
   })
 
   findInput.addEventListener('input', () => refreshFindPatternError())

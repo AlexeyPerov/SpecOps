@@ -48,6 +48,12 @@ async function atomicWriteJson(targetPath: string, value: unknown): Promise<void
   await rename(tmp, targetPath)
 }
 
+function clampRecentsPaneWidthPx(raw: unknown): number {
+  const x = typeof raw === 'number' ? raw : typeof raw === 'string' ? parseFloat(raw) : NaN
+  if (!Number.isFinite(x)) return DEFAULT_PREFERENCES_V1.recentsPaneWidthPx
+  return Math.min(560, Math.max(180, Math.round(x)))
+}
+
 function parsePreferences(raw: string): PersistedPreferencesV1 {
   try {
     const o = JSON.parse(raw) as Partial<PersistedPreferencesV1>
@@ -77,7 +83,8 @@ function parsePreferences(raw: string): PersistedPreferencesV1 {
       workspaceFolderPath,
       autosaveEnabled: typeof o.autosaveEnabled === 'boolean' ? o.autosaveEnabled : false,
       editorSoftWrap: typeof o.editorSoftWrap === 'boolean' ? o.editorSoftWrap : true,
-      editorLineNumbers: typeof o.editorLineNumbers === 'boolean' ? o.editorLineNumbers : true
+      editorLineNumbers: typeof o.editorLineNumbers === 'boolean' ? o.editorLineNumbers : true,
+      recentsPaneWidthPx: clampRecentsPaneWidthPx(o.recentsPaneWidthPx)
     }
   } catch {
     return DEFAULT_PREFERENCES_V1
@@ -211,28 +218,41 @@ export function registerPersistenceIpc(app: App): void {
   ipcMain.handle('specops:read-preferences', async () => readPreferencesFile(app))
 
   ipcMain.handle('specops:write-preferences', async (_evt, prefs: unknown) => {
+    const base = await readPreferencesFile(app)
     const p = prefs as Partial<PersistedPreferencesV1>
     const merged: PersistedPreferencesV1 = {
       version: 1,
       themeMode:
         p.themeMode === 'light' || p.themeMode === 'dark' || p.themeMode === 'system'
           ? p.themeMode
-          : DEFAULT_PREFERENCES_V1.themeMode,
+          : base.themeMode,
       fileListSort:
         p.fileListSort === 'lastOpened' || p.fileListSort === 'title' || p.fileListSort === 'path'
           ? p.fileListSort
-          : DEFAULT_PREFERENCES_V1.fileListSort,
-      fileListGrouping: p.fileListGrouping === 'folder' ? 'folder' : 'none',
+          : base.fileListSort,
+      fileListGrouping:
+        p.fileListGrouping === 'folder'
+          ? 'folder'
+          : p.fileListGrouping === 'none'
+            ? 'none'
+            : base.fileListGrouping,
       expandedFolderGroups: Array.isArray(p.expandedFolderGroups)
         ? p.expandedFolderGroups.filter((x): x is string => typeof x === 'string')
-        : [],
+        : [...base.expandedFolderGroups],
       workspaceFolderPath:
         typeof p.workspaceFolderPath === 'string' || p.workspaceFolderPath === null
           ? p.workspaceFolderPath
-          : null,
-      autosaveEnabled: typeof p.autosaveEnabled === 'boolean' ? p.autosaveEnabled : false,
-      editorSoftWrap: typeof p.editorSoftWrap === 'boolean' ? p.editorSoftWrap : true,
-      editorLineNumbers: typeof p.editorLineNumbers === 'boolean' ? p.editorLineNumbers : true
+          : base.workspaceFolderPath,
+      autosaveEnabled:
+        typeof p.autosaveEnabled === 'boolean' ? p.autosaveEnabled : base.autosaveEnabled,
+      editorSoftWrap:
+        typeof p.editorSoftWrap === 'boolean' ? p.editorSoftWrap : base.editorSoftWrap,
+      editorLineNumbers:
+        typeof p.editorLineNumbers === 'boolean' ? p.editorLineNumbers : base.editorLineNumbers,
+      recentsPaneWidthPx:
+        p.recentsPaneWidthPx !== undefined && p.recentsPaneWidthPx !== null
+          ? clampRecentsPaneWidthPx(p.recentsPaneWidthPx)
+          : base.recentsPaneWidthPx
     }
     await writePreferencesFile(app, merged)
   })

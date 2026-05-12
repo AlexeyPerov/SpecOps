@@ -1,4 +1,4 @@
-import { watch } from 'node:fs'
+import { existsSync, watch } from 'node:fs'
 import { promises as fs } from 'node:fs'
 import {
   dirname,
@@ -63,6 +63,8 @@ type WatchSlot = {
   absolutePath: string | null
   watcher: ReturnType<typeof watch> | null
   debounceTimer: ReturnType<typeof setTimeout> | null
+  /** Latest mtime we have already reflected to the renderer (or just established as baseline). */
+  lastSeenMtimeMs: number | null
 }
 
 const watchSlots = new Map<number, WatchSlot>()
@@ -70,7 +72,7 @@ const watchSlots = new Map<number, WatchSlot>()
 function watchSlotFor(senderId: number): WatchSlot {
   let slot = watchSlots.get(senderId)
   if (!slot) {
-    slot = { absolutePath: null, watcher: null, debounceTimer: null }
+    slot = { absolutePath: null, watcher: null, debounceTimer: null, lastSeenMtimeMs: null }
     watchSlots.set(senderId, slot)
   }
   return slot
@@ -88,6 +90,13 @@ function assertAbsoluteNormalizedPath(p: string): string | null {
 
 const saveQueue = createSaveQueue()
 
+function syncWatchSlotMtimeAfterOwnWrite(senderId: number, normalizedAbsolutePath: string, mtimeMs: number): void {
+  const slot = watchSlots.get(senderId)
+  if (!slot?.absolutePath) return
+  if (normalize(slot.absolutePath) !== normalize(normalizedAbsolutePath)) return
+  slot.lastSeenMtimeMs = mtimeMs
+}
+
 function stopDocWatcher(slot: WatchSlot): void {
   if (slot.debounceTimer) {
     clearTimeout(slot.debounceTimer)
@@ -98,6 +107,7 @@ function stopDocWatcher(slot: WatchSlot): void {
     slot.watcher = null
   }
   slot.absolutePath = null
+  slot.lastSeenMtimeMs = null
 }
 
 function registerSpecOpsHandlers(): void {
@@ -208,17 +218,29 @@ function registerSpecOpsHandlers(): void {
     stopDocWatcher(slot)
     if (typeof filePath !== 'string' || !filePath.trim()) return
 
-    slot.absolutePath = normalize(filePath)
+    const normalized = normalize(filePath)
+    slot.absolutePath = normalized
     try {
-      slot.watcher = watch(slot.absolutePath, () => {
+      const st = await fs.stat(normalized)
+      slot.lastSeenMtimeMs = st.mtimeMs
+    } catch {
+      slot.lastSeenMtimeMs = null
+    }
+
+    try {
+      slot.watcher = watch(normalized, () => {
         if (slot.debounceTimer) clearTimeout(slot.debounceTimer)
         slot.debounceTimer = setTimeout(() => {
           void (async () => {
             const target = slot.absolutePath
             if (!target) return
             try {
-              const content = await fs.readFile(target, 'utf8')
               const stat = await fs.stat(target)
+              if (slot.lastSeenMtimeMs !== null && stat.mtimeMs === slot.lastSeenMtimeMs) {
+                return
+              }
+              const content = await fs.readFile(target, 'utf8')
+              slot.lastSeenMtimeMs = stat.mtimeMs
               event.sender.send('specops:external-file-changed', {
                 path: target,
                 content,
@@ -249,6 +271,7 @@ function registerSpecOpsHandlers(): void {
           await fs.mkdir(dirname(target), { recursive: true })
           await fs.writeFile(target, content, 'utf8')
           const stat = await fs.stat(target)
+          syncWatchSlotMtimeAfterOwnWrite(wcId, target, stat.mtimeMs)
           return { ok: true as const, mtimeIso: stat.mtime.toISOString() }
         } catch {
           return { ok: false as const, reason: 'write_error' }
@@ -345,18 +368,63 @@ function registerSpecOpsHandlers(): void {
 }
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
-const preload = join(__dirname, '../preload/index.mjs')
+const preload = join(__dirname, '../preload/index.cjs')
 
-function createWindow(): void {
+let mainWindow: BrowserWindow | null = null
+let settingsWindow: BrowserWindow | null = null
+
+function showSettingsWindow(): void {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus()
+    return
+  }
   const win = new BrowserWindow({
-    width: 900,
-    height: 680,
+    width: 480,
+    height: 300,
+    title: 'Settings',
+    show: false,
     webPreferences: {
       preload,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
     }
+  })
+  settingsWindow = win
+  win.on('closed', () => {
+    settingsWindow = null
+  })
+  win.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error(`[specops] Settings preload failed (${preloadPath}):`, error)
+  })
+  if (VITE_DEV_SERVER_URL) {
+    const base = VITE_DEV_SERVER_URL.replace(/\/$/, '')
+    void win.loadURL(`${base}/settings.html`)
+  } else {
+    void win.loadFile(join(__dirname, '../renderer/settings.html'))
+  }
+  win.once('ready-to-show', () => win.show())
+}
+
+function createWindow(): void {
+  const win = new BrowserWindow({
+    width: 1580,
+    height: 1061,
+    webPreferences: {
+      preload,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  })
+
+  mainWindow = win
+  win.on('closed', () => {
+    mainWindow = null
+  })
+
+  win.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error(`[specops] Preload script failed (${preloadPath}):`, error)
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -367,10 +435,31 @@ function createWindow(): void {
   }
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
+  if (!existsSync(preload)) {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'SpecOps failed to start',
+      message:
+        `The preload script was not built or is missing at:\n\n${preload}\n\nRebuild with \`npm run build\`, or stop any --renderer-only dev server without opening the page outside Electron.`,
+      buttons: ['OK']
+    })
+    app.quit()
+    return
+  }
   registerSpecOpsHandlers()
   registerPersistenceIpc(app)
-  Menu.setApplicationMenu(createApplicationMenu(app))
+
+  ipcMain.on('specops:notify-preferences-changed', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.webContents.send('specops:preferences-changed-main')
+  })
+
+  Menu.setApplicationMenu(
+    createApplicationMenu(app, {
+      openSettings: showSettingsWindow
+    })
+  )
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

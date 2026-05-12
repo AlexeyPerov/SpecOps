@@ -24,6 +24,7 @@ import {
   serializeSessionFromState
 } from '../../core/state/sessionCodec'
 import { attachPreviewChrome, mountPreview, previewErrorSnippet } from '../previewHost'
+import { buildEditorHighlightHtml } from '../editor/editorHighlight'
 
 export interface RendererBootContext {
   readonly root: HTMLElement
@@ -149,10 +150,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
       <button type="button" id="btn-save" class="toolbar-btn">Save</button>
       <button type="button" id="btn-save-as" class="toolbar-btn">Save As…</button>
       <button type="button" id="btn-new-untitled" class="toolbar-btn">New untitled</button>
-      <button type="button" id="btn-workspace-folder" class="toolbar-btn">Workspace folder…</button>
-      <button type="button" id="btn-new-markdown" class="toolbar-btn">New markdown in workspace…</button>
-      <button type="button" id="btn-seed-demos" class="toolbar-btn">Seed demo documents</button>
-      <button type="button" id="btn-open-fixture" class="toolbar-btn">Open fixture sample</button>
       <span id="dirty-indicator" class="dirty-indicator" hidden aria-live="polite">Modified</span>
       <label class="toolbar-autosave"><input type="checkbox" id="editor-autosave" /> Autosave</label>
       <span id="theme-controls-slot"></span>
@@ -178,6 +175,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
         </div>
         <div data-testid="recents-list" class="recents-list-root"></div>
       </aside>
+      <div class="recents-resizer" role="separator" aria-orientation="vertical" aria-label="Resize recents panel" tabindex="-1"></div>
       <div class="workspace">
         <div id="external-file-banner" class="external-file-banner" hidden role="status">
           <span class="external-file-banner-msg">This file changed on disk.</span>
@@ -187,6 +185,10 @@ export function bootRenderer(ctx: RendererBootContext): void {
           <div class="workspace-columns">
           <div class="editor-pane">
             <div id="find-panel" class="find-panel" hidden>
+              <div class="find-panel-header">
+                <span class="find-panel-heading">Find &amp; replace</span>
+                <button type="button" id="find-close" class="find-close-btn" aria-label="Close find panel">×</button>
+              </div>
               <div class="find-panel-grid">
                 <label class="find-field-label"><span class="find-field-caption">Find</span>
                   <input type="text" id="find-input" class="find-field-input" autocomplete="off" spellcheck="false" />
@@ -198,26 +200,29 @@ export function bootRenderer(ctx: RendererBootContext): void {
               <div class="find-panel-toolbar">
                 <label class="find-option"><input type="checkbox" id="find-case" /> Case sensitive</label>
                 <label class="find-option"><input type="checkbox" id="find-regex" /> Regex</label>
-                <label class="find-option"><input type="checkbox" id="editor-wrap" /> Wrap</label>
-                <label class="find-option"><input type="checkbox" id="editor-line-numbers" /> Line numbers</label>
                 <span id="find-error" class="find-error" hidden></span>
                 <span class="find-toolbar-spacer"></span>
                 <button type="button" id="find-prev" class="toolbar-btn find-action-btn">Previous</button>
                 <button type="button" id="find-next" class="toolbar-btn find-action-btn">Next</button>
                 <button type="button" id="find-replace" class="toolbar-btn find-action-btn">Replace</button>
                 <button type="button" id="find-replace-all" class="toolbar-btn find-action-btn">Replace all</button>
-                <button type="button" id="find-close" class="toolbar-btn find-action-btn">Close</button>
               </div>
             </div>
             <div class="editor-main">
               <div id="line-gutter" class="line-gutter" aria-hidden="true" hidden></div>
-              <textarea data-testid="editor" id="editor" class="editor-field" aria-label="Markdown editor" spellcheck="false"></textarea>
+              <div class="editor-stack">
+                <pre class="editor-highlight" aria-hidden="true"><code id="editor-highlight-content" class="editor-highlight-content"></code></pre>
+                <textarea data-testid="editor" id="editor" class="editor-field editor-field--layered" aria-label="Markdown editor" spellcheck="false"></textarea>
+              </div>
             </div>
           </div>
           <div data-testid="preview" id="preview" class="preview-pane"></div>
         </div>
       </div>
     </div>
+    <footer class="app-status-footer" aria-label="Status">
+      <span class="app-status-encoding">UTF-8</span>
+    </footer>
     <div id="recents-context-menu" class="recents-context-menu" hidden role="menu"></div>
   `
 
@@ -227,8 +232,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const replaceInput = root.querySelector<HTMLInputElement>('#replace-input')!
   const findCase = root.querySelector<HTMLInputElement>('#find-case')!
   const findRegex = root.querySelector<HTMLInputElement>('#find-regex')!
-  const editorWrap = root.querySelector<HTMLInputElement>('#editor-wrap')!
-  const editorLineNumbers = root.querySelector<HTMLInputElement>('#editor-line-numbers')!
   const findError = root.querySelector<HTMLElement>('#find-error')!
   const findPrevBtn = root.querySelector<HTMLButtonElement>('#find-prev')!
   const findNextBtn = root.querySelector<HTMLButtonElement>('#find-next')!
@@ -236,6 +239,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const findReplaceAllBtn = root.querySelector<HTMLButtonElement>('#find-replace-all')!
   const findCloseBtn = root.querySelector<HTMLButtonElement>('#find-close')!
   const lineGutter = root.querySelector<HTMLElement>('#line-gutter')!
+  const editorStack = root.querySelector<HTMLElement>('.editor-stack')!
+  const editorHighlightContent = root.querySelector<HTMLElement>('#editor-highlight-content')!
   const previewEl = root.querySelector<HTMLElement>('#preview')!
   const recentsListRoot = root.querySelector<HTMLElement>('[data-testid="recents-list"]')!
   const workspaceEl = root.querySelector<HTMLElement>('.workspace')!
@@ -243,11 +248,10 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const groupSelect = root.querySelector<HTMLSelectElement>('#recents-grouping')!
   const contextMenu = root.querySelector<HTMLElement>('#recents-context-menu')!
   const externalBanner = root.querySelector<HTMLElement>('#external-file-banner')!
-  const externalReload = root.querySelector<HTMLButtonElement>('#external-file-reload')!
-  const externalDismiss = root.querySelector<HTMLButtonElement>('#external-file-dismiss')!
   const statusLine = root.querySelector<HTMLElement>('#status-line')!
   const dirtyIndicator = root.querySelector<HTMLElement>('#dirty-indicator')!
   const editorAutosave = root.querySelector<HTMLInputElement>('#editor-autosave')!
+  const recentsResizer = root.querySelector<HTMLElement>('.recents-resizer')!
 
   attachPreviewChrome(previewEl)
 
@@ -258,6 +262,15 @@ export function bootRenderer(ctx: RendererBootContext): void {
     readonly content: string
     readonly lastModified: string | null
   } | null = null
+
+  function setExternalFileBannerVisible(visible: boolean): void {
+    externalBanner.hidden = !visible
+    if (visible) {
+      externalBanner.style.removeProperty('display')
+    } else {
+      externalBanner.style.display = 'none'
+    }
+  }
 
   let contextDocId: string | null = null
 
@@ -330,12 +343,23 @@ export function bootRenderer(ctx: RendererBootContext): void {
   }, 500)
 
   function refreshLineGutter(): void {
-    if (lineGutter.hidden) return
-    const lines = editor.value.split('\n')
-    lineGutter.innerHTML = lines
-      .map((_ln, i) => `<div class="line-gutter-line">${String(i + 1)}</div>`)
-      .join('')
-    lineGutter.scrollTop = editor.scrollTop
+    if (!lineGutter.hidden) {
+      const lines = editor.value.split('\n')
+      lineGutter.innerHTML = lines
+        .map((_ln, i) => `<div class="line-gutter-line">${String(i + 1)}</div>`)
+        .join('')
+      lineGutter.scrollTop = editor.scrollTop
+    }
+    syncEditorHighlightScroll()
+  }
+
+  function syncEditorHighlightScroll(): void {
+    editorHighlightContent.style.transform = `translate3d(${-editor.scrollLeft}px, ${-editor.scrollTop}px, 0)`
+  }
+
+  function refreshEditorHighlight(): void {
+    editorHighlightContent.innerHTML = buildEditorHighlightHtml(editor.value)
+    syncEditorHighlightScroll()
   }
 
   function scrollCaretIntoView(): void {
@@ -377,6 +401,11 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   function setFindPanel(open: boolean): void {
     findPanel.hidden = !open
+    if (open) {
+      findPanel.style.removeProperty('display')
+    } else {
+      findPanel.style.display = 'none'
+    }
     refreshFindPatternError()
   }
 
@@ -405,6 +434,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     store.dispatch({ type: 'EDITOR_CHANGE', content: nextValue })
     suppressHistory = false
     refreshLineGutter()
+    refreshEditorHighlight()
     schedulePreview()
   }
 
@@ -416,6 +446,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     store.dispatch({ type: 'EDITOR_CHANGE', content: snap.value })
     suppressHistory = false
     refreshLineGutter()
+    refreshEditorHighlight()
     schedulePreview.flush()
     scheduleHistoryPush.cancel()
   }
@@ -680,8 +711,77 @@ export function bootRenderer(ctx: RendererBootContext): void {
     return out
   }
 
-  store.subscribe(() => {
+  function miscPickWorkspaceFolder(): void {
+    void (async () => {
+      const picked = await specOps.pickWorkspaceFolder()
+      store.dispatch({ type: 'SET_WORKSPACE_FOLDER', path: picked })
+    })()
+  }
+
+  function miscNewMarkdownInWorkspace(): void {
+    void runAfterDirtyPrompt(async () => {
+      const folder = store.getState().workspaceFolderPath
+      if (!folder) {
+        window.alert('Choose a workspace folder first.')
+        return
+      }
+      const raw = window.prompt('New Markdown file name', 'notes.md')
+      if (raw === null) return
+      const created = await specOps.createMarkdownInWorkspace({ folderPath: folder, baseName: raw })
+      if (!created.ok) {
+        window.alert(`Could not create file (${created.reason}).`)
+        return
+      }
+      const read = await specOps.readTextFile(created.absolutePath)
+      if (!read.ok) {
+        window.alert(`Created file but could not read it (${read.reason}).`)
+        return
+      }
+      const id = stableDocIdForPath(created.absolutePath)
+      store.dispatch({
+        type: 'OPEN_EXPLICIT',
+        document: {
+          id,
+          title: pathBasename(created.absolutePath).replace(/\.md$/i, '') || id,
+          content: read.content,
+          path: created.absolutePath,
+          lastModified: read.mtimeIso
+        }
+      })
+      schedulePreview.flush()
+    })
+  }
+
+  function miscSeedDemos(): void {
+    void runAfterDirtyPrompt(() => {
+      const t0 = new Date().toISOString()
+      store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_B }, t0)
+      store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_A }, t0)
+      schedulePreview.flush()
+    })
+  }
+
+  function miscOpenFixture(): void {
+    void runAfterDirtyPrompt(async () => {
+      const docPath = await specOps.resolveRepoPath('fixtures', 'sample', 'readme.md')
+      store.dispatch({
+        type: 'OPEN_EXPLICIT',
+        document: {
+          id: 'fixture-sample',
+          title: 'Fixture (NFR-08)',
+          content: FIXTURE_MARKDOWN,
+          path: docPath,
+          lastModified: null
+        }
+      })
+      schedulePreview.flush()
+    })
+  }
+
+  function syncShellFromStore(): void {
     const st = store.getState()
+    document.documentElement.style.setProperty('--recents-width', `${st.recentsPaneWidthPx}px`)
+
     if (st.currentDocumentId !== prevHistoryDocId) {
       editorHistory.clear()
       scheduleHistoryPush.cancel()
@@ -695,9 +795,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
       refreshLineGutter()
     }
 
-    editorWrap.checked = st.editorSoftWrap
     editor.classList.toggle('editor-field--wrap', st.editorSoftWrap)
-    editorLineNumbers.checked = st.editorLineNumbers
+    editorStack.classList.toggle('editor-stack--wrap', st.editorSoftWrap)
     lineGutter.hidden = !st.editorLineNumbers
     if (st.editorLineNumbers) refreshLineGutter()
     editorAutosave.checked = st.autosaveEnabled
@@ -739,15 +838,66 @@ export function bootRenderer(ctx: RendererBootContext): void {
     prevSelection = st.currentDocumentId
 
     root.dataset.currentDocId = st.currentDocumentId ?? ''
-  })
 
-  syncSelectsFromState()
-  renderRecents(recentsListRoot, store)
-  prevSelection = store.getState().currentDocumentId
+    refreshEditorHighlight()
+  }
+
+  store.subscribe(syncShellFromStore)
+  syncShellFromStore()
   void syncWatchPath()
+
+  let resizerDragStartX = 0
+  let resizerStartWidthPx = 0
+  recentsResizer.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    resizerDragStartX = e.clientX
+    resizerStartWidthPx = store.getState().recentsPaneWidthPx
+    recentsResizer.setPointerCapture(e.pointerId)
+  })
+  recentsResizer.addEventListener('pointermove', (e) => {
+    if (!recentsResizer.hasPointerCapture(e.pointerId)) return
+    const delta = e.clientX - resizerDragStartX
+    const clamped = Math.min(560, Math.max(180, resizerStartWidthPx + delta))
+    document.documentElement.style.setProperty('--recents-width', `${clamped}px`)
+  })
+  recentsResizer.addEventListener('pointerup', (e) => {
+    if (!recentsResizer.hasPointerCapture(e.pointerId)) return
+    recentsResizer.releasePointerCapture(e.pointerId)
+    const raw = getComputedStyle(document.documentElement).getPropertyValue('--recents-width').trim()
+    const n = parseFloat(raw)
+    if (Number.isFinite(n)) {
+      store.dispatch({ type: 'SET_RECENTS_PANE_WIDTH', widthPx: n })
+    }
+  })
+  recentsResizer.addEventListener('pointercancel', (e) => {
+    if (recentsResizer.hasPointerCapture(e.pointerId)) {
+      recentsResizer.releasePointerCapture(e.pointerId)
+    }
+    const w = store.getState().recentsPaneWidthPx
+    document.documentElement.style.setProperty('--recents-width', `${w}px`)
+  })
 
   editor.addEventListener('input', () => {
     store.dispatch({ type: 'EDITOR_CHANGE', content: editor.value })
+    refreshEditorHighlight()
+    schedulePreview()
+    scheduleHistoryPush()
+    scheduleDraftWrite()
+  })
+
+  editor.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab' || e.shiftKey) return
+    e.preventDefault()
+    const start = editor.selectionStart
+    const end = editor.selectionEnd
+    const v = editor.value
+    const next = v.slice(0, start) + '\t' + v.slice(end)
+    suppressHistory = true
+    editor.value = next
+    editor.selectionStart = editor.selectionEnd = start + 1
+    suppressHistory = false
+    store.dispatch({ type: 'EDITOR_CHANGE', content: next })
+    refreshEditorHighlight()
     schedulePreview()
     scheduleHistoryPush()
     scheduleDraftWrite()
@@ -755,19 +905,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   editor.addEventListener('scroll', () => {
     lineGutter.scrollTop = editor.scrollTop
+    syncEditorHighlightScroll()
   })
 
   findInput.addEventListener('input', () => refreshFindPatternError())
   findRegex.addEventListener('change', () => refreshFindPatternError())
   findCase.addEventListener('change', () => refreshFindPatternError())
-
-  editorWrap.addEventListener('change', () => {
-    store.dispatch({ type: 'SET_EDITOR_SOFT_WRAP', enabled: editorWrap.checked })
-  })
-
-  editorLineNumbers.addEventListener('change', () => {
-    store.dispatch({ type: 'SET_EDITOR_LINE_NUMBERS', enabled: editorLineNumbers.checked })
-  })
 
   editorAutosave.addEventListener('change', () => {
     store.dispatch({ type: 'SET_AUTOSAVE_ENABLED', enabled: editorAutosave.checked })
@@ -777,10 +920,16 @@ export function bootRenderer(ctx: RendererBootContext): void {
   findNextBtn.addEventListener('click', () => applyFindNext())
   findReplaceBtn.addEventListener('click', () => applyReplace())
   findReplaceAllBtn.addEventListener('click', () => applyReplaceAll())
-  findCloseBtn.addEventListener('click', () => {
-    setFindPanel(false)
-    editor.focus()
-  })
+  findCloseBtn.addEventListener(
+    'click',
+    (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setFindPanel(false)
+      editor.focus()
+    },
+    true
+  )
 
   sortSelect.addEventListener('change', () => {
     const v = sortSelect.value as 'lastOpened' | 'title' | 'path'
@@ -914,13 +1063,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
     hideContextMenu()
   })
 
-  root.querySelector('#btn-workspace-folder')!.addEventListener('click', () => {
-    void (async () => {
-      const picked = await specOps.pickWorkspaceFolder()
-      store.dispatch({ type: 'SET_WORKSPACE_FOLDER', path: picked })
-    })()
-  })
-
   root.querySelector('#btn-open-markdown')!.addEventListener('click', () => {
     void runAfterDirtyPrompt(async () => {
       const pick = await specOps.pickOpenMarkdownFile()
@@ -947,66 +1089,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
           title: 'Untitled',
           content: '',
           path: null,
-          lastModified: null
-        }
-      })
-      schedulePreview.flush()
-    })
-  })
-
-  root.querySelector('#btn-new-markdown')!.addEventListener('click', () => {
-    void runAfterDirtyPrompt(async () => {
-      const folder = store.getState().workspaceFolderPath
-      if (!folder) {
-        window.alert('Choose a workspace folder first.')
-        return
-      }
-      const raw = window.prompt('New Markdown file name', 'notes.md')
-      if (raw === null) return
-      const created = await specOps.createMarkdownInWorkspace({ folderPath: folder, baseName: raw })
-      if (!created.ok) {
-        window.alert(`Could not create file (${created.reason}).`)
-        return
-      }
-      const read = await specOps.readTextFile(created.absolutePath)
-      if (!read.ok) {
-        window.alert(`Created file but could not read it (${read.reason}).`)
-        return
-      }
-      const id = stableDocIdForPath(created.absolutePath)
-      store.dispatch({
-        type: 'OPEN_EXPLICIT',
-        document: {
-          id,
-          title: pathBasename(created.absolutePath).replace(/\.md$/i, '') || id,
-          content: read.content,
-          path: created.absolutePath,
-          lastModified: read.mtimeIso
-        }
-      })
-      schedulePreview.flush()
-    })
-  })
-
-  root.querySelector('#btn-seed-demos')!.addEventListener('click', () => {
-    void runAfterDirtyPrompt(() => {
-      const t0 = new Date().toISOString()
-      store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_B }, t0)
-      store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_A }, t0)
-      schedulePreview.flush()
-    })
-  })
-
-  root.querySelector('#btn-open-fixture')!.addEventListener('click', () => {
-    void runAfterDirtyPrompt(async () => {
-      const docPath = await specOps.resolveRepoPath('fixtures', 'sample', 'readme.md')
-      store.dispatch({
-        type: 'OPEN_EXPLICIT',
-        document: {
-          id: 'fixture-sample',
-          title: 'Fixture (NFR-08)',
-          content: FIXTURE_MARKDOWN,
-          path: docPath,
           lastModified: null
         }
       })
@@ -1046,8 +1128,17 @@ export function bootRenderer(ctx: RendererBootContext): void {
       case 'open-file':
         root.querySelector<HTMLButtonElement>('#btn-open-markdown')?.click()
         break
-      case 'open-workspace-folder':
-        root.querySelector<HTMLButtonElement>('#btn-workspace-folder')?.click()
+      case 'misc-workspace-folder':
+        miscPickWorkspaceFolder()
+        break
+      case 'misc-new-markdown':
+        miscNewMarkdownInWorkspace()
+        break
+      case 'misc-seed-demos':
+        miscSeedDemos()
+        break
+      case 'misc-open-fixture':
+        miscOpenFixture()
         break
       case 'new-untitled':
         root.querySelector<HTMLButtonElement>('#btn-new-untitled')?.click()
@@ -1110,23 +1201,37 @@ export function bootRenderer(ctx: RendererBootContext): void {
     }
   })
 
-  externalReload.addEventListener('click', () => {
-    if (!pendingExternal) return
-    store.dispatch({
-      type: 'SYNC_DOCUMENT_FROM_DISK',
-      documentId: pendingExternal.documentId,
-      content: pendingExternal.content,
-      lastModified: pendingExternal.lastModified
-    })
-    pendingExternal = null
-    externalBanner.hidden = true
-    schedulePreview.flush()
-  })
-
-  externalDismiss.addEventListener('click', () => {
-    pendingExternal = null
-    externalBanner.hidden = true
-  })
+  externalBanner.addEventListener(
+    'click',
+    (e) => {
+      const btn = (e.target as HTMLElement | null)?.closest('button')
+      if (!btn || !externalBanner.contains(btn)) {
+        return
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      const id = btn.id
+      if (id === 'external-file-reload') {
+        if (pendingExternal) {
+          store.dispatch({
+            type: 'SYNC_DOCUMENT_FROM_DISK',
+            documentId: pendingExternal.documentId,
+            content: pendingExternal.content,
+            lastModified: pendingExternal.lastModified
+          })
+        }
+        pendingExternal = null
+        setExternalFileBannerVisible(false)
+        schedulePreview.flush()
+        return
+      }
+      if (id === 'external-file-dismiss') {
+        pendingExternal = null
+        setExternalFileBannerVisible(false)
+      }
+    },
+    true
+  )
 
   specOps.onExternalFileChanged((payload) => {
     const st = store.getState()
@@ -1134,12 +1239,15 @@ export function bootRenderer(ctx: RendererBootContext): void {
     if (!docId) return
     const isCurrent = st.currentDocumentId === docId
     if (isCurrent && isEditorDirty(st)) {
+      if (payload.content === st.editorContent) {
+        return
+      }
       pendingExternal = {
         documentId: docId,
         content: payload.content,
         lastModified: payload.mtimeIso
       }
-      externalBanner.hidden = false
+      setExternalFileBannerVisible(true)
       return
     }
     store.dispatch({

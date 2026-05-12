@@ -1,8 +1,12 @@
 import type { App } from 'electron'
 import { BrowserWindow, Menu } from 'electron'
 
+export interface ApplicationMenuHandlers {
+  readonly openSettings: () => void
+}
+
 /** Desktop menu wiring for FR-49 / AC-32 (command surfaces). */
-export function createApplicationMenu(app: App): Menu {
+export function createApplicationMenu(app: App, handlers: ApplicationMenuHandlers): Menu {
   const send = (commandId: string): void => {
     const w = BrowserWindow.getFocusedWindow()
     w?.webContents.send('specops:menu-command', commandId)
@@ -16,6 +20,12 @@ export function createApplicationMenu(app: App): Menu {
             submenu: [
               { role: 'about' },
               { type: 'separator' },
+              {
+                label: 'Settings…',
+                accelerator: 'CmdOrCtrl+,',
+                click: () => handlers.openSettings()
+              },
+              { type: 'separator' },
               { role: 'quit' }
             ]
           }
@@ -28,10 +38,6 @@ export function createApplicationMenu(app: App): Menu {
           label: 'Open…',
           accelerator: 'CmdOrCtrl+O',
           click: () => send('open-file')
-        },
-        {
-          label: 'Workspace folder…',
-          click: () => send('open-workspace-folder')
         },
         { type: 'separator' },
         {
@@ -50,9 +56,40 @@ export function createApplicationMenu(app: App): Menu {
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => send('save-as')
         },
+        { type: 'separator' },
+        {
+          label: 'Misc',
+          submenu: [
+            {
+              label: 'Workspace folder…',
+              click: () => send('misc-workspace-folder')
+            },
+            {
+              label: 'New markdown in workspace…',
+              click: () => send('misc-new-markdown')
+            },
+            {
+              label: 'Seed demo documents',
+              click: () => send('misc-seed-demos')
+            },
+            {
+              label: 'Open fixture sample',
+              click: () => send('misc-open-fixture')
+            }
+          ]
+        },
         ...(process.platform === 'darwin'
           ? []
-          : ([{ type: 'separator' }, { role: 'quit' }] as const))
+          : ([
+              { type: 'separator' },
+              {
+                label: 'Settings…',
+                accelerator: 'CmdOrCtrl+,',
+                click: () => handlers.openSettings()
+              },
+              { type: 'separator' },
+              { role: 'quit' }
+            ] as const))
       ]
     },
     {

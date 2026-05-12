@@ -94,4 +94,7 @@ export type SpecOpsPreloadApi = Readonly<{
   listDraftIds: () => Promise<string[]>
   promptDraftRecovery: () => Promise<DraftRecoveryChoice>
   onMenuCommand: (callback: (commandId: string) => void) => () => void
+  /** Notify main window to reload preferences from disk (after settings window saves). */
+  notifyPreferencesChanged: () => void
+  onPreferencesChanged: (callback: () => void) => () => void
 }>

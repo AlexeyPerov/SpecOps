@@ -18,7 +18,22 @@ import { bindThemeControls } from '../theme/bindTheme'
 
 declare global {
   interface Window {
-    specOps: SpecOpsPreloadApi
+    specOps?: SpecOpsPreloadApi
+  }
+}
+
+function assertElectronBridge(): asserts window is Window & { specOps: SpecOpsPreloadApi } {
+  const api = window.specOps
+  if (
+    !api ||
+    typeof api.readPreferences !== 'function' ||
+    typeof api.onMenuCommand !== 'function' ||
+    typeof api.notifyPreferencesChanged !== 'function' ||
+    typeof api.onPreferencesChanged !== 'function'
+  ) {
+    throw new Error(
+      'The Electron preload bridge is missing (`window.specOps`). Open this app via Electron (`npm run dev` or `npm run preview`). If you opened the dev URL in an external browser only the renderer loads and native features cannot run.'
+    )
   }
 }
 
@@ -59,6 +74,32 @@ async function buildInitialState(): Promise<ReturnType<typeof createInitialAppSt
   return state
 }
 
+async function applyPreferencesFromDisk(store: ReturnType<typeof createAppStore>): Promise<void> {
+  let prefsRaw: unknown
+  try {
+    prefsRaw = await window.specOps.readPreferences()
+  } catch {
+    return
+  }
+  const prefs: PreferencesPersistedV1 =
+    prefsRaw && typeof prefsRaw === 'object'
+      ? { ...DEFAULT_PREFERENCES_V1, ...(prefsRaw as PreferencesPersistedV1) }
+      : DEFAULT_PREFERENCES_V1
+  const st = store.getState()
+  if (prefs.editorSoftWrap !== st.editorSoftWrap) {
+    store.dispatch({ type: 'SET_EDITOR_SOFT_WRAP', enabled: prefs.editorSoftWrap })
+  }
+  if (prefs.editorLineNumbers !== st.editorLineNumbers) {
+    store.dispatch({ type: 'SET_EDITOR_LINE_NUMBERS', enabled: prefs.editorLineNumbers })
+  }
+  if (prefs.recentsPaneWidthPx !== st.recentsPaneWidthPx) {
+    store.dispatch({ type: 'SET_RECENTS_PANE_WIDTH', widthPx: prefs.recentsPaneWidthPx })
+  }
+  if (prefs.themeMode !== st.themeMode) {
+    store.dispatch({ type: 'SET_THEME_MODE', mode: prefs.themeMode })
+  }
+}
+
 async function maybeRecoverDraft(store: ReturnType<typeof createAppStore>): Promise<void> {
   const cid = store.getState().currentDocumentId
   if (!cid) return
@@ -84,6 +125,8 @@ async function bootstrap(): Promise<void> {
     throw new Error('#app missing')
   }
 
+  assertElectronBridge()
+
   const initial = await buildInitialState()
   const store = createAppStore(initial)
 
@@ -101,6 +144,10 @@ async function bootstrap(): Promise<void> {
   })
 
   bindThemeControls(appRoot, store)
+
+  window.specOps.onPreferencesChanged(() => {
+    void applyPreferencesFromDisk(store)
+  })
 
   window.addEventListener('beforeunload', () => {
     void window.specOps.writeSession(serializeSessionFromState(store.getState()))

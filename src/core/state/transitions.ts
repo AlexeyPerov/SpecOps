@@ -15,7 +15,8 @@ export function createInitialAppState(): AppState {
     workspaceFolderPath: null,
     autosaveEnabled: false,
     editorSoftWrap: true,
-    editorLineNumbers: true
+    editorLineNumbers: true,
+    recentsPaneWidthPx: 260
   }
 }
 
@@ -102,6 +103,12 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
 
     case 'SET_EDITOR_LINE_NUMBERS':
       return { ...state, editorLineNumbers: action.enabled }
+
+    case 'SET_RECENTS_PANE_WIDTH': {
+      const w = Number.isFinite(action.widthPx) ? Math.round(action.widthPx) : state.recentsPaneWidthPx
+      const clamped = Math.min(560, Math.max(180, w))
+      return { ...state, recentsPaneWidthPx: clamped }
+    }
 
     case 'REPARENT_DOCUMENT': {
       const doc = state.documentsById.get(action.oldDocumentId)

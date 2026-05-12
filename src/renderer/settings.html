@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Settings</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:"
+    />
+  </head>
+  <body class="settings-body">
+    <main class="settings-shell">
+      <h1 class="settings-title">Settings</h1>
+      <div class="settings-fields">
+        <label class="settings-row">
+          <input type="checkbox" id="setting-wrap" />
+          <span>Wrap lines</span>
+        </label>
+        <label class="settings-row">
+          <input type="checkbox" id="setting-line-numbers" />
+          <span>Line numbers</span>
+        </label>
+      </div>
+    </main>
+    <script type="module" src="./settingsMain.ts"></script>
+  </body>
+</html>

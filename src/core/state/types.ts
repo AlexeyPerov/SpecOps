@@ -37,6 +37,8 @@ export interface AppState {
   readonly editorSoftWrap: boolean
   /** DEF-08 default true */
   readonly editorLineNumbers: boolean
+  /** Recents sidebar width in pixels (persisted in preferences). */
+  readonly recentsPaneWidthPx: number
 }
 
 /** Upsert payload for explicit opens; `lastOpened` is always overwritten by the transition. */
@@ -71,3 +73,4 @@ export type AppAction =
   | { readonly type: 'SET_AUTOSAVE_ENABLED'; readonly enabled: boolean }
   | { readonly type: 'SET_EDITOR_SOFT_WRAP'; readonly enabled: boolean }
   | { readonly type: 'SET_EDITOR_LINE_NUMBERS'; readonly enabled: boolean }
+  | { readonly type: 'SET_RECENTS_PANE_WIDTH'; readonly widthPx: number }

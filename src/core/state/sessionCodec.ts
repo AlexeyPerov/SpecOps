@@ -11,6 +11,7 @@ export interface PreferencesPersistedV1 {
   readonly autosaveEnabled: boolean
   readonly editorSoftWrap: boolean
   readonly editorLineNumbers: boolean
+  readonly recentsPaneWidthPx: number
 }
 
 export interface SessionDocumentPersistedV1 {
@@ -38,7 +39,8 @@ export const DEFAULT_PREFERENCES_V1: PreferencesPersistedV1 = {
   workspaceFolderPath: null,
   autosaveEnabled: false,
   editorSoftWrap: true,
-  editorLineNumbers: true
+  editorLineNumbers: true,
+  recentsPaneWidthPx: 260
 }
 
 /** Merge persisted prefs onto baseline AppState (session/doc fields unchanged). */
@@ -52,7 +54,8 @@ export function mergePreferencesIntoState(base: AppState, prefs: PreferencesPers
     workspaceFolderPath: prefs.workspaceFolderPath,
     autosaveEnabled: prefs.autosaveEnabled,
     editorSoftWrap: prefs.editorSoftWrap,
-    editorLineNumbers: prefs.editorLineNumbers
+    editorLineNumbers: prefs.editorLineNumbers,
+    recentsPaneWidthPx: prefs.recentsPaneWidthPx
   }
 }
 
@@ -131,7 +134,8 @@ export function serializePreferencesFromState(state: AppState): PreferencesPersi
     workspaceFolderPath: state.workspaceFolderPath,
     autosaveEnabled: state.autosaveEnabled,
     editorSoftWrap: state.editorSoftWrap,
-    editorLineNumbers: state.editorLineNumbers
+    editorLineNumbers: state.editorLineNumbers,
+    recentsPaneWidthPx: state.recentsPaneWidthPx
   }
 }
 

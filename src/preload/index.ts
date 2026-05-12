@@ -54,6 +54,14 @@ const api: SpecOpsPreloadApi = {
     const listener = (_event: IpcRendererEvent, commandId: unknown) => callback(String(commandId ?? ''))
     ipcRenderer.on('specops:menu-command', listener)
     return () => ipcRenderer.removeListener('specops:menu-command', listener)
+  },
+  notifyPreferencesChanged: () => {
+    ipcRenderer.send('specops:notify-preferences-changed')
+  },
+  onPreferencesChanged: (callback) => {
+    const listener = (_event: IpcRendererEvent) => callback()
+    ipcRenderer.on('specops:preferences-changed-main', listener)
+    return () => ipcRenderer.removeListener('specops:preferences-changed-main', listener)
   }
 }
 

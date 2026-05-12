@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createAppServices } from '../src/app/services'
 import { createAppStore } from '../src/core/state/store'
+import { createInitialAppState } from '../src/core/state/transitions'
 import { DEFAULT_PREFERENCES_V1 } from '../src/core/state/sessionCodec'
 import type { SpecOpsPreloadApi } from '../src/preload/specOpsApi'
 import { bootRenderer } from '../src/renderer/boot/rendererBoot'
+
+let lastMenuListener: ((commandId: string) => void) | null = null
 
 const mockSpecOps: SpecOpsPreloadApi = {
   ping: () => 'pong',
@@ -35,11 +38,19 @@ const mockSpecOps: SpecOpsPreloadApi = {
   clearDraft: vi.fn(async () => {}),
   listDraftIds: vi.fn(async () => []),
   promptDraftRecovery: vi.fn(async () => 'discard' as const),
-  onMenuCommand: vi.fn(() => () => {})
+  onMenuCommand: vi.fn((cb) => {
+    lastMenuListener = cb
+    return () => {
+      lastMenuListener = null
+    }
+  }),
+  notifyPreferencesChanged: vi.fn(),
+  onPreferencesChanged: vi.fn(() => () => {})
 }
 
 describe('UPH-01 shell (TEST-02 harness)', () => {
   beforeEach(() => {
+    lastMenuListener = null
     document.documentElement.dataset.theme = 'light'
     Object.defineProperty(window, 'specOps', { value: mockSpecOps, configurable: true })
     Object.defineProperty(window, 'matchMedia', {
@@ -69,7 +80,36 @@ describe('UPH-01 shell (TEST-02 harness)', () => {
     expect(document.querySelector('[data-testid="preview"]')).toBeTruthy()
   })
 
-  it('seed demos then activate recent updates editor buffer', async () => {
+  it('syncs initial editor buffer from store when a document is already selected', () => {
+    const root = document.getElementById('app')!
+    const doc = {
+      id: 'a',
+      title: 'A',
+      content: '# Hello from initial state',
+      lastOpened: '2026-01-01T00:00:00.000Z',
+      path: null,
+      lastModified: null
+    }
+    const store = createAppStore({
+      ...createInitialAppState(),
+      documentsById: new Map([[doc.id, doc]]),
+      recentDocumentIds: [doc.id],
+      currentDocumentId: doc.id,
+      editorContent: doc.content
+    })
+    bootRenderer({
+      root,
+      store,
+      services: createAppServices(),
+      specOps: mockSpecOps
+    })
+
+    expect((document.querySelector('[data-testid="editor"]') as HTMLTextAreaElement).value).toBe(
+      '# Hello from initial state'
+    )
+  })
+
+  it('seed demos via File ▸ Misc menu updates editor buffer', async () => {
     const root = document.getElementById('app')!
     const store = createAppStore()
     bootRenderer({
@@ -79,7 +119,8 @@ describe('UPH-01 shell (TEST-02 harness)', () => {
       specOps: mockSpecOps
     })
 
-    document.querySelector<HTMLButtonElement>('#btn-seed-demos')!.click()
+    expect(lastMenuListener).toBeTypeOf('function')
+    lastMenuListener!('misc-seed-demos')
 
     await vi.waitFor(() => {
       expect((document.querySelector('[data-testid="editor"]') as HTMLTextAreaElement).value).toContain(

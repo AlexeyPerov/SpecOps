@@ -7,8 +7,8 @@
   --color-accent: #0969da;
   --color-danger: #b00020;
   --color-link: #0969da;
-  --font-ui: system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-ui: 'Cascadia Code', system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-size-sm: 12px;
   --font-size-code: 13px;
   --font-weight-heading: 600;

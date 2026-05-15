@@ -30,6 +30,8 @@ export interface ProjectState {
   readonly editorContent: string
   /** Single workspace root for Task 12 MVP create-file flow */
   readonly workspaceFolderPath: string | null
+  /** Stable color for project rail avatar border. */
+  readonly accentColor: string
   readonly fileListSort: FileListSort
   readonly fileListGrouping: FileListGrouping
   /** When grouping by folder, folder keys listed here are expanded in the recents list. */
@@ -48,6 +50,8 @@ export interface AppState {
   readonly editorLineNumbers: boolean
   /** Recents sidebar width in pixels (persisted in preferences). */
   readonly recentsPaneWidthPx: number
+  /** Relative subfolders under each project workspace for markdown recents scan (persisted in preferences). */
+  readonly markdownScanRelativeFolders: readonly string[]
   /**
    * Transitional mirrors of active project fields used by pre-Task-6 callers.
    * Keep in sync with `projectsById.get(activeProjectId)`.
@@ -72,9 +76,16 @@ export type AppAction =
       readonly type: 'CREATE_PROJECT'
       readonly projectId: string
       readonly workspaceFolderPath?: string | null
+      readonly accentColor?: string
     }
   | { readonly type: 'SET_ACTIVE_PROJECT'; readonly projectId: string }
   | { readonly type: 'REMOVE_PROJECT'; readonly projectId: string }
+  | { readonly type: 'CLEAR_NON_DEFAULT_PROJECTS' }
+  | {
+      readonly type: 'UPSERT_PROJECT_DOCUMENTS'
+      readonly projectId: string
+      readonly documents: readonly DocumentInput[]
+    }
   | { readonly type: 'OPEN_EXPLICIT'; readonly document: DocumentInput }
   | { readonly type: 'ACTIVATE_FROM_RECENT_LIST'; readonly documentId: string }
   | { readonly type: 'EDITOR_CHANGE'; readonly content: string }
@@ -102,3 +113,7 @@ export type AppAction =
   | { readonly type: 'SET_EDITOR_SOFT_WRAP'; readonly enabled: boolean }
   | { readonly type: 'SET_EDITOR_LINE_NUMBERS'; readonly enabled: boolean }
   | { readonly type: 'SET_RECENTS_PANE_WIDTH'; readonly widthPx: number }
+  | {
+      readonly type: 'SET_MARKDOWN_SCAN_RELATIVE_FOLDERS'
+      readonly folders: readonly string[]
+    }

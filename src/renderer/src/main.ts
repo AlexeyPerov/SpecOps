@@ -14,7 +14,7 @@ import {
   type SessionPersistedV1
 } from '../../core/state/sessionCodec'
 import { bootRenderer } from '../boot/rendererBoot'
-import { bindThemeControls } from '../theme/bindTheme'
+import { applyDocumentTheme } from '../theme/applyTheme'
 
 declare global {
   interface Window {
@@ -105,6 +105,19 @@ async function applyPreferencesFromDisk(store: ReturnType<typeof createAppStore>
   if (prefs.themeMode !== st.themeMode) {
     store.dispatch({ type: 'SET_THEME_MODE', mode: prefs.themeMode })
   }
+  if (prefs.autosaveEnabled !== st.autosaveEnabled) {
+    store.dispatch({ type: 'SET_AUTOSAVE_ENABLED', enabled: prefs.autosaveEnabled })
+  }
+  if (
+    JSON.stringify([...prefs.markdownScanRelativeFolders]) !==
+    JSON.stringify([...st.markdownScanRelativeFolders])
+  ) {
+    store.dispatch({
+      type: 'SET_MARKDOWN_SCAN_RELATIVE_FOLDERS',
+      folders: prefs.markdownScanRelativeFolders
+    })
+  }
+  applyDocumentTheme(store.getState().themeMode)
 }
 
 async function maybeRecoverDraft(store: ReturnType<typeof createAppStore>): Promise<void> {
@@ -150,7 +163,7 @@ async function bootstrap(): Promise<void> {
     specOps: window.specOps
   })
 
-  bindThemeControls(appRoot, store)
+  applyDocumentTheme(store.getState().themeMode)
 
   window.specOps.onPreferencesChanged(() => {
     void applyPreferencesFromDisk(store)

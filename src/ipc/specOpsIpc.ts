@@ -7,6 +7,7 @@ export const SPEC_OPS_IPC = {
   revealInFolder: 'specops:reveal-in-folder',
   readTextFile: 'specops:read-text-file',
   createMarkdownInWorkspace: 'specops:create-markdown-in-workspace',
+  listMarkdownFilesRecursive: 'specops:list-markdown-files-recursive',
   setWatchedDocPath: 'specops:set-watched-doc-path',
   externalFileChanged: 'specops:external-file-changed',
   writeTextFile: 'specops:write-text-file',
@@ -20,6 +21,7 @@ export const SPEC_OPS_IPC = {
   writePreferences: 'specops:write-preferences',
   readSession: 'specops:read-session',
   writeSession: 'specops:write-session',
+  clearProjects: 'specops:clear-projects',
   readDraft: 'specops:read-draft',
   writeDraft: 'specops:write-draft',
   clearDraft: 'specops:clear-draft',
@@ -27,7 +29,8 @@ export const SPEC_OPS_IPC = {
   promptDraftRecovery: 'specops:prompt-draft-recovery',
   menuCommand: 'specops:menu-command',
   notifyPreferencesChanged: 'specops:notify-preferences-changed',
-  preferencesChangedMain: 'specops:preferences-changed-main'
+  preferencesChangedMain: 'specops:preferences-changed-main',
+  projectsClearedMain: 'specops:projects-cleared-main'
 } as const
 
 export const SPEC_OPS_MENU_COMMANDS = {

@@ -42,7 +42,7 @@ export function createApplicationMenu(app: App, handlers: ApplicationMenuHandler
         },
         { type: 'separator' },
         {
-          label: 'New untitled',
+          label: 'New',
           accelerator: 'CmdOrCtrl+N',
           click: () => send(SPEC_OPS_MENU_COMMANDS.newUntitled)
         },

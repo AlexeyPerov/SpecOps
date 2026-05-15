@@ -18,9 +18,11 @@ const mockSpecOps: SpecOpsPreloadApi = {
   resolveRepoPath: vi.fn(async (...segments: string[]) => '/virtual/' + segments.join('/')),
   readMarkdownAsset: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
   pickWorkspaceFolder: vi.fn(async () => null),
+  getPathForFile: vi.fn(() => null),
   revealInFolder: vi.fn(async () => {}),
   readTextFile: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
   createMarkdownInWorkspace: vi.fn(async () => ({ ok: false as const, reason: 'stub' })),
+  listMarkdownFilesRecursive: vi.fn(async () => []),
   setWatchedDocPath: vi.fn(async () => {}),
   onExternalFileChanged: vi.fn(() => () => {}),
   writeTextFile: vi.fn(async () => ({ ok: true as const, mtimeIso: '2026-01-01T00:00:00.000Z' })),
@@ -34,6 +36,7 @@ const mockSpecOps: SpecOpsPreloadApi = {
   writePreferences: vi.fn(async () => {}),
   readSession: vi.fn(async () => null),
   writeSession: vi.fn(async () => {}),
+  clearProjects: vi.fn(async () => {}),
   readDraft: vi.fn(async () => null),
   writeDraft: vi.fn(async () => {}),
   clearDraft: vi.fn(async () => {}),
@@ -46,7 +49,8 @@ const mockSpecOps: SpecOpsPreloadApi = {
     }
   }),
   notifyPreferencesChanged: vi.fn(),
-  onPreferencesChanged: vi.fn(() => () => {})
+  onPreferencesChanged: vi.fn(() => () => {}),
+  onProjectsCleared: vi.fn(() => () => {})
 }
 
 describe('UPH-01 shell (TEST-02 harness)', () => {

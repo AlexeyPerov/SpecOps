@@ -1,5 +1,5 @@
 import type { IpcRendererEvent } from 'electron'
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { SPEC_OPS_IPC, type SpecOpsMenuCommand } from '../ipc/specOpsIpc'
 import type {
   DirtyNavigationChoice,
@@ -20,10 +20,20 @@ const api: SpecOpsPreloadApi = {
     ipcRenderer.invoke(SPEC_OPS_IPC.readMarkdownAsset, payload),
   pickWorkspaceFolder: () =>
     ipcRenderer.invoke(SPEC_OPS_IPC.pickWorkspaceFolder) as Promise<string | null>,
+  getPathForFile: (file: File) => {
+    try {
+      const p = webUtils.getPathForFile(file)
+      return p?.trim() ? p : null
+    } catch {
+      return null
+    }
+  },
   revealInFolder: (filePath: string) => ipcRenderer.invoke(SPEC_OPS_IPC.revealInFolder, filePath),
   readTextFile: (absolutePath: string) => ipcRenderer.invoke(SPEC_OPS_IPC.readTextFile, absolutePath),
   createMarkdownInWorkspace: (payload) =>
     ipcRenderer.invoke(SPEC_OPS_IPC.createMarkdownInWorkspace, payload),
+  listMarkdownFilesRecursive: (folderPath) =>
+    ipcRenderer.invoke(SPEC_OPS_IPC.listMarkdownFilesRecursive, folderPath),
   setWatchedDocPath: (absolutePath) =>
     ipcRenderer.invoke(SPEC_OPS_IPC.setWatchedDocPath, absolutePath),
   onExternalFileChanged: (callback) => {
@@ -46,6 +56,7 @@ const api: SpecOpsPreloadApi = {
   writePreferences: (prefs) => ipcRenderer.invoke(SPEC_OPS_IPC.writePreferences, prefs),
   readSession: () => ipcRenderer.invoke(SPEC_OPS_IPC.readSession),
   writeSession: (session) => ipcRenderer.invoke(SPEC_OPS_IPC.writeSession, session),
+  clearProjects: () => ipcRenderer.invoke(SPEC_OPS_IPC.clearProjects),
   readDraft: (documentId) => ipcRenderer.invoke(SPEC_OPS_IPC.readDraft, documentId),
   writeDraft: (payload) => ipcRenderer.invoke(SPEC_OPS_IPC.writeDraft, payload),
   clearDraft: (documentId) => ipcRenderer.invoke(SPEC_OPS_IPC.clearDraft, documentId),
@@ -64,6 +75,11 @@ const api: SpecOpsPreloadApi = {
     const listener = (_event: IpcRendererEvent) => callback()
     ipcRenderer.on(SPEC_OPS_IPC.preferencesChangedMain, listener)
     return () => ipcRenderer.removeListener(SPEC_OPS_IPC.preferencesChangedMain, listener)
+  },
+  onProjectsCleared: (callback) => {
+    const listener = (_event: IpcRendererEvent) => callback()
+    ipcRenderer.on(SPEC_OPS_IPC.projectsClearedMain, listener)
+    return () => ipcRenderer.removeListener(SPEC_OPS_IPC.projectsClearedMain, listener)
   }
 }
 

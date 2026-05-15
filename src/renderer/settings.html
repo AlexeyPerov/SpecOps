@@ -17,8 +17,28 @@
           <span>Wrap lines</span>
         </label>
         <label class="settings-row">
+          <input type="checkbox" id="setting-autosave" />
+          <span>Autosave</span>
+        </label>
+        <label class="settings-stack">
+          <span class="settings-stack-label">Theme</span>
+          <select id="setting-theme" class="settings-select" aria-label="Theme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label class="settings-row">
           <input type="checkbox" id="setting-line-numbers" />
           <span>Line numbers</span>
+        </label>
+        <button type="button" id="clear-projects" class="toolbar-btn settings-danger-btn">
+          Clear projects list
+        </button>
+        <label class="settings-stack">
+          <span class="settings-stack-label">Markdown scan folders</span>
+          <span class="settings-stack-hint">Relative to each project folder; one path per line. Nested markdown files under each root are included.</span>
+          <textarea id="setting-scan-folders" class="settings-textarea" rows="5" spellcheck="false"></textarea>
         </label>
       </div>
     </main>

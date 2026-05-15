@@ -18,6 +18,7 @@ import {
 } from '../../core/state/fileListPresentation'
 import { selectActiveProject, selectCurrentDocumentPath } from '../../core/state/selectors'
 import { pathBasename, replaceBasename, stableDocIdForPath } from '../../core/util/paths'
+import { resolveContainedScanRoot } from '../../core/util/markdownScanFolders'
 import {
   serializePreferencesFromState,
   serializeSessionFromState
@@ -62,27 +63,34 @@ const SAMPLE_DOC_B: DocumentInput = {
 /** Wire SpeOps renderer shell (UPH-01 three-pane). */
 export function bootRenderer(ctx: RendererBootContext): void {
   const { root, store, services, specOps } = ctx
+  const getPathForDroppedFile = (file: File): string | null => {
+    if (typeof specOps.getPathForFile === 'function') return specOps.getPathForFile(file)
+    const legacyPath = (file as File & { path?: string }).path
+    return typeof legacyPath === 'string' && legacyPath.trim() ? legacyPath : null
+  }
+  const listMarkdownFilesRecursive = async (folderPath: string): Promise<string[]> => {
+    if (typeof specOps.listMarkdownFilesRecursive === 'function') {
+      return specOps.listMarkdownFilesRecursive(folderPath)
+    }
+    return []
+  }
 
   root.innerHTML = `
     <header class="app-toolbar" role="banner">
+      <button type="button" id="btn-new-untitled" class="toolbar-btn">New</button>
       <button type="button" id="btn-open-markdown" class="toolbar-btn">Open…</button>
       <button type="button" id="btn-save" class="toolbar-btn">Save</button>
       <button type="button" id="btn-save-as" class="toolbar-btn">Save As…</button>
-      <button type="button" id="btn-new-untitled" class="toolbar-btn">New untitled</button>
-      <label class="toolbar-project">
-        <span class="visually-hidden">Active project</span>
-        <select id="project-switcher" class="recents-select" aria-label="Active project"></select>
-      </label>
-      <button type="button" id="btn-add-project" class="toolbar-btn">Add project…</button>
       <span id="dirty-indicator" class="dirty-indicator" hidden aria-live="polite">Modified</span>
-      <label class="toolbar-autosave"><input type="checkbox" id="editor-autosave" /> Autosave</label>
-      <span id="theme-controls-slot"></span>
       <span id="status-line" class="status-line"></span>
     </header>
     <div class="app-body">
+      <aside class="projects-rail" aria-label="Projects">
+        <button type="button" id="btn-add-project" class="project-rail-btn project-rail-add" title="Add project…">+</button>
+        <div class="projects-rail-list" data-testid="projects-rail-list"></div>
+      </aside>
       <aside data-testid="recents-pane" class="recents-pane" aria-label="Recent documents">
         <div class="recents-heading-row">
-          <span class="recents-heading-title">Recents</span>
           <label class="recents-control"><span class="visually-hidden">Sort</span>
             <select id="recents-sort" class="recents-select" aria-label="Sort recents">
               <option value="lastOpened">Last opened</option>
@@ -167,6 +175,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const editorHighlightContent = root.querySelector<HTMLElement>('#editor-highlight-content')!
   const previewEl = root.querySelector<HTMLElement>('#preview')!
   const recentsListRoot = root.querySelector<HTMLElement>('[data-testid="recents-list"]')!
+  const projectsRailList = root.querySelector<HTMLElement>('[data-testid="projects-rail-list"]')!
   const workspaceEl = root.querySelector<HTMLElement>('.workspace')!
   const sortSelect = root.querySelector<HTMLSelectElement>('#recents-sort')!
   const groupSelect = root.querySelector<HTMLSelectElement>('#recents-grouping')!
@@ -174,7 +183,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const externalBanner = root.querySelector<HTMLElement>('#external-file-banner')!
   const statusLine = root.querySelector<HTMLElement>('#status-line')!
   const dirtyIndicator = root.querySelector<HTMLElement>('#dirty-indicator')!
-  const editorAutosave = root.querySelector<HTMLInputElement>('#editor-autosave')!
   const recentsResizer = root.querySelector<HTMLElement>('.recents-resizer')!
 
   attachPreviewChrome(previewEl)
@@ -519,6 +527,47 @@ export function bootRenderer(ctx: RendererBootContext): void {
     openLoadedDocument(absPath, read.content, read.mtimeIso)
   }
 
+  function markdownTitleFromPath(absPath: string): string {
+    return pathBasename(absPath).replace(/\.(md|markdown)$/i, '') || pathBasename(absPath)
+  }
+
+  async function refreshProjectMarkdownRecents(projectId: string): Promise<void> {
+    const st = store.getState()
+    const project = st.projectsById.get(projectId)
+    const rootFolder = project?.workspaceFolderPath?.trim()
+    const scanFolders = st.markdownScanRelativeFolders
+    if (!rootFolder || scanFolders.length === 0) return
+
+    const pathSet = new Set<string>()
+    for (const rel of scanFolders) {
+      const scanRoot = resolveContainedScanRoot(rootFolder, rel)
+      if (!scanRoot) continue
+      const listed = await listMarkdownFilesRecursive(scanRoot)
+      for (const p of listed) pathSet.add(p)
+    }
+    const paths = [...pathSet].sort((a, b) => a.localeCompare(b))
+    if (!paths.length) return
+    const docs: DocumentInput[] = []
+    for (const absPath of paths) {
+      const id = stableDocIdForPath(absPath)
+      const loaded = await specOps.readTextFile(absPath)
+      if (!loaded.ok) continue
+      docs.push({
+        id,
+        title: markdownTitleFromPath(absPath),
+        content: loaded.content,
+        path: absPath,
+        lastModified: loaded.mtimeIso
+      })
+    }
+    if (!docs.length) return
+    store.dispatch({
+      type: 'UPSERT_PROJECT_DOCUMENTS',
+      projectId,
+      documents: docs
+    })
+  }
+
   async function saveCurrentBuffer(): Promise<boolean> {
     const st = store.getState()
     const project = selectActiveProject(st)
@@ -643,15 +692,23 @@ export function bootRenderer(ctx: RendererBootContext): void {
     await Promise.resolve(action())
   }
 
-  wireProjectSwitcher({ root, store, specOps, runAfterDirtyPrompt })
+  wireProjectSwitcher({
+    root,
+    store,
+    specOps,
+    runAfterDirtyPrompt,
+    onProjectActivated: (projectId) => refreshProjectMarkdownRecents(projectId)
+  })
 
   function collectDroppedMarkdownPaths(dt: DataTransfer | null): string[] {
     const out: string[] = []
     const files = dt?.files
     if (!files?.length) return out
     for (let i = 0; i < files.length; i++) {
-      const raw = (files[i] as File & { path?: string }).path
-      if (typeof raw === 'string' && raw.toLowerCase().endsWith('.md')) out.push(raw)
+      const raw = getPathForDroppedFile(files[i]!)
+      if (!raw) continue
+      const lower = raw.toLowerCase()
+      if (lower.endsWith('.md') || lower.endsWith('.markdown')) out.push(raw)
     }
     return out
   }
@@ -725,6 +782,25 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   function syncShellFromStore(): void {
     const st = store.getState()
+    const projectButtons = [...st.projectsById.entries()]
+      .sort((a, b) => {
+        if (a[0] === 'default') return -1
+        if (b[0] === 'default') return 1
+        return a[0].localeCompare(b[0])
+      })
+      .map(([id, project]) => {
+        const rawPath = project.workspaceFolderPath?.trim()
+        const letter =
+          (rawPath ? pathBasename(rawPath) : id === 'default' ? 'D' : 'P').trim().charAt(0).toUpperCase() ||
+          'P'
+        const title = rawPath || (id === 'default' ? 'Default project' : 'Project')
+        const activeClass = id === st.activeProjectId ? ' project-rail-btn--active' : ''
+        const color = project.accentColor || '#6f7684'
+        return `<button type="button" class="project-rail-btn${activeClass}" data-project-id="${id}" title="${title.replace(/"/g, '&quot;')}" style="border-color:${color}">${letter}</button>`
+      })
+      .join('')
+    projectsRailList.innerHTML = projectButtons
+
     const project = selectActiveProject(st)
     document.documentElement.style.setProperty('--recents-width', `${st.recentsPaneWidthPx}px`)
 
@@ -745,7 +821,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
     editorStack.classList.toggle('editor-stack--wrap', st.editorSoftWrap)
     lineGutter.hidden = !st.editorLineNumbers
     if (st.editorLineNumbers) refreshLineGutter()
-    editorAutosave.checked = st.autosaveEnabled
 
     dirtyIndicator.hidden = !isEditorDirty(st)
 
@@ -791,6 +866,17 @@ export function bootRenderer(ctx: RendererBootContext): void {
   }
 
   store.subscribe(syncShellFromStore)
+
+  let prevScanFoldersJson = JSON.stringify(store.getState().markdownScanRelativeFolders)
+  store.subscribe(() => {
+    const next = JSON.stringify(store.getState().markdownScanRelativeFolders)
+    if (next === prevScanFoldersJson) return
+    prevScanFoldersJson = next
+    for (const pid of store.getState().projectsById.keys()) {
+      void refreshProjectMarkdownRecents(pid)
+    }
+  })
+
   syncShellFromStore()
   void syncWatchPath()
 
@@ -877,10 +963,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
   findRegex.addEventListener('change', () => refreshFindPatternError())
   findCase.addEventListener('change', () => refreshFindPatternError())
 
-  editorAutosave.addEventListener('change', () => {
-    store.dispatch({ type: 'SET_AUTOSAVE_ENABLED', enabled: editorAutosave.checked })
-  })
-
   findPrevBtn.addEventListener('click', () => applyFindPrevious())
   findNextBtn.addEventListener('click', () => applyFindNext())
   findReplaceBtn.addEventListener('click', () => applyReplace())
@@ -919,6 +1001,16 @@ export function bootRenderer(ctx: RendererBootContext): void {
     void runAfterDirtyPrompt(() => {
       store.dispatch({ type: 'ACTIVATE_FROM_RECENT_LIST', documentId: docId })
       requestAnimationFrame(() => schedulePreview.flush())
+    })
+  })
+
+  projectsRailList.addEventListener('click', (event) => {
+    const btn = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-project-id]')
+    const id = btn?.dataset.projectId
+    if (!id) return
+    void runAfterDirtyPrompt(async () => {
+      store.dispatch({ type: 'SET_ACTIVE_PROJECT', projectId: id })
+      await refreshProjectMarkdownRecents(id)
     })
   })
 
@@ -1107,6 +1199,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
     })
   })
 
+  if (typeof specOps.onProjectsCleared === 'function') {
+    specOps.onProjectsCleared(() => {
+      store.dispatch({ type: 'CLEAR_NON_DEFAULT_PROJECTS' })
+    })
+  }
+
   window.addEventListener('keydown', (e) => {
     const mod = e.metaKey || e.ctrlKey
     const ek = e.key.toLowerCase()
@@ -1209,10 +1307,9 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   statusLine.textContent = `${specOps.ping()} • v${specOps.getAppVersion()} • ${specOps.getPlatform()}`
 
+  for (const projectId of store.getState().projectsById.keys()) {
+    void refreshProjectMarkdownRecents(projectId)
+  }
   void runPreview()
 }
 
-/** Resolve toolbar slot for theme control (Task 10). */
-export function getThemeControlsSlot(root: HTMLElement): HTMLElement | null {
-  return root.querySelector('#theme-controls-slot')
-}

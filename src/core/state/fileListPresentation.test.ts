@@ -127,6 +127,15 @@ describe('groupsForPresentation', () => {
     expect(g[1].ids).toEqual(['b'])
     expect(g[2].ids).toEqual(['a'])
   })
+
+  it('renders grouped labels relative to workspace root', () => {
+    const s = stateWith([da, db], ['b', 'a'], {
+      fileListGrouping: 'folder',
+      workspaceFolderPath: '/p'
+    })
+    const g = groupsForPresentation(s)
+    expect(g.map((x) => x.label)).toEqual(['y', 'x'])
+  })
 })
 
 describe('isFolderExpanded', () => {

@@ -1,14 +1,17 @@
 import type { AppState, ProjectState } from './types'
+import { createEmptyChatState } from '../chat/chatState'
 
 export function selectActiveProject(state: AppState): ProjectState {
   return state.projectsById.get(state.activeProjectId) ?? {
+    chat: createEmptyChatState(),
     documentsById: new Map(),
     recentDocumentIds: [],
     currentDocumentId: null,
     editorContent: '',
     workspaceFolderPath: null,
+    accentColor: '#6f7684',
     fileListSort: 'lastOpened',
-    fileListGrouping: 'none',
+    fileListGrouping: 'folder',
     expandedFolderGroups: []
   }
 }

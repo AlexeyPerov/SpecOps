@@ -1,64 +1,59 @@
 import type { SpecOpsPreloadApi } from '../../../preload/specOpsApi'
 import type { AppStore } from '../../../core/state/store'
-import { DEFAULT_PROJECT_ID } from '../../../core/state/transitions'
-import { pathBasename } from '../../../core/util/paths'
 
 export interface ProjectSwitcherContext {
   readonly root: HTMLElement
   readonly store: AppStore
   readonly specOps: SpecOpsPreloadApi
   readonly runAfterDirtyPrompt: (action: () => void | Promise<void>) => Promise<void>
+  readonly onProjectActivated?: (projectId: string) => void | Promise<void>
 }
 
-function projectLabel(projectId: string, workspaceFolderPath: string | null): string {
-  if (projectId === DEFAULT_PROJECT_ID) return 'Default'
-  const folder = workspaceFolderPath?.trim()
-  if (!folder) return 'Project'
-  return pathBasename(folder) || 'Project'
-}
-
-/** Toolbar project dropdown + add-project (folder-scoped); respects dirty buffer via `runAfterDirtyPrompt`. */
+/** Project add flow (folder-scoped); respects dirty buffer via `runAfterDirtyPrompt`. */
 export function wireProjectSwitcher(ctx: ProjectSwitcherContext): void {
-  const select = ctx.root.querySelector<HTMLSelectElement>('#project-switcher')
   const addBtn = ctx.root.querySelector<HTMLButtonElement>('#btn-add-project')
-  if (!select || !addBtn) return
+  if (!addBtn) return
 
-  let syncingFromStore = false
+  const PROJECT_ACCENTS = [
+    '#f59e0b',
+    '#ef4444',
+    '#22c55e',
+    '#3b82f6',
+    '#a855f7',
+    '#f97316',
+    '#14b8a6',
+    '#e11d48',
+    '#84cc16',
+    '#6366f1'
+  ] as const
 
-  function renderOptions(): void {
-    const st = ctx.store.getState()
-    const ids = [...st.projectsById.keys()].sort((a, b) => {
-      if (a === DEFAULT_PROJECT_ID) return -1
-      if (b === DEFAULT_PROJECT_ID) return 1
-      return a.localeCompare(b)
-    })
-    const nextValue = st.activeProjectId
-    select.innerHTML = ''
-    for (const id of ids) {
-      const p = st.projectsById.get(id)!
-      const opt = document.createElement('option')
-      opt.value = id
-      opt.textContent = projectLabel(id, p.workspaceFolderPath)
-      select.appendChild(opt)
-    }
-    syncingFromStore = true
-    select.value = ids.includes(nextValue) ? nextValue : ids[0] ?? ''
-    syncingFromStore = false
+  function normalizeProjectPath(p: string): string {
+    return p.replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase()
   }
 
-  select.addEventListener('change', () => {
-    if (syncingFromStore) return
-    const id = select.value
-    if (!id) return
-    void ctx.runAfterDirtyPrompt(() => {
-      ctx.store.dispatch({ type: 'SET_ACTIVE_PROJECT', projectId: id })
-    })
-  })
+  function randomAccent(): string {
+    const idx = Math.floor(Math.random() * PROJECT_ACCENTS.length)
+    return PROJECT_ACCENTS[idx] ?? '#6f7684'
+  }
+
+  async function activateProject(projectId: string): Promise<void> {
+    ctx.store.dispatch({ type: 'SET_ACTIVE_PROJECT', projectId })
+    await Promise.resolve(ctx.onProjectActivated?.(projectId))
+  }
 
   addBtn.addEventListener('click', () => {
     void ctx.runAfterDirtyPrompt(async () => {
       const folder = await ctx.specOps.pickWorkspaceFolder()
       if (!folder) return
+      const normalized = normalizeProjectPath(folder)
+      const existing = [...ctx.store.getState().projectsById.entries()].find(([, p]) => {
+        const raw = p.workspaceFolderPath?.trim()
+        return raw ? normalizeProjectPath(raw) === normalized : false
+      })
+      if (existing) {
+        await activateProject(existing[0])
+        return
+      }
       const projectId =
         typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
           ? crypto.randomUUID()
@@ -66,12 +61,11 @@ export function wireProjectSwitcher(ctx: ProjectSwitcherContext): void {
       ctx.store.dispatch({
         type: 'CREATE_PROJECT',
         projectId,
-        workspaceFolderPath: folder
+        workspaceFolderPath: folder,
+        accentColor: randomAccent()
       })
-      ctx.store.dispatch({ type: 'SET_ACTIVE_PROJECT', projectId })
+      await activateProject(projectId)
     })
   })
 
-  renderOptions()
-  ctx.store.subscribe(renderOptions)
 }

@@ -62,12 +62,14 @@ export type SpecOpsPreloadApi = Readonly<{
   resolveRepoPath: (...segments: string[]) => Promise<string>
   readMarkdownAsset: (payload: ReadMarkdownAssetPayload) => Promise<ReadMarkdownAssetResult>
   pickWorkspaceFolder: () => Promise<string | null>
+  getPathForFile: (file: File) => string | null
   revealInFolder: (filePath: string) => Promise<void>
   readTextFile: (absolutePath: string) => Promise<ReadTextFileResult>
   createMarkdownInWorkspace: (payload: {
     folderPath: string
     baseName: string
   }) => Promise<CreateMarkdownResult>
+  listMarkdownFilesRecursive: (folderPath: string) => Promise<string[]>
   setWatchedDocPath: (absolutePath: string | null) => Promise<void>
   onExternalFileChanged: (callback: (payload: ExternalFileChangedPayload) => void) => () => void
   writeTextFile: (payload: {
@@ -89,6 +91,7 @@ export type SpecOpsPreloadApi = Readonly<{
   writePreferences: (prefs: PreferencesPersistedV1) => Promise<void>
   readSession: () => Promise<SessionPersistedV1 | null>
   writeSession: (session: SessionPersistedV1) => Promise<void>
+  clearProjects: () => Promise<void>
   readDraft: (documentId: string) => Promise<PersistedDraftPayload>
   writeDraft: (payload: { documentId: string; content: string }) => Promise<void>
   clearDraft: (documentId: string) => Promise<void>
@@ -98,4 +101,5 @@ export type SpecOpsPreloadApi = Readonly<{
   /** Notify main window to reload preferences from disk (after settings window saves). */
   notifyPreferencesChanged: () => void
   onPreferencesChanged: (callback: () => void) => () => void
+  onProjectsCleared: (callback: () => void) => () => void
 }>

@@ -1,6 +1,7 @@
 import { createEmptyChatState } from '../chat/chatState'
 import { folderKeyForDocumentPath, groupsForPresentation } from './fileListPresentation'
 import type { AppAction, AppState, Document, ProjectState } from './types'
+import { sanitizeMarkdownScanRelativeFolders } from '../util/markdownScanFolders'
 import { pathBasename, stableDocIdForPath } from '../util/paths'
 
 export const DEFAULT_PROJECT_ID = 'default'
@@ -13,8 +14,9 @@ function createInitialProjectState(): ProjectState {
     currentDocumentId: null,
     editorContent: '',
     workspaceFolderPath: null,
+    accentColor: '#6f7684',
     fileListSort: 'lastOpened',
-    fileListGrouping: 'none',
+    fileListGrouping: 'folder',
     expandedFolderGroups: []
   }
 }
@@ -56,6 +58,7 @@ export function createInitialAppState(): AppState {
     editorSoftWrap: true,
     editorLineNumbers: true,
     recentsPaneWidthPx: 260,
+    markdownScanRelativeFolders: sanitizeMarkdownScanRelativeFolders(['specs']),
     documentsById: initialProject.documentsById,
     recentDocumentIds: initialProject.recentDocumentIds,
     currentDocumentId: initialProject.currentDocumentId,
@@ -78,13 +81,26 @@ function dedupeRecents(ids: readonly string[]): string[] {
   return out
 }
 
+function patchProjectById(state: AppState, projectId: string, patch: Partial<ProjectState>): AppState {
+  const current = state.projectsById.get(projectId)
+  if (!current) return state
+  const next: ProjectState = { ...current, ...patch }
+  const projectsById = new Map(state.projectsById)
+  projectsById.set(projectId, next)
+  if (projectId === state.activeProjectId) {
+    return withActiveProject({ ...state, projectsById }, next)
+  }
+  return { ...state, projectsById }
+}
+
 /** Pure state reducer — inject `nowIso` for deterministic tests (NR-01 / DATA-01 / DATA-08). */
 export function reduceAppState(state: AppState, action: AppAction, nowIso: string): AppState {
   if (action.type === 'CREATE_PROJECT') {
     if (state.projectsById.has(action.projectId)) return state
     const project: ProjectState = {
       ...createInitialProjectState(),
-      workspaceFolderPath: action.workspaceFolderPath ?? null
+      workspaceFolderPath: action.workspaceFolderPath ?? null,
+      accentColor: action.accentColor ?? '#6f7684'
     }
     const projectsById = new Map(state.projectsById)
     projectsById.set(action.projectId, project)
@@ -107,6 +123,44 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
     }
     const [nextId, nextProject] = projectsById.entries().next().value as [string, ProjectState]
     return withActiveProject({ ...state, projectsById, activeProjectId: nextId }, nextProject)
+  }
+
+  if (action.type === 'CLEAR_NON_DEFAULT_PROJECTS') {
+    const defaultProject = state.projectsById.get(DEFAULT_PROJECT_ID) ?? createInitialProjectState()
+    const projectsById = new Map<string, ProjectState>([[DEFAULT_PROJECT_ID, defaultProject]])
+    return withActiveProject({ ...state, projectsById, activeProjectId: DEFAULT_PROJECT_ID }, defaultProject)
+  }
+
+  if (action.type === 'UPSERT_PROJECT_DOCUMENTS') {
+    const project = state.projectsById.get(action.projectId)
+    if (!project) return state
+    const documentsById = new Map(project.documentsById)
+    for (const input of action.documents) {
+      const doc: Document = {
+        ...input,
+        lastOpened: nowIso
+      }
+      documentsById.set(doc.id, doc)
+    }
+    const mergedRecents = dedupeRecents([
+      ...action.documents.map((d) => d.id),
+      ...project.recentDocumentIds
+    ])
+    let expandedFolderGroups = project.expandedFolderGroups
+    if (project.fileListGrouping === 'folder') {
+      const known = new Set(expandedFolderGroups)
+      for (const d of action.documents) {
+        const fk = folderKeyForDocumentPath(d.path)
+        if (known.has(fk)) continue
+        known.add(fk)
+        expandedFolderGroups = [...expandedFolderGroups, fk]
+      }
+    }
+    return patchProjectById(state, action.projectId, {
+      documentsById,
+      recentDocumentIds: mergedRecents,
+      expandedFolderGroups
+    })
   }
 
   switch (action.type) {
@@ -180,6 +234,12 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
       const clamped = Math.min(560, Math.max(180, w))
       return { ...state, recentsPaneWidthPx: clamped }
     }
+
+    case 'SET_MARKDOWN_SCAN_RELATIVE_FOLDERS':
+      return {
+        ...state,
+        markdownScanRelativeFolders: sanitizeMarkdownScanRelativeFolders(action.folders)
+      }
 
     case 'REPARENT_DOCUMENT': {
       const doc = state.documentsById.get(action.oldDocumentId)

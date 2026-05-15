@@ -10,6 +10,7 @@ import type {
 } from '../core/state/sessionCodec'
 import { SPEC_OPS_IPC } from '../ipc/specOpsIpc'
 import { DEFAULT_PREFERENCES_V1 } from '../core/state/sessionCodec'
+import { sanitizeMarkdownScanRelativeFolders } from '../core/util/markdownScanFolders'
 
 export type { PersistedPreferencesV1, PersistedSessionDocumentV1, PersistedSessionV1 }
 
@@ -76,6 +77,11 @@ function parsePreferences(raw: string): PersistedPreferencesV1 {
       typeof o.workspaceFolderPath === 'string' || o.workspaceFolderPath === null
         ? o.workspaceFolderPath
         : null
+    const markdownScanRelativeFolders = sanitizeMarkdownScanRelativeFolders(
+      Array.isArray(o.markdownScanRelativeFolders)
+        ? o.markdownScanRelativeFolders.filter((x): x is string => typeof x === 'string')
+        : [...DEFAULT_PREFERENCES_V1.markdownScanRelativeFolders]
+    )
     return {
       version: 2,
       themeMode,
@@ -86,7 +92,8 @@ function parsePreferences(raw: string): PersistedPreferencesV1 {
       autosaveEnabled: typeof o.autosaveEnabled === 'boolean' ? o.autosaveEnabled : false,
       editorSoftWrap: typeof o.editorSoftWrap === 'boolean' ? o.editorSoftWrap : true,
       editorLineNumbers: typeof o.editorLineNumbers === 'boolean' ? o.editorLineNumbers : true,
-      recentsPaneWidthPx: clampRecentsPaneWidthPx(o.recentsPaneWidthPx)
+      recentsPaneWidthPx: clampRecentsPaneWidthPx(o.recentsPaneWidthPx),
+      markdownScanRelativeFolders
     }
   } catch {
     return DEFAULT_PREFERENCES_V1
@@ -106,6 +113,7 @@ function parseSession(raw: string): PersistedSessionV1 | null {
           p !== null &&
           typeof p.projectId === 'string' &&
           (typeof p.workspaceFolderPath === 'string' || p.workspaceFolderPath === null) &&
+          (p.accentColor === undefined || typeof p.accentColor === 'string') &&
           (p.fileListSort === 'lastOpened' || p.fileListSort === 'title' || p.fileListSort === 'path') &&
           (p.fileListGrouping === 'none' || p.fileListGrouping === 'folder') &&
           Array.isArray(p.expandedFolderGroups) &&
@@ -141,6 +149,7 @@ function parseSession(raw: string): PersistedSessionV1 | null {
         return {
           projectId: p.projectId,
           workspaceFolderPath: p.workspaceFolderPath,
+          ...(typeof p.accentColor === 'string' ? { accentColor: p.accentColor } : {}),
           fileListSort: p.fileListSort,
           fileListGrouping: p.fileListGrouping,
           expandedFolderGroups: p.expandedFolderGroups.filter((x): x is string => typeof x === 'string'),
@@ -285,7 +294,13 @@ export function registerPersistenceIpc(app: App): void {
       recentsPaneWidthPx:
         p.recentsPaneWidthPx !== undefined && p.recentsPaneWidthPx !== null
           ? clampRecentsPaneWidthPx(p.recentsPaneWidthPx)
-          : base.recentsPaneWidthPx
+          : base.recentsPaneWidthPx,
+      markdownScanRelativeFolders:
+        Array.isArray(p.markdownScanRelativeFolders)
+          ? sanitizeMarkdownScanRelativeFolders(
+              p.markdownScanRelativeFolders.filter((x): x is string => typeof x === 'string')
+            )
+          : [...base.markdownScanRelativeFolders]
     }
     await writePreferencesFile(app, merged)
   })

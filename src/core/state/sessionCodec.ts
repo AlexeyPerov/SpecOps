@@ -5,6 +5,7 @@ import {
   type ChatStatePersistedV1
 } from '../chat/chatState'
 import { selectActiveProject } from './selectors'
+import { sanitizeMarkdownScanRelativeFolders } from '../util/markdownScanFolders'
 
 /**
  * Session/preferences codec for nested multi-project state (v2).
@@ -22,6 +23,8 @@ export interface PreferencesPersistedV1 {
   readonly editorSoftWrap: boolean
   readonly editorLineNumbers: boolean
   readonly recentsPaneWidthPx: number
+  /** Relative subfolders under each project workspace to scan for markdown recents (recursive). */
+  readonly markdownScanRelativeFolders: readonly string[]
 }
 
 export interface SessionDocumentPersistedV1 {
@@ -36,6 +39,7 @@ export interface SessionDocumentPersistedV1 {
 export interface SessionProjectPersistedV1 {
   readonly projectId: string
   readonly workspaceFolderPath: string | null
+  readonly accentColor?: string
   readonly fileListSort: AppState['fileListSort']
   readonly fileListGrouping: AppState['fileListGrouping']
   readonly expandedFolderGroups: readonly string[]
@@ -56,13 +60,14 @@ export const DEFAULT_PREFERENCES_V1: PreferencesPersistedV1 = {
   version: 2,
   themeMode: 'system',
   fileListSort: 'lastOpened',
-  fileListGrouping: 'none',
+  fileListGrouping: 'folder',
   expandedFolderGroups: [],
   workspaceFolderPath: null,
   autosaveEnabled: false,
   editorSoftWrap: true,
   editorLineNumbers: true,
-  recentsPaneWidthPx: 260
+  recentsPaneWidthPx: 260,
+  markdownScanRelativeFolders: ['specs']
 }
 
 /** Merge persisted prefs onto baseline AppState (session/doc fields unchanged). */
@@ -89,7 +94,10 @@ export function mergePreferencesIntoState(base: AppState, prefs: PreferencesPers
     autosaveEnabled: prefs.autosaveEnabled,
     editorSoftWrap: prefs.editorSoftWrap,
     editorLineNumbers: prefs.editorLineNumbers,
-    recentsPaneWidthPx: prefs.recentsPaneWidthPx
+    recentsPaneWidthPx: prefs.recentsPaneWidthPx,
+    markdownScanRelativeFolders: sanitizeMarkdownScanRelativeFolders(
+      prefs.markdownScanRelativeFolders ?? DEFAULT_PREFERENCES_V1.markdownScanRelativeFolders
+    )
   }
 }
 
@@ -131,6 +139,10 @@ export function mergeSessionIntoState(
       currentDocumentId,
       editorContent,
       workspaceFolderPath: project.workspaceFolderPath,
+      accentColor:
+        typeof project.accentColor === 'string' && project.accentColor.trim()
+          ? project.accentColor
+          : '#6f7684',
       fileListSort: project.fileListSort,
       fileListGrouping: project.fileListGrouping,
       expandedFolderGroups: [...project.expandedFolderGroups]
@@ -179,6 +191,7 @@ export function serializeSessionFromState(state: AppState): SessionPersistedV1 {
     projects.push({
       projectId,
       workspaceFolderPath: project.workspaceFolderPath,
+      accentColor: project.accentColor,
       fileListSort: project.fileListSort,
       fileListGrouping: project.fileListGrouping,
       expandedFolderGroups: [...project.expandedFolderGroups],
@@ -208,7 +221,8 @@ export function serializePreferencesFromState(state: AppState): PreferencesPersi
     autosaveEnabled: state.autosaveEnabled,
     editorSoftWrap: state.editorSoftWrap,
     editorLineNumbers: state.editorLineNumbers,
-    recentsPaneWidthPx: state.recentsPaneWidthPx
+    recentsPaneWidthPx: state.recentsPaneWidthPx,
+    markdownScanRelativeFolders: [...state.markdownScanRelativeFolders]
   }
 }
 

@@ -55,7 +55,7 @@ function showSettingsWindow(): void {
   }
   const win = new BrowserWindow({
     width: 480,
-    height: 300,
+    height: 420,
     title: 'Settings',
     show: false,
     webPreferences: {
@@ -128,6 +128,11 @@ void app.whenReady().then(async () => {
   ipcMain.on(SPEC_OPS_IPC.notifyPreferencesChanged, () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
     mainWindow.webContents.send(SPEC_OPS_IPC.preferencesChangedMain)
+  })
+
+  ipcMain.handle(SPEC_OPS_IPC.clearProjects, async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.webContents.send(SPEC_OPS_IPC.projectsClearedMain)
   })
 
   Menu.setApplicationMenu(

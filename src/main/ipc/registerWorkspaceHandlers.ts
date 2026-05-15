@@ -70,4 +70,32 @@ export function registerWorkspaceHandlers(
       }
     }
   )
+
+  ipc.handle(SPEC_OPS_IPC.listMarkdownFilesRecursive, async (_evt, folderPath: unknown) => {
+    if (typeof folderPath !== 'string' || !folderPath.trim()) return []
+    const rootDir = resolve(folderPath)
+    const out: string[] = []
+    const stack: string[] = [rootDir]
+    while (stack.length > 0) {
+      const current = stack.pop()!
+      let entries: Awaited<ReturnType<typeof fs.readdir>>
+      try {
+        entries = await fs.readdir(current, { withFileTypes: true })
+      } catch {
+        continue
+      }
+      for (const entry of entries) {
+        const abs = normalize(join(current, entry.name))
+        if (entry.isDirectory()) {
+          stack.push(abs)
+          continue
+        }
+        if (!entry.isFile()) continue
+        const lower = entry.name.toLowerCase()
+        if (lower.endsWith('.md') || lower.endsWith('.markdown')) out.push(abs)
+      }
+    }
+    out.sort((a, b) => a.localeCompare(b))
+    return out
+  })
 }

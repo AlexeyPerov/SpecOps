@@ -39,6 +39,20 @@ export interface RecentPresentationGroup {
   readonly ids: readonly string[]
 }
 
+function folderLabelForSidebar(workspaceFolderPath: string | null, folderKey: string): string {
+  if (folderKey === UNGROUPED_FOLDER_KEY) return 'Ungrouped'
+  const root = workspaceFolderPath?.trim().replace(/\\/g, '/').replace(/\/+$/, '')
+  if (!root) return folderKey
+  const keyNorm = folderKey.replace(/\\/g, '/')
+  if (keyNorm === root) return '.'
+  const prefix = `${root}/`
+  if (keyNorm.startsWith(prefix)) {
+    const rel = keyNorm.slice(prefix.length)
+    return rel || '.'
+  }
+  return folderKey
+}
+
 export function groupsForPresentation(state: AppState): RecentPresentationGroup[] {
   const project = selectActiveProject(state)
   const ordered = orderedRecentIds(state)
@@ -59,9 +73,11 @@ export function groupsForPresentation(state: AppState): RecentPresentationGroup[
     bucket.get(key)!.push(id)
   }
 
+  const workspaceRoot = project.workspaceFolderPath
+
   return groupOrder.map((key) => ({
     key,
-    label: key === UNGROUPED_FOLDER_KEY ? 'Ungrouped' : key,
+    label: folderLabelForSidebar(workspaceRoot, key),
     ids: bucket.get(key) ?? []
   }))
 }

@@ -24,6 +24,7 @@ describe('sessionCodec (TEST-10 helpers)', () => {
     expect(next.autosaveEnabled).toBe(true)
     expect(next.editorSoftWrap).toBe(false)
     expect(next.editorLineNumbers).toBe(false)
+    expect(next.fileListGrouping).toBe('folder')
   })
 
   it('isRecoverableDraft detects differing draft', () => {
@@ -79,6 +80,28 @@ describe('sessionCodec (TEST-10 helpers)', () => {
     expect(p.autosaveEnabled).toBe(true)
     expect(p.editorSoftWrap).toBe(false)
     expect(p.themeMode).toBe('dark')
+  })
+
+  it('mergePreferencesIntoState applies sanitized markdown scan folders', () => {
+    const base = createInitialAppState()
+    const next = mergePreferencesIntoState(base, {
+      ...DEFAULT_PREFERENCES_V1,
+      markdownScanRelativeFolders: ['specs', ' specs ', '../bad']
+    })
+    expect(next.markdownScanRelativeFolders).toEqual(['specs'])
+  })
+
+  it('serializePreferencesFromState preserves markdownScanRelativeFolders round-trip', () => {
+    let s = createInitialAppState()
+    s = reduceAppState(
+      s,
+      { type: 'SET_MARKDOWN_SCAN_RELATIVE_FOLDERS', folders: ['specs', 'docs'] },
+      '2026-01-01T00:00:00.000Z'
+    )
+    const blob = serializePreferencesFromState(s)
+    expect(blob.markdownScanRelativeFolders).toEqual(['specs', 'docs'])
+    const merged = mergePreferencesIntoState(createInitialAppState(), blob)
+    expect(merged.markdownScanRelativeFolders).toEqual(['specs', 'docs'])
   })
 
   it('mergeSessionIntoState restores documents and editor baseline', () => {

@@ -139,8 +139,8 @@ body {
 }
 
 .app-toolbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
@@ -165,8 +165,8 @@ body {
 }
 
 .view-mode-switch {
-  margin-left: auto;
   display: inline-flex;
+  justify-self: end;
   gap: calc(var(--space-xs) / 2);
 }
 
@@ -182,6 +182,16 @@ body {
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-sm);
+}
+
+.current-file-label {
+  justify-self: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
 }
 
 .app-body {

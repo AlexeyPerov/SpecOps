@@ -16,7 +16,10 @@ export type ReadMarkdownAssetResult =
 
 export type ReadTextFileResult =
   | Readonly<{ ok: true; content: string; mtimeIso: string | null }>
-  | Readonly<{ ok: false; reason: string }>
+  | Readonly<{
+      ok: false
+      reason: 'invalid_path' | 'read_error' | 'unreadable' | 'binary' | 'too_large'
+    }>
 
 export type CreateMarkdownResult =
   | Readonly<{ ok: true; absolutePath: string }>
@@ -26,11 +29,11 @@ export type WriteTextFileResult =
   | Readonly<{ ok: true; mtimeIso: string }>
   | Readonly<{ ok: false; reason: string }>
 
-export type PickOpenMarkdownFileResult =
+export type PickOpenFileResult =
   | Readonly<{ canceled: true }>
   | Readonly<{ canceled: false; filePath: string }>
 
-export type PickSaveMarkdownFileResult =
+export type PickSaveFileResult =
   | Readonly<{ canceled: true }>
   | Readonly<{ canceled: false; filePath: string }>
 
@@ -76,10 +79,10 @@ export type SpecOpsPreloadApi = Readonly<{
     absolutePath: string
     content: string
   }) => Promise<WriteTextFileResult>
-  pickOpenMarkdownFile: () => Promise<PickOpenMarkdownFileResult>
-  pickSaveMarkdownFile: (payload?: {
+  pickOpenFile: () => Promise<PickOpenFileResult>
+  pickSaveFile: (payload?: {
     defaultPath?: string
-  }) => Promise<PickSaveMarkdownFileResult>
+  }) => Promise<PickSaveFileResult>
   promptDirtyNavigation: () => Promise<DirtyNavigationChoice>
   confirmDeleteFile: (basename: string) => Promise<boolean>
   renamePathOnDisk: (payload: {

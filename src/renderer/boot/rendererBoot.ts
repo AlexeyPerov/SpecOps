@@ -16,7 +16,11 @@ import {
   documentIdForAbsolutePath,
   isEditorDirty
 } from '../../core/state/fileListPresentation'
-import { selectActiveProject, selectCurrentDocumentPath } from '../../core/state/selectors'
+import {
+  isMarkdownCapableDocumentPath,
+  selectActiveProject,
+  selectCurrentDocumentPath
+} from '../../core/state/selectors'
 import { pathBasename, replaceBasename, stableDocIdForPath } from '../../core/util/paths'
 import { resolveContainedScanRoot } from '../../core/util/markdownScanFolders'
 import {
@@ -78,7 +82,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
   root.innerHTML = `
     <header class="app-toolbar" role="banner">
       <span id="dirty-indicator" class="dirty-indicator" hidden aria-live="polite">Modified</span>
-      <div class="view-mode-switch" role="group" aria-label="Markdown view mode">
+      <span id="current-file-label" class="current-file-label" title="No file selected">No file selected</span>
+      <div class="view-mode-switch" role="group" aria-label="Editor view mode">
         <button type="button" class="toolbar-btn mode-btn" data-view-mode="split" aria-pressed="true">Split</button>
         <button type="button" class="toolbar-btn mode-btn" data-view-mode="edit" aria-pressed="false">Edit</button>
         <button type="button" class="toolbar-btn mode-btn" data-view-mode="preview" aria-pressed="false">Preview</button>
@@ -144,7 +149,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
               <div id="line-gutter" class="line-gutter" aria-hidden="true" hidden></div>
               <div class="editor-stack">
                 <pre class="editor-highlight" aria-hidden="true"><code id="editor-highlight-content" class="editor-highlight-content"></code></pre>
-                <textarea data-testid="editor" id="editor" class="editor-field editor-field--layered" aria-label="Markdown editor" spellcheck="false"></textarea>
+                <textarea data-testid="editor" id="editor" class="editor-field editor-field--layered" aria-label="Text editor" spellcheck="false"></textarea>
               </div>
             </div>
           </div>
@@ -183,6 +188,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const contextMenu = root.querySelector<HTMLElement>('#recents-context-menu')!
   const externalBanner = root.querySelector<HTMLElement>('#external-file-banner')!
   const dirtyIndicator = root.querySelector<HTMLElement>('#dirty-indicator')!
+  const currentFileLabel = root.querySelector<HTMLElement>('#current-file-label')!
   const recentsResizer = root.querySelector<HTMLElement>('.recents-resizer')!
   const modeButtons = [...root.querySelectorAll<HTMLButtonElement>('[data-view-mode]')]
 
@@ -229,19 +235,52 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   let contextDocId: string | null = null
   let currentViewMode: 'split' | 'preview' | 'edit' = 'split'
+  let isCurrentDocMarkdownCapable = true
+
+  function isPreviewAllowed(): boolean {
+    return isCurrentDocMarkdownCapable
+  }
 
   function applyViewMode(mode: 'split' | 'preview' | 'edit'): void {
-    currentViewMode = mode
-    workspaceColumns.dataset.viewMode = mode
+    const effectiveMode = isPreviewAllowed() ? mode : 'edit'
+    currentViewMode = effectiveMode
+    workspaceColumns.dataset.viewMode = effectiveMode
+    workspaceColumns.dataset.previewAllowed = isPreviewAllowed() ? 'true' : 'false'
     for (const btn of modeButtons) {
-      btn.setAttribute('aria-pressed', btn.dataset.viewMode === mode ? 'true' : 'false')
+      const btnMode = btn.dataset.viewMode
+      const enabled = isPreviewAllowed() || btnMode === 'edit'
+      btn.disabled = !enabled
+      btn.setAttribute('aria-disabled', enabled ? 'false' : 'true')
+      btn.hidden = !enabled
+      btn.setAttribute('aria-pressed', btnMode === effectiveMode ? 'true' : 'false')
     }
+  }
+
+  function schedulePreviewMaybe(): void {
+    if (!isPreviewAllowed()) return
+    schedulePreview()
+  }
+
+  function flushPreviewMaybe(): void {
+    if (!isPreviewAllowed()) {
+      previewEl.innerHTML = ''
+      return
+    }
+    schedulePreview.flush()
   }
 
   async function runPreview(): Promise<void> {
     const seq = ++previewSeq
     const st = store.getState()
     const project = selectActiveProject(st)
+    const docPath =
+      project.currentDocumentId !== null
+        ? project.documentsById.get(project.currentDocumentId)?.path ?? null
+        : null
+    if (!isMarkdownCapableDocumentPath(docPath)) {
+      previewEl.innerHTML = ''
+      return
+    }
     const parseResult = services.parser.parse(st.editorContent)
 
     let html: string
@@ -251,11 +290,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
       const rr = services.renderer.render(parseResult.ast)
       html = rr.ok ? rr.html : previewErrorSnippet(rr.error.message)
     }
-
-    const docPath =
-      project.currentDocumentId !== null
-        ? project.documentsById.get(project.currentDocumentId)?.path ?? null
-        : null
 
     if (seq !== previewSeq) return
 
@@ -403,7 +437,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     suppressHistory = false
     refreshLineGutter()
     refreshEditorHighlight()
-    schedulePreview()
+    schedulePreviewMaybe()
   }
 
   function applyUndoRedoSnapshot(snap: { value: string; selStart: number; selEnd: number }): void {
@@ -415,7 +449,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     suppressHistory = false
     refreshLineGutter()
     refreshEditorHighlight()
-    schedulePreview.flush()
+    flushPreviewMaybe()
     scheduleHistoryPush.cancel()
   }
 
@@ -536,23 +570,52 @@ export function bootRenderer(ctx: RendererBootContext): void {
         lastModified
       }
     })
-    schedulePreview.flush()
+    flushPreviewMaybe()
   }
 
-  async function openMarkdownFromAbsolutePath(absPath: string): Promise<void> {
+  function currentFileDisplay(
+    doc:
+      | {
+          title: string
+          path: string | null
+        }
+      | undefined
+  ): string {
+    const path = doc?.path?.trim()
+    if (path) return pathBasename(path)
+    const title = doc?.title?.trim()
+    return title || 'Untitled'
+  }
+
+  function formatOpenReadFailure(reason: string): string {
+    switch (reason) {
+      case 'too_large':
+        return 'Could not open file: file exceeds 2 MB text limit.'
+      case 'binary':
+        return 'Could not open file: binary files are not supported in the editor.'
+      case 'unreadable':
+        return 'Could not open file: file is not readable as UTF-8 text.'
+      case 'invalid_path':
+        return 'Could not open file: invalid path.'
+      default:
+        return 'Could not open file (read error).'
+    }
+  }
+
+  async function openTextFromAbsolutePath(absPath: string): Promise<void> {
     const read = await specOps.readTextFile(absPath)
     if (!read.ok) {
-      window.alert(`Could not open file (${read.reason}).`)
+      window.alert(formatOpenReadFailure(read.reason))
       return
     }
     openLoadedDocument(absPath, read.content, read.mtimeIso)
   }
 
-  function openMarkdownPicker(): void {
+  function openFilePicker(): void {
     void runAfterDirtyPrompt(async () => {
-      const pick = await specOps.pickOpenMarkdownFile()
+      const pick = await specOps.pickOpenFile()
       if (pick.canceled) return
-      await openMarkdownFromAbsolutePath(pick.filePath)
+      await openTextFromAbsolutePath(pick.filePath)
     })
   }
 
@@ -569,7 +632,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
           lastModified: null
         }
       })
-      schedulePreview.flush()
+      flushPreviewMaybe()
     })
   }
 
@@ -635,12 +698,13 @@ export function bootRenderer(ctx: RendererBootContext): void {
         content: body,
         lastModified: wr.mtimeIso
       })
-      schedulePreview.flush()
+      flushPreviewMaybe()
       void specOps.clearDraft(id)
       return true
     }
-    const pick = await specOps.pickSaveMarkdownFile({
-      defaultPath: doc.title ? `${doc.title}.md` : undefined
+    const defaultExt = doc.path?.toLowerCase().endsWith('.md') ? '.md' : ''
+    const pick = await specOps.pickSaveFile({
+      defaultPath: doc.title ? `${doc.title}${defaultExt}` : undefined
     })
     if (pick.canceled) return false
     const wr = await specOps.writeTextFile({ absolutePath: pick.filePath, content: body })
@@ -656,7 +720,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
       lastModified: wr.mtimeIso
     })
     void syncWatchPath()
-    schedulePreview.flush()
+    flushPreviewMaybe()
     void specOps.clearDraft(id)
     return true
   }
@@ -669,8 +733,9 @@ export function bootRenderer(ctx: RendererBootContext): void {
     const doc = project.documentsById.get(id)
     if (!doc) return false
     const body = project.editorContent
-    const pick = await specOps.pickSaveMarkdownFile({
-      defaultPath: doc.path ?? (doc.title ? `${doc.title}.md` : undefined)
+    const defaultExt = doc.path?.toLowerCase().endsWith('.md') ? '.md' : ''
+    const pick = await specOps.pickSaveFile({
+      defaultPath: doc.path ?? (doc.title ? `${doc.title}${defaultExt}` : undefined)
     })
     if (pick.canceled) return false
     const wr = await specOps.writeTextFile({ absolutePath: pick.filePath, content: body })
@@ -698,7 +763,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
       void specOps.clearDraft(id)
     }
     void syncWatchPath()
-    schedulePreview.flush()
+    flushPreviewMaybe()
     return true
   }
 
@@ -766,14 +831,14 @@ export function bootRenderer(ctx: RendererBootContext): void {
     })()
   }
 
-  function miscNewMarkdownInWorkspace(): void {
+  function miscNewTextFileInWorkspace(): void {
     void runAfterDirtyPrompt(async () => {
       const folder = selectActiveProject(store.getState()).workspaceFolderPath
       if (!folder) {
         window.alert('Choose a workspace folder first.')
         return
       }
-      const raw = window.prompt('New Markdown file name', 'notes.md')
+      const raw = window.prompt('New text file name', 'notes.md')
       if (raw === null) return
       const created = await specOps.createMarkdownInWorkspace({ folderPath: folder, baseName: raw })
       if (!created.ok) {
@@ -796,7 +861,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
           lastModified: read.mtimeIso
         }
       })
-      schedulePreview.flush()
+      flushPreviewMaybe()
     })
   }
 
@@ -805,7 +870,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
       const t0 = new Date().toISOString()
       store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_B }, t0)
       store.dispatch({ type: 'OPEN_EXPLICIT', document: SAMPLE_DOC_A }, t0)
-      schedulePreview.flush()
+      flushPreviewMaybe()
     })
   }
 
@@ -822,7 +887,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
           lastModified: null
         }
       })
-      schedulePreview.flush()
+      flushPreviewMaybe()
     })
   }
 
@@ -839,7 +904,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
         const letter =
           (rawPath ? pathBasename(rawPath) : id === 'default' ? 'D' : 'P').trim().charAt(0).toUpperCase() ||
           'P'
-        const title = rawPath || (id === 'default' ? 'Default project' : 'Project')
+        const title = rawPath || (id === 'default' ? 'Notepad' : 'Project')
         const activeClass = id === st.activeProjectId ? ' project-rail-btn--active' : ''
         const color = project.accentColor || '#6f7684'
         return `<button type="button" class="project-rail-btn${activeClass}" data-project-id="${id}" title="${title.replace(/"/g, '&quot;')}" style="border-color:${color}">${letter}</button>`
@@ -893,6 +958,14 @@ export function bootRenderer(ctx: RendererBootContext): void {
     const doc = project.currentDocumentId
       ? project.documentsById.get(project.currentDocumentId)
       : undefined
+    isCurrentDocMarkdownCapable = isMarkdownCapableDocumentPath(doc?.path ?? null)
+    if (!isCurrentDocMarkdownCapable && currentViewMode !== 'edit') {
+      currentViewMode = 'edit'
+    }
+    applyViewMode(currentViewMode)
+    const currentName = currentFileDisplay(doc)
+    currentFileLabel.textContent = currentName
+    currentFileLabel.title = currentName
     if (st.autosaveEnabled && doc?.path?.trim() && dirty) {
       scheduleAutosave()
     }
@@ -903,7 +976,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     if (prevSelection !== undefined && prevSelection !== project.currentDocumentId) {
       triggerWorkspaceMotion(workspaceEl)
       void syncWatchPath()
-      schedulePreview.flush()
+      flushPreviewMaybe()
     }
     prevSelection = project.currentDocumentId
 
@@ -962,7 +1035,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
   editor.addEventListener('input', () => {
     store.dispatch({ type: 'EDITOR_CHANGE', content: editor.value })
     refreshEditorHighlight()
-    schedulePreview()
+    schedulePreviewMaybe()
     scheduleHistoryPush()
     scheduleDraftWrite()
   })
@@ -980,7 +1053,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     suppressHistory = false
     store.dispatch({ type: 'EDITOR_CHANGE', content: next })
     refreshEditorHighlight()
-    schedulePreview()
+    schedulePreviewMaybe()
     scheduleHistoryPush()
     scheduleDraftWrite()
   })
@@ -989,6 +1062,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     lineGutter.scrollTop = editor.scrollTop
     syncEditorHighlightScroll()
     if (suppressEditorScrollFromSync) return
+    if (!isPreviewAllowed()) return
     suppressPreviewScrollFromSync = true
     syncScrollFractionIfNeeded(previewEl, getScrollFraction(editor))
     releaseScrollSyncSuppression('preview')
@@ -1044,7 +1118,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     if (!docId) return
     void runAfterDirtyPrompt(() => {
       store.dispatch({ type: 'ACTIVATE_FROM_RECENT_LIST', documentId: docId })
-      requestAnimationFrame(() => schedulePreview.flush())
+      requestAnimationFrame(() => flushPreviewMaybe())
     })
   })
 
@@ -1083,7 +1157,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
         break
       case 'remove':
         store.dispatch({ type: 'REMOVE_FROM_RECENTS', documentId: doc.id })
-        schedulePreview.flush()
+        flushPreviewMaybe()
         break
       case 'copy-path':
         if (doc.path) void navigator.clipboard.writeText(doc.path)
@@ -1120,7 +1194,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
             lastModified: rn.mtimeIso
           })
           void syncWatchPath()
-          schedulePreview.flush()
+          flushPreviewMaybe()
         })()
         break
       }
@@ -1138,7 +1212,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
           }
           store.dispatch({ type: 'DROP_DOCUMENT', documentId: doc.id })
           void syncWatchPath()
-          schedulePreview.flush()
+          flushPreviewMaybe()
         })()
         break
       }
@@ -1168,6 +1242,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.viewMode
       if (mode === 'split' || mode === 'preview' || mode === 'edit') {
+        if (!isPreviewAllowed() && mode !== 'edit') return
         applyViewMode(mode)
       }
     })
@@ -1185,7 +1260,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     const paths = collectDroppedMarkdownPaths(e.dataTransfer)
     const first = paths[0]
     if (!first) return
-    void runAfterDirtyPrompt(() => openMarkdownFromAbsolutePath(first))
+    void runAfterDirtyPrompt(() => openTextFromAbsolutePath(first))
   })
 
   root.addEventListener('dragenter', (e) => {
@@ -1202,7 +1277,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   specOps.onMenuCommand((cmd) => {
     executeMenuCommand(cmd, {
-      openFile: openMarkdownPicker,
+      openFile: openFilePicker,
       newUntitled: openNewUntitled,
       save: () => {
         void saveCurrentBuffer()
@@ -1211,7 +1286,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
         void saveCurrentBufferAs()
       },
       miscWorkspaceFolder: miscPickWorkspaceFolder,
-      miscNewMarkdown: miscNewMarkdownInWorkspace,
+      miscNewTextFile: miscNewTextFileInWorkspace,
       miscSeedDemos: miscSeedDemos,
       miscOpenFixture: miscOpenFixture,
       find: toggleFindPanelShortcut,
@@ -1287,7 +1362,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
         }
         pendingExternal = null
         setExternalFileBannerVisible(false)
-        schedulePreview.flush()
+        flushPreviewMaybe()
         return
       }
       if (id === 'external-file-dismiss') {
@@ -1322,7 +1397,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
       content: payload.content,
       lastModified: payload.mtimeIso
     })
-    schedulePreview.flush()
+    flushPreviewMaybe()
   })
 
   for (const projectId of store.getState().projectsById.keys()) {

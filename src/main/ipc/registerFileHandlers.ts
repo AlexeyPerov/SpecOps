@@ -10,6 +10,27 @@ import {
 } from '../../ipc/ipcPayloadNormalize'
 import type { createSaveQueue } from '../saveSerialize'
 
+const MAX_READ_TEXT_BYTES = 2 * 1024 * 1024
+const MAX_REPLACEMENT_CHAR_RATIO = 0.02
+const MAX_REPLACEMENT_CHAR_COUNT = 64
+
+export function hasNulByte(buffer: Buffer): boolean {
+  for (let i = 0; i < buffer.length; i++) {
+    if (buffer[i] === 0) return true
+  }
+  return false
+}
+
+export function replacementCharRatio(text: string): number {
+  if (!text.length) return 0
+  let replacementCount = 0
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 0xfffd) replacementCount++
+  }
+  if (replacementCount <= MAX_REPLACEMENT_CHAR_COUNT) return 0
+  return replacementCount / text.length
+}
+
 export function registerFileHandlers(
   ipc: IpcMain,
   deps: {
@@ -27,8 +48,15 @@ export function registerFileHandlers(
         return { ok: false as const, reason: 'invalid_path' }
       }
       const target = normalize(absolutePath)
-      const content = await fs.readFile(target, 'utf8')
       const stat = await fs.stat(target)
+      if (!stat.isFile()) return { ok: false as const, reason: 'unreadable' }
+      if (stat.size > MAX_READ_TEXT_BYTES) return { ok: false as const, reason: 'too_large' }
+      const raw = await fs.readFile(target)
+      if (hasNulByte(raw)) return { ok: false as const, reason: 'binary' }
+      const content = raw.toString('utf8')
+      if (replacementCharRatio(content) > MAX_REPLACEMENT_CHAR_RATIO) {
+        return { ok: false as const, reason: 'unreadable' }
+      }
       return {
         ok: true as const,
         content,
@@ -62,30 +90,26 @@ export function registerFileHandlers(
     }
   )
 
-  ipc.handle(SPEC_OPS_IPC.pickOpenMarkdownFile, async (event) => {
+  ipc.handle(SPEC_OPS_IPC.pickOpenFile, async (event) => {
     const win =
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
     const res = await dialog.showOpenDialog(win, {
-      properties: ['openFile'],
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }]
+      properties: ['openFile']
     })
     if (res.canceled || !res.filePaths[0]) return { canceled: true as const }
     return { canceled: false as const, filePath: normalize(res.filePaths[0]) }
   })
 
   ipc.handle(
-    SPEC_OPS_IPC.pickSaveMarkdownFile,
+    SPEC_OPS_IPC.pickSaveFile,
     async (event, payload?: { defaultPath?: string }) => {
       const win =
         BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
       const res = await dialog.showSaveDialog(win, {
-        defaultPath: typeof payload?.defaultPath === 'string' ? payload.defaultPath : undefined,
-        filters: [{ name: 'Markdown', extensions: ['md'] }]
+        defaultPath: typeof payload?.defaultPath === 'string' ? payload.defaultPath : undefined
       })
       if (res.canceled || !res.filePath) return { canceled: true as const }
-      let fp = normalize(res.filePath)
-      if (!fp.toLowerCase().endsWith('.md')) fp += '.md'
-      return { canceled: false as const, filePath: fp }
+      return { canceled: false as const, filePath: normalize(res.filePath) }
     }
   )
 

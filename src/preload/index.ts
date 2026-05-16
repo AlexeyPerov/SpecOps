@@ -4,8 +4,8 @@ import { SPEC_OPS_IPC, type SpecOpsMenuCommand } from '../ipc/specOpsIpc'
 import type {
   DirtyNavigationChoice,
   ExternalFileChangedPayload,
-  PickOpenMarkdownFileResult,
-  PickSaveMarkdownFileResult,
+  PickOpenFileResult,
+  PickSaveFileResult,
   ReadMarkdownAssetPayload,
   SpecOpsPreloadApi
 } from './specOpsApi'
@@ -43,10 +43,9 @@ const api: SpecOpsPreloadApi = {
     return () => ipcRenderer.removeListener(SPEC_OPS_IPC.externalFileChanged, listener)
   },
   writeTextFile: (payload) => ipcRenderer.invoke(SPEC_OPS_IPC.writeTextFile, payload),
-  pickOpenMarkdownFile: () =>
-    ipcRenderer.invoke(SPEC_OPS_IPC.pickOpenMarkdownFile) as Promise<PickOpenMarkdownFileResult>,
-  pickSaveMarkdownFile: (payload) =>
-    ipcRenderer.invoke(SPEC_OPS_IPC.pickSaveMarkdownFile, payload) as Promise<PickSaveMarkdownFileResult>,
+  pickOpenFile: () => ipcRenderer.invoke(SPEC_OPS_IPC.pickOpenFile) as Promise<PickOpenFileResult>,
+  pickSaveFile: (payload) =>
+    ipcRenderer.invoke(SPEC_OPS_IPC.pickSaveFile, payload) as Promise<PickSaveFileResult>,
   promptDirtyNavigation: () =>
     ipcRenderer.invoke(SPEC_OPS_IPC.dirtyNavigationPrompt) as Promise<DirtyNavigationChoice>,
   confirmDeleteFile: (basename) => ipcRenderer.invoke(SPEC_OPS_IPC.confirmDeleteFile, basename),

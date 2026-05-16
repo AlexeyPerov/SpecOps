@@ -11,8 +11,8 @@ export const SPEC_OPS_IPC = {
   setWatchedDocPath: 'specops:set-watched-doc-path',
   externalFileChanged: 'specops:external-file-changed',
   writeTextFile: 'specops:write-text-file',
-  pickOpenMarkdownFile: 'specops:pick-open-markdown-file',
-  pickSaveMarkdownFile: 'specops:pick-save-markdown-file',
+  pickOpenFile: 'specops:pick-open-file',
+  pickSaveFile: 'specops:pick-save-file',
   dirtyNavigationPrompt: 'specops:dirty-navigation-prompt',
   confirmDeleteFile: 'specops:confirm-delete-file',
   renamePathOnDisk: 'specops:rename-path-on-disk',
@@ -67,9 +67,16 @@ export type CreateMarkdownInWorkspaceResult =
   | Readonly<{ ok: true; absolutePath: string }>
   | Readonly<{ ok: false; reason: string }>
 
+export type ReadTextFileFailureReason =
+  | 'invalid_path'
+  | 'read_error'
+  | 'unreadable'
+  | 'binary'
+  | 'too_large'
+
 export type ReadTextFileResult =
   | Readonly<{ ok: true; content: string; mtimeIso: string | null }>
-  | Readonly<{ ok: false; reason: string }>
+  | Readonly<{ ok: false; reason: ReadTextFileFailureReason }>
 
 export type WriteTextFilePayload = Readonly<{
   absolutePath: unknown
@@ -80,15 +87,15 @@ export type WriteTextFileResult =
   | Readonly<{ ok: true; mtimeIso: string }>
   | Readonly<{ ok: false; reason: string }>
 
-export type PickOpenMarkdownFileResult =
+export type PickOpenFileResult =
   | Readonly<{ canceled: true }>
   | Readonly<{ canceled: false; filePath: string }>
 
-export type PickSaveMarkdownFilePayload = Readonly<{
+export type PickSaveFilePayload = Readonly<{
   defaultPath?: string
 }>
 
-export type PickSaveMarkdownFileResult =
+export type PickSaveFileResult =
   | Readonly<{ canceled: true }>
   | Readonly<{ canceled: false; filePath: string }>
 

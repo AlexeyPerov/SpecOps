@@ -66,7 +66,7 @@ export function createApplicationMenu(app: App, handlers: ApplicationMenuHandler
               click: () => send(SPEC_OPS_MENU_COMMANDS.miscWorkspaceFolder)
             },
             {
-              label: 'New markdown in workspace…',
+              label: 'New text file in workspace…',
               click: () => send(SPEC_OPS_MENU_COMMANDS.miscNewMarkdown)
             },
             {

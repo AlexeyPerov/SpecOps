@@ -102,7 +102,7 @@ async function boot(): Promise<void> {
   scanFoldersEl.addEventListener('change', () => void persist())
   clearProjectsBtn.addEventListener('click', () => {
     void (async () => {
-      const confirmed = window.confirm('Clear all added projects and keep only the default project?')
+      const confirmed = window.confirm('Clear all added projects and keep only Notepad?')
       if (!confirmed) return
       await specOps.clearProjects()
       window.alert('Projects list cleared.')

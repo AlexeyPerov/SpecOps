@@ -7,7 +7,7 @@ export interface MenuCommandHandlers {
   save: () => void
   saveAs: () => void
   miscWorkspaceFolder: () => void
-  miscNewMarkdown: () => void
+  miscNewTextFile: () => void
   miscSeedDemos: () => void
   miscOpenFixture: () => void
   find: () => void
@@ -23,7 +23,7 @@ export function executeMenuCommand(cmd: SpecOpsMenuCommand, handlers: MenuComman
       handlers.miscWorkspaceFolder()
       break
     case SPEC_OPS_MENU_COMMANDS.miscNewMarkdown:
-      handlers.miscNewMarkdown()
+      handlers.miscNewTextFile()
       break
     case SPEC_OPS_MENU_COMMANDS.miscSeedDemos:
       handlers.miscSeedDemos()

@@ -7,6 +7,14 @@ import {
 import { selectActiveProject } from './selectors'
 import { sanitizeMarkdownScanRelativeFolders } from '../util/markdownScanFolders'
 
+const MIN_FONT_SIZE_PX = 10
+const MAX_FONT_SIZE_PX = 24
+
+function sanitizeFontSizePx(value: number, fallback: number): number {
+  const rounded = Number.isFinite(value) ? Math.round(value) : fallback
+  return Math.min(MAX_FONT_SIZE_PX, Math.max(MIN_FONT_SIZE_PX, rounded))
+}
+
 /**
  * Session/preferences codec for nested multi-project state (v2).
  * Per-project chat payloads are embedded in session projects for the stub; future
@@ -22,6 +30,8 @@ export interface PreferencesPersistedV1 {
   readonly autosaveEnabled: boolean
   readonly editorSoftWrap: boolean
   readonly editorLineNumbers: boolean
+  readonly editorFontSizePx: number
+  readonly previewFontSizePx: number
   readonly recentsPaneWidthPx: number
   /** Relative subfolders under each project workspace to scan for markdown recents (recursive). */
   readonly markdownScanRelativeFolders: readonly string[]
@@ -66,6 +76,8 @@ export const DEFAULT_PREFERENCES_V1: PreferencesPersistedV1 = {
   autosaveEnabled: false,
   editorSoftWrap: true,
   editorLineNumbers: true,
+  editorFontSizePx: 13,
+  previewFontSizePx: 16,
   recentsPaneWidthPx: 260,
   markdownScanRelativeFolders: ['specs']
 }
@@ -94,6 +106,14 @@ export function mergePreferencesIntoState(base: AppState, prefs: PreferencesPers
     autosaveEnabled: prefs.autosaveEnabled,
     editorSoftWrap: prefs.editorSoftWrap,
     editorLineNumbers: prefs.editorLineNumbers,
+    editorFontSizePx: sanitizeFontSizePx(
+      prefs.editorFontSizePx ?? DEFAULT_PREFERENCES_V1.editorFontSizePx,
+      DEFAULT_PREFERENCES_V1.editorFontSizePx
+    ),
+    previewFontSizePx: sanitizeFontSizePx(
+      prefs.previewFontSizePx ?? DEFAULT_PREFERENCES_V1.previewFontSizePx,
+      DEFAULT_PREFERENCES_V1.previewFontSizePx
+    ),
     recentsPaneWidthPx: prefs.recentsPaneWidthPx,
     markdownScanRelativeFolders: sanitizeMarkdownScanRelativeFolders(
       prefs.markdownScanRelativeFolders ?? DEFAULT_PREFERENCES_V1.markdownScanRelativeFolders
@@ -221,6 +241,14 @@ export function serializePreferencesFromState(state: AppState): PreferencesPersi
     autosaveEnabled: state.autosaveEnabled,
     editorSoftWrap: state.editorSoftWrap,
     editorLineNumbers: state.editorLineNumbers,
+    editorFontSizePx: sanitizeFontSizePx(
+      state.editorFontSizePx,
+      DEFAULT_PREFERENCES_V1.editorFontSizePx
+    ),
+    previewFontSizePx: sanitizeFontSizePx(
+      state.previewFontSizePx,
+      DEFAULT_PREFERENCES_V1.previewFontSizePx
+    ),
     recentsPaneWidthPx: state.recentsPaneWidthPx,
     markdownScanRelativeFolders: [...state.markdownScanRelativeFolders]
   }

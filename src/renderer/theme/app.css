@@ -109,6 +109,27 @@ body {
   font-weight: 400;
   background: var(--color-bg);
   color: var(--color-text);
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid var(--color-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
 }
 
 #app.shell {
@@ -141,6 +162,17 @@ body {
   margin-left: auto;
   font-size: var(--font-size-sm);
   color: var(--color-muted);
+}
+
+.view-mode-switch {
+  margin-left: auto;
+  display: inline-flex;
+  gap: calc(var(--space-xs) / 2);
+}
+
+.mode-btn[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .dirty-indicator {
@@ -368,6 +400,26 @@ body {
   min-height: 0;
   transition: opacity var(--motion-file-switch-ms) var(--ease-standard);
   opacity: 1;
+}
+
+.workspace-columns[data-view-mode='preview'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace-columns[data-view-mode='preview'] .editor-pane {
+  display: none;
+}
+
+.workspace-columns[data-view-mode='preview'] .find-panel {
+  display: none !important;
+}
+
+.workspace-columns[data-view-mode='edit'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace-columns[data-view-mode='edit'] .preview-pane {
+  display: none;
 }
 
 .workspace--transition .workspace-columns {
@@ -698,6 +750,7 @@ body {
   padding: var(--space-md);
   min-height: 200px;
   background: var(--color-bg);
+  font-size: var(--font-size-preview);
 }
 
 .preview-pane a {

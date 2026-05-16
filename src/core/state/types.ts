@@ -48,6 +48,10 @@ export interface AppState {
   readonly editorSoftWrap: boolean
   /** DEF-08 default true */
   readonly editorLineNumbers: boolean
+  /** Markdown editor monospace font size in px. */
+  readonly editorFontSizePx: number
+  /** Markdown preview pane font size in px. */
+  readonly previewFontSizePx: number
   /** Recents sidebar width in pixels (persisted in preferences). */
   readonly recentsPaneWidthPx: number
   /** Relative subfolders under each project workspace for markdown recents scan (persisted in preferences). */
@@ -112,6 +116,8 @@ export type AppAction =
   | { readonly type: 'SET_AUTOSAVE_ENABLED'; readonly enabled: boolean }
   | { readonly type: 'SET_EDITOR_SOFT_WRAP'; readonly enabled: boolean }
   | { readonly type: 'SET_EDITOR_LINE_NUMBERS'; readonly enabled: boolean }
+  | { readonly type: 'SET_EDITOR_FONT_SIZE_PX'; readonly sizePx: number }
+  | { readonly type: 'SET_PREVIEW_FONT_SIZE_PX'; readonly sizePx: number }
   | { readonly type: 'SET_RECENTS_PANE_WIDTH'; readonly widthPx: number }
   | {
       readonly type: 'SET_MARKDOWN_SCAN_RELATIVE_FOLDERS'

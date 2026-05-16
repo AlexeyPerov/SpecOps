@@ -77,12 +77,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   root.innerHTML = `
     <header class="app-toolbar" role="banner">
-      <button type="button" id="btn-new-untitled" class="toolbar-btn">New</button>
-      <button type="button" id="btn-open-markdown" class="toolbar-btn">Open…</button>
-      <button type="button" id="btn-save" class="toolbar-btn">Save</button>
-      <button type="button" id="btn-save-as" class="toolbar-btn">Save As…</button>
       <span id="dirty-indicator" class="dirty-indicator" hidden aria-live="polite">Modified</span>
-      <span id="status-line" class="status-line"></span>
+      <div class="view-mode-switch" role="group" aria-label="Markdown view mode">
+        <button type="button" class="toolbar-btn mode-btn" data-view-mode="split" aria-pressed="true">Split</button>
+        <button type="button" class="toolbar-btn mode-btn" data-view-mode="edit" aria-pressed="false">Edit</button>
+        <button type="button" class="toolbar-btn mode-btn" data-view-mode="preview" aria-pressed="false">Preview</button>
+      </div>
     </header>
     <div class="app-body">
       <aside class="projects-rail" aria-label="Projects">
@@ -174,6 +174,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const editorStack = root.querySelector<HTMLElement>('.editor-stack')!
   const editorHighlightContent = root.querySelector<HTMLElement>('#editor-highlight-content')!
   const previewEl = root.querySelector<HTMLElement>('#preview')!
+  const workspaceColumns = root.querySelector<HTMLElement>('.workspace-columns')!
   const recentsListRoot = root.querySelector<HTMLElement>('[data-testid="recents-list"]')!
   const projectsRailList = root.querySelector<HTMLElement>('[data-testid="projects-rail-list"]')!
   const workspaceEl = root.querySelector<HTMLElement>('.workspace')!
@@ -181,21 +182,32 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const groupSelect = root.querySelector<HTMLSelectElement>('#recents-grouping')!
   const contextMenu = root.querySelector<HTMLElement>('#recents-context-menu')!
   const externalBanner = root.querySelector<HTMLElement>('#external-file-banner')!
-  const statusLine = root.querySelector<HTMLElement>('#status-line')!
   const dirtyIndicator = root.querySelector<HTMLElement>('#dirty-indicator')!
   const recentsResizer = root.querySelector<HTMLElement>('.recents-resizer')!
+  const modeButtons = [...root.querySelectorAll<HTMLButtonElement>('[data-view-mode]')]
 
   attachPreviewChrome(previewEl)
 
   let suppressEditorScrollFromSync = false
   let suppressPreviewScrollFromSync = false
+  const SCROLL_SYNC_EPSILON = 0.001
+
+  function releaseScrollSyncSuppression(next: 'editor' | 'preview'): void {
+    requestAnimationFrame(() => {
+      if (next === 'editor') suppressEditorScrollFromSync = false
+      else suppressPreviewScrollFromSync = false
+    })
+  }
+
+  function syncScrollFractionIfNeeded(target: HTMLElement, sourceFraction: number): void {
+    if (Math.abs(getScrollFraction(target) - sourceFraction) <= SCROLL_SYNC_EPSILON) return
+    setScrollFraction(target, sourceFraction)
+  }
 
   function syncPreviewFromEditor(): void {
     suppressPreviewScrollFromSync = true
-    setScrollFraction(previewEl, getScrollFraction(editor))
-    queueMicrotask(() => {
-      suppressPreviewScrollFromSync = false
-    })
+    syncScrollFractionIfNeeded(previewEl, getScrollFraction(editor))
+    releaseScrollSyncSuppression('preview')
   }
 
   let previewSeq = 0
@@ -216,6 +228,15 @@ export function bootRenderer(ctx: RendererBootContext): void {
   }
 
   let contextDocId: string | null = null
+  let currentViewMode: 'split' | 'preview' | 'edit' = 'split'
+
+  function applyViewMode(mode: 'split' | 'preview' | 'edit'): void {
+    currentViewMode = mode
+    workspaceColumns.dataset.viewMode = mode
+    for (const btn of modeButtons) {
+      btn.setAttribute('aria-pressed', btn.dataset.viewMode === mode ? 'true' : 'false')
+    }
+  }
 
   async function runPreview(): Promise<void> {
     const seq = ++previewSeq
@@ -525,6 +546,31 @@ export function bootRenderer(ctx: RendererBootContext): void {
       return
     }
     openLoadedDocument(absPath, read.content, read.mtimeIso)
+  }
+
+  function openMarkdownPicker(): void {
+    void runAfterDirtyPrompt(async () => {
+      const pick = await specOps.pickOpenMarkdownFile()
+      if (pick.canceled) return
+      await openMarkdownFromAbsolutePath(pick.filePath)
+    })
+  }
+
+  function openNewUntitled(): void {
+    void runAfterDirtyPrompt(() => {
+      const id = `untitled:${crypto.randomUUID()}`
+      store.dispatch({
+        type: 'OPEN_EXPLICIT',
+        document: {
+          id,
+          title: 'Untitled',
+          content: '',
+          path: null,
+          lastModified: null
+        }
+      })
+      schedulePreview.flush()
+    })
   }
 
   function markdownTitleFromPath(absPath: string): string {
@@ -857,6 +903,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     if (prevSelection !== undefined && prevSelection !== project.currentDocumentId) {
       triggerWorkspaceMotion(workspaceEl)
       void syncWatchPath()
+      schedulePreview.flush()
     }
     prevSelection = project.currentDocumentId
 
@@ -878,6 +925,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
   })
 
   syncShellFromStore()
+  applyViewMode(currentViewMode)
   void syncWatchPath()
 
   let resizerDragStartX = 0
@@ -942,21 +990,17 @@ export function bootRenderer(ctx: RendererBootContext): void {
     syncEditorHighlightScroll()
     if (suppressEditorScrollFromSync) return
     suppressPreviewScrollFromSync = true
-    setScrollFraction(previewEl, getScrollFraction(editor))
-    queueMicrotask(() => {
-      suppressPreviewScrollFromSync = false
-    })
+    syncScrollFractionIfNeeded(previewEl, getScrollFraction(editor))
+    releaseScrollSyncSuppression('preview')
   })
 
   previewEl.addEventListener('scroll', () => {
     if (suppressPreviewScrollFromSync) return
     suppressEditorScrollFromSync = true
-    setScrollFraction(editor, getScrollFraction(previewEl))
+    syncScrollFractionIfNeeded(editor, getScrollFraction(previewEl))
     lineGutter.scrollTop = editor.scrollTop
     syncEditorHighlightScroll()
-    queueMicrotask(() => {
-      suppressEditorScrollFromSync = false
-    })
+    releaseScrollSyncSuppression('editor')
   })
 
   findInput.addEventListener('input', () => refreshFindPatternError())
@@ -1120,38 +1164,14 @@ export function bootRenderer(ctx: RendererBootContext): void {
     hideContextMenu()
   })
 
-  root.querySelector('#btn-open-markdown')!.addEventListener('click', () => {
-    void runAfterDirtyPrompt(async () => {
-      const pick = await specOps.pickOpenMarkdownFile()
-      if (pick.canceled) return
-      await openMarkdownFromAbsolutePath(pick.filePath)
+  for (const btn of modeButtons) {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.viewMode
+      if (mode === 'split' || mode === 'preview' || mode === 'edit') {
+        applyViewMode(mode)
+      }
     })
-  })
-
-  root.querySelector('#btn-save')!.addEventListener('click', () => {
-    void saveCurrentBuffer()
-  })
-
-  root.querySelector('#btn-save-as')!.addEventListener('click', () => {
-    void saveCurrentBufferAs()
-  })
-
-  root.querySelector('#btn-new-untitled')!.addEventListener('click', () => {
-    void runAfterDirtyPrompt(() => {
-      const id = `untitled:${crypto.randomUUID()}`
-      store.dispatch({
-        type: 'OPEN_EXPLICIT',
-        document: {
-          id,
-          title: 'Untitled',
-          content: '',
-          path: null,
-          lastModified: null
-        }
-      })
-      schedulePreview.flush()
-    })
-  })
+  }
 
   let dragDepth = 0
   root.addEventListener('dragover', (e) => {
@@ -1182,8 +1202,8 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   specOps.onMenuCommand((cmd) => {
     executeMenuCommand(cmd, {
-      openFile: () => root.querySelector<HTMLButtonElement>('#btn-open-markdown')?.click(),
-      newUntitled: () => root.querySelector<HTMLButtonElement>('#btn-new-untitled')?.click(),
+      openFile: openMarkdownPicker,
+      newUntitled: openNewUntitled,
       save: () => {
         void saveCurrentBuffer()
       },
@@ -1304,8 +1324,6 @@ export function bootRenderer(ctx: RendererBootContext): void {
     })
     schedulePreview.flush()
   })
-
-  statusLine.textContent = `${specOps.ping()} • v${specOps.getAppVersion()} • ${specOps.getPlatform()}`
 
   for (const projectId of store.getState().projectsById.keys()) {
     void refreshProjectMarkdownRecents(projectId)

@@ -81,6 +81,14 @@ describe('reduceAppState', () => {
     expect(state.documentsById.size).toBe(0)
   })
 
+  it('clamps editor/preview font sizes to allowed bounds', () => {
+    let state = createInitialAppState()
+    state = reduceAppState(state, { type: 'SET_EDITOR_FONT_SIZE_PX', sizePx: 9 }, t0)
+    state = reduceAppState(state, { type: 'SET_PREVIEW_FONT_SIZE_PX', sizePx: 25 }, t0)
+    expect(state.editorFontSizePx).toBe(10)
+    expect(state.previewFontSizePx).toBe(24)
+  })
+
   it('creates/switches/removes projects with isolated recents', () => {
     let state = createInitialAppState()
     state = reduceAppState(state, { type: 'OPEN_EXPLICIT', document: doc({ id: 'a', content: 'A' }) }, t0)

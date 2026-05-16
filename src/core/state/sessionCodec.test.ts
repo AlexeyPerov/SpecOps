@@ -19,11 +19,15 @@ describe('sessionCodec (TEST-10 helpers)', () => {
       ...DEFAULT_PREFERENCES_V1,
       autosaveEnabled: true,
       editorSoftWrap: false,
-      editorLineNumbers: false
+      editorLineNumbers: false,
+      editorFontSizePx: 12,
+      previewFontSizePx: 14
     })
     expect(next.autosaveEnabled).toBe(true)
     expect(next.editorSoftWrap).toBe(false)
     expect(next.editorLineNumbers).toBe(false)
+    expect(next.editorFontSizePx).toBe(12)
+    expect(next.previewFontSizePx).toBe(14)
     expect(next.fileListGrouping).toBe('folder')
   })
 
@@ -74,12 +78,27 @@ describe('sessionCodec (TEST-10 helpers)', () => {
       autosaveEnabled: true,
       editorSoftWrap: false,
       editorLineNumbers: true,
+      editorFontSizePx: 11,
+      previewFontSizePx: 15,
       themeMode: 'dark' as const
     }
     const p = serializePreferencesFromState(s)
     expect(p.autosaveEnabled).toBe(true)
     expect(p.editorSoftWrap).toBe(false)
     expect(p.themeMode).toBe('dark')
+    expect(p.editorFontSizePx).toBe(11)
+    expect(p.previewFontSizePx).toBe(15)
+  })
+
+  it('mergePreferencesIntoState clamps editor/preview font sizes', () => {
+    const base = createInitialAppState()
+    const next = mergePreferencesIntoState(base, {
+      ...DEFAULT_PREFERENCES_V1,
+      editorFontSizePx: 1,
+      previewFontSizePx: 100
+    })
+    expect(next.editorFontSizePx).toBe(10)
+    expect(next.previewFontSizePx).toBe(24)
   })
 
   it('mergePreferencesIntoState applies sanitized markdown scan folders', () => {

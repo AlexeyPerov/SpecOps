@@ -5,6 +5,13 @@ import { sanitizeMarkdownScanRelativeFolders } from '../util/markdownScanFolders
 import { pathBasename, stableDocIdForPath } from '../util/paths'
 
 export const DEFAULT_PROJECT_ID = 'default'
+const MIN_FONT_SIZE_PX = 10
+const MAX_FONT_SIZE_PX = 24
+
+function clampFontSizePx(sizePx: number, fallback: number): number {
+  const rounded = Number.isFinite(sizePx) ? Math.round(sizePx) : fallback
+  return Math.min(MAX_FONT_SIZE_PX, Math.max(MIN_FONT_SIZE_PX, rounded))
+}
 
 function createInitialProjectState(): ProjectState {
   return {
@@ -57,6 +64,8 @@ export function createInitialAppState(): AppState {
     autosaveEnabled: false,
     editorSoftWrap: true,
     editorLineNumbers: true,
+    editorFontSizePx: 13,
+    previewFontSizePx: 16,
     recentsPaneWidthPx: 260,
     markdownScanRelativeFolders: sanitizeMarkdownScanRelativeFolders(['specs']),
     documentsById: initialProject.documentsById,
@@ -228,6 +237,18 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
 
     case 'SET_EDITOR_LINE_NUMBERS':
       return { ...state, editorLineNumbers: action.enabled }
+
+    case 'SET_EDITOR_FONT_SIZE_PX':
+      return {
+        ...state,
+        editorFontSizePx: clampFontSizePx(action.sizePx, state.editorFontSizePx)
+      }
+
+    case 'SET_PREVIEW_FONT_SIZE_PX':
+      return {
+        ...state,
+        previewFontSizePx: clampFontSizePx(action.sizePx, state.previewFontSizePx)
+      }
 
     case 'SET_RECENTS_PANE_WIDTH': {
       const w = Number.isFinite(action.widthPx) ? Math.round(action.widthPx) : state.recentsPaneWidthPx

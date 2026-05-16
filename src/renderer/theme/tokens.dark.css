@@ -7,10 +7,14 @@
   --color-accent: #58a6ff;
   --color-danger: #ff7b72;
   --color-link: #47e0ff;
+  --color-scrollbar-track: #1f1f20;
+  --color-scrollbar-thumb: #4c4f57;
+  --color-scrollbar-thumb-hover: #6a6f78;
   --font-ui: 'Cascadia Code', system-ui, sans-serif;
   --font-mono: 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-size-sm: 12px;
   --font-size-code: 13px;
+  --font-size-preview: 16px;
   --font-weight-heading: 600;
   --space-xs: 4px;
   --space-sm: 8px;

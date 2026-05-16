@@ -17,6 +17,11 @@ function assertSpecOps(): asserts window is Window & { specOps: SpecOpsPreloadAp
   if (!window.specOps) throw new Error('specOps bridge missing')
 }
 
+function sanitizeFontSizePx(value: number, fallback: number): number {
+  const rounded = Number.isFinite(value) ? Math.round(value) : fallback
+  return Math.min(24, Math.max(10, rounded))
+}
+
 function bindSystemThemeListener(themeMode: PreferencesPersistedV1['themeMode'], scheduleApply: () => void): void {
   const mq = globalThis.matchMedia?.('(prefers-color-scheme: dark)')
   if (!mq?.addEventListener) return
@@ -43,6 +48,8 @@ async function boot(): Promise<void> {
   const autosaveEl = document.querySelector<HTMLInputElement>('#setting-autosave')!
   const themeEl = document.querySelector<HTMLSelectElement>('#setting-theme')!
   const lineNumbersEl = document.querySelector<HTMLInputElement>('#setting-line-numbers')!
+  const editorFontSizeEl = document.querySelector<HTMLInputElement>('#setting-editor-font-size')!
+  const previewFontSizeEl = document.querySelector<HTMLInputElement>('#setting-preview-font-size')!
   const clearProjectsBtn = document.querySelector<HTMLButtonElement>('#clear-projects')!
   const scanFoldersEl = document.querySelector<HTMLTextAreaElement>('#setting-scan-folders')!
   wrapEl.checked = prefs.editorSoftWrap
@@ -52,6 +59,12 @@ async function boot(): Promise<void> {
   applyTheme()
   bindSystemThemeListener(themeEl.value as PreferencesPersistedV1['themeMode'], applyTheme)
   lineNumbersEl.checked = prefs.editorLineNumbers
+  editorFontSizeEl.value = String(
+    sanitizeFontSizePx(prefs.editorFontSizePx, DEFAULT_PREFERENCES_V1.editorFontSizePx)
+  )
+  previewFontSizeEl.value = String(
+    sanitizeFontSizePx(prefs.previewFontSizePx, DEFAULT_PREFERENCES_V1.previewFontSizePx)
+  )
   scanFoldersEl.value = prefs.markdownScanRelativeFolders.join('\n')
 
   const persist = async (): Promise<void> => {
@@ -66,6 +79,14 @@ async function boot(): Promise<void> {
       autosaveEnabled: autosaveEl.checked,
       editorSoftWrap: wrapEl.checked,
       editorLineNumbers: lineNumbersEl.checked,
+      editorFontSizePx: sanitizeFontSizePx(
+        Number(editorFontSizeEl.value),
+        DEFAULT_PREFERENCES_V1.editorFontSizePx
+      ),
+      previewFontSizePx: sanitizeFontSizePx(
+        Number(previewFontSizeEl.value),
+        DEFAULT_PREFERENCES_V1.previewFontSizePx
+      ),
       markdownScanRelativeFolders: [...sanitizeMarkdownScanFolderLines(scanFoldersEl.value)]
     })
     applyDocumentTheme(themeEl.value as PreferencesPersistedV1['themeMode'])
@@ -76,6 +97,8 @@ async function boot(): Promise<void> {
   themeEl.addEventListener('change', () => void persist())
   wrapEl.addEventListener('change', () => void persist())
   lineNumbersEl.addEventListener('change', () => void persist())
+  editorFontSizeEl.addEventListener('change', () => void persist())
+  previewFontSizeEl.addEventListener('change', () => void persist())
   scanFoldersEl.addEventListener('change', () => void persist())
   clearProjectsBtn.addEventListener('click', () => {
     void (async () => {

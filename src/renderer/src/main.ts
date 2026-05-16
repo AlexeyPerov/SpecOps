@@ -37,6 +37,23 @@ function assertElectronBridge(): asserts window is Window & { specOps: SpecOpsPr
   }
 }
 
+function sanitizeFontSizePx(value: number, fallback: number): number {
+  const rounded = Number.isFinite(value) ? Math.round(value) : fallback
+  return Math.min(24, Math.max(10, rounded))
+}
+
+function applyFontSizeVariables(prefs: PreferencesPersistedV1): void {
+  const root = document.documentElement
+  root.style.setProperty(
+    '--font-size-code',
+    `${sanitizeFontSizePx(prefs.editorFontSizePx, DEFAULT_PREFERENCES_V1.editorFontSizePx)}px`
+  )
+  root.style.setProperty(
+    '--font-size-preview',
+    `${sanitizeFontSizePx(prefs.previewFontSizePx, DEFAULT_PREFERENCES_V1.previewFontSizePx)}px`
+  )
+}
+
 async function buildInitialState(): Promise<ReturnType<typeof createInitialAppState>> {
   let prefsRaw: unknown
   try {
@@ -99,6 +116,12 @@ async function applyPreferencesFromDisk(store: ReturnType<typeof createAppStore>
   if (prefs.editorLineNumbers !== st.editorLineNumbers) {
     store.dispatch({ type: 'SET_EDITOR_LINE_NUMBERS', enabled: prefs.editorLineNumbers })
   }
+  if (prefs.editorFontSizePx !== st.editorFontSizePx) {
+    store.dispatch({ type: 'SET_EDITOR_FONT_SIZE_PX', sizePx: prefs.editorFontSizePx })
+  }
+  if (prefs.previewFontSizePx !== st.previewFontSizePx) {
+    store.dispatch({ type: 'SET_PREVIEW_FONT_SIZE_PX', sizePx: prefs.previewFontSizePx })
+  }
   if (prefs.recentsPaneWidthPx !== st.recentsPaneWidthPx) {
     store.dispatch({ type: 'SET_RECENTS_PANE_WIDTH', widthPx: prefs.recentsPaneWidthPx })
   }
@@ -118,6 +141,7 @@ async function applyPreferencesFromDisk(store: ReturnType<typeof createAppStore>
     })
   }
   applyDocumentTheme(store.getState().themeMode)
+  applyFontSizeVariables(prefs)
 }
 
 async function maybeRecoverDraft(store: ReturnType<typeof createAppStore>): Promise<void> {
@@ -164,6 +188,8 @@ async function bootstrap(): Promise<void> {
   })
 
   applyDocumentTheme(store.getState().themeMode)
+  applyFontSizeVariables(DEFAULT_PREFERENCES_V1)
+  void applyPreferencesFromDisk(store)
 
   window.specOps.onPreferencesChanged(() => {
     void applyPreferencesFromDisk(store)

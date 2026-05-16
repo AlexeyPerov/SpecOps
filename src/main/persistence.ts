@@ -57,6 +57,12 @@ function clampRecentsPaneWidthPx(raw: unknown): number {
   return Math.min(560, Math.max(180, Math.round(x)))
 }
 
+function clampFontSizePx(raw: unknown, fallback: number): number {
+  const x = typeof raw === 'number' ? raw : typeof raw === 'string' ? parseFloat(raw) : NaN
+  if (!Number.isFinite(x)) return fallback
+  return Math.min(24, Math.max(10, Math.round(x)))
+}
+
 function parsePreferences(raw: string): PersistedPreferencesV1 {
   try {
     const o = JSON.parse(raw) as Partial<PersistedPreferencesV1>
@@ -92,6 +98,14 @@ function parsePreferences(raw: string): PersistedPreferencesV1 {
       autosaveEnabled: typeof o.autosaveEnabled === 'boolean' ? o.autosaveEnabled : false,
       editorSoftWrap: typeof o.editorSoftWrap === 'boolean' ? o.editorSoftWrap : true,
       editorLineNumbers: typeof o.editorLineNumbers === 'boolean' ? o.editorLineNumbers : true,
+      editorFontSizePx: clampFontSizePx(
+        o.editorFontSizePx,
+        DEFAULT_PREFERENCES_V1.editorFontSizePx
+      ),
+      previewFontSizePx: clampFontSizePx(
+        o.previewFontSizePx,
+        DEFAULT_PREFERENCES_V1.previewFontSizePx
+      ),
       recentsPaneWidthPx: clampRecentsPaneWidthPx(o.recentsPaneWidthPx),
       markdownScanRelativeFolders
     }
@@ -291,6 +305,8 @@ export function registerPersistenceIpc(app: App): void {
         typeof p.editorSoftWrap === 'boolean' ? p.editorSoftWrap : base.editorSoftWrap,
       editorLineNumbers:
         typeof p.editorLineNumbers === 'boolean' ? p.editorLineNumbers : base.editorLineNumbers,
+      editorFontSizePx: clampFontSizePx(p.editorFontSizePx, base.editorFontSizePx),
+      previewFontSizePx: clampFontSizePx(p.previewFontSizePx, base.previewFontSizePx),
       recentsPaneWidthPx:
         p.recentsPaneWidthPx !== undefined && p.recentsPaneWidthPx !== null
           ? clampRecentsPaneWidthPx(p.recentsPaneWidthPx)

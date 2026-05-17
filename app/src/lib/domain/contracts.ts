@@ -9,6 +9,7 @@ export interface DocumentIdentity {
 export interface DocumentState extends DocumentIdentity {
   title: string;
   content: string;
+  savedContent: string;
   isDirty: boolean;
   language: "plaintext" | "markdown";
   encoding: "utf-8";
@@ -36,7 +37,27 @@ export interface AppSettingsState {
 export type AppCommandId =
   | "app.toggleSettingsPane"
   | "view.toggleTheme"
-  | "file.new";
+  | "file.new"
+  | "file.open"
+  | "file.save"
+  | "file.saveAs"
+  | "file.saveAll"
+  | "file.rename"
+  | "tab.close"
+  | "tab.next"
+  | "tab.previous"
+  | "edit.undo"
+  | "edit.redo"
+  | "edit.indent"
+  | "edit.outdent"
+  | "edit.moveLineUp"
+  | "edit.moveLineDown"
+  | "edit.duplicateLine"
+  | "edit.joinLines"
+  | "view.toggleWrap"
+  | "view.zoomIn"
+  | "view.zoomOut"
+  | "view.zoomReset";
 
 export interface CommandBinding {
   mac: string;
@@ -64,4 +85,11 @@ export interface AppDomainState {
   documents: DocumentState[];
   session: SessionState;
   settings: AppSettingsState;
+  recentFiles: string[];
+  editor: {
+    cursorLine: number;
+    cursorColumn: number;
+    zoomPercent: number;
+    wrapLines: boolean;
+  };
 }

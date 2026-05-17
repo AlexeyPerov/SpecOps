@@ -3,6 +3,8 @@ import type {
   AccentOption,
   AppDomainState,
   AppSettingsState,
+  DocumentState,
+  DocumentIdentity,
   ThemeMode,
 } from "../domain/contracts";
 
@@ -12,25 +14,54 @@ const defaultSettings: AppSettingsState = {
   statusBarVisible: true,
 };
 
+let docCounter = 1;
+let tabCounter = 1;
+
+function basename(path: string): string {
+  const normalized = path.replaceAll("\\", "/");
+  const parts = normalized.split("/");
+  return parts[parts.length - 1] || path;
+}
+
+function inferLanguage(path: string | null): "plaintext" | "markdown" {
+  if (!path) {
+    return "plaintext";
+  }
+  const lower = path.toLowerCase();
+  return lower.endsWith(".md") || lower.endsWith(".markdown")
+    ? "markdown"
+    : "plaintext";
+}
+
+function buildDocument(identity: DocumentIdentity, content: string, title: string): DocumentState {
+  return {
+    id: identity.id,
+    filePath: identity.filePath,
+    title,
+    content,
+    savedContent: content,
+    isDirty: false,
+    language: inferLanguage(identity.filePath),
+    encoding: "utf-8",
+    lineEnding: content.includes("\r\n") ? "crlf" : "lf",
+  };
+}
+
 const initialState: AppDomainState = {
-  documents: [
-    {
-      id: "doc-1",
-      filePath: null,
-      title: "Untitled",
-      content: "# Spec Ops\n\nCodeMirror baseline is ready.",
-      isDirty: false,
-      language: "markdown",
-      encoding: "utf-8",
-      lineEnding: "lf",
-    },
-  ],
+  documents: [buildDocument({ id: "doc-1", filePath: null }, "", "Untitled")],
   session: {
     selectedTabId: "tab-1",
     openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
     lastActiveWindowId: "main",
   },
   settings: defaultSettings,
+  recentFiles: [],
+  editor: {
+    cursorLine: 1,
+    cursorColumn: 1,
+    zoomPercent: 100,
+    wrapLines: false,
+  },
 };
 
 const accentColors: Record<AccentOption, string> = {
@@ -52,7 +83,17 @@ function applyTheme(settings: AppSettingsState): void {
 }
 
 function createStateStore() {
-  const { subscribe, update } = writable<AppDomainState>(initialState);
+  const { subscribe, update, set } = writable<AppDomainState>(initialState);
+
+  function selectTabInternal(state: AppDomainState, tabId: string): AppDomainState {
+    if (!state.session.openTabs.some((tab) => tab.id === tabId)) {
+      return state;
+    }
+    return {
+      ...state,
+      session: { ...state.session, selectedTabId: tabId },
+    };
+  }
 
   return {
     subscribe,
@@ -77,6 +118,213 @@ function createStateStore() {
     },
     initializeTheme() {
       applyTheme(initialState.settings);
+    },
+    resetWorkspace() {
+      set(initialState);
+      applyTheme(initialState.settings);
+    },
+    createTab() {
+      update((state) => {
+        docCounter += 1;
+        tabCounter += 1;
+        const id = `doc-${docCounter}`;
+        const newDocument = buildDocument(
+          { id, filePath: null },
+          "",
+          `Untitled ${docCounter - 1}`,
+        );
+        const tabId = `tab-${tabCounter}`;
+        return {
+          ...state,
+          documents: [...state.documents, newDocument],
+          session: {
+            ...state.session,
+            openTabs: [...state.session.openTabs, { id: tabId, documentId: id, pinned: false }],
+            selectedTabId: tabId,
+          },
+        };
+      });
+    },
+    selectTab(tabId: string) {
+      update((state) => selectTabInternal(state, tabId));
+    },
+    closeTab(tabId: string) {
+      update((state) => {
+        const openTabs = state.session.openTabs;
+        if (openTabs.length <= 1) {
+          return state;
+        }
+        const idx = openTabs.findIndex((tab) => tab.id === tabId);
+        if (idx < 0) {
+          return state;
+        }
+        const filtered = openTabs.filter((tab) => tab.id !== tabId);
+        const selectedTabId =
+          state.session.selectedTabId === tabId
+            ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
+            : state.session.selectedTabId;
+        return {
+          ...state,
+          session: {
+            ...state.session,
+            openTabs: filtered,
+            selectedTabId,
+          },
+        };
+      });
+    },
+    moveTab(fromIndex: number, toIndex: number) {
+      update((state) => {
+        const tabs = [...state.session.openTabs];
+        if (
+          fromIndex < 0 ||
+          toIndex < 0 ||
+          fromIndex >= tabs.length ||
+          toIndex >= tabs.length ||
+          fromIndex === toIndex
+        ) {
+          return state;
+        }
+        const [moved] = tabs.splice(fromIndex, 1);
+        tabs.splice(toIndex, 0, moved);
+        return {
+          ...state,
+          session: {
+            ...state.session,
+            openTabs: tabs,
+          },
+        };
+      });
+    },
+    openFileInTab(filePath: string, content: string) {
+      update((state) => {
+        const duplicate = state.documents.find(
+          (doc) => doc.filePath === filePath,
+        );
+        if (duplicate) {
+          const existingTab = state.session.openTabs.find(
+            (tab) => tab.documentId === duplicate.id,
+          );
+          if (existingTab) {
+            return selectTabInternal(state, existingTab.id);
+          }
+        }
+
+        docCounter += 1;
+        tabCounter += 1;
+        const docId = `doc-${docCounter}`;
+        const tabId = `tab-${tabCounter}`;
+        const documentState = buildDocument(
+          { id: docId, filePath },
+          content,
+          basename(filePath),
+        );
+        const recentFiles = [filePath, ...state.recentFiles.filter((entry) => entry !== filePath)].slice(
+          0,
+          15,
+        );
+
+        return {
+          ...state,
+          documents: [...state.documents, documentState],
+          recentFiles,
+          session: {
+            ...state.session,
+            openTabs: [...state.session.openTabs, { id: tabId, documentId: docId, pinned: false }],
+            selectedTabId: tabId,
+          },
+        };
+      });
+    },
+    setDocumentContent(documentId: string, content: string) {
+      update((state) => {
+        const documents = state.documents.map((documentState) => {
+          if (documentState.id !== documentId) {
+            return documentState;
+          }
+          const lineEnding: "lf" | "crlf" = content.includes("\r\n")
+            ? "crlf"
+            : "lf";
+          return {
+            ...documentState,
+            content,
+            lineEnding,
+            isDirty: content !== documentState.savedContent,
+          };
+        });
+        return { ...state, documents };
+      });
+    },
+    markDocumentSaved(documentId: string, filePath: string | null, content: string) {
+      update((state) => {
+        const documents = state.documents.map((documentState) => {
+          if (documentState.id !== documentId) {
+            return documentState;
+          }
+          return {
+            ...documentState,
+            filePath,
+            title: filePath ? basename(filePath) : documentState.title,
+            savedContent: content,
+            content,
+            lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as
+              | "lf"
+              | "crlf",
+            isDirty: false,
+            language: inferLanguage(filePath),
+          };
+        });
+        const recentFiles =
+          filePath === null
+            ? state.recentFiles
+            : [filePath, ...state.recentFiles.filter((entry) => entry !== filePath)].slice(0, 15);
+        return { ...state, documents, recentFiles };
+      });
+    },
+    renameDocument(documentId: string, filePath: string, title: string) {
+      update((state) => {
+        const documents = state.documents.map((documentState) => {
+          if (documentState.id !== documentId) {
+            return documentState;
+          }
+          return {
+            ...documentState,
+            filePath,
+            title,
+            language: inferLanguage(filePath),
+          };
+        });
+        const recentFiles = [filePath, ...state.recentFiles.filter((entry) => entry !== filePath)].slice(0, 15);
+        return { ...state, documents, recentFiles };
+      });
+    },
+    setCursor(line: number, column: number) {
+      update((state) => ({
+        ...state,
+        editor: {
+          ...state.editor,
+          cursorLine: line,
+          cursorColumn: column,
+        },
+      }));
+    },
+    setZoomPercent(zoomPercent: number) {
+      update((state) => ({
+        ...state,
+        editor: {
+          ...state.editor,
+          zoomPercent,
+        },
+      }));
+    },
+    toggleWrap() {
+      update((state) => ({
+        ...state,
+        editor: {
+          ...state.editor,
+          wrapLines: !state.editor.wrapLines,
+        },
+      }));
     },
   };
 }

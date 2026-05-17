@@ -1,7 +1,0 @@
-# Headings
-
-# Alpha
-
-## Bravo
-
-### Charlie

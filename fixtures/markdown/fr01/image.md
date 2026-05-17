@@ -1,1 +1,0 @@
-![](relative-image.png)

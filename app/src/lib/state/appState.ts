@@ -62,6 +62,9 @@ const initialState: AppDomainState = {
     cursorColumn: 1,
     zoomPercent: 100,
     wrapLines: false,
+    findReplaceOpen: false,
+    goToOpen: false,
+    previewMode: "editor",
   },
 };
 
@@ -150,7 +153,12 @@ function createStateStore() {
         session: snapshot.session,
         settings: defaultSettings,
         recentFiles: snapshot.recentFiles,
-        editor: snapshot.editor,
+        editor: {
+          ...snapshot.editor,
+          findReplaceOpen: false,
+          goToOpen: false,
+          previewMode: "editor",
+        },
       });
       applyTheme(defaultSettings);
     },
@@ -451,6 +459,42 @@ function createStateStore() {
           ...state.editor,
           zoomPercent,
         },
+      }));
+    },
+    setPreviewMode(previewMode: "editor" | "markdown" | "diff") {
+      update((state) => ({
+        ...state,
+        editor: { ...state.editor, previewMode },
+      }));
+    },
+    toggleFindReplace() {
+      update((state) => ({
+        ...state,
+        editor: {
+          ...state.editor,
+          findReplaceOpen: !state.editor.findReplaceOpen,
+        },
+      }));
+    },
+    setFindReplaceOpen(findReplaceOpen: boolean) {
+      update((state) => ({
+        ...state,
+        editor: { ...state.editor, findReplaceOpen },
+      }));
+    },
+    toggleGoTo() {
+      update((state) => ({
+        ...state,
+        editor: {
+          ...state.editor,
+          goToOpen: !state.editor.goToOpen,
+        },
+      }));
+    },
+    setGoToOpen(goToOpen: boolean) {
+      update((state) => ({
+        ...state,
+        editor: { ...state.editor, goToOpen },
       }));
     },
     toggleWrap() {

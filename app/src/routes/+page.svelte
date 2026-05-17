@@ -23,11 +23,18 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
     restoreWindowSession,
     scheduleSessionPersistence,
   } from "../lib/services/sessionManager";
+  import { marked } from "marked";
+  import { diffLines } from "diff";
+  import { loadPersistedSettings, savePersistedSettings } from "../lib/services/settingsStore";
 
   let settingsPaneOpen = false;
   let statusMessage = "Ready";
   let editorRunner: EditorCommandRunner | null = null;
   let currentWindowId = "main";
+  let findQuery = "";
+  let replaceValue = "";
+  let findCaseSensitive = false;
+  let goToLineValue = "";
 
   $: state = $appState;
   $: activeTab = state.session.openTabs.find(
@@ -36,6 +43,14 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
   $: activeDocument =
     state.documents.find((documentState) => documentState.id === activeTab?.documentId) ??
     state.documents[0];
+  $: markdownHtml =
+    state.editor.previewMode === "markdown" && activeDocument
+      ? marked.parse(activeDocument.content)
+      : "";
+  $: diffRows =
+    state.editor.previewMode === "diff" && activeDocument
+      ? diffLines(activeDocument.savedContent, activeDocument.content)
+      : [];
 
   function notify(message: string): void {
     statusMessage = message;
@@ -65,6 +80,20 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
     if (restoredSession) {
       appState.applyWindowSession(restoredSession);
       statusMessage = "Session restored.";
+    }
+
+    const persistedSettings = await loadPersistedSettings();
+    if (persistedSettings) {
+      if (persistedSettings.themeMode !== state.settings.themeMode) {
+        appState.toggleTheme();
+      }
+      while (state.settings.accent !== persistedSettings.accent) {
+        appState.cycleAccent();
+      }
+      appState.setZoomPercent(persistedSettings.zoomPercent);
+      if (persistedSettings.wrapLines !== state.editor.wrapLines) {
+        appState.toggleWrap();
+      }
     }
 
     await currentWindow.onFocusChanged(async ({ payload }) => {
@@ -135,6 +164,46 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
     runCommand(command);
   }
 
+  function runFindNext(): void {
+    if (!findQuery.trim()) {
+      notify("Find query cannot be empty.");
+      return;
+    }
+    const found = editorRunner?.findNext(findQuery, findCaseSensitive) ?? false;
+    notify(found ? "Match selected." : "No match found.");
+  }
+
+  function runReplaceCurrent(): void {
+    if (!findQuery.trim()) {
+      notify("Find query cannot be empty.");
+      return;
+    }
+    const replaced =
+      editorRunner?.replaceCurrent(findQuery, replaceValue, findCaseSensitive) ??
+      false;
+    notify(replaced ? "Selection replaced." : "Current selection does not match.");
+  }
+
+  function runReplaceAll(): void {
+    if (!findQuery.trim()) {
+      notify("Find query cannot be empty.");
+      return;
+    }
+    const count =
+      editorRunner?.replaceAll(findQuery, replaceValue, findCaseSensitive) ?? 0;
+    notify(`Replaced ${count} occurrence(s).`);
+  }
+
+  function runGoToLine(): void {
+    const line = Number(goToLineValue);
+    if (!Number.isInteger(line) || line < 1) {
+      notify("Go-to line must be a positive integer.");
+      return;
+    }
+    const moved = editorRunner?.goToLine(line) ?? false;
+    notify(moved ? `Moved to line ${line}.` : "Line is out of range.");
+  }
+
   onMount(() => {
     let runtimeCleanup: (() => void) | undefined;
     void setupRuntime().then((cleanup) => {
@@ -179,6 +248,12 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
 
   $: if (state) {
     scheduleSessionPersistence(state, currentWindowId);
+    void savePersistedSettings({
+      themeMode: state.settings.themeMode,
+      accent: state.settings.accent,
+      wrapLines: state.editor.wrapLines,
+      zoomPercent: state.editor.zoomPercent,
+    });
   }
 </script>
 
@@ -246,21 +321,81 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
   </header>
 
   <section class="workspace">
-    <EditorSurface
-      content={activeDocument?.content ?? ""}
-      wrapLines={state.editor.wrapLines}
-      zoomPercent={state.editor.zoomPercent}
-      onStatusMessage={notify}
-      onDocumentDirty={(nextContent) => {
-        if (!activeDocument) {
-          return;
-        }
-        appState.setDocumentContent(activeDocument.id, nextContent);
-      }}
-      registerEditorCommandRunner={(runner) => {
-        editorRunner = runner;
-      }}
-    />
+    {#if state.editor.previewMode === "editor"}
+      <EditorSurface
+        content={activeDocument?.content ?? ""}
+        wrapLines={state.editor.wrapLines}
+        zoomPercent={state.editor.zoomPercent}
+        onStatusMessage={notify}
+        onDocumentDirty={(nextContent) => {
+          if (!activeDocument) {
+            return;
+          }
+          appState.setDocumentContent(activeDocument.id, nextContent);
+        }}
+        registerEditorCommandRunner={(runner) => {
+          editorRunner = runner;
+        }}
+      />
+    {:else if state.editor.previewMode === "markdown"}
+      <div class="preview-panel">
+        <div class="preview-title">Markdown Preview</div>
+        <div class="markdown-preview">{@html markdownHtml}</div>
+      </div>
+    {:else}
+      <div class="preview-panel diff-preview">
+        <div class="preview-title">Diff Preview (saved vs current)</div>
+        <div class="diff-grid">
+          <div class="diff-column">
+            <h4>Saved</h4>
+            {#each diffRows as row}
+              <pre class={`diff-row ${row.added ? "row-added" : row.removed ? "row-removed" : ""}`}>
+{row.removed ? row.value : row.added ? "" : row.value}</pre>
+            {/each}
+          </div>
+          <div class="diff-column">
+            <h4>Current</h4>
+            {#each diffRows as row}
+              <pre class={`diff-row ${row.added ? "row-added" : row.removed ? "row-removed" : ""}`}>
+{row.added ? row.value : row.removed ? "" : row.value}</pre>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if state.editor.findReplaceOpen}
+      <div class="floating-tool">
+        <h3>Find / Replace</h3>
+        <input placeholder="Find..." bind:value={findQuery} />
+        <input placeholder="Replace..." bind:value={replaceValue} />
+        <label class="tool-checkbox">
+          <input type="checkbox" bind:checked={findCaseSensitive} />
+          Case sensitive
+        </label>
+        <div class="tool-actions">
+          <button type="button" class="toolbar-button" onclick={runFindNext}>Find Next</button>
+          <button type="button" class="toolbar-button" onclick={runReplaceCurrent}>Replace</button>
+          <button type="button" class="toolbar-button" onclick={runReplaceAll}>Replace All</button>
+          <button type="button" class="toolbar-button" onclick={() => appState.setFindReplaceOpen(false)}>
+            Close
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if state.editor.goToOpen}
+      <div class="floating-tool goto-tool">
+        <h3>Go To Line</h3>
+        <input placeholder="Line number..." bind:value={goToLineValue} />
+        <div class="tool-actions">
+          <button type="button" class="toolbar-button" onclick={runGoToLine}>Go</button>
+          <button type="button" class="toolbar-button" onclick={() => appState.setGoToOpen(false)}>
+            Close
+          </button>
+        </div>
+      </div>
+    {/if}
     <aside class="settings-pane" data-open={settingsPaneOpen}>
       <h2>Settings</h2>
       <p>Theme: {state.settings.themeMode}</p>
@@ -346,6 +481,108 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
     position: relative;
     padding: var(--space-8);
     overflow: hidden;
+  }
+
+  .preview-panel {
+    height: 100%;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .preview-title {
+    padding: var(--space-8);
+    border-bottom: 1px solid var(--color-border-subtle);
+    font-size: var(--font-size-status);
+    color: var(--color-text-secondary);
+  }
+
+  .markdown-preview {
+    padding: var(--space-12);
+    overflow: auto;
+    line-height: 1.55;
+  }
+
+  .diff-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-8);
+    height: 100%;
+    padding: var(--space-8);
+    overflow: auto;
+  }
+
+  .diff-column {
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: auto;
+  }
+
+  .diff-column h4 {
+    margin: 0;
+    padding: var(--space-6) var(--space-8);
+    border-bottom: 1px solid var(--color-border-subtle);
+    font-size: var(--font-size-status);
+  }
+
+  .diff-row {
+    margin: 0;
+    padding: var(--space-2) var(--space-8);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .row-added {
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+
+  .row-removed {
+    background: color-mix(in srgb, #c53030 18%, transparent);
+  }
+
+  .floating-tool {
+    position: absolute;
+    top: var(--space-12);
+    left: var(--space-12);
+    width: 340px;
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-overlay);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    backdrop-filter: blur(var(--blur-overlay));
+    padding: var(--space-8);
+    display: grid;
+    gap: var(--space-6);
+  }
+
+  .goto-tool {
+    left: 370px;
+    width: 240px;
+  }
+
+  .floating-tool input {
+    height: 30px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    padding: 0 var(--space-8);
+  }
+
+  .tool-checkbox {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--font-size-status);
+  }
+
+  .tool-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
   }
 
   .settings-pane {

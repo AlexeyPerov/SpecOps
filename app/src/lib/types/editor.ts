@@ -9,4 +9,16 @@ export type EditorCommandRunner = {
   joinLines: () => void;
   setWrap: (value: boolean) => void;
   setZoom: (zoom: number) => void;
+  findNext: (query: string, caseSensitive: boolean) => boolean;
+  replaceCurrent: (
+    query: string,
+    replacement: string,
+    caseSensitive: boolean,
+  ) => boolean;
+  replaceAll: (
+    query: string,
+    replacement: string,
+    caseSensitive: boolean,
+  ) => number;
+  goToLine: (line: number) => boolean;
 };

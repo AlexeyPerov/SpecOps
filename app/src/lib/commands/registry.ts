@@ -24,6 +24,10 @@ function getSnapshot() {
 const keyBindingsByPlatform: Record<string, string> = {
   "Meta+,": "app.toggleSettingsPane",
   "Meta+Shift+t": "view.toggleTheme",
+  "Meta+f": "app.toggleFindReplace",
+  "Meta+l": "app.toggleGoTo",
+  "Meta+Shift+m": "view.toggleMarkdownPreview",
+  "Meta+Shift+d": "view.toggleDiffPreview",
   "Meta+n": "file.new",
   "Meta+o": "file.open",
   "Meta+s": "file.save",
@@ -47,6 +51,10 @@ const keyBindingsByPlatform: Record<string, string> = {
   "Meta+0": "view.zoomReset",
   "Ctrl+,": "app.toggleSettingsPane",
   "Ctrl+Shift+t": "view.toggleTheme",
+  "Ctrl+f": "app.toggleFindReplace",
+  "Ctrl+l": "app.toggleGoTo",
+  "Ctrl+Shift+m": "view.toggleMarkdownPreview",
+  "Ctrl+Shift+d": "view.toggleDiffPreview",
   "Ctrl+n": "file.new",
   "Ctrl+o": "file.open",
   "Ctrl+s": "file.save",
@@ -86,6 +94,30 @@ export const commandDefinitions: CommandDefinition[] = [
     label: "Toggle Theme",
     menuPath: "View/Theme",
     binding: { mac: "Cmd+Shift+T", windows: "Ctrl+Shift+T" },
+  },
+  {
+    id: "app.toggleFindReplace",
+    label: "Find / Replace",
+    menuPath: "Edit/Find Replace",
+    binding: { mac: "Cmd+F", windows: "Ctrl+F" },
+  },
+  {
+    id: "app.toggleGoTo",
+    label: "Go To Line",
+    menuPath: "Edit/Go To",
+    binding: { mac: "Cmd+L", windows: "Ctrl+L" },
+  },
+  {
+    id: "view.toggleMarkdownPreview",
+    label: "Markdown Preview",
+    menuPath: "View/Markdown Preview",
+    binding: { mac: "Cmd+Shift+M", windows: "Ctrl+Shift+M" },
+  },
+  {
+    id: "view.toggleDiffPreview",
+    label: "Diff Preview",
+    menuPath: "View/Diff Preview",
+    binding: { mac: "Cmd+Shift+D", windows: "Ctrl+Shift+D" },
   },
   {
     id: "file.new",
@@ -231,6 +263,23 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
   "view.toggleTheme": () => {
     appState.toggleTheme();
+  },
+  "app.toggleFindReplace": () => {
+    appState.toggleFindReplace();
+  },
+  "app.toggleGoTo": () => {
+    appState.toggleGoTo();
+  },
+  "view.toggleMarkdownPreview": ({ getState, notify }) => {
+    const next =
+      getState().editor.previewMode === "markdown" ? "editor" : "markdown";
+    appState.setPreviewMode(next);
+    notify(next === "markdown" ? "Markdown preview on." : "Markdown preview off.");
+  },
+  "view.toggleDiffPreview": ({ getState, notify }) => {
+    const next = getState().editor.previewMode === "diff" ? "editor" : "diff";
+    appState.setPreviewMode(next);
+    notify(next === "diff" ? "Diff preview on." : "Diff preview off.");
   },
   "file.new": ({ notify }) => {
     appState.createTab();

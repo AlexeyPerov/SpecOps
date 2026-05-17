@@ -22,7 +22,9 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-log": "^2.8.0",
     "@tauri-apps/plugin-opener": "^2",
-    "codemirror": "^6.0.2"
+    "codemirror": "^6.0.2",
+    "diff": "^9.0.0",
+    "marked": "^18.0.3"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",

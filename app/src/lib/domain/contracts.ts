@@ -37,7 +37,11 @@ export interface AppSettingsState {
 export type AppCommandId =
   | "app.toggleSettingsPane"
   | "app.newWindow"
+  | "app.toggleFindReplace"
+  | "app.toggleGoTo"
   | "view.toggleTheme"
+  | "view.toggleMarkdownPreview"
+  | "view.toggleDiffPreview"
   | "file.new"
   | "file.open"
   | "file.save"
@@ -93,6 +97,9 @@ export interface AppDomainState {
     cursorColumn: number;
     zoomPercent: number;
     wrapLines: boolean;
+    findReplaceOpen: boolean;
+    goToOpen: boolean;
+    previewMode: "editor" | "markdown" | "diff";
   };
 }
 

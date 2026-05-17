@@ -169,6 +169,99 @@
     });
   }
 
+  function normalizeForSearch(value: string, caseSensitive: boolean): string {
+    return caseSensitive ? value : value.toLowerCase();
+  }
+
+  function findNext(query: string, caseSensitive: boolean): boolean {
+    if (!view || query.length === 0) {
+      return false;
+    }
+    const doc = view.state.doc.toString();
+    const haystack = normalizeForSearch(doc, caseSensitive);
+    const needle = normalizeForSearch(query, caseSensitive);
+    const from = view.state.selection.main.to;
+    let idx = haystack.indexOf(needle, from);
+    if (idx === -1) {
+      idx = haystack.indexOf(needle, 0);
+    }
+    if (idx === -1) {
+      return false;
+    }
+    view.dispatch({
+      selection: EditorSelection.range(idx, idx + query.length),
+      scrollIntoView: true,
+    });
+    updateCursor();
+    return true;
+  }
+
+  function replaceCurrent(
+    query: string,
+    replacement: string,
+    caseSensitive: boolean,
+  ): boolean {
+    if (!view || query.length === 0) {
+      return false;
+    }
+    const sel = view.state.selection.main;
+    const selectedText = view.state.sliceDoc(sel.from, sel.to);
+    if (
+      normalizeForSearch(selectedText, caseSensitive) !==
+      normalizeForSearch(query, caseSensitive)
+    ) {
+      return false;
+    }
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: replacement },
+      selection: EditorSelection.range(sel.from, sel.from + replacement.length),
+      userEvent: "input",
+    });
+    return true;
+  }
+
+  function replaceAll(
+    query: string,
+    replacement: string,
+    caseSensitive: boolean,
+  ): number {
+    if (!view || query.length === 0) {
+      return 0;
+    }
+    const source = view.state.doc.toString();
+    const haystack = normalizeForSearch(source, caseSensitive);
+    const needle = normalizeForSearch(query, caseSensitive);
+    let index = 0;
+    let count = 0;
+    const changes: { from: number; to: number; insert: string }[] = [];
+    while (index <= haystack.length) {
+      const found = haystack.indexOf(needle, index);
+      if (found === -1) break;
+      changes.push({ from: found, to: found + query.length, insert: replacement });
+      count += 1;
+      index = found + Math.max(1, query.length);
+    }
+    if (changes.length > 0) {
+      view.dispatch({ changes, userEvent: "input" });
+      updateCursor();
+    }
+    return count;
+  }
+
+  function goToLine(line: number): boolean {
+    if (!view || !Number.isFinite(line) || line < 1) {
+      return false;
+    }
+    const clampedLine = Math.min(line, view.state.doc.lines);
+    const target = view.state.doc.line(clampedLine);
+    view.dispatch({
+      selection: EditorSelection.cursor(target.from),
+      scrollIntoView: true,
+    });
+    updateCursor();
+    return true;
+  }
+
   onMount(() => {
     if (!hostEl) {
       return;
@@ -255,6 +348,10 @@
       joinLines,
       setWrap: (value) => applyWrap(value),
       setZoom: (zoom) => applyZoom(zoom),
+      findNext,
+      replaceCurrent,
+      replaceAll,
+      goToLine,
     });
   });
 

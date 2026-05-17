@@ -2,7 +2,7 @@ import type {
   PreferencesPersistedV1,
   SessionPersistedV1
 } from '../core/state/sessionCodec'
-import type { SpecOpsMenuCommand } from '../ipc/specOpsIpc'
+import type { SpecOpsMenuCommand, TreeNode, GitSummaryResult } from '../ipc/specOpsIpc'
 
 /** Typed surface exposed to the renderer via `contextBridge`. */
 export type ReadMarkdownAssetPayload = Readonly<{
@@ -73,6 +73,11 @@ export type SpecOpsPreloadApi = Readonly<{
     baseName: string
   }) => Promise<CreateMarkdownResult>
   listMarkdownFilesRecursive: (folderPath: string) => Promise<string[]>
+  listProjectTree: (payload: {
+    rootPath: string
+    excludeGitDirectory?: boolean
+    excludeNodeModules?: boolean
+  }) => Promise<TreeNode[]>
   setWatchedDocPath: (absolutePath: string | null) => Promise<void>
   onExternalFileChanged: (callback: (payload: ExternalFileChangedPayload) => void) => () => void
   writeTextFile: (payload: {
@@ -105,4 +110,5 @@ export type SpecOpsPreloadApi = Readonly<{
   notifyPreferencesChanged: () => void
   onPreferencesChanged: (callback: () => void) => () => void
   onProjectsCleared: (callback: () => void) => () => void
+  gitSummary: (workspacePath: string | null) => Promise<GitSummaryResult>
 }>

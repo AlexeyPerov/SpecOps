@@ -10,6 +10,7 @@ function doc(partial: Partial<Document> & Pick<Document, 'id'>): Document {
     lastOpened: partial.lastOpened ?? '2026-05-09T00:00:00.000Z',
     path: partial.path ?? null,
     lastModified: partial.lastModified ?? null,
+    saveIntentDirectory: partial.saveIntentDirectory ?? null,
     ...partial
   }
 }

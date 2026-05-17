@@ -1,6 +1,7 @@
 import { createEmptyChatState } from '../chat/chatState'
 import { folderKeyForDocumentPath, groupsForPresentation } from './fileListPresentation'
-import type { AppAction, AppState, Document, ProjectState } from './types'
+import type { AppAction, AppState, Document, ProjectState, ScrollSnapshot } from './types'
+import type { PanelMode } from './types'
 import { sanitizeMarkdownScanRelativeFolders } from '../util/markdownScanFolders'
 import { pathBasename, stableDocIdForPath } from '../util/paths'
 
@@ -24,7 +25,9 @@ function createInitialProjectState(): ProjectState {
     accentColor: '#6f7684',
     fileListSort: 'lastOpened',
     fileListGrouping: 'folder',
-    expandedFolderGroups: []
+    expandedFolderGroups: [],
+    panelMode: 'recents',
+    scrollSnapshots: new Map()
   }
 }
 
@@ -38,7 +41,9 @@ function withActiveProject(state: AppState, project: ProjectState): AppState {
     workspaceFolderPath: project.workspaceFolderPath,
     fileListSort: project.fileListSort,
     fileListGrouping: project.fileListGrouping,
-    expandedFolderGroups: project.expandedFolderGroups
+    expandedFolderGroups: project.expandedFolderGroups,
+    panelMode: project.panelMode,
+    scrollSnapshots: project.scrollSnapshots
   }
 }
 
@@ -68,6 +73,10 @@ export function createInitialAppState(): AppState {
     previewFontSizePx: 16,
     recentsPaneWidthPx: 260,
     markdownScanRelativeFolders: sanitizeMarkdownScanRelativeFolders(['specs']),
+    excludeGitDirectory: true,
+    excludeNodeModules: true,
+    panelMode: 'recents' as PanelMode,
+    scrollSnapshots: initialProject.scrollSnapshots,
     documentsById: initialProject.documentsById,
     recentDocumentIds: initialProject.recentDocumentIds,
     currentDocumentId: initialProject.currentDocumentId,
@@ -147,7 +156,8 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
     for (const input of action.documents) {
       const doc: Document = {
         ...input,
-        lastOpened: nowIso
+        lastOpened: nowIso,
+        saveIntentDirectory: input.saveIntentDirectory ?? null
       }
       documentsById.set(doc.id, doc)
     }
@@ -256,6 +266,29 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
       return { ...state, recentsPaneWidthPx: clamped }
     }
 
+    case 'SET_PANEL_MODE':
+      return patchActiveProject(state, { panelMode: action.mode })
+
+    case 'UPDATE_UNTITLED_TITLE': {
+      const doc = state.documentsById.get(action.documentId)
+      if (!doc || doc.path) return state
+      const documentsById = new Map(state.documentsById)
+      documentsById.set(action.documentId, { ...doc, title: action.title })
+      return patchActiveProject(state, { documentsById })
+    }
+
+    case 'SET_SCROLL_SNAPSHOT': {
+      const scrollSnapshots = new Map(state.scrollSnapshots)
+      scrollSnapshots.set(action.documentId, action.snapshot)
+      return patchActiveProject(state, { scrollSnapshots })
+    }
+
+    case 'SET_EXCLUDE_GIT_DIRECTORY':
+      return { ...state, excludeGitDirectory: action.enabled }
+
+    case 'SET_EXCLUDE_NODE_MODULES':
+      return { ...state, excludeNodeModules: action.enabled }
+
     case 'SET_MARKDOWN_SCAN_RELATIVE_FOLDERS':
       return {
         ...state,
@@ -276,7 +309,8 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
         title,
         path: action.newAbsolutePath,
         content: action.content,
-        lastModified: action.lastModified
+        lastModified: action.lastModified,
+        saveIntentDirectory: null
       })
       const recentDocumentIds = dedupeRecents(
         state.recentDocumentIds.map((id) => (id === action.oldDocumentId ? newId : id))
@@ -326,7 +360,8 @@ export function reduceAppState(state: AppState, action: AppAction, nowIso: strin
     case 'OPEN_EXPLICIT': {
       const doc: Document = {
         ...action.document,
-        lastOpened: nowIso
+        lastOpened: nowIso,
+        saveIntentDirectory: action.document.saveIntentDirectory ?? null
       }
       const documentsById = new Map(state.documentsById)
       documentsById.set(doc.id, doc)

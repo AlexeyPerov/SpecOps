@@ -11,6 +11,8 @@ export interface Document {
   readonly path: string | null
   /** ISO-8601 datetime string or null when unknown */
   readonly lastModified: string | null
+  /** For untitled docs created from a folder: suggested save directory. */
+  readonly saveIntentDirectory: string | null
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -18,6 +20,13 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 export type FileListSort = 'lastOpened' | 'title' | 'path'
 
 export type FileListGrouping = 'none' | 'folder'
+
+export type PanelMode = 'recents' | 'explorer'
+
+export interface ScrollSnapshot {
+  readonly editorFraction: number
+  readonly previewFraction?: number
+}
 
 export const UNGROUPED_FOLDER_KEY = '__ungrouped__'
 
@@ -36,6 +45,10 @@ export interface ProjectState {
   readonly fileListGrouping: FileListGrouping
   /** When grouping by folder, folder keys listed here are expanded in the recents list. */
   readonly expandedFolderGroups: readonly string[]
+  /** Which panel view is active for this project. */
+  readonly panelMode: PanelMode
+  /** Per-document persisted scroll positions. */
+  readonly scrollSnapshots: Map<string, ScrollSnapshot>
 }
 
 export interface AppState {
@@ -56,6 +69,8 @@ export interface AppState {
   readonly recentsPaneWidthPx: number
   /** Relative subfolders under each project workspace for markdown recents scan (persisted in preferences). */
   readonly markdownScanRelativeFolders: readonly string[]
+  readonly excludeGitDirectory: boolean
+  readonly excludeNodeModules: boolean
   /**
    * Transitional mirrors of active project fields used by pre-Task-6 callers.
    * Keep in sync with `projectsById.get(activeProjectId)`.
@@ -68,11 +83,14 @@ export interface AppState {
   readonly fileListSort: FileListSort
   readonly fileListGrouping: FileListGrouping
   readonly expandedFolderGroups: readonly string[]
+  readonly panelMode: PanelMode
+  readonly scrollSnapshots: Map<string, ScrollSnapshot>
 }
 
 /** Upsert payload for explicit opens; `lastOpened` is always overwritten by the transition. */
-export type DocumentInput = Omit<Document, 'lastOpened'> & {
+export type DocumentInput = Omit<Document, 'lastOpened' | 'saveIntentDirectory'> & {
   readonly lastOpened?: string
+  readonly saveIntentDirectory?: string | null
 }
 
 export type AppAction =
@@ -119,7 +137,12 @@ export type AppAction =
   | { readonly type: 'SET_EDITOR_FONT_SIZE_PX'; readonly sizePx: number }
   | { readonly type: 'SET_PREVIEW_FONT_SIZE_PX'; readonly sizePx: number }
   | { readonly type: 'SET_RECENTS_PANE_WIDTH'; readonly widthPx: number }
+  | { readonly type: 'SET_PANEL_MODE'; readonly mode: PanelMode }
   | {
       readonly type: 'SET_MARKDOWN_SCAN_RELATIVE_FOLDERS'
       readonly folders: readonly string[]
     }
+  | { readonly type: 'UPDATE_UNTITLED_TITLE'; readonly documentId: string; readonly title: string }
+  | { readonly type: 'SET_SCROLL_SNAPSHOT'; readonly documentId: string; readonly snapshot: ScrollSnapshot }
+  | { readonly type: 'SET_EXCLUDE_GIT_DIRECTORY'; readonly enabled: boolean }
+  | { readonly type: 'SET_EXCLUDE_NODE_MODULES'; readonly enabled: boolean }

@@ -8,6 +8,7 @@ export const SPEC_OPS_IPC = {
   readTextFile: 'specops:read-text-file',
   createMarkdownInWorkspace: 'specops:create-markdown-in-workspace',
   listMarkdownFilesRecursive: 'specops:list-markdown-files-recursive',
+  listProjectTree: 'specops:list-project-tree',
   setWatchedDocPath: 'specops:set-watched-doc-path',
   externalFileChanged: 'specops:external-file-changed',
   writeTextFile: 'specops:write-text-file',
@@ -30,7 +31,8 @@ export const SPEC_OPS_IPC = {
   menuCommand: 'specops:menu-command',
   notifyPreferencesChanged: 'specops:notify-preferences-changed',
   preferencesChangedMain: 'specops:preferences-changed-main',
-  projectsClearedMain: 'specops:projects-cleared-main'
+  projectsClearedMain: 'specops:projects-cleared-main',
+  gitSummary: 'specops:git-summary'
 } as const
 
 export const SPEC_OPS_MENU_COMMANDS = {
@@ -116,4 +118,22 @@ export type ExternalFileChangedPayload = Readonly<{
   path: string
   content: string
   mtimeIso: string | null
+}>
+
+export interface TreeNode {
+  readonly name: string
+  readonly absolutePath: string
+  readonly isDirectory: boolean
+  readonly children: readonly TreeNode[]
+}
+
+export type ListProjectTreePayload = Readonly<{
+  rootPath: string
+  excludeGitDirectory?: boolean
+  excludeNodeModules?: boolean
+}>
+
+export type GitSummaryResult = Readonly<{
+  isRepo: boolean
+  branch: string | null
 }>

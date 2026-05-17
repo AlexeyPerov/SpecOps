@@ -21,7 +21,7 @@ import {
   selectActiveProject,
   selectCurrentDocumentPath
 } from '../../core/state/selectors'
-import { pathBasename, replaceBasename, stableDocIdForPath } from '../../core/util/paths'
+import { pathBasename, replaceBasename, stableDocIdForPath, deriveUntitledTitle } from '../../core/util/paths'
 import { resolveContainedScanRoot } from '../../core/util/markdownScanFolders'
 import {
   serializePreferencesFromState,
@@ -30,6 +30,7 @@ import {
 import { executeMenuCommand } from '../features/menu/menuCommands'
 import { wireProjectSwitcher } from '../features/projects/projectSwitcher'
 import { renderRecents, triggerWorkspaceMotion } from '../features/recents/recentsView'
+import { renderExplorer, storeExplorerNodes } from '../features/explorer/explorerView'
 import { attachPreviewChrome, mountPreview, previewErrorSnippet } from '../previewHost'
 import { buildEditorHighlightHtml } from '../editor/editorHighlight'
 import { getScrollFraction, setScrollFraction } from '../editor/scrollSync'
@@ -53,7 +54,8 @@ const SAMPLE_DOC_A: DocumentInput = {
   title: 'Doc A',
   content: '# Alpha\n\nHello **world**.\n\n![](missing-local.png)\n',
   path: null,
-  lastModified: null
+  lastModified: null,
+  saveIntentDirectory: null
 }
 
 const SAMPLE_DOC_B: DocumentInput = {
@@ -61,12 +63,40 @@ const SAMPLE_DOC_B: DocumentInput = {
   title: 'Doc B',
   content: '# Bravo\n\nSecond document.\n\n[Example](https://example.com)\n',
   path: null,
-  lastModified: null
+  lastModified: null,
+  saveIntentDirectory: null
 }
 
 /** Wire SpeOps renderer shell (UPH-01 three-pane). */
 export function bootRenderer(ctx: RendererBootContext): void {
   const { root, store, services, specOps } = ctx
+  function debugLog(
+    hypothesisId: string,
+    location: string,
+    message: string,
+    data: Record<string, unknown>
+  ): void {
+    const payload = {
+      sessionId: '2ceeb5',
+      runId: 'initial',
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now()
+    }
+    void fetch('http://127.0.0.1:7746/ingest/00baad89-b58a-48d1-ac46-41df50053a3c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2ceeb5' },
+      body: JSON.stringify(payload)
+    }).catch(() => {})
+  }
+  // #region agent log
+  debugLog('H5', 'rendererBoot.ts:bootRenderer:entry', 'renderer boot entry', {
+    hasRoot: Boolean(root),
+    initialDocId: store.getState().currentDocumentId
+  })
+  // #endregion
   const getPathForDroppedFile = (file: File): string | null => {
     if (typeof specOps.getPathForFile === 'function') return specOps.getPathForFile(file)
     const legacyPath = (file as File & { path?: string }).path
@@ -81,12 +111,16 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   root.innerHTML = `
     <header class="app-toolbar" role="banner">
-      <span id="dirty-indicator" class="dirty-indicator" hidden aria-live="polite">Modified</span>
+      <div class="app-toolbar-left">
+        <span id="dirty-indicator" class="dirty-indicator" hidden aria-live="polite">Modified</span>
+      </div>
       <span id="current-file-label" class="current-file-label" title="No file selected">No file selected</span>
-      <div class="view-mode-switch" role="group" aria-label="Editor view mode">
-        <button type="button" class="toolbar-btn mode-btn" data-view-mode="split" aria-pressed="true">Split</button>
-        <button type="button" class="toolbar-btn mode-btn" data-view-mode="edit" aria-pressed="false">Edit</button>
-        <button type="button" class="toolbar-btn mode-btn" data-view-mode="preview" aria-pressed="false">Preview</button>
+      <div class="app-toolbar-right">
+        <div class="view-mode-switch" role="group" aria-label="Editor view mode">
+          <button type="button" class="toolbar-btn mode-btn" data-view-mode="split" aria-pressed="true">Split</button>
+          <button type="button" class="toolbar-btn mode-btn" data-view-mode="edit" aria-pressed="false">Edit</button>
+          <button type="button" class="toolbar-btn mode-btn" data-view-mode="preview" aria-pressed="false">Preview</button>
+        </div>
       </div>
     </header>
     <div class="app-body">
@@ -96,21 +130,30 @@ export function bootRenderer(ctx: RendererBootContext): void {
       </aside>
       <aside data-testid="recents-pane" class="recents-pane" aria-label="Recent documents">
         <div class="recents-heading-row">
-          <label class="recents-control"><span class="visually-hidden">Sort</span>
-            <select id="recents-sort" class="recents-select" aria-label="Sort recents">
-              <option value="lastOpened">Last opened</option>
-              <option value="title">Title</option>
-              <option value="path">Path</option>
-            </select>
-          </label>
-          <label class="recents-control"><span class="visually-hidden">Group</span>
-            <select id="recents-grouping" class="recents-select" aria-label="Group recents">
-              <option value="none">No grouping</option>
-              <option value="folder">By folder</option>
-            </select>
-          </label>
+          <div class="recents-heading-top">
+            <div class="panel-mode-tabs" role="group" aria-label="Panel view mode">
+              <button type="button" class="panel-mode-btn" data-panel-mode="recents" aria-pressed="true">Recents</button>
+              <button type="button" class="panel-mode-btn" data-panel-mode="explorer" aria-pressed="false">Explorer</button>
+            </div>
+          </div>
+          <div class="recents-heading-bottom">
+            <label class="recents-control"><span class="visually-hidden">Sort</span>
+              <select id="recents-sort" class="recents-select" aria-label="Sort recents">
+                <option value="lastOpened">Last opened</option>
+                <option value="title">Title</option>
+                <option value="path">Path</option>
+              </select>
+            </label>
+            <label class="recents-control"><span class="visually-hidden">Group</span>
+              <select id="recents-grouping" class="recents-select" aria-label="Group recents">
+                <option value="none">No grouping</option>
+                <option value="folder">By folder</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div data-testid="recents-list" class="recents-list-root"></div>
+        <div data-testid="explorer-tree-root" class="recents-list-root" hidden></div>
       </aside>
       <div class="recents-resizer" role="separator" aria-orientation="vertical" aria-label="Resize recents panel" tabindex="-1"></div>
       <div class="workspace">
@@ -158,9 +201,11 @@ export function bootRenderer(ctx: RendererBootContext): void {
       </div>
     </div>
     <footer class="app-status-footer" aria-label="Status">
+      <span id="git-branch" class="app-status-git" hidden></span>
       <span class="app-status-encoding">UTF-8</span>
     </footer>
     <div id="recents-context-menu" class="recents-context-menu" hidden role="menu"></div>
+    <div id="explorer-context-menu" class="explorer-context-menu" hidden role="menu"></div>
   `
 
   const editor = root.querySelector<HTMLTextAreaElement>('#editor')!
@@ -191,6 +236,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
   const currentFileLabel = root.querySelector<HTMLElement>('#current-file-label')!
   const recentsResizer = root.querySelector<HTMLElement>('.recents-resizer')!
   const modeButtons = [...root.querySelectorAll<HTMLButtonElement>('[data-view-mode]')]
+  const panelModeButtons = [...root.querySelectorAll<HTMLButtonElement>('[data-panel-mode]')]
+  const explorerTreeRoot = root.querySelector<HTMLElement>('[data-testid="explorer-tree-root"]')!
+  const explorerContextMenu = root.querySelector<HTMLElement>('#explorer-context-menu')!
+  const gitBranchEl = root.querySelector<HTMLElement>('#git-branch')!
+  let lastObservedSelectionStart = -1
+  let lastObservedSelectionEnd = -1
 
   attachPreviewChrome(previewEl)
 
@@ -236,6 +287,93 @@ export function bootRenderer(ctx: RendererBootContext): void {
   let contextDocId: string | null = null
   let currentViewMode: 'split' | 'preview' | 'edit' = 'split'
   let isCurrentDocMarkdownCapable = true
+  let explorerNodes: import('../../ipc/specOpsIpc').TreeNode[] = []
+  let explorerLoadedWorkspace: string | null = null
+
+  function refreshExplorer(): void {
+    const st = store.getState()
+    const folder = st.workspaceFolderPath?.trim() ?? null
+    if (!folder) {
+      explorerNodes = []
+      explorerLoadedWorkspace = null
+      renderExplorer({
+        treeRoot: explorerTreeRoot,
+        workspaceFolderPath: null,
+        onFileClick: handleExplorerFileClick,
+        onFolderContextMenu: handleExplorerFolderContextMenu
+      }, explorerNodes)
+      return
+    }
+    if (folder === explorerLoadedWorkspace) return
+    explorerLoadedWorkspace = folder
+    void specOps.listProjectTree({ rootPath: folder, excludeGitDirectory: st.excludeGitDirectory, excludeNodeModules: st.excludeNodeModules }).then((nodes) => {
+      explorerNodes = nodes
+      storeExplorerNodes(explorerTreeRoot, nodes)
+      renderExplorer({
+        treeRoot: explorerTreeRoot,
+        workspaceFolderPath: folder,
+        onFileClick: handleExplorerFileClick,
+        onFolderContextMenu: handleExplorerFolderContextMenu
+      }, nodes)
+    })
+  }
+
+  function handleExplorerFileClick(absolutePath: string): void {
+    void runAfterDirtyPrompt(() => openTextFromAbsolutePath(absolutePath))
+  }
+
+  let explorerContextFolderPath: string | null = null
+
+  function handleExplorerFolderContextMenu(absolutePath: string, clientX: number, clientY: number): void {
+    explorerContextFolderPath = absolutePath
+    const st = store.getState()
+    const workspaceRoot = st.workspaceFolderPath?.trim() ?? ''
+    const isInsideWorkspace = workspaceRoot && absolutePath.replace(/\\/g, '/').startsWith(workspaceRoot.replace(/\\/g, '/'))
+
+    explorerContextMenu.innerHTML = `
+      <button type="button" role="menuitem" class="context-menu-item" data-action="explorer-copy-path">Copy path</button>
+      <button type="button" role="menuitem" class="context-menu-item" data-action="explorer-copy-relative-path"${isInsideWorkspace ? '' : ' disabled'}>Copy relative path</button>
+      <button type="button" role="menuitem" class="context-menu-item" data-action="explorer-create-file">Create new file</button>
+    `
+    explorerContextMenu.hidden = false
+    void explorerContextMenu.offsetWidth
+    const mw = explorerContextMenu.offsetWidth
+    const mh = explorerContextMenu.offsetHeight
+    const pad = 4
+    explorerContextMenu.style.left = `${Math.min(clientX, window.innerWidth - mw - pad)}px`
+    explorerContextMenu.style.top = `${Math.min(clientY, window.innerHeight - mh - pad)}px`
+  }
+
+  function hideExplorerContextMenu(): void {
+    explorerContextMenu.hidden = true
+    explorerContextFolderPath = null
+  }
+
+  function applyPanelMode(mode: 'recents' | 'explorer'): void {
+    store.dispatch({ type: 'SET_PANEL_MODE', mode })
+  }
+
+  let lastGitWorkspace: string | null | undefined = undefined
+
+  function refreshGitStatus(): void {
+    const ws = store.getState().workspaceFolderPath?.trim() ?? null
+    if (ws === lastGitWorkspace) return
+    lastGitWorkspace = ws
+    if (!ws) {
+      gitBranchEl.hidden = true
+      gitBranchEl.textContent = ''
+      return
+    }
+    void specOps.gitSummary(ws).then((result) => {
+      if (!result.isRepo || !result.branch) {
+        gitBranchEl.hidden = true
+        gitBranchEl.textContent = ''
+        return
+      }
+      gitBranchEl.textContent = `\u2009${result.branch}`
+      gitBranchEl.hidden = false
+    })
+  }
 
   function isPreviewAllowed(): boolean {
     return isCurrentDocMarkdownCapable
@@ -342,6 +480,17 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   const scheduleSessionPersist = debounce(() => {
     void specOps.writeSession(serializeSessionFromState(store.getState()))
+  }, 500)
+
+  const scheduleScrollCapture = debounce(() => {
+    const st = store.getState()
+    const project = selectActiveProject(st)
+    if (!project.currentDocumentId) return
+    const snapshot = {
+      editorFraction: getScrollFraction(editor),
+      ...(isPreviewAllowed() ? { previewFraction: getScrollFraction(previewEl) } : {})
+    }
+    store.dispatch({ type: 'SET_SCROLL_SNAPSHOT', documentId: project.currentDocumentId, snapshot })
   }, 500)
 
   function refreshLineGutter(): void {
@@ -555,6 +704,12 @@ export function bootRenderer(ctx: RendererBootContext): void {
   async function syncWatchPath(): Promise<void> {
     const st = store.getState()
     const path = selectCurrentDocumentPath(st)
+    // #region agent log
+    debugLog('H10', 'rendererBoot.ts:syncWatchPath', 'sync watched path', {
+      currentDocumentId: st.currentDocumentId,
+      watchedPath: path && path.trim() ? path : null
+    })
+    // #endregion
     await specOps.setWatchedDocPath(path && path.trim() ? path : null)
   }
 
@@ -578,13 +733,15 @@ export function bootRenderer(ctx: RendererBootContext): void {
       | {
           title: string
           path: string | null
+          content: string
         }
       | undefined
   ): string {
     const path = doc?.path?.trim()
     if (path) return pathBasename(path)
     const title = doc?.title?.trim()
-    return title || 'Untitled'
+    if (title && title !== 'Untitled') return title
+    return deriveUntitledTitle(doc?.content ?? '')
   }
 
   function formatOpenReadFailure(reason: string): string {
@@ -680,6 +837,14 @@ export function bootRenderer(ctx: RendererBootContext): void {
   async function saveCurrentBuffer(): Promise<boolean> {
     const st = store.getState()
     const project = selectActiveProject(st)
+    // #region agent log
+    debugLog('N4_N6', 'rendererBoot.ts:saveCurrentBuffer:entry', 'saveCurrentBuffer invoked', {
+      currentDocumentId: project.currentDocumentId,
+      editorLen: project.editorContent.length,
+      autosaveEnabled: st.autosaveEnabled,
+      activeElement: document.activeElement instanceof HTMLElement ? document.activeElement.tagName : 'unknown'
+    })
+    // #endregion
     const id = project.currentDocumentId
     if (!id) return false
     const doc = project.documentsById.get(id)
@@ -688,6 +853,18 @@ export function bootRenderer(ctx: RendererBootContext): void {
     const targetPath = doc.path?.trim()
     if (targetPath) {
       const wr = await specOps.writeTextFile({ absolutePath: targetPath, content: body })
+      // #region agent log
+      debugLog('N4_N6', 'rendererBoot.ts:saveCurrentBuffer:writeResult', 'save write completed', {
+        currentDocumentId: id,
+        targetPath,
+        writeOk: wr.ok,
+        writeReason: wr.ok ? null : wr.reason,
+        writeMtime: wr.ok ? wr.mtimeIso : null,
+        bodyLen: body.length,
+        selectionStart: editor.selectionStart,
+        selectionEnd: editor.selectionEnd
+      })
+      // #endregion
       if (!wr.ok) {
         window.alert(`Save failed (${wr.reason}).`)
         return false
@@ -698,16 +875,40 @@ export function bootRenderer(ctx: RendererBootContext): void {
         content: body,
         lastModified: wr.mtimeIso
       })
+      // #region agent log
+      debugLog('N4_N6', 'rendererBoot.ts:saveCurrentBuffer:dispatchSync', 'dispatch SYNC_DOCUMENT_FROM_DISK from save', {
+        currentDocumentId: id,
+        targetPath,
+        editorLenAfterDispatch: editor.value.length,
+        activeElement: document.activeElement instanceof HTMLElement ? document.activeElement.tagName : 'unknown'
+      })
+      // #endregion
       flushPreviewMaybe()
       void specOps.clearDraft(id)
       return true
     }
     const defaultExt = doc.path?.toLowerCase().endsWith('.md') ? '.md' : ''
+    const intentDir = doc.saveIntentDirectory?.trim()
+    const suggestedPath = intentDir
+      ? `${intentDir.replace(/\\/g, '/').replace(/\/+$/, '')}/${doc.title || 'Untitled'}${defaultExt}`
+      : (doc.title ? `${doc.title}${defaultExt}` : undefined)
     const pick = await specOps.pickSaveFile({
-      defaultPath: doc.title ? `${doc.title}${defaultExt}` : undefined
+      defaultPath: suggestedPath
     })
     if (pick.canceled) return false
     const wr = await specOps.writeTextFile({ absolutePath: pick.filePath, content: body })
+    // #region agent log
+    debugLog('N4_N6', 'rendererBoot.ts:saveCurrentBuffer:writeResultNewPath', 'save write completed for picked path', {
+      currentDocumentId: id,
+      targetPath: pick.filePath,
+      writeOk: wr.ok,
+      writeReason: wr.ok ? null : wr.reason,
+      writeMtime: wr.ok ? wr.mtimeIso : null,
+      bodyLen: body.length,
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd
+    })
+    // #endregion
     if (!wr.ok) {
       window.alert(`Save failed (${wr.reason}).`)
       return false
@@ -776,6 +977,11 @@ export function bootRenderer(ctx: RendererBootContext): void {
   }, 750)
 
   const scheduleAutosave = debounce(() => {
+    // #region agent log
+    debugLog('N6', 'rendererBoot.ts:scheduleAutosave:fire', 'autosave debounce fired', {
+      currentDocumentId: selectActiveProject(store.getState()).currentDocumentId
+    })
+    // #endregion
     void saveCurrentBuffer()
   }, 1000)
 
@@ -893,6 +1099,16 @@ export function bootRenderer(ctx: RendererBootContext): void {
 
   function syncShellFromStore(): void {
     const st = store.getState()
+    // #region agent log
+    debugLog('H1_H3', 'rendererBoot.ts:syncShellFromStore:entry', 'syncShellFromStore entry', {
+      currentDocumentId: st.currentDocumentId,
+      editorLen: editor.value.length,
+      stateEditorLen: st.editorContent.length,
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd,
+      activeElement: document.activeElement instanceof HTMLElement ? document.activeElement.tagName : 'unknown'
+    })
+    // #endregion
     const projectButtons = [...st.projectsById.entries()]
       .sort((a, b) => {
         if (a[0] === 'default') return -1
@@ -902,12 +1118,13 @@ export function bootRenderer(ctx: RendererBootContext): void {
       .map(([id, project]) => {
         const rawPath = project.workspaceFolderPath?.trim()
         const letter =
-          (rawPath ? pathBasename(rawPath) : id === 'default' ? 'D' : 'P').trim().charAt(0).toUpperCase() ||
+          (rawPath ? pathBasename(rawPath) : id === 'default' ? 'N' : 'P').trim().charAt(0).toUpperCase() ||
           'P'
         const title = rawPath || (id === 'default' ? 'Notepad' : 'Project')
         const activeClass = id === st.activeProjectId ? ' project-rail-btn--active' : ''
+        const notepadClass = id === 'default' ? ' project-rail-btn--notepad' : ''
         const color = project.accentColor || '#6f7684'
-        return `<button type="button" class="project-rail-btn${activeClass}" data-project-id="${id}" title="${title.replace(/"/g, '&quot;')}" style="border-color:${color}">${letter}</button>`
+        return `<button type="button" class="project-rail-btn${activeClass}${notepadClass}" data-project-id="${id}" title="${title.replace(/"/g, '&quot;')}" style="${id === 'default' ? '' : `border-color:${color}`}">${letter}</button>`
       })
       .join('')
     projectsRailList.innerHTML = projectButtons
@@ -921,11 +1138,31 @@ export function bootRenderer(ctx: RendererBootContext): void {
       prevHistoryDocId = project.currentDocumentId
     }
     if (editor.value !== project.editorContent) {
+      // #region agent log
+      debugLog('H1', 'rendererBoot.ts:syncShellFromStore:editorMismatch', 'editor value mismatch before overwrite', {
+        currentDocumentId: project.currentDocumentId,
+        currentDocumentPath: project.currentDocumentId
+          ? project.documentsById.get(project.currentDocumentId)?.path ?? null
+          : null,
+        dirty: isEditorDirty(st),
+        editorLen: editor.value.length,
+        stateEditorLen: project.editorContent.length,
+        selectionStart: editor.selectionStart,
+        selectionEnd: editor.selectionEnd
+      })
+      // #endregion
       suppressHistory = true
       editor.value = project.editorContent
       suppressHistory = false
       scheduleHistoryPush.cancel()
       refreshLineGutter()
+      // #region agent log
+      debugLog('H1', 'rendererBoot.ts:syncShellFromStore:editorOverwriteDone', 'editor value overwritten from state', {
+        editorLen: editor.value.length,
+        selectionStart: editor.selectionStart,
+        selectionEnd: editor.selectionEnd
+      })
+      // #endregion
     }
 
     editor.classList.toggle('editor-field--wrap', st.editorSoftWrap)
@@ -934,6 +1171,24 @@ export function bootRenderer(ctx: RendererBootContext): void {
     if (st.editorLineNumbers) refreshLineGutter()
 
     dirtyIndicator.hidden = !isEditorDirty(st)
+
+    if (project.currentDocumentId) {
+      const currentDoc = project.documentsById.get(project.currentDocumentId)
+      if (currentDoc && !currentDoc.path && (currentDoc.title === 'Untitled' || currentDoc.title.trim() === '')) {
+        const autoTitle = deriveUntitledTitle(project.editorContent)
+        if (currentDoc.title !== autoTitle) {
+          // #region agent log
+          debugLog('H2', 'rendererBoot.ts:syncShellFromStore:updateUntitledTitle', 'dispatch UPDATE_UNTITLED_TITLE', {
+            documentId: project.currentDocumentId,
+            oldTitle: currentDoc.title,
+            newTitle: autoTitle,
+            editorLen: project.editorContent.length
+          })
+          // #endregion
+          store.dispatch({ type: 'UPDATE_UNTITLED_TITLE', documentId: project.currentDocumentId, title: autoTitle })
+        }
+      }
+    }
 
     const pj = JSON.stringify(serializePreferencesFromState(st))
     if (pj !== prevPrefsJson) {
@@ -973,27 +1228,69 @@ export function bootRenderer(ctx: RendererBootContext): void {
     syncSelectsFromState()
     renderRecents(recentsListRoot, st)
 
+    const isDefaultProject = st.activeProjectId === 'default'
+    const activePanelMode = isDefaultProject ? 'recents' : st.panelMode
+    recentsListRoot.hidden = activePanelMode !== 'recents'
+    explorerTreeRoot.hidden = activePanelMode !== 'explorer'
+    const panelTabsHost = root.querySelector<HTMLElement>('.panel-mode-tabs')
+    if (panelTabsHost) {
+      panelTabsHost.hidden = isDefaultProject
+    }
+    for (const btn of panelModeButtons) {
+      const btnMode = btn.dataset.panelMode
+      btn.setAttribute('aria-pressed', btnMode === activePanelMode ? 'true' : 'false')
+      btn.disabled = isDefaultProject
+    }
+
+    if (activePanelMode === 'explorer') {
+      refreshExplorer()
+    }
+
     if (prevSelection !== undefined && prevSelection !== project.currentDocumentId) {
       triggerWorkspaceMotion(workspaceEl)
       void syncWatchPath()
       flushPreviewMaybe()
+      if (project.currentDocumentId) {
+        const snap = project.scrollSnapshots.get(project.currentDocumentId)
+        if (snap) {
+          requestAnimationFrame(() => {
+            setScrollFraction(editor, snap.editorFraction)
+            lineGutter.scrollTop = editor.scrollTop
+            syncEditorHighlightScroll()
+            if (isPreviewAllowed() && snap.previewFraction != null) {
+              setScrollFraction(previewEl, snap.previewFraction)
+            }
+          })
+        }
+      }
     }
     prevSelection = project.currentDocumentId
 
     root.dataset.currentDocId = project.currentDocumentId ?? ''
 
+    refreshGitStatus()
     refreshEditorHighlight()
   }
 
   store.subscribe(syncShellFromStore)
 
   let prevScanFoldersJson = JSON.stringify(store.getState().markdownScanRelativeFolders)
+  let prevExcludeGit = store.getState().excludeGitDirectory
+  let prevExcludeNodeModules = store.getState().excludeNodeModules
   store.subscribe(() => {
     const next = JSON.stringify(store.getState().markdownScanRelativeFolders)
     if (next === prevScanFoldersJson) return
     prevScanFoldersJson = next
     for (const pid of store.getState().projectsById.keys()) {
       void refreshProjectMarkdownRecents(pid)
+    }
+  })
+  store.subscribe(() => {
+    const st = store.getState()
+    if (st.excludeGitDirectory !== prevExcludeGit || st.excludeNodeModules !== prevExcludeNodeModules) {
+      prevExcludeGit = st.excludeGitDirectory
+      prevExcludeNodeModules = st.excludeNodeModules
+      explorerLoadedWorkspace = null
     }
   })
 
@@ -1033,11 +1330,71 @@ export function bootRenderer(ctx: RendererBootContext): void {
   })
 
   editor.addEventListener('input', () => {
+    // #region agent log
+    debugLog('H1_H3_H4', 'rendererBoot.ts:editorInput:beforeDispatch', 'editor input event', {
+      editorLen: editor.value.length,
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd,
+      activeElement: document.activeElement instanceof HTMLElement ? document.activeElement.tagName : 'unknown'
+    })
+    // #endregion
     store.dispatch({ type: 'EDITOR_CHANGE', content: editor.value })
     refreshEditorHighlight()
     schedulePreviewMaybe()
     scheduleHistoryPush()
     scheduleDraftWrite()
+    // #region agent log
+    debugLog('H3_H4', 'rendererBoot.ts:editorInput:afterHandlers', 'editor input handlers completed', {
+      editorLen: editor.value.length,
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd,
+      activeElement: document.activeElement instanceof HTMLElement ? document.activeElement.tagName : 'unknown'
+    })
+    // #endregion
+  })
+
+  editor.addEventListener('beforeinput', (event) => {
+    // #region agent log
+    debugLog('N1_N2', 'rendererBoot.ts:editorBeforeInput', 'editor beforeinput', {
+      inputType: (event as InputEvent).inputType ?? 'unknown',
+      data: (event as InputEvent).data ?? null,
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd,
+      valueLen: editor.value.length
+    })
+    // #endregion
+  })
+
+  editor.addEventListener('keydown', (event) => {
+    // #region agent log
+    debugLog('N1_N2', 'rendererBoot.ts:editorKeyDown', 'editor keydown', {
+      key: event.key,
+      code: event.code,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      shiftKey: event.shiftKey,
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd,
+      valueLen: editor.value.length
+    })
+    // #endregion
+  })
+
+  document.addEventListener('selectionchange', () => {
+    if (document.activeElement !== editor) return
+    const start = editor.selectionStart
+    const end = editor.selectionEnd
+    if (start === lastObservedSelectionStart && end === lastObservedSelectionEnd) return
+    lastObservedSelectionStart = start
+    lastObservedSelectionEnd = end
+    // #region agent log
+    debugLog('N2_N3', 'rendererBoot.ts:selectionChange', 'selection change while editor focused', {
+      selectionStart: start,
+      selectionEnd: end,
+      valueLen: editor.value.length
+    })
+    // #endregion
   })
 
   editor.addEventListener('keydown', (e) => {
@@ -1066,6 +1423,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     suppressPreviewScrollFromSync = true
     syncScrollFractionIfNeeded(previewEl, getScrollFraction(editor))
     releaseScrollSyncSuppression('preview')
+    scheduleScrollCapture()
   })
 
   previewEl.addEventListener('scroll', () => {
@@ -1075,6 +1433,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
     lineGutter.scrollTop = editor.scrollTop
     syncEditorHighlightScroll()
     releaseScrollSyncSuppression('editor')
+    scheduleScrollCapture()
   })
 
   findInput.addEventListener('input', () => refreshFindPatternError())
@@ -1105,6 +1464,15 @@ export function bootRenderer(ctx: RendererBootContext): void {
     const v = groupSelect.value as 'none' | 'folder'
     store.dispatch({ type: 'SET_FILE_LIST_GROUPING', grouping: v })
   })
+
+  for (const btn of panelModeButtons) {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.panelMode
+      if (mode === 'recents' || mode === 'explorer') {
+        applyPanelMode(mode)
+      }
+    })
+  }
 
   recentsListRoot.addEventListener('click', (event) => {
     const target = event.target as HTMLElement | null
@@ -1225,6 +1593,58 @@ export function bootRenderer(ctx: RendererBootContext): void {
   // `contextDocId`, making every context-menu action a no-op (see REMOVE_FROM_RECENTS, etc.).
   document.body.addEventListener('click', () => {
     hideContextMenu()
+    hideExplorerContextMenu()
+  })
+
+  explorerContextMenu.addEventListener('click', (event) => {
+    event.stopPropagation()
+    const btn = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('button[data-action]')
+    if (!btn || btn.disabled || !explorerContextFolderPath) return
+    const folderPath = explorerContextFolderPath
+    hideExplorerContextMenu()
+
+    switch (btn.dataset.action) {
+      case 'explorer-copy-path':
+        void navigator.clipboard.writeText(folderPath)
+        break
+      case 'explorer-copy-relative-path': {
+        const ws = store.getState().workspaceFolderPath?.trim() ?? ''
+        if (!ws) break
+        const rel = folderPath.replace(/\\/g, '/').slice(ws.replace(/\\/g, '/').length + 1)
+        void navigator.clipboard.writeText(rel)
+        break
+      }
+      case 'explorer-create-file': {
+        void runAfterDirtyPrompt(async () => {
+          const raw = window.prompt('New file name', 'untitled.txt')
+          if (raw === null) return
+          const name = raw.trim()
+          if (!name) return
+          const slash = '/'
+          const absPath = folderPath.replace(/\\/g, '/').replace(/\/+$/, '') + slash + name.replace(/[/\\]/g, '')
+          const created = await specOps.writeTextFile({ absolutePath: absPath, content: '' })
+          if (!created.ok) {
+            window.alert(`Could not create file (${created.reason}).`)
+            return
+          }
+          const id = stableDocIdForPath(absPath)
+          store.dispatch({
+            type: 'OPEN_EXPLICIT',
+            document: {
+              id,
+              title: pathBasename(absPath),
+              content: '',
+              path: absPath,
+              lastModified: created.mtimeIso,
+              saveIntentDirectory: folderPath
+            }
+          })
+          explorerLoadedWorkspace = null
+          flushPreviewMaybe()
+        })
+        break
+      }
+    }
   })
 
   document.body.addEventListener('keydown', (e) => {
@@ -1236,6 +1656,7 @@ export function bootRenderer(ctx: RendererBootContext): void {
       return
     }
     hideContextMenu()
+    hideExplorerContextMenu()
   })
 
   for (const btn of modeButtons) {
@@ -1374,11 +1795,32 @@ export function bootRenderer(ctx: RendererBootContext): void {
   )
 
   specOps.onExternalFileChanged((payload) => {
+    // #region agent log
+    debugLog('N3', 'rendererBoot.ts:onExternalFileChanged', 'external file changed event', {
+      changedPath: payload.path,
+      payloadLen: payload.content.length,
+      payloadMtime: payload.mtimeIso
+    })
+    // #endregion
     const st = store.getState()
     const project = selectActiveProject(st)
     const docId = documentIdForAbsolutePath(st, payload.path)
     if (!docId) return
     const isCurrent = project.currentDocumentId === docId
+    // #region agent log
+    debugLog('H6', 'rendererBoot.ts:onExternalFileChanged:decision', 'external change decision flags', {
+      changedPath: payload.path,
+      mappedDocId: docId,
+      currentDocumentId: project.currentDocumentId,
+      isCurrent,
+      isDirty: isEditorDirty(st),
+      payloadEqualsEditor: payload.content === project.editorContent,
+      editorLen: project.editorContent.length,
+      payloadLen: payload.content.length,
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd
+    })
+    // #endregion
     if (isCurrent && isEditorDirty(st)) {
       if (payload.content === project.editorContent) {
         return
@@ -1391,6 +1833,15 @@ export function bootRenderer(ctx: RendererBootContext): void {
       setExternalFileBannerVisible(true)
       return
     }
+    // #region agent log
+    debugLog('H6', 'rendererBoot.ts:onExternalFileChanged:dispatchSync', 'dispatch SYNC_DOCUMENT_FROM_DISK from external change', {
+      documentId: docId,
+      changedPath: payload.path,
+      isCurrent,
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd
+    })
+    // #endregion
     store.dispatch({
       type: 'SYNC_DOCUMENT_FROM_DISK',
       documentId: docId,

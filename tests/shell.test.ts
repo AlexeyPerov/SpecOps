@@ -254,4 +254,38 @@ describe('UPH-01 shell (TEST-02 harness)', () => {
     expect(splitBtn.hidden).toBe(false)
     expect(previewBtn.hidden).toBe(false)
   })
+
+  it('shows Notepad default project badge and hides panel mode tabs', async () => {
+    const root = document.getElementById('app')!
+    bootRenderer({
+      root,
+      store: createAppStore(),
+      services: createAppServices(),
+      specOps: mockSpecOps
+    })
+
+    const notepadBtn = document.querySelector<HTMLButtonElement>(
+      '.project-rail-btn[data-project-id="default"]'
+    )
+    expect(notepadBtn).toBeTruthy()
+    expect(notepadBtn!.textContent).toBe('N')
+    expect(notepadBtn!.classList.contains('project-rail-btn--notepad')).toBe(true)
+
+    const panelTabs = document.querySelector<HTMLElement>('.panel-mode-tabs')
+    expect(panelTabs).toBeTruthy()
+    expect(panelTabs!.hidden).toBe(true)
+  })
+
+  it('renders recents heading controls in two rows', () => {
+    const root = document.getElementById('app')!
+    bootRenderer({
+      root,
+      store: createAppStore(),
+      services: createAppServices(),
+      specOps: mockSpecOps
+    })
+
+    expect(document.querySelector('.recents-heading-top')).toBeTruthy()
+    expect(document.querySelector('.recents-heading-bottom')).toBeTruthy()
+  })
 })

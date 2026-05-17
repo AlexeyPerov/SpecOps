@@ -1,4 +1,4 @@
-import type { AppState, Document } from './types'
+import type { AppState, Document, ScrollSnapshot } from './types'
 import {
   chatStateFromPersisted,
   chatStateToPersisted,
@@ -33,8 +33,9 @@ export interface PreferencesPersistedV1 {
   readonly editorFontSizePx: number
   readonly previewFontSizePx: number
   readonly recentsPaneWidthPx: number
-  /** Relative subfolders under each project workspace to scan for markdown recents (recursive). */
   readonly markdownScanRelativeFolders: readonly string[]
+  readonly excludeGitDirectory?: boolean
+  readonly excludeNodeModules?: boolean
 }
 
 export interface SessionDocumentPersistedV1 {
@@ -44,6 +45,7 @@ export interface SessionDocumentPersistedV1 {
   readonly lastModified: string | null
   readonly lastOpened: string
   readonly content: string
+  readonly saveIntentDirectory?: string | null
 }
 
 export interface SessionProjectPersistedV1 {
@@ -56,8 +58,9 @@ export interface SessionProjectPersistedV1 {
   readonly recentDocumentIds: readonly string[]
   readonly documents: readonly SessionDocumentPersistedV1[]
   readonly currentDocumentId: string | null
-  /** Optional stub chat snapshot; omitted in older v2 files. */
   readonly chat?: ChatStatePersistedV1
+  readonly panelMode?: AppState['panelMode']
+  readonly scrollSnapshots?: Readonly<Record<string, ScrollSnapshot>>
 }
 
 export interface SessionPersistedV1 {
@@ -79,7 +82,9 @@ export const DEFAULT_PREFERENCES_V1: PreferencesPersistedV1 = {
   editorFontSizePx: 13,
   previewFontSizePx: 16,
   recentsPaneWidthPx: 260,
-  markdownScanRelativeFolders: ['specs']
+  markdownScanRelativeFolders: ['specs'],
+  excludeGitDirectory: true,
+  excludeNodeModules: true
 }
 
 /** Merge persisted prefs onto baseline AppState (session/doc fields unchanged). */
@@ -117,7 +122,9 @@ export function mergePreferencesIntoState(base: AppState, prefs: PreferencesPers
     recentsPaneWidthPx: prefs.recentsPaneWidthPx,
     markdownScanRelativeFolders: sanitizeMarkdownScanRelativeFolders(
       prefs.markdownScanRelativeFolders ?? DEFAULT_PREFERENCES_V1.markdownScanRelativeFolders
-    )
+    ),
+    excludeGitDirectory: prefs.excludeGitDirectory ?? true,
+    excludeNodeModules: prefs.excludeNodeModules ?? true
   }
 }
 
@@ -139,7 +146,8 @@ export function mergeSessionIntoState(
         path: d.path,
         lastModified: d.lastModified,
         lastOpened: d.lastOpened,
-        content: d.content
+        content: d.content,
+        saveIntentDirectory: d.saveIntentDirectory ?? null
       }
       documentsById.set(d.id, doc)
     }
@@ -165,7 +173,9 @@ export function mergeSessionIntoState(
           : '#6f7684',
       fileListSort: project.fileListSort,
       fileListGrouping: project.fileListGrouping,
-      expandedFolderGroups: [...project.expandedFolderGroups]
+      expandedFolderGroups: [...project.expandedFolderGroups],
+      panelMode: project.panelMode === 'explorer' ? 'explorer' : 'recents',
+      scrollSnapshots: new Map(Object.entries(project.scrollSnapshots ?? {}))
     })
   }
 
@@ -185,7 +195,9 @@ export function mergeSessionIntoState(
     workspaceFolderPath: activeProject.workspaceFolderPath,
     fileListSort: activeProject.fileListSort,
     fileListGrouping: activeProject.fileListGrouping,
-    expandedFolderGroups: activeProject.expandedFolderGroups
+    expandedFolderGroups: activeProject.expandedFolderGroups,
+    panelMode: activeProject.panelMode,
+    scrollSnapshots: activeProject.scrollSnapshots
   }
 }
 
@@ -205,7 +217,8 @@ export function serializeSessionFromState(state: AppState): SessionPersistedV1 {
         path: doc.path,
         lastModified: doc.lastModified,
         lastOpened: doc.lastOpened,
-        content: doc.content
+        content: doc.content,
+        saveIntentDirectory: doc.saveIntentDirectory ?? undefined
       })
     }
     projects.push({
@@ -218,7 +231,9 @@ export function serializeSessionFromState(state: AppState): SessionPersistedV1 {
       recentDocumentIds: [...project.recentDocumentIds],
       documents,
       currentDocumentId: project.currentDocumentId,
-      chat: chatStateToPersisted(project.chat)
+      chat: chatStateToPersisted(project.chat),
+      panelMode: project.panelMode,
+      scrollSnapshots: Object.fromEntries(project.scrollSnapshots.entries())
     })
   }
   return {
@@ -250,7 +265,9 @@ export function serializePreferencesFromState(state: AppState): PreferencesPersi
       DEFAULT_PREFERENCES_V1.previewFontSizePx
     ),
     recentsPaneWidthPx: state.recentsPaneWidthPx,
-    markdownScanRelativeFolders: [...state.markdownScanRelativeFolders]
+    markdownScanRelativeFolders: [...state.markdownScanRelativeFolders],
+    excludeGitDirectory: state.excludeGitDirectory,
+    excludeNodeModules: state.excludeNodeModules
   }
 }
 

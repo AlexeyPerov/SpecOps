@@ -20,3 +20,14 @@ export function replaceBasename(absolutePath: string, newBasename: string): stri
   }
   return `${prefixSlash}/${newBasename}`
 }
+
+export function deriveUntitledTitle(content: string): string {
+  const lines = content.split('\n')
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.length > 0) {
+      return trimmed.length > 60 ? trimmed.slice(0, 60) : trimmed
+    }
+  }
+  return 'Untitled'
+}

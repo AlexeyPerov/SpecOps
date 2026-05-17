@@ -1,8 +1,8 @@
-import { promises as fs } from 'node:fs'
+import { promises as fs, readdirSync, type Dirent } from 'node:fs'
 import { dirname, isAbsolute, join, normalize, relative, resolve } from 'node:path'
 import type { BrowserWindow, Dialog, IpcMain, Shell } from 'electron'
 
-import { SPEC_OPS_IPC } from '../../ipc/specOpsIpc'
+import { SPEC_OPS_IPC, type TreeNode } from '../../ipc/specOpsIpc'
 
 function safeMarkdownBasename(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
@@ -97,5 +97,54 @@ export function registerWorkspaceHandlers(
     }
     out.sort((a, b) => a.localeCompare(b))
     return out
+  })
+
+  ipc.handle(SPEC_OPS_IPC.listProjectTree, async (_evt, payload: {
+    rootPath: unknown
+    excludeGitDirectory?: unknown
+    excludeNodeModules?: unknown
+  }) => {
+    const rootPath = payload?.rootPath
+    if (typeof rootPath !== 'string' || !rootPath.trim()) return []
+    const rootDir = resolve(rootPath)
+    const excludeGit = payload.excludeGitDirectory !== false
+    const excludeNodeModules = payload.excludeNodeModules !== false
+
+    function buildTree(dir: string, depth: number): TreeNode[] {
+      if (depth > 20) return []
+      let entries: Dirent[]
+      try {
+        entries = readdirSync(dir, { withFileTypes: true }) as Dirent[]
+      } catch {
+        return []
+      }
+      const result: TreeNode[] = []
+      const dirs: { name: string; abs: string }[] = []
+
+      for (const entry of entries) {
+        const name = entry.name as string
+        if (excludeGit && name === '.git') continue
+        if (excludeNodeModules && name === 'node_modules') continue
+        const abs = normalize(join(dir, name))
+        if (entry.isDirectory()) {
+          dirs.push({ name, abs })
+        } else if (entry.isFile()) {
+          result.push({ name, absolutePath: abs, isDirectory: false, children: [] })
+        }
+      }
+
+      dirs.sort((a, b) => a.name.localeCompare(b.name))
+      result.sort((a, b) => a.name.localeCompare(b.name))
+
+      const dirNodes: TreeNode[] = []
+      for (const { name, abs } of dirs) {
+        const children = buildTree(abs, depth + 1)
+        dirNodes.push({ name, absolutePath: abs, isDirectory: true, children })
+      }
+
+      return [...dirNodes, ...result]
+    }
+
+    return buildTree(rootDir, 0)
   })
 }

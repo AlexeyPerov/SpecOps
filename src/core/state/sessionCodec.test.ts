@@ -44,7 +44,8 @@ describe('sessionCodec (TEST-10 helpers)', () => {
       content: 'baseline',
       lastOpened: '2026-01-01T00:00:00.000Z',
       path: '/virtual/p.md',
-      lastModified: null as string | null
+      lastModified: null as string | null,
+      saveIntentDirectory: null as string | null
     }
     let s = createInitialAppState()
     const active = s.projectsById.get(s.activeProjectId)!
@@ -224,5 +225,52 @@ describe('sessionCodec (TEST-10 helpers)', () => {
     expect(out).toHaveLength(1)
     expect(out[0]?.id).toBe('2')
     expect(out[0]?.content).toBe('from-disk')
+  })
+
+  it('mergePreferencesIntoState defaults excludeGitDirectory and excludeNodeModules to true when absent', () => {
+    const base = createInitialAppState()
+    const prefs = {
+      ...DEFAULT_PREFERENCES_V1,
+      excludeGitDirectory: undefined,
+      excludeNodeModules: undefined
+    } as unknown as import('../core/state/sessionCodec').PreferencesPersistedV1
+    const next = mergePreferencesIntoState(base, prefs)
+    expect(next.excludeGitDirectory).toBe(true)
+    expect(next.excludeNodeModules).toBe(true)
+  })
+
+  it('mergeSessionIntoState restores scroll snapshots', () => {
+    const base = createInitialAppState()
+    const merged = mergeSessionIntoState(base, {
+      version: 2,
+      activeProjectId: 'default',
+      projects: [
+        {
+          projectId: 'default',
+          workspaceFolderPath: null,
+          fileListSort: 'lastOpened',
+          fileListGrouping: 'none',
+          expandedFolderGroups: [],
+          recentDocumentIds: [],
+          currentDocumentId: null,
+          documents: [],
+          scrollSnapshots: { 'doc-a': { editorFraction: 0.5, previewFraction: 0.3 } }
+        }
+      ]
+    })
+    const snap = merged.scrollSnapshots.get('doc-a')
+    expect(snap).toEqual({ editorFraction: 0.5, previewFraction: 0.3 })
+  })
+
+  it('serializeSessionFromState round-trip preserves scroll snapshots', () => {
+    let s = createInitialAppState()
+    s = reduceAppState(
+      s,
+      { type: 'SET_SCROLL_SNAPSHOT', documentId: 'x', snapshot: { editorFraction: 0.42 } },
+      '2026-01-01T00:00:00.000Z'
+    )
+    const blob = serializeSessionFromState(s)
+    const proj = blob.projects[0]!
+    expect(proj.scrollSnapshots?.['x']).toEqual({ editorFraction: 0.42 })
   })
 })

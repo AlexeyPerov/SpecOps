@@ -52,6 +52,8 @@ async function boot(): Promise<void> {
   const previewFontSizeEl = document.querySelector<HTMLInputElement>('#setting-preview-font-size')!
   const clearProjectsBtn = document.querySelector<HTMLButtonElement>('#clear-projects')!
   const scanFoldersEl = document.querySelector<HTMLTextAreaElement>('#setting-scan-folders')!
+  const excludeGitEl = document.querySelector<HTMLInputElement>('#setting-exclude-git')!
+  const excludeNodeModulesEl = document.querySelector<HTMLInputElement>('#setting-exclude-node-modules')!
   wrapEl.checked = prefs.editorSoftWrap
   autosaveEl.checked = prefs.autosaveEnabled
   themeEl.value = prefs.themeMode
@@ -66,6 +68,8 @@ async function boot(): Promise<void> {
     sanitizeFontSizePx(prefs.previewFontSizePx, DEFAULT_PREFERENCES_V1.previewFontSizePx)
   )
   scanFoldersEl.value = prefs.markdownScanRelativeFolders.join('\n')
+  excludeGitEl.checked = prefs.excludeGitDirectory ?? true
+  excludeNodeModulesEl.checked = prefs.excludeNodeModules ?? true
 
   const persist = async (): Promise<void> => {
     const latest = await specOps.readPreferences()
@@ -87,7 +91,9 @@ async function boot(): Promise<void> {
         Number(previewFontSizeEl.value),
         DEFAULT_PREFERENCES_V1.previewFontSizePx
       ),
-      markdownScanRelativeFolders: [...sanitizeMarkdownScanFolderLines(scanFoldersEl.value)]
+      markdownScanRelativeFolders: [...sanitizeMarkdownScanFolderLines(scanFoldersEl.value)],
+      excludeGitDirectory: excludeGitEl.checked,
+      excludeNodeModules: excludeNodeModulesEl.checked
     })
     applyDocumentTheme(themeEl.value as PreferencesPersistedV1['themeMode'])
     specOps.notifyPreferencesChanged()
@@ -100,6 +106,8 @@ async function boot(): Promise<void> {
   editorFontSizeEl.addEventListener('change', () => void persist())
   previewFontSizeEl.addEventListener('change', () => void persist())
   scanFoldersEl.addEventListener('change', () => void persist())
+  excludeGitEl.addEventListener('change', () => void persist())
+  excludeNodeModulesEl.addEventListener('change', () => void persist())
   clearProjectsBtn.addEventListener('click', () => {
     void (async () => {
       const confirmed = window.confirm('Clear all added projects and keep only Notepad?')

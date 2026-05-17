@@ -64,6 +64,14 @@
           <span class="settings-stack-hint">Relative to each project folder; one path per line. Nested markdown files under each root are included.</span>
           <textarea id="setting-scan-folders" class="settings-textarea" rows="5" spellcheck="false"></textarea>
         </label>
+        <label class="settings-row">
+          <input type="checkbox" id="setting-exclude-git" />
+          <span>Exclude .git from explorer</span>
+        </label>
+        <label class="settings-row">
+          <input type="checkbox" id="setting-exclude-node-modules" />
+          <span>Exclude node_modules from explorer</span>
+        </label>
       </div>
     </main>
     <script type="module" src="./settingsMain.ts"></script>

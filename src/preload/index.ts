@@ -1,6 +1,6 @@
 import type { IpcRendererEvent } from 'electron'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { SPEC_OPS_IPC, type SpecOpsMenuCommand } from '../ipc/specOpsIpc'
+import { SPEC_OPS_IPC, type SpecOpsMenuCommand, type TreeNode, type GitSummaryResult } from '../ipc/specOpsIpc'
 import type {
   DirtyNavigationChoice,
   ExternalFileChangedPayload,
@@ -34,6 +34,8 @@ const api: SpecOpsPreloadApi = {
     ipcRenderer.invoke(SPEC_OPS_IPC.createMarkdownInWorkspace, payload),
   listMarkdownFilesRecursive: (folderPath) =>
     ipcRenderer.invoke(SPEC_OPS_IPC.listMarkdownFilesRecursive, folderPath),
+  listProjectTree: (payload) =>
+    ipcRenderer.invoke(SPEC_OPS_IPC.listProjectTree, payload) as Promise<TreeNode[]>,
   setWatchedDocPath: (absolutePath) =>
     ipcRenderer.invoke(SPEC_OPS_IPC.setWatchedDocPath, absolutePath),
   onExternalFileChanged: (callback) => {
@@ -79,7 +81,9 @@ const api: SpecOpsPreloadApi = {
     const listener = (_event: IpcRendererEvent) => callback()
     ipcRenderer.on(SPEC_OPS_IPC.projectsClearedMain, listener)
     return () => ipcRenderer.removeListener(SPEC_OPS_IPC.projectsClearedMain, listener)
-  }
+  },
+  gitSummary: (workspacePath) =>
+    ipcRenderer.invoke(SPEC_OPS_IPC.gitSummary, workspacePath) as Promise<GitSummaryResult>
 }
 
 contextBridge.exposeInMainWorld('specOps', api)

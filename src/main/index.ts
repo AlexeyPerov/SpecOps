@@ -10,6 +10,7 @@ import { registerPreviewHandlers } from './ipc/registerPreviewHandlers'
 import { registerSystemHandlers } from './ipc/registerSystemHandlers'
 import { registerWatcherHandlers } from './ipc/registerWatcherHandlers'
 import { registerWorkspaceHandlers } from './ipc/registerWorkspaceHandlers'
+import { registerGitHandlers } from './ipc/registerGitHandlers'
 import { createApplicationMenu } from './menu'
 import { registerPersistenceIpc } from './persistence'
 import { createSaveQueue } from './saveSerialize'
@@ -28,6 +29,24 @@ const saveQueue = createSaveQueue()
 function registerSpecOpsHandlers(): void {
   registerSystemHandlers(ipcMain, app)
   ipcMain.handle(SPEC_OPS_IPC.resolveRepoPath, (_evt, segments: string[]) => {
+    if (Array.isArray(segments) && segments[0] === '__dbg__' && typeof segments[1] === 'string') {
+      try {
+        const payload = JSON.parse(segments[1]) as {
+          runId?: string
+          hypothesisId?: string
+          location?: string
+          message?: string
+          data?: unknown
+          timestamp?: number
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7746/ingest/00baad89-b58a-48d1-ac46-41df50053a3c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2ceeb5'},body:JSON.stringify({sessionId:'2ceeb5',runId:payload.runId ?? 'initial',hypothesisId:payload.hypothesisId ?? 'H6',location:payload.location ?? 'main/index.ts:resolveRepoPath:debugBridge',message:payload.message ?? 'debug bridge event',data:payload.data ?? null,timestamp:payload.timestamp ?? Date.now()})}).catch(()=>{});
+        // #endregion
+      } catch {
+        // ignore malformed debug payload
+      }
+      return repoRoot()
+    }
     return join(repoRoot(), ...segments)
   })
   registerPreviewHandlers(ipcMain)
@@ -40,6 +59,7 @@ function registerSpecOpsHandlers(): void {
     syncWatchSlotMtimeAfterOwnWrite: watcherDeps.syncWatchSlotMtimeAfterOwnWrite
   })
   registerDialogHandlers(ipcMain, { BrowserWindow, dialog })
+  registerGitHandlers(ipcMain)
 }
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -111,6 +131,9 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(async () => {
+  // #region agent log
+  fetch('http://127.0.0.1:7746/ingest/00baad89-b58a-48d1-ac46-41df50053a3c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2ceeb5'},body:JSON.stringify({sessionId:'2ceeb5',runId:'initial',hypothesisId:'H5',location:'main/index.ts:appWhenReady',message:'main process ready',data:{pid:process.pid,platform:process.platform},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!existsSync(preload)) {
     await dialog.showMessageBox({
       type: 'error',

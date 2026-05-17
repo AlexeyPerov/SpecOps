@@ -12,7 +12,9 @@ export function selectActiveProject(state: AppState): ProjectState {
     accentColor: '#6f7684',
     fileListSort: 'lastOpened',
     fileListGrouping: 'folder',
-    expandedFolderGroups: []
+    expandedFolderGroups: [],
+    panelMode: 'recents' as const,
+    scrollSnapshots: new Map()
   }
 }
 

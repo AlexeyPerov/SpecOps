@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest'
 import type { DocumentInput } from './types'
 import { createInitialAppState, reduceAppState } from './transitions'
 
-function doc(partial: DocumentInput & { id: string }): DocumentInput {
+function doc(partial: Partial<DocumentInput> & { id: string }): DocumentInput {
   return {
+    ...partial,
     title: partial.title ?? 't',
     content: partial.content ?? '',
     path: partial.path ?? null,
     lastModified: partial.lastModified ?? null,
-    ...partial
+    saveIntentDirectory: partial.saveIntentDirectory ?? null
   }
 }
 
@@ -111,5 +112,58 @@ describe('reduceAppState', () => {
     state = reduceAppState(state, { type: 'REMOVE_PROJECT', projectId: 'p2' }, t2)
     expect(state.projectsById.has('p2')).toBe(false)
     expect(state.activeProjectId).toBe('default')
+  })
+
+  it('SET_PANEL_MODE updates per-project panel mode', () => {
+    let state = createInitialAppState()
+    expect(state.panelMode).toBe('recents')
+    state = reduceAppState(state, { type: 'SET_PANEL_MODE', mode: 'explorer' }, t0)
+    expect(state.panelMode).toBe('explorer')
+    expect(state.projectsById.get(state.activeProjectId)?.panelMode).toBe('explorer')
+  })
+
+  it('UPDATE_UNTITLED_TITLE renames untitled doc without path', () => {
+    let state = createInitialAppState()
+    state = reduceAppState(state, { type: 'OPEN_EXPLICIT', document: doc({ id: 'a', title: 'Untitled', content: 'hello' }) }, t0)
+    expect(state.documentsById.get('a')?.title).toBe('Untitled')
+    state = reduceAppState(state, { type: 'UPDATE_UNTITLED_TITLE', documentId: 'a', title: 'hello' }, t1)
+    expect(state.documentsById.get('a')?.title).toBe('hello')
+  })
+
+  it('UPDATE_UNTITLED_TITLE is no-op for docs with path', () => {
+    let state = createInitialAppState()
+    state = reduceAppState(state, { type: 'OPEN_EXPLICIT', document: doc({ id: 'a', title: 'MyDoc', content: 'x', path: '/tmp/a.md' }) }, t0)
+    state = reduceAppState(state, { type: 'UPDATE_UNTITLED_TITLE', documentId: 'a', title: 'new' }, t1)
+    expect(state.documentsById.get('a')?.title).toBe('MyDoc')
+  })
+
+  it('REPARENT_DOCUMENT clears saveIntentDirectory', () => {
+    let state = createInitialAppState()
+    state = reduceAppState(state, { type: 'OPEN_EXPLICIT', document: doc({ id: 'a', title: 'Untitled', content: 'x', saveIntentDirectory: '/tmp/dir' }) }, t0)
+    expect(state.documentsById.get('a')?.saveIntentDirectory).toBe('/tmp/dir')
+    state = reduceAppState(state, { type: 'REPARENT_DOCUMENT', oldDocumentId: 'a', newAbsolutePath: '/tmp/dir/saved.md', content: 'x', lastModified: t1 }, t1)
+    const newId = '/tmp/dir/saved.md'.replace(/\\/g, '/')
+    expect(state.documentsById.get(newId)?.saveIntentDirectory).toBeNull()
+  })
+
+  it('SET_SCROLL Snapshot stores per-document scroll', () => {
+    let state = createInitialAppState()
+    state = reduceAppState(state, { type: 'OPEN_EXPLICIT', document: doc({ id: 'a', content: 'A' }) }, t0)
+    state = reduceAppState(state, { type: 'SET_SCROLL_SNAPSHOT', documentId: 'a', snapshot: { editorFraction: 0.5, previewFraction: 0.3 } }, t1)
+    expect(state.scrollSnapshots.get('a')).toEqual({ editorFraction: 0.5, previewFraction: 0.3 })
+  })
+
+  it('SET_EXCLUDE_GIT_DIRECTORY updates global setting', () => {
+    let state = createInitialAppState()
+    expect(state.excludeGitDirectory).toBe(true)
+    state = reduceAppState(state, { type: 'SET_EXCLUDE_GIT_DIRECTORY', enabled: false }, t0)
+    expect(state.excludeGitDirectory).toBe(false)
+  })
+
+  it('SET_EXCLUDE_NODE_MODULES updates global setting', () => {
+    let state = createInitialAppState()
+    expect(state.excludeNodeModules).toBe(true)
+    state = reduceAppState(state, { type: 'SET_EXCLUDE_NODE_MODULES', enabled: false }, t0)
+    expect(state.excludeNodeModules).toBe(false)
   })
 })

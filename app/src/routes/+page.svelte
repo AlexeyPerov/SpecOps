@@ -11,10 +11,23 @@
   import { appState } from "../lib/state/appState";
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
   import { openPath } from "../lib/services/fileSystem";
+import { listen, TauriEvent } from "@tauri-apps/api/event";
+  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import {
+    WINDOW_EVENT_ACTIVATE_FILE,
+    WINDOW_EVENT_TRANSFER_TAB,
+    markWindowActive,
+    routePathToLastActiveWindow,
+  } from "../lib/services/windowManager";
+  import {
+    restoreWindowSession,
+    scheduleSessionPersistence,
+  } from "../lib/services/sessionManager";
 
   let settingsPaneOpen = false;
   let statusMessage = "Ready";
   let editorRunner: EditorCommandRunner | null = null;
+  let currentWindowId = "main";
 
   $: state = $appState;
   $: activeTab = state.session.openTabs.find(
@@ -41,15 +54,68 @@
     });
   }
 
-  async function setupRuntime(): Promise<void> {
+  async function setupRuntime(): Promise<() => void> {
+    const currentWindow = getCurrentWebviewWindow();
+    currentWindowId = currentWindow.label;
     appState.initializeTheme();
     await initializeLogging();
+    await markWindowActive(currentWindowId);
+
+    const restoredSession = await restoreWindowSession(currentWindowId);
+    if (restoredSession) {
+      appState.applyWindowSession(restoredSession);
+      statusMessage = "Session restored.";
+    }
+
+    await currentWindow.onFocusChanged(async ({ payload }) => {
+      if (payload) {
+        await markWindowActive(currentWindowId);
+      }
+    });
+
+    await listen<{ path: string }>(WINDOW_EVENT_ACTIVATE_FILE, async (event) => {
+      const path = event.payload.path;
+      try {
+        const opened = await openPath(path);
+        if (opened.sizeBytes > 10 * 1024 * 1024) {
+          notify("Open failed: file exceeds 10MB MVP limit.");
+          return;
+        }
+        appState.openFileInTab(opened.path, opened.content);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        notify(`Failed to open routed file: ${message}`);
+      }
+    });
+
+    await listen<{ filePath: string | null; content: string; title: string }>(
+      WINDOW_EVENT_TRANSFER_TAB,
+      async (event) => {
+        appState.openTransferredTab(event.payload);
+      },
+    );
+
+    const unlistenDestroyed = await listen(TauriEvent.WINDOW_DESTROYED, async () => {
+      await logDiagnostic({
+        level: "warn",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "window destroyed",
+        metadata: { windowId: currentWindowId },
+      });
+    });
+
     await logDiagnostic({
       level: "info",
       source: "frontend",
       timestamp: new Date().toISOString(),
       message: "app shell initialized",
+      metadata: { windowId: currentWindowId },
     });
+
+    return () => {
+      unlistenDestroyed();
+    };
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -70,13 +136,24 @@
   }
 
   onMount(() => {
-    void setupRuntime();
+    let runtimeCleanup: (() => void) | undefined;
+    void setupRuntime().then((cleanup) => {
+      runtimeCleanup = cleanup;
+    });
 
     const search = new URLSearchParams(window.location.search);
     const openParam = search.get("open");
     if (openParam) {
-      void openPath(openParam)
-        .then((opened) => {
+      void routePathToLastActiveWindow(openParam)
+        .then(() => {
+          notify("File open routed to last active window.");
+        })
+        .catch(async () => {
+          const self = getCurrentWebviewWindow().label;
+          if (self !== "main") {
+            return;
+          }
+          const opened = await openPath(openParam);
           if (opened.sizeBytes > 10 * 1024 * 1024) {
             notify("Open failed: file exceeds 10MB MVP limit.");
             return;
@@ -95,9 +172,14 @@
 
     window.addEventListener("keydown", onKeydown);
     return () => {
+      runtimeCleanup?.();
       window.removeEventListener("keydown", onKeydown);
     };
   });
+
+  $: if (state) {
+    scheduleSessionPersistence(state, currentWindowId);
+  }
 </script>
 
 <main class="shell">
@@ -129,6 +211,12 @@
     <div class="header-right">
       <button class="toolbar-button" type="button" onclick={() => runCommand("file.open")}>
         Open
+      </button>
+      <button class="toolbar-button" type="button" onclick={() => runCommand("app.newWindow")}>
+        New Window
+      </button>
+      <button class="toolbar-button" type="button" onclick={() => runCommand("tab.moveToNewWindow")}>
+        Move Tab
       </button>
       <button class="toolbar-button" type="button" onclick={() => runCommand("file.save")}>
         Save

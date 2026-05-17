@@ -4,6 +4,7 @@ import { appState } from "../state/appState";
 import { logDiagnostic } from "../services/logging";
 import type { EditorCommandRunner } from "../types/editor";
 import { openFileDialog, renameFile, saveFile, saveFileAs } from "../services/fileSystem";
+import { createNewWindowWithTransfer } from "../services/windowManager";
 
 type CommandContext = {
   setSettingsPaneOpen: (next: boolean) => void;
@@ -29,6 +30,7 @@ const keyBindingsByPlatform: Record<string, string> = {
   "Meta+Shift+s": "file.saveAs",
   "Meta+Alt+s": "file.saveAll",
   "Meta+w": "tab.close",
+  "Meta+Shift+n": "app.newWindow",
   "Meta+Shift+]": "tab.next",
   "Meta+Shift+[": "tab.previous",
   "Meta+z": "edit.undo",
@@ -51,6 +53,7 @@ const keyBindingsByPlatform: Record<string, string> = {
   "Ctrl+Shift+s": "file.saveAs",
   "Ctrl+Alt+s": "file.saveAll",
   "Ctrl+w": "tab.close",
+  "Ctrl+Shift+n": "app.newWindow",
   "Ctrl+tab": "tab.next",
   "Ctrl+Shift+tab": "tab.previous",
   "Ctrl+z": "edit.undo",
@@ -71,6 +74,12 @@ export const commandDefinitions: CommandDefinition[] = [
     label: "Toggle Settings Pane",
     menuPath: "View/Settings Pane",
     binding: { mac: "Cmd+,", windows: "Ctrl+," },
+  },
+  {
+    id: "app.newWindow",
+    label: "New Window",
+    menuPath: "File/New Window",
+    binding: { mac: "Cmd+Shift+N", windows: "Ctrl+Shift+N" },
   },
   {
     id: "view.toggleTheme",
@@ -119,6 +128,12 @@ export const commandDefinitions: CommandDefinition[] = [
     label: "Close Tab",
     menuPath: "Tab/Close",
     binding: { mac: "Cmd+W", windows: "Ctrl+W" },
+  },
+  {
+    id: "tab.moveToNewWindow",
+    label: "Move Tab To New Window",
+    menuPath: "Tab/Move To New Window",
+    binding: { mac: "none", windows: "none" },
   },
   {
     id: "tab.next",
@@ -209,6 +224,10 @@ export const commandDefinitions: CommandDefinition[] = [
 const handlers: Record<AppCommandId, CommandHandler> = {
   "app.toggleSettingsPane": ({ isSettingsPaneOpen, setSettingsPaneOpen }) => {
     setSettingsPaneOpen(!isSettingsPaneOpen());
+  },
+  "app.newWindow": async ({ getState, notify }) => {
+    await createNewWindowWithTransfer(getState(), null);
+    notify("Opened new window.");
   },
   "view.toggleTheme": () => {
     appState.toggleTheme();
@@ -327,6 +346,15 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     }
     appState.closeTab(selectedTab.id);
     notify("Tab closed.");
+  },
+  "tab.moveToNewWindow": async ({ notify }) => {
+    const transfer = appState.transferActiveTabOut();
+    if (!transfer) {
+      notify("No active tab to transfer.");
+      return;
+    }
+    await createNewWindowWithTransfer(appState.getSnapshot(), transfer);
+    notify("Transferred tab to new window.");
   },
   "tab.next": ({ getState }) => {
     const state = getState();

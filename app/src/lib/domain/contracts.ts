@@ -36,6 +36,7 @@ export interface AppSettingsState {
 
 export type AppCommandId =
   | "app.toggleSettingsPane"
+  | "app.newWindow"
   | "view.toggleTheme"
   | "file.new"
   | "file.open"
@@ -44,6 +45,7 @@ export type AppCommandId =
   | "file.saveAll"
   | "file.rename"
   | "tab.close"
+  | "tab.moveToNewWindow"
   | "tab.next"
   | "tab.previous"
   | "edit.undo"
@@ -92,4 +94,18 @@ export interface AppDomainState {
     zoomPercent: number;
     wrapLines: boolean;
   };
+}
+
+export interface WindowSessionSnapshot {
+  documents: DocumentState[];
+  session: SessionState;
+  recentFiles: string[];
+  editor: AppDomainState["editor"];
+}
+
+export interface AppSessionSnapshot {
+  version: 1;
+  updatedAt: string;
+  lastActiveWindowId: string;
+  windows: Record<string, WindowSessionSnapshot>;
 }

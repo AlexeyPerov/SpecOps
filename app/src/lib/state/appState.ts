@@ -5,6 +5,7 @@ import type {
   AppSettingsState,
   DocumentState,
   DocumentIdentity,
+  WindowSessionSnapshot,
   ThemeMode,
 } from "../domain/contracts";
 
@@ -97,6 +98,14 @@ function createStateStore() {
 
   return {
     subscribe,
+    getSnapshot() {
+      let snapshot = initialState;
+      const un = subscribe((state) => {
+        snapshot = state;
+      });
+      un();
+      return snapshot;
+    },
     toggleTheme() {
       update((state) => {
         const themeMode: ThemeMode =
@@ -122,6 +131,28 @@ function createStateStore() {
     resetWorkspace() {
       set(initialState);
       applyTheme(initialState.settings);
+    },
+    applyWindowSession(snapshot: WindowSessionSnapshot) {
+      docCounter = Math.max(
+        1,
+        ...snapshot.documents.map((documentState) =>
+          Number(documentState.id.replace("doc-", "")) || 1,
+        ),
+      );
+      tabCounter = Math.max(
+        1,
+        ...snapshot.session.openTabs.map((tab) =>
+          Number(tab.id.replace("tab-", "")) || 1,
+        ),
+      );
+      set({
+        documents: snapshot.documents,
+        session: snapshot.session,
+        settings: defaultSettings,
+        recentFiles: snapshot.recentFiles,
+        editor: snapshot.editor,
+      });
+      applyTheme(defaultSettings);
     },
     createTab() {
       update((state) => {
@@ -159,6 +190,51 @@ function createStateStore() {
           return state;
         }
         const filtered = openTabs.filter((tab) => tab.id !== tabId);
+        const selectedTabId =
+          state.session.selectedTabId === tabId
+            ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
+            : state.session.selectedTabId;
+        return {
+          ...state,
+          session: {
+            ...state.session,
+            openTabs: filtered,
+            selectedTabId,
+          },
+        };
+      });
+    },
+    closeTabForce(tabId: string) {
+      update((state) => {
+        const openTabs = state.session.openTabs;
+        if (openTabs.length === 0) {
+          return state;
+        }
+        const idx = openTabs.findIndex((tab) => tab.id === tabId);
+        if (idx < 0) {
+          return state;
+        }
+        const filtered = openTabs.filter((tab) => tab.id !== tabId);
+        if (filtered.length === 0) {
+          docCounter += 1;
+          tabCounter += 1;
+          const docId = `doc-${docCounter}`;
+          const tabIdNew = `tab-${tabCounter}`;
+          const newDocument = buildDocument(
+            { id: docId, filePath: null },
+            "",
+            `Untitled ${docCounter - 1}`,
+          );
+          return {
+            ...state,
+            documents: [...state.documents, newDocument],
+            session: {
+              ...state.session,
+              openTabs: [{ id: tabIdNew, documentId: docId, pinned: false }],
+              selectedTabId: tabIdNew,
+            },
+          };
+        }
         const selectedTabId =
           state.session.selectedTabId === tabId
             ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
@@ -228,6 +304,66 @@ function createStateStore() {
           ...state,
           documents: [...state.documents, documentState],
           recentFiles,
+          session: {
+            ...state.session,
+            openTabs: [...state.session.openTabs, { id: tabId, documentId: docId, pinned: false }],
+            selectedTabId: tabId,
+          },
+        };
+      });
+    },
+    transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
+      const snapshot = this.getSnapshot();
+      const selectedTab = snapshot.session.openTabs.find(
+        (tab) => tab.id === snapshot.session.selectedTabId,
+      );
+      if (!selectedTab) {
+        return null;
+      }
+      const doc = snapshot.documents.find(
+        (documentState) => documentState.id === selectedTab.documentId,
+      );
+      if (!doc) {
+        return null;
+      }
+      this.closeTabForce(selectedTab.id);
+      return {
+        filePath: doc.filePath,
+        content: doc.content,
+        title: doc.title,
+      };
+    },
+    openTransferredTab(payload: {
+      filePath: string | null;
+      content: string;
+      title: string;
+    }) {
+      update((state) => {
+        if (payload.filePath) {
+          const duplicate = state.documents.find(
+            (doc) => doc.filePath === payload.filePath,
+          );
+          if (duplicate) {
+            const existingTab = state.session.openTabs.find(
+              (tab) => tab.documentId === duplicate.id,
+            );
+            if (existingTab) {
+              return selectTabInternal(state, existingTab.id);
+            }
+          }
+        }
+        docCounter += 1;
+        tabCounter += 1;
+        const docId = `doc-${docCounter}`;
+        const tabId = `tab-${tabCounter}`;
+        const newDoc = buildDocument(
+          { id: docId, filePath: payload.filePath },
+          payload.content,
+          payload.title,
+        );
+        return {
+          ...state,
+          documents: [...state.documents, newDoc],
           session: {
             ...state.session,
             openTabs: [...state.session.openTabs, { id: tabId, documentId: docId, pinned: false }],

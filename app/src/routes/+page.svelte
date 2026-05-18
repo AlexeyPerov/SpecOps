@@ -2,8 +2,8 @@
   import { onMount } from "svelte";
   import EditorSurface from "../lib/components/EditorSurface.svelte";
   import {
-    commandDefinitions,
     dispatchMenuCommand,
+    initializeAppMenu,
     keymapCommandForEvent,
   } from "../lib/commands/registry";
   import type { AppCommandId } from "../lib/domain/contracts";
@@ -11,7 +11,7 @@
   import { appState } from "../lib/state/appState";
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
   import { openPath } from "../lib/services/fileSystem";
-import { listen, TauriEvent } from "@tauri-apps/api/event";
+  import { listen, TauriEvent } from "@tauri-apps/api/event";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import {
     WINDOW_EVENT_ACTIVATE_FILE,
@@ -69,11 +69,22 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
     });
   }
 
+  async function openAndActivatePath(path: string): Promise<void> {
+    const opened = await openPath(path);
+    if (opened.sizeBytes > 10 * 1024 * 1024) {
+      notify("Open failed: file exceeds 10MB MVP limit.");
+      return;
+    }
+    appState.openFileInTab(opened.path, opened.content);
+    notify(`Opened ${opened.path}`);
+  }
+
   async function setupRuntime(): Promise<() => void> {
     const currentWindow = getCurrentWebviewWindow();
     currentWindowId = currentWindow.label;
     appState.initializeTheme();
     await initializeLogging();
+    await initializeAppMenu(runCommand);
     await markWindowActive(currentWindowId);
 
     const restoredSession = await restoreWindowSession(currentWindowId);
@@ -84,14 +95,22 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
 
     const persistedSettings = await loadPersistedSettings();
     if (persistedSettings) {
-      if (persistedSettings.themeMode !== state.settings.themeMode) {
+      const appliedState = appState.getSnapshot();
+      if (persistedSettings.themeMode !== appliedState.settings.themeMode) {
         appState.toggleTheme();
       }
-      while (state.settings.accent !== persistedSettings.accent) {
+      const accents: ("blue" | "violet" | "green")[] = ["blue", "violet", "green"];
+      const currentAccent = appState.getSnapshot().settings.accent;
+      const currentIndex = accents.indexOf(currentAccent);
+      const targetIndex = accents.indexOf(persistedSettings.accent);
+      const steps = targetIndex >= 0 && currentIndex >= 0
+        ? (targetIndex - currentIndex + accents.length) % accents.length
+        : 0;
+      for (let i = 0; i < steps; i += 1) {
         appState.cycleAccent();
       }
       appState.setZoomPercent(persistedSettings.zoomPercent);
-      if (persistedSettings.wrapLines !== state.editor.wrapLines) {
+      if (persistedSettings.wrapLines !== appState.getSnapshot().editor.wrapLines) {
         appState.toggleWrap();
       }
     }
@@ -102,22 +121,16 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
       }
     });
 
-    await listen<{ path: string }>(WINDOW_EVENT_ACTIVATE_FILE, async (event) => {
-      const path = event.payload.path;
+    const unlistenActivate = await listen<{ path: string }>(WINDOW_EVENT_ACTIVATE_FILE, async (event) => {
       try {
-        const opened = await openPath(path);
-        if (opened.sizeBytes > 10 * 1024 * 1024) {
-          notify("Open failed: file exceeds 10MB MVP limit.");
-          return;
-        }
-        appState.openFileInTab(opened.path, opened.content);
+        await openAndActivatePath(event.payload.path);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "unknown error";
         notify(`Failed to open routed file: ${message}`);
       }
     });
 
-    await listen<{ filePath: string | null; content: string; title: string }>(
+    const unlistenTransfer = await listen<{ filePath: string | null; content: string; title: string }>(
       WINDOW_EVENT_TRANSFER_TAB,
       async (event) => {
         appState.openTransferredTab(event.payload);
@@ -134,6 +147,21 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
       });
     });
 
+    const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
+      if (event.payload.type !== "drop") {
+        return;
+      }
+
+      for (const droppedPath of event.payload.paths) {
+        try {
+          await openAndActivatePath(droppedPath);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "unknown error";
+          notify(`Failed to open dropped file: ${message}`);
+        }
+      }
+    });
+
     await logDiagnostic({
       level: "info",
       source: "frontend",
@@ -143,7 +171,10 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
     });
 
     return () => {
+      unlistenActivate();
+      unlistenTransfer();
       unlistenDestroyed();
+      unlistenDragDrop();
     };
   }
 
@@ -222,12 +253,7 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
           if (self !== "main") {
             return;
           }
-          const opened = await openPath(openParam);
-          if (opened.sizeBytes > 10 * 1024 * 1024) {
-            notify("Open failed: file exceeds 10MB MVP limit.");
-            return;
-          }
-          appState.openFileInTab(opened.path, opened.content);
+          await openAndActivatePath(openParam);
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : "unknown error";
@@ -248,12 +274,14 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
 
   $: if (state) {
     scheduleSessionPersistence(state, currentWindowId);
-    void savePersistedSettings({
-      themeMode: state.settings.themeMode,
-      accent: state.settings.accent,
-      wrapLines: state.editor.wrapLines,
-      zoomPercent: state.editor.zoomPercent,
-    });
+    if (currentWindowId) {
+      void savePersistedSettings({
+        themeMode: state.settings.themeMode,
+        accent: state.settings.accent,
+        wrapLines: state.editor.wrapLines,
+        zoomPercent: state.editor.zoomPercent,
+      });
+    }
   }
 </script>
 
@@ -284,38 +312,8 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
       {/each}
     </div>
     <div class="header-right">
-      <button class="toolbar-button" type="button" onclick={() => runCommand("file.open")}>
-        Open
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("app.newWindow")}>
-        New Window
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("tab.moveToNewWindow")}>
-        Move Tab
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("file.save")}>
-        Save
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("file.saveAs")}>
-        Save As
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("file.saveAll")}>
-        Save All
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("file.rename")}>
-        Rename
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("tab.close")}>
-        Close
-      </button>
       <button class="toolbar-button" type="button" onclick={() => runCommand("app.toggleSettingsPane")}>
         Settings
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("view.toggleTheme")}>
-        Theme
-      </button>
-      <button class="toolbar-button" type="button" onclick={() => appState.cycleAccent()}>
-        Accent
       </button>
     </div>
   </header>
@@ -399,7 +397,13 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
     <aside class="settings-pane" data-open={settingsPaneOpen}>
       <h2>Settings</h2>
       <p>Theme: {state.settings.themeMode}</p>
+      <button class="toolbar-button" type="button" onclick={() => runCommand("view.toggleTheme")}>
+        Toggle Theme
+      </button>
       <p>Accent: {state.settings.accent}</p>
+      <button class="toolbar-button" type="button" onclick={() => runCommand("view.cycleAccent")}>
+        Cycle Accent
+      </button>
       <p>Recent files: {state.recentFiles.length}</p>
       <p>This pane uses token-driven overlay styling.</p>
     </aside>
@@ -416,13 +420,6 @@ import { listen, TauriEvent } from "@tauri-apps/api/event";
     <span class="status-message">{statusMessage}</span>
   </footer>
 
-  <nav class="command-demo">
-    {#each commandDefinitions as command}
-      <button class="menu-action" type="button" onclick={() => runCommand(command.id)}>
-        {command.menuPath}
-      </button>
-    {/each}
-  </nav>
 </main>
 
 <style>

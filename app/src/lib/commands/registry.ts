@@ -5,6 +5,7 @@ import { logDiagnostic } from "../services/logging";
 import type { EditorCommandRunner } from "../types/editor";
 import { openFileDialog, renameFile, saveFile, saveFileAs } from "../services/fileSystem";
 import { createNewWindowWithTransfer } from "../services/windowManager";
+import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 
 type CommandContext = {
   setSettingsPaneOpen: (next: boolean) => void;
@@ -19,6 +20,76 @@ type CommandHandler = (context: CommandContext) => Promise<void> | void;
 
 function getSnapshot() {
   return get(appState);
+}
+
+function serializeUnknownError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      type: error.name,
+      message: error.message,
+      stack: error.stack ?? null,
+      cause: error.cause ?? null,
+    };
+  }
+
+  let jsonValue: string | null = null;
+  try {
+    jsonValue = JSON.stringify(error);
+  } catch {
+    jsonValue = null;
+  }
+
+  return {
+    type: typeof error,
+    value: String(error),
+    json: jsonValue,
+  };
+}
+
+function sanitizePermissionNoise(value: string): string {
+  const marker = "Permissions associated with this command:";
+  const markerIndex = value.indexOf(marker);
+  if (markerIndex === -1) {
+    return value;
+  }
+  return value.slice(0, markerIndex).trim();
+}
+
+function summarizeError(error: unknown): string {
+  if (error instanceof Error) {
+    return sanitizePermissionNoise(error.message || error.name || "Unknown command error");
+  }
+  if (typeof error === "string") {
+    return sanitizePermissionNoise(error);
+  }
+  return "Unknown command error";
+}
+
+function sanitizeErrorDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = { ...details };
+  if (typeof cleaned.message === "string") {
+    cleaned.message = sanitizePermissionNoise(cleaned.message);
+  }
+  if (typeof cleaned.value === "string") {
+    cleaned.value = sanitizePermissionNoise(cleaned.value);
+  }
+  delete cleaned.json;
+  return cleaned;
+}
+
+async function openAndStoreFile(
+  notify: (message: string) => void,
+  opened: { path: string; content: string; sizeBytes: number } | null,
+): Promise<void> {
+  if (!opened) {
+    return;
+  }
+  if (opened.sizeBytes > 10 * 1024 * 1024) {
+    notify("Open failed: file exceeds 10MB MVP limit.");
+    return;
+  }
+  appState.openFileInTab(opened.path, opened.content);
+  notify(`Opened ${opened.path}`);
 }
 
 const keyBindingsByPlatform: Record<string, string> = {
@@ -264,6 +335,9 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   "view.toggleTheme": () => {
     appState.toggleTheme();
   },
+  "view.cycleAccent": () => {
+    appState.cycleAccent();
+  },
   "app.toggleFindReplace": () => {
     appState.toggleFindReplace();
   },
@@ -286,12 +360,21 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     notify("New tab created.");
   },
   "file.open": async ({ notify }) => {
-    const opened = await openFileDialog();
-    if (!opened) {
-      return;
+    try {
+      const opened = await openFileDialog();
+      await openAndStoreFile(notify, opened);
+    } catch (error: unknown) {
+      const reason = summarizeError(error);
+      const details = sanitizeErrorDetails(serializeUnknownError(error));
+      await logDiagnostic({
+        level: "error",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: `file.open handler failed (${reason})`,
+        metadata: details,
+      });
+      throw error;
     }
-    appState.openFileInTab(opened.path, opened.content);
-    notify(`Opened ${opened.path}`);
   },
   "file.save": async ({ getState, notify }) => {
     const state = getState();
@@ -469,6 +552,257 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
 };
 
+let appMenuInitialized = false;
+
+async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Promise<void> {
+  if (appMenuInitialized) {
+    return;
+  }
+
+  const openItem = await MenuItem.new({
+    id: "cmd.file.open",
+    text: "Open",
+    accelerator: "CmdOrCtrl+O",
+    action: () => runCommand("file.open"),
+  });
+  const newWindowItem = await MenuItem.new({
+    id: "cmd.file.newWindow",
+    text: "New Window",
+    accelerator: "CmdOrCtrl+Shift+N",
+    action: () => runCommand("app.newWindow"),
+  });
+  const moveTabItem = await MenuItem.new({
+    id: "cmd.file.moveTab",
+    text: "Move Tab To New Window",
+    action: () => runCommand("tab.moveToNewWindow"),
+  });
+  const saveItem = await MenuItem.new({
+    id: "cmd.file.save",
+    text: "Save",
+    accelerator: "CmdOrCtrl+S",
+    action: () => runCommand("file.save"),
+  });
+  const saveAsItem = await MenuItem.new({
+    id: "cmd.file.saveAs",
+    text: "Save As",
+    accelerator: "CmdOrCtrl+Shift+S",
+    action: () => runCommand("file.saveAs"),
+  });
+  const saveAllItem = await MenuItem.new({
+    id: "cmd.file.saveAll",
+    text: "Save All",
+    accelerator: "CmdOrCtrl+Alt+S",
+    action: () => runCommand("file.saveAll"),
+  });
+  const renameItem = await MenuItem.new({
+    id: "cmd.file.rename",
+    text: "Rename",
+    action: () => runCommand("file.rename"),
+  });
+  const closeItem = await MenuItem.new({
+    id: "cmd.file.close",
+    text: "Close",
+    accelerator: "CmdOrCtrl+W",
+    action: () => runCommand("tab.close"),
+  });
+
+  const fileMenu = await Submenu.new({
+    text: "File",
+    items: [
+      openItem,
+      newWindowItem,
+      moveTabItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      saveItem,
+      saveAsItem,
+      saveAllItem,
+      renameItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      closeItem,
+    ],
+  });
+
+  const undoItem = await MenuItem.new({
+    id: "cmd.edit.undo",
+    text: "Undo",
+    accelerator: "CmdOrCtrl+Z",
+    action: () => runCommand("edit.undo"),
+  });
+  const redoItem = await MenuItem.new({
+    id: "cmd.edit.redo",
+    text: "Redo",
+    accelerator: "CmdOrCtrl+Shift+Z",
+    action: () => runCommand("edit.redo"),
+  });
+  const findReplaceItem = await MenuItem.new({
+    id: "cmd.edit.findReplace",
+    text: "Find / Replace",
+    accelerator: "CmdOrCtrl+F",
+    action: () => runCommand("app.toggleFindReplace"),
+  });
+  const cutItem = await PredefinedMenuItem.new({ item: "Cut" });
+  const copyItem = await PredefinedMenuItem.new({ item: "Copy" });
+  const pasteItem = await PredefinedMenuItem.new({ item: "Paste" });
+  const selectAllItem = await PredefinedMenuItem.new({ item: "SelectAll" });
+  const goToItem = await MenuItem.new({
+    id: "cmd.edit.goTo",
+    text: "Go To Line",
+    accelerator: "CmdOrCtrl+L",
+    action: () => runCommand("app.toggleGoTo"),
+  });
+  const indentItem = await MenuItem.new({
+    id: "cmd.edit.indent",
+    text: "Indent",
+    accelerator: "CmdOrCtrl+]",
+    action: () => runCommand("edit.indent"),
+  });
+  const outdentItem = await MenuItem.new({
+    id: "cmd.edit.outdent",
+    text: "Outdent",
+    accelerator: "CmdOrCtrl+[",
+    action: () => runCommand("edit.outdent"),
+  });
+  const moveLineUpItem = await MenuItem.new({
+    id: "cmd.edit.moveLineUp",
+    text: "Move Line Up",
+    accelerator: "Alt+Up",
+    action: () => runCommand("edit.moveLineUp"),
+  });
+  const moveLineDownItem = await MenuItem.new({
+    id: "cmd.edit.moveLineDown",
+    text: "Move Line Down",
+    accelerator: "Alt+Down",
+    action: () => runCommand("edit.moveLineDown"),
+  });
+  const duplicateLineItem = await MenuItem.new({
+    id: "cmd.edit.duplicateLine",
+    text: "Duplicate Line",
+    accelerator: "CmdOrCtrl+D",
+    action: () => runCommand("edit.duplicateLine"),
+  });
+  const joinLinesItem = await MenuItem.new({
+    id: "cmd.edit.joinLines",
+    text: "Join Lines",
+    accelerator: "CmdOrCtrl+J",
+    action: () => runCommand("edit.joinLines"),
+  });
+
+  const editMenu = await Submenu.new({
+    text: "Edit",
+    items: [
+      undoItem,
+      redoItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      cutItem,
+      copyItem,
+      pasteItem,
+      selectAllItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      findReplaceItem,
+      goToItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      indentItem,
+      outdentItem,
+      moveLineUpItem,
+      moveLineDownItem,
+      duplicateLineItem,
+      joinLinesItem,
+    ],
+  });
+
+  const settingsItem = await MenuItem.new({
+    id: "cmd.view.settings",
+    text: "Toggle Settings Pane",
+    accelerator: "CmdOrCtrl+,",
+    action: () => runCommand("app.toggleSettingsPane"),
+  });
+  const themeItem = await MenuItem.new({
+    id: "cmd.view.theme",
+    text: "Toggle Theme",
+    accelerator: "CmdOrCtrl+Shift+T",
+    action: () => runCommand("view.toggleTheme"),
+  });
+  const accentItem = await MenuItem.new({
+    id: "cmd.view.accent",
+    text: "Cycle Accent",
+    action: () => runCommand("view.cycleAccent"),
+  });
+  const markdownItem = await MenuItem.new({
+    id: "cmd.view.markdown",
+    text: "Toggle Markdown Preview",
+    accelerator: "CmdOrCtrl+Shift+M",
+    action: () => runCommand("view.toggleMarkdownPreview"),
+  });
+  const diffItem = await MenuItem.new({
+    id: "cmd.view.diff",
+    text: "Toggle Diff Preview",
+    accelerator: "CmdOrCtrl+Shift+D",
+    action: () => runCommand("view.toggleDiffPreview"),
+  });
+  const wrapItem = await MenuItem.new({
+    id: "cmd.view.wrap",
+    text: "Toggle Wrap",
+    accelerator: "CmdOrCtrl+Alt+Z",
+    action: () => runCommand("view.toggleWrap"),
+  });
+  const zoomInItem = await MenuItem.new({
+    id: "cmd.view.zoomIn",
+    text: "Zoom In",
+    accelerator: "CmdOrCtrl+=",
+    action: () => runCommand("view.zoomIn"),
+  });
+  const zoomOutItem = await MenuItem.new({
+    id: "cmd.view.zoomOut",
+    text: "Zoom Out",
+    accelerator: "CmdOrCtrl+-",
+    action: () => runCommand("view.zoomOut"),
+  });
+  const zoomResetItem = await MenuItem.new({
+    id: "cmd.view.zoomReset",
+    text: "Reset Zoom",
+    accelerator: "CmdOrCtrl+0",
+    action: () => runCommand("view.zoomReset"),
+  });
+
+  const viewMenu = await Submenu.new({
+    text: "View",
+    items: [
+      settingsItem,
+      themeItem,
+      accentItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      markdownItem,
+      diffItem,
+      wrapItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      zoomInItem,
+      zoomOutItem,
+      zoomResetItem,
+    ],
+  });
+
+  const appSubmenu = await Submenu.new({
+    text: "spec-ops",
+    items: [
+      await PredefinedMenuItem.new({
+        item: {
+          About: {
+            name: "spec-ops",
+          },
+        },
+      }),
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      await PredefinedMenuItem.new({ item: "Quit" }),
+    ],
+  });
+
+  const appMenu = await Menu.new({
+    items: [appSubmenu, fileMenu, editMenu, viewMenu],
+  });
+  await appMenu.setAsAppMenu();
+  appMenuInitialized = true;
+}
+
 export function dispatchCommand(
   commandId: AppCommandId,
   context: CommandContext,
@@ -486,15 +820,15 @@ export function dispatchCommand(
     metadata: { commandId },
   });
   Promise.resolve(handler(context)).catch((error: unknown) => {
-    const message =
-      error instanceof Error ? error.message : "Unknown command error";
+    const message = summarizeError(error);
     context.notify(`Command failed: ${message}`);
+    const details = sanitizeErrorDetails(serializeUnknownError(error));
     void logDiagnostic({
       level: "error",
       source: "frontend",
       timestamp: new Date().toISOString(),
-      message: `command failed: ${commandId}`,
-      metadata: { commandId, reason: message },
+      message: `command failed: ${commandId} (${message})`,
+      metadata: { commandId, reason: message, ...details },
     });
   });
 }
@@ -504,6 +838,12 @@ export function dispatchMenuCommand(
   context: CommandContext,
 ): void {
   dispatchCommand(commandId, context);
+}
+
+export async function initializeAppMenu(
+  runCommand: (commandId: AppCommandId) => void,
+): Promise<void> {
+  await buildAppMenu(runCommand);
 }
 
 export function keymapCommandForEvent(event: KeyboardEvent): AppCommandId | null {

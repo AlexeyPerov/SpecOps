@@ -40,6 +40,7 @@ export type AppCommandId =
   | "app.toggleFindReplace"
   | "app.toggleGoTo"
   | "view.toggleTheme"
+  | "view.cycleAccent"
   | "view.toggleMarkdownPreview"
   | "view.toggleDiffPreview"
   | "file.new"

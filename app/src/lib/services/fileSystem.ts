@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, rename, stat, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile, rename, writeTextFile } from "@tauri-apps/plugin-fs";
 
 export interface OpenedFile {
   path: string;
@@ -52,10 +52,10 @@ export async function renameFile(oldPath: string): Promise<string | null> {
 }
 
 export async function openPath(path: string): Promise<OpenedFile> {
-  const [content, fileStat] = await Promise.all([readTextFile(path), stat(path)]);
+  const content = await readTextFile(path);
   return {
     path,
     content,
-    sizeBytes: fileStat.size,
+    sizeBytes: new TextEncoder().encode(content).length,
   };
 }

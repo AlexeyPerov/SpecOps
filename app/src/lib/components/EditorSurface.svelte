@@ -5,6 +5,7 @@
     defaultKeymap,
     history,
     historyKeymap,
+    indentWithTab,
     indentMore,
     indentLess,
     redo,
@@ -272,7 +273,7 @@
       extensions: [
         lineNumbers(),
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
+        keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
         lineWrapCompartment.of([]),
         fontSizeCompartment.of(
           EditorView.theme({
@@ -303,6 +304,9 @@
           },
           ".cm-activeLine, .cm-activeLineGutter": {
             backgroundColor: "var(--color-hover)",
+          },
+          ".cm-cursor, .cm-dropCursor": {
+            borderLeftColor: "#d7e3ff",
           },
         }),
         EditorView.updateListener.of((update) => {

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "app",
+  "productName": "spec-ops",
   "version": "0.1.0",
-  "identifier": "com.alexeyperov.app",
+  "identifier": "com.alexeyperov.specops",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "app",
+        "title": "spec-ops",
         "width": 800,
-        "height": 600
+        "height": 1020
       }
     ],
     "security": {

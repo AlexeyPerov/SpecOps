@@ -51,6 +51,19 @@
     state.editor.previewMode === "diff" && activeDocument
       ? diffLines(activeDocument.savedContent, activeDocument.content)
       : [];
+  $: statusPath = formatStatusPath(activeDocument?.filePath ?? null, activeDocument?.title);
+
+  function formatStatusPath(filePath: string | null, fallbackTitle: string | undefined): string {
+    if (!filePath) {
+      return fallbackTitle ?? "Untitled";
+    }
+    const normalized = filePath.replaceAll("\\", "/");
+    const parts = normalized.split("/").filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+    }
+    return parts[parts.length - 1] ?? normalized;
+  }
 
   function notify(message: string): void {
     statusMessage = message;
@@ -302,6 +315,15 @@
       {/each}
     </div>
     <div class="header-right">
+      <button
+        class="toolbar-button add-file-button"
+        type="button"
+        aria-label="Create new untitled file"
+        title="New Untitled File"
+        onclick={() => runCommand("file.new")}
+      >
+        +
+      </button>
       <button class="toolbar-button" type="button" onclick={() => runCommand("app.toggleSettingsPane")}>
         Settings
       </button>
@@ -400,14 +422,26 @@
   </section>
 
   <footer class="status-bar">
-    <button class="status-segment" type="button">Ln {state.editor.cursorLine}, Col {state.editor.cursorColumn}</button>
-    <button class="status-segment" type="button">{activeDocument?.encoding.toUpperCase() ?? "UTF-8"}</button>
-    <button class="status-segment" type="button">{activeDocument?.lineEnding.toUpperCase() ?? "LF"}</button>
-    <button class="status-segment" type="button">{state.editor.zoomPercent}%</button>
-    <button class="status-segment" type="button">{state.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}</button>
+    <button class="status-segment optional-segment optional-cursor" type="button">
+      Ln {state.editor.cursorLine}, Col {state.editor.cursorColumn}
+    </button>
+    <button class="status-segment optional-segment optional-encoding" type="button">
+      {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+    </button>
+    <button class="status-segment optional-segment optional-line-ending" type="button">
+      {activeDocument?.lineEnding.toUpperCase() ?? "LF"}
+    </button>
+    <button class="status-segment optional-segment optional-zoom" type="button">
+      {state.editor.zoomPercent}%
+    </button>
+    <button class="status-segment optional-segment optional-wrap" type="button">
+      {state.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
+    </button>
     <button class="status-segment" type="button">{activeDocument?.isDirty ? "Modified" : "Saved"}</button>
-    <button class="status-segment path-segment" type="button">{activeDocument?.filePath ?? "No file path"}</button>
-    <span class="status-message">{statusMessage}</span>
+    <span class="status-message optional-segment optional-message">{statusMessage}</span>
+    <button class="status-segment path-segment" type="button" title={activeDocument?.filePath ?? statusPath}>
+      {statusPath}
+    </button>
   </footer>
 
 </main>
@@ -575,8 +609,7 @@
     height: calc(100% - var(--space-8) * 2);
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-overlay);
-    backdrop-filter: blur(var(--blur-overlay));
+    background: var(--color-surface-1);
     box-shadow: var(--shadow-overlay);
     padding: var(--space-12);
     transform: translateX(110%);
@@ -596,6 +629,8 @@
   .status-bar {
     display: flex;
     align-items: center;
+    flex-wrap: nowrap;
+    overflow: hidden;
     gap: var(--space-4);
     padding: 0 var(--space-8);
     background: var(--color-statusbar-bg);
@@ -606,22 +641,95 @@
   .status-segment {
     height: calc(var(--statusbar-height) - var(--space-4));
     font-size: var(--font-size-status);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .status-message {
-    margin-left: auto;
     color: var(--color-text-secondary);
-    max-width: 280px;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .path-segment {
-    max-width: 220px;
+    margin-left: auto;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .add-file-button {
+    min-width: 32px;
+    width: 32px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  @media (max-width: 1100px) {
+    .optional-message {
+      display: none;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .optional-wrap,
+    .optional-zoom {
+      display: none;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .optional-line-ending,
+    .optional-encoding {
+      display: none;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .optional-cursor {
+      display: none;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .status-segment:not(.path-segment) {
+      display: none;
+    }
+
+    .optional-segment {
+      display: none;
+    }
+
+    .path-segment {
+      margin-left: 0;
+      max-width: 100%;
+    }
+  }
+
+  .tab-header {
+    min-width: 0;
+  }
+
+  .header-left {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .header-left .tab {
+    white-space: nowrap;
+  }
+
+  .header-right {
+    flex-shrink: 0;
+  }
+
+  .path-segment:focus-visible,
+  .path-segment:hover {
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .command-demo {

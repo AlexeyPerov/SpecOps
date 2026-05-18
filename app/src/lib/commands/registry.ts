@@ -181,7 +181,7 @@ export const commandDefinitions: CommandDefinition[] = [
   {
     id: "view.toggleMarkdownPreview",
     label: "Markdown Preview",
-    menuPath: "View/Markdown Preview",
+    menuPath: "Hidden/Markdown Preview",
     binding: { mac: "Cmd+Shift+M", windows: "Ctrl+Shift+M" },
   },
   {
@@ -727,12 +727,6 @@ async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Prom
     text: "Cycle Accent",
     action: () => runCommand("view.cycleAccent"),
   });
-  const markdownItem = await MenuItem.new({
-    id: "cmd.view.markdown",
-    text: "Toggle Markdown Preview",
-    accelerator: "CmdOrCtrl+Shift+M",
-    action: () => runCommand("view.toggleMarkdownPreview"),
-  });
   const diffItem = await MenuItem.new({
     id: "cmd.view.diff",
     text: "Toggle Diff Preview",
@@ -771,7 +765,6 @@ async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Prom
       themeItem,
       accentItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
-      markdownItem,
       diffItem,
       wrapItem,
       await PredefinedMenuItem.new({ item: "Separator" }),

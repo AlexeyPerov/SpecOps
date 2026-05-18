@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import EditorSurface from "../lib/components/EditorSurface.svelte";
   import {
     dispatchMenuCommand,
@@ -36,6 +36,11 @@
   let replaceValue = "";
   let findCaseSensitive = false;
   let goToLineValue = "";
+  let markdownViewMode: "edit" | "split" | "preview" = "edit";
+  let markdownEditorPaneEl: HTMLDivElement | null = null;
+  let markdownPreviewPaneEl: HTMLDivElement | null = null;
+  let splitScrollCleanup: (() => void) | null = null;
+  let lastMarkdownDocumentId: string | null = null;
 
   $: state = $appState;
   $: activeTab = state.session.openTabs.find(
@@ -44,9 +49,10 @@
   $: activeDocument =
     state.documents.find((documentState) => documentState.id === activeTab?.documentId) ??
     state.documents[0];
+  $: isMarkdownDocument = activeDocument?.language === "markdown";
   $: markdownHtml =
-    state.editor.previewMode === "markdown" && activeDocument
-      ? marked.parse(activeDocument.content)
+    isMarkdownDocument && activeDocument
+      ? (marked.parse(activeDocument.content) as string)
       : "";
   $: diffRows =
     state.editor.previewMode === "diff" && activeDocument
@@ -68,6 +74,67 @@
 
   function notify(message: string): void {
     statusMessage = message;
+  }
+
+  function teardownSplitScrollSync(): void {
+    splitScrollCleanup?.();
+    splitScrollCleanup = null;
+  }
+
+  function syncByRatio(source: HTMLElement, target: HTMLElement): void {
+    const sourceScrollable = source.scrollHeight - source.clientHeight;
+    const targetScrollable = target.scrollHeight - target.clientHeight;
+    if (sourceScrollable <= 0 || targetScrollable <= 0) {
+      target.scrollTop = 0;
+      return;
+    }
+    const ratio = source.scrollTop / sourceScrollable;
+    target.scrollTop = ratio * targetScrollable;
+  }
+
+  async function setupSplitScrollSync(): Promise<void> {
+    teardownSplitScrollSync();
+    await tick();
+
+    const editorScroller = markdownEditorPaneEl?.querySelector(".cm-scroller") as HTMLElement | null;
+    const previewScroller = markdownPreviewPaneEl;
+    if (!editorScroller || !previewScroller) {
+      return;
+    }
+
+    let syncingFromEditor = false;
+    let syncingFromPreview = false;
+
+    const onEditorScroll = (): void => {
+      if (syncingFromPreview) {
+        return;
+      }
+      syncingFromEditor = true;
+      syncByRatio(editorScroller, previewScroller);
+      requestAnimationFrame(() => {
+        syncingFromEditor = false;
+      });
+    };
+
+    const onPreviewScroll = (): void => {
+      if (syncingFromEditor) {
+        return;
+      }
+      syncingFromPreview = true;
+      syncByRatio(previewScroller, editorScroller);
+      requestAnimationFrame(() => {
+        syncingFromPreview = false;
+      });
+    };
+
+    editorScroller.addEventListener("scroll", onEditorScroll, { passive: true });
+    previewScroller.addEventListener("scroll", onPreviewScroll, { passive: true });
+    onEditorScroll();
+
+    splitScrollCleanup = () => {
+      editorScroller.removeEventListener("scroll", onEditorScroll);
+      previewScroller.removeEventListener("scroll", onPreviewScroll);
+    };
   }
 
   function runCommand(commandId: AppCommandId): void {
@@ -329,11 +396,30 @@
     window.addEventListener("keydown", onKeydown);
     return () => {
       runtimeCleanup?.();
+      teardownSplitScrollSync();
       window.removeEventListener("dragover", preventBrowserDrop);
       window.removeEventListener("drop", onNativeDrop);
       window.removeEventListener("keydown", onKeydown);
     };
   });
+
+  $: if (isMarkdownDocument && activeDocument) {
+    if (lastMarkdownDocumentId !== activeDocument.id) {
+      markdownViewMode = "edit";
+      lastMarkdownDocumentId = activeDocument.id;
+    }
+  }
+
+  $: if (!isMarkdownDocument) {
+    markdownViewMode = "edit";
+    lastMarkdownDocumentId = null;
+  }
+
+  $: if (isMarkdownDocument && markdownViewMode === "split") {
+    void setupSplitScrollSync();
+  } else {
+    teardownSplitScrollSync();
+  }
 
   $: if (state) {
     scheduleSessionPersistence(state, currentWindowId);
@@ -382,21 +468,96 @@
 
   <section class="workspace">
     {#if state.editor.previewMode === "editor"}
-      <EditorSurface
-        content={activeDocument?.content ?? ""}
-        wrapLines={state.editor.wrapLines}
-        zoomPercent={state.editor.zoomPercent}
-        onStatusMessage={notify}
-        onDocumentDirty={(nextContent) => {
-          if (!activeDocument) {
-            return;
-          }
-          appState.setDocumentContent(activeDocument.id, nextContent);
-        }}
-        registerEditorCommandRunner={(runner) => {
-          editorRunner = runner;
-        }}
-      />
+      {#if isMarkdownDocument}
+        <div class="markdown-workspace">
+          <div class="markdown-mode-bar">
+            <div class="markdown-mode-actions">
+              <button
+                class={`mode-button ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
+                type="button"
+                onclick={() => (markdownViewMode = "edit")}
+              >
+                edit
+              </button>
+              <button
+                class={`mode-button ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
+                type="button"
+                onclick={() => (markdownViewMode = "split")}
+              >
+                split
+              </button>
+              <button
+                class={`mode-button ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
+                type="button"
+                onclick={() => (markdownViewMode = "preview")}
+              >
+                preview
+              </button>
+            </div>
+          </div>
+
+          {#if markdownViewMode === "preview"}
+            <div class="markdown-preview markdown-preview-standalone">{@html markdownHtml}</div>
+          {:else if markdownViewMode === "split"}
+            <div class="markdown-split">
+              <div class="markdown-editor-pane" bind:this={markdownEditorPaneEl}>
+                <EditorSurface
+                  content={activeDocument?.content ?? ""}
+                  wrapLines={state.editor.wrapLines}
+                  zoomPercent={state.editor.zoomPercent}
+                  onStatusMessage={notify}
+                  onDocumentDirty={(nextContent) => {
+                    if (!activeDocument) {
+                      return;
+                    }
+                    appState.setDocumentContent(activeDocument.id, nextContent);
+                  }}
+                  registerEditorCommandRunner={(runner) => {
+                    editorRunner = runner;
+                  }}
+                />
+              </div>
+              <div class="markdown-preview markdown-preview-pane" bind:this={markdownPreviewPaneEl}>
+                {@html markdownHtml}
+              </div>
+            </div>
+          {:else}
+            <div class="markdown-editor-single">
+              <EditorSurface
+                content={activeDocument?.content ?? ""}
+                wrapLines={state.editor.wrapLines}
+                zoomPercent={state.editor.zoomPercent}
+                onStatusMessage={notify}
+                onDocumentDirty={(nextContent) => {
+                  if (!activeDocument) {
+                    return;
+                  }
+                  appState.setDocumentContent(activeDocument.id, nextContent);
+                }}
+                registerEditorCommandRunner={(runner) => {
+                  editorRunner = runner;
+                }}
+              />
+            </div>
+          {/if}
+        </div>
+      {:else}
+        <EditorSurface
+          content={activeDocument?.content ?? ""}
+          wrapLines={state.editor.wrapLines}
+          zoomPercent={state.editor.zoomPercent}
+          onStatusMessage={notify}
+          onDocumentDirty={(nextContent) => {
+            if (!activeDocument) {
+              return;
+            }
+            appState.setDocumentContent(activeDocument.id, nextContent);
+          }}
+          registerEditorCommandRunner={(runner) => {
+            editorRunner = runner;
+          }}
+        />
+      {/if}
     {:else if state.editor.previewMode === "markdown"}
       <div class="preview-panel">
         <div class="preview-title">Markdown Preview</div>
@@ -546,6 +707,74 @@
     position: relative;
     padding: var(--space-8);
     overflow: hidden;
+  }
+
+  .markdown-workspace {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-height: 0;
+  }
+
+  .markdown-mode-bar {
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 var(--space-4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+  }
+
+  .markdown-mode-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .mode-button {
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    height: 18px;
+    font-size: 11px;
+    text-transform: lowercase;
+    padding: 0 var(--space-6);
+  }
+
+  .mode-button-active {
+    color: var(--color-text-primary);
+    border-color: var(--color-border-subtle);
+    background: var(--color-hover);
+  }
+
+  .markdown-editor-single {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .markdown-split {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-8);
+  }
+
+  .markdown-editor-pane {
+    min-height: 0;
+  }
+
+  .markdown-preview-pane,
+  .markdown-preview-standalone {
+    min-height: 0;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-1);
+    overflow: auto;
   }
 
   .preview-panel {

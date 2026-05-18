@@ -26,6 +26,7 @@
   import { marked } from "marked";
   import { diffLines } from "diff";
   import { loadPersistedSettings, savePersistedSettings } from "../lib/services/settingsStore";
+  import { sep } from "@tauri-apps/api/path";
 
   let settingsPaneOpen = false;
   let statusMessage = "Ready";
@@ -80,6 +81,30 @@
       confirm: (message) => window.confirm(message),
       getEditorRunner: () => editorRunner,
     });
+  }
+
+  async function openDroppedPaths(paths: string[]): Promise<void> {
+    for (const droppedPath of paths) {
+      try {
+        await openAndActivatePath(droppedPath);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        notify(`Failed to open dropped file: ${message}`);
+      }
+    }
+  }
+
+  async function normalizeDroppedFilePath(rawPath: string): Promise<string> {
+    const nativeSeparator = await sep();
+    if (rawPath.startsWith("file://")) {
+      const withoutScheme = rawPath.replace(/^file:\/\//, "");
+      const decoded = decodeURIComponent(withoutScheme);
+      if (nativeSeparator === "\\" && decoded.startsWith("/")) {
+        return decoded.slice(1).replaceAll("/", "\\");
+      }
+      return decoded;
+    }
+    return rawPath;
   }
 
   async function openAndActivatePath(path: string): Promise<void> {
@@ -164,15 +189,7 @@
       if (event.payload.type !== "drop") {
         return;
       }
-
-      for (const droppedPath of event.payload.paths) {
-        try {
-          await openAndActivatePath(droppedPath);
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : "unknown error";
-          notify(`Failed to open dropped file: ${message}`);
-        }
-      }
+      await openDroppedPaths(event.payload.paths);
     });
 
     await logDiagnostic({
@@ -274,13 +291,46 @@
         });
     }
 
+    function preventBrowserDrop(event: DragEvent): void {
+      event.preventDefault();
+    }
+
+    async function onNativeDrop(event: DragEvent): Promise<void> {
+      event.preventDefault();
+      const droppedFiles = event.dataTransfer?.files;
+      if (!droppedFiles || droppedFiles.length === 0) {
+        return;
+      }
+
+      const candidatePaths: string[] = [];
+      for (const file of Array.from(droppedFiles)) {
+        const fileWithPath = file as File & { path?: string };
+        if (typeof fileWithPath.path === "string" && fileWithPath.path.length > 0) {
+          candidatePaths.push(fileWithPath.path);
+          continue;
+        }
+        if (typeof file.name === "string" && file.name.startsWith("file://")) {
+          candidatePaths.push(await normalizeDroppedFilePath(file.name));
+          continue;
+        }
+      }
+
+      if (candidatePaths.length > 0) {
+        await openDroppedPaths(candidatePaths);
+      }
+    }
+
     function onKeydown(event: KeyboardEvent): void {
       handleKeydown(event);
     }
 
+    window.addEventListener("dragover", preventBrowserDrop);
+    window.addEventListener("drop", onNativeDrop);
     window.addEventListener("keydown", onKeydown);
     return () => {
       runtimeCleanup?.();
+      window.removeEventListener("dragover", preventBrowserDrop);
+      window.removeEventListener("drop", onNativeDrop);
       window.removeEventListener("keydown", onKeydown);
     };
   });
@@ -313,8 +363,6 @@
         </button>
         {/if}
       {/each}
-    </div>
-    <div class="header-right">
       <button
         class="toolbar-button add-file-button"
         type="button"
@@ -324,6 +372,8 @@
       >
         +
       </button>
+    </div>
+    <div class="header-right">
       <button class="toolbar-button" type="button" onclick={() => runCommand("app.toggleSettingsPane")}>
         Settings
       </button>

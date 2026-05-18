@@ -77,3 +77,31 @@ body {
   color: var(--color-text-primary);
   background: var(--color-bg-root);
 }
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  scrollbar-color: rgb(122 137 159 / 72%) #0f141b;
+}
+
+:root[data-theme="dark"] * {
+  scrollbar-color: rgb(122 137 159 / 72%) #0f141b;
+}
+
+:root[data-theme="dark"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+:root[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: #0f141b;
+}
+
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgb(122 137 159 / 72%);
+  border-radius: 8px;
+  border: 2px solid #0f141b;
+}
+
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgb(151 169 196 / 82%);
+}

@@ -61,7 +61,7 @@ const initialState: AppDomainState = {
     cursorLine: 1,
     cursorColumn: 1,
     zoomPercent: 100,
-    wrapLines: false,
+    wrapLines: true,
     findReplaceOpen: false,
     goToOpen: false,
     previewMode: "editor",

@@ -257,29 +257,6 @@ function createStateStore() {
         };
       });
     },
-    moveTab(fromIndex: number, toIndex: number) {
-      update((state) => {
-        const tabs = [...state.session.openTabs];
-        if (
-          fromIndex < 0 ||
-          toIndex < 0 ||
-          fromIndex >= tabs.length ||
-          toIndex >= tabs.length ||
-          fromIndex === toIndex
-        ) {
-          return state;
-        }
-        const [moved] = tabs.splice(fromIndex, 1);
-        tabs.splice(toIndex, 0, moved);
-        return {
-          ...state,
-          session: {
-            ...state.session,
-            openTabs: tabs,
-          },
-        };
-      });
-    },
     openFileInTab(filePath: string, content: string) {
       update((state) => {
         const duplicate = state.documents.find(

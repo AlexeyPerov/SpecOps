@@ -288,7 +288,7 @@
 <main class="shell">
   <header class="tab-header">
     <div class="header-left">
-      {#each state.session.openTabs as tab, index}
+      {#each state.session.openTabs as tab}
         {@const tabDoc = state.documents.find((doc) => doc.id === tab.documentId)}
         {#if tabDoc}
         <button
@@ -297,16 +297,6 @@
           onclick={() => appState.selectTab(tab.id)}
         >
           {tabDoc.title}{tabDoc.isDirty ? "*" : ""}
-        </button>
-        <button class="tab-action" type="button" onclick={() => appState.moveTab(index, Math.max(0, index - 1))}>
-          ←
-        </button>
-        <button
-          class="tab-action"
-          type="button"
-          onclick={() => appState.moveTab(index, Math.min(state.session.openTabs.length - 1, index + 1))}
-        >
-          →
         </button>
         {/if}
       {/each}
@@ -451,8 +441,7 @@
   .tab,
   .toolbar-button,
   .status-segment,
-  .menu-action,
-  .tab-action {
+  .menu-action {
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -462,11 +451,6 @@
     transition:
       background-color var(--motion-fast) var(--easing-standard),
       border-color var(--motion-fast) var(--easing-standard);
-  }
-
-  .tab-action {
-    height: calc(var(--tab-header-height) - var(--space-12));
-    padding: 0 var(--space-4);
   }
 
   .tab-active {
@@ -650,8 +634,7 @@
   .tab:hover,
   .toolbar-button:hover,
   .status-segment:hover,
-  .menu-action:hover,
-  .tab-action:hover {
+  .menu-action:hover {
     background: var(--color-hover);
     cursor: pointer;
   }
@@ -659,8 +642,7 @@
   .tab:focus-visible,
   .toolbar-button:focus-visible,
   .status-segment:focus-visible,
-  .menu-action:focus-visible,
-  .tab-action:focus-visible {
+  .menu-action:focus-visible {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: 1px;
   }
@@ -668,8 +650,7 @@
   .tab:active,
   .toolbar-button:active,
   .status-segment:active,
-  .menu-action:active,
-  .tab-action:active {
+  .menu-action:active {
     background: var(--color-pressed);
   }
 </style>

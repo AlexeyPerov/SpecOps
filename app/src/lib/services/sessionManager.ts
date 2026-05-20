@@ -4,6 +4,8 @@ import { ensureSpecOpsDataDir } from "./appDataDir";
 import type {
   AppDomainState,
   AppSessionSnapshot,
+  DocumentState,
+  TabState,
   WindowSessionSnapshot,
 } from "../domain/contracts";
 import { logDiagnostic } from "./logging";
@@ -24,6 +26,114 @@ function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
     session: state.session,
     recentFiles: state.recentFiles,
     editor: state.editor,
+  };
+}
+
+function buildFallbackDocument(documentId: string): DocumentState {
+  return {
+    id: documentId,
+    filePath: null,
+    title: "Untitled",
+    content: "",
+    savedContent: "",
+    isDirty: false,
+    language: "plaintext",
+    encoding: "utf-8",
+    lineEnding: "lf",
+  };
+}
+
+function nextNumericId(prefix: "doc" | "tab", ids: string[]): string {
+  let max = 0;
+  for (const id of ids) {
+    const value = Number(id.replace(`${prefix}-`, ""));
+    if (Number.isFinite(value) && value > 0) {
+      max = Math.max(max, value);
+    }
+  }
+  return `${prefix}-${Math.max(1, max + 1)}`;
+}
+
+function isFileMissingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("no such file") ||
+    lower.includes("not found") ||
+    lower.includes("os error 2") ||
+    lower.includes("cannot find the path")
+  );
+}
+
+async function fileStillExists(path: string): Promise<boolean> {
+  try {
+    await readTextFile(path);
+    return true;
+  } catch (error: unknown) {
+    if (isFileMissingError(error)) {
+      return false;
+    }
+    return true;
+  }
+}
+
+async function sanitizeWindowSnapshot(
+  snapshot: WindowSessionSnapshot,
+): Promise<WindowSessionSnapshot> {
+  const documentsById = new Map(snapshot.documents.map((documentState) => [documentState.id, documentState]));
+  const openTabs: TabState[] = [];
+
+  for (const tab of snapshot.session.openTabs) {
+    const linkedDocument = documentsById.get(tab.documentId);
+    if (!linkedDocument) {
+      continue;
+    }
+    if (linkedDocument.filePath) {
+      const exists = await fileStillExists(linkedDocument.filePath);
+      if (!exists) {
+        continue;
+      }
+    }
+    openTabs.push(tab);
+  }
+
+  if (openTabs.length === 0) {
+    const docId = nextNumericId(
+      "doc",
+      snapshot.documents.map((documentState) => documentState.id),
+    );
+    const tabId = nextNumericId(
+      "tab",
+      snapshot.session.openTabs.map((tab) => tab.id),
+    );
+    const fallbackDocument = buildFallbackDocument(docId);
+    return {
+      ...snapshot,
+      documents: [fallbackDocument],
+      session: {
+        ...snapshot.session,
+        openTabs: [{ id: tabId, documentId: docId, pinned: false }],
+        selectedTabId: tabId,
+      },
+    };
+  }
+
+  const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
+  const documents = snapshot.documents.filter((documentState) =>
+    referencedDocIds.has(documentState.id)
+  );
+  const selectedTabId = openTabs.some((tab) => tab.id === snapshot.session.selectedTabId)
+    ? snapshot.session.selectedTabId
+    : openTabs[0]?.id ?? null;
+
+  return {
+    ...snapshot,
+    documents,
+    session: {
+      ...snapshot.session,
+      openTabs,
+      selectedTabId,
+    },
   };
 }
 
@@ -80,7 +190,11 @@ export async function restoreWindowSession(
     if (parsed.version !== 1 || !parsed.windows) {
       return null;
     }
-    return parsed.windows[windowId] ?? null;
+    const snapshot = parsed.windows[windowId];
+    if (!snapshot) {
+      return null;
+    }
+    return sanitizeWindowSnapshot(snapshot);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "unknown error";
     await logDiagnostic({
@@ -105,7 +219,11 @@ export async function restoreWindowSession(
       message: "session restored from backup",
       metadata: { windowId },
     });
-    return parsed.windows[windowId] ?? null;
+    const snapshot = parsed.windows[windowId];
+    if (!snapshot) {
+      return null;
+    }
+    return sanitizeWindowSnapshot(snapshot);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "unknown error";
     await logDiagnostic({

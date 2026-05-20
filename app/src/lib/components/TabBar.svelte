@@ -93,7 +93,7 @@
       tabRects = next;
       return;
     }
-    for (const node of tabStripEl.querySelectorAll<HTMLButtonElement>("[data-tab-id]")) {
+    for (const node of tabStripEl.querySelectorAll<HTMLElement>("[data-tab-id]")) {
       const tabId = node.dataset.tabId;
       if (!tabId) {
         continue;
@@ -166,7 +166,7 @@
     window.removeEventListener("pointerup", onPointerUp);
     window.removeEventListener("pointercancel", onPointerCancel);
     if (activePointerId !== null) {
-      for (const node of tabStripEl?.querySelectorAll<HTMLButtonElement>("[data-tab-id]") ?? []) {
+      for (const node of tabStripEl?.querySelectorAll<HTMLElement>("[data-tab-id]") ?? []) {
         if (node.hasPointerCapture(activePointerId)) {
           node.releasePointerCapture(activePointerId);
         }
@@ -210,14 +210,33 @@
     {#if didDrag && tab.id === dragTabId}
       <span class="tab-placeholder" style={`width:${dragTabRect?.width ?? 0}px`}></span>
     {:else}
-      <button
-        class={`tab ${tab.id === selectedTabId ? "tab-active" : ""}`}
-        data-tab-id={tab.id}
-        type="button"
-        onpointerdown={(event) => pointerDown(event, tab, openTabs.findIndex((entry) => entry.id === tab.id))}
-      >
-        {tabTitle(tab)}
-      </button>
+      <div class="tab-shell">
+        <button
+          class={`tab ${tab.id === selectedTabId ? "tab-active" : ""}`}
+          data-tab-id={tab.id}
+          type="button"
+          onpointerdown={(event) => pointerDown(event, tab, openTabs.findIndex((entry) => entry.id === tab.id))}
+        >
+          <span class="tab-label">
+            {tabTitle(tab)}
+          </span>
+        </button>
+        <button
+          class="tab-close"
+          type="button"
+          aria-label={`Close ${tabTitle(tab)}`}
+          title="Close tab"
+          onpointerdown={(event) => {
+            event.stopPropagation();
+          }}
+          onclick={(event) => {
+            event.stopPropagation();
+            appState.closeTabForce(tab.id);
+          }}
+        >
+          ×
+        </button>
+      </div>
     {/if}
   {/each}
 </div>
@@ -247,14 +266,56 @@
     user-select: none;
   }
 
+  .tab-shell {
+    position: relative;
+    height: calc(var(--tab-header-height) - var(--space-8));
+    min-width: 0;
+  }
+
   .tab {
+    display: flex;
+    align-items: center;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     background: transparent;
     color: inherit;
     height: calc(var(--tab-header-height) - var(--space-8));
-    padding: 0 var(--space-8);
+    padding: 0 var(--space-8) 0 var(--space-6);
+    min-width: 0;
+    width: 100%;
+  }
+
+  .tab-label {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    padding: 0;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 16px;
+    pointer-events: none;
+  }
+
+  .tab-close {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition:
       background-color var(--motion-fast) var(--easing-standard),
       border-color var(--motion-fast) var(--easing-standard);
@@ -267,6 +328,15 @@
 
   .tab:hover {
     background: var(--color-hover);
+    cursor: pointer;
+  }
+
+  .tab-shell:hover .tab-close {
+    color: inherit;
+  }
+
+  .tab-close:hover {
+    background: var(--color-pressed);
     cursor: pointer;
   }
 

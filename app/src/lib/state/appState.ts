@@ -5,6 +5,7 @@ import type {
   AppSettingsState,
   DocumentState,
   DocumentIdentity,
+  TabState,
   WindowSessionSnapshot,
   ThemeMode,
 } from "../domain/contracts";
@@ -46,6 +47,25 @@ function buildDocument(identity: DocumentIdentity, content: string, title: strin
     encoding: "utf-8",
     lineEnding: content.includes("\r\n") ? "crlf" : "lf",
   };
+}
+
+function moveTab(tabs: TabState[], fromIndex: number, toIndex: number): TabState[] {
+  if (
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= tabs.length ||
+    toIndex >= tabs.length ||
+    fromIndex === toIndex
+  ) {
+    return tabs;
+  }
+  const next = [...tabs];
+  const [moved] = next.splice(fromIndex, 1);
+  if (!moved) {
+    return tabs;
+  }
+  next.splice(toIndex, 0, moved);
+  return next;
 }
 
 const initialState: AppDomainState = {
@@ -173,7 +193,7 @@ function createStateStore() {
           `Untitled ${docCounter - 1}`,
         );
         const tabId = `tab-${tabCounter}`;
-        return {
+        const nextState = {
           ...state,
           documents: [...state.documents, newDocument],
           session: {
@@ -182,10 +202,26 @@ function createStateStore() {
             selectedTabId: tabId,
           },
         };
+        return nextState;
       });
     },
     selectTab(tabId: string) {
       update((state) => selectTabInternal(state, tabId));
+    },
+    reorderTabs(fromIndex: number, toIndex: number) {
+      update((state) => {
+        const openTabs = moveTab(state.session.openTabs, fromIndex, toIndex);
+        if (openTabs === state.session.openTabs) {
+          return state;
+        }
+        return {
+          ...state,
+          session: {
+            ...state.session,
+            openTabs,
+          },
+        };
+      });
     },
     closeTab(tabId: string) {
       update((state) => {
@@ -285,7 +321,7 @@ function createStateStore() {
           15,
         );
 
-        return {
+        const nextState = {
           ...state,
           documents: [...state.documents, documentState],
           recentFiles,
@@ -295,6 +331,7 @@ function createStateStore() {
             selectedTabId: tabId,
           },
         };
+        return nextState;
       });
     },
     transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {

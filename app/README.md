@@ -15,14 +15,14 @@ npm install
 npm run tauri dev
 ```
 
-### Port 1420 already in use
+### Port 1430 already in use
 
-Vite is pinned to port **1420** (`vite.config.js`) with `strictPort: true`, matching `src-tauri/tauri.conf.json` → `build.devUrl`. If a previous dev server did not exit, that port stays occupied and `beforeDevCommand` fails.
+Vite is pinned to port **1430** (`vite.config.js`) with `strictPort: true`, matching `src-tauri/tauri.conf.json` → `build.devUrl`. If a previous dev server did not exit, that port stays occupied and `beforeDevCommand` fails.
 
 Free it (macOS/Linux):
 
 ```sh
-kill "$(lsof -t -iTCP:1420 -sTCP:LISTEN)"
+kill "$(lsof -t -iTCP:1430 -sTCP:LISTEN)"
 ```
 
 Then run `npm run tauri dev` again.

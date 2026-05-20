@@ -1,5 +1,6 @@
-import { appDataDir, join } from "@tauri-apps/api/path";
+import { join } from "@tauri-apps/api/path";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { ensureSpecOpsDataDir } from "./appDataDir";
 import type { AccentOption, ThemeMode } from "../domain/contracts";
 
 interface PersistedSettings {
@@ -12,8 +13,8 @@ interface PersistedSettings {
 const FILE_NAME = "settings.json";
 
 async function getSettingsPath(): Promise<string> {
-  const base = await appDataDir();
-  return join(base, "spec-ops", FILE_NAME);
+  const base = await ensureSpecOpsDataDir();
+  return join(base, FILE_NAME);
 }
 
 export async function loadPersistedSettings(): Promise<PersistedSettings | null> {

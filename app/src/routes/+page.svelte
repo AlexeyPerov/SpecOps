@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import EditorSurface from "../lib/components/EditorSurface.svelte";
+  import TabBar from "../lib/components/TabBar.svelte";
   import {
     dispatchMenuCommand,
     initializeAppMenu,
@@ -26,7 +27,7 @@
   import { marked } from "marked";
   import { diffLines } from "diff";
   import { loadPersistedSettings, savePersistedSettings } from "../lib/services/settingsStore";
-  import { sep } from "@tauri-apps/api/path";
+
 
   let settingsPaneOpen = false;
   let statusMessage = "Ready";
@@ -161,19 +162,6 @@
     }
   }
 
-  async function normalizeDroppedFilePath(rawPath: string): Promise<string> {
-    const nativeSeparator = await sep();
-    if (rawPath.startsWith("file://")) {
-      const withoutScheme = rawPath.replace(/^file:\/\//, "");
-      const decoded = decodeURIComponent(withoutScheme);
-      if (nativeSeparator === "\\" && decoded.startsWith("/")) {
-        return decoded.slice(1).replaceAll("/", "\\");
-      }
-      return decoded;
-    }
-    return rawPath;
-  }
-
   async function openAndActivatePath(path: string): Promise<void> {
     const opened = await openPath(path);
     if (opened.sizeBytes > 10 * 1024 * 1024) {
@@ -189,6 +177,14 @@
     currentWindowId = currentWindow.label;
     appState.initializeTheme();
     await initializeLogging();
+
+    const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
+      if (event.payload.type !== "drop") {
+        return;
+      }
+      await openDroppedPaths(event.payload.paths);
+    });
+
     await initializeAppMenu(runCommand);
     await markWindowActive(currentWindowId);
 
@@ -250,13 +246,6 @@
         message: "window destroyed",
         metadata: { windowId: currentWindowId },
       });
-    });
-
-    const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
-      if (event.payload.type !== "drop") {
-        return;
-      }
-      await openDroppedPaths(event.payload.paths);
     });
 
     await logDiagnostic({
@@ -334,9 +323,20 @@
 
   onMount(() => {
     let runtimeCleanup: (() => void) | undefined;
-    void setupRuntime().then((cleanup) => {
-      runtimeCleanup = cleanup;
-    });
+    void setupRuntime()
+      .then((cleanup) => {
+        runtimeCleanup = cleanup;
+      })
+      .catch(async (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        await logDiagnostic({
+          level: "error",
+          source: "frontend",
+          timestamp: new Date().toISOString(),
+          message: "setupRuntime failed",
+          metadata: { error: message },
+        });
+      });
 
     const search = new URLSearchParams(window.location.search);
     const openParam = search.get("open");
@@ -358,48 +358,21 @@
         });
     }
 
-    function preventBrowserDrop(event: DragEvent): void {
-      event.preventDefault();
-    }
-
-    async function onNativeDrop(event: DragEvent): Promise<void> {
-      event.preventDefault();
-      const droppedFiles = event.dataTransfer?.files;
-      if (!droppedFiles || droppedFiles.length === 0) {
-        return;
-      }
-
-      const candidatePaths: string[] = [];
-      for (const file of Array.from(droppedFiles)) {
-        const fileWithPath = file as File & { path?: string };
-        if (typeof fileWithPath.path === "string" && fileWithPath.path.length > 0) {
-          candidatePaths.push(fileWithPath.path);
-          continue;
-        }
-        if (typeof file.name === "string" && file.name.startsWith("file://")) {
-          candidatePaths.push(await normalizeDroppedFilePath(file.name));
-          continue;
-        }
-      }
-
-      if (candidatePaths.length > 0) {
-        await openDroppedPaths(candidatePaths);
-      }
-    }
-
     function onKeydown(event: KeyboardEvent): void {
       handleKeydown(event);
     }
 
-    window.addEventListener("dragover", preventBrowserDrop);
-    window.addEventListener("drop", onNativeDrop);
+    function preventBrowserDragOver(event: DragEvent): void {
+      event.preventDefault();
+    }
+
     window.addEventListener("keydown", onKeydown);
+    window.addEventListener("dragover", preventBrowserDragOver);
     return () => {
       runtimeCleanup?.();
       teardownSplitScrollSync();
-      window.removeEventListener("dragover", preventBrowserDrop);
-      window.removeEventListener("drop", onNativeDrop);
       window.removeEventListener("keydown", onKeydown);
+      window.removeEventListener("dragover", preventBrowserDragOver);
     };
   });
 
@@ -437,18 +410,11 @@
 <main class="shell">
   <header class="tab-header">
     <div class="header-left">
-      {#each state.session.openTabs as tab}
-        {@const tabDoc = state.documents.find((doc) => doc.id === tab.documentId)}
-        {#if tabDoc}
-        <button
-          class={`tab ${tab.id === state.session.selectedTabId ? "tab-active" : ""}`}
-          type="button"
-          onclick={() => appState.selectTab(tab.id)}
-        >
-          {tabDoc.title}{tabDoc.isDirty ? "*" : ""}
-        </button>
-        {/if}
-      {/each}
+      <TabBar
+        openTabs={state.session.openTabs}
+        documents={state.documents}
+        selectedTabId={state.session.selectedTabId}
+      />
       <button
         class="toolbar-button add-file-button"
         type="button"
@@ -683,7 +649,6 @@
     gap: var(--space-6);
   }
 
-  .tab,
   .toolbar-button,
   .status-segment,
   .menu-action {
@@ -696,11 +661,6 @@
     transition:
       background-color var(--motion-fast) var(--easing-standard),
       border-color var(--motion-fast) var(--easing-standard);
-  }
-
-  .tab-active {
-    background: var(--color-hover);
-    border-color: var(--color-border-subtle);
   }
 
   .workspace {
@@ -997,10 +957,6 @@
     overflow: hidden;
   }
 
-  .header-left .tab {
-    white-space: nowrap;
-  }
-
   .header-right {
     flex-shrink: 0;
   }
@@ -1018,7 +974,6 @@
     gap: var(--space-6);
   }
 
-  .tab:hover,
   .toolbar-button:hover,
   .status-segment:hover,
   .menu-action:hover {
@@ -1026,7 +981,6 @@
     cursor: pointer;
   }
 
-  .tab:focus-visible,
   .toolbar-button:focus-visible,
   .status-segment:focus-visible,
   .menu-action:focus-visible {
@@ -1034,7 +988,6 @@
     outline-offset: 1px;
   }
 
-  .tab:active,
   .toolbar-button:active,
   .status-segment:active,
   .menu-action:active {

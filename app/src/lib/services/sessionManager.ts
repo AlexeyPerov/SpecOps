@@ -1,5 +1,6 @@
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { appDataDir, join } from "@tauri-apps/api/path";
+import { join } from "@tauri-apps/api/path";
+import { ensureSpecOpsDataDir } from "./appDataDir";
 import type {
   AppDomainState,
   AppSessionSnapshot,
@@ -13,8 +14,8 @@ const SESSION_BACKUP_FILE = "session.backup.json";
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function getSessionPath(fileName: string): Promise<string> {
-  const dataDir = await appDataDir();
-  return join(dataDir, "spec-ops", fileName);
+  const dataDir = await ensureSpecOpsDataDir();
+  return join(dataDir, fileName);
 }
 
 function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {

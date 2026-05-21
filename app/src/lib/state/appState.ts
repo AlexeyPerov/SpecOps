@@ -35,6 +35,14 @@ function inferLanguage(path: string | null): "plaintext" | "markdown" {
     : "plaintext";
 }
 
+function deriveUntitledTitle(content: string): string {
+  const firstLine = (content.split(/\r?\n/, 1)[0] ?? "").trim();
+  if (!firstLine) {
+    return "Untitled";
+  }
+  return Array.from(firstLine).slice(0, 64).join("");
+}
+
 function buildDocument(identity: DocumentIdentity, content: string, title: string): DocumentState {
   return {
     id: identity.id,
@@ -190,7 +198,7 @@ function createStateStore() {
         const newDocument = buildDocument(
           { id, filePath: null },
           "",
-          `Untitled ${docCounter - 1}`,
+          "Untitled",
         );
         const tabId = `tab-${tabCounter}`;
         const nextState = {
@@ -267,7 +275,7 @@ function createStateStore() {
           const newDocument = buildDocument(
             { id: docId, filePath: null },
             "",
-            `Untitled ${docCounter - 1}`,
+            "Untitled",
           );
           return {
             ...state,
@@ -410,6 +418,46 @@ function createStateStore() {
             isDirty: content !== documentState.savedContent,
           };
         });
+        return { ...state, documents };
+      });
+    },
+    refreshUntitledTitle(documentId: string) {
+      update((state) => {
+        let changed = false;
+        const documents = state.documents.map((documentState) => {
+          if (documentState.id !== documentId || documentState.filePath !== null) {
+            return documentState;
+          }
+          const title = deriveUntitledTitle(documentState.content);
+          if (title === documentState.title) {
+            return documentState;
+          }
+          changed = true;
+          return { ...documentState, title };
+        });
+        if (!changed) {
+          return state;
+        }
+        return { ...state, documents };
+      });
+    },
+    normalizeUntitledTitles() {
+      update((state) => {
+        let changed = false;
+        const documents = state.documents.map((documentState) => {
+          if (documentState.filePath !== null) {
+            return documentState;
+          }
+          const title = deriveUntitledTitle(documentState.content);
+          if (title === documentState.title) {
+            return documentState;
+          }
+          changed = true;
+          return { ...documentState, title };
+        });
+        if (!changed) {
+          return state;
+        }
         return { ...state, documents };
       });
     },

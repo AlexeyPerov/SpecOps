@@ -42,6 +42,7 @@
   let markdownPreviewPaneEl: HTMLDivElement | null = null;
   let splitScrollCleanup: (() => void) | null = null;
   let lastMarkdownDocumentId: string | null = null;
+  let untitledTitleDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   $: state = $appState;
   $: activeTab = state.session.openTabs.find(
@@ -75,6 +76,16 @@
 
   function notify(message: string): void {
     statusMessage = message;
+  }
+
+  function scheduleUntitledTitleRefresh(documentId: string): void {
+    if (untitledTitleDebounceTimer) {
+      clearTimeout(untitledTitleDebounceTimer);
+    }
+    untitledTitleDebounceTimer = setTimeout(() => {
+      appState.refreshUntitledTitle(documentId);
+      untitledTitleDebounceTimer = null;
+    }, 300);
   }
 
   function teardownSplitScrollSync(): void {
@@ -191,6 +202,7 @@
     const restoredSession = await restoreWindowSession(currentWindowId);
     if (restoredSession) {
       appState.applyWindowSession(restoredSession);
+      appState.normalizeUntitledTitles();
       statusMessage = "Session restored.";
     }
 
@@ -369,6 +381,10 @@
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("dragover", preventBrowserDragOver);
     return () => {
+      if (untitledTitleDebounceTimer) {
+        clearTimeout(untitledTitleDebounceTimer);
+        untitledTitleDebounceTimer = null;
+      }
       runtimeCleanup?.();
       teardownSplitScrollSync();
       window.removeEventListener("keydown", onKeydown);
@@ -477,6 +493,7 @@
                       return;
                     }
                     appState.setDocumentContent(activeDocument.id, nextContent);
+                    scheduleUntitledTitleRefresh(activeDocument.id);
                   }}
                   registerEditorCommandRunner={(runner) => {
                     editorRunner = runner;
@@ -499,6 +516,7 @@
                     return;
                   }
                   appState.setDocumentContent(activeDocument.id, nextContent);
+                  scheduleUntitledTitleRefresh(activeDocument.id);
                 }}
                 registerEditorCommandRunner={(runner) => {
                   editorRunner = runner;
@@ -518,6 +536,7 @@
               return;
             }
             appState.setDocumentContent(activeDocument.id, nextContent);
+            scheduleUntitledTitleRefresh(activeDocument.id);
           }}
           registerEditorCommandRunner={(runner) => {
             editorRunner = runner;

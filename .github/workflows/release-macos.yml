@@ -3,14 +3,13 @@ name: Release macOS
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
   build-macos:
-    if: matches(github.ref_name, '^v[0-9]+\.[0-9]+\.[0-9]+$')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

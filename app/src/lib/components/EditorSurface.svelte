@@ -306,7 +306,7 @@
             backgroundColor: "var(--color-hover)",
           },
           ".cm-cursor, .cm-dropCursor": {
-            borderLeftColor: "#d7e3ff",
+            borderLeftColor: "var(--color-text-primary)",
           },
         }),
         EditorView.updateListener.of((update) => {

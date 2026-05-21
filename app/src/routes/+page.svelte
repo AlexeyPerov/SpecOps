@@ -13,6 +13,7 @@
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
   import { openPath } from "../lib/services/fileSystem";
   import { listen, TauriEvent } from "@tauri-apps/api/event";
+  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import {
     WINDOW_EVENT_ACTIVATE_FILE,
@@ -28,6 +29,7 @@
   import { diffLines } from "diff";
   import { loadPersistedSettings, savePersistedSettings } from "../lib/services/settingsStore";
 
+  const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
   let settingsPaneOpen = false;
   let statusMessage = "Ready";
@@ -173,6 +175,11 @@
     }
   }
 
+  async function consumeOpenedPaths(paths: string[]): Promise<void> {
+    await openDroppedPaths(paths);
+    notify(`Opened ${paths.length} file(s) from app icon.`);
+  }
+
   async function openAndActivatePath(path: string): Promise<void> {
     const opened = await openPath(path);
     if (opened.sizeBytes > 10 * 1024 * 1024) {
@@ -243,6 +250,15 @@
       }
     });
 
+    const unlistenOpenedPaths = await listen<{ paths: string[] }>(APP_EVENT_OPENED_PATHS, async (event) => {
+      await consumeOpenedPaths(event.payload.paths);
+    });
+
+    const initialOpenedPaths = await invoke<string[]>("take_pending_opened_paths");
+    if (initialOpenedPaths.length > 0) {
+      await consumeOpenedPaths(initialOpenedPaths);
+    }
+
     const unlistenTransfer = await listen<{ filePath: string | null; content: string; title: string }>(
       WINDOW_EVENT_TRANSFER_TAB,
       async (event) => {
@@ -270,6 +286,7 @@
 
     return () => {
       unlistenActivate();
+      unlistenOpenedPaths();
       unlistenTransfer();
       unlistenDestroyed();
       unlistenDragDrop();

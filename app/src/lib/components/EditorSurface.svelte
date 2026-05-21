@@ -293,14 +293,16 @@
           ".cm-content, .cm-gutter": {
             minHeight: "100%",
           },
+          ".cm-content": {
+            caretColor: "var(--color-text-primary)",
+          },
           ".cm-gutters": {
             backgroundColor: "var(--color-surface-1)",
             color: "var(--color-text-secondary)",
             borderRight: "1px solid var(--color-border-subtle)",
           },
           "&.cm-focused": {
-            outline: "2px solid var(--color-focus-ring)",
-            outlineOffset: "-2px",
+            outline: "none",
           },
           ".cm-activeLine, .cm-activeLineGutter": {
             backgroundColor: "var(--color-hover)",

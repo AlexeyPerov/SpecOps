@@ -24,6 +24,12 @@ export type ExternalCheckResult =
 const lastWriteFingerprintByPath = new Map<string, DiskFingerprint>();
 const dialogOpenForDocument = new Set<string>();
 const deferredDirtyDocumentIds = new Set<string>();
+const inFlightCheckByDocument = new Map<string, Promise<ExternalCheckResult>>();
+const pendingDirtyPromptByDocument = new Map<
+  string,
+  { trigger: ExternalCheckTrigger; diskFingerprint: DiskFingerprint }
+>();
+let flushingDirtyPrompts = false;
 
 export function shouldSyncFileWatcher(settings: ExternalFilesSettings): boolean {
   return settings.watchExternalChanges;
@@ -99,6 +105,94 @@ async function promptReloadOrKeep(title: string): Promise<"reload" | "keep"> {
   return reload ? "reload" : "keep";
 }
 
+function scheduleFlushDirtyPrompts(): void {
+  queueMicrotask(() => {
+    void flushDirtyPrompts();
+  });
+}
+
+async function flushDirtyPrompts(): Promise<void> {
+  if (flushingDirtyPrompts) {
+    return;
+  }
+  flushingDirtyPrompts = true;
+  try {
+    for (const documentId of [...pendingDirtyPromptByDocument.keys()]) {
+      const pending = pendingDirtyPromptByDocument.get(documentId);
+      if (!pending) {
+        continue;
+      }
+
+      const snapshot = appState.getSnapshot();
+      const documentState = snapshot.documents.find((doc) => doc.id === documentId);
+      if (!documentState?.filePath || !documentState.isDirty) {
+        pendingDirtyPromptByDocument.delete(documentId);
+        continue;
+      }
+
+      if (dialogOpenForDocument.has(documentId)) {
+        continue;
+      }
+
+      let currentFingerprint: DiskFingerprint;
+      try {
+        currentFingerprint = await statDiskFingerprint(documentState.filePath);
+      } catch (error: unknown) {
+        if (isFileMissingError(error)) {
+          pendingDirtyPromptByDocument.delete(documentId);
+          if (!documentState.fileMissing) {
+            appState.setDocumentDiskState(documentId, {
+              diskFingerprint: documentState.diskFingerprint,
+              fileMissing: true,
+            });
+          }
+          continue;
+        }
+        throw error;
+      }
+
+      if (shouldSkipAsDismissed(documentState.dismissedFingerprint, currentFingerprint)) {
+        pendingDirtyPromptByDocument.delete(documentId);
+        continue;
+      }
+
+      if (
+        !diskChanged(documentState.diskFingerprint, currentFingerprint) &&
+        !documentState.fileMissing
+      ) {
+        pendingDirtyPromptByDocument.delete(documentId);
+        continue;
+      }
+
+      pendingDirtyPromptByDocument.delete(documentId);
+      dialogOpenForDocument.add(documentId);
+      try {
+        const choice = await promptReloadOrKeep(documentState.title);
+        if (choice === "reload") {
+          await reloadDocumentFromDisk(documentId, documentState.filePath);
+          deferredDirtyDocumentIds.delete(documentId);
+        } else {
+          appState.applyDocumentKeepLocal(documentId, currentFingerprint);
+          deferredDirtyDocumentIds.delete(documentId);
+        }
+      } catch {
+        pendingDirtyPromptByDocument.set(documentId, {
+          trigger: pending.trigger,
+          diskFingerprint: currentFingerprint,
+        });
+        break;
+      } finally {
+        dialogOpenForDocument.delete(documentId);
+      }
+    }
+  } finally {
+    flushingDirtyPrompts = false;
+    if (pendingDirtyPromptByDocument.size > 0) {
+      scheduleFlushDirtyPrompts();
+    }
+  }
+}
+
 async function reloadDocumentFromDisk(
   documentId: string,
   filePath: string,
@@ -109,6 +203,26 @@ async function reloadDocumentFromDisk(
 }
 
 export async function checkDocumentExternalChanges(
+  documentId: string,
+  trigger: ExternalCheckTrigger,
+): Promise<ExternalCheckResult> {
+  const inFlight = inFlightCheckByDocument.get(documentId);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const checkPromise = checkDocumentExternalChangesInner(documentId, trigger);
+  inFlightCheckByDocument.set(documentId, checkPromise);
+  try {
+    return await checkPromise;
+  } finally {
+    if (inFlightCheckByDocument.get(documentId) === checkPromise) {
+      inFlightCheckByDocument.delete(documentId);
+    }
+  }
+}
+
+async function checkDocumentExternalChangesInner(
   documentId: string,
   trigger: ExternalCheckTrigger,
 ): Promise<ExternalCheckResult> {
@@ -124,6 +238,10 @@ export async function checkDocumentExternalChanges(
 
   if (dialogOpenForDocument.has(documentId)) {
     return "skipped";
+  }
+
+  if (pendingDirtyPromptByDocument.has(documentId)) {
+    return "deferred";
   }
 
   let currentFingerprint: DiskFingerprint;
@@ -179,33 +297,24 @@ export async function checkDocumentExternalChanges(
     return "deferred";
   }
 
-  dialogOpenForDocument.add(documentId);
-  try {
-    const choice = await promptReloadOrKeep(documentState.title);
-    if (choice === "reload") {
-      await reloadDocumentFromDisk(documentId, documentState.filePath);
-      deferredDirtyDocumentIds.delete(documentId);
-      return "reloaded";
-    }
-
-    appState.applyDocumentKeepLocal(documentId, currentFingerprint);
-    deferredDirtyDocumentIds.delete(documentId);
-    return "kept";
-  } finally {
-    dialogOpenForDocument.delete(documentId);
-  }
+  pendingDirtyPromptByDocument.set(documentId, {
+    trigger,
+    diskFingerprint: currentFingerprint,
+  });
+  scheduleFlushDirtyPrompts();
+  return "deferred";
 }
 
 export async function checkDocumentIfDeferred(
   documentId: string,
   trigger: "focus" | "tab",
 ): Promise<ExternalCheckResult> {
-  if (!deferredDirtyDocumentIds.has(documentId)) {
-    return checkDocumentExternalChanges(documentId, trigger);
+  if (deferredDirtyDocumentIds.has(documentId)) {
+    deferredDirtyDocumentIds.delete(documentId);
   }
-
-  deferredDirtyDocumentIds.delete(documentId);
-  return checkDocumentExternalChanges(documentId, trigger);
+  const result = await checkDocumentExternalChanges(documentId, trigger);
+  await flushDirtyPrompts();
+  return result;
 }
 
 export async function runStartupExternalChecks(): Promise<void> {
@@ -228,6 +337,7 @@ export async function runFocusExternalChecks(): Promise<void> {
   for (const tab of snapshot.session.openTabs) {
     await checkDocumentIfDeferred(tab.documentId, "focus");
   }
+  await flushDirtyPrompts();
 }
 
 export async function runWatcherExternalCheck(normalizedOrRawPath: string): Promise<void> {
@@ -244,6 +354,7 @@ export async function runWatcherExternalCheck(normalizedOrRawPath: string): Prom
       normalizePathSync(documentState.filePath) === normalized
     ) {
       await checkDocumentExternalChanges(documentState.id, "watcher");
+      await flushDirtyPrompts();
       return;
     }
   }
@@ -291,5 +402,7 @@ export async function reloadActiveDocumentFromDisk(): Promise<ExternalCheckResul
     }
   }
 
-  return checkDocumentExternalChanges(documentState.id, "manual");
+  const result = await checkDocumentExternalChanges(documentState.id, "manual");
+  await flushDirtyPrompts();
+  return result;
 }

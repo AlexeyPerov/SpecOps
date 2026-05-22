@@ -1,6 +1,11 @@
 export type ThemeMode = "light" | "dark";
 export type AccentOption = "blue" | "violet" | "green";
 
+export interface DiskFingerprint {
+  mtimeMs: number;
+  sizeBytes: number;
+}
+
 export interface DocumentIdentity {
   id: string;
   filePath: string | null;
@@ -14,6 +19,9 @@ export interface DocumentState extends DocumentIdentity {
   language: "plaintext" | "markdown";
   encoding: "utf-8";
   lineEnding: "lf" | "crlf";
+  diskFingerprint: DiskFingerprint | null;
+  dismissedFingerprint: DiskFingerprint | null;
+  fileMissing: boolean;
 }
 
 export interface TabState {
@@ -28,10 +36,18 @@ export interface SessionState {
   lastActiveWindowId: string;
 }
 
+export interface ExternalFilesSettings {
+  watchExternalChanges: boolean;
+  autoReloadCleanFiles: boolean;
+  checkOnWindowFocus: boolean;
+  checkOnTabActivate: boolean;
+}
+
 export interface AppSettingsState {
   themeMode: ThemeMode;
   accent: AccentOption;
   statusBarVisible: boolean;
+  externalFiles: ExternalFilesSettings;
 }
 
 export type AppCommandId =
@@ -49,6 +65,7 @@ export type AppCommandId =
   | "file.saveAs"
   | "file.saveAll"
   | "file.rename"
+  | "file.reloadFromDisk"
   | "tab.close"
   | "tab.moveToNewWindow"
   | "tab.next"
@@ -88,6 +105,13 @@ export interface DiagnosticEvent {
   timestamp: string;
 }
 
+export interface OpenFileOwner {
+  windowId: string;
+  documentId: string;
+}
+
+export type OpenFileRegistry = Record<string, OpenFileOwner>;
+
 export interface AppDomainState {
   documents: DocumentState[];
   session: SessionState;
@@ -115,5 +139,6 @@ export interface AppSessionSnapshot {
   version: 1;
   updatedAt: string;
   lastActiveWindowId: string;
+  openFileRegistry: OpenFileRegistry;
   windows: Record<string, WindowSessionSnapshot>;
 }

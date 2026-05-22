@@ -1,6 +1,9 @@
+mod file_watcher;
+
+use file_watcher::FileWatcherState;
 use serde::Serialize;
 use std::sync::{Mutex, OnceLock};
-use tauri::{Emitter, RunEvent};
+use tauri::{Emitter, Manager, RunEvent};
 use tauri_plugin_log::log::LevelFilter;
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -36,7 +39,17 @@ fn take_pending_opened_paths() -> Vec<String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![take_pending_opened_paths])
+        .manage(FileWatcherState::new())
+        .setup(|app| {
+            if let Some(watcher_state) = app.try_state::<FileWatcherState>() {
+                watcher_state.set_app_handle(app.handle().clone());
+            }
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            take_pending_opened_paths,
+            file_watcher::sync_file_watcher_paths,
+        ])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(

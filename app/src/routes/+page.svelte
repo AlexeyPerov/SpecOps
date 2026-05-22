@@ -17,6 +17,7 @@
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import {
     WINDOW_EVENT_ACTIVATE_FILE,
+    WINDOW_EVENT_SELECT_TAB_FOR_PATH,
     WINDOW_EVENT_TRANSFER_TAB,
     markWindowActive,
     routePathToLastActiveWindow,
@@ -25,9 +26,25 @@
     restoreWindowSession,
     scheduleSessionPersistence,
   } from "../lib/services/sessionManager";
+  import {
+    completeOpenPath,
+    requestOpenPath,
+    selectTabForNormalizedPath,
+  } from "../lib/services/openFileGate";
+  import {
+    claimOpenFile,
+    releaseAllOpenFilesForWindow,
+    syncOpenFileRegistryForWindow,
+  } from "../lib/services/openFileRegistry";
+  import {
+    loadPersistedSettings,
+    savePersistedSettings,
+    toExternalFilesSettings,
+    toPersistedSettings,
+  } from "../lib/services/settingsStore";
   import { marked } from "marked";
   import { diffLines } from "diff";
-  import { loadPersistedSettings, savePersistedSettings } from "../lib/services/settingsStore";
+  import type { ExternalFilesSettings } from "../lib/domain/contracts";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -159,6 +176,7 @@
       },
       notify,
       getState: () => state,
+      getWindowId: () => currentWindowId,
       confirm: (message) => window.confirm(message),
       getEditorRunner: () => editorRunner,
     });
@@ -181,13 +199,34 @@
   }
 
   async function openAndActivatePath(path: string): Promise<void> {
+    const gateResult = await requestOpenPath(path, currentWindowId);
+    if (gateResult.kind === "redirected") {
+      notify(`Switched to ${path} in another window.`);
+      return;
+    }
+    if (gateResult.kind === "existing") {
+      notify(`Opened ${path}`);
+      return;
+    }
+
     const opened = await openPath(path);
     if (opened.sizeBytes > 10 * 1024 * 1024) {
       notify("Open failed: file exceeds 10MB MVP limit.");
       return;
     }
-    appState.openFileInTab(opened.path, opened.content);
+    await completeOpenPath(opened.path, opened.content, currentWindowId);
     notify(`Opened ${opened.path}`);
+  }
+
+  function updateExternalFilesSetting(
+    key: keyof ExternalFilesSettings,
+    value: boolean,
+  ): void {
+    const current = appState.getSnapshot().settings.externalFiles;
+    appState.setExternalFilesSettings({
+      ...current,
+      [key]: value,
+    });
   }
 
   async function setupRuntime(): Promise<() => void> {
@@ -210,29 +249,19 @@
     if (restoredSession) {
       appState.applyWindowSession(restoredSession);
       appState.normalizeUntitledTitles();
+      await syncOpenFileRegistryForWindow(currentWindowId, appState.getSnapshot());
       statusMessage = "Session restored.";
     }
 
     const persistedSettings = await loadPersistedSettings();
     if (persistedSettings) {
-      const appliedState = appState.getSnapshot();
-      if (persistedSettings.themeMode !== appliedState.settings.themeMode) {
-        appState.toggleTheme();
-      }
-      const accents: ("blue" | "violet" | "green")[] = ["blue", "violet", "green"];
-      const currentAccent = appState.getSnapshot().settings.accent;
-      const currentIndex = accents.indexOf(currentAccent);
-      const targetIndex = accents.indexOf(persistedSettings.accent);
-      const steps = targetIndex >= 0 && currentIndex >= 0
-        ? (targetIndex - currentIndex + accents.length) % accents.length
-        : 0;
-      for (let i = 0; i < steps; i += 1) {
-        appState.cycleAccent();
-      }
-      appState.setZoomPercent(persistedSettings.zoomPercent);
-      if (persistedSettings.wrapLines !== appState.getSnapshot().editor.wrapLines) {
-        appState.toggleWrap();
-      }
+      appState.applyPersistedSettings({
+        themeMode: persistedSettings.themeMode,
+        accent: persistedSettings.accent,
+        wrapLines: persistedSettings.wrapLines,
+        zoomPercent: persistedSettings.zoomPercent,
+        externalFiles: toExternalFilesSettings(persistedSettings),
+      });
     }
 
     await currentWindow.onFocusChanged(async ({ payload }) => {
@@ -259,14 +288,29 @@
       await consumeOpenedPaths(initialOpenedPaths);
     }
 
-    const unlistenTransfer = await listen<{ filePath: string | null; content: string; title: string }>(
-      WINDOW_EVENT_TRANSFER_TAB,
+    const unlistenSelectTab = await listen<{ path: string }>(
+      WINDOW_EVENT_SELECT_TAB_FOR_PATH,
       async (event) => {
-        appState.openTransferredTab(event.payload);
+        selectTabForNormalizedPath(event.payload.path);
       },
     );
 
-    const unlistenDestroyed = await listen(TauriEvent.WINDOW_DESTROYED, async () => {
+    const unlistenTransfer = await listen<{ filePath: string | null; content: string; title: string }>(
+      WINDOW_EVENT_TRANSFER_TAB,
+      async (event) => {
+        const documentId = appState.openTransferredTab(event.payload);
+        if (event.payload.filePath && documentId) {
+          await claimOpenFile(event.payload.filePath, currentWindowId, documentId);
+        }
+      },
+    );
+
+    const unlistenDestroyed = await listen(TauriEvent.WINDOW_DESTROYED, async (event) => {
+      const destroyedWindowId =
+        typeof event.payload === "string" ? event.payload : currentWindowId;
+      if (destroyedWindowId === currentWindowId) {
+        await releaseAllOpenFilesForWindow(currentWindowId);
+      }
       await logDiagnostic({
         level: "warn",
         source: "frontend",
@@ -286,6 +330,7 @@
 
     return () => {
       unlistenActivate();
+      unlistenSelectTab();
       unlistenOpenedPaths();
       unlistenTransfer();
       unlistenDestroyed();
@@ -430,12 +475,15 @@
   $: if (state) {
     scheduleSessionPersistence(state, currentWindowId);
     if (currentWindowId) {
-      void savePersistedSettings({
-        themeMode: state.settings.themeMode,
-        accent: state.settings.accent,
-        wrapLines: state.editor.wrapLines,
-        zoomPercent: state.editor.zoomPercent,
-      });
+      void savePersistedSettings(
+        toPersistedSettings({
+          themeMode: state.settings.themeMode,
+          accent: state.settings.accent,
+          wrapLines: state.editor.wrapLines,
+          zoomPercent: state.editor.zoomPercent,
+          externalFiles: state.settings.externalFiles,
+        }),
+      );
     }
   }
 </script>
@@ -630,6 +678,60 @@
         Cycle Accent
       </button>
       <p>Recent files: {state.recentFiles.length}</p>
+      <section class="settings-section">
+        <h3>External files</h3>
+        <label class="settings-toggle">
+          <input
+            type="checkbox"
+            checked={state.settings.externalFiles.watchExternalChanges}
+            onchange={(event) =>
+              updateExternalFilesSetting(
+                "watchExternalChanges",
+                (event.currentTarget as HTMLInputElement).checked,
+              )}
+          />
+          Watch external file changes
+        </label>
+        <label class="settings-toggle">
+          <input
+            type="checkbox"
+            checked={state.settings.externalFiles.autoReloadCleanFiles}
+            disabled={!state.settings.externalFiles.watchExternalChanges}
+            onchange={(event) =>
+              updateExternalFilesSetting(
+                "autoReloadCleanFiles",
+                (event.currentTarget as HTMLInputElement).checked,
+              )}
+          />
+          Reload clean files automatically
+        </label>
+        <label class="settings-toggle">
+          <input
+            type="checkbox"
+            checked={state.settings.externalFiles.checkOnWindowFocus}
+            disabled={!state.settings.externalFiles.watchExternalChanges}
+            onchange={(event) =>
+              updateExternalFilesSetting(
+                "checkOnWindowFocus",
+                (event.currentTarget as HTMLInputElement).checked,
+              )}
+          />
+          Check when window gains focus
+        </label>
+        <label class="settings-toggle">
+          <input
+            type="checkbox"
+            checked={state.settings.externalFiles.checkOnTabActivate}
+            disabled={!state.settings.externalFiles.watchExternalChanges}
+            onchange={(event) =>
+              updateExternalFilesSetting(
+                "checkOnTabActivate",
+                (event.currentTarget as HTMLInputElement).checked,
+              )}
+          />
+          Check when tab becomes active
+        </label>
+      </section>
       <p>This pane uses token-driven overlay styling.</p>
     </aside>
   </section>
@@ -873,6 +975,30 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-6);
+  }
+
+  .settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin-top: var(--space-8);
+  }
+
+  .settings-section h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: 0.875rem;
+  }
+
+  .settings-toggle input {
+    accent-color: var(--accent-color);
   }
 
   .settings-pane {

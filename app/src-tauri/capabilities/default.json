@@ -27,6 +27,10 @@
       "identifier": "fs:allow-mkdir",
       "allow": [{ "path": "$APPDATA/**" }]
     },
+    {
+      "identifier": "fs:allow-stat",
+      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }]
+    },
     "log:default",
     "opener:default"
   ]

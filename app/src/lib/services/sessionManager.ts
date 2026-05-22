@@ -9,6 +9,10 @@ import type {
   WindowSessionSnapshot,
 } from "../domain/contracts";
 import { logDiagnostic } from "./logging";
+import {
+  dedupeWindowSnapshotAgainstRegistry,
+  syncOpenFileRegistryForWindow,
+} from "./openFileRegistry";
 
 const SESSION_FILE = "session.json";
 const SESSION_BACKUP_FILE = "session.backup.json";
@@ -40,6 +44,9 @@ function buildFallbackDocument(documentId: string): DocumentState {
     language: "plaintext",
     encoding: "utf-8",
     lineEnding: "lf",
+    diskFingerprint: null,
+    dismissedFingerprint: null,
+    fileMissing: false,
   };
 }
 
@@ -80,7 +87,9 @@ async function fileStillExists(path: string): Promise<boolean> {
 async function sanitizeWindowSnapshot(
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
-  const documentsById = new Map(snapshot.documents.map((documentState) => [documentState.id, documentState]));
+  const documentsById = new Map(
+    snapshot.documents.map((documentState) => [documentState.id, { ...documentState }]),
+  );
   const openTabs: TabState[] = [];
 
   for (const tab of snapshot.session.openTabs) {
@@ -91,7 +100,10 @@ async function sanitizeWindowSnapshot(
     if (linkedDocument.filePath) {
       const exists = await fileStillExists(linkedDocument.filePath);
       if (!exists) {
-        continue;
+        documentsById.set(tab.documentId, {
+          ...linkedDocument,
+          fileMissing: true,
+        });
       }
     }
     openTabs.push(tab);
@@ -119,8 +131,8 @@ async function sanitizeWindowSnapshot(
   }
 
   const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
-  const documents = snapshot.documents.filter((documentState) =>
-    referencedDocIds.has(documentState.id)
+  const documents = [...documentsById.values()].filter((documentState) =>
+    referencedDocIds.has(documentState.id),
   );
   const selectedTabId = openTabs.some((tab) => tab.id === snapshot.session.selectedTabId)
     ? snapshot.session.selectedTabId
@@ -148,6 +160,7 @@ export async function persistSessionSnapshot(
     version: 1,
     updatedAt: new Date().toISOString(),
     lastActiveWindowId: windowId,
+    openFileRegistry: {},
     windows: {},
   };
 
@@ -155,7 +168,10 @@ export async function persistSessionSnapshot(
     const raw = await readTextFile(sessionPath);
     const parsed = JSON.parse(raw) as AppSessionSnapshot;
     if (parsed.version === 1 && parsed.windows) {
-      current = parsed;
+      current = {
+        ...parsed,
+        openFileRegistry: parsed.openFileRegistry ?? {},
+      };
     }
   } catch {
     // first save / no session file
@@ -168,6 +184,8 @@ export async function persistSessionSnapshot(
   const content = JSON.stringify(current, null, 2);
   await writeTextFile(sessionPath, content);
   await writeTextFile(backupPath, content);
+
+  await syncOpenFileRegistryForWindow(windowId, state);
 
   await logDiagnostic({
     level: "debug",
@@ -194,7 +212,8 @@ export async function restoreWindowSession(
     if (!snapshot) {
       return null;
     }
-    return sanitizeWindowSnapshot(snapshot);
+    const deduped = await dedupeWindowSnapshotAgainstRegistry(windowId, snapshot);
+    return sanitizeWindowSnapshot(deduped);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "unknown error";
     await logDiagnostic({
@@ -223,7 +242,8 @@ export async function restoreWindowSession(
     if (!snapshot) {
       return null;
     }
-    return sanitizeWindowSnapshot(snapshot);
+    const deduped = await dedupeWindowSnapshotAgainstRegistry(windowId, snapshot);
+    return sanitizeWindowSnapshot(deduped);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "unknown error";
     await logDiagnostic({
@@ -269,6 +289,7 @@ export async function updateLastActiveWindow(windowId: string): Promise<void> {
     version: 1,
     updatedAt: new Date().toISOString(),
     lastActiveWindowId: windowId,
+    openFileRegistry: {},
     windows: {},
   };
 
@@ -276,7 +297,10 @@ export async function updateLastActiveWindow(windowId: string): Promise<void> {
     const raw = await readTextFile(sessionPath);
     const parsed = JSON.parse(raw) as AppSessionSnapshot;
     if (parsed.version === 1 && parsed.windows) {
-      current = parsed;
+      current = {
+        ...parsed,
+        openFileRegistry: parsed.openFileRegistry ?? {},
+      };
     }
   } catch {
     // no existing session file yet

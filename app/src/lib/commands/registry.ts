@@ -4,6 +4,8 @@ import { appState } from "../state/appState";
 import { logDiagnostic } from "../services/logging";
 import type { EditorCommandRunner } from "../types/editor";
 import { openFileDialog, renameFile, saveFile, saveFileAs } from "../services/fileSystem";
+import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
+import { renameOpenFileRegistry } from "../services/openFileRegistry";
 import { createNewWindowWithTransfer } from "../services/windowManager";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 
@@ -12,6 +14,7 @@ type CommandContext = {
   isSettingsPaneOpen: () => boolean;
   notify: (message: string) => void;
   getState: () => AppDomainState;
+  getWindowId: () => string;
   confirm: (message: string) => boolean;
   getEditorRunner: () => EditorCommandRunner | null;
 };
@@ -79,6 +82,7 @@ function sanitizeErrorDetails(details: Record<string, unknown>): Record<string, 
 
 async function openAndStoreFile(
   notify: (message: string) => void,
+  windowId: string,
   opened: { path: string; content: string; sizeBytes: number } | null,
 ): Promise<void> {
   if (!opened) {
@@ -88,7 +92,18 @@ async function openAndStoreFile(
     notify("Open failed: file exceeds 10MB MVP limit.");
     return;
   }
-  appState.openFileInTab(opened.path, opened.content);
+
+  const gateResult = await requestOpenPath(opened.path, windowId);
+  if (gateResult.kind === "redirected") {
+    notify(`Switched to ${opened.path} in another window.`);
+    return;
+  }
+  if (gateResult.kind === "existing") {
+    notify(`Opened ${opened.path}`);
+    return;
+  }
+
+  await completeOpenPath(opened.path, opened.content, windowId);
   notify(`Opened ${opened.path}`);
 }
 
@@ -359,10 +374,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     appState.createTab();
     notify("New tab created.");
   },
-  "file.open": async ({ notify }) => {
+  "file.open": async ({ notify, getWindowId }) => {
     try {
       const opened = await openFileDialog();
-      await openAndStoreFile(notify, opened);
+      await openAndStoreFile(notify, getWindowId(), opened);
     } catch (error: unknown) {
       const reason = summarizeError(error);
       const details = sanitizeErrorDetails(serializeUnknownError(error));
@@ -376,7 +391,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       throw error;
     }
   },
-  "file.save": async ({ getState, notify }) => {
+  "file.save": async ({ getState, notify, getWindowId }) => {
     const state = getState();
     const selected = state.session.openTabs.find(
       (tab) => tab.id === state.session.selectedTabId,
@@ -391,6 +406,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     }
 
     let targetPath = doc.filePath;
+    const previousPath = doc.filePath;
     if (!targetPath) {
       targetPath = await saveFileAs(doc.content);
       if (!targetPath) {
@@ -400,9 +416,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       await saveFile({ path: targetPath, content: doc.content });
     }
     appState.markDocumentSaved(doc.id, targetPath, doc.content);
+    await renameOpenFileRegistry(previousPath, targetPath, getWindowId(), doc.id);
     notify(`Saved ${targetPath}`);
   },
-  "file.saveAs": async ({ getState, notify }) => {
+  "file.saveAs": async ({ getState, notify, getWindowId }) => {
     const state = getState();
     const selected = state.session.openTabs.find(
       (tab) => tab.id === state.session.selectedTabId,
@@ -419,10 +436,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!targetPath) {
       return;
     }
+    const previousPath = doc.filePath;
     appState.markDocumentSaved(doc.id, targetPath, doc.content);
+    await renameOpenFileRegistry(previousPath, targetPath, getWindowId(), doc.id);
     notify(`Saved as ${targetPath}`);
   },
-  "file.saveAll": async ({ getState, notify }) => {
+  "file.saveAll": async ({ getState, notify, getWindowId }) => {
     const state = getState();
     let saved = 0;
     for (const documentState of state.documents) {
@@ -430,6 +449,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
         continue;
       }
       let targetPath = documentState.filePath;
+      const previousPath = documentState.filePath;
       if (!targetPath) {
         targetPath = await saveFileAs(documentState.content);
         if (!targetPath) {
@@ -439,11 +459,17 @@ const handlers: Record<AppCommandId, CommandHandler> = {
         await saveFile({ path: targetPath, content: documentState.content });
       }
       appState.markDocumentSaved(documentState.id, targetPath, documentState.content);
+      await renameOpenFileRegistry(
+        previousPath,
+        targetPath,
+        getWindowId(),
+        documentState.id,
+      );
       saved += 1;
     }
     notify(saved > 0 ? `Saved ${saved} document(s).` : "No dirty documents to save.");
   },
-  "file.rename": async ({ getState, notify }) => {
+  "file.rename": async ({ getState, notify, getWindowId }) => {
     const state = getState();
     const selected = state.session.openTabs.find(
       (tab) => tab.id === state.session.selectedTabId,
@@ -462,7 +488,11 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     }
     const title = renamedPath.replaceAll("\\", "/").split("/").pop() ?? renamedPath;
     appState.renameDocument(doc.id, renamedPath, title);
+    await renameOpenFileRegistry(doc.filePath, renamedPath, getWindowId(), doc.id);
     notify(`Renamed to ${title}`);
+  },
+  "file.reloadFromDisk": ({ notify }) => {
+    notify("Reload from disk will be available after external file change handling is wired.");
   },
   "tab.close": ({ getState, confirm, notify }) => {
     const state = getState();

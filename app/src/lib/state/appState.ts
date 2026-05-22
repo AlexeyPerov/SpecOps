@@ -5,15 +5,25 @@ import type {
   AppSettingsState,
   DocumentState,
   DocumentIdentity,
+  ExternalFilesSettings,
   TabState,
   WindowSessionSnapshot,
   ThemeMode,
 } from "../domain/contracts";
+import { normalizePathSync } from "../services/diskFingerprint";
+
+const defaultExternalFilesSettings: ExternalFilesSettings = {
+  watchExternalChanges: true,
+  autoReloadCleanFiles: true,
+  checkOnWindowFocus: true,
+  checkOnTabActivate: true,
+};
 
 const defaultSettings: AppSettingsState = {
   themeMode: "dark",
   accent: "blue",
   statusBarVisible: true,
+  externalFiles: defaultExternalFilesSettings,
 };
 
 let docCounter = 1;
@@ -54,6 +64,40 @@ function buildDocument(identity: DocumentIdentity, content: string, title: strin
     language: inferLanguage(identity.filePath),
     encoding: "utf-8",
     lineEnding: content.includes("\r\n") ? "crlf" : "lf",
+    diskFingerprint: null,
+    dismissedFingerprint: null,
+    fileMissing: false,
+  };
+}
+
+function normalizeDocument(documentState: DocumentState): DocumentState {
+  return {
+    ...documentState,
+    diskFingerprint: documentState.diskFingerprint ?? null,
+    dismissedFingerprint: documentState.dismissedFingerprint ?? null,
+    fileMissing: documentState.fileMissing ?? false,
+  };
+}
+
+function findDocumentByPath(state: AppDomainState, filePath: string): DocumentState | undefined {
+  const normalized = normalizePathSync(filePath);
+  return state.documents.find(
+    (documentState) =>
+      documentState.filePath !== null &&
+      normalizePathSync(documentState.filePath) === normalized,
+  );
+}
+
+function reopenTabForDocument(state: AppDomainState, documentId: string): AppDomainState {
+  tabCounter += 1;
+  const tabId = `tab-${tabCounter}`;
+  return {
+    ...state,
+    session: {
+      ...state.session,
+      openTabs: [...state.session.openTabs, { id: tabId, documentId, pinned: false }],
+      selectedTabId: tabId,
+    },
   };
 }
 
@@ -177,7 +221,7 @@ function createStateStore() {
         ),
       );
       set({
-        documents: snapshot.documents,
+        documents: snapshot.documents.map(normalizeDocument),
         session: snapshot.session,
         settings: defaultSettings,
         recentFiles: snapshot.recentFiles,
@@ -215,6 +259,21 @@ function createStateStore() {
     },
     selectTab(tabId: string) {
       update((state) => selectTabInternal(state, tabId));
+    },
+    selectOrReopenTabForDocument(documentId: string) {
+      update((state) => {
+        const existingTab = state.session.openTabs.find(
+          (tab) => tab.documentId === documentId,
+        );
+        if (existingTab) {
+          return selectTabInternal(state, existingTab.id);
+        }
+        return reopenTabForDocument(state, documentId);
+      });
+    },
+    findDocumentIdByPath(filePath: string): string | null {
+      const snapshot = this.getSnapshot();
+      return findDocumentByPath(snapshot, filePath)?.id ?? null;
     },
     reorderTabs(fromIndex: number, toIndex: number) {
       update((state) => {
@@ -301,23 +360,25 @@ function createStateStore() {
         };
       });
     },
-    openFileInTab(filePath: string, content: string) {
+    openFileInTab(filePath: string, content: string): string {
+      let openedDocumentId = "";
       update((state) => {
-        const duplicate = state.documents.find(
-          (doc) => doc.filePath === filePath,
-        );
+        const duplicate = findDocumentByPath(state, filePath);
         if (duplicate) {
+          openedDocumentId = duplicate.id;
           const existingTab = state.session.openTabs.find(
             (tab) => tab.documentId === duplicate.id,
           );
           if (existingTab) {
             return selectTabInternal(state, existingTab.id);
           }
+          return reopenTabForDocument(state, duplicate.id);
         }
 
         docCounter += 1;
         tabCounter += 1;
         const docId = `doc-${docCounter}`;
+        openedDocumentId = docId;
         const tabId = `tab-${tabCounter}`;
         const documentState = buildDocument(
           { id: docId, filePath },
@@ -329,7 +390,7 @@ function createStateStore() {
           15,
         );
 
-        const nextState = {
+        return {
           ...state,
           documents: [...state.documents, documentState],
           recentFiles,
@@ -339,8 +400,8 @@ function createStateStore() {
             selectedTabId: tabId,
           },
         };
-        return nextState;
       });
+      return openedDocumentId;
     },
     transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
       const snapshot = this.getSnapshot();
@@ -367,24 +428,26 @@ function createStateStore() {
       filePath: string | null;
       content: string;
       title: string;
-    }) {
+    }): string | null {
+      let documentId: string | null = null;
       update((state) => {
         if (payload.filePath) {
-          const duplicate = state.documents.find(
-            (doc) => doc.filePath === payload.filePath,
-          );
+          const duplicate = findDocumentByPath(state, payload.filePath);
           if (duplicate) {
+            documentId = duplicate.id;
             const existingTab = state.session.openTabs.find(
               (tab) => tab.documentId === duplicate.id,
             );
             if (existingTab) {
               return selectTabInternal(state, existingTab.id);
             }
+            return reopenTabForDocument(state, duplicate.id);
           }
         }
         docCounter += 1;
         tabCounter += 1;
         const docId = `doc-${docCounter}`;
+        documentId = docId;
         const tabId = `tab-${tabCounter}`;
         const newDoc = buildDocument(
           { id: docId, filePath: payload.filePath },
@@ -401,6 +464,7 @@ function createStateStore() {
           },
         };
       });
+      return documentId;
     },
     setDocumentContent(documentId: string, content: string) {
       update((state) => {
@@ -567,6 +631,59 @@ function createStateStore() {
           wrapLines: !state.editor.wrapLines,
         },
       }));
+    },
+    setExternalFilesSettings(externalFiles: ExternalFilesSettings) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          externalFiles,
+        },
+      }));
+    },
+    applyPersistedSettings(partial: {
+      themeMode?: ThemeMode;
+      accent?: AccentOption;
+      wrapLines?: boolean;
+      zoomPercent?: number;
+      externalFiles?: ExternalFilesSettings;
+    }) {
+      update((state) => {
+        let next = state;
+        if (partial.themeMode && partial.themeMode !== state.settings.themeMode) {
+          const themeMode = partial.themeMode;
+          const settings = { ...state.settings, themeMode };
+          applyTheme(settings);
+          next = { ...next, settings };
+        }
+        if (partial.accent && partial.accent !== next.settings.accent) {
+          const settings = { ...next.settings, accent: partial.accent };
+          applyTheme(settings);
+          next = { ...next, settings };
+        }
+        if (typeof partial.wrapLines === "boolean" && partial.wrapLines !== next.editor.wrapLines) {
+          next = {
+            ...next,
+            editor: { ...next.editor, wrapLines: partial.wrapLines },
+          };
+        }
+        if (typeof partial.zoomPercent === "number") {
+          next = {
+            ...next,
+            editor: { ...next.editor, zoomPercent: partial.zoomPercent },
+          };
+        }
+        if (partial.externalFiles) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              externalFiles: partial.externalFiles,
+            },
+          };
+        }
+        return next;
+      });
     },
   };
 }

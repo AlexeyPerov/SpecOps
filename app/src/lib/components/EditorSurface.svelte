@@ -282,7 +282,7 @@
             },
           }),
         ),
-        markdown(),
+        markdown({ addKeymap: false }),
         EditorView.theme({
           "&": {
             height: "100%",

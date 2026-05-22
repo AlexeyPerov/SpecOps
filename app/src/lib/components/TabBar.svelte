@@ -33,7 +33,8 @@
     if (!tabDoc) {
       return "Untitled";
     }
-    return `${tabDoc.title}${tabDoc.isDirty ? "*" : ""}`;
+    const missingSuffix = tabDoc.fileMissing ? " (missing)" : "";
+    return `${tabDoc.title}${tabDoc.isDirty ? "*" : ""}${missingSuffix}`;
   }
 
   function previewTabs(

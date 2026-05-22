@@ -7,6 +7,9 @@ import {
   readOpenFileRegistry,
 } from "./openFileRegistry";
 import {
+  initializeDocumentDiskState,
+} from "./externalFileChanges";
+import {
   WINDOW_EVENT_SELECT_TAB_FOR_PATH,
 } from "./windowManager";
 
@@ -73,5 +76,6 @@ export async function completeOpenPath(
 ): Promise<string> {
   const documentId = appState.openFileInTab(path, content);
   await claimOpenFile(path, windowId, documentId);
+  await initializeDocumentDiskState(documentId, path);
   return documentId;
 }

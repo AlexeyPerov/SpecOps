@@ -1,5 +1,8 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import type { DiskFingerprint } from "../domain/contracts";
+import { statDiskFingerprint } from "./diskFingerprint";
+import { recordWriteFingerprint } from "./externalFileChanges";
 
 export interface OpenedFile {
   path: string;
@@ -24,11 +27,14 @@ export async function openFileDialog(): Promise<OpenedFile | null> {
   return openPath(selectedPath);
 }
 
-export async function saveFile(payload: FileSavePayload): Promise<void> {
+export async function saveFile(payload: FileSavePayload): Promise<DiskFingerprint> {
   await writeTextFile(payload.path, payload.content);
+  const fingerprint = await statDiskFingerprint(payload.path);
+  recordWriteFingerprint(payload.path, fingerprint);
+  return fingerprint;
 }
 
-export async function saveFileAs(content: string): Promise<string | null> {
+export async function saveFileAs(content: string): Promise<{ path: string; fingerprint: DiskFingerprint } | null> {
   const selectedPath = await save({
     title: "Save File As",
   });
@@ -36,7 +42,9 @@ export async function saveFileAs(content: string): Promise<string | null> {
     return null;
   }
   await writeTextFile(selectedPath, content);
-  return selectedPath;
+  const fingerprint = await statDiskFingerprint(selectedPath);
+  recordWriteFingerprint(selectedPath, fingerprint);
+  return { path: selectedPath, fingerprint };
 }
 
 export async function renameFile(oldPath: string): Promise<string | null> {

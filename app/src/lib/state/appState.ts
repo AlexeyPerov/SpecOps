@@ -3,6 +3,7 @@ import type {
   AccentOption,
   AppDomainState,
   AppSettingsState,
+  DiskFingerprint,
   DocumentState,
   DocumentIdentity,
   ExternalFilesSettings,
@@ -542,6 +543,7 @@ function createStateStore() {
               | "crlf",
             isDirty: false,
             language: inferLanguage(filePath),
+            fileMissing: false,
           };
         });
         const recentFiles =
@@ -550,6 +552,68 @@ function createStateStore() {
             : [filePath, ...state.recentFiles.filter((entry) => entry !== filePath)].slice(0, 15);
         return { ...state, documents, recentFiles };
       });
+    },
+    applyDocumentDiskReload(
+      documentId: string,
+      content: string,
+      diskFingerprint: DiskFingerprint,
+    ) {
+      update((state) => ({
+        ...state,
+        documents: state.documents.map((documentState) => {
+          if (documentState.id !== documentId) {
+            return documentState;
+          }
+          return {
+            ...documentState,
+            content,
+            savedContent: content,
+            isDirty: false,
+            diskFingerprint,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
+          };
+        }),
+      }));
+    },
+    applyDocumentKeepLocal(
+      documentId: string,
+      dismissedFingerprint: DiskFingerprint,
+    ) {
+      update((state) => ({
+        ...state,
+        documents: state.documents.map((documentState) => {
+          if (documentState.id !== documentId) {
+            return documentState;
+          }
+          return {
+            ...documentState,
+            dismissedFingerprint,
+          };
+        }),
+      }));
+    },
+    setDocumentDiskState(
+      documentId: string,
+      patch: {
+        diskFingerprint: DiskFingerprint | null;
+        fileMissing: boolean;
+      },
+    ) {
+      update((state) => ({
+        ...state,
+        documents: state.documents.map((documentState) => {
+          if (documentState.id !== documentId) {
+            return documentState;
+          }
+          return {
+            ...documentState,
+            diskFingerprint: patch.diskFingerprint,
+            fileMissing: patch.fileMissing,
+          };
+        }),
+      }));
     },
     renameDocument(documentId: string, filePath: string, title: string) {
       update((state) => {

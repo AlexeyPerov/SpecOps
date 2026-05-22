@@ -42,9 +42,22 @@
     toExternalFilesSettings,
     toPersistedSettings,
   } from "../lib/services/settingsStore";
+  import {
+    checkDocumentIfDeferred,
+    initializeDocumentDiskState,
+    runFocusExternalChecks,
+    runStartupExternalChecks,
+    runWatcherExternalCheck,
+    shouldSyncFileWatcher,
+  } from "../lib/services/externalFileChanges";
+  import {
+    clearFileWatcherPaths,
+    FILE_CHANGED_EVENT,
+    syncFileWatcherPaths,
+  } from "../lib/services/fileWatcher";
   import { marked } from "marked";
   import { diffLines } from "diff";
-  import type { ExternalFilesSettings } from "../lib/domain/contracts";
+  import type { AppDomainState, ExternalFilesSettings } from "../lib/domain/contracts";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -62,6 +75,9 @@
   let splitScrollCleanup: (() => void) | null = null;
   let lastMarkdownDocumentId: string | null = null;
   let untitledTitleDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastSelectedTabId: string | null = null;
+  let lastWatcherSyncKey = "";
+  let runtimeReady = false;
 
   $: state = $appState;
   $: activeTab = state.session.openTabs.find(
@@ -218,6 +234,56 @@
     notify(`Opened ${opened.path}`);
   }
 
+  function watchedPathsFromState(appDomainState: AppDomainState): string[] {
+    const paths = new Set<string>();
+    for (const tab of appDomainState.session.openTabs) {
+      const documentState = appDomainState.documents.find((doc) => doc.id === tab.documentId);
+      if (documentState?.filePath) {
+        paths.add(documentState.filePath);
+      }
+    }
+    return [...paths];
+  }
+
+  async function syncExternalFileWatcher(appDomainState: AppDomainState): Promise<void> {
+    const paths = watchedPathsFromState(appDomainState);
+    const syncKey = `${appDomainState.settings.externalFiles.watchExternalChanges}:${paths.join("\0")}`;
+    if (syncKey === lastWatcherSyncKey) {
+      return;
+    }
+    lastWatcherSyncKey = syncKey;
+
+    if (!shouldSyncFileWatcher(appDomainState.settings.externalFiles)) {
+      await clearFileWatcherPaths();
+      return;
+    }
+    await syncFileWatcherPaths(paths);
+  }
+
+  async function onTabActivated(tabId: string): Promise<void> {
+    if (!runtimeReady) {
+      return;
+    }
+    const snapshot = appState.getSnapshot();
+    const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
+    if (!tab) {
+      return;
+    }
+    await checkDocumentIfDeferred(tab.documentId, "tab");
+  }
+
+  $: if (runtimeReady && currentWindowId) {
+    void syncExternalFileWatcher(state);
+  }
+
+  $: if (runtimeReady && state.session.selectedTabId !== lastSelectedTabId) {
+    const nextTabId = state.session.selectedTabId;
+    if (nextTabId && nextTabId !== lastSelectedTabId) {
+      lastSelectedTabId = nextTabId;
+      void onTabActivated(nextTabId);
+    }
+  }
+
   function updateExternalFilesSetting(
     key: keyof ExternalFilesSettings,
     value: boolean,
@@ -264,11 +330,29 @@
       });
     }
 
+    await runStartupExternalChecks();
+    lastSelectedTabId = appState.getSnapshot().session.selectedTabId;
+    runtimeReady = true;
+    await syncExternalFileWatcher(appState.getSnapshot());
+
     await currentWindow.onFocusChanged(async ({ payload }) => {
       if (payload) {
         await markWindowActive(currentWindowId);
+        if (runtimeReady) {
+          await runFocusExternalChecks();
+        }
       }
     });
+
+    const unlistenFileChanged = await listen<{ path: string }>(
+      FILE_CHANGED_EVENT,
+      async (event) => {
+        if (!runtimeReady) {
+          return;
+        }
+        await runWatcherExternalCheck(event.payload.path);
+      },
+    );
 
     const unlistenActivate = await listen<{ path: string }>(WINDOW_EVENT_ACTIVATE_FILE, async (event) => {
       try {
@@ -301,6 +385,7 @@
         const documentId = appState.openTransferredTab(event.payload);
         if (event.payload.filePath && documentId) {
           await claimOpenFile(event.payload.filePath, currentWindowId, documentId);
+          await initializeDocumentDiskState(documentId, event.payload.filePath);
         }
       },
     );
@@ -329,12 +414,15 @@
     });
 
     return () => {
+      runtimeReady = false;
       unlistenActivate();
       unlistenSelectTab();
       unlistenOpenedPaths();
       unlistenTransfer();
       unlistenDestroyed();
       unlistenDragDrop();
+      unlistenFileChanged();
+      void clearFileWatcherPaths();
     };
   }
 
@@ -753,6 +841,11 @@
       {state.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
     </button>
     <button class="status-segment" type="button">{activeDocument?.isDirty ? "Modified" : "Saved"}</button>
+    {#if activeDocument?.fileMissing}
+      <button class="status-segment status-missing" type="button" title="File no longer exists on disk">
+        File missing
+      </button>
+    {/if}
     <span class="status-message optional-segment optional-message">{statusMessage}</span>
     <button class="status-segment path-segment" type="button" title={activeDocument?.filePath ?? statusPath}>
       {statusPath}
@@ -1044,6 +1137,11 @@
     font-size: var(--font-size-status);
     white-space: nowrap;
     flex-shrink: 0;
+  }
+
+  .status-missing {
+    color: #e06c75;
+    border-color: color-mix(in srgb, #e06c75 35%, transparent);
   }
 
   .status-message {

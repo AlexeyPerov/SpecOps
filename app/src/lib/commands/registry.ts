@@ -6,6 +6,8 @@ import type { EditorCommandRunner } from "../types/editor";
 import { openFileDialog, renameFile, saveFile, saveFileAs } from "../services/fileSystem";
 import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
+import { reloadActiveDocumentFromDisk } from "../services/externalFileChanges";
+import { statDiskFingerprint } from "../services/diskFingerprint";
 import { createNewWindowWithTransfer } from "../services/windowManager";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 
@@ -242,6 +244,12 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "none", windows: "none" },
   },
   {
+    id: "file.reloadFromDisk",
+    label: "Reload from Disk",
+    menuPath: "File/Reload from Disk",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
     id: "tab.close",
     label: "Close Tab",
     menuPath: "Tab/Close",
@@ -407,15 +415,19 @@ const handlers: Record<AppCommandId, CommandHandler> = {
 
     let targetPath = doc.filePath;
     const previousPath = doc.filePath;
+    let fingerprint;
     if (!targetPath) {
-      targetPath = await saveFileAs(doc.content);
-      if (!targetPath) {
+      const saved = await saveFileAs(doc.content);
+      if (!saved) {
         return;
       }
+      targetPath = saved.path;
+      fingerprint = saved.fingerprint;
     } else {
-      await saveFile({ path: targetPath, content: doc.content });
+      fingerprint = await saveFile({ path: targetPath, content: doc.content });
     }
     appState.markDocumentSaved(doc.id, targetPath, doc.content);
+    appState.setDocumentDiskState(doc.id, { diskFingerprint: fingerprint, fileMissing: false });
     await renameOpenFileRegistry(previousPath, targetPath, getWindowId(), doc.id);
     notify(`Saved ${targetPath}`);
   },
@@ -432,14 +444,18 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!doc) {
       return;
     }
-    const targetPath = await saveFileAs(doc.content);
-    if (!targetPath) {
+    const saved = await saveFileAs(doc.content);
+    if (!saved) {
       return;
     }
     const previousPath = doc.filePath;
-    appState.markDocumentSaved(doc.id, targetPath, doc.content);
-    await renameOpenFileRegistry(previousPath, targetPath, getWindowId(), doc.id);
-    notify(`Saved as ${targetPath}`);
+    appState.markDocumentSaved(doc.id, saved.path, doc.content);
+    appState.setDocumentDiskState(doc.id, {
+      diskFingerprint: saved.fingerprint,
+      fileMissing: false,
+    });
+    await renameOpenFileRegistry(previousPath, saved.path, getWindowId(), doc.id);
+    notify(`Saved as ${saved.path}`);
   },
   "file.saveAll": async ({ getState, notify, getWindowId }) => {
     const state = getState();
@@ -450,15 +466,22 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       }
       let targetPath = documentState.filePath;
       const previousPath = documentState.filePath;
+      let fingerprint;
       if (!targetPath) {
-        targetPath = await saveFileAs(documentState.content);
-        if (!targetPath) {
+        const saved = await saveFileAs(documentState.content);
+        if (!saved) {
           continue;
         }
+        targetPath = saved.path;
+        fingerprint = saved.fingerprint;
       } else {
-        await saveFile({ path: targetPath, content: documentState.content });
+        fingerprint = await saveFile({ path: targetPath, content: documentState.content });
       }
       appState.markDocumentSaved(documentState.id, targetPath, documentState.content);
+      appState.setDocumentDiskState(documentState.id, {
+        diskFingerprint: fingerprint,
+        fileMissing: false,
+      });
       await renameOpenFileRegistry(
         previousPath,
         targetPath,
@@ -489,10 +512,46 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     const title = renamedPath.replaceAll("\\", "/").split("/").pop() ?? renamedPath;
     appState.renameDocument(doc.id, renamedPath, title);
     await renameOpenFileRegistry(doc.filePath, renamedPath, getWindowId(), doc.id);
+    try {
+      const fingerprint = await statDiskFingerprint(renamedPath);
+      appState.setDocumentDiskState(doc.id, { diskFingerprint: fingerprint, fileMissing: false });
+    } catch {
+      appState.setDocumentDiskState(doc.id, { diskFingerprint: null, fileMissing: true });
+    }
     notify(`Renamed to ${title}`);
   },
-  "file.reloadFromDisk": ({ notify }) => {
-    notify("Reload from disk will be available after external file change handling is wired.");
+  "file.reloadFromDisk": async ({ getState, notify }) => {
+    const state = getState();
+    const selected = state.session.openTabs.find(
+      (tab) => tab.id === state.session.selectedTabId,
+    );
+    if (!selected) {
+      notify("No active tab to reload.");
+      return;
+    }
+    const doc = state.documents.find((document) => document.id === selected.documentId);
+    if (!doc?.filePath) {
+      notify("Save the document before reloading from disk.");
+      return;
+    }
+
+    const result = await reloadActiveDocumentFromDisk();
+    switch (result) {
+      case "reloaded":
+        notify(`Reloaded ${doc.filePath} from disk.`);
+        break;
+      case "kept":
+        notify("Kept local version.");
+        break;
+      case "missing":
+        notify("File is missing on disk.");
+        break;
+      case "unchanged":
+        notify("File is already up to date.");
+        break;
+      default:
+        break;
+    }
   },
   "tab.close": ({ getState, confirm, notify }) => {
     const state = getState();
@@ -629,6 +688,11 @@ async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Prom
     text: "Rename",
     action: () => runCommand("file.rename"),
   });
+  const reloadFromDiskItem = await MenuItem.new({
+    id: "cmd.file.reloadFromDisk",
+    text: "Reload from Disk",
+    action: () => runCommand("file.reloadFromDisk"),
+  });
   const closeItem = await MenuItem.new({
     id: "cmd.file.close",
     text: "Close",
@@ -647,6 +711,7 @@ async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Prom
       saveAsItem,
       saveAllItem,
       renameItem,
+      reloadFromDiskItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       closeItem,
     ],

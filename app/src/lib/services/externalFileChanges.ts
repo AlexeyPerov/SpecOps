@@ -1,0 +1,295 @@
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
+import { appState } from "../state/appState";
+import {
+  diskChanged,
+  fingerprintsEqual,
+  isFileMissingError,
+  normalizePathSync,
+  shouldSkipAsDismissed,
+  statDiskFingerprint,
+} from "./diskFingerprint";
+
+export type ExternalCheckTrigger = "watcher" | "focus" | "tab" | "startup" | "manual";
+
+export type ExternalCheckResult =
+  | "unchanged"
+  | "reloaded"
+  | "kept"
+  | "missing"
+  | "skipped"
+  | "deferred";
+
+const lastWriteFingerprintByPath = new Map<string, DiskFingerprint>();
+const dialogOpenForDocument = new Set<string>();
+const deferredDirtyDocumentIds = new Set<string>();
+
+export function shouldSyncFileWatcher(settings: ExternalFilesSettings): boolean {
+  return settings.watchExternalChanges;
+}
+
+export function shouldRunAutomaticCheck(
+  settings: ExternalFilesSettings,
+  trigger: Exclude<ExternalCheckTrigger, "manual">,
+): boolean {
+  if (!settings.watchExternalChanges) {
+    return false;
+  }
+  switch (trigger) {
+    case "watcher":
+      return true;
+    case "focus":
+      return settings.checkOnWindowFocus;
+    case "tab":
+      return settings.checkOnTabActivate;
+    case "startup":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function recordWriteFingerprint(path: string, fingerprint: DiskFingerprint): void {
+  lastWriteFingerprintByPath.set(normalizePathSync(path), fingerprint);
+}
+
+export async function recordWriteFingerprintFromPath(path: string): Promise<DiskFingerprint> {
+  const fingerprint = await statDiskFingerprint(path);
+  recordWriteFingerprint(path, fingerprint);
+  return fingerprint;
+}
+
+export async function initializeDocumentDiskState(
+  documentId: string,
+  filePath: string,
+): Promise<void> {
+  try {
+    const fingerprint = await statDiskFingerprint(filePath);
+    appState.setDocumentDiskState(documentId, {
+      diskFingerprint: fingerprint,
+      fileMissing: false,
+    });
+  } catch (error: unknown) {
+    if (isFileMissingError(error)) {
+      appState.setDocumentDiskState(documentId, {
+        diskFingerprint: null,
+        fileMissing: true,
+      });
+      return;
+    }
+    throw error;
+  }
+}
+
+function matchesLastWrite(path: string, fingerprint: DiskFingerprint): boolean {
+  const lastWrite = lastWriteFingerprintByPath.get(normalizePathSync(path));
+  return lastWrite !== undefined && fingerprintsEqual(lastWrite, fingerprint);
+}
+
+async function promptReloadOrKeep(title: string): Promise<"reload" | "keep"> {
+  const reload = await confirm(
+    `"${title}" has been modified on disk. Reload from disk and discard your unsaved changes?`,
+    {
+      title: "External File Change",
+      okLabel: "Reload",
+      cancelLabel: "Keep Local",
+    },
+  );
+  return reload ? "reload" : "keep";
+}
+
+async function reloadDocumentFromDisk(
+  documentId: string,
+  filePath: string,
+): Promise<void> {
+  const content = await readTextFile(filePath);
+  const fingerprint = await statDiskFingerprint(filePath);
+  appState.applyDocumentDiskReload(documentId, content, fingerprint);
+}
+
+export async function checkDocumentExternalChanges(
+  documentId: string,
+  trigger: ExternalCheckTrigger,
+): Promise<ExternalCheckResult> {
+  const snapshot = appState.getSnapshot();
+  const documentState = snapshot.documents.find((doc) => doc.id === documentId);
+  if (!documentState?.filePath) {
+    return "skipped";
+  }
+
+  if (trigger !== "manual" && !shouldRunAutomaticCheck(snapshot.settings.externalFiles, trigger)) {
+    return "skipped";
+  }
+
+  if (dialogOpenForDocument.has(documentId)) {
+    return "skipped";
+  }
+
+  let currentFingerprint: DiskFingerprint;
+  try {
+    currentFingerprint = await statDiskFingerprint(documentState.filePath);
+  } catch (error: unknown) {
+    if (isFileMissingError(error)) {
+      if (!documentState.fileMissing) {
+        appState.setDocumentDiskState(documentId, {
+          diskFingerprint: documentState.diskFingerprint,
+          fileMissing: true,
+        });
+      }
+      return "missing";
+    }
+    throw error;
+  }
+
+  if (documentState.fileMissing) {
+    appState.setDocumentDiskState(documentId, {
+      diskFingerprint: currentFingerprint,
+      fileMissing: false,
+    });
+  }
+
+  if (matchesLastWrite(documentState.filePath, currentFingerprint)) {
+    return "unchanged";
+  }
+
+  if (shouldSkipAsDismissed(documentState.dismissedFingerprint, currentFingerprint)) {
+    return "unchanged";
+  }
+
+  if (
+    !diskChanged(documentState.diskFingerprint, currentFingerprint) &&
+    !documentState.fileMissing
+  ) {
+    return "unchanged";
+  }
+
+  const { externalFiles } = snapshot.settings;
+
+  if (!documentState.isDirty) {
+    if (trigger === "manual" || externalFiles.autoReloadCleanFiles) {
+      await reloadDocumentFromDisk(documentId, documentState.filePath);
+      return "reloaded";
+    }
+    return "skipped";
+  }
+
+  if (trigger === "startup") {
+    deferredDirtyDocumentIds.add(documentId);
+    return "deferred";
+  }
+
+  dialogOpenForDocument.add(documentId);
+  try {
+    const choice = await promptReloadOrKeep(documentState.title);
+    if (choice === "reload") {
+      await reloadDocumentFromDisk(documentId, documentState.filePath);
+      deferredDirtyDocumentIds.delete(documentId);
+      return "reloaded";
+    }
+
+    appState.applyDocumentKeepLocal(documentId, currentFingerprint);
+    deferredDirtyDocumentIds.delete(documentId);
+    return "kept";
+  } finally {
+    dialogOpenForDocument.delete(documentId);
+  }
+}
+
+export async function checkDocumentIfDeferred(
+  documentId: string,
+  trigger: "focus" | "tab",
+): Promise<ExternalCheckResult> {
+  if (!deferredDirtyDocumentIds.has(documentId)) {
+    return checkDocumentExternalChanges(documentId, trigger);
+  }
+
+  deferredDirtyDocumentIds.delete(documentId);
+  return checkDocumentExternalChanges(documentId, trigger);
+}
+
+export async function runStartupExternalChecks(): Promise<void> {
+  const snapshot = appState.getSnapshot();
+  if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "startup")) {
+    return;
+  }
+
+  for (const tab of snapshot.session.openTabs) {
+    await checkDocumentExternalChanges(tab.documentId, "startup");
+  }
+}
+
+export async function runFocusExternalChecks(): Promise<void> {
+  const snapshot = appState.getSnapshot();
+  if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "focus")) {
+    return;
+  }
+
+  for (const tab of snapshot.session.openTabs) {
+    await checkDocumentIfDeferred(tab.documentId, "focus");
+  }
+}
+
+export async function runWatcherExternalCheck(normalizedOrRawPath: string): Promise<void> {
+  const snapshot = appState.getSnapshot();
+  if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "watcher")) {
+    return;
+  }
+
+  const normalized = normalizePathSync(normalizedOrRawPath);
+  for (const tab of snapshot.session.openTabs) {
+    const documentState = snapshot.documents.find((doc) => doc.id === tab.documentId);
+    if (
+      documentState?.filePath &&
+      normalizePathSync(documentState.filePath) === normalized
+    ) {
+      await checkDocumentExternalChanges(documentState.id, "watcher");
+      return;
+    }
+  }
+}
+
+export function collectOpenFilePaths(): string[] {
+  const snapshot = appState.getSnapshot();
+  const paths = new Set<string>();
+  for (const tab of snapshot.session.openTabs) {
+    const documentState = snapshot.documents.find((doc) => doc.id === tab.documentId);
+    if (documentState?.filePath) {
+      paths.add(documentState.filePath);
+    }
+  }
+  return [...paths];
+}
+
+export async function reloadActiveDocumentFromDisk(): Promise<ExternalCheckResult> {
+  const snapshot = appState.getSnapshot();
+  const selectedTab = snapshot.session.openTabs.find(
+    (tab) => tab.id === snapshot.session.selectedTabId,
+  );
+  if (!selectedTab) {
+    return "skipped";
+  }
+
+  const documentState = snapshot.documents.find((doc) => doc.id === selectedTab.documentId);
+  if (!documentState?.filePath) {
+    return "skipped";
+  }
+
+  if (!documentState.isDirty) {
+    try {
+      await reloadDocumentFromDisk(documentState.id, documentState.filePath);
+      return "reloaded";
+    } catch (error: unknown) {
+      if (isFileMissingError(error)) {
+        appState.setDocumentDiskState(documentState.id, {
+          diskFingerprint: documentState.diskFingerprint,
+          fileMissing: true,
+        });
+        return "missing";
+      }
+      throw error;
+    }
+  }
+
+  return checkDocumentExternalChanges(documentState.id, "manual");
+}

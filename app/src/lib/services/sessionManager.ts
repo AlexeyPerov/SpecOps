@@ -47,6 +47,7 @@ function buildFallbackDocument(documentId: string): DocumentState {
     diskFingerprint: null,
     dismissedFingerprint: null,
     fileMissing: false,
+    scrollTop: 0,
   };
 }
 
@@ -84,11 +85,24 @@ async function fileStillExists(path: string): Promise<boolean> {
   }
 }
 
+function normalizeRestoredDocument(documentState: DocumentState): DocumentState {
+  return {
+    ...documentState,
+    diskFingerprint: documentState.diskFingerprint ?? null,
+    dismissedFingerprint: documentState.dismissedFingerprint ?? null,
+    fileMissing: documentState.fileMissing ?? false,
+    scrollTop: documentState.scrollTop ?? 0,
+  };
+}
+
 async function sanitizeWindowSnapshot(
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
   const documentsById = new Map(
-    snapshot.documents.map((documentState) => [documentState.id, { ...documentState }]),
+    snapshot.documents.map((documentState) => [
+      documentState.id,
+      normalizeRestoredDocument(documentState),
+    ]),
   );
   const openTabs: TabState[] = [];
 
@@ -145,6 +159,7 @@ async function sanitizeWindowSnapshot(
       ...snapshot.session,
       openTabs,
       selectedTabId,
+      windowBounds: snapshot.session.windowBounds ?? null,
     },
   };
 }

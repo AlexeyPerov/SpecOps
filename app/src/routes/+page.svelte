@@ -25,7 +25,9 @@
   import {
     restoreWindowSession,
     scheduleSessionPersistence,
+    persistSessionSnapshot,
   } from "../lib/services/sessionManager";
+  import { applyWindowBounds, readWindowBounds } from "../lib/services/windowBounds";
   import {
     completeOpenPath,
     requestOpenPath,
@@ -78,6 +80,8 @@
   let lastSelectedTabId: string | null = null;
   let lastWatcherSyncKey = "";
   let runtimeReady = false;
+  let windowBoundsTimer: ReturnType<typeof setTimeout> | null = null;
+  let applyingWindowBounds = false;
 
   $: state = $appState;
   $: activeTab = state.session.openTabs.find(
@@ -96,6 +100,35 @@
       ? diffLines(activeDocument.savedContent, activeDocument.content)
       : [];
   $: statusPath = formatStatusPath(activeDocument?.filePath ?? null, activeDocument?.title);
+
+  function handleDocumentScrollTop(documentId: string, scrollTop: number): void {
+    appState.setDocumentScrollTop(documentId, scrollTop);
+  }
+
+  function scheduleWindowBoundsPersistence(): void {
+    if (applyingWindowBounds) {
+      return;
+    }
+    if (windowBoundsTimer) {
+      clearTimeout(windowBoundsTimer);
+    }
+    windowBoundsTimer = setTimeout(() => {
+      void (async () => {
+        const bounds = await readWindowBounds(getCurrentWebviewWindow());
+        appState.setWindowBounds(bounds);
+      })();
+    }, 400);
+  }
+
+  async function persistWindowBoundsNow(): Promise<void> {
+    if (windowBoundsTimer) {
+      clearTimeout(windowBoundsTimer);
+      windowBoundsTimer = null;
+    }
+    const bounds = await readWindowBounds(getCurrentWebviewWindow());
+    appState.setWindowBounds(bounds);
+    await persistSessionSnapshot(appState.getSnapshot(), currentWindowId);
+  }
 
   function formatStatusPath(filePath: string | null, fallbackTitle: string | undefined): string {
     if (!filePath) {
@@ -316,6 +349,14 @@
       appState.applyWindowSession(restoredSession);
       appState.normalizeUntitledTitles();
       await syncOpenFileRegistryForWindow(currentWindowId, appState.getSnapshot());
+      if (restoredSession.session.windowBounds) {
+        applyingWindowBounds = true;
+        try {
+          await applyWindowBounds(currentWindow, restoredSession.session.windowBounds);
+        } finally {
+          applyingWindowBounds = false;
+        }
+      }
       statusMessage = "Session restored.";
     }
 
@@ -405,6 +446,16 @@
       });
     });
 
+    const unlistenWindowResized = await currentWindow.onResized(() => {
+      scheduleWindowBoundsPersistence();
+    });
+    const unlistenWindowMoved = await currentWindow.onMoved(() => {
+      scheduleWindowBoundsPersistence();
+    });
+    const unlistenCloseRequested = await currentWindow.onCloseRequested(async () => {
+      await persistWindowBoundsNow();
+    });
+
     await logDiagnostic({
       level: "info",
       source: "frontend",
@@ -422,6 +473,13 @@
       unlistenDestroyed();
       unlistenDragDrop();
       unlistenFileChanged();
+      unlistenWindowResized();
+      unlistenWindowMoved();
+      unlistenCloseRequested();
+      if (windowBoundsTimer) {
+        clearTimeout(windowBoundsTimer);
+        windowBoundsTimer = null;
+      }
       void clearFileWatcherPaths();
     };
   }
@@ -638,6 +696,8 @@
               <div class="markdown-editor-pane" bind:this={markdownEditorPaneEl}>
                 <EditorSurface
                   content={activeDocument?.content ?? ""}
+                  documentId={activeDocument?.id ?? null}
+                  scrollTop={activeDocument?.scrollTop ?? 0}
                   wrapLines={state.editor.wrapLines}
                   zoomPercent={state.editor.zoomPercent}
                   onStatusMessage={notify}
@@ -648,6 +708,7 @@
                     appState.setDocumentContent(activeDocument.id, nextContent);
                     scheduleUntitledTitleRefresh(activeDocument.id);
                   }}
+                  onScrollTopChange={handleDocumentScrollTop}
                   registerEditorCommandRunner={(runner) => {
                     editorRunner = runner;
                   }}
@@ -661,6 +722,8 @@
             <div class="markdown-editor-single">
               <EditorSurface
                 content={activeDocument?.content ?? ""}
+                documentId={activeDocument?.id ?? null}
+                scrollTop={activeDocument?.scrollTop ?? 0}
                 wrapLines={state.editor.wrapLines}
                 zoomPercent={state.editor.zoomPercent}
                 onStatusMessage={notify}
@@ -671,6 +734,7 @@
                   appState.setDocumentContent(activeDocument.id, nextContent);
                   scheduleUntitledTitleRefresh(activeDocument.id);
                 }}
+                onScrollTopChange={handleDocumentScrollTop}
                 registerEditorCommandRunner={(runner) => {
                   editorRunner = runner;
                 }}
@@ -681,6 +745,8 @@
       {:else}
         <EditorSurface
           content={activeDocument?.content ?? ""}
+          documentId={activeDocument?.id ?? null}
+          scrollTop={activeDocument?.scrollTop ?? 0}
           wrapLines={state.editor.wrapLines}
           zoomPercent={state.editor.zoomPercent}
           onStatusMessage={notify}
@@ -691,6 +757,7 @@
             appState.setDocumentContent(activeDocument.id, nextContent);
             scheduleUntitledTitleRefresh(activeDocument.id);
           }}
+          onScrollTopChange={handleDocumentScrollTop}
           registerEditorCommandRunner={(runner) => {
             editorRunner = runner;
           }}

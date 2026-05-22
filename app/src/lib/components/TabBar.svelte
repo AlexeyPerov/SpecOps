@@ -2,8 +2,11 @@
   import { onDestroy } from "svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
   import { appState } from "../state/appState";
+  import { revealInFileManagerLabel } from "../services/platform";
+  import { revealInFileManager } from "../services/revealInFileManager";
 
   const DRAG_THRESHOLD_PX = 4;
+  const revealLabel = revealInFileManagerLabel();
 
   export let openTabs: TabState[] = [];
   export let documents: DocumentState[] = [];
@@ -28,13 +31,76 @@
 
   let isFinishingDrag = false;
 
+  let contextMenu: { tabId: string; x: number; y: number } | null = null;
+  let contextMenuEl: HTMLDivElement | null = null;
+
+  function tabDocument(tab: TabState): DocumentState | undefined {
+    return documents.find((doc) => doc.id === tab.documentId);
+  }
+
   function tabTitle(tab: TabState): string {
-    const tabDoc = documents.find((doc) => doc.id === tab.documentId);
+    const tabDoc = tabDocument(tab);
     if (!tabDoc) {
       return "Untitled";
     }
     const missingSuffix = tabDoc.fileMissing ? " (missing)" : "";
     return `${tabDoc.title}${tabDoc.isDirty ? "*" : ""}${missingSuffix}`;
+  }
+
+  function tabTooltip(tab: TabState): string {
+    const tabDoc = tabDocument(tab);
+    if (!tabDoc?.filePath) {
+      return "Unsaved document";
+    }
+    return tabDoc.filePath;
+  }
+
+  function openContextMenu(event: MouseEvent, tab: TabState): void {
+    event.preventDefault();
+    event.stopPropagation();
+    contextMenu = { tabId: tab.id, x: event.clientX, y: event.clientY };
+    window.addEventListener("pointerdown", onWindowPointerDown);
+    window.addEventListener("keydown", onWindowKeydown);
+  }
+
+  function closeContextMenu(): void {
+    if (!contextMenu) {
+      return;
+    }
+    contextMenu = null;
+    window.removeEventListener("pointerdown", onWindowPointerDown);
+    window.removeEventListener("keydown", onWindowKeydown);
+  }
+
+  async function revealTabInFileManager(tab: TabState): Promise<void> {
+    const tabDoc = tabDocument(tab);
+    if (!tabDoc?.filePath) {
+      closeContextMenu();
+      return;
+    }
+    try {
+      await revealInFileManager(tabDoc.filePath);
+    } catch {
+      // reveal is best-effort from the tab menu
+    }
+    closeContextMenu();
+  }
+
+  function onWindowPointerDown(event: PointerEvent): void {
+    if (!contextMenu || event.button !== 0) {
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Node && contextMenuEl?.contains(target)) {
+      return;
+    }
+    closeContextMenu();
+  }
+
+  function onWindowKeydown(event: KeyboardEvent): void {
+    if (contextMenu && event.key === "Escape") {
+      closeContextMenu();
+    }
   }
 
   function previewTabs(
@@ -203,7 +269,13 @@
 
   onDestroy(() => {
     finishDrag(false);
+    closeContextMenu();
   });
+
+  $: contextMenuTab = contextMenu
+    ? openTabs.find((tab) => tab.id === contextMenu?.tabId) ?? null
+    : null;
+  $: contextMenuCanReveal = Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath);
 </script>
 
 <div class="tab-strip" bind:this={tabStripEl} data-dragging={didDrag}>
@@ -216,6 +288,8 @@
           class={`tab ${tab.id === selectedTabId ? "tab-active" : ""}`}
           data-tab-id={tab.id}
           type="button"
+          title={tabTooltip(tab)}
+          oncontextmenu={(event) => openContextMenu(event, tab)}
           onpointerdown={(event) => pointerDown(event, tab, openTabs.findIndex((entry) => entry.id === tab.id))}
         >
           <span class="tab-label">
@@ -252,6 +326,33 @@
       {tabTitle(draggedTab)}
     {/if}
   </button>
+{/if}
+
+{#if contextMenu && contextMenuTab}
+  <div
+    bind:this={contextMenuEl}
+    class="tab-context-menu"
+    style={`left:${contextMenu.x}px; top:${contextMenu.y}px;`}
+    role="menu"
+    tabindex="-1"
+    onpointerdown={(event) => event.stopPropagation()}
+  >
+    <button
+      class="tab-context-item"
+      type="button"
+      role="menuitem"
+      disabled={!contextMenuCanReveal}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!contextMenuCanReveal) {
+          return;
+        }
+        void revealTabInFileManager(contextMenuTab);
+      }}
+    >
+      {revealLabel}
+    </button>
+  </div>
 {/if}
 
 <style>
@@ -361,5 +462,39 @@
     pointer-events: none;
     cursor: grabbing;
     box-shadow: var(--shadow-overlay);
+  }
+
+  .tab-context-menu {
+    position: fixed;
+    z-index: 1100;
+    min-width: 180px;
+    padding: var(--space-4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-overlay);
+  }
+
+  .tab-context-item {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    text-align: left;
+    font: inherit;
+    padding: var(--space-4) var(--space-6);
+  }
+
+  .tab-context-item:not(:disabled):hover {
+    background: var(--color-hover);
+    cursor: pointer;
+  }
+
+  .tab-context-item:disabled {
+    color: var(--color-text-secondary);
+    cursor: not-allowed;
   }
 </style>

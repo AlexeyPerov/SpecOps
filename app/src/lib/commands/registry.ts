@@ -119,8 +119,8 @@ const keyBindingsByPlatform: Record<string, string> = {
   "Meta+n": "file.new",
   "Meta+o": "file.open",
   "Meta+s": "file.save",
-  "Meta+Shift+s": "file.saveAs",
-  "Meta+Alt+s": "file.saveAll",
+  "Meta+Shift+s": "file.saveAll",
+  "Meta+Alt+s": "file.saveAs",
   "Meta+w": "tab.close",
   "Meta+Shift+n": "app.newWindow",
   "Meta+Shift+]": "tab.next",
@@ -146,8 +146,8 @@ const keyBindingsByPlatform: Record<string, string> = {
   "Ctrl+n": "file.new",
   "Ctrl+o": "file.open",
   "Ctrl+s": "file.save",
-  "Ctrl+Shift+s": "file.saveAs",
-  "Ctrl+Alt+s": "file.saveAll",
+  "Ctrl+Shift+s": "file.saveAll",
+  "Ctrl+Alt+s": "file.saveAs",
   "Ctrl+w": "tab.close",
   "Ctrl+Shift+n": "app.newWindow",
   "Ctrl+tab": "tab.next",
@@ -229,13 +229,13 @@ export const commandDefinitions: CommandDefinition[] = [
     id: "file.saveAs",
     label: "Save As",
     menuPath: "File/Save As",
-    binding: { mac: "Cmd+Shift+S", windows: "Ctrl+Shift+S" },
+    binding: { mac: "Cmd+Alt+S", windows: "Ctrl+Alt+S" },
   },
   {
     id: "file.saveAll",
     label: "Save All",
     menuPath: "File/Save All",
-    binding: { mac: "Cmd+Alt+S", windows: "Ctrl+Alt+S" },
+    binding: { mac: "Cmd+Shift+S", windows: "Ctrl+Shift+S" },
   },
   {
     id: "file.rename",
@@ -674,13 +674,13 @@ async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Prom
   const saveAsItem = await MenuItem.new({
     id: "cmd.file.saveAs",
     text: "Save As",
-    accelerator: "CmdOrCtrl+Shift+S",
+    accelerator: "CmdOrCtrl+Alt+S",
     action: () => runCommand("file.saveAs"),
   });
   const saveAllItem = await MenuItem.new({
     id: "cmd.file.saveAll",
     text: "Save All",
-    accelerator: "CmdOrCtrl+Alt+S",
+    accelerator: "CmdOrCtrl+Shift+S",
     action: () => runCommand("file.saveAll"),
   });
   const renameItem = await MenuItem.new({

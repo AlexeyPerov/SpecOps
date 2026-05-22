@@ -8,6 +8,7 @@ import type {
   DocumentIdentity,
   ExternalFilesSettings,
   TabState,
+  WindowBounds,
   WindowSessionSnapshot,
   ThemeMode,
 } from "../domain/contracts";
@@ -68,6 +69,7 @@ function buildDocument(identity: DocumentIdentity, content: string, title: strin
     diskFingerprint: null,
     dismissedFingerprint: null,
     fileMissing: false,
+    scrollTop: 0,
   };
 }
 
@@ -77,6 +79,7 @@ function normalizeDocument(documentState: DocumentState): DocumentState {
     diskFingerprint: documentState.diskFingerprint ?? null,
     dismissedFingerprint: documentState.dismissedFingerprint ?? null,
     fileMissing: documentState.fileMissing ?? false,
+    scrollTop: documentState.scrollTop ?? 0,
   };
 }
 
@@ -127,6 +130,7 @@ const initialState: AppDomainState = {
     selectedTabId: "tab-1",
     openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
     lastActiveWindowId: "main",
+    windowBounds: null,
   },
   settings: defaultSettings,
   recentFiles: [],
@@ -223,7 +227,10 @@ function createStateStore() {
       );
       set({
         documents: snapshot.documents.map(normalizeDocument),
-        session: snapshot.session,
+        session: {
+          ...snapshot.session,
+          windowBounds: snapshot.session.windowBounds ?? null,
+        },
         settings: defaultSettings,
         recentFiles: snapshot.recentFiles,
         editor: {
@@ -641,6 +648,39 @@ function createStateStore() {
           cursorColumn: column,
         },
       }));
+    },
+    setDocumentScrollTop(documentId: string, scrollTop: number) {
+      update((state) => {
+        let changed = false;
+        const documents = state.documents.map((documentState) => {
+          if (documentState.id !== documentId) {
+            return documentState;
+          }
+          if (documentState.scrollTop === scrollTop) {
+            return documentState;
+          }
+          changed = true;
+          return { ...documentState, scrollTop };
+        });
+        if (!changed) {
+          return state;
+        }
+        return { ...state, documents };
+      });
+    },
+    setWindowBounds(windowBounds: WindowBounds | null) {
+      update((state) => {
+        if (state.session.windowBounds === windowBounds) {
+          return state;
+        }
+        return {
+          ...state,
+          session: {
+            ...state.session,
+            windowBounds,
+          },
+        };
+      });
     },
     setZoomPercent(zoomPercent: number) {
       update((state) => ({

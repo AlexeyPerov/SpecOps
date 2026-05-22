@@ -23,12 +23,20 @@
   let muted = false;
 
   export let content = "";
+  export let documentId: string | null = null;
+  export let scrollTop = 0;
   export let wrapLines = false;
   export let zoomPercent = 100;
   export let onStatusMessage: (message: string) => void = () => {};
   export let onDocumentDirty: (nextContent: string) => void = () => {};
+  export let onScrollTopChange: (documentId: string, scrollTop: number) => void = () => {};
   export let registerEditorCommandRunner: ((runner: EditorCommandRunner) => void) | undefined =
     undefined;
+
+  let trackedDocumentId: string | null = null;
+  let applyingScroll = false;
+  let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let detachScrollListener: (() => void) | null = null;
 
   function withEditorSelection(
     transform: (text: string, from: number, to: number) => {
@@ -141,6 +149,55 @@
     const pos = view.state.selection.main.head;
     const line = view.state.doc.lineAt(pos);
     appState.setCursor(line.number, pos - line.from + 1);
+  }
+
+  function applyScrollTop(nextScrollTop: number): void {
+    if (!view) {
+      return;
+    }
+    applyingScroll = true;
+    view.scrollDOM.scrollTop = nextScrollTop;
+    requestAnimationFrame(() => {
+      applyingScroll = false;
+    });
+  }
+
+  function scheduleScrollTopSave(documentIdForSave: string, nextScrollTop: number): void {
+    if (scrollSaveTimer) {
+      clearTimeout(scrollSaveTimer);
+    }
+    scrollSaveTimer = setTimeout(() => {
+      onScrollTopChange(documentIdForSave, nextScrollTop);
+    }, 150);
+  }
+
+  function flushScrollTopSave(): void {
+    if (!view || !trackedDocumentId || applyingScroll) {
+      return;
+    }
+    if (scrollSaveTimer) {
+      clearTimeout(scrollSaveTimer);
+      scrollSaveTimer = null;
+    }
+    onScrollTopChange(trackedDocumentId, view.scrollDOM.scrollTop);
+  }
+
+  function attachScrollListener(): void {
+    detachScrollListener?.();
+    if (!view) {
+      return;
+    }
+    const scroller = view.scrollDOM;
+    const onScroll = (): void => {
+      if (applyingScroll || !trackedDocumentId) {
+        return;
+      }
+      scheduleScrollTopSave(trackedDocumentId, scroller.scrollTop);
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    detachScrollListener = () => {
+      scroller.removeEventListener("scroll", onScroll);
+    };
   }
 
   function applyWrap(nextWrap: boolean): void {
@@ -330,6 +387,9 @@
     applyWrap(wrapLines);
     applyZoom(zoomPercent);
     updateCursor();
+    attachScrollListener();
+    trackedDocumentId = documentId;
+    applyScrollTop(scrollTop);
 
     registerEditorCommandRunner?.({
       undo: () => {
@@ -362,8 +422,19 @@
   });
 
   onDestroy(() => {
+    flushScrollTopSave();
+    if (scrollSaveTimer) {
+      clearTimeout(scrollSaveTimer);
+    }
+    detachScrollListener?.();
     view?.destroy();
   });
+
+  $: if (view && documentId !== trackedDocumentId) {
+    flushScrollTopSave();
+    trackedDocumentId = documentId;
+    applyScrollTop(scrollTop);
+  }
 
   $: if (view && wrapLines !== undefined) {
     applyWrap(wrapLines);

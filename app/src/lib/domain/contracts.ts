@@ -22,6 +22,15 @@ export interface DocumentState extends DocumentIdentity {
   diskFingerprint: DiskFingerprint | null;
   dismissedFingerprint: DiskFingerprint | null;
   fileMissing: boolean;
+  scrollTop: number;
+}
+
+export interface WindowBounds {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  maximized: boolean;
 }
 
 export interface TabState {
@@ -34,6 +43,7 @@ export interface SessionState {
   selectedTabId: string | null;
   openTabs: TabState[];
   lastActiveWindowId: string;
+  windowBounds: WindowBounds | null;
 }
 
 export interface ExternalFilesSettings {

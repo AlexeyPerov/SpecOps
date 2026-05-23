@@ -22,6 +22,28 @@ This starts the Vite dev server and opens the desktop app. Type-check the fronte
 npm run check
 ```
 
+### Unit tests
+
+From the `app/` directory:
+
+```sh
+npm test
+```
+
+Run tests in watch mode while developing:
+
+```sh
+npm run test:watch
+```
+
+Tests live next to source as `*.test.ts` files under `app/src/`. Rust backend tests run from `app/src-tauri/`:
+
+```sh
+cargo test
+```
+
+See `specs/unit-tests.md` for the full catalog and agent execution plan.
+
 If port **1430** is already in use (Vite is pinned to that port), free it and retry:
 
 ```sh

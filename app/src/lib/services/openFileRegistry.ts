@@ -96,11 +96,12 @@ export async function claimOpenFile(
   await writeOpenFileRegistry(registry);
 }
 
-export async function dedupeWindowSnapshotAgainstRegistry(
+export function applyRegistryDedupeToWindowSnapshot(
+  registry: OpenFileRegistry,
   windowId: string,
   snapshot: WindowSessionSnapshot,
-): Promise<WindowSessionSnapshot> {
-  const registry = await readOpenFileRegistry();
+): { registry: OpenFileRegistry; snapshot: WindowSessionSnapshot } {
+  const nextRegistry = { ...registry };
   const documentsById = new Map(snapshot.documents.map((doc) => [doc.id, doc]));
   const openTabs = [];
 
@@ -112,19 +113,17 @@ export async function dedupeWindowSnapshotAgainstRegistry(
     }
 
     const key = normalizePathSync(linkedDocument.filePath);
-    const owner = registry[key];
+    const owner = nextRegistry[key];
     if (owner && owner.windowId !== windowId) {
       continue;
     }
 
-    registry[key] = { windowId, documentId: linkedDocument.id };
+    nextRegistry[key] = { windowId, documentId: linkedDocument.id };
     openTabs.push(tab);
   }
 
-  await writeOpenFileRegistry(registry);
-
   if (openTabs.length === snapshot.session.openTabs.length) {
-    return snapshot;
+    return { registry: nextRegistry, snapshot };
   }
 
   const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
@@ -134,14 +133,30 @@ export async function dedupeWindowSnapshotAgainstRegistry(
     : openTabs[0]?.id ?? null;
 
   return {
-    ...snapshot,
-    documents,
-    session: {
-      ...snapshot.session,
-      openTabs,
-      selectedTabId,
+    registry: nextRegistry,
+    snapshot: {
+      ...snapshot,
+      documents,
+      session: {
+        ...snapshot.session,
+        openTabs,
+        selectedTabId,
+      },
     },
   };
+}
+
+export async function dedupeWindowSnapshotAgainstRegistry(
+  windowId: string,
+  snapshot: WindowSessionSnapshot,
+): Promise<WindowSessionSnapshot> {
+  const registry = await readOpenFileRegistry();
+  const { registry: nextRegistry, snapshot: nextSnapshot } =
+    applyRegistryDedupeToWindowSnapshot(registry, windowId, snapshot);
+
+  await writeOpenFileRegistry(nextRegistry);
+
+  return nextSnapshot;
 }
 
 export async function releaseAllOpenFilesForWindow(windowId: string): Promise<void> {

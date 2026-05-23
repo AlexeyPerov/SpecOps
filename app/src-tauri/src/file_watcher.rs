@@ -78,6 +78,21 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
     Ok(())
 }
 
+fn compute_watcher_path_diff(
+    watched_paths: &HashSet<String>,
+    next_paths: &HashSet<String>,
+) -> (Vec<String>, Vec<String>) {
+    let to_remove: Vec<String> = watched_paths
+        .difference(next_paths)
+        .cloned()
+        .collect();
+    let to_add: Vec<String> = next_paths
+        .difference(watched_paths)
+        .cloned()
+        .collect();
+    (to_remove, to_add)
+}
+
 #[tauri::command]
 pub fn sync_file_watcher_paths(
     paths: Vec<String>,
@@ -92,15 +107,7 @@ pub fn sync_file_watcher_paths(
 
     let next_paths: HashSet<String> = paths.into_iter().collect();
 
-    let to_remove: Vec<String> = inner
-        .watched_paths
-        .difference(&next_paths)
-        .cloned()
-        .collect();
-    let to_add: Vec<String> = next_paths
-        .difference(&inner.watched_paths)
-        .cloned()
-        .collect();
+    let (to_remove, to_add) = compute_watcher_path_diff(&inner.watched_paths, &next_paths);
 
     let debouncer = inner
         .debouncer
@@ -125,4 +132,56 @@ pub fn sync_file_watcher_paths(
 
     inner.watched_paths = next_paths;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn set(paths: &[&str]) -> HashSet<String> {
+        paths.iter().map(|path| (*path).to_string()).collect()
+    }
+
+    #[test]
+    fn diff_empty_to_paths_adds_all() {
+        let (to_remove, to_add) = compute_watcher_path_diff(&set(&[]), &set(&["/a", "/b"]));
+        assert!(to_remove.is_empty());
+        assert_eq!(to_add.len(), 2);
+        assert!(to_add.contains(&"/a".to_string()));
+        assert!(to_add.contains(&"/b".to_string()));
+    }
+
+    #[test]
+    fn diff_paths_to_empty_removes_all() {
+        let (to_remove, to_add) = compute_watcher_path_diff(&set(&["/a", "/b"]), &set(&[]));
+        assert!(to_add.is_empty());
+        assert_eq!(to_remove.len(), 2);
+    }
+
+    #[test]
+    fn diff_unchanged_set_has_no_changes() {
+        let current = set(&["/a", "/b"]);
+        let (to_remove, to_add) = compute_watcher_path_diff(&current, &current);
+        assert!(to_remove.is_empty());
+        assert!(to_add.is_empty());
+    }
+
+    #[test]
+    fn diff_partial_update() {
+        let watched = set(&["/a", "/b"]);
+        let next = set(&["/b", "/c"]);
+        let (to_remove, to_add) = compute_watcher_path_diff(&watched, &next);
+        assert_eq!(to_remove, vec!["/a".to_string()]);
+        assert_eq!(to_add, vec!["/c".to_string()]);
+    }
+
+    #[test]
+    fn file_changed_payload_serializes_path_field() {
+        let payload = FileChangedPayload {
+            path: "/tmp/example.txt".to_string(),
+        };
+        let value = serde_json::to_value(&payload).expect("serialize payload");
+        assert_eq!(value["path"], "/tmp/example.txt");
+    }
 }

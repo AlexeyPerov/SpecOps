@@ -31,6 +31,16 @@ const pendingDirtyPromptByDocument = new Map<
 >();
 let flushingDirtyPrompts = false;
 
+/** Clears module-level state between unit tests. */
+export function resetExternalFileChangesForTests(): void {
+  lastWriteFingerprintByPath.clear();
+  dialogOpenForDocument.clear();
+  deferredDirtyDocumentIds.clear();
+  inFlightCheckByDocument.clear();
+  pendingDirtyPromptByDocument.clear();
+  flushingDirtyPrompts = false;
+}
+
 export function shouldSyncFileWatcher(settings: ExternalFilesSettings): boolean {
   return settings.watchExternalChanges;
 }
@@ -211,15 +221,23 @@ export async function checkDocumentExternalChanges(
     return inFlight;
   }
 
-  const checkPromise = checkDocumentExternalChangesInner(documentId, trigger);
+  let resolveCheck!: (result: ExternalCheckResult) => void;
+  let rejectCheck!: (error: unknown) => void;
+  const checkPromise = new Promise<ExternalCheckResult>((resolve, reject) => {
+    resolveCheck = resolve;
+    rejectCheck = reject;
+  });
   inFlightCheckByDocument.set(documentId, checkPromise);
-  try {
-    return await checkPromise;
-  } finally {
-    if (inFlightCheckByDocument.get(documentId) === checkPromise) {
-      inFlightCheckByDocument.delete(documentId);
-    }
-  }
+
+  void checkDocumentExternalChangesInner(documentId, trigger)
+    .then(resolveCheck, rejectCheck)
+    .finally(() => {
+      if (inFlightCheckByDocument.get(documentId) === checkPromise) {
+        inFlightCheckByDocument.delete(documentId);
+      }
+    });
+
+  return checkPromise;
 }
 
 async function checkDocumentExternalChangesInner(

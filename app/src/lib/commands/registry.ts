@@ -4,12 +4,17 @@ import { appState } from "../state/appState";
 import { logDiagnostic } from "../services/logging";
 import type { EditorCommandRunner } from "../types/editor";
 import { openFileDialog, renameFile, saveFile, saveFileAs } from "../services/fileSystem";
-import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
 import { reloadActiveDocumentFromDisk } from "../services/externalFileChanges";
 import { statDiskFingerprint } from "../services/diskFingerprint";
 import { createNewWindowWithTransfer } from "../services/windowManager";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import {
+  sanitizeErrorDetails,
+  serializeUnknownError,
+  summarizeError,
+} from "./commandErrors";
+import { openAndStoreFile } from "./openAndStoreFile";
 
 type CommandContext = {
   setSettingsPaneOpen: (next: boolean) => void;
@@ -25,88 +30,6 @@ type CommandHandler = (context: CommandContext) => Promise<void> | void;
 
 function getSnapshot() {
   return get(appState);
-}
-
-function serializeUnknownError(error: unknown): Record<string, unknown> {
-  if (error instanceof Error) {
-    return {
-      type: error.name,
-      message: error.message,
-      stack: error.stack ?? null,
-      cause: error.cause ?? null,
-    };
-  }
-
-  let jsonValue: string | null = null;
-  try {
-    jsonValue = JSON.stringify(error);
-  } catch {
-    jsonValue = null;
-  }
-
-  return {
-    type: typeof error,
-    value: String(error),
-    json: jsonValue,
-  };
-}
-
-function sanitizePermissionNoise(value: string): string {
-  const marker = "Permissions associated with this command:";
-  const markerIndex = value.indexOf(marker);
-  if (markerIndex === -1) {
-    return value;
-  }
-  return value.slice(0, markerIndex).trim();
-}
-
-function summarizeError(error: unknown): string {
-  if (error instanceof Error) {
-    return sanitizePermissionNoise(error.message || error.name || "Unknown command error");
-  }
-  if (typeof error === "string") {
-    return sanitizePermissionNoise(error);
-  }
-  return "Unknown command error";
-}
-
-function sanitizeErrorDetails(details: Record<string, unknown>): Record<string, unknown> {
-  const cleaned: Record<string, unknown> = { ...details };
-  if (typeof cleaned.message === "string") {
-    cleaned.message = sanitizePermissionNoise(cleaned.message);
-  }
-  if (typeof cleaned.value === "string") {
-    cleaned.value = sanitizePermissionNoise(cleaned.value);
-  }
-  delete cleaned.json;
-  return cleaned;
-}
-
-async function openAndStoreFile(
-  notify: (message: string) => void,
-  windowId: string,
-  opened: { path: string; content: string; sizeBytes: number } | null,
-): Promise<void> {
-  if (!opened) {
-    return;
-  }
-  if (opened.sizeBytes > 10 * 1024 * 1024) {
-    notify("Open failed: file exceeds 10MB MVP limit.");
-    return;
-  }
-
-  const gateResult = await requestOpenPath(opened.path, windowId);
-  if (gateResult.kind === "redirected") {
-    notify(`Switched to ${opened.path} in another window.`);
-    return;
-  }
-  if (gateResult.kind === "existing") {
-    notify(`Opened ${opened.path}`);
-    return;
-  }
-
-  await completeOpenPath(opened.path, opened.content, windowId);
-  notify(`Opened ${opened.path}`);
 }
 
 const keyBindingsByPlatform: Record<string, string> = {
@@ -889,6 +812,10 @@ async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Prom
   });
   await appMenu.setAsAppMenu();
   appMenuInitialized = true;
+}
+
+export function getRegisteredCommandIds(): AppCommandId[] {
+  return Object.keys(handlers) as AppCommandId[];
 }
 
 export function dispatchCommand(

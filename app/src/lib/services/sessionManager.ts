@@ -19,6 +19,14 @@ const SESSION_BACKUP_FILE = "session.backup.json";
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Clears debounce timer between unit tests. */
+export function resetSessionManagerForTests(): void {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+}
+
 async function getSessionPath(fileName: string): Promise<string> {
   const dataDir = await ensureSpecOpsDataDir();
   return join(dataDir, fileName);
@@ -51,7 +59,7 @@ function buildFallbackDocument(documentId: string): DocumentState {
   };
 }
 
-function nextNumericId(prefix: "doc" | "tab", ids: string[]): string {
+export function nextNumericId(prefix: "doc" | "tab", ids: string[]): string {
   let max = 0;
   for (const id of ids) {
     const value = Number(id.replace(`${prefix}-`, ""));
@@ -95,7 +103,7 @@ function normalizeRestoredDocument(documentState: DocumentState): DocumentState 
   };
 }
 
-async function sanitizeWindowSnapshot(
+export async function sanitizeWindowSnapshot(
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
   const documentsById = new Map(

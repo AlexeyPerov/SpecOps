@@ -209,6 +209,8 @@ function createStateStore() {
       applyTheme(initialState.settings);
     },
     resetWorkspace() {
+      docCounter = 1;
+      tabCounter = 1;
       set(initialState);
       applyTheme(initialState.settings);
     },

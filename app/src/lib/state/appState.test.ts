@@ -348,22 +348,22 @@ describe("appState settings and editor chrome", () => {
     appState.resetWorkspace();
   });
 
-  it("toggleTheme alternates light and dark", () => {
-    expect(appState.getSnapshot().settings.themeMode).toBe("dark");
-    appState.toggleTheme();
-    expect(appState.getSnapshot().settings.themeMode).toBe("light");
-    appState.toggleTheme();
-    expect(appState.getSnapshot().settings.themeMode).toBe("dark");
+  it("setTheme updates the active theme", () => {
+    expect(appState.getSnapshot().settings.theme).toBe("dark-blue");
+    appState.setTheme("light-violet");
+    expect(appState.getSnapshot().settings.theme).toBe("light-violet");
   });
 
-  it("cycleAccent rotates through accent options", () => {
-    expect(appState.getSnapshot().settings.accent).toBe("blue");
-    appState.cycleAccent();
-    expect(appState.getSnapshot().settings.accent).toBe("violet");
-    appState.cycleAccent();
-    expect(appState.getSnapshot().settings.accent).toBe("green");
-    appState.cycleAccent();
-    expect(appState.getSnapshot().settings.accent).toBe("blue");
+  it("cycleTheme cycles through all theme ids and wraps", () => {
+    expect(appState.getSnapshot().settings.theme).toBe("dark-blue");
+    appState.cycleTheme();
+    expect(appState.getSnapshot().settings.theme).toBe("dark-violet");
+    appState.cycleTheme();
+    expect(appState.getSnapshot().settings.theme).toBe("dark-green");
+    for (let i = 0; i < 10; i++) {
+      appState.cycleTheme();
+    }
+    expect(appState.getSnapshot().settings.theme).toBe("dark-blue");
   });
 
   it("applyPersistedSettings updates only provided fields", () => {
@@ -371,7 +371,7 @@ describe("appState settings and editor chrome", () => {
     const snapshot = appState.getSnapshot();
     expect(snapshot.editor.zoomPercent).toBe(130);
     expect(snapshot.editor.wrapLines).toBe(false);
-    expect(snapshot.settings.themeMode).toBe("dark");
+    expect(snapshot.settings.theme).toBe("dark-blue");
   });
 
   it("setPreviewMode, zoom, and wrap update editor state", () => {

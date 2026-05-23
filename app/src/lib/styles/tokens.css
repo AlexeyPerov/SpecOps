@@ -44,6 +44,16 @@
   --color-focus-ring: color-mix(in srgb, var(--color-accent) 80%, white);
   --color-statusbar-bg: #ebeff6;
   --color-pressed: rgb(20 71 170 / 18%);
+
+  --syntax-keyword: #a626a4;
+  --syntax-string: #50a14f;
+  --syntax-comment: #a0a1a7;
+  --syntax-number: #986801;
+  --syntax-type: #c18401;
+  --syntax-heading: #e45649;
+  --syntax-link: #4078f2;
+  --syntax-markup: #0184bc;
+  --syntax-punctuation: #383a42;
 }
 
 :root[data-theme="dark"] {
@@ -58,6 +68,16 @@
   --color-focus-ring: color-mix(in srgb, var(--color-accent) 76%, white);
   --color-statusbar-bg: #101620;
   --color-pressed: rgb(89 152 243 / 26%);
+
+  --syntax-keyword: #c678dd;
+  --syntax-string: #98c379;
+  --syntax-comment: #5c6370;
+  --syntax-number: #d19a66;
+  --syntax-type: #e5c07b;
+  --syntax-heading: #e06c75;
+  --syntax-link: #61afef;
+  --syntax-markup: #56b6c2;
+  --syntax-punctuation: #abb2bf;
 }
 
 *,

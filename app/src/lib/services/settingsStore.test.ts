@@ -28,8 +28,7 @@ const writeTextFileMock = vi.mocked(writeTextFile);
 describe("settings mapping", () => {
   it("round-trips external file settings", () => {
     const persisted = toPersistedSettings({
-      themeMode: "light",
-      accent: "violet",
+      theme: "light-violet",
       wrapLines: false,
       zoomPercent: 120,
       externalFiles: {
@@ -38,6 +37,7 @@ describe("settings mapping", () => {
         checkOnWindowFocus: false,
         checkOnTabActivate: true,
       },
+      decoratePlaintextSymbols: false,
     });
 
     expect(toExternalFilesSettings(persisted)).toEqual({
@@ -62,8 +62,7 @@ describe("loadPersistedSettings", () => {
   it("defaults missing external-file booleans", async () => {
     readTextFileMock.mockResolvedValue(
       JSON.stringify({
-        themeMode: "dark",
-        accent: "blue",
+        theme: "dark-blue",
         wrapLines: true,
         zoomPercent: 100,
       }),
@@ -72,16 +71,35 @@ describe("loadPersistedSettings", () => {
     await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
   });
 
-  it("returns null for invalid themeMode", async () => {
+  it("returns null for invalid theme", async () => {
     readTextFileMock.mockResolvedValue(
-      JSON.stringify({ ...defaultPersistedSettings, themeMode: "auto" }),
+      JSON.stringify({ ...defaultPersistedSettings, theme: "dark-red" }),
     );
     await expect(loadPersistedSettings()).resolves.toBeNull();
   });
 
-  it("returns null for invalid accent", async () => {
+  it("maps legacy themeMode/accent to unified theme", async () => {
     readTextFileMock.mockResolvedValue(
-      JSON.stringify({ ...defaultPersistedSettings, accent: "red" }),
+      JSON.stringify({
+        themeMode: "light",
+        accent: "violet",
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result).not.toBeNull();
+    expect(result!.theme).toBe("light-violet");
+  });
+
+  it("returns null for invalid accent in legacy format", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        themeMode: "dark",
+        accent: "red",
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
     );
     await expect(loadPersistedSettings()).resolves.toBeNull();
   });

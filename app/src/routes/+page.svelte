@@ -60,6 +60,8 @@
   import { marked } from "marked";
   import { diffLines } from "diff";
   import type { AppDomainState, ExternalFilesSettings } from "../lib/domain/contracts";
+  import { APP_THEME_IDS, getThemeLabel, getThemeAccentHex } from "../lib/styles/themes";
+  import type { AppTheme } from "../lib/styles/themes";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -363,11 +365,11 @@
     const persistedSettings = await loadPersistedSettings();
     if (persistedSettings) {
       appState.applyPersistedSettings({
-        themeMode: persistedSettings.themeMode,
-        accent: persistedSettings.accent,
+        theme: persistedSettings.theme,
         wrapLines: persistedSettings.wrapLines,
         zoomPercent: persistedSettings.zoomPercent,
         externalFiles: toExternalFilesSettings(persistedSettings),
+        decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
       });
     }
 
@@ -623,11 +625,11 @@
     if (currentWindowId) {
       void savePersistedSettings(
         toPersistedSettings({
-          themeMode: state.settings.themeMode,
-          accent: state.settings.accent,
+          theme: state.settings.theme,
           wrapLines: state.editor.wrapLines,
           zoomPercent: state.editor.zoomPercent,
           externalFiles: state.settings.externalFiles,
+          decoratePlaintextSymbols: state.settings.decoratePlaintextSymbols,
         }),
       );
     }
@@ -701,6 +703,8 @@
                   scrollTop={activeDocument?.scrollTop ?? 0}
                   wrapLines={state.editor.wrapLines}
                   zoomPercent={state.editor.zoomPercent}
+                  language={activeDocument?.language ?? "plaintext"}
+                  decoratePlaintextSymbols={state.settings.decoratePlaintextSymbols}
                   onStatusMessage={notify}
                   onDocumentDirty={(nextContent) => {
                     if (!activeDocument) {
@@ -727,6 +731,8 @@
                 scrollTop={activeDocument?.scrollTop ?? 0}
                 wrapLines={state.editor.wrapLines}
                 zoomPercent={state.editor.zoomPercent}
+                language={activeDocument?.language ?? "plaintext"}
+                decoratePlaintextSymbols={state.settings.decoratePlaintextSymbols}
                 onStatusMessage={notify}
                 onDocumentDirty={(nextContent) => {
                   if (!activeDocument) {
@@ -750,6 +756,8 @@
           scrollTop={activeDocument?.scrollTop ?? 0}
           wrapLines={state.editor.wrapLines}
           zoomPercent={state.editor.zoomPercent}
+          language={activeDocument?.language ?? "plaintext"}
+          decoratePlaintextSymbols={state.settings.decoratePlaintextSymbols}
           onStatusMessage={notify}
           onDocumentDirty={(nextContent) => {
             if (!activeDocument) {
@@ -825,14 +833,22 @@
     {/if}
     <aside class="settings-pane" data-open={settingsPaneOpen}>
       <h2>Settings</h2>
-      <p>Theme: {state.settings.themeMode}</p>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("view.toggleTheme")}>
-        Toggle Theme
-      </button>
-      <p>Accent: {state.settings.accent}</p>
-      <button class="toolbar-button" type="button" onclick={() => runCommand("view.cycleAccent")}>
-        Cycle Accent
-      </button>
+      <section class="settings-section">
+        <h3>Theme</h3>
+        {#each APP_THEME_IDS as themeId}
+          <label class="settings-theme-row">
+            <input
+              type="radio"
+              name="theme"
+              value={themeId}
+              checked={state.settings.theme === themeId}
+              onchange={() => appState.setTheme(themeId)}
+            />
+            <span class="theme-swatch" style="background-color: {getThemeAccentHex(themeId)}"></span>
+            <span>{getThemeLabel(themeId)}</span>
+          </label>
+        {/each}
+      </section>
       <p>Recent files: {state.recentFiles.length}</p>
       <section class="settings-section">
         <h3>External files</h3>
@@ -886,6 +902,21 @@
               )}
           />
           Check when tab becomes active
+        </label>
+      </section>
+      <section class="settings-section">
+        <h3>Editor</h3>
+        <label class="settings-toggle">
+          <input
+            type="checkbox"
+            checked={state.settings.decoratePlaintextSymbols}
+            onchange={(event) =>
+              appState.setDecoratePlaintextSymbols(
+                (event.currentTarget as HTMLInputElement).checked,
+              )
+            }
+          />
+          Decorate plaintext symbols
         </label>
       </section>
       <p>This pane uses token-driven overlay styling.</p>
@@ -1162,6 +1193,21 @@
     accent-color: var(--accent-color);
   }
 
+  .settings-theme-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: 0.875rem;
+    padding: var(--space-2) 0;
+  }
+
+  .theme-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
   .settings-pane {
     position: absolute;
     top: var(--space-8);
@@ -1320,5 +1366,10 @@
   .status-segment:active,
   .menu-action:active {
     background: var(--color-pressed);
+  }
+
+  :global(.cm-plaintext-symbol) {
+    color: var(--syntax-punctuation);
+    opacity: 0.7;
   }
 </style>

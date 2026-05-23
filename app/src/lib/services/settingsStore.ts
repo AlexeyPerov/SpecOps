@@ -1,21 +1,19 @@
 import { join } from "@tauri-apps/api/path";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { ensureSpecOpsDataDir } from "./appDataDir";
-import type {
-  AccentOption,
-  ExternalFilesSettings,
-  ThemeMode,
-} from "../domain/contracts";
+import type { ExternalFilesSettings } from "../domain/contracts";
+import type { AppTheme } from "../styles/themes";
+import { isValidTheme } from "../styles/themes";
 
 export interface PersistedSettings {
-  themeMode: ThemeMode;
-  accent: AccentOption;
+  theme: AppTheme;
   wrapLines: boolean;
   zoomPercent: number;
   watchExternalChanges: boolean;
   autoReloadCleanFiles: boolean;
   checkOnWindowFocus: boolean;
   checkOnTabActivate: boolean;
+  decoratePlaintextSymbols: boolean;
 }
 
 export const defaultExternalFilesSettings: ExternalFilesSettings = {
@@ -26,11 +24,11 @@ export const defaultExternalFilesSettings: ExternalFilesSettings = {
 };
 
 export const defaultPersistedSettings: PersistedSettings = {
-  themeMode: "dark",
-  accent: "blue",
+  theme: "dark-blue",
   wrapLines: true,
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
+  decoratePlaintextSymbols: false,
 };
 
 const FILE_NAME = "settings.json";
@@ -65,22 +63,36 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
   try {
     const path = await getSettingsPath();
     const raw = await readTextFile(path);
-    const parsed = JSON.parse(raw) as Partial<PersistedSettings>;
-    if (
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    let theme: AppTheme | null = null;
+
+    if (typeof parsed.theme === "string" && isValidTheme(parsed.theme)) {
+      theme = parsed.theme;
+    } else if (
       (parsed.themeMode === "dark" || parsed.themeMode === "light") &&
-      (parsed.accent === "blue" ||
-        parsed.accent === "green" ||
-        parsed.accent === "violet") &&
+      typeof parsed.accent === "string"
+    ) {
+      const candidate = `${parsed.themeMode}-${parsed.accent}` as AppTheme;
+      if (isValidTheme(candidate)) {
+        theme = candidate;
+      }
+    }
+
+    if (
+      theme !== null &&
       isBoolean(parsed.wrapLines) &&
       typeof parsed.zoomPercent === "number"
     ) {
-      const externalFiles = parseExternalFilesSettings(parsed);
+      const externalFiles = parseExternalFilesSettings(parsed as Partial<PersistedSettings>);
       return {
-        themeMode: parsed.themeMode,
-        accent: parsed.accent,
+        theme,
         wrapLines: parsed.wrapLines,
-        zoomPercent: parsed.zoomPercent,
+        zoomPercent: parsed.zoomPercent as number,
         ...externalFiles,
+        decoratePlaintextSymbols: isBoolean(parsed.decoratePlaintextSymbols)
+          ? parsed.decoratePlaintextSymbols
+          : false,
       };
     }
     return null;
@@ -108,17 +120,17 @@ export function toExternalFilesSettings(
 }
 
 export function toPersistedSettings(input: {
-  themeMode: ThemeMode;
-  accent: AccentOption;
+  theme: AppTheme;
   wrapLines: boolean;
   zoomPercent: number;
   externalFiles: ExternalFilesSettings;
+  decoratePlaintextSymbols: boolean;
 }): PersistedSettings {
   return {
-    themeMode: input.themeMode,
-    accent: input.accent,
+    theme: input.theme,
     wrapLines: input.wrapLines,
     zoomPercent: input.zoomPercent,
     ...input.externalFiles,
+    decoratePlaintextSymbols: input.decoratePlaintextSymbols,
   };
 }

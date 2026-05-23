@@ -1,5 +1,4 @@
-export type ThemeMode = "light" | "dark";
-export type AccentOption = "blue" | "violet" | "green";
+import type { AppTheme } from "../styles/themes";
 
 export interface DiskFingerprint {
   mtimeMs: number;
@@ -16,7 +15,7 @@ export interface DocumentState extends DocumentIdentity {
   content: string;
   savedContent: string;
   isDirty: boolean;
-  language: "plaintext" | "markdown";
+  language: string;
   encoding: "utf-8";
   lineEnding: "lf" | "crlf";
   diskFingerprint: DiskFingerprint | null;
@@ -54,10 +53,10 @@ export interface ExternalFilesSettings {
 }
 
 export interface AppSettingsState {
-  themeMode: ThemeMode;
-  accent: AccentOption;
+  theme: AppTheme;
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
+  decoratePlaintextSymbols: boolean;
 }
 
 export type AppCommandId =
@@ -65,8 +64,7 @@ export type AppCommandId =
   | "app.newWindow"
   | "app.toggleFindReplace"
   | "app.toggleGoTo"
-  | "view.toggleTheme"
-  | "view.cycleAccent"
+  | "view.cycleTheme"
   | "view.toggleMarkdownPreview"
   | "view.toggleDiffPreview"
   | "file.new"

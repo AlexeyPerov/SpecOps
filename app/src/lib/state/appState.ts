@@ -1,6 +1,5 @@
 import { writable } from "svelte/store";
 import type {
-  AccentOption,
   AppDomainState,
   AppSettingsState,
   DiskFingerprint,
@@ -10,9 +9,16 @@ import type {
   TabState,
   WindowBounds,
   WindowSessionSnapshot,
-  ThemeMode,
 } from "../domain/contracts";
+import { inferEditorLanguage } from "../editor/editorLanguage";
 import { normalizePathSync } from "../services/diskFingerprint";
+import type { AppTheme } from "../styles/themes";
+import {
+  APP_THEME_IDS,
+  DEFAULT_THEME,
+  getThemeAccentHex,
+  getThemeMode,
+} from "../styles/themes";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -22,10 +28,10 @@ const defaultExternalFilesSettings: ExternalFilesSettings = {
 };
 
 const defaultSettings: AppSettingsState = {
-  themeMode: "dark",
-  accent: "blue",
+  theme: DEFAULT_THEME,
   statusBarVisible: true,
   externalFiles: defaultExternalFilesSettings,
+  decoratePlaintextSymbols: false,
 };
 
 let docCounter = 1;
@@ -37,14 +43,8 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-function inferLanguage(path: string | null): "plaintext" | "markdown" {
-  if (!path) {
-    return "plaintext";
-  }
-  const lower = path.toLowerCase();
-  return lower.endsWith(".md") || lower.endsWith(".markdown")
-    ? "markdown"
-    : "plaintext";
+function inferLanguage(path: string | null): string {
+  return inferEditorLanguage(path);
 }
 
 function deriveUntitledTitle(content: string): string {
@@ -253,21 +253,15 @@ const initialState: AppDomainState = {
   },
 };
 
-const accentColors: Record<AccentOption, string> = {
-  blue: "#2f80ed",
-  violet: "#8b5cf6",
-  green: "#22a06b",
-};
-
 function applyTheme(settings: AppSettingsState): void {
   if (typeof document === "undefined") {
     return;
   }
 
-  document.documentElement.dataset.theme = settings.themeMode;
+  document.documentElement.dataset.theme = getThemeMode(settings.theme);
   document.documentElement.style.setProperty(
     "--accent-color",
-    accentColors[settings.accent],
+    getThemeAccentHex(settings.theme),
   );
 }
 
@@ -294,21 +288,18 @@ function createStateStore() {
       un();
       return snapshot;
     },
-    toggleTheme() {
+    setTheme(id: AppTheme) {
       update((state) => {
-        const themeMode: ThemeMode =
-          state.settings.themeMode === "dark" ? "light" : "dark";
-        const settings = { ...state.settings, themeMode };
+        const settings = { ...state.settings, theme: id };
         applyTheme(settings);
         return { ...state, settings };
       });
     },
-    cycleAccent() {
+    cycleTheme() {
       update((state) => {
-        const accents: AccentOption[] = ["blue", "violet", "green"];
-        const index = accents.indexOf(state.settings.accent);
-        const accent = accents[(index + 1) % accents.length];
-        const settings = { ...state.settings, accent };
+        const index = APP_THEME_IDS.indexOf(state.settings.theme);
+        const theme = APP_THEME_IDS[(index + 1) % APP_THEME_IDS.length];
+        const settings = { ...state.settings, theme };
         applyTheme(settings);
         return { ...state, settings };
       });
@@ -923,23 +914,26 @@ function createStateStore() {
         },
       }));
     },
+    setDecoratePlaintextSymbols(value: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          decoratePlaintextSymbols: value,
+        },
+      }));
+    },
     applyPersistedSettings(partial: {
-      themeMode?: ThemeMode;
-      accent?: AccentOption;
+      theme?: AppTheme;
       wrapLines?: boolean;
       zoomPercent?: number;
       externalFiles?: ExternalFilesSettings;
+      decoratePlaintextSymbols?: boolean;
     }) {
       update((state) => {
         let next = state;
-        if (partial.themeMode && partial.themeMode !== state.settings.themeMode) {
-          const themeMode = partial.themeMode;
-          const settings = { ...state.settings, themeMode };
-          applyTheme(settings);
-          next = { ...next, settings };
-        }
-        if (partial.accent && partial.accent !== next.settings.accent) {
-          const settings = { ...next.settings, accent: partial.accent };
+        if (partial.theme && partial.theme !== state.settings.theme) {
+          const settings = { ...state.settings, theme: partial.theme };
           applyTheme(settings);
           next = { ...next, settings };
         }
@@ -961,6 +955,15 @@ function createStateStore() {
             settings: {
               ...next.settings,
               externalFiles: partial.externalFiles,
+            },
+          };
+        }
+        if (typeof partial.decoratePlaintextSymbols === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              decoratePlaintextSymbols: partial.decoratePlaintextSymbols,
             },
           };
         }

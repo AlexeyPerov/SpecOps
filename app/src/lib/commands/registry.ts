@@ -34,7 +34,7 @@ function getSnapshot() {
 
 const keyBindingsByPlatform: Record<string, string> = {
   "Meta+,": "app.toggleSettingsPane",
-  "Meta+Shift+t": "view.toggleTheme",
+  "Meta+Shift+t": "view.cycleTheme",
   "Meta+f": "app.toggleFindReplace",
   "Meta+l": "app.toggleGoTo",
   "Meta+Shift+m": "view.toggleMarkdownPreview",
@@ -61,7 +61,7 @@ const keyBindingsByPlatform: Record<string, string> = {
   "Meta+-": "view.zoomOut",
   "Meta+0": "view.zoomReset",
   "Ctrl+,": "app.toggleSettingsPane",
-  "Ctrl+Shift+t": "view.toggleTheme",
+  "Ctrl+Shift+t": "view.cycleTheme",
   "Ctrl+f": "app.toggleFindReplace",
   "Ctrl+l": "app.toggleGoTo",
   "Ctrl+Shift+m": "view.toggleMarkdownPreview",
@@ -101,8 +101,8 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "Cmd+Shift+N", windows: "Ctrl+Shift+N" },
   },
   {
-    id: "view.toggleTheme",
-    label: "Toggle Theme",
+    id: "view.cycleTheme",
+    label: "Cycle Theme",
     menuPath: "View/Theme",
     binding: { mac: "Cmd+Shift+T", windows: "Ctrl+Shift+T" },
   },
@@ -278,11 +278,8 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     await createNewWindowWithTransfer(getState(), null);
     notify("Opened new window.");
   },
-  "view.toggleTheme": () => {
-    appState.toggleTheme();
-  },
-  "view.cycleAccent": () => {
-    appState.cycleAccent();
+  "view.cycleTheme": () => {
+    appState.cycleTheme();
   },
   "app.toggleFindReplace": () => {
     appState.toggleFindReplace();
@@ -736,14 +733,9 @@ async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Prom
   });
   const themeItem = await MenuItem.new({
     id: "cmd.view.theme",
-    text: "Toggle Theme",
+    text: "Cycle Theme",
     accelerator: "CmdOrCtrl+Shift+T",
-    action: () => runCommand("view.toggleTheme"),
-  });
-  const accentItem = await MenuItem.new({
-    id: "cmd.view.accent",
-    text: "Cycle Accent",
-    action: () => runCommand("view.cycleAccent"),
+    action: () => runCommand("view.cycleTheme"),
   });
   const diffItem = await MenuItem.new({
     id: "cmd.view.diff",
@@ -781,7 +773,6 @@ async function buildAppMenu(runCommand: (commandId: AppCommandId) => void): Prom
     items: [
       settingsItem,
       themeItem,
-      accentItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       diffItem,
       wrapItem,

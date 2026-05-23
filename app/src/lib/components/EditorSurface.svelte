@@ -11,15 +11,21 @@
     redo,
     undo,
   } from "@codemirror/commands";
-  import { markdown } from "@codemirror/lang-markdown";
   import { EditorView, keymap, lineNumbers } from "@codemirror/view";
   import { appState } from "../state/appState";
   import type { EditorCommandRunner } from "../types/editor";
+  import { createSyntaxHighlightExtension } from "../editor/editorHighlight";
+  import { getLanguageSupport, loadLanguageSupport } from "../editor/editorLanguage";
+  import type { EditorLanguageId } from "../editor/editorLanguage";
+  import { createPlaintextSymbolDecorations } from "../editor/plaintextDecorations";
 
   let hostEl: HTMLDivElement | undefined;
   let view: EditorView | undefined;
   const lineWrapCompartment = new Compartment();
   const fontSizeCompartment = new Compartment();
+  const languageCompartment = new Compartment();
+  const highlightCompartment = new Compartment();
+  const decorationCompartment = new Compartment();
   let muted = false;
 
   export let content = "";
@@ -27,6 +33,8 @@
   export let scrollTop = 0;
   export let wrapLines = false;
   export let zoomPercent = 100;
+  export let language: EditorLanguageId = "plaintext";
+  export let decoratePlaintextSymbols = false;
   export let onStatusMessage: (message: string) => void = () => {};
   export let onDocumentDirty: (nextContent: string) => void = () => {};
   export let onScrollTopChange: (documentId: string, scrollTop: number) => void = () => {};
@@ -34,6 +42,8 @@
     undefined;
 
   let trackedDocumentId: string | null = null;
+  let currentEditorLanguage: EditorLanguageId = "plaintext";
+  let lastDecoState = "";
   let applyingScroll = false;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let detachScrollListener: (() => void) | null = null;
@@ -339,7 +349,9 @@
             },
           }),
         ),
-        markdown({ addKeymap: false }),
+        languageCompartment.of(getLanguageSupport(language) ?? []),
+        highlightCompartment.of(createSyntaxHighlightExtension()),
+        decorationCompartment.of([]),
         EditorView.theme({
           "&": {
             height: "100%",
@@ -389,6 +401,7 @@
     updateCursor();
     attachScrollListener();
     trackedDocumentId = documentId;
+    currentEditorLanguage = language;
     applyScrollTop(scrollTop);
 
     registerEditorCommandRunner?.({
@@ -450,6 +463,30 @@
       changes: { from: 0, to: view.state.doc.length, insert: content },
     });
     muted = false;
+  }
+
+  $: if (view && language !== undefined && language !== currentEditorLanguage) {
+    currentEditorLanguage = language;
+    void loadLanguageSupport(language).then((support) => {
+      if (view) {
+        view.dispatch({
+          effects: languageCompartment.reconfigure(support ?? []),
+        });
+      }
+    });
+  }
+
+  $: if (view) {
+    const key = `${language}:${decoratePlaintextSymbols}`;
+    if (key !== lastDecoState) {
+      lastDecoState = key;
+      const shouldDecorate = language === "plaintext" && decoratePlaintextSymbols;
+      view.dispatch({
+        effects: decorationCompartment.reconfigure(
+          shouldDecorate ? [createPlaintextSymbolDecorations()] : [],
+        ),
+      });
+    }
   }
 </script>
 

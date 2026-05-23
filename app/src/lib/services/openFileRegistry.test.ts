@@ -174,8 +174,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         windowBounds: null,
       },
       settings: {
-        themeMode: "dark",
-        accent: "blue",
+        theme: "dark-blue",
         statusBarVisible: true,
         externalFiles: {
           watchExternalChanges: true,
@@ -183,6 +182,7 @@ describe("syncOpenFileRegistryForWindow", () => {
           checkOnWindowFocus: true,
           checkOnTabActivate: true,
         },
+        decoratePlaintextSymbols: false,
       },
       recentFiles: [],
       editor: {

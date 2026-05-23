@@ -4,6 +4,9 @@
   import { appState } from "../state/appState";
   import { revealInFileManagerLabel } from "../services/platform";
   import { revealInFileManager } from "../services/revealInFileManager";
+  import { readNearbyTextFiles, type NearbyTextFile } from "../services/nearbyFiles";
+  import { openPath } from "../services/fileSystem";
+  import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
 
   const DRAG_THRESHOLD_PX = 4;
   const revealLabel = revealInFileManagerLabel();
@@ -12,6 +15,7 @@
   export let documents: DocumentState[] = [];
   export let selectedTabId: string | null = null;
   export let onSelect: (tabId: string) => void = (tabId: string) => appState.selectTab(tabId);
+  export let windowId = "main";
 
   let tabStripEl: HTMLDivElement | null = null;
 
@@ -33,6 +37,10 @@
 
   let contextMenu: { tabId: string; x: number; y: number } | null = null;
   let contextMenuEl: HTMLDivElement | null = null;
+  let nearbySubmenuOpen = false;
+  let nearbyFiles: NearbyTextFile[] = [];
+  let nearbyFilesLoading = false;
+  let nearbyRequestId = 0;
 
   function tabDocument(tab: TabState): DocumentState | undefined {
     return documents.find((doc) => doc.id === tab.documentId);
@@ -58,9 +66,12 @@
   function openContextMenu(event: MouseEvent, tab: TabState): void {
     event.preventDefault();
     event.stopPropagation();
+    closeContextMenu();
     contextMenu = { tabId: tab.id, x: event.clientX, y: event.clientY };
+    nearbySubmenuOpen = false;
     window.addEventListener("pointerdown", onWindowPointerDown);
     window.addEventListener("keydown", onWindowKeydown);
+    void prefetchNearbyFiles(tab);
   }
 
   function closeContextMenu(): void {
@@ -68,6 +79,7 @@
       return;
     }
     contextMenu = null;
+    nearbySubmenuOpen = false;
     window.removeEventListener("pointerdown", onWindowPointerDown);
     window.removeEventListener("keydown", onWindowKeydown);
   }
@@ -87,7 +99,7 @@
   }
 
   function onWindowPointerDown(event: PointerEvent): void {
-    if (!contextMenu || event.button !== 0) {
+    if (!contextMenu) {
       return;
     }
     const target = event.target;
@@ -101,6 +113,102 @@
     if (contextMenu && event.key === "Escape") {
       closeContextMenu();
     }
+  }
+
+  function tabOpenPaths(): string[] {
+    const openPaths = new Set<string>();
+    for (const tab of openTabs) {
+      const doc = tabDocument(tab);
+      if (doc?.filePath) {
+        openPaths.add(doc.filePath);
+      }
+    }
+    return [...openPaths];
+  }
+
+  async function prefetchNearbyFiles(tab: TabState): Promise<void> {
+    const tabDoc = tabDocument(tab);
+    if (!tabDoc?.filePath) {
+      nearbyFiles = [];
+      nearbyFilesLoading = false;
+      return;
+    }
+    nearbyFilesLoading = true;
+    nearbyFiles = [];
+    const requestId = nearbyRequestId + 1;
+    nearbyRequestId = requestId;
+    try {
+      const files = await readNearbyTextFiles(tabDoc.filePath, tabOpenPaths(), 10);
+      if (nearbyRequestId !== requestId) {
+        return;
+      }
+      nearbyFiles = files;
+    } catch {
+      if (nearbyRequestId !== requestId) {
+        return;
+      }
+      nearbyFiles = [];
+    } finally {
+      if (nearbyRequestId === requestId) {
+        nearbyFilesLoading = false;
+      }
+    }
+  }
+
+  async function openPathWithPipeline(path: string): Promise<void> {
+    try {
+      const opened = await openPath(path);
+      if (opened.sizeBytes > 10 * 1024 * 1024) {
+        return;
+      }
+      const gateResult = await requestOpenPath(opened.path, windowId);
+      if (gateResult.kind === "needs_read") {
+        await completeOpenPath(opened.path, opened.content, windowId);
+      }
+    } catch {
+      // nearby open is best-effort from the tab menu
+    }
+  }
+
+  async function openNearbyFile(path: string): Promise<void> {
+    await openPathWithPipeline(path);
+    closeContextMenu();
+  }
+
+  async function openAllNearbyFiles(): Promise<void> {
+    for (const nearbyFile of nearbyFiles) {
+      await openPathWithPipeline(nearbyFile.path);
+    }
+    closeContextMenu();
+  }
+
+  function closeContextTabWithPrompt(): void {
+    if (!contextMenuTab) {
+      return;
+    }
+    appState.closeTabWithPrompt(contextMenuTab.id, (message) => window.confirm(message));
+    closeContextMenu();
+  }
+
+  function closeOtherTabsWithPrompt(): void {
+    if (!contextMenuTab) {
+      return;
+    }
+    appState.closeOtherTabs(contextMenuTab.id, (message) => window.confirm(message));
+    closeContextMenu();
+  }
+
+  function closeTabsToRightWithPrompt(): void {
+    if (!contextMenuTab) {
+      return;
+    }
+    appState.closeTabsToRight(contextMenuTab.id, (message) => window.confirm(message));
+    closeContextMenu();
+  }
+
+  function closeMissingFileTabs(): void {
+    appState.closeMissingFileTabs();
+    closeContextMenu();
   }
 
   function previewTabs(
@@ -276,6 +384,22 @@
     ? openTabs.find((tab) => tab.id === contextMenu?.tabId) ?? null
     : null;
   $: contextMenuCanReveal = Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath);
+  $: contextMenuTabIndex = contextMenuTab ? openTabs.findIndex((tab) => tab.id === contextMenuTab.id) : -1;
+  $: contextMenuCanCloseOtherTabs = Boolean(
+    contextMenuTab &&
+      openTabs.some((tab) => tab.id !== contextMenuTab.id && !tab.pinned),
+  );
+  $: contextMenuCanCloseTabsToRight =
+    contextMenuTabIndex >= 0 &&
+    openTabs.slice(contextMenuTabIndex + 1).some((tab) => !tab.pinned);
+  $: contextMenuCanCloseMissingFileTabs = openTabs.some((tab) => {
+    if (tab.pinned) {
+      return false;
+    }
+    return Boolean(tabDocument(tab)?.fileMissing);
+  });
+  $: contextMenuCanOpenNearby = Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath);
+  $: contextMenuHasNearbyFiles = nearbyFiles.length > 0;
 </script>
 
 <div class="tab-strip" bind:this={tabStripEl} data-dragging={didDrag}>
@@ -337,6 +461,158 @@
     tabindex="-1"
     onpointerdown={(event) => event.stopPropagation()}
   >
+    <button
+      class="tab-context-item"
+      type="button"
+      role="menuitem"
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        closeContextTabWithPrompt();
+      }}
+    >
+      Close Tab
+    </button>
+    <button
+      class="tab-context-item"
+      type="button"
+      role="menuitem"
+      disabled={!contextMenuCanCloseOtherTabs}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!contextMenuCanCloseOtherTabs) {
+          return;
+        }
+        closeOtherTabsWithPrompt();
+      }}
+    >
+      Close Other Tabs
+    </button>
+
+    <div class="tab-context-separator" role="separator"></div>
+
+    <button
+      class="tab-context-item"
+      type="button"
+      role="menuitem"
+      disabled={!contextMenuCanCloseTabsToRight}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!contextMenuCanCloseTabsToRight) {
+          return;
+        }
+        closeTabsToRightWithPrompt();
+      }}
+    >
+      Close Tabs to the Right
+    </button>
+    <button
+      class="tab-context-item"
+      type="button"
+      role="menuitem"
+      disabled={!contextMenuCanCloseMissingFileTabs}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!contextMenuCanCloseMissingFileTabs) {
+          return;
+        }
+        closeMissingFileTabs();
+      }}
+    >
+      Close Missing File Tabs
+    </button>
+
+    <div class="tab-context-separator" role="separator"></div>
+
+    <div
+      class="tab-context-submenu"
+      role="none"
+      onpointerenter={() => {
+        if (!contextMenuCanOpenNearby) {
+          return;
+        }
+        nearbySubmenuOpen = true;
+      }}
+      onpointerleave={() => {
+        nearbySubmenuOpen = false;
+      }}
+      onfocusin={() => {
+        if (!contextMenuCanOpenNearby) {
+          return;
+        }
+        nearbySubmenuOpen = true;
+      }}
+      onfocusout={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (!(nextTarget instanceof Node) || !contextMenuEl?.contains(nextTarget)) {
+          nearbySubmenuOpen = false;
+        }
+      }}
+    >
+      <button
+        class="tab-context-item tab-context-item-submenu"
+        type="button"
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={nearbySubmenuOpen}
+        disabled={!contextMenuCanOpenNearby}
+        onpointerdown={(event) => {
+          event.stopPropagation();
+          if (!contextMenuCanOpenNearby) {
+            return;
+          }
+          nearbySubmenuOpen = true;
+        }}
+      >
+        <span>Open Nearby</span>
+        <span class="tab-context-chevron">›</span>
+      </button>
+      {#if nearbySubmenuOpen && contextMenuCanOpenNearby}
+        <div class="tab-context-submenu-panel" role="menu">
+          {#if nearbyFilesLoading}
+            <button class="tab-context-item" type="button" role="menuitem" disabled>Loading...</button>
+          {:else if !contextMenuHasNearbyFiles}
+            <button class="tab-context-item" type="button" role="menuitem" disabled>
+              No nearby files
+            </button>
+          {:else}
+            {#each nearbyFiles as nearbyFile (nearbyFile.path)}
+              <button
+                class="tab-context-item"
+                type="button"
+                role="menuitem"
+                onpointerdown={(event) => {
+                  event.stopPropagation();
+                  void openNearbyFile(nearbyFile.path);
+                }}
+              >
+                {nearbyFile.basename}
+              </button>
+            {/each}
+          {/if}
+
+          <div class="tab-context-separator" role="separator"></div>
+
+          <button
+            class="tab-context-item"
+            type="button"
+            role="menuitem"
+            disabled={!contextMenuHasNearbyFiles}
+            onpointerdown={(event) => {
+              event.stopPropagation();
+              if (!contextMenuHasNearbyFiles) {
+                return;
+              }
+              void openAllNearbyFiles();
+            }}
+          >
+            Open All Nearby
+          </button>
+        </div>
+      {/if}
+    </div>
+
+    <div class="tab-context-separator" role="separator"></div>
+
     <button
       class="tab-context-item"
       type="button"
@@ -486,6 +762,41 @@
     text-align: left;
     font: inherit;
     padding: var(--space-4) var(--space-6);
+  }
+
+  .tab-context-item-submenu {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .tab-context-chevron {
+    color: var(--color-text-secondary);
+  }
+
+  .tab-context-separator {
+    height: 1px;
+    margin: var(--space-4) var(--space-2);
+    background: var(--color-border-subtle);
+  }
+
+  .tab-context-submenu {
+    position: relative;
+  }
+
+  .tab-context-submenu-panel {
+    position: absolute;
+    top: 0;
+    left: calc(100% + var(--space-4));
+    z-index: 1;
+    min-width: 180px;
+    padding: var(--space-4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-overlay);
   }
 
   .tab-context-item:not(:disabled):hover {

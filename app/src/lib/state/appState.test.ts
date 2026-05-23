@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appState } from "./appState";
 
 describe("appState tabs and selection", () => {
@@ -56,6 +56,134 @@ describe("appState tabs and selection", () => {
     const snapshot = appState.getSnapshot();
     expect(snapshot.session.openTabs).toHaveLength(1);
     expect(snapshot.documents[0]?.title).toBe("Untitled");
+  });
+
+  it("closeTabWithPrompt closes a non-selected dirty tab when confirmed", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.setDocumentContent("doc-2", "a dirty");
+    const confirm = vi.fn(() => true);
+
+    const closed = appState.closeTabWithPrompt("tab-2", confirm);
+
+    expect(closed).toBe(true);
+    expect(confirm).toHaveBeenCalledWith("Close a.txt without saving?");
+    expect(appState.getSnapshot().session.openTabs.some((tab) => tab.id === "tab-2")).toBe(false);
+  });
+
+  it("closeOtherTabs keeps context tab and skips pinned tabs", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.openFileInTab("/tmp/c.txt", "c");
+
+    appState.applyWindowSession({
+      ...appState.getSnapshot(),
+      session: {
+        ...appState.getSnapshot().session,
+        openTabs: [
+          { id: "tab-1", documentId: "doc-1", pinned: false },
+          { id: "tab-2", documentId: "doc-2", pinned: false },
+          { id: "tab-3", documentId: "doc-3", pinned: true },
+          { id: "tab-4", documentId: "doc-4", pinned: false },
+        ],
+        selectedTabId: "tab-4",
+      },
+    });
+
+    const closed = appState.closeOtherTabs("tab-2", () => true);
+
+    expect(closed).toBe(true);
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.session.openTabs.map((tab) => tab.id)).toEqual(["tab-2", "tab-3"]);
+    expect(snapshot.session.selectedTabId).toBe("tab-2");
+  });
+
+  it("closeOtherTabs aborts when a dirty tab is rejected", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.setDocumentContent("doc-3", "dirty");
+    const before = appState.getSnapshot().session.openTabs.map((tab) => tab.id);
+
+    const closed = appState.closeOtherTabs("tab-2", () => false);
+
+    expect(closed).toBe(false);
+    expect(appState.getSnapshot().session.openTabs.map((tab) => tab.id)).toEqual(before);
+  });
+
+  it("closeTabsToRight closes only right-side unpinned tabs", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.openFileInTab("/tmp/c.txt", "c");
+    appState.openFileInTab("/tmp/d.txt", "d");
+
+    appState.applyWindowSession({
+      ...appState.getSnapshot(),
+      session: {
+        ...appState.getSnapshot().session,
+        openTabs: [
+          { id: "tab-1", documentId: "doc-1", pinned: false },
+          { id: "tab-2", documentId: "doc-2", pinned: false },
+          { id: "tab-3", documentId: "doc-3", pinned: false },
+          { id: "tab-4", documentId: "doc-4", pinned: true },
+          { id: "tab-5", documentId: "doc-5", pinned: false },
+        ],
+        selectedTabId: "tab-3",
+      },
+    });
+
+    const closed = appState.closeTabsToRight("tab-2", () => true);
+
+    expect(closed).toBe(true);
+    expect(appState.getSnapshot().session.openTabs.map((tab) => tab.id)).toEqual([
+      "tab-1",
+      "tab-2",
+      "tab-4",
+    ]);
+    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-2");
+  });
+
+  it("closeMissingFileTabs closes missing tabs without prompt and keeps pinned missing", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+
+    appState.applyWindowSession({
+      ...appState.getSnapshot(),
+      documents: appState.getSnapshot().documents.map((doc) =>
+        doc.id === "doc-2" || doc.id === "doc-3"
+          ? { ...doc, fileMissing: true }
+          : doc,
+      ),
+      session: {
+        ...appState.getSnapshot().session,
+        openTabs: [
+          { id: "tab-1", documentId: "doc-1", pinned: false },
+          { id: "tab-2", documentId: "doc-2", pinned: false },
+          { id: "tab-3", documentId: "doc-3", pinned: true },
+        ],
+        selectedTabId: "tab-2",
+      },
+    });
+
+    const closed = appState.closeMissingFileTabs();
+
+    expect(closed).toBe(true);
+    expect(appState.getSnapshot().session.openTabs.map((tab) => tab.id)).toEqual(["tab-1", "tab-3"]);
+  });
+
+  it("closeMissingFileTabs keeps one Untitled tab when all tabs close", () => {
+    appState.applyWindowSession({
+      ...appState.getSnapshot(),
+      documents: appState.getSnapshot().documents.map((doc) => ({ ...doc, fileMissing: true })),
+    });
+
+    const closed = appState.closeMissingFileTabs();
+    const snapshot = appState.getSnapshot();
+
+    expect(closed).toBe(true);
+    expect(snapshot.session.openTabs).toHaveLength(1);
+    const selectedTab = snapshot.session.openTabs[0];
+    expect(selectedTab).toBeDefined();
+    expect(snapshot.documents.find((doc) => doc.id === selectedTab!.documentId)?.title).toBe("Untitled");
   });
 
   it("reorderTabs moves tabs and ignores invalid indices", () => {

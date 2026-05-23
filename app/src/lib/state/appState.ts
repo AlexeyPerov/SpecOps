@@ -124,6 +124,114 @@ function moveTab(tabs: TabState[], fromIndex: number, toIndex: number): TabState
   return next;
 }
 
+function tabIdsToCloseOtherThan(
+  openTabs: TabState[],
+  contextTabId: string,
+): string[] {
+  return openTabs
+    .filter((tab) => tab.id !== contextTabId && !tab.pinned)
+    .map((tab) => tab.id);
+}
+
+function tabIdsToCloseToRightOf(
+  openTabs: TabState[],
+  contextTabId: string,
+): string[] {
+  const contextIndex = openTabs.findIndex((tab) => tab.id === contextTabId);
+  if (contextIndex < 0) {
+    return [];
+  }
+  return openTabs
+    .slice(contextIndex + 1)
+    .filter((tab) => !tab.pinned)
+    .map((tab) => tab.id);
+}
+
+function missingTabIdsToClose(
+  openTabs: TabState[],
+  documents: DocumentState[],
+): string[] {
+  const missingByDocumentId = new Map(
+    documents.map((documentState) => [documentState.id, documentState.fileMissing]),
+  );
+  return openTabs
+    .filter((tab) => !tab.pinned && missingByDocumentId.get(tab.documentId) === true)
+    .map((tab) => tab.id);
+}
+
+function nextSelectedTabAfterBulkClose(
+  previousTabs: TabState[],
+  remainingTabs: TabState[],
+  previousSelectedTabId: string | null,
+  preferredTabId: string | null = null,
+): string | null {
+  if (preferredTabId && remainingTabs.some((tab) => tab.id === preferredTabId)) {
+    return preferredTabId;
+  }
+  if (!previousSelectedTabId) {
+    return remainingTabs[0]?.id ?? null;
+  }
+  if (remainingTabs.some((tab) => tab.id === previousSelectedTabId)) {
+    return previousSelectedTabId;
+  }
+
+  const selectedIndex = previousTabs.findIndex((tab) => tab.id === previousSelectedTabId);
+  if (selectedIndex >= 0) {
+    for (let idx = selectedIndex - 1; idx >= 0; idx -= 1) {
+      const candidateId = previousTabs[idx]?.id;
+      if (candidateId && remainingTabs.some((tab) => tab.id === candidateId)) {
+        return candidateId;
+      }
+    }
+  }
+  return remainingTabs[0]?.id ?? null;
+}
+
+function closeTabsForce(state: AppDomainState, tabIds: string[], preferredTabId: string | null): AppDomainState {
+  if (tabIds.length === 0) {
+    return state;
+  }
+  const idsToClose = new Set(tabIds);
+  const filteredTabs = state.session.openTabs.filter((tab) => !idsToClose.has(tab.id));
+  if (filteredTabs.length === state.session.openTabs.length) {
+    return state;
+  }
+  if (filteredTabs.length === 0) {
+    docCounter += 1;
+    tabCounter += 1;
+    const docId = `doc-${docCounter}`;
+    const tabId = `tab-${tabCounter}`;
+    const newDocument = buildDocument(
+      { id: docId, filePath: null },
+      "",
+      "Untitled",
+    );
+    return {
+      ...state,
+      documents: [...state.documents, newDocument],
+      session: {
+        ...state.session,
+        openTabs: [{ id: tabId, documentId: docId, pinned: false }],
+        selectedTabId: tabId,
+      },
+    };
+  }
+
+  return {
+    ...state,
+    session: {
+      ...state.session,
+      openTabs: filteredTabs,
+      selectedTabId: nextSelectedTabAfterBulkClose(
+        state.session.openTabs,
+        filteredTabs,
+        state.session.selectedTabId,
+        preferredTabId,
+      ),
+    },
+  };
+}
+
 const initialState: AppDomainState = {
   documents: [buildDocument({ id: "doc-1", filePath: null }, "", "Untitled")],
   session: {
@@ -369,6 +477,74 @@ function createStateStore() {
           },
         };
       });
+    },
+    closeTabWithPrompt(tabId: string, confirm: (message: string) => boolean): boolean {
+      const snapshot = this.getSnapshot();
+      const targetTab = snapshot.session.openTabs.find((tab) => tab.id === tabId);
+      if (!targetTab) {
+        return false;
+      }
+      const targetDocument = snapshot.documents.find((documentState) => documentState.id === targetTab.documentId);
+      if (targetDocument?.isDirty && !confirm(`Close ${targetDocument.title} without saving?`)) {
+        return false;
+      }
+      this.closeTabForce(tabId);
+      return true;
+    },
+    closeOtherTabs(contextTabId: string, confirm: (message: string) => boolean): boolean {
+      const snapshot = this.getSnapshot();
+      if (!snapshot.session.openTabs.some((tab) => tab.id === contextTabId)) {
+        return false;
+      }
+      const tabIds = tabIdsToCloseOtherThan(snapshot.session.openTabs, contextTabId);
+      if (tabIds.length === 0) {
+        return false;
+      }
+
+      for (const tabId of tabIds) {
+        const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
+        if (!tab) {
+          continue;
+        }
+        const doc = snapshot.documents.find((documentState) => documentState.id === tab.documentId);
+        if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
+          return false;
+        }
+      }
+
+      update((state) => closeTabsForce(state, tabIds, contextTabId));
+      return true;
+    },
+    closeTabsToRight(contextTabId: string, confirm: (message: string) => boolean): boolean {
+      const snapshot = this.getSnapshot();
+      const tabIds = tabIdsToCloseToRightOf(snapshot.session.openTabs, contextTabId);
+      if (tabIds.length === 0) {
+        return false;
+      }
+
+      for (const tabId of tabIds) {
+        const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
+        if (!tab) {
+          continue;
+        }
+        const doc = snapshot.documents.find((documentState) => documentState.id === tab.documentId);
+        if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
+          return false;
+        }
+      }
+
+      update((state) => closeTabsForce(state, tabIds, contextTabId));
+      return true;
+    },
+    closeMissingFileTabs(): boolean {
+      const snapshot = this.getSnapshot();
+      const tabIds = missingTabIdsToClose(snapshot.session.openTabs, snapshot.documents);
+      if (tabIds.length === 0) {
+        return false;
+      }
+
+      update((state) => closeTabsForce(state, tabIds, null));
+      return true;
     },
     openFileInTab(filePath: string, content: string): string {
       let openedDocumentId = "";

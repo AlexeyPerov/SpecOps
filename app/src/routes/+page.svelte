@@ -641,6 +641,7 @@
         openTabs={state.session.openTabs}
         documents={state.documents}
         selectedTabId={state.session.selectedTabId}
+        windowId={currentWindowId}
       />
       <button
         class="toolbar-button add-file-button"

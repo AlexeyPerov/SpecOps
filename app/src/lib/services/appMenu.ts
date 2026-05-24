@@ -167,6 +167,11 @@ export async function initializeAppMenu(
     text: "Open all in Folder",
     action: () => runCommand("file.openAllInFolder"),
   });
+  const addWorkspaceItem = await MenuItem.new({
+    id: "cmd.file.addWorkspace",
+    text: "Add Workspace",
+    action: () => runCommand("workspace.add"),
+  });
   const newWindowItem = await MenuItem.new({
     id: "cmd.file.newWindow",
     text: "New Window",
@@ -219,6 +224,7 @@ export async function initializeAppMenu(
       openItem,
       openRecentSubmenu,
       openAllInFolderItem,
+      addWorkspaceItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       newWindowItem,
       moveTabItem,

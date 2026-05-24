@@ -38,6 +38,7 @@ describe("settings mapping", () => {
         checkOnTabActivate: true,
       },
       decoratePlaintextSymbols: false,
+      hideActivityRailWhenNotepadOnly: true,
     });
 
     expect(toExternalFilesSettings(persisted)).toEqual({

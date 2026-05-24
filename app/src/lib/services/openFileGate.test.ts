@@ -46,7 +46,7 @@ const getByLabelMock = vi.mocked(WebviewWindow.getByLabel);
 
 describe("requestOpenPath", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
     readOpenFileRegistryMock.mockReset();
     claimOpenFileMock.mockClear();
     emitToMock.mockClear();
@@ -95,7 +95,7 @@ describe("requestOpenPath", () => {
 
 describe("selectTabForNormalizedPath", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("selects the tab for a normalized path", () => {
@@ -111,7 +111,7 @@ describe("selectTabForNormalizedPath", () => {
 
 describe("completeOpenPath", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
     claimOpenFileMock.mockClear();
     initializeDocumentDiskStateMock.mockClear();
   });

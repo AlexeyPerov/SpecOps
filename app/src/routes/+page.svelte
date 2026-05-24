@@ -4,6 +4,7 @@
   import ConsolePanel from "../lib/components/ConsolePanel.svelte";
   import FindReplacePanel from "../lib/components/FindReplacePanel.svelte";
   import TabBar from "../lib/components/TabBar.svelte";
+  import ActivityRail from "../lib/components/ActivityRail.svelte";
   import {
     dispatchMenuCommand,
     initializeAppMenu,
@@ -63,6 +64,7 @@
   import { marked } from "marked";
   import { diffLines } from "diff";
   import type { AppDomainState, ExternalFilesSettings } from "../lib/domain/contracts";
+  import type { ContextId, DocumentState } from "../lib/domain/contracts";
   import { APP_THEME_IDS, getThemeLabel, getThemeAccentHex } from "../lib/styles/themes";
   import type { AppTheme } from "../lib/styles/themes";
 
@@ -88,8 +90,18 @@
   let runtimeReady = false;
   let windowBoundsTimer: ReturnType<typeof setTimeout> | null = null;
   let applyingWindowBounds = false;
+  let workspaceContextMenu:
+    | { workspaceId: ContextId; x: number; y: number }
+    | null = null;
+  let workspaceContextMenuEl: HTMLDivElement | null = null;
 
   $: state = $appState;
+  $: activeContextId = state.contexts.activeContextId;
+  $: workspaces = state.contexts.workspaces;
+  $: showActivityRail = !(
+    state.settings.hideActivityRailWhenNotepadOnly &&
+    state.contexts.workspaces.length === 0
+  );
   $: activeTab = state.session.openTabs.find(
     (tab) => tab.id === state.session.selectedTabId,
   );
@@ -154,6 +166,88 @@
 
   function toggleConsole(): void {
     consoleOpen = !consoleOpen;
+  }
+
+  function handleSelectContext(contextId: ContextId): void {
+    const switched = appState.switchContext(contextId);
+    if (!switched) {
+      return;
+    }
+    consoleOpen = false;
+    markdownViewMode = "edit";
+    closeWorkspaceContextMenu();
+  }
+
+  function handleAddWorkspace(): void {
+    runCommand("workspace.add");
+  }
+
+  function handleOpenWorkspaceContextMenu(
+    workspaceId: ContextId,
+    x: number,
+    y: number,
+  ): void {
+    workspaceContextMenu = { workspaceId, x, y };
+    window.addEventListener("pointerdown", onWindowPointerDownWorkspaceMenu);
+    window.addEventListener("keydown", onWindowKeydownWorkspaceMenu);
+  }
+
+  function closeWorkspaceContextMenu(): void {
+    if (!workspaceContextMenu) {
+      return;
+    }
+    workspaceContextMenu = null;
+    window.removeEventListener("pointerdown", onWindowPointerDownWorkspaceMenu);
+    window.removeEventListener("keydown", onWindowKeydownWorkspaceMenu);
+  }
+
+  function onWindowPointerDownWorkspaceMenu(event: PointerEvent): void {
+    if (!workspaceContextMenu) {
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Node && workspaceContextMenuEl?.contains(target)) {
+      return;
+    }
+    closeWorkspaceContextMenu();
+  }
+
+  function onWindowKeydownWorkspaceMenu(event: KeyboardEvent): void {
+    if (workspaceContextMenu && event.key === "Escape") {
+      closeWorkspaceContextMenu();
+    }
+  }
+
+  function resolveCloseWorkspaceAction(dirtyDocuments: DocumentState[]): "save-all" | "discard-all" | "cancel" {
+    const count = dirtyDocuments.length;
+    const saveAll = window.confirm(
+      `This workspace has ${count} unsaved file(s). Press OK to Save All, or Cancel for more options.`,
+    );
+    if (saveAll) {
+      return "save-all";
+    }
+    const discard = window.confirm("Discard all unsaved changes and close this workspace?");
+    return discard ? "discard-all" : "cancel";
+  }
+
+  function closeWorkspaceFromContextMenu(workspaceId: ContextId): void {
+    const closed = appState.closeWorkspace(workspaceId, {
+      resolveAction: resolveCloseWorkspaceAction,
+      saveAllDirtyDocuments: (dirtyDocuments) => {
+        for (const doc of dirtyDocuments) {
+          if (!doc.filePath) {
+            continue;
+          }
+          appState.markDocumentSaved(doc.id, doc.filePath, doc.content);
+        }
+      },
+    });
+    if (closed) {
+      notify("Workspace closed.");
+      consoleOpen = false;
+      markdownViewMode = "edit";
+    }
+    closeWorkspaceContextMenu();
   }
 
   function scheduleUntitledTitleRefresh(documentId: string): void {
@@ -343,10 +437,11 @@
       appState.applyWindowSession(restoredSession.snapshot, restoredSession.recentFiles);
       appState.normalizeUntitledTitles();
       await syncOpenFileRegistryForWindow(currentWindowId, appState.getSnapshot());
-      if (restoredSession.snapshot.session.windowBounds) {
+      const restoredBounds = appState.getSnapshot().session.windowBounds;
+      if (restoredBounds) {
         applyingWindowBounds = true;
         try {
-          await applyWindowBounds(currentWindow, restoredSession.snapshot.session.windowBounds);
+          await applyWindowBounds(currentWindow, restoredBounds);
         } finally {
           applyingWindowBounds = false;
         }
@@ -366,6 +461,7 @@
         zoomPercent: persistedSettings.zoomPercent,
         externalFiles: toExternalFilesSettings(persistedSettings),
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
+        hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
       });
     }
 
@@ -608,6 +704,7 @@
           zoomPercent: state.editor.zoomPercent,
           externalFiles: state.settings.externalFiles,
           decoratePlaintextSymbols: state.settings.decoratePlaintextSymbols,
+          hideActivityRailWhenNotepadOnly: state.settings.hideActivityRailWhenNotepadOnly,
         }),
       );
     }
@@ -615,7 +712,18 @@
 </script>
 
 <main class="shell">
-  <header class="tab-header">
+  <div class="shell-main-row">
+    {#if showActivityRail}
+      <ActivityRail
+        workspaces={workspaces}
+        activeContextId={activeContextId}
+        onSelectContext={handleSelectContext}
+        onAddWorkspace={handleAddWorkspace}
+        onRequestCloseWorkspace={handleOpenWorkspaceContextMenu}
+      />
+    {/if}
+    <section class="editor-shell">
+      <header class="tab-header">
     <div class="header-left">
       <TabBar
         openTabs={state.session.openTabs}
@@ -638,12 +746,12 @@
         Settings
       </button>
     </div>
-  </header>
+      </header>
 
-  <section class="workspace">
+      <section class="editor-pane">
     {#if state.editor.previewMode === "editor"}
       {#if isMarkdownDocument}
-        <div class="markdown-workspace">
+        <div class="markdown-layout">
           <div class="markdown-mode-bar">
             <div class="markdown-mode-actions">
               <button
@@ -800,7 +908,7 @@
         </div>
       </div>
     {/if}
-    <aside class="settings-pane" data-open={settingsPaneOpen}>
+        <aside class="settings-pane" data-open={settingsPaneOpen}>
       <h2>Settings</h2>
       <section class="settings-section">
         <h3>Theme</h3>
@@ -886,10 +994,23 @@
           />
           Decorate plaintext symbols
         </label>
+        <label class="settings-toggle">
+          <input
+            type="checkbox"
+            checked={state.settings.hideActivityRailWhenNotepadOnly}
+            onchange={(event) =>
+              appState.setHideActivityRailWhenNotepadOnly(
+                (event.currentTarget as HTMLInputElement).checked,
+              )}
+          />
+          Hide activity rail when Notepad only
+        </label>
       </section>
       <p>This pane uses token-driven overlay styling.</p>
-    </aside>
-  </section>
+        </aside>
+      </section>
+    </section>
+  </div>
 
   <div class="bottom-panel">
     {#if consoleOpen}
@@ -934,13 +1055,52 @@
 
 </main>
 
+{#if workspaceContextMenu}
+  <div
+    bind:this={workspaceContextMenuEl}
+    class="workspace-context-menu"
+    style={`left:${workspaceContextMenu.x}px; top:${workspaceContextMenu.y}px;`}
+    role="menu"
+    tabindex="-1"
+    onpointerdown={(event) => event.stopPropagation()}
+  >
+    <button
+      class="workspace-context-item"
+      type="button"
+      role="menuitem"
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!workspaceContextMenu) {
+          return;
+        }
+        closeWorkspaceFromContextMenu(workspaceContextMenu.workspaceId);
+      }}
+    >
+      Close Workspace
+    </button>
+  </div>
+{/if}
+
 <style>
   .shell {
     height: 100vh;
     display: grid;
-    grid-template-rows: var(--tab-header-height) 1fr auto;
+    grid-template-rows: minmax(0, 1fr) auto;
     background: var(--color-bg-root);
     color: var(--color-text-primary);
+  }
+
+  .shell-main-row {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: auto minmax(var(--editor-min-width), 1fr);
+  }
+
+  .editor-shell {
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: var(--tab-header-height) minmax(0, 1fr);
   }
 
   .bottom-panel {
@@ -980,13 +1140,13 @@
       border-color var(--motion-fast) var(--easing-standard);
   }
 
-  .workspace {
+  .editor-pane {
     position: relative;
     padding: var(--space-8);
     overflow: hidden;
   }
 
-  .markdown-workspace {
+  .markdown-layout {
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -1216,6 +1376,35 @@
     transform: translateX(0);
     opacity: 1;
     pointer-events: auto;
+  }
+
+  .workspace-context-menu {
+    position: fixed;
+    z-index: 1100;
+    min-width: 180px;
+    padding: var(--space-4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-overlay);
+  }
+
+  .workspace-context-item {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    text-align: left;
+    font: inherit;
+    padding: var(--space-4) var(--space-6);
+  }
+
+  .workspace-context-item:hover {
+    background: var(--color-hover);
+    cursor: pointer;
   }
 
   .status-bar {

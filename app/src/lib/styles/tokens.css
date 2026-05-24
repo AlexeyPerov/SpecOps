@@ -20,6 +20,8 @@
   --statusbar-height: 25px;
   --console-height: 180px;
   --settings-pane-width: 385px;
+  --activity-rail-width: 48px;
+  --editor-min-width: 400px;
 
   --radius-sm: 6px;
   --radius-md: 10px;

@@ -3,7 +3,7 @@ import { appState } from "./appState";
 
 describe("appState tabs and selection", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("createTab adds a document and selects it", () => {
@@ -77,16 +77,19 @@ describe("appState tabs and selection", () => {
     appState.openFileInTab("/tmp/c.txt", "c");
 
     appState.applyWindowSession({
-      ...appState.getSnapshot(),
-      session: {
-        ...appState.getSnapshot().session,
-        openTabs: [
-          { id: "tab-1", documentId: "doc-1", pinned: false },
-          { id: "tab-2", documentId: "doc-2", pinned: false },
-          { id: "tab-3", documentId: "doc-3", pinned: true },
-          { id: "tab-4", documentId: "doc-4", pinned: false },
-        ],
-        selectedTabId: "tab-4",
+      ...appState.getWindowSessionSnapshot(),
+      notepad: {
+        ...appState.getWindowSessionSnapshot().notepad,
+        session: {
+          ...appState.getWindowSessionSnapshot().notepad.session,
+          openTabs: [
+            { id: "tab-1", documentId: "doc-1", pinned: false },
+            { id: "tab-2", documentId: "doc-2", pinned: false },
+            { id: "tab-3", documentId: "doc-3", pinned: true },
+            { id: "tab-4", documentId: "doc-4", pinned: false },
+          ],
+          selectedTabId: "tab-4",
+        },
       },
     });
 
@@ -117,17 +120,20 @@ describe("appState tabs and selection", () => {
     appState.openFileInTab("/tmp/d.txt", "d");
 
     appState.applyWindowSession({
-      ...appState.getSnapshot(),
-      session: {
-        ...appState.getSnapshot().session,
-        openTabs: [
-          { id: "tab-1", documentId: "doc-1", pinned: false },
-          { id: "tab-2", documentId: "doc-2", pinned: false },
-          { id: "tab-3", documentId: "doc-3", pinned: false },
-          { id: "tab-4", documentId: "doc-4", pinned: true },
-          { id: "tab-5", documentId: "doc-5", pinned: false },
-        ],
-        selectedTabId: "tab-3",
+      ...appState.getWindowSessionSnapshot(),
+      notepad: {
+        ...appState.getWindowSessionSnapshot().notepad,
+        session: {
+          ...appState.getWindowSessionSnapshot().notepad.session,
+          openTabs: [
+            { id: "tab-1", documentId: "doc-1", pinned: false },
+            { id: "tab-2", documentId: "doc-2", pinned: false },
+            { id: "tab-3", documentId: "doc-3", pinned: false },
+            { id: "tab-4", documentId: "doc-4", pinned: true },
+            { id: "tab-5", documentId: "doc-5", pinned: false },
+          ],
+          selectedTabId: "tab-3",
+        },
       },
     });
 
@@ -146,21 +152,25 @@ describe("appState tabs and selection", () => {
     appState.openFileInTab("/tmp/a.txt", "a");
     appState.openFileInTab("/tmp/b.txt", "b");
 
+    const currentSnapshot = appState.getWindowSessionSnapshot();
     appState.applyWindowSession({
-      ...appState.getSnapshot(),
-      documents: appState.getSnapshot().documents.map((doc) =>
-        doc.id === "doc-2" || doc.id === "doc-3"
-          ? { ...doc, fileMissing: true }
-          : doc,
-      ),
-      session: {
-        ...appState.getSnapshot().session,
-        openTabs: [
-          { id: "tab-1", documentId: "doc-1", pinned: false },
-          { id: "tab-2", documentId: "doc-2", pinned: false },
-          { id: "tab-3", documentId: "doc-3", pinned: true },
-        ],
-        selectedTabId: "tab-2",
+      ...currentSnapshot,
+      notepad: {
+        ...currentSnapshot.notepad,
+        documents: currentSnapshot.notepad.documents.map((doc) =>
+          doc.id === "doc-2" || doc.id === "doc-3"
+            ? { ...doc, fileMissing: true }
+            : doc,
+        ),
+        session: {
+          ...currentSnapshot.notepad.session,
+          openTabs: [
+            { id: "tab-1", documentId: "doc-1", pinned: false },
+            { id: "tab-2", documentId: "doc-2", pinned: false },
+            { id: "tab-3", documentId: "doc-3", pinned: true },
+          ],
+          selectedTabId: "tab-2",
+        },
       },
     });
 
@@ -171,9 +181,13 @@ describe("appState tabs and selection", () => {
   });
 
   it("closeMissingFileTabs keeps one Untitled tab when all tabs close", () => {
+    const currentSnapshot = appState.getWindowSessionSnapshot();
     appState.applyWindowSession({
-      ...appState.getSnapshot(),
-      documents: appState.getSnapshot().documents.map((doc) => ({ ...doc, fileMissing: true })),
+      ...currentSnapshot,
+      notepad: {
+        ...currentSnapshot.notepad,
+        documents: currentSnapshot.notepad.documents.map((doc) => ({ ...doc, fileMissing: true })),
+      },
     });
 
     const closed = appState.closeMissingFileTabs();
@@ -220,7 +234,7 @@ describe("appState tabs and selection", () => {
 
 describe("appState documents and paths", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("openFileInTab opens a new saved document", () => {
@@ -302,7 +316,7 @@ describe("appState documents and paths", () => {
 
 describe("appState external file fields", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("applyDocumentDiskReload replaces buffer and clears dismissed/missing flags", () => {
@@ -347,7 +361,7 @@ describe("appState external file fields", () => {
 
 describe("appState settings and editor chrome", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("setTheme updates the active theme", () => {

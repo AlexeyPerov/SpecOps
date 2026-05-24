@@ -45,6 +45,31 @@ export interface SessionState {
   windowBounds: WindowBounds | null;
 }
 
+export type ContextId = "notepad" | `ws-${number}`;
+
+export interface ContextSnapshot {
+  documents: DocumentState[];
+  session: SessionState;
+}
+
+export interface WorkspaceContext {
+  id: ContextId;
+  rootPath: string;
+  snapshot: ContextSnapshot;
+}
+
+export interface WorkspaceEntry {
+  id: ContextId;
+  rootPath: string;
+  snapshot: ContextSnapshot;
+}
+
+export interface WindowContextState {
+  activeContextId: ContextId;
+  notepad: ContextSnapshot;
+  workspaces: WorkspaceEntry[];
+}
+
 export interface ExternalFilesSettings {
   watchExternalChanges: boolean;
   autoReloadCleanFiles: boolean;
@@ -57,6 +82,7 @@ export interface AppSettingsState {
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
+  hideActivityRailWhenNotepadOnly: boolean;
 }
 
 export type AppCommandId =
@@ -92,7 +118,9 @@ export type AppCommandId =
   | "view.toggleWrap"
   | "view.zoomIn"
   | "view.zoomOut"
-  | "view.zoomReset";
+  | "view.zoomReset"
+  | "workspace.add"
+  | "workspace.close";
 
 export interface CommandBinding {
   mac: string;
@@ -124,6 +152,11 @@ export interface OpenFileOwner {
 export type OpenFileRegistry = Record<string, OpenFileOwner>;
 
 export interface AppDomainState {
+  contexts: WindowContextState;
+  /**
+   * Active context mirrors for legacy consumers.
+   * Keep in sync with `contexts[activeContextId]`.
+   */
   documents: DocumentState[];
   session: SessionState;
   settings: AppSettingsState;
@@ -140,13 +173,15 @@ export interface AppDomainState {
 }
 
 export interface WindowSessionSnapshot {
-  documents: DocumentState[];
-  session: SessionState;
-  editor: AppDomainState["editor"];
+  activeContextId: ContextId;
+  notepad: ContextSnapshot;
+  workspaces: WorkspaceEntry[];
+  editorPreferences: Pick<AppDomainState["editor"], "zoomPercent" | "wrapLines">;
 }
 
 export interface AppSessionSnapshot {
-  version: 1;
+  /** Session v2. v1 snapshots are intentionally not migrated. */
+  version: 2;
   updatedAt: string;
   lastActiveWindowId: string;
   openFileRegistry: OpenFileRegistry;

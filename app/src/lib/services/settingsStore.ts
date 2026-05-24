@@ -14,6 +14,7 @@ export interface PersistedSettings {
   checkOnWindowFocus: boolean;
   checkOnTabActivate: boolean;
   decoratePlaintextSymbols: boolean;
+  hideActivityRailWhenNotepadOnly: boolean;
 }
 
 export const defaultExternalFilesSettings: ExternalFilesSettings = {
@@ -29,6 +30,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
+  hideActivityRailWhenNotepadOnly: true,
 };
 
 const FILE_NAME = "settings.json";
@@ -93,6 +95,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         decoratePlaintextSymbols: isBoolean(parsed.decoratePlaintextSymbols)
           ? parsed.decoratePlaintextSymbols
           : defaultPersistedSettings.decoratePlaintextSymbols,
+        hideActivityRailWhenNotepadOnly: isBoolean(parsed.hideActivityRailWhenNotepadOnly)
+          ? parsed.hideActivityRailWhenNotepadOnly
+          : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
       };
     }
     return null;
@@ -125,6 +130,7 @@ export function toPersistedSettings(input: {
   zoomPercent: number;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
+  hideActivityRailWhenNotepadOnly: boolean;
 }): PersistedSettings {
   return {
     theme: input.theme,
@@ -132,5 +138,6 @@ export function toPersistedSettings(input: {
     zoomPercent: input.zoomPercent,
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
+    hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
   };
 }

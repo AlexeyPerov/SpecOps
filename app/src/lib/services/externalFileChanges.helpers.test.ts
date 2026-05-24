@@ -61,7 +61,7 @@ describe("shouldRunAutomaticCheck", () => {
 describe("collectOpenFilePaths", () => {
   beforeEach(() => {
     resetExternalFileChangesForTests();
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("returns empty list when no saved files are open", () => {

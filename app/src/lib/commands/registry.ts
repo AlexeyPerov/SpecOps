@@ -18,6 +18,7 @@ import {
 } from "../services/openAllInFolder";
 import { runWithRecentFilesBatch } from "../services/recentFilesSync";
 import { dirname } from "@tauri-apps/api/path";
+import { normalizePathSync } from "../services/diskFingerprint";
 import {
   sanitizeErrorDetails,
   serializeUnknownError,
@@ -167,6 +168,18 @@ export const commandDefinitions: CommandDefinition[] = [
     id: "file.openAllInFolder",
     label: "Open all in Folder",
     menuPath: "File/Open all in Folder",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "workspace.add",
+    label: "Add Workspace",
+    menuPath: "File/Add Workspace",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "workspace.close",
+    label: "Close Workspace",
+    menuPath: "Hidden/Close Workspace",
     binding: { mac: "none", windows: "none" },
   },
   {
@@ -657,6 +670,49 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   "view.zoomReset": ({ getEditorRunner }) => {
     appState.setZoomPercent(100);
     getEditorRunner()?.setZoom(100);
+  },
+  "workspace.add": async ({ notify }) => {
+    const selected = await openFolderDialog();
+    if (!selected) {
+      return;
+    }
+    const workspaceId = appState.addWorkspace(normalizePathSync(selected));
+    if (!workspaceId) {
+      notify("Workspace is already open.");
+      return;
+    }
+    notify("Workspace added.");
+  },
+  "workspace.close": ({ notify }) => {
+    const activeContext = appState.getActiveContext();
+    if (activeContext.kind !== "workspace") {
+      notify("No active workspace to close.");
+      return;
+    }
+    const closed = appState.closeWorkspace(activeContext.id, {
+      resolveAction: (dirtyDocuments) => {
+        const fileCount = dirtyDocuments.length;
+        const shouldSave = window.confirm(
+          `Workspace has ${fileCount} unsaved file(s). Press OK to Save All, or Cancel for more options.`,
+        );
+        if (shouldSave) {
+          return "save-all";
+        }
+        const shouldDiscard = window.confirm("Discard all unsaved changes and close workspace?");
+        return shouldDiscard ? "discard-all" : "cancel";
+      },
+      saveAllDirtyDocuments: (dirtyDocuments) => {
+        for (const documentState of dirtyDocuments) {
+          if (!documentState.filePath) {
+            continue;
+          }
+          appState.markDocumentSaved(documentState.id, documentState.filePath, documentState.content);
+        }
+      },
+    });
+    if (closed) {
+      notify("Workspace closed.");
+    }
   },
 };
 

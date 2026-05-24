@@ -72,7 +72,7 @@ function prepareSavedFile(
 describe("checkDocumentExternalChanges", () => {
   beforeEach(() => {
     resetExternalFileChangesForTests();
-    appState.resetWorkspace();
+    appState.resetAppState();
     setExternalFiles();
     confirmMock.mockReset();
     readTextFileMock.mockReset();
@@ -252,7 +252,7 @@ describe("checkDocumentExternalChanges", () => {
 describe("reloadActiveDocumentFromDisk", () => {
   beforeEach(() => {
     resetExternalFileChangesForTests();
-    appState.resetWorkspace();
+    appState.resetAppState();
     setExternalFiles();
     confirmMock.mockReset();
     readTextFileMock.mockReset();
@@ -282,7 +282,7 @@ describe("reloadActiveDocumentFromDisk", () => {
 describe("runWatcherExternalCheck", () => {
   beforeEach(() => {
     resetExternalFileChangesForTests();
-    appState.resetWorkspace();
+    appState.resetAppState();
     setExternalFiles();
     statMock.mockReset();
     readTextFileMock.mockReset();

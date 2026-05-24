@@ -3,6 +3,7 @@ import { join } from "@tauri-apps/api/path";
 import type {
   AppDomainState,
   AppSessionSnapshot,
+  ContextSnapshot,
   OpenFileRegistry,
   WindowSessionSnapshot,
 } from "../domain/contracts";
@@ -21,7 +22,7 @@ async function readSessionSnapshot(): Promise<AppSessionSnapshot | null> {
     const sessionPath = await getSessionPath();
     const raw = await readTextFile(sessionPath);
     const parsed = JSON.parse(raw) as AppSessionSnapshot;
-    if (parsed.version !== 1 || !parsed.windows) {
+    if (parsed.version !== 2 || !parsed.windows) {
       return null;
     }
     return {
@@ -48,7 +49,7 @@ export async function writeOpenFileRegistry(registry: OpenFileRegistry): Promise
   const current =
     (await readSessionSnapshot()) ??
     ({
-      version: 1,
+      version: 2,
       updatedAt: new Date().toISOString(),
       lastActiveWindowId: "main",
       openFileRegistry: {},
@@ -73,16 +74,23 @@ export async function syncOpenFileRegistryForWindow(
     }
   }
 
-  for (const tab of state.session.openTabs) {
-    const documentState = state.documents.find((doc) => doc.id === tab.documentId);
-    if (!documentState?.filePath) {
-      continue;
+  const contextSnapshots: ContextSnapshot[] = [
+    state.contexts.notepad,
+    ...state.contexts.workspaces.map((workspace) => workspace.snapshot),
+  ];
+
+  for (const contextSnapshot of contextSnapshots) {
+    for (const tab of contextSnapshot.session.openTabs) {
+      const documentState = contextSnapshot.documents.find((doc) => doc.id === tab.documentId);
+      if (!documentState?.filePath) {
+        continue;
+      }
+      const key = normalizePathSync(documentState.filePath);
+      registry[key] = {
+        windowId,
+        documentId: documentState.id,
+      };
     }
-    const key = normalizePathSync(documentState.filePath);
-    registry[key] = {
-      windowId,
-      documentId: documentState.id,
-    };
   }
 
   await writeOpenFileRegistry(registry);
@@ -104,46 +112,60 @@ export function applyRegistryDedupeToWindowSnapshot(
   snapshot: WindowSessionSnapshot,
 ): { registry: OpenFileRegistry; snapshot: WindowSessionSnapshot } {
   const nextRegistry = { ...registry };
-  const documentsById = new Map(snapshot.documents.map((doc) => [doc.id, doc]));
-  const openTabs = [];
+  function dedupeContext(context: ContextSnapshot): ContextSnapshot {
+    const documentsById = new Map(context.documents.map((doc) => [doc.id, doc]));
+    const openTabs = [];
 
-  for (const tab of snapshot.session.openTabs) {
-    const linkedDocument = documentsById.get(tab.documentId);
-    if (!linkedDocument?.filePath) {
+    for (const tab of context.session.openTabs) {
+      const linkedDocument = documentsById.get(tab.documentId);
+      if (!linkedDocument?.filePath) {
+        openTabs.push(tab);
+        continue;
+      }
+
+      const key = normalizePathSync(linkedDocument.filePath);
+      const owner = nextRegistry[key];
+      if (owner && owner.windowId !== windowId) {
+        continue;
+      }
+
+      nextRegistry[key] = { windowId, documentId: linkedDocument.id };
       openTabs.push(tab);
-      continue;
     }
 
-    const key = normalizePathSync(linkedDocument.filePath);
-    const owner = nextRegistry[key];
-    if (owner && owner.windowId !== windowId) {
-      continue;
-    }
+    const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
+    const documents = context.documents.filter((doc) => referencedDocIds.has(doc.id));
+    const selectedTabId = openTabs.some((tab) => tab.id === context.session.selectedTabId)
+      ? context.session.selectedTabId
+      : openTabs[0]?.id ?? null;
 
-    nextRegistry[key] = { windowId, documentId: linkedDocument.id };
-    openTabs.push(tab);
+    return {
+      documents,
+      session: {
+        ...context.session,
+        openTabs,
+        selectedTabId,
+      },
+    };
   }
 
-  if (openTabs.length === snapshot.session.openTabs.length) {
-    return { registry: nextRegistry, snapshot };
-  }
-
-  const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
-  const documents = snapshot.documents.filter((doc) => referencedDocIds.has(doc.id));
-  const selectedTabId = openTabs.some((tab) => tab.id === snapshot.session.selectedTabId)
-    ? snapshot.session.selectedTabId
-    : openTabs[0]?.id ?? null;
+  const nextNotepad = dedupeContext(snapshot.notepad);
+  const nextWorkspaces = snapshot.workspaces.map((workspace) => ({
+    ...workspace,
+    snapshot: dedupeContext(workspace.snapshot),
+  }));
+  const activeContextExists =
+    snapshot.activeContextId === "notepad" ||
+    nextWorkspaces.some((workspace) => workspace.id === snapshot.activeContextId);
+  const nextActiveContextId = activeContextExists ? snapshot.activeContextId : "notepad";
 
   return {
     registry: nextRegistry,
     snapshot: {
       ...snapshot,
-      documents,
-      session: {
-        ...snapshot.session,
-        openTabs,
-        selectedTabId,
-      },
+      activeContextId: nextActiveContextId,
+      notepad: nextNotepad,
+      workspaces: nextWorkspaces,
     },
   };
 }

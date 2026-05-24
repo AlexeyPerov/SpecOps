@@ -31,7 +31,7 @@ vi.mock("./openFileRegistry", () => ({
 }));
 
 function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowSessionSnapshot {
-  return {
+  const notepad: WindowSessionSnapshot["notepad"] = {
     documents: [
       {
         id: "doc-1",
@@ -55,14 +55,14 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
       lastActiveWindowId: "win-a",
       windowBounds: null,
     },
-    editor: {
-      cursorLine: 1,
-      cursorColumn: 1,
+  };
+  return {
+    activeContextId: "notepad",
+    notepad,
+    workspaces: [],
+    editorPreferences: {
       zoomPercent: 100,
       wrapLines: true,
-      findReplaceOpen: false,
-      goToOpen: false,
-      previewMode: "editor",
     },
     ...overrides,
   };
@@ -70,7 +70,7 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
 
 function sessionWithWindow(windowId: string, snapshot: WindowSessionSnapshot): AppSessionSnapshot {
   return {
-    version: 1,
+    version: 2,
     updatedAt: new Date().toISOString(),
     lastActiveWindowId: windowId,
     openFileRegistry: {},
@@ -96,42 +96,46 @@ describe("sanitizeWindowSnapshot", () => {
   it("marks missing files on disk without dropping tabs", async () => {
     const snapshot = windowSnapshot();
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(sanitized.session.openTabs).toHaveLength(1);
-    expect(sanitized.documents[0]?.fileMissing).toBe(true);
+    expect(sanitized.notepad.session.openTabs).toHaveLength(1);
+    expect(sanitized.notepad.documents[0]?.fileMissing).toBe(true);
   });
 
   it("drops orphan tabs without linked documents", async () => {
     sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
     const snapshot = windowSnapshot({
-      session: {
-        selectedTabId: "tab-1",
-        openTabs: [
-          { id: "tab-1", documentId: "doc-1", pinned: false },
-          { id: "tab-2", documentId: "doc-missing", pinned: false },
-        ],
-        lastActiveWindowId: "win-a",
-        windowBounds: null,
+      notepad: {
+        ...windowSnapshot().notepad,
+        session: {
+          ...windowSnapshot().notepad.session,
+          selectedTabId: "tab-1",
+          openTabs: [
+            { id: "tab-1", documentId: "doc-1", pinned: false },
+            { id: "tab-2", documentId: "doc-missing", pinned: false },
+          ],
+        },
       },
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(sanitized.session.openTabs.map((tab) => tab.id)).toEqual(["tab-1"]);
+    expect(sanitized.notepad.session.openTabs.map((tab) => tab.id)).toEqual(["tab-1"]);
   });
 
   it("creates a fallback untitled tab when no tabs remain", async () => {
     const snapshot = windowSnapshot({
-      documents: [],
-      session: {
-        selectedTabId: "tab-1",
-        openTabs: [{ id: "tab-1", documentId: "doc-missing", pinned: false }],
-        lastActiveWindowId: "win-a",
-        windowBounds: null,
+      notepad: {
+        ...windowSnapshot().notepad,
+        documents: [],
+        session: {
+          ...windowSnapshot().notepad.session,
+          selectedTabId: "tab-1",
+          openTabs: [{ id: "tab-1", documentId: "doc-missing", pinned: false }],
+        },
       },
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(sanitized.session.openTabs).toHaveLength(1);
-    expect(sanitized.documents[0]?.title).toBe("Untitled");
+    expect(sanitized.notepad.session.openTabs).toHaveLength(1);
+    expect(sanitized.notepad.documents[0]?.title).toBe("Untitled");
   });
 });
 
@@ -147,7 +151,7 @@ describe("restoreWindowSession", () => {
     sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
 
     const restored = await sessionManager.restoreWindowSession("win-a");
-    expect(restored?.snapshot.documents[0]?.content).toBe("saved");
+    expect(restored?.snapshot.notepad.documents[0]?.content).toBe("saved");
     expect(restored?.recentFiles).toEqual(["/tmp/restored.txt"]);
   });
 
@@ -168,7 +172,7 @@ describe("restoreWindowSession", () => {
     });
 
     const restored = await sessionManager.restoreWindowSession("win-a");
-    expect(restored?.snapshot.session.selectedTabId).toBe("tab-1");
+    expect(restored?.snapshot.notepad.session.selectedTabId).toBe("tab-1");
   });
 
   it("returns null when both primary and backup fail", async () => {
@@ -178,14 +182,14 @@ describe("restoreWindowSession", () => {
 
   it("returns null for unsupported session versions", async () => {
     sessionMock.setSessionStore({
-      version: 1,
+      version: 2,
       updatedAt: new Date().toISOString(),
       lastActiveWindowId: "win-a",
       openFileRegistry: {},
       recentFiles: [],
       windows: {},
     });
-    sessionMock.readTextFile.mockResolvedValue(JSON.stringify({ version: 2, windows: {} }));
+    sessionMock.readTextFile.mockResolvedValue(JSON.stringify({ version: 1, windows: {} }));
 
     await expect(sessionManager.restoreWindowSession("win-a")).resolves.toBeNull();
   });
@@ -194,7 +198,7 @@ describe("restoreWindowSession", () => {
 describe("persistSessionSnapshot", () => {
   beforeEach(() => {
     sessionMock.setSessionStore(null);
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("merges window state into session.json and writes backup", async () => {
@@ -243,7 +247,7 @@ describe("persistGlobalRecentFiles", () => {
     );
     const written = JSON.parse(String(sessionWriteCall?.[1] ?? "{}"));
     expect(written.recentFiles).toEqual(["/tmp/a.txt", "/tmp/b.txt"]);
-    expect(written.windows["win-a"]?.session.selectedTabId).toBe("tab-1");
+    expect(written.windows["win-a"]?.notepad.session.selectedTabId).toBe("tab-1");
   });
 });
 
@@ -252,7 +256,7 @@ describe("scheduleSessionPersistence", () => {
     sessionManager.resetSessionManagerForTests();
     sessionMock.setSessionStore(null);
     sessionMock.writeTextFile.mockClear();
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("debounces persistence calls", async () => {

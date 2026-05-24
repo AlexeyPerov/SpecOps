@@ -33,7 +33,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 }));
 
 function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowSessionSnapshot {
-  return {
+  const notepad: WindowSessionSnapshot["notepad"] = {
     documents: [
       {
         id: "doc-1",
@@ -75,14 +75,14 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
       lastActiveWindowId: "win-a",
       windowBounds: null,
     },
-    editor: {
-      cursorLine: 1,
-      cursorColumn: 1,
+  };
+  return {
+    activeContextId: "notepad",
+    notepad,
+    workspaces: [],
+    editorPreferences: {
       zoomPercent: 100,
       wrapLines: true,
-      findReplaceOpen: false,
-      goToOpen: false,
-      previewMode: "editor",
     },
     ...overrides,
   };
@@ -90,7 +90,7 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
 
 function emptySession(): AppSessionSnapshot {
   return {
-    version: 1,
+    version: 2,
     updatedAt: new Date().toISOString(),
     lastActiveWindowId: "main",
     openFileRegistry: {},
@@ -150,6 +150,35 @@ describe("syncOpenFileRegistryForWindow", () => {
 
   it("replaces only the target window entries with current saved tabs", async () => {
     const state: AppDomainState = {
+      contexts: {
+        activeContextId: "notepad",
+        notepad: {
+          documents: [
+            {
+              id: "doc-1",
+              filePath: "/tmp/new.txt",
+              title: "new.txt",
+              content: "",
+              savedContent: "",
+              isDirty: false,
+              language: "plaintext",
+              encoding: "utf-8",
+              lineEnding: "lf",
+              diskFingerprint: null,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              scrollTop: 0,
+            },
+          ],
+          session: {
+            selectedTabId: "tab-1",
+            openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+            lastActiveWindowId: "win-a",
+            windowBounds: null,
+          },
+        },
+        workspaces: [],
+      },
       documents: [
         {
           id: "doc-1",
@@ -183,6 +212,7 @@ describe("syncOpenFileRegistryForWindow", () => {
           checkOnTabActivate: true,
         },
         decoratePlaintextSymbols: false,
+        hideActivityRailWhenNotepadOnly: true,
       },
       recentFiles: [],
       editor: {
@@ -251,9 +281,9 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, "win-a", snapshot);
 
-    expect(nextSnapshot.session.openTabs.map((tab) => tab.id)).toEqual(["tab-2"]);
-    expect(nextSnapshot.session.selectedTabId).toBe("tab-2");
-    expect(nextSnapshot.documents.map((doc) => doc.id)).toEqual(["doc-2"]);
+    expect(nextSnapshot.notepad.session.openTabs.map((tab) => tab.id)).toEqual(["tab-2"]);
+    expect(nextSnapshot.notepad.session.selectedTabId).toBe("tab-2");
+    expect(nextSnapshot.notepad.documents.map((doc) => doc.id)).toEqual(["doc-2"]);
     expect(nextRegistry["/tmp/shared.txt"]).toEqual({ windowId: "win-b", documentId: "doc-9" });
   });
 
@@ -264,7 +294,7 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, "win-a", snapshot);
 
-    expect(nextSnapshot.session.openTabs).toHaveLength(2);
+    expect(nextSnapshot.notepad.session.openTabs).toHaveLength(2);
     expect(nextRegistry["/tmp/shared.txt"]).toEqual({ windowId: "win-a", documentId: "doc-1" });
   });
 });

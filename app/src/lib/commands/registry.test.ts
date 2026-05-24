@@ -79,7 +79,7 @@ describe("command registration", () => {
 
 describe("getActiveDocumentContent", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
   });
 
   it("returns content for the selected tab", () => {

@@ -44,7 +44,7 @@ describe("formatOpenAllInFolderSummary", () => {
 
 describe("openAllInFolder", () => {
   beforeEach(() => {
-    appState.resetWorkspace();
+    appState.resetAppState();
     openActivePathMock.mockReset();
     readOpenFileRegistryMock.mockResolvedValue({});
   });

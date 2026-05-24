@@ -2,11 +2,14 @@ import { writable } from "svelte/store";
 import type {
   AppDomainState,
   AppSettingsState,
+  ContextId,
+  ContextSnapshot,
   DiskFingerprint,
   DocumentState,
   DocumentIdentity,
   ExternalFilesSettings,
   TabState,
+  WorkspaceEntry,
   WindowBounds,
   WindowSessionSnapshot,
 } from "../domain/contracts";
@@ -35,10 +38,13 @@ const defaultSettings: AppSettingsState = {
   statusBarVisible: true,
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
+  hideActivityRailWhenNotepadOnly: true,
 };
 
 let docCounter = 1;
 let tabCounter = 1;
+let workspaceCounter = 0;
+const NOTEPAD_CONTEXT_ID: ContextId = "notepad";
 
 function basename(path: string): string {
   const normalized = path.replaceAll("\\", "/");
@@ -84,6 +90,127 @@ function normalizeDocument(documentState: DocumentState): DocumentState {
     fileMissing: documentState.fileMissing ?? false,
     scrollTop: documentState.scrollTop ?? 0,
   };
+}
+
+function cloneContextSnapshot(snapshot: ContextSnapshot): ContextSnapshot {
+  return {
+    documents: snapshot.documents.map(normalizeDocument),
+    session: {
+      ...snapshot.session,
+      openTabs: snapshot.session.openTabs.map((tab) => ({ ...tab })),
+      windowBounds: snapshot.session.windowBounds ?? null,
+    },
+  };
+}
+
+function normalizeWorkspaceEntries(entries: WorkspaceEntry[]): WorkspaceEntry[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    rootPath: normalizePathSync(entry.rootPath),
+    snapshot: cloneContextSnapshot(entry.snapshot),
+  }));
+}
+
+function getContextSnapshotById(state: AppDomainState, contextId: ContextId): ContextSnapshot | null {
+  if (contextId === NOTEPAD_CONTEXT_ID) {
+    return state.contexts.notepad;
+  }
+  const workspace = state.contexts.workspaces.find((entry) => entry.id === contextId);
+  return workspace?.snapshot ?? null;
+}
+
+function getActiveContextSnapshot(state: AppDomainState): ContextSnapshot {
+  return (
+    getContextSnapshotById(state, state.contexts.activeContextId) ?? state.contexts.notepad
+  );
+}
+
+function withActiveContextApplied(state: AppDomainState): AppDomainState {
+  const activeContext = getActiveContextSnapshot(state);
+  return {
+    ...state,
+    documents: activeContext.documents,
+    session: activeContext.session,
+  };
+}
+
+function syncLegacyFieldsIntoActiveContext(state: AppDomainState): AppDomainState {
+  const activeSnapshot: ContextSnapshot = {
+    documents: state.documents,
+    session: state.session,
+  };
+  if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
+    return {
+      ...state,
+      contexts: {
+        ...state.contexts,
+        notepad: activeSnapshot,
+      },
+    };
+  }
+  return {
+    ...state,
+    contexts: {
+      ...state.contexts,
+      workspaces: state.contexts.workspaces.map((workspace) =>
+        workspace.id === state.contexts.activeContextId
+          ? { ...workspace, snapshot: activeSnapshot }
+          : workspace,
+      ),
+    },
+  };
+}
+
+function reindexWorkspaceCounter(workspaces: WorkspaceEntry[]): void {
+  workspaceCounter = Math.max(
+    0,
+    ...workspaces.map((workspace) => Number(workspace.id.replace("ws-", "")) || 0),
+  );
+}
+
+function nextWorkspaceId(): ContextId {
+  workspaceCounter += 1;
+  return `ws-${workspaceCounter}`;
+}
+
+function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
+  docCounter += 1;
+  tabCounter += 1;
+  const documentId = `doc-${docCounter}`;
+  const tabId = `tab-${tabCounter}`;
+  return {
+    documents: [buildDocument({ id: documentId, filePath: null }, "", "Untitled")],
+    session: {
+      selectedTabId: tabId,
+      openTabs: [{ id: tabId, documentId, pinned: false }],
+      lastActiveWindowId,
+      windowBounds: null,
+    },
+  };
+}
+
+function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot {
+  if (snapshot.session.openTabs.length > 0) {
+    return snapshot;
+  }
+  return fallbackContextSnapshot(snapshot.session.lastActiveWindowId);
+}
+
+export function isPathUnderWorkspaceRoot(filePath: string, workspaceRoot: string): boolean {
+  const normalizedFilePath = normalizePathSync(filePath).replace(/\/+$/, "");
+  const normalizedWorkspaceRoot = normalizePathSync(workspaceRoot).replace(/\/+$/, "");
+  return (
+    normalizedFilePath === normalizedWorkspaceRoot ||
+    normalizedFilePath.startsWith(`${normalizedWorkspaceRoot}/`)
+  );
+}
+
+export function findWorkspaceByPath(
+  workspaces: WorkspaceEntry[],
+  rootPath: string,
+): WorkspaceEntry | null {
+  const normalized = normalizePathSync(rootPath);
+  return workspaces.find((workspace) => normalizePathSync(workspace.rootPath) === normalized) ?? null;
 }
 
 function findDocumentByPath(state: AppDomainState, filePath: string): DocumentState | undefined {
@@ -236,6 +363,19 @@ function closeTabsForce(state: AppDomainState, tabIds: string[], preferredTabId:
 }
 
 const initialState: AppDomainState = {
+  contexts: {
+    activeContextId: NOTEPAD_CONTEXT_ID,
+    notepad: {
+      documents: [buildDocument({ id: "doc-1", filePath: null }, "", "Untitled")],
+      session: {
+        selectedTabId: "tab-1",
+        openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+        lastActiveWindowId: "main",
+        windowBounds: null,
+      },
+    },
+    workspaces: [],
+  },
   documents: [buildDocument({ id: "doc-1", filePath: null }, "", "Untitled")],
   session: {
     selectedTabId: "tab-1",
@@ -268,7 +408,15 @@ function applyTheme(settings: AppSettingsState): void {
 }
 
 function createStateStore() {
-  const { subscribe, update, set } = writable<AppDomainState>(initialState);
+  const { subscribe, update: rawUpdate, set } = writable<AppDomainState>(initialState);
+
+  function update(mutator: (state: AppDomainState) => AppDomainState): void {
+    rawUpdate((state) => {
+      const base = withActiveContextApplied(syncLegacyFieldsIntoActiveContext(state));
+      const next = mutator(base);
+      return withActiveContextApplied(syncLegacyFieldsIntoActiveContext(next));
+    });
+  }
 
   function selectTabInternal(state: AppDomainState, tabId: string): AppDomainState {
     if (!state.session.openTabs.some((tab) => tab.id === tabId)) {
@@ -277,6 +425,19 @@ function createStateStore() {
     return {
       ...state,
       session: { ...state.session, selectedTabId: tabId },
+    };
+  }
+
+  function toCurrentWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
+    const synced = syncLegacyFieldsIntoActiveContext(state);
+    return {
+      activeContextId: synced.contexts.activeContextId,
+      notepad: cloneContextSnapshot(synced.contexts.notepad),
+      workspaces: normalizeWorkspaceEntries(synced.contexts.workspaces),
+      editorPreferences: {
+        zoomPercent: synced.editor.zoomPercent,
+        wrapLines: synced.editor.wrapLines,
+      },
     };
   }
 
@@ -309,41 +470,215 @@ function createStateStore() {
     initializeTheme() {
       applyTheme(initialState.settings);
     },
-    resetWorkspace() {
+    resetAppState() {
       docCounter = 1;
       tabCounter = 1;
+      workspaceCounter = 0;
       set(initialState);
       applyTheme(initialState.settings);
     },
     applyWindowSession(snapshot: WindowSessionSnapshot, recentFiles: string[] = []) {
+      const normalizedNotepad = ensureContextSnapshotHasTab(cloneContextSnapshot(snapshot.notepad));
+      const normalizedWorkspaces = normalizeWorkspaceEntries(snapshot.workspaces).map((workspace) => ({
+        ...workspace,
+        snapshot: ensureContextSnapshotHasTab(workspace.snapshot),
+      }));
+      const activeContextId =
+        snapshot.activeContextId === NOTEPAD_CONTEXT_ID ||
+        normalizedWorkspaces.some((workspace) => workspace.id === snapshot.activeContextId)
+          ? snapshot.activeContextId
+          : NOTEPAD_CONTEXT_ID;
+      const contexts = {
+        activeContextId,
+        notepad: normalizedNotepad,
+        workspaces: normalizedWorkspaces,
+      };
+      const activeContextSnapshot =
+        activeContextId === NOTEPAD_CONTEXT_ID
+          ? contexts.notepad
+          : contexts.workspaces.find((workspace) => workspace.id === activeContextId)?.snapshot ??
+            contexts.notepad;
       docCounter = Math.max(
         1,
-        ...snapshot.documents.map((documentState) =>
+        ...[
+          ...contexts.notepad.documents,
+          ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.documents),
+        ].map((documentState) =>
           Number(documentState.id.replace("doc-", "")) || 1,
         ),
       );
       tabCounter = Math.max(
         1,
-        ...snapshot.session.openTabs.map((tab) =>
+        ...[
+          ...contexts.notepad.session.openTabs,
+          ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.session.openTabs),
+        ].map((tab) =>
           Number(tab.id.replace("tab-", "")) || 1,
         ),
       );
+      reindexWorkspaceCounter(contexts.workspaces);
       set({
-        documents: snapshot.documents.map(normalizeDocument),
-        session: {
-          ...snapshot.session,
-          windowBounds: snapshot.session.windowBounds ?? null,
-        },
+        contexts,
+        documents: activeContextSnapshot.documents,
+        session: activeContextSnapshot.session,
         settings: defaultSettings,
         recentFiles,
         editor: {
-          ...snapshot.editor,
+          ...initialState.editor,
+          ...snapshot.editorPreferences,
           findReplaceOpen: false,
           goToOpen: false,
           previewMode: "editor",
         },
       });
       applyTheme(defaultSettings);
+    },
+    getWindowSessionSnapshot(): WindowSessionSnapshot {
+      return toCurrentWindowSnapshot(this.getSnapshot());
+    },
+    getActiveContext() {
+      const state = this.getSnapshot();
+      if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
+        return {
+          id: NOTEPAD_CONTEXT_ID,
+          kind: "notepad" as const,
+          snapshot: getActiveContextSnapshot(state),
+        };
+      }
+      const workspace =
+        state.contexts.workspaces.find((entry) => entry.id === state.contexts.activeContextId) ?? null;
+      return {
+        id: state.contexts.activeContextId,
+        kind: "workspace" as const,
+        rootPath: workspace?.rootPath ?? null,
+        snapshot: getActiveContextSnapshot(state),
+      };
+    },
+    getActiveDocuments() {
+      return this.getSnapshot().documents;
+    },
+    getActiveSession() {
+      return this.getSnapshot().session;
+    },
+    isNotepadActive() {
+      return this.getSnapshot().contexts.activeContextId === NOTEPAD_CONTEXT_ID;
+    },
+    getWorkspaceRoot(contextId?: ContextId): string | null {
+      const state = this.getSnapshot();
+      const targetId = contextId ?? state.contexts.activeContextId;
+      if (targetId === NOTEPAD_CONTEXT_ID) {
+        return null;
+      }
+      return state.contexts.workspaces.find((workspace) => workspace.id === targetId)?.rootPath ?? null;
+    },
+    switchContext(contextId: ContextId): boolean {
+      let switched = false;
+      update((state) => {
+        const synced = syncLegacyFieldsIntoActiveContext(state);
+        const exists =
+          contextId === NOTEPAD_CONTEXT_ID ||
+          synced.contexts.workspaces.some((workspace) => workspace.id === contextId);
+        if (!exists || synced.contexts.activeContextId === contextId) {
+          return synced;
+        }
+        switched = true;
+        return withActiveContextApplied({
+          ...synced,
+          contexts: {
+            ...synced.contexts,
+            activeContextId: contextId,
+          },
+          editor: {
+            ...synced.editor,
+            findReplaceOpen: false,
+            goToOpen: false,
+            previewMode: "editor",
+          },
+        });
+      });
+      return switched;
+    },
+    addWorkspace(rootPath: string): ContextId | null {
+      let createdId: ContextId | null = null;
+      update((state) => {
+        const synced = syncLegacyFieldsIntoActiveContext(state);
+        const normalizedRoot = normalizePathSync(rootPath);
+        const duplicate = findWorkspaceByPath(synced.contexts.workspaces, normalizedRoot);
+        if (duplicate) {
+          return synced;
+        }
+        const workspaceId = nextWorkspaceId();
+        createdId = workspaceId;
+        const workspaceSnapshot = fallbackContextSnapshot(synced.session.lastActiveWindowId);
+        return withActiveContextApplied({
+          ...synced,
+          contexts: {
+            ...synced.contexts,
+            activeContextId: workspaceId,
+            workspaces: [
+              ...synced.contexts.workspaces,
+              {
+                id: workspaceId,
+                rootPath: normalizedRoot,
+                snapshot: workspaceSnapshot,
+              },
+            ],
+          },
+          editor: {
+            ...synced.editor,
+            findReplaceOpen: false,
+            goToOpen: false,
+            previewMode: "editor",
+          },
+        });
+      });
+      return createdId;
+    },
+    closeWorkspace(
+      workspaceId: ContextId,
+      options?: {
+        resolveAction?: (dirtyDocuments: DocumentState[]) => "save-all" | "discard-all" | "cancel";
+        saveAllDirtyDocuments?: (dirtyDocuments: DocumentState[]) => void;
+      },
+    ): boolean {
+      let closed = false;
+      update((state) => {
+        const synced = syncLegacyFieldsIntoActiveContext(state);
+        const targetWorkspace = synced.contexts.workspaces.find((workspace) => workspace.id === workspaceId);
+        if (!targetWorkspace) {
+          return synced;
+        }
+        const dirtyDocuments = targetWorkspace.snapshot.documents.filter((documentState) => documentState.isDirty);
+        let action: "save-all" | "discard-all" | "cancel" = "discard-all";
+        if (dirtyDocuments.length > 0) {
+          action = options?.resolveAction?.(dirtyDocuments) ?? "cancel";
+        }
+        if (action === "cancel") {
+          return synced;
+        }
+        if (action === "save-all") {
+          if (!options?.saveAllDirtyDocuments) {
+            return synced;
+          }
+          options.saveAllDirtyDocuments(dirtyDocuments);
+        }
+        closed = true;
+        return withActiveContextApplied({
+          ...synced,
+          contexts: {
+            ...synced.contexts,
+            activeContextId: NOTEPAD_CONTEXT_ID,
+            workspaces: synced.contexts.workspaces.filter((workspace) => workspace.id !== workspaceId),
+          },
+          editor: {
+            ...synced.editor,
+            findReplaceOpen: false,
+            goToOpen: false,
+            previewMode: "editor",
+          },
+        });
+      });
+      return closed;
     },
     replaceRecentFiles(recentFiles: string[]) {
       update((state) => ({ ...state, recentFiles }));
@@ -953,12 +1288,22 @@ function createStateStore() {
         },
       }));
     },
+    setHideActivityRailWhenNotepadOnly(value: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          hideActivityRailWhenNotepadOnly: value,
+        },
+      }));
+    },
     applyPersistedSettings(partial: {
       theme?: AppTheme;
       wrapLines?: boolean;
       zoomPercent?: number;
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
+      hideActivityRailWhenNotepadOnly?: boolean;
     }) {
       update((state) => {
         let next = state;
@@ -994,6 +1339,15 @@ function createStateStore() {
             settings: {
               ...next.settings,
               decoratePlaintextSymbols: partial.decoratePlaintextSymbols,
+            },
+          };
+        }
+        if (typeof partial.hideActivityRailWhenNotepadOnly === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              hideActivityRailWhenNotepadOnly: partial.hideActivityRailWhenNotepadOnly,
             },
           };
         }

@@ -35,15 +35,19 @@ async function getSessionPath(fileName: string): Promise<string> {
 
 function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
   return {
-    documents: state.documents,
-    session: state.session,
-    editor: state.editor,
+    activeContextId: state.contexts.activeContextId,
+    notepad: state.contexts.notepad,
+    workspaces: state.contexts.workspaces,
+    editorPreferences: {
+      zoomPercent: state.editor.zoomPercent,
+      wrapLines: state.editor.wrapLines,
+    },
   };
 }
 
 function emptySessionSnapshot(): AppSessionSnapshot {
   return {
-    version: 1,
+    version: 2,
     updatedAt: new Date().toISOString(),
     lastActiveWindowId: "main",
     openFileRegistry: {},
@@ -57,7 +61,7 @@ async function readSessionSnapshot(): Promise<AppSessionSnapshot> {
   try {
     const raw = await readTextFile(sessionPath);
     const parsed = JSON.parse(raw) as AppSessionSnapshot;
-    if (parsed.version === 1 && parsed.windows) {
+    if (parsed.version === 2 && parsed.windows) {
       return {
         ...emptySessionSnapshot(),
         ...parsed,
@@ -144,69 +148,91 @@ function normalizeRestoredDocument(documentState: DocumentState): DocumentState 
 export async function sanitizeWindowSnapshot(
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
-  const documentsById = new Map(
-    snapshot.documents.map((documentState) => [
-      documentState.id,
-      normalizeRestoredDocument(documentState),
-    ]),
-  );
-  const openTabs: TabState[] = [];
+  async function sanitizeContext(context: WindowSessionSnapshot["notepad"]): Promise<WindowSessionSnapshot["notepad"]> {
+    const documentsById = new Map(
+      context.documents.map((documentState) => [
+        documentState.id,
+        normalizeRestoredDocument(documentState),
+      ]),
+    );
+    const openTabs: TabState[] = [];
 
-  for (const tab of snapshot.session.openTabs) {
-    const linkedDocument = documentsById.get(tab.documentId);
-    if (!linkedDocument) {
-      continue;
-    }
-    if (linkedDocument.filePath) {
-      const exists = await fileStillExists(linkedDocument.filePath);
-      if (!exists) {
-        documentsById.set(tab.documentId, {
-          ...linkedDocument,
-          fileMissing: true,
-        });
+    for (const tab of context.session.openTabs) {
+      const linkedDocument = documentsById.get(tab.documentId);
+      if (!linkedDocument) {
+        continue;
       }
+      if (linkedDocument.filePath) {
+        const exists = await fileStillExists(linkedDocument.filePath);
+        if (!exists) {
+          documentsById.set(tab.documentId, {
+            ...linkedDocument,
+            fileMissing: true,
+          });
+        }
+      }
+      openTabs.push(tab);
     }
-    openTabs.push(tab);
-  }
 
-  if (openTabs.length === 0) {
-    const docId = nextNumericId(
-      "doc",
-      snapshot.documents.map((documentState) => documentState.id),
+    if (openTabs.length === 0) {
+      const docId = nextNumericId(
+        "doc",
+        context.documents.map((documentState) => documentState.id),
+      );
+      const tabId = nextNumericId(
+        "tab",
+        context.session.openTabs.map((tab) => tab.id),
+      );
+      const fallbackDocument = buildFallbackDocument(docId);
+      return {
+        documents: [fallbackDocument],
+        session: {
+          ...context.session,
+          openTabs: [{ id: tabId, documentId: docId, pinned: false }],
+          selectedTabId: tabId,
+          windowBounds: context.session.windowBounds ?? null,
+        },
+      };
+    }
+
+    const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
+    const documents = [...documentsById.values()].filter((documentState) =>
+      referencedDocIds.has(documentState.id),
     );
-    const tabId = nextNumericId(
-      "tab",
-      snapshot.session.openTabs.map((tab) => tab.id),
-    );
-    const fallbackDocument = buildFallbackDocument(docId);
+    const selectedTabId = openTabs.some((tab) => tab.id === context.session.selectedTabId)
+      ? context.session.selectedTabId
+      : openTabs[0]?.id ?? null;
+
     return {
-      ...snapshot,
-      documents: [fallbackDocument],
+      documents,
       session: {
-        ...snapshot.session,
-        openTabs: [{ id: tabId, documentId: docId, pinned: false }],
-        selectedTabId: tabId,
+        ...context.session,
+        openTabs,
+        selectedTabId,
+        windowBounds: context.session.windowBounds ?? null,
       },
     };
   }
 
-  const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
-  const documents = [...documentsById.values()].filter((documentState) =>
-    referencedDocIds.has(documentState.id),
-  );
-  const selectedTabId = openTabs.some((tab) => tab.id === snapshot.session.selectedTabId)
-    ? snapshot.session.selectedTabId
-    : openTabs[0]?.id ?? null;
+  const notepad = await sanitizeContext(snapshot.notepad);
+  const workspaces = [];
+  for (const workspace of snapshot.workspaces) {
+    workspaces.push({
+      ...workspace,
+      snapshot: await sanitizeContext(workspace.snapshot),
+    });
+  }
+  const activeContextId =
+    snapshot.activeContextId === "notepad" ||
+    workspaces.some((workspace) => workspace.id === snapshot.activeContextId)
+      ? snapshot.activeContextId
+      : "notepad";
 
   return {
     ...snapshot,
-    documents,
-    session: {
-      ...snapshot.session,
-      openTabs,
-      selectedTabId,
-      windowBounds: snapshot.session.windowBounds ?? null,
-    },
+    activeContextId,
+    notepad,
+    workspaces,
   };
 }
 
@@ -244,7 +270,7 @@ async function restoreWindowSessionFromSnapshot(
   windowId: string,
   parsed: AppSessionSnapshot,
 ): Promise<RestoredWindowSession | null> {
-  if (parsed.version !== 1 || !parsed.windows) {
+  if (parsed.version !== 2 || !parsed.windows) {
     return null;
   }
   const snapshot = parsed.windows[windowId];
@@ -283,7 +309,7 @@ export async function restoreWindowSession(
   try {
     const backupRaw = await readTextFile(backupPath);
     const parsed = JSON.parse(backupRaw) as AppSessionSnapshot;
-    if (parsed.version !== 1 || !parsed.windows) {
+    if (parsed.version !== 2 || !parsed.windows) {
       return null;
     }
     await logDiagnostic({
@@ -324,7 +350,7 @@ export async function getLastActiveWindowId(): Promise<string | null> {
   try {
     const raw = await readTextFile(sessionPath);
     const parsed = JSON.parse(raw) as AppSessionSnapshot;
-    if (parsed.version !== 1 || !parsed.lastActiveWindowId) {
+    if (parsed.version !== 2 || !parsed.lastActiveWindowId) {
       return null;
     }
     return parsed.lastActiveWindowId;

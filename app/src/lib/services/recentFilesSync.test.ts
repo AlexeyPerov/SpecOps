@@ -31,7 +31,7 @@ const persistMock = vi.mocked(persistGlobalRecentFiles);
 describe("recentFilesSync batching", () => {
   beforeEach(() => {
     resetRecentFilesSyncForTests();
-    appState.resetWorkspace();
+    appState.resetAppState();
     emitMock.mockClear();
     persistMock.mockClear();
   });

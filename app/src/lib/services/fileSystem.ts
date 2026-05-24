@@ -27,6 +27,19 @@ export async function openFileDialog(): Promise<OpenedFile | null> {
   return openPath(selectedPath);
 }
 
+export async function openFolderDialog(defaultPath?: string | null): Promise<string | null> {
+  const selectedPath = await open({
+    title: "Open Folder",
+    multiple: false,
+    directory: true,
+    defaultPath: defaultPath ?? undefined,
+  });
+  if (!selectedPath || Array.isArray(selectedPath)) {
+    return null;
+  }
+  return selectedPath;
+}
+
 export async function saveFile(payload: FileSavePayload): Promise<DiskFingerprint> {
   await writeTextFile(payload.path, payload.content);
   const fingerprint = await statDiskFingerprint(payload.path);

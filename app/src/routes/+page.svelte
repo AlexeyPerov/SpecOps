@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import EditorSurface from "../lib/components/EditorSurface.svelte";
+  import ConsolePanel from "../lib/components/ConsolePanel.svelte";
   import FindReplacePanel from "../lib/components/FindReplacePanel.svelte";
   import TabBar from "../lib/components/TabBar.svelte";
   import {
@@ -8,6 +9,7 @@
     initializeAppMenu,
     keymapCommandForEvent,
     refreshOpenRecentMenu,
+    shouldInitializeAppMenu,
   } from "../lib/commands/registry";
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
@@ -67,6 +69,7 @@
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
   let settingsPaneOpen = false;
+  let consoleOpen = false;
   let statusMessage = "Ready";
   let editorRunner: EditorCommandRunner | null = null;
   let currentWindowId = "main";
@@ -147,6 +150,10 @@
 
   function notify(message: string): void {
     statusMessage = message;
+  }
+
+  function toggleConsole(): void {
+    consoleOpen = !consoleOpen;
   }
 
   function scheduleUntitledTitleRefresh(documentId: string): void {
@@ -347,7 +354,9 @@
       statusMessage = "Session restored.";
     }
 
-    await initializeAppMenu(runCommand, appState.getSnapshot().recentFiles);
+    if (shouldInitializeAppMenu(currentWindowId)) {
+      await initializeAppMenu(runCommand, appState.getSnapshot().recentFiles);
+    }
 
     const persistedSettings = await loadPersistedSettings();
     if (persistedSettings) {
@@ -385,7 +394,9 @@
     );
 
     const unlistenRecentFiles = await listenForRecentFilesChanges((recentFiles) => {
-      void refreshOpenRecentMenu(recentFiles);
+      if (shouldInitializeAppMenu(currentWindowId)) {
+        void refreshOpenRecentMenu(recentFiles);
+      }
     });
 
     const unlistenActivate = await listen<{ path: string }>(WINDOW_EVENT_ACTIVATE_FILE, async (event) => {
@@ -880,33 +891,46 @@
     </aside>
   </section>
 
-  <footer class="status-bar">
-    <button class="status-segment optional-segment optional-cursor" type="button">
-      Ln {state.editor.cursorLine}, Col {state.editor.cursorColumn}
-    </button>
-    <button class="status-segment optional-segment optional-encoding" type="button">
-      {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
-    </button>
-    <button class="status-segment optional-segment optional-line-ending" type="button">
-      {activeDocument?.lineEnding.toUpperCase() ?? "LF"}
-    </button>
-    <button class="status-segment optional-segment optional-zoom" type="button">
-      {state.editor.zoomPercent}%
-    </button>
-    <button class="status-segment optional-segment optional-wrap" type="button">
-      {state.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
-    </button>
-    <button class="status-segment" type="button">{activeDocument?.isDirty ? "Modified" : "Saved"}</button>
-    {#if activeDocument?.fileMissing}
-      <button class="status-segment status-missing" type="button" title="File no longer exists on disk">
-        File missing
-      </button>
+  <div class="bottom-panel">
+    {#if consoleOpen}
+      <ConsolePanel />
     {/if}
-    <span class="status-message optional-segment optional-message">{statusMessage}</span>
-    <button class="status-segment path-segment" type="button" title={activeDocument?.filePath ?? statusPath}>
-      {statusPath}
-    </button>
-  </footer>
+
+    <footer class="status-bar" class:status-bar-console-open={consoleOpen}>
+      <button
+        type="button"
+        class="status-bar-button"
+        title={consoleOpen ? "Hide console" : "Show console"}
+        onclick={toggleConsole}
+      >
+        <span class="status-segment optional-segment optional-cursor">
+          Ln {state.editor.cursorLine}, Col {state.editor.cursorColumn}
+        </span>
+        <span class="status-segment optional-segment optional-encoding">
+          {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+        </span>
+        <span class="status-segment optional-segment optional-line-ending">
+          {activeDocument?.lineEnding.toUpperCase() ?? "LF"}
+        </span>
+        <span class="status-segment optional-segment optional-zoom">
+          {state.editor.zoomPercent}%
+        </span>
+        <span class="status-segment optional-segment optional-wrap">
+          {state.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
+        </span>
+        <span class="status-segment">{activeDocument?.isDirty ? "Modified" : "Saved"}</span>
+        {#if activeDocument?.fileMissing}
+          <span class="status-segment status-missing" title="File no longer exists on disk">
+            File missing
+          </span>
+        {/if}
+        <span class="status-message optional-segment optional-message">{statusMessage}</span>
+        <span class="status-segment path-segment" title={activeDocument?.filePath ?? statusPath}>
+          {statusPath}
+        </span>
+      </button>
+    </footer>
+  </div>
 
 </main>
 
@@ -914,9 +938,15 @@
   .shell {
     height: 100vh;
     display: grid;
-    grid-template-rows: var(--tab-header-height) 1fr var(--statusbar-height);
+    grid-template-rows: var(--tab-header-height) 1fr auto;
     background: var(--color-bg-root);
     color: var(--color-text-primary);
+  }
+
+  .bottom-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .tab-header {
@@ -1189,15 +1219,43 @@
   }
 
   .status-bar {
+    flex-shrink: 0;
+    height: var(--statusbar-height);
+    overflow: hidden;
+    background: var(--color-statusbar-bg);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  .status-bar-button {
     display: flex;
     align-items: center;
     flex-wrap: nowrap;
     overflow: hidden;
     gap: var(--space-4);
+    width: 100%;
+    height: 100%;
     padding: 0 var(--space-8);
-    background: var(--color-statusbar-bg);
-    border-top: 1px solid var(--color-border-subtle);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
     font-size: var(--font-size-status);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .status-bar-button:hover {
+    background: var(--color-hover);
+  }
+
+  .status-bar-button:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+  }
+
+  .status-bar-console-open {
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-accent) 35%, transparent);
   }
 
   .status-segment {

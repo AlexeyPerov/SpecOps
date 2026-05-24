@@ -13,7 +13,7 @@ import type {
 import { inferEditorLanguage } from "../editor/editorLanguage";
 import { normalizePathSync } from "../services/diskFingerprint";
 import { bumpRecentFile } from "../services/recentFiles";
-import { commitRecentFiles } from "../services/recentFilesSync";
+import { syncRecentFiles } from "../services/recentFilesSync";
 import type { AppTheme } from "../styles/themes";
 import {
   APP_THEME_IDS,
@@ -351,16 +351,16 @@ function createStateStore() {
     touchRecentFile(filePath: string) {
       const recentFiles = bumpRecentFile(this.getSnapshot().recentFiles, filePath);
       this.replaceRecentFiles(recentFiles);
-      void commitRecentFiles(recentFiles);
+      void syncRecentFiles(recentFiles);
     },
     clearRecentFiles() {
       this.replaceRecentFiles([]);
-      void commitRecentFiles([]);
+      void syncRecentFiles([]);
     },
     removeRecentFile(filePath: string) {
       const recentFiles = this.getSnapshot().recentFiles.filter((entry) => entry !== filePath);
       this.replaceRecentFiles(recentFiles);
-      void commitRecentFiles(recentFiles);
+      void syncRecentFiles(recentFiles);
     },
     createTab() {
       update((state) => {
@@ -601,7 +601,7 @@ function createStateStore() {
           },
         };
       });
-      void commitRecentFiles(recentFiles);
+      syncRecentFiles(recentFiles);
       return openedDocumentId;
     },
     transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
@@ -754,7 +754,7 @@ function createStateStore() {
         return { ...state, documents, recentFiles };
       });
       if (filePath !== null) {
-        void commitRecentFiles(recentFiles);
+        syncRecentFiles(recentFiles);
       }
     },
     applyDocumentDiskReload(
@@ -836,7 +836,7 @@ function createStateStore() {
         recentFiles = bumpRecentFile(state.recentFiles, filePath);
         return { ...state, documents, recentFiles };
       });
-      void commitRecentFiles(recentFiles);
+      syncRecentFiles(recentFiles);
     },
     setCursor(line: number, column: number) {
       update((state) => ({

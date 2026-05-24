@@ -3,13 +3,21 @@ import type { AppCommandId, AppDomainState, CommandDefinition } from "../domain/
 import { appState } from "../state/appState";
 import { logDiagnostic } from "../services/logging";
 import type { EditorCommandRunner } from "../types/editor";
-import { openFileDialog, renameFile, saveFile, saveFileAs } from "../services/fileSystem";
+import { openFileDialog, openFolderDialog, renameFile, saveFile, saveFileAs } from "../services/fileSystem";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
 import { reloadActiveDocumentFromDisk } from "../services/externalFileChanges";
 import { statDiskFingerprint } from "../services/diskFingerprint";
 import { createNewWindowWithTransfer } from "../services/windowManager";
 import { takeQueuedOpenRecentPath } from "../services/appMenu";
 import { openActivePath, describeOpenActivePathResult } from "../services/openActivePath";
+import { collectOpenableFolderFiles } from "../services/folderOpenableFiles";
+import {
+  FOLDER_OPEN_MAX_FILES,
+  formatOpenAllInFolderSummary,
+  openAllInFolder,
+} from "../services/openAllInFolder";
+import { runWithRecentFilesBatch } from "../services/recentFilesSync";
+import { dirname } from "@tauri-apps/api/path";
 import {
   sanitizeErrorDetails,
   serializeUnknownError,
@@ -153,6 +161,12 @@ export const commandDefinitions: CommandDefinition[] = [
     id: "file.clearRecentFiles",
     label: "Clear Recent Files",
     menuPath: "File/Open Recent/Clear Recent",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "file.openAllInFolder",
+    label: "Open all in Folder",
+    menuPath: "File/Open all in Folder",
     binding: { mac: "none", windows: "none" },
   },
   {
@@ -342,6 +356,67 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
   "file.clearRecentFiles": () => {
     appState.clearRecentFiles();
+  },
+  "file.openAllInFolder": async ({ getState, getWindowId, confirm, notify }) => {
+    const state = getState();
+    const selectedTab = state.session.openTabs.find(
+      (tab) => tab.id === state.session.selectedTabId,
+    );
+    const activeDocument = selectedTab
+      ? state.documents.find((document) => document.id === selectedTab.documentId)
+      : undefined;
+
+    let defaultPath: string | null = null;
+    if (activeDocument?.filePath) {
+      defaultPath = await dirname(activeDocument.filePath);
+    }
+
+    const folderPath = await openFolderDialog(defaultPath);
+    if (!folderPath) {
+      return;
+    }
+
+    const matchedPaths = await collectOpenableFolderFiles(folderPath);
+    await logDiagnostic({
+      level: "info",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "openAllInFolder: scanned folder",
+      metadata: { folderPath, matchedCount: matchedPaths.length },
+    });
+    if (matchedPaths.length === 0) {
+      notify("No openable files in folder.");
+      return;
+    }
+
+    let pathsToOpen = matchedPaths;
+    if (matchedPaths.length > FOLDER_OPEN_MAX_FILES) {
+      const confirmed = confirm(
+        `Found ${matchedPaths.length} openable files. Open the first ${FOLDER_OPEN_MAX_FILES} alphabetically?`,
+      );
+      if (!confirmed) {
+        return;
+      }
+      pathsToOpen = matchedPaths.slice(0, FOLDER_OPEN_MAX_FILES);
+    }
+
+    await logDiagnostic({
+      level: "info",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "openAllInFolder: opening files",
+      metadata: { folderPath, pathsToOpen: pathsToOpen.length },
+    });
+
+    const summary = await runWithRecentFilesBatch(() => openAllInFolder(pathsToOpen, getWindowId()));
+    await logDiagnostic({
+      level: "info",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "openAllInFolder: complete",
+      metadata: { ...summary },
+    });
+    notify(formatOpenAllInFolderSummary(summary));
   },
   "file.save": async ({ getState, notify, getWindowId }) => {
     const state = getState();
@@ -626,7 +701,7 @@ export function dispatchMenuCommand(
   dispatchCommand(commandId, context);
 }
 
-export { initializeAppMenu, refreshOpenRecentMenu } from "../services/appMenu";
+export { initializeAppMenu, refreshOpenRecentMenu, shouldInitializeAppMenu } from "../services/appMenu";
 
 export function keymapCommandForEvent(event: KeyboardEvent): AppCommandId | null {
   const token = [

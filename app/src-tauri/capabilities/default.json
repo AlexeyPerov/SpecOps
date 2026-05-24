@@ -36,6 +36,14 @@
       "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }]
     },
     "log:default",
-    "opener:default"
+    "opener:default",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-inner-size",
+    "core:window:allow-outer-position",
+    "core:window:allow-scale-factor"
   ]
 }

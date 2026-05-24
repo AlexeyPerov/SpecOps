@@ -32,6 +32,45 @@ const EXTENSION_MAP: Record<string, EditorLanguageId> = {
   ".cs": "csharp",
 };
 
+export const OPENABLE_FILE_EXTENSIONS = [...Object.keys(EXTENSION_MAP), ".txt"] as const;
+
+const EXTENSIONLESS_OPENABLE_NAMES = new Set([
+  "readme",
+  "license",
+  "licence",
+  "changelog",
+  "makefile",
+  "dockerfile",
+  "gemfile",
+  "rakefile",
+  "procfile",
+  "cmakelists.txt",
+]);
+
+function fileBasename(path: string): string {
+  const normalized = path.replaceAll("\\", "/");
+  const parts = normalized.split("/");
+  return parts[parts.length - 1] ?? path;
+}
+
+export function isOpenableFilePath(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  for (const extension of OPENABLE_FILE_EXTENSIONS) {
+    if (lower.endsWith(extension)) {
+      return true;
+    }
+  }
+  const base = fileBasename(filePath);
+  if (EXTENSIONLESS_OPENABLE_NAMES.has(base.toLowerCase())) {
+    return true;
+  }
+  // Plain-text notes often have no extension (e.g. Apple Notes exports).
+  if (!base.includes(".")) {
+    return true;
+  }
+  return false;
+}
+
 export function inferEditorLanguage(path: string | null): EditorLanguageId {
   if (!path) return "plaintext";
   const lower = path.toLowerCase();

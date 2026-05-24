@@ -1,12 +1,18 @@
 import { homeDir } from "@tauri-apps/api/path";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import type { AppCommandId } from "../domain/contracts";
+import { logDiagnostic } from "./logging";
 import { formatRecentPath } from "./recentFiles";
 
 let cachedHomeDir: string | null | undefined;
 let openRecentSubmenu: Submenu | null = null;
 let menuRunCommand: ((commandId: AppCommandId) => void) | null = null;
 const openRecentPathByItemId = new Map<string, string>();
+let refreshMenuChain: Promise<void> = Promise.resolve();
+let pendingRecentFilesRefresh: string[] | null = null;
+let refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+const REFRESH_DEBOUNCE_MS = 50;
 
 async function resolveHomeDir(): Promise<string | null> {
   if (cachedHomeDir !== undefined) {
@@ -38,12 +44,23 @@ export function takeQueuedOpenRecentPath(): string | null {
   return path;
 }
 
-export async function refreshOpenRecentMenu(recentFiles: string[]): Promise<void> {
+async function refreshOpenRecentMenuInternal(recentFiles: string[]): Promise<void> {
   if (!openRecentSubmenu) {
     return;
   }
 
   const existingItems = await openRecentSubmenu.items();
+  await logDiagnostic({
+    level: "info",
+    source: "frontend",
+    timestamp: new Date().toISOString(),
+    message: "appMenu: refresh Open Recent start",
+    metadata: {
+      recentCount: recentFiles.length,
+      removedCount: existingItems.length,
+    },
+  });
+
   for (let index = existingItems.length - 1; index >= 0; index -= 1) {
     await openRecentSubmenu.removeAt(index);
   }
@@ -72,12 +89,67 @@ export async function refreshOpenRecentMenu(recentFiles: string[]): Promise<void
       action: () => menuRunCommand?.("file.clearRecentFiles"),
     }),
   );
+
+  await logDiagnostic({
+    level: "info",
+    source: "frontend",
+    timestamp: new Date().toISOString(),
+    message: "appMenu: refresh Open Recent complete",
+    metadata: {
+      recentCount: recentFiles.length,
+      appendedCount: recentFiles.length + 2,
+    },
+  });
+}
+
+function flushPendingRecentMenuRefresh(): void {
+  if (pendingRecentFilesRefresh === null) {
+    return;
+  }
+  const recentFiles = pendingRecentFilesRefresh;
+  pendingRecentFilesRefresh = null;
+  refreshMenuChain = refreshMenuChain
+    .then(async () => {
+      await refreshOpenRecentMenuInternal(recentFiles);
+    })
+    .catch(async (error: unknown) => {
+      const reason = error instanceof Error ? error.message : "unknown error";
+      await logDiagnostic({
+        level: "error",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "failed to refresh Open Recent menu",
+        metadata: { reason },
+      });
+    });
+}
+
+export function refreshOpenRecentMenu(recentFiles: string[]): Promise<void> {
+  pendingRecentFilesRefresh = recentFiles;
+  if (refreshDebounceTimer) {
+    clearTimeout(refreshDebounceTimer);
+  }
+  return new Promise((resolve) => {
+    refreshDebounceTimer = setTimeout(() => {
+      refreshDebounceTimer = null;
+      flushPendingRecentMenuRefresh();
+      void refreshMenuChain.then(resolve);
+    }, REFRESH_DEBOUNCE_MS);
+  });
 }
 
 export async function initializeAppMenu(
   runCommand: (commandId: AppCommandId) => void,
   recentFiles: string[],
 ): Promise<void> {
+  await logDiagnostic({
+    level: "info",
+    source: "frontend",
+    timestamp: new Date().toISOString(),
+    message: "appMenu: initialize start",
+    metadata: { recentCount: recentFiles.length },
+  });
+
   menuRunCommand = runCommand;
 
   const openItem = await MenuItem.new({
@@ -89,6 +161,11 @@ export async function initializeAppMenu(
   openRecentSubmenu = await Submenu.new({
     text: "Open Recent",
     items: [],
+  });
+  const openAllInFolderItem = await MenuItem.new({
+    id: "cmd.file.openAllInFolder",
+    text: "Open all in Folder",
+    action: () => runCommand("file.openAllInFolder"),
   });
   const newWindowItem = await MenuItem.new({
     id: "cmd.file.newWindow",
@@ -141,6 +218,7 @@ export async function initializeAppMenu(
     items: [
       openItem,
       openRecentSubmenu,
+      openAllInFolderItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       newWindowItem,
       moveTabItem,
@@ -320,7 +398,26 @@ export async function initializeAppMenu(
     items: [appSubmenu, fileMenu, editMenu, viewMenu],
   });
   await appMenu.setAsAppMenu();
-  await refreshOpenRecentMenu(recentFiles);
+  if (refreshDebounceTimer) {
+    clearTimeout(refreshDebounceTimer);
+    refreshDebounceTimer = null;
+  }
+  pendingRecentFilesRefresh = recentFiles;
+  refreshMenuChain = Promise.resolve();
+  await refreshOpenRecentMenuInternal(recentFiles);
+
+  const fileMenuItems = await fileMenu.items();
+  await logDiagnostic({
+    level: "info",
+    source: "frontend",
+    timestamp: new Date().toISOString(),
+    message: "appMenu: initialize complete",
+    metadata: { fileMenuItemCount: fileMenuItems.length },
+  });
+}
+
+export function shouldInitializeAppMenu(windowId: string): boolean {
+  return windowId === "main";
 }
 
 export function resetAppMenuForTests(): void {
@@ -328,4 +425,10 @@ export function resetAppMenuForTests(): void {
   openRecentSubmenu = null;
   menuRunCommand = null;
   openRecentPathByItemId.clear();
+  refreshMenuChain = Promise.resolve();
+  pendingRecentFilesRefresh = null;
+  if (refreshDebounceTimer) {
+    clearTimeout(refreshDebounceTimer);
+    refreshDebounceTimer = null;
+  }
 }

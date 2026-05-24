@@ -71,6 +71,7 @@ export type AppCommandId =
   | "file.open"
   | "file.openRecent"
   | "file.clearRecentFiles"
+  | "file.openAllInFolder"
   | "file.save"
   | "file.saveAs"
   | "file.saveAll"

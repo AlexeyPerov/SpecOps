@@ -2,7 +2,7 @@ import { isFileMissingError } from "./diskFingerprint";
 import { openPath } from "./fileSystem";
 import { completeOpenPath, requestOpenPath } from "./openFileGate";
 import { appState } from "../state/appState";
-import { commitRecentFiles } from "./recentFilesSync";
+import { syncRecentFiles } from "./recentFilesSync";
 
 const MAX_OPEN_BYTES = 10 * 1024 * 1024;
 
@@ -21,7 +21,7 @@ async function pruneMissingRecentFile(path: string): Promise<void> {
     return;
   }
   appState.replaceRecentFiles(recentFiles);
-  await commitRecentFiles(recentFiles);
+  syncRecentFiles(recentFiles);
 }
 
 export async function openActivePath(

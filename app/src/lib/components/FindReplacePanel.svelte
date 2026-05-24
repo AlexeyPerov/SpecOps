@@ -180,7 +180,13 @@
   }
 </script>
 
-<form class="find-replace-panel" role="search" aria-label="Find and Replace" onkeydown={handleKeydown} onsubmit={(e) => e.preventDefault()}>
+<div
+  class="find-replace-panel"
+  role="search"
+  tabindex="-1"
+  aria-label="Find and Replace"
+  onkeydown={handleKeydown}
+>
   <div class="fr-row">
     <button
       type="button"
@@ -239,7 +245,7 @@
       </button>
     </div>
   {/if}
-</form>
+</div>
 
 <style>
   .find-replace-panel {

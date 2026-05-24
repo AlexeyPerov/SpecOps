@@ -1,6 +1,7 @@
 import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { appState } from "../state/appState";
+import type { ContextId } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import {
   claimOpenFile,
@@ -12,16 +13,45 @@ import {
 import {
   WINDOW_EVENT_SELECT_TAB_FOR_PATH,
 } from "./windowManager";
+import { ensureNotepadForOutsidePath } from "./workspacePaths";
 
 export type RequestOpenPathResult =
   | { kind: "redirected"; path: string; ownerWindowId: string }
   | { kind: "existing"; path: string; documentId: string }
-  | { kind: "needs_read"; path: string };
+  | { kind: "needs_read"; path: string; switchedToNotepad: boolean };
+
+function findLocalDocumentForNormalizedPath(
+  normalizedPath: string,
+): { contextId: ContextId; documentId: string } | null {
+  const snapshot = appState.getSnapshot();
+  const contexts = [
+    { id: "notepad" as const, snapshot: snapshot.contexts.notepad },
+    ...snapshot.contexts.workspaces.map((workspace) => ({
+      id: workspace.id,
+      snapshot: workspace.snapshot,
+    })),
+  ];
+
+  for (const context of contexts) {
+    for (const tab of context.snapshot.session.openTabs) {
+      const documentState = context.snapshot.documents.find((doc) => doc.id === tab.documentId);
+      if (
+        documentState?.filePath &&
+        normalizePathSync(documentState.filePath) === normalizedPath
+      ) {
+        return { contextId: context.id, documentId: documentState.id };
+      }
+    }
+  }
+
+  return null;
+}
 
 export async function requestOpenPath(
   path: string,
   windowId: string,
 ): Promise<RequestOpenPathResult> {
+  const outsideRouting = ensureNotepadForOutsidePath(path);
   const normalized = normalizePathSync(path);
   const registry = await readOpenFileRegistry();
   const owner = registry[normalized];
@@ -31,15 +61,16 @@ export async function requestOpenPath(
     return { kind: "redirected", path: normalized, ownerWindowId: owner.windowId };
   }
 
-  const existingDocumentId = appState.findDocumentIdByPath(path);
-  if (existingDocumentId) {
-    appState.selectOrReopenTabForDocument(existingDocumentId);
+  const existingLocal = findLocalDocumentForNormalizedPath(normalized);
+  if (existingLocal) {
+    appState.switchContext(existingLocal.contextId);
+    appState.selectOrReopenTabForDocument(existingLocal.documentId);
     appState.touchRecentFile(path);
-    await claimOpenFile(path, windowId, existingDocumentId);
-    return { kind: "existing", path: normalized, documentId: existingDocumentId };
+    await claimOpenFile(path, windowId, existingLocal.documentId);
+    return { kind: "existing", path: normalized, documentId: existingLocal.documentId };
   }
 
-  return { kind: "needs_read", path };
+  return { kind: "needs_read", path, switchedToNotepad: outsideRouting.switchedToNotepad };
 }
 
 export async function redirectToOwnerWindow(
@@ -57,14 +88,24 @@ export async function redirectToOwnerWindow(
 
 export function selectTabForNormalizedPath(normalizedPath: string): boolean {
   const snapshot = appState.getSnapshot();
-  for (const tab of snapshot.session.openTabs) {
-    const documentState = snapshot.documents.find((doc) => doc.id === tab.documentId);
-    if (
-      documentState?.filePath &&
-      normalizePathSync(documentState.filePath) === normalizedPath
-    ) {
-      appState.selectTab(tab.id);
-      return true;
+  const contexts = [
+    { id: "notepad" as const, snapshot: snapshot.contexts.notepad },
+    ...snapshot.contexts.workspaces.map((workspace) => ({
+      id: workspace.id,
+      snapshot: workspace.snapshot,
+    })),
+  ];
+  for (const context of contexts) {
+    for (const tab of context.snapshot.session.openTabs) {
+      const documentState = context.snapshot.documents.find((doc) => doc.id === tab.documentId);
+      if (
+        documentState?.filePath &&
+        normalizePathSync(documentState.filePath) === normalizedPath
+      ) {
+        appState.switchContext(context.id);
+        appState.selectTab(tab.id);
+        return true;
+      }
     }
   }
   return false;

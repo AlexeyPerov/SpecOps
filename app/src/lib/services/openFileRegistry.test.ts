@@ -233,6 +233,106 @@ describe("syncOpenFileRegistryForWindow", () => {
       "/tmp/new.txt": { windowId: "win-a", documentId: "doc-1" },
     });
   });
+
+  it("collects saved tabs across notepad and workspace contexts", async () => {
+    const state: AppDomainState = {
+      contexts: {
+        activeContextId: "ws-1",
+        notepad: {
+          documents: [
+            {
+              id: "doc-n",
+              filePath: "/tmp/notepad.txt",
+              title: "notepad.txt",
+              content: "",
+              savedContent: "",
+              isDirty: false,
+              language: "plaintext",
+              encoding: "utf-8",
+              lineEnding: "lf",
+              diskFingerprint: null,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              scrollTop: 0,
+            },
+          ],
+          session: {
+            selectedTabId: "tab-n",
+            openTabs: [{ id: "tab-n", documentId: "doc-n", pinned: false }],
+            lastActiveWindowId: "win-a",
+            windowBounds: null,
+          },
+        },
+        workspaces: [
+          {
+            id: "ws-1",
+            rootPath: "/tmp/ws",
+            snapshot: {
+              documents: [
+                {
+                  id: "doc-w",
+                  filePath: "/tmp/ws/workspace.txt",
+                  title: "workspace.txt",
+                  content: "",
+                  savedContent: "",
+                  isDirty: false,
+                  language: "plaintext",
+                  encoding: "utf-8",
+                  lineEnding: "lf",
+                  diskFingerprint: null,
+                  dismissedFingerprint: null,
+                  fileMissing: false,
+                  scrollTop: 0,
+                },
+              ],
+              session: {
+                selectedTabId: "tab-w",
+                openTabs: [{ id: "tab-w", documentId: "doc-w", pinned: false }],
+                lastActiveWindowId: "win-a",
+                windowBounds: null,
+              },
+            },
+          },
+        ],
+      },
+      documents: [],
+      session: {
+        selectedTabId: null,
+        openTabs: [],
+        lastActiveWindowId: "win-a",
+        windowBounds: null,
+      },
+      settings: {
+        theme: "dark-blue",
+        statusBarVisible: true,
+        externalFiles: {
+          watchExternalChanges: true,
+          autoReloadCleanFiles: true,
+          checkOnWindowFocus: true,
+          checkOnTabActivate: true,
+        },
+        decoratePlaintextSymbols: false,
+        hideActivityRailWhenNotepadOnly: true,
+      },
+      recentFiles: [],
+      editor: {
+        cursorLine: 1,
+        cursorColumn: 1,
+        zoomPercent: 100,
+        wrapLines: true,
+        findReplaceOpen: false,
+        goToOpen: false,
+        previewMode: "editor",
+      },
+    };
+
+    await syncOpenFileRegistryForWindow("win-a", state);
+
+    expect(sessionMock.getSessionStore()?.openFileRegistry).toMatchObject({
+      "/tmp/notepad.txt": { windowId: "win-a", documentId: "doc-n" },
+      "/tmp/ws/workspace.txt": { windowId: "win-a", documentId: "doc-w" },
+    });
+  });
 });
 
 describe("releaseAllOpenFilesForWindow", () => {

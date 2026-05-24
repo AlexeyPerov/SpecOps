@@ -276,7 +276,7 @@ Dependencies: M2-4.
 
 ## Milestone 3 — File routing and Notepad-only commands
 
-#### Task M3-1: Path-under-root helpers and Notepad redirect [Score:6] [Agent:medium]
+#### Task M3-1: Path-under-root helpers and Notepad redirect [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -296,7 +296,7 @@ Dependencies: M2-5.
 
 ---
 
-#### Task M3-2: Notepad-only command gate [Score:5] [Agent:medium]
+#### Task M3-2: Notepad-only command gate [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -316,7 +316,7 @@ Dependencies: M3-1.
 
 ---
 
-#### Task M3-3: File → Open, New, Save As routing [Score:7] [Agent:medium]
+#### Task M3-3: File → Open, New, Save As routing [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -336,7 +336,7 @@ Dependencies: M3-2.
 
 ---
 
-#### Task M3-4: Open-file registry across contexts [Score:6] [Agent:medium]
+#### Task M3-4: Open-file registry across contexts [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -356,7 +356,7 @@ Dependencies: M3-3.
 
 ---
 
-#### Task M3-5: Multi-window Notepad-only policy [Score:5] [Agent:medium]
+#### Task M3-5: Multi-window Notepad-only policy [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 

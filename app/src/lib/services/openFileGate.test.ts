@@ -89,7 +89,23 @@ describe("requestOpenPath", () => {
     await expect(requestOpenPath("/tmp/new.txt", "win-a")).resolves.toEqual({
       kind: "needs_read",
       path: "/tmp/new.txt",
+      switchedToNotepad: false,
     });
+  });
+
+  it("switches to owning local context when file is already open there", async () => {
+    readOpenFileRegistryMock.mockResolvedValue({});
+    appState.addWorkspace("/tmp/ws");
+    appState.openFileInTab("/tmp/ws/existing.txt", "workspace");
+    appState.switchContext("notepad");
+
+    const result = await requestOpenPath("/tmp/ws/existing.txt", "win-a");
+    expect(result).toMatchObject({
+      kind: "existing",
+      path: "/tmp/ws/existing.txt",
+      documentId: expect.stringMatching(/^doc-/),
+    });
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("ws-1");
   });
 });
 
@@ -106,6 +122,15 @@ describe("selectTabForNormalizedPath", () => {
 
   it("returns false when no tab matches", () => {
     expect(selectTabForNormalizedPath("/tmp/missing.txt")).toBe(false);
+  });
+
+  it("switches context to select matching workspace tab", () => {
+    appState.addWorkspace("/tmp/ws");
+    appState.openFileInTab("/tmp/ws/select.txt", "workspace");
+    appState.switchContext("notepad");
+
+    expect(selectTabForNormalizedPath("/tmp/ws/select.txt")).toBe(true);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("ws-1");
   });
 });
 

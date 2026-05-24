@@ -196,15 +196,6 @@ function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot
   return fallbackContextSnapshot(snapshot.session.lastActiveWindowId);
 }
 
-export function isPathUnderWorkspaceRoot(filePath: string, workspaceRoot: string): boolean {
-  const normalizedFilePath = normalizePathSync(filePath).replace(/\/+$/, "");
-  const normalizedWorkspaceRoot = normalizePathSync(workspaceRoot).replace(/\/+$/, "");
-  return (
-    normalizedFilePath === normalizedWorkspaceRoot ||
-    normalizedFilePath.startsWith(`${normalizedWorkspaceRoot}/`)
-  );
-}
-
 export function findWorkspaceByPath(
   workspaces: WorkspaceEntry[],
   rootPath: string,
@@ -216,6 +207,18 @@ export function findWorkspaceByPath(
 function findDocumentByPath(state: AppDomainState, filePath: string): DocumentState | undefined {
   const normalized = normalizePathSync(filePath);
   return state.documents.find(
+    (documentState) =>
+      documentState.filePath !== null &&
+      normalizePathSync(documentState.filePath) === normalized,
+  );
+}
+
+function findDocumentByPathInContext(
+  context: ContextSnapshot,
+  filePath: string,
+): DocumentState | undefined {
+  const normalized = normalizePathSync(filePath);
+  return context.documents.find(
     (documentState) =>
       documentState.filePath !== null &&
       normalizePathSync(documentState.filePath) === normalized,
@@ -736,7 +739,21 @@ function createStateStore() {
     },
     findDocumentIdByPath(filePath: string): string | null {
       const snapshot = this.getSnapshot();
-      return findDocumentByPath(snapshot, filePath)?.id ?? null;
+      const inActive = findDocumentByPath(snapshot, filePath);
+      if (inActive) {
+        return inActive.id;
+      }
+      const inNotepad = findDocumentByPathInContext(snapshot.contexts.notepad, filePath);
+      if (inNotepad) {
+        return inNotepad.id;
+      }
+      for (const workspace of snapshot.contexts.workspaces) {
+        const inWorkspace = findDocumentByPathInContext(workspace.snapshot, filePath);
+        if (inWorkspace) {
+          return inWorkspace.id;
+        }
+      }
+      return null;
     },
     reorderTabs(fromIndex: number, toIndex: number) {
       update((state) => {

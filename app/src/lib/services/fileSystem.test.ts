@@ -86,6 +86,18 @@ describe("saveFileAs", () => {
     saveMock.mockResolvedValue(null);
     await expect(saveFileAs("content")).resolves.toBeNull();
   });
+
+  it("passes defaultPath to save dialog when provided", async () => {
+    saveMock.mockResolvedValue("/tmp/workspace/new.txt");
+    statMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 7 });
+
+    await saveFileAs("content", "/tmp/workspace");
+
+    expect(saveMock).toHaveBeenCalledWith({
+      title: "Save File As",
+      defaultPath: "/tmp/workspace",
+    });
+  });
 });
 
 describe("openFileDialog", () => {

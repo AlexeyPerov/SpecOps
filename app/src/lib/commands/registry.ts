@@ -25,6 +25,7 @@ import {
   summarizeError,
 } from "./commandErrors";
 import { openAndStoreFile } from "./openAndStoreFile";
+import { isPathUnderRoot, runInNotepadContext } from "../services/workspacePaths";
 
 type CommandContext = {
   setSettingsPaneOpen: (next: boolean) => void;
@@ -359,78 +360,80 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       throw error;
     }
   },
-  "file.openRecent": async ({ notify, getWindowId }) => {
-    const path = takeQueuedOpenRecentPath();
-    if (!path) {
-      return;
-    }
-    const result = await openActivePath(path, getWindowId());
-    notify(describeOpenActivePathResult(result));
-  },
+  "file.openRecent": async ({ notify, getWindowId }) =>
+    runInNotepadContext(async () => {
+      const path = takeQueuedOpenRecentPath();
+      if (!path) {
+        return;
+      }
+      const result = await openActivePath(path, getWindowId());
+      notify(describeOpenActivePathResult(result));
+    }),
   "file.clearRecentFiles": () => {
     appState.clearRecentFiles();
   },
-  "file.openAllInFolder": async ({ getState, getWindowId, confirm, notify }) => {
-    const state = getState();
-    const selectedTab = state.session.openTabs.find(
-      (tab) => tab.id === state.session.selectedTabId,
-    );
-    const activeDocument = selectedTab
-      ? state.documents.find((document) => document.id === selectedTab.documentId)
-      : undefined;
-
-    let defaultPath: string | null = null;
-    if (activeDocument?.filePath) {
-      defaultPath = await dirname(activeDocument.filePath);
-    }
-
-    const folderPath = await openFolderDialog(defaultPath);
-    if (!folderPath) {
-      return;
-    }
-
-    const matchedPaths = await collectOpenableFolderFiles(folderPath);
-    await logDiagnostic({
-      level: "info",
-      source: "frontend",
-      timestamp: new Date().toISOString(),
-      message: "openAllInFolder: scanned folder",
-      metadata: { folderPath, matchedCount: matchedPaths.length },
-    });
-    if (matchedPaths.length === 0) {
-      notify("No openable files in folder.");
-      return;
-    }
-
-    let pathsToOpen = matchedPaths;
-    if (matchedPaths.length > FOLDER_OPEN_MAX_FILES) {
-      const confirmed = confirm(
-        `Found ${matchedPaths.length} openable files. Open the first ${FOLDER_OPEN_MAX_FILES} alphabetically?`,
+  "file.openAllInFolder": async ({ getState, getWindowId, confirm, notify }) =>
+    runInNotepadContext(async () => {
+      const state = getState();
+      const selectedTab = state.session.openTabs.find(
+        (tab) => tab.id === state.session.selectedTabId,
       );
-      if (!confirmed) {
+      const activeDocument = selectedTab
+        ? state.documents.find((document) => document.id === selectedTab.documentId)
+        : undefined;
+
+      let defaultPath: string | null = null;
+      if (activeDocument?.filePath) {
+        defaultPath = await dirname(activeDocument.filePath);
+      }
+
+      const folderPath = await openFolderDialog(defaultPath);
+      if (!folderPath) {
         return;
       }
-      pathsToOpen = matchedPaths.slice(0, FOLDER_OPEN_MAX_FILES);
-    }
 
-    await logDiagnostic({
-      level: "info",
-      source: "frontend",
-      timestamp: new Date().toISOString(),
-      message: "openAllInFolder: opening files",
-      metadata: { folderPath, pathsToOpen: pathsToOpen.length },
-    });
+      const matchedPaths = await collectOpenableFolderFiles(folderPath);
+      await logDiagnostic({
+        level: "info",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "openAllInFolder: scanned folder",
+        metadata: { folderPath, matchedCount: matchedPaths.length },
+      });
+      if (matchedPaths.length === 0) {
+        notify("No openable files in folder.");
+        return;
+      }
 
-    const summary = await runWithRecentFilesBatch(() => openAllInFolder(pathsToOpen, getWindowId()));
-    await logDiagnostic({
-      level: "info",
-      source: "frontend",
-      timestamp: new Date().toISOString(),
-      message: "openAllInFolder: complete",
-      metadata: { ...summary },
-    });
-    notify(formatOpenAllInFolderSummary(summary));
-  },
+      let pathsToOpen = matchedPaths;
+      if (matchedPaths.length > FOLDER_OPEN_MAX_FILES) {
+        const confirmed = confirm(
+          `Found ${matchedPaths.length} openable files. Open the first ${FOLDER_OPEN_MAX_FILES} alphabetically?`,
+        );
+        if (!confirmed) {
+          return;
+        }
+        pathsToOpen = matchedPaths.slice(0, FOLDER_OPEN_MAX_FILES);
+      }
+
+      await logDiagnostic({
+        level: "info",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "openAllInFolder: opening files",
+        metadata: { folderPath, pathsToOpen: pathsToOpen.length },
+      });
+
+      const summary = await runWithRecentFilesBatch(() => openAllInFolder(pathsToOpen, getWindowId()));
+      await logDiagnostic({
+        level: "info",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "openAllInFolder: complete",
+        metadata: { ...summary },
+      });
+      notify(formatOpenAllInFolderSummary(summary));
+    }),
   "file.save": async ({ getState, notify, getWindowId }) => {
     const state = getState();
     const selected = state.session.openTabs.find(
@@ -449,7 +452,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     const previousPath = doc.filePath;
     let fingerprint;
     if (!targetPath) {
-      const saved = await saveFileAs(doc.content);
+      const saved = await saveFileAs(doc.content, appState.getWorkspaceRoot());
       if (!saved) {
         return;
       }
@@ -476,18 +479,35 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!doc) {
       return;
     }
-    const saved = await saveFileAs(doc.content);
+    const activeWorkspaceRoot = appState.getWorkspaceRoot();
+    const saved = await saveFileAs(doc.content, activeWorkspaceRoot);
     if (!saved) {
       return;
     }
+    const savedOutsideWorkspace =
+      activeWorkspaceRoot !== null && !isPathUnderRoot(saved.path, activeWorkspaceRoot);
     const previousPath = doc.filePath;
+    const sourceTabId = selected.id;
     appState.markDocumentSaved(doc.id, saved.path, doc.content);
+    if (savedOutsideWorkspace) {
+      appState.closeTabForce(sourceTabId);
+      appState.switchContext("notepad");
+      appState.openTransferredTab({
+        filePath: saved.path,
+        content: doc.content,
+        title: doc.title,
+      });
+    }
     appState.setDocumentDiskState(doc.id, {
       diskFingerprint: saved.fingerprint,
       fileMissing: false,
     });
     await renameOpenFileRegistry(previousPath, saved.path, getWindowId(), doc.id);
-    notify(`Saved as ${saved.path}`);
+    notify(
+      savedOutsideWorkspace
+        ? `Saved as ${saved.path} and moved tab to Notepad.`
+        : `Saved as ${saved.path}`,
+    );
   },
   "file.saveAll": async ({ getState, notify, getWindowId }) => {
     const state = getState();
@@ -500,7 +520,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       const previousPath = documentState.filePath;
       let fingerprint;
       if (!targetPath) {
-        const saved = await saveFileAs(documentState.content);
+        const saved = await saveFileAs(documentState.content, appState.getWorkspaceRoot());
         if (!saved) {
           continue;
         }
@@ -601,6 +621,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     notify("Tab closed.");
   },
   "tab.moveToNewWindow": async ({ notify }) => {
+    if (!appState.isNotepadActive()) {
+      notify("Move to new window is only available for Notepad tabs.");
+      return;
+    }
     const transfer = appState.transferActiveTabOut();
     if (!transfer) {
       notify("No active tab to transfer.");

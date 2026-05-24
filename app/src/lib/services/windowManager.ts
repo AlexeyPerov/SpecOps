@@ -32,7 +32,7 @@ export async function activateFileInWindow(
 }
 
 export async function createNewWindowWithTransfer(
-  snapshot: AppDomainState,
+  _snapshot: AppDomainState,
   transferPayload?: { filePath: string | null; content: string; title: string } | null,
 ): Promise<void> {
   windowCounter += 1;
@@ -48,20 +48,6 @@ export async function createNewWindowWithTransfer(
     await updateLastActiveWindow(label);
     if (transferPayload) {
       await emitTo(label, WINDOW_EVENT_TRANSFER_TAB, transferPayload);
-    } else if (snapshot.session.selectedTabId) {
-      const selected = snapshot.session.openTabs.find(
-        (tab) => tab.id === snapshot.session.selectedTabId,
-      );
-      const doc = snapshot.documents.find(
-        (documentState) => documentState.id === selected?.documentId,
-      );
-      if (doc) {
-        await emitTo(label, WINDOW_EVENT_TRANSFER_TAB, {
-          filePath: doc.filePath,
-          content: doc.content,
-          title: doc.title,
-        });
-      }
     }
   });
 }

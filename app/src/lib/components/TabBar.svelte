@@ -7,6 +7,7 @@
   import { readNearbyTextFiles, type NearbyTextFile } from "../services/nearbyFiles";
   import { openPath } from "../services/fileSystem";
   import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
+  import { runInNotepadContext } from "../services/workspacePaths";
 
   const DRAG_THRESHOLD_PX = 4;
   const revealLabel = revealInFileManagerLabel();
@@ -176,9 +177,11 @@
   }
 
   async function openAllNearbyFiles(): Promise<void> {
-    for (const nearbyFile of nearbyFiles) {
-      await openPathWithPipeline(nearbyFile.path);
-    }
+    await runInNotepadContext(async () => {
+      for (const nearbyFile of nearbyFiles) {
+        await openPathWithPipeline(nearbyFile.path);
+      }
+    });
     closeContextMenu();
   }
 

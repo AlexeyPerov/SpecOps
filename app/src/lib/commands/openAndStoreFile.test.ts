@@ -30,7 +30,11 @@ describe("openAndStoreFile", () => {
 
   it("opens files within the size limit through the gate", async () => {
     const notify = vi.fn();
-    requestOpenPathMock.mockResolvedValue({ kind: "needs_read", path: "/tmp/ok.txt" });
+    requestOpenPathMock.mockResolvedValue({
+      kind: "needs_read",
+      path: "/tmp/ok.txt",
+      switchedToNotepad: false,
+    });
 
     await openAndStoreFile(notify, "win-a", {
       path: "/tmp/ok.txt",

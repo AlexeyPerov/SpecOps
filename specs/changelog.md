@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-24 22:18 (UTC+3)
+
+- **Workspaces M3 routing + policy:** Added `workspacePaths` helpers (`isPathUnderRoot`, `ensureNotepadForOutsidePath`, `runInNotepadContext`) and wired path-open routing so outside-root opens switch to Notepad, while existing-tab lookup now scans all local contexts and focuses the owner context/tab.
+- **Notepad-only commands:** Applied shared Notepad gate to `file.openRecent`, `file.openAllInFolder`, and tab-menu **Open All Nearby**, ensuring those entrypoints always run and open tabs in Notepad context while keeping global recent-files behavior unchanged.
+- **File/Open/Save As + multi-window behavior:** Updated file dialogs to default to active workspace root, Save As to use workspace-root defaults and move outside-root saves to Notepad, and blocked `tab.moveToNewWindow` from workspace context; `createNewWindowWithTransfer` now opens blank Notepad-only windows unless explicit Notepad transfer payload is provided.
+- **Docs execution tracking:** Marked Milestone 3 tasks (`M3-1` through `M3-5`) as done in `specs/workspaces-execution-plan.md`.
+
 ## 2026-05-24 21:53 (UTC+3)
 
 - **Workspaces M2:** Implemented the activity-rail milestone end-to-end: added `ActivityRail.svelte` (Notepad, workspace buttons, add button), integrated it into the shell layout, and wired context switching to `appState.switchContext` with console close + markdown mode reset on switch.

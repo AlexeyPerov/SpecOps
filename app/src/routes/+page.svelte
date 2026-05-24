@@ -1333,7 +1333,7 @@
   }
 
   :global(.cm-plaintext-symbol) {
-    color: var(--syntax-punctuation);
-    opacity: 0.7;
+    color: var(--color-accent);
+    opacity: 0.85;
   }
 </style>

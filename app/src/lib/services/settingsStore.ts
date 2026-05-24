@@ -28,7 +28,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   wrapLines: true,
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
-  decoratePlaintextSymbols: false,
+  decoratePlaintextSymbols: true,
 };
 
 const FILE_NAME = "settings.json";
@@ -92,7 +92,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         ...externalFiles,
         decoratePlaintextSymbols: isBoolean(parsed.decoratePlaintextSymbols)
           ? parsed.decoratePlaintextSymbols
-          : false,
+          : defaultPersistedSettings.decoratePlaintextSymbols,
       };
     }
     return null;

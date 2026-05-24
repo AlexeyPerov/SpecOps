@@ -18,6 +18,7 @@ import {
   DEFAULT_THEME,
   getThemeAccentHex,
   getThemeMode,
+  applyThemeSyntaxPalette,
 } from "../styles/themes";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
@@ -31,7 +32,7 @@ const defaultSettings: AppSettingsState = {
   theme: DEFAULT_THEME,
   statusBarVisible: true,
   externalFiles: defaultExternalFilesSettings,
-  decoratePlaintextSymbols: false,
+  decoratePlaintextSymbols: true,
 };
 
 let docCounter = 1;
@@ -258,11 +259,10 @@ function applyTheme(settings: AppSettingsState): void {
     return;
   }
 
-  document.documentElement.dataset.theme = getThemeMode(settings.theme);
-  document.documentElement.style.setProperty(
-    "--accent-color",
-    getThemeAccentHex(settings.theme),
-  );
+  const root = document.documentElement;
+  root.dataset.theme = getThemeMode(settings.theme);
+  root.style.setProperty("--accent-color", getThemeAccentHex(settings.theme));
+  applyThemeSyntaxPalette(settings.theme, root);
 }
 
 function createStateStore() {

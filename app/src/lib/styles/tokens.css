@@ -45,7 +45,8 @@
   --color-statusbar-bg: #ebeff6;
   --color-pressed: rgb(20 71 170 / 18%);
 
-  --syntax-keyword: #a626a4;
+  /* Fallbacks before theme JS runs; overridden by applyThemeSyntaxPalette */
+  --syntax-keyword: var(--color-accent);
   --syntax-string: #50a14f;
   --syntax-comment: #a0a1a7;
   --syntax-number: #986801;
@@ -71,7 +72,8 @@
   --color-statusbar-bg: #101620;
   --color-pressed: rgb(89 152 243 / 26%);
 
-  --syntax-keyword: #c678dd;
+  /* Fallbacks before theme JS runs; overridden by applyThemeSyntaxPalette */
+  --syntax-keyword: var(--color-accent);
   --syntax-string: #98c379;
   --syntax-comment: #5c6370;
   --syntax-number: #d19a66;

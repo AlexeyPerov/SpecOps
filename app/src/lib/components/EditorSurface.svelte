@@ -40,7 +40,7 @@
   export let wrapLines = false;
   export let zoomPercent = 100;
   export let language: EditorLanguageId = "plaintext";
-  export let decoratePlaintextSymbols = false;
+  export let decoratePlaintextSymbols = true;
   export let onStatusMessage: (message: string) => void = () => {};
   export let onDocumentDirty: (nextContent: string) => void = () => {};
   export let onScrollTopChange: (documentId: string, scrollTop: number) => void = () => {};

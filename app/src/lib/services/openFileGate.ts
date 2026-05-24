@@ -34,6 +34,7 @@ export async function requestOpenPath(
   const existingDocumentId = appState.findDocumentIdByPath(path);
   if (existingDocumentId) {
     appState.selectOrReopenTabForDocument(existingDocumentId);
+    appState.touchRecentFile(path);
     await claimOpenFile(path, windowId, existingDocumentId);
     return { kind: "existing", path: normalized, documentId: existingDocumentId };
   }

@@ -7,12 +7,14 @@
     dispatchMenuCommand,
     initializeAppMenu,
     keymapCommandForEvent,
+    refreshOpenRecentMenu,
   } from "../lib/commands/registry";
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
-  import { openPath } from "../lib/services/fileSystem";
+  import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
+  import { listenForRecentFilesChanges } from "../lib/services/recentFilesSync";
   import { listen, TauriEvent } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -30,8 +32,6 @@
   } from "../lib/services/sessionManager";
   import { applyWindowBounds, readWindowBounds } from "../lib/services/windowBounds";
   import {
-    completeOpenPath,
-    requestOpenPath,
     selectTabForNormalizedPath,
   } from "../lib/services/openFileGate";
   import {
@@ -251,23 +251,8 @@
   }
 
   async function openAndActivatePath(path: string): Promise<void> {
-    const gateResult = await requestOpenPath(path, currentWindowId);
-    if (gateResult.kind === "redirected") {
-      notify(`Switched to ${path} in another window.`);
-      return;
-    }
-    if (gateResult.kind === "existing") {
-      notify(`Opened ${path}`);
-      return;
-    }
-
-    const opened = await openPath(path);
-    if (opened.sizeBytes > 10 * 1024 * 1024) {
-      notify("Open failed: file exceeds 10MB MVP limit.");
-      return;
-    }
-    await completeOpenPath(opened.path, opened.content, currentWindowId);
-    notify(`Opened ${opened.path}`);
+    const result = await openActivePath(path, currentWindowId);
+    notify(describeOpenActivePathResult(result));
   }
 
   function watchedPathsFromState(appDomainState: AppDomainState): string[] {
@@ -344,24 +329,25 @@
       await openDroppedPaths(event.payload.paths);
     });
 
-    await initializeAppMenu(runCommand);
     await markWindowActive(currentWindowId);
 
     const restoredSession = await restoreWindowSession(currentWindowId);
     if (restoredSession) {
-      appState.applyWindowSession(restoredSession);
+      appState.applyWindowSession(restoredSession.snapshot, restoredSession.recentFiles);
       appState.normalizeUntitledTitles();
       await syncOpenFileRegistryForWindow(currentWindowId, appState.getSnapshot());
-      if (restoredSession.session.windowBounds) {
+      if (restoredSession.snapshot.session.windowBounds) {
         applyingWindowBounds = true;
         try {
-          await applyWindowBounds(currentWindow, restoredSession.session.windowBounds);
+          await applyWindowBounds(currentWindow, restoredSession.snapshot.session.windowBounds);
         } finally {
           applyingWindowBounds = false;
         }
       }
       statusMessage = "Session restored.";
     }
+
+    await initializeAppMenu(runCommand, appState.getSnapshot().recentFiles);
 
     const persistedSettings = await loadPersistedSettings();
     if (persistedSettings) {
@@ -397,6 +383,10 @@
         await runWatcherExternalCheck(event.payload.path);
       },
     );
+
+    const unlistenRecentFiles = await listenForRecentFilesChanges((recentFiles) => {
+      void refreshOpenRecentMenu(recentFiles);
+    });
 
     const unlistenActivate = await listen<{ path: string }>(WINDOW_EVENT_ACTIVATE_FILE, async (event) => {
       try {
@@ -469,6 +459,7 @@
 
     return () => {
       runtimeReady = false;
+      unlistenRecentFiles();
       unlistenActivate();
       unlistenSelectTab();
       unlistenOpenedPaths();
@@ -816,7 +807,6 @@
           </label>
         {/each}
       </section>
-      <p>Recent files: {state.recentFiles.length}</p>
       <section class="settings-section">
         <h3>External files</h3>
         <label class="settings-toggle">

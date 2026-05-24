@@ -27,6 +27,7 @@ async function readSessionSnapshot(): Promise<AppSessionSnapshot | null> {
     return {
       ...parsed,
       openFileRegistry: parsed.openFileRegistry ?? {},
+      recentFiles: parsed.recentFiles ?? [],
     };
   } catch {
     return null;
@@ -51,6 +52,7 @@ export async function writeOpenFileRegistry(registry: OpenFileRegistry): Promise
       updatedAt: new Date().toISOString(),
       lastActiveWindowId: "main",
       openFileRegistry: {},
+      recentFiles: [],
       windows: {},
     } satisfies AppSessionSnapshot);
 

@@ -12,6 +12,8 @@ import type {
 } from "../domain/contracts";
 import { inferEditorLanguage } from "../editor/editorLanguage";
 import { normalizePathSync } from "../services/diskFingerprint";
+import { bumpRecentFile } from "../services/recentFiles";
+import { commitRecentFiles } from "../services/recentFilesSync";
 import type { AppTheme } from "../styles/themes";
 import {
   APP_THEME_IDS,
@@ -313,7 +315,7 @@ function createStateStore() {
       set(initialState);
       applyTheme(initialState.settings);
     },
-    applyWindowSession(snapshot: WindowSessionSnapshot) {
+    applyWindowSession(snapshot: WindowSessionSnapshot, recentFiles: string[] = []) {
       docCounter = Math.max(
         1,
         ...snapshot.documents.map((documentState) =>
@@ -333,7 +335,7 @@ function createStateStore() {
           windowBounds: snapshot.session.windowBounds ?? null,
         },
         settings: defaultSettings,
-        recentFiles: snapshot.recentFiles,
+        recentFiles,
         editor: {
           ...snapshot.editor,
           findReplaceOpen: false,
@@ -342,6 +344,23 @@ function createStateStore() {
         },
       });
       applyTheme(defaultSettings);
+    },
+    replaceRecentFiles(recentFiles: string[]) {
+      update((state) => ({ ...state, recentFiles }));
+    },
+    touchRecentFile(filePath: string) {
+      const recentFiles = bumpRecentFile(this.getSnapshot().recentFiles, filePath);
+      this.replaceRecentFiles(recentFiles);
+      void commitRecentFiles(recentFiles);
+    },
+    clearRecentFiles() {
+      this.replaceRecentFiles([]);
+      void commitRecentFiles([]);
+    },
+    removeRecentFile(filePath: string) {
+      const recentFiles = this.getSnapshot().recentFiles.filter((entry) => entry !== filePath);
+      this.replaceRecentFiles(recentFiles);
+      void commitRecentFiles(recentFiles);
     },
     createTab() {
       update((state) => {
@@ -539,7 +558,9 @@ function createStateStore() {
     },
     openFileInTab(filePath: string, content: string): string {
       let openedDocumentId = "";
+      let recentFiles: string[] = [];
       update((state) => {
+        recentFiles = bumpRecentFile(state.recentFiles, filePath);
         const duplicate = findDocumentByPath(state, filePath);
         if (duplicate) {
           openedDocumentId = duplicate.id;
@@ -547,9 +568,15 @@ function createStateStore() {
             (tab) => tab.documentId === duplicate.id,
           );
           if (existingTab) {
-            return selectTabInternal(state, existingTab.id);
+            return {
+              ...selectTabInternal(state, existingTab.id),
+              recentFiles,
+            };
           }
-          return reopenTabForDocument(state, duplicate.id);
+          return {
+            ...reopenTabForDocument(state, duplicate.id),
+            recentFiles,
+          };
         }
 
         docCounter += 1;
@@ -561,10 +588,6 @@ function createStateStore() {
           { id: docId, filePath },
           content,
           basename(filePath),
-        );
-        const recentFiles = [filePath, ...state.recentFiles.filter((entry) => entry !== filePath)].slice(
-          0,
-          15,
         );
 
         return {
@@ -578,6 +601,7 @@ function createStateStore() {
           },
         };
       });
+      void commitRecentFiles(recentFiles);
       return openedDocumentId;
     },
     transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
@@ -703,6 +727,7 @@ function createStateStore() {
       });
     },
     markDocumentSaved(documentId: string, filePath: string | null, content: string) {
+      let recentFiles: string[] = [];
       update((state) => {
         const documents = state.documents.map((documentState) => {
           if (documentState.id !== documentId) {
@@ -722,12 +747,15 @@ function createStateStore() {
             fileMissing: false,
           };
         });
-        const recentFiles =
+        recentFiles =
           filePath === null
             ? state.recentFiles
-            : [filePath, ...state.recentFiles.filter((entry) => entry !== filePath)].slice(0, 15);
+            : bumpRecentFile(state.recentFiles, filePath);
         return { ...state, documents, recentFiles };
       });
+      if (filePath !== null) {
+        void commitRecentFiles(recentFiles);
+      }
     },
     applyDocumentDiskReload(
       documentId: string,
@@ -792,6 +820,7 @@ function createStateStore() {
       }));
     },
     renameDocument(documentId: string, filePath: string, title: string) {
+      let recentFiles: string[] = [];
       update((state) => {
         const documents = state.documents.map((documentState) => {
           if (documentState.id !== documentId) {
@@ -804,9 +833,10 @@ function createStateStore() {
             language: inferLanguage(filePath),
           };
         });
-        const recentFiles = [filePath, ...state.recentFiles.filter((entry) => entry !== filePath)].slice(0, 15);
+        recentFiles = bumpRecentFile(state.recentFiles, filePath);
         return { ...state, documents, recentFiles };
       });
+      void commitRecentFiles(recentFiles);
     },
     setCursor(line: number, column: number) {
       update((state) => ({

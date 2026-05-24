@@ -234,10 +234,12 @@ describe("appState documents and paths", () => {
 
   it("openFileInTab selects an existing document for duplicate paths", () => {
     appState.openFileInTab("/tmp/dup.txt", "first");
+    appState.openFileInTab("/tmp/other.txt", "other");
     appState.openFileInTab("/tmp/dup.txt", "second");
     const snapshot = appState.getSnapshot();
     expect(snapshot.documents.filter((doc) => doc.filePath === "/tmp/dup.txt")).toHaveLength(1);
     expect(snapshot.session.selectedTabId).toBe("tab-2");
+    expect(snapshot.recentFiles[0]).toBe("/tmp/dup.txt");
   });
 
   it("findDocumentIdByPath returns null for untitled documents", () => {

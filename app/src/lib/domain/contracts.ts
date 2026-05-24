@@ -69,6 +69,8 @@ export type AppCommandId =
   | "view.toggleDiffPreview"
   | "file.new"
   | "file.open"
+  | "file.openRecent"
+  | "file.clearRecentFiles"
   | "file.save"
   | "file.saveAs"
   | "file.saveAll"
@@ -139,7 +141,6 @@ export interface AppDomainState {
 export interface WindowSessionSnapshot {
   documents: DocumentState[];
   session: SessionState;
-  recentFiles: string[];
   editor: AppDomainState["editor"];
 }
 
@@ -148,5 +149,11 @@ export interface AppSessionSnapshot {
   updatedAt: string;
   lastActiveWindowId: string;
   openFileRegistry: OpenFileRegistry;
+  recentFiles: string[];
   windows: Record<string, WindowSessionSnapshot>;
+}
+
+export interface RestoredWindowSession {
+  snapshot: WindowSessionSnapshot;
+  recentFiles: string[];
 }

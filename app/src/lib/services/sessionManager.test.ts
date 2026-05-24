@@ -55,7 +55,6 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
       lastActiveWindowId: "win-a",
       windowBounds: null,
     },
-    recentFiles: ["/tmp/restored.txt"],
     editor: {
       cursorLine: 1,
       cursorColumn: 1,
@@ -75,6 +74,7 @@ function sessionWithWindow(windowId: string, snapshot: WindowSessionSnapshot): A
     updatedAt: new Date().toISOString(),
     lastActiveWindowId: windowId,
     openFileRegistry: {},
+    recentFiles: ["/tmp/restored.txt"],
     windows: {
       [windowId]: snapshot,
     },
@@ -147,7 +147,8 @@ describe("restoreWindowSession", () => {
     sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
 
     const restored = await sessionManager.restoreWindowSession("win-a");
-    expect(restored?.documents[0]?.content).toBe("saved");
+    expect(restored?.snapshot.documents[0]?.content).toBe("saved");
+    expect(restored?.recentFiles).toEqual(["/tmp/restored.txt"]);
   });
 
   it("falls back to backup when primary session is corrupt", async () => {
@@ -167,7 +168,7 @@ describe("restoreWindowSession", () => {
     });
 
     const restored = await sessionManager.restoreWindowSession("win-a");
-    expect(restored?.session.selectedTabId).toBe("tab-1");
+    expect(restored?.snapshot.session.selectedTabId).toBe("tab-1");
   });
 
   it("returns null when both primary and backup fail", async () => {
@@ -181,6 +182,7 @@ describe("restoreWindowSession", () => {
       updatedAt: new Date().toISOString(),
       lastActiveWindowId: "win-a",
       openFileRegistry: {},
+      recentFiles: [],
       windows: {},
     });
     sessionMock.readTextFile.mockResolvedValue(JSON.stringify({ version: 2, windows: {} }));
@@ -203,6 +205,45 @@ describe("persistSessionSnapshot", () => {
       "/data/spec-ops/session.backup.json",
       expect.any(String),
     );
+  });
+
+  it("preserves global recent files when persisting a window snapshot", async () => {
+    const initial = {
+      ...sessionWithWindow("win-a", windowSnapshot()),
+      recentFiles: ["/tmp/global.txt"],
+    };
+    sessionMock.readTextFile.mockImplementation(async (path: string) => {
+      if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
+        return JSON.stringify(initial);
+      }
+      throw new Error(`unexpected read: ${path}`);
+    });
+
+    await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
+
+    expect(sessionMock.getSessionStore()?.recentFiles).toEqual(["/tmp/global.txt"]);
+  });
+});
+
+describe("persistGlobalRecentFiles", () => {
+  it("updates only the global recent file list", async () => {
+    const initial = sessionWithWindow("win-a", windowSnapshot());
+    sessionMock.readTextFile.mockImplementation(async (path: string) => {
+      if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
+        return JSON.stringify(initial);
+      }
+      throw new Error(`unexpected read: ${path}`);
+    });
+    sessionMock.writeTextFile.mockClear();
+
+    await sessionManager.persistGlobalRecentFiles(["/tmp/a.txt", "/tmp/b.txt"]);
+
+    const sessionWriteCall = sessionMock.writeTextFile.mock.calls.find((call) =>
+      String(call[0]).endsWith("/session.json"),
+    );
+    const written = JSON.parse(String(sessionWriteCall?.[1] ?? "{}"));
+    expect(written.recentFiles).toEqual(["/tmp/a.txt", "/tmp/b.txt"]);
+    expect(written.windows["win-a"]?.session.selectedTabId).toBe("tab-1");
   });
 });
 

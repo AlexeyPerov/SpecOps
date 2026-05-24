@@ -75,7 +75,6 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
       lastActiveWindowId: "win-a",
       windowBounds: null,
     },
-    recentFiles: [],
     editor: {
       cursorLine: 1,
       cursorColumn: 1,
@@ -95,6 +94,7 @@ function emptySession(): AppSessionSnapshot {
     updatedAt: new Date().toISOString(),
     lastActiveWindowId: "main",
     openFileRegistry: {},
+    recentFiles: [],
     windows: {},
   };
 }

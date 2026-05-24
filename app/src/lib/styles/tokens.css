@@ -54,6 +54,8 @@
   --syntax-link: #4078f2;
   --syntax-markup: #0184bc;
   --syntax-punctuation: #383a42;
+  --color-search-match: rgba(255, 200, 0, 0.45);
+  --color-search-match-current: rgba(255, 150, 50, 0.75);
 }
 
 :root[data-theme="dark"] {
@@ -78,6 +80,8 @@
   --syntax-link: #61afef;
   --syntax-markup: #56b6c2;
   --syntax-punctuation: #abb2bf;
+  --color-search-match: rgba(255, 200, 0, 0.28);
+  --color-search-match-current: rgba(255, 150, 50, 0.55);
 }
 
 *,
@@ -124,4 +128,15 @@ body {
 
 :root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
   background: rgb(151 169 196 / 82%);
+}
+
+.cm-search-match {
+  background-color: var(--color-search-match);
+  border-radius: 2px;
+}
+
+.cm-search-match-current {
+  background-color: var(--color-search-match-current);
+  border-radius: 2px;
+  outline: 1px solid var(--color-search-match-current);
 }

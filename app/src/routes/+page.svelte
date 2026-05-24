@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import EditorSurface from "../lib/components/EditorSurface.svelte";
+  import FindReplacePanel from "../lib/components/FindReplacePanel.svelte";
   import TabBar from "../lib/components/TabBar.svelte";
   import {
     dispatchMenuCommand,
@@ -487,6 +488,12 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
+    const command = keymapCommandForEvent(event);
+    if (command === "app.toggleFindReplace") {
+      event.preventDefault();
+      runCommand(command);
+      return;
+    }
     if (
       (event.target as HTMLElement | null)?.closest(
         "input, textarea, [contenteditable=true]",
@@ -494,43 +501,12 @@
     ) {
       return;
     }
-    const command = keymapCommandForEvent(event);
     if (!command) {
       return;
     }
 
     event.preventDefault();
     runCommand(command);
-  }
-
-  function runFindNext(): void {
-    if (!findQuery.trim()) {
-      notify("Find query cannot be empty.");
-      return;
-    }
-    const found = editorRunner?.findNext(findQuery, findCaseSensitive) ?? false;
-    notify(found ? "Match selected." : "No match found.");
-  }
-
-  function runReplaceCurrent(): void {
-    if (!findQuery.trim()) {
-      notify("Find query cannot be empty.");
-      return;
-    }
-    const replaced =
-      editorRunner?.replaceCurrent(findQuery, replaceValue, findCaseSensitive) ??
-      false;
-    notify(replaced ? "Selection replaced." : "Current selection does not match.");
-  }
-
-  function runReplaceAll(): void {
-    if (!findQuery.trim()) {
-      notify("Find query cannot be empty.");
-      return;
-    }
-    const count =
-      editorRunner?.replaceAll(findQuery, replaceValue, findCaseSensitive) ?? 0;
-    notify(`Replaced ${count} occurrence(s).`);
   }
 
   function runGoToLine(): void {
@@ -800,23 +776,14 @@
     {/if}
 
     {#if state.editor.findReplaceOpen}
-      <div class="floating-tool">
-        <h3>Find / Replace</h3>
-        <input placeholder="Find..." bind:value={findQuery} />
-        <input placeholder="Replace..." bind:value={replaceValue} />
-        <label class="tool-checkbox">
-          <input type="checkbox" bind:checked={findCaseSensitive} />
-          Case sensitive
-        </label>
-        <div class="tool-actions">
-          <button type="button" class="toolbar-button" onclick={runFindNext}>Find Next</button>
-          <button type="button" class="toolbar-button" onclick={runReplaceCurrent}>Replace</button>
-          <button type="button" class="toolbar-button" onclick={runReplaceAll}>Replace All</button>
-          <button type="button" class="toolbar-button" onclick={() => appState.setFindReplaceOpen(false)}>
-            Close
-          </button>
-        </div>
-      </div>
+      <FindReplacePanel
+        bind:findQuery
+        bind:replaceValue
+        bind:findCaseSensitive
+        {editorRunner}
+        {notify}
+        documentId={activeDocument?.id ?? null}
+      />
     {/if}
 
     {#if state.editor.goToOpen}
@@ -1131,19 +1098,16 @@
     position: absolute;
     top: var(--space-12);
     left: var(--space-12);
-    width: 340px;
     border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-overlay);
+    background: var(--color-surface-1);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-overlay);
-    backdrop-filter: blur(var(--blur-overlay));
     padding: var(--space-8);
     display: grid;
     gap: var(--space-6);
   }
 
   .goto-tool {
-    left: 370px;
     width: 240px;
   }
 

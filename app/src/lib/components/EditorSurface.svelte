@@ -18,6 +18,12 @@
   import { getLanguageSupport, loadLanguageSupport } from "../editor/editorLanguage";
   import type { EditorLanguageId } from "../editor/editorLanguage";
   import { createPlaintextSymbolDecorations } from "../editor/plaintextDecorations";
+  import {
+    createSearchHighlightExtension,
+    findAllMatches,
+    searchHighlightCompartment,
+  } from "../editor/searchHighlight";
+  import type { MatchInfo } from "../types/editor";
 
   let hostEl: HTMLDivElement | undefined;
   let view: EditorView | undefined;
@@ -302,7 +308,7 @@
     let index = 0;
     let count = 0;
     const changes: { from: number; to: number; insert: string }[] = [];
-    while (index <= haystack.length) {
+    while (index < haystack.length) {
       const found = haystack.indexOf(needle, index);
       if (found === -1) break;
       changes.push({ from: found, to: found + query.length, insert: replacement });
@@ -314,6 +320,78 @@
       updateCursor();
     }
     return count;
+  }
+
+  function findPrevious(query: string, caseSensitive: boolean): boolean {
+    if (!view || query.length === 0) {
+      return false;
+    }
+    const doc = view.state.doc.toString();
+    const haystack = normalizeForSearch(doc, caseSensitive);
+    const needle = normalizeForSearch(query, caseSensitive);
+    const from = view.state.selection.main.from;
+
+    let idx = from > 0 ? haystack.lastIndexOf(needle, from - 1) : -1;
+    if (idx === -1) {
+      idx = haystack.lastIndexOf(needle);
+    }
+    if (idx === -1) {
+      return false;
+    }
+    view.dispatch({
+      selection: EditorSelection.range(idx, idx + query.length),
+      scrollIntoView: true,
+    });
+    updateCursor();
+    return true;
+  }
+
+  function replaceAndFindNext(
+    query: string,
+    replacement: string,
+    caseSensitive: boolean,
+  ): boolean {
+    if (!view || query.length === 0) {
+      return false;
+    }
+    const sel = view.state.selection.main;
+    const selectedText = view.state.sliceDoc(sel.from, sel.to);
+    if (
+      normalizeForSearch(selectedText, caseSensitive) ===
+      normalizeForSearch(query, caseSensitive)
+    ) {
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: replacement },
+        selection: EditorSelection.range(sel.from, sel.from + replacement.length),
+        userEvent: "input",
+      });
+    }
+    return findNext(query, caseSensitive);
+  }
+
+  function setSearchQuery(query: string, caseSensitive: boolean): void {
+    if (!view) return;
+    view.dispatch({
+      effects: searchHighlightCompartment.reconfigure(
+        query ? [createSearchHighlightExtension(query, caseSensitive)] : [],
+      ),
+    });
+  }
+
+  function getMatchInfo(query: string, caseSensitive: boolean): MatchInfo {
+    if (!view || query.length === 0) return { total: 0, current: 0 };
+    const doc = view.state.doc.toString();
+    const matches = findAllMatches(doc, query, caseSensitive);
+    if (matches.length === 0) return { total: 0, current: 0 };
+    const sel = view.state.selection.main;
+    let current = 0;
+    for (let i = 0; i < matches.length; i++) {
+      if (matches[i].from === sel.from && matches[i].to === sel.to) {
+        current = i + 1;
+        break;
+      }
+    }
+    return { total: matches.length, current };
   }
 
   function goToLine(line: number): boolean {
@@ -352,6 +430,7 @@
         languageCompartment.of(getLanguageSupport(language) ?? []),
         highlightCompartment.of(createSyntaxHighlightExtension()),
         decorationCompartment.of([]),
+        searchHighlightCompartment.of([]),
         EditorView.theme({
           "&": {
             height: "100%",
@@ -428,8 +507,12 @@
       setWrap: (value) => applyWrap(value),
       setZoom: (zoom) => applyZoom(zoom),
       findNext,
+      findPrevious,
       replaceCurrent,
+      replaceAndFindNext,
       replaceAll,
+      setSearchQuery,
+      getMatchInfo,
       goToLine,
     });
   });

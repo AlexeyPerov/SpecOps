@@ -83,6 +83,13 @@
   let findCaseSensitive = false;
   let goToLineValue = "";
   let markdownViewMode: "edit" | "split" | "preview" = "edit";
+  let preferredMarkdownViewMode: "edit" | "split" | "preview" = "edit";
+  let previousActiveContextId: ContextId | null = null;
+  let shellMainRowEl: HTMLDivElement | null = null;
+  let editorPaneEl: HTMLElement | null = null;
+  let shellMainRowWidth = 0;
+  let editorPaneWidth = 0;
+  let layoutResizeObserver: ResizeObserver | null = null;
   let markdownEditorPaneEl: HTMLDivElement | null = null;
   let markdownPreviewPaneEl: HTMLDivElement | null = null;
   let splitScrollCleanup: (() => void) | null = null;
@@ -102,6 +109,7 @@
   let projectTreeExpandedPaths = new Set<string>();
   let projectTreeLoadingPaths = new Set<string>();
   let projectTreeShowHidden = false;
+  const MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
 
   $: state = $appState;
   $: activeContextId = state.contexts.activeContextId;
@@ -273,15 +281,62 @@
     consoleOpen = !consoleOpen;
   }
 
+  function canFitMarkdownSplit(): boolean {
+    return editorPaneWidth >= MARKDOWN_SPLIT_MIN_EDITOR_WIDTH;
+  }
+
+  function setMarkdownViewMode(nextMode: "edit" | "split" | "preview"): void {
+    preferredMarkdownViewMode = nextMode;
+    if (nextMode === "split" && !canFitMarkdownSplit()) {
+      markdownViewMode = "edit";
+      return;
+    }
+    markdownViewMode = nextMode;
+  }
+
+  function updateLayoutMeasurements(): void {
+    shellMainRowWidth = shellMainRowEl?.clientWidth ?? 0;
+    editorPaneWidth = editorPaneEl?.clientWidth ?? 0;
+  }
+
+  function applyResponsiveLayoutRules(): void {
+    const workspaceActive = Boolean(activeWorkspaceRoot);
+    const shouldAutoCollapsePanel =
+      shellMainRowWidth > 0 &&
+      shellMainRowWidth < 1100 &&
+      workspaceActive &&
+      !state.editor.projectPanelCollapsed;
+    if (shouldAutoCollapsePanel) {
+      appState.setProjectPanelCollapsed(true);
+    }
+
+    const projectPanelCollapsed = state.editor.projectPanelCollapsed || shouldAutoCollapsePanel;
+    if (shellMainRowWidth > 0 && shellMainRowWidth < 900 && projectPanelCollapsed) {
+      consoleOpen = false;
+    }
+  }
+
+  function handleActiveContextSwitch(nextContextId: ContextId): void {
+    if (previousActiveContextId === null) {
+      previousActiveContextId = nextContextId;
+      return;
+    }
+    if (previousActiveContextId === nextContextId) {
+      return;
+    }
+    previousActiveContextId = nextContextId;
+    consoleOpen = false;
+    setMarkdownViewMode("edit");
+    closeWorkspaceContextMenu();
+    void loadProjectTreeRoot();
+  }
+
   function handleSelectContext(contextId: ContextId): void {
     const switched = appState.switchContext(contextId);
     if (!switched) {
       return;
     }
-    consoleOpen = false;
-    markdownViewMode = "edit";
     closeWorkspaceContextMenu();
-    void loadProjectTreeRoot();
   }
 
   function handleAddWorkspace(): void {
@@ -352,7 +407,7 @@
     if (closed) {
       notify("Workspace closed.");
       consoleOpen = false;
-      markdownViewMode = "edit";
+      setMarkdownViewMode("edit");
       void loadProjectTreeRoot();
     }
     closeWorkspaceContextMenu();
@@ -728,6 +783,30 @@
 
   onMount(() => {
     let runtimeCleanup: (() => void) | undefined;
+    let resizeObserverDisconnected = false;
+
+    const setupLayoutObserver = (): void => {
+      updateLayoutMeasurements();
+      if (typeof ResizeObserver === "undefined") {
+        return;
+      }
+      layoutResizeObserver = new ResizeObserver(() => {
+        updateLayoutMeasurements();
+      });
+      if (shellMainRowEl) {
+        layoutResizeObserver.observe(shellMainRowEl);
+      }
+      if (editorPaneEl) {
+        layoutResizeObserver.observe(editorPaneEl);
+      }
+    };
+
+    void tick().then(() => {
+      if (!resizeObserverDisconnected) {
+        setupLayoutObserver();
+      }
+    });
+
     void setupRuntime()
       .then((cleanup) => {
         runtimeCleanup = cleanup;
@@ -774,6 +853,9 @@
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("dragover", preventBrowserDragOver);
     return () => {
+      resizeObserverDisconnected = true;
+      layoutResizeObserver?.disconnect();
+      layoutResizeObserver = null;
       if (untitledTitleDebounceTimer) {
         clearTimeout(untitledTitleDebounceTimer);
         untitledTitleDebounceTimer = null;
@@ -785,16 +867,26 @@
     };
   });
 
+  $: if (activeContextId) {
+    handleActiveContextSwitch(activeContextId);
+  }
+
+  $: applyResponsiveLayoutRules();
+
   $: if (isMarkdownDocument && activeDocument) {
     if (lastMarkdownDocumentId !== activeDocument.id) {
-      markdownViewMode = "edit";
+      setMarkdownViewMode("edit");
       lastMarkdownDocumentId = activeDocument.id;
     }
   }
 
   $: if (!isMarkdownDocument) {
-    markdownViewMode = "edit";
+    setMarkdownViewMode("edit");
     lastMarkdownDocumentId = null;
+  }
+
+  $: if (isMarkdownDocument && preferredMarkdownViewMode === "split") {
+    markdownViewMode = canFitMarkdownSplit() ? "split" : "edit";
   }
 
   $: if (isMarkdownDocument && markdownViewMode === "split") {
@@ -846,7 +938,7 @@
 </script>
 
 <main class="shell">
-  <div class="shell-main-row">
+  <div class="shell-main-row" bind:this={shellMainRowEl}>
     {#if showActivityRail}
       <ActivityRail
         workspaces={workspaces}
@@ -882,7 +974,7 @@
     </div>
       </header>
 
-      <section class="editor-pane">
+      <section class="editor-pane" bind:this={editorPaneEl}>
     {#if state.editor.previewMode === "editor"}
       {#if isMarkdownDocument}
         <div class="markdown-layout">
@@ -891,21 +983,21 @@
               <button
                 class={`mode-button ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
                 type="button"
-                onclick={() => (markdownViewMode = "edit")}
+                onclick={() => setMarkdownViewMode("edit")}
               >
                 edit
               </button>
               <button
                 class={`mode-button ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
                 type="button"
-                onclick={() => (markdownViewMode = "split")}
+                onclick={() => setMarkdownViewMode("split")}
               >
                 split
               </button>
               <button
                 class={`mode-button ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
                 type="button"
-                onclick={() => (markdownViewMode = "preview")}
+                onclick={() => setMarkdownViewMode("preview")}
               >
                 preview
               </button>

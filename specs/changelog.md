@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-05-24 22:47 (UTC+3)
+
+- **Workspaces M5 shell behavior:** Updated `app/src/routes/+page.svelte` to close console on any active context change (including non-rail/routing-driven switches) by watching `activeContextId` transitions centrally.
+- **Responsive shell rules:** Added `ResizeObserver`-driven width tracking for shell middle row and editor pane; auto-collapses project panel under 1100px when workspace context is active, and auto-closes console under 900px once the panel is collapsed.
+- **Markdown split fallback:** Introduced `setMarkdownViewMode` + preferred mode tracking with measured editor-width gating (`760px` threshold), forcing split requests to `edit` when space is insufficient and automatically restoring split once width recovers.
+
 ## 2026-05-24 22:40 (UTC+3)
 
 - **Workspaces M4 project panel:** Added lazy project-tree service (`projectTree.ts`) with one-call directory loading, folders-first alphabetical sorting, hidden-file toggle behavior, symlink skipping, and openable-file filtering aligned with existing folder-open rules.

@@ -403,3 +403,115 @@ describe("appState settings and editor chrome", () => {
     expect(editor.projectPanelCollapsed).toBe(true);
   });
 });
+
+describe("appState session restore", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("restores active workspace context, order, tabs, and project panel state", () => {
+    appState.applyWindowSession(
+      {
+        activeContextId: "ws-2",
+        notepad: {
+          documents: [
+            {
+              id: "doc-1",
+              filePath: "/tmp/notepad.md",
+              title: "notepad.md",
+              content: "notepad",
+              savedContent: "notepad",
+              isDirty: false,
+              language: "markdown",
+              encoding: "utf-8",
+              lineEnding: "lf",
+              diskFingerprint: null,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              scrollTop: 0,
+            },
+          ],
+          session: {
+            selectedTabId: "tab-1",
+            openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+            lastActiveWindowId: "main",
+            windowBounds: null,
+          },
+        },
+        workspaces: [
+          {
+            id: "ws-1",
+            rootPath: "/tmp/ws-one",
+            snapshot: {
+              documents: [
+                {
+                  id: "doc-2",
+                  filePath: "/tmp/ws-one/a.ts",
+                  title: "a.ts",
+                  content: "export const a = 1;",
+                  savedContent: "export const a = 1;",
+                  isDirty: false,
+                  language: "typescript",
+                  encoding: "utf-8",
+                  lineEnding: "lf",
+                  diskFingerprint: null,
+                  dismissedFingerprint: null,
+                  fileMissing: false,
+                  scrollTop: 0,
+                },
+              ],
+              session: {
+                selectedTabId: "tab-2",
+                openTabs: [{ id: "tab-2", documentId: "doc-2", pinned: false }],
+                lastActiveWindowId: "main",
+                windowBounds: null,
+              },
+            },
+          },
+          {
+            id: "ws-2",
+            rootPath: "/tmp/ws-two",
+            snapshot: {
+              documents: [
+                {
+                  id: "doc-3",
+                  filePath: "/tmp/ws-two/b.ts",
+                  title: "b.ts",
+                  content: "export const b = 2;",
+                  savedContent: "export const b = 2;",
+                  isDirty: false,
+                  language: "typescript",
+                  encoding: "utf-8",
+                  lineEnding: "lf",
+                  diskFingerprint: null,
+                  dismissedFingerprint: null,
+                  fileMissing: false,
+                  scrollTop: 0,
+                },
+              ],
+              session: {
+                selectedTabId: "tab-3",
+                openTabs: [{ id: "tab-3", documentId: "doc-3", pinned: false }],
+                lastActiveWindowId: "main",
+                windowBounds: null,
+              },
+            },
+          },
+        ],
+        editorPreferences: {
+          zoomPercent: 120,
+          wrapLines: false,
+          projectPanelCollapsed: true,
+        },
+      },
+      ["/tmp/notepad.md"],
+    );
+
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.contexts.activeContextId).toBe("ws-2");
+    expect(snapshot.contexts.workspaces.map((workspace) => workspace.id)).toEqual(["ws-1", "ws-2"]);
+    expect(snapshot.session.selectedTabId).toBe("tab-3");
+    expect(snapshot.documents[0]?.filePath).toBe("/tmp/ws-two/b.ts");
+    expect(snapshot.editor.projectPanelCollapsed).toBe(true);
+  });
+});

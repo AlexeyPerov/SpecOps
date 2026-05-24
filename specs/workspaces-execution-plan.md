@@ -509,7 +509,7 @@ Dependencies: M4-5.
 
 ## Milestone 5 — Console, layout, and session polish
 
-#### Task M5-1: Console close on context switch [Score:3] [Agent:easy]
+#### Task M5-1: Console close on context switch [Score:3] [Agent:easy] [DONE]
 
 **Required context**
 
@@ -529,7 +529,7 @@ Dependencies: M2-4, M4-6.
 
 ---
 
-#### Task M5-2: Responsive narrow-window layout [Score:5] [Agent:medium]
+#### Task M5-2: Responsive narrow-window layout [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -552,7 +552,7 @@ Dependencies: M5-1.
 
 ---
 
-#### Task M5-3: End-to-end session restore [Score:6] [Agent:medium]
+#### Task M5-3: End-to-end session restore [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -593,7 +593,7 @@ Dependencies: M5-3. **Optional** — not required for Workspaces v1 ship; run af
 
 ---
 
-#### Task M5-4: Validation and documentation [Score:4] [Agent:easy]
+#### Task M5-4: Validation and documentation [Score:4] [Agent:easy] [DONE]
 
 **Required context**
 

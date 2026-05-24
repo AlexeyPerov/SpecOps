@@ -22,6 +22,8 @@
   --settings-pane-width: 385px;
   --activity-rail-width: 48px;
   --editor-min-width: 400px;
+  --project-panel-width: 240px;
+  --tree-indent: 14px;
 
   --radius-sm: 6px;
   --radius-md: 10px;

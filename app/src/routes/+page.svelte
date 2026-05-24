@@ -5,6 +5,7 @@
   import FindReplacePanel from "../lib/components/FindReplacePanel.svelte";
   import TabBar from "../lib/components/TabBar.svelte";
   import ActivityRail from "../lib/components/ActivityRail.svelte";
+  import ProjectPanel from "../lib/components/ProjectPanel.svelte";
   import {
     dispatchMenuCommand,
     initializeAppMenu,
@@ -67,6 +68,8 @@
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
   import { APP_THEME_IDS, getThemeLabel, getThemeAccentHex } from "../lib/styles/themes";
   import type { AppTheme } from "../lib/styles/themes";
+  import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
+  import { normalizePathSync } from "../lib/services/diskFingerprint";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -94,10 +97,17 @@
     | { workspaceId: ContextId; x: number; y: number }
     | null = null;
   let workspaceContextMenuEl: HTMLDivElement | null = null;
+  let projectTreeRootNodes: ProjectTreeNode[] = [];
+  let projectTreeChildrenByPath = new Map<string, ProjectTreeNode[]>();
+  let projectTreeExpandedPaths = new Set<string>();
+  let projectTreeLoadingPaths = new Set<string>();
+  let projectTreeShowHidden = false;
 
   $: state = $appState;
   $: activeContextId = state.contexts.activeContextId;
   $: workspaces = state.contexts.workspaces;
+  $: activeWorkspaceRoot = appState.getWorkspaceRoot();
+  $: showProjectPanel = Boolean(activeWorkspaceRoot) && !state.editor.projectPanelCollapsed;
   $: showActivityRail = !(
     state.settings.hideActivityRailWhenNotepadOnly &&
     state.contexts.workspaces.length === 0
@@ -118,6 +128,101 @@
       ? diffLines(activeDocument.savedContent, activeDocument.content)
       : [];
   $: statusPath = formatStatusPath(activeDocument?.filePath ?? null, activeDocument?.title);
+  $: activeDocumentPath = activeDocument?.filePath ? normalizePathSync(activeDocument.filePath) : null;
+
+  async function loadProjectTreeRoot(): Promise<void> {
+    if (!activeWorkspaceRoot) {
+      projectTreeRootNodes = [];
+      projectTreeChildrenByPath = new Map();
+      projectTreeExpandedPaths = new Set();
+      projectTreeLoadingPaths = new Set();
+      return;
+    }
+    projectTreeRootNodes = await loadDirectoryChildren(activeWorkspaceRoot, activeWorkspaceRoot, {
+      showHidden: projectTreeShowHidden,
+    });
+  }
+
+  async function loadProjectTreeChildren(directoryPath: string): Promise<void> {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    projectTreeLoadingPaths = new Set([...projectTreeLoadingPaths, directoryPath]);
+    try {
+      const children = await loadDirectoryChildren(activeWorkspaceRoot, directoryPath, {
+        showHidden: projectTreeShowHidden,
+      });
+      const next = new Map(projectTreeChildrenByPath);
+      next.set(directoryPath, children);
+      projectTreeChildrenByPath = next;
+    } finally {
+      const nextLoading = new Set(projectTreeLoadingPaths);
+      nextLoading.delete(directoryPath);
+      projectTreeLoadingPaths = nextLoading;
+    }
+  }
+
+  async function handleToggleProjectTreeDirectory(path: string): Promise<void> {
+    if (projectTreeExpandedPaths.has(path)) {
+      const next = new Set(projectTreeExpandedPaths);
+      next.delete(path);
+      projectTreeExpandedPaths = next;
+      return;
+    }
+    projectTreeExpandedPaths = new Set([...projectTreeExpandedPaths, path]);
+    if (!projectTreeChildrenByPath.has(path)) {
+      await loadProjectTreeChildren(path);
+    }
+  }
+
+  async function handleOpenProjectTreeFile(path: string): Promise<void> {
+    const result = await openActivePath(path, currentWindowId);
+    notify(describeOpenActivePathResult(result));
+  }
+
+  async function refreshProjectTree(): Promise<void> {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    const expanded = [...projectTreeExpandedPaths];
+    projectTreeChildrenByPath = new Map();
+    await loadProjectTreeRoot();
+    for (const path of expanded) {
+      await loadProjectTreeChildren(path);
+    }
+  }
+
+  function toggleProjectPanelCollapsed(next: boolean): void {
+    appState.setProjectPanelCollapsed(next);
+  }
+
+  async function toggleProjectTreeHidden(next: boolean): Promise<void> {
+    projectTreeShowHidden = next;
+    await refreshProjectTree();
+  }
+
+  function expandAncestorsForActiveFile(path: string): void {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    const normalizedRoot = normalizePathSync(activeWorkspaceRoot).replace(/\/+$/, "");
+    const normalizedPath = normalizePathSync(path).replace(/\/+$/, "");
+    if (!normalizedPath.startsWith(`${normalizedRoot}/`)) {
+      return;
+    }
+    const relative = normalizedPath.slice(normalizedRoot.length + 1);
+    const parts = relative.split("/").filter(Boolean);
+    if (parts.length <= 1) {
+      return;
+    }
+    const nextExpanded = new Set(projectTreeExpandedPaths);
+    let cursor = normalizedRoot;
+    for (const part of parts.slice(0, -1)) {
+      cursor = `${cursor}/${part}`;
+      nextExpanded.add(cursor);
+    }
+    projectTreeExpandedPaths = nextExpanded;
+  }
 
   function handleDocumentScrollTop(documentId: string, scrollTop: number): void {
     appState.setDocumentScrollTop(documentId, scrollTop);
@@ -176,10 +281,12 @@
     consoleOpen = false;
     markdownViewMode = "edit";
     closeWorkspaceContextMenu();
+    void loadProjectTreeRoot();
   }
 
   function handleAddWorkspace(): void {
     runCommand("workspace.add");
+    void loadProjectTreeRoot();
   }
 
   function handleOpenWorkspaceContextMenu(
@@ -246,6 +353,7 @@
       notify("Workspace closed.");
       consoleOpen = false;
       markdownViewMode = "edit";
+      void loadProjectTreeRoot();
     }
     closeWorkspaceContextMenu();
   }
@@ -448,7 +556,6 @@
       }
       statusMessage = "Session restored.";
     }
-
     if (shouldInitializeAppMenu(currentWindowId)) {
       await initializeAppMenu(runCommand, appState.getSnapshot().recentFiles);
     }
@@ -464,6 +571,8 @@
         hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
       });
     }
+
+    await loadProjectTreeRoot();
 
     await runStartupExternalChecks();
     lastSelectedTabId = appState.getSnapshot().session.selectedTabId;
@@ -707,6 +816,31 @@
           hideActivityRailWhenNotepadOnly: state.settings.hideActivityRailWhenNotepadOnly,
         }),
       );
+    }
+  }
+
+  $: if (activeWorkspaceRoot) {
+    void loadProjectTreeRoot();
+  }
+
+  $: if (activeDocumentPath) {
+    expandAncestorsForActiveFile(activeDocumentPath);
+  }
+
+  $: if (activeDocumentPath && activeWorkspaceRoot) {
+    const normalizedRoot = normalizePathSync(activeWorkspaceRoot).replace(/\/+$/, "");
+    if (activeDocumentPath.startsWith(`${normalizedRoot}/`)) {
+      const relative = activeDocumentPath.slice(normalizedRoot.length + 1);
+      const segments = relative.split("/").filter(Boolean);
+      if (segments.length > 1) {
+        let cursor = normalizedRoot;
+        for (const segment of segments.slice(0, -1)) {
+          cursor = `${cursor}/${segment}`;
+          if (!projectTreeChildrenByPath.has(cursor) && !projectTreeLoadingPaths.has(cursor)) {
+            void loadProjectTreeChildren(cursor);
+          }
+        }
+      }
     }
   }
 </script>
@@ -1010,6 +1144,23 @@
         </aside>
       </section>
     </section>
+    {#if activeWorkspaceRoot}
+      <ProjectPanel
+        workspaceRoot={activeWorkspaceRoot}
+        rootNodes={projectTreeRootNodes}
+        expandedPaths={projectTreeExpandedPaths}
+        childrenByPath={projectTreeChildrenByPath}
+        loadingPaths={projectTreeLoadingPaths}
+        activeFilePath={activeDocumentPath}
+        showHidden={projectTreeShowHidden}
+        collapsed={!showProjectPanel}
+        onRefresh={refreshProjectTree}
+        onToggleHidden={toggleProjectTreeHidden}
+        onToggleCollapsed={toggleProjectPanelCollapsed}
+        onToggleDirectory={handleToggleProjectTreeDirectory}
+        onOpenFile={handleOpenProjectTreeFile}
+      />
+    {/if}
   </div>
 
   <div class="bottom-panel">
@@ -1093,7 +1244,10 @@
   .shell-main-row {
     min-height: 0;
     display: grid;
-    grid-template-columns: auto minmax(var(--editor-min-width), 1fr);
+    grid-template-columns:
+      auto
+      minmax(var(--editor-min-width), 1fr)
+      auto;
   }
 
   .editor-shell {

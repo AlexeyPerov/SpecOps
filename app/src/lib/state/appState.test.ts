@@ -394,10 +394,12 @@ describe("appState settings and editor chrome", () => {
     appState.setPreviewMode("diff");
     appState.setZoomPercent(110);
     appState.toggleWrap();
+    appState.setProjectPanelCollapsed(true);
 
     const editor = appState.getSnapshot().editor;
     expect(editor.previewMode).toBe("diff");
     expect(editor.zoomPercent).toBe(110);
     expect(editor.wrapLines).toBe(false);
+    expect(editor.projectPanelCollapsed).toBe(true);
   });
 });

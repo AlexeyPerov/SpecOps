@@ -169,6 +169,7 @@ export interface AppDomainState {
     findReplaceOpen: boolean;
     goToOpen: boolean;
     previewMode: "editor" | "markdown" | "diff";
+    projectPanelCollapsed: boolean;
   };
 }
 
@@ -176,7 +177,10 @@ export interface WindowSessionSnapshot {
   activeContextId: ContextId;
   notepad: ContextSnapshot;
   workspaces: WorkspaceEntry[];
-  editorPreferences: Pick<AppDomainState["editor"], "zoomPercent" | "wrapLines">;
+  editorPreferences: Pick<
+    AppDomainState["editor"],
+    "zoomPercent" | "wrapLines" | "projectPanelCollapsed"
+  >;
 }
 
 export interface AppSessionSnapshot {

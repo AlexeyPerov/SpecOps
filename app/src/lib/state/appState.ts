@@ -396,6 +396,7 @@ const initialState: AppDomainState = {
     findReplaceOpen: false,
     goToOpen: false,
     previewMode: "editor",
+    projectPanelCollapsed: false,
   },
 };
 
@@ -440,6 +441,7 @@ function createStateStore() {
       editorPreferences: {
         zoomPercent: synced.editor.zoomPercent,
         wrapLines: synced.editor.wrapLines,
+        projectPanelCollapsed: synced.editor.projectPanelCollapsed,
       },
     };
   }
@@ -1248,6 +1250,12 @@ function createStateStore() {
         editor: { ...state.editor, previewMode },
       }));
     },
+    setProjectPanelCollapsed(projectPanelCollapsed: boolean) {
+      update((state) => ({
+        ...state,
+        editor: { ...state.editor, projectPanelCollapsed },
+      }));
+    },
     toggleFindReplace() {
       update((state) => ({
         ...state,
@@ -1321,6 +1329,7 @@ function createStateStore() {
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
       hideActivityRailWhenNotepadOnly?: boolean;
+      projectPanelCollapsed?: boolean;
     }) {
       update((state) => {
         let next = state;
@@ -1365,6 +1374,15 @@ function createStateStore() {
             settings: {
               ...next.settings,
               hideActivityRailWhenNotepadOnly: partial.hideActivityRailWhenNotepadOnly,
+            },
+          };
+        }
+        if (typeof partial.projectPanelCollapsed === "boolean") {
+          next = {
+            ...next,
+            editor: {
+              ...next.editor,
+              projectPanelCollapsed: partial.projectPanelCollapsed,
             },
           };
         }

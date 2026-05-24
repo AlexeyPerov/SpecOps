@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-24 22:40 (UTC+3)
+
+- **Workspaces M4 project panel:** Added lazy project-tree service (`projectTree.ts`) with one-call directory loading, folders-first alphabetical sorting, hidden-file toggle behavior, symlink skipping, and openable-file filtering aligned with existing folder-open rules.
+- **Tree UI components:** Implemented `ProjectPanel.svelte`, `ProjectTreeView.svelte`, `ProjectTreeList.svelte`, `ProjectTreeNode.svelte`, plus `FileIcon.svelte` / `DirectoryIcon.svelte`; includes recursive expand/collapse, loading rows, path tooltips, active-file highlighting, and scroll-into-view for selected tree nodes.
+- **Shell integration + persistence:** Integrated project panel into `+page.svelte` as right column in workspace mode, wired single-click open via `openActivePath`, lazy ancestor expansion/loading for active files, refresh and show-hidden controls, and persisted panel collapsed state in window session snapshots (`projectPanelCollapsed` in `editorPreferences`).
+- **Design tokens + coverage:** Added `--project-panel-width` and `--tree-indent` tokens, introduced `projectTree.test.ts` coverage, and updated existing state/session tests for new persisted editor preference.
+
 ## 2026-05-24 22:18 (UTC+3)
 
 - **Workspaces M3 routing + policy:** Added `workspacePaths` helpers (`isPathUnderRoot`, `ensureNotepadForOutsidePath`, `runInNotepadContext`) and wired path-open routing so outside-root opens switch to Notepad, while existing-tab lookup now scans all local contexts and focuses the owner context/tab.

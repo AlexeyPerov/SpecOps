@@ -378,7 +378,7 @@ Dependencies: M3-4.
 
 ## Milestone 4 — Project panel
 
-#### Task M4-1: Lazy project tree service [Score:6] [Agent:medium]
+#### Task M4-1: Lazy project tree service [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -401,7 +401,7 @@ Dependencies: M2-5 (M3-4 recommended before user-facing release).
 
 ---
 
-#### Task M4-2: Tree icons and node primitives [Score:3] [Agent:easy]
+#### Task M4-2: Tree icons and node primitives [Score:3] [Agent:easy] [DONE]
 
 **Required context**
 
@@ -421,7 +421,7 @@ Dependencies: M4-1.
 
 ---
 
-#### Task M4-3: ProjectTreeList and ProjectTreeNode [Score:8] [Agent:heavy]
+#### Task M4-3: ProjectTreeList and ProjectTreeNode [Score:8] [Agent:heavy] [DONE]
 
 **Required context**
 
@@ -443,7 +443,7 @@ Dependencies: M4-2.
 
 ---
 
-#### Task M4-4: ProjectPanel shell [Score:6] [Agent:medium]
+#### Task M4-4: ProjectPanel shell [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -466,7 +466,7 @@ Dependencies: M4-3.
 
 ---
 
-#### Task M4-5: Tree open/focus and active-file sync [Score:7] [Agent:medium]
+#### Task M4-5: Tree open/focus and active-file sync [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -487,7 +487,7 @@ Dependencies: M4-4, M3-4.
 
 ---
 
-#### Task M4-6: Shell layout integration [Score:5] [Agent:medium]
+#### Task M4-6: Shell layout integration [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 

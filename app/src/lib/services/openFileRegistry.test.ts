@@ -83,6 +83,7 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
     editorPreferences: {
       zoomPercent: 100,
       wrapLines: true,
+      projectPanelCollapsed: false,
     },
     ...overrides,
   };
@@ -223,6 +224,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         findReplaceOpen: false,
         goToOpen: false,
         previewMode: "editor",
+        projectPanelCollapsed: false,
       },
     };
 
@@ -323,6 +325,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         findReplaceOpen: false,
         goToOpen: false,
         previewMode: "editor",
+        projectPanelCollapsed: false,
       },
     };
 

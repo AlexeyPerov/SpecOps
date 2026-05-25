@@ -7,6 +7,7 @@ import {
   readNearbyTextFiles,
   type NearbyListEntry,
 } from "./nearbyFiles";
+import { logDiagnostic } from "./logging";
 
 vi.mock("@tauri-apps/api/path", () => ({
   dirname: vi.fn(),
@@ -17,12 +18,17 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
 }));
 
+vi.mock("./logging", () => ({
+  logDiagnostic: vi.fn().mockResolvedValue(undefined),
+}));
+
 const dirnameMock = vi.mocked(dirname);
 const readDirMock = vi.mocked(readDir);
 const readTextFileMock = vi.mocked(readTextFile);
+const logDiagnosticMock = vi.mocked(logDiagnostic);
 
 describe("listNearbyTextFiles", () => {
-  it("filters text files, excludes current/open paths, sorts, and limits", () => {
+  it("filters openable files, excludes current/open paths, sorts, and limits", () => {
     const entries: NearbyListEntry[] = [
       { name: "zeta.md", isDirectory: false },
       { name: "alpha.txt", isDirectory: false },
@@ -30,6 +36,9 @@ describe("listNearbyTextFiles", () => {
       { name: "skip.ts", isDirectory: false },
       { name: "folder", isDirectory: true },
       { name: "same.md", isDirectory: false },
+      { name: "photo.png", isDirectory: false },
+      { name: "README", isDirectory: false },
+      { name: "vibe notes", isDirectory: false },
     ];
 
     const files = listNearbyTextFiles(entries, {
@@ -39,10 +48,12 @@ describe("listNearbyTextFiles", () => {
       limit: 10,
     });
 
-    expect(files.map((entry) => entry.basename)).toEqual(["beta.markdown", "zeta.md"]);
-    expect(files.map((entry) => entry.path)).toEqual([
-      "/tmp/specs/beta.markdown",
-      "/tmp/specs/zeta.md",
+    expect(files.map((entry) => entry.basename)).toEqual([
+      "beta.markdown",
+      "README",
+      "skip.ts",
+      "vibe notes",
+      "zeta.md",
     ]);
   });
 
@@ -67,6 +78,7 @@ describe("readNearbyTextFiles", () => {
   beforeEach(() => {
     dirnameMock.mockReset();
     readDirMock.mockReset();
+    logDiagnosticMock.mockClear();
   });
 
   it("returns filtered nearby files from readDir", async () => {
@@ -80,12 +92,20 @@ describe("readNearbyTextFiles", () => {
 
     await expect(readNearbyTextFiles("/tmp/specs/current.md", ["/tmp/specs/a.txt"])).resolves.toEqual([
       { path: "/tmp/specs/b.md", basename: "b.md" },
+      { path: "/tmp/specs/c.ts", basename: "c.ts" },
     ]);
   });
 
-  it("returns empty list on fs errors", async () => {
+  it("returns empty list and logs on fs errors", async () => {
     dirnameMock.mockRejectedValue(new Error("boom"));
     await expect(readNearbyTextFiles("/tmp/specs/current.md", [])).resolves.toEqual([]);
+    expect(logDiagnosticMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "warn",
+        message: "readNearbyTextFiles failed (boom)",
+        metadata: { filePath: "/tmp/specs/current.md" },
+      }),
+    );
   });
 });
 

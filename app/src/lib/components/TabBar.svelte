@@ -7,7 +7,7 @@
   import { readNearbyTextFiles, type NearbyTextFile } from "../services/nearbyFiles";
   import { openPath } from "../services/fileSystem";
   import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
-  import { runInNotepadContext } from "../services/workspacePaths";
+  import { runInNotepadContext, workspaceRelativePath } from "../services/workspacePaths";
 
   const DRAG_THRESHOLD_PX = 4;
   const revealLabel = revealInFileManagerLabel();
@@ -95,6 +95,40 @@
       await revealInFileManager(tabDoc.filePath);
     } catch {
       // reveal is best-effort from the tab menu
+    }
+    closeContextMenu();
+  }
+
+  async function copyTabPath(tab: TabState): Promise<void> {
+    const tabDoc = tabDocument(tab);
+    if (!tabDoc?.filePath) {
+      closeContextMenu();
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(tabDoc.filePath);
+    } catch {
+      // clipboard is best-effort from the tab menu
+    }
+    closeContextMenu();
+  }
+
+  async function copyTabRelativePath(tab: TabState): Promise<void> {
+    const tabDoc = tabDocument(tab);
+    const workspaceRoot = appState.getWorkspaceRoot();
+    if (!tabDoc?.filePath || !workspaceRoot) {
+      closeContextMenu();
+      return;
+    }
+    const relativePath = workspaceRelativePath(tabDoc.filePath, workspaceRoot);
+    if (relativePath === null) {
+      closeContextMenu();
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(relativePath);
+    } catch {
+      // clipboard is best-effort from the tab menu
     }
     closeContextMenu();
   }
@@ -388,6 +422,12 @@
     : null;
   $: contextMenuCanReveal = Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath);
   $: contextMenuTabIndex = contextMenuTab ? openTabs.findIndex((tab) => tab.id === contextMenuTab.id) : -1;
+  $: contextMenuTabDoc = contextMenuTab ? tabDocument(contextMenuTab) : null;
+  $: contextMenuWorkspaceRoot = appState.getWorkspaceRoot();
+  $: contextMenuRelativePath =
+    contextMenuTabDoc?.filePath && contextMenuWorkspaceRoot
+      ? workspaceRelativePath(contextMenuTabDoc.filePath, contextMenuWorkspaceRoot)
+      : null;
   $: contextMenuCanCloseOtherTabs = Boolean(
     contextMenuTab &&
       openTabs.some((tab) => tab.id !== contextMenuTab.id && !tab.pinned),
@@ -401,7 +441,9 @@
     }
     return Boolean(tabDocument(tab)?.fileMissing);
   });
-  $: contextMenuCanOpenNearby = Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath);
+  $: contextMenuCanOpenNearby = Boolean(contextMenuTabDoc?.filePath);
+  $: contextMenuCanCopyPath = Boolean(contextMenuTabDoc?.filePath);
+  $: contextMenuCanCopyRelativePath = contextMenuRelativePath !== null;
   $: contextMenuHasNearbyFiles = nearbyFiles.length > 0;
 </script>
 
@@ -613,6 +655,41 @@
         </div>
       {/if}
     </div>
+
+    <div class="tab-context-separator" role="separator"></div>
+
+    <button
+      class="tab-context-item"
+      type="button"
+      role="menuitem"
+      disabled={!contextMenuCanCopyPath}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!contextMenuCanCopyPath || !contextMenuTab) {
+          return;
+        }
+        void copyTabPath(contextMenuTab);
+      }}
+    >
+      Copy Path
+    </button>
+    {#if contextMenuWorkspaceRoot}
+      <button
+        class="tab-context-item"
+        type="button"
+        role="menuitem"
+        disabled={!contextMenuCanCopyRelativePath}
+        onpointerdown={(event) => {
+          event.stopPropagation();
+          if (!contextMenuCanCopyRelativePath || !contextMenuTab) {
+            return;
+          }
+          void copyTabRelativePath(contextMenuTab);
+        }}
+      >
+        Copy Relative Path
+      </button>
+    {/if}
 
     <div class="tab-context-separator" role="separator"></div>
 

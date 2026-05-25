@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { appState } from "../state/appState";
-import { ensureNotepadForOutsidePath, isPathUnderRoot, runInNotepadContext } from "./workspacePaths";
+import {
+  ensureNotepadForOutsidePath,
+  isPathUnderRoot,
+  runInNotepadContext,
+  workspaceRelativePath,
+} from "./workspacePaths";
 
 describe("isPathUnderRoot", () => {
   it("matches root and nested paths", () => {
@@ -11,6 +16,20 @@ describe("isPathUnderRoot", () => {
   it("handles trailing slashes", () => {
     expect(isPathUnderRoot("/Users/me/ws/src", "/Users/me/ws/")).toBe(true);
     expect(isPathUnderRoot("/Users/me/other", "/Users/me/ws/")).toBe(false);
+  });
+});
+
+describe("workspaceRelativePath", () => {
+  it("returns path relative to workspace root", () => {
+    expect(workspaceRelativePath("/Users/me/ws/src/main.ts", "/Users/me/ws")).toBe("src/main.ts");
+  });
+
+  it("returns empty string for workspace root itself", () => {
+    expect(workspaceRelativePath("/Users/me/ws", "/Users/me/ws/")).toBe("");
+  });
+
+  it("returns null for paths outside workspace root", () => {
+    expect(workspaceRelativePath("/Users/me/other/file.ts", "/Users/me/ws")).toBeNull();
   });
 });
 

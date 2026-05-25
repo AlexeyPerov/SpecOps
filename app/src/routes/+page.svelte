@@ -584,7 +584,21 @@
   async function setupRuntime(): Promise<() => void> {
     const currentWindow = getCurrentWebviewWindow();
     currentWindowId = currentWindow.label;
-    appState.initializeTheme();
+
+    const persistedSettings = await loadPersistedSettings();
+    if (persistedSettings) {
+      appState.applyPersistedSettings({
+        theme: persistedSettings.theme,
+        wrapLines: persistedSettings.wrapLines,
+        zoomPercent: persistedSettings.zoomPercent,
+        externalFiles: toExternalFilesSettings(persistedSettings),
+        decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
+        hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
+      });
+    } else {
+      appState.initializeTheme();
+    }
+
     await initializeLogging();
 
     const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
@@ -614,18 +628,6 @@
     }
     if (shouldInitializeAppMenu(currentWindowId)) {
       await initializeAppMenu(runCommand, appState.getSnapshot().recentFiles);
-    }
-
-    const persistedSettings = await loadPersistedSettings();
-    if (persistedSettings) {
-      appState.applyPersistedSettings({
-        theme: persistedSettings.theme,
-        wrapLines: persistedSettings.wrapLines,
-        zoomPercent: persistedSettings.zoomPercent,
-        externalFiles: toExternalFilesSettings(persistedSettings),
-        decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
-        hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
-      });
     }
 
     await loadProjectTreeRoot();
@@ -891,7 +893,7 @@
     teardownSplitScrollSync();
   }
 
-  $: if (state) {
+  $: if (runtimeReady && state) {
     scheduleSessionPersistence(state, currentWindowId);
     if (currentWindowId) {
       void savePersistedSettings(

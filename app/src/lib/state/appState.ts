@@ -522,11 +522,12 @@ function createStateStore() {
         ),
       );
       reindexWorkspaceCounter(contexts.workspaces);
+      const preservedSettings = this.getSnapshot().settings;
       set({
         contexts,
         documents: activeContextSnapshot.documents,
         session: activeContextSnapshot.session,
-        settings: defaultSettings,
+        settings: preservedSettings,
         recentFiles,
         editor: {
           ...initialState.editor,
@@ -536,7 +537,7 @@ function createStateStore() {
           previewMode: "editor",
         },
       });
-      applyTheme(defaultSettings);
+      applyTheme(preservedSettings);
     },
     getWindowSessionSnapshot(): WindowSessionSnapshot {
       return toCurrentWindowSnapshot(this.getSnapshot());

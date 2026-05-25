@@ -1,23 +1,13 @@
 import { dirname } from "@tauri-apps/api/path";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { isOpenableFilePath } from "../editor/editorLanguage";
 import { normalizePathSync } from "./diskFingerprint";
-
-const TEXT_EXTENSIONS = new Set([".txt", ".md", ".markdown"]);
+import { logDiagnostic } from "./logging";
 
 function basename(path: string): string {
   const normalized = path.replaceAll("\\", "/");
   const parts = normalized.split("/");
   return parts[parts.length - 1] ?? path;
-}
-
-function isTextPath(path: string): boolean {
-  const lower = path.toLowerCase();
-  for (const extension of TEXT_EXTENSIONS) {
-    if (lower.endsWith(extension)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 export interface NearbyTextFile {
@@ -51,7 +41,7 @@ export function listNearbyTextFiles(
       const normalized = normalizePathSync(path);
       return { path, normalized, basename: basename(path) };
     })
-    .filter((entry) => isTextPath(entry.path))
+    .filter((entry) => isOpenableFilePath(entry.path))
     .filter((entry) => entry.normalized !== normalizedCurrent)
     .filter((entry) => !openPathSet.has(entry.normalized))
     .sort((a, b) => a.basename.localeCompare(b.basename))
@@ -73,7 +63,15 @@ export async function readNearbyTextFiles(
       openPaths,
       limit,
     });
-  } catch {
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    void logDiagnostic({
+      level: "warn",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: `readNearbyTextFiles failed (${reason})`,
+      metadata: { filePath },
+    });
     return [];
   }
 }

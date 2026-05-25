@@ -2,6 +2,10 @@
 
 ## 2026-05-25
 
+- **Tabs:** Hide **Copy Relative Path** in Notepad mode (workspace context menu only).
+- **Settings:** Fix theme not surviving restarts — load persisted settings before session restore, preserve settings (including theme) in `applyWindowSession`, and defer settings persistence until runtime is ready so startup session restore cannot overwrite `settings.json` with defaults.
+- **Open Nearby:** Align nearby file filtering with `isOpenableFilePath` (syntax-highlighted extensions, known extensionless names, and plain extensionless notes) instead of only `.txt`/`.md`/`.markdown`. Log a diagnostic warning when nearby directory reads fail instead of failing silently.
+- **Tabs:** Add **Copy Path** and **Copy Relative Path** (workspace tabs only) to the tab context menu.
 - **Editor:** Use static imports for CodeMirror JS, HTML, and CSS language packs in `editorLanguage.ts`. These modules were already bundled via `@codemirror/lang-markdown`; dynamic `import()` only produced Vite warnings without code-splitting benefit. Synchronous `getLanguageSupport` now covers those languages for immediate highlighting on first open.
 - **Specs:** Add `specs/ai-questions.md` documenting AI chat-in-console MVP idea, confirmed decisions (workspace-scoped history, auto-load last thread on switch), and a numbered clarification checklist with recommended options for console behavior, thread model, modes, providers, persistence, error UX, and future settings-driven mode extensibility.
 - **Specs:** Update `specs/ai-questions.md` to replace `plan` mode with `review`, redefine mode expectations toward critique/estimation/clarification behavior, and add new mode-specific open questions for minimum `review` behavior and default effort-estimation output.

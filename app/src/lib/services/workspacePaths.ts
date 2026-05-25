@@ -13,6 +13,18 @@ export function isPathUnderRoot(filePath: string, workspaceRoot: string): boolea
   return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
 }
 
+export function workspaceRelativePath(filePath: string, workspaceRoot: string): string | null {
+  const normalizedPath = normalizePathSync(filePath).replace(/\/+$/, "");
+  const normalizedRoot = normalizePathSync(workspaceRoot).replace(/\/+$/, "");
+  if (normalizedPath === normalizedRoot) {
+    return "";
+  }
+  if (!normalizedPath.startsWith(`${normalizedRoot}/`)) {
+    return null;
+  }
+  return normalizedPath.slice(normalizedRoot.length + 1);
+}
+
 export function ensureNotepadForOutsidePath(path: string): {
   switchedToNotepad: boolean;
   activeWorkspaceRoot: string | null;

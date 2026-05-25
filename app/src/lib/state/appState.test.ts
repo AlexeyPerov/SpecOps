@@ -390,6 +390,45 @@ describe("appState settings and editor chrome", () => {
     expect(snapshot.settings.theme).toBe("dark-blue");
   });
 
+  it("applyWindowSession preserves the active theme from settings", () => {
+    appState.setTheme("light-green");
+    appState.applyWindowSession({
+      activeContextId: "notepad",
+      notepad: {
+        documents: [
+          {
+            id: "doc-1",
+            filePath: null,
+            title: "Untitled",
+            content: "",
+            savedContent: "",
+            isDirty: false,
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+          },
+        ],
+        session: {
+          selectedTabId: "tab-1",
+          openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+          lastActiveWindowId: "main",
+          windowBounds: null,
+        },
+      },
+      workspaces: [],
+      editorPreferences: {
+        zoomPercent: 100,
+        wrapLines: true,
+        projectPanelCollapsed: false,
+      },
+    });
+    expect(appState.getSnapshot().settings.theme).toBe("light-green");
+  });
+
   it("setPreviewMode, zoom, and wrap update editor state", () => {
     appState.setPreviewMode("diff");
     appState.setZoomPercent(110);

@@ -6,6 +6,7 @@
   export let node: ProjectTreeNodeModel;
   export let depth = 0;
   export let isExpanded = false;
+  export let canExpand = false;
   export let isActiveFile = false;
   export let rowPath = "";
   export let onToggleDirectory: (path: string) => void = () => {};
@@ -17,6 +18,9 @@
 
   function handleClick(): void {
     if (node.kind === "directory") {
+      if (!canExpand) {
+        return;
+      }
       onToggleDirectory(node.path);
       return;
     }
@@ -37,8 +41,8 @@
     style={depthStyle(depth)}
     onclick={handleClick}
   >
-    <span class={`project-tree-chevron ${node.kind === "directory" && isExpanded ? "project-tree-chevron-open" : ""}`}>
-      {node.kind === "directory" ? "▶" : ""}
+    <span class={`project-tree-chevron ${node.kind === "directory" && canExpand && isExpanded ? "project-tree-chevron-open" : ""}`}>
+      {node.kind === "directory" && canExpand ? "▶" : ""}
     </span>
     {#if node.kind === "directory"}
       <DirectoryIcon />

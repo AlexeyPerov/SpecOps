@@ -15,23 +15,28 @@
 
 <ul class="project-tree-list" role="group">
   {#each nodes as node (node.path)}
+    {@const hasLoadedChildren = node.kind === "directory" && childrenByPath.has(node.path)}
+    {@const children = node.kind === "directory" ? (childrenByPath.get(node.path) ?? []) : []}
+    {@const canExpand =
+      node.kind === "directory" && (!hasLoadedChildren || children.length > 0 || loadingPaths.has(node.path))}
     <ProjectTreeNode
       {node}
       {depth}
       rowPath={node.path}
       isExpanded={expandedPaths.has(node.path)}
+      {canExpand}
       isActiveFile={node.kind === "file" && activeFilePath === node.path}
       {onToggleDirectory}
       {onOpenFile}
     />
-    {#if node.kind === "directory" && expandedPaths.has(node.path)}
+    {#if node.kind === "directory" && canExpand && expandedPaths.has(node.path)}
       {#if loadingPaths.has(node.path)}
         <li class="project-tree-loading" role="treeitem" aria-selected={false} aria-busy="true">
           Loading...
         </li>
       {:else}
         <ProjectTreeList
-          nodes={childrenByPath.get(node.path) ?? []}
+          nodes={children}
           depth={depth + 1}
           {expandedPaths}
           {childrenByPath}

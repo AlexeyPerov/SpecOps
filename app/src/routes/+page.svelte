@@ -1284,7 +1284,7 @@
             File missing
           </span>
         {/if}
-        <span class="status-message optional-segment optional-message">{statusMessage}</span>
+        <span class="status-segment status-message optional-segment optional-message">{statusMessage}</span>
         <span class="status-segment path-segment" title={activeDocument?.filePath ?? statusPath}>
           {statusPath}
         </span>
@@ -1695,8 +1695,11 @@
   }
 
   .status-segment {
+    display: inline-flex;
+    align-items: center;
     height: calc(var(--statusbar-height) - var(--space-4));
     font-size: var(--font-size-status);
+    line-height: 1;
     white-space: nowrap;
     flex-shrink: 0;
   }

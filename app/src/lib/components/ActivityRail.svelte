@@ -12,6 +12,11 @@
     const parts = normalized.split("/");
     return parts[parts.length - 1] || workspace.rootPath;
   }
+
+  function workspaceInitial(workspace: WorkspaceEntry): string {
+    const name = workspaceName(workspace).trim();
+    return (name[0] ?? "?").toUpperCase();
+  }
 </script>
 
 <aside class="activity-rail" aria-label="Activity rail">
@@ -25,10 +30,12 @@
     N
   </button>
 
+  <div class="rail-separator" aria-hidden="true"></div>
+
   <div class="rail-workspaces">
     {#each workspaces as workspace (workspace.id)}
       <button
-        class={`rail-button ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
+        class={`rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
         type="button"
         title={workspace.rootPath}
         aria-label={`Workspace ${workspaceName(workspace)}`}
@@ -38,7 +45,7 @@
         }}
         onclick={() => onSelectContext(workspace.id)}
       >
-        <span class="rail-folder-glyph">▢</span>
+        <span class="rail-workspace-initial">{workspaceInitial(workspace)}</span>
       </button>
     {/each}
   </div>
@@ -64,6 +71,13 @@
     align-items: center;
     gap: var(--space-6);
     padding: var(--space-8) var(--space-6);
+  }
+
+  .rail-separator {
+    width: 100%;
+    height: 1px;
+    background: var(--color-border-subtle);
+    flex-shrink: 0;
   }
 
   .rail-workspaces {
@@ -108,13 +122,19 @@
   }
 
   .rail-button-active {
-    border-color: var(--color-border-subtle);
-    background: var(--color-hover);
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
     color: var(--color-text-primary);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent);
   }
 
-  .rail-folder-glyph {
+  .rail-button-workspace {
+    font-weight: 600;
+  }
+
+  .rail-workspace-initial {
     font-size: 12px;
+    text-transform: uppercase;
   }
 
   .rail-button-add {

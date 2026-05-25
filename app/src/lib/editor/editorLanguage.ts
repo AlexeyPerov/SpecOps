@@ -114,7 +114,7 @@ export async function loadLanguageSupport(id: EditorLanguageId): Promise<Languag
       case "typescript":
       case "jsx": {
         const mod = await import("@codemirror/lang-javascript");
-        if (id === "typescript") support = mod.javascript({ typescript: true });
+        if (id === "typescript") support = mod.javascript({ typescript: true, jsx: true });
         else if (id === "jsx") support = mod.javascript({ jsx: true });
         else support = mod.javascript();
         break;

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-05-25 09:52 (UTC+3)
+
+- **Activity rail visual update:** Updated `app/src/lib/components/ActivityRail.svelte` to add a separator between Notepad and workspace items, render workspace buttons as square letter badges using a new `workspaceInitial()` helper (first letter of folder name, uppercased), and preserve existing click/contextmenu behaviors and ARIA labels.
+- **Active rail emphasis:** Switched active Notepad/workspace button styling to an explicit accent-based highlight (`--color-accent`) via border/background treatment while retaining existing hover/focus behavior and add-button placement at the bottom.
+- **Status bar alignment:** Updated `app/src/routes/+page.svelte` status message styling so transient labels like `Workspace added.` and `Saved <path>` align vertically with adjacent status segments.
+
+## 2026-05-25 09:00 (UTC+3)
+
+- **Project panel resize:** Updated `app/src/lib/components/ProjectPanel.svelte` with a left-edge drag handle (`.project-panel-resize-handle`) that resizes the right-side panel width in local component state (`panelWidth`) with clamped bounds (`180..520`) and `col-resize` cursor behavior during drag.
+- **Project panel controls:** Switched collapse/expand button glyphs in `ProjectPanel.svelte` from `‹/›` to `⟫/⟪` while preserving existing collapsed-width behavior (`project-panel-collapsed` stays `36px`).
+- **Tree expandability gating:** Added `canExpand` prop to `app/src/lib/components/ProjectTreeNode.svelte`; chevron now renders only for expandable directories and directory click no-ops when expansion is unavailable.
+- **Tree list rendering guard:** Updated `app/src/lib/components/ProjectTreeList.svelte` to compute and pass `canExpand`, and to render nested child blocks only when `canExpand` is true (while still allowing not-yet-loaded directories to expand).
+
 ## 2026-05-24 23:02 (UTC+3)
 
 - **Debug cleanup:** Removed temporary layout/context investigation instrumentation from `app/src/routes/+page.svelte` (`emitDebugLog`, debug keys/run id, and all `#region agent log` blocks/calls, including the debug-only reactive context logger).

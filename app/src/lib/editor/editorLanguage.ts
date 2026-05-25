@@ -1,3 +1,6 @@
+import { css } from "@codemirror/lang-css";
+import { html } from "@codemirror/lang-html";
+import { javascript } from "@codemirror/lang-javascript";
 import { markdown } from "@codemirror/lang-markdown";
 import { LanguageSupport, StreamLanguage } from "@codemirror/language";
 export type EditorLanguageId = string;
@@ -91,9 +94,53 @@ function syncMarkdown(): LanguageSupport {
   return cached;
 }
 
+function syncJavascript(id: "javascript" | "typescript" | "jsx" | "shell"): LanguageSupport {
+  let cached = cache.get(id);
+  if (!cached) {
+    if (id === "typescript") cached = javascript({ typescript: true, jsx: true });
+    else if (id === "jsx") cached = javascript({ jsx: true });
+    else cached = javascript();
+    cache.set(id, cached);
+  }
+  return cached;
+}
+
+function syncHtml(): LanguageSupport {
+  let cached = cache.get("html");
+  if (!cached) {
+    cached = html();
+    cache.set("html", cached);
+  }
+  return cached;
+}
+
+function syncCss(): LanguageSupport {
+  let cached = cache.get("css");
+  if (!cached) {
+    cached = css();
+    cache.set("css", cached);
+  }
+  return cached;
+}
+
+const SYNC_LANGUAGE_IDS = new Set<EditorLanguageId>([
+  "markdown",
+  "javascript",
+  "typescript",
+  "jsx",
+  "shell",
+  "html",
+  "css",
+]);
+
 export function getLanguageSupport(id: EditorLanguageId): LanguageSupport | null {
   if (id === "plaintext") return null;
   if (id === "markdown") return syncMarkdown();
+  if (id === "javascript" || id === "typescript" || id === "jsx" || id === "shell") {
+    return syncJavascript(id);
+  }
+  if (id === "html") return syncHtml();
+  if (id === "css") return syncCss();
   const cached = cache.get(id);
   if (cached) return cached;
   return null;
@@ -101,7 +148,7 @@ export function getLanguageSupport(id: EditorLanguageId): LanguageSupport | null
 
 export async function loadLanguageSupport(id: EditorLanguageId): Promise<LanguageSupport | null> {
   if (id === "plaintext") return null;
-  if (id === "markdown") return syncMarkdown();
+  if (SYNC_LANGUAGE_IDS.has(id)) return getLanguageSupport(id);
 
   const cached = cache.get(id);
   if (cached) return cached;
@@ -110,28 +157,9 @@ export async function loadLanguageSupport(id: EditorLanguageId): Promise<Languag
 
   try {
     switch (id) {
-      case "javascript":
-      case "typescript":
-      case "jsx": {
-        const mod = await import("@codemirror/lang-javascript");
-        if (id === "typescript") support = mod.javascript({ typescript: true, jsx: true });
-        else if (id === "jsx") support = mod.javascript({ jsx: true });
-        else support = mod.javascript();
-        break;
-      }
       case "json": {
         const mod = await import("@codemirror/lang-json");
         support = mod.json();
-        break;
-      }
-      case "html": {
-        const mod = await import("@codemirror/lang-html");
-        support = mod.html();
-        break;
-      }
-      case "css": {
-        const mod = await import("@codemirror/lang-css");
-        support = mod.css();
         break;
       }
       case "python": {
@@ -162,11 +190,6 @@ export async function loadLanguageSupport(id: EditorLanguageId): Promise<Languag
       case "sql": {
         const mod = await import("@codemirror/lang-sql");
         support = mod.sql();
-        break;
-      }
-      case "shell": {
-        const mod = await import("@codemirror/lang-javascript");
-        support = mod.javascript();
         break;
       }
       case "toml": {

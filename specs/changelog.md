@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-05-25
+
+- **Editor:** Use static imports for CodeMirror JS, HTML, and CSS language packs in `editorLanguage.ts`. These modules were already bundled via `@codemirror/lang-markdown`; dynamic `import()` only produced Vite warnings without code-splitting benefit. Synchronous `getLanguageSupport` now covers those languages for immediate highlighting on first open.
+- **Specs:** Add `specs/ai-questions.md` documenting AI chat-in-console MVP idea, confirmed decisions (workspace-scoped history, auto-load last thread on switch), and a numbered clarification checklist with recommended options for console behavior, thread model, modes, providers, persistence, error UX, and future settings-driven mode extensibility.
+- **Specs:** Update `specs/ai-questions.md` to replace `plan` mode with `review`, redefine mode expectations toward critique/estimation/clarification behavior, and add new mode-specific open questions for minimum `review` behavior and default effort-estimation output.
+- **Specs:** Promote `specs/ai-requirements.md` as source of truth for AI chat in workspaces, including finalized behavior for console tabs, workspace-scoped chat, `ask`/`review` modes, provider switching semantics, mandatory workspace file-access preflight with blocking UX, persistence/retention rules, and milestone-based implementation plan. Update `specs/ai-questions.md` as historical discussion with a source-of-truth pointer and additional captured decisions on file-access gating and no active-file/log attachment in MVP.
+- **Specs:** Split provider/runtime implementation milestone in `specs/ai-requirements.md` into two sequential milestones: GLM integration first, Cursor SDK integration second. Renumber subsequent milestones accordingly (`Access contract` to Milestone 5, `Retention/reliability/polish` to Milestone 6).
+- **Specs:** Reorder `specs/ai-requirements.md` milestones so platform substrate precedes provider integration: access contract (M3), retention/reliability core (M4), then GLM (M5) and Cursor SDK (M6), with retry/streaming/UX polish last (M7).
+- **Specs:** Add per-milestone AI execution plans (`specs/ai-m-1-execution-plan.md` … `specs/ai-m-7-execution-plan.md`) with detailed agent tasks, dependencies, acceptance checklists, and testing maps following `specs/archive/execution-plan.md` template. Link plans from `specs/ai-requirements.md`.
+
+
 ## 2026-05-25 09:52 (UTC+3)
 
 - **Activity rail visual update:** Updated `app/src/lib/components/ActivityRail.svelte` to add a separator between Notepad and workspace items, render workspace buttons as square letter badges using a new `workspaceInitial()` helper (first letter of folder name, uppercased), and preserve existing click/contextmenu behaviors and ARIA labels.

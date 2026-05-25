@@ -1,6 +1,18 @@
 # Changelog
 
+## 2026-05-25 21:43 (MSK)
+
+- **Console M1-1:** Refactored `app/src/lib/components/ConsolePanel.svelte` into a tabbed console shell with `Chat` first and `Logs` second, defaulting to `Chat`, and added token-driven active/inactive tab states without changing console container sizing.
+- **Console logs extraction:** Added `app/src/lib/components/ConsoleLogsPanel.svelte` and moved logs rendering logic there while preserving pre-refactor behavior (250-entry cap, truncation notice, sticky near-bottom autoscroll, line wrapping, and severity coloring).
+- **Specs:** Marked Task M1-1 as done in `specs/ai-m-1-execution-plan.md`.
+- **Validation:** Ran `npm run check` in `app`; passed with one pre-existing warning in `app/src/lib/components/FindReplacePanel.svelte` and no new errors.
+
 ## 2026-05-25
+
+- **Console M1-1 follow-up:** Kept `app/src/lib/components/ConsoleLogsPanel.svelte` behavior identical while switching log consumption to direct `$consoleLogs` derived state in runes mode; retained 250-entry cap, truncation notice, sticky near-bottom autoscroll, and existing level colors/typography.
+- **Console M1-1 tab shell:** Refactored logs rendering from `app/src/lib/components/ConsolePanel.svelte` into new `app/src/lib/components/ConsoleLogsPanel.svelte` with unchanged behavior (subscription to `consoleLogs`, max 250 visible entries, truncation notice, stick-to-bottom scrolling, preserved line formatting and severity colors).
+- **Console tabs:** Updated `ConsolePanel.svelte` into a local-state tab shell with **Chat** then **Logs** order (default **Chat**), a simple `Start chat` placeholder panel, and conditional rendering of `ConsoleLogsPanel` for logs while preserving existing console height and border structure.
+- **Validation:** Verified updated Svelte components with `@sveltejs/mcp` autofixer and workspace lints; resolved runes-mode reactivity issues by using `$state` and runes-safe effects.
 
 - **Tabs:** Hide **Copy Relative Path** in Notepad mode (workspace context menu only).
 - **Settings:** Fix theme not surviving restarts — load persisted settings before session restore, preserve settings (including theme) in `applyWindowSession`, and defer settings persistence until runtime is ready so startup session restore cannot overwrite `settings.json` with defaults.

@@ -1,60 +1,50 @@
 <script lang="ts">
-  import { afterUpdate, onDestroy } from "svelte";
-  import { consoleLogs, type ConsoleLogEntry } from "../services/appConsole";
+  import ConsoleLogsPanel from "./ConsoleLogsPanel.svelte";
 
-  const DISPLAY_MAX_ENTRIES = 250;
+  type ConsoleTabId = "chat" | "logs";
 
-  let scrollEl: HTMLDivElement | undefined;
-  let entries: ConsoleLogEntry[] = [];
-  let visibleEntries: ConsoleLogEntry[] = [];
-  let hiddenEntryCount = 0;
-  let stickToBottom = true;
-
-  const unsubscribe = consoleLogs.subscribe((value) => {
-    entries = value;
-    hiddenEntryCount = Math.max(0, value.length - DISPLAY_MAX_ENTRIES);
-    visibleEntries =
-      value.length > DISPLAY_MAX_ENTRIES ? value.slice(value.length - DISPLAY_MAX_ENTRIES) : value;
-  });
-
-  onDestroy(unsubscribe);
-
-  afterUpdate(() => {
-    if (stickToBottom && scrollEl) {
-      scrollEl.scrollTop = scrollEl.scrollHeight;
-    }
-  });
-
-  function handleScroll(): void {
-    if (!scrollEl) {
-      return;
-    }
-    const distanceFromBottom =
-      scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
-    stickToBottom = distanceFromBottom < 24;
-  }
+  let activeTab = $state<ConsoleTabId>("chat");
 </script>
 
 <section class="console-panel" aria-hidden="false">
-  <div
-    class="console-scroll"
-    bind:this={scrollEl}
-    onscroll={handleScroll}
-    tabindex="-1"
-  >
-    {#if entries.length === 0}
-      <p class="console-empty">No log entries yet.</p>
+  <div class="console-tabs" role="tablist" aria-label="Console tabs">
+    <button
+      type="button"
+      role="tab"
+      class="console-tab"
+      class:console-tab-active={activeTab === "chat"}
+      aria-selected={activeTab === "chat"}
+      tabindex={activeTab === "chat" ? 0 : -1}
+      onclick={() => {
+        activeTab = "chat";
+      }}
+    >
+      Chat
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="console-tab"
+      class:console-tab-active={activeTab === "logs"}
+      aria-selected={activeTab === "logs"}
+      tabindex={activeTab === "logs" ? 0 : -1}
+      onclick={() => {
+        activeTab = "logs";
+      }}
+    >
+      Logs
+    </button>
+  </div>
+
+  <div class="console-content">
+    {#if activeTab === "chat"}
+      <div class="chat-placeholder" role="tabpanel">
+        Start chat
+      </div>
     {:else}
-      {#if hiddenEntryCount > 0}
-        <p class="console-truncated">
-          {hiddenEntryCount} older {hiddenEntryCount === 1 ? "entry" : "entries"} not shown
-        </p>
-      {/if}
-      {#each visibleEntries as entry (entry.id)}
-        <div class="console-line" data-level={entry.level}>
-          {entry.text}
-        </div>
-      {/each}
+      <div role="tabpanel" class="logs-panel-wrap">
+        <ConsoleLogsPanel />
+      </div>
     {/if}
   </div>
 </section>
@@ -67,40 +57,67 @@
     border-top: 1px solid var(--color-border-subtle);
     background: var(--color-surface-1);
     color: var(--color-text-primary);
+    display: flex;
+    flex-direction: column;
   }
 
-  .console-scroll {
-    height: 100%;
-    overflow: auto;
-    padding: var(--space-4) var(--space-8);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
-    line-height: 1.45;
-    user-select: text;
-    -webkit-user-select: text;
+  .console-tabs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-8);
+    border-bottom: 1px solid var(--color-border-subtle);
   }
 
-  .console-empty,
-  .console-truncated {
-    margin: 0 0 var(--space-4);
+  .console-tab {
+    min-height: 24px;
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
     color: var(--color-text-secondary);
+    font-size: 12px;
+    line-height: 1;
+    transition:
+      background-color var(--motion-fast) var(--easing-standard),
+      border-color var(--motion-fast) var(--easing-standard),
+      color var(--motion-fast) var(--easing-standard);
   }
 
-  .console-line {
-    white-space: pre-wrap;
-    word-break: break-word;
+  .console-tab:hover {
+    background: var(--color-hover);
+    color: var(--color-text-primary);
+    cursor: pointer;
   }
 
-  .console-line[data-level="error"] {
-    color: #e06c75;
+  .console-tab:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
   }
 
-  .console-line[data-level="warn"] {
-    color: #e5c07b;
+  .console-tab-active {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-text-primary);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent);
   }
 
-  .console-line[data-level="debug"],
-  .console-line[data-level="trace"] {
+  .console-content {
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .logs-panel-wrap {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .chat-placeholder {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding: var(--space-4) var(--space-8);
     color: var(--color-text-secondary);
   }
 </style>

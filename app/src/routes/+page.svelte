@@ -86,6 +86,7 @@
   let preferredMarkdownViewMode: "edit" | "split" | "preview" = "edit";
   let previousActiveContextId: ContextId | null = null;
   let shellMainRowEl: HTMLDivElement | null = null;
+  let editorShellEl: HTMLElement | null = null;
   let editorPaneEl: HTMLElement | null = null;
   let shellMainRowWidth = 0;
   let editorPaneWidth = 0;
@@ -109,13 +110,17 @@
   let projectTreeExpandedPaths = new Set<string>();
   let projectTreeLoadingPaths = new Set<string>();
   let projectTreeShowHidden = false;
+  let autoProjectPanelCollapsed = false;
   const MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
 
   $: state = $appState;
   $: activeContextId = state.contexts.activeContextId;
   $: workspaces = state.contexts.workspaces;
-  $: activeWorkspaceRoot = appState.getWorkspaceRoot();
-  $: showProjectPanel = Boolean(activeWorkspaceRoot) && !state.editor.projectPanelCollapsed;
+  $: activeWorkspaceRoot = appState.getWorkspaceRoot(activeContextId);
+  $: showProjectPanel =
+    Boolean(activeWorkspaceRoot) &&
+    !state.editor.projectPanelCollapsed &&
+    !autoProjectPanelCollapsed;
   $: showActivityRail = !(
     state.settings.hideActivityRailWhenNotepadOnly &&
     state.contexts.workspaces.length === 0
@@ -301,16 +306,12 @@
 
   function applyResponsiveLayoutRules(): void {
     const workspaceActive = Boolean(activeWorkspaceRoot);
-    const shouldAutoCollapsePanel =
-      shellMainRowWidth > 0 &&
-      shellMainRowWidth < 1100 &&
-      workspaceActive &&
-      !state.editor.projectPanelCollapsed;
-    if (shouldAutoCollapsePanel) {
-      appState.setProjectPanelCollapsed(true);
+    const shouldAutoCollapsePanel = shellMainRowWidth > 0 && shellMainRowWidth < 1100 && workspaceActive;
+    if (autoProjectPanelCollapsed !== shouldAutoCollapsePanel) {
+      autoProjectPanelCollapsed = shouldAutoCollapsePanel;
     }
 
-    const projectPanelCollapsed = state.editor.projectPanelCollapsed || shouldAutoCollapsePanel;
+    const projectPanelCollapsed = state.editor.projectPanelCollapsed || autoProjectPanelCollapsed;
     if (shellMainRowWidth > 0 && shellMainRowWidth < 900 && projectPanelCollapsed) {
       consoleOpen = false;
     }
@@ -716,10 +717,6 @@
     const unlistenWindowMoved = await currentWindow.onMoved(() => {
       scheduleWindowBoundsPersistence();
     });
-    const unlistenCloseRequested = await currentWindow.onCloseRequested(async () => {
-      await persistWindowBoundsNow();
-    });
-
     await logDiagnostic({
       level: "info",
       source: "frontend",
@@ -740,7 +737,6 @@
       unlistenFileChanged();
       unlistenWindowResized();
       unlistenWindowMoved();
-      unlistenCloseRequested();
       if (windowBoundsTimer) {
         clearTimeout(windowBoundsTimer);
         windowBoundsTimer = null;
@@ -948,7 +944,7 @@
         onRequestCloseWorkspace={handleOpenWorkspaceContextMenu}
       />
     {/if}
-    <section class="editor-shell">
+    <section class="editor-shell" bind:this={editorShellEl}>
       <header class="tab-header">
     <div class="header-left">
       <TabBar
@@ -1343,10 +1339,15 @@
   }
 
   .editor-shell {
+    grid-column: 2;
     min-width: 0;
     min-height: 0;
     display: grid;
     grid-template-rows: var(--tab-header-height) minmax(0, 1fr);
+  }
+
+  .shell-main-row :global(.project-panel) {
+    grid-column: 3;
   }
 
   .bottom-panel {

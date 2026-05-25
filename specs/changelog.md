@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-24 23:02 (UTC+3)
+
+- **Debug cleanup:** Removed temporary layout/context investigation instrumentation from `app/src/routes/+page.svelte` (`emitDebugLog`, debug keys/run id, and all `#region agent log` blocks/calls, including the debug-only reactive context logger).
+- **Layout fix retained:** Kept responsive behavior and structural layout fixes, including `editorShellEl` binding usage, `.editor-shell { grid-column: 2; }`, and project panel column assignment.
+
+## 2026-05-24 22:54 (UTC+3)
+
+- **Hotfix: responsive project panel collapse:** Updated `app/src/routes/+page.svelte` to use transient local `autoProjectPanelCollapsed` state instead of mutating persisted `projectPanelCollapsed` in responsive logic. `showProjectPanel` now respects both persisted manual collapse and temporary auto-collapse.
+- **Console auto-close behavior:** Preserved width-based console close behavior while using effective collapsed state (`manual || auto`) so console closes under 900px only when the panel is effectively collapsed.
+
 ## 2026-05-24 22:47 (UTC+3)
 
 - **Workspaces M5 shell behavior:** Updated `app/src/routes/+page.svelte` to close console on any active context change (including non-rail/routing-driven switches) by watching `activeContextId` transitions centrally.
@@ -40,7 +50,7 @@
 ## 2026-05-25
 
 - Added `specs/workspaces-execution-plan.md` — agent task breakdown for Workspaces (25 tasks across M1–M5), following `specs/archive/execution-plan.md` template.
-- **Specs:** Expanded Milestone 4 in `specs/workspaces-milestone-plan.md` with explicit Nucleus reference (`references/Nucleus/`), file-by-file porting guide, and feature parity table for the project panel.
+- **Specs:** Expanded Milestone 4 in `specs/workspaces-milestone-plan.md`.
 
 ## 2026-05-24 (workspaces planning)
 

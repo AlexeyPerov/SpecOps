@@ -144,6 +144,56 @@ export interface DiagnosticEvent {
   timestamp: string;
 }
 
+export type ChatMessageRole = "user" | "assistant" | "system";
+
+export type ChatModeId = "ask" | "review";
+
+export type ChatProviderId = "glm" | "cursor";
+
+/**
+ * System-only marker events persisted in chat history.
+ * Start with provider switching and expand as system event needs grow.
+ */
+export type ChatSystemEvent = {
+  type: "provider-switched";
+  fromProvider: ChatProviderId | null;
+  toProvider: ChatProviderId;
+};
+
+export interface ChatMessage {
+  id: string;
+  role: ChatMessageRole;
+  content: string;
+  createdAt: string;
+  systemEvent?: ChatSystemEvent;
+}
+
+export interface ChatThreadMetadata {
+  mode: ChatModeId;
+  provider: ChatProviderId;
+  createdAt: string;
+  updatedAt: string;
+  summary?: string;
+}
+
+/**
+ * In MVP, chat is one thread per workspace.
+ * `ChatThreadSnapshot` represents that single per-workspace thread.
+ */
+export interface ChatThreadSnapshot {
+  metadata: ChatThreadMetadata;
+  messages: ChatMessage[];
+}
+
+/**
+ * Versioned on-disk envelope for workspace chat persistence.
+ * Keep a single `thread` to enforce one-thread-per-workspace invariant.
+ */
+export interface ChatThreadFileSnapshot {
+  version: 1;
+  thread: ChatThreadSnapshot | null;
+}
+
 export interface OpenFileOwner {
   windowId: string;
   documentId: string;

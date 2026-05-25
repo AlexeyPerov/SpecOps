@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-05-25 23:20 (MSK)
+
+- **AI M2-6 milestone validation:** Completed full Milestone 2 validation run in `app` with `npm test` (26 files, 208 tests passed) and `npm run check` (0 errors; 1 pre-existing `FindReplacePanel.svelte` a11y warning unchanged).
+- **M2 coverage status:** Added/validated dedicated tests for codec + store + workspace isolation (`chatPersistence.test.ts`, `chatStore.test.ts`) and confirmed M2-2..M2-5 acceptance behavior remains green in the full suite.
+- **Manual smoke checklist (M2 exit criteria):**
+  - Workspace A/B context switch restores workspace-specific chat thread.
+  - App restart restores active workspace and its chat metadata/messages from per-workspace chat file.
+  - Workspace with no chat file shows empty `Start chat` state until first user message.
+  - Notepad context clears chat binding and does not display prior workspace messages.
+- **Specs tracking:** Marked `Task M2-6` as done in `specs/ai-m-2-execution-plan.md`.
+
+## 2026-05-25 23:22 (MSK)
+
+- **AI M2-5 chat conversation UI:** Replaced the `ChatPanel` placeholder with a functional pre-provider conversation UI in `app/src/lib/components/ChatPanel.svelte`, including message list rendering, role labels/styles (`user`/`assistant`/`system`), empty-state copy (`Start chat`), and composer controls.
+- **Local message send flow:** Wired composer submit (Enter to send, Shift+Enter newline, send button) to `chatStore.appendMessage(...)`, with lazy-thread creation on first user message and immediate in-memory list updates in the active workspace chat tab.
+- **Persistence on send:** Added chat snapshot persistence on successful local send via `scheduleWorkspaceChatFilePersistence(...)`, using active workspace/thread snapshots from `chatStore`.
+- **Store selector support:** Extended `app/src/lib/state/chatStore.ts` with `getActiveWorkspaceRoot()` and `getActiveThreadSnapshot()` to provide safe, encapsulated persistence inputs for the UI layer.
+- **Svelte validation:** Ran `npx @sveltejs/mcp svelte-autofixer ./src/lib/components/ChatPanel.svelte` (clean) and kept runes-mode reactivity (`$derived`) for template state.
+- **Specs tracking:** Marked `Task M2-5` as done in `specs/ai-m-2-execution-plan.md`.
+
+## 2026-05-25 23:19 (MSK)
+
+- **ChatPanel Svelte 5 runes fix:** Updated `app/src/lib/components/ChatPanel.svelte` to replace legacy `$:` reactive statements with rune-safe `$derived(...)` declarations for `messages`, `isEmpty`, and `isSendDisabled`.
+- **Composer accessibility/idioms:** Added `aria-label` on the chat textarea and reused derived disabled-state logic for the send button while preserving existing Enter-to-send behavior and keyed message rendering.
+- **Validation:** Ran Svelte MCP `svelte-autofixer` before/after edits; initial run flagged legacy reactive statements, final run returned clean (`issues: []`).
+
+## 2026-05-25 23:17 (MSK)
+
+- **AI M2-4 workspace chat restore wiring:** Integrated `chatStore` into `app/src/routes/+page.svelte` context flow so chat binding follows active workspace context and clears in Notepad context.
+- **Workspace switch loading:** Added workspace-root keyed chat load on context changes; each new active workspace now loads its persisted thread snapshot (or `null` empty state) and sets it as active without leaking previous workspace messages.
+- **Restart restore behavior:** Extended runtime setup after `restoreWindowSession` to initialize `chatStore` for the restored active workspace and hydrate persisted thread data during startup.
+- **Race-safe store behavior:** Updated `app/src/lib/state/chatStore.ts` so `loadWorkspaceThread` only updates thread cache and does not mutate active workspace binding, preventing stale async loads from overriding the current workspace selection.
+- **Tests:** Extended `app/src/lib/state/chatStore.test.ts` with workspace-empty-state and Notepad unbinding coverage, and updated workspace-switch test to reflect explicit active-workspace binding.
+- **Specs tracking:** Marked `Task M2-4` as done in `specs/ai-m-2-execution-plan.md`.
+
+## 2026-05-25 23:09 (MSK)
+
+- **AI M2-3 chat in-memory store:** Added `app/src/lib/state/chatStore.ts` to manage one active workspace thread with per-workspace in-memory map, explicit workspace loading (`loadWorkspaceThread`), message appends, and thread metadata updates.
+- **Lazy thread creation:** Implemented first-message creation semantics in `appendMessage` (creates thread only on first `user` message), with default metadata placeholders for MVP (`mode: ask`, `provider: glm`) and timestamp updates on append/update.
+- **UI selectors:** Exposed both imperative selectors (`getMessages`, `getMetadata`, `hasThread`, `isEmpty`) and derived stores (`chatMessages`, `chatMetadata`, `chatHasThread`, `chatIsEmpty`) for upcoming ChatPanel wiring.
+- **Tests:** Added `app/src/lib/state/chatStore.test.ts` covering lazy thread creation, append + metadata update behavior, and workspace-key switching that swaps active thread state.
+- **Specs tracking:** Marked `Task M2-3` as done in `specs/ai-m-2-execution-plan.md`.
+
+## 2026-05-25 22:59 (MSK)
+
+- **AI M2-2 chat persistence service:** Added `app/src/lib/services/chatPersistence.ts` with workspace-scoped chat file mapping (`getWorkspaceChatFilePath`) under app data `chat/<normalized-path-hash>.json`, using normalized workspace path hash keys.
+- **Versioned codec + safe fallbacks:** Implemented `encodeChatThreadFileSnapshot`/`decodeChatThreadFileSnapshot` with `version: 1` envelope handling and strict shape parsing for metadata/messages/system events; missing/corrupt/invalid content now safely resolves to an empty snapshot (`thread: null`) instead of throwing.
+- **Debounced persistence helper:** Added `scheduleWorkspaceChatFilePersistence` (session-manager-style debounce) plus `resetChatPersistenceForTests` for deterministic unit tests.
+- **Tests:** Added `app/src/lib/services/chatPersistence.test.ts` covering snapshot round-trip codec behavior, corrupt-file fallback, and distinct file mapping for different workspace paths.
+- **Specs tracking:** Marked `Task M2-2` as done in `specs/ai-m-2-execution-plan.md`.
+
+## 2026-05-25 22:55 (MSK)
+
+- **AI M2-1 chat contracts:** Added chat domain contracts in `app/src/lib/domain/contracts.ts` for Milestone 2 storage/modeling: `ChatMessageRole`, `ChatMessage`, `ChatModeId`, `ChatProviderId`, `ChatThreadMetadata`, `ChatThreadSnapshot`, and `ChatThreadFileSnapshot` (versioned envelope).
+- **System-event forward compatibility:** Added typed `ChatSystemEvent` support on `ChatMessage` to represent persisted system markers (starting with `provider-switched`) so provider-switch events can be appended as visible chat history entries in later milestones.
+- **One-thread invariant documentation:** Documented one-thread-per-workspace invariant directly in `ChatThreadSnapshot` / `ChatThreadFileSnapshot` comments.
+- **Specs tracking:** Marked `Task M2-1` as done in `specs/ai-m-2-execution-plan.md`.
+
 ## 2026-05-25 22:35 (MSK)
 
 - **Console M1-5 context-switch integration:** Verified `app/src/routes/+page.svelte` still closes console on every Notepad/workspace context switch via `handleActiveContextSwitch`, while preserving M1-4 restore behavior for workspace tab preference on reopen.

@@ -16,6 +16,7 @@
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
+  import { chatStore } from "../lib/state/chatStore";
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
   import { listenForRecentFilesChanges } from "../lib/services/recentFilesSync";
@@ -70,6 +71,7 @@
   import type { AppTheme } from "../lib/styles/themes";
   import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
+  import { readWorkspaceChatFileSnapshot } from "../lib/services/chatPersistence";
   import {
     readWorkspaceConsoleTabPreference,
     writeWorkspaceConsoleTabPreference,
@@ -118,6 +120,7 @@
   let autoProjectPanelCollapsed = false;
   let consoleTabSelection: ConsoleTabId = "chat";
   let lastConsoleWorkspaceRoot: string | null = null;
+  let lastChatWorkspaceRoot: string | null = null;
   const MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
 
   $: state = $appState;
@@ -641,6 +644,15 @@
       }
       statusMessage = "Session restored.";
     }
+    const restoredWorkspaceRoot = appState.getWorkspaceRoot();
+    if (restoredWorkspaceRoot) {
+      const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
+      chatStore.setActiveWorkspaceRoot(normalizedRoot);
+      const snapshot = await readWorkspaceChatFileSnapshot(normalizedRoot);
+      chatStore.setWorkspaceThread(normalizedRoot, snapshot.thread);
+    } else {
+      chatStore.setActiveWorkspaceRoot(null);
+    }
     if (shouldInitializeAppMenu(currentWindowId)) {
       await initializeAppMenu(runCommand, appState.getSnapshot().recentFiles);
     }
@@ -882,6 +894,34 @@
 
   $: if (activeContextId) {
     handleActiveContextSwitch(activeContextId);
+  }
+
+  $: {
+    if (!activeWorkspaceRoot) {
+      if (lastChatWorkspaceRoot !== null) {
+        lastChatWorkspaceRoot = null;
+      }
+      chatStore.setActiveWorkspaceRoot(null);
+    } else {
+      const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
+      if (lastChatWorkspaceRoot !== normalizedWorkspaceRoot) {
+        lastChatWorkspaceRoot = normalizedWorkspaceRoot;
+        chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
+        void readWorkspaceChatFileSnapshot(normalizedWorkspaceRoot)
+          .then((snapshot) => {
+            if (!activeWorkspaceRoot) {
+              return;
+            }
+            if (normalizePathSync(activeWorkspaceRoot) !== normalizedWorkspaceRoot) {
+              return;
+            }
+            chatStore.setWorkspaceThread(normalizedWorkspaceRoot, snapshot.thread);
+          })
+          .catch(() => {
+            chatStore.setWorkspaceThread(normalizedWorkspaceRoot, null);
+          });
+      }
+    }
   }
 
   $: {

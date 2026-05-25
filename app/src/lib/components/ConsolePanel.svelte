@@ -1,45 +1,67 @@
 <script lang="ts">
+  import ChatPanel from "./ChatPanel.svelte";
   import ConsoleLogsPanel from "./ConsoleLogsPanel.svelte";
 
-  type ConsoleTabId = "chat" | "logs";
+  import type { ConsoleTabId } from "../services/consoleTabPrefs";
 
-  let activeTab = $state<ConsoleTabId>("chat");
+  let {
+    showChatTab = true,
+    activeTab = "chat",
+    onTabChange,
+  }: {
+    showChatTab?: boolean;
+    activeTab?: ConsoleTabId;
+    onTabChange?: (nextTab: ConsoleTabId) => void;
+  } = $props();
+
+  function selectTab(nextTab: ConsoleTabId): void {
+    if (activeTab === nextTab) {
+      return;
+    }
+    activeTab = nextTab;
+    onTabChange?.(nextTab);
+  }
+
+  $effect(() => {
+    if (!showChatTab && activeTab !== "logs") {
+      activeTab = "logs";
+      onTabChange?.("logs");
+    }
+  });
 </script>
 
 <section class="console-panel" aria-hidden="false">
-  <div class="console-tabs" role="tablist" aria-label="Console tabs">
-    <button
-      type="button"
-      role="tab"
-      class="console-tab"
-      class:console-tab-active={activeTab === "chat"}
-      aria-selected={activeTab === "chat"}
-      tabindex={activeTab === "chat" ? 0 : -1}
-      onclick={() => {
-        activeTab = "chat";
-      }}
-    >
-      Chat
-    </button>
-    <button
-      type="button"
-      role="tab"
-      class="console-tab"
-      class:console-tab-active={activeTab === "logs"}
-      aria-selected={activeTab === "logs"}
-      tabindex={activeTab === "logs" ? 0 : -1}
-      onclick={() => {
-        activeTab = "logs";
-      }}
-    >
-      Logs
-    </button>
-  </div>
+  {#if showChatTab}
+    <div class="console-tabs" role="tablist" aria-label="Console tabs">
+      <button
+        type="button"
+        role="tab"
+        class="console-tab"
+        class:console-tab-active={activeTab === "chat"}
+        aria-selected={activeTab === "chat"}
+        tabindex={activeTab === "chat" ? 0 : -1}
+        onclick={() => selectTab("chat")}
+      >
+        Chat
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="console-tab"
+        class:console-tab-active={activeTab === "logs"}
+        aria-selected={activeTab === "logs"}
+        tabindex={activeTab === "logs" ? 0 : -1}
+        onclick={() => selectTab("logs")}
+      >
+        Logs
+      </button>
+    </div>
+  {/if}
 
   <div class="console-content">
-    {#if activeTab === "chat"}
-      <div class="chat-placeholder" role="tabpanel">
-        Start chat
+    {#if showChatTab && activeTab === "chat"}
+      <div role="tabpanel" aria-label="Chat panel">
+        <ChatPanel />
       </div>
     {:else}
       <div role="tabpanel" class="logs-panel-wrap">
@@ -111,13 +133,5 @@
   .logs-panel-wrap {
     height: 100%;
     min-height: 0;
-  }
-
-  .chat-placeholder {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    padding: var(--space-4) var(--space-8);
-    color: var(--color-text-secondary);
   }
 </style>

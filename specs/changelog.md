@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-05-25 22:35 (MSK)
+
+- **Console M1-5 context-switch integration:** Verified `app/src/routes/+page.svelte` still closes console on every Notepad/workspace context switch via `handleActiveContextSwitch`, while preserving M1-4 restore behavior for workspace tab preference on reopen.
+- **Console reopen restore:** Confirmed console mounts with controlled `activeTab` from per-workspace prefs (`consoleTabSelection`) and keeps Notepad behavior prefs-free (no workspace read/write in Notepad context).
+- **Validation:** Ran full suite in `app` — `npm test` (24 files, 200 tests passed) and `npm run check` (0 errors; one pre-existing `FindReplacePanel.svelte` a11y warning).
+- **Specs:** Marked Task M1-5 as done in `specs/ai-m-1-execution-plan.md`.
+
+## 2026-05-25 22:29 (MSK)
+
+- **Console M1-4 persistence service:** Added `app/src/lib/services/consoleTabPrefs.ts` with lightweight app-data storage (`console-tab-prefs.json`) for per-workspace console tab selection, keyed by normalized workspace path hash and scoped to `chat`/`logs`.
+- **Console tab restore wiring:** Updated `app/src/routes/+page.svelte` to restore tab preference when workspace context activates (default `chat` when no record exists), and persist changes only in workspace context.
+- **Console panel control hook:** Updated `app/src/lib/components/ConsolePanel.svelte` to accept controlled `activeTab` and emit `onTabChange` callbacks while preserving existing M1-2 notepad gating and logs-only fallback behavior.
+- **Tests:** Added `app/src/lib/services/consoleTabPrefs.test.ts` for hash-key stability and prefs read/write behavior.
+- **Specs:** Marked Task M1-4 as done in `specs/ai-m-1-execution-plan.md`.
+- **Validation:** Ran `npm run check`, `npm test -- consoleTabPrefs`, and `ReadLints` on changed files (no new errors; one pre-existing `FindReplacePanel.svelte` warning remains).
+
+## 2026-05-25 22:13 (MSK)
+
+- **Console M1-3 chat placeholder component:** Added `app/src/lib/components/ChatPanel.svelte` as a workspace-scoped empty-state view (`Start chat` with a brief workspace/provider hint) using existing console design tokens and without composer/input/network/provider runtime logic.
+- **Console panel integration:** Updated `app/src/lib/components/ConsolePanel.svelte` to import/render `ChatPanel` instead of inline placeholder markup, preserving tab order (`Chat`, then `Logs`), current logs behavior, and existing `showChatTab` gating (tabs hidden in Notepad mode, logs-only when chat unavailable).
+- **Validation:** Ran Svelte MCP `svelte-autofixer` for both changed components; fixed one a11y issue (`tabpanel` role on non-interactive element in `ChatPanel`) and revalidated cleanly (remaining `activeTab` `$effect` note in `ConsolePanel` is pre-existing M1-2 gating logic).
+
+## 2026-05-25 21:56 (MSK)
+
+- **Console M1-2 workspace gating:** Updated `app/src/lib/components/ConsolePanel.svelte` to accept `showChatTab`, hide the tab header in Notepad mode, and render logs-only when no workspace is active.
+- **Console tab safety:** Added defensive tab coercion in `ConsolePanel.svelte` so hidden `Chat` cannot stay selected; panel falls back to `logs` when `showChatTab` is false.
+- **Shell integration:** Updated `app/src/routes/+page.svelte` to pass `showChatTab={Boolean(activeWorkspaceRoot)}` into `ConsolePanel` while keeping existing `toggleConsole`, `applyResponsiveLayoutRules`, and context-switch close behavior unchanged.
+- **Specs:** Marked Task M1-2 as done in `specs/ai-m-1-execution-plan.md`.
+- **Validation:** Ran `npm run check` in `app` and `ReadLints` on changed files; no new errors (pre-existing `FindReplacePanel.svelte` a11y warning remains).
+
 ## 2026-05-25 21:43 (MSK)
 
 - **Console M1-1:** Refactored `app/src/lib/components/ConsolePanel.svelte` into a tabbed console shell with `Chat` first and `Logs` second, defaulting to `Chat`, and added token-driven active/inactive tab states without changing console container sizing.

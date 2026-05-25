@@ -70,6 +70,11 @@
   import type { AppTheme } from "../lib/styles/themes";
   import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
+  import {
+    readWorkspaceConsoleTabPreference,
+    writeWorkspaceConsoleTabPreference,
+    type ConsoleTabId,
+  } from "../lib/services/consoleTabPrefs";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -111,6 +116,8 @@
   let projectTreeLoadingPaths = new Set<string>();
   let projectTreeShowHidden = false;
   let autoProjectPanelCollapsed = false;
+  let consoleTabSelection: ConsoleTabId = "chat";
+  let lastConsoleWorkspaceRoot: string | null = null;
   const MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
 
   $: state = $appState;
@@ -284,6 +291,14 @@
 
   function toggleConsole(): void {
     consoleOpen = !consoleOpen;
+  }
+
+  function handleConsoleTabChange(nextTab: ConsoleTabId): void {
+    consoleTabSelection = nextTab;
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    void writeWorkspaceConsoleTabPreference(activeWorkspaceRoot, nextTab);
   }
 
   function canFitMarkdownSplit(): boolean {
@@ -869,6 +884,27 @@
     handleActiveContextSwitch(activeContextId);
   }
 
+  $: {
+    if (!activeWorkspaceRoot) {
+      lastConsoleWorkspaceRoot = null;
+    } else {
+      const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
+      if (lastConsoleWorkspaceRoot !== normalizedWorkspaceRoot) {
+        lastConsoleWorkspaceRoot = normalizedWorkspaceRoot;
+        consoleTabSelection = "chat";
+        void readWorkspaceConsoleTabPreference(activeWorkspaceRoot).then((storedTab) => {
+          if (!activeWorkspaceRoot) {
+            return;
+          }
+          if (normalizePathSync(activeWorkspaceRoot) !== normalizedWorkspaceRoot) {
+            return;
+          }
+          consoleTabSelection = storedTab ?? "chat";
+        });
+      }
+    }
+  }
+
   $: applyResponsiveLayoutRules();
 
   $: if (isMarkdownDocument && activeDocument) {
@@ -1255,7 +1291,11 @@
 
   <div class="bottom-panel">
     {#if consoleOpen}
-      <ConsolePanel />
+      <ConsolePanel
+        showChatTab={Boolean(activeWorkspaceRoot)}
+        activeTab={consoleTabSelection}
+        onTabChange={handleConsoleTabChange}
+      />
     {/if}
 
     <footer class="status-bar" class:status-bar-console-open={consoleOpen}>

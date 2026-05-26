@@ -1,14 +1,32 @@
 <script lang="ts">
+  import { WorkspaceAccessReason } from "../ai/capabilities";
   import type { ChatMessage } from "../domain/contracts";
-  import { chatMessages, chatStore } from "../state/chatStore";
+  import { chatAccessState, chatMessages, chatStore } from "../state/chatStore";
   import { scheduleWorkspaceChatFilePersistence } from "../services/chatPersistence";
 
   let draft = $state("");
   let sending = $state(false);
 
   const messages = $derived($chatMessages);
+  const accessState = $derived($chatAccessState);
+  const isBlocked = $derived(accessState.status === "blocked");
   const isEmpty = $derived(messages.length === 0);
-  const isSendDisabled = $derived(sending || draft.trim().length === 0);
+  const isSendDisabled = $derived(isBlocked || sending || draft.trim().length === 0);
+  const blockedMessage = $derived.by(() => {
+    if (!isBlocked) {
+      return "";
+    }
+    if (accessState.reason === WorkspaceAccessReason.WorkspacePathInaccessible) {
+      return "AI cannot read files in this workspace because the path is currently inaccessible.";
+    }
+    if (accessState.reason === WorkspaceAccessReason.MissingProviderConfig) {
+      return "AI cannot run because provider setup is incomplete for this workspace.";
+    }
+    if (accessState.reason === WorkspaceAccessReason.ProviderUnsupported) {
+      return "AI cannot read files in this workspace with the current provider.";
+    }
+    return "AI cannot read files in this workspace.";
+  });
 
   function messageRoleLabel(message: ChatMessage): string {
     if (message.role === "assistant") {
@@ -43,7 +61,7 @@
 
   async function submitMessage(): Promise<void> {
     const content = draft.trim();
-    if (!content || sending) {
+    if (!content || sending || isBlocked) {
       return;
     }
     sending = true;
@@ -64,6 +82,16 @@
 </script>
 
 <section class="chat-panel" aria-label="Workspace chat">
+  {#if isBlocked}
+    <div class="chat-blocked-state" role="status" aria-live="polite">
+      <p class="chat-blocked-title">AI cannot read files in this workspace.</p>
+      <p class="chat-blocked-message">{blockedMessage}</p>
+      {#if accessState.recoveryHint}
+        <p class="chat-blocked-hint">{accessState.recoveryHint}</p>
+      {/if}
+    </div>
+  {/if}
+
   {#if isEmpty}
     <div class="chat-empty-state">
       <p class="chat-title">Start chat</p>
@@ -88,7 +116,7 @@
       placeholder="Message workspace chat"
       aria-label="Chat message"
       onkeydown={handleComposerKeydown}
-      disabled={sending}
+      disabled={sending || isBlocked}
     ></textarea>
     <div class="chat-composer-actions">
       <button
@@ -122,6 +150,32 @@
     flex-direction: column;
     justify-content: center;
     gap: var(--space-2);
+    color: var(--color-text-secondary);
+  }
+
+  .chat-blocked-state {
+    border: 1px solid color-mix(in srgb, #e06c75 48%, var(--color-border-subtle));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, #e06c75 9%, var(--color-surface-1));
+    padding: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .chat-blocked-title {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .chat-blocked-message,
+  .chat-blocked-hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
     color: var(--color-text-secondary);
   }
 

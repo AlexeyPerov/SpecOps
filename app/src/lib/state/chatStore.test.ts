@@ -90,6 +90,21 @@ describe("chatStore", () => {
     });
   });
 
+  it("creates an empty thread when mode is selected before the first message", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+
+    const updated = chatStore.updateThreadMetadata({ mode: "review" }, "2026-05-26T00:00:00.000Z");
+
+    expect(updated).toBe(true);
+    expect(chatStore.getMessages()).toEqual([]);
+    expect(chatStore.getMetadata()).toEqual({
+      mode: "review",
+      provider: "glm",
+      createdAt: "2026-05-26T00:00:00.000Z",
+      updatedAt: "2026-05-26T00:00:00.000Z",
+    });
+  });
+
   it("compacts oldest turns when append exceeds retention cap", () => {
     setChatRetentionMaxTurnsForTests(2);
     chatStore.setActiveWorkspaceRoot("/work/a");

@@ -1,19 +1,32 @@
 <script lang="ts">
+  import { listBuiltinChatModes } from "../ai/modes/builtins";
   import { WorkspaceAccessReason } from "../ai/capabilities";
-  import type { ChatMessage } from "../domain/contracts";
-  import { chatAccessState, chatHasThread, chatMessages, chatMetadata, chatStore, formatCompactionNotice } from "../state/chatStore";
+  import type { ChatMessage, ChatModeId } from "../domain/contracts";
+  import {
+    chatAccessState,
+    chatHasThread,
+    chatIsGenerating,
+    chatMessages,
+    chatMetadata,
+    chatStore,
+    formatCompactionNotice,
+  } from "../state/chatStore";
   import { scheduleWorkspaceChatFilePersistence } from "../services/chatPersistence";
 
   let draft = $state("");
   let sending = $state(false);
 
+  const modes = listBuiltinChatModes();
   const messages = $derived($chatMessages);
   const metadata = $derived($chatMetadata);
   const hasThread = $derived($chatHasThread);
   const accessState = $derived($chatAccessState);
+  const isGenerating = $derived($chatIsGenerating);
+  const activeMode = $derived(metadata?.mode ?? "ask");
   const isBlocked = $derived(accessState.status === "blocked");
   const isEmpty = $derived(messages.length === 0);
   const canClearHistory = $derived(hasThread || !isEmpty);
+  const isModeSelectionDisabled = $derived(isBlocked || isGenerating || sending);
   const compactionNotice = $derived.by(() => {
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
@@ -93,6 +106,16 @@
     await chatStore.clearActiveWorkspaceChatHistory();
   }
 
+  function selectMode(nextMode: ChatModeId): void {
+    if (nextMode === activeMode || isModeSelectionDisabled) {
+      return;
+    }
+    const updated = chatStore.updateThreadMetadata({ mode: nextMode });
+    if (updated) {
+      persistActiveThreadSnapshot();
+    }
+  }
+
   function handleComposerKeydown(event: KeyboardEvent): void {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -129,6 +152,25 @@
   {#if compactionNotice}
     <p class="chat-compaction-notice" role="status">{compactionNotice}</p>
   {/if}
+
+  <div class="chat-mode-toolbar" role="group" aria-label="Chat mode">
+    <span class="chat-mode-label">Mode</span>
+    <div class="chat-mode-options" role="radiogroup" aria-label="Select chat mode">
+      {#each modes as mode (mode.id)}
+        <button
+          type="button"
+          role="radio"
+          class="chat-mode-option"
+          class:chat-mode-option-active={activeMode === mode.id}
+          aria-checked={activeMode === mode.id}
+          disabled={isModeSelectionDisabled}
+          onclick={() => selectMode(mode.id)}
+        >
+          {mode.label}
+        </button>
+      {/each}
+    </div>
+  </div>
 
   {#if isEmpty}
     <div class="chat-empty-state">
@@ -262,6 +304,62 @@
     font-size: 11px;
     line-height: 1.4;
     color: var(--color-text-secondary);
+  }
+
+  .chat-mode-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+  }
+
+  .chat-mode-label {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .chat-mode-options {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 2px;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+  }
+
+  .chat-mode-option {
+    min-height: 22px;
+    padding: 0 var(--space-6);
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius-sm) - 1px);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .chat-mode-option:hover:not(:disabled) {
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  .chat-mode-option:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
+  }
+
+  .chat-mode-option-active {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle));
+    background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface-1));
+    color: var(--color-text-primary);
+  }
+
+  .chat-mode-option:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .chat-message-list {

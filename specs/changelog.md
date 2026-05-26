@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-05-26 21:11 (MSK)
+
+- **AI M5-2 built-in modes:** Added `app/src/lib/ai/modes/builtins.ts` with `ask` and `review` system prompt templates, mode registry (`id`, `label`, `outputStyle`), review section requirements, and T-shirt size + confidence wording enforcement.
+- **Shared prompt assembly:** Added `app/src/lib/ai/modes/prompt.ts` with `buildThreadProviderRequest()` so Debug diagnostics and GLM adapter input share identical mode-aware payloads from M5-1 helpers.
+- **Chat UI:** Wired segmented Ask/Review mode control in `ChatPanel.svelte`; selection persists via thread metadata and disables while generating.
+- **Chat store:** `updateThreadMetadata()` now creates an empty thread when mode is selected before the first message.
+- **Tests:** Added `builtins.test.ts` for mode registry and prompt assembly; extended `chatStore.test.ts` for pre-message mode persistence; full `npm test` (268 passed) and `npm run check` pass.
+- **Specs tracking:** Marked `Task M5-2` as done in `specs/ai-m-5-execution-plan.md`.
+
 ## 2026-05-26 20:59 (MSK)
 
 - **AI M5-1 provider abstraction:** Added `app/src/lib/ai/providers/types.ts` with `ChatProvider` contract (buffered `sendMessage`, optional `streamMessage`, `checkCapabilities`), request/response DTOs, and shared `buildProviderRequest()` / `buildProviderRequestFromThread()` for mode-aware prompt payload assembly.

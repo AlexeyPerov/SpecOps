@@ -354,7 +354,17 @@ function createChatStore() {
         }
         const thread = state.threadsByWorkspace[root];
         if (!thread) {
-          return state;
+          updatedMetadata = true;
+          return {
+            ...state,
+            threadsByWorkspace: {
+              ...state.threadsByWorkspace,
+              [root]: {
+                metadata: applyMetadataPatch(createThreadMetadata(updatedAt), patch, updatedAt),
+                messages: [],
+              },
+            },
+          };
         }
 
         updatedMetadata = true;

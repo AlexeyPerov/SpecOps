@@ -87,7 +87,7 @@ function isChatModeId(value: unknown): value is ChatModeId {
 }
 
 function isChatProviderId(value: unknown): value is ChatProviderId {
-  return value === "glm" || value === "cursor";
+  return value === "glm" || value === "cursor" || value === "debug";
 }
 
 function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {

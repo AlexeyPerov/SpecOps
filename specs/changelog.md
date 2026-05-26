@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-05-26 20:59 (MSK)
+
+- **AI M5-1 provider abstraction:** Added `app/src/lib/ai/providers/types.ts` with `ChatProvider` contract (buffered `sendMessage`, optional `streamMessage`, `checkCapabilities`), request/response DTOs, and shared `buildProviderRequest()` / `buildProviderRequestFromThread()` for mode-aware prompt payload assembly.
+- **Provider registry:** Added `app/src/lib/ai/providers/registry.ts` for register/resolve/list of active providers.
+- **Debug provider id:** Extended `ChatProviderId` with `"debug"` and `PRODUCT_CHAT_PROVIDER_IDS`; updated chat persistence validation.
+- **Tests:** Added `providers.test.ts` with in-memory test double covering buffered/streaming paths and registry resolution; full `npm test` (260 passed) and `npm run check` pass.
+- **Specs tracking:** Marked `Task M5-1` as done in `specs/ai-m-5-execution-plan.md`.
+
+## 2026-05-26 (planning)
+
+- **AI M5 execution plan rewrite:** Reordered `specs/ai-m-5-execution-plan.md` so Debug provider ships before GLM. Added Developer Settings (`DebugProviderSettings`), streaming simulation (random delay + chunked tokens), structured review templates, diagnostics appendix, and failure probability. Expanded to 10 tasks (M5-1–M5-10); GLM settings/adapter moved to M5-8/M5-9; milestone validation to M5-10. Updated Milestone 5 summary in `specs/ai-requirements.md`.
+
 ## 2026-05-26 17:42 (MSK)
 
 - **AI M4-7 milestone validation:** Added `app/src/lib/state/chatM4.validation.test.ts` covering M4 exit criteria: FIFO cap overflow bounds, compaction summary/metadata updates, prompt-context shape, clear-history isolation, and retry scaffolding without provider coupling.

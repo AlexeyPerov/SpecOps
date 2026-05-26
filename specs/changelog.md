@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-26 17:42 (MSK)
+
+- **AI M4-7 milestone validation:** Added `app/src/lib/state/chatM4.validation.test.ts` covering M4 exit criteria: FIFO cap overflow bounds, compaction summary/metadata updates, prompt-context shape, clear-history isolation, and retry scaffolding without provider coupling.
+- **Validation run:** Full `npm test` (31 files, 251 tests passed) and `npm run check` (0 errors; 1 pre-existing `FindReplacePanel.svelte` a11y warning unchanged).
+- **Manual smoke checklist (M4 exit):**
+  - Long conversation append triggers FIFO compaction; compaction banner shows compacted message count.
+  - Clear workspace chat history returns to empty state and persists after restart.
+  - Retry hooks (`beginTurn` / `failTurn` / `canRetryLastTurn`) available without provider integration.
+- **Specs tracking:** Marked `Task M4-7` as done in `specs/ai-m-4-execution-plan.md`. Milestone 4 complete.
+
 ## 2026-05-26 17:45 (MSK)
 
 - **AI M4-5 retry scaffolding:** Added per-workspace ephemeral runtime state in `chatStore` (`isGenerating`, `lastFailedTurnId`, `lastError`) with provider hooks `beginTurn()`, `completeTurn()`, `failTurn()`, and `canRetryLastTurn()`; runtime resets on clear history.

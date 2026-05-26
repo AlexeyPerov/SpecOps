@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-26 17:45 (MSK)
+
+- **AI M4-5 retry scaffolding:** Added per-workspace ephemeral runtime state in `chatStore` (`isGenerating`, `lastFailedTurnId`, `lastError`) with provider hooks `beginTurn()`, `completeTurn()`, `failTurn()`, and `canRetryLastTurn()`; runtime resets on clear history.
+- **AI M4-6 compaction indicator:** Added persistent thread banner in `ChatPanel.svelte` when `compactedMessageCount > 0`, using `formatCompactionNotice()` copy (e.g. "24 older messages compacted").
+- **Tests:** Added chatStore turn lifecycle, workspace-scoped failure retention, clear-reset, and compaction notice formatting coverage; full `npm test` and `npm run check` pass.
+- **Specs tracking:** Marked `Task M4-5` and `Task M4-6` as done in `specs/ai-m-4-execution-plan.md`.
+
 ## 2026-05-26 17:34 (MSK)
 
 - **AI M4-3 compaction summary:** Extended `ChatThreadMetadata` with `compactionCount`, `lastCompactedAt`, and `compactedMessageCount`; on FIFO truncation, `compactChatThread()` now appends structured user/assistant bullet summaries and updates compaction metadata.

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { chatStore } from "./chatStore";
+import { chatStore, formatCompactionNotice } from "./chatStore";
 import type { ChatThreadFileSnapshot } from "../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
 import {
@@ -474,5 +474,79 @@ describe("chatStore", () => {
     expect(chatStore.getSnapshot().threadsByWorkspace["/work/b"]?.messages[0]?.content).toBe("B");
     expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenCalledWith("/work/a");
     expect(clearWorkspaceChatFileSnapshotMock).not.toHaveBeenCalledWith("/work/b");
+  });
+
+  it("tracks turn lifecycle through begin, complete, and fail transitions", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+
+    expect(chatStore.beginTurn("turn-1")).toBe(true);
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      isGenerating: true,
+      activeTurnId: "turn-1",
+      lastFailedTurnId: null,
+      lastError: null,
+    });
+    expect(chatStore.canRetryLastTurn()).toBe(false);
+
+    expect(chatStore.completeTurn()).toBe(true);
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      isGenerating: false,
+      activeTurnId: null,
+      lastFailedTurnId: null,
+      lastError: null,
+    });
+
+    expect(chatStore.beginTurn("turn-2")).toBe(true);
+    expect(chatStore.failTurn({ message: "Provider timeout", code: "timeout" })).toBe(true);
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      isGenerating: false,
+      activeTurnId: null,
+      lastFailedTurnId: "turn-2",
+      lastError: { message: "Provider timeout", code: "timeout" },
+    });
+    expect(chatStore.canRetryLastTurn()).toBe(true);
+    expect(chatStore.beginTurn("turn-3")).toBe(true);
+    expect(chatStore.getRuntimeState().lastFailedTurnId).toBeNull();
+    expect(chatStore.canRetryLastTurn()).toBe(false);
+  });
+
+  it("keeps failed turn metadata scoped per workspace", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.beginTurn("turn-a");
+    chatStore.failTurn({ message: "failed in A" });
+
+    chatStore.setActiveWorkspaceRoot("/work/b");
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      isGenerating: false,
+      lastFailedTurnId: null,
+      lastError: null,
+    });
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      lastFailedTurnId: "turn-a",
+      lastError: { message: "failed in A" },
+    });
+    expect(chatStore.canRetryLastTurn()).toBe(true);
+  });
+
+  it("clears retry runtime state when chat history is cleared", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.beginTurn("turn-1");
+    chatStore.failTurn({ message: "failed" });
+
+    await chatStore.clearActiveWorkspaceChatHistory();
+
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      isGenerating: false,
+      lastFailedTurnId: null,
+      lastError: null,
+    });
+    expect(chatStore.canRetryLastTurn()).toBe(false);
+  });
+
+  it("formats compaction notice copy for the chat banner", () => {
+    expect(formatCompactionNotice(1)).toBe("1 older message compacted");
+    expect(formatCompactionNotice(24)).toBe("24 older messages compacted");
   });
 });

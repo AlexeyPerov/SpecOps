@@ -23,6 +23,20 @@ interface ChatStoreState {
   activeWorkspaceRoot: string | null;
   threadsByWorkspace: Record<string, ChatThreadSnapshot | null>;
   accessByWorkspace: Record<string, ChatAccessState>;
+  runtimeByWorkspace: Record<string, ChatThreadRuntimeState>;
+}
+
+export interface ChatTurnError {
+  message: string;
+  code?: string;
+}
+
+/** Ephemeral per-workspace chat runtime; not persisted to disk. */
+export interface ChatThreadRuntimeState {
+  isGenerating: boolean;
+  lastFailedTurnId: string | null;
+  lastError: ChatTurnError | null;
+  activeTurnId: string | null;
 }
 
 export interface ChatAccessState {
@@ -43,7 +57,24 @@ const initialState: ChatStoreState = {
   activeWorkspaceRoot: null,
   threadsByWorkspace: {},
   accessByWorkspace: {},
+  runtimeByWorkspace: {},
 };
+
+function defaultRuntimeState(): ChatThreadRuntimeState {
+  return {
+    isGenerating: false,
+    lastFailedTurnId: null,
+    lastError: null,
+    activeTurnId: null,
+  };
+}
+
+function activeRuntime(state: ChatStoreState): ChatThreadRuntimeState {
+  if (!state.activeWorkspaceRoot) {
+    return defaultRuntimeState();
+  }
+  return state.runtimeByWorkspace[state.activeWorkspaceRoot] ?? defaultRuntimeState();
+}
 
 function defaultUnknownAccessState(message: string): ChatAccessState {
   return {
@@ -185,6 +216,28 @@ function createChatStore() {
     return capabilityChecker ?? stubCapabilityChecker;
   }
 
+  function updateActiveRuntime(
+    updater: (runtime: ChatThreadRuntimeState) => ChatThreadRuntimeState,
+  ): boolean {
+    let updated = false;
+    update((state) => {
+      const root = state.activeWorkspaceRoot;
+      if (!root) {
+        return state;
+      }
+      const current = state.runtimeByWorkspace[root] ?? defaultRuntimeState();
+      updated = true;
+      return {
+        ...state,
+        runtimeByWorkspace: {
+          ...state.runtimeByWorkspace,
+          [root]: updater(current),
+        },
+      };
+    });
+    return updated;
+  }
+
   return {
     subscribe,
     reset() {
@@ -281,6 +334,10 @@ function createChatStore() {
           ...state.threadsByWorkspace,
           [root]: null,
         },
+        runtimeByWorkspace: {
+          ...state.runtimeByWorkspace,
+          [root]: defaultRuntimeState(),
+        },
       }));
       await clearWorkspaceChatFileSnapshot(root);
       return true;
@@ -333,6 +390,54 @@ function createChatStore() {
     },
     isEmpty(): boolean {
       return this.getMessages().length === 0;
+    },
+    getRuntimeState(): ChatThreadRuntimeState {
+      return { ...activeRuntime(this.getSnapshot()) };
+    },
+    beginTurn(turnId: string): boolean {
+      if (!this.getActiveWorkspaceRoot()) {
+        return false;
+      }
+      const runtime = this.getRuntimeState();
+      if (runtime.isGenerating) {
+        return false;
+      }
+      return updateActiveRuntime(() => ({
+        isGenerating: true,
+        activeTurnId: turnId,
+        lastFailedTurnId: null,
+        lastError: null,
+      }));
+    },
+    completeTurn(): boolean {
+      if (!this.getActiveWorkspaceRoot()) {
+        return false;
+      }
+      const runtime = this.getRuntimeState();
+      if (!runtime.isGenerating) {
+        return false;
+      }
+      return updateActiveRuntime(() => defaultRuntimeState());
+    },
+    failTurn(error: ChatTurnError, turnId?: string): boolean {
+      if (!this.getActiveWorkspaceRoot()) {
+        return false;
+      }
+      const runtime = this.getRuntimeState();
+      const failedTurnId = turnId ?? runtime.activeTurnId;
+      if (!failedTurnId) {
+        return false;
+      }
+      return updateActiveRuntime(() => ({
+        isGenerating: false,
+        activeTurnId: null,
+        lastFailedTurnId: failedTurnId,
+        lastError: { ...error },
+      }));
+    },
+    canRetryLastTurn(): boolean {
+      const runtime = this.getRuntimeState();
+      return runtime.lastFailedTurnId !== null && !runtime.isGenerating;
     },
     setCapabilityChecker(checker: CapabilityChecker | null): void {
       capabilityChecker = checker;
@@ -421,3 +526,13 @@ export const chatAccessState = derived(chatStore, ($chatStore) => {
     defaultUnknownAccessState("Chat access preflight has not run yet.")
   );
 });
+export const chatRuntimeState = derived(chatStore, ($chatStore) => activeRuntime($chatStore));
+export const chatIsGenerating = derived(chatRuntimeState, ($runtime) => $runtime.isGenerating);
+export const chatCanRetryLastTurn = derived(chatRuntimeState, ($runtime) =>
+  Boolean($runtime.lastFailedTurnId && !$runtime.isGenerating),
+);
+
+export function formatCompactionNotice(compactedMessageCount: number): string {
+  const label = compactedMessageCount === 1 ? "message" : "messages";
+  return `${compactedMessageCount} older ${label} compacted`;
+}

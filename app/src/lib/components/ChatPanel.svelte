@@ -1,18 +1,23 @@
 <script lang="ts">
   import { WorkspaceAccessReason } from "../ai/capabilities";
   import type { ChatMessage } from "../domain/contracts";
-  import { chatAccessState, chatHasThread, chatMessages, chatStore } from "../state/chatStore";
+  import { chatAccessState, chatHasThread, chatMessages, chatMetadata, chatStore, formatCompactionNotice } from "../state/chatStore";
   import { scheduleWorkspaceChatFilePersistence } from "../services/chatPersistence";
 
   let draft = $state("");
   let sending = $state(false);
 
   const messages = $derived($chatMessages);
+  const metadata = $derived($chatMetadata);
   const hasThread = $derived($chatHasThread);
   const accessState = $derived($chatAccessState);
   const isBlocked = $derived(accessState.status === "blocked");
   const isEmpty = $derived(messages.length === 0);
   const canClearHistory = $derived(hasThread || !isEmpty);
+  const compactionNotice = $derived.by(() => {
+    const count = metadata?.compactedMessageCount ?? 0;
+    return count > 0 ? formatCompactionNotice(count) : "";
+  });
   const isSendDisabled = $derived(isBlocked || sending || draft.trim().length === 0);
   const blockedMessage = $derived.by(() => {
     if (!isBlocked) {
@@ -119,6 +124,10 @@
         <p class="chat-blocked-hint">{accessState.recoveryHint}</p>
       {/if}
     </div>
+  {/if}
+
+  {#if compactionNotice}
+    <p class="chat-compaction-notice" role="status">{compactionNotice}</p>
   {/if}
 
   {#if isEmpty}
@@ -240,6 +249,17 @@
   .chat-blocked-hint {
     margin: 0;
     font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+  }
+
+  .chat-compaction-notice {
+    margin: 0;
+    padding: var(--space-4) var(--space-6);
+    border: 1px dashed var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-text-secondary) 6%, var(--color-surface-1));
+    font-size: 11px;
     line-height: 1.4;
     color: var(--color-text-secondary);
   }

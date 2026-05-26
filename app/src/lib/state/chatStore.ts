@@ -281,7 +281,7 @@ function createChatStore() {
         },
       }));
     },
-    appendMessage(message: ChatMessage): boolean {
+    appendMessage(message: ChatMessage, options?: { skipCompaction?: boolean }): boolean {
       let appended = false;
       update((state) => {
         const root = state.activeWorkspaceRoot;
@@ -308,8 +308,7 @@ function createChatStore() {
           ...thread.metadata,
           updatedAt: message.createdAt,
         };
-        const compacted = compactChatThread(thread);
-        const nextThread = compacted.thread;
+        const nextThread = options?.skipCompaction ? thread : compactChatThread(thread).thread;
 
         appended = true;
         return {
@@ -321,6 +320,105 @@ function createChatStore() {
         };
       });
       return appended;
+    },
+    updateMessageContent(messageId: string, content: string): boolean {
+      let updated = false;
+      update((state) => {
+        const root = state.activeWorkspaceRoot;
+        if (!root) {
+          return state;
+        }
+        const thread = state.threadsByWorkspace[root];
+        if (!thread) {
+          return state;
+        }
+
+        const messageIndex = thread.messages.findIndex((entry) => entry.id === messageId);
+        if (messageIndex === -1) {
+          return state;
+        }
+
+        const nextThread = cloneThread(thread);
+        if (!nextThread) {
+          return state;
+        }
+        const updatedAt = new Date().toISOString();
+        nextThread.messages = nextThread.messages.map((entry, index) =>
+          index === messageIndex ? { ...entry, content } : entry,
+        );
+        nextThread.metadata = {
+          ...nextThread.metadata,
+          updatedAt,
+        };
+        updated = true;
+        return {
+          ...state,
+          threadsByWorkspace: {
+            ...state.threadsByWorkspace,
+            [root]: nextThread,
+          },
+        };
+      });
+      return updated;
+    },
+    removeMessage(messageId: string): boolean {
+      let removed = false;
+      update((state) => {
+        const root = state.activeWorkspaceRoot;
+        if (!root) {
+          return state;
+        }
+        const thread = state.threadsByWorkspace[root];
+        if (!thread) {
+          return state;
+        }
+        if (!thread.messages.some((entry) => entry.id === messageId)) {
+          return state;
+        }
+
+        const nextThread = cloneThread(thread);
+        if (!nextThread) {
+          return state;
+        }
+        const updatedAt = new Date().toISOString();
+        nextThread.messages = nextThread.messages.filter((entry) => entry.id !== messageId);
+        nextThread.metadata = {
+          ...nextThread.metadata,
+          updatedAt,
+        };
+        removed = true;
+        return {
+          ...state,
+          threadsByWorkspace: {
+            ...state.threadsByWorkspace,
+            [root]: nextThread,
+          },
+        };
+      });
+      return removed;
+    },
+    compactActiveThread(): boolean {
+      let compacted = false;
+      update((state) => {
+        const root = state.activeWorkspaceRoot;
+        if (!root) {
+          return state;
+        }
+        const thread = state.threadsByWorkspace[root];
+        if (!thread) {
+          return state;
+        }
+        const result = compactChatThread(thread);
+        compacted = true;
+        return {
+          ...state,
+          threadsByWorkspace: {
+            ...state.threadsByWorkspace,
+            [root]: result.thread,
+          },
+        };
+      });
+      return compacted;
     },
     async clearActiveWorkspaceChatHistory(): Promise<boolean> {
       const root = this.getActiveWorkspaceRoot();
@@ -538,6 +636,7 @@ export const chatAccessState = derived(chatStore, ($chatStore) => {
 });
 export const chatRuntimeState = derived(chatStore, ($chatStore) => activeRuntime($chatStore));
 export const chatIsGenerating = derived(chatRuntimeState, ($runtime) => $runtime.isGenerating);
+export const chatLastError = derived(chatRuntimeState, ($runtime) => $runtime.lastError);
 export const chatCanRetryLastTurn = derived(chatRuntimeState, ($runtime) =>
   Boolean($runtime.lastFailedTurnId && !$runtime.isGenerating),
 );

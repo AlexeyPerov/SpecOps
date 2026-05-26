@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-26 21:41 (MSK)
+
+- **AI M5-5 chat send pipeline:** Added `sendChatMessage()` orchestrating access preflight, user append, `beginTurn()`, provider streaming/buffered send, incremental assistant updates, `completeTurn()` / `failTurn()`, post-turn compaction, and single persist per completed turn.
+- **Chat store streaming support:** Added `updateMessageContent()`, `removeMessage()`, `compactActiveThread()`, and `skipCompaction` option on `appendMessage()` for streaming without partial persist thrash.
+- **Chat UI:** Wired `ChatPanel` to the send pipeline; composer disables while generating; streaming assistant placeholder/partial content visible; inline error on failure (retry deferred to M7).
+- **Tests:** Added `sendChatMessage.test.ts` covering Debug ask/review E2E, streaming partial updates, generation lock, failure scaffolding, and preflight blocking; full `npm test` (297 passed) and `npm run check` pass.
+- **Specs tracking:** Marked `Task M5-5` as done in `specs/ai-m-5-execution-plan.md`.
+
 ## 2026-05-26 21:34 (MSK)
 
 - **AI M5-4 Debug provider adapter:** Added `DebugChatProvider` with settings-gated `checkCapabilities()`, seeded simulation (`debugSimulation.ts`), structured ask/review responses, optional diagnostics appendix, buffered `sendMessage()`, and chunked `streamMessage()` with configurable delay/failure.

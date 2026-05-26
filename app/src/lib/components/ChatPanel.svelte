@@ -3,6 +3,7 @@
     getDebugProviderSendBlockHint,
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
+  import { sendChatMessage } from "../ai/sendChatMessage";
   import { listBuiltinChatModes } from "../ai/modes/builtins";
   import { WorkspaceAccessReason } from "../ai/capabilities";
   import type { ChatMessage, ChatModeId } from "../domain/contracts";
@@ -11,6 +12,7 @@
     chatAccessState,
     chatHasThread,
     chatIsGenerating,
+    chatLastError,
     chatMessages,
     chatMetadata,
     chatStore,
@@ -20,6 +22,7 @@
 
   let draft = $state("");
   let sending = $state(false);
+  let inlineError = $state("");
 
   const modes = listBuiltinChatModes();
   const messages = $derived($chatMessages);
@@ -27,6 +30,7 @@
   const hasThread = $derived($chatHasThread);
   const accessState = $derived($chatAccessState);
   const isGenerating = $derived($chatIsGenerating);
+  const lastError = $derived($chatLastError);
   const activeMode = $derived(metadata?.mode ?? "ask");
   const debugProviderSettings = $derived($appState.settings.debugProvider);
   const isDebugSendBlocked = $derived(
@@ -41,8 +45,22 @@
     return count > 0 ? formatCompactionNotice(count) : "";
   });
   const isSendDisabled = $derived(
-    isBlocked || isDebugSendBlocked || sending || draft.trim().length === 0,
+    isBlocked ||
+      isDebugSendBlocked ||
+      isGenerating ||
+      sending ||
+      draft.trim().length === 0,
   );
+  const composerDisabled = $derived(isBlocked || isDebugSendBlocked || isGenerating || sending);
+  const generationStatus = $derived.by(() => {
+    if (isGenerating) {
+      return "Generating response…";
+    }
+    if (lastError) {
+      return lastError.message;
+    }
+    return "";
+  });
   const blockedMessage = $derived.by(() => {
     if (!isBlocked) {
       return "";
@@ -81,25 +99,19 @@
     });
   }
 
-  function createUserMessage(content: string): ChatMessage {
-    return {
-      id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      role: "user",
-      content,
-      createdAt: new Date().toISOString(),
-    };
-  }
-
   async function submitMessage(): Promise<void> {
     const content = draft.trim();
-    if (!content || sending || isBlocked || isDebugSendBlocked) {
+    if (!content || sending || isBlocked || isDebugSendBlocked || isGenerating) {
       return;
     }
+
     sending = true;
-    const appended = chatStore.appendMessage(createUserMessage(content));
-    if (appended) {
+    inlineError = "";
+    const result = await sendChatMessage(content);
+    if (result.ok) {
       draft = "";
-      persistActiveThreadSnapshot();
+    } else {
+      inlineError = result.message;
     }
     sending = false;
   }
@@ -191,20 +203,39 @@
   {#if isEmpty}
     <div class="chat-empty-state">
       <p class="chat-title">Start chat</p>
-      <p class="chat-hint">Ask about this workspace. Provider responses will be enabled in later milestones.</p>
+      <p class="chat-hint">
+        Ask or review ideas for this workspace. Enable the Debug provider in Developer Settings to
+        try end-to-end chat locally.
+      </p>
     </div>
   {:else}
     <ol class="chat-message-list" aria-label="Conversation">
-      {#each messages as message (message.id)}
-        <li class={`chat-message chat-message-${message.role}`}>
+      {#each messages as message, index (message.id)}
+        <li
+          class={`chat-message chat-message-${message.role}`}
+          class:chat-message-streaming={isGenerating &&
+            message.role === "assistant" &&
+            index === messages.length - 1}
+        >
           <p class="chat-message-role">{messageRoleLabel(message)}</p>
-          <p class="chat-message-content">{message.content}</p>
+          <p class="chat-message-content">
+            {#if message.content.length > 0}
+              {message.content}
+            {:else if isGenerating && message.role === "assistant" && index === messages.length - 1}
+              <span class="chat-streaming-placeholder">Generating…</span>
+            {/if}
+          </p>
         </li>
       {/each}
     </ol>
   {/if}
 
   <div class="chat-composer" role="group" aria-label="Chat composer">
+    {#if inlineError}
+      <p class="chat-inline-error" role="alert">{inlineError}</p>
+    {:else if lastError && !isGenerating}
+      <p class="chat-inline-error" role="alert">{lastError.message}</p>
+    {/if}
     <textarea
       class="chat-input"
       rows="3"
@@ -212,7 +243,7 @@
       placeholder="Message workspace chat"
       aria-label="Chat message"
       onkeydown={handleComposerKeydown}
-      disabled={sending || isBlocked || isDebugSendBlocked}
+      disabled={composerDisabled}
     ></textarea>
     <div class="chat-composer-actions">
       <button
@@ -221,9 +252,11 @@
         onclick={() => void submitMessage()}
         disabled={isSendDisabled}
       >
-        Send
+        {isGenerating ? "Generating…" : "Send"}
       </button>
-      <span class="chat-assistant-status">Assistant responses unavailable in this milestone.</span>
+      {#if generationStatus}
+        <span class="chat-assistant-status" role="status">{generationStatus}</span>
+      {/if}
     </div>
   </div>
 </section>
@@ -428,6 +461,26 @@
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  .chat-message-streaming {
+    border-style: dashed;
+  }
+
+  .chat-streaming-placeholder {
+    color: var(--color-text-secondary);
+    font-style: italic;
+  }
+
+  .chat-inline-error {
+    margin: 0;
+    padding: var(--space-4) var(--space-6);
+    border: 1px solid color-mix(in srgb, #e06c75 48%, var(--color-border-subtle));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, #e06c75 9%, var(--color-surface-1));
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-primary);
   }
 
   .chat-composer {

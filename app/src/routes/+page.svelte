@@ -65,7 +65,7 @@
   } from "../lib/services/fileWatcher";
   import { marked } from "marked";
   import { diffLines } from "diff";
-  import type { AppDomainState, ExternalFilesSettings } from "../lib/domain/contracts";
+  import type { AppDomainState, DebugProviderSettings, ExternalFilesSettings } from "../lib/domain/contracts";
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
   import { APP_THEME_IDS, getThemeLabel, getThemeAccentHex } from "../lib/styles/themes";
   import type { AppTheme } from "../lib/styles/themes";
@@ -619,6 +619,34 @@
     });
   }
 
+  function updateDebugProviderSetting(
+    key: keyof DebugProviderSettings,
+    value: DebugProviderSettings[keyof DebugProviderSettings],
+  ): void {
+    appState.updateDebugProviderSettings({ [key]: value });
+  }
+
+  function updateDebugProviderNumberSetting(
+    key:
+      | "delayMsMin"
+      | "delayMsMax"
+      | "chunkCharsMin"
+      | "chunkCharsMax"
+      | "failureProbability",
+    rawValue: string,
+  ): void {
+    const parsed = key === "failureProbability" ? Number.parseFloat(rawValue) : Number.parseInt(rawValue, 10);
+    updateDebugProviderSetting(key, Number.isFinite(parsed) ? parsed : 0);
+  }
+
+  function updateDebugProviderSeed(rawValue: string): void {
+    const trimmed = rawValue.trim();
+    updateDebugProviderSetting(
+      "simulationSeed",
+      trimmed.length === 0 ? null : Number.parseInt(trimmed, 10),
+    );
+  }
+
   async function setupRuntime(): Promise<() => void> {
     const currentWindow = getCurrentWebviewWindow();
     currentWindowId = currentWindow.label;
@@ -632,6 +660,7 @@
         externalFiles: toExternalFilesSettings(persistedSettings),
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
         hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
+        debugProvider: persistedSettings.debugProvider,
       });
     } else {
       appState.initializeTheme();
@@ -1018,6 +1047,7 @@
           externalFiles: state.settings.externalFiles,
           decoratePlaintextSymbols: state.settings.decoratePlaintextSymbols,
           hideActivityRailWhenNotepadOnly: state.settings.hideActivityRailWhenNotepadOnly,
+          debugProvider: state.settings.debugProvider,
         }),
       );
     }
@@ -1343,6 +1373,133 @@
           />
           Hide activity rail when Notepad only
         </label>
+      </section>
+      <section class="settings-section">
+        <h3>Developer Settings</h3>
+        <p class="settings-section-note">Debug provider configuration for development dogfooding.</p>
+        <div class="settings-subsection">
+          <h4>Enable</h4>
+          <label class="settings-toggle">
+            <input
+              type="checkbox"
+              checked={state.settings.debugProvider.enabled}
+              onchange={(event) =>
+                updateDebugProviderSetting(
+                  "enabled",
+                  (event.currentTarget as HTMLInputElement).checked,
+                )}
+            />
+            Show Debug provider in chat
+          </label>
+        </div>
+        <div class="settings-subsection">
+          <h4>Simulation</h4>
+          <label class="settings-field">
+            <span>Simulation seed</span>
+            <input
+              type="text"
+              inputmode="numeric"
+              placeholder="Random"
+              value={state.settings.debugProvider.simulationSeed ?? ""}
+              oninput={(event) =>
+                updateDebugProviderSeed((event.currentTarget as HTMLInputElement).value)}
+            />
+          </label>
+          <label class="settings-field">
+            <span>Delay min (ms)</span>
+            <input
+              type="number"
+              min="0"
+              value={state.settings.debugProvider.delayMsMin}
+              onchange={(event) =>
+                updateDebugProviderNumberSetting(
+                  "delayMsMin",
+                  (event.currentTarget as HTMLInputElement).value,
+                )}
+            />
+          </label>
+          <label class="settings-field">
+            <span>Delay max (ms)</span>
+            <input
+              type="number"
+              min="0"
+              value={state.settings.debugProvider.delayMsMax}
+              onchange={(event) =>
+                updateDebugProviderNumberSetting(
+                  "delayMsMax",
+                  (event.currentTarget as HTMLInputElement).value,
+                )}
+            />
+          </label>
+          <label class="settings-field">
+            <span>Chunk min (chars)</span>
+            <input
+              type="number"
+              min="1"
+              value={state.settings.debugProvider.chunkCharsMin}
+              onchange={(event) =>
+                updateDebugProviderNumberSetting(
+                  "chunkCharsMin",
+                  (event.currentTarget as HTMLInputElement).value,
+                )}
+            />
+          </label>
+          <label class="settings-field">
+            <span>Chunk max (chars)</span>
+            <input
+              type="number"
+              min="1"
+              value={state.settings.debugProvider.chunkCharsMax}
+              onchange={(event) =>
+                updateDebugProviderNumberSetting(
+                  "chunkCharsMax",
+                  (event.currentTarget as HTMLInputElement).value,
+                )}
+            />
+          </label>
+          <label class="settings-field">
+            <span>Failure probability</span>
+            <input
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              value={state.settings.debugProvider.failureProbability}
+              onchange={(event) =>
+                updateDebugProviderNumberSetting(
+                  "failureProbability",
+                  (event.currentTarget as HTMLInputElement).value,
+                )}
+            />
+          </label>
+          <label class="settings-field">
+            <span>Failure message</span>
+            <input
+              type="text"
+              value={state.settings.debugProvider.failureMessage}
+              onchange={(event) =>
+                updateDebugProviderSetting(
+                  "failureMessage",
+                  (event.currentTarget as HTMLInputElement).value,
+                )}
+            />
+          </label>
+        </div>
+        <div class="settings-subsection">
+          <h4>Output</h4>
+          <label class="settings-toggle">
+            <input
+              type="checkbox"
+              checked={state.settings.debugProvider.includeDiagnostics}
+              onchange={(event) =>
+                updateDebugProviderSetting(
+                  "includeDiagnostics",
+                  (event.currentTarget as HTMLInputElement).checked,
+                )}
+            />
+            Include diagnostics appendix in replies
+          </label>
+        </div>
       </section>
       <p>This pane uses token-driven overlay styling.</p>
         </aside>
@@ -1691,6 +1848,51 @@
     margin: 0;
     font-size: 0.95rem;
     font-weight: 600;
+  }
+
+  .settings-section-note {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+  }
+
+  .settings-subsection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .settings-subsection h4 {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: 0.8125rem;
+  }
+
+  .settings-field input {
+    min-height: 28px;
+    padding: 0 var(--space-4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    font: inherit;
+  }
+
+  .settings-field input:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
   }
 
   .settings-toggle {

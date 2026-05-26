@@ -1,9 +1,13 @@
 import { join } from "@tauri-apps/api/path";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { ensureSpecOpsDataDir } from "./appDataDir";
-import type { ExternalFilesSettings } from "../domain/contracts";
+import {
+  defaultDebugProviderSettings,
+  normalizeDebugProviderSettings,
+} from "../ai/providers/debugProviderSettings";
+import type { DebugProviderSettings, ExternalFilesSettings } from "../domain/contracts";
 import type { AppTheme } from "../styles/themes";
 import { isValidTheme } from "../styles/themes";
+import { ensureSpecOpsDataDir } from "./appDataDir";
 
 export interface PersistedSettings {
   theme: AppTheme;
@@ -15,6 +19,7 @@ export interface PersistedSettings {
   checkOnTabActivate: boolean;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  debugProvider: DebugProviderSettings;
 }
 
 export const defaultExternalFilesSettings: ExternalFilesSettings = {
@@ -31,6 +36,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
+  debugProvider: defaultDebugProviderSettings,
 };
 
 const FILE_NAME = "settings.json";
@@ -98,6 +104,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         hideActivityRailWhenNotepadOnly: isBoolean(parsed.hideActivityRailWhenNotepadOnly)
           ? parsed.hideActivityRailWhenNotepadOnly
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
+        debugProvider: normalizeDebugProviderSettings(parsed.debugProvider),
       };
     }
     return null;
@@ -131,6 +138,7 @@ export function toPersistedSettings(input: {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  debugProvider: DebugProviderSettings;
 }): PersistedSettings {
   return {
     theme: input.theme,
@@ -139,5 +147,6 @@ export function toPersistedSettings(input: {
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
+    debugProvider: normalizeDebugProviderSettings(input.debugProvider),
   };
 }

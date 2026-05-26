@@ -39,6 +39,17 @@ describe("settings mapping", () => {
       },
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
+      debugProvider: {
+        enabled: true,
+        simulationSeed: 7,
+        delayMsMin: 100,
+        delayMsMax: 900,
+        chunkCharsMin: 4,
+        chunkCharsMax: 20,
+        failureProbability: 0.1,
+        failureMessage: "Test failure",
+        includeDiagnostics: false,
+      },
     });
 
     expect(toExternalFilesSettings(persisted)).toEqual({
@@ -70,6 +81,50 @@ describe("loadPersistedSettings", () => {
     );
 
     await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
+  });
+
+  it("defaults missing debug provider settings", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        theme: "dark-blue",
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
+    );
+
+    await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
+  });
+
+  it("normalizes invalid debug provider ranges on load", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        ...defaultPersistedSettings,
+        debugProvider: {
+          enabled: true,
+          simulationSeed: null,
+          delayMsMin: 5000,
+          delayMsMax: 100,
+          chunkCharsMin: 64,
+          chunkCharsMax: 8,
+          failureProbability: 3,
+          failureMessage: "Fail",
+          includeDiagnostics: true,
+        },
+      }),
+    );
+
+    const result = await loadPersistedSettings();
+    expect(result?.debugProvider).toEqual({
+      enabled: true,
+      simulationSeed: null,
+      delayMsMin: 5000,
+      delayMsMax: 5000,
+      chunkCharsMin: 64,
+      chunkCharsMax: 64,
+      failureProbability: 1,
+      failureMessage: "Fail",
+      includeDiagnostics: true,
+    });
   });
 
   it("returns null for invalid theme", async () => {

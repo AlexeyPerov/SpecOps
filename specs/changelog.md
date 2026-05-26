@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-26 21:15 (MSK)
+
+- **AI M5-3 Developer Settings:** Added `DebugProviderSettings` to persisted settings and `AppSettingsState` with safe defaults (`enabled: false`, `failureProbability: 0`); validation/clamping via `normalizeDebugProviderSettings()` on load/save.
+- **Developer Settings UI:** Added grouped Debug provider section in settings pane (Enable · Simulation · Output) with seed, delay/chunk ranges, failure probability/message, and diagnostics toggle.
+- **Debug send blocking:** When thread metadata has `provider: "debug"` but Debug is disabled, chat send is blocked with a recovery hint pointing to Developer Settings (no auto-switch).
+- **Tests:** Added `debugProviderSettings.test.ts` and extended `settingsStore.test.ts` for defaults, range normalization, and send-block helpers; full `npm test` (278 passed) and `npm run check` pass.
+- **Specs tracking:** Marked `Task M5-3` as done in `specs/ai-m-5-execution-plan.md`.
+
 ## 2026-05-26 21:11 (MSK)
 
 - **AI M5-2 built-in modes:** Added `app/src/lib/ai/modes/builtins.ts` with `ask` and `review` system prompt templates, mode registry (`id`, `label`, `outputStyle`), review section requirements, and T-shirt size + confidence wording enforcement.

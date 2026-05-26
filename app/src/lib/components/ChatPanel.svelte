@@ -1,7 +1,12 @@
 <script lang="ts">
+  import {
+    getDebugProviderSendBlockHint,
+    isDebugProviderSendBlocked,
+  } from "../ai/providers/debugProviderSettings";
   import { listBuiltinChatModes } from "../ai/modes/builtins";
   import { WorkspaceAccessReason } from "../ai/capabilities";
   import type { ChatMessage, ChatModeId } from "../domain/contracts";
+  import { appState } from "../state/appState";
   import {
     chatAccessState,
     chatHasThread,
@@ -23,6 +28,10 @@
   const accessState = $derived($chatAccessState);
   const isGenerating = $derived($chatIsGenerating);
   const activeMode = $derived(metadata?.mode ?? "ask");
+  const debugProviderSettings = $derived($appState.settings.debugProvider);
+  const isDebugSendBlocked = $derived(
+    isDebugProviderSendBlocked(metadata?.provider, debugProviderSettings),
+  );
   const isBlocked = $derived(accessState.status === "blocked");
   const isEmpty = $derived(messages.length === 0);
   const canClearHistory = $derived(hasThread || !isEmpty);
@@ -31,7 +40,9 @@
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
   });
-  const isSendDisabled = $derived(isBlocked || sending || draft.trim().length === 0);
+  const isSendDisabled = $derived(
+    isBlocked || isDebugSendBlocked || sending || draft.trim().length === 0,
+  );
   const blockedMessage = $derived.by(() => {
     if (!isBlocked) {
       return "";
@@ -81,7 +92,7 @@
 
   async function submitMessage(): Promise<void> {
     const content = draft.trim();
-    if (!content || sending || isBlocked) {
+    if (!content || sending || isBlocked || isDebugSendBlocked) {
       return;
     }
     sending = true;
@@ -147,6 +158,11 @@
         <p class="chat-blocked-hint">{accessState.recoveryHint}</p>
       {/if}
     </div>
+  {:else if isDebugSendBlocked}
+    <div class="chat-blocked-state" role="status" aria-live="polite">
+      <p class="chat-blocked-title">Debug provider is disabled.</p>
+      <p class="chat-blocked-message">{getDebugProviderSendBlockHint()}</p>
+    </div>
   {/if}
 
   {#if compactionNotice}
@@ -196,7 +212,7 @@
       placeholder="Message workspace chat"
       aria-label="Chat message"
       onkeydown={handleComposerKeydown}
-      disabled={sending || isBlocked}
+      disabled={sending || isBlocked || isDebugSendBlocked}
     ></textarea>
     <div class="chat-composer-actions">
       <button

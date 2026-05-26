@@ -6,6 +6,7 @@ import type {
   WindowSessionSnapshot,
 } from "../domain/contracts";
 import { createSessionFsMock } from "../test/sessionMock";
+import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import {
   applyRegistryDedupeToWindowSnapshot,
   claimOpenFile,
@@ -214,6 +215,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         },
         decoratePlaintextSymbols: false,
         hideActivityRailWhenNotepadOnly: true,
+        debugProvider: defaultDebugProviderSettings,
       },
       recentFiles: [],
       editor: {
@@ -315,6 +317,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         },
         decoratePlaintextSymbols: false,
         hideActivityRailWhenNotepadOnly: true,
+        debugProvider: defaultDebugProviderSettings,
       },
       recentFiles: [],
       editor: {

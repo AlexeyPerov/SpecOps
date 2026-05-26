@@ -4,6 +4,7 @@ import type {
   AppSettingsState,
   ContextId,
   ContextSnapshot,
+  DebugProviderSettings,
   DiskFingerprint,
   DocumentState,
   DocumentIdentity,
@@ -13,6 +14,10 @@ import type {
   WindowBounds,
   WindowSessionSnapshot,
 } from "../domain/contracts";
+import {
+  defaultDebugProviderSettings,
+  normalizeDebugProviderSettings,
+} from "../ai/providers/debugProviderSettings";
 import { inferEditorLanguage } from "../editor/editorLanguage";
 import { normalizePathSync } from "../services/diskFingerprint";
 import { bumpRecentFile } from "../services/recentFiles";
@@ -39,6 +44,7 @@ const defaultSettings: AppSettingsState = {
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
+  debugProvider: defaultDebugProviderSettings,
 };
 
 let docCounter = 1;
@@ -1323,6 +1329,27 @@ function createStateStore() {
         },
       }));
     },
+    setDebugProviderSettings(debugProvider: DebugProviderSettings) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          debugProvider: normalizeDebugProviderSettings(debugProvider),
+        },
+      }));
+    },
+    updateDebugProviderSettings(patch: Partial<DebugProviderSettings>) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          debugProvider: normalizeDebugProviderSettings({
+            ...state.settings.debugProvider,
+            ...patch,
+          }),
+        },
+      }));
+    },
     applyPersistedSettings(partial: {
       theme?: AppTheme;
       wrapLines?: boolean;
@@ -1330,6 +1357,7 @@ function createStateStore() {
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
       hideActivityRailWhenNotepadOnly?: boolean;
+      debugProvider?: DebugProviderSettings;
       projectPanelCollapsed?: boolean;
     }) {
       update((state) => {
@@ -1375,6 +1403,15 @@ function createStateStore() {
             settings: {
               ...next.settings,
               hideActivityRailWhenNotepadOnly: partial.hideActivityRailWhenNotepadOnly,
+            },
+          };
+        }
+        if (partial.debugProvider) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              debugProvider: normalizeDebugProviderSettings(partial.debugProvider),
             },
           };
         }

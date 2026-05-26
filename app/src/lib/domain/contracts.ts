@@ -77,12 +77,26 @@ export interface ExternalFilesSettings {
   checkOnTabActivate: boolean;
 }
 
+/** Settings-gated development provider; disabled by default (see M5-3). */
+export interface DebugProviderSettings {
+  enabled: boolean;
+  simulationSeed: number | null;
+  delayMsMin: number;
+  delayMsMax: number;
+  chunkCharsMin: number;
+  chunkCharsMax: number;
+  failureProbability: number;
+  failureMessage: string;
+  includeDiagnostics: boolean;
+}
+
 export interface AppSettingsState {
   theme: AppTheme;
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  debugProvider: DebugProviderSettings;
 }
 
 export type AppCommandId =

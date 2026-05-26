@@ -295,10 +295,16 @@
 
   function toggleConsole(): void {
     consoleOpen = !consoleOpen;
+    if (consoleOpen && consoleTabSelection === "chat" && activeWorkspaceRoot) {
+      void chatStore.runAccessPreflight();
+    }
   }
 
   function handleConsoleTabChange(nextTab: ConsoleTabId): void {
     consoleTabSelection = nextTab;
+    if (nextTab === "chat" && activeWorkspaceRoot) {
+      void chatStore.runAccessPreflight();
+    }
     if (!activeWorkspaceRoot) {
       return;
     }
@@ -652,6 +658,9 @@
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
       const snapshot = await readWorkspaceChatFileSnapshot(normalizedRoot);
       chatStore.setWorkspaceThread(normalizedRoot, snapshot.thread);
+      if (consoleTabSelection === "chat") {
+        void chatStore.runAccessPreflight();
+      }
     } else {
       chatStore.setActiveWorkspaceRoot(null);
     }
@@ -919,9 +928,15 @@
               return;
             }
             chatStore.setWorkspaceThread(normalizedWorkspaceRoot, snapshot.thread);
+            if (consoleTabSelection === "chat") {
+              void chatStore.runAccessPreflight();
+            }
           })
           .catch(() => {
             chatStore.setWorkspaceThread(normalizedWorkspaceRoot, null);
+            if (consoleTabSelection === "chat") {
+              void chatStore.runAccessPreflight();
+            }
           });
       }
     }

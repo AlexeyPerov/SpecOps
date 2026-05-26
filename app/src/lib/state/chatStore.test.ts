@@ -3,18 +3,25 @@ import { chatStore } from "./chatStore";
 import type { ChatThreadFileSnapshot } from "../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
 import { readWorkspaceChatFileSnapshot } from "../services/chatPersistence";
+import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
 vi.mock("../services/chatPersistence", () => ({
   readWorkspaceChatFileSnapshot: vi.fn(),
 }));
 
+vi.mock("../services/fileSystem", () => ({
+  ensureWorkspaceReadAccess: vi.fn(),
+}));
+
 const readWorkspaceChatFileSnapshotMock = vi.mocked(readWorkspaceChatFileSnapshot);
+const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 describe("chatStore", () => {
   beforeEach(() => {
     chatStore.reset();
     chatStore.setCapabilityChecker(null);
     readWorkspaceChatFileSnapshotMock.mockReset();
+    ensureWorkspaceReadAccessMock.mockReset();
   });
 
   it("creates thread lazily on first user message", () => {
@@ -166,13 +173,19 @@ describe("chatStore", () => {
   });
 
   it("returns unknown capability status when checker is not configured", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+
     const result = await chatStore.checkActiveWorkspaceCapabilities();
 
-    expect(result).toEqual({
-      status: "unknown",
-      reason: WorkspaceAccessReason.Unknown,
-      capabilities: null,
-      message: "Capability checker is not configured yet.",
+    expect(result).toMatchObject({
+      status: "blocked",
+      reason: WorkspaceAccessReason.ProviderUnsupported,
     });
   });
 
@@ -216,5 +229,41 @@ describe("chatStore", () => {
       message: "Provider does not support workspace reads.",
       recoveryHint: "Switch provider.",
     });
+  });
+
+  it("blocks preflight when workspace path is inaccessible", async () => {
+    ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
+    chatStore.setActiveWorkspaceRoot("/work/blocked");
+
+    const result = await chatStore.runAccessPreflight();
+
+    expect(result).toEqual({
+      status: "blocked",
+      reason: WorkspaceAccessReason.WorkspacePathInaccessible,
+      message: "AI cannot read files in this workspace because the path is inaccessible.",
+      recoveryHint: "Re-open the workspace path and confirm file permissions.",
+      checkedAt: result.checkedAt,
+    });
+    expect(chatStore.getChatAccessState()).toEqual(result);
+  });
+
+  it("returns stub blocked state when preflight runs without real checker", async () => {
+    ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+
+    const result = await chatStore.runAccessPreflight();
+
+    expect(result).toMatchObject({
+      status: "blocked",
+      reason: WorkspaceAccessReason.ProviderUnsupported,
+      message: "Provider capability checks are not integrated yet for this milestone.",
+    });
+    expect(chatStore.getChatAccessState()).toEqual(result);
   });
 });

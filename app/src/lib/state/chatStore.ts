@@ -8,14 +8,25 @@ import type {
 } from "../domain/contracts";
 import {
   WorkspaceAccessReason,
+  type WorkspaceAccessStatus,
   type CapabilityCheckResult,
   type CapabilityChecker,
 } from "../ai/capabilities";
 import { readWorkspaceChatFileSnapshot } from "../services/chatPersistence";
+import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
 interface ChatStoreState {
   activeWorkspaceRoot: string | null;
   threadsByWorkspace: Record<string, ChatThreadSnapshot | null>;
+  accessByWorkspace: Record<string, ChatAccessState>;
+}
+
+export interface ChatAccessState {
+  status: WorkspaceAccessStatus;
+  reason: WorkspaceAccessReason;
+  message: string;
+  recoveryHint?: string;
+  checkedAt: string;
 }
 
 const DEFAULT_CHAT_MODE: ChatModeId = "ask";
@@ -24,6 +35,31 @@ const DEFAULT_CHAT_PROVIDER: ChatProviderId = "glm";
 const initialState: ChatStoreState = {
   activeWorkspaceRoot: null,
   threadsByWorkspace: {},
+  accessByWorkspace: {},
+};
+
+function defaultUnknownAccessState(message: string): ChatAccessState {
+  return {
+    status: "unknown",
+    reason: WorkspaceAccessReason.Unknown,
+    message,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+const stubCapabilityChecker: CapabilityChecker = {
+  async checkCapabilities() {
+    return {
+      status: "blocked",
+      reason: WorkspaceAccessReason.ProviderUnsupported,
+      capabilities: {
+        canReadWorkspaceFiles: false,
+        supportedModes: [],
+      },
+      message: "Provider capability checks are not integrated yet for this milestone.",
+      recoveryHint: "Provider integration arrives in a later milestone.",
+    };
+  },
 };
 
 function cloneThread(thread: ChatThreadSnapshot | null): ChatThreadSnapshot | null {
@@ -70,6 +106,20 @@ function applyMetadataPatch(
 function createChatStore() {
   const { subscribe, set, update } = writable<ChatStoreState>(initialState);
   let capabilityChecker: CapabilityChecker | null = null;
+
+  function setWorkspaceAccessState(rootPath: string, next: ChatAccessState): void {
+    update((state) => ({
+      ...state,
+      accessByWorkspace: {
+        ...state.accessByWorkspace,
+        [rootPath]: next,
+      },
+    }));
+  }
+
+  function resolveCapabilityChecker(): CapabilityChecker {
+    return capabilityChecker ?? stubCapabilityChecker;
+  }
 
   return {
     subscribe,
@@ -204,20 +254,62 @@ function createChatStore() {
       const rootPath = this.getActiveWorkspaceRoot();
       const metadata = this.getMetadata();
 
-      if (!rootPath || !metadata || !capabilityChecker) {
+      if (!rootPath) {
         return {
           status: "unknown",
           reason: WorkspaceAccessReason.Unknown,
           capabilities: null,
-          message: "Capability checker is not configured yet.",
+          message: "Chat capability checks require an active workspace.",
         };
       }
 
-      return capabilityChecker.checkCapabilities({
-        provider: metadata.provider,
-        mode: metadata.mode,
+      const checker = resolveCapabilityChecker();
+      return checker.checkCapabilities({
+        provider: metadata?.provider ?? DEFAULT_CHAT_PROVIDER,
+        mode: metadata?.mode ?? DEFAULT_CHAT_MODE,
         workspaceRootPath: rootPath,
       });
+    },
+    getChatAccessState(): ChatAccessState {
+      const snapshot = this.getSnapshot();
+      const rootPath = snapshot.activeWorkspaceRoot;
+      if (!rootPath) {
+        return defaultUnknownAccessState("Open a workspace to use AI chat.");
+      }
+      return (
+        snapshot.accessByWorkspace[rootPath] ??
+        defaultUnknownAccessState("Chat access preflight has not run yet.")
+      );
+    },
+    async runAccessPreflight(): Promise<ChatAccessState> {
+      const rootPath = this.getActiveWorkspaceRoot();
+      if (!rootPath) {
+        return defaultUnknownAccessState("Open a workspace to use AI chat.");
+      }
+
+      const workspaceAccess = await ensureWorkspaceReadAccess(rootPath);
+      if (workspaceAccess !== "ready") {
+        const blockedState: ChatAccessState = {
+          status: "blocked",
+          reason: WorkspaceAccessReason.WorkspacePathInaccessible,
+          message: "AI cannot read files in this workspace because the path is inaccessible.",
+          recoveryHint: "Re-open the workspace path and confirm file permissions.",
+          checkedAt: new Date().toISOString(),
+        };
+        setWorkspaceAccessState(rootPath, blockedState);
+        return blockedState;
+      }
+
+      const capabilityResult = await this.checkActiveWorkspaceCapabilities();
+      const nextState: ChatAccessState = {
+        status: capabilityResult.status,
+        reason: capabilityResult.reason,
+        message: capabilityResult.message,
+        recoveryHint: capabilityResult.recoveryHint,
+        checkedAt: new Date().toISOString(),
+      };
+      setWorkspaceAccessState(rootPath, nextState);
+      return nextState;
     },
   };
 }
@@ -231,3 +323,13 @@ export const chatIsEmpty = derived(
   chatStore,
   ($chatStore) => (activeThread($chatStore)?.messages.length ?? 0) === 0,
 );
+export const chatAccessState = derived(chatStore, ($chatStore) => {
+  const rootPath = $chatStore.activeWorkspaceRoot;
+  if (!rootPath) {
+    return defaultUnknownAccessState("Open a workspace to use AI chat.");
+  }
+  return (
+    $chatStore.accessByWorkspace[rootPath] ??
+    defaultUnknownAccessState("Chat access preflight has not run yet.")
+  );
+});

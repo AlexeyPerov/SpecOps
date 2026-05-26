@@ -3,11 +3,16 @@ import { chatStore } from "./chatStore";
 import type { ChatThreadFileSnapshot } from "../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
 import { readWorkspaceChatFileSnapshot } from "../services/chatPersistence";
+import { setChatRetentionMaxTurnsForTests } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
-vi.mock("../services/chatPersistence", () => ({
-  readWorkspaceChatFileSnapshot: vi.fn(),
-}));
+vi.mock("../services/chatPersistence", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/chatPersistence")>();
+  return {
+    ...actual,
+    readWorkspaceChatFileSnapshot: vi.fn(),
+  };
+});
 
 vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
@@ -20,6 +25,7 @@ describe("chatStore", () => {
   beforeEach(() => {
     chatStore.reset();
     chatStore.setCapabilityChecker(null);
+    setChatRetentionMaxTurnsForTests(undefined);
     readWorkspaceChatFileSnapshotMock.mockReset();
     ensureWorkspaceReadAccessMock.mockReset();
   });
@@ -74,6 +80,52 @@ describe("chatStore", () => {
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:02.000Z",
       summary: "brief summary",
+    });
+  });
+
+  it("compacts oldest turns when append exceeds retention cap", () => {
+    setChatRetentionMaxTurnsForTests(2);
+    chatStore.setActiveWorkspaceRoot("/work/a");
+
+    for (let index = 1; index <= 3; index += 1) {
+      chatStore.appendMessage({
+        id: `u-${index}`,
+        role: "user",
+        content: `turn-${index}`,
+        createdAt: `2026-05-26T00:00:0${index}.000Z`,
+      });
+      chatStore.appendMessage({
+        id: `a-${index}`,
+        role: "assistant",
+        content: `reply-${index}`,
+        createdAt: `2026-05-26T00:00:1${index}.000Z`,
+      });
+    }
+
+    expect(chatStore.getMessages().map((message) => message.id)).toEqual([
+      "u-2",
+      "a-2",
+      "u-3",
+      "a-3",
+    ]);
+
+    chatStore.appendMessage({
+      id: "u-4",
+      role: "user",
+      content: "turn-4",
+      createdAt: "2026-05-26T00:00:40.000Z",
+    });
+
+    expect(chatStore.getMessages().map((message) => message.id)).toEqual([
+      "u-3",
+      "a-3",
+      "u-4",
+    ]);
+    expect(chatStore.getMetadata()).toMatchObject({
+      mode: "ask",
+      provider: "glm",
+      createdAt: "2026-05-26T00:00:01.000Z",
+      updatedAt: "2026-05-26T00:00:40.000Z",
     });
   });
 
@@ -245,6 +297,82 @@ describe("chatStore", () => {
       checkedAt: result.checkedAt,
     });
     expect(chatStore.getChatAccessState()).toEqual(result);
+  });
+
+  it("records workspace access loss in thread when ready transitions to blocked", async () => {
+    const readyChecker: CapabilityChecker = {
+      checkCapabilities: vi.fn().mockResolvedValue({
+        status: "ready",
+        reason: WorkspaceAccessReason.Unknown,
+        capabilities: {
+          canReadWorkspaceFiles: true,
+          supportedModes: ["ask", "review"],
+        },
+        message: "Ready",
+      }),
+    };
+    chatStore.setCapabilityChecker(readyChecker);
+    ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+
+    const readyResult = await chatStore.runAccessPreflight();
+    expect(readyResult.status).toBe("ready");
+    expect(chatStore.getMessages()).toHaveLength(1);
+
+    ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
+    const blockedResult = await chatStore.runAccessPreflight();
+
+    expect(blockedResult.status).toBe("blocked");
+    expect(blockedResult.reason).toBe(WorkspaceAccessReason.WorkspacePathInaccessible);
+    expect(chatStore.getMessages()).toHaveLength(2);
+    expect(chatStore.getMessages()[1]).toMatchObject({
+      role: "system",
+      content: expect.stringContaining("Workspace file access was lost"),
+    });
+    expect(chatStore.appendMessage({
+      id: "m-2",
+      role: "user",
+      content: "blocked send",
+      createdAt: "2026-05-26T00:00:01.000Z",
+    })).toBe(false);
+    expect(chatStore.getMessages()).toHaveLength(2);
+  });
+
+  it("does not duplicate access-loss system messages on repeated blocked preflight", async () => {
+    const readyChecker: CapabilityChecker = {
+      checkCapabilities: vi.fn().mockResolvedValue({
+        status: "ready",
+        reason: WorkspaceAccessReason.Unknown,
+        capabilities: {
+          canReadWorkspaceFiles: true,
+          supportedModes: ["ask"],
+        },
+        message: "Ready",
+      }),
+    };
+    chatStore.setCapabilityChecker(readyChecker);
+    ensureWorkspaceReadAccessMock.mockResolvedValueOnce("ready").mockResolvedValue("blocked");
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+    await chatStore.runAccessPreflight();
+    await chatStore.runAccessPreflight();
+    await chatStore.runAccessPreflight();
+
+    const systemMessages = chatStore
+      .getMessages()
+      .filter((message) => message.role === "system");
+    expect(systemMessages).toHaveLength(1);
   });
 
   it("returns stub blocked state when preflight runs without real checker", async () => {

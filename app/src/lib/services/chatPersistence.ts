@@ -11,6 +11,30 @@ import type {
 } from "../domain/contracts";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
+/**
+ * Rolling retention cap per workspace thread.
+ *
+ * Policy (specs/ai-requirements.md — Persistence and retention):
+ * - One thread per workspace with a rolling turn cap.
+ * - On overflow, remove oldest turns first (FIFO); never drop newest messages.
+ * - Removed turn text is summarized into `thread.metadata.summary` (M4-3).
+ *
+ * A turn starts at each user message and includes following assistant replies
+ * until the next user message. Compaction runs on append/save, not on load.
+ */
+export const CHAT_RETENTION_MAX_TURNS = 50;
+
+export function countConversationTurns(messages: readonly ChatMessage[]): number {
+  return messages.reduce((count, message) => count + (message.role === "user" ? 1 : 0), 0);
+}
+
+export function needsChatCompaction(
+  messages: readonly ChatMessage[],
+  maxTurns: number = CHAT_RETENTION_MAX_TURNS,
+): boolean {
+  return countConversationTurns(messages) > maxTurns;
+}
+
 const CHAT_VERSION = 1;
 const CHAT_DIR_NAME = "chat";
 const PERSIST_DEBOUNCE_MS = 700;

@@ -13,6 +13,7 @@ import {
   type CapabilityChecker,
 } from "../ai/capabilities";
 import { readWorkspaceChatFileSnapshot } from "../services/chatPersistence";
+import { compactChatThread } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
 interface ChatStoreState {
@@ -31,6 +32,9 @@ export interface ChatAccessState {
 
 const DEFAULT_CHAT_MODE: ChatModeId = "ask";
 const DEFAULT_CHAT_PROVIDER: ChatProviderId = "glm";
+
+const WORKSPACE_ACCESS_LOSS_MESSAGE =
+  "Workspace file access was lost. AI cannot read files until access is restored.";
 
 const initialState: ChatStoreState = {
   activeWorkspaceRoot: null,
@@ -117,6 +121,63 @@ function createChatStore() {
     }));
   }
 
+  function appendWorkspaceAccessLossMessage(rootPath: string): void {
+    const checkedAt = new Date().toISOString();
+    update((state) => {
+      const thread = state.threadsByWorkspace[rootPath];
+      if (!thread || thread.messages.length === 0) {
+        return state;
+      }
+      const lastMessage = thread.messages[thread.messages.length - 1];
+      if (
+        lastMessage.role === "system" &&
+        lastMessage.content === WORKSPACE_ACCESS_LOSS_MESSAGE
+      ) {
+        return state;
+      }
+      const nextThread = cloneThread(thread);
+      if (!nextThread) {
+        return state;
+      }
+      nextThread.messages = [
+        ...nextThread.messages,
+        {
+          id: `access-loss-${checkedAt}`,
+          role: "system",
+          content: WORKSPACE_ACCESS_LOSS_MESSAGE,
+          createdAt: checkedAt,
+        },
+      ];
+      nextThread.metadata = {
+        ...nextThread.metadata,
+        updatedAt: checkedAt,
+      };
+      return {
+        ...state,
+        threadsByWorkspace: {
+          ...state.threadsByWorkspace,
+          [rootPath]: nextThread,
+        },
+      };
+    });
+  }
+
+  function commitAccessPreflightResult(
+    rootPath: string,
+    nextState: ChatAccessState,
+    previousState: ChatAccessState | undefined,
+  ): ChatAccessState {
+    if (
+      previousState?.status === "ready" &&
+      nextState.status === "blocked" &&
+      nextState.reason === WorkspaceAccessReason.WorkspacePathInaccessible
+    ) {
+      appendWorkspaceAccessLossMessage(rootPath);
+    }
+    setWorkspaceAccessState(rootPath, nextState);
+    return nextState;
+  }
+
   function resolveCapabilityChecker(): CapabilityChecker {
     return capabilityChecker ?? stubCapabilityChecker;
   }
@@ -172,6 +233,11 @@ function createChatStore() {
           return state;
         }
 
+        const access = state.accessByWorkspace[root];
+        if (access?.status === "blocked" && message.role === "user") {
+          return state;
+        }
+
         const existingThread = state.threadsByWorkspace[root] ?? null;
         if (!existingThread && message.role !== "user") {
           return state;
@@ -186,13 +252,15 @@ function createChatStore() {
           ...thread.metadata,
           updatedAt: message.createdAt,
         };
+        const compacted = compactChatThread(thread);
+        const nextThread = compacted.thread;
 
         appended = true;
         return {
           ...state,
           threadsByWorkspace: {
             ...state.threadsByWorkspace,
-            [root]: thread,
+            [root]: nextThread,
           },
         };
       });
@@ -282,10 +350,13 @@ function createChatStore() {
       );
     },
     async runAccessPreflight(): Promise<ChatAccessState> {
-      const rootPath = this.getActiveWorkspaceRoot();
+      const snapshot = this.getSnapshot();
+      const rootPath = snapshot.activeWorkspaceRoot;
       if (!rootPath) {
         return defaultUnknownAccessState("Open a workspace to use AI chat.");
       }
+
+      const previousState = snapshot.accessByWorkspace[rootPath];
 
       const workspaceAccess = await ensureWorkspaceReadAccess(rootPath);
       if (workspaceAccess !== "ready") {
@@ -296,8 +367,7 @@ function createChatStore() {
           recoveryHint: "Re-open the workspace path and confirm file permissions.",
           checkedAt: new Date().toISOString(),
         };
-        setWorkspaceAccessState(rootPath, blockedState);
-        return blockedState;
+        return commitAccessPreflightResult(rootPath, blockedState, previousState);
       }
 
       const capabilityResult = await this.checkActiveWorkspaceCapabilities();
@@ -308,8 +378,7 @@ function createChatStore() {
         recoveryHint: capabilityResult.recoveryHint,
         checkedAt: new Date().toISOString(),
       };
-      setWorkspaceAccessState(rootPath, nextState);
-      return nextState;
+      return commitAccessPreflightResult(rootPath, nextState, previousState);
     },
   };
 }

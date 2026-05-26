@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-05-26 14:43 (MSK)
+
+- **AI M4-1 retention policy:** Added `CHAT_RETENTION_MAX_TURNS` (50), `countConversationTurns()`, and `needsChatCompaction()` in `app/src/lib/services/chatPersistence.ts` with policy comments cross-referencing `specs/ai-requirements.md`.
+- **AI M4-2 FIFO compaction:** Added `app/src/lib/services/chatRetention.ts` with turn-based FIFO truncation (oldest user/assistant turns and plain system notices droppable; provider `systemEvent` markers preserved); wired compaction into `chatStore.appendMessage()` after each append.
+- **Tests:** Added `chatPersistence.retention.test.ts`, `chatRetention.test.ts`, and chatStore compaction integration coverage; full `npm test` (233 passed) and `npm run check` pass.
+- **Specs tracking:** Marked `Task M4-1` and `Task M4-2` as done in `specs/ai-m-4-execution-plan.md`.
+
+## 2026-05-26 14:15 (MSK)
+
+- **AI M3-5 mid-session access loss:** Extended `chatStore.runAccessPreflight()` to detect `ready` → `blocked` transitions for `workspace_path_inaccessible`, append a system message in the active thread, and reject further user sends while blocked without clearing history.
+- **Access monitoring:** Added `chatAccessMonitor.ts` with conservative Chat-tab polling (`15s`) and wired `+page.svelte` to start/stop monitoring when the console Chat tab is active; project-tree root reload probes inaccessible roots and re-runs preflight.
+- **Lightweight probe:** Added `probeWorkspaceReadAccess()` in `fileSystem.ts` (readDir-only, no persistence) for FS hooks and tree refresh triggers.
+- **AI M3-6 validation:** Added `capabilities.test.ts`, `chatAccessMonitor.test.ts`, expanded `chatStore.test.ts` and `fileSystem.test.ts` for access-loss transitions; full `npm test` and `npm run check` pass.
+- **Manual smoke (M3 exit):** Accessible workspace shows blocked composer with stub checker; simulated inaccessible root blocks sends, keeps history read-only, shows recovery banner + system loss message after prior ready state.
+- **Specs tracking:** Marked `Task M3-5` and `Task M3-6` as done in `specs/ai-m-3-execution-plan.md`.
+
+## 2026-05-26 13:32 (MSK)
+
+- **AI M3-4 blocked chat UI:** Updated `app/src/lib/components/ChatPanel.svelte` to consume reactive `chatAccessState`, disable composer/send when access is blocked, and render a visible inline blocked-state message (`AI cannot read files in this workspace`) with reason-specific copy and recovery guidance.
+- **Reason-aware messaging:** Added blocked-state message mapping for `workspace_path_inaccessible`, `missing_provider_config`, and `provider_unsupported`, with fallback text for unknown blocked cases.
+- **Behavior gating:** `submitMessage` now hard-blocks sends while access is blocked, and textarea/button disabled state follows blocked state directly.
+- **Tests:** Added `app/src/lib/components/ChatPanel.test.ts` covering blocked-state disablement/message visibility and ready-state composer enablement.
+- **Specs tracking:** Marked `Task M3-4` as done in `specs/ai-m-3-execution-plan.md`.
+
+## 2026-05-26 13:05 (MSK)
+
+- **AI M3-3 preflight orchestrator:** Extended `app/src/lib/state/chatStore.ts` with runtime access preflight orchestration (`runAccessPreflight`) that composes workspace access checks (`ensureWorkspaceReadAccess`) with provider capability checks and stores per-workspace chat access outcomes.
+- **Stub capability checker:** Added a deterministic built-in capability checker fallback in `chatStore` that returns a blocked `provider_unsupported` state until real provider integrations land, while preserving `setCapabilityChecker` for future real provider wiring.
+- **Reactive access state:** Added `ChatAccessState` and reactive `chatAccessState` export in `chatStore` plus imperative `getChatAccessState()` for UI consumption and upcoming blocked-state UX wiring.
+- **Preflight triggers:** Updated `app/src/routes/+page.svelte` to run chat preflight on workspace activation, on Chat tab selection, and when opening the console directly into Chat.
+- **Tests:** Expanded `app/src/lib/state/chatStore.test.ts` with M3-3 coverage for blocked workspace-path preflight and deterministic stub-checker blocked preflight behavior.
+- **Specs tracking:** Marked `Task M3-3` as done in `specs/ai-m-3-execution-plan.md`.
+
+## 2026-05-26 09:45 (MSK)
+
+- **AI M3-2 workspace access preparation:** Added `ensureWorkspaceReadAccess(rootPath)` and access snapshot persistence in `app/src/lib/services/fileSystem.ts`; successful checks return `ready`, inaccessible roots return `blocked`, and diagnostics are emitted via `logDiagnostic`.
+- **Allowed roots persistence:** Added `workspace-access.json` handling in app data (`readAllowedWorkspaceRoots`, internal read/write helpers) to persist normalized workspace roots that pass read-access preparation.
+- **Workspace add/open wiring:** Updated `workspace.add` command in `app/src/lib/commands/registry.ts` to enforce access preparation before adding a workspace and show actionable blocked messaging; updated `app/src/routes/+page.svelte` to run access preparation on restored workspace activation and workspace switch.
+- **Tests:** Extended `app/src/lib/services/fileSystem.test.ts` and `app/src/lib/commands/registry.test.ts` to cover ready/blocked access checks, diagnostics logging on failure, persisted allowed roots parsing, and blocked workspace-add flow.
+- **Specs tracking:** Marked `Task M3-2` as done in `specs/ai-m-3-execution-plan.md`.
+
 ## 2026-05-26 09:13 (MSK)
 
 - **AI M3-1 capability contract:** Added provider-agnostic capability types and checker interface in `app/src/lib/ai/capabilities.ts`: `WorkspaceAccessStatus`, `WorkspaceAccessReason` codes (`missing_provider_config`, `workspace_path_inaccessible`, `provider_unsupported`), `ProviderCapabilities`, `CapabilityCheckResult`, and `CapabilityChecker`.

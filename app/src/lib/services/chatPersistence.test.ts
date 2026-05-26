@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
+  clearWorkspaceChatFileSnapshot,
   decodeChatThreadFileSnapshot,
   encodeChatThreadFileSnapshot,
   getWorkspaceChatFilePath,
   readWorkspaceChatFileSnapshot,
+  resetChatPersistenceForTests,
   workspaceChatPathHashKey,
+  writeWorkspaceChatFileSnapshot,
 } from "./chatPersistence";
 import type { ChatThreadFileSnapshot } from "../domain/contracts";
 
@@ -90,6 +93,7 @@ describe("chat snapshot file reads", () => {
     mkdirMock.mockReset();
     mkdirMock.mockResolvedValue(undefined);
     writeTextFileMock.mockResolvedValue(undefined);
+    resetChatPersistenceForTests();
   });
 
   it("returns empty snapshot when chat file is corrupt", async () => {
@@ -98,5 +102,45 @@ describe("chat snapshot file reads", () => {
       version: 1,
       thread: null,
     });
+  });
+
+  it("clears workspace chat file to an empty snapshot", async () => {
+    await clearWorkspaceChatFileSnapshot("/work/a");
+
+    expect(writeTextFileMock).toHaveBeenCalledWith(
+      "/data/spec-ops/chat/" + workspaceChatPathHashKey("/work/a") + ".json",
+      encodeChatThreadFileSnapshot({ version: 1, thread: null }),
+    );
+  });
+
+  it("clears only the targeted workspace chat file", async () => {
+    await writeWorkspaceChatFileSnapshot("/work/a", {
+      version: 1,
+      thread: {
+        metadata: {
+          mode: "ask",
+          provider: "glm",
+          createdAt: "2026-05-26T00:00:00.000Z",
+          updatedAt: "2026-05-26T00:00:00.000Z",
+        },
+        messages: [
+          {
+            id: "m-1",
+            role: "user",
+            content: "hello",
+            createdAt: "2026-05-26T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    writeTextFileMock.mockClear();
+
+    await clearWorkspaceChatFileSnapshot("/work/b");
+
+    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
+    expect(writeTextFileMock).toHaveBeenCalledWith(
+      "/data/spec-ops/chat/" + workspaceChatPathHashKey("/work/b") + ".json",
+      encodeChatThreadFileSnapshot({ version: 1, thread: null }),
+    );
   });
 });

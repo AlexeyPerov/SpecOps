@@ -174,6 +174,12 @@ export interface ChatThreadMetadata {
   createdAt: string;
   updatedAt: string;
   summary?: string;
+  /** Number of FIFO compaction events applied to this thread. */
+  compactionCount?: number;
+  /** ISO timestamp of the most recent compaction event. */
+  lastCompactedAt?: string;
+  /** Cumulative count of messages removed by compaction (for UI indicators). */
+  compactedMessageCount?: number;
 }
 
 /**

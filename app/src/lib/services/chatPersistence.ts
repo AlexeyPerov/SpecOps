@@ -105,12 +105,24 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
   if (value.summary !== undefined && typeof value.summary !== "string") {
     return null;
   }
+  if (value.compactionCount !== undefined && typeof value.compactionCount !== "number") {
+    return null;
+  }
+  if (value.lastCompactedAt !== undefined && typeof value.lastCompactedAt !== "string") {
+    return null;
+  }
+  if (value.compactedMessageCount !== undefined && typeof value.compactedMessageCount !== "number") {
+    return null;
+  }
   return {
     mode: value.mode,
     provider: value.provider,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     summary: value.summary,
+    compactionCount: value.compactionCount,
+    lastCompactedAt: value.lastCompactedAt,
+    compactedMessageCount: value.compactedMessageCount,
   };
 }
 
@@ -241,6 +253,17 @@ export async function writeWorkspaceChatFileSnapshot(
 ): Promise<void> {
   const chatPath = await getWorkspaceChatFilePath(normalizedRootPath);
   await writeTextFile(chatPath, encodeChatThreadFileSnapshot(snapshot));
+}
+
+export async function clearWorkspaceChatFileSnapshot(normalizedRootPath: string): Promise<void> {
+  if (pendingPersist?.normalizedRootPath === normalizedRootPath) {
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+    pendingPersist = null;
+  }
+  await writeWorkspaceChatFileSnapshot(normalizedRootPath, emptyChatSnapshot());
 }
 
 export function scheduleWorkspaceChatFilePersistence(

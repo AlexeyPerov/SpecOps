@@ -108,18 +108,81 @@ export function compactChatMessages(
 
 export function compactChatThread(
   thread: ChatThreadSnapshot,
-  options?: { maxTurns?: number },
+  options?: { maxTurns?: number; compactedAt?: string },
 ): ChatCompactionResult {
   const { messages, removedMessages } = compactChatMessages(thread.messages, options?.maxTurns);
   if (removedMessages.length === 0) {
     return { thread, removedMessages };
   }
 
+  const compactedAt = options?.compactedAt ?? new Date().toISOString();
+  const summary = appendCompactionSummary(thread.metadata.summary, removedMessages);
+  const droppableRemovedCount = removedMessages.filter(isDroppableCompactionMessage).length;
+
   return {
     thread: {
-      metadata: { ...thread.metadata },
+      metadata: {
+        ...thread.metadata,
+        summary: summary || thread.metadata.summary,
+        compactionCount: (thread.metadata.compactionCount ?? 0) + 1,
+        lastCompactedAt: compactedAt,
+        compactedMessageCount:
+          (thread.metadata.compactedMessageCount ?? 0) + droppableRemovedCount,
+        updatedAt: compactedAt,
+      },
       messages,
     },
     removedMessages,
+  };
+}
+
+const SUMMARY_LINE_MAX_LENGTH = 120;
+
+function truncateSummaryLine(content: string): string {
+  const singleLine = content.replace(/\s+/g, " ").trim();
+  if (singleLine.length <= SUMMARY_LINE_MAX_LENGTH) {
+    return singleLine;
+  }
+  return `${singleLine.slice(0, SUMMARY_LINE_MAX_LENGTH - 3)}...`;
+}
+
+function summaryMessagesFromRemoved(removedMessages: readonly ChatMessage[]): ChatMessage[] {
+  return removedMessages.filter(
+    (message) => message.role === "user" || message.role === "assistant",
+  );
+}
+
+/** MVP compaction summary: bullet list extracted from removed user/assistant turns. */
+export function buildCompactionSummaryBullets(removedMessages: readonly ChatMessage[]): string {
+  const lines: string[] = [];
+  for (const message of summaryMessagesFromRemoved(removedMessages)) {
+    const roleLabel = message.role === "user" ? "User" : "Assistant";
+    lines.push(`- ${roleLabel}: ${truncateSummaryLine(message.content)}`);
+  }
+  return lines.join("\n");
+}
+
+export function appendCompactionSummary(
+  existingSummary: string | undefined,
+  removedMessages: readonly ChatMessage[],
+): string {
+  const bullets = buildCompactionSummaryBullets(removedMessages);
+  if (!bullets) {
+    return existingSummary?.trim() ?? "";
+  }
+  if (!existingSummary?.trim()) {
+    return bullets;
+  }
+  return `${existingSummary.trim()}\n${bullets}`;
+}
+
+/** Shape consumed by future provider prompt-context builders (M5). */
+export function buildThreadPromptContext(thread: ChatThreadSnapshot): {
+  summary: string | undefined;
+  recentMessages: ChatMessage[];
+} {
+  return {
+    summary: thread.metadata.summary,
+    recentMessages: thread.messages,
   };
 }

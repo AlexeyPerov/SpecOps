@@ -1,16 +1,18 @@
 <script lang="ts">
   import { WorkspaceAccessReason } from "../ai/capabilities";
   import type { ChatMessage } from "../domain/contracts";
-  import { chatAccessState, chatMessages, chatStore } from "../state/chatStore";
+  import { chatAccessState, chatHasThread, chatMessages, chatStore } from "../state/chatStore";
   import { scheduleWorkspaceChatFilePersistence } from "../services/chatPersistence";
 
   let draft = $state("");
   let sending = $state(false);
 
   const messages = $derived($chatMessages);
+  const hasThread = $derived($chatHasThread);
   const accessState = $derived($chatAccessState);
   const isBlocked = $derived(accessState.status === "blocked");
   const isEmpty = $derived(messages.length === 0);
+  const canClearHistory = $derived(hasThread || !isEmpty);
   const isSendDisabled = $derived(isBlocked || sending || draft.trim().length === 0);
   const blockedMessage = $derived.by(() => {
     if (!isBlocked) {
@@ -73,6 +75,19 @@
     sending = false;
   }
 
+  async function clearChatHistory(): Promise<void> {
+    if (!canClearHistory) {
+      return;
+    }
+    const confirmed = window.confirm(
+      "Clear all chat history for this workspace? This cannot be undone.",
+    );
+    if (!confirmed) {
+      return;
+    }
+    await chatStore.clearActiveWorkspaceChatHistory();
+  }
+
   function handleComposerKeydown(event: KeyboardEvent): void {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -82,6 +97,20 @@
 </script>
 
 <section class="chat-panel" aria-label="Workspace chat">
+  <div class="chat-panel-header">
+    <p class="chat-panel-title">Workspace chat</p>
+    {#if canClearHistory}
+      <button
+        type="button"
+        class="chat-clear-button"
+        onclick={() => void clearChatHistory()}
+        disabled={isBlocked}
+      >
+        Clear workspace chat history
+      </button>
+    {/if}
+  </div>
+
   {#if isBlocked}
     <div class="chat-blocked-state" role="status" aria-live="polite">
       <p class="chat-blocked-title">AI cannot read files in this workspace.</p>
@@ -141,6 +170,42 @@
     min-height: 0;
     padding: var(--space-8);
     color: var(--color-text-primary);
+  }
+
+  .chat-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+  }
+
+  .chat-panel-title {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .chat-clear-button {
+    min-height: 24px;
+    padding: 0 var(--space-6);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-1);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .chat-clear-button:hover:not(:disabled) {
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  .chat-clear-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .chat-empty-state {

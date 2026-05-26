@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-26 17:34 (MSK)
+
+- **AI M4-3 compaction summary:** Extended `ChatThreadMetadata` with `compactionCount`, `lastCompactedAt`, and `compactedMessageCount`; on FIFO truncation, `compactChatThread()` now appends structured user/assistant bullet summaries and updates compaction metadata.
+- **Prompt context helper:** Added `buildThreadPromptContext()` in `chatRetention.ts` for future M5 prompt assembly (summary + recent messages).
+- **AI M4-4 clear history:** Added `clearWorkspaceChatFileSnapshot()` and `chatStore.clearActiveWorkspaceChatHistory()` to reset in-memory thread and persist an empty workspace chat file; added confirm-gated "Clear workspace chat history" action in `ChatPanel.svelte`.
+- **Tests:** Added summary append, clear/idempotency, and workspace-isolation coverage in `chatRetention.test.ts`, `chatPersistence.test.ts`, and `chatStore.test.ts`; full `npm test` (241 passed) and `npm run check` pass.
+- **Specs tracking:** Marked `Task M4-3` and `Task M4-4` as done in `specs/ai-m-4-execution-plan.md`.
+
 ## 2026-05-26 14:43 (MSK)
 
 - **AI M4-1 retention policy:** Added `CHAT_RETENTION_MAX_TURNS` (50), `countConversationTurns()`, and `needsChatCompaction()` in `app/src/lib/services/chatPersistence.ts` with policy comments cross-referencing `specs/ai-requirements.md`.

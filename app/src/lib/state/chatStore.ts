@@ -12,7 +12,10 @@ import {
   type CapabilityCheckResult,
   type CapabilityChecker,
 } from "../ai/capabilities";
-import { readWorkspaceChatFileSnapshot } from "../services/chatPersistence";
+import {
+  clearWorkspaceChatFileSnapshot,
+  readWorkspaceChatFileSnapshot,
+} from "../services/chatPersistence";
 import { compactChatThread } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
@@ -265,6 +268,22 @@ function createChatStore() {
         };
       });
       return appended;
+    },
+    async clearActiveWorkspaceChatHistory(): Promise<boolean> {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
+        return false;
+      }
+
+      update((state) => ({
+        ...state,
+        threadsByWorkspace: {
+          ...state.threadsByWorkspace,
+          [root]: null,
+        },
+      }));
+      await clearWorkspaceChatFileSnapshot(root);
+      return true;
     },
     updateThreadMetadata(
       patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary">>,

@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chatStore } from "./chatStore";
 import type { ChatThreadFileSnapshot } from "../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
-import { readWorkspaceChatFileSnapshot } from "../services/chatPersistence";
+import {
+  clearWorkspaceChatFileSnapshot,
+  readWorkspaceChatFileSnapshot,
+} from "../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
@@ -11,6 +14,7 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   return {
     ...actual,
     readWorkspaceChatFileSnapshot: vi.fn(),
+    clearWorkspaceChatFileSnapshot: vi.fn(),
   };
 });
 
@@ -19,6 +23,7 @@ vi.mock("../services/fileSystem", () => ({
 }));
 
 const readWorkspaceChatFileSnapshotMock = vi.mocked(readWorkspaceChatFileSnapshot);
+const clearWorkspaceChatFileSnapshotMock = vi.mocked(clearWorkspaceChatFileSnapshot);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 describe("chatStore", () => {
@@ -27,6 +32,8 @@ describe("chatStore", () => {
     chatStore.setCapabilityChecker(null);
     setChatRetentionMaxTurnsForTests(undefined);
     readWorkspaceChatFileSnapshotMock.mockReset();
+    clearWorkspaceChatFileSnapshotMock.mockReset();
+    clearWorkspaceChatFileSnapshotMock.mockResolvedValue(undefined);
     ensureWorkspaceReadAccessMock.mockReset();
   });
 
@@ -125,8 +132,10 @@ describe("chatStore", () => {
       mode: "ask",
       provider: "glm",
       createdAt: "2026-05-26T00:00:01.000Z",
-      updatedAt: "2026-05-26T00:00:40.000Z",
+      compactionCount: 2,
+      compactedMessageCount: 4,
     });
+    expect(chatStore.getMetadata()?.lastCompactedAt).toBeDefined();
   });
 
   it("switches active thread state by workspace key", async () => {
@@ -393,5 +402,77 @@ describe("chatStore", () => {
       message: "Provider capability checks are not integrated yet for this milestone.",
     });
     expect(chatStore.getChatAccessState()).toEqual(result);
+  });
+
+  it("clears active workspace chat history in memory and on disk", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+
+    const cleared = await chatStore.clearActiveWorkspaceChatHistory();
+
+    expect(cleared).toBe(true);
+    expect(chatStore.hasThread()).toBe(false);
+    expect(chatStore.isEmpty()).toBe(true);
+    expect(chatStore.getMessages()).toEqual([]);
+    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenCalledWith("/work/a");
+  });
+
+  it("clear history is idempotent for an already empty workspace thread", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+
+    await expect(chatStore.clearActiveWorkspaceChatHistory()).resolves.toBe(true);
+    await expect(chatStore.clearActiveWorkspaceChatHistory()).resolves.toBe(true);
+
+    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenCalledTimes(2);
+    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenNthCalledWith(1, "/work/a");
+    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenNthCalledWith(2, "/work/a");
+  });
+
+  it("clear history affects only the active workspace thread", async () => {
+    chatStore.setWorkspaceThread("/work/a", {
+      metadata: {
+        mode: "ask",
+        provider: "glm",
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+      },
+      messages: [
+        {
+          id: "a-1",
+          role: "user",
+          content: "A",
+          createdAt: "2026-05-26T00:00:00.000Z",
+        },
+      ],
+    });
+    chatStore.setWorkspaceThread("/work/b", {
+      metadata: {
+        mode: "review",
+        provider: "cursor",
+        createdAt: "2026-05-26T00:00:01.000Z",
+        updatedAt: "2026-05-26T00:00:01.000Z",
+      },
+      messages: [
+        {
+          id: "b-1",
+          role: "user",
+          content: "B",
+          createdAt: "2026-05-26T00:00:01.000Z",
+        },
+      ],
+    });
+    chatStore.setActiveWorkspaceRoot("/work/a");
+
+    await chatStore.clearActiveWorkspaceChatHistory();
+
+    expect(chatStore.getSnapshot().threadsByWorkspace["/work/a"]).toBeNull();
+    expect(chatStore.getSnapshot().threadsByWorkspace["/work/b"]?.messages[0]?.content).toBe("B");
+    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenCalledWith("/work/a");
+    expect(clearWorkspaceChatFileSnapshotMock).not.toHaveBeenCalledWith("/work/b");
   });
 });

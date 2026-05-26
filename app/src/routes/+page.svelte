@@ -85,6 +85,7 @@
     writeWorkspaceConsoleTabPreference,
     type ConsoleTabId,
   } from "../lib/services/consoleTabPrefs";
+  import { initializeChatProviders } from "../lib/ai/providers/bootstrap";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -665,6 +666,8 @@
     } else {
       appState.initializeTheme();
     }
+
+    initializeChatProviders();
 
     await initializeLogging();
 

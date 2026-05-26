@@ -4,7 +4,7 @@ import type {
   ChatProviderId,
   ChatThreadSnapshot,
 } from "../../domain/contracts";
-import type { CapabilityCheckInput, CapabilityCheckResult } from "../capabilities";
+import type { CapabilityCheckInput, CapabilityCheckResult, WorkspaceAccessStatus } from "../capabilities";
 import { buildThreadPromptContext } from "../../services/chatRetention";
 
 export interface WorkspaceMetadata {
@@ -34,6 +34,10 @@ export interface ProviderRequestPayload {
 
 export interface ProviderSendRequest {
   payload: ProviderRequestPayload;
+  /** Stable turn identity for deterministic Debug simulation (M5-4). */
+  turnKey?: string;
+  /** Optional access status for Debug diagnostics appendix. */
+  accessStatus?: WorkspaceAccessStatus;
 }
 
 export interface ProviderSendResponse {

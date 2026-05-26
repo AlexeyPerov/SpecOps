@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-26 21:34 (MSK)
+
+- **AI M5-4 Debug provider adapter:** Added `DebugChatProvider` with settings-gated `checkCapabilities()`, seeded simulation (`debugSimulation.ts`), structured ask/review responses, optional diagnostics appendix, buffered `sendMessage()`, and chunked `streamMessage()` with configurable delay/failure.
+- **Provider bootstrap:** Added registry-backed capability checker (`capabilityChecker.ts`), provider registration/bootstrap wired at app startup, and `streamProviderMessage()` helper in `chatSend.ts` for send-pipeline integration (M5-5).
+- **Errors:** Added `ChatProviderError` for simulated provider failures mapped to `failTurn` scaffolding.
+- **Tests:** Added `debugChatProvider.test.ts` and `capabilityChecker.test.ts` covering deterministic seeded simulation, review template shape, diagnostics toggle, streaming chunks, and failTurn wiring; full `npm test` (291 passed) and `npm run check` pass.
+- **Specs tracking:** Marked `Task M5-4` as done in `specs/ai-m-5-execution-plan.md`.
+
 ## 2026-05-26 21:15 (MSK)
 
 - **AI M5-3 Developer Settings:** Added `DebugProviderSettings` to persisted settings and `AppSettingsState` with safe defaults (`enabled: false`, `failureProbability: 0`); validation/clamping via `normalizeDebugProviderSettings()` on load/save.

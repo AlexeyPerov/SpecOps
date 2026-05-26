@@ -5,6 +5,7 @@ import {
   ensureWorkspaceReadAccess,
   openFileDialog,
   openPath,
+  probeWorkspaceReadAccess,
   readAllowedWorkspaceRoots,
   saveFile,
   saveFileAs,
@@ -131,6 +132,28 @@ describe("openFileDialog", () => {
   it("returns null when the dialog is cancelled", async () => {
     openMock.mockResolvedValue(null);
     await expect(openFileDialog()).resolves.toBeNull();
+  });
+});
+
+describe("probeWorkspaceReadAccess", () => {
+  beforeEach(() => {
+    readDirMock.mockReset();
+    writeTextFileMock.mockReset();
+  });
+
+  it("returns ready when workspace root is readable", async () => {
+    readDirMock.mockResolvedValue([]);
+    await expect(probeWorkspaceReadAccess("/tmp/workspace/")).resolves.toBe("ready");
+    expect(readDirMock).toHaveBeenCalledWith("/tmp/workspace");
+  });
+
+  it("returns blocked without persisting allowed workspace roots", async () => {
+    readDirMock.mockRejectedValue(new Error("no such file or directory"));
+    await expect(probeWorkspaceReadAccess("/tmp/missing")).resolves.toBe("blocked");
+    const accessWrites = writeTextFileMock.mock.calls.filter((call) =>
+      String(call[0]).endsWith("/workspace-access.json"),
+    );
+    expect(accessWrites).toHaveLength(0);
   });
 });
 

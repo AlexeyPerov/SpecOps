@@ -90,6 +90,17 @@ export async function readAllowedWorkspaceRoots(): Promise<string[]> {
   return snapshot.allowedWorkspaceRoots.map((path) => normalizePathSync(path));
 }
 
+/** Lightweight read probe without persisting allowed roots (for polling / FS hooks). */
+export async function probeWorkspaceReadAccess(rootPath: string): Promise<WorkspaceAccessStatus> {
+  const normalizedRootPath = normalizePathSync(rootPath);
+  try {
+    await readDir(normalizedRootPath);
+    return "ready";
+  } catch {
+    return "blocked";
+  }
+}
+
 export async function ensureWorkspaceReadAccess(rootPath: string): Promise<WorkspaceAccessStatus> {
   const normalizedRootPath = normalizePathSync(rootPath);
   try {

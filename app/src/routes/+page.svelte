@@ -72,7 +72,14 @@
   import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
   import { readWorkspaceChatFileSnapshot } from "../lib/services/chatPersistence";
-  import { ensureWorkspaceReadAccess } from "../lib/services/fileSystem";
+  import {
+    ensureWorkspaceReadAccess,
+    probeWorkspaceReadAccess,
+  } from "../lib/services/fileSystem";
+  import {
+    stopChatAccessMonitor,
+    syncChatAccessMonitor,
+  } from "../lib/services/chatAccessMonitor";
   import {
     readWorkspaceConsoleTabPreference,
     writeWorkspaceConsoleTabPreference,
@@ -165,6 +172,12 @@
     projectTreeRootNodes = await loadDirectoryChildren(activeWorkspaceRoot, activeWorkspaceRoot, {
       showHidden: projectTreeShowHidden,
     });
+    if (consoleOpen && consoleTabSelection === "chat") {
+      const probe = await probeWorkspaceReadAccess(activeWorkspaceRoot);
+      if (probe === "blocked") {
+        void chatStore.runAccessPreflight();
+      }
+    }
   }
 
   async function loadProjectTreeChildren(directoryPath: string): Promise<void> {
@@ -897,11 +910,18 @@
         untitledTitleDebounceTimer = null;
       }
       runtimeCleanup?.();
+      stopChatAccessMonitor();
       teardownSplitScrollSync();
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("dragover", preventBrowserDragOver);
     };
   });
+
+  $: if (runtimeReady) {
+    syncChatAccessMonitor(
+      consoleOpen && consoleTabSelection === "chat" && Boolean(activeWorkspaceRoot),
+    );
+  }
 
   $: if (activeContextId) {
     handleActiveContextSwitch(activeContextId);

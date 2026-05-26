@@ -3,6 +3,7 @@ import { appState } from "../../state/appState";
 import { createRegistryCapabilityChecker } from "./capabilityChecker";
 import { createDebugChatProvider } from "./debugChatProvider";
 import { registerChatProvider } from "./registry";
+import { isGlmProviderConfigured, resolveDefaultChatProvider } from "./selection";
 
 let initialized = false;
 
@@ -16,6 +17,12 @@ export function initializeChatProviders(): void {
   );
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(() => appState.getSnapshot().settings.debugProvider),
+  );
+  chatStore.setDefaultChatProviderResolver(() =>
+    resolveDefaultChatProvider(
+      appState.getSnapshot().settings.debugProvider,
+      isGlmProviderConfigured(),
+    ),
   );
   initialized = true;
 }

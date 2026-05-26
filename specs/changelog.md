@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-05-26 21:50 (MSK)
+
+- **AI M5-6 provider/mode selection UI:** Added provider picker to `ChatPanel.svelte` with Debug gated by Developer Settings; mode options filter by active provider capabilities; provider/mode controls disable while generating.
+- **Provider selection helpers:** Added `app/src/lib/ai/providers/selection.ts` with selectable provider list, default precedence (GLM when configured → Debug when enabled → GLM fallback), and switch notice formatting.
+- **AI M5-7 provider switch events:** Added `chatStore.switchThreadProvider()` to persist provider metadata, append `provider-switched` system messages, block Debug when disabled, and prevent switches during generation; distinct system-event rendering in chat history.
+- **Bootstrap:** Wired default new-thread provider resolver via `setDefaultChatProviderResolver()`.
+- **Tests:** Added `selection.test.ts` and `chatStore` provider-switch coverage; full `npm test` (304 passed) and `npm run check` pass.
+- **Specs tracking:** Marked `Task M5-6` and `Task M5-7` as done in `specs/ai-m-5-execution-plan.md`.
+
 ## 2026-05-26 21:41 (MSK)
 
 - **AI M5-5 chat send pipeline:** Added `sendChatMessage()` orchestrating access preflight, user append, `beginTurn()`, provider streaming/buffered send, incremental assistant updates, `completeTurn()` / `failTurn()`, post-turn compaction, and single persist per completed turn.

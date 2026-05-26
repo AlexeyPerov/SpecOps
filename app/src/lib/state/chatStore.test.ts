@@ -8,6 +8,13 @@ import {
 } from "../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
+import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
+import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
+import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
+import {
+  registerChatProvider,
+  resetChatProviderRegistryForTests,
+} from "../ai/providers/registry";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
@@ -563,5 +570,71 @@ describe("chatStore", () => {
   it("formats compaction notice copy for the chat banner", () => {
     expect(formatCompactionNotice(1)).toBe("1 older message compacted");
     expect(formatCompactionNotice(24)).toBe("24 older messages compacted");
+  });
+});
+
+describe("chatStore provider switching", () => {
+  beforeEach(() => {
+    chatStore.reset();
+    resetChatProviderRegistryForTests();
+    ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
+    registerChatProvider(
+      createDebugChatProvider(() => ({
+        ...defaultDebugProviderSettings,
+        enabled: true,
+      })),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(() => ({
+        ...defaultDebugProviderSettings,
+        enabled: true,
+      })),
+    );
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+  });
+
+  it("appends a provider-switched system event and updates metadata", async () => {
+    const result = await chatStore.switchThreadProvider("debug", { debugProviderEnabled: true });
+
+    expect(result.switched).toBe(true);
+    expect(chatStore.getMetadata()?.provider).toBe("debug");
+    expect(chatStore.getMessages().at(-1)).toMatchObject({
+      role: "system",
+      content: "Provider switched from GLM to Debug.",
+      systemEvent: {
+        type: "provider-switched",
+        fromProvider: "glm",
+        toProvider: "debug",
+      },
+    });
+  });
+
+  it("blocks switching to Debug when it is disabled in settings", async () => {
+    const result = await chatStore.switchThreadProvider("debug", { debugProviderEnabled: false });
+
+    expect(result.switched).toBe(false);
+    expect(result.message).toContain("Developer Settings");
+    expect(chatStore.getMetadata()?.provider).toBe("glm");
+    expect(chatStore.getMessages()).toHaveLength(0);
+  });
+
+  it("supports switching from Debug back to GLM when both are available", async () => {
+    await chatStore.switchThreadProvider("debug", { debugProviderEnabled: true });
+
+    const result = await chatStore.switchThreadProvider("glm", { debugProviderEnabled: true });
+
+    expect(result.switched).toBe(true);
+    expect(chatStore.getMetadata()?.provider).toBe("glm");
+    expect(chatStore.getMessages().at(-1)?.content).toBe("Provider switched from Debug to GLM.");
+  });
+
+  it("blocks provider changes while generating", async () => {
+    chatStore.beginTurn("turn-1");
+
+    const result = await chatStore.switchThreadProvider("debug", { debugProviderEnabled: true });
+
+    expect(result.switched).toBe(false);
+    expect(chatStore.getMetadata()?.provider).toBe("glm");
   });
 });

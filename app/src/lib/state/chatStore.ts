@@ -18,6 +18,7 @@ import {
 } from "../services/chatPersistence";
 import { compactChatThread } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
+import { formatProviderSwitchNotice } from "../ai/providers/selection";
 
 interface ChatStoreState {
   activeWorkspaceRoot: string | null;
@@ -47,8 +48,15 @@ export interface ChatAccessState {
   checkedAt: string;
 }
 
+export interface SwitchThreadProviderResult {
+  switched: boolean;
+  message?: string;
+}
+
 const DEFAULT_CHAT_MODE: ChatModeId = "ask";
 const DEFAULT_CHAT_PROVIDER: ChatProviderId = "glm";
+
+let defaultChatProviderResolver: () => ChatProviderId = () => DEFAULT_CHAT_PROVIDER;
 
 const WORKSPACE_ACCESS_LOSS_MESSAGE =
   "Workspace file access was lost. AI cannot read files until access is restored.";
@@ -123,7 +131,7 @@ function activeThread(state: ChatStoreState): ChatThreadSnapshot | null {
 function createThreadMetadata(createdAt: string): ChatThreadMetadata {
   return {
     mode: DEFAULT_CHAT_MODE,
-    provider: DEFAULT_CHAT_PROVIDER,
+    provider: defaultChatProviderResolver(),
     createdAt,
     updatedAt: createdAt,
   };
@@ -549,6 +557,94 @@ function createChatStore() {
     },
     setCapabilityChecker(checker: CapabilityChecker | null): void {
       capabilityChecker = checker;
+    },
+    setDefaultChatProviderResolver(resolver: () => ChatProviderId): void {
+      defaultChatProviderResolver = resolver;
+    },
+    async switchThreadProvider(
+      nextProvider: ChatProviderId,
+      options: { debugProviderEnabled: boolean },
+    ): Promise<SwitchThreadProviderResult> {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
+        return { switched: false, message: "Open a workspace to switch providers." };
+      }
+
+      if (this.getRuntimeState().isGenerating) {
+        return {
+          switched: false,
+          message: "Provider cannot be changed while a response is generating.",
+        };
+      }
+
+      if (nextProvider === "debug" && !options.debugProviderEnabled) {
+        return {
+          switched: false,
+          message: "Enable the Debug provider in Developer Settings first.",
+        };
+      }
+
+      const metadata = this.getMetadata();
+      const fromProvider = metadata?.provider ?? null;
+      if (fromProvider === nextProvider) {
+        return { switched: false };
+      }
+
+      const capabilityResult = await resolveCapabilityChecker().checkCapabilities({
+        provider: nextProvider,
+        mode: metadata?.mode ?? DEFAULT_CHAT_MODE,
+        workspaceRootPath: root,
+      });
+
+      let nextMode = metadata?.mode ?? DEFAULT_CHAT_MODE;
+      const supportedModes = capabilityResult.capabilities?.supportedModes;
+      if (supportedModes && supportedModes.length > 0 && !supportedModes.includes(nextMode)) {
+        nextMode = supportedModes[0];
+      }
+
+      const updatedAt = new Date().toISOString();
+      const systemEvent = {
+        type: "provider-switched" as const,
+        fromProvider,
+        toProvider: nextProvider,
+      };
+      const switchMessage: ChatMessage = {
+        id: `provider-switch-${updatedAt}`,
+        role: "system",
+        content: formatProviderSwitchNotice(systemEvent),
+        createdAt: updatedAt,
+        systemEvent,
+      };
+
+      let switched = false;
+      update((state) => {
+        const thread = state.threadsByWorkspace[root];
+        const baseThread =
+          thread ??
+          ({
+            metadata: applyMetadataPatch(createThreadMetadata(updatedAt), {}, updatedAt),
+            messages: [],
+          } satisfies ChatThreadSnapshot);
+
+        switched = true;
+        return {
+          ...state,
+          threadsByWorkspace: {
+            ...state.threadsByWorkspace,
+            [root]: {
+              ...baseThread,
+              metadata: applyMetadataPatch(
+                baseThread.metadata,
+                { provider: nextProvider, mode: nextMode },
+                updatedAt,
+              ),
+              messages: [...baseThread.messages, switchMessage],
+            },
+          },
+        };
+      });
+
+      return { switched };
     },
     async checkActiveWorkspaceCapabilities(): Promise<CapabilityCheckResult> {
       const rootPath = this.getActiveWorkspaceRoot();

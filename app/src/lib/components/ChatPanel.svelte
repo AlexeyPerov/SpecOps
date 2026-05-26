@@ -3,10 +3,16 @@
     getDebugProviderSendBlockHint,
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
+  import {
+    canSelectChatProvider,
+    formatProviderSwitchNotice,
+    listSelectableChatProviders,
+    resolveDefaultChatProvider,
+  } from "../ai/providers/selection";
   import { sendChatMessage } from "../ai/sendChatMessage";
-  import { listBuiltinChatModes } from "../ai/modes/builtins";
+  import { listBuiltinChatModes, listModesForProvider } from "../ai/modes/builtins";
   import { WorkspaceAccessReason } from "../ai/capabilities";
-  import type { ChatMessage, ChatModeId } from "../domain/contracts";
+  import type { ChatMessage, ChatModeId, ChatProviderId } from "../domain/contracts";
   import { appState } from "../state/appState";
   import {
     chatAccessState,
@@ -23,16 +29,21 @@
   let draft = $state("");
   let sending = $state(false);
   let inlineError = $state("");
+  let supportedModes = $state<ChatModeId[]>(["ask", "review"]);
 
-  const modes = listBuiltinChatModes();
   const messages = $derived($chatMessages);
   const metadata = $derived($chatMetadata);
   const hasThread = $derived($chatHasThread);
   const accessState = $derived($chatAccessState);
   const isGenerating = $derived($chatIsGenerating);
   const lastError = $derived($chatLastError);
-  const activeMode = $derived(metadata?.mode ?? "ask");
   const debugProviderSettings = $derived($appState.settings.debugProvider);
+  const availableProviders = $derived(listSelectableChatProviders(debugProviderSettings));
+  const availableModes = $derived(listModesForProvider(supportedModes));
+  const activeMode = $derived(metadata?.mode ?? "ask");
+  const activeProvider = $derived(
+    metadata?.provider ?? resolveDefaultChatProvider(debugProviderSettings),
+  );
   const isDebugSendBlocked = $derived(
     isDebugProviderSendBlocked(metadata?.provider, debugProviderSettings),
   );
@@ -40,6 +51,7 @@
   const isEmpty = $derived(messages.length === 0);
   const canClearHistory = $derived(hasThread || !isEmpty);
   const isModeSelectionDisabled = $derived(isBlocked || isGenerating || sending);
+  const isProviderSelectionDisabled = $derived(isBlocked || isGenerating || sending);
   const compactionNotice = $derived.by(() => {
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
@@ -77,7 +89,37 @@
     return "AI cannot read files in this workspace.";
   });
 
+  $effect(() => {
+    activeProvider;
+    metadata?.mode;
+    const root = chatStore.getActiveWorkspaceRoot();
+    if (!root) {
+      supportedModes = ["ask", "review"];
+      return;
+    }
+    void chatStore.checkActiveWorkspaceCapabilities().then((result) => {
+      supportedModes =
+        result.capabilities?.supportedModes && result.capabilities.supportedModes.length > 0
+          ? result.capabilities.supportedModes
+          : ["ask", "review"];
+    });
+  });
+
+  function isProviderSwitchMessage(message: ChatMessage): boolean {
+    return message.systemEvent?.type === "provider-switched";
+  }
+
+  function messageDisplayContent(message: ChatMessage): string {
+    if (message.systemEvent?.type === "provider-switched") {
+      return formatProviderSwitchNotice(message.systemEvent);
+    }
+    return message.content;
+  }
+
   function messageRoleLabel(message: ChatMessage): string {
+    if (isProviderSwitchMessage(message)) {
+      return "Provider switch";
+    }
     if (message.role === "assistant") {
       return "Assistant";
     }
@@ -139,6 +181,24 @@
     }
   }
 
+  async function selectProvider(nextProvider: ChatProviderId): Promise<void> {
+    if (
+      nextProvider === activeProvider ||
+      isProviderSelectionDisabled ||
+      !canSelectChatProvider(nextProvider, debugProviderSettings)
+    ) {
+      return;
+    }
+
+    const result = await chatStore.switchThreadProvider(nextProvider, {
+      debugProviderEnabled: debugProviderSettings.enabled,
+    });
+    if (result.switched) {
+      persistActiveThreadSnapshot();
+      void chatStore.runAccessPreflight();
+    }
+  }
+
   function handleComposerKeydown(event: KeyboardEvent): void {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -181,10 +241,29 @@
     <p class="chat-compaction-notice" role="status">{compactionNotice}</p>
   {/if}
 
+  <div class="chat-mode-toolbar" role="group" aria-label="Chat provider">
+    <span class="chat-mode-label">Provider</span>
+    <div class="chat-mode-options" role="radiogroup" aria-label="Select chat provider">
+      {#each availableProviders as provider (provider.id)}
+        <button
+          type="button"
+          role="radio"
+          class="chat-mode-option"
+          class:chat-mode-option-active={activeProvider === provider.id}
+          aria-checked={activeProvider === provider.id}
+          disabled={isProviderSelectionDisabled}
+          onclick={() => void selectProvider(provider.id)}
+        >
+          {provider.label}
+        </button>
+      {/each}
+    </div>
+  </div>
+
   <div class="chat-mode-toolbar" role="group" aria-label="Chat mode">
     <span class="chat-mode-label">Mode</span>
     <div class="chat-mode-options" role="radiogroup" aria-label="Select chat mode">
-      {#each modes as mode (mode.id)}
+      {#each availableModes as mode (mode.id)}
         <button
           type="button"
           role="radio"
@@ -204,8 +283,8 @@
     <div class="chat-empty-state">
       <p class="chat-title">Start chat</p>
       <p class="chat-hint">
-        Ask or review ideas for this workspace. Enable the Debug provider in Developer Settings to
-        try end-to-end chat locally.
+        Ask or review ideas for this workspace. Enable Debug in Developer Settings to try local
+        end-to-end chat, then pick a provider above.
       </p>
     </div>
   {:else}
@@ -213,16 +292,17 @@
       {#each messages as message, index (message.id)}
         <li
           class={`chat-message chat-message-${message.role}`}
+          class:chat-message-system-event={isProviderSwitchMessage(message)}
           class:chat-message-streaming={isGenerating &&
             message.role === "assistant" &&
             index === messages.length - 1}
         >
           <p class="chat-message-role">{messageRoleLabel(message)}</p>
           <p class="chat-message-content">
-            {#if message.content.length > 0}
-              {message.content}
-            {:else if isGenerating && message.role === "assistant" && index === messages.length - 1}
+            {#if message.role === "assistant" && message.content.length === 0 && isGenerating && index === messages.length - 1}
               <span class="chat-streaming-placeholder">Generating…</span>
+            {:else}
+              {messageDisplayContent(message)}
             {/if}
           </p>
         </li>
@@ -444,6 +524,11 @@
     border-style: dashed;
     border-color: color-mix(in srgb, var(--color-text-secondary) 45%, var(--color-border-subtle));
     background: color-mix(in srgb, var(--color-text-secondary) 8%, var(--color-surface-1));
+  }
+
+  .chat-message-system-event {
+    border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border-subtle));
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-1));
   }
 
   .chat-message-role {

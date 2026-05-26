@@ -1,9 +1,14 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readDir, readTextFile, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import { join } from "@tauri-apps/api/path";
 import type { DiskFingerprint } from "../domain/contracts";
+import type { WorkspaceAccessStatus } from "../ai/capabilities";
 import { statDiskFingerprint } from "./diskFingerprint";
 import { recordWriteFingerprint } from "./externalFileChanges";
 import { appState } from "../state/appState";
+import { normalizePathSync } from "./diskFingerprint";
+import { ensureSpecOpsDataDir } from "./appDataDir";
+import { logDiagnostic } from "./logging";
 
 export interface OpenedFile {
   path: string;
@@ -14,6 +19,97 @@ export interface OpenedFile {
 export interface FileSavePayload {
   path: string;
   content: string;
+}
+
+interface WorkspaceAccessSnapshot {
+  version: 1;
+  updatedAt: string;
+  allowedWorkspaceRoots: string[];
+}
+
+const WORKSPACE_ACCESS_FILE = "workspace-access.json";
+
+async function getWorkspaceAccessFilePath(): Promise<string> {
+  const dataDir = await ensureSpecOpsDataDir();
+  return join(dataDir, WORKSPACE_ACCESS_FILE);
+}
+
+async function readWorkspaceAccessSnapshot(): Promise<WorkspaceAccessSnapshot | null> {
+  try {
+    const path = await getWorkspaceAccessFilePath();
+    const raw = await readTextFile(path);
+    const parsed = JSON.parse(raw) as {
+      version?: unknown;
+      updatedAt?: unknown;
+      allowedWorkspaceRoots?: unknown;
+    };
+    if (
+      parsed.version !== 1 ||
+      typeof parsed.updatedAt !== "string" ||
+      !Array.isArray(parsed.allowedWorkspaceRoots)
+    ) {
+      return null;
+    }
+    const allowedWorkspaceRoots = parsed.allowedWorkspaceRoots.filter(
+      (entry): entry is string => typeof entry === "string",
+    );
+    return {
+      version: 1,
+      updatedAt: parsed.updatedAt,
+      allowedWorkspaceRoots,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeWorkspaceAccessSnapshot(snapshot: WorkspaceAccessSnapshot): Promise<void> {
+  const path = await getWorkspaceAccessFilePath();
+  await writeTextFile(path, JSON.stringify(snapshot, null, 2));
+}
+
+async function rememberWorkspaceReadAccess(normalizedRootPath: string): Promise<void> {
+  const snapshot = (await readWorkspaceAccessSnapshot()) ?? {
+    version: 1 as const,
+    updatedAt: new Date().toISOString(),
+    allowedWorkspaceRoots: [],
+  };
+  if (snapshot.allowedWorkspaceRoots.includes(normalizedRootPath)) {
+    return;
+  }
+  snapshot.allowedWorkspaceRoots = [...snapshot.allowedWorkspaceRoots, normalizedRootPath];
+  snapshot.updatedAt = new Date().toISOString();
+  await writeWorkspaceAccessSnapshot(snapshot);
+}
+
+export async function readAllowedWorkspaceRoots(): Promise<string[]> {
+  const snapshot = await readWorkspaceAccessSnapshot();
+  if (!snapshot) {
+    return [];
+  }
+  return snapshot.allowedWorkspaceRoots.map((path) => normalizePathSync(path));
+}
+
+export async function ensureWorkspaceReadAccess(rootPath: string): Promise<WorkspaceAccessStatus> {
+  const normalizedRootPath = normalizePathSync(rootPath);
+  try {
+    await readDir(normalizedRootPath);
+    await rememberWorkspaceReadAccess(normalizedRootPath);
+    return "ready";
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    await logDiagnostic({
+      level: "warn",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "workspace read access preparation failed",
+      metadata: {
+        rootPath: normalizedRootPath,
+        reason: message,
+      },
+    });
+    return "blocked";
+  }
 }
 
 export async function openFileDialog(): Promise<OpenedFile | null> {

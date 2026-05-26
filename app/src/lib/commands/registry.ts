@@ -3,7 +3,14 @@ import type { AppCommandId, AppDomainState, CommandDefinition } from "../domain/
 import { appState } from "../state/appState";
 import { logDiagnostic } from "../services/logging";
 import type { EditorCommandRunner } from "../types/editor";
-import { openFileDialog, openFolderDialog, renameFile, saveFile, saveFileAs } from "../services/fileSystem";
+import {
+  ensureWorkspaceReadAccess,
+  openFileDialog,
+  openFolderDialog,
+  renameFile,
+  saveFile,
+  saveFileAs,
+} from "../services/fileSystem";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
 import { reloadActiveDocumentFromDisk } from "../services/externalFileChanges";
 import { statDiskFingerprint } from "../services/diskFingerprint";
@@ -700,7 +707,14 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!selected) {
       return;
     }
-    const workspaceId = appState.addWorkspace(normalizePathSync(selected));
+    const normalizedRoot = normalizePathSync(selected);
+    const accessStatus = await ensureWorkspaceReadAccess(normalizedRoot);
+    if (accessStatus === "blocked") {
+      notify("Workspace path is inaccessible. Check permissions and try again.");
+      return;
+    }
+
+    const workspaceId = appState.addWorkspace(normalizedRoot);
     if (!workspaceId) {
       notify("Workspace is already open.");
       return;

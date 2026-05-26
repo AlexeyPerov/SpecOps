@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
+  ensureWorkspaceReadAccess,
   openFileDialog,
   openPath,
+  readAllowedWorkspaceRoots,
   saveFile,
   saveFileAs,
 } from "./fileSystem";
 import { statDiskFingerprint } from "./diskFingerprint";
 import { recordWriteFingerprint } from "./externalFileChanges";
+import { logDiagnostic } from "./logging";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
@@ -16,6 +19,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 }));
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
+  readDir: vi.fn(),
   readTextFile: vi.fn(),
   writeTextFile: vi.fn(),
   rename: vi.fn(),
@@ -33,12 +37,30 @@ vi.mock("./externalFileChanges", () => ({
   recordWriteFingerprint: vi.fn(),
 }));
 
+vi.mock("./appDataDir", () => ({
+  ensureSpecOpsDataDir: vi.fn().mockResolvedValue("/data/spec-ops"),
+}));
+
+vi.mock("@tauri-apps/api/path", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tauri-apps/api/path")>();
+  return {
+    ...actual,
+    join: (...parts: string[]) => parts.join("/"),
+  };
+});
+
+vi.mock("./logging", () => ({
+  logDiagnostic: vi.fn().mockResolvedValue(undefined),
+}));
+
 const openMock = vi.mocked(open);
 const saveMock = vi.mocked(save);
+const readDirMock = vi.mocked(readDir);
 const readTextFileMock = vi.mocked(readTextFile);
 const writeTextFileMock = vi.mocked(writeTextFile);
 const statMock = vi.mocked(statDiskFingerprint);
 const recordWriteMock = vi.mocked(recordWriteFingerprint);
+const logDiagnosticMock = vi.mocked(logDiagnostic);
 
 describe("openPath", () => {
   beforeEach(() => {
@@ -109,5 +131,76 @@ describe("openFileDialog", () => {
   it("returns null when the dialog is cancelled", async () => {
     openMock.mockResolvedValue(null);
     await expect(openFileDialog()).resolves.toBeNull();
+  });
+});
+
+describe("ensureWorkspaceReadAccess", () => {
+  beforeEach(() => {
+    readDirMock.mockReset();
+    readTextFileMock.mockReset();
+    writeTextFileMock.mockReset();
+    logDiagnosticMock.mockReset();
+  });
+
+  it("returns ready and persists normalized workspace root on success", async () => {
+    readDirMock.mockResolvedValue([]);
+    readTextFileMock.mockImplementation(async (path: string | URL) => {
+      const asString = String(path);
+      if (asString.endsWith("/workspace-access.json")) {
+        throw new Error("missing");
+      }
+      throw new Error(`unexpected read: ${asString}`);
+    });
+    writeTextFileMock.mockResolvedValue(undefined);
+
+    await expect(ensureWorkspaceReadAccess("/tmp/workspace/")).resolves.toBe("ready");
+
+    expect(readDirMock).toHaveBeenCalledWith("/tmp/workspace");
+    const writeCall = writeTextFileMock.mock.calls.find((call) =>
+      String(call[0]).endsWith("/workspace-access.json"),
+    );
+    expect(writeCall).toBeDefined();
+    const parsed = JSON.parse(String(writeCall?.[1] ?? "{}")) as {
+      allowedWorkspaceRoots?: string[];
+    };
+    expect(parsed.allowedWorkspaceRoots).toEqual(["/tmp/workspace"]);
+  });
+
+  it("returns blocked and logs diagnostics when root is inaccessible", async () => {
+    readDirMock.mockRejectedValue(new Error("permission denied"));
+
+    await expect(ensureWorkspaceReadAccess("/tmp/denied")).resolves.toBe("blocked");
+
+    expect(logDiagnosticMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "warn",
+        message: "workspace read access preparation failed",
+        metadata: expect.objectContaining({
+          rootPath: "/tmp/denied",
+        }),
+      }),
+    );
+  });
+});
+
+describe("readAllowedWorkspaceRoots", () => {
+  beforeEach(() => {
+    readTextFileMock.mockReset();
+  });
+
+  it("returns stored allowed roots from workspace access snapshot", async () => {
+    readTextFileMock.mockImplementation(async (path: string | URL) => {
+      const asString = String(path);
+      if (asString.endsWith("/workspace-access.json")) {
+        return JSON.stringify({
+          version: 1,
+          updatedAt: "2026-05-26T00:00:00.000Z",
+          allowedWorkspaceRoots: ["/tmp/a", "/tmp/b/"],
+        });
+      }
+      throw new Error(`unexpected read: ${asString}`);
+    });
+
+    await expect(readAllowedWorkspaceRoots()).resolves.toEqual(["/tmp/a", "/tmp/b"]);
   });
 });

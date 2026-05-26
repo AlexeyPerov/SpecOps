@@ -72,6 +72,7 @@
   import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
   import { readWorkspaceChatFileSnapshot } from "../lib/services/chatPersistence";
+  import { ensureWorkspaceReadAccess } from "../lib/services/fileSystem";
   import {
     readWorkspaceConsoleTabPreference,
     writeWorkspaceConsoleTabPreference,
@@ -647,6 +648,7 @@
     const restoredWorkspaceRoot = appState.getWorkspaceRoot();
     if (restoredWorkspaceRoot) {
       const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
+      void ensureWorkspaceReadAccess(normalizedRoot);
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
       const snapshot = await readWorkspaceChatFileSnapshot(normalizedRoot);
       chatStore.setWorkspaceThread(normalizedRoot, snapshot.thread);
@@ -906,6 +908,7 @@
       const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
       if (lastChatWorkspaceRoot !== normalizedWorkspaceRoot) {
         lastChatWorkspaceRoot = normalizedWorkspaceRoot;
+        void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
         chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
         void readWorkspaceChatFileSnapshot(normalizedWorkspaceRoot)
           .then((snapshot) => {

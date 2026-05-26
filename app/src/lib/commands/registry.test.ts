@@ -10,7 +10,9 @@ vi.mock("@tauri-apps/api/menu", () => ({
 }));
 
 vi.mock("../services/fileSystem", () => ({
+  ensureWorkspaceReadAccess: vi.fn(),
   openFileDialog: vi.fn(),
+  openFolderDialog: vi.fn(),
   saveFile: vi.fn(),
   saveFileAs: vi.fn(),
   renameFile: vi.fn(),
@@ -34,11 +36,13 @@ vi.mock("../services/windowManager", () => ({
 }));
 
 import {
+  dispatchCommand,
   commandDefinitions,
   getActiveDocumentContent,
   getRegisteredCommandIds,
   keymapCommandForEvent,
 } from "./registry";
+import { ensureWorkspaceReadAccess, openFolderDialog } from "../services/fileSystem";
 
 describe("keymapCommandForEvent", () => {
   it("maps Meta+S to file.save", () => {
@@ -90,5 +94,36 @@ describe("getActiveDocumentContent", () => {
   it("returns empty string for a new untitled tab", () => {
     appState.createTab();
     expect(getActiveDocumentContent()).toBe("");
+  });
+});
+
+describe("workspace.add command", () => {
+  const notify = vi.fn();
+  const commandContext = {
+    setSettingsPaneOpen: vi.fn(),
+    isSettingsPaneOpen: vi.fn(() => false),
+    notify,
+    getState: () => appState.getSnapshot(),
+    getWindowId: () => "main",
+    confirm: vi.fn(() => true),
+    getEditorRunner: vi.fn(() => null),
+  };
+
+  beforeEach(() => {
+    appState.resetAppState();
+    notify.mockReset();
+    vi.mocked(openFolderDialog).mockReset();
+    vi.mocked(ensureWorkspaceReadAccess).mockReset();
+  });
+
+  it("does not add workspace when access check is blocked", async () => {
+    vi.mocked(openFolderDialog).mockResolvedValue("/tmp/blocked");
+    vi.mocked(ensureWorkspaceReadAccess).mockResolvedValue("blocked");
+
+    dispatchCommand("workspace.add", commandContext);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(appState.getSnapshot().contexts.workspaces).toHaveLength(0);
+    expect(notify).toHaveBeenCalledWith("Workspace path is inaccessible. Check permissions and try again.");
   });
 });

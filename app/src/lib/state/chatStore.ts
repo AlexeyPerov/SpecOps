@@ -6,6 +6,11 @@ import type {
   ChatThreadMetadata,
   ChatThreadSnapshot,
 } from "../domain/contracts";
+import {
+  WorkspaceAccessReason,
+  type CapabilityCheckResult,
+  type CapabilityChecker,
+} from "../ai/capabilities";
 import { readWorkspaceChatFileSnapshot } from "../services/chatPersistence";
 
 interface ChatStoreState {
@@ -64,6 +69,7 @@ function applyMetadataPatch(
 
 function createChatStore() {
   const { subscribe, set, update } = writable<ChatStoreState>(initialState);
+  let capabilityChecker: CapabilityChecker | null = null;
 
   return {
     subscribe,
@@ -190,6 +196,28 @@ function createChatStore() {
     },
     isEmpty(): boolean {
       return this.getMessages().length === 0;
+    },
+    setCapabilityChecker(checker: CapabilityChecker | null): void {
+      capabilityChecker = checker;
+    },
+    async checkActiveWorkspaceCapabilities(): Promise<CapabilityCheckResult> {
+      const rootPath = this.getActiveWorkspaceRoot();
+      const metadata = this.getMetadata();
+
+      if (!rootPath || !metadata || !capabilityChecker) {
+        return {
+          status: "unknown",
+          reason: WorkspaceAccessReason.Unknown,
+          capabilities: null,
+          message: "Capability checker is not configured yet.",
+        };
+      }
+
+      return capabilityChecker.checkCapabilities({
+        provider: metadata.provider,
+        mode: metadata.mode,
+        workspaceRootPath: rootPath,
+      });
     },
   };
 }

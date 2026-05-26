@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-26 09:13 (MSK)
+
+- **AI M3-1 capability contract:** Added provider-agnostic capability types and checker interface in `app/src/lib/ai/capabilities.ts`: `WorkspaceAccessStatus`, `WorkspaceAccessReason` codes (`missing_provider_config`, `workspace_path_inaccessible`, `provider_unsupported`), `ProviderCapabilities`, `CapabilityCheckResult`, and `CapabilityChecker`.
+- **Chat runtime preflight import point:** Updated `app/src/lib/state/chatStore.ts` to import and use the capability contract via `setCapabilityChecker(...)` and `checkActiveWorkspaceCapabilities()`, making capability checks callable from chat runtime flow.
+- **Tests:** Extended `app/src/lib/state/chatStore.test.ts` with coverage for unknown-state fallback and configured checker invocation/return path.
+- **Specs tracking:** Marked `Task M3-1` as done in `specs/ai-m-3-execution-plan.md`.
+
 ## 2026-05-25 23:20 (MSK)
 
 - **AI M2-6 milestone validation:** Completed full Milestone 2 validation run in `app` with `npm test` (26 files, 208 tests passed) and `npm run check` (0 errors; 1 pre-existing `FindReplacePanel.svelte` a11y warning unchanged).

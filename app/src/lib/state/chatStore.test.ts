@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chatStore } from "./chatStore";
 import type { ChatThreadFileSnapshot } from "../domain/contracts";
+import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
 import { readWorkspaceChatFileSnapshot } from "../services/chatPersistence";
 
 vi.mock("../services/chatPersistence", () => ({
@@ -12,6 +13,7 @@ const readWorkspaceChatFileSnapshotMock = vi.mocked(readWorkspaceChatFileSnapsho
 describe("chatStore", () => {
   beforeEach(() => {
     chatStore.reset();
+    chatStore.setCapabilityChecker(null);
     readWorkspaceChatFileSnapshotMock.mockReset();
   });
 
@@ -161,5 +163,58 @@ describe("chatStore", () => {
     expect(chatStore.isEmpty()).toBe(true);
     expect(chatStore.getMessages()).toEqual([]);
     expect(chatStore.getMetadata()).toBeNull();
+  });
+
+  it("returns unknown capability status when checker is not configured", async () => {
+    const result = await chatStore.checkActiveWorkspaceCapabilities();
+
+    expect(result).toEqual({
+      status: "unknown",
+      reason: WorkspaceAccessReason.Unknown,
+      capabilities: null,
+      message: "Capability checker is not configured yet.",
+    });
+  });
+
+  it("checks active workspace capabilities through configured checker", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+
+    const checker: CapabilityChecker = {
+      checkCapabilities: vi.fn().mockResolvedValue({
+        status: "blocked",
+        reason: WorkspaceAccessReason.ProviderUnsupported,
+        capabilities: {
+          canReadWorkspaceFiles: false,
+          supportedModes: ["ask"],
+        },
+        message: "Provider does not support workspace reads.",
+        recoveryHint: "Switch provider.",
+      }),
+    };
+    chatStore.setCapabilityChecker(checker);
+
+    const result = await chatStore.checkActiveWorkspaceCapabilities();
+
+    expect(checker.checkCapabilities).toHaveBeenCalledWith({
+      provider: "glm",
+      mode: "ask",
+      workspaceRootPath: "/work/a",
+    });
+    expect(result).toEqual({
+      status: "blocked",
+      reason: WorkspaceAccessReason.ProviderUnsupported,
+      capabilities: {
+        canReadWorkspaceFiles: false,
+        supportedModes: ["ask"],
+      },
+      message: "Provider does not support workspace reads.",
+      recoveryHint: "Switch provider.",
+    });
   });
 });

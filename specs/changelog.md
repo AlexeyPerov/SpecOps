@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-27 (fix)
+
+- **Fix Debug provider preflight:** `chatStore.getActiveChatProvider()` resolves thread provider or bootstrap default; preflight and send pipeline no longer fall back to hardcoded `glm` when thread metadata is missing. `ChatPanel` re-runs access preflight when effective provider or Debug settings change; provider/mode pickers stay enabled while blocked so users can switch to Debug.
+
 ## 2026-05-27 21:00 (MSK)
 
 - **Settings dialog:** Initial size measured to fit **Debug AI** without scrolling; tab switches keep fixed dimensions; bottom-right resize with min size equal to initial measured width/height; body scrolls only when content overflows after resize.

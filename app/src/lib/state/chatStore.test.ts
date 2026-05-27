@@ -638,3 +638,44 @@ describe("chatStore provider switching", () => {
     expect(chatStore.getMetadata()?.provider).toBe("glm");
   });
 });
+
+describe("chatStore active provider resolution", () => {
+  beforeEach(() => {
+    chatStore.reset();
+    resetChatProviderRegistryForTests();
+    ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
+    registerChatProvider(
+      createDebugChatProvider(() => ({
+        ...defaultDebugProviderSettings,
+        enabled: true,
+      })),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(() => ({
+        ...defaultDebugProviderSettings,
+        enabled: true,
+      })),
+    );
+    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setActiveWorkspaceRoot("/work/a");
+  });
+
+  it("uses default provider resolver when thread metadata is missing", () => {
+    expect(chatStore.getMetadata()).toBeNull();
+    expect(chatStore.getActiveChatProvider()).toBe("debug");
+  });
+
+  it("preflights Debug when no thread exists yet", async () => {
+    const result = await chatStore.runAccessPreflight();
+
+    expect(result.status).toBe("ready");
+    expect(result.message).toContain("Debug provider is ready");
+  });
+
+  it("checks capabilities for Debug without persisted thread metadata", async () => {
+    const result = await chatStore.checkActiveWorkspaceCapabilities();
+
+    expect(result.status).toBe("ready");
+    expect(result.capabilities?.supportedModes).toEqual(["ask", "review"]);
+  });
+});

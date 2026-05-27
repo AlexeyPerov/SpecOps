@@ -501,6 +501,10 @@ function createChatStore() {
       const thread = activeThread(this.getSnapshot());
       return thread?.metadata ?? null;
     },
+    /** Thread provider, or bootstrap default when no thread metadata exists yet. */
+    getActiveChatProvider(): ChatProviderId {
+      return this.getMetadata()?.provider ?? defaultChatProviderResolver();
+    },
     hasThread(): boolean {
       return this.getMetadata() !== null;
     },
@@ -661,7 +665,7 @@ function createChatStore() {
 
       const checker = resolveCapabilityChecker();
       return checker.checkCapabilities({
-        provider: metadata?.provider ?? DEFAULT_CHAT_PROVIDER,
+        provider: metadata?.provider ?? defaultChatProviderResolver(),
         mode: metadata?.mode ?? DEFAULT_CHAT_MODE,
         workspaceRootPath: rootPath,
       });

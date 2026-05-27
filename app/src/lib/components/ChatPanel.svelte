@@ -45,13 +45,13 @@
     metadata?.provider ?? resolveDefaultChatProvider(debugProviderSettings),
   );
   const isDebugSendBlocked = $derived(
-    isDebugProviderSendBlocked(metadata?.provider, debugProviderSettings),
+    isDebugProviderSendBlocked(activeProvider, debugProviderSettings),
   );
   const isBlocked = $derived(accessState.status === "blocked");
   const isEmpty = $derived(messages.length === 0);
   const canClearHistory = $derived(hasThread || !isEmpty);
-  const isModeSelectionDisabled = $derived(isBlocked || isGenerating || sending);
-  const isProviderSelectionDisabled = $derived(isBlocked || isGenerating || sending);
+  const isModeSelectionDisabled = $derived(isGenerating || sending);
+  const isProviderSelectionDisabled = $derived(isGenerating || sending);
   const compactionNotice = $derived.by(() => {
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
@@ -92,12 +92,14 @@
   $effect(() => {
     activeProvider;
     metadata?.mode;
+    debugProviderSettings.enabled;
     const root = chatStore.getActiveWorkspaceRoot();
     if (!root) {
       supportedModes = ["ask", "review"];
       return;
     }
-    void chatStore.checkActiveWorkspaceCapabilities().then((result) => {
+    void chatStore.runAccessPreflight().then(async () => {
+      const result = await chatStore.checkActiveWorkspaceCapabilities();
       supportedModes =
         result.capabilities?.supportedModes && result.capabilities.supportedModes.length > 0
           ? result.capabilities.supportedModes

@@ -53,6 +53,7 @@ describe("sendChatMessage", () => {
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(() => appState.getSnapshot().settings.debugProvider),
     );
+    chatStore.setDefaultChatProviderResolver(() => "debug");
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
   });
@@ -76,6 +77,23 @@ describe("sendChatMessage", () => {
     expect(chatStore.getMessages()[1].content).toContain("simulated answer");
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
     expect(schedulePersistMock).toHaveBeenCalledOnce();
+  });
+
+  it("uses default provider resolver before thread metadata exists", async () => {
+    chatStore.reset();
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(() => appState.getSnapshot().settings.debugProvider),
+    );
+    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setActiveWorkspaceRoot("/work/a");
+
+    const resultPromise = sendChatMessage("First message without metadata");
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(true);
+    expect(chatStore.getMetadata()?.provider).toBe("debug");
   });
 
   it("streams partial assistant updates during generation", async () => {

@@ -98,8 +98,7 @@ export async function sendChatMessage(content: string): Promise<SendChatMessageR
     };
   }
 
-  const metadata = chatStore.getMetadata();
-  const providerId = metadata?.provider ?? "glm";
+  const providerId = chatStore.getActiveChatProvider();
   const debugSettings = appState.getSnapshot().settings.debugProvider;
   if (isDebugProviderSendBlocked(providerId, debugSettings)) {
     abortTurn();

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-27 22:30 (MSK)
+
+- **README:** Removed all references to `specs/` and internal milestone IDs; WIP roadmap rewritten in plain product terms.
+
+## 2026-05-27 22:15 (MSK)
+
+- **README:** Reframed SpecOps as a workspace-oriented desktop app (notepad, project panel, workspaces, console). Added main-screen screenshot, app icon in title, current-features list, and WIP roadmap from `specs/ai-requirements.md`.
+
 ## 2026-05-27 (fix)
 
 - **Fix Debug provider preflight:** `chatStore.getActiveChatProvider()` resolves thread provider or bootstrap default; preflight and send pipeline no longer fall back to hardcoded `glm` when thread metadata is missing. `ChatPanel` re-runs access preflight when effective provider or Debug settings change; provider/mode pickers stay enabled while blocked so users can switch to Debug.

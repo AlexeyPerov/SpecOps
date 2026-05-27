@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-27 23:00 (MSK)
+
+- **Markdown split view:** Fixed post-scroll drift by syncing only user-initiated scroll events (`isTrusted`); programmatic sync no longer bounces between editor and preview panes.
+
 ## 2026-05-27 22:30 (MSK)
 
 - **README:** Removed all references to `specs/` and internal milestone IDs; WIP roadmap rewritten in plain product terms.

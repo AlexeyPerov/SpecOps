@@ -481,11 +481,17 @@
     const sourceScrollable = source.scrollHeight - source.clientHeight;
     const targetScrollable = target.scrollHeight - target.clientHeight;
     if (sourceScrollable <= 0 || targetScrollable <= 0) {
-      target.scrollTop = 0;
+      if (target.scrollTop !== 0) {
+        target.scrollTop = 0;
+      }
       return;
     }
     const ratio = source.scrollTop / sourceScrollable;
-    target.scrollTop = ratio * targetScrollable;
+    const nextScrollTop = Math.round(ratio * targetScrollable);
+    if (Math.abs(target.scrollTop - nextScrollTop) <= 1) {
+      return;
+    }
+    target.scrollTop = nextScrollTop;
   }
 
   async function setupSplitScrollSync(): Promise<void> {
@@ -498,34 +504,23 @@
       return;
     }
 
-    let syncingFromEditor = false;
-    let syncingFromPreview = false;
-
-    const onEditorScroll = (): void => {
-      if (syncingFromPreview) {
+    const onEditorScroll = (event: Event): void => {
+      if (!event.isTrusted) {
         return;
       }
-      syncingFromEditor = true;
       syncByRatio(editorScroller, previewScroller);
-      requestAnimationFrame(() => {
-        syncingFromEditor = false;
-      });
     };
 
-    const onPreviewScroll = (): void => {
-      if (syncingFromEditor) {
+    const onPreviewScroll = (event: Event): void => {
+      if (!event.isTrusted) {
         return;
       }
-      syncingFromPreview = true;
       syncByRatio(previewScroller, editorScroller);
-      requestAnimationFrame(() => {
-        syncingFromPreview = false;
-      });
     };
 
     editorScroller.addEventListener("scroll", onEditorScroll, { passive: true });
     previewScroller.addEventListener("scroll", onPreviewScroll, { passive: true });
-    onEditorScroll();
+    syncByRatio(editorScroller, previewScroller);
 
     splitScrollCleanup = () => {
       editorScroller.removeEventListener("scroll", onEditorScroll);

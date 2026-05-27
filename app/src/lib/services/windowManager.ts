@@ -38,7 +38,7 @@ export async function createNewWindowWithTransfer(
   windowCounter += 1;
   const label = `window-${windowCounter}`;
   const windowRef = new WebviewWindow(label, {
-    title: "spec-ops",
+    title: "SpecOps",
     width: 1000,
     height: 720,
     url: "/",

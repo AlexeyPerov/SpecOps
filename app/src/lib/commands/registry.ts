@@ -35,8 +35,10 @@ import { openAndStoreFile } from "./openAndStoreFile";
 import { isPathUnderRoot, runInNotepadContext } from "../services/workspacePaths";
 
 type CommandContext = {
-  setSettingsPaneOpen: (next: boolean) => void;
-  isSettingsPaneOpen: () => boolean;
+  setThemePaneOpen: (next: boolean) => void;
+  isThemePaneOpen: () => boolean;
+  setSettingsDialogOpen: (next: boolean) => void;
+  isSettingsDialogOpen: () => boolean;
   notify: (message: string) => void;
   getState: () => AppDomainState;
   getWindowId: () => string;
@@ -51,7 +53,7 @@ function getSnapshot() {
 }
 
 const keyBindingsByPlatform: Record<string, string> = {
-  "Meta+,": "app.toggleSettingsPane",
+  "Meta+,": "app.toggleSettings",
   "Meta+Shift+t": "view.cycleTheme",
   "Meta+f": "app.toggleFindReplace",
   "Meta+l": "app.toggleGoTo",
@@ -78,7 +80,7 @@ const keyBindingsByPlatform: Record<string, string> = {
   "Meta+=": "view.zoomIn",
   "Meta+-": "view.zoomOut",
   "Meta+0": "view.zoomReset",
-  "Ctrl+,": "app.toggleSettingsPane",
+  "Ctrl+,": "app.toggleSettings",
   "Ctrl+Shift+t": "view.cycleTheme",
   "Ctrl+f": "app.toggleFindReplace",
   "Ctrl+l": "app.toggleGoTo",
@@ -107,9 +109,14 @@ const keyBindingsByPlatform: Record<string, string> = {
 
 export const commandDefinitions: CommandDefinition[] = [
   {
-    id: "app.toggleSettingsPane",
-    label: "Toggle Settings Pane",
-    menuPath: "View/Settings Pane",
+    id: "app.toggleThemePane",
+    label: "Toggle Theme Pane",
+    menuPath: "View/Theme Pane",
+  },
+  {
+    id: "app.toggleSettings",
+    label: "Settings",
+    menuPath: "SpecOps/Settings",
     binding: { mac: "Cmd+,", windows: "Ctrl+," },
   },
   {
@@ -319,8 +326,11 @@ export const commandDefinitions: CommandDefinition[] = [
 ];
 
 const handlers: Record<AppCommandId, CommandHandler> = {
-  "app.toggleSettingsPane": ({ isSettingsPaneOpen, setSettingsPaneOpen }) => {
-    setSettingsPaneOpen(!isSettingsPaneOpen());
+  "app.toggleThemePane": ({ isThemePaneOpen, setThemePaneOpen }) => {
+    setThemePaneOpen(!isThemePaneOpen());
+  },
+  "app.toggleSettings": ({ isSettingsDialogOpen, setSettingsDialogOpen }) => {
+    setSettingsDialogOpen(!isSettingsDialogOpen());
   },
   "app.newWindow": async ({ getState, notify }) => {
     await createNewWindowWithTransfer(getState(), null);

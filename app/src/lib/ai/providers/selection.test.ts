@@ -25,7 +25,9 @@ describe("chat provider selection", () => {
     expect(resolveDefaultChatProvider({ ...defaultDebugProviderSettings, enabled: true }, false)).toBe(
       "debug",
     );
-    expect(resolveDefaultChatProvider(defaultDebugProviderSettings, false)).toBe("glm");
+    expect(resolveDefaultChatProvider({ ...defaultDebugProviderSettings, enabled: false }, false)).toBe(
+      "glm",
+    );
   });
 
   it("formats provider switch notices for history rendering", () => {

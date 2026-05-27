@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-05-27 21:00 (MSK)
+
+- **Settings dialog:** Initial size measured to fit **Debug AI** without scrolling; tab switches keep fixed dimensions; bottom-right resize with min size equal to initial measured width/height; body scrolls only when content overflows after resize.
+
+## 2026-05-27 20:35 (MSK)
+
+- **Settings dialog:** Renamed **AI** tab to **Debug AI** (Debug provider settings only). Tabs moved to a fixed-width left sidebar column; panel content scrolls on the right.
+
+## 2026-05-27 19:15 (MSK)
+
+- **Settings split:** Toolbar **Theme** button opens a scrollable side pane (themes + decoration only). Full **Settings** dialog with **Editor** and **AI** tabs opens from **SpecOps → Settings** (macOS), **File → Settings…** (Windows/Linux), and `Cmd/Ctrl+,`.
+- **Components:** Added `ThemePane.svelte`, `SettingsDialog.svelte`, and shared `settingsForm.css`.
+
+## 2026-05-27 18:30 (MSK)
+
+- **Console UX:** Vertically resizable console (drag handle, double-click reset, height persisted in `console-tab-prefs.json`). Console and status bar moved into the editor column so chat aligns with the text area; shared `--editor-content-padding-x` with the editor pane.
+- **Chat UX:** Grid layout fixes mode/provider chrome clipping; provider picker is a dropdown; empty-state copy updated.
+- **Debug provider:** Enabled by default in `defaultDebugProviderSettings` for dogfooding.
+- **Branding:** User-visible app name unified to **SpecOps** (window title, About menu, Tauri `productName`, web title, release name).
+- **Activity rail:** Fast custom `HoverTooltip` (folder name + full path) on workspace and rail buttons.
+
 ## 2026-05-27 17:10 (MSK)
 
 - **App icon:** Replaced the orange spec-ops icon with the cyan variant from `spec-ops-cyan-app-icon.png`. Source glyph upscaled (LANCZOS) onto a 1024×1024 transparent canvas at the same ~86.5% fill ratio as the previous icon so macOS dock size stays consistent. Regenerated all Tauri bundle icons (`icon.icns`, `icon.ico`, platform PNGs) and updated `app/static/favicon.png`.

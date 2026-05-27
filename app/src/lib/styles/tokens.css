@@ -19,6 +19,7 @@
   --tab-header-height: 32px;
   --statusbar-height: 25px;
   --console-height: 180px;
+  --editor-content-padding-x: var(--space-8);
   --settings-pane-width: 385px;
   --activity-rail-width: 48px;
   --editor-min-width: 400px;

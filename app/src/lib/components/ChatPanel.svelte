@@ -208,107 +208,113 @@
 </script>
 
 <section class="chat-panel" aria-label="Workspace chat">
-  <div class="chat-panel-header">
-    <p class="chat-panel-title">Workspace chat</p>
-    {#if canClearHistory}
-      <button
-        type="button"
-        class="chat-clear-button"
-        onclick={() => void clearChatHistory()}
-        disabled={isBlocked}
-      >
-        Clear workspace chat history
-      </button>
-    {/if}
-  </div>
-
-  {#if isBlocked}
-    <div class="chat-blocked-state" role="status" aria-live="polite">
-      <p class="chat-blocked-title">AI cannot read files in this workspace.</p>
-      <p class="chat-blocked-message">{blockedMessage}</p>
-      {#if accessState.recoveryHint}
-        <p class="chat-blocked-hint">{accessState.recoveryHint}</p>
+  <div class="chat-panel-chrome">
+    <div class="chat-panel-header">
+      <p class="chat-panel-title">Workspace chat</p>
+      {#if canClearHistory}
+        <button
+          type="button"
+          class="chat-clear-button"
+          onclick={() => void clearChatHistory()}
+          disabled={isBlocked}
+        >
+          Clear workspace chat history
+        </button>
       {/if}
     </div>
-  {:else if isDebugSendBlocked}
-    <div class="chat-blocked-state" role="status" aria-live="polite">
-      <p class="chat-blocked-title">Debug provider is disabled.</p>
-      <p class="chat-blocked-message">{getDebugProviderSendBlockHint()}</p>
-    </div>
-  {/if}
 
-  {#if compactionNotice}
-    <p class="chat-compaction-notice" role="status">{compactionNotice}</p>
-  {/if}
+    {#if isBlocked}
+      <div class="chat-blocked-state" role="status" aria-live="polite">
+        <p class="chat-blocked-title">AI cannot read files in this workspace.</p>
+        <p class="chat-blocked-message">{blockedMessage}</p>
+        {#if accessState.recoveryHint}
+          <p class="chat-blocked-hint">{accessState.recoveryHint}</p>
+        {/if}
+      </div>
+    {:else if isDebugSendBlocked}
+      <div class="chat-blocked-state" role="status" aria-live="polite">
+        <p class="chat-blocked-title">Debug provider is disabled.</p>
+        <p class="chat-blocked-message">{getDebugProviderSendBlockHint()}</p>
+      </div>
+    {/if}
 
-  <div class="chat-mode-toolbar" role="group" aria-label="Chat provider">
-    <span class="chat-mode-label">Provider</span>
-    <div class="chat-mode-options" role="radiogroup" aria-label="Select chat provider">
-      {#each availableProviders as provider (provider.id)}
-        <button
-          type="button"
-          role="radio"
-          class="chat-mode-option"
-          class:chat-mode-option-active={activeProvider === provider.id}
-          aria-checked={activeProvider === provider.id}
+    {#if compactionNotice}
+      <p class="chat-compaction-notice" role="status">{compactionNotice}</p>
+    {/if}
+
+    <div class="chat-controls-row">
+      <label class="chat-provider-field">
+        <span class="chat-mode-label">Provider</span>
+        <select
+          class="chat-provider-select"
+          aria-label="Select chat provider"
+          value={activeProvider}
           disabled={isProviderSelectionDisabled}
-          onclick={() => void selectProvider(provider.id)}
+          onchange={(event) => {
+            const next = (event.currentTarget as HTMLSelectElement)
+              .value as ChatProviderId;
+            void selectProvider(next);
+          }}
         >
-          {provider.label}
-        </button>
-      {/each}
+          {#each availableProviders as provider (provider.id)}
+            <option value={provider.id}>{provider.label}</option>
+          {/each}
+        </select>
+      </label>
+
+      <div class="chat-mode-toolbar" role="group" aria-label="Chat mode">
+        <span class="chat-mode-label">Mode</span>
+        <div class="chat-mode-options" role="radiogroup" aria-label="Select chat mode">
+          {#each availableModes as mode (mode.id)}
+            <button
+              type="button"
+              role="radio"
+              class="chat-mode-option"
+              class:chat-mode-option-active={activeMode === mode.id}
+              aria-checked={activeMode === mode.id}
+              disabled={isModeSelectionDisabled}
+              onclick={() => selectMode(mode.id)}
+            >
+              {mode.label}
+            </button>
+          {/each}
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="chat-mode-toolbar" role="group" aria-label="Chat mode">
-    <span class="chat-mode-label">Mode</span>
-    <div class="chat-mode-options" role="radiogroup" aria-label="Select chat mode">
-      {#each availableModes as mode (mode.id)}
-        <button
-          type="button"
-          role="radio"
-          class="chat-mode-option"
-          class:chat-mode-option-active={activeMode === mode.id}
-          aria-checked={activeMode === mode.id}
-          disabled={isModeSelectionDisabled}
-          onclick={() => selectMode(mode.id)}
-        >
-          {mode.label}
-        </button>
-      {/each}
-    </div>
+  <div class="chat-panel-body">
+    {#if isEmpty}
+      <div class="chat-empty-state">
+        <p class="chat-title">Start chat</p>
+        <p class="chat-hint">
+          Ask or review ideas for this workspace. Pick a provider and mode above, then send a
+          message.
+        </p>
+      </div>
+    {:else}
+      <ol class="chat-message-list" aria-label="Conversation">
+        {#each messages as message, index (message.id)}
+          <li
+            class={`chat-message chat-message-${message.role}`}
+            class:chat-message-system-event={isProviderSwitchMessage(message)}
+            class:chat-message-streaming={isGenerating &&
+              message.role === "assistant" &&
+              index === messages.length - 1}
+          >
+            <p class="chat-message-role">{messageRoleLabel(message)}</p>
+            <p class="chat-message-content">
+              {#if message.role === "assistant" && message.content.length === 0 && isGenerating && index === messages.length - 1}
+                <span class="chat-streaming-placeholder">Generating…</span>
+              {:else}
+                {messageDisplayContent(message)}
+              {/if}
+            </p>
+          </li>
+        {/each}
+      </ol>
+    {/if}
   </div>
-
-  {#if isEmpty}
-    <div class="chat-empty-state">
-      <p class="chat-title">Start chat</p>
-      <p class="chat-hint">
-        Ask or review ideas for this workspace. Enable Debug in Developer Settings to try local
-        end-to-end chat, then pick a provider above.
-      </p>
-    </div>
-  {:else}
-    <ol class="chat-message-list" aria-label="Conversation">
-      {#each messages as message, index (message.id)}
-        <li
-          class={`chat-message chat-message-${message.role}`}
-          class:chat-message-system-event={isProviderSwitchMessage(message)}
-          class:chat-message-streaming={isGenerating &&
-            message.role === "assistant" &&
-            index === messages.length - 1}
-        >
-          <p class="chat-message-role">{messageRoleLabel(message)}</p>
-          <p class="chat-message-content">
-            {#if message.role === "assistant" && message.content.length === 0 && isGenerating && index === messages.length - 1}
-              <span class="chat-streaming-placeholder">Generating…</span>
-            {:else}
-              {messageDisplayContent(message)}
-            {/if}
-          </p>
-        </li>
-      {/each}
-    </ol>
-  {/if}
 
   <div class="chat-composer" role="group" aria-label="Chat composer">
     {#if inlineError}
@@ -343,13 +349,66 @@
 
 <style>
   .chat-panel {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
+    min-height: 0;
+    padding: var(--space-6) var(--editor-content-padding-x, var(--space-8));
+    gap: var(--space-6);
+    color: var(--color-text-primary);
+  }
+
+  .chat-panel-chrome {
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
-    height: 100%;
     min-height: 0;
-    padding: var(--space-8);
+    flex-shrink: 0;
+  }
+
+  .chat-panel-body {
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chat-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .chat-provider-field {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-6);
+    min-width: 0;
+  }
+
+  .chat-provider-select {
+    min-height: 24px;
+    min-width: 120px;
+    max-width: 180px;
+    padding: 0 var(--space-6);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
     color: var(--color-text-primary);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .chat-provider-select:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
+  }
+
+  .chat-provider-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .chat-panel-header {
@@ -389,7 +448,7 @@
   }
 
   .chat-empty-state {
-    flex: 1;
+    height: 100%;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -574,6 +633,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    flex-shrink: 0;
+    min-height: 0;
   }
 
   .chat-input {

@@ -2,6 +2,8 @@
   import { onMount, tick } from "svelte";
   import EditorSurface from "../lib/components/EditorSurface.svelte";
   import ConsolePanel from "../lib/components/ConsolePanel.svelte";
+  import SettingsDialog from "../lib/components/SettingsDialog.svelte";
+  import ThemePane from "../lib/components/ThemePane.svelte";
   import FindReplacePanel from "../lib/components/FindReplacePanel.svelte";
   import TabBar from "../lib/components/TabBar.svelte";
   import ActivityRail from "../lib/components/ActivityRail.svelte";
@@ -65,10 +67,8 @@
   } from "../lib/services/fileWatcher";
   import { marked } from "marked";
   import { diffLines } from "diff";
-  import type { AppDomainState, DebugProviderSettings, ExternalFilesSettings } from "../lib/domain/contracts";
+  import type { AppDomainState } from "../lib/domain/contracts";
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
-  import { APP_THEME_IDS, getThemeLabel, getThemeAccentHex } from "../lib/styles/themes";
-  import type { AppTheme } from "../lib/styles/themes";
   import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
   import { readWorkspaceChatFileSnapshot } from "../lib/services/chatPersistence";
@@ -81,7 +81,10 @@
     syncChatAccessMonitor,
   } from "../lib/services/chatAccessMonitor";
   import {
+    DEFAULT_CONSOLE_HEIGHT_PX,
+    readConsoleHeightPreference,
     readWorkspaceConsoleTabPreference,
+    writeConsoleHeightPreference,
     writeWorkspaceConsoleTabPreference,
     type ConsoleTabId,
   } from "../lib/services/consoleTabPrefs";
@@ -89,8 +92,10 @@
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
-  let settingsPaneOpen = false;
+  let themePaneOpen = false;
+  let settingsDialogOpen = false;
   let consoleOpen = false;
+  let consoleHeightPx = DEFAULT_CONSOLE_HEIGHT_PX;
   let statusMessage = "Ready";
   let editorRunner: EditorCommandRunner | null = null;
   let currentWindowId = "main";
@@ -325,6 +330,10 @@
     void writeWorkspaceConsoleTabPreference(activeWorkspaceRoot, nextTab);
   }
 
+  function persistConsoleHeightNow(): void {
+    void writeConsoleHeightPreference(consoleHeightPx);
+  }
+
   function canFitMarkdownSplit(): boolean {
     return editorPaneWidth >= MARKDOWN_SPLIT_MIN_EDITOR_WIDTH;
   }
@@ -526,9 +535,13 @@
 
   function runCommand(commandId: AppCommandId): void {
     dispatchMenuCommand(commandId, {
-      isSettingsPaneOpen: () => settingsPaneOpen,
-      setSettingsPaneOpen: (next) => {
-        settingsPaneOpen = next;
+      isThemePaneOpen: () => themePaneOpen,
+      setThemePaneOpen: (next) => {
+        themePaneOpen = next;
+      },
+      isSettingsDialogOpen: () => settingsDialogOpen,
+      setSettingsDialogOpen: (next) => {
+        settingsDialogOpen = next;
       },
       notify,
       getState: () => state,
@@ -609,45 +622,6 @@
     }
   }
 
-  function updateExternalFilesSetting(
-    key: keyof ExternalFilesSettings,
-    value: boolean,
-  ): void {
-    const current = appState.getSnapshot().settings.externalFiles;
-    appState.setExternalFilesSettings({
-      ...current,
-      [key]: value,
-    });
-  }
-
-  function updateDebugProviderSetting(
-    key: keyof DebugProviderSettings,
-    value: DebugProviderSettings[keyof DebugProviderSettings],
-  ): void {
-    appState.updateDebugProviderSettings({ [key]: value });
-  }
-
-  function updateDebugProviderNumberSetting(
-    key:
-      | "delayMsMin"
-      | "delayMsMax"
-      | "chunkCharsMin"
-      | "chunkCharsMax"
-      | "failureProbability",
-    rawValue: string,
-  ): void {
-    const parsed = key === "failureProbability" ? Number.parseFloat(rawValue) : Number.parseInt(rawValue, 10);
-    updateDebugProviderSetting(key, Number.isFinite(parsed) ? parsed : 0);
-  }
-
-  function updateDebugProviderSeed(rawValue: string): void {
-    const trimmed = rawValue.trim();
-    updateDebugProviderSetting(
-      "simulationSeed",
-      trimmed.length === 0 ? null : Number.parseInt(trimmed, 10),
-    );
-  }
-
   async function setupRuntime(): Promise<() => void> {
     const currentWindow = getCurrentWebviewWindow();
     currentWindowId = currentWindow.label;
@@ -668,6 +642,8 @@
     }
 
     initializeChatProviders();
+
+    consoleHeightPx = await readConsoleHeightPreference();
 
     await initializeLogging();
 
@@ -1093,7 +1069,7 @@
         onRequestCloseWorkspace={handleOpenWorkspaceContextMenu}
       />
     {/if}
-    <section class="editor-shell" bind:this={editorShellEl}>
+    <section class="editor-shell" bind:this={editorShellEl} style="--console-height: {consoleHeightPx}px;">
       <header class="tab-header">
     <div class="header-left">
       <TabBar
@@ -1113,8 +1089,8 @@
       </button>
     </div>
     <div class="header-right">
-      <button class="toolbar-button" type="button" onclick={() => runCommand("app.toggleSettingsPane")}>
-        Settings
+      <button class="toolbar-button" type="button" onclick={() => runCommand("app.toggleThemePane")}>
+        Theme
       </button>
     </div>
       </header>
@@ -1279,234 +1255,55 @@
         </div>
       </div>
     {/if}
-        <aside class="settings-pane" data-open={settingsPaneOpen}>
-      <h2>Settings</h2>
-      <section class="settings-section">
-        <h3>Theme</h3>
-        {#each APP_THEME_IDS as themeId}
-          <label class="settings-theme-row">
-            <input
-              type="radio"
-              name="theme"
-              value={themeId}
-              checked={state.settings.theme === themeId}
-              onchange={() => appState.setTheme(themeId)}
-            />
-            <span class="theme-swatch" style="background-color: {getThemeAccentHex(themeId)}"></span>
-            <span>{getThemeLabel(themeId)}</span>
-          </label>
-        {/each}
+        <ThemePane open={themePaneOpen} />
       </section>
-      <section class="settings-section">
-        <h3>External files</h3>
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={state.settings.externalFiles.watchExternalChanges}
-            onchange={(event) =>
-              updateExternalFilesSetting(
-                "watchExternalChanges",
-                (event.currentTarget as HTMLInputElement).checked,
-              )}
+
+      <div class="bottom-panel">
+        {#if consoleOpen}
+          <ConsolePanel
+            showChatTab={Boolean(activeWorkspaceRoot)}
+            activeTab={consoleTabSelection}
+            onTabChange={handleConsoleTabChange}
+            bind:heightPx={consoleHeightPx}
+            onHeightCommit={persistConsoleHeightNow}
           />
-          Watch external file changes
-        </label>
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={state.settings.externalFiles.autoReloadCleanFiles}
-            disabled={!state.settings.externalFiles.watchExternalChanges}
-            onchange={(event) =>
-              updateExternalFilesSetting(
-                "autoReloadCleanFiles",
-                (event.currentTarget as HTMLInputElement).checked,
-              )}
-          />
-          Reload clean files automatically
-        </label>
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={state.settings.externalFiles.checkOnWindowFocus}
-            disabled={!state.settings.externalFiles.watchExternalChanges}
-            onchange={(event) =>
-              updateExternalFilesSetting(
-                "checkOnWindowFocus",
-                (event.currentTarget as HTMLInputElement).checked,
-              )}
-          />
-          Check when window gains focus
-        </label>
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={state.settings.externalFiles.checkOnTabActivate}
-            disabled={!state.settings.externalFiles.watchExternalChanges}
-            onchange={(event) =>
-              updateExternalFilesSetting(
-                "checkOnTabActivate",
-                (event.currentTarget as HTMLInputElement).checked,
-              )}
-          />
-          Check when tab becomes active
-        </label>
-      </section>
-      <section class="settings-section">
-        <h3>Editor</h3>
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={state.settings.decoratePlaintextSymbols}
-            onchange={(event) =>
-              appState.setDecoratePlaintextSymbols(
-                (event.currentTarget as HTMLInputElement).checked,
-              )
-            }
-          />
-          Decorate plaintext symbols
-        </label>
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={state.settings.hideActivityRailWhenNotepadOnly}
-            onchange={(event) =>
-              appState.setHideActivityRailWhenNotepadOnly(
-                (event.currentTarget as HTMLInputElement).checked,
-              )}
-          />
-          Hide activity rail when Notepad only
-        </label>
-      </section>
-      <section class="settings-section">
-        <h3>Developer Settings</h3>
-        <p class="settings-section-note">Debug provider configuration for development dogfooding.</p>
-        <div class="settings-subsection">
-          <h4>Enable</h4>
-          <label class="settings-toggle">
-            <input
-              type="checkbox"
-              checked={state.settings.debugProvider.enabled}
-              onchange={(event) =>
-                updateDebugProviderSetting(
-                  "enabled",
-                  (event.currentTarget as HTMLInputElement).checked,
-                )}
-            />
-            Show Debug provider in chat
-          </label>
-        </div>
-        <div class="settings-subsection">
-          <h4>Simulation</h4>
-          <label class="settings-field">
-            <span>Simulation seed</span>
-            <input
-              type="text"
-              inputmode="numeric"
-              placeholder="Random"
-              value={state.settings.debugProvider.simulationSeed ?? ""}
-              oninput={(event) =>
-                updateDebugProviderSeed((event.currentTarget as HTMLInputElement).value)}
-            />
-          </label>
-          <label class="settings-field">
-            <span>Delay min (ms)</span>
-            <input
-              type="number"
-              min="0"
-              value={state.settings.debugProvider.delayMsMin}
-              onchange={(event) =>
-                updateDebugProviderNumberSetting(
-                  "delayMsMin",
-                  (event.currentTarget as HTMLInputElement).value,
-                )}
-            />
-          </label>
-          <label class="settings-field">
-            <span>Delay max (ms)</span>
-            <input
-              type="number"
-              min="0"
-              value={state.settings.debugProvider.delayMsMax}
-              onchange={(event) =>
-                updateDebugProviderNumberSetting(
-                  "delayMsMax",
-                  (event.currentTarget as HTMLInputElement).value,
-                )}
-            />
-          </label>
-          <label class="settings-field">
-            <span>Chunk min (chars)</span>
-            <input
-              type="number"
-              min="1"
-              value={state.settings.debugProvider.chunkCharsMin}
-              onchange={(event) =>
-                updateDebugProviderNumberSetting(
-                  "chunkCharsMin",
-                  (event.currentTarget as HTMLInputElement).value,
-                )}
-            />
-          </label>
-          <label class="settings-field">
-            <span>Chunk max (chars)</span>
-            <input
-              type="number"
-              min="1"
-              value={state.settings.debugProvider.chunkCharsMax}
-              onchange={(event) =>
-                updateDebugProviderNumberSetting(
-                  "chunkCharsMax",
-                  (event.currentTarget as HTMLInputElement).value,
-                )}
-            />
-          </label>
-          <label class="settings-field">
-            <span>Failure probability</span>
-            <input
-              type="number"
-              min="0"
-              max="1"
-              step="0.01"
-              value={state.settings.debugProvider.failureProbability}
-              onchange={(event) =>
-                updateDebugProviderNumberSetting(
-                  "failureProbability",
-                  (event.currentTarget as HTMLInputElement).value,
-                )}
-            />
-          </label>
-          <label class="settings-field">
-            <span>Failure message</span>
-            <input
-              type="text"
-              value={state.settings.debugProvider.failureMessage}
-              onchange={(event) =>
-                updateDebugProviderSetting(
-                  "failureMessage",
-                  (event.currentTarget as HTMLInputElement).value,
-                )}
-            />
-          </label>
-        </div>
-        <div class="settings-subsection">
-          <h4>Output</h4>
-          <label class="settings-toggle">
-            <input
-              type="checkbox"
-              checked={state.settings.debugProvider.includeDiagnostics}
-              onchange={(event) =>
-                updateDebugProviderSetting(
-                  "includeDiagnostics",
-                  (event.currentTarget as HTMLInputElement).checked,
-                )}
-            />
-            Include diagnostics appendix in replies
-          </label>
-        </div>
-      </section>
-      <p>This pane uses token-driven overlay styling.</p>
-        </aside>
-      </section>
+        {/if}
+
+        <footer class="status-bar" class:status-bar-console-open={consoleOpen}>
+          <button
+            type="button"
+            class="status-bar-button"
+            title={consoleOpen ? "Hide console" : "Show console"}
+            onclick={toggleConsole}
+          >
+            <span class="status-segment optional-segment optional-cursor">
+              Ln {state.editor.cursorLine}, Col {state.editor.cursorColumn}
+            </span>
+            <span class="status-segment optional-segment optional-encoding">
+              {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+            </span>
+            <span class="status-segment optional-segment optional-line-ending">
+              {activeDocument?.lineEnding.toUpperCase() ?? "LF"}
+            </span>
+            <span class="status-segment optional-segment optional-zoom">
+              {state.editor.zoomPercent}%
+            </span>
+            <span class="status-segment optional-segment optional-wrap">
+              {state.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
+            </span>
+            <span class="status-segment">{activeDocument?.isDirty ? "Modified" : "Saved"}</span>
+            {#if activeDocument?.fileMissing}
+              <span class="status-segment status-missing" title="File no longer exists on disk">
+                File missing
+              </span>
+            {/if}
+            <span class="status-segment status-message optional-segment optional-message">{statusMessage}</span>
+            <span class="status-segment path-segment" title={activeDocument?.filePath ?? statusPath}>
+              {statusPath}
+            </span>
+          </button>
+        </footer>
+      </div>
     </section>
     {#if activeWorkspaceRoot}
       <ProjectPanel
@@ -1527,52 +1324,9 @@
     {/if}
   </div>
 
-  <div class="bottom-panel">
-    {#if consoleOpen}
-      <ConsolePanel
-        showChatTab={Boolean(activeWorkspaceRoot)}
-        activeTab={consoleTabSelection}
-        onTabChange={handleConsoleTabChange}
-      />
-    {/if}
-
-    <footer class="status-bar" class:status-bar-console-open={consoleOpen}>
-      <button
-        type="button"
-        class="status-bar-button"
-        title={consoleOpen ? "Hide console" : "Show console"}
-        onclick={toggleConsole}
-      >
-        <span class="status-segment optional-segment optional-cursor">
-          Ln {state.editor.cursorLine}, Col {state.editor.cursorColumn}
-        </span>
-        <span class="status-segment optional-segment optional-encoding">
-          {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
-        </span>
-        <span class="status-segment optional-segment optional-line-ending">
-          {activeDocument?.lineEnding.toUpperCase() ?? "LF"}
-        </span>
-        <span class="status-segment optional-segment optional-zoom">
-          {state.editor.zoomPercent}%
-        </span>
-        <span class="status-segment optional-segment optional-wrap">
-          {state.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
-        </span>
-        <span class="status-segment">{activeDocument?.isDirty ? "Modified" : "Saved"}</span>
-        {#if activeDocument?.fileMissing}
-          <span class="status-segment status-missing" title="File no longer exists on disk">
-            File missing
-          </span>
-        {/if}
-        <span class="status-segment status-message optional-segment optional-message">{statusMessage}</span>
-        <span class="status-segment path-segment" title={activeDocument?.filePath ?? statusPath}>
-          {statusPath}
-        </span>
-      </button>
-    </footer>
-  </div>
-
 </main>
+
+<SettingsDialog open={settingsDialogOpen} onClose={() => (settingsDialogOpen = false)} />
 
 {#if workspaceContextMenu}
   <div
@@ -1604,13 +1358,14 @@
   .shell {
     height: 100vh;
     display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
     background: var(--color-bg-root);
     color: var(--color-text-primary);
   }
 
   .shell-main-row {
     min-height: 0;
+    height: 100%;
     display: grid;
     grid-template-columns:
       auto
@@ -1623,7 +1378,8 @@
     min-width: 0;
     min-height: 0;
     display: grid;
-    grid-template-rows: var(--tab-header-height) minmax(0, 1fr);
+    grid-template-rows: var(--tab-header-height) minmax(0, 1fr) auto;
+    --editor-content-padding-x: var(--space-8);
   }
 
   .shell-main-row :global(.project-panel) {
@@ -1634,6 +1390,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    grid-row: 3;
   }
 
   .tab-header {
@@ -1840,116 +1597,6 @@
     gap: var(--space-6);
   }
 
-  .settings-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    margin-top: var(--space-8);
-  }
-
-  .settings-section h3 {
-    margin: 0;
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
-
-  .settings-section-note {
-    margin: 0;
-    font-size: 0.75rem;
-    line-height: 1.4;
-    color: var(--color-text-secondary);
-  }
-
-  .settings-subsection {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .settings-subsection h4 {
-    margin: 0;
-    font-size: 0.75rem;
-    line-height: 1.4;
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .settings-field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    font-size: 0.8125rem;
-  }
-
-  .settings-field input {
-    min-height: 28px;
-    padding: 0 var(--space-4);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    font: inherit;
-  }
-
-  .settings-field input:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 1px;
-  }
-
-  .settings-toggle {
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-    font-size: 0.875rem;
-  }
-
-  .settings-toggle input {
-    accent-color: var(--accent-color);
-  }
-
-  .settings-theme-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-8);
-    font-size: 0.875rem;
-    padding: var(--space-2) 0;
-  }
-
-  .theme-swatch {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .settings-pane {
-    position: absolute;
-    top: var(--space-8);
-    right: var(--space-8);
-    width: var(--settings-pane-width);
-    max-width: calc(100% - var(--space-8) * 2);
-    height: calc(100% - var(--space-8) * 2);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
-    box-shadow: var(--shadow-overlay);
-    padding: var(--space-12);
-    transform: translateX(110%);
-    opacity: 0;
-    pointer-events: none;
-    transition:
-      transform var(--motion-medium) var(--easing-emphasized),
-      opacity var(--motion-medium) var(--easing-standard);
-  }
-
-  .settings-pane[data-open="true"] {
-    transform: translateX(0);
-    opacity: 1;
-    pointer-events: auto;
-  }
-
   .workspace-context-menu {
     position: fixed;
     z-index: 1100;
@@ -1995,7 +1642,7 @@
     gap: var(--space-4);
     width: 100%;
     height: 100%;
-    padding: 0 var(--space-8);
+    padding: 0 var(--editor-content-padding-x, var(--space-8));
     border: none;
     border-radius: 0;
     background: transparent;

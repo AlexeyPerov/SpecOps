@@ -100,8 +100,10 @@ describe("getActiveDocumentContent", () => {
 describe("workspace.add command", () => {
   const notify = vi.fn();
   const commandContext = {
-    setSettingsPaneOpen: vi.fn(),
-    isSettingsPaneOpen: vi.fn(() => false),
+    setThemePaneOpen: vi.fn(),
+    isThemePaneOpen: vi.fn(() => false),
+    setSettingsDialogOpen: vi.fn(),
+    isSettingsDialogOpen: vi.fn(() => false),
     notify,
     getState: () => appState.getSnapshot(),
     getWindowId: () => "main",

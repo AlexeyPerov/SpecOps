@@ -62,7 +62,7 @@
   .console-scroll {
     height: 100%;
     overflow: auto;
-    padding: var(--space-4) var(--space-8);
+    padding: var(--space-4) var(--editor-content-padding-x, var(--space-8));
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 11px;
     line-height: 1.45;

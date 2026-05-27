@@ -100,7 +100,8 @@ export interface AppSettingsState {
 }
 
 export type AppCommandId =
-  | "app.toggleSettingsPane"
+  | "app.toggleThemePane"
+  | "app.toggleSettings"
   | "app.newWindow"
   | "app.toggleFindReplace"
   | "app.toggleGoTo"
@@ -145,7 +146,7 @@ export interface CommandDefinition {
   id: AppCommandId;
   label: string;
   menuPath: string;
-  binding: CommandBinding;
+  binding?: CommandBinding;
 }
 
 export type DiagnosticLevel = "debug" | "info" | "warn" | "error";

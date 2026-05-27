@@ -1,4 +1,5 @@
 <script lang="ts">
+  import HoverTooltip from "./HoverTooltip.svelte";
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
 
   export let workspaces: WorkspaceEntry[] = [];
@@ -20,45 +21,48 @@
 </script>
 
 <aside class="activity-rail" aria-label="Activity rail">
-  <button
-    class={`rail-button ${activeContextId === "notepad" ? "rail-button-active" : ""}`}
-    type="button"
-    title="Notepad"
-    aria-label="Notepad"
-    onclick={() => onSelectContext("notepad")}
-  >
-    N
-  </button>
+  <HoverTooltip label="Notepad">
+    <button
+      class={`rail-button ${activeContextId === "notepad" ? "rail-button-active" : ""}`}
+      type="button"
+      aria-label="Notepad"
+      onclick={() => onSelectContext("notepad")}
+    >
+      N
+    </button>
+  </HoverTooltip>
 
   <div class="rail-separator" aria-hidden="true"></div>
 
   <div class="rail-workspaces">
     {#each workspaces as workspace (workspace.id)}
-      <button
-        class={`rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
-        type="button"
-        title={workspace.rootPath}
-        aria-label={`Workspace ${workspaceName(workspace)}`}
-        oncontextmenu={(event) => {
-          event.preventDefault();
-          onRequestCloseWorkspace(workspace.id, event.clientX, event.clientY);
-        }}
-        onclick={() => onSelectContext(workspace.id)}
-      >
-        <span class="rail-workspace-initial">{workspaceInitial(workspace)}</span>
-      </button>
+      <HoverTooltip label={workspaceName(workspace)} detail={workspace.rootPath}>
+        <button
+          class={`rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
+          type="button"
+          aria-label={`Workspace ${workspaceName(workspace)}`}
+          oncontextmenu={(event) => {
+            event.preventDefault();
+            onRequestCloseWorkspace(workspace.id, event.clientX, event.clientY);
+          }}
+          onclick={() => onSelectContext(workspace.id)}
+        >
+          <span class="rail-workspace-initial">{workspaceInitial(workspace)}</span>
+        </button>
+      </HoverTooltip>
     {/each}
   </div>
 
-  <button
-    class="rail-button rail-button-add"
-    type="button"
-    title="Add Workspace"
-    aria-label="Add Workspace"
-    onclick={onAddWorkspace}
-  >
-    +
-  </button>
+  <HoverTooltip label="Add Workspace">
+    <button
+      class="rail-button rail-button-add"
+      type="button"
+      aria-label="Add Workspace"
+      onclick={onAddWorkspace}
+    >
+      +
+    </button>
+  </HoverTooltip>
 </aside>
 
 <style>

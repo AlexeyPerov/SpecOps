@@ -217,6 +217,17 @@ export async function initializeAppMenu(
     accelerator: "CmdOrCtrl+W",
     action: () => runCommand("tab.close"),
   });
+  const settingsItem = await MenuItem.new({
+    id: "cmd.app.settings",
+    text: "Settings",
+    accelerator: "CmdOrCtrl+,",
+    action: () => runCommand("app.toggleSettings"),
+  });
+  const fileSettingsItem = await MenuItem.new({
+    id: "cmd.file.settings",
+    text: "Settings…",
+    action: () => runCommand("app.toggleSettings"),
+  });
 
   const fileMenu = await Submenu.new({
     text: "File",
@@ -225,6 +236,8 @@ export async function initializeAppMenu(
       openRecentSubmenu,
       openAllInFolderItem,
       addWorkspaceItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      fileSettingsItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       newWindowItem,
       moveTabItem,
@@ -327,12 +340,6 @@ export async function initializeAppMenu(
     ],
   });
 
-  const settingsItem = await MenuItem.new({
-    id: "cmd.view.settings",
-    text: "Toggle Settings Pane",
-    accelerator: "CmdOrCtrl+,",
-    action: () => runCommand("app.toggleSettingsPane"),
-  });
   const themeItem = await MenuItem.new({
     id: "cmd.view.theme",
     text: "Cycle Theme",
@@ -373,7 +380,6 @@ export async function initializeAppMenu(
   const viewMenu = await Submenu.new({
     text: "View",
     items: [
-      settingsItem,
       themeItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       diffItem,
@@ -386,15 +392,17 @@ export async function initializeAppMenu(
   });
 
   const appSubmenu = await Submenu.new({
-    text: "spec-ops",
+    text: "SpecOps",
     items: [
       await PredefinedMenuItem.new({
         item: {
           About: {
-            name: "spec-ops",
+            name: "SpecOps",
           },
         },
       }),
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      settingsItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       await PredefinedMenuItem.new({ item: "Quit" }),
     ],

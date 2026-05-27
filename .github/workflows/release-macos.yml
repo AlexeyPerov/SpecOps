@@ -42,7 +42,7 @@ jobs:
         with:
           projectPath: app
           tagName: ${{ github.ref_name }}
-          releaseName: spec-ops ${{ github.ref_name }}
+          releaseName: SpecOps ${{ github.ref_name }}
           releaseBody: macOS release for ${{ github.ref_name }}.
           releaseDraft: false
           prerelease: false

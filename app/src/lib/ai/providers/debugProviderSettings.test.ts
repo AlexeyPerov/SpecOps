@@ -10,7 +10,7 @@ import {
 describe("normalizeDebugProviderSettings", () => {
   it("returns safe defaults when input is missing", () => {
     expect(normalizeDebugProviderSettings()).toEqual(defaultDebugProviderSettings);
-    expect(defaultDebugProviderSettings.enabled).toBe(false);
+    expect(defaultDebugProviderSettings.enabled).toBe(true);
     expect(defaultDebugProviderSettings.failureProbability).toBe(0);
   });
 

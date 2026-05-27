@@ -1,0 +1,87 @@
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+}
+
+.settings-section:first-child {
+  margin-top: 0;
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.settings-section-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.settings-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-subsection h4 {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+}
+
+.settings-field input {
+  min-height: 28px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.settings-field input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: 0.875rem;
+}
+
+.settings-toggle input {
+  accent-color: var(--accent-color);
+}
+
+.settings-theme-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: 0.875rem;
+  padding: var(--space-2) 0;
+}
+
+.theme-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

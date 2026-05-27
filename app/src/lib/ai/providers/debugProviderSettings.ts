@@ -1,7 +1,7 @@
 import type { ChatProviderId, DebugProviderSettings } from "../../domain/contracts";
 
 export const defaultDebugProviderSettings: DebugProviderSettings = {
-  enabled: false,
+  enabled: true,
   simulationSeed: null,
   delayMsMin: 200,
   delayMsMax: 1200,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-27 17:10 (MSK)
+
+- **App icon:** Replaced the orange spec-ops icon with the cyan variant from `spec-ops-cyan-app-icon.png`. Source glyph upscaled (LANCZOS) onto a 1024×1024 transparent canvas at the same ~86.5% fill ratio as the previous icon so macOS dock size stays consistent. Regenerated all Tauri bundle icons (`icon.icns`, `icon.ico`, platform PNGs) and updated `app/static/favicon.png`.
+
 ## 2026-05-26 21:50 (MSK)
 
 - **AI M5-6 provider/mode selection UI:** Added provider picker to `ChatPanel.svelte` with Debug gated by Developer Settings; mode options filter by active provider capabilities; provider/mode controls disable while generating.

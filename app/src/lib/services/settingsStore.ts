@@ -4,7 +4,11 @@ import {
   defaultDebugProviderSettings,
   normalizeDebugProviderSettings,
 } from "../ai/providers/debugProviderSettings";
-import type { DebugProviderSettings, ExternalFilesSettings } from "../domain/contracts";
+import {
+  defaultGlmProviderSettings,
+  normalizeGlmProviderSettings,
+} from "../ai/providers/glmProviderSettings";
+import type { DebugProviderSettings, ExternalFilesSettings, GlmProviderSettings } from "../domain/contracts";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
 export interface PersistedSettings {
@@ -17,6 +21,7 @@ export interface PersistedSettings {
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   debugProvider: DebugProviderSettings;
+  glmProvider: GlmProviderSettings;
 }
 
 export const defaultExternalFilesSettings: ExternalFilesSettings = {
@@ -33,6 +38,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
   debugProvider: defaultDebugProviderSettings,
+  glmProvider: defaultGlmProviderSettings,
 };
 
 const FILE_NAME = "settings.json";
@@ -82,6 +88,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
           ? parsed.hideActivityRailWhenNotepadOnly
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
         debugProvider: normalizeDebugProviderSettings(parsed.debugProvider),
+        glmProvider: normalizeGlmProviderSettings(parsed.glmProvider),
       };
     }
     return null;
@@ -115,6 +122,7 @@ export function toPersistedSettings(input: {
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   debugProvider: DebugProviderSettings;
+  glmProvider: GlmProviderSettings;
 }): PersistedSettings {
   return {
     wrapLines: input.wrapLines,
@@ -123,5 +131,6 @@ export function toPersistedSettings(input: {
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
     debugProvider: normalizeDebugProviderSettings(input.debugProvider),
+    glmProvider: normalizeGlmProviderSettings(input.glmProvider),
   };
 }

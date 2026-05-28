@@ -9,6 +9,7 @@ import {
   toExternalFilesSettings,
   toPersistedSettings,
 } from "./settingsStore";
+import { defaultGlmProviderSettings } from "../ai/providers/glmProviderSettings";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
@@ -49,6 +50,11 @@ describe("settings mapping", () => {
         failureProbability: 0.1,
         failureMessage: "Test failure",
         includeDiagnostics: false,
+      },
+      glmProvider: {
+        enabled: true,
+        baseUrl: "https://example.test/v1",
+        modelId: "glm-test",
       },
     });
 
@@ -91,6 +97,18 @@ describe("loadPersistedSettings", () => {
     );
 
     await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
+  });
+
+  it("defaults missing glm provider settings", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
+    );
+
+    const result = await loadPersistedSettings();
+    expect(result?.glmProvider).toEqual(defaultGlmProviderSettings);
   });
 
   it("normalizes invalid debug provider ranges on load", async () => {

@@ -16,14 +16,21 @@ export function initializeChatProviders(): void {
     createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider),
   );
   chatStore.setCapabilityChecker(
-    createRegistryCapabilityChecker(() => appState.getSnapshot().settings.debugProvider),
-  );
-  chatStore.setDefaultChatProviderResolver(() =>
-    resolveDefaultChatProvider(
-      appState.getSnapshot().settings.debugProvider,
-      isGlmProviderConfigured(),
+    createRegistryCapabilityChecker(
+      () => appState.getSnapshot().settings.debugProvider,
+      () => ({
+        settings: appState.getSnapshot().settings.glmProvider,
+        apiKey: appState.getSnapshot().settings.glmApiKey,
+      }),
     ),
   );
+  chatStore.setDefaultChatProviderResolver(() => {
+    const snapshot = appState.getSnapshot().settings;
+    return resolveDefaultChatProvider(
+      snapshot.debugProvider,
+      isGlmProviderConfigured(snapshot.glmProvider, snapshot.glmApiKey),
+    );
+  });
   initialized = true;
 }
 

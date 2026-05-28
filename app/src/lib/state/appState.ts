@@ -10,6 +10,7 @@ import type {
   DocumentState,
   DocumentIdentity,
   ExternalFilesSettings,
+  GlmProviderSettings,
   TabState,
   WorkspaceEntry,
   WindowBounds,
@@ -27,6 +28,10 @@ import {
   defaultDebugProviderSettings,
   normalizeDebugProviderSettings,
 } from "../ai/providers/debugProviderSettings";
+import {
+  defaultGlmProviderSettings,
+  normalizeGlmProviderSettings,
+} from "../ai/providers/glmProviderSettings";
 import { inferEditorLanguage } from "../editor/editorLanguage";
 import { normalizePathSync } from "../services/diskFingerprint";
 import { findNextOpenAgentTabAfterClose } from "../services/workspaceAgentSession";
@@ -65,6 +70,8 @@ const defaultSettings: AppSettingsState = {
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
   debugProvider: defaultDebugProviderSettings,
+  glmProvider: defaultGlmProviderSettings,
+  glmApiKey: "",
 };
 
 const defaultThemeState: AppThemeState = {
@@ -1661,6 +1668,36 @@ function createStateStore() {
         },
       }));
     },
+    setGlmProviderSettings(glmProvider: GlmProviderSettings) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          glmProvider: normalizeGlmProviderSettings(glmProvider),
+        },
+      }));
+    },
+    updateGlmProviderSettings(patch: Partial<GlmProviderSettings>) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          glmProvider: normalizeGlmProviderSettings({
+            ...state.settings.glmProvider,
+            ...patch,
+          }),
+        },
+      }));
+    },
+    setGlmApiKey(glmApiKey: string) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          glmApiKey,
+        },
+      }));
+    },
     applyPersistedSettings(partial: {
       wrapLines?: boolean;
       zoomPercent?: number;
@@ -1668,6 +1705,7 @@ function createStateStore() {
       decoratePlaintextSymbols?: boolean;
       hideActivityRailWhenNotepadOnly?: boolean;
       debugProvider?: DebugProviderSettings;
+      glmProvider?: GlmProviderSettings;
       projectPanelCollapsed?: boolean;
     }) {
       update((state) => {
@@ -1717,6 +1755,15 @@ function createStateStore() {
             settings: {
               ...next.settings,
               debugProvider: normalizeDebugProviderSettings(partial.debugProvider),
+            },
+          };
+        }
+        if (partial.glmProvider) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              glmProvider: normalizeGlmProviderSettings(partial.glmProvider),
             },
           };
         }

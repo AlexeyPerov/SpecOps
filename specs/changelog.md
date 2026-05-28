@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 20:12 (MSK)
+
+- **M5-3-1 — GLM settings and config UI:** Added `GlmProviderSettings` (enabled, base URL, model ID) to persisted settings; API key stored separately in `glm-secrets.json` (never in `settings.json`, chat threads, or Debug diagnostics). New **GLM** tab in Settings; inline setup CTA in `ChatPanel` when GLM is selected but credentials are missing. Capability preflight and send pipeline block unconfigured GLM with actionable hints. Unit tests for settings normalization and secrets store.
+
 ## 2026-05-28 18:05 (MSK)
 
 - **M5-2-8 — Milestone validation:** Added `chatM5-2.validation.test.ts` covering M5.2 exit criteria (draft lifecycle, parallel Debug generation, date grouping and title search, delete agent, session restore, close-tab navigation, console height-only prefs). Ran `npm test` (377 tests) and `npm run check` (clean). Marked M5.2 execution plan complete.

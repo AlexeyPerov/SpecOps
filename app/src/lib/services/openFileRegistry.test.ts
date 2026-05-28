@@ -8,6 +8,7 @@ import type {
 import { createFileTab } from "../domain/contracts";
 import { createSessionFsMock } from "../test/sessionMock";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
+import { defaultGlmProviderSettings } from "../ai/providers/glmProviderSettings";
 import {
   applyRegistryDedupeToWindowSnapshot,
   claimOpenFile,
@@ -216,6 +217,8 @@ describe("syncOpenFileRegistryForWindow", () => {
         decoratePlaintextSymbols: false,
         hideActivityRailWhenNotepadOnly: true,
         debugProvider: defaultDebugProviderSettings,
+        glmProvider: defaultGlmProviderSettings,
+        glmApiKey: "",
       },
       theme: {
         activeTheme: { kind: "builtin", id: "dark-amber" },
@@ -321,6 +324,8 @@ describe("syncOpenFileRegistryForWindow", () => {
         decoratePlaintextSymbols: false,
         hideActivityRailWhenNotepadOnly: true,
         debugProvider: defaultDebugProviderSettings,
+        glmProvider: defaultGlmProviderSettings,
+        glmApiKey: "",
       },
       theme: {
         activeTheme: { kind: "builtin", id: "dark-amber" },

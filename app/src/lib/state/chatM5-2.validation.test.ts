@@ -81,7 +81,13 @@ describe("M5.2 milestone validation", () => {
     });
     registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
     chatStore.setCapabilityChecker(
-      createRegistryCapabilityChecker(() => appState.getSnapshot().settings.debugProvider),
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.debugProvider,
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: appState.getSnapshot().settings.glmApiKey,
+        }),
+      ),
     );
     chatStore.setDefaultChatProviderResolver(() => "debug");
     chatStore.setActiveWorkspaceRoot("/work/a");

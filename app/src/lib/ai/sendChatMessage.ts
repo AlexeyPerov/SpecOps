@@ -4,6 +4,10 @@ import {
   getDebugProviderSendBlockHint,
   isDebugProviderSendBlocked,
 } from "./providers/debugProviderSettings";
+import {
+  getGlmProviderMissingConfigMessage,
+  isGlmProviderSendBlocked,
+} from "./providers/glmProviderSettings";
 import { getChatProvider } from "./providers/registry";
 import type { ProviderSendRequest } from "./providers/types";
 import { appState } from "../state/appState";
@@ -18,6 +22,7 @@ export type SendChatMessageFailureReason =
   | "generating"
   | "preflight"
   | "debug_disabled"
+  | "glm_not_configured"
   | "provider_unavailable"
   | "append_failed"
   | "provider_error";
@@ -101,13 +106,23 @@ export async function sendChatMessage(
   }
 
   const providerId = chatStore.getActiveChatProvider(activeAgentId);
-  const debugSettings = appState.getSnapshot().settings.debugProvider;
+  const appSettings = appState.getSnapshot().settings;
+  const debugSettings = appSettings.debugProvider;
   if (isDebugProviderSendBlocked(providerId, debugSettings)) {
     abortTurn(activeAgentId);
     return {
       ok: false,
       reason: "debug_disabled",
       message: getDebugProviderSendBlockHint(),
+    };
+  }
+
+  if (isGlmProviderSendBlocked(providerId, appSettings.glmProvider, appSettings.glmApiKey)) {
+    abortTurn(activeAgentId);
+    return {
+      ok: false,
+      reason: "glm_not_configured",
+      message: getGlmProviderMissingConfigMessage(),
     };
   }
 

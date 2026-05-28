@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
+import { defaultGlmProviderSettings } from "./glmProviderSettings";
 import {
   formatProviderSwitchNotice,
+  isGlmProviderConfigured,
   listSelectableChatProviders,
   resolveDefaultChatProvider,
 } from "./selection";
@@ -21,13 +23,21 @@ describe("chat provider selection", () => {
   });
 
   it("prefers GLM for new threads when configured, otherwise Debug when enabled", () => {
-    expect(resolveDefaultChatProvider(defaultDebugProviderSettings, true)).toBe("glm");
+    expect(
+      resolveDefaultChatProvider(
+        defaultDebugProviderSettings,
+        isGlmProviderConfigured(defaultGlmProviderSettings, "key-123"),
+      ),
+    ).toBe("glm");
     expect(resolveDefaultChatProvider({ ...defaultDebugProviderSettings, enabled: true }, false)).toBe(
       "debug",
     );
-    expect(resolveDefaultChatProvider({ ...defaultDebugProviderSettings, enabled: false }, false)).toBe(
-      "glm",
-    );
+    expect(
+      resolveDefaultChatProvider(
+        { ...defaultDebugProviderSettings, enabled: false },
+        isGlmProviderConfigured(defaultGlmProviderSettings, ""),
+      ),
+    ).toBe("glm");
   });
 
   it("formats provider switch notices for history rendering", () => {

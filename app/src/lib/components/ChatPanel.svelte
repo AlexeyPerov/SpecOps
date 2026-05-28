@@ -4,6 +4,11 @@
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
   import {
+    getGlmProviderMissingConfigMessage,
+    getGlmProviderSetupHint,
+    isGlmProviderSendBlocked,
+  } from "../ai/providers/glmProviderSettings";
+  import {
     canSelectChatProvider,
     formatProviderSwitchNotice,
     listSelectableChatProviders,
@@ -24,6 +29,7 @@
     formatCompactionNotice,
   } from "../state/chatStore";
   import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+  import { openSettingsDialog } from "../services/settingsDialogUi";
 
   interface Props {
     onDeleteAgent?: () => void | Promise<void>;
@@ -42,6 +48,8 @@
   const isGenerating = $derived($chatIsGenerating);
   const lastError = $derived($chatLastError);
   const debugProviderSettings = $derived($appState.settings.debugProvider);
+  const glmProviderSettings = $derived($appState.settings.glmProvider);
+  const glmApiKey = $derived($appState.settings.glmApiKey);
   const availableProviders = $derived(listSelectableChatProviders(debugProviderSettings));
   const availableModes = $derived(listModesForProvider(supportedModes));
   const activeMode = $derived(metadata?.mode ?? "ask");
@@ -50,6 +58,9 @@
   );
   const isDebugSendBlocked = $derived(
     isDebugProviderSendBlocked(activeProvider, debugProviderSettings),
+  );
+  const isGlmSendBlocked = $derived(
+    isGlmProviderSendBlocked(activeProvider, glmProviderSettings, glmApiKey),
   );
   const isBlocked = $derived(accessState.status === "blocked");
   const isEmpty = $derived(messages.length === 0);
@@ -70,11 +81,14 @@
   const isSendDisabled = $derived(
     isBlocked ||
       isDebugSendBlocked ||
+      isGlmSendBlocked ||
       isGenerating ||
       sending ||
       draft.trim().length === 0,
   );
-  const composerDisabled = $derived(isBlocked || isDebugSendBlocked || isGenerating || sending);
+  const composerDisabled = $derived(
+    isBlocked || isDebugSendBlocked || isGlmSendBlocked || isGenerating || sending,
+  );
   const generationStatus = $derived.by(() => {
     if (isGenerating) {
       return "Generating response…";
@@ -92,6 +106,9 @@
       return "AI cannot read files in this workspace because the path is currently inaccessible.";
     }
     if (accessState.reason === WorkspaceAccessReason.MissingProviderConfig) {
+      if (activeProvider === "glm") {
+        return getGlmProviderMissingConfigMessage();
+      }
       return "AI cannot run because provider setup is incomplete for this workspace.";
     }
     if (accessState.reason === WorkspaceAccessReason.ProviderUnsupported) {
@@ -104,6 +121,10 @@
     activeProvider;
     metadata?.mode;
     debugProviderSettings.enabled;
+    glmProviderSettings.enabled;
+    glmProviderSettings.baseUrl;
+    glmProviderSettings.modelId;
+    glmApiKey;
     const root = chatStore.getActiveWorkspaceRoot();
     if (!root) {
       supportedModes = ["ask", "review"];
@@ -157,7 +178,7 @@
 
   async function submitMessage(): Promise<void> {
     const content = draft.trim();
-    if (!content || sending || isBlocked || isDebugSendBlocked || isGenerating) {
+    if (!content || sending || isBlocked || isDebugSendBlocked || isGlmSendBlocked || isGenerating) {
       return;
     }
 
@@ -248,6 +269,15 @@
         {#if accessState.recoveryHint}
           <p class="chat-blocked-hint">{accessState.recoveryHint}</p>
         {/if}
+      </div>
+    {:else if isGlmSendBlocked}
+      <div class="chat-blocked-state" role="status" aria-live="polite">
+        <p class="chat-blocked-title">GLM is not configured.</p>
+        <p class="chat-blocked-message">{getGlmProviderMissingConfigMessage()}</p>
+        <p class="chat-blocked-hint">{getGlmProviderSetupHint()}</p>
+        <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("glm")}>
+          Open GLM settings
+        </button>
       </div>
     {:else if isDebugSendBlocked}
       <div class="chat-blocked-state" role="status" aria-live="polite">
@@ -500,6 +530,29 @@
     font-size: 12px;
     line-height: 1.4;
     color: var(--color-text-secondary);
+  }
+
+  .chat-setup-button {
+    align-self: flex-start;
+    min-height: 26px;
+    margin-top: var(--space-2);
+    padding: 0 var(--space-8);
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle));
+    background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface-1));
+    color: var(--color-text-primary);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .chat-setup-button:hover {
+    background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface-1));
+  }
+
+  .chat-setup-button:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
   }
 
   .chat-compaction-notice {

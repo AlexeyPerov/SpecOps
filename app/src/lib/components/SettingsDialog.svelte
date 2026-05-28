@@ -1,9 +1,10 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import type { DebugProviderSettings, ExternalFilesSettings } from "../domain/contracts";
+  import type { DebugProviderSettings, ExternalFilesSettings, GlmProviderSettings } from "../domain/contracts";
+  import { saveGlmApiKey } from "../services/glmSecretsStore";
+  import type { SettingsDialogTab } from "../services/settingsDialogUi";
   import { appState } from "../state/appState";
-
-  export type SettingsDialogTab = "editor" | "debugAi";
+  import { chatStore } from "../state/chatStore";
 
   const SETTINGS_TAB_SIDEBAR_WIDTH_PX = 132;
   const SETTINGS_BODY_PADDING_X_PX = 24;
@@ -11,9 +12,11 @@
 
   let {
     open = false,
+    initialTab = "editor",
     onClose = () => {},
   }: {
     open?: boolean;
+    initialTab?: SettingsDialogTab;
     onClose?: () => void;
   } = $props();
 
@@ -21,6 +24,7 @@
   let dialogEl: HTMLDivElement | null = $state(null);
   let headerEl: HTMLElement | null = $state(null);
   let editorMeasureEl: HTMLElement | null = $state(null);
+  let glmMeasureEl: HTMLElement | null = $state(null);
   let debugMeasureEl: HTMLElement | null = $state(null);
   let isResizing = $state(false);
 
@@ -72,6 +76,20 @@
     );
   }
 
+  function updateGlmProviderSetting(
+    key: keyof GlmProviderSettings,
+    value: GlmProviderSettings[keyof GlmProviderSettings],
+  ): void {
+    appState.updateGlmProviderSettings({ [key]: value });
+    void chatStore.runAccessPreflight();
+  }
+
+  async function updateGlmApiKey(rawValue: string): Promise<void> {
+    appState.setGlmApiKey(rawValue);
+    await saveGlmApiKey(rawValue);
+    void chatStore.runAccessPreflight();
+  }
+
   function selectTab(nextTab: SettingsDialogTab): void {
     activeTab = nextTab;
   }
@@ -97,12 +115,14 @@
     await tick();
     const headerHeight = headerEl?.offsetHeight ?? 0;
     const editorHeight = editorMeasureEl?.scrollHeight ?? 0;
+    const glmHeight = glmMeasureEl?.scrollHeight ?? 0;
     const debugHeight = debugMeasureEl?.scrollHeight ?? 0;
     const editorWidth = editorMeasureEl?.scrollWidth ?? 0;
+    const glmWidth = glmMeasureEl?.scrollWidth ?? 0;
     const debugWidth = debugMeasureEl?.scrollWidth ?? 0;
 
-    const bodyHeight = Math.max(editorHeight, debugHeight);
-    const bodyWidth = Math.max(editorWidth, debugWidth);
+    const bodyHeight = Math.max(editorHeight, glmHeight, debugHeight);
+    const bodyWidth = Math.max(editorWidth, glmWidth, debugWidth);
 
     const measuredWidth =
       SETTINGS_TAB_SIDEBAR_WIDTH_PX +
@@ -163,7 +183,7 @@
 
   $effect(() => {
     if (open && !wasOpen) {
-      activeTab = "editor";
+      activeTab = initialTab;
       if (!sizeInitialized) {
         void measureAndApplyInitialSize();
       }
@@ -249,6 +269,72 @@
       />
       Check when tab becomes active
     </label>
+  </section>
+{/snippet}
+
+{#snippet glmSettingsPanel()}
+  <section class="settings-section">
+    <h3>GLM provider</h3>
+    <p class="settings-section-note">
+      Credentials for the GLM chat provider. The API key is stored in a separate secrets file and
+      is never written to chat history or Debug diagnostics.
+    </p>
+    <div class="settings-subsection">
+      <h4>Enable</h4>
+      <label class="settings-toggle">
+        <input
+          type="checkbox"
+          checked={snapshot.settings.glmProvider.enabled}
+          onchange={(event) =>
+            updateGlmProviderSetting(
+              "enabled",
+              (event.currentTarget as HTMLInputElement).checked,
+            )}
+        />
+        Enable GLM provider in chat
+      </label>
+    </div>
+    <div class="settings-subsection">
+      <h4>Credentials</h4>
+      <label class="settings-field">
+        <span>API key</span>
+        <input
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Enter GLM API key"
+          value={snapshot.settings.glmApiKey}
+          oninput={(event) =>
+            void updateGlmApiKey((event.currentTarget as HTMLInputElement).value)}
+        />
+      </label>
+      <label class="settings-field">
+        <span>Base URL</span>
+        <input
+          type="url"
+          spellcheck="false"
+          value={snapshot.settings.glmProvider.baseUrl}
+          onchange={(event) =>
+            updateGlmProviderSetting(
+              "baseUrl",
+              (event.currentTarget as HTMLInputElement).value,
+            )}
+        />
+      </label>
+      <label class="settings-field">
+        <span>Model ID</span>
+        <input
+          type="text"
+          spellcheck="false"
+          value={snapshot.settings.glmProvider.modelId}
+          onchange={(event) =>
+            updateGlmProviderSetting(
+              "modelId",
+              (event.currentTarget as HTMLInputElement).value,
+            )}
+        />
+      </label>
+    </div>
   </section>
 {/snippet}
 
@@ -406,6 +492,9 @@
         >
           {@render editorSettingsPanel()}
         </div>
+        <div class="settings-dialog-body settings-dialog-body-measure" bind:this={glmMeasureEl}>
+          {@render glmSettingsPanel()}
+        </div>
         <div class="settings-dialog-body settings-dialog-body-measure" bind:this={debugMeasureEl}>
           {@render debugAiSettingsPanel()}
         </div>
@@ -453,6 +542,16 @@
             type="button"
             role="tab"
             class="settings-dialog-tab"
+            class:settings-dialog-tab-active={activeTab === "glm"}
+            aria-selected={activeTab === "glm"}
+            onclick={() => selectTab("glm")}
+          >
+            GLM
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="settings-dialog-tab"
             class:settings-dialog-tab-active={activeTab === "debugAi"}
             aria-selected={activeTab === "debugAi"}
             onclick={() => selectTab("debugAi")}
@@ -464,10 +563,16 @@
         <div
           class="settings-dialog-body"
           role="tabpanel"
-          aria-label={activeTab === "editor" ? "Editor settings" : "Debug AI provider settings"}
+          aria-label={activeTab === "editor"
+            ? "Editor settings"
+            : activeTab === "glm"
+              ? "GLM provider settings"
+              : "Debug AI provider settings"}
         >
           {#if activeTab === "editor"}
             {@render editorSettingsPanel()}
+          {:else if activeTab === "glm"}
+            {@render glmSettingsPanel()}
           {:else}
             {@render debugAiSettingsPanel()}
           {/if}

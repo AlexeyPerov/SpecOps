@@ -61,6 +61,11 @@
     toExternalFilesSettings,
     toPersistedSettings,
   } from "../lib/services/settingsStore";
+  import { loadGlmApiKey } from "../lib/services/glmSecretsStore";
+  import {
+    registerSettingsDialogOpener,
+    type SettingsDialogTab,
+  } from "../lib/services/settingsDialogUi";
   import {
     checkDocumentIfDeferred,
     initializeDocumentDiskState,
@@ -101,6 +106,7 @@
 
   let themePaneOpen = false;
   let settingsDialogOpen = false;
+  let settingsDialogInitialTab: SettingsDialogTab = "editor";
   let consoleOpen = false;
   let consoleHeightPx = DEFAULT_CONSOLE_HEIGHT_PX;
   let statusMessage = "Ready";
@@ -739,6 +745,7 @@
     currentWindowId = currentWindow.label;
 
     const persistedSettings = await loadPersistedSettings();
+    const glmApiKey = await loadGlmApiKey();
     setThemeSaveErrorNotifier(notify);
     await appState.loadTheme();
     if (persistedSettings) {
@@ -749,8 +756,10 @@
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
         hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
         debugProvider: persistedSettings.debugProvider,
+        glmProvider: persistedSettings.glmProvider,
       });
     }
+    appState.setGlmApiKey(glmApiKey);
 
     initializeChatProviders();
 
@@ -949,6 +958,11 @@
     let runtimeCleanup: (() => void) | undefined;
     let resizeObserverDisconnected = false;
 
+    registerSettingsDialogOpener((tab) => {
+      settingsDialogInitialTab = tab;
+      settingsDialogOpen = true;
+    });
+
     const setupLayoutObserver = (): void => {
       updateLayoutMeasurements();
       if (typeof ResizeObserver === "undefined") {
@@ -1017,6 +1031,7 @@
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("dragover", preventBrowserDragOver);
     return () => {
+      registerSettingsDialogOpener(null);
       resizeObserverDisconnected = true;
       layoutResizeObserver?.disconnect();
       layoutResizeObserver = null;
@@ -1096,6 +1111,7 @@
           decoratePlaintextSymbols: state.settings.decoratePlaintextSymbols,
           hideActivityRailWhenNotepadOnly: state.settings.hideActivityRailWhenNotepadOnly,
           debugProvider: state.settings.debugProvider,
+          glmProvider: state.settings.glmProvider,
         }),
       );
     }
@@ -1404,7 +1420,11 @@
 
 </main>
 
-<SettingsDialog open={settingsDialogOpen} onClose={() => (settingsDialogOpen = false)} />
+<SettingsDialog
+  open={settingsDialogOpen}
+  initialTab={settingsDialogInitialTab}
+  onClose={() => (settingsDialogOpen = false)}
+/>
 
 {#if workspaceContextMenu}
   <div

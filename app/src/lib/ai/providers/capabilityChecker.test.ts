@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceAccessReason } from "../capabilities";
 import { chatStore } from "../../state/chatStore";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
+import { defaultGlmProviderSettings } from "./glmProviderSettings";
 import { initializeChatProviders, resetChatProvidersForTests } from "./bootstrap";
 import { createRegistryCapabilityChecker } from "./capabilityChecker";
 import { createDebugChatProvider } from "./debugChatProvider";
@@ -21,7 +22,10 @@ describe("registry-backed capability checker", () => {
         enabled: true,
       })),
     );
-    const checker = createRegistryCapabilityChecker(() => defaultDebugProviderSettings);
+    const checker = createRegistryCapabilityChecker(
+      () => defaultDebugProviderSettings,
+      () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+    );
 
     const result = await checker.checkCapabilities({
       provider: "debug",
@@ -34,7 +38,10 @@ describe("registry-backed capability checker", () => {
   });
 
   it("reports missing GLM config when GLM is not registered", async () => {
-    const checker = createRegistryCapabilityChecker(() => defaultDebugProviderSettings);
+    const checker = createRegistryCapabilityChecker(
+      () => defaultDebugProviderSettings,
+      () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+    );
 
     const result = await checker.checkCapabilities({
       provider: "glm",

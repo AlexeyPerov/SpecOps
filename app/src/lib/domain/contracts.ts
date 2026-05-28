@@ -146,6 +146,13 @@ export interface DebugProviderSettings {
   includeDiagnostics: boolean;
 }
 
+/** Product GLM provider settings (API key stored separately; see glmSecretsStore). */
+export interface GlmProviderSettings {
+  enabled: boolean;
+  baseUrl: string;
+  modelId: string;
+}
+
 export interface AppThemeState {
   activeTheme: ActiveThemeRef;
   customThemes: CustomThemeRecord[];
@@ -157,6 +164,9 @@ export interface AppSettingsState {
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   debugProvider: DebugProviderSettings;
+  glmProvider: GlmProviderSettings;
+  /** In-memory only; loaded from glmSecretsStore, never written to settings.json. */
+  glmApiKey: string;
 }
 
 export type AppCommandId =

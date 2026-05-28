@@ -13,6 +13,7 @@ import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
+import { defaultGlmProviderSettings } from "../ai/providers/glmProviderSettings";
 import {
   registerChatProvider,
   resetChatProviderRegistryForTests,
@@ -720,10 +721,13 @@ describe("chatStore provider switching", () => {
       })),
     );
     chatStore.setCapabilityChecker(
-      createRegistryCapabilityChecker(() => ({
-        ...defaultDebugProviderSettings,
-        enabled: true,
-      })),
+      createRegistryCapabilityChecker(
+        () => ({
+          ...defaultDebugProviderSettings,
+          enabled: true,
+        }),
+        () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+      ),
     );
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
@@ -786,10 +790,13 @@ describe("chatStore active provider resolution", () => {
       })),
     );
     chatStore.setCapabilityChecker(
-      createRegistryCapabilityChecker(() => ({
-        ...defaultDebugProviderSettings,
-        enabled: true,
-      })),
+      createRegistryCapabilityChecker(
+        () => ({
+          ...defaultDebugProviderSettings,
+          enabled: true,
+        }),
+        () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+      ),
     );
     chatStore.setDefaultChatProviderResolver(() => "debug");
     chatStore.setActiveWorkspaceRoot("/work/a");

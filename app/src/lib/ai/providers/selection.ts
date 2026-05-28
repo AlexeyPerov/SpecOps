@@ -1,6 +1,7 @@
-import type { ChatProviderId, DebugProviderSettings } from "../../domain/contracts";
+import type { ChatProviderId, DebugProviderSettings, GlmProviderSettings } from "../../domain/contracts";
 import type { ChatSystemEvent } from "../../domain/contracts";
 import { PRODUCT_CHAT_PROVIDER_IDS } from "../../domain/contracts";
+import { isGlmProviderConfigured as hasGlmProviderCredentials } from "./glmProviderSettings";
 import { getChatProvider } from "./registry";
 
 export interface ChatProviderOption {
@@ -16,17 +17,20 @@ const PROVIDER_LABELS: Record<ChatProviderId, string> = {
 
 /**
  * Default provider precedence for new threads:
- * 1. GLM when configured (M5-8 settings / registered adapter)
+ * 1. GLM when configured (settings + API key, or registered adapter)
  * 2. Debug when enabled in Developer Settings
  * 3. GLM as product default fallback
  */
-export function isGlmProviderConfigured(): boolean {
-  return getChatProvider("glm") !== null;
+export function isGlmProviderConfigured(
+  glmSettings: GlmProviderSettings,
+  apiKey: string,
+): boolean {
+  return hasGlmProviderCredentials(glmSettings, apiKey) || getChatProvider("glm") !== null;
 }
 
 export function resolveDefaultChatProvider(
   settings: DebugProviderSettings,
-  glmConfigured: boolean = isGlmProviderConfigured(),
+  glmConfigured = false,
 ): ChatProviderId {
   if (glmConfigured) {
     return "glm";

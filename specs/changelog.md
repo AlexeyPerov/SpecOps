@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 21:00 (MSK)
+
+- **M5-3-2 — GLM provider adapter:** Added `GlmChatProvider` with OpenAI-compatible `/chat/completions` calls, shared prompt assembly (`buildGlmChatMessages`), capability checks, and user-facing `ChatProviderError` mapping. Registered GLM in provider bootstrap; capability checker delegates to the adapter when credentials are configured. Buffered send path only (streaming deferred to M7). Unit tests with mock fetch for adapter, registry checker, and send pipeline.
+
 ## 2026-05-28 20:12 (MSK)
 
 - **M5-3-1 — GLM settings and config UI:** Added `GlmProviderSettings` (enabled, base URL, model ID) to persisted settings; API key stored separately in `glm-secrets.json` (never in `settings.json`, chat threads, or Debug diagnostics). New **GLM** tab in Settings; inline setup CTA in `ChatPanel` when GLM is selected but credentials are missing. Capability preflight and send pipeline block unconfigured GLM with actionable hints. Unit tests for settings normalization and secrets store.

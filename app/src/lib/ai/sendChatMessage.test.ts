@@ -5,6 +5,7 @@ import { appState } from "../state/appState";
 import { defaultDebugProviderSettings } from "./providers/debugProviderSettings";
 import { defaultGlmProviderSettings } from "./providers/glmProviderSettings";
 import { createDebugChatProvider } from "./providers/debugChatProvider";
+import { createGlmChatProvider } from "./providers/glmChatProvider";
 import {
   registerChatProvider,
   resetChatProviderRegistryForTests,
@@ -29,6 +30,15 @@ vi.mock("../services/fileSystem", () => ({
 
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
+
+function glmFetchSuccess(content: string): typeof fetch {
+  return vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  ) as typeof fetch;
+}
 
 describe("sendChatMessage", () => {
   beforeEach(() => {
@@ -238,5 +248,77 @@ describe("sendChatMessage", () => {
     const assistant = chatStore.getMessages().find((message: ChatMessage) => message.role === "assistant");
     expect(assistant?.content).toContain("## Summary");
     expect(assistant?.content).toContain("T-shirt size");
+  });
+
+  it("runs end-to-end ask conversation with GLM provider", async () => {
+    resetChatProviderRegistryForTests();
+    appState.setGlmApiKey("glm-test-key");
+    registerChatProvider(
+      createGlmChatProvider(
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+        glmFetchSuccess("GLM response about retention."),
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.debugProvider,
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+
+    const result = await sendChatMessage("How does retention work?");
+
+    expect(result.ok).toBe(true);
+    expect(chatStore.getMessages()).toHaveLength(2);
+    expect(chatStore.getMessages()[1].content).toBe("GLM response about retention.");
+    expect(chatStore.getRuntimeState().isGenerating).toBe(false);
+    expect(schedulePersistMock).toHaveBeenCalledOnce();
+  });
+
+  it("records GLM provider errors in retry scaffolding", async () => {
+    resetChatProviderRegistryForTests();
+    appState.setGlmApiKey("glm-test-key");
+    registerChatProvider(
+      createGlmChatProvider(
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
+        ) as typeof fetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.debugProvider,
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+
+    const result = await sendChatMessage("This should fail");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toBe("Invalid GLM API key. Check Settings → GLM.");
+    }
+    expect(chatStore.getMessages()).toHaveLength(1);
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      isGenerating: false,
+      lastFailedTurnId: expect.stringMatching(/^turn-/),
+      lastError: { message: "Invalid GLM API key. Check Settings → GLM.", code: "provider_error" },
+    });
+    expect(chatStore.canRetryLastTurn()).toBe(true);
   });
 });

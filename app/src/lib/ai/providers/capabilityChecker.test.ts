@@ -6,6 +6,7 @@ import { defaultGlmProviderSettings } from "./glmProviderSettings";
 import { initializeChatProviders, resetChatProvidersForTests } from "./bootstrap";
 import { createRegistryCapabilityChecker } from "./capabilityChecker";
 import { createDebugChatProvider } from "./debugChatProvider";
+import { createGlmChatProvider } from "./glmChatProvider";
 import { registerChatProvider, resetChatProviderRegistryForTests } from "./registry";
 
 describe("registry-backed capability checker", () => {
@@ -51,6 +52,28 @@ describe("registry-backed capability checker", () => {
 
     expect(result.status).toBe("blocked");
     expect(result.reason).toBe(WorkspaceAccessReason.MissingProviderConfig);
+  });
+
+  it("delegates to registered GLM provider when credentials are configured", async () => {
+    registerChatProvider(
+      createGlmChatProvider(() => ({
+        settings: defaultGlmProviderSettings,
+        apiKey: "test-key",
+      })),
+    );
+    const checker = createRegistryCapabilityChecker(
+      () => defaultDebugProviderSettings,
+      () => ({ settings: defaultGlmProviderSettings, apiKey: "test-key" }),
+    );
+
+    const result = await checker.checkCapabilities({
+      provider: "glm",
+      mode: "ask",
+      workspaceRootPath: "/work/a",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.capabilities?.supportedModes).toEqual(["ask", "review"]);
   });
 
   it("installs registry-backed checker during provider bootstrap", async () => {

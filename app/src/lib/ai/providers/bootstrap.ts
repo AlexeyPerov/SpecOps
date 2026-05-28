@@ -2,6 +2,7 @@ import { chatStore } from "../../state/chatStore";
 import { appState } from "../../state/appState";
 import { createRegistryCapabilityChecker } from "./capabilityChecker";
 import { createDebugChatProvider } from "./debugChatProvider";
+import { createGlmChatProvider } from "./glmChatProvider";
 import { registerChatProvider } from "./registry";
 import { isGlmProviderConfigured, resolveDefaultChatProvider } from "./selection";
 
@@ -14,6 +15,12 @@ export function initializeChatProviders(): void {
 
   registerChatProvider(
     createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider),
+  );
+  registerChatProvider(
+    createGlmChatProvider(() => ({
+      settings: appState.getSnapshot().settings.glmProvider,
+      apiKey: appState.getSnapshot().settings.glmApiKey,
+    })),
   );
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(

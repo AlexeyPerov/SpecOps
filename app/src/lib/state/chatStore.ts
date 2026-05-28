@@ -1190,6 +1190,22 @@ export const chatCanRetryLastTurn = derived(chatRuntimeState, ($runtime) =>
   Boolean($runtime.lastFailedTurnId && !$runtime.isGenerating),
 );
 
+export const chatAgentIndex = derived(chatStore, ($chatStore) => {
+  const root = $chatStore.activeWorkspaceRoot;
+  if (!root) {
+    return [];
+  }
+  return [...($chatStore.workspaces[root]?.agentIndex ?? [])];
+});
+
+export const chatActiveAgentId = derived(chatStore, ($chatStore) => {
+  const root = $chatStore.activeWorkspaceRoot;
+  if (!root) {
+    return null;
+  }
+  return $chatStore.workspaces[root]?.activeAgentId ?? null;
+});
+
 export function formatCompactionNotice(compactedMessageCount: number): string {
   const label = compactedMessageCount === 1 ? "message" : "messages";
   return `${compactedMessageCount} older ${label} compacted`;

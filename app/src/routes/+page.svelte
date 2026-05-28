@@ -8,6 +8,7 @@
   import TabBar from "../lib/components/TabBar.svelte";
   import ActivityRail from "../lib/components/ActivityRail.svelte";
   import ProjectPanel from "../lib/components/ProjectPanel.svelte";
+  import AgentsSidebar from "../lib/components/AgentsSidebar.svelte";
   import {
     dispatchMenuCommand,
     initializeAppMenu,
@@ -18,7 +19,7 @@
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState, setThemeSaveErrorNotifier } from "../lib/state/appState";
-  import { chatStore } from "../lib/state/chatStore";
+  import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
   import { listenForRecentFilesChanges } from "../lib/services/recentFilesSync";
@@ -69,7 +70,7 @@
   import { diffLines } from "diff";
   import type { AppDomainState } from "../lib/domain/contracts";
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
-  import { isFileTab, tabDocumentId } from "../lib/domain/contracts";
+  import { isAgentTab, isFileTab, tabDocumentId } from "../lib/domain/contracts";
   import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
   import { scheduleAgentThreadFilePersistence } from "../lib/services/chatPersistence";
@@ -133,6 +134,8 @@
   let projectTreeLoadingPaths = new Set<string>();
   let projectTreeShowHidden = false;
   let autoProjectPanelCollapsed = false;
+  let agentsSidebarCollapsed = false;
+  let autoAgentsSidebarCollapsed = false;
   let consoleTabSelection: ConsoleTabId = "chat";
   let lastConsoleWorkspaceRoot: string | null = null;
   let lastChatWorkspaceRoot: string | null = null;
@@ -146,6 +149,9 @@
     Boolean(activeWorkspaceRoot) &&
     !state.editor.projectPanelCollapsed &&
     !autoProjectPanelCollapsed;
+  $: showAgentsSidebar = Boolean(activeWorkspaceRoot) && !agentsSidebarCollapsed && !autoAgentsSidebarCollapsed;
+  $: workspaceAgents = $chatAgentIndex;
+  $: selectedAgentId = $chatActiveAgentId;
   $: showActivityRail = !(
     state.settings.hideActivityRailWhenNotepadOnly &&
     state.contexts.workspaces.length === 0
@@ -153,6 +159,12 @@
   $: activeTab = state.session.openTabs.find(
     (tab) => tab.id === state.session.selectedTabId,
   );
+  $: if (activeTab && isAgentTab(activeTab)) {
+    if (chatStore.getActiveAgentId() !== activeTab.agentId) {
+      chatStore.setActiveAgentId(activeTab.agentId);
+      void chatStore.runAccessPreflight();
+    }
+  }
   $: activeDocument =
     state.documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
     state.documents[0];
@@ -238,6 +250,36 @@
 
   function toggleProjectPanelCollapsed(next: boolean): void {
     appState.setProjectPanelCollapsed(next);
+  }
+
+  function toggleAgentsSidebarCollapsed(next: boolean): void {
+    agentsSidebarCollapsed = next;
+  }
+
+  function handleNewAgent(): void {
+    const agentId = chatStore.createDraftAgent();
+    if (!agentId) {
+      return;
+    }
+    appState.openOrFocusAgentTab(agentId);
+  }
+
+  function handleSelectAgent(agentId: string): void {
+    chatStore.setActiveAgentId(agentId);
+    appState.openOrFocusAgentTab(agentId);
+    void chatStore.runAccessPreflight();
+  }
+
+  async function handleDeleteAgent(agentId: string): Promise<void> {
+    appState.closeTabsForAgent(agentId);
+    const deleted = await chatStore.deleteAgent(agentId);
+    if (!deleted) {
+      return;
+    }
+    const nextAgentId = chatStore.getActiveAgentId();
+    if (nextAgentId) {
+      appState.openOrFocusAgentTab(nextAgentId);
+    }
   }
 
   async function toggleProjectTreeHidden(next: boolean): Promise<void> {
@@ -358,6 +400,11 @@
     const shouldAutoCollapsePanel = shellMainRowWidth > 0 && shellMainRowWidth < 1100 && workspaceActive;
     if (autoProjectPanelCollapsed !== shouldAutoCollapsePanel) {
       autoProjectPanelCollapsed = shouldAutoCollapsePanel;
+    }
+
+    const shouldAutoCollapseAgents = shellMainRowWidth > 0 && shellMainRowWidth < 1320 && workspaceActive;
+    if (autoAgentsSidebarCollapsed !== shouldAutoCollapseAgents) {
+      autoAgentsSidebarCollapsed = shouldAutoCollapseAgents;
     }
 
     const projectPanelCollapsed = state.editor.projectPanelCollapsed || autoProjectPanelCollapsed;
@@ -1315,6 +1362,15 @@
         onToggleDirectory={handleToggleProjectTreeDirectory}
         onOpenFile={handleOpenProjectTreeFile}
       />
+      <AgentsSidebar
+        agents={workspaceAgents}
+        activeAgentId={selectedAgentId}
+        collapsed={!showAgentsSidebar}
+        onToggleCollapsed={toggleAgentsSidebarCollapsed}
+        onSelectAgent={handleSelectAgent}
+        onNewAgent={handleNewAgent}
+        onDeleteAgent={(agentId) => void handleDeleteAgent(agentId)}
+      />
     {/if}
   </div>
 
@@ -1364,6 +1420,7 @@
     grid-template-columns:
       auto
       minmax(var(--editor-min-width), 1fr)
+      auto
       auto;
   }
 
@@ -1378,6 +1435,10 @@
 
   .shell-main-row :global(.project-panel) {
     grid-column: 3;
+  }
+
+  .shell-main-row :global(.agents-sidebar) {
+    grid-column: 4;
   }
 
   .bottom-panel {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 16:26 (MSK)
+
+- **M5-2-4 — Agents sidebar UI:** Added `AgentsSidebar.svelte` (search, New agent, date-grouped list, selection highlight, delete via context menu, resize/collapse). Integrated into shell grid to the right of the project panel; hidden outside workspace context. Wired `openOrFocusAgentTab` / `closeTabsForAgent` in `appState` and sidebar handlers to `chatStore`. Added `chatAgentIndex` and `chatActiveAgentId` derived stores.
+
 ## 2026-05-28 16:16 (MSK)
 
 - **M5-2-3 — Draft agent lifecycle:** Added `chatStore.createDraftAgent`, `isAgentDraft`, and `getAgentTitle`. Drafts live in the in-memory agent index only (no thread file) until the first user message; `appendMessage` and `sendChatMessage` promote the draft (title from first line, `isDraft` cleared, `lastUsedAt` updated). Persistence is skipped until a user message exists. Unit tests for multiple drafts, promotion, and first-send persist.

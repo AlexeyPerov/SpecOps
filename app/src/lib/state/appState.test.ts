@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFileTab, tabDocumentId } from "../domain/contracts";
+import { createAgentTab, createFileTab, isAgentTab, tabDocumentId } from "../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "./appState";
 import { saveThemeFile } from "../services/themeStore";
 
@@ -30,6 +30,31 @@ describe("appState tabs and selection", () => {
   it("selectTab ignores unknown tab ids", () => {
     appState.selectTab("tab-missing");
     expect(appState.getSnapshot().session.selectedTabId).toBe("tab-1");
+  });
+
+  it("openOrFocusAgentTab opens a new agent tab and focuses an existing one", () => {
+    appState.openOrFocusAgentTab("agent-a");
+    let snapshot = appState.getSnapshot();
+    expect(snapshot.session.openTabs).toHaveLength(2);
+    const firstAgentTab = snapshot.session.openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a");
+    expect(firstAgentTab?.id).toBe("tab-2");
+    expect(snapshot.session.selectedTabId).toBe("tab-2");
+
+    appState.selectTab("tab-1");
+    appState.openOrFocusAgentTab("agent-a");
+    snapshot = appState.getSnapshot();
+    expect(snapshot.session.openTabs).toHaveLength(2);
+    expect(snapshot.session.selectedTabId).toBe("tab-2");
+  });
+
+  it("closeTabsForAgent removes all tabs for that agent", () => {
+    appState.openOrFocusAgentTab("agent-a");
+    appState.openOrFocusAgentTab("agent-b");
+    appState.closeTabsForAgent("agent-a");
+
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.session.openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-a")).toBe(false);
+    expect(snapshot.session.openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-b")).toBe(true);
   });
 
   it("selectOrReopenTabForDocument selects an open tab", () => {

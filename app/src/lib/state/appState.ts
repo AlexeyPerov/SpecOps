@@ -15,7 +15,14 @@ import type {
   WindowBounds,
   WindowSessionSnapshot,
 } from "../domain/contracts";
-import { createFileTab, isFileTab, normalizeTabState, tabDocumentId } from "../domain/contracts";
+import {
+  createAgentTab,
+  createFileTab,
+  isAgentTab,
+  isFileTab,
+  normalizeTabState,
+  tabDocumentId,
+} from "../domain/contracts";
 import {
   defaultDebugProviderSettings,
   normalizeDebugProviderSettings,
@@ -965,6 +972,35 @@ function createStateStore() {
     },
     selectTab(tabId: string) {
       update((state) => selectTabInternal(state, tabId));
+    },
+    openOrFocusAgentTab(agentId: string) {
+      update((state) => {
+        const existingTab = state.session.openTabs
+          .map((rawTab) => normalizeTabState(rawTab))
+          .find((tab) => isAgentTab(tab) && tab.agentId === agentId);
+        if (existingTab) {
+          return selectTabInternal(state, existingTab.id);
+        }
+        tabCounter += 1;
+        const tabId = `tab-${tabCounter}`;
+        return {
+          ...state,
+          session: {
+            ...state.session,
+            openTabs: [...state.session.openTabs, createAgentTab(tabId, agentId)],
+            selectedTabId: tabId,
+          },
+        };
+      });
+    },
+    closeTabsForAgent(agentId: string) {
+      update((state) => {
+        const tabIds = state.session.openTabs
+          .map((rawTab) => normalizeTabState(rawTab))
+          .filter((tab) => isAgentTab(tab) && tab.agentId === agentId)
+          .map((tab) => tab.id);
+        return closeTabsForce(state, tabIds, null);
+      });
     },
     selectOrReopenTabForDocument(documentId: string) {
       update((state) => {

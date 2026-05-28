@@ -1,13 +1,91 @@
 <script lang="ts">
   import { appState } from "../state/appState";
-  import { BUILTIN_THEME_IDS, getBuiltinAccentHex, getBuiltinThemeLabel } from "../styles/themeTokens";
+  import type { CustomThemeRecord } from "../services/themeStore";
+  import {
+    BUILTIN_THEME_IDS,
+    getBuiltinAccentHex,
+    getBuiltinThemeLabel,
+    THEME_TOKEN_GROUPS,
+    THEME_TOKEN_LABELS,
+    type ThemeTokenKey,
+  } from "../styles/themeTokens";
 
   let { open = false }: { open?: boolean } = $props();
 
   const snapshot = $derived($appState);
 
+  const activeCustom = $derived(
+    snapshot.theme.activeTheme.kind === "custom"
+      ? (snapshot.theme.customThemes.find(
+          (custom) => custom.id === snapshot.theme.activeTheme.id,
+        ) ?? null)
+      : null,
+  );
+
+  let nameDraft = $state("");
+
+  $effect(() => {
+    nameDraft = activeCustom?.name ?? "";
+  });
+
   function isBuiltinActive(id: string): boolean {
     return snapshot.theme.activeTheme.kind === "builtin" && snapshot.theme.activeTheme.id === id;
+  }
+
+  function isCustomActive(id: string): boolean {
+    return snapshot.theme.activeTheme.kind === "custom" && snapshot.theme.activeTheme.id === id;
+  }
+
+  function customAccentSwatch(custom: CustomThemeRecord): string {
+    return custom.tokens["accent-color"];
+  }
+
+  function cssColorToHex(value: string): string | null {
+    const trimmed = value.trim();
+    const shortHex = /^#([0-9a-f]{3})$/i.exec(trimmed);
+    if (shortHex) {
+      const [r, g, b] = shortHex[1];
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    if (/^#[0-9a-f]{6}$/i.test(trimmed)) {
+      return trimmed.toLowerCase();
+    }
+    const rgbMatch = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(trimmed);
+    if (rgbMatch) {
+      const channels = [rgbMatch[1], rgbMatch[2], rgbMatch[3]].map((channel) =>
+        Math.round(Number(channel))
+          .toString(16)
+          .padStart(2, "0"),
+      );
+      return `#${channels.join("")}`;
+    }
+    return null;
+  }
+
+  function pickerValueForToken(value: string): string {
+    return cssColorToHex(value) ?? "#000000";
+  }
+
+  function updateToken(customId: string, key: ThemeTokenKey, value: string): void {
+    appState.updateCustomThemeToken(customId, key, value);
+  }
+
+  function commitCustomName(): void {
+    if (!activeCustom) {
+      return;
+    }
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === activeCustom.name) {
+      nameDraft = activeCustom.name;
+      return;
+    }
+    appState.renameCustomTheme(activeCustom.id, trimmed);
+  }
+
+  function handleNameKeydown(event: KeyboardEvent): void {
+    if (event.key === "Enter") {
+      (event.currentTarget as HTMLInputElement).blur();
+    }
   }
 </script>
 
@@ -32,7 +110,90 @@
           <span>{getBuiltinThemeLabel(themeId)}</span>
         </label>
       {/each}
+      <button type="button" class="settings-button" onclick={() => appState.createCustomTheme()}>
+        + New theme
+      </button>
     </section>
+
+    {#if snapshot.theme.customThemes.length > 0}
+      <section class="settings-section">
+        <h3>Your themes</h3>
+        {#each snapshot.theme.customThemes as custom (custom.id)}
+          <label class="settings-theme-row">
+            <input
+              type="radio"
+              name="theme"
+              value={custom.id}
+              checked={isCustomActive(custom.id)}
+              onchange={() => appState.setActiveTheme({ kind: "custom", id: custom.id })}
+            />
+            <span class="theme-swatch" style="background-color: {customAccentSwatch(custom)}"></span>
+            <span>{custom.name}</span>
+          </label>
+        {/each}
+      </section>
+    {/if}
+
+    {#if activeCustom}
+      <section class="settings-section">
+        <label class="settings-field">
+          <span>Name</span>
+          <input
+            type="text"
+            bind:value={nameDraft}
+            onblur={commitCustomName}
+            onkeydown={handleNameKeydown}
+          />
+        </label>
+        <button
+          type="button"
+          class="settings-button settings-button-danger"
+          onclick={() => appState.deleteCustomTheme(activeCustom.id)}
+        >
+          Delete theme
+        </button>
+      </section>
+
+      <section class="settings-section">
+        <h3>Theme tokens</h3>
+        {#each THEME_TOKEN_GROUPS as group}
+          <div class="settings-subsection">
+            <h4>{group.label}</h4>
+            {#each group.keys as key (key)}
+              {@const tokenValue = activeCustom.tokens[key]}
+              <div class="theme-token-row">
+                <span class="theme-token-label">{THEME_TOKEN_LABELS[key]}</span>
+                <div class="theme-token-controls">
+                  <input
+                    type="color"
+                    value={pickerValueForToken(tokenValue)}
+                    aria-label="{THEME_TOKEN_LABELS[key]} color picker"
+                    oninput={(event) =>
+                      updateToken(
+                        activeCustom.id,
+                        key,
+                        (event.currentTarget as HTMLInputElement).value,
+                      )}
+                  />
+                  <input
+                    type="text"
+                    class="theme-token-text"
+                    value={tokenValue}
+                    aria-label="{THEME_TOKEN_LABELS[key]} CSS value"
+                    oninput={(event) =>
+                      updateToken(
+                        activeCustom.id,
+                        key,
+                        (event.currentTarget as HTMLInputElement).value,
+                      )}
+                  />
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/each}
+      </section>
+    {/if}
 
     <section class="settings-section">
       <h3>Decoration</h3>

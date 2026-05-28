@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 09:12 (MSK)
+
+- **Themes T4:** Full `ThemePane.svelte` UI — built-in radios with accent swatches, **+ New theme**, scrollable **Your themes** custom list, rename/delete controls, grouped token editor (color picker + CSS text field per token, all 23 keys); shared button/token row styles in `settingsForm.css`.
+
 ## 2026-05-28 09:10 (MSK)
 
 - **Themes T3:** App state theme APIs and startup wiring — `AppThemeState` on domain state (`activeTheme`, `customThemes`); `setActiveTheme`, `createCustomTheme`, `renameCustomTheme`, `deleteCustomTheme`, `updateCustomThemeToken` (debounced save); `loadTheme()` at startup from `theme.json`; save-failure toast via `setThemeSaveErrorNotifier`; removed `theme` from `settings.json` / `PersistedSettings`; updated `ThemePane`, `+page.svelte`, and tests.

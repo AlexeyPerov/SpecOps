@@ -1,0 +1,136 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { chatStore } from "./chatStore";
+import { sendChatMessage } from "../ai/sendChatMessage";
+import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
+import {
+  registerChatProvider,
+  resetChatProviderRegistryForTests,
+} from "../ai/providers/registry";
+import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
+import { resetChatProvidersForTests } from "../ai/providers/bootstrap";
+import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
+import { appState } from "./appState";
+import { ensureWorkspaceReadAccess } from "../services/fileSystem";
+
+vi.mock("../services/fileSystem", () => ({
+  ensureWorkspaceReadAccess: vi.fn(),
+}));
+
+const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
+
+describe("M6-4 edge-case transitions", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    chatStore.reset();
+    resetChatProviderRegistryForTests();
+    resetChatProvidersForTests();
+    ensureWorkspaceReadAccessMock.mockReset();
+    ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
+
+    appState.updateDebugProviderSettings({
+      ...defaultDebugProviderSettings,
+      enabled: true,
+      simulationSeed: 42,
+      delayMsMin: 50,
+      delayMsMax: 50,
+      chunkCharsMin: 4,
+      chunkCharsMax: 4,
+      failureProbability: 0,
+      includeDiagnostics: false,
+    });
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.debugProvider,
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: appState.getSnapshot().settings.glmApiKey,
+        }),
+      ),
+    );
+    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setActiveWorkspaceRoot("/work/a");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("cancels in-flight generation and removes the partial assistant placeholder", () => {
+    const agentId = chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
+    chatStore.appendMessage(
+      {
+        id: "user-1",
+        role: "user",
+        content: "Hello",
+        createdAt: "2026-05-28T12:00:00.000Z",
+      },
+      { agentId: agentId! },
+    );
+    chatStore.beginTurn("turn-1", agentId!);
+    chatStore.appendMessage(
+      {
+        id: "assistant-turn-1",
+        role: "assistant",
+        content: "Partial",
+        createdAt: "2026-05-28T12:00:01.000Z",
+      },
+      { agentId: agentId!, skipCompaction: true },
+    );
+
+    expect(chatStore.cancelAgentGeneration("/work/a", agentId!)).toBe(true);
+    expect(chatStore.getRuntimeState(agentId!, "/work/a")).toMatchObject({
+      isGenerating: false,
+      activeTurnId: null,
+    });
+    expect(
+      chatStore.getWorkspaceAgentsState("/work/a")?.threadsByAgentId[agentId!]?.messages.some(
+        (message) => message.id === "assistant-turn-1",
+      ),
+    ).toBe(false);
+  });
+
+  it("clears failed retry state when switching providers", async () => {
+    const agentId = chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" }, undefined, agentId!);
+    chatStore.beginTurn("turn-fail", agentId!);
+    chatStore.failTurn({ message: "Provider failed" }, "turn-fail", agentId!);
+
+    expect(chatStore.canRetryLastTurn(agentId!)).toBe(true);
+
+    const result = await chatStore.switchThreadProvider(
+      "debug",
+      {
+        debugProviderEnabled: true,
+      },
+      agentId!,
+    );
+
+    expect(result.switched).toBe(true);
+    expect(chatStore.canRetryLastTurn(agentId!)).toBe(false);
+    expect(chatStore.getRuntimeState(agentId!)).toMatchObject({
+      lastFailedTurnId: null,
+      lastError: null,
+    });
+  });
+
+  it("does not leave isGenerating stuck after workspace cancellation during send", async () => {
+    const agentId = chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
+
+    const sendPromise = sendChatMessage("Hold please", agentId!);
+    await Promise.resolve();
+    expect(chatStore.getRuntimeState(agentId!, "/work/a").isGenerating).toBe(true);
+
+    chatStore.cancelAllGenerations("/work/a");
+    await vi.runAllTimersAsync();
+    const result = await sendPromise;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("generating");
+    }
+    expect(chatStore.getRuntimeState(agentId!, "/work/a").isGenerating).toBe(false);
+  });
+});

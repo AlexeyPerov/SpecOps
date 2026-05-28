@@ -21,6 +21,17 @@ import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence"
 import { isChatProviderError, streamProviderMessage } from "./chatSend";
 import type { WorkspaceAccessStatus } from "../ai/capabilities";
 
+class TurnCancelledError extends Error {
+  constructor() {
+    super("Turn cancelled");
+    this.name = "TurnCancelledError";
+  }
+}
+
+function isTurnCancelledError(error: unknown): error is TurnCancelledError {
+  return error instanceof TurnCancelledError;
+}
+
 export type SendChatMessageFailureReason =
   | "empty"
   | "no_workspace"
@@ -73,10 +84,9 @@ function createAssistantPlaceholder(turnId: string): ChatMessage {
   };
 }
 
-function persistAgentThreadOnce(agentId: string): void {
-  const root = chatStore.getActiveWorkspaceRoot();
-  const thread = chatStore.getActiveThreadSnapshot(agentId);
-  if (!root || !thread || !thread.messages.some((message) => message.role === "user")) {
+function persistAgentThreadOnce(root: string, agentId: string): void {
+  const thread = chatStore.getWorkspaceAgentsState(root)?.threadsByAgentId[agentId] ?? null;
+  if (!thread || !thread.messages.some((message) => message.role === "user")) {
     return;
   }
   scheduleAgentThreadFilePersistence(root, agentId, {
@@ -85,8 +95,14 @@ function persistAgentThreadOnce(agentId: string): void {
   });
 }
 
-function abortTurn(agentId: string): void {
-  chatStore.completeTurn(agentId);
+function abortTurn(agentId: string, workspaceRoot?: string | null): void {
+  chatStore.completeTurn(agentId, workspaceRoot);
+}
+
+function assertTurnStillActive(root: string, agentId: string, turnId: string): void {
+  if (!chatStore.isGenerationTurnActive(root, agentId, turnId)) {
+    throw new TurnCancelledError();
+  }
 }
 
 function findLastUserMessage(messages: ChatMessage[]): ChatMessage | null {
@@ -176,7 +192,7 @@ async function executeProviderTurn(params: {
 
   const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
   if (!thread) {
-    abortTurn(activeAgentId);
+    abortTurn(activeAgentId, root);
     return {
       ok: false,
       reason: "append_failed",
@@ -202,23 +218,32 @@ async function executeProviderTurn(params: {
 
   try {
     const finalContent = await streamProviderMessage(provider, request, (_delta, accumulated) => {
-      chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId);
+      assertTurnStillActive(root, activeAgentId, turnId);
+      chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
     });
-    chatStore.updateMessageContent(assistantMessage.id, finalContent, activeAgentId);
+    assertTurnStillActive(root, activeAgentId, turnId);
+    chatStore.updateMessageContent(assistantMessage.id, finalContent, activeAgentId, root);
     chatStore.compactActiveThread(activeAgentId);
-    chatStore.completeTurn(activeAgentId);
-    persistAgentThreadOnce(activeAgentId);
+    chatStore.completeTurn(activeAgentId, root);
+    persistAgentThreadOnce(root, activeAgentId);
     return { ok: true, turnId, assistantMessageId: assistantMessage.id, agentId: activeAgentId };
   } catch (error) {
-    chatStore.removeMessage(assistantMessage.id, activeAgentId);
+    if (isTurnCancelledError(error)) {
+      return {
+        ok: false,
+        reason: "generating",
+        message: "Response was cancelled.",
+      };
+    }
+    chatStore.removeMessage(assistantMessage.id, activeAgentId, root);
     if (previousError) {
-      chatStore.removeMessage(`retry-note-${turnId}`, activeAgentId);
+      chatStore.removeMessage(`retry-note-${turnId}`, activeAgentId, root);
     }
     const message = isChatProviderError(error)
       ? error.userMessage
       : sanitizeUnexpectedProviderError(error);
-    chatStore.failTurn({ message, code: "provider_error" }, turnId, activeAgentId);
-    persistAgentThreadOnce(activeAgentId);
+    chatStore.failTurn({ message, code: "provider_error" }, turnId, activeAgentId, root);
+    persistAgentThreadOnce(root, activeAgentId);
     return { ok: false, reason: "provider_error", message };
   }
 }
@@ -306,13 +331,13 @@ export async function sendChatMessage(
 
   const validation = await validateProviderSend(activeAgentId);
   if (!validation.ok) {
-    abortTurn(activeAgentId);
+    abortTurn(activeAgentId, root);
     return validation;
   }
 
   const userMessage = createUserMessage(trimmed);
   if (!chatStore.appendMessage(userMessage, { agentId: activeAgentId })) {
-    abortTurn(activeAgentId);
+    abortTurn(activeAgentId, root);
     return {
       ok: false,
       reason: "append_failed",

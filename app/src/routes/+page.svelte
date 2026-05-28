@@ -343,6 +343,11 @@
     const closedAgentId =
       closingTab && isAgentTab(closingTab) ? closingTab.agentId : null;
     const wasSelected = before.session.selectedTabId === tabId;
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+
+    if (closedAgentId && workspaceRoot) {
+      chatStore.cancelAgentGeneration(workspaceRoot, closedAgentId);
+    }
 
     appState.closeTabForce(tabId);
 
@@ -469,12 +474,17 @@
 
   function applyResponsiveLayoutRules(): void {
     const workspaceActive = Boolean(activeWorkspaceRoot);
-    const shouldAutoCollapsePanel = shellMainRowWidth > 0 && shellMainRowWidth < 1100 && workspaceActive;
+    const agentTabLayout = isAgentTabActive && workspaceActive;
+    const panelCollapseWidth = agentTabLayout ? 1200 : 1100;
+    const agentsCollapseWidth = agentTabLayout ? 1400 : 1320;
+    const shouldAutoCollapsePanel =
+      shellMainRowWidth > 0 && shellMainRowWidth < panelCollapseWidth && workspaceActive;
     if (autoProjectPanelCollapsed !== shouldAutoCollapsePanel) {
       autoProjectPanelCollapsed = shouldAutoCollapsePanel;
     }
 
-    const shouldAutoCollapseAgents = shellMainRowWidth > 0 && shellMainRowWidth < 1320 && workspaceActive;
+    const shouldAutoCollapseAgents =
+      shellMainRowWidth > 0 && shellMainRowWidth < agentsCollapseWidth && workspaceActive;
     if (autoAgentsSidebarCollapsed !== shouldAutoCollapseAgents) {
       autoAgentsSidebarCollapsed = shouldAutoCollapseAgents;
     }
@@ -1058,12 +1068,16 @@
   $: {
     if (!activeWorkspaceRoot) {
       if (lastChatWorkspaceRoot !== null) {
+        chatStore.cancelAllGenerations(lastChatWorkspaceRoot);
         lastChatWorkspaceRoot = null;
       }
       chatStore.setActiveWorkspaceRoot(null);
     } else {
       const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
       if (lastChatWorkspaceRoot !== normalizedWorkspaceRoot) {
+        if (lastChatWorkspaceRoot !== null) {
+          chatStore.cancelAllGenerations(lastChatWorkspaceRoot);
+        }
         lastChatWorkspaceRoot = normalizedWorkspaceRoot;
         void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
         chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
@@ -1538,6 +1552,8 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .markdown-layout {

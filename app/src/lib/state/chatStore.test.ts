@@ -644,6 +644,38 @@ describe("chatStore", () => {
     expect(chatStore.canRetryLastTurn("agent-a")).toBe(true);
   });
 
+  it("cancelAgentGeneration clears runtime and partial assistant for a workspace agent", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+    chatStore.appendMessage(
+      {
+        id: "user-1",
+        role: "user",
+        content: "Hello",
+        createdAt: "2026-05-28T12:00:00.000Z",
+      },
+      { agentId: agentId! },
+    );
+    chatStore.beginTurn("turn-1", agentId!);
+    chatStore.appendMessage(
+      {
+        id: "assistant-turn-1",
+        role: "assistant",
+        content: "Partial",
+        createdAt: "2026-05-28T12:00:01.000Z",
+      },
+      { agentId: agentId!, skipCompaction: true },
+    );
+
+    expect(chatStore.cancelAgentGeneration("/work/a", agentId!)).toBe(true);
+    expect(chatStore.getRuntimeState(agentId!, "/work/a").isGenerating).toBe(false);
+    expect(
+      chatStore
+        .getWorkspaceAgentsState("/work/a")
+        ?.threadsByAgentId[agentId!]?.messages.some((message) => message.id === "assistant-turn-1"),
+    ).toBe(false);
+  });
+
   it("clears retry runtime state when chat history is cleared", async () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.createDraftAgent();
@@ -661,8 +693,12 @@ describe("chatStore", () => {
   });
 
   it("formats compaction notice copy for the chat banner", () => {
-    expect(formatCompactionNotice(1)).toBe("1 older message compacted");
-    expect(formatCompactionNotice(24)).toBe("24 older messages compacted");
+    expect(formatCompactionNotice(1)).toBe(
+      "1 older message compacted to stay within chat retention limits.",
+    );
+    expect(formatCompactionNotice(24)).toBe(
+      "24 older messages compacted to stay within chat retention limits.",
+    );
   });
 
   it("createDraftAgent adds session draft without in-memory thread", () => {

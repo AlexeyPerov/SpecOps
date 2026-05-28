@@ -19,6 +19,7 @@
   } from "../ai/providers/selection";
   import { listModesForProvider } from "../ai/modes/builtins";
   import { sendChatMessage, retryLastChatTurn } from "../ai/sendChatMessage";
+  import { parseReviewMessageSections, type ReviewMessageSection } from "../ai/chatReviewContent";
   import type { ChatMessage, ChatModeId, ChatProviderId } from "../domain/contracts";
   import { appState } from "../state/appState";
   import {
@@ -161,6 +162,13 @@
       return formatProviderSwitchNotice(message.systemEvent);
     }
     return message.content;
+  }
+
+  function reviewSectionsForMessage(message: ChatMessage): ReviewMessageSection[] | null {
+    if (message.role !== "assistant" || activeMode !== "review") {
+      return null;
+    }
+    return parseReviewMessageSections(message.content);
   }
 
   function messageRoleLabel(message: ChatMessage): string {
@@ -318,7 +326,10 @@
     {/if}
 
     {#if compactionNotice}
-      <p class="chat-compaction-notice" role="status">{compactionNotice}</p>
+      <div class="chat-compaction-notice" role="status">
+        <p class="chat-compaction-notice-title">Chat history compacted</p>
+        <p class="chat-compaction-notice-body">{compactionNotice}</p>
+      </div>
     {/if}
 
     <div class="chat-controls-row">
@@ -382,13 +393,24 @@
               index === messages.length - 1}
           >
             <p class="chat-message-role">{messageRoleLabel(message)}</p>
-            <p class="chat-message-content">
-              {#if message.role === "assistant" && message.content.length === 0 && isGenerating && index === messages.length - 1}
-                <span class="chat-streaming-placeholder">Generating…</span>
-              {:else}
-                {messageDisplayContent(message)}
-              {/if}
-            </p>
+            {#if reviewSectionsForMessage(message)}
+              <div class="chat-review-sections">
+                {#each reviewSectionsForMessage(message) ?? [] as section (section.heading)}
+                  <section class="chat-review-section">
+                    <h3 class="chat-review-section-heading">{section.heading}</h3>
+                    <p class="chat-review-section-body">{section.body}</p>
+                  </section>
+                {/each}
+              </div>
+            {:else}
+              <p class="chat-message-content">
+                {#if message.role === "assistant" && message.content.length === 0 && isGenerating && index === messages.length - 1}
+                  <span class="chat-streaming-placeholder">Generating…</span>
+                {:else}
+                  {messageDisplayContent(message)}
+                {/if}
+              </p>
+            {/if}
           </li>
         {/each}
       </ol>
@@ -445,9 +467,11 @@
     grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100%;
     min-height: 0;
+    min-width: 0;
     padding: var(--space-6) var(--editor-content-padding-x, var(--space-8));
     gap: var(--space-6);
     color: var(--color-text-primary);
+    container-type: inline-size;
   }
 
   .chat-panel-chrome {
@@ -602,11 +626,28 @@
   .chat-compaction-notice {
     margin: 0;
     padding: var(--space-4) var(--space-6);
-    border: 1px dashed var(--color-border-subtle);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--color-border-subtle));
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-text-secondary) 6%, var(--color-surface-1));
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-1));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .chat-compaction-notice-title {
+    margin: 0;
     font-size: 11px;
     line-height: 1.4;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .chat-compaction-notice-body {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
     color: var(--color-text-secondary);
   }
 
@@ -721,6 +762,46 @@
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .chat-review-sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .chat-review-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  .chat-review-section:first-child {
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .chat-review-section-heading {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .chat-review-section-body {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    color: var(--color-text-secondary);
   }
 
   .chat-message-streaming {
@@ -853,5 +934,27 @@
     margin: 0;
     font-size: 12px;
     line-height: 1.5;
+  }
+
+  @container (max-width: 520px) {
+    .chat-panel {
+      padding-inline: var(--space-4);
+      gap: var(--space-4);
+    }
+
+    .chat-controls-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .chat-provider-field,
+    .chat-mode-toolbar {
+      width: 100%;
+    }
+
+    .chat-provider-select {
+      flex: 1;
+      max-width: none;
+    }
   }
 </style>

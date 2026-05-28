@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 22:25 (MSK)
+
+- **M6-4 — Edge-case UX polish:** Added workspace-scoped generation cancellation (`cancelAgentGeneration`, `cancelAllGenerations`) wired on workspace switch and agent tab close so `isGenerating` never sticks after transitions. Send pipeline updates and completes turns against the originating workspace root and stops cleanly when cancelled mid-stream. Provider switch clears failed-turn retry state. Review mode renders structured section headings for long responses; compaction banner copy/styling improved; agent tab layout stays scrollable at narrow widths with responsive panel/sidebar collapse. Added `chatReviewContent`, `chatM6-4.validation.test.ts`. Marked M6-4 complete in execution plan.
+
 ## 2026-05-28 22:20 (MSK)
 
 - **M6-3 — Error copy and recovery guidance polish:** Centralized user-facing chat error copy in `chatErrorCopy.ts` for missing provider config, workspace access blocked, provider request failure, and mode/provider incompatibility. `ChatPanel` shows consistent titles, messages, and recovery hints (including Retry guidance for failed turns); Debug blocked state adds a settings CTA. Send pipeline sanitizes unexpected provider errors so raw stack traces never reach the UI. Updated GLM/Debug/capability checker and chatStore copy. Added `chatErrorCopy.test.ts`. Marked M6-3 complete in execution plan.

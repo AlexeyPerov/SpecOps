@@ -206,12 +206,27 @@ function activeThread(state: ChatStoreState): ChatThreadSnapshot | null {
   return threadForAgent(state, activeAgentId(state));
 }
 
-function runtimeForAgent(state: ChatStoreState, agentId: string | null): ChatThreadRuntimeState {
-  const root = state.activeWorkspaceRoot;
-  if (!root || !agentId) {
+function resolveWorkspaceRoot(state: ChatStoreState, workspaceRoot?: string | null): string | null {
+  return workspaceRoot ?? state.activeWorkspaceRoot;
+}
+
+function runtimeForAgentInWorkspace(
+  state: ChatStoreState,
+  workspaceRoot: string | null,
+  agentId: string | null,
+): ChatThreadRuntimeState {
+  if (!workspaceRoot || !agentId) {
     return defaultRuntimeState();
   }
-  return state.workspaces[root]?.runtimeByAgentId[agentId] ?? defaultRuntimeState();
+  return state.workspaces[workspaceRoot]?.runtimeByAgentId[agentId] ?? defaultRuntimeState();
+}
+
+function runtimeForAgent(state: ChatStoreState, agentId: string | null): ChatThreadRuntimeState {
+  return runtimeForAgentInWorkspace(state, state.activeWorkspaceRoot, agentId);
+}
+
+function assistantPlaceholderId(turnId: string): string {
+  return `assistant-${turnId}`;
 }
 
 function activeRuntime(state: ChatStoreState): ChatThreadRuntimeState {
@@ -407,10 +422,11 @@ function createChatStore() {
   function updateAgentRuntime(
     agentId: string,
     updater: (runtime: ChatThreadRuntimeState) => ChatThreadRuntimeState,
+    workspaceRoot?: string | null,
   ): boolean {
     let updated = false;
     update((state) => {
-      const root = state.activeWorkspaceRoot;
+      const root = resolveWorkspaceRoot(state, workspaceRoot);
       if (!root) {
         return state;
       }
@@ -729,10 +745,15 @@ function createChatStore() {
       });
       return appended;
     },
-    updateMessageContent(messageId: string, content: string, agentId?: string): boolean {
+    updateMessageContent(
+      messageId: string,
+      content: string,
+      agentId?: string,
+      workspaceRoot?: string | null,
+    ): boolean {
       let updated = false;
       update((state) => {
-        const root = state.activeWorkspaceRoot;
+        const root = resolveWorkspaceRoot(state, workspaceRoot);
         const targetAgentId = resolveTargetAgentId(state, agentId);
         if (!root || !targetAgentId) {
           return state;
@@ -774,10 +795,10 @@ function createChatStore() {
       });
       return updated;
     },
-    removeMessage(messageId: string, agentId?: string): boolean {
+    removeMessage(messageId: string, agentId?: string, workspaceRoot?: string | null): boolean {
       let removed = false;
       update((state) => {
-        const root = state.activeWorkspaceRoot;
+        const root = resolveWorkspaceRoot(state, workspaceRoot);
         const targetAgentId = resolveTargetAgentId(state, agentId);
         if (!root || !targetAgentId) {
           return state;
@@ -968,9 +989,84 @@ function createChatStore() {
     isEmpty(agentId?: string): boolean {
       return this.getMessages(agentId).length === 0;
     },
-    getRuntimeState(agentId?: string): ChatThreadRuntimeState {
-      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
-      return { ...runtimeForAgent(this.getSnapshot(), targetAgentId) };
+    getRuntimeState(agentId?: string, workspaceRoot?: string | null): ChatThreadRuntimeState {
+      const snapshot = this.getSnapshot();
+      const root = resolveWorkspaceRoot(snapshot, workspaceRoot);
+      const targetAgentId = agentId ?? (root ? snapshot.workspaces[root]?.activeAgentId ?? null : null);
+      return { ...runtimeForAgentInWorkspace(snapshot, root, targetAgentId) };
+    },
+    isGenerationTurnActive(
+      workspaceRoot: string,
+      agentId: string,
+      turnId: string,
+    ): boolean {
+      const runtime = runtimeForAgentInWorkspace(this.getSnapshot(), workspaceRoot, agentId);
+      return runtime.isGenerating && runtime.activeTurnId === turnId;
+    },
+    cancelAgentGeneration(workspaceRoot: string, agentId: string): boolean {
+      let cancelled = false;
+      update((state) => {
+        const workspace = state.workspaces[workspaceRoot];
+        if (!workspace) {
+          return state;
+        }
+        const runtime = workspace.runtimeByAgentId[agentId] ?? defaultRuntimeState();
+        if (!runtime.isGenerating) {
+          return state;
+        }
+
+        cancelled = true;
+        const turnId = runtime.activeTurnId;
+        let threadsByAgentId = workspace.threadsByAgentId;
+        if (turnId) {
+          const thread = workspace.threadsByAgentId[agentId];
+          if (thread) {
+            const placeholderId = assistantPlaceholderId(turnId);
+            const nextMessages = thread.messages.filter((entry) => entry.id !== placeholderId);
+            if (nextMessages.length !== thread.messages.length) {
+              const updatedAt = new Date().toISOString();
+              threadsByAgentId = {
+                ...threadsByAgentId,
+                [agentId]: {
+                  ...thread,
+                  messages: nextMessages,
+                  metadata: {
+                    ...thread.metadata,
+                    updatedAt,
+                  },
+                },
+              };
+            }
+          }
+        }
+
+        return patchWorkspaceState(state, workspaceRoot, {
+          ...workspace,
+          threadsByAgentId,
+          runtimeByAgentId: {
+            ...workspace.runtimeByAgentId,
+            [agentId]: defaultRuntimeState(),
+          },
+        });
+      });
+      return cancelled;
+    },
+    cancelAllGenerations(workspaceRoot: string): string[] {
+      const workspace = this.getSnapshot().workspaces[workspaceRoot];
+      if (!workspace) {
+        return [];
+      }
+      const agentIds = new Set<string>([
+        ...Object.keys(workspace.runtimeByAgentId),
+        ...workspace.agentIndex.map((entry) => entry.id),
+      ]);
+      const cancelled: string[] = [];
+      for (const agentId of agentIds) {
+        if (this.cancelAgentGeneration(workspaceRoot, agentId)) {
+          cancelled.push(agentId);
+        }
+      }
+      return cancelled;
     },
     beginTurn(turnId: string, agentId?: string): boolean {
       const root = this.getActiveWorkspaceRoot();
@@ -992,33 +1088,46 @@ function createChatStore() {
         lastError: null,
       }));
     },
-    completeTurn(agentId?: string): boolean {
-      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
-      if (!this.getActiveWorkspaceRoot() || !targetAgentId) {
+    completeTurn(agentId?: string, workspaceRoot?: string | null): boolean {
+      const snapshot = this.getSnapshot();
+      const root = resolveWorkspaceRoot(snapshot, workspaceRoot);
+      const targetAgentId = resolveTargetAgentId(snapshot, agentId);
+      if (!root || !targetAgentId) {
         return false;
       }
-      const runtime = runtimeForAgent(this.getSnapshot(), targetAgentId);
+      const runtime = runtimeForAgentInWorkspace(snapshot, root, targetAgentId);
       if (!runtime.isGenerating) {
         return false;
       }
-      return updateAgentRuntime(targetAgentId, () => defaultRuntimeState());
+      return updateAgentRuntime(targetAgentId, () => defaultRuntimeState(), root);
     },
-    failTurn(error: ChatTurnError, turnId?: string, agentId?: string): boolean {
-      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
-      if (!this.getActiveWorkspaceRoot() || !targetAgentId) {
+    failTurn(
+      error: ChatTurnError,
+      turnId?: string,
+      agentId?: string,
+      workspaceRoot?: string | null,
+    ): boolean {
+      const snapshot = this.getSnapshot();
+      const root = resolveWorkspaceRoot(snapshot, workspaceRoot);
+      const targetAgentId = resolveTargetAgentId(snapshot, agentId);
+      if (!root || !targetAgentId) {
         return false;
       }
-      const runtime = runtimeForAgent(this.getSnapshot(), targetAgentId);
+      const runtime = runtimeForAgentInWorkspace(snapshot, root, targetAgentId);
       const failedTurnId = turnId ?? runtime.activeTurnId;
       if (!failedTurnId) {
         return false;
       }
-      return updateAgentRuntime(targetAgentId, () => ({
-        isGenerating: false,
-        activeTurnId: null,
-        lastFailedTurnId: failedTurnId,
-        lastError: { ...error },
-      }));
+      return updateAgentRuntime(
+        targetAgentId,
+        () => ({
+          isGenerating: false,
+          activeTurnId: null,
+          lastFailedTurnId: failedTurnId,
+          lastError: { ...error },
+        }),
+        root,
+      );
     },
     canRetryLastTurn(agentId?: string): boolean {
       const runtime = this.getRuntimeState(agentId);
@@ -1123,6 +1232,10 @@ function createChatStore() {
               ),
               messages: [...baseThread.messages, switchMessage],
             },
+          },
+          runtimeByAgentId: {
+            ...workspace.runtimeByAgentId,
+            [targetAgentId]: defaultRuntimeState(),
           },
         });
       });
@@ -1238,5 +1351,5 @@ export const chatActiveAgentId = derived(chatStore, ($chatStore) => {
 
 export function formatCompactionNotice(compactedMessageCount: number): string {
   const label = compactedMessageCount === 1 ? "message" : "messages";
-  return `${compactedMessageCount} older ${label} compacted`;
+  return `${compactedMessageCount} older ${label} compacted to stay within chat retention limits.`;
 }

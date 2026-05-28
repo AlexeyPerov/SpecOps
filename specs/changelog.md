@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 21:15 (MSK)
+
+- **M5-3-3 — Milestone validation:** Added `chatM5-3.validation.test.ts` covering M5.3 exit criteria — Debug/GLM access preflight pass/fail, per-agent generation lock, concurrent Debug+GLM sends, streaming finalize, failure retry scaffolding, GLM review mode, provider switch persistence, and workspace access blocks. Documented manual smoke checklist and optional GLM integration env requirements. Ran `npm test` (410 tests) and `npm run check` (clean). Marked M5.3 execution plan complete.
+
 ## 2026-05-28 21:00 (MSK)
 
 - **M5-3-2 — GLM provider adapter:** Added `GlmChatProvider` with OpenAI-compatible `/chat/completions` calls, shared prompt assembly (`buildGlmChatMessages`), capability checks, and user-facing `ChatProviderError` mapping. Registered GLM in provider bootstrap; capability checker delegates to the adapter when credentials are configured. Buffered send path only (streaming deferred to M7). Unit tests with mock fetch for adapter, registry checker, and send pipeline.

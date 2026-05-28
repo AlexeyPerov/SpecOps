@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-28 22:30 (MSK)
+
+- **M6-5 — AI chat MVP ship:** Ran full validation suite (`npm test` 436 tests, `npm run check` clean, `cargo test` 5 tests). Added `chatM6-5.validation.test.ts` covering M6 exit criteria — retry on Debug/GLM, streaming vs buffered fallback, recovery copy, compaction + delete agent, concurrent multi-agent generation. Updated README to reflect shipped MVP scope. Marked M6-5 complete in execution plan.
+- **AI chat MVP ships at M6 completion.** Scope: workspace agents sidebar + agent tabs, Ask/Review modes, GLM production provider, Debug for development, retry, streaming fallback, error/recovery copy, retention compaction, delete agent. Known follow-ups: optional Cursor SDK (`specs/ai-m-extra-1-execution-plan.md`), agent list subtitles, custom modes.
+
 ## 2026-05-28 22:25 (MSK)
 
 - **M6-4 — Edge-case UX polish:** Added workspace-scoped generation cancellation (`cancelAgentGeneration`, `cancelAllGenerations`) wired on workspace switch and agent tab close so `isGenerating` never sticks after transitions. Send pipeline updates and completes turns against the originating workspace root and stops cleanly when cancelled mid-stream. Provider switch clears failed-turn retry state. Review mode renders structured section headings for long responses; compaction banner copy/styling improved; agent tab layout stays scrollable at narrow widths with responsive panel/sidebar collapse. Added `chatReviewContent`, `chatM6-4.validation.test.ts`. Marked M6-4 complete in execution plan.

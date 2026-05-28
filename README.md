@@ -2,7 +2,7 @@
 
 Desktop workspace for writing specs, notes, and project files. Built with [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
 
-Open folders as workspaces, browse files in the project panel, edit in tabs with CodeMirror, preview Markdown, and keep your session across restarts. A built-in console surfaces logs; workspace-scoped AI agents (in progress) live in a dedicated sidebar and agent tabs.
+Open folders as workspaces, browse files in the project panel, edit in tabs with CodeMirror, preview Markdown, and keep your session across restarts. A built-in console surfaces logs; workspace-scoped AI agents live in a dedicated sidebar and agent tabs.
 
 ![SpecOps main screen](screenshots/main-screen.png)
 
@@ -11,36 +11,27 @@ Open folders as workspaces, browse files in the project panel, edit in tabs with
 - **Notepad and workspaces** — quick scratchpad plus folder-backed workspaces on the activity rail
 - **Project panel** — file tree, open files in tabs, refresh and show/hide hidden files
 - **Editor** — syntax highlighting, Markdown preview, find/replace, go to line, unsaved-change diff
-- **Console** — resizable bottom panel with **Logs** (chat moves to workspace agent tabs; see Work in progress)
+- **Console** — resizable bottom panel with **Logs** only
+- **AI agents** — workspace-scoped agents sidebar, agent tabs, **Ask** and **Review** modes, GLM provider (Debug for development)
 - **Session restore** — reopen tabs and workspace layout after restart
 
-## Work in progress
+## AI agents (MVP)
 
-AI agents in workspaces is the active focus. The product is pivoting from console-embedded chat to an **agents sidebar** plus **agent tabs** in the main editor area.
-
-### Goal
-
-Workspace-scoped AI agents with **Ask** and **Review** modes, **GLM** and **Cursor SDK** providers, multiple conversations per workspace, and file-read access checks before chat is enabled.
-
-### Roadmap
+Workspace-scoped AI agents with **Ask** and **Review** modes, **GLM** as the production provider (plus settings-gated **Debug** for development), multiple conversations per workspace, retry on failure, streaming on Debug with buffered GLM fallback, and file-read access checks before chat is enabled.
 
 | Area | Status | What it covers |
 | --- | --- | --- |
-| Provider foundation (Debug) | Done | Provider abstraction, ask/review modes, send pipeline, Debug provider for development |
-| Console chat UI (legacy) | Superseded | Original console Chat tab; replaced by agents UI shell |
-| Agents UI shell | Next | Agents sidebar, agent tabs, multi-agent persistence, logs-only console |
-| Chat history | Partial | Per-workspace single thread delivered; migrating to per-agent threads |
-| Workspace access | Done | Preflight checks; blocked state when the model cannot read workspace files |
-| History limits & errors | Done | Rolling cap, retry scaffolding (delete agent replaces clear history) |
-| GLM provider | Planned | Settings, adapter, inline setup CTA in agent tabs |
-| Cursor SDK | Planned | Second production provider alongside GLM |
-| Reliability & polish | Planned | Retry last message, streaming fallbacks, clearer error and recovery copy |
+| Agents UI | Done | Agents sidebar, agent tabs, multi-agent persistence, logs-only console |
+| GLM provider | Done | Settings, adapter, inline setup CTA in agent tabs |
+| Reliability & polish | Done | Retry last message, streaming fallbacks, error and recovery copy |
+| Cursor SDK (optional extra) | Planned | Second production provider; not required for MVP |
 
 ### Not planned for the first release
 
 - Attaching the active file or console logs to AI context
 - Agent list subtitles
 - Remote chat sync
+- Cursor SDK provider (optional post-MVP — see `specs/ai-m-extra-1-execution-plan.md`)
 
 ## Prerequisites
 

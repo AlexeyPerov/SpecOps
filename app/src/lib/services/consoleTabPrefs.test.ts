@@ -1,15 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
   DEFAULT_CONSOLE_HEIGHT_PX,
   normalizeConsoleHeightPx,
   readConsoleHeightPreference,
-  readWorkspaceConsoleTabPreference,
-  workspacePathHashKey,
   writeConsoleHeightPreference,
-  writeWorkspaceConsoleTabPreference,
 } from "./consoleTabPrefs";
-import { mockNavigatorPlatform } from "../test/helpers";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
@@ -26,25 +22,6 @@ vi.mock("@tauri-apps/api/path", () => ({
 
 const readTextFileMock = vi.mocked(readTextFile);
 const writeTextFileMock = vi.mocked(writeTextFile);
-
-describe("workspacePathHashKey", () => {
-  let restorePlatform: (() => void) | undefined;
-
-  afterEach(() => {
-    restorePlatform?.();
-    restorePlatform = undefined;
-  });
-
-  it("is stable for identical normalized paths", () => {
-    restorePlatform = mockNavigatorPlatform("Linux x86_64");
-    expect(workspacePathHashKey("/work/a")).toBe(workspacePathHashKey("/work/a/"));
-  });
-
-  it("uses normalized path semantics on macOS", () => {
-    restorePlatform = mockNavigatorPlatform("MacIntel");
-    expect(workspacePathHashKey("/Work/Repo")).toBe(workspacePathHashKey("/work/repo"));
-  });
-});
 
 describe("normalizeConsoleHeightPx", () => {
   it("clamps invalid values to defaults and bounds", () => {
@@ -75,47 +52,5 @@ describe("console height preference persistence", () => {
 
     readTextFileMock.mockResolvedValue(content as string);
     await expect(readConsoleHeightPreference()).resolves.toBe(240);
-  });
-});
-
-describe("console tab preference persistence", () => {
-  beforeEach(() => {
-    readTextFileMock.mockReset();
-    writeTextFileMock.mockReset();
-    writeTextFileMock.mockResolvedValue(undefined);
-  });
-
-  it("returns null when prefs file is missing", async () => {
-    readTextFileMock.mockRejectedValue(new Error("missing"));
-    await expect(readWorkspaceConsoleTabPreference("/work/a")).resolves.toBeNull();
-  });
-
-  it("returns stored tab for workspace key", async () => {
-    const key = workspacePathHashKey("/work/a");
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        version: 1,
-        updatedAt: "2026-05-25T00:00:00.000Z",
-        tabsByWorkspaceKey: {
-          [key]: "logs",
-        },
-      }),
-    );
-    await expect(readWorkspaceConsoleTabPreference("/work/a")).resolves.toBe("logs");
-  });
-
-  it("writes tab preference keyed by normalized workspace hash", async () => {
-    readTextFileMock.mockRejectedValue(new Error("missing"));
-    await writeWorkspaceConsoleTabPreference("/work/a/", "chat");
-    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
-    const [path, content] = writeTextFileMock.mock.calls[0];
-    expect(path).toBe("/data/spec-ops/console-tab-prefs.json");
-    const parsed = JSON.parse(content as string) as {
-      version: number;
-      updatedAt: string;
-      tabsByWorkspaceKey: Record<string, string>;
-    };
-    expect(parsed.version).toBe(1);
-    expect(parsed.tabsByWorkspaceKey[workspacePathHashKey("/work/a")]).toBe("chat");
   });
 });

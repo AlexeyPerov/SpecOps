@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 17:30 (MSK)
+
+- **M5-2-7 — Console logs-only:** Removed Chat tab from `ConsolePanel`; console shows `ConsoleLogsPanel` only. Dropped console chat tab preference persistence (`tabsByWorkspaceKey`, `ConsoleTabId`, workspace tab read/write). Removed `+page.svelte` wiring for console tab selection and chat-gated preflight on console tab. Access monitor comment updated for agent-tab context. Trimmed `consoleTabPrefs` tests to height persistence only.
+
 ## 2026-05-28 17:12 (MSK)
 
 - **M5-2-6 — Session restore and sidebar ↔ tab sync:** Added `lastActiveAgentId` to workspace session state. On workspace enter, restore open agent tabs (including session-only drafts via `mergeSessionDraftAgents`), focus last active agent when it still exists, otherwise clear sidebar selection without auto-opening another. Close agent tab: next open agent tab in bar order, else next sidebar row (highlight only), else clear selection. `TabBar` uses `onCloseTab` for agent navigation. Unit tests for routing helpers, restore resolution, merge drafts, and close-tab order.

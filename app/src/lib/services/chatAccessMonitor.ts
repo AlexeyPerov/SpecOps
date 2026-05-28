@@ -1,6 +1,6 @@
 import { chatStore } from "../state/chatStore";
 
-/** Conservative interval while Chat tab is active to detect workspace root loss. */
+/** Conservative interval while an agent tab is active to detect workspace root loss. */
 export const CHAT_ACCESS_POLL_INTERVAL_MS = 15_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;

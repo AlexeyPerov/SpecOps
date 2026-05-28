@@ -93,10 +93,7 @@
   import {
     DEFAULT_CONSOLE_HEIGHT_PX,
     readConsoleHeightPreference,
-    readWorkspaceConsoleTabPreference,
     writeConsoleHeightPreference,
-    writeWorkspaceConsoleTabPreference,
-    type ConsoleTabId,
   } from "../lib/services/consoleTabPrefs";
   import { initializeChatProviders } from "../lib/ai/providers/bootstrap";
 
@@ -144,8 +141,6 @@
   let autoProjectPanelCollapsed = false;
   let agentsSidebarCollapsed = false;
   let autoAgentsSidebarCollapsed = false;
-  let consoleTabSelection: ConsoleTabId = "chat";
-  let lastConsoleWorkspaceRoot: string | null = null;
   let lastChatWorkspaceRoot: string | null = null;
   const MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
 
@@ -442,17 +437,6 @@
 
   function toggleConsole(): void {
     consoleOpen = !consoleOpen;
-  }
-
-  function handleConsoleTabChange(nextTab: ConsoleTabId): void {
-    consoleTabSelection = nextTab;
-    if (nextTab === "chat" && activeWorkspaceRoot) {
-      void chatStore.runAccessPreflight();
-    }
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    void writeWorkspaceConsoleTabPreference(activeWorkspaceRoot, nextTab);
   }
 
   function persistConsoleHeightNow(): void {
@@ -1077,27 +1061,6 @@
     }
   }
 
-  $: {
-    if (!activeWorkspaceRoot) {
-      lastConsoleWorkspaceRoot = null;
-    } else {
-      const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
-      if (lastConsoleWorkspaceRoot !== normalizedWorkspaceRoot) {
-        lastConsoleWorkspaceRoot = normalizedWorkspaceRoot;
-        consoleTabSelection = "chat";
-        void readWorkspaceConsoleTabPreference(activeWorkspaceRoot).then((storedTab) => {
-          if (!activeWorkspaceRoot) {
-            return;
-          }
-          if (normalizePathSync(activeWorkspaceRoot) !== normalizedWorkspaceRoot) {
-            return;
-          }
-          consoleTabSelection = storedTab ?? "chat";
-        });
-      }
-    }
-  }
-
   $: applyResponsiveLayoutRules();
 
   $: if (isMarkdownDocument && activeDocument) {
@@ -1370,9 +1333,6 @@
       <div class="bottom-panel">
         {#if consoleOpen}
           <ConsolePanel
-            showChatTab={Boolean(activeWorkspaceRoot)}
-            activeTab={consoleTabSelection}
-            onTabChange={handleConsoleTabChange}
             bind:heightPx={consoleHeightPx}
             onHeightCommit={persistConsoleHeightNow}
           />

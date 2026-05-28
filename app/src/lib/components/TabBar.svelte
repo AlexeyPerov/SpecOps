@@ -3,6 +3,7 @@
   import type { DocumentState, TabState } from "../domain/contracts";
   import { isAgentTab, isFileTab } from "../domain/contracts";
   import { appState } from "../state/appState";
+  import { chatAgentIndex } from "../state/chatStore";
   import { revealInFileManagerLabel } from "../services/platform";
   import { revealInFileManager } from "../services/revealInFileManager";
   import { readNearbyTextFiles, type NearbyTextFile } from "../services/nearbyFiles";
@@ -51,9 +52,11 @@
     return documents.find((doc) => doc.id === tab.documentId);
   }
 
+  $: agentTitleById = new Map($chatAgentIndex.map((entry) => [entry.id, entry.title]));
+
   function tabTitle(tab: TabState): string {
     if (isAgentTab(tab)) {
-      return "New agent";
+      return agentTitleById.get(tab.agentId) ?? "New agent";
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc) {
@@ -286,6 +289,9 @@
     if (event.button !== 0 || isFinishingDrag) {
       return;
     }
+    if (isAgentTab(tab)) {
+      return;
+    }
 
     const target = event.currentTarget as HTMLElement | null;
     if (!target) {
@@ -465,14 +471,22 @@
     {#if didDrag && tab.id === dragTabId}
       <span class="tab-placeholder" style={`width:${dragTabRect?.width ?? 0}px`}></span>
     {:else}
-      <div class="tab-shell">
+      <div class={`tab-shell ${isAgentTab(tab) ? "tab-shell-agent" : ""}`}>
         <button
-          class={`tab ${tab.id === selectedTabId ? "tab-active" : ""}`}
+          class={`tab ${isAgentTab(tab) ? "tab-agent" : ""} ${tab.id === selectedTabId ? "tab-active" : ""}`}
           data-tab-id={tab.id}
           type="button"
           title={tabTooltip(tab)}
           oncontextmenu={(event) => openContextMenu(event, tab)}
-          onpointerdown={(event) => pointerDown(event, tab, openTabs.findIndex((entry) => entry.id === tab.id))}
+          onpointerdown={(event) => {
+            if (isAgentTab(tab)) {
+              if (event.button === 0) {
+                onSelect(tab.id);
+              }
+              return;
+            }
+            pointerDown(event, tab, openTabs.findIndex((entry) => entry.id === tab.id));
+          }}
         >
           <span class="tab-label">
             {tabTitle(tab)}
@@ -500,7 +514,7 @@
 
 {#if didDrag && dragTabId}
   <button
-    class={`tab tab-dragging ${dragTabId === selectedTabId ? "tab-active" : ""}`}
+    class={`tab tab-dragging ${draggedTab && isAgentTab(draggedTab) ? "tab-agent" : ""} ${dragTabId === selectedTabId ? "tab-active" : ""}`}
     type="button"
     style={`left:${dragPointerX - dragOffsetX}px; top:${dragPointerY - dragOffsetY}px; width:${dragTabRect?.width ?? 0}px; height:${dragTabRect?.height ?? 0}px;`}
   >
@@ -790,6 +804,16 @@
     transition:
       background-color var(--motion-fast) var(--easing-standard),
       border-color var(--motion-fast) var(--easing-standard);
+  }
+
+  .tab-agent {
+    border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border-subtle));
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
+
+  .tab-agent.tab-active {
+    background: color-mix(in srgb, var(--color-accent) 20%, var(--color-hover));
+    border-color: color-mix(in srgb, var(--color-accent) 62%, var(--color-border-subtle));
   }
 
   .tab-active {

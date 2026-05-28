@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 17:05 (MSK)
+
+- **M5-2-5 — Agent tabs and editor routing:** Agent tabs in `TabBar` use accent styling and titles from the workspace agent index. Editor pane shows `ChatPanel` when an agent tab is selected (file tabs unchanged). Chat access preflight and polling run on agent tab activation instead of the console Chat tab. Replaced “Clear workspace chat history” with **Delete agent** in chat chrome. Added `editorRouting.ts` unit tests.
+
 ## 2026-05-28 16:26 (MSK)
 
 - **M5-2-4 — Agents sidebar UI:** Added `AgentsSidebar.svelte` (search, New agent, date-grouped list, selection highlight, delete via context menu, resize/collapse). Integrated into shell grid to the right of the project panel; hidden outside workspace context. Wired `openOrFocusAgentTab` / `closeTabsForAgent` in `appState` and sidebar handlers to `chatStore`. Added `chatAgentIndex` and `chatActiveAgentId` derived stores.

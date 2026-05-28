@@ -16,7 +16,6 @@
   import { appState } from "../state/appState";
   import {
     chatAccessState,
-    chatHasThread,
     chatIsGenerating,
     chatLastError,
     chatMessages,
@@ -26,6 +25,12 @@
   } from "../state/chatStore";
   import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 
+  interface Props {
+    onDeleteAgent?: () => void | Promise<void>;
+  }
+
+  let { onDeleteAgent }: Props = $props();
+
   let draft = $state("");
   let sending = $state(false);
   let inlineError = $state("");
@@ -33,7 +38,6 @@
 
   const messages = $derived($chatMessages);
   const metadata = $derived($chatMetadata);
-  const hasThread = $derived($chatHasThread);
   const accessState = $derived($chatAccessState);
   const isGenerating = $derived($chatIsGenerating);
   const lastError = $derived($chatLastError);
@@ -49,7 +53,14 @@
   );
   const isBlocked = $derived(accessState.status === "blocked");
   const isEmpty = $derived(messages.length === 0);
-  const canClearHistory = $derived(hasThread || !isEmpty);
+  const activeAgentId = $derived(chatStore.getActiveAgentId());
+  const activeAgentTitle = $derived.by(() => {
+    if (!activeAgentId) {
+      return "Agent";
+    }
+    return chatStore.getAgentTitle(activeAgentId) ?? "New agent";
+  });
+  const canDeleteAgent = $derived(activeAgentId !== null);
   const isModeSelectionDisabled = $derived(isGenerating || sending);
   const isProviderSelectionDisabled = $derived(isGenerating || sending);
   const compactionNotice = $derived.by(() => {
@@ -161,17 +172,21 @@
     sending = false;
   }
 
-  async function clearChatHistory(): Promise<void> {
-    if (!canClearHistory) {
+  async function deleteAgent(): Promise<void> {
+    if (!canDeleteAgent || !activeAgentId) {
       return;
     }
     const confirmed = window.confirm(
-      "Clear all chat history for this workspace? This cannot be undone.",
+      `Delete agent "${activeAgentTitle}"? This removes the agent and its chat history. This cannot be undone.`,
     );
     if (!confirmed) {
       return;
     }
-    await chatStore.clearActiveWorkspaceChatHistory();
+    if (onDeleteAgent) {
+      await onDeleteAgent();
+      return;
+    }
+    await chatStore.deleteAgent(activeAgentId);
   }
 
   function selectMode(nextMode: ChatModeId): void {
@@ -210,18 +225,18 @@
   }
 </script>
 
-<section class="chat-panel" aria-label="Workspace chat">
+<section class="chat-panel" aria-label="Agent chat">
   <div class="chat-panel-chrome">
     <div class="chat-panel-header">
-      <p class="chat-panel-title">Workspace chat</p>
-      {#if canClearHistory}
+      <p class="chat-panel-title">{activeAgentTitle}</p>
+      {#if canDeleteAgent}
         <button
           type="button"
-          class="chat-clear-button"
-          onclick={() => void clearChatHistory()}
-          disabled={isBlocked}
+          class="chat-delete-button"
+          onclick={() => void deleteAgent()}
+          disabled={isBlocked || isGenerating || sending}
         >
-          Clear workspace chat history
+          Delete agent
         </button>
       {/if}
     </div>
@@ -329,7 +344,7 @@
       class="chat-input"
       rows="3"
       bind:value={draft}
-      placeholder="Message workspace chat"
+      placeholder="Message agent"
       aria-label="Chat message"
       onkeydown={handleComposerKeydown}
       disabled={composerDisabled}
@@ -429,23 +444,24 @@
     color: var(--color-text-primary);
   }
 
-  .chat-clear-button {
+  .chat-delete-button {
     min-height: 24px;
     padding: 0 var(--space-6);
     border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border-subtle);
+    border: 1px solid color-mix(in srgb, #e06c75 40%, var(--color-border-subtle));
     background: var(--color-surface-1);
     color: var(--color-text-secondary);
     font-size: 11px;
     line-height: 1;
   }
 
-  .chat-clear-button:hover:not(:disabled) {
+  .chat-delete-button:hover:not(:disabled) {
     color: var(--color-text-primary);
+    border-color: color-mix(in srgb, #e06c75 55%, var(--color-border-subtle));
     cursor: pointer;
   }
 
-  .chat-clear-button:disabled {
+  .chat-delete-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

@@ -9,6 +9,8 @@
   import ActivityRail from "../lib/components/ActivityRail.svelte";
   import ProjectPanel from "../lib/components/ProjectPanel.svelte";
   import AgentsSidebar from "../lib/components/AgentsSidebar.svelte";
+  import ChatPanel from "../lib/components/ChatPanel.svelte";
+  import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
   import {
     dispatchMenuCommand,
     initializeAppMenu,
@@ -159,6 +161,10 @@
   $: activeTab = state.session.openTabs.find(
     (tab) => tab.id === state.session.selectedTabId,
   );
+  $: isAgentTabActive = isAgentEditorPaneActive(
+    state.session.openTabs,
+    state.session.selectedTabId,
+  );
   $: if (activeTab && isAgentTab(activeTab)) {
     if (chatStore.getActiveAgentId() !== activeTab.agentId) {
       chatStore.setActiveAgentId(activeTab.agentId);
@@ -191,7 +197,7 @@
     projectTreeRootNodes = await loadDirectoryChildren(activeWorkspaceRoot, activeWorkspaceRoot, {
       showHidden: projectTreeShowHidden,
     });
-    if (consoleOpen && consoleTabSelection === "chat") {
+    if (isAgentTabActive) {
       const probe = await probeWorkspaceReadAccess(activeWorkspaceRoot);
       if (probe === "blocked") {
         void chatStore.runAccessPreflight();
@@ -282,6 +288,14 @@
     }
   }
 
+  async function handleDeleteAgentFromChat(): Promise<void> {
+    const agentId = chatStore.getActiveAgentId();
+    if (!agentId) {
+      return;
+    }
+    await handleDeleteAgent(agentId);
+  }
+
   async function toggleProjectTreeHidden(next: boolean): Promise<void> {
     projectTreeShowHidden = next;
     await refreshProjectTree();
@@ -357,9 +371,6 @@
 
   function toggleConsole(): void {
     consoleOpen = !consoleOpen;
-    if (consoleOpen && consoleTabSelection === "chat" && activeWorkspaceRoot) {
-      void chatStore.runAccessPreflight();
-    }
   }
 
   function handleConsoleTabChange(nextTab: ConsoleTabId): void {
@@ -723,7 +734,11 @@
       void ensureWorkspaceReadAccess(normalizedRoot);
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
       await chatStore.loadWorkspaceAgents(normalizedRoot);
-      if (consoleTabSelection === "chat") {
+      const restoredTab = appState
+        .getSnapshot()
+        .session.openTabs.find((tab) => tab.id === appState.getSnapshot().session.selectedTabId);
+      if (restoredTab && isAgentTab(restoredTab)) {
+        chatStore.setActiveAgentId(restoredTab.agentId);
         void chatStore.runAccessPreflight();
       }
     } else {
@@ -970,9 +985,7 @@
   });
 
   $: if (runtimeReady) {
-    syncChatAccessMonitor(
-      consoleOpen && consoleTabSelection === "chat" && Boolean(activeWorkspaceRoot),
-    );
+    syncChatAccessMonitor(isAgentTabActive && Boolean(activeWorkspaceRoot));
   }
 
   $: if (activeContextId) {
@@ -999,12 +1012,12 @@
             if (normalizePathSync(activeWorkspaceRoot) !== normalizedWorkspaceRoot) {
               return;
             }
-            if (consoleTabSelection === "chat") {
+            if (isAgentTabActive) {
               void chatStore.runAccessPreflight();
             }
           })
           .catch(() => {
-            if (consoleTabSelection === "chat") {
+            if (isAgentTabActive) {
               void chatStore.runAccessPreflight();
             }
           });
@@ -1136,8 +1149,10 @@
     </div>
       </header>
 
-      <section class="editor-pane" bind:this={editorPaneEl}>
-    {#if state.editor.previewMode === "editor"}
+      <section class="editor-pane" class:editor-pane-agent={isAgentTabActive} bind:this={editorPaneEl}>
+    {#if isAgentTabActive}
+      <ChatPanel onDeleteAgent={handleDeleteAgentFromChat} />
+    {:else if state.editor.previewMode === "editor"}
       {#if isMarkdownDocument}
         <div class="markdown-layout">
           <div class="markdown-mode-bar">
@@ -1273,7 +1288,7 @@
       </div>
     {/if}
 
-    {#if state.editor.findReplaceOpen}
+    {#if !isAgentTabActive && state.editor.findReplaceOpen}
       <FindReplacePanel
         bind:findQuery
         bind:replaceValue
@@ -1284,7 +1299,7 @@
       />
     {/if}
 
-    {#if state.editor.goToOpen}
+    {#if !isAgentTabActive && state.editor.goToOpen}
       <div class="floating-tool goto-tool">
         <h3>Go To Line</h3>
         <input placeholder="Line number..." bind:value={goToLineValue} />
@@ -1483,6 +1498,13 @@
     position: relative;
     padding: var(--space-8);
     overflow: hidden;
+  }
+
+  .editor-pane-agent {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .markdown-layout {

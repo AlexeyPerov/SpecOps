@@ -14,13 +14,14 @@
     listSelectableChatProviders,
     resolveDefaultChatProvider,
   } from "../ai/providers/selection";
-  import { sendChatMessage } from "../ai/sendChatMessage";
+  import { sendChatMessage, retryLastChatTurn } from "../ai/sendChatMessage";
   import { listBuiltinChatModes, listModesForProvider } from "../ai/modes/builtins";
   import { WorkspaceAccessReason } from "../ai/capabilities";
   import type { ChatMessage, ChatModeId, ChatProviderId } from "../domain/contracts";
   import { appState } from "../state/appState";
   import {
     chatAccessState,
+    chatCanRetryLastTurn,
     chatIsGenerating,
     chatLastError,
     chatMessages,
@@ -39,6 +40,7 @@
 
   let draft = $state("");
   let sending = $state(false);
+  let retrying = $state(false);
   let inlineError = $state("");
   let supportedModes = $state<ChatModeId[]>(["ask", "review"]);
 
@@ -46,6 +48,7 @@
   const metadata = $derived($chatMetadata);
   const accessState = $derived($chatAccessState);
   const isGenerating = $derived($chatIsGenerating);
+  const canRetryLastTurn = $derived($chatCanRetryLastTurn);
   const lastError = $derived($chatLastError);
   const debugProviderSettings = $derived($appState.settings.debugProvider);
   const glmProviderSettings = $derived($appState.settings.glmProvider);
@@ -72,8 +75,8 @@
     return chatStore.getAgentTitle(activeAgentId) ?? "New agent";
   });
   const canDeleteAgent = $derived(activeAgentId !== null);
-  const isModeSelectionDisabled = $derived(isGenerating || sending);
-  const isProviderSelectionDisabled = $derived(isGenerating || sending);
+  const isModeSelectionDisabled = $derived(isGenerating || sending || retrying);
+  const isProviderSelectionDisabled = $derived(isGenerating || sending || retrying);
   const compactionNotice = $derived.by(() => {
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
@@ -84,10 +87,14 @@
       isGlmSendBlocked ||
       isGenerating ||
       sending ||
+      retrying ||
       draft.trim().length === 0,
   );
   const composerDisabled = $derived(
-    isBlocked || isDebugSendBlocked || isGlmSendBlocked || isGenerating || sending,
+    isBlocked || isDebugSendBlocked || isGlmSendBlocked || isGenerating || sending || retrying,
+  );
+  const isRetryDisabled = $derived(
+    !canRetryLastTurn || isGenerating || sending || retrying || isBlocked || isDebugSendBlocked || isGlmSendBlocked,
   );
   const generationStatus = $derived.by(() => {
     if (isGenerating) {
@@ -178,7 +185,7 @@
 
   async function submitMessage(): Promise<void> {
     const content = draft.trim();
-    if (!content || sending || isBlocked || isDebugSendBlocked || isGlmSendBlocked || isGenerating) {
+    if (!content || sending || retrying || isBlocked || isDebugSendBlocked || isGlmSendBlocked || isGenerating) {
       return;
     }
 
@@ -191,6 +198,20 @@
       inlineError = result.message;
     }
     sending = false;
+  }
+
+  async function retryLastTurn(): Promise<void> {
+    if (isRetryDisabled) {
+      return;
+    }
+
+    retrying = true;
+    inlineError = "";
+    const result = await retryLastChatTurn();
+    if (!result.ok) {
+      inlineError = result.message;
+    }
+    retrying = false;
   }
 
   async function deleteAgent(): Promise<void> {
@@ -255,7 +276,7 @@
           type="button"
           class="chat-delete-button"
           onclick={() => void deleteAgent()}
-          disabled={isBlocked || isGenerating || sending}
+          disabled={isBlocked || isGenerating || sending || retrying}
         >
           Delete agent
         </button>
@@ -367,7 +388,7 @@
   <div class="chat-composer" role="group" aria-label="Chat composer">
     {#if inlineError}
       <p class="chat-inline-error" role="alert">{inlineError}</p>
-    {:else if lastError && !isGenerating}
+    {:else if lastError && !isGenerating && !retrying}
       <p class="chat-inline-error" role="alert">{lastError.message}</p>
     {/if}
     <textarea
@@ -380,6 +401,16 @@
       disabled={composerDisabled}
     ></textarea>
     <div class="chat-composer-actions">
+      {#if canRetryLastTurn}
+        <button
+          type="button"
+          class="chat-retry-button"
+          onclick={() => void retryLastTurn()}
+          disabled={isRetryDisabled}
+        >
+          {retrying ? "Retrying…" : "Retry"}
+        </button>
+      {/if}
       <button
         type="button"
         class="chat-send-button"
@@ -744,6 +775,27 @@
     color: var(--color-text-primary);
     font-size: 12px;
     line-height: 1;
+  }
+
+  .chat-retry-button {
+    min-height: 26px;
+    padding: 0 var(--space-8);
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, #e06c75 40%, var(--color-border-subtle));
+    background: color-mix(in srgb, #e06c75 9%, var(--color-surface-1));
+    color: var(--color-text-primary);
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .chat-retry-button:hover:not(:disabled) {
+    background: color-mix(in srgb, #e06c75 16%, var(--color-surface-1));
+    cursor: pointer;
+  }
+
+  .chat-retry-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .chat-send-button:hover:not(:disabled) {

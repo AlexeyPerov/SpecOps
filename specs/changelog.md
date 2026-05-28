@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 22:00 (MSK)
+
+- **M6-1 — Retry last turn:** Added `retryLastChatTurn()` to resend the last user message through the current provider without duplicating the user turn. Wired **Retry** in `ChatPanel` when a failed turn exists (disabled while generating). Successful retry clears failure runtime state and appends a system note preserving the previous error. Added retry pipeline unit tests for Debug and GLM paths. Marked M6-1 complete in execution plan.
+
 ## 2026-05-28 21:15 (MSK)
 
 - **M5-3-3 — Milestone validation:** Added `chatM5-3.validation.test.ts` covering M5.3 exit criteria — Debug/GLM access preflight pass/fail, per-agent generation lock, concurrent Debug+GLM sends, streaming finalize, failure retry scaffolding, GLM review mode, provider switch persistence, and workspace access blocks. Documented manual smoke checklist and optional GLM integration env requirements. Ran `npm test` (410 tests) and `npm run check` (clean). Marked M5.3 execution plan complete.

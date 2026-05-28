@@ -12,7 +12,7 @@ import {
 } from "./providers/registry";
 import { createRegistryCapabilityChecker } from "./providers/capabilityChecker";
 import { resetChatProvidersForTests } from "./providers/bootstrap";
-import { sendChatMessage } from "./sendChatMessage";
+import { sendChatMessage, retryLastChatTurn } from "./sendChatMessage";
 import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
@@ -320,5 +320,100 @@ describe("sendChatMessage", () => {
       lastError: { message: "Invalid GLM API key. Check Settings → GLM.", code: "provider_error" },
     });
     expect(chatStore.canRetryLastTurn()).toBe(true);
+  });
+
+  it("retries the last failed turn without duplicating user messages", async () => {
+    appState.updateDebugProviderSettings({
+      ...appState.getSnapshot().settings.debugProvider,
+      failureProbability: 1,
+      failureMessage: "Simulated provider failure",
+    });
+
+    const failedPromise = sendChatMessage("Retry me");
+    await vi.runAllTimersAsync();
+    const failed = await failedPromise;
+
+    expect(failed.ok).toBe(false);
+    expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
+    expect(chatStore.canRetryLastTurn()).toBe(true);
+
+    appState.updateDebugProviderSettings({
+      ...appState.getSnapshot().settings.debugProvider,
+      failureProbability: 0,
+    });
+
+    const retryPromise = retryLastChatTurn();
+    await vi.runAllTimersAsync();
+    const retried = await retryPromise;
+
+    expect(retried.ok).toBe(true);
+    expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
+    expect(chatStore.getMessages().some((message) => message.role === "assistant")).toBe(true);
+    expect(chatStore.getMessages().some((message) => message.content.includes("Previous response failed"))).toBe(
+      true,
+    );
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      isGenerating: false,
+      lastFailedTurnId: null,
+      lastError: null,
+    });
+    expect(chatStore.canRetryLastTurn()).toBe(false);
+  });
+
+  it("returns no_failed_turn when retry runs without a failed response", async () => {
+    const result = await retryLastChatTurn();
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "no_failed_turn",
+      message: "There is no failed response to retry.",
+    });
+  });
+
+  it("retries failed GLM turns successfully", async () => {
+    resetChatProviderRegistryForTests();
+    appState.setGlmApiKey("glm-test-key");
+    const glmFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ choices: [{ message: { content: "Retried GLM response." } }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    registerChatProvider(
+      createGlmChatProvider(
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+        glmFetch as typeof fetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.debugProvider,
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+
+    const failed = await sendChatMessage("Retry GLM");
+    expect(failed.ok).toBe(false);
+    expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
+
+    const retried = await retryLastChatTurn();
+    expect(retried.ok).toBe(true);
+    expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
+    expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
+      "Retried GLM response.",
+    );
+    expect(chatStore.canRetryLastTurn()).toBe(false);
   });
 });

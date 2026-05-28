@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { chatStore, formatCompactionNotice } from "./chatStore";
+import { chatStore, formatCompactionNotice, resetAgentIdCounterForTests } from "./chatStore";
 import type { ChatThreadSnapshot } from "../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
 import {
   deleteAgentPersistence,
-  INTERIM_WORKSPACE_AGENT_ID,
   readAgentThreadFileSnapshot,
+  readWorkspaceAgentsIndexSnapshot,
 } from "../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
@@ -22,6 +22,7 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   return {
     ...actual,
     readAgentThreadFileSnapshot: vi.fn(),
+    readWorkspaceAgentsIndexSnapshot: vi.fn(),
     deleteAgentPersistence: vi.fn(),
   };
 });
@@ -31,6 +32,7 @@ vi.mock("../services/fileSystem", () => ({
 }));
 
 const readAgentThreadFileSnapshotMock = vi.mocked(readAgentThreadFileSnapshot);
+const readWorkspaceAgentsIndexSnapshotMock = vi.mocked(readWorkspaceAgentsIndexSnapshot);
 const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
@@ -39,7 +41,10 @@ describe("chatStore", () => {
     chatStore.reset();
     chatStore.setCapabilityChecker(null);
     setChatRetentionMaxTurnsForTests(undefined);
+    resetAgentIdCounterForTests();
     readAgentThreadFileSnapshotMock.mockReset();
+    readWorkspaceAgentsIndexSnapshotMock.mockReset();
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({ version: 1, agents: [] });
     deleteAgentPersistenceMock.mockReset();
     deleteAgentPersistenceMock.mockResolvedValue(undefined);
     ensureWorkspaceReadAccessMock.mockReset();
@@ -58,8 +63,8 @@ describe("chatStore", () => {
     expect(chatStore.hasThread()).toBe(true);
     expect(chatStore.isEmpty()).toBe(false);
     expect(chatStore.getMetadata()).toMatchObject({
-      agentId: INTERIM_WORKSPACE_AGENT_ID,
-      threadId: INTERIM_WORKSPACE_AGENT_ID,
+      agentId: "agent-1",
+      threadId: "agent-1",
       mode: "ask",
       provider: "glm",
       createdAt: "2026-05-25T00:00:00.000Z",
@@ -92,8 +97,8 @@ describe("chatStore", () => {
     expect(metadataUpdated).toBe(true);
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["m-1", "m-2"]);
     expect(chatStore.getMetadata()).toEqual({
-      agentId: INTERIM_WORKSPACE_AGENT_ID,
-      threadId: INTERIM_WORKSPACE_AGENT_ID,
+      agentId: "agent-1",
+      threadId: "agent-1",
       mode: "review",
       provider: "cursor",
       createdAt: "2026-05-25T00:00:00.000Z",
@@ -110,8 +115,8 @@ describe("chatStore", () => {
     expect(updated).toBe(true);
     expect(chatStore.getMessages()).toEqual([]);
     expect(chatStore.getMetadata()).toEqual({
-      agentId: INTERIM_WORKSPACE_AGENT_ID,
-      threadId: INTERIM_WORKSPACE_AGENT_ID,
+      agentId: "agent-1",
+      threadId: "agent-1",
       mode: "review",
       provider: "glm",
       createdAt: "2026-05-26T00:00:00.000Z",
@@ -167,11 +172,11 @@ describe("chatStore", () => {
     expect(chatStore.getMetadata()?.lastCompactedAt).toBeDefined();
   });
 
-  it("switches active thread state by workspace key", async () => {
-    const workspaceA: ChatThreadSnapshot = {
+  it("switches active thread state when changing active agent", () => {
+    const threadA: ChatThreadSnapshot = {
       metadata: {
-        agentId: INTERIM_WORKSPACE_AGENT_ID,
-        threadId: INTERIM_WORKSPACE_AGENT_ID,
+        agentId: "agent-a",
+        threadId: "agent-a",
         mode: "ask",
         provider: "glm",
         createdAt: "2026-05-25T00:00:00.000Z",
@@ -187,10 +192,10 @@ describe("chatStore", () => {
       ],
     };
 
-    const workspaceB: ChatThreadSnapshot = {
+    const threadB: ChatThreadSnapshot = {
       metadata: {
-        agentId: INTERIM_WORKSPACE_AGENT_ID,
-        threadId: INTERIM_WORKSPACE_AGENT_ID,
+        agentId: "agent-b",
+        threadId: "agent-b",
         mode: "review",
         provider: "cursor",
         createdAt: "2026-05-25T00:00:03.000Z",
@@ -206,25 +211,50 @@ describe("chatStore", () => {
       ],
     };
 
-    readAgentThreadFileSnapshotMock
-      .mockResolvedValueOnce(workspaceA)
-      .mockResolvedValueOnce(workspaceB)
-      .mockResolvedValueOnce(workspaceA);
-
     chatStore.setActiveWorkspaceRoot("/work/a");
-    await chatStore.loadWorkspaceThread("/work/a");
+    chatStore.setAgentThread("agent-a", threadA);
+    chatStore.setAgentThread("agent-b", threadB);
+    chatStore.setActiveAgentId("agent-a");
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["a-1"]);
     expect(chatStore.getMetadata()?.mode).toBe("ask");
 
-    chatStore.setActiveWorkspaceRoot("/work/b");
-    await chatStore.loadWorkspaceThread("/work/b");
+    chatStore.setActiveAgentId("agent-b");
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["b-1"]);
     expect(chatStore.getMetadata()?.mode).toBe("review");
+    expect(chatStore.getMetadata()?.provider).toBe("cursor");
+  });
+
+  it("loads workspace agents from index and thread files", async () => {
+    const threadA: ChatThreadSnapshot = {
+      metadata: {
+        agentId: "agent-a",
+        threadId: "agent-a",
+        mode: "ask",
+        provider: "glm",
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+      },
+      messages: [
+        {
+          id: "a-1",
+          role: "user",
+          content: "A",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        },
+      ],
+    };
+
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      agents: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+    });
+    readAgentThreadFileSnapshotMock.mockResolvedValue(threadA);
 
     chatStore.setActiveWorkspaceRoot("/work/a");
-    await chatStore.loadWorkspaceThread("/work/a");
-    expect(chatStore.getMessages().map((message) => message.id)).toEqual(["a-1"]);
-    expect(chatStore.getMetadata()?.provider).toBe("glm");
+    await chatStore.loadWorkspaceAgents("/work/a");
+
+    expect(chatStore.getActiveAgentId()).toBe("agent-a");
+    expect(chatStore.getMessages()).toEqual(threadA.messages);
   });
 
   it("shows empty state when workspace has no persisted thread", async () => {
@@ -443,25 +473,22 @@ describe("chatStore", () => {
     expect(chatStore.hasThread()).toBe(false);
     expect(chatStore.isEmpty()).toBe(true);
     expect(chatStore.getMessages()).toEqual([]);
-    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", INTERIM_WORKSPACE_AGENT_ID);
+    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", "agent-1");
   });
 
-  it("clear history is idempotent for an already empty workspace thread", async () => {
+  it("clear history returns false when no active agent exists", async () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
 
-    await expect(chatStore.clearActiveWorkspaceChatHistory()).resolves.toBe(true);
-    await expect(chatStore.clearActiveWorkspaceChatHistory()).resolves.toBe(true);
-
-    expect(deleteAgentPersistenceMock).toHaveBeenCalledTimes(2);
-    expect(deleteAgentPersistenceMock).toHaveBeenNthCalledWith(1, "/work/a", INTERIM_WORKSPACE_AGENT_ID);
-    expect(deleteAgentPersistenceMock).toHaveBeenNthCalledWith(2, "/work/a", INTERIM_WORKSPACE_AGENT_ID);
+    await expect(chatStore.clearActiveWorkspaceChatHistory()).resolves.toBe(false);
+    expect(deleteAgentPersistenceMock).not.toHaveBeenCalled();
   });
 
-  it("clear history affects only the active workspace thread", async () => {
-    chatStore.setWorkspaceThread("/work/a", {
+  it("clear history affects only the active agent", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.setAgentThread("agent-a", {
       metadata: {
-        agentId: INTERIM_WORKSPACE_AGENT_ID,
-        threadId: INTERIM_WORKSPACE_AGENT_ID,
+        agentId: "agent-a",
+        threadId: "agent-a",
         mode: "ask",
         provider: "glm",
         createdAt: "2026-05-26T00:00:00.000Z",
@@ -476,10 +503,10 @@ describe("chatStore", () => {
         },
       ],
     });
-    chatStore.setWorkspaceThread("/work/b", {
+    chatStore.setAgentThread("agent-b", {
       metadata: {
-        agentId: INTERIM_WORKSPACE_AGENT_ID,
-        threadId: INTERIM_WORKSPACE_AGENT_ID,
+        agentId: "agent-b",
+        threadId: "agent-b",
         mode: "review",
         provider: "cursor",
         createdAt: "2026-05-26T00:00:01.000Z",
@@ -494,14 +521,49 @@ describe("chatStore", () => {
         },
       ],
     });
-    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.setActiveAgentId("agent-a");
 
     await chatStore.clearActiveWorkspaceChatHistory();
 
-    expect(chatStore.getSnapshot().threadsByWorkspace["/work/a"]).toBeNull();
-    expect(chatStore.getSnapshot().threadsByWorkspace["/work/b"]?.messages[0]?.content).toBe("B");
-    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", INTERIM_WORKSPACE_AGENT_ID);
-    expect(deleteAgentPersistenceMock).not.toHaveBeenCalledWith("/work/b", INTERIM_WORKSPACE_AGENT_ID);
+    const workspace = chatStore.getWorkspaceAgentsState("/work/a");
+    expect(workspace?.threadsByAgentId["agent-a"]).toBeUndefined();
+    expect(workspace?.threadsByAgentId["agent-b"]?.messages[0]?.content).toBe("B");
+    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", "agent-a");
+    expect(deleteAgentPersistenceMock).not.toHaveBeenCalledWith("/work/a", "agent-b");
+  });
+
+  it("allows parallel generation on two agents in the same workspace", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.updateThreadMetadata({ mode: "ask", provider: "glm" }, "2026-05-26T00:00:00.000Z", "agent-a");
+    chatStore.updateThreadMetadata({ mode: "ask", provider: "glm" }, "2026-05-26T00:00:00.000Z", "agent-b");
+
+    expect(chatStore.beginTurn("turn-a", "agent-a")).toBe(true);
+    expect(chatStore.beginTurn("turn-b", "agent-b")).toBe(true);
+    expect(chatStore.getRuntimeState("agent-a").isGenerating).toBe(true);
+    expect(chatStore.getRuntimeState("agent-b").isGenerating).toBe(true);
+    expect(chatStore.beginTurn("turn-a-2", "agent-a")).toBe(false);
+    expect(chatStore.beginTurn("turn-b-2", "agent-b")).toBe(false);
+  });
+
+  it("deleteAgent clears thread, runtime, and index entry", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.setActiveAgentId("agent-a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+    chatStore.beginTurn("turn-1", "agent-a");
+    chatStore.failTurn({ message: "failed" }, "turn-1", "agent-a");
+
+    await chatStore.deleteAgent("agent-a");
+
+    const workspace = chatStore.getWorkspaceAgentsState("/work/a");
+    expect(workspace?.threadsByAgentId["agent-a"]).toBeUndefined();
+    expect(workspace?.runtimeByAgentId["agent-a"]).toBeUndefined();
+    expect(workspace?.agentIndex.some((entry) => entry.id === "agent-a")).toBe(false);
+    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", "agent-a");
   });
 
   it("tracks turn lifecycle through begin, complete, and fail transitions", () => {
@@ -538,24 +600,24 @@ describe("chatStore", () => {
     expect(chatStore.canRetryLastTurn()).toBe(false);
   });
 
-  it("keeps failed turn metadata scoped per workspace", () => {
+  it("keeps failed turn metadata scoped per agent", () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.beginTurn("turn-a");
-    chatStore.failTurn({ message: "failed in A" });
+    chatStore.updateThreadMetadata({ mode: "ask" }, "2026-05-26T00:00:00.000Z", "agent-a");
+    chatStore.updateThreadMetadata({ mode: "ask" }, "2026-05-26T00:00:00.000Z", "agent-b");
+    chatStore.beginTurn("turn-a", "agent-a");
+    chatStore.failTurn({ message: "failed in A" }, "turn-a", "agent-a");
 
-    chatStore.setActiveWorkspaceRoot("/work/b");
-    expect(chatStore.getRuntimeState()).toMatchObject({
+    expect(chatStore.getRuntimeState("agent-b")).toMatchObject({
       isGenerating: false,
       lastFailedTurnId: null,
       lastError: null,
     });
 
-    chatStore.setActiveWorkspaceRoot("/work/a");
-    expect(chatStore.getRuntimeState()).toMatchObject({
+    expect(chatStore.getRuntimeState("agent-a")).toMatchObject({
       lastFailedTurnId: "turn-a",
       lastError: { message: "failed in A" },
     });
-    expect(chatStore.canRetryLastTurn()).toBe(true);
+    expect(chatStore.canRetryLastTurn("agent-a")).toBe(true);
   });
 
   it("clears retry runtime state when chat history is cleared", async () => {

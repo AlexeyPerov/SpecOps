@@ -8,15 +8,13 @@ import { getChatProvider } from "./providers/registry";
 import type { ProviderSendRequest } from "./providers/types";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
-import {
-  INTERIM_WORKSPACE_AGENT_ID,
-  scheduleAgentThreadFilePersistence,
-} from "../services/chatPersistence";
+import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 import { isChatProviderError, streamProviderMessage } from "./chatSend";
 
 export type SendChatMessageFailureReason =
   | "empty"
   | "no_workspace"
+  | "no_agent"
   | "generating"
   | "preflight"
   | "debug_disabled"
@@ -25,7 +23,7 @@ export type SendChatMessageFailureReason =
   | "provider_error";
 
 export type SendChatMessageResult =
-  | { ok: true; turnId: string; assistantMessageId: string }
+  | { ok: true; turnId: string; assistantMessageId: string; agentId: string }
   | { ok: false; reason: SendChatMessageFailureReason; message: string };
 
 function createUserMessage(content: string): ChatMessage {
@@ -48,26 +46,26 @@ function createAssistantPlaceholder(turnId: string): ChatMessage {
   };
 }
 
-function persistActiveThreadOnce(): void {
+function persistAgentThreadOnce(agentId: string): void {
   const root = chatStore.getActiveWorkspaceRoot();
-  if (!root) {
-    return;
-  }
-  const thread = chatStore.getActiveThreadSnapshot();
+  const thread = chatStore.getActiveThreadSnapshot(agentId);
   if (!root || !thread) {
     return;
   }
-  scheduleAgentThreadFilePersistence(root, INTERIM_WORKSPACE_AGENT_ID, {
+  scheduleAgentThreadFilePersistence(root, agentId, {
     version: 1,
     thread,
   });
 }
 
-function abortTurn(): void {
-  chatStore.completeTurn();
+function abortTurn(agentId: string): void {
+  chatStore.completeTurn(agentId);
 }
 
-export async function sendChatMessage(content: string): Promise<SendChatMessageResult> {
+export async function sendChatMessage(
+  content: string,
+  agentId?: string,
+): Promise<SendChatMessageResult> {
   const trimmed = content.trim();
   if (!trimmed) {
     return { ok: false, reason: "empty", message: "Message cannot be empty." };
@@ -78,16 +76,8 @@ export async function sendChatMessage(content: string): Promise<SendChatMessageR
     return { ok: false, reason: "no_workspace", message: "Open a workspace to send chat messages." };
   }
 
-  if (chatStore.getRuntimeState().isGenerating) {
-    return {
-      ok: false,
-      reason: "generating",
-      message: "Wait for the current response to finish before sending another message.",
-    };
-  }
-
   const turnId = `turn-${Date.now()}`;
-  if (!chatStore.beginTurn(turnId)) {
+  if (!chatStore.beginTurn(turnId, agentId)) {
     return {
       ok: false,
       reason: "generating",
@@ -95,9 +85,14 @@ export async function sendChatMessage(content: string): Promise<SendChatMessageR
     };
   }
 
+  const activeAgentId = agentId ?? chatStore.getActiveAgentId();
+  if (!activeAgentId) {
+    return { ok: false, reason: "no_agent", message: "Could not resolve an active agent." };
+  }
+
   const accessState = await chatStore.runAccessPreflight();
   if (accessState.status !== "ready") {
-    abortTurn();
+    abortTurn(activeAgentId);
     return {
       ok: false,
       reason: "preflight",
@@ -105,10 +100,10 @@ export async function sendChatMessage(content: string): Promise<SendChatMessageR
     };
   }
 
-  const providerId = chatStore.getActiveChatProvider();
+  const providerId = chatStore.getActiveChatProvider(activeAgentId);
   const debugSettings = appState.getSnapshot().settings.debugProvider;
   if (isDebugProviderSendBlocked(providerId, debugSettings)) {
-    abortTurn();
+    abortTurn(activeAgentId);
     return {
       ok: false,
       reason: "debug_disabled",
@@ -118,7 +113,7 @@ export async function sendChatMessage(content: string): Promise<SendChatMessageR
 
   const provider = getChatProvider(providerId);
   if (!provider) {
-    abortTurn();
+    abortTurn(activeAgentId);
     return {
       ok: false,
       reason: "provider_unavailable",
@@ -127,8 +122,8 @@ export async function sendChatMessage(content: string): Promise<SendChatMessageR
   }
 
   const userMessage = createUserMessage(trimmed);
-  if (!chatStore.appendMessage(userMessage)) {
-    abortTurn();
+  if (!chatStore.appendMessage(userMessage, { agentId: activeAgentId })) {
+    abortTurn(activeAgentId);
     return {
       ok: false,
       reason: "append_failed",
@@ -136,9 +131,9 @@ export async function sendChatMessage(content: string): Promise<SendChatMessageR
     };
   }
 
-  const threadAfterUser = chatStore.getActiveThreadSnapshot();
+  const threadAfterUser = chatStore.getActiveThreadSnapshot(activeAgentId);
   if (!threadAfterUser) {
-    abortTurn();
+    abortTurn(activeAgentId);
     return {
       ok: false,
       reason: "append_failed",
@@ -153,26 +148,26 @@ export async function sendChatMessage(content: string): Promise<SendChatMessageR
   };
 
   const assistantMessage = createAssistantPlaceholder(turnId);
-  chatStore.appendMessage(assistantMessage, { skipCompaction: true });
+  chatStore.appendMessage(assistantMessage, { agentId: activeAgentId, skipCompaction: true });
 
   try {
     const finalContent = await streamProviderMessage(provider, request, (_delta, accumulated) => {
-      chatStore.updateMessageContent(assistantMessage.id, accumulated);
+      chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId);
     });
-    chatStore.updateMessageContent(assistantMessage.id, finalContent);
-    chatStore.compactActiveThread();
-    chatStore.completeTurn();
-    persistActiveThreadOnce();
-    return { ok: true, turnId, assistantMessageId: assistantMessage.id };
+    chatStore.updateMessageContent(assistantMessage.id, finalContent, activeAgentId);
+    chatStore.compactActiveThread(activeAgentId);
+    chatStore.completeTurn(activeAgentId);
+    persistAgentThreadOnce(activeAgentId);
+    return { ok: true, turnId, assistantMessageId: assistantMessage.id, agentId: activeAgentId };
   } catch (error) {
-    chatStore.removeMessage(assistantMessage.id);
+    chatStore.removeMessage(assistantMessage.id, activeAgentId);
     const message = isChatProviderError(error)
       ? error.userMessage
       : error instanceof Error
         ? error.message
         : "Failed to generate a response.";
-    chatStore.failTurn({ message, code: "provider_error" }, turnId);
-    persistActiveThreadOnce();
+    chatStore.failTurn({ message, code: "provider_error" }, turnId, activeAgentId);
+    persistAgentThreadOnce(activeAgentId);
     return { ok: false, reason: "provider_error", message };
   }
 }

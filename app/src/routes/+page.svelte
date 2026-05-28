@@ -72,11 +72,7 @@
   import { isFileTab, tabDocumentId } from "../lib/domain/contracts";
   import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
-  import {
-    INTERIM_WORKSPACE_AGENT_ID,
-    readAgentThreadFileSnapshot,
-    scheduleAgentThreadFilePersistence,
-  } from "../lib/services/chatPersistence";
+  import { scheduleAgentThreadFilePersistence } from "../lib/services/chatPersistence";
   import {
     ensureWorkspaceReadAccess,
     probeWorkspaceReadAccess,
@@ -679,11 +675,7 @@
       const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
       void ensureWorkspaceReadAccess(normalizedRoot);
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
-      const thread = await readAgentThreadFileSnapshot(
-        normalizedRoot,
-        INTERIM_WORKSPACE_AGENT_ID,
-      );
-      chatStore.setWorkspaceThread(normalizedRoot, thread);
+      await chatStore.loadWorkspaceAgents(normalizedRoot);
       if (consoleTabSelection === "chat") {
         void chatStore.runAccessPreflight();
       }
@@ -952,21 +944,19 @@
         lastChatWorkspaceRoot = normalizedWorkspaceRoot;
         void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
         chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
-        void readAgentThreadFileSnapshot(normalizedWorkspaceRoot, INTERIM_WORKSPACE_AGENT_ID)
-          .then((thread) => {
+        void chatStore.loadWorkspaceAgents(normalizedWorkspaceRoot)
+          .then(() => {
             if (!activeWorkspaceRoot) {
               return;
             }
             if (normalizePathSync(activeWorkspaceRoot) !== normalizedWorkspaceRoot) {
               return;
             }
-            chatStore.setWorkspaceThread(normalizedWorkspaceRoot, thread);
             if (consoleTabSelection === "chat") {
               void chatStore.runAccessPreflight();
             }
           })
           .catch(() => {
-            chatStore.setWorkspaceThread(normalizedWorkspaceRoot, null);
             if (consoleTabSelection === "chat") {
               void chatStore.runAccessPreflight();
             }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 15:56 (MSK)
+
+- **M5-2-2 — chatStore per-agent refactor:** Refactored `chatStore` to `threadsByAgentId`, `runtimeByAgentId`, `activeAgentId`, and in-memory workspace agent index per root. Mutations, turn lifecycle, provider switch, and `deleteAgent` target agent id; generation lock is per agent. `sendChatMessage` accepts optional `agentId`. Removed `INTERIM_WORKSPACE_AGENT_ID` bridge. Added unit tests for parallel runtime, active-agent switching, and delete agent.
+
 ## 2026-05-28 15:25 (MSK)
 
 - **M5-2-1 — Multi-agent contracts and persistence:** Added per-agent types (`AgentIndexEntry`, `WorkspaceAgentsIndexSnapshot`, `ChatAgentThreadFileSnapshot`), `agentId`/`threadId` on `ChatThreadMetadata`, and `TabState` discriminated union (`file` | `agent`). Replaced single workspace chat file with `chat/{hash}/index.json` plus per-agent `{agentId}.json` thread files. Added `chatAgents.ts` helpers (title derivation, date grouping). Updated persistence callers to use interim single-agent bridge until M5-2-2. Unit tests for title truncation, date grouping, index read/write, and per-agent thread read/write.

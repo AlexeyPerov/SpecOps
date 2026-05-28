@@ -27,12 +27,6 @@ import { ensureSpecOpsDataDir } from "./appDataDir";
  */
 export const CHAT_RETENTION_MAX_TURNS = 50;
 
-/**
- * Temporary single-agent bridge until M5-2-2 refactors chatStore to per-agent threads.
- * Existing console chat callers persist under this fixed agent id.
- */
-export const INTERIM_WORKSPACE_AGENT_ID = "agent-interim-1";
-
 export function countConversationTurns(messages: readonly ChatMessage[]): number {
   return messages.reduce((count, message) => count + (message.role === "user" ? 1 : 0), 0);
 }

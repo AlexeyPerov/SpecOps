@@ -11,10 +11,7 @@ import {
 import { createRegistryCapabilityChecker } from "./providers/capabilityChecker";
 import { resetChatProvidersForTests } from "./providers/bootstrap";
 import { sendChatMessage } from "./sendChatMessage";
-import {
-  INTERIM_WORKSPACE_AGENT_ID,
-  scheduleAgentThreadFilePersistence,
-} from "../services/chatPersistence";
+import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
@@ -124,7 +121,7 @@ describe("sendChatMessage", () => {
     expect(second).toEqual({
       ok: false,
       reason: "generating",
-      message: "Wait for the current response to finish before sending another message.",
+      message: "Another response is already in progress.",
     });
 
     await vi.runAllTimersAsync();

@@ -7,8 +7,8 @@ import {
 } from "../services/chatRetention";
 import {
   deleteAgentPersistence,
-  INTERIM_WORKSPACE_AGENT_ID,
   readAgentThreadFileSnapshot,
+  readWorkspaceAgentsIndexSnapshot,
 } from "../services/chatPersistence";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
@@ -16,6 +16,7 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   return {
     ...actual,
     readAgentThreadFileSnapshot: vi.fn(),
+    readWorkspaceAgentsIndexSnapshot: vi.fn(),
     deleteAgentPersistence: vi.fn(),
   };
 });
@@ -135,14 +136,15 @@ describe("M4 milestone validation", () => {
 
     expect(chatStore.hasThread()).toBe(false);
     expect(chatStore.isEmpty()).toBe(true);
-    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", INTERIM_WORKSPACE_AGENT_ID);
+    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", "agent-1");
   });
 
   it("isolates clear history to the active workspace", async () => {
-    chatStore.setWorkspaceThread("/work/a", {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.setAgentThread("agent-a", {
       metadata: {
-        agentId: INTERIM_WORKSPACE_AGENT_ID,
-        threadId: INTERIM_WORKSPACE_AGENT_ID,
+        agentId: "agent-a",
+        threadId: "agent-a",
         mode: "ask",
         provider: "glm",
         createdAt: "2026-05-26T00:00:00.000Z",
@@ -158,10 +160,10 @@ describe("M4 milestone validation", () => {
         },
       ],
     });
-    chatStore.setWorkspaceThread("/work/b", {
+    chatStore.setAgentThread("agent-b", {
       metadata: {
-        agentId: INTERIM_WORKSPACE_AGENT_ID,
-        threadId: INTERIM_WORKSPACE_AGENT_ID,
+        agentId: "agent-b",
+        threadId: "agent-b",
         mode: "review",
         provider: "cursor",
         createdAt: "2026-05-26T00:00:01.000Z",
@@ -177,14 +179,13 @@ describe("M4 milestone validation", () => {
         },
       ],
     });
-    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.setActiveAgentId("agent-a");
 
     await chatStore.clearActiveWorkspaceChatHistory();
 
-    expect(chatStore.getSnapshot().threadsByWorkspace["/work/a"]).toBeNull();
-    expect(chatStore.getSnapshot().threadsByWorkspace["/work/b"]?.metadata.compactedMessageCount).toBe(
-      2,
-    );
+    const workspace = chatStore.getWorkspaceAgentsState("/work/a");
+    expect(workspace?.threadsByAgentId["agent-a"]).toBeUndefined();
+    expect(workspace?.threadsByAgentId["agent-b"]?.metadata.compactedMessageCount).toBe(2);
   });
 
   it("provides retry scaffolding without provider coupling", () => {

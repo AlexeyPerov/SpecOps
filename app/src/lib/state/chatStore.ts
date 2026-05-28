@@ -1,5 +1,6 @@
 import { derived, writable } from "svelte/store";
 import type {
+  AgentIndexEntry,
   ChatMessage,
   ChatModeId,
   ChatProviderId,
@@ -14,18 +15,25 @@ import {
 } from "../ai/capabilities";
 import {
   deleteAgentPersistence,
-  INTERIM_WORKSPACE_AGENT_ID,
   readAgentThreadFileSnapshot,
+  readWorkspaceAgentsIndexSnapshot,
 } from "../services/chatPersistence";
+import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
 import { compactChatThread } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { formatProviderSwitchNotice } from "../ai/providers/selection";
 
+export interface WorkspaceAgentsState {
+  activeAgentId: string | null;
+  agentIndex: AgentIndexEntry[];
+  threadsByAgentId: Record<string, ChatThreadSnapshot | null>;
+  runtimeByAgentId: Record<string, ChatThreadRuntimeState>;
+}
+
 interface ChatStoreState {
   activeWorkspaceRoot: string | null;
-  threadsByWorkspace: Record<string, ChatThreadSnapshot | null>;
+  workspaces: Record<string, WorkspaceAgentsState>;
   accessByWorkspace: Record<string, ChatAccessState>;
-  runtimeByWorkspace: Record<string, ChatThreadRuntimeState>;
 }
 
 export interface ChatTurnError {
@@ -33,7 +41,7 @@ export interface ChatTurnError {
   code?: string;
 }
 
-/** Ephemeral per-workspace chat runtime; not persisted to disk. */
+/** Ephemeral per-agent chat runtime; not persisted to disk. */
 export interface ChatThreadRuntimeState {
   isGenerating: boolean;
   lastFailedTurnId: string | null;
@@ -58,16 +66,33 @@ const DEFAULT_CHAT_MODE: ChatModeId = "ask";
 const DEFAULT_CHAT_PROVIDER: ChatProviderId = "glm";
 
 let defaultChatProviderResolver: () => ChatProviderId = () => DEFAULT_CHAT_PROVIDER;
+let agentIdCounter = 0;
 
 const WORKSPACE_ACCESS_LOSS_MESSAGE =
   "Workspace file access was lost. AI cannot read files until access is restored.";
 
+const initialWorkspaceAgentsState = (): WorkspaceAgentsState => ({
+  activeAgentId: null,
+  agentIndex: [],
+  threadsByAgentId: {},
+  runtimeByAgentId: {},
+});
+
 const initialState: ChatStoreState = {
   activeWorkspaceRoot: null,
-  threadsByWorkspace: {},
+  workspaces: {},
   accessByWorkspace: {},
-  runtimeByWorkspace: {},
 };
+
+/** Clears agent id counter between unit tests. */
+export function resetAgentIdCounterForTests(): void {
+  agentIdCounter = 0;
+}
+
+export function createAgentId(): string {
+  agentIdCounter += 1;
+  return `agent-${agentIdCounter}`;
+}
 
 function defaultRuntimeState(): ChatThreadRuntimeState {
   return {
@@ -76,13 +101,6 @@ function defaultRuntimeState(): ChatThreadRuntimeState {
     lastError: null,
     activeTurnId: null,
   };
-}
-
-function activeRuntime(state: ChatStoreState): ChatThreadRuntimeState {
-  if (!state.activeWorkspaceRoot) {
-    return defaultRuntimeState();
-  }
-  return state.runtimeByWorkspace[state.activeWorkspaceRoot] ?? defaultRuntimeState();
 }
 
 function defaultUnknownAccessState(message: string): ChatAccessState {
@@ -122,17 +140,80 @@ function cloneThread(thread: ChatThreadSnapshot | null): ChatThreadSnapshot | nu
   };
 }
 
-function activeThread(state: ChatStoreState): ChatThreadSnapshot | null {
-  if (!state.activeWorkspaceRoot) {
+function workspaceState(state: ChatStoreState, root: string | null): WorkspaceAgentsState | null {
+  if (!root) {
     return null;
   }
-  return state.threadsByWorkspace[state.activeWorkspaceRoot] ?? null;
+  return state.workspaces[root] ?? null;
 }
 
-function createThreadMetadata(
-  agentId: string,
-  createdAt: string,
-): ChatThreadMetadata {
+function getOrCreateWorkspaceState(
+  state: ChatStoreState,
+  root: string,
+): { nextState: ChatStoreState; workspace: WorkspaceAgentsState } {
+  const existing = state.workspaces[root];
+  if (existing) {
+    return { nextState: state, workspace: existing };
+  }
+  const workspace = initialWorkspaceAgentsState();
+  return {
+    nextState: {
+      ...state,
+      workspaces: {
+        ...state.workspaces,
+        [root]: workspace,
+      },
+    },
+    workspace,
+  };
+}
+
+function patchWorkspaceState(
+  state: ChatStoreState,
+  root: string,
+  patch: WorkspaceAgentsState,
+): ChatStoreState {
+  return {
+    ...state,
+    workspaces: {
+      ...state.workspaces,
+      [root]: patch,
+    },
+  };
+}
+
+function activeAgentId(state: ChatStoreState): string | null {
+  return workspaceState(state, state.activeWorkspaceRoot)?.activeAgentId ?? null;
+}
+
+function threadForAgent(
+  state: ChatStoreState,
+  agentId: string | null,
+): ChatThreadSnapshot | null {
+  const root = state.activeWorkspaceRoot;
+  if (!root || !agentId) {
+    return null;
+  }
+  return state.workspaces[root]?.threadsByAgentId[agentId] ?? null;
+}
+
+function activeThread(state: ChatStoreState): ChatThreadSnapshot | null {
+  return threadForAgent(state, activeAgentId(state));
+}
+
+function runtimeForAgent(state: ChatStoreState, agentId: string | null): ChatThreadRuntimeState {
+  const root = state.activeWorkspaceRoot;
+  if (!root || !agentId) {
+    return defaultRuntimeState();
+  }
+  return state.workspaces[root]?.runtimeByAgentId[agentId] ?? defaultRuntimeState();
+}
+
+function activeRuntime(state: ChatStoreState): ChatThreadRuntimeState {
+  return runtimeForAgent(state, activeAgentId(state));
+}
+
+function createThreadMetadata(agentId: string, createdAt: string): ChatThreadMetadata {
   return {
     agentId,
     threadId: agentId,
@@ -155,6 +236,50 @@ function applyMetadataPatch(
   };
 }
 
+function createDraftAgentEntry(agentId: string, lastUsedAt: string): AgentIndexEntry {
+  return {
+    id: agentId,
+    title: DRAFT_AGENT_TITLE,
+    lastUsedAt,
+    isDraft: true,
+  };
+}
+
+function ensureActiveAgent(
+  state: ChatStoreState,
+): { state: ChatStoreState; workspace: WorkspaceAgentsState; agentId: string } | null {
+  const root = state.activeWorkspaceRoot;
+  if (!root) {
+    return null;
+  }
+
+  const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
+  if (workspace.activeAgentId) {
+    return { state: nextState, workspace, agentId: workspace.activeAgentId };
+  }
+
+  const agentId = createAgentId();
+  const lastUsedAt = new Date().toISOString();
+  const nextWorkspace: WorkspaceAgentsState = {
+    ...workspace,
+    activeAgentId: agentId,
+    agentIndex: [...workspace.agentIndex, createDraftAgentEntry(agentId, lastUsedAt)],
+  };
+
+  return {
+    state: patchWorkspaceState(nextState, root, nextWorkspace),
+    workspace: nextWorkspace,
+    agentId,
+  };
+}
+
+function resolveTargetAgentId(state: ChatStoreState, agentId?: string): string | null {
+  if (agentId) {
+    return agentId;
+  }
+  return activeAgentId(state);
+}
+
 function createChatStore() {
   const { subscribe, set, update } = writable<ChatStoreState>(initialState);
   let capabilityChecker: CapabilityChecker | null = null;
@@ -169,10 +294,14 @@ function createChatStore() {
     }));
   }
 
-  function appendWorkspaceAccessLossMessage(rootPath: string): void {
+  function appendAgentAccessLossMessage(rootPath: string, agentId: string): void {
     const checkedAt = new Date().toISOString();
     update((state) => {
-      const thread = state.threadsByWorkspace[rootPath];
+      const workspace = state.workspaces[rootPath];
+      if (!workspace) {
+        return state;
+      }
+      const thread = workspace.threadsByAgentId[agentId];
       if (!thread || thread.messages.length === 0) {
         return state;
       }
@@ -200,13 +329,13 @@ function createChatStore() {
         ...nextThread.metadata,
         updatedAt: checkedAt,
       };
-      return {
-        ...state,
-        threadsByWorkspace: {
-          ...state.threadsByWorkspace,
-          [rootPath]: nextThread,
+      return patchWorkspaceState(state, rootPath, {
+        ...workspace,
+        threadsByAgentId: {
+          ...workspace.threadsByAgentId,
+          [agentId]: nextThread,
         },
-      };
+      });
     });
   }
 
@@ -214,13 +343,22 @@ function createChatStore() {
     rootPath: string,
     nextState: ChatAccessState,
     previousState: ChatAccessState | undefined,
+    snapshot: ChatStoreState,
   ): ChatAccessState {
     if (
       previousState?.status === "ready" &&
       nextState.status === "blocked" &&
       nextState.reason === WorkspaceAccessReason.WorkspacePathInaccessible
     ) {
-      appendWorkspaceAccessLossMessage(rootPath);
+      const workspace = snapshot.workspaces[rootPath];
+      const agentsWithThreads = workspace
+        ? Object.keys(workspace.threadsByAgentId).filter(
+            (agentId) => (workspace.threadsByAgentId[agentId]?.messages.length ?? 0) > 0,
+          )
+        : [];
+      for (const agentId of agentsWithThreads) {
+        appendAgentAccessLossMessage(rootPath, agentId);
+      }
     }
     setWorkspaceAccessState(rootPath, nextState);
     return nextState;
@@ -230,7 +368,8 @@ function createChatStore() {
     return capabilityChecker ?? stubCapabilityChecker;
   }
 
-  function updateActiveRuntime(
+  function updateAgentRuntime(
+    agentId: string,
     updater: (runtime: ChatThreadRuntimeState) => ChatThreadRuntimeState,
   ): boolean {
     let updated = false;
@@ -239,15 +378,16 @@ function createChatStore() {
       if (!root) {
         return state;
       }
-      const current = state.runtimeByWorkspace[root] ?? defaultRuntimeState();
+      const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
+      const current = workspace.runtimeByAgentId[agentId] ?? defaultRuntimeState();
       updated = true;
-      return {
-        ...state,
-        runtimeByWorkspace: {
-          ...state.runtimeByWorkspace,
-          [root]: updater(current),
+      return patchWorkspaceState(nextState, root, {
+        ...workspace,
+        runtimeByAgentId: {
+          ...workspace.runtimeByAgentId,
+          [agentId]: updater(current),
         },
-      };
+      });
     });
     return updated;
   }
@@ -256,6 +396,7 @@ function createChatStore() {
     subscribe,
     reset() {
       set(initialState);
+      resetAgentIdCounterForTests();
     },
     getSnapshot(): ChatStoreState {
       let snapshot = initialState;
@@ -276,29 +417,134 @@ function createChatStore() {
         };
       });
     },
+    setActiveAgentId(agentId: string | null): void {
+      update((state) => {
+        const root = state.activeWorkspaceRoot;
+        if (!root) {
+          return state;
+        }
+        const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
+        if (workspace.activeAgentId === agentId) {
+          return nextState;
+        }
+        return patchWorkspaceState(nextState, root, {
+          ...workspace,
+          activeAgentId: agentId,
+        });
+      });
+    },
+    getActiveAgentId(): string | null {
+      return activeAgentId(this.getSnapshot());
+    },
+    getAgentIndex(): AgentIndexEntry[] {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
+        return [];
+      }
+      return [...(this.getSnapshot().workspaces[root]?.agentIndex ?? [])];
+    },
+    getWorkspaceAgentsState(root: string): WorkspaceAgentsState | null {
+      const workspace = this.getSnapshot().workspaces[root];
+      if (!workspace) {
+        return null;
+      }
+      return {
+        activeAgentId: workspace.activeAgentId,
+        agentIndex: [...workspace.agentIndex],
+        threadsByAgentId: { ...workspace.threadsByAgentId },
+        runtimeByAgentId: { ...workspace.runtimeByAgentId },
+      };
+    },
+    setAgentThread(agentId: string, thread: ChatThreadSnapshot | null): void {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
+        return;
+      }
+      update((state) => {
+        const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
+        return patchWorkspaceState(nextState, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [agentId]: cloneThread(thread),
+          },
+        });
+      });
+    },
+    /** @deprecated Use setAgentThread + setActiveAgentId. Kept for transitional callers. */
     setWorkspaceThread(normalizedRootPath: string, thread: ChatThreadSnapshot | null): void {
-      update((state) => ({
-        ...state,
-        threadsByWorkspace: {
-          ...state.threadsByWorkspace,
-          [normalizedRootPath]: cloneThread(thread),
-        },
-      }));
+      update((state) => {
+        const { nextState, workspace } = getOrCreateWorkspaceState(state, normalizedRootPath);
+        const agentId = thread?.metadata.agentId ?? workspace.activeAgentId ?? createAgentId();
+        const nextIndex = workspace.agentIndex.some((entry) => entry.id === agentId)
+          ? workspace.agentIndex
+          : [
+              ...workspace.agentIndex,
+              {
+                id: agentId,
+                title: thread ? DRAFT_AGENT_TITLE : DRAFT_AGENT_TITLE,
+                lastUsedAt: thread?.metadata.updatedAt ?? new Date().toISOString(),
+                isDraft: !thread || thread.messages.length === 0,
+              },
+            ];
+        return {
+          ...state,
+          activeWorkspaceRoot: normalizedRootPath,
+          workspaces: {
+            ...nextState.workspaces,
+            [normalizedRootPath]: {
+              ...workspace,
+              activeAgentId: agentId,
+              agentIndex: nextIndex,
+              threadsByAgentId: {
+                ...workspace.threadsByAgentId,
+                [agentId]: cloneThread(thread),
+              },
+            },
+          },
+        };
+      });
     },
+    async loadWorkspaceAgents(normalizedRootPath: string): Promise<void> {
+      const index = await readWorkspaceAgentsIndexSnapshot(normalizedRootPath);
+      const threadsByAgentId: Record<string, ChatThreadSnapshot | null> = {};
+      for (const entry of index.agents) {
+        if (entry.isDraft) {
+          continue;
+        }
+        const thread = await readAgentThreadFileSnapshot(normalizedRootPath, entry.id);
+        threadsByAgentId[entry.id] = cloneThread(thread);
+      }
+
+      update((state) => {
+        const existing = state.workspaces[normalizedRootPath];
+        const activeAgentIdValue =
+          existing?.activeAgentId && index.agents.some((entry) => entry.id === existing.activeAgentId)
+            ? existing.activeAgentId
+            : (index.agents[0]?.id ?? null);
+
+        return {
+          ...state,
+          workspaces: {
+            ...state.workspaces,
+            [normalizedRootPath]: {
+              activeAgentId: activeAgentIdValue,
+              agentIndex: index.agents,
+              threadsByAgentId,
+              runtimeByAgentId: existing?.runtimeByAgentId ?? {},
+            },
+          },
+        };
+      });
+    },
+    /** @deprecated Use loadWorkspaceAgents. */
     async loadWorkspaceThread(normalizedRootPath: string): Promise<void> {
-      const thread = await readAgentThreadFileSnapshot(
-        normalizedRootPath,
-        INTERIM_WORKSPACE_AGENT_ID,
-      );
-      update((state) => ({
-        ...state,
-        threadsByWorkspace: {
-          ...state.threadsByWorkspace,
-          [normalizedRootPath]: cloneThread(thread),
-        },
-      }));
+      await this.loadWorkspaceAgents(normalizedRootPath);
     },
-    appendMessage(message: ChatMessage, options?: { skipCompaction?: boolean }): boolean {
+    appendMessage(
+      message: ChatMessage,
+      options?: { agentId?: string; skipCompaction?: boolean },
+    ): boolean {
       let appended = false;
       update((state) => {
         const root = state.activeWorkspaceRoot;
@@ -311,13 +557,34 @@ function createChatStore() {
           return state;
         }
 
-        const existingThread = state.threadsByWorkspace[root] ?? null;
+        let agentId = resolveTargetAgentId(state, options?.agentId);
+        let workingState = state;
+        let workspace = state.workspaces[root];
+
+        if (!agentId) {
+          if (message.role !== "user") {
+            return state;
+          }
+          const ensured = ensureActiveAgent(state);
+          if (!ensured) {
+            return state;
+          }
+          workingState = ensured.state;
+          workspace = ensured.workspace;
+          agentId = ensured.agentId;
+        }
+
+        if (!workspace || !agentId) {
+          return state;
+        }
+
+        const existingThread = workspace.threadsByAgentId[agentId] ?? null;
         if (!existingThread && message.role !== "user") {
           return state;
         }
 
         const thread = cloneThread(existingThread) ?? {
-          metadata: createThreadMetadata(INTERIM_WORKSPACE_AGENT_ID, message.createdAt),
+          metadata: createThreadMetadata(agentId, message.createdAt),
           messages: [],
         };
         thread.messages = [...thread.messages, { ...message }];
@@ -328,24 +595,30 @@ function createChatStore() {
         const nextThread = options?.skipCompaction ? thread : compactChatThread(thread).thread;
 
         appended = true;
-        return {
-          ...state,
-          threadsByWorkspace: {
-            ...state.threadsByWorkspace,
-            [root]: nextThread,
+        return patchWorkspaceState(workingState, root, {
+          ...workspace,
+          activeAgentId: workspace.activeAgentId ?? agentId,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [agentId]: nextThread,
           },
-        };
+        });
       });
       return appended;
     },
-    updateMessageContent(messageId: string, content: string): boolean {
+    updateMessageContent(messageId: string, content: string, agentId?: string): boolean {
       let updated = false;
       update((state) => {
         const root = state.activeWorkspaceRoot;
-        if (!root) {
+        const targetAgentId = resolveTargetAgentId(state, agentId);
+        if (!root || !targetAgentId) {
           return state;
         }
-        const thread = state.threadsByWorkspace[root];
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const thread = workspace.threadsByAgentId[targetAgentId];
         if (!thread) {
           return state;
         }
@@ -368,24 +641,29 @@ function createChatStore() {
           updatedAt,
         };
         updated = true;
-        return {
-          ...state,
-          threadsByWorkspace: {
-            ...state.threadsByWorkspace,
-            [root]: nextThread,
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: nextThread,
           },
-        };
+        });
       });
       return updated;
     },
-    removeMessage(messageId: string): boolean {
+    removeMessage(messageId: string, agentId?: string): boolean {
       let removed = false;
       update((state) => {
         const root = state.activeWorkspaceRoot;
-        if (!root) {
+        const targetAgentId = resolveTargetAgentId(state, agentId);
+        if (!root || !targetAgentId) {
           return state;
         }
-        const thread = state.threadsByWorkspace[root];
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const thread = workspace.threadsByAgentId[targetAgentId];
         if (!thread) {
           return state;
         }
@@ -404,62 +682,84 @@ function createChatStore() {
           updatedAt,
         };
         removed = true;
-        return {
-          ...state,
-          threadsByWorkspace: {
-            ...state.threadsByWorkspace,
-            [root]: nextThread,
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: nextThread,
           },
-        };
+        });
       });
       return removed;
     },
-    compactActiveThread(): boolean {
+    compactActiveThread(agentId?: string): boolean {
       let compacted = false;
       update((state) => {
         const root = state.activeWorkspaceRoot;
-        if (!root) {
+        const targetAgentId = resolveTargetAgentId(state, agentId);
+        if (!root || !targetAgentId) {
           return state;
         }
-        const thread = state.threadsByWorkspace[root];
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const thread = workspace.threadsByAgentId[targetAgentId];
         if (!thread) {
           return state;
         }
         const result = compactChatThread(thread);
         compacted = true;
-        return {
-          ...state,
-          threadsByWorkspace: {
-            ...state.threadsByWorkspace,
-            [root]: result.thread,
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: result.thread,
           },
-        };
+        });
       });
       return compacted;
     },
-    async clearActiveWorkspaceChatHistory(): Promise<boolean> {
+    async deleteAgent(agentId: string): Promise<boolean> {
       const root = this.getActiveWorkspaceRoot();
       if (!root) {
         return false;
       }
 
-      update((state) => ({
-        ...state,
-        threadsByWorkspace: {
-          ...state.threadsByWorkspace,
-          [root]: null,
-        },
-        runtimeByWorkspace: {
-          ...state.runtimeByWorkspace,
-          [root]: defaultRuntimeState(),
-        },
-      }));
-      await deleteAgentPersistence(root, INTERIM_WORKSPACE_AGENT_ID);
+      update((state) => {
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+
+        const { [agentId]: _removedThread, ...remainingThreads } = workspace.threadsByAgentId;
+        const { [agentId]: _removedRuntime, ...remainingRuntime } = workspace.runtimeByAgentId;
+        const nextActiveAgentId =
+          workspace.activeAgentId === agentId ? null : workspace.activeAgentId;
+
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          activeAgentId: nextActiveAgentId,
+          agentIndex: workspace.agentIndex.filter((entry) => entry.id !== agentId),
+          threadsByAgentId: remainingThreads,
+          runtimeByAgentId: remainingRuntime,
+        });
+      });
+
+      await deleteAgentPersistence(root, agentId);
       return true;
+    },
+    async clearActiveWorkspaceChatHistory(): Promise<boolean> {
+      const agentId = this.getActiveAgentId();
+      if (!agentId) {
+        return false;
+      }
+      return this.deleteAgent(agentId);
     },
     updateThreadMetadata(
       patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary">>,
       updatedAt: string = new Date().toISOString(),
+      agentId?: string,
     ): boolean {
       let updatedMetadata = false;
       update((state) => {
@@ -467,109 +767,143 @@ function createChatStore() {
         if (!root) {
           return state;
         }
-        const thread = state.threadsByWorkspace[root];
+
+        let workingState = state;
+        let workspace = state.workspaces[root];
+        let targetAgentId = resolveTargetAgentId(state, agentId);
+
+        if (!targetAgentId) {
+          const ensured = ensureActiveAgent(state);
+          if (!ensured) {
+            return state;
+          }
+          workingState = ensured.state;
+          workspace = ensured.workspace;
+          targetAgentId = ensured.agentId;
+        }
+
+        if (!workspace || !targetAgentId) {
+          return state;
+        }
+
+        const thread = workspace.threadsByAgentId[targetAgentId];
         if (!thread) {
           updatedMetadata = true;
-          return {
-            ...state,
-            threadsByWorkspace: {
-              ...state.threadsByWorkspace,
-              [root]: {
+          return patchWorkspaceState(workingState, root, {
+            ...workspace,
+            activeAgentId: workspace.activeAgentId ?? targetAgentId,
+            threadsByAgentId: {
+              ...workspace.threadsByAgentId,
+              [targetAgentId]: {
                 metadata: applyMetadataPatch(
-                  createThreadMetadata(INTERIM_WORKSPACE_AGENT_ID, updatedAt),
+                  createThreadMetadata(targetAgentId, updatedAt),
                   patch,
                   updatedAt,
                 ),
                 messages: [],
               },
             },
-          };
+          });
         }
 
         updatedMetadata = true;
-        return {
-          ...state,
-          threadsByWorkspace: {
-            ...state.threadsByWorkspace,
-            [root]: {
+        return patchWorkspaceState(workingState, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: {
               ...thread,
               metadata: applyMetadataPatch(thread.metadata, patch, updatedAt),
             },
           },
-        };
+        });
       });
       return updatedMetadata;
     },
-    getMessages(): ChatMessage[] {
-      const thread = activeThread(this.getSnapshot());
+    getMessages(agentId?: string): ChatMessage[] {
+      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
+      const thread = threadForAgent(this.getSnapshot(), targetAgentId);
       return thread?.messages ?? [];
     },
     getActiveWorkspaceRoot(): string | null {
       return this.getSnapshot().activeWorkspaceRoot;
     },
-    getActiveThreadSnapshot(): ChatThreadSnapshot | null {
-      return cloneThread(activeThread(this.getSnapshot()));
+    getActiveThreadSnapshot(agentId?: string): ChatThreadSnapshot | null {
+      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
+      return cloneThread(threadForAgent(this.getSnapshot(), targetAgentId));
     },
-    getMetadata(): ChatThreadMetadata | null {
-      const thread = activeThread(this.getSnapshot());
+    getMetadata(agentId?: string): ChatThreadMetadata | null {
+      const thread = threadForAgent(this.getSnapshot(), resolveTargetAgentId(this.getSnapshot(), agentId));
       return thread?.metadata ?? null;
     },
-    /** Thread provider, or bootstrap default when no thread metadata exists yet. */
-    getActiveChatProvider(): ChatProviderId {
-      return this.getMetadata()?.provider ?? defaultChatProviderResolver();
+    getActiveChatProvider(agentId?: string): ChatProviderId {
+      return this.getMetadata(agentId)?.provider ?? defaultChatProviderResolver();
     },
-    hasThread(): boolean {
-      return this.getMetadata() !== null;
+    hasThread(agentId?: string): boolean {
+      return this.getMetadata(agentId) !== null;
     },
-    isEmpty(): boolean {
-      return this.getMessages().length === 0;
+    isEmpty(agentId?: string): boolean {
+      return this.getMessages(agentId).length === 0;
     },
-    getRuntimeState(): ChatThreadRuntimeState {
-      return { ...activeRuntime(this.getSnapshot()) };
+    getRuntimeState(agentId?: string): ChatThreadRuntimeState {
+      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
+      return { ...runtimeForAgent(this.getSnapshot(), targetAgentId) };
     },
-    beginTurn(turnId: string): boolean {
-      if (!this.getActiveWorkspaceRoot()) {
+    beginTurn(turnId: string, agentId?: string): boolean {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
         return false;
       }
-      const runtime = this.getRuntimeState();
+      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
+      if (!targetAgentId) {
+        const ensured = ensureActiveAgent(this.getSnapshot());
+        if (!ensured) {
+          return false;
+        }
+        update(() => ensured.state);
+        return this.beginTurn(turnId, ensured.agentId);
+      }
+      const runtime = runtimeForAgent(this.getSnapshot(), targetAgentId);
       if (runtime.isGenerating) {
         return false;
       }
-      return updateActiveRuntime(() => ({
+      return updateAgentRuntime(targetAgentId, () => ({
         isGenerating: true,
         activeTurnId: turnId,
         lastFailedTurnId: null,
         lastError: null,
       }));
     },
-    completeTurn(): boolean {
-      if (!this.getActiveWorkspaceRoot()) {
+    completeTurn(agentId?: string): boolean {
+      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
+      if (!this.getActiveWorkspaceRoot() || !targetAgentId) {
         return false;
       }
-      const runtime = this.getRuntimeState();
+      const runtime = runtimeForAgent(this.getSnapshot(), targetAgentId);
       if (!runtime.isGenerating) {
         return false;
       }
-      return updateActiveRuntime(() => defaultRuntimeState());
+      return updateAgentRuntime(targetAgentId, () => defaultRuntimeState());
     },
-    failTurn(error: ChatTurnError, turnId?: string): boolean {
-      if (!this.getActiveWorkspaceRoot()) {
+    failTurn(error: ChatTurnError, turnId?: string, agentId?: string): boolean {
+      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
+      if (!this.getActiveWorkspaceRoot() || !targetAgentId) {
         return false;
       }
-      const runtime = this.getRuntimeState();
+      const runtime = runtimeForAgent(this.getSnapshot(), targetAgentId);
       const failedTurnId = turnId ?? runtime.activeTurnId;
       if (!failedTurnId) {
         return false;
       }
-      return updateActiveRuntime(() => ({
+      return updateAgentRuntime(targetAgentId, () => ({
         isGenerating: false,
         activeTurnId: null,
         lastFailedTurnId: failedTurnId,
         lastError: { ...error },
       }));
     },
-    canRetryLastTurn(): boolean {
-      const runtime = this.getRuntimeState();
+    canRetryLastTurn(agentId?: string): boolean {
+      const runtime = this.getRuntimeState(agentId);
       return runtime.lastFailedTurnId !== null && !runtime.isGenerating;
     },
     setCapabilityChecker(checker: CapabilityChecker | null): void {
@@ -581,13 +915,19 @@ function createChatStore() {
     async switchThreadProvider(
       nextProvider: ChatProviderId,
       options: { debugProviderEnabled: boolean },
+      agentId?: string,
     ): Promise<SwitchThreadProviderResult> {
       const root = this.getActiveWorkspaceRoot();
       if (!root) {
         return { switched: false, message: "Open a workspace to switch providers." };
       }
 
-      if (this.getRuntimeState().isGenerating) {
+      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
+      if (!targetAgentId) {
+        return { switched: false, message: "Select an agent to switch providers." };
+      }
+
+      if (this.getRuntimeState(targetAgentId).isGenerating) {
         return {
           switched: false,
           message: "Provider cannot be changed while a response is generating.",
@@ -601,7 +941,7 @@ function createChatStore() {
         };
       }
 
-      const metadata = this.getMetadata();
+      const metadata = this.getMetadata(targetAgentId);
       const fromProvider = metadata?.provider ?? null;
       if (fromProvider === nextProvider) {
         return { switched: false };
@@ -635,12 +975,16 @@ function createChatStore() {
 
       let switched = false;
       update((state) => {
-        const thread = state.threadsByWorkspace[root];
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const thread = workspace.threadsByAgentId[targetAgentId];
         const baseThread =
           thread ??
           ({
             metadata: applyMetadataPatch(
-              createThreadMetadata(INTERIM_WORKSPACE_AGENT_ID, updatedAt),
+              createThreadMetadata(targetAgentId, updatedAt),
               {},
               updatedAt,
             ),
@@ -648,11 +992,11 @@ function createChatStore() {
           } satisfies ChatThreadSnapshot);
 
         switched = true;
-        return {
-          ...state,
-          threadsByWorkspace: {
-            ...state.threadsByWorkspace,
-            [root]: {
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: {
               ...baseThread,
               metadata: applyMetadataPatch(
                 baseThread.metadata,
@@ -662,14 +1006,14 @@ function createChatStore() {
               messages: [...baseThread.messages, switchMessage],
             },
           },
-        };
+        });
       });
 
       return { switched };
     },
-    async checkActiveWorkspaceCapabilities(): Promise<CapabilityCheckResult> {
+    async checkActiveWorkspaceCapabilities(agentId?: string): Promise<CapabilityCheckResult> {
       const rootPath = this.getActiveWorkspaceRoot();
-      const metadata = this.getMetadata();
+      const metadata = this.getMetadata(agentId);
 
       if (!rootPath) {
         return {
@@ -716,7 +1060,7 @@ function createChatStore() {
           recoveryHint: "Re-open the workspace path and confirm file permissions.",
           checkedAt: new Date().toISOString(),
         };
-        return commitAccessPreflightResult(rootPath, blockedState, previousState);
+        return commitAccessPreflightResult(rootPath, blockedState, previousState, snapshot);
       }
 
       const capabilityResult = await this.checkActiveWorkspaceCapabilities();
@@ -727,7 +1071,7 @@ function createChatStore() {
         recoveryHint: capabilityResult.recoveryHint,
         checkedAt: new Date().toISOString(),
       };
-      return commitAccessPreflightResult(rootPath, nextState, previousState);
+      return commitAccessPreflightResult(rootPath, nextState, previousState, snapshot);
     },
   };
 }

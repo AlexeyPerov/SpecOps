@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 14:30 (MSK)
+
+- **AI agents pivot — specs:** Rewrote `specs/ai-requirements.md` for agents sidebar + agent tabs (multi-agent per workspace, draft-on-first-message lifecycle, delete agent, logs-only console). Split M5 execution plan into `specs/ai-m-5-1-execution-plan.md` (completed Debug/provider foundation), `specs/ai-m-5-2-execution-plan.md` (Agents UI shell, 8 tasks), and `specs/ai-m-5-3-execution-plan.md` (GLM in agent tabs). Removed `specs/ai-m-5-execution-plan.md`. Updated `specs/ai-m-6-execution-plan.md` and `specs/ai-m-7-execution-plan.md` for agent-tab UX. Updated README WIP roadmap.
+
 ## 2026-05-28 11:45 (MSK)
 
 - **Build warnings:** Fixed Svelte a11y warnings in `FindReplacePanel.svelte` (use `<search>` with programmatic keydown) and `SettingsDialog.svelte` (`div` instead of `nav` for tablist). Split settings CSS into `settingsForm.css`, `settingsDialogForm.css`, and `themePaneForm.css` so scoped imports no longer report unused selectors.

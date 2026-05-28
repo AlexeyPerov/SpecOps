@@ -2,6 +2,8 @@
 
 How to use this plan: each task lists **Required context** — read only those docs for that task. Behavior and scope come from `specs/ai-requirements.md` (source of truth).
 
+**Status:** Delivered (one thread per workspace). **Superseded by M5.2** for multi-agent persistence (`specs/ai-m-5-2-execution-plan.md`, task M5-2-1).
+
 ## Assumptions
 
 - Milestone 1 is complete (`specs/ai-m-1-execution-plan.md`).

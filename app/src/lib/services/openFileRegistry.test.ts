@@ -5,6 +5,7 @@ import type {
   OpenFileRegistry,
   WindowSessionSnapshot,
 } from "../domain/contracts";
+import { createFileTab } from "../domain/contracts";
 import { createSessionFsMock } from "../test/sessionMock";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import {
@@ -70,8 +71,8 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
     session: {
       selectedTabId: "tab-1",
       openTabs: [
-        { id: "tab-1", documentId: "doc-1", pinned: false },
-        { id: "tab-2", documentId: "doc-2", pinned: false },
+        createFileTab("tab-1", "doc-1"),
+        createFileTab("tab-2", "doc-2"),
       ],
       lastActiveWindowId: "win-a",
       windowBounds: null,
@@ -174,7 +175,7 @@ describe("syncOpenFileRegistryForWindow", () => {
           ],
           session: {
             selectedTabId: "tab-1",
-            openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+            openTabs: [createFileTab("tab-1", "doc-1")],
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
@@ -200,7 +201,7 @@ describe("syncOpenFileRegistryForWindow", () => {
       ],
       session: {
         selectedTabId: "tab-1",
-        openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+        openTabs: [createFileTab("tab-1", "doc-1")],
         lastActiveWindowId: "win-a",
         windowBounds: null,
       },
@@ -265,7 +266,7 @@ describe("syncOpenFileRegistryForWindow", () => {
           ],
           session: {
             selectedTabId: "tab-n",
-            openTabs: [{ id: "tab-n", documentId: "doc-n", pinned: false }],
+            openTabs: [createFileTab("tab-n", "doc-n")],
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
@@ -294,7 +295,7 @@ describe("syncOpenFileRegistryForWindow", () => {
               ],
               session: {
                 selectedTabId: "tab-w",
-                openTabs: [{ id: "tab-w", documentId: "doc-w", pinned: false }],
+                openTabs: [createFileTab("tab-w", "doc-w")],
                 lastActiveWindowId: "win-a",
                 windowBounds: null,
               },

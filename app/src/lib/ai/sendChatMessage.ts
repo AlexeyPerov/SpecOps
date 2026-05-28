@@ -8,7 +8,10 @@ import { getChatProvider } from "./providers/registry";
 import type { ProviderSendRequest } from "./providers/types";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
-import { scheduleWorkspaceChatFilePersistence } from "../services/chatPersistence";
+import {
+  INTERIM_WORKSPACE_AGENT_ID,
+  scheduleAgentThreadFilePersistence,
+} from "../services/chatPersistence";
 import { isChatProviderError, streamProviderMessage } from "./chatSend";
 
 export type SendChatMessageFailureReason =
@@ -50,9 +53,13 @@ function persistActiveThreadOnce(): void {
   if (!root) {
     return;
   }
-  scheduleWorkspaceChatFilePersistence(root, {
+  const thread = chatStore.getActiveThreadSnapshot();
+  if (!root || !thread) {
+    return;
+  }
+  scheduleAgentThreadFilePersistence(root, INTERIM_WORKSPACE_AGENT_ID, {
     version: 1,
-    thread: chatStore.getActiveThreadSnapshot(),
+    thread,
   });
 }
 

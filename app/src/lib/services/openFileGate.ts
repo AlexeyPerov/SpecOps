@@ -2,6 +2,7 @@ import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { appState } from "../state/appState";
 import type { ContextId } from "../domain/contracts";
+import { isFileTab, normalizeTabState } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import {
   claimOpenFile,
@@ -34,6 +35,9 @@ function findLocalDocumentForNormalizedPath(
 
   for (const context of contexts) {
     for (const tab of context.snapshot.session.openTabs) {
+      if (!isFileTab(tab)) {
+        continue;
+      }
       const documentState = context.snapshot.documents.find((doc) => doc.id === tab.documentId);
       if (
         documentState?.filePath &&
@@ -97,6 +101,9 @@ export function selectTabForNormalizedPath(normalizedPath: string): boolean {
   ];
   for (const context of contexts) {
     for (const tab of context.snapshot.session.openTabs) {
+      if (!isFileTab(tab)) {
+        continue;
+      }
       const documentState = context.snapshot.documents.find((doc) => doc.id === tab.documentId);
       if (
         documentState?.filePath &&

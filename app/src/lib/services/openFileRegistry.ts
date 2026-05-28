@@ -7,6 +7,7 @@ import type {
   OpenFileRegistry,
   WindowSessionSnapshot,
 } from "../domain/contracts";
+import { isFileTab, normalizeTabState } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
@@ -80,7 +81,11 @@ export async function syncOpenFileRegistryForWindow(
   ];
 
   for (const contextSnapshot of contextSnapshots) {
-    for (const tab of contextSnapshot.session.openTabs) {
+    for (const rawTab of contextSnapshot.session.openTabs) {
+      const tab = normalizeTabState(rawTab);
+      if (!isFileTab(tab)) {
+        continue;
+      }
       const documentState = contextSnapshot.documents.find((doc) => doc.id === tab.documentId);
       if (!documentState?.filePath) {
         continue;
@@ -116,7 +121,12 @@ export function applyRegistryDedupeToWindowSnapshot(
     const documentsById = new Map(context.documents.map((doc) => [doc.id, doc]));
     const openTabs = [];
 
-    for (const tab of context.session.openTabs) {
+    for (const rawTab of context.session.openTabs) {
+      const tab = normalizeTabState(rawTab);
+      if (!isFileTab(tab)) {
+        openTabs.push(tab);
+        continue;
+      }
       const linkedDocument = documentsById.get(tab.documentId);
       if (!linkedDocument?.filePath) {
         openTabs.push(tab);
@@ -133,7 +143,9 @@ export function applyRegistryDedupeToWindowSnapshot(
       openTabs.push(tab);
     }
 
-    const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
+    const referencedDocIds = new Set(
+      openTabs.filter(isFileTab).map((tab) => tab.documentId),
+    );
     const documents = context.documents.filter((doc) => referencedDocIds.has(doc.id));
     const selectedTabId = openTabs.some((tab) => tab.id === context.session.selectedTabId)
       ? context.session.selectedTabId

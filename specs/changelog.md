@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 15:25 (MSK)
+
+- **M5-2-1 — Multi-agent contracts and persistence:** Added per-agent types (`AgentIndexEntry`, `WorkspaceAgentsIndexSnapshot`, `ChatAgentThreadFileSnapshot`), `agentId`/`threadId` on `ChatThreadMetadata`, and `TabState` discriminated union (`file` | `agent`). Replaced single workspace chat file with `chat/{hash}/index.json` plus per-agent `{agentId}.json` thread files. Added `chatAgents.ts` helpers (title derivation, date grouping). Updated persistence callers to use interim single-agent bridge until M5-2-2. Unit tests for title truncation, date grouping, index read/write, and per-agent thread read/write.
+
 ## 2026-05-28 14:30 (MSK)
 
 - **AI agents pivot — specs:** Rewrote `specs/ai-requirements.md` for agents sidebar + agent tabs (multi-agent per workspace, draft-on-first-message lifecycle, delete agent, logs-only console). Split M5 execution plan into `specs/ai-m-5-1-execution-plan.md` (completed Debug/provider foundation), `specs/ai-m-5-2-execution-plan.md` (Agents UI shell, 8 tasks), and `specs/ai-m-5-3-execution-plan.md` (GLM in agent tabs). Removed `specs/ai-m-5-execution-plan.md`. Updated `specs/ai-m-6-execution-plan.md` and `specs/ai-m-7-execution-plan.md` for agent-tab UX. Updated README WIP roadmap.

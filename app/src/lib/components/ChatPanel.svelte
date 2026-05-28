@@ -24,7 +24,10 @@
     chatStore,
     formatCompactionNotice,
   } from "../state/chatStore";
-  import { scheduleWorkspaceChatFilePersistence } from "../services/chatPersistence";
+  import {
+    INTERIM_WORKSPACE_AGENT_ID,
+    scheduleAgentThreadFilePersistence,
+  } from "../services/chatPersistence";
 
   let draft = $state("");
   let sending = $state(false);
@@ -134,10 +137,10 @@
   function persistActiveThreadSnapshot(): void {
     const root = chatStore.getActiveWorkspaceRoot();
     const thread = chatStore.getActiveThreadSnapshot();
-    if (!root) {
+    if (!root || !thread) {
       return;
     }
-    scheduleWorkspaceChatFilePersistence(root, {
+    scheduleAgentThreadFilePersistence(root, INTERIM_WORKSPACE_AGENT_ID, {
       version: 1,
       thread,
     });

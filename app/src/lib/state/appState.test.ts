@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createFileTab, tabDocumentId } from "../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "./appState";
 import { saveThemeFile } from "../services/themeStore";
 
@@ -95,10 +96,10 @@ describe("appState tabs and selection", () => {
         session: {
           ...appState.getWindowSessionSnapshot().notepad.session,
           openTabs: [
-            { id: "tab-1", documentId: "doc-1", pinned: false },
-            { id: "tab-2", documentId: "doc-2", pinned: false },
-            { id: "tab-3", documentId: "doc-3", pinned: true },
-            { id: "tab-4", documentId: "doc-4", pinned: false },
+            createFileTab("tab-1", "doc-1"),
+            createFileTab("tab-2", "doc-2"),
+            createFileTab("tab-3", "doc-3", true),
+            createFileTab("tab-4", "doc-4"),
           ],
           selectedTabId: "tab-4",
         },
@@ -138,11 +139,11 @@ describe("appState tabs and selection", () => {
         session: {
           ...appState.getWindowSessionSnapshot().notepad.session,
           openTabs: [
-            { id: "tab-1", documentId: "doc-1", pinned: false },
-            { id: "tab-2", documentId: "doc-2", pinned: false },
-            { id: "tab-3", documentId: "doc-3", pinned: false },
-            { id: "tab-4", documentId: "doc-4", pinned: true },
-            { id: "tab-5", documentId: "doc-5", pinned: false },
+            createFileTab("tab-1", "doc-1"),
+            createFileTab("tab-2", "doc-2"),
+            createFileTab("tab-3", "doc-3"),
+            createFileTab("tab-4", "doc-4", true),
+            createFileTab("tab-5", "doc-5"),
           ],
           selectedTabId: "tab-3",
         },
@@ -177,9 +178,9 @@ describe("appState tabs and selection", () => {
         session: {
           ...currentSnapshot.notepad.session,
           openTabs: [
-            { id: "tab-1", documentId: "doc-1", pinned: false },
-            { id: "tab-2", documentId: "doc-2", pinned: false },
-            { id: "tab-3", documentId: "doc-3", pinned: true },
+            createFileTab("tab-1", "doc-1"),
+            createFileTab("tab-2", "doc-2"),
+            createFileTab("tab-3", "doc-3", true),
           ],
           selectedTabId: "tab-2",
         },
@@ -209,7 +210,7 @@ describe("appState tabs and selection", () => {
     expect(snapshot.session.openTabs).toHaveLength(1);
     const selectedTab = snapshot.session.openTabs[0];
     expect(selectedTab).toBeDefined();
-    expect(snapshot.documents.find((doc) => doc.id === selectedTab!.documentId)?.title).toBe("Untitled");
+    expect(snapshot.documents.find((doc) => doc.id === tabDocumentId(selectedTab))?.title).toBe("Untitled");
   });
 
   it("reorderTabs moves tabs and ignores invalid indices", () => {
@@ -512,7 +513,7 @@ describe("appState settings and editor chrome", () => {
         ],
         session: {
           selectedTabId: "tab-1",
-          openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+          openTabs: [createFileTab("tab-1", "doc-1")],
           lastActiveWindowId: "main",
           windowBounds: null,
         },
@@ -573,7 +574,7 @@ describe("appState session restore", () => {
           ],
           session: {
             selectedTabId: "tab-1",
-            openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+            openTabs: [createFileTab("tab-1", "doc-1")],
             lastActiveWindowId: "main",
             windowBounds: null,
           },
@@ -602,7 +603,7 @@ describe("appState session restore", () => {
               ],
               session: {
                 selectedTabId: "tab-2",
-                openTabs: [{ id: "tab-2", documentId: "doc-2", pinned: false }],
+                openTabs: [createFileTab("tab-2", "doc-2")],
                 lastActiveWindowId: "main",
                 windowBounds: null,
               },
@@ -631,7 +632,7 @@ describe("appState session restore", () => {
               ],
               session: {
                 selectedTabId: "tab-3",
-                openTabs: [{ id: "tab-3", documentId: "doc-3", pinned: false }],
+                openTabs: [createFileTab("tab-3", "doc-3")],
                 lastActiveWindowId: "main",
                 windowBounds: null,
               },

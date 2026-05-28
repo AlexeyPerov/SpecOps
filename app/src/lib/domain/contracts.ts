@@ -32,10 +32,64 @@ export interface WindowBounds {
   maximized: boolean;
 }
 
-export interface TabState {
+export interface FileTabState {
   id: string;
+  kind: "file";
   documentId: string;
   pinned: boolean;
+}
+
+export interface AgentTabState {
+  id: string;
+  kind: "agent";
+  agentId: string;
+  pinned: boolean;
+}
+
+export type TabState = FileTabState | AgentTabState;
+
+export function isFileTab(tab: TabState): tab is FileTabState {
+  return tab.kind === "file";
+}
+
+export function isAgentTab(tab: TabState): tab is AgentTabState {
+  return tab.kind === "agent";
+}
+
+export function createFileTab(id: string, documentId: string, pinned = false): FileTabState {
+  return { id, kind: "file", documentId, pinned };
+}
+
+export function createAgentTab(id: string, agentId: string, pinned = false): AgentTabState {
+  return { id, kind: "agent", agentId, pinned };
+}
+
+/** Restores legacy session tabs that omit `kind`. */
+export function normalizeTabState(
+  tab: TabState | (Omit<FileTabState, "kind"> & { kind?: unknown; agentId?: unknown }),
+): TabState {
+  if (tab.kind === "agent" && typeof tab.agentId === "string") {
+    return {
+      id: tab.id,
+      kind: "agent",
+      agentId: tab.agentId,
+      pinned: tab.pinned ?? false,
+    };
+  }
+  if ("documentId" in tab && typeof tab.documentId === "string") {
+    return createFileTab(tab.id, tab.documentId, tab.pinned ?? false);
+  }
+  throw new Error(`Invalid tab state: ${tab.id}`);
+}
+
+export function tabDocumentId(
+  tab: TabState | (Omit<FileTabState, "kind"> & { kind?: unknown; agentId?: unknown }) | undefined,
+): string | null {
+  if (!tab) {
+    return null;
+  }
+  const normalized = normalizeTabState(tab);
+  return isFileTab(normalized) ? normalized.documentId : null;
 }
 
 export interface SessionState {
@@ -191,6 +245,8 @@ export interface ChatMessage {
 }
 
 export interface ChatThreadMetadata {
+  agentId: string;
+  threadId: string;
   mode: ChatModeId;
   provider: ChatProviderId;
   createdAt: string;
@@ -204,22 +260,30 @@ export interface ChatThreadMetadata {
   compactedMessageCount?: number;
 }
 
-/**
- * In MVP, chat is one thread per workspace.
- * `ChatThreadSnapshot` represents that single per-workspace thread.
- */
+/** One persisted agent conversation (messages + per-agent settings). */
 export interface ChatThreadSnapshot {
   metadata: ChatThreadMetadata;
   messages: ChatMessage[];
 }
 
-/**
- * Versioned on-disk envelope for workspace chat persistence.
- * Keep a single `thread` to enforce one-thread-per-workspace invariant.
- */
-export interface ChatThreadFileSnapshot {
+export interface AgentIndexEntry {
+  id: string;
+  title: string;
+  lastUsedAt: string;
+  /** Session-only drafts are not written to disk until first user message. */
+  isDraft?: boolean;
+}
+
+/** Per-workspace agent list only — no conversation payload. */
+export interface WorkspaceAgentsIndexSnapshot {
   version: 1;
-  thread: ChatThreadSnapshot | null;
+  agents: AgentIndexEntry[];
+}
+
+/** Versioned on-disk envelope for a single agent thread file. */
+export interface ChatAgentThreadFileSnapshot {
+  version: 1;
+  thread: ChatThreadSnapshot;
 }
 
 export interface OpenFileOwner {

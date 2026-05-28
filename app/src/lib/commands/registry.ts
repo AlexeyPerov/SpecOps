@@ -1,5 +1,6 @@
 import { get } from "svelte/store";
 import type { AppCommandId, AppDomainState, CommandDefinition } from "../domain/contracts";
+import { tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { logDiagnostic } from "../services/logging";
 import type { EditorCommandRunner } from "../types/editor";
@@ -395,8 +396,9 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       const selectedTab = state.session.openTabs.find(
         (tab) => tab.id === state.session.selectedTabId,
       );
-      const activeDocument = selectedTab
-        ? state.documents.find((document) => document.id === selectedTab.documentId)
+      const activeDocumentId = tabDocumentId(selectedTab);
+      const activeDocument = activeDocumentId
+        ? state.documents.find((document) => document.id === activeDocumentId)
         : undefined;
 
       let defaultPath: string | null = null;
@@ -460,7 +462,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       notify("No active tab to save.");
       return;
     }
-    const doc = state.documents.find((document) => document.id === selected.documentId);
+    const selectedDocumentId = tabDocumentId(selected);
+    if (!selectedDocumentId) {
+      notify("No active file tab to save.");
+      return;
+    }
+    const doc = state.documents.find((document) => document.id === selectedDocumentId);
     if (!doc) {
       return;
     }
@@ -492,7 +499,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       notify("No active tab to save.");
       return;
     }
-    const doc = state.documents.find((document) => document.id === selected.documentId);
+    const selectedDocumentId = tabDocumentId(selected);
+    if (!selectedDocumentId) {
+      notify("No active file tab to save.");
+      return;
+    }
+    const doc = state.documents.find((document) => document.id === selectedDocumentId);
     if (!doc) {
       return;
     }
@@ -569,7 +581,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!selected) {
       return;
     }
-    const doc = state.documents.find((document) => document.id === selected.documentId);
+    const selectedDocumentId = tabDocumentId(selected);
+    if (!selectedDocumentId) {
+      notify("No active file tab to save.");
+      return;
+    }
+    const doc = state.documents.find((document) => document.id === selectedDocumentId);
     if (!doc?.filePath) {
       notify("Save document before renaming.");
       return;
@@ -598,7 +615,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       notify("No active tab to reload.");
       return;
     }
-    const doc = state.documents.find((document) => document.id === selected.documentId);
+    const selectedDocumentId = tabDocumentId(selected);
+    if (!selectedDocumentId) {
+      notify("No active file tab to save.");
+      return;
+    }
+    const doc = state.documents.find((document) => document.id === selectedDocumentId);
     if (!doc?.filePath) {
       notify("Save the document before reloading from disk.");
       return;
@@ -630,7 +652,11 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!selectedTab) {
       return;
     }
-    const doc = state.documents.find((document) => document.id === selectedTab.documentId);
+    const selectedDocumentId = tabDocumentId(selectedTab);
+    if (!selectedDocumentId) {
+      return;
+    }
+    const doc = state.documents.find((document) => document.id === selectedDocumentId);
     if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
       return;
     }
@@ -827,8 +853,9 @@ export function getActiveDocumentContent(): string {
   if (!activeTab) {
     return "";
   }
-  const activeDocument = state.documents.find(
-    (documentState) => documentState.id === activeTab.documentId,
-  );
+  const activeDocumentId = tabDocumentId(activeTab);
+  const activeDocument = activeDocumentId
+    ? state.documents.find((documentState) => documentState.id === activeDocumentId)
+    : undefined;
   return activeDocument?.content ?? "";
 }

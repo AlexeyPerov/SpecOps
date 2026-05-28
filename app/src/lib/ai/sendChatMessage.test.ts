@@ -11,14 +11,17 @@ import {
 import { createRegistryCapabilityChecker } from "./providers/capabilityChecker";
 import { resetChatProvidersForTests } from "./providers/bootstrap";
 import { sendChatMessage } from "./sendChatMessage";
-import { scheduleWorkspaceChatFilePersistence } from "../services/chatPersistence";
+import {
+  INTERIM_WORKSPACE_AGENT_ID,
+  scheduleAgentThreadFilePersistence,
+} from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleWorkspaceChatFilePersistence: vi.fn(),
+    scheduleAgentThreadFilePersistence: vi.fn(),
   };
 });
 
@@ -26,7 +29,7 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const schedulePersistMock = vi.mocked(scheduleWorkspaceChatFilePersistence);
+const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 describe("sendChatMessage", () => {

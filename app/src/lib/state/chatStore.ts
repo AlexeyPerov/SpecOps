@@ -13,8 +13,9 @@ import {
   type CapabilityChecker,
 } from "../ai/capabilities";
 import {
-  clearWorkspaceChatFileSnapshot,
-  readWorkspaceChatFileSnapshot,
+  deleteAgentPersistence,
+  INTERIM_WORKSPACE_AGENT_ID,
+  readAgentThreadFileSnapshot,
 } from "../services/chatPersistence";
 import { compactChatThread } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
@@ -128,8 +129,13 @@ function activeThread(state: ChatStoreState): ChatThreadSnapshot | null {
   return state.threadsByWorkspace[state.activeWorkspaceRoot] ?? null;
 }
 
-function createThreadMetadata(createdAt: string): ChatThreadMetadata {
+function createThreadMetadata(
+  agentId: string,
+  createdAt: string,
+): ChatThreadMetadata {
   return {
+    agentId,
+    threadId: agentId,
     mode: DEFAULT_CHAT_MODE,
     provider: defaultChatProviderResolver(),
     createdAt,
@@ -280,12 +286,15 @@ function createChatStore() {
       }));
     },
     async loadWorkspaceThread(normalizedRootPath: string): Promise<void> {
-      const snapshot = await readWorkspaceChatFileSnapshot(normalizedRootPath);
+      const thread = await readAgentThreadFileSnapshot(
+        normalizedRootPath,
+        INTERIM_WORKSPACE_AGENT_ID,
+      );
       update((state) => ({
         ...state,
         threadsByWorkspace: {
           ...state.threadsByWorkspace,
-          [normalizedRootPath]: cloneThread(snapshot.thread),
+          [normalizedRootPath]: cloneThread(thread),
         },
       }));
     },
@@ -308,7 +317,7 @@ function createChatStore() {
         }
 
         const thread = cloneThread(existingThread) ?? {
-          metadata: createThreadMetadata(message.createdAt),
+          metadata: createThreadMetadata(INTERIM_WORKSPACE_AGENT_ID, message.createdAt),
           messages: [],
         };
         thread.messages = [...thread.messages, { ...message }];
@@ -445,7 +454,7 @@ function createChatStore() {
           [root]: defaultRuntimeState(),
         },
       }));
-      await clearWorkspaceChatFileSnapshot(root);
+      await deleteAgentPersistence(root, INTERIM_WORKSPACE_AGENT_ID);
       return true;
     },
     updateThreadMetadata(
@@ -466,7 +475,11 @@ function createChatStore() {
             threadsByWorkspace: {
               ...state.threadsByWorkspace,
               [root]: {
-                metadata: applyMetadataPatch(createThreadMetadata(updatedAt), patch, updatedAt),
+                metadata: applyMetadataPatch(
+                  createThreadMetadata(INTERIM_WORKSPACE_AGENT_ID, updatedAt),
+                  patch,
+                  updatedAt,
+                ),
                 messages: [],
               },
             },
@@ -626,7 +639,11 @@ function createChatStore() {
         const baseThread =
           thread ??
           ({
-            metadata: applyMetadataPatch(createThreadMetadata(updatedAt), {}, updatedAt),
+            metadata: applyMetadataPatch(
+              createThreadMetadata(INTERIM_WORKSPACE_AGENT_ID, updatedAt),
+              {},
+              updatedAt,
+            ),
             messages: [],
           } satisfies ChatThreadSnapshot);
 

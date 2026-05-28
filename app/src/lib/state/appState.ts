@@ -15,6 +15,7 @@ import type {
   WindowBounds,
   WindowSessionSnapshot,
 } from "../domain/contracts";
+import { createFileTab, isFileTab, normalizeTabState, tabDocumentId } from "../domain/contracts";
 import {
   defaultDebugProviderSettings,
   normalizeDebugProviderSettings,
@@ -344,7 +345,7 @@ function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
     documents: [buildDocument({ id: documentId, filePath: null }, "", "Untitled")],
     session: {
       selectedTabId: tabId,
-      openTabs: [{ id: tabId, documentId, pinned: false }],
+      openTabs: [createFileTab(tabId, documentId)],
       lastActiveWindowId,
       windowBounds: null,
     },
@@ -394,7 +395,7 @@ function reopenTabForDocument(state: AppDomainState, documentId: string): AppDom
     ...state,
     session: {
       ...state.session,
-      openTabs: [...state.session.openTabs, { id: tabId, documentId, pinned: false }],
+      openTabs: [...state.session.openTabs, createFileTab(tabId, documentId)],
       selectedTabId: tabId,
     },
   };
@@ -450,7 +451,11 @@ function missingTabIdsToClose(
     documents.map((documentState) => [documentState.id, documentState.fileMissing]),
   );
   return openTabs
-    .filter((tab) => !tab.pinned && missingByDocumentId.get(tab.documentId) === true)
+    .map((rawTab) => normalizeTabState(rawTab))
+    .filter(
+      (tab) =>
+        isFileTab(tab) && !tab.pinned && missingByDocumentId.get(tab.documentId) === true,
+    )
     .map((tab) => tab.id);
 }
 
@@ -506,7 +511,7 @@ function closeTabsForce(state: AppDomainState, tabIds: string[], preferredTabId:
       documents: [...state.documents, newDocument],
       session: {
         ...state.session,
-        openTabs: [{ id: tabId, documentId: docId, pinned: false }],
+        openTabs: [createFileTab(tabId, docId)],
         selectedTabId: tabId,
       },
     };
@@ -534,7 +539,7 @@ const initialState: AppDomainState = {
       documents: [buildDocument({ id: "doc-1", filePath: null }, "", "Untitled")],
       session: {
         selectedTabId: "tab-1",
-        openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+        openTabs: [createFileTab("tab-1", "doc-1")],
         lastActiveWindowId: "main",
         windowBounds: null,
       },
@@ -544,7 +549,7 @@ const initialState: AppDomainState = {
   documents: [buildDocument({ id: "doc-1", filePath: null }, "", "Untitled")],
   session: {
     selectedTabId: "tab-1",
-    openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+    openTabs: [createFileTab("tab-1", "doc-1")],
     lastActiveWindowId: "main",
     windowBounds: null,
   },
@@ -951,7 +956,7 @@ function createStateStore() {
           documents: [...state.documents, newDocument],
           session: {
             ...state.session,
-            openTabs: [...state.session.openTabs, { id: tabId, documentId: id, pinned: false }],
+            openTabs: [...state.session.openTabs, createFileTab(tabId, id)],
             selectedTabId: tabId,
           },
         };
@@ -963,9 +968,9 @@ function createStateStore() {
     },
     selectOrReopenTabForDocument(documentId: string) {
       update((state) => {
-        const existingTab = state.session.openTabs.find(
-          (tab) => tab.documentId === documentId,
-        );
+        const existingTab = state.session.openTabs
+          .map((rawTab) => normalizeTabState(rawTab))
+          .find((tab) => isFileTab(tab) && tab.documentId === documentId);
         if (existingTab) {
           return selectTabInternal(state, existingTab.id);
         }
@@ -1056,7 +1061,7 @@ function createStateStore() {
             documents: [...state.documents, newDocument],
             session: {
               ...state.session,
-              openTabs: [{ id: tabIdNew, documentId: docId, pinned: false }],
+              openTabs: [createFileTab(tabIdNew, docId)],
               selectedTabId: tabIdNew,
             },
           };
@@ -1081,7 +1086,10 @@ function createStateStore() {
       if (!targetTab) {
         return false;
       }
-      const targetDocument = snapshot.documents.find((documentState) => documentState.id === targetTab.documentId);
+      const targetDocumentId = tabDocumentId(targetTab);
+      const targetDocument = targetDocumentId
+        ? snapshot.documents.find((documentState) => documentState.id === targetDocumentId)
+        : undefined;
       if (targetDocument?.isDirty && !confirm(`Close ${targetDocument.title} without saving?`)) {
         return false;
       }
@@ -1099,8 +1107,10 @@ function createStateStore() {
       }
 
       for (const tabId of tabIds) {
-        const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
-        if (!tab) {
+        const tab = snapshot.session.openTabs
+          .map((rawTab) => normalizeTabState(rawTab))
+          .find((entry) => entry.id === tabId);
+        if (!tab || !isFileTab(tab)) {
           continue;
         }
         const doc = snapshot.documents.find((documentState) => documentState.id === tab.documentId);
@@ -1120,8 +1130,10 @@ function createStateStore() {
       }
 
       for (const tabId of tabIds) {
-        const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
-        if (!tab) {
+        const tab = snapshot.session.openTabs
+          .map((rawTab) => normalizeTabState(rawTab))
+          .find((entry) => entry.id === tabId);
+        if (!tab || !isFileTab(tab)) {
           continue;
         }
         const doc = snapshot.documents.find((documentState) => documentState.id === tab.documentId);
@@ -1151,9 +1163,9 @@ function createStateStore() {
         const duplicate = findDocumentByPath(state, filePath);
         if (duplicate) {
           openedDocumentId = duplicate.id;
-          const existingTab = state.session.openTabs.find(
-            (tab) => tab.documentId === duplicate.id,
-          );
+          const existingTab = state.session.openTabs
+            .map((rawTab) => normalizeTabState(rawTab))
+            .find((tab) => isFileTab(tab) && tab.documentId === duplicate.id);
           if (existingTab) {
             return {
               ...selectTabInternal(state, existingTab.id),
@@ -1183,7 +1195,7 @@ function createStateStore() {
           recentFiles,
           session: {
             ...state.session,
-            openTabs: [...state.session.openTabs, { id: tabId, documentId: docId, pinned: false }],
+            openTabs: [...state.session.openTabs, createFileTab(tabId, docId)],
             selectedTabId: tabId,
           },
         };
@@ -1199,9 +1211,10 @@ function createStateStore() {
       if (!selectedTab) {
         return null;
       }
-      const doc = snapshot.documents.find(
-        (documentState) => documentState.id === selectedTab.documentId,
-      );
+      const selectedDocumentId = tabDocumentId(selectedTab);
+      const doc = selectedDocumentId
+        ? snapshot.documents.find((documentState) => documentState.id === selectedDocumentId)
+        : undefined;
       if (!doc) {
         return null;
       }
@@ -1224,7 +1237,7 @@ function createStateStore() {
           if (duplicate) {
             documentId = duplicate.id;
             const existingTab = state.session.openTabs.find(
-              (tab) => tab.documentId === duplicate.id,
+              (tab) => isFileTab(tab) && tab.documentId === duplicate.id,
             );
             if (existingTab) {
               return selectTabInternal(state, existingTab.id);
@@ -1247,7 +1260,7 @@ function createStateStore() {
           documents: [...state.documents, newDoc],
           session: {
             ...state.session,
-            openTabs: [...state.session.openTabs, { id: tabId, documentId: docId, pinned: false }],
+            openTabs: [...state.session.openTabs, createFileTab(tabId, docId)],
             selectedTabId: tabId,
           },
         };

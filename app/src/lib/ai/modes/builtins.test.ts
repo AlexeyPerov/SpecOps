@@ -16,6 +16,8 @@ import { buildProviderRequest } from "../providers/types";
 function threadSnapshot(mode: ChatThreadSnapshot["metadata"]["mode"]): ChatThreadSnapshot {
   return {
     metadata: {
+      agentId: "agent-test",
+      threadId: "agent-test",
       mode,
       provider: "glm",
       createdAt: "2026-05-26T00:00:00.000Z",

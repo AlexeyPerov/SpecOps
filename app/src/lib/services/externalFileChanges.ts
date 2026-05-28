@@ -1,6 +1,7 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
+import { isFileTab, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import {
   diskChanged,
@@ -342,6 +343,9 @@ export async function runStartupExternalChecks(): Promise<void> {
   }
 
   for (const tab of snapshot.session.openTabs) {
+    if (!isFileTab(tab)) {
+      continue;
+    }
     await checkDocumentExternalChanges(tab.documentId, "startup");
   }
 }
@@ -353,6 +357,9 @@ export async function runFocusExternalChecks(): Promise<void> {
   }
 
   for (const tab of snapshot.session.openTabs) {
+    if (!isFileTab(tab)) {
+      continue;
+    }
     await checkDocumentIfDeferred(tab.documentId, "focus");
   }
   await flushDirtyPrompts();
@@ -366,6 +373,9 @@ export async function runWatcherExternalCheck(normalizedOrRawPath: string): Prom
 
   const normalized = normalizePathSync(normalizedOrRawPath);
   for (const tab of snapshot.session.openTabs) {
+    if (!isFileTab(tab)) {
+      continue;
+    }
     const documentState = snapshot.documents.find((doc) => doc.id === tab.documentId);
     if (
       documentState?.filePath &&
@@ -382,6 +392,9 @@ export function collectOpenFilePaths(): string[] {
   const snapshot = appState.getSnapshot();
   const paths = new Set<string>();
   for (const tab of snapshot.session.openTabs) {
+    if (!isFileTab(tab)) {
+      continue;
+    }
     const documentState = snapshot.documents.find((doc) => doc.id === tab.documentId);
     if (documentState?.filePath) {
       paths.add(documentState.filePath);
@@ -399,7 +412,12 @@ export async function reloadActiveDocumentFromDisk(): Promise<ExternalCheckResul
     return "skipped";
   }
 
-  const documentState = snapshot.documents.find((doc) => doc.id === selectedTab.documentId);
+  const selectedDocumentId = tabDocumentId(selectedTab);
+  if (!selectedDocumentId) {
+    return "skipped";
+  }
+
+  const documentState = snapshot.documents.find((doc) => doc.id === selectedDocumentId);
   if (!documentState?.filePath) {
     return "skipped";
   }

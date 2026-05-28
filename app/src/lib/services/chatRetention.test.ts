@@ -53,6 +53,8 @@ function providerSwitchEvent(id: string): ChatMessage {
 function threadWithMessages(messages: ChatMessage[]): ChatThreadSnapshot {
   return {
     metadata: {
+      agentId: "agent-test",
+      threadId: "agent-test",
       mode: "ask",
       provider: "glm",
       createdAt: "2026-05-26T00:00:00.000Z",

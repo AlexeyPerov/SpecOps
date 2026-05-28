@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppDomainState, AppSessionSnapshot, WindowSessionSnapshot } from "../domain/contracts";
+import { createFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { createSessionFsMock } from "../test/sessionMock";
 import * as sessionManager from "./sessionManager";
@@ -51,7 +52,7 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
     ],
     session: {
       selectedTabId: "tab-1",
-      openTabs: [{ id: "tab-1", documentId: "doc-1", pinned: false }],
+      openTabs: [createFileTab("tab-1", "doc-1")],
       lastActiveWindowId: "win-a",
       windowBounds: null,
     },
@@ -110,8 +111,8 @@ describe("sanitizeWindowSnapshot", () => {
           ...windowSnapshot().notepad.session,
           selectedTabId: "tab-1",
           openTabs: [
-            { id: "tab-1", documentId: "doc-1", pinned: false },
-            { id: "tab-2", documentId: "doc-missing", pinned: false },
+            createFileTab("tab-1", "doc-1"),
+            createFileTab("tab-2", "doc-missing"),
           ],
         },
       },
@@ -129,7 +130,7 @@ describe("sanitizeWindowSnapshot", () => {
         session: {
           ...windowSnapshot().notepad.session,
           selectedTabId: "tab-1",
-          openTabs: [{ id: "tab-1", documentId: "doc-missing", pinned: false }],
+          openTabs: [createFileTab("tab-1", "doc-missing")],
         },
       },
     });

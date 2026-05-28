@@ -69,9 +69,14 @@
   import { diffLines } from "diff";
   import type { AppDomainState } from "../lib/domain/contracts";
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
+  import { isFileTab, tabDocumentId } from "../lib/domain/contracts";
   import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
-  import { readWorkspaceChatFileSnapshot } from "../lib/services/chatPersistence";
+  import {
+    INTERIM_WORKSPACE_AGENT_ID,
+    readAgentThreadFileSnapshot,
+    scheduleAgentThreadFilePersistence,
+  } from "../lib/services/chatPersistence";
   import {
     ensureWorkspaceReadAccess,
     probeWorkspaceReadAccess,
@@ -153,7 +158,7 @@
     (tab) => tab.id === state.session.selectedTabId,
   );
   $: activeDocument =
-    state.documents.find((documentState) => documentState.id === activeTab?.documentId) ??
+    state.documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
     state.documents[0];
   $: isMarkdownDocument = activeDocument?.language === "markdown";
   $: markdownHtml =
@@ -570,6 +575,9 @@
   function watchedPathsFromState(appDomainState: AppDomainState): string[] {
     const paths = new Set<string>();
     for (const tab of appDomainState.session.openTabs) {
+      if (!isFileTab(tab)) {
+        continue;
+      }
       const documentState = appDomainState.documents.find((doc) => doc.id === tab.documentId);
       if (documentState?.filePath) {
         paths.add(documentState.filePath);
@@ -599,7 +607,7 @@
     }
     const snapshot = appState.getSnapshot();
     const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
-    if (!tab) {
+    if (!tab || !isFileTab(tab)) {
       return;
     }
     await checkDocumentIfDeferred(tab.documentId, "tab");
@@ -671,8 +679,11 @@
       const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
       void ensureWorkspaceReadAccess(normalizedRoot);
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
-      const snapshot = await readWorkspaceChatFileSnapshot(normalizedRoot);
-      chatStore.setWorkspaceThread(normalizedRoot, snapshot.thread);
+      const thread = await readAgentThreadFileSnapshot(
+        normalizedRoot,
+        INTERIM_WORKSPACE_AGENT_ID,
+      );
+      chatStore.setWorkspaceThread(normalizedRoot, thread);
       if (consoleTabSelection === "chat") {
         void chatStore.runAccessPreflight();
       }
@@ -941,15 +952,15 @@
         lastChatWorkspaceRoot = normalizedWorkspaceRoot;
         void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
         chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
-        void readWorkspaceChatFileSnapshot(normalizedWorkspaceRoot)
-          .then((snapshot) => {
+        void readAgentThreadFileSnapshot(normalizedWorkspaceRoot, INTERIM_WORKSPACE_AGENT_ID)
+          .then((thread) => {
             if (!activeWorkspaceRoot) {
               return;
             }
             if (normalizePathSync(activeWorkspaceRoot) !== normalizedWorkspaceRoot) {
               return;
             }
-            chatStore.setWorkspaceThread(normalizedWorkspaceRoot, snapshot.thread);
+            chatStore.setWorkspaceThread(normalizedWorkspaceRoot, thread);
             if (consoleTabSelection === "chat") {
               void chatStore.runAccessPreflight();
             }

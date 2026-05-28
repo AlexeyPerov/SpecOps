@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chatStore, formatCompactionNotice } from "./chatStore";
-import type { ChatThreadFileSnapshot } from "../domain/contracts";
+import type { ChatThreadSnapshot } from "../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
 import {
-  clearWorkspaceChatFileSnapshot,
-  readWorkspaceChatFileSnapshot,
+  deleteAgentPersistence,
+  INTERIM_WORKSPACE_AGENT_ID,
+  readAgentThreadFileSnapshot,
 } from "../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
@@ -20,8 +21,8 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    readWorkspaceChatFileSnapshot: vi.fn(),
-    clearWorkspaceChatFileSnapshot: vi.fn(),
+    readAgentThreadFileSnapshot: vi.fn(),
+    deleteAgentPersistence: vi.fn(),
   };
 });
 
@@ -29,8 +30,8 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const readWorkspaceChatFileSnapshotMock = vi.mocked(readWorkspaceChatFileSnapshot);
-const clearWorkspaceChatFileSnapshotMock = vi.mocked(clearWorkspaceChatFileSnapshot);
+const readAgentThreadFileSnapshotMock = vi.mocked(readAgentThreadFileSnapshot);
+const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 describe("chatStore", () => {
@@ -38,9 +39,9 @@ describe("chatStore", () => {
     chatStore.reset();
     chatStore.setCapabilityChecker(null);
     setChatRetentionMaxTurnsForTests(undefined);
-    readWorkspaceChatFileSnapshotMock.mockReset();
-    clearWorkspaceChatFileSnapshotMock.mockReset();
-    clearWorkspaceChatFileSnapshotMock.mockResolvedValue(undefined);
+    readAgentThreadFileSnapshotMock.mockReset();
+    deleteAgentPersistenceMock.mockReset();
+    deleteAgentPersistenceMock.mockResolvedValue(undefined);
     ensureWorkspaceReadAccessMock.mockReset();
   });
 
@@ -57,6 +58,8 @@ describe("chatStore", () => {
     expect(chatStore.hasThread()).toBe(true);
     expect(chatStore.isEmpty()).toBe(false);
     expect(chatStore.getMetadata()).toMatchObject({
+      agentId: INTERIM_WORKSPACE_AGENT_ID,
+      threadId: INTERIM_WORKSPACE_AGENT_ID,
       mode: "ask",
       provider: "glm",
       createdAt: "2026-05-25T00:00:00.000Z",
@@ -89,6 +92,8 @@ describe("chatStore", () => {
     expect(metadataUpdated).toBe(true);
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["m-1", "m-2"]);
     expect(chatStore.getMetadata()).toEqual({
+      agentId: INTERIM_WORKSPACE_AGENT_ID,
+      threadId: INTERIM_WORKSPACE_AGENT_ID,
       mode: "review",
       provider: "cursor",
       createdAt: "2026-05-25T00:00:00.000Z",
@@ -105,6 +110,8 @@ describe("chatStore", () => {
     expect(updated).toBe(true);
     expect(chatStore.getMessages()).toEqual([]);
     expect(chatStore.getMetadata()).toEqual({
+      agentId: INTERIM_WORKSPACE_AGENT_ID,
+      threadId: INTERIM_WORKSPACE_AGENT_ID,
       mode: "review",
       provider: "glm",
       createdAt: "2026-05-26T00:00:00.000Z",
@@ -161,47 +168,45 @@ describe("chatStore", () => {
   });
 
   it("switches active thread state by workspace key", async () => {
-    const workspaceA: ChatThreadFileSnapshot = {
-      version: 1,
-      thread: {
-        metadata: {
-          mode: "ask",
-          provider: "glm",
+    const workspaceA: ChatThreadSnapshot = {
+      metadata: {
+        agentId: INTERIM_WORKSPACE_AGENT_ID,
+        threadId: INTERIM_WORKSPACE_AGENT_ID,
+        mode: "ask",
+        provider: "glm",
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+      },
+      messages: [
+        {
+          id: "a-1",
+          role: "user",
+          content: "A",
           createdAt: "2026-05-25T00:00:00.000Z",
-          updatedAt: "2026-05-25T00:00:00.000Z",
         },
-        messages: [
-          {
-            id: "a-1",
-            role: "user",
-            content: "A",
-            createdAt: "2026-05-25T00:00:00.000Z",
-          },
-        ],
-      },
+      ],
     };
 
-    const workspaceB: ChatThreadFileSnapshot = {
-      version: 1,
-      thread: {
-        metadata: {
-          mode: "review",
-          provider: "cursor",
+    const workspaceB: ChatThreadSnapshot = {
+      metadata: {
+        agentId: INTERIM_WORKSPACE_AGENT_ID,
+        threadId: INTERIM_WORKSPACE_AGENT_ID,
+        mode: "review",
+        provider: "cursor",
+        createdAt: "2026-05-25T00:00:03.000Z",
+        updatedAt: "2026-05-25T00:00:03.000Z",
+      },
+      messages: [
+        {
+          id: "b-1",
+          role: "user",
+          content: "B",
           createdAt: "2026-05-25T00:00:03.000Z",
-          updatedAt: "2026-05-25T00:00:03.000Z",
         },
-        messages: [
-          {
-            id: "b-1",
-            role: "user",
-            content: "B",
-            createdAt: "2026-05-25T00:00:03.000Z",
-          },
-        ],
-      },
+      ],
     };
 
-    readWorkspaceChatFileSnapshotMock
+    readAgentThreadFileSnapshotMock
       .mockResolvedValueOnce(workspaceA)
       .mockResolvedValueOnce(workspaceB)
       .mockResolvedValueOnce(workspaceA);
@@ -223,10 +228,7 @@ describe("chatStore", () => {
   });
 
   it("shows empty state when workspace has no persisted thread", async () => {
-    readWorkspaceChatFileSnapshotMock.mockResolvedValue({
-      version: 1,
-      thread: null,
-    });
+    readAgentThreadFileSnapshotMock.mockResolvedValue(null);
 
     chatStore.setActiveWorkspaceRoot("/work/empty");
     await chatStore.loadWorkspaceThread("/work/empty");
@@ -441,7 +443,7 @@ describe("chatStore", () => {
     expect(chatStore.hasThread()).toBe(false);
     expect(chatStore.isEmpty()).toBe(true);
     expect(chatStore.getMessages()).toEqual([]);
-    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenCalledWith("/work/a");
+    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", INTERIM_WORKSPACE_AGENT_ID);
   });
 
   it("clear history is idempotent for an already empty workspace thread", async () => {
@@ -450,14 +452,16 @@ describe("chatStore", () => {
     await expect(chatStore.clearActiveWorkspaceChatHistory()).resolves.toBe(true);
     await expect(chatStore.clearActiveWorkspaceChatHistory()).resolves.toBe(true);
 
-    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenCalledTimes(2);
-    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenNthCalledWith(1, "/work/a");
-    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenNthCalledWith(2, "/work/a");
+    expect(deleteAgentPersistenceMock).toHaveBeenCalledTimes(2);
+    expect(deleteAgentPersistenceMock).toHaveBeenNthCalledWith(1, "/work/a", INTERIM_WORKSPACE_AGENT_ID);
+    expect(deleteAgentPersistenceMock).toHaveBeenNthCalledWith(2, "/work/a", INTERIM_WORKSPACE_AGENT_ID);
   });
 
   it("clear history affects only the active workspace thread", async () => {
     chatStore.setWorkspaceThread("/work/a", {
       metadata: {
+        agentId: INTERIM_WORKSPACE_AGENT_ID,
+        threadId: INTERIM_WORKSPACE_AGENT_ID,
         mode: "ask",
         provider: "glm",
         createdAt: "2026-05-26T00:00:00.000Z",
@@ -474,6 +478,8 @@ describe("chatStore", () => {
     });
     chatStore.setWorkspaceThread("/work/b", {
       metadata: {
+        agentId: INTERIM_WORKSPACE_AGENT_ID,
+        threadId: INTERIM_WORKSPACE_AGENT_ID,
         mode: "review",
         provider: "cursor",
         createdAt: "2026-05-26T00:00:01.000Z",
@@ -494,8 +500,8 @@ describe("chatStore", () => {
 
     expect(chatStore.getSnapshot().threadsByWorkspace["/work/a"]).toBeNull();
     expect(chatStore.getSnapshot().threadsByWorkspace["/work/b"]?.messages[0]?.content).toBe("B");
-    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenCalledWith("/work/a");
-    expect(clearWorkspaceChatFileSnapshotMock).not.toHaveBeenCalledWith("/work/b");
+    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", INTERIM_WORKSPACE_AGENT_ID);
+    expect(deleteAgentPersistenceMock).not.toHaveBeenCalledWith("/work/b", INTERIM_WORKSPACE_AGENT_ID);
   });
 
   it("tracks turn lifecycle through begin, complete, and fail transitions", () => {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
+  import { isAgentTab, isFileTab } from "../domain/contracts";
   import { appState } from "../state/appState";
   import { revealInFileManagerLabel } from "../services/platform";
   import { revealInFileManager } from "../services/revealInFileManager";
@@ -44,10 +45,16 @@
   let nearbyRequestId = 0;
 
   function tabDocument(tab: TabState): DocumentState | undefined {
+    if (!isFileTab(tab)) {
+      return undefined;
+    }
     return documents.find((doc) => doc.id === tab.documentId);
   }
 
   function tabTitle(tab: TabState): string {
+    if (isAgentTab(tab)) {
+      return "New agent";
+    }
     const tabDoc = tabDocument(tab);
     if (!tabDoc) {
       return "Untitled";
@@ -57,6 +64,9 @@
   }
 
   function tabTooltip(tab: TabState): string {
+    if (isAgentTab(tab)) {
+      return "Agent chat";
+    }
     const tabDoc = tabDocument(tab);
     if (!tabDoc?.filePath) {
       return "Unsaved document";
@@ -65,6 +75,9 @@
   }
 
   function openContextMenu(event: MouseEvent, tab: TabState): void {
+    if (!isFileTab(tab)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     closeContextMenu();

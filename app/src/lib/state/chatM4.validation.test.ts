@@ -6,16 +6,17 @@ import {
   setChatRetentionMaxTurnsForTests,
 } from "../services/chatRetention";
 import {
-  clearWorkspaceChatFileSnapshot,
-  readWorkspaceChatFileSnapshot,
+  deleteAgentPersistence,
+  INTERIM_WORKSPACE_AGENT_ID,
+  readAgentThreadFileSnapshot,
 } from "../services/chatPersistence";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    readWorkspaceChatFileSnapshot: vi.fn(),
-    clearWorkspaceChatFileSnapshot: vi.fn(),
+    readAgentThreadFileSnapshot: vi.fn(),
+    deleteAgentPersistence: vi.fn(),
   };
 });
 
@@ -23,16 +24,16 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const clearWorkspaceChatFileSnapshotMock = vi.mocked(clearWorkspaceChatFileSnapshot);
+const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
 
 describe("M4 milestone validation", () => {
   beforeEach(() => {
     chatStore.reset();
     chatStore.setCapabilityChecker(null);
     setChatRetentionMaxTurnsForTests(undefined);
-    clearWorkspaceChatFileSnapshotMock.mockReset();
-    clearWorkspaceChatFileSnapshotMock.mockResolvedValue(undefined);
-    vi.mocked(readWorkspaceChatFileSnapshot).mockReset();
+    deleteAgentPersistenceMock.mockReset();
+    deleteAgentPersistenceMock.mockResolvedValue(undefined);
+    vi.mocked(readAgentThreadFileSnapshot).mockReset();
   });
 
   it("keeps long-running usage bounded via FIFO cap overflow", () => {
@@ -134,12 +135,14 @@ describe("M4 milestone validation", () => {
 
     expect(chatStore.hasThread()).toBe(false);
     expect(chatStore.isEmpty()).toBe(true);
-    expect(clearWorkspaceChatFileSnapshotMock).toHaveBeenCalledWith("/work/a");
+    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", INTERIM_WORKSPACE_AGENT_ID);
   });
 
   it("isolates clear history to the active workspace", async () => {
     chatStore.setWorkspaceThread("/work/a", {
       metadata: {
+        agentId: INTERIM_WORKSPACE_AGENT_ID,
+        threadId: INTERIM_WORKSPACE_AGENT_ID,
         mode: "ask",
         provider: "glm",
         createdAt: "2026-05-26T00:00:00.000Z",
@@ -157,6 +160,8 @@ describe("M4 milestone validation", () => {
     });
     chatStore.setWorkspaceThread("/work/b", {
       metadata: {
+        agentId: INTERIM_WORKSPACE_AGENT_ID,
+        threadId: INTERIM_WORKSPACE_AGENT_ID,
         mode: "review",
         provider: "cursor",
         createdAt: "2026-05-26T00:00:01.000Z",

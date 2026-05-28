@@ -9,6 +9,7 @@ import type {
   TabState,
   WindowSessionSnapshot,
 } from "../domain/contracts";
+import { createFileTab, isAgentTab, isFileTab, normalizeTabState } from "../domain/contracts";
 import { logDiagnostic } from "./logging";
 import {
   dedupeWindowSnapshotAgainstRegistry,
@@ -158,7 +159,12 @@ export async function sanitizeWindowSnapshot(
     );
     const openTabs: TabState[] = [];
 
-    for (const tab of context.session.openTabs) {
+    for (const rawTab of context.session.openTabs) {
+      const tab = normalizeTabState(rawTab);
+      if (isAgentTab(tab)) {
+        openTabs.push(tab);
+        continue;
+      }
       const linkedDocument = documentsById.get(tab.documentId);
       if (!linkedDocument) {
         continue;
@@ -189,14 +195,16 @@ export async function sanitizeWindowSnapshot(
         documents: [fallbackDocument],
         session: {
           ...context.session,
-          openTabs: [{ id: tabId, documentId: docId, pinned: false }],
+          openTabs: [createFileTab(tabId, docId)],
           selectedTabId: tabId,
           windowBounds: context.session.windowBounds ?? null,
         },
       };
     }
 
-    const referencedDocIds = new Set(openTabs.map((tab) => tab.documentId));
+    const referencedDocIds = new Set(
+      openTabs.filter(isFileTab).map((tab) => tab.documentId),
+    );
     const documents = [...documentsById.values()].filter((documentState) =>
       referencedDocIds.has(documentState.id),
     );

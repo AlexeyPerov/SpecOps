@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 22:05 (MSK)
+
+- **M6-2 — Streaming response support:** Send pipeline uses `streamProviderMessage` to append partial assistant content via `chatStore.updateMessageContent` during generation and finalize on completion. Debug provider streams simulated chunks; GLM and other buffered-only providers fall back to `sendMessage` with a single content update. Persistence writes the final message once after the turn completes (no partial persist thrash). Added `chatSend.test.ts` for adapter streaming/fallback coverage and send-pipeline tests for persist-after-stream and GLM buffered fallback. Marked M6-2 complete in execution plan.
+
 ## 2026-05-28 22:00 (MSK)
 
 - **M6-1 — Retry last turn:** Added `retryLastChatTurn()` to resend the last user message through the current provider without duplicating the user turn. Wired **Retry** in `ChatPanel` when a failed turn exists (disabled while generating). Successful retry clears failure runtime state and appends a system note preserving the previous error. Added retry pipeline unit tests for Debug and GLM paths. Marked M6-1 complete in execution plan.

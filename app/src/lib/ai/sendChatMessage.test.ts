@@ -139,6 +139,62 @@ describe("sendChatMessage", () => {
     expect(new Set(observedLengths).size).toBeGreaterThan(1);
   });
 
+  it("persists the completed stream once with full assistant content", async () => {
+    const resultPromise = sendChatMessage("Persist after stream");
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(true);
+    expect(schedulePersistMock).toHaveBeenCalledOnce();
+    const persistedSnapshot = schedulePersistMock.mock.calls[0]?.[2];
+    const assistant = persistedSnapshot?.thread.messages.find((message) => message.role === "assistant");
+    expect(assistant?.content).toContain("simulated answer");
+    expect(assistant?.content).toBe(chatStore.getMessages().find((message) => message.role === "assistant")?.content);
+  });
+
+  it("uses buffered fallback for GLM without streaming partial updates", async () => {
+    resetChatProviderRegistryForTests();
+    appState.setGlmApiKey("glm-test-key");
+    registerChatProvider(
+      createGlmChatProvider(
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+        glmFetchSuccess("Buffered GLM response."),
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.debugProvider,
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+
+    const observedLengths: number[] = [];
+    const unsubscribe = chatStore.subscribe(() => {
+      const assistant = chatStore.getMessages().find((message) => message.role === "assistant");
+      if (assistant) {
+        observedLengths.push(assistant.content.length);
+      }
+    });
+
+    const result = await sendChatMessage("Buffered GLM please");
+    unsubscribe();
+
+    expect(result.ok).toBe(true);
+    expect(observedLengths[0]).toBe(0);
+    expect(observedLengths.every((length) => length === 0 || length === 22)).toBe(true);
+    expect(new Set(observedLengths.filter((length) => length > 0))).toEqual(new Set([22]));
+    expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
+      "Buffered GLM response.",
+    );
+  });
+
   it("prevents duplicate sends while generating", async () => {
     const firstPromise = sendChatMessage("First");
     const second = await sendChatMessage("Second");

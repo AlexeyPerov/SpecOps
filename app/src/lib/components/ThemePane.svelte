@@ -225,6 +225,7 @@
 
 <style>
   @import "../styles/settingsForm.css";
+  @import "../styles/themePaneForm.css";
 
   .theme-pane {
     position: absolute;

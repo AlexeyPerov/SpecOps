@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 11:45 (MSK)
+
+- **Build warnings:** Fixed Svelte a11y warnings in `FindReplacePanel.svelte` (use `<search>` with programmatic keydown) and `SettingsDialog.svelte` (`div` instead of `nav` for tablist). Split settings CSS into `settingsForm.css`, `settingsDialogForm.css`, and `themePaneForm.css` so scoped imports no longer report unused selectors.
+
 ## 2026-05-28 (release)
 
 - **Version 0.2.0:** Bumped app version in `package.json`, `Cargo.toml`, and `tauri.conf.json`.

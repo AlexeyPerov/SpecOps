@@ -12,6 +12,7 @@
 
   let findInputEl: HTMLInputElement | undefined;
   let replaceInputEl: HTMLInputElement | undefined;
+  let panelEl: HTMLElement | undefined;
   let matchCount = 0;
   let currentMatch = 0;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -156,11 +157,16 @@
 
   onMount(() => {
     mounted = true;
+    panelEl?.addEventListener("keydown", handleKeydown);
     findInputEl?.focus();
     findInputEl?.select();
     if (findQuery) {
       runIncrementalSearch();
     }
+
+    return () => {
+      panelEl?.removeEventListener("keydown", handleKeydown);
+    };
   });
 
   onDestroy(() => {
@@ -180,13 +186,7 @@
   }
 </script>
 
-<div
-  class="find-replace-panel"
-  role="search"
-  tabindex="-1"
-  aria-label="Find and Replace"
-  onkeydown={handleKeydown}
->
+<search bind:this={panelEl} class="find-replace-panel" aria-label="Find and Replace">
   <div class="fr-row">
     <button
       type="button"
@@ -245,7 +245,7 @@
       </button>
     </div>
   {/if}
-</div>
+</search>
 
 <style>
   .find-replace-panel {

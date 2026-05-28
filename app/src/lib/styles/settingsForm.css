@@ -15,13 +15,6 @@
   font-weight: 600;
 }
 
-.settings-section-note {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.4;
-  color: var(--color-text-secondary);
-}
-
 .settings-subsection {
   display: flex;
   flex-direction: column;
@@ -69,90 +62,4 @@
 
 .settings-toggle input {
   accent-color: var(--accent-color);
-}
-
-.settings-theme-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  font-size: 0.875rem;
-  padding: var(--space-2) 0;
-}
-
-.settings-button {
-  align-self: flex-start;
-  min-height: 28px;
-  padding: 0 var(--space-6);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-1);
-  color: var(--color-text-primary);
-  font: inherit;
-  font-size: 0.8125rem;
-  cursor: pointer;
-}
-
-.settings-button:hover {
-  background: var(--color-hover);
-}
-
-.settings-button:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
-.settings-button-danger {
-  color: var(--color-text-primary);
-}
-
-.theme-token-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-4);
-  font-size: 0.8125rem;
-}
-
-.theme-token-label {
-  min-width: 0;
-}
-
-.theme-token-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.theme-token-controls input[type="color"] {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  cursor: pointer;
-}
-
-.theme-token-text {
-  width: 7.5rem;
-  min-height: 28px;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-1);
-  color: var(--color-text-primary);
-  font: inherit;
-  font-size: 0.75rem;
-}
-
-.theme-token-text:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
-.theme-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  flex-shrink: 0;
 }

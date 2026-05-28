@@ -433,7 +433,7 @@
       </header>
 
       <div class="settings-dialog-main">
-        <nav
+        <div
           class="settings-dialog-sidebar"
           style={`width: ${SETTINGS_TAB_SIDEBAR_WIDTH_PX}px;`}
           role="tablist"
@@ -459,7 +459,7 @@
           >
             Debug AI
           </button>
-        </nav>
+        </div>
 
         <div
           class="settings-dialog-body"
@@ -486,6 +486,7 @@
 
 <style>
   @import "../styles/settingsForm.css";
+  @import "../styles/settingsDialogForm.css";
 
   .settings-dialog-backdrop {
     position: fixed;

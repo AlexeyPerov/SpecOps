@@ -18,7 +18,7 @@ import {
   readAgentThreadFileSnapshot,
   readWorkspaceAgentsIndexSnapshot,
 } from "../services/chatPersistence";
-import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
+import { DRAFT_AGENT_TITLE, deriveAgentTitle } from "../services/chatAgents";
 import { compactChatThread } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { formatProviderSwitchNotice } from "../ai/providers/selection";
@@ -245,6 +245,37 @@ function createDraftAgentEntry(agentId: string, lastUsedAt: string): AgentIndexE
   };
 }
 
+function findAgentIndexEntry(
+  workspace: WorkspaceAgentsState,
+  agentId: string,
+): AgentIndexEntry | undefined {
+  return workspace.agentIndex.find((entry) => entry.id === agentId);
+}
+
+function isDraftAgentEntry(entry: AgentIndexEntry | undefined): boolean {
+  return entry?.isDraft === true;
+}
+
+function promoteDraftAgentIndexEntry(
+  entry: AgentIndexEntry,
+  firstUserMessageContent: string,
+  lastUsedAt: string,
+): AgentIndexEntry {
+  return {
+    id: entry.id,
+    title: deriveAgentTitle({ firstUserMessage: firstUserMessageContent }),
+    lastUsedAt,
+  };
+}
+
+function patchAgentIndexEntry(
+  agentIndex: AgentIndexEntry[],
+  agentId: string,
+  nextEntry: AgentIndexEntry,
+): AgentIndexEntry[] {
+  return agentIndex.map((entry) => (entry.id === agentId ? nextEntry : entry));
+}
+
 function ensureActiveAgent(
   state: ChatStoreState,
 ): { state: ChatStoreState; workspace: WorkspaceAgentsState; agentId: string } | null {
@@ -436,6 +467,49 @@ function createChatStore() {
     getActiveAgentId(): string | null {
       return activeAgentId(this.getSnapshot());
     },
+    createDraftAgent(options?: { activate?: boolean }): string | null {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
+        return null;
+      }
+
+      let createdAgentId: string | null = null;
+      update((state) => {
+        const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
+        const agentId = createAgentId();
+        const lastUsedAt = new Date().toISOString();
+        const activate = options?.activate !== false;
+        createdAgentId = agentId;
+        return patchWorkspaceState(nextState, root, {
+          ...workspace,
+          activeAgentId: activate ? agentId : workspace.activeAgentId,
+          agentIndex: [...workspace.agentIndex, createDraftAgentEntry(agentId, lastUsedAt)],
+        });
+      });
+      return createdAgentId;
+    },
+    isAgentDraft(agentId: string): boolean {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
+        return false;
+      }
+      const workspace = this.getSnapshot().workspaces[root];
+      if (!workspace) {
+        return false;
+      }
+      return isDraftAgentEntry(findAgentIndexEntry(workspace, agentId));
+    },
+    getAgentTitle(agentId: string): string | null {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
+        return null;
+      }
+      const workspace = this.getSnapshot().workspaces[root];
+      if (!workspace) {
+        return null;
+      }
+      return findAgentIndexEntry(workspace, agentId)?.title ?? null;
+    },
     getAgentIndex(): AgentIndexEntry[] {
       const root = this.getActiveWorkspaceRoot();
       if (!root) {
@@ -594,10 +668,29 @@ function createChatStore() {
         };
         const nextThread = options?.skipCompaction ? thread : compactChatThread(thread).thread;
 
+        let nextAgentIndex = workspace.agentIndex;
+        if (message.role === "user") {
+          const userMessageCount = nextThread.messages.filter((entry) => entry.role === "user").length;
+          const indexEntry = findAgentIndexEntry(workspace, agentId);
+          if (userMessageCount === 1 && isDraftAgentEntry(indexEntry)) {
+            nextAgentIndex = patchAgentIndexEntry(
+              workspace.agentIndex,
+              agentId,
+              promoteDraftAgentIndexEntry(indexEntry!, message.content, message.createdAt),
+            );
+          } else if (indexEntry) {
+            nextAgentIndex = patchAgentIndexEntry(workspace.agentIndex, agentId, {
+              ...indexEntry,
+              lastUsedAt: message.createdAt,
+            });
+          }
+        }
+
         appended = true;
         return patchWorkspaceState(workingState, root, {
           ...workspace,
           activeAgentId: workspace.activeAgentId ?? agentId,
+          agentIndex: nextAgentIndex,
           threadsByAgentId: {
             ...workspace.threadsByAgentId,
             [agentId]: nextThread,
@@ -856,12 +949,7 @@ function createChatStore() {
       }
       const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
       if (!targetAgentId) {
-        const ensured = ensureActiveAgent(this.getSnapshot());
-        if (!ensured) {
-          return false;
-        }
-        update(() => ensured.state);
-        return this.beginTurn(turnId, ensured.agentId);
+        return false;
       }
       const runtime = runtimeForAgent(this.getSnapshot(), targetAgentId);
       if (runtime.isGenerating) {

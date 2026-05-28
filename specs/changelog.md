@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 16:16 (MSK)
+
+- **M5-2-3 — Draft agent lifecycle:** Added `chatStore.createDraftAgent`, `isAgentDraft`, and `getAgentTitle`. Drafts live in the in-memory agent index only (no thread file) until the first user message; `appendMessage` and `sendChatMessage` promote the draft (title from first line, `isDraft` cleared, `lastUsedAt` updated). Persistence is skipped until a user message exists. Unit tests for multiple drafts, promotion, and first-send persist.
+
 ## 2026-05-28 15:56 (MSK)
 
 - **M5-2-2 — chatStore per-agent refactor:** Refactored `chatStore` to `threadsByAgentId`, `runtimeByAgentId`, `activeAgentId`, and in-memory workspace agent index per root. Mutations, turn lifecycle, provider switch, and `deleteAgent` target agent id; generation lock is per agent. `sendChatMessage` accepts optional `agentId`. Removed `INTERIM_WORKSPACE_AGENT_ID` bridge. Added unit tests for parallel runtime, active-agent switching, and delete agent.

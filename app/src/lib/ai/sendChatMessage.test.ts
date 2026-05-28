@@ -55,6 +55,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setDefaultChatProviderResolver(() => "debug");
     chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
   });
 
@@ -87,6 +88,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setDefaultChatProviderResolver(() => "debug");
     chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.createDraftAgent();
 
     const resultPromise = sendChatMessage("First message without metadata");
     await vi.runAllTimersAsync();
@@ -166,6 +168,44 @@ describe("sendChatMessage", () => {
     }
     expect(chatStore.getMessages()).toHaveLength(0);
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
+  });
+
+  it("promotes draft agent and schedules persistence on first send", async () => {
+    chatStore.reset();
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(() => appState.getSnapshot().settings.debugProvider),
+    );
+    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+    expect(agentId).toBe("agent-1");
+    expect(chatStore.isAgentDraft(agentId!)).toBe(true);
+
+    const resultPromise = sendChatMessage("Sidebar title from first send");
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(true);
+    expect(chatStore.isAgentDraft(agentId!)).toBe(false);
+    expect(chatStore.getAgentTitle(agentId!)).toBe("Sidebar title from first send");
+    expect(schedulePersistMock).toHaveBeenCalledOnce();
+    const persistedSnapshot = schedulePersistMock.mock.calls[0]?.[2];
+    expect(persistedSnapshot?.thread.messages.some((message) => message.role === "user")).toBe(true);
+  });
+
+  it("returns no_agent when send runs without an active draft or agent", async () => {
+    chatStore.reset();
+    chatStore.setActiveWorkspaceRoot("/work/a");
+
+    const result = await sendChatMessage("Hello");
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "no_agent",
+      message: "Could not resolve an active agent.",
+    });
+    expect(schedulePersistMock).not.toHaveBeenCalled();
   });
 
   it("produces structured review output for review mode threads", async () => {

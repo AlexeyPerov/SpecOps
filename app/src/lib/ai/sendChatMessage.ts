@@ -49,7 +49,7 @@ function createAssistantPlaceholder(turnId: string): ChatMessage {
 function persistAgentThreadOnce(agentId: string): void {
   const root = chatStore.getActiveWorkspaceRoot();
   const thread = chatStore.getActiveThreadSnapshot(agentId);
-  if (!root || !thread) {
+  if (!root || !thread || !thread.messages.some((message) => message.role === "user")) {
     return;
   }
   scheduleAgentThreadFilePersistence(root, agentId, {
@@ -76,18 +76,18 @@ export async function sendChatMessage(
     return { ok: false, reason: "no_workspace", message: "Open a workspace to send chat messages." };
   }
 
+  const activeAgentId = agentId ?? chatStore.getActiveAgentId();
+  if (!activeAgentId) {
+    return { ok: false, reason: "no_agent", message: "Could not resolve an active agent." };
+  }
+
   const turnId = `turn-${Date.now()}`;
-  if (!chatStore.beginTurn(turnId, agentId)) {
+  if (!chatStore.beginTurn(turnId, activeAgentId)) {
     return {
       ok: false,
       reason: "generating",
       message: "Another response is already in progress.",
     };
-  }
-
-  const activeAgentId = agentId ?? chatStore.getActiveAgentId();
-  if (!activeAgentId) {
-    return { ok: false, reason: "no_agent", message: "Could not resolve an active agent." };
   }
 
   const accessState = await chatStore.runAccessPreflight();

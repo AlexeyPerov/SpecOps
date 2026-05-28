@@ -135,7 +135,7 @@
     const root = chatStore.getActiveWorkspaceRoot();
     const agentId = chatStore.getActiveAgentId();
     const thread = agentId ? chatStore.getActiveThreadSnapshot(agentId) : null;
-    if (!root || !agentId || !thread) {
+    if (!root || !agentId || !thread || !thread.messages.some((message) => message.role === "user")) {
       return;
     }
     scheduleAgentThreadFilePersistence(root, agentId, {

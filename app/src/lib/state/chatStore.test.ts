@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chatStore, formatCompactionNotice, resetAgentIdCounterForTests } from "./chatStore";
+import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
 import type { ChatThreadSnapshot } from "../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
 import {
@@ -568,6 +569,7 @@ describe("chatStore", () => {
 
   it("tracks turn lifecycle through begin, complete, and fail transitions", () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.createDraftAgent();
 
     expect(chatStore.beginTurn("turn-1")).toBe(true);
     expect(chatStore.getRuntimeState()).toMatchObject({
@@ -622,6 +624,7 @@ describe("chatStore", () => {
 
   it("clears retry runtime state when chat history is cleared", async () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.createDraftAgent();
     chatStore.beginTurn("turn-1");
     chatStore.failTurn({ message: "failed" });
 
@@ -638,6 +641,53 @@ describe("chatStore", () => {
   it("formats compaction notice copy for the chat banner", () => {
     expect(formatCompactionNotice(1)).toBe("1 older message compacted");
     expect(formatCompactionNotice(24)).toBe("24 older messages compacted");
+  });
+
+  it("createDraftAgent adds session draft without in-memory thread", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+
+    expect(agentId).toBe("agent-1");
+    expect(chatStore.getActiveAgentId()).toBe("agent-1");
+    expect(chatStore.isAgentDraft("agent-1")).toBe(true);
+    expect(chatStore.getAgentTitle("agent-1")).toBe(DRAFT_AGENT_TITLE);
+    expect(chatStore.getActiveThreadSnapshot("agent-1")).toBeNull();
+    expect(chatStore.hasThread("agent-1")).toBe(false);
+  });
+
+  it("supports multiple concurrent draft agents with distinct ids", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const firstId = chatStore.createDraftAgent();
+    const secondId = chatStore.createDraftAgent({ activate: true });
+
+    expect(firstId).toBe("agent-1");
+    expect(secondId).toBe("agent-2");
+    expect(chatStore.getActiveAgentId()).toBe("agent-2");
+    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["agent-1", "agent-2"]);
+    expect(chatStore.getAgentIndex().every((entry) => entry.title === DRAFT_AGENT_TITLE)).toBe(true);
+    expect(chatStore.getAgentIndex().every((entry) => entry.isDraft)).toBe(true);
+  });
+
+  it("promotes draft title and clears isDraft on first user message", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+    expect(agentId).not.toBeNull();
+
+    chatStore.appendMessage(
+      {
+        id: "m-1",
+        role: "user",
+        content: "First line of the agent\nsecond line",
+        createdAt: "2026-05-28T12:00:00.000Z",
+      },
+      { agentId: agentId! },
+    );
+
+    expect(chatStore.isAgentDraft(agentId!)).toBe(false);
+    expect(chatStore.getAgentTitle(agentId!)).toBe("First line of the agent");
+    const entry = chatStore.getAgentIndex().find((item) => item.id === agentId);
+    expect(entry?.isDraft).toBeUndefined();
+    expect(entry?.lastUsedAt).toBe("2026-05-28T12:00:00.000Z");
   });
 });
 

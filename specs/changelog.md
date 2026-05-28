@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 (release)
+
+- **Version 0.2.0:** Bumped app version in `package.json`, `Cargo.toml`, and `tauri.conf.json`.
+
 ## 2026-05-28 09:15 (MSK)
 
 - **Themes T5:** `cycleTheme` flips `dark-amber` ↔ `light-blue` by current `data-theme` mode (from built-in or custom); clears custom selection. Menu/command wiring unchanged (`Meta+Shift+T`, View → Cycle Theme). `settingsStore.test.ts` documents that theme tests live in `themeStore.test.ts`; legacy `theme` field still ignored on load.

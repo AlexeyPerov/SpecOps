@@ -205,7 +205,6 @@ describe("syncOpenFileRegistryForWindow", () => {
         windowBounds: null,
       },
       settings: {
-        theme: "dark-amber",
         statusBarVisible: true,
         externalFiles: {
           watchExternalChanges: true,
@@ -216,6 +215,10 @@ describe("syncOpenFileRegistryForWindow", () => {
         decoratePlaintextSymbols: false,
         hideActivityRailWhenNotepadOnly: true,
         debugProvider: defaultDebugProviderSettings,
+      },
+      theme: {
+        activeTheme: { kind: "builtin", id: "dark-amber" },
+        customThemes: [],
       },
       recentFiles: [],
       editor: {
@@ -307,7 +310,6 @@ describe("syncOpenFileRegistryForWindow", () => {
         windowBounds: null,
       },
       settings: {
-        theme: "dark-amber",
         statusBarVisible: true,
         externalFiles: {
           watchExternalChanges: true,
@@ -318,6 +320,10 @@ describe("syncOpenFileRegistryForWindow", () => {
         decoratePlaintextSymbols: false,
         hideActivityRailWhenNotepadOnly: true,
         debugProvider: defaultDebugProviderSettings,
+      },
+      theme: {
+        activeTheme: { kind: "builtin", id: "dark-amber" },
+        customThemes: [],
       },
       recentFiles: [],
       editor: {

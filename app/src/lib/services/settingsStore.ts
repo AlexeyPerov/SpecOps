@@ -5,12 +5,9 @@ import {
   normalizeDebugProviderSettings,
 } from "../ai/providers/debugProviderSettings";
 import type { DebugProviderSettings, ExternalFilesSettings } from "../domain/contracts";
-import type { AppTheme } from "../styles/themes";
-import { normalizeLegacyThemeId } from "../styles/themes";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
 export interface PersistedSettings {
-  theme: AppTheme;
   wrapLines: boolean;
   zoomPercent: number;
   watchExternalChanges: boolean;
@@ -30,7 +27,6 @@ export const defaultExternalFilesSettings: ExternalFilesSettings = {
 };
 
 export const defaultPersistedSettings: PersistedSettings = {
-  theme: "dark-amber",
   wrapLines: true,
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
@@ -73,25 +69,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
     const raw = await readTextFile(path);
     const parsed = JSON.parse(raw) as Record<string, unknown>;
 
-    let theme: AppTheme | null = null;
-
-    if (typeof parsed.theme === "string") {
-      theme = normalizeLegacyThemeId(parsed.theme);
-    } else if (
-      (parsed.themeMode === "dark" || parsed.themeMode === "light") &&
-      typeof parsed.accent === "string"
-    ) {
-      theme = normalizeLegacyThemeId(`${parsed.themeMode}-${parsed.accent}`);
-    }
-
-    if (
-      theme !== null &&
-      isBoolean(parsed.wrapLines) &&
-      typeof parsed.zoomPercent === "number"
-    ) {
+    if (isBoolean(parsed.wrapLines) && typeof parsed.zoomPercent === "number") {
       const externalFiles = parseExternalFilesSettings(parsed as Partial<PersistedSettings>);
       return {
-        theme,
         wrapLines: parsed.wrapLines,
         zoomPercent: parsed.zoomPercent as number,
         ...externalFiles,
@@ -129,7 +109,6 @@ export function toExternalFilesSettings(
 }
 
 export function toPersistedSettings(input: {
-  theme: AppTheme;
   wrapLines: boolean;
   zoomPercent: number;
   externalFiles: ExternalFilesSettings;
@@ -138,7 +117,6 @@ export function toPersistedSettings(input: {
   debugProvider: DebugProviderSettings;
 }): PersistedSettings {
   return {
-    theme: input.theme,
     wrapLines: input.wrapLines,
     zoomPercent: input.zoomPercent,
     ...input.externalFiles,

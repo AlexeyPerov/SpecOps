@@ -17,7 +17,7 @@
   } from "../lib/commands/registry";
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
-  import { appState } from "../lib/state/appState";
+  import { appState, setThemeSaveErrorNotifier } from "../lib/state/appState";
   import { chatStore } from "../lib/state/chatStore";
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
@@ -622,9 +622,10 @@
     currentWindowId = currentWindow.label;
 
     const persistedSettings = await loadPersistedSettings();
+    setThemeSaveErrorNotifier(notify);
+    await appState.loadTheme();
     if (persistedSettings) {
       appState.applyPersistedSettings({
-        theme: persistedSettings.theme,
         wrapLines: persistedSettings.wrapLines,
         zoomPercent: persistedSettings.zoomPercent,
         externalFiles: toExternalFilesSettings(persistedSettings),
@@ -632,8 +633,6 @@
         hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
         debugProvider: persistedSettings.debugProvider,
       });
-    } else {
-      appState.initializeTheme();
     }
 
     initializeChatProviders();
@@ -1015,7 +1014,6 @@
     if (currentWindowId) {
       void savePersistedSettings(
         toPersistedSettings({
-          theme: state.settings.theme,
           wrapLines: state.editor.wrapLines,
           zoomPercent: state.editor.zoomPercent,
           externalFiles: state.settings.externalFiles,

@@ -1,4 +1,4 @@
-import type { AppTheme } from "../styles/themes";
+import type { ActiveThemeRef, CustomThemeRecord } from "../services/themeStore";
 
 export interface DiskFingerprint {
   mtimeMs: number;
@@ -90,8 +90,12 @@ export interface DebugProviderSettings {
   includeDiagnostics: boolean;
 }
 
+export interface AppThemeState {
+  activeTheme: ActiveThemeRef;
+  customThemes: CustomThemeRecord[];
+}
+
 export interface AppSettingsState {
-  theme: AppTheme;
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
@@ -234,6 +238,7 @@ export interface AppDomainState {
   documents: DocumentState[];
   session: SessionState;
   settings: AppSettingsState;
+  theme: AppThemeState;
   recentFiles: string[];
   editor: {
     cursorLine: number;

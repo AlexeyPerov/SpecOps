@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 import type {
   AppDomainState,
   AppSettingsState,
+  AppThemeState,
   ContextId,
   ContextSnapshot,
   DebugProviderSettings,
@@ -22,14 +23,25 @@ import { inferEditorLanguage } from "../editor/editorLanguage";
 import { normalizePathSync } from "../services/diskFingerprint";
 import { bumpRecentFile } from "../services/recentFiles";
 import { syncRecentFiles } from "../services/recentFilesSync";
-import type { AppTheme } from "../styles/themes";
 import {
-  APP_THEME_IDS,
-  DEFAULT_THEME,
-  getThemeAccentHex,
-  getThemeMode,
-  applyThemeSyntaxPalette,
-} from "../styles/themes";
+  defaultThemeFile,
+  loadThemeFile,
+  saveThemeFile,
+  type ActiveThemeRef,
+  type CustomThemeRecord,
+  type ThemeFileV1,
+} from "../services/themeStore";
+import type { BuiltinThemeId } from "../styles/themeTokens";
+import {
+  applyBuiltinTheme,
+  applyCustomTheme,
+  DEFAULT_BUILTIN_THEME,
+  getBuiltinThemeMode,
+  resolveBuiltinTokens,
+  snapshotThemeTokens,
+  type ThemeTokenKey,
+  type ThemeTokens,
+} from "../styles/themeTokens";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -39,7 +51,6 @@ const defaultExternalFilesSettings: ExternalFilesSettings = {
 };
 
 const defaultSettings: AppSettingsState = {
-  theme: DEFAULT_THEME,
   statusBarVisible: true,
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
@@ -47,6 +58,151 @@ const defaultSettings: AppSettingsState = {
   debugProvider: defaultDebugProviderSettings,
 };
 
+const defaultThemeState: AppThemeState = {
+  activeTheme: defaultThemeFile.activeTheme,
+  customThemes: defaultThemeFile.customThemes,
+};
+
+let themeSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let themeSaveErrorNotifier: ((message: string) => void) | null = null;
+
+const THEME_TOKEN_SAVE_DEBOUNCE_MS = 300;
+const THEME_SAVE_ERROR_MESSAGE =
+  "Failed to save theme. Changes kept in memory; will retry on next change.";
+
+/** Clears debounce timer between unit tests. */
+export function resetThemePersistenceForTests(): void {
+  if (themeSaveTimer) {
+    clearTimeout(themeSaveTimer);
+    themeSaveTimer = null;
+  }
+}
+
+export function setThemeSaveErrorNotifier(notifier: (message: string) => void): void {
+  themeSaveErrorNotifier = notifier;
+}
+
+function toThemeFile(theme: AppThemeState): ThemeFileV1 {
+  return {
+    version: 1,
+    activeTheme: theme.activeTheme,
+    customThemes: theme.customThemes,
+  };
+}
+
+async function persistThemeNow(theme: AppThemeState): Promise<void> {
+  try {
+    await saveThemeFile(toThemeFile(theme));
+  } catch {
+    themeSaveErrorNotifier?.(THEME_SAVE_ERROR_MESSAGE);
+  }
+}
+
+function persistThemeImmediate(theme: AppThemeState): void {
+  if (themeSaveTimer) {
+    clearTimeout(themeSaveTimer);
+    themeSaveTimer = null;
+  }
+  void persistThemeNow(theme);
+}
+
+function scheduleDebouncedThemeSave(theme: AppThemeState): void {
+  if (themeSaveTimer) {
+    clearTimeout(themeSaveTimer);
+  }
+  themeSaveTimer = setTimeout(() => {
+    themeSaveTimer = null;
+    void persistThemeNow(theme);
+  }, THEME_TOKEN_SAVE_DEBOUNCE_MS);
+}
+
+function findCustomTheme(theme: AppThemeState, id: string): CustomThemeRecord | undefined {
+  return theme.customThemes.find((entry) => entry.id === id);
+}
+
+function fallbackBuiltinForTheme(theme: AppThemeState): BuiltinThemeId {
+  if (theme.activeTheme.kind === "builtin") {
+    return theme.activeTheme.id;
+  }
+  const custom = findCustomTheme(theme, theme.activeTheme.id);
+  if (!custom) {
+    return DEFAULT_BUILTIN_THEME;
+  }
+  return custom.baseMode === "dark" ? "dark-amber" : "light-blue";
+}
+
+function baseModeForTheme(theme: AppThemeState): "dark" | "light" {
+  if (theme.activeTheme.kind === "builtin") {
+    return getBuiltinThemeMode(theme.activeTheme.id);
+  }
+  return findCustomTheme(theme, theme.activeTheme.id)?.baseMode ?? "dark";
+}
+
+function applyThemeState(theme: AppThemeState): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const root = document.documentElement;
+  if (theme.activeTheme.kind === "builtin") {
+    applyBuiltinTheme(theme.activeTheme.id, root);
+    return;
+  }
+
+  const custom = findCustomTheme(theme, theme.activeTheme.id);
+  if (custom) {
+    applyCustomTheme(custom, root);
+    return;
+  }
+
+  applyBuiltinTheme(DEFAULT_BUILTIN_THEME, root);
+}
+
+function nextCustomThemeName(customThemes: CustomThemeRecord[]): string {
+  const usedIndexes = new Set<number>();
+  for (const custom of customThemes) {
+    const match = /^Custom (\d+)$/.exec(custom.name.trim());
+    if (match) {
+      usedIndexes.add(Number(match[1]));
+    }
+  }
+  let index = 1;
+  while (usedIndexes.has(index)) {
+    index += 1;
+  }
+  return `Custom ${index}`;
+}
+
+function snapshotCurrentThemeTokens(theme: AppThemeState): ThemeTokens {
+  const fallbackBuiltin = fallbackBuiltinForTheme(theme);
+  if (typeof document !== "undefined") {
+    try {
+      return snapshotThemeTokens(document.documentElement, fallbackBuiltin);
+    } catch {
+      // jsdom or pre-paint environment
+    }
+  }
+  return resolveBuiltinTokens(fallbackBuiltin);
+}
+
+function createCustomThemeFromCurrent(theme: AppThemeState): AppThemeState {
+  const baseMode = baseModeForTheme(theme);
+  const tokens = snapshotCurrentThemeTokens(theme);
+  const id = crypto.randomUUID();
+  const custom: CustomThemeRecord = {
+    id,
+    name: nextCustomThemeName(theme.customThemes),
+    baseMode,
+    tokens,
+  };
+
+  const nextTheme: AppThemeState = {
+    activeTheme: { kind: "custom", id },
+    customThemes: [...theme.customThemes, custom],
+  };
+  applyThemeState(nextTheme);
+  return nextTheme;
+}
 let docCounter = 1;
 let tabCounter = 1;
 let workspaceCounter = 0;
@@ -393,6 +549,7 @@ const initialState: AppDomainState = {
     windowBounds: null,
   },
   settings: defaultSettings,
+  theme: defaultThemeState,
   recentFiles: [],
   editor: {
     cursorLine: 1,
@@ -405,17 +562,6 @@ const initialState: AppDomainState = {
     projectPanelCollapsed: false,
   },
 };
-
-function applyTheme(settings: AppSettingsState): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const root = document.documentElement;
-  root.dataset.theme = getThemeMode(settings.theme);
-  root.style.setProperty("--accent-color", getThemeAccentHex(settings.theme));
-  applyThemeSyntaxPalette(settings.theme, root);
-}
 
 function createStateStore() {
   const { subscribe, update: rawUpdate, set } = writable<AppDomainState>(initialState);
@@ -462,31 +608,109 @@ function createStateStore() {
       un();
       return snapshot;
     },
-    setTheme(id: AppTheme) {
+    setActiveTheme(ref: ActiveThemeRef) {
       update((state) => {
-        const settings = { ...state.settings, theme: id };
-        applyTheme(settings);
-        return { ...state, settings };
+        const theme: AppThemeState = { ...state.theme, activeTheme: ref };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
       });
+    },
+    /** @deprecated Use `setActiveTheme({ kind: "builtin", id })`. */
+    setTheme(id: BuiltinThemeId) {
+      this.setActiveTheme({ kind: "builtin", id });
     },
     cycleTheme() {
       update((state) => {
-        const index = APP_THEME_IDS.indexOf(state.settings.theme);
-        const theme = APP_THEME_IDS[(index + 1) % APP_THEME_IDS.length];
-        const settings = { ...state.settings, theme };
-        applyTheme(settings);
-        return { ...state, settings };
+        const currentMode = baseModeForTheme(state.theme);
+        const nextId: BuiltinThemeId = currentMode === "dark" ? "light-blue" : "dark-amber";
+        const theme: AppThemeState = {
+          ...state.theme,
+          activeTheme: { kind: "builtin", id: nextId },
+        };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
       });
     },
+    createCustomTheme() {
+      update((state) => {
+        const theme = createCustomThemeFromCurrent(state.theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    renameCustomTheme(id: string, name: string) {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return;
+      }
+      update((state) => {
+        const customThemes = state.theme.customThemes.map((custom) =>
+          custom.id === id ? { ...custom, name: trimmed } : custom,
+        );
+        const theme: AppThemeState = { ...state.theme, customThemes };
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    deleteCustomTheme(id: string) {
+      update((state) => {
+        const customThemes = state.theme.customThemes.filter((custom) => custom.id !== id);
+        const wasActive = state.theme.activeTheme.kind === "custom" && state.theme.activeTheme.id === id;
+        const activeTheme: ActiveThemeRef = wasActive
+          ? { kind: "builtin", id: DEFAULT_BUILTIN_THEME }
+          : state.theme.activeTheme;
+        const theme: AppThemeState = { activeTheme, customThemes };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    updateCustomThemeToken(id: string, key: ThemeTokenKey, value: string) {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return;
+      }
+      update((state) => {
+        const customThemes = state.theme.customThemes.map((custom) => {
+          if (custom.id !== id) {
+            return custom;
+          }
+          const tokens = { ...custom.tokens, [key]: trimmed };
+          if (key === "accent-color") {
+            tokens["color-accent"] = trimmed;
+          } else if (key === "color-accent") {
+            tokens["accent-color"] = trimmed;
+          }
+          return { ...custom, tokens };
+        });
+        const theme: AppThemeState = { ...state.theme, customThemes };
+        if (state.theme.activeTheme.kind === "custom" && state.theme.activeTheme.id === id) {
+          applyThemeState(theme);
+        }
+        scheduleDebouncedThemeSave(theme);
+        return { ...state, theme };
+      });
+    },
+    async loadTheme(): Promise<void> {
+      const file = await loadThemeFile();
+      const theme: AppThemeState = {
+        activeTheme: file.activeTheme,
+        customThemes: file.customThemes,
+      };
+      set({ ...this.getSnapshot(), theme });
+      applyThemeState(theme);
+    },
     initializeTheme() {
-      applyTheme(initialState.settings);
+      applyThemeState(this.getSnapshot().theme);
     },
     resetAppState() {
       docCounter = 1;
       tabCounter = 1;
       workspaceCounter = 0;
       set(initialState);
-      applyTheme(initialState.settings);
+      applyThemeState(initialState.theme);
     },
     applyWindowSession(snapshot: WindowSessionSnapshot, recentFiles: string[] = []) {
       const normalizedNotepad = ensureContextSnapshotHasTab(cloneContextSnapshot(snapshot.notepad));
@@ -529,11 +753,13 @@ function createStateStore() {
       );
       reindexWorkspaceCounter(contexts.workspaces);
       const preservedSettings = this.getSnapshot().settings;
+      const preservedTheme = this.getSnapshot().theme;
       set({
         contexts,
         documents: activeContextSnapshot.documents,
         session: activeContextSnapshot.session,
         settings: preservedSettings,
+        theme: preservedTheme,
         recentFiles,
         editor: {
           ...initialState.editor,
@@ -543,7 +769,7 @@ function createStateStore() {
           previewMode: "editor",
         },
       });
-      applyTheme(preservedSettings);
+      applyThemeState(preservedTheme);
     },
     getWindowSessionSnapshot(): WindowSessionSnapshot {
       return toCurrentWindowSnapshot(this.getSnapshot());
@@ -1351,7 +1577,6 @@ function createStateStore() {
       }));
     },
     applyPersistedSettings(partial: {
-      theme?: AppTheme;
       wrapLines?: boolean;
       zoomPercent?: number;
       externalFiles?: ExternalFilesSettings;
@@ -1362,11 +1587,6 @@ function createStateStore() {
     }) {
       update((state) => {
         let next = state;
-        if (partial.theme && partial.theme !== state.settings.theme) {
-          const settings = { ...state.settings, theme: partial.theme };
-          applyTheme(settings);
-          next = { ...next, settings };
-        }
         if (typeof partial.wrapLines === "boolean" && partial.wrapLines !== next.editor.wrapLines) {
           next = {
             ...next,

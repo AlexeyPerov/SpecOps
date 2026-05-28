@@ -1,10 +1,14 @@
 <script lang="ts">
   import { appState } from "../state/appState";
-  import { APP_THEME_IDS, getThemeAccentHex, getThemeLabel } from "../styles/themes";
+  import { BUILTIN_THEME_IDS, getBuiltinAccentHex, getBuiltinThemeLabel } from "../styles/themeTokens";
 
   let { open = false }: { open?: boolean } = $props();
 
   const snapshot = $derived($appState);
+
+  function isBuiltinActive(id: string): boolean {
+    return snapshot.theme.activeTheme.kind === "builtin" && snapshot.theme.activeTheme.id === id;
+  }
 </script>
 
 <aside class="theme-pane" data-open={open} aria-label="Theme and decoration" aria-hidden={!open}>
@@ -15,17 +19,17 @@
   <div class="theme-pane-scroll">
     <section class="settings-section">
       <h3>Appearance</h3>
-      {#each APP_THEME_IDS as themeId}
+      {#each BUILTIN_THEME_IDS as themeId}
         <label class="settings-theme-row">
           <input
             type="radio"
             name="theme"
             value={themeId}
-            checked={snapshot.settings.theme === themeId}
-            onchange={() => appState.setTheme(themeId)}
+            checked={isBuiltinActive(themeId)}
+            onchange={() => appState.setActiveTheme({ kind: "builtin", id: themeId })}
           />
-          <span class="theme-swatch" style="background-color: {getThemeAccentHex(themeId)}"></span>
-          <span>{getThemeLabel(themeId)}</span>
+          <span class="theme-swatch" style="background-color: {getBuiltinAccentHex(themeId)}"></span>
+          <span>{getBuiltinThemeLabel(themeId)}</span>
         </label>
       {/each}
     </section>

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 09:10 (MSK)
+
+- **Themes T3:** App state theme APIs and startup wiring — `AppThemeState` on domain state (`activeTheme`, `customThemes`); `setActiveTheme`, `createCustomTheme`, `renameCustomTheme`, `deleteCustomTheme`, `updateCustomThemeToken` (debounced save); `loadTheme()` at startup from `theme.json`; save-failure toast via `setThemeSaveErrorNotifier`; removed `theme` from `settings.json` / `PersistedSettings`; updated `ThemePane`, `+page.svelte`, and tests.
+
 ## 2026-05-28 09:05 (MSK)
 
 - **Themes T2:** Added `themeStore.ts` and `themeStore.test.ts` — `theme.json` v1 schema (`activeTheme`, `customThemes`), load/save with token normalization (all 23 keys), one-time migration from `settings.json` when `theme.json` is missing (`dark-*` → `dark-amber`, `light-*` → `light-blue`).

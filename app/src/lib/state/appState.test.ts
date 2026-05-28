@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appState } from "./appState";
+import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "./appState";
+import { saveThemeFile } from "../services/themeStore";
+
+vi.mock("../services/themeStore", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/themeStore")>();
+  return {
+    ...actual,
+    loadThemeFile: vi.fn().mockResolvedValue(actual.defaultThemeFile),
+    saveThemeFile: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+const saveThemeFileMock = vi.mocked(saveThemeFile);
 
 describe("appState tabs and selection", () => {
   beforeEach(() => {
@@ -362,20 +374,92 @@ describe("appState external file fields", () => {
 describe("appState settings and editor chrome", () => {
   beforeEach(() => {
     appState.resetAppState();
+    resetThemePersistenceForTests();
+    saveThemeFileMock.mockClear();
   });
 
-  it("setTheme updates the active theme", () => {
-    expect(appState.getSnapshot().settings.theme).toBe("dark-amber");
-    appState.setTheme("light-blue");
-    expect(appState.getSnapshot().settings.theme).toBe("light-blue");
+  it("setActiveTheme updates the active built-in theme", () => {
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "dark-amber",
+    });
+    appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
+    });
+    expect(saveThemeFileMock).toHaveBeenCalled();
   });
 
   it("cycleTheme toggles between the two built-in themes", () => {
-    expect(appState.getSnapshot().settings.theme).toBe("dark-amber");
+    expect(appState.getSnapshot().theme.activeTheme.id).toBe("dark-amber");
     appState.cycleTheme();
-    expect(appState.getSnapshot().settings.theme).toBe("light-blue");
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
+    });
     appState.cycleTheme();
-    expect(appState.getSnapshot().settings.theme).toBe("dark-amber");
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "dark-amber",
+    });
+  });
+
+  it("createCustomTheme adds a custom theme and selects it", () => {
+    appState.createCustomTheme();
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.activeTheme.kind).toBe("custom");
+    expect(snapshot.theme.customThemes).toHaveLength(1);
+    expect(snapshot.theme.customThemes[0]?.name).toBe("Custom 1");
+    expect(saveThemeFileMock).toHaveBeenCalled();
+  });
+
+  it("renameCustomTheme trims and persists the new name", () => {
+    appState.createCustomTheme();
+    const customId = appState.getSnapshot().theme.customThemes[0]!.id;
+    appState.renameCustomTheme(customId, "  My Theme  ");
+    expect(appState.getSnapshot().theme.customThemes[0]?.name).toBe("My Theme");
+    appState.renameCustomTheme(customId, "   ");
+    expect(appState.getSnapshot().theme.customThemes[0]?.name).toBe("My Theme");
+  });
+
+  it("deleteCustomTheme falls back to dark-amber when active custom is deleted", () => {
+    appState.createCustomTheme();
+    const customId = appState.getSnapshot().theme.customThemes[0]!.id;
+    appState.deleteCustomTheme(customId);
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.customThemes).toHaveLength(0);
+    expect(snapshot.theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "dark-amber",
+    });
+  });
+
+  it("updateCustomThemeToken debounces save and keeps in-memory state on write failure", async () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    setThemeSaveErrorNotifier(notify);
+    saveThemeFileMock.mockRejectedValueOnce(new Error("disk full"));
+
+    appState.createCustomTheme();
+    const customId = appState.getSnapshot().theme.customThemes[0]!.id;
+    saveThemeFileMock.mockClear();
+
+    appState.updateCustomThemeToken(customId, "accent-color", "#112233");
+    expect(appState.getSnapshot().theme.customThemes[0]?.tokens["accent-color"]).toBe("#112233");
+
+    await vi.advanceTimersByTimeAsync(300);
+    expect(notify).toHaveBeenCalledWith(
+      "Failed to save theme. Changes kept in memory; will retry on next change.",
+    );
+    expect(appState.getSnapshot().theme.customThemes[0]?.tokens["accent-color"]).toBe("#112233");
+
+    saveThemeFileMock.mockResolvedValueOnce(undefined);
+    appState.updateCustomThemeToken(customId, "accent-color", "#445566");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(saveThemeFileMock).toHaveBeenCalled();
+
+    vi.useRealTimers();
   });
 
   it("applyPersistedSettings updates only provided fields", () => {
@@ -383,11 +467,11 @@ describe("appState settings and editor chrome", () => {
     const snapshot = appState.getSnapshot();
     expect(snapshot.editor.zoomPercent).toBe(130);
     expect(snapshot.editor.wrapLines).toBe(false);
-    expect(snapshot.settings.theme).toBe("dark-amber");
+    expect(snapshot.theme.activeTheme.id).toBe("dark-amber");
   });
 
-  it("applyWindowSession preserves the active theme from settings", () => {
-    appState.setTheme("light-blue");
+  it("applyWindowSession preserves the active theme", () => {
+    appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
     appState.applyWindowSession({
       activeContextId: "notepad",
       notepad: {
@@ -422,7 +506,10 @@ describe("appState settings and editor chrome", () => {
         projectPanelCollapsed: false,
       },
     });
-    expect(appState.getSnapshot().settings.theme).toBe("light-blue");
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
+    });
   });
 
   it("setPreviewMode, zoom, and wrap update editor state", () => {

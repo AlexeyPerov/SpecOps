@@ -6,6 +6,12 @@ import {
   type CapabilityChecker,
 } from "../capabilities";
 import {
+  PROVIDER_NOT_REGISTERED_MESSAGE,
+  PROVIDER_NOT_REGISTERED_RECOVERY,
+  getUnknownProviderMessage,
+  getUnknownProviderRecovery,
+} from "../chatErrorCopy";
+import {
   getGlmProviderMissingConfigMessage,
   getGlmProviderSetupHint,
   isGlmProviderConfigured,
@@ -62,8 +68,8 @@ export function createRegistryCapabilityChecker(
             canReadWorkspaceFiles: false,
             supportedModes: [],
           },
-          message: "Debug provider is not registered.",
-          recoveryHint: "Restart the app or check provider initialization.",
+          message: PROVIDER_NOT_REGISTERED_MESSAGE,
+          recoveryHint: PROVIDER_NOT_REGISTERED_RECOVERY,
         };
       }
 
@@ -71,8 +77,8 @@ export function createRegistryCapabilityChecker(
         status: "blocked",
         reason: WorkspaceAccessReason.ProviderUnsupported,
         capabilities: null,
-        message: `${input.provider} provider is not integrated yet.`,
-        recoveryHint: "Choose a supported provider or enable Debug in Developer Settings.",
+        message: getUnknownProviderMessage(input.provider),
+        recoveryHint: getUnknownProviderRecovery(),
       };
     },
   };

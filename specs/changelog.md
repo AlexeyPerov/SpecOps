@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-28 22:20 (MSK)
+
+- **M6-3 — Error copy and recovery guidance polish:** Centralized user-facing chat error copy in `chatErrorCopy.ts` for missing provider config, workspace access blocked, provider request failure, and mode/provider incompatibility. `ChatPanel` shows consistent titles, messages, and recovery hints (including Retry guidance for failed turns); Debug blocked state adds a settings CTA. Send pipeline sanitizes unexpected provider errors so raw stack traces never reach the UI. Updated GLM/Debug/capability checker and chatStore copy. Added `chatErrorCopy.test.ts`. Marked M6-3 complete in execution plan.
+
 ## 2026-05-28 22:05 (MSK)
 
 - **M6-2 — Streaming response support:** Send pipeline uses `streamProviderMessage` to append partial assistant content via `chatStore.updateMessageContent` during generation and finalize on completion. Debug provider streams simulated chunks; GLM and other buffered-only providers fall back to `sendMessage` with a single content update. Persistence writes the final message once after the turn completes (no partial persist thrash). Added `chatSend.test.ts` for adapter streaming/fallback coverage and send-pipeline tests for persist-after-stream and GLM buffered fallback. Marked M6-2 complete in execution plan.

@@ -1,11 +1,14 @@
 <script lang="ts">
   import {
-    getDebugProviderSendBlockHint,
+    getAccessBlockedCopy,
+    getDebugProviderDisabledCopy,
+    getGlmMissingConfigCopy,
+    PROVIDER_REQUEST_FAILURE_RECOVERY,
+  } from "../ai/chatErrorCopy";
+  import {
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
   import {
-    getGlmProviderMissingConfigMessage,
-    getGlmProviderSetupHint,
     isGlmProviderSendBlocked,
   } from "../ai/providers/glmProviderSettings";
   import {
@@ -14,9 +17,8 @@
     listSelectableChatProviders,
     resolveDefaultChatProvider,
   } from "../ai/providers/selection";
+  import { listModesForProvider } from "../ai/modes/builtins";
   import { sendChatMessage, retryLastChatTurn } from "../ai/sendChatMessage";
-  import { listBuiltinChatModes, listModesForProvider } from "../ai/modes/builtins";
-  import { WorkspaceAccessReason } from "../ai/capabilities";
   import type { ChatMessage, ChatModeId, ChatProviderId } from "../domain/contracts";
   import { appState } from "../state/appState";
   import {
@@ -96,33 +98,24 @@
   const isRetryDisabled = $derived(
     !canRetryLastTurn || isGenerating || sending || retrying || isBlocked || isDebugSendBlocked || isGlmSendBlocked,
   );
-  const generationStatus = $derived.by(() => {
-    if (isGenerating) {
-      return "Generating response…";
+  const glmBlockedCopy = $derived(getGlmMissingConfigCopy());
+  const debugBlockedCopy = $derived(getDebugProviderDisabledCopy());
+  const accessBlockedCopy = $derived(
+    getAccessBlockedCopy(accessState.reason, { activeProvider }),
+  );
+  const composerError = $derived.by(() => {
+    if (inlineError) {
+      return { message: inlineError, recoveryHint: composerErrorRecoveryHint(inlineError) };
     }
-    if (lastError) {
-      return lastError.message;
+    if (lastError && !isGenerating && !retrying) {
+      return {
+        message: lastError.message,
+        recoveryHint: PROVIDER_REQUEST_FAILURE_RECOVERY,
+      };
     }
-    return "";
+    return null;
   });
-  const blockedMessage = $derived.by(() => {
-    if (!isBlocked) {
-      return "";
-    }
-    if (accessState.reason === WorkspaceAccessReason.WorkspacePathInaccessible) {
-      return "AI cannot read files in this workspace because the path is currently inaccessible.";
-    }
-    if (accessState.reason === WorkspaceAccessReason.MissingProviderConfig) {
-      if (activeProvider === "glm") {
-        return getGlmProviderMissingConfigMessage();
-      }
-      return "AI cannot run because provider setup is incomplete for this workspace.";
-    }
-    if (accessState.reason === WorkspaceAccessReason.ProviderUnsupported) {
-      return "AI cannot read files in this workspace with the current provider.";
-    }
-    return "AI cannot read files in this workspace.";
-  });
+  const generationStatus = $derived(isGenerating ? "Generating response…" : "");
 
   $effect(() => {
     activeProvider;
@@ -145,6 +138,19 @@
           : ["ask", "review"];
     });
   });
+
+  function composerErrorRecoveryHint(message: string): string {
+    if (message === glmBlockedCopy.message) {
+      return glmBlockedCopy.recoveryHint;
+    }
+    if (message === debugBlockedCopy.message) {
+      return debugBlockedCopy.recoveryHint;
+    }
+    if (message === accessBlockedCopy.message || message === accessState.message) {
+      return accessState.recoveryHint ?? accessBlockedCopy.recoveryHint;
+    }
+    return PROVIDER_REQUEST_FAILURE_RECOVERY;
+  }
 
   function isProviderSwitchMessage(message: ChatMessage): boolean {
     return message.systemEvent?.type === "provider-switched";
@@ -285,25 +291,29 @@
 
     {#if isBlocked}
       <div class="chat-blocked-state" role="status" aria-live="polite">
-        <p class="chat-blocked-title">AI cannot read files in this workspace.</p>
-        <p class="chat-blocked-message">{blockedMessage}</p>
-        {#if accessState.recoveryHint}
-          <p class="chat-blocked-hint">{accessState.recoveryHint}</p>
+        <p class="chat-blocked-title">{accessBlockedCopy.title}</p>
+        <p class="chat-blocked-message">{accessState.message || accessBlockedCopy.message}</p>
+        {#if accessState.recoveryHint ?? accessBlockedCopy.recoveryHint}
+          <p class="chat-blocked-hint">{accessState.recoveryHint ?? accessBlockedCopy.recoveryHint}</p>
         {/if}
       </div>
     {:else if isGlmSendBlocked}
       <div class="chat-blocked-state" role="status" aria-live="polite">
-        <p class="chat-blocked-title">GLM is not configured.</p>
-        <p class="chat-blocked-message">{getGlmProviderMissingConfigMessage()}</p>
-        <p class="chat-blocked-hint">{getGlmProviderSetupHint()}</p>
+        <p class="chat-blocked-title">{glmBlockedCopy.title}</p>
+        <p class="chat-blocked-message">{glmBlockedCopy.message}</p>
+        <p class="chat-blocked-hint">{glmBlockedCopy.recoveryHint}</p>
         <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("glm")}>
           Open GLM settings
         </button>
       </div>
     {:else if isDebugSendBlocked}
       <div class="chat-blocked-state" role="status" aria-live="polite">
-        <p class="chat-blocked-title">Debug provider is disabled.</p>
-        <p class="chat-blocked-message">{getDebugProviderSendBlockHint()}</p>
+        <p class="chat-blocked-title">{debugBlockedCopy.title}</p>
+        <p class="chat-blocked-message">{debugBlockedCopy.message}</p>
+        <p class="chat-blocked-hint">{debugBlockedCopy.recoveryHint}</p>
+        <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("debugAi")}>
+          Open Debug AI settings
+        </button>
       </div>
     {/if}
 
@@ -386,10 +396,13 @@
   </div>
 
   <div class="chat-composer" role="group" aria-label="Chat composer">
-    {#if inlineError}
-      <p class="chat-inline-error" role="alert">{inlineError}</p>
-    {:else if lastError && !isGenerating && !retrying}
-      <p class="chat-inline-error" role="alert">{lastError.message}</p>
+    {#if composerError}
+      <div class="chat-inline-error" role="alert">
+        <p class="chat-inline-error-message">{composerError.message}</p>
+        {#if composerError.recoveryHint}
+          <p class="chat-inline-error-hint">{composerError.recoveryHint}</p>
+        {/if}
+      </div>
     {/if}
     <textarea
       class="chat-input"
@@ -725,9 +738,23 @@
     border: 1px solid color-mix(in srgb, #e06c75 48%, var(--color-border-subtle));
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, #e06c75 9%, var(--color-surface-1));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .chat-inline-error-message {
+    margin: 0;
     font-size: 12px;
     line-height: 1.4;
     color: var(--color-text-primary);
+  }
+
+  .chat-inline-error-hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
   }
 
   .chat-composer {

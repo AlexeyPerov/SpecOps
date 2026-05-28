@@ -16,6 +16,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceAccessReason } from "../ai/capabilities";
+import { DEBUG_PROVIDER_DISABLED_MESSAGE, GLM_MISSING_CONFIG_MESSAGE } from "../ai/chatErrorCopy";
 import { sendChatMessage } from "../ai/sendChatMessage";
 import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
@@ -154,7 +155,7 @@ describe("M5.3 milestone validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("preflight");
-      expect(result.message).toBe("Debug provider is disabled.");
+      expect(result.message).toBe(DEBUG_PROVIDER_DISABLED_MESSAGE);
     }
     expect(chatStore.getMessages(agentId!)).toHaveLength(0);
   });
@@ -168,9 +169,7 @@ describe("M5.3 milestone validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("preflight");
-      expect(result.message).toBe(
-        "GLM is not configured yet. Add an API key in Settings to send messages.",
-      );
+      expect(result.message).toBe(GLM_MISSING_CONFIG_MESSAGE);
     }
     expect(chatStore.getMessages(agentId!)).toHaveLength(0);
   });

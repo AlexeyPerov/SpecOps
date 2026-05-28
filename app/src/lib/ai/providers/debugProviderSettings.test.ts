@@ -3,6 +3,7 @@ import {
   DEBUG_PROVIDER_DISABLED_SEND_HINT,
   defaultDebugProviderSettings,
   getDebugProviderSendBlockHint,
+  getDebugProviderSendBlockRecovery,
   isDebugProviderSendBlocked,
   normalizeDebugProviderSettings,
 } from "./debugProviderSettings";
@@ -79,8 +80,8 @@ describe("debug provider send blocking", () => {
     expect(isDebugProviderSendBlocked(undefined, defaultDebugProviderSettings)).toBe(false);
   });
 
-  it("exposes a recovery hint pointing to Developer Settings", () => {
+  it("exposes a recovery hint pointing to Debug AI settings", () => {
     expect(getDebugProviderSendBlockHint()).toBe(DEBUG_PROVIDER_DISABLED_SEND_HINT);
-    expect(getDebugProviderSendBlockHint()).toContain("Developer Settings");
+    expect(getDebugProviderSendBlockRecovery()).toContain("Debug AI");
   });
 });

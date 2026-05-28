@@ -1,3 +1,7 @@
+import {
+  DEBUG_PROVIDER_DISABLED_MESSAGE,
+  DEBUG_PROVIDER_DISABLED_RECOVERY,
+} from "../chatErrorCopy";
 import type { ChatProviderId, DebugProviderSettings } from "../../domain/contracts";
 
 export const defaultDebugProviderSettings: DebugProviderSettings = {
@@ -12,8 +16,7 @@ export const defaultDebugProviderSettings: DebugProviderSettings = {
   includeDiagnostics: true,
 };
 
-export const DEBUG_PROVIDER_DISABLED_SEND_HINT =
-  "The Debug provider is disabled. Enable it in Developer Settings to send messages.";
+export const DEBUG_PROVIDER_DISABLED_SEND_HINT = DEBUG_PROVIDER_DISABLED_MESSAGE;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -113,4 +116,8 @@ export function isDebugProviderSendBlocked(
 
 export function getDebugProviderSendBlockHint(): string {
   return DEBUG_PROVIDER_DISABLED_SEND_HINT;
+}
+
+export function getDebugProviderSendBlockRecovery(): string {
+  return DEBUG_PROVIDER_DISABLED_RECOVERY;
 }

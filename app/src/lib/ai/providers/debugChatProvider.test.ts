@@ -92,7 +92,7 @@ describe("DebugChatProvider", () => {
 
     expect(result.status).toBe("blocked");
     expect(result.capabilities?.supportedModes).toEqual([]);
-    expect(result.recoveryHint).toContain("Developer Settings");
+    expect(result.recoveryHint).toContain("Debug AI");
   });
 
   it("returns ready capabilities with both modes when Debug is enabled", async () => {

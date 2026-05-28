@@ -1,3 +1,7 @@
+import {
+  GLM_MISSING_CONFIG_MESSAGE,
+  GLM_MISSING_CONFIG_RECOVERY,
+} from "../chatErrorCopy";
 import type { ChatProviderId, GlmProviderSettings } from "../../domain/contracts";
 
 export const defaultGlmProviderSettings: GlmProviderSettings = {
@@ -6,10 +10,9 @@ export const defaultGlmProviderSettings: GlmProviderSettings = {
   modelId: "glm-4-flash",
 };
 
-export const GLM_PROVIDER_MISSING_CONFIG_MESSAGE =
-  "GLM is not configured yet. Add an API key in Settings to send messages.";
+export const GLM_PROVIDER_MISSING_CONFIG_MESSAGE = GLM_MISSING_CONFIG_MESSAGE;
 
-export const GLM_PROVIDER_SETUP_HINT = "Open Settings → GLM and enter your API key.";
+export const GLM_PROVIDER_SETUP_HINT = GLM_MISSING_CONFIG_RECOVERY;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

@@ -6,6 +6,10 @@ import {
   type WorkspaceAccessStatus,
 } from "../capabilities";
 import {
+  DEBUG_PROVIDER_DISABLED_MESSAGE,
+  DEBUG_PROVIDER_DISABLED_RECOVERY,
+} from "../chatErrorCopy";
+import {
   getDebugProviderSendBlockHint,
   normalizeDebugProviderSettings,
 } from "./debugProviderSettings";
@@ -48,8 +52,8 @@ class DebugChatProvider implements ChatProvider {
           canReadWorkspaceFiles: false,
           supportedModes: [],
         },
-        message: "Debug provider is disabled.",
-        recoveryHint: getDebugProviderSendBlockHint(),
+        message: DEBUG_PROVIDER_DISABLED_MESSAGE,
+        recoveryHint: DEBUG_PROVIDER_DISABLED_RECOVERY,
       };
     }
 
@@ -115,7 +119,7 @@ class DebugChatProvider implements ChatProvider {
   private assertEnabled(settings: DebugProviderSettings): void {
     if (!settings.enabled) {
       throw new ChatProviderError(
-        "Debug provider is disabled.",
+        DEBUG_PROVIDER_DISABLED_MESSAGE,
         getDebugProviderSendBlockHint(),
       );
     }

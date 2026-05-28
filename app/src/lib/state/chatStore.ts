@@ -14,6 +14,12 @@ import {
   type CapabilityChecker,
 } from "../ai/capabilities";
 import {
+  DEBUG_PROVIDER_SWITCH_BLOCKED_MESSAGE,
+  WORKSPACE_ACCESS_LOST_MESSAGE,
+  WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
+  WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
+} from "../ai/chatErrorCopy";
+import {
   deleteAgentPersistence,
   readAgentThreadFileSnapshot,
   readWorkspaceAgentsIndexSnapshot,
@@ -68,8 +74,7 @@ const DEFAULT_CHAT_PROVIDER: ChatProviderId = "glm";
 let defaultChatProviderResolver: () => ChatProviderId = () => DEFAULT_CHAT_PROVIDER;
 let agentIdCounter = 0;
 
-const WORKSPACE_ACCESS_LOSS_MESSAGE =
-  "Workspace file access was lost. AI cannot read files until access is restored.";
+const WORKSPACE_ACCESS_LOSS_MESSAGE = WORKSPACE_ACCESS_LOST_MESSAGE;
 
 const initialWorkspaceAgentsState = (): WorkspaceAgentsState => ({
   activeAgentId: null,
@@ -1050,7 +1055,7 @@ function createChatStore() {
       if (nextProvider === "debug" && !options.debugProviderEnabled) {
         return {
           switched: false,
-          message: "Enable the Debug provider in Developer Settings first.",
+          message: DEBUG_PROVIDER_SWITCH_BLOCKED_MESSAGE,
         };
       }
 
@@ -1169,8 +1174,8 @@ function createChatStore() {
         const blockedState: ChatAccessState = {
           status: "blocked",
           reason: WorkspaceAccessReason.WorkspacePathInaccessible,
-          message: "AI cannot read files in this workspace because the path is inaccessible.",
-          recoveryHint: "Re-open the workspace path and confirm file permissions.",
+          message: WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
+          recoveryHint: WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
           checkedAt: new Date().toISOString(),
         };
         return commitAccessPreflightResult(rootPath, blockedState, previousState, snapshot);

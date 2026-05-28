@@ -4,6 +4,10 @@ import {
   type CapabilityCheckInput,
   type CapabilityCheckResult,
 } from "../capabilities";
+import {
+  getModeUnsupportedMessage,
+  getModeUnsupportedRecovery,
+} from "../chatErrorCopy";
 import { ChatProviderError } from "./errors";
 import {
   getGlmProviderMissingConfigMessage,
@@ -74,8 +78,8 @@ class GlmChatProvider implements ChatProvider {
           canReadWorkspaceFiles: false,
           supportedModes: [...SUPPORTED_MODES],
         },
-        message: `GLM does not support ${input.mode} mode.`,
-        recoveryHint: "Switch to Ask or Review mode.",
+        message: getModeUnsupportedMessage(input.mode, "GLM"),
+        recoveryHint: getModeUnsupportedRecovery(),
       };
     }
 

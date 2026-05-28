@@ -1,6 +1,11 @@
 import type { ChatMessage } from "../domain/contracts";
 import { buildThreadProviderRequest } from "./modes/prompt";
 import {
+  formatRetryFailureNote,
+  PROVIDER_UNAVAILABLE_MESSAGE,
+  sanitizeUnexpectedProviderError,
+} from "./chatErrorCopy";
+import {
   getDebugProviderSendBlockHint,
   isDebugProviderSendBlocked,
 } from "./providers/debugProviderSettings";
@@ -99,7 +104,7 @@ function createRetryFailureNote(turnId: string, previousError: ChatTurnError): C
   return {
     id: `retry-note-${turnId}`,
     role: "system",
-    content: `Previous response failed: ${previousError.message}`,
+    content: formatRetryFailureNote(previousError.message),
     createdAt,
   };
 }
@@ -152,7 +157,7 @@ async function validateProviderSend(
     return {
       ok: false,
       reason: "provider_unavailable",
-      message: "The selected provider is not available yet.",
+      message: PROVIDER_UNAVAILABLE_MESSAGE,
     };
   }
 
@@ -211,9 +216,7 @@ async function executeProviderTurn(params: {
     }
     const message = isChatProviderError(error)
       ? error.userMessage
-      : error instanceof Error
-        ? error.message
-        : "Failed to generate a response.";
+      : sanitizeUnexpectedProviderError(error);
     chatStore.failTurn({ message, code: "provider_error" }, turnId, activeAgentId);
     persistAgentThreadOnce(activeAgentId);
     return { ok: false, reason: "provider_error", message };

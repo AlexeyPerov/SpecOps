@@ -4,6 +4,10 @@ import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
 import type { ChatThreadSnapshot } from "../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../ai/capabilities";
 import {
+  WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
+  WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
+} from "../ai/chatErrorCopy";
+import {
   deleteAgentPersistence,
   readAgentThreadFileSnapshot,
   readWorkspaceAgentsIndexSnapshot,
@@ -374,8 +378,8 @@ describe("chatStore", () => {
     expect(result).toEqual({
       status: "blocked",
       reason: WorkspaceAccessReason.WorkspacePathInaccessible,
-      message: "AI cannot read files in this workspace because the path is inaccessible.",
-      recoveryHint: "Re-open the workspace path and confirm file permissions.",
+      message: WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
+      recoveryHint: WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
       checkedAt: result.checkedAt,
     });
     expect(chatStore.getChatAccessState()).toEqual(result);
@@ -753,7 +757,7 @@ describe("chatStore provider switching", () => {
     const result = await chatStore.switchThreadProvider("debug", { debugProviderEnabled: false });
 
     expect(result.switched).toBe(false);
-    expect(result.message).toContain("Developer Settings");
+    expect(result.message).toContain("Debug AI");
     expect(chatStore.getMetadata()?.provider).toBe("glm");
     expect(chatStore.getMessages()).toHaveLength(0);
   });

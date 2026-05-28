@@ -6,7 +6,7 @@ import {
 } from "../ai/providers/debugProviderSettings";
 import type { DebugProviderSettings, ExternalFilesSettings } from "../domain/contracts";
 import type { AppTheme } from "../styles/themes";
-import { isValidTheme } from "../styles/themes";
+import { normalizeLegacyThemeId } from "../styles/themes";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
 export interface PersistedSettings {
@@ -30,7 +30,7 @@ export const defaultExternalFilesSettings: ExternalFilesSettings = {
 };
 
 export const defaultPersistedSettings: PersistedSettings = {
-  theme: "dark-blue",
+  theme: "dark-amber",
   wrapLines: true,
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
@@ -75,16 +75,13 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
 
     let theme: AppTheme | null = null;
 
-    if (typeof parsed.theme === "string" && isValidTheme(parsed.theme)) {
-      theme = parsed.theme;
+    if (typeof parsed.theme === "string") {
+      theme = normalizeLegacyThemeId(parsed.theme);
     } else if (
       (parsed.themeMode === "dark" || parsed.themeMode === "light") &&
       typeof parsed.accent === "string"
     ) {
-      const candidate = `${parsed.themeMode}-${parsed.accent}` as AppTheme;
-      if (isValidTheme(candidate)) {
-        theme = candidate;
-      }
+      theme = normalizeLegacyThemeId(`${parsed.themeMode}-${parsed.accent}`);
     }
 
     if (

@@ -28,7 +28,7 @@ const writeTextFileMock = vi.mocked(writeTextFile);
 describe("settings mapping", () => {
   it("round-trips external file settings", () => {
     const persisted = toPersistedSettings({
-      theme: "light-violet",
+      theme: "light-blue",
       wrapLines: false,
       zoomPercent: 120,
       externalFiles: {
@@ -74,7 +74,7 @@ describe("loadPersistedSettings", () => {
   it("defaults missing external-file booleans", async () => {
     readTextFileMock.mockResolvedValue(
       JSON.stringify({
-        theme: "dark-blue",
+        theme: "dark-amber",
         wrapLines: true,
         zoomPercent: 100,
       }),
@@ -86,7 +86,7 @@ describe("loadPersistedSettings", () => {
   it("defaults missing debug provider settings", async () => {
     readTextFileMock.mockResolvedValue(
       JSON.stringify({
-        theme: "dark-blue",
+        theme: "dark-amber",
         wrapLines: true,
         zoomPercent: 100,
       }),
@@ -127,9 +127,17 @@ describe("loadPersistedSettings", () => {
     });
   });
 
-  it("returns null for invalid theme", async () => {
+  it("maps legacy dark-* theme strings to dark-amber", async () => {
     readTextFileMock.mockResolvedValue(
       JSON.stringify({ ...defaultPersistedSettings, theme: "dark-red" }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.theme).toBe("dark-amber");
+  });
+
+  it("returns null for unrecognized theme string", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...defaultPersistedSettings, theme: "neon" }),
     );
     await expect(loadPersistedSettings()).resolves.toBeNull();
   });
@@ -145,10 +153,10 @@ describe("loadPersistedSettings", () => {
     );
     const result = await loadPersistedSettings();
     expect(result).not.toBeNull();
-    expect(result!.theme).toBe("light-violet");
+    expect(result!.theme).toBe("light-blue");
   });
 
-  it("returns null for invalid accent in legacy format", async () => {
+  it("maps legacy dark accent strings to dark-amber", async () => {
     readTextFileMock.mockResolvedValue(
       JSON.stringify({
         themeMode: "dark",
@@ -157,7 +165,8 @@ describe("loadPersistedSettings", () => {
         zoomPercent: 100,
       }),
     );
-    await expect(loadPersistedSettings()).resolves.toBeNull();
+    const result = await loadPersistedSettings();
+    expect(result?.theme).toBe("dark-amber");
   });
 
   it("returns null when wrapLines is missing", async () => {

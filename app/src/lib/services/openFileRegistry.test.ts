@@ -205,7 +205,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         windowBounds: null,
       },
       settings: {
-        theme: "dark-blue",
+        theme: "dark-amber",
         statusBarVisible: true,
         externalFiles: {
           watchExternalChanges: true,
@@ -307,7 +307,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         windowBounds: null,
       },
       settings: {
-        theme: "dark-blue",
+        theme: "dark-amber",
         statusBarVisible: true,
         externalFiles: {
           watchExternalChanges: true,

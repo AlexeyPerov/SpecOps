@@ -365,21 +365,17 @@ describe("appState settings and editor chrome", () => {
   });
 
   it("setTheme updates the active theme", () => {
-    expect(appState.getSnapshot().settings.theme).toBe("dark-blue");
-    appState.setTheme("light-violet");
-    expect(appState.getSnapshot().settings.theme).toBe("light-violet");
+    expect(appState.getSnapshot().settings.theme).toBe("dark-amber");
+    appState.setTheme("light-blue");
+    expect(appState.getSnapshot().settings.theme).toBe("light-blue");
   });
 
-  it("cycleTheme cycles through all theme ids and wraps", () => {
-    expect(appState.getSnapshot().settings.theme).toBe("dark-blue");
+  it("cycleTheme toggles between the two built-in themes", () => {
+    expect(appState.getSnapshot().settings.theme).toBe("dark-amber");
     appState.cycleTheme();
-    expect(appState.getSnapshot().settings.theme).toBe("dark-violet");
+    expect(appState.getSnapshot().settings.theme).toBe("light-blue");
     appState.cycleTheme();
-    expect(appState.getSnapshot().settings.theme).toBe("dark-green");
-    for (let i = 0; i < 10; i++) {
-      appState.cycleTheme();
-    }
-    expect(appState.getSnapshot().settings.theme).toBe("dark-blue");
+    expect(appState.getSnapshot().settings.theme).toBe("dark-amber");
   });
 
   it("applyPersistedSettings updates only provided fields", () => {
@@ -387,11 +383,11 @@ describe("appState settings and editor chrome", () => {
     const snapshot = appState.getSnapshot();
     expect(snapshot.editor.zoomPercent).toBe(130);
     expect(snapshot.editor.wrapLines).toBe(false);
-    expect(snapshot.settings.theme).toBe("dark-blue");
+    expect(snapshot.settings.theme).toBe("dark-amber");
   });
 
   it("applyWindowSession preserves the active theme from settings", () => {
-    appState.setTheme("light-green");
+    appState.setTheme("light-blue");
     appState.applyWindowSession({
       activeContextId: "notepad",
       notepad: {
@@ -426,7 +422,7 @@ describe("appState settings and editor chrome", () => {
         projectPanelCollapsed: false,
       },
     });
-    expect(appState.getSnapshot().settings.theme).toBe("light-green");
+    expect(appState.getSnapshot().settings.theme).toBe("light-blue");
   });
 
   it("setPreviewMode, zoom, and wrap update editor state", () => {

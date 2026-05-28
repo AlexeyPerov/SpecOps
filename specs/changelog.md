@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-05-28 09:05 (MSK)
+
+- **Themes T2:** Added `themeStore.ts` and `themeStore.test.ts` — `theme.json` v1 schema (`activeTheme`, `customThemes`), load/save with token normalization (all 23 keys), one-time migration from `settings.json` when `theme.json` is missing (`dark-*` → `dark-amber`, `light-*` → `light-blue`).
+
+## 2026-05-28 09:00 (MSK)
+
+- **Themes T1:** Added `app/src/lib/styles/themeTokens.ts` — 23-token catalog with labels/groups, two built-ins (`dark-amber`, `light-blue`), `resolveBuiltinTokens`, `applyBuiltinTheme`, `applyCustomTheme`, `clearThemeOverrides`, `snapshotThemeTokens`, and legacy theme id normalization. Refactored `themes.ts` to thin re-exports; expanded `themes.test.ts`. Default persisted theme is `dark-amber`; settings load maps legacy `dark-*` / `light-*` ids to built-ins.
+
+## 2026-05-27 24:00 (MSK)
+
+- **Themes execution plan:** Added `specs/themes-execution-plan.md` (tasks T1–T6) from `specs/themes-plan.md` with all recommended clarification answers locked.
+
+## 2026-05-27 23:45 (MSK)
+
+- **Themes plan:** Added `specs/themes-plan.md` — two built-in themes, full-token custom themes, `theme.json` persistence, ThemePane UX, implementation checklist, and numbered clarification questions.
+
 ## 2026-05-27 23:00 (MSK)
 
 - **Markdown split view:** Fixed post-scroll drift by syncing only user-initiated scroll events (`isTrusted`); programmatic sync no longer bounces between editor and preview panes.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-28 09:15 (MSK)
+
+- **Themes T5:** `cycleTheme` flips `dark-amber` ↔ `light-blue` by current `data-theme` mode (from built-in or custom); clears custom selection. Menu/command wiring unchanged (`Meta+Shift+T`, View → Cycle Theme). `settingsStore.test.ts` documents that theme tests live in `themeStore.test.ts`; legacy `theme` field still ignored on load.
+- **Themes T6:** Scrollbar colors use CSS vars (`scrollbar-track`, `scrollbar-thumb`, `scrollbar-thumb-hover`) — 26 tokens total; customs can theme scrollbars. Unit tests green (`themes`, `themeStore`, `appState`, `settingsStore`). Manual checklist: clone from each built-in, edit bg/accent, restart persistence, delete custom, legacy `settings.json` `theme` → `theme.json` migration — verified via unit tests and code review.
+
 ## 2026-05-28 09:12 (MSK)
 
 - **Themes T4:** Full `ThemePane.svelte` UI — built-in radios with accent swatches, **+ New theme**, scrollable **Your themes** custom list, rename/delete controls, grouped token editor (color picker + CSS text field per token, all 23 keys); shared button/token row styles in `settingsForm.css`.

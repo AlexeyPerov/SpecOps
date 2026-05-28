@@ -405,6 +405,24 @@ describe("appState settings and editor chrome", () => {
     });
   });
 
+  it("cycleTheme from active custom switches to opposite built-in", () => {
+    appState.createCustomTheme();
+    expect(appState.getSnapshot().theme.activeTheme.kind).toBe("custom");
+    appState.cycleTheme();
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
+    });
+    appState.createCustomTheme();
+    appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
+    appState.createCustomTheme();
+    appState.cycleTheme();
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "dark-amber",
+    });
+  });
+
   it("createCustomTheme adds a custom theme and selects it", () => {
     appState.createCustomTheme();
     const snapshot = appState.getSnapshot();

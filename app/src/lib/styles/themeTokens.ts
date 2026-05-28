@@ -19,6 +19,9 @@ export const THEME_TOKEN_KEYS = [
   "color-focus-ring",
   "color-search-match",
   "color-search-match-current",
+  "scrollbar-track",
+  "scrollbar-thumb",
+  "scrollbar-thumb-hover",
   "syntax-keyword",
   "syntax-string",
   "syntax-comment",
@@ -56,6 +59,9 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       "color-surface-1",
       "color-surface-overlay",
       "color-statusbar-bg",
+      "scrollbar-track",
+      "scrollbar-thumb",
+      "scrollbar-thumb-hover",
     ],
   },
   {
@@ -111,6 +117,9 @@ export const THEME_TOKEN_LABELS: Record<ThemeTokenKey, string> = {
   "color-focus-ring": "Focus ring",
   "color-search-match": "Search match",
   "color-search-match-current": "Current search match",
+  "scrollbar-track": "Scrollbar track",
+  "scrollbar-thumb": "Scrollbar thumb",
+  "scrollbar-thumb-hover": "Scrollbar thumb (hover)",
   "syntax-keyword": "Keyword",
   "syntax-string": "String",
   "syntax-comment": "Comment",
@@ -145,6 +154,9 @@ const MODE_UI_TOKEN_KEYS = [
   "color-focus-ring",
   "color-search-match",
   "color-search-match-current",
+  "scrollbar-track",
+  "scrollbar-thumb",
+  "scrollbar-thumb-hover",
 ] as const satisfies ReadonlyArray<ThemeTokenKey>;
 
 type ModeUiTokenKey = (typeof MODE_UI_TOKEN_KEYS)[number];
@@ -163,6 +175,9 @@ const MODE_UI_TOKENS: Record<"dark" | "light", Record<ModeUiTokenKey, string>> =
     "color-focus-ring": "color-mix(in srgb, var(--color-accent) 76%, white)",
     "color-search-match": "rgba(255, 200, 0, 0.28)",
     "color-search-match-current": "rgba(255, 150, 50, 0.55)",
+    "scrollbar-track": "#0f141b",
+    "scrollbar-thumb": "rgb(122 137 159 / 72%)",
+    "scrollbar-thumb-hover": "rgb(151 169 196 / 82%)",
   },
   light: {
     "color-bg-root": "#f3f6fa",
@@ -177,6 +192,9 @@ const MODE_UI_TOKENS: Record<"dark" | "light", Record<ModeUiTokenKey, string>> =
     "color-focus-ring": "color-mix(in srgb, var(--color-accent) 80%, white)",
     "color-search-match": "rgba(255, 200, 0, 0.45)",
     "color-search-match-current": "rgba(255, 150, 50, 0.75)",
+    "scrollbar-track": "#e8edf4",
+    "scrollbar-thumb": "rgb(71 84 103 / 45%)",
+    "scrollbar-thumb-hover": "rgb(71 84 103 / 62%)",
   },
 };
 

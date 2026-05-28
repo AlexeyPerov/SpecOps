@@ -1,3 +1,4 @@
+/** Theme persistence and migration are covered in `themeStore.test.ts`. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import {

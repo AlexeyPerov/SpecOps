@@ -39,17 +39,17 @@ function createMockRoot(): HTMLElement {
 }
 
 describe("THEME_TOKEN_KEYS", () => {
-  it("lists exactly 23 keys in five groups", () => {
-    expect(THEME_TOKEN_KEYS).toHaveLength(23);
+  it("lists exactly 26 keys in five groups", () => {
+    expect(THEME_TOKEN_KEYS).toHaveLength(26);
     const grouped = THEME_TOKEN_GROUPS.flatMap((group) => group.keys);
-    expect(new Set(grouped).size).toBe(23);
+    expect(new Set(grouped).size).toBe(26);
     expect([...THEME_TOKEN_KEYS].sort()).toEqual([...grouped].sort());
   });
 });
 
 describe("resolveBuiltinTokens", () => {
   it.each<BuiltinThemeId>(["dark-amber", "light-blue"])(
-    "returns all 23 non-empty token values for %s",
+    "returns all 26 non-empty token values for %s",
     (id) => {
       const tokens = resolveBuiltinTokens(id);
       for (const key of THEME_TOKEN_KEYS) {
@@ -128,7 +128,7 @@ describe("clearThemeOverrides", () => {
 });
 
 describe("applyCustomTheme", () => {
-  it("sets data-theme and all 23 token properties", () => {
+  it("sets data-theme and all 26 token properties", () => {
     const root = createMockRoot();
     const tokens = resolveBuiltinTokens("light-blue");
     tokens["color-bg-root"] = "#abcdef";
@@ -153,6 +153,6 @@ describe("snapshotThemeTokens", () => {
 
     const snapshot = snapshotThemeTokens(root, "dark-amber");
     expect(snapshot["accent-color"]).toBe("#d97706");
-    expect(Object.keys(snapshot)).toHaveLength(23);
+    expect(Object.keys(snapshot)).toHaveLength(26);
   });
 });

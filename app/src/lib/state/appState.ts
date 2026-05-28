@@ -29,6 +29,7 @@ import {
 } from "../ai/providers/debugProviderSettings";
 import { inferEditorLanguage } from "../editor/editorLanguage";
 import { normalizePathSync } from "../services/diskFingerprint";
+import { findNextOpenAgentTabAfterClose } from "../services/workspaceAgentSession";
 import { bumpRecentFile } from "../services/recentFiles";
 import { syncRecentFiles } from "../services/recentFilesSync";
 import {
@@ -355,6 +356,7 @@ function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
       openTabs: [createFileTab(tabId, documentId)],
       lastActiveWindowId,
       windowBounds: null,
+      lastActiveAgentId: null,
     },
   };
 }
@@ -549,6 +551,7 @@ const initialState: AppDomainState = {
         openTabs: [createFileTab("tab-1", "doc-1")],
         lastActiveWindowId: "main",
         windowBounds: null,
+        lastActiveAgentId: null,
       },
     },
     workspaces: [],
@@ -559,6 +562,7 @@ const initialState: AppDomainState = {
     openTabs: [createFileTab("tab-1", "doc-1")],
     lastActiveWindowId: "main",
     windowBounds: null,
+    lastActiveAgentId: null,
   },
   settings: defaultSettings,
   theme: defaultThemeState,
@@ -973,6 +977,23 @@ function createStateStore() {
     selectTab(tabId: string) {
       update((state) => selectTabInternal(state, tabId));
     },
+    setLastActiveAgentId(agentId: string | null) {
+      update((state) => {
+        if (state.session.lastActiveAgentId === agentId) {
+          return state;
+        }
+        return {
+          ...state,
+          session: {
+            ...state.session,
+            lastActiveAgentId: agentId,
+          },
+        };
+      });
+    },
+    getLastActiveAgentId(): string | null {
+      return this.getSnapshot().session.lastActiveAgentId ?? null;
+    },
     openOrFocusAgentTab(agentId: string) {
       update((state) => {
         const existingTab = state.session.openTabs
@@ -1057,10 +1078,17 @@ function createStateStore() {
           return state;
         }
         const filtered = openTabs.filter((tab) => tab.id !== tabId);
-        const selectedTabId =
+        const closingTab = openTabs[idx];
+        let selectedTabId =
           state.session.selectedTabId === tabId
             ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
             : state.session.selectedTabId;
+        if (state.session.selectedTabId === tabId && isAgentTab(closingTab)) {
+          const nextAgentTab = findNextOpenAgentTabAfterClose(openTabs, tabId);
+          if (nextAgentTab) {
+            selectedTabId = nextAgentTab.id;
+          }
+        }
         return {
           ...state,
           session: {
@@ -1099,13 +1127,21 @@ function createStateStore() {
               ...state.session,
               openTabs: [createFileTab(tabIdNew, docId)],
               selectedTabId: tabIdNew,
+              lastActiveAgentId: null,
             },
           };
         }
-        const selectedTabId =
+        const closingTab = openTabs[idx];
+        let selectedTabId =
           state.session.selectedTabId === tabId
             ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
             : state.session.selectedTabId;
+        if (state.session.selectedTabId === tabId && isAgentTab(closingTab)) {
+          const nextAgentTab = findNextOpenAgentTabAfterClose(openTabs, tabId);
+          if (nextAgentTab) {
+            selectedTabId = nextAgentTab.id;
+          }
+        }
         return {
           ...state,
           session: {

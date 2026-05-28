@@ -254,8 +254,25 @@ describe("chatStore", () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
     await chatStore.loadWorkspaceAgents("/work/a");
 
-    expect(chatStore.getActiveAgentId()).toBe("agent-a");
+    expect(chatStore.getActiveAgentId()).toBeNull();
+    chatStore.setActiveAgentId("agent-a");
     expect(chatStore.getMessages()).toEqual(threadA.messages);
+  });
+
+  it("mergeSessionDraftAgents adds draft entries for open tab ids missing from disk index", async () => {
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      agents: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+    });
+    readAgentThreadFileSnapshotMock.mockResolvedValue(null);
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    await chatStore.loadWorkspaceAgents("/work/a");
+    chatStore.mergeSessionDraftAgents("/work/a", ["agent-draft-tab"]);
+
+    const index = chatStore.getAgentIndex();
+    expect(index.some((entry) => entry.id === "agent-draft-tab" && entry.isDraft)).toBe(true);
+    expect(index.some((entry) => entry.id === "agent-a")).toBe(true);
   });
 
   it("shows empty state when workspace has no persisted thread", async () => {

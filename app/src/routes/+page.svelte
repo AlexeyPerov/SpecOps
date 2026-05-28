@@ -12,6 +12,12 @@
   import ChatPanel from "../lib/components/ChatPanel.svelte";
   import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
   import {
+    nextSidebarAgentId,
+    openAgentTabIds,
+    resolveRestoredActiveAgent,
+    selectedTabAfterMissingLastAgent,
+  } from "../lib/services/workspaceAgentSession";
+  import {
     dispatchMenuCommand,
     initializeAppMenu,
     keymapCommandForEvent,
@@ -168,8 +174,17 @@
   $: if (activeTab && isAgentTab(activeTab)) {
     if (chatStore.getActiveAgentId() !== activeTab.agentId) {
       chatStore.setActiveAgentId(activeTab.agentId);
+      appState.setLastActiveAgentId(activeTab.agentId);
       void chatStore.runAccessPreflight();
     }
+  }
+
+  $: if (
+    runtimeReady &&
+    activeWorkspaceRoot &&
+    $chatActiveAgentId !== (state.session.lastActiveAgentId ?? null)
+  ) {
+    appState.setLastActiveAgentId($chatActiveAgentId);
   }
   $: activeDocument =
     state.documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
@@ -267,11 +282,13 @@
     if (!agentId) {
       return;
     }
+    appState.setLastActiveAgentId(agentId);
     appState.openOrFocusAgentTab(agentId);
   }
 
   function handleSelectAgent(agentId: string): void {
     chatStore.setActiveAgentId(agentId);
+    appState.setLastActiveAgentId(agentId);
     appState.openOrFocusAgentTab(agentId);
     void chatStore.runAccessPreflight();
   }
@@ -294,6 +311,60 @@
       return;
     }
     await handleDeleteAgent(agentId);
+  }
+
+  async function restoreWorkspaceAgentSession(normalizedRoot: string): Promise<void> {
+    const session = appState.getSnapshot().session;
+    await chatStore.loadWorkspaceAgents(normalizedRoot);
+    chatStore.mergeSessionDraftAgents(normalizedRoot, openAgentTabIds(session.openTabs));
+    const agentIndex = chatStore.getAgentIndex();
+    const restored = resolveRestoredActiveAgent(session, agentIndex);
+    if (restored.shouldFocusAgentTab && restored.activeAgentId) {
+      chatStore.setActiveAgentId(restored.activeAgentId);
+      appState.setLastActiveAgentId(restored.activeAgentId);
+      appState.openOrFocusAgentTab(restored.activeAgentId);
+      void chatStore.runAccessPreflight();
+      return;
+    }
+    chatStore.setActiveAgentId(null);
+    appState.setLastActiveAgentId(null);
+    const tabs = appState.getSnapshot().session.openTabs;
+    const selectedTabId = appState.getSnapshot().session.selectedTabId;
+    const nextSelected = selectedTabAfterMissingLastAgent(tabs, selectedTabId);
+    if (nextSelected && nextSelected !== selectedTabId) {
+      appState.selectTab(nextSelected);
+    }
+  }
+
+  function handleCloseTab(tabId: string): void {
+    const before = appState.getSnapshot();
+    const closingTab = before.session.openTabs.find((tab) => tab.id === tabId);
+    const closedAgentId =
+      closingTab && isAgentTab(closingTab) ? closingTab.agentId : null;
+    const wasSelected = before.session.selectedTabId === tabId;
+
+    appState.closeTabForce(tabId);
+
+    if (!closedAgentId || !wasSelected) {
+      return;
+    }
+
+    const after = appState.getSnapshot();
+    const selectedAfter = after.session.openTabs.find(
+      (tab) => tab.id === after.session.selectedTabId,
+    );
+    if (selectedAfter && isAgentTab(selectedAfter)) {
+      return;
+    }
+
+    const nextSidebarId = nextSidebarAgentId(chatStore.getAgentIndex(), closedAgentId);
+    if (nextSidebarId) {
+      chatStore.setActiveAgentId(nextSidebarId);
+      appState.setLastActiveAgentId(nextSidebarId);
+      return;
+    }
+    chatStore.setActiveAgentId(null);
+    appState.setLastActiveAgentId(null);
   }
 
   async function toggleProjectTreeHidden(next: boolean): Promise<void> {
@@ -733,14 +804,7 @@
       const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
       void ensureWorkspaceReadAccess(normalizedRoot);
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
-      await chatStore.loadWorkspaceAgents(normalizedRoot);
-      const restoredTab = appState
-        .getSnapshot()
-        .session.openTabs.find((tab) => tab.id === appState.getSnapshot().session.selectedTabId);
-      if (restoredTab && isAgentTab(restoredTab)) {
-        chatStore.setActiveAgentId(restoredTab.agentId);
-        void chatStore.runAccessPreflight();
-      }
+      await restoreWorkspaceAgentSession(normalizedRoot);
     } else {
       chatStore.setActiveWorkspaceRoot(null);
     }
@@ -1004,23 +1068,11 @@
         lastChatWorkspaceRoot = normalizedWorkspaceRoot;
         void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
         chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
-        void chatStore.loadWorkspaceAgents(normalizedWorkspaceRoot)
-          .then(() => {
-            if (!activeWorkspaceRoot) {
-              return;
-            }
-            if (normalizePathSync(activeWorkspaceRoot) !== normalizedWorkspaceRoot) {
-              return;
-            }
-            if (isAgentTabActive) {
-              void chatStore.runAccessPreflight();
-            }
-          })
-          .catch(() => {
-            if (isAgentTabActive) {
-              void chatStore.runAccessPreflight();
-            }
-          });
+        void restoreWorkspaceAgentSession(normalizedWorkspaceRoot).catch(() => {
+          if (isAgentTabActive) {
+            void chatStore.runAccessPreflight();
+          }
+        });
       }
     }
   }
@@ -1131,6 +1183,7 @@
         documents={state.documents}
         selectedTabId={state.session.selectedTabId}
         windowId={currentWindowId}
+        onCloseTab={handleCloseTab}
       />
       <button
         class="toolbar-button add-file-button"

@@ -97,6 +97,8 @@ export interface SessionState {
   openTabs: TabState[];
   lastActiveWindowId: string;
   windowBounds: WindowBounds | null;
+  /** Last focused agent in this workspace context; persisted in session snapshot. */
+  lastActiveAgentId?: string | null;
 }
 
 export type ContextId = "notepad" | `ws-${number}`;

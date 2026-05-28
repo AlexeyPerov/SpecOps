@@ -10,6 +10,7 @@ import type {
   WindowSessionSnapshot,
 } from "../domain/contracts";
 import { createFileTab, isAgentTab, isFileTab, normalizeTabState } from "../domain/contracts";
+import { normalizeSessionState } from "./workspaceAgentSession";
 import { logDiagnostic } from "./logging";
 import {
   dedupeWindowSnapshotAgainstRegistry,
@@ -193,12 +194,12 @@ export async function sanitizeWindowSnapshot(
       const fallbackDocument = buildFallbackDocument(docId);
       return {
         documents: [fallbackDocument],
-        session: {
+        session: normalizeSessionState({
           ...context.session,
           openTabs: [createFileTab(tabId, docId)],
           selectedTabId: tabId,
           windowBounds: context.session.windowBounds ?? null,
-        },
+        }),
       };
     }
 
@@ -214,12 +215,12 @@ export async function sanitizeWindowSnapshot(
 
     return {
       documents,
-      session: {
+      session: normalizeSessionState({
         ...context.session,
         openTabs,
         selectedTabId,
         windowBounds: context.session.windowBounds ?? null,
-      },
+      }),
     };
   }
 

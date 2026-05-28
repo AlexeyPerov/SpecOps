@@ -18,6 +18,7 @@
   export let documents: DocumentState[] = [];
   export let selectedTabId: string | null = null;
   export let onSelect: (tabId: string) => void = (tabId: string) => appState.selectTab(tabId);
+  export let onCloseTab: (tabId: string) => void = (tabId: string) => appState.closeTabForce(tabId);
   export let windowId = "main";
 
   let tabStripEl: HTMLDivElement | null = null;
@@ -502,7 +503,7 @@
           }}
           onclick={(event) => {
             event.stopPropagation();
-            appState.closeTabForce(tab.id);
+            onCloseTab(tab.id);
           }}
         >
           ×

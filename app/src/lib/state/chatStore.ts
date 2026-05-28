@@ -595,7 +595,7 @@ function createChatStore() {
         const activeAgentIdValue =
           existing?.activeAgentId && index.agents.some((entry) => entry.id === existing.activeAgentId)
             ? existing.activeAgentId
-            : (index.agents[0]?.id ?? null);
+            : null;
 
         return {
           ...state,
@@ -609,6 +609,31 @@ function createChatStore() {
             },
           },
         };
+      });
+    },
+    mergeSessionDraftAgents(normalizedRootPath: string, agentIds: readonly string[]): void {
+      if (agentIds.length === 0) {
+        return;
+      }
+      update((state) => {
+        const { nextState, workspace } = getOrCreateWorkspaceState(state, normalizedRootPath);
+        const knownIds = new Set(workspace.agentIndex.map((entry) => entry.id));
+        const additions: AgentIndexEntry[] = [];
+        const lastUsedAt = new Date().toISOString();
+        for (const agentId of agentIds) {
+          if (knownIds.has(agentId)) {
+            continue;
+          }
+          knownIds.add(agentId);
+          additions.push(createDraftAgentEntry(agentId, lastUsedAt));
+        }
+        if (additions.length === 0) {
+          return nextState;
+        }
+        return patchWorkspaceState(nextState, normalizedRootPath, {
+          ...workspace,
+          agentIndex: [...workspace.agentIndex, ...additions],
+        });
       });
     },
     /** @deprecated Use loadWorkspaceAgents. */

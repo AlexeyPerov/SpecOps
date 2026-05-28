@@ -57,6 +57,29 @@ describe("appState tabs and selection", () => {
     expect(snapshot.session.openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-b")).toBe(true);
   });
 
+  it("closeTabForce focuses the next open agent tab in tab-bar order", () => {
+    appState.openOrFocusAgentTab("agent-a");
+    appState.openOrFocusAgentTab("agent-b");
+    const agentATabId = appState
+      .getSnapshot()
+      .session.openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a")?.id;
+    expect(agentATabId).toBeDefined();
+    appState.selectTab(agentATabId!);
+
+    appState.closeTabForce(agentATabId!);
+
+    const snapshot = appState.getSnapshot();
+    const selected = snapshot.session.openTabs.find((tab) => tab.id === snapshot.session.selectedTabId);
+    expect(selected && isAgentTab(selected) ? selected.agentId : null).toBe("agent-b");
+  });
+
+  it("persists lastActiveAgentId in session state", () => {
+    appState.setLastActiveAgentId("agent-a");
+    expect(appState.getSnapshot().session.lastActiveAgentId).toBe("agent-a");
+    appState.setLastActiveAgentId(null);
+    expect(appState.getSnapshot().session.lastActiveAgentId).toBeNull();
+  });
+
   it("selectOrReopenTabForDocument selects an open tab", () => {
     appState.createTab();
     appState.selectTab("tab-1");

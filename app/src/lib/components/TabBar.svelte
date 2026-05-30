@@ -10,6 +10,7 @@
   import { openPath } from "../services/fileSystem";
   import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
   import { runInNotepadContext, workspaceRelativePath } from "../services/workspacePaths";
+  import { renameDocumentOnDisk } from "../services/documentRename";
 
   const DRAG_THRESHOLD_PX = 4;
   const revealLabel = revealInFileManagerLabel();
@@ -20,6 +21,7 @@
   export let onSelect: (tabId: string) => void = (tabId: string) => appState.selectTab(tabId);
   export let onCloseTab: (tabId: string) => void = (tabId: string) => appState.closeTabForce(tabId);
   export let windowId = "main";
+  export let notify: (message: string) => void = () => {};
 
   let tabStripEl: HTMLDivElement | null = null;
 
@@ -100,6 +102,19 @@
     nearbySubmenuOpen = false;
     window.removeEventListener("pointerdown", onWindowPointerDown);
     window.removeEventListener("keydown", onWindowKeydown);
+  }
+
+  async function renameContextTab(): Promise<void> {
+    const tabDoc = contextMenuTab ? tabDocument(contextMenuTab) : undefined;
+    if (!tabDoc?.filePath) {
+      closeContextMenu();
+      return;
+    }
+    try {
+      await renameDocumentOnDisk(tabDoc.id, { windowId, notify });
+    } finally {
+      closeContextMenu();
+    }
   }
 
   async function revealTabInFileManager(tab: TabState): Promise<void> {
@@ -441,6 +456,12 @@
     ? openTabs.find((tab) => tab.id === contextMenu?.tabId) ?? null
     : null;
   $: contextMenuCanReveal = Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath);
+  $: contextMenuCanRename = Boolean(
+    contextMenuTab &&
+      isFileTab(contextMenuTab) &&
+      contextMenuTabDoc?.filePath &&
+      !contextMenuTabDoc.fileMissing,
+  );
   $: contextMenuTabIndex = contextMenuTab ? openTabs.findIndex((tab) => tab.id === contextMenuTab.id) : -1;
   $: contextMenuTabDoc = contextMenuTab ? tabDocument(contextMenuTab) : null;
   $: contextMenuWorkspaceRoot = appState.getWorkspaceRoot();
@@ -716,6 +737,22 @@
         }}
       >
         Copy Relative Path
+      </button>
+    {/if}
+
+    {#if contextMenuCanRename}
+      <div class="tab-context-separator" role="separator"></div>
+
+      <button
+        class="tab-context-item"
+        type="button"
+        role="menuitem"
+        onpointerdown={(event) => {
+          event.stopPropagation();
+          void renameContextTab();
+        }}
+      >
+        Rename
       </button>
     {/if}
 

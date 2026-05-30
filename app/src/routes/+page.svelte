@@ -1193,6 +1193,7 @@
         documents={state.documents}
         selectedTabId={state.session.selectedTabId}
         windowId={currentWindowId}
+        notify={notify}
         onCloseTab={handleCloseTab}
       />
       <button

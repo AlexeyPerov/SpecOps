@@ -8,13 +8,12 @@ import {
   ensureWorkspaceReadAccess,
   openFileDialog,
   openFolderDialog,
-  renameFile,
   saveFile,
   saveFileAs,
 } from "../services/fileSystem";
+import { renameDocumentOnDisk } from "../services/documentRename";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
 import { reloadActiveDocumentFromDisk } from "../services/externalFileChanges";
-import { statDiskFingerprint } from "../services/diskFingerprint";
 import { createNewWindowWithTransfer } from "../services/windowManager";
 import { takeQueuedOpenRecentPath } from "../services/appMenu";
 import { openActivePath, describeOpenActivePathResult } from "../services/openActivePath";
@@ -586,25 +585,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       notify("No active file tab to save.");
       return;
     }
-    const doc = state.documents.find((document) => document.id === selectedDocumentId);
-    if (!doc?.filePath) {
-      notify("Save document before renaming.");
-      return;
-    }
-    const renamedPath = await renameFile(doc.filePath);
-    if (!renamedPath) {
-      return;
-    }
-    const title = renamedPath.replaceAll("\\", "/").split("/").pop() ?? renamedPath;
-    appState.renameDocument(doc.id, renamedPath, title);
-    await renameOpenFileRegistry(doc.filePath, renamedPath, getWindowId(), doc.id);
-    try {
-      const fingerprint = await statDiskFingerprint(renamedPath);
-      appState.setDocumentDiskState(doc.id, { diskFingerprint: fingerprint, fileMissing: false });
-    } catch {
-      appState.setDocumentDiskState(doc.id, { diskFingerprint: null, fileMissing: true });
-    }
-    notify(`Renamed to ${title}`);
+    await renameDocumentOnDisk(selectedDocumentId, {
+      windowId: getWindowId(),
+      notify,
+    });
   },
   "file.reloadFromDisk": async ({ getState, notify }) => {
     const state = getState();

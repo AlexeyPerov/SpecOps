@@ -2,6 +2,8 @@
 
 ## 2026-05-30 (MSK)
 
+- **Markdown view mode persistence:** Each markdown file remembers its edit/split/preview mode per document. Mode restores when switching tabs and is saved in the session snapshot between app restarts.
+
 - **Markdown preview links:** External `http`/`https`/`mailto`/`tel` links open in the system browser via `tauri-plugin-opener`; relative and `file:` links resolve against the open markdown file and open in the editor. In-webview navigation is blocked on all markdown preview surfaces.
 
 ## 2026-05-28 22:30 (MSK)

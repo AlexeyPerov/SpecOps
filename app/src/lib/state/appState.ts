@@ -257,16 +257,22 @@ function buildDocument(identity: DocumentIdentity, content: string, title: strin
     dismissedFingerprint: null,
     fileMissing: false,
     scrollTop: 0,
+    markdownViewMode: "edit",
   };
 }
 
 function normalizeDocument(documentState: DocumentState): DocumentState {
+  const markdownViewMode =
+    documentState.markdownViewMode === "split" || documentState.markdownViewMode === "preview"
+      ? documentState.markdownViewMode
+      : "edit";
   return {
     ...documentState,
     diskFingerprint: documentState.diskFingerprint ?? null,
     dismissedFingerprint: documentState.dismissedFingerprint ?? null,
     fileMissing: documentState.fileMissing ?? false,
     scrollTop: documentState.scrollTop ?? 0,
+    markdownViewMode,
   };
 }
 
@@ -1539,6 +1545,28 @@ function createStateStore() {
           }
           changed = true;
           return { ...documentState, scrollTop };
+        });
+        if (!changed) {
+          return state;
+        }
+        return { ...state, documents };
+      });
+    },
+    setDocumentMarkdownViewMode(
+      documentId: string,
+      markdownViewMode: DocumentState["markdownViewMode"],
+    ) {
+      update((state) => {
+        let changed = false;
+        const documents = state.documents.map((documentState) => {
+          if (documentState.id !== documentId) {
+            return documentState;
+          }
+          if (documentState.markdownViewMode === markdownViewMode) {
+            return documentState;
+          }
+          changed = true;
+          return { ...documentState, markdownViewMode };
         });
         if (!changed) {
           return state;

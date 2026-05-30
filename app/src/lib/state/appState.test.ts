@@ -418,6 +418,13 @@ describe("appState external file fields", () => {
     expect(document?.diskFingerprint).toEqual({ mtimeMs: 3, sizeBytes: 3 });
     expect(document?.fileMissing).toBe(true);
   });
+
+  it("setDocumentMarkdownViewMode stores per-document markdown view mode", () => {
+    appState.openFileInTab("/tmp/readme.md", "# Hello");
+    appState.setDocumentMarkdownViewMode("doc-2", "preview");
+    const document = appState.getSnapshot().documents.find((doc) => doc.id === "doc-2");
+    expect(document?.markdownViewMode).toBe("preview");
+  });
 });
 
 describe("appState settings and editor chrome", () => {
@@ -557,6 +564,7 @@ describe("appState settings and editor chrome", () => {
             dismissedFingerprint: null,
             fileMissing: false,
             scrollTop: 0,
+            markdownViewMode: "edit",
           },
         ],
         session: {
@@ -618,6 +626,7 @@ describe("appState session restore", () => {
               dismissedFingerprint: null,
               fileMissing: false,
               scrollTop: 0,
+              markdownViewMode: "edit",
             },
           ],
           session: {
@@ -647,6 +656,7 @@ describe("appState session restore", () => {
                   dismissedFingerprint: null,
                   fileMissing: false,
                   scrollTop: 0,
+                  markdownViewMode: "edit",
                 },
               ],
               session: {
@@ -676,6 +686,7 @@ describe("appState session restore", () => {
                   dismissedFingerprint: null,
                   fileMissing: false,
                   scrollTop: 0,
+                  markdownViewMode: "edit",
                 },
               ],
               session: {

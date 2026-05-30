@@ -101,6 +101,7 @@ function buildFallbackDocument(documentId: string): DocumentState {
     dismissedFingerprint: null,
     fileMissing: false,
     scrollTop: 0,
+    markdownViewMode: "edit",
   };
 }
 
@@ -145,6 +146,10 @@ function normalizeRestoredDocument(documentState: DocumentState): DocumentState 
     dismissedFingerprint: documentState.dismissedFingerprint ?? null,
     fileMissing: documentState.fileMissing ?? false,
     scrollTop: documentState.scrollTop ?? 0,
+    markdownViewMode:
+      documentState.markdownViewMode === "split" || documentState.markdownViewMode === "preview"
+        ? documentState.markdownViewMode
+        : "edit",
   };
 }
 

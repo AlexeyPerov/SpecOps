@@ -52,6 +52,7 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
         dismissedFingerprint: null,
         fileMissing: false,
         scrollTop: 0,
+        markdownViewMode: "edit",
       },
       {
         id: "doc-2",
@@ -67,6 +68,7 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
         dismissedFingerprint: null,
         fileMissing: false,
         scrollTop: 0,
+        markdownViewMode: "edit",
       },
     ],
     session: {
@@ -172,6 +174,7 @@ describe("syncOpenFileRegistryForWindow", () => {
               dismissedFingerprint: null,
               fileMissing: false,
               scrollTop: 0,
+              markdownViewMode: "edit",
             },
           ],
           session: {
@@ -198,6 +201,7 @@ describe("syncOpenFileRegistryForWindow", () => {
           dismissedFingerprint: null,
           fileMissing: false,
           scrollTop: 0,
+          markdownViewMode: "edit",
         },
       ],
       session: {
@@ -265,6 +269,7 @@ describe("syncOpenFileRegistryForWindow", () => {
               dismissedFingerprint: null,
               fileMissing: false,
               scrollTop: 0,
+              markdownViewMode: "edit",
             },
           ],
           session: {
@@ -294,6 +299,7 @@ describe("syncOpenFileRegistryForWindow", () => {
                   dismissedFingerprint: null,
                   fileMissing: false,
                   scrollTop: 0,
+                  markdownViewMode: "edit",
                 },
               ],
               session: {

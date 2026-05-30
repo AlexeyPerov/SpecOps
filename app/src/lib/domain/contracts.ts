@@ -10,6 +10,8 @@ export interface DocumentIdentity {
   filePath: string | null;
 }
 
+export type MarkdownViewMode = "edit" | "split" | "preview";
+
 export interface DocumentState extends DocumentIdentity {
   title: string;
   content: string;
@@ -22,6 +24,7 @@ export interface DocumentState extends DocumentIdentity {
   dismissedFingerprint: DiskFingerprint | null;
   fileMissing: boolean;
   scrollTop: number;
+  markdownViewMode: MarkdownViewMode;
 }
 
 export interface WindowBounds {

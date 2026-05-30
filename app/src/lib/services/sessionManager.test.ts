@@ -48,6 +48,7 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
         dismissedFingerprint: null,
         fileMissing: false,
         scrollTop: 0,
+        markdownViewMode: "edit",
       },
     ],
     session: {

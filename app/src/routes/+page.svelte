@@ -120,9 +120,6 @@
   let replaceValue = "";
   let findCaseSensitive = false;
   let goToLineValue = "";
-  let markdownViewMode: "edit" | "split" | "preview" = "edit";
-  let preferredMarkdownViewMode: "edit" | "split" | "preview" = "edit";
-  let previousActiveContextId: ContextId | null = null;
   let shellMainRowEl: HTMLDivElement | null = null;
   let editorShellEl: HTMLElement | null = null;
   let editorPaneEl: HTMLElement | null = null;
@@ -132,7 +129,7 @@
   let markdownEditorPaneEl: HTMLDivElement | null = null;
   let markdownPreviewPaneEl: HTMLDivElement | null = null;
   let splitScrollCleanup: (() => void) | null = null;
-  let lastMarkdownDocumentId: string | null = null;
+  let previousActiveContextId: ContextId | null = null;
   let untitledTitleDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSelectedTabId: string | null = null;
   let lastWatcherSyncKey = "";
@@ -463,12 +460,10 @@
   }
 
   function setMarkdownViewMode(nextMode: "edit" | "split" | "preview"): void {
-    preferredMarkdownViewMode = nextMode;
-    if (nextMode === "split" && !canFitMarkdownSplit()) {
-      markdownViewMode = "edit";
+    if (!activeDocument) {
       return;
     }
-    markdownViewMode = nextMode;
+    appState.setDocumentMarkdownViewMode(activeDocument.id, nextMode);
   }
 
   async function onMarkdownPreviewClick(event: MouseEvent): Promise<void> {
@@ -523,7 +518,6 @@
     }
     previousActiveContextId = nextContextId;
     consoleOpen = false;
-    setMarkdownViewMode("edit");
     closeWorkspaceContextMenu();
     void loadProjectTreeRoot();
   }
@@ -1110,21 +1104,12 @@
 
   $: applyResponsiveLayoutRules();
 
-  $: if (isMarkdownDocument && activeDocument) {
-    if (lastMarkdownDocumentId !== activeDocument.id) {
-      setMarkdownViewMode("edit");
-      lastMarkdownDocumentId = activeDocument.id;
-    }
-  }
-
-  $: if (!isMarkdownDocument) {
-    setMarkdownViewMode("edit");
-    lastMarkdownDocumentId = null;
-  }
-
-  $: if (isMarkdownDocument && preferredMarkdownViewMode === "split") {
-    markdownViewMode = canFitMarkdownSplit() ? "split" : "edit";
-  }
+  $: activeDocumentMarkdownMode = activeDocument?.markdownViewMode ?? "edit";
+  $: markdownViewMode = !isMarkdownDocument
+    ? "edit"
+    : activeDocumentMarkdownMode === "split" && !canFitMarkdownSplit()
+      ? "edit"
+      : activeDocumentMarkdownMode;
 
   $: if (isMarkdownDocument && markdownViewMode === "split") {
     void setupSplitScrollSync();

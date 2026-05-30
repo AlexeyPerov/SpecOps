@@ -4,6 +4,8 @@
 
 - **Tab context menu — Rename:** File tabs with a saved on-disk path expose **Rename** in the tab context menu; it renames the right-clicked tab’s file (not necessarily the selected tab). Hidden for agent, untitled, and missing-file tabs. **File → Rename** still targets the active tab.
 
+- **Untitled save dialog suggestions:** Saving untitled files (Save, Save As, Save All) prefills the save dialog with the tab’s derived title (first non-empty line, same as the tab label) under the workspace root. Notepad leaves the save location to the OS. No default extension in v1.
+
 - **Per-workspace panel layout persistence:** Project panel and agents sidebar widths and collapsed state are stored in each workspace's session snapshot (`session.layout`) and restored on app restart. Switching workspaces restores that workspace's individual layout. Removed window-global `editorPreferences.projectPanelCollapsed`.
 
 - **Markdown view mode persistence:** Each markdown file remembers its edit/split/preview mode per document. Mode restores when switching tabs and is saved in the session snapshot between app restarts.

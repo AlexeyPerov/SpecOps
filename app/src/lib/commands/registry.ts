@@ -12,6 +12,7 @@ import {
   saveFileAs,
 } from "../services/fileSystem";
 import { renameDocumentOnDisk } from "../services/documentRename";
+import { untitledSaveDefaultPath } from "../services/untitledSavePath";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
 import { reloadActiveDocumentFromDisk } from "../services/externalFileChanges";
 import { createNewWindowWithTransfer } from "../services/windowManager";
@@ -475,7 +476,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     const previousPath = doc.filePath;
     let fingerprint;
     if (!targetPath) {
-      const saved = await saveFileAs(doc.content, appState.getWorkspaceRoot());
+      const saved = await saveFileAs(
+        doc.content,
+        await untitledSaveDefaultPath(doc.content, appState.getWorkspaceRoot()),
+      );
       if (!saved) {
         return;
       }
@@ -508,7 +512,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       return;
     }
     const activeWorkspaceRoot = appState.getWorkspaceRoot();
-    const saved = await saveFileAs(doc.content, activeWorkspaceRoot);
+    const saveAsDefaultPath = doc.filePath
+      ? activeWorkspaceRoot
+      : await untitledSaveDefaultPath(doc.content, activeWorkspaceRoot);
+    const saved = await saveFileAs(doc.content, saveAsDefaultPath);
     if (!saved) {
       return;
     }
@@ -548,7 +555,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       const previousPath = documentState.filePath;
       let fingerprint;
       if (!targetPath) {
-        const saved = await saveFileAs(documentState.content, appState.getWorkspaceRoot());
+        const saved = await saveFileAs(
+          documentState.content,
+          await untitledSaveDefaultPath(documentState.content, appState.getWorkspaceRoot()),
+        );
         if (!saved) {
           continue;
         }

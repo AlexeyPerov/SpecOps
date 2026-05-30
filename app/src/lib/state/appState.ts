@@ -34,6 +34,7 @@ import {
   normalizeGlmProviderSettings,
 } from "../ai/providers/glmProviderSettings";
 import { inferEditorLanguage } from "../editor/editorLanguage";
+import { deriveUntitledTitle } from "../services/untitledTitle";
 import { normalizePathSync } from "../services/diskFingerprint";
 import {
   defaultWorkspaceLayout,
@@ -237,14 +238,6 @@ function basename(path: string): string {
 
 function inferLanguage(path: string | null): string {
   return inferEditorLanguage(path);
-}
-
-function deriveUntitledTitle(content: string): string {
-  const firstLine = (content.split(/\r?\n/, 1)[0] ?? "").trim();
-  if (!firstLine) {
-    return "Untitled";
-  }
-  return Array.from(firstLine).slice(0, 64).join("");
 }
 
 function buildDocument(identity: DocumentIdentity, content: string, title: string): DocumentState {

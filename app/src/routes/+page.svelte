@@ -30,6 +30,10 @@
   import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
+  import {
+    describeMarkdownPreviewLinkResult,
+    handleMarkdownPreviewLinkClick,
+  } from "../lib/services/markdownPreviewLinks";
   import { listenForRecentFilesChanges } from "../lib/services/recentFilesSync";
   import { listen, TauriEvent } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
@@ -465,6 +469,20 @@
       return;
     }
     markdownViewMode = nextMode;
+  }
+
+  async function onMarkdownPreviewClick(event: MouseEvent): Promise<void> {
+    const result = await handleMarkdownPreviewLinkClick(event, {
+      documentFilePath: activeDocument?.filePath ?? null,
+      windowId: currentWindowId,
+    });
+    if (!result) {
+      return;
+    }
+    const message = describeMarkdownPreviewLinkResult(result);
+    if (message) {
+      notify(message);
+    }
   }
 
   function updateLayoutMeasurements(): void {
@@ -1228,7 +1246,14 @@
           </div>
 
           {#if markdownViewMode === "preview"}
-            <div class="markdown-preview markdown-preview-standalone">{@html markdownHtml}</div>
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="markdown-preview markdown-preview-standalone"
+              onclick={onMarkdownPreviewClick}
+            >
+              {@html markdownHtml}
+            </div>
           {:else if markdownViewMode === "split"}
             <div class="markdown-split">
               <div class="markdown-editor-pane" bind:this={markdownEditorPaneEl}>
@@ -1254,7 +1279,13 @@
                   }}
                 />
               </div>
-              <div class="markdown-preview markdown-preview-pane" bind:this={markdownPreviewPaneEl}>
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="markdown-preview markdown-preview-pane"
+                bind:this={markdownPreviewPaneEl}
+                onclick={onMarkdownPreviewClick}
+              >
                 {@html markdownHtml}
               </div>
             </div>
@@ -1310,7 +1341,11 @@
     {:else if state.editor.previewMode === "markdown"}
       <div class="preview-panel">
         <div class="preview-title">Markdown Preview</div>
-        <div class="markdown-preview">{@html markdownHtml}</div>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="markdown-preview" onclick={onMarkdownPreviewClick}>
+          {@html markdownHtml}
+        </div>
       </div>
     {:else}
       <div class="preview-panel diff-preview">
@@ -1645,6 +1680,10 @@
     padding: var(--space-12);
     overflow: auto;
     line-height: 1.55;
+  }
+
+  .markdown-preview :global(a[href]) {
+    cursor: pointer;
   }
 
   .diff-grid {

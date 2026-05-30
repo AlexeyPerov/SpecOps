@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-30 (MSK)
+
+- **Markdown preview links:** External `http`/`https`/`mailto`/`tel` links open in the system browser via `tauri-plugin-opener`; relative and `file:` links resolve against the open markdown file and open in the editor. In-webview navigation is blocked on all markdown preview surfaces.
+
 ## 2026-05-28 22:30 (MSK)
 
 - **M6-5 — AI chat MVP ship:** Ran full validation suite (`npm test` 436 tests, `npm run check` clean, `cargo test` 5 tests). Added `chatM6-5.validation.test.ts` covering M6 exit criteria — retry on Debug/GLM, streaming vs buffered fallback, recovery copy, compaction + delete agent, concurrent multi-agent generation. Updated README to reflect shipped MVP scope. Marked M6-5 complete in execution plan.

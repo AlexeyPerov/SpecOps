@@ -89,7 +89,7 @@
   }
 </script>
 
-<aside class="theme-pane" data-open={open} aria-label="Theme and decoration" aria-hidden={!open}>
+<aside class="theme-pane" data-open={open} aria-label="Theme" aria-hidden={!open}>
   <header class="theme-pane-header">
     <h2 class="theme-pane-title">Theme</h2>
   </header>
@@ -97,19 +97,33 @@
   <div class="theme-pane-scroll">
     <section class="settings-section">
       <h3>Appearance</h3>
-      {#each BUILTIN_THEME_IDS as themeId}
-        <label class="settings-theme-row">
-          <input
-            type="radio"
-            name="theme"
-            value={themeId}
-            checked={isBuiltinActive(themeId)}
-            onchange={() => appState.setActiveTheme({ kind: "builtin", id: themeId })}
-          />
-          <span class="theme-swatch" style="background-color: {getBuiltinAccentHex(themeId)}"></span>
-          <span>{getBuiltinThemeLabel(themeId)}</span>
-        </label>
-      {/each}
+      <label class="settings-toggle">
+        <input
+          type="checkbox"
+          checked={snapshot.settings.decoratePlaintextSymbols}
+          onchange={(event) =>
+            appState.setDecoratePlaintextSymbols(
+              (event.currentTarget as HTMLInputElement).checked,
+            )}
+        />
+        Decorate plaintext symbols
+      </label>
+      <div class="settings-subsection">
+        <h4>Built-in themes</h4>
+        {#each BUILTIN_THEME_IDS as themeId}
+          <label class="settings-theme-row">
+            <input
+              type="radio"
+              name="theme"
+              value={themeId}
+              checked={isBuiltinActive(themeId)}
+              onchange={() => appState.setActiveTheme({ kind: "builtin", id: themeId })}
+            />
+            <span class="theme-swatch" style="background-color: {getBuiltinAccentHex(themeId)}"></span>
+            <span>{getBuiltinThemeLabel(themeId)}</span>
+          </label>
+        {/each}
+      </div>
       <button type="button" class="settings-button" onclick={() => appState.createCustomTheme()}>
         + New theme
       </button>
@@ -194,32 +208,6 @@
         {/each}
       </section>
     {/if}
-
-    <section class="settings-section">
-      <h3>Decoration</h3>
-      <label class="settings-toggle">
-        <input
-          type="checkbox"
-          checked={snapshot.settings.decoratePlaintextSymbols}
-          onchange={(event) =>
-            appState.setDecoratePlaintextSymbols(
-              (event.currentTarget as HTMLInputElement).checked,
-            )}
-        />
-        Decorate plaintext symbols
-      </label>
-      <label class="settings-toggle">
-        <input
-          type="checkbox"
-          checked={snapshot.settings.hideActivityRailWhenNotepadOnly}
-          onchange={(event) =>
-            appState.setHideActivityRailWhenNotepadOnly(
-              (event.currentTarget as HTMLInputElement).checked,
-            )}
-        />
-        Hide activity rail when Notepad only
-      </label>
-    </section>
   </div>
 </aside>
 

@@ -217,6 +217,21 @@
 
 {#snippet editorSettingsPanel()}
   <section class="settings-section">
+    <h3>Layout</h3>
+    <label class="settings-toggle">
+      <input
+        type="checkbox"
+        checked={snapshot.settings.hideActivityRailWhenNotepadOnly}
+        onchange={(event) =>
+          appState.setHideActivityRailWhenNotepadOnly(
+            (event.currentTarget as HTMLInputElement).checked,
+          )}
+      />
+      Hide activity rail when Notepad only
+    </label>
+  </section>
+
+  <section class="settings-section">
     <h3>External files</h3>
     <label class="settings-toggle">
       <input

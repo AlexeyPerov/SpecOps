@@ -2,7 +2,6 @@ import type { ChatProviderId, DebugProviderSettings, GlmProviderSettings } from 
 import type { ChatSystemEvent } from "../../domain/contracts";
 import { PRODUCT_CHAT_PROVIDER_IDS } from "../../domain/contracts";
 import { isGlmProviderConfigured as hasGlmProviderCredentials } from "./glmProviderSettings";
-import { getChatProvider } from "./registry";
 
 export interface ChatProviderOption {
   id: ChatProviderId;
@@ -25,7 +24,7 @@ export function isGlmProviderConfigured(
   glmSettings: GlmProviderSettings,
   apiKey: string,
 ): boolean {
-  return hasGlmProviderCredentials(glmSettings, apiKey) || getChatProvider("glm") !== null;
+  return hasGlmProviderCredentials(glmSettings, apiKey);
 }
 
 export function resolveDefaultChatProvider(
@@ -75,5 +74,5 @@ export function canSelectChatProvider(
   if (provider === "debug") {
     return settings.enabled;
   }
-  return provider === "glm" || provider === "cursor";
+  return provider === "glm";
 }

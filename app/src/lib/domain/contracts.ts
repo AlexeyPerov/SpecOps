@@ -248,7 +248,7 @@ export type ChatModeId = "ask" | "review";
 export type ChatProviderId = "glm" | "cursor" | "debug";
 
 /** MVP product providers; Debug is dev-only and settings-gated (see M5-3). */
-export const PRODUCT_CHAT_PROVIDER_IDS = ["glm", "cursor"] as const satisfies readonly ChatProviderId[];
+export const PRODUCT_CHAT_PROVIDER_IDS = ["glm"] as const satisfies readonly ChatProviderId[];
 
 /**
  * System-only marker events persisted in chat history.

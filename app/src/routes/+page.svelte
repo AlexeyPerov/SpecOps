@@ -1185,6 +1185,19 @@
         onRequestCloseWorkspace={handleOpenWorkspaceContextMenu}
       />
     {/if}
+    {#if activeWorkspaceRoot}
+      <AgentsSidebar
+        agents={workspaceAgents}
+        activeAgentId={selectedAgentId}
+        collapsed={!showAgentsSidebar}
+        panelWidthPx={workspaceLayout.agentsSidebarWidthPx}
+        onToggleCollapsed={toggleAgentsSidebarCollapsed}
+        onPanelWidthChange={handleAgentsSidebarWidthChange}
+        onSelectAgent={handleSelectAgent}
+        onNewAgent={handleNewAgent}
+        onDeleteAgent={(agentId) => void handleDeleteAgent(agentId)}
+      />
+    {/if}
     <section class="editor-shell" bind:this={editorShellEl} style="--console-height: {consoleHeightPx}px;">
       <header class="tab-header">
     <div class="header-left">
@@ -1457,17 +1470,6 @@
         onToggleDirectory={handleToggleProjectTreeDirectory}
         onOpenFile={handleOpenProjectTreeFile}
       />
-      <AgentsSidebar
-        agents={workspaceAgents}
-        activeAgentId={selectedAgentId}
-        collapsed={!showAgentsSidebar}
-        panelWidthPx={workspaceLayout.agentsSidebarWidthPx}
-        onToggleCollapsed={toggleAgentsSidebarCollapsed}
-        onPanelWidthChange={handleAgentsSidebarWidthChange}
-        onSelectAgent={handleSelectAgent}
-        onNewAgent={handleNewAgent}
-        onDeleteAgent={(agentId) => void handleDeleteAgent(agentId)}
-      />
     {/if}
   </div>
 
@@ -1520,13 +1522,13 @@
     display: grid;
     grid-template-columns:
       auto
-      minmax(var(--editor-min-width), 1fr)
       auto
+      minmax(var(--editor-min-width), 1fr)
       auto;
   }
 
   .editor-shell {
-    grid-column: 2;
+    grid-column: 3;
     min-width: 0;
     min-height: 0;
     display: grid;
@@ -1534,11 +1536,11 @@
     --editor-content-padding-x: var(--space-8);
   }
 
-  .shell-main-row :global(.project-panel) {
-    grid-column: 3;
+  .shell-main-row :global(.agents-sidebar) {
+    grid-column: 2;
   }
 
-  .shell-main-row :global(.agents-sidebar) {
+  .shell-main-row :global(.project-panel) {
     grid-column: 4;
   }
 

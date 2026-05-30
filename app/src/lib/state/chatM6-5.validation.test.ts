@@ -23,6 +23,7 @@ import { WorkspaceAccessReason } from "../ai/capabilities";
 import {
   DEBUG_PROVIDER_DISABLED_RECOVERY,
   GLM_MISSING_CONFIG_RECOVERY,
+  PROVIDER_MISSING_CONFIG_RECOVERY,
   PROVIDER_REQUEST_FAILURE_RECOVERY,
   WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
   getAccessBlockedCopy,
@@ -281,7 +282,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     ).toBe(WORKSPACE_PATH_INACCESSIBLE_RECOVERY);
     expect(
       getAccessBlockedCopy(WorkspaceAccessReason.MissingProviderConfig, { activeProvider: "glm" }).recoveryHint,
-    ).toBe(GLM_MISSING_CONFIG_RECOVERY);
+    ).toBe(PROVIDER_MISSING_CONFIG_RECOVERY);
     expect(PROVIDER_REQUEST_FAILURE_RECOVERY).toContain("Retry");
   });
 

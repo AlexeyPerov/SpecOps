@@ -2,6 +2,12 @@
 
 ## 2026-05-30 (MSK)
 
+- **Agent chat layout:** Title stays pinned at the top; blocked states, messages, and composer sit at the bottom so the conversation grows upward. Provider and mode controls moved to the composer row, to the right of Send.
+
+- **Agent chat provider defaults:** New draft agents no longer trigger a false workspace-access warning when Debug is the effective provider. Provider dropdown and access preflight now share the same default resolution (GLM only when credentials are configured). Removed Cursor from the provider list. Workspace blocked-state copy is generic instead of always mentioning GLM setup.
+
+- **Agents sidebar layout:** Moved the agents panel to sit immediately right of the activity rail (modes/workspaces bar). Project panel stays on the far right; agents sidebar resize handle and collapse direction updated for left-side placement.
+
 - **Theme panel and settings layout:** Moved **Decorate plaintext symbols** into the theme pane **Appearance** section (below the heading, above built-in theme choices). Added a **Built-in themes** subheading before Amber/Blue. Moved **Hide activity rail when Notepad only** to Settings → Editor (**Layout**). Removed the theme pane **Decoration** section.
 
 - **Tab context menu — Rename:** File tabs with a saved on-disk path expose **Rename** in the tab context menu; it renames the right-clicked tab’s file (not necessarily the selected tab). Hidden for agent, untitled, and missing-file tabs. **File → Rename** still targets the active tab.

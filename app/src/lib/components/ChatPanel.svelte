@@ -5,6 +5,7 @@
     getGlmMissingConfigCopy,
     PROVIDER_REQUEST_FAILURE_RECOVERY,
   } from "../ai/chatErrorCopy";
+  import { WorkspaceAccessReason } from "../ai/capabilities";
   import {
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
@@ -15,7 +16,6 @@
     canSelectChatProvider,
     formatProviderSwitchNotice,
     listSelectableChatProviders,
-    resolveDefaultChatProvider,
   } from "../ai/providers/selection";
   import { listModesForProvider } from "../ai/modes/builtins";
   import { sendChatMessage, retryLastChatTurn } from "../ai/sendChatMessage";
@@ -59,16 +59,23 @@
   const availableProviders = $derived(listSelectableChatProviders(debugProviderSettings));
   const availableModes = $derived(listModesForProvider(supportedModes));
   const activeMode = $derived(metadata?.mode ?? "ask");
-  const activeProvider = $derived(
-    metadata?.provider ?? resolveDefaultChatProvider(debugProviderSettings),
-  );
+  const activeProvider = $derived.by(() => {
+    metadata;
+    debugProviderSettings;
+    glmProviderSettings;
+    glmApiKey;
+    return chatStore.getActiveChatProvider();
+  });
   const isDebugSendBlocked = $derived(
     isDebugProviderSendBlocked(activeProvider, debugProviderSettings),
   );
   const isGlmSendBlocked = $derived(
     isGlmProviderSendBlocked(activeProvider, glmProviderSettings, glmApiKey),
   );
-  const isBlocked = $derived(accessState.status === "blocked");
+  const isBlocked = $derived(
+    accessState.status === "blocked" &&
+      accessState.reason !== WorkspaceAccessReason.MissingProviderConfig,
+  );
   const isEmpty = $derived(messages.length === 0);
   const activeAgentId = $derived(chatStore.getActiveAgentId());
   const activeAgentTitle = $derived.by(() => {
@@ -282,27 +289,27 @@
 </script>
 
 <section class="chat-panel" aria-label="Agent chat">
-  <div class="chat-panel-chrome">
-    <div class="chat-panel-header">
-      <p class="chat-panel-title">{activeAgentTitle}</p>
-      {#if canDeleteAgent}
-        <button
-          type="button"
-          class="chat-delete-button"
-          onclick={() => void deleteAgent()}
-          disabled={isBlocked || isGenerating || sending || retrying}
-        >
-          Delete agent
-        </button>
-      {/if}
-    </div>
+  <div class="chat-panel-header">
+    <p class="chat-panel-title">{activeAgentTitle}</p>
+    {#if canDeleteAgent}
+      <button
+        type="button"
+        class="chat-delete-button"
+        onclick={() => void deleteAgent()}
+        disabled={isBlocked || isGenerating || sending || retrying}
+      >
+        Delete agent
+      </button>
+    {/if}
+  </div>
 
+  <div class="chat-panel-stack">
     {#if isBlocked}
       <div class="chat-blocked-state" role="status" aria-live="polite">
         <p class="chat-blocked-title">{accessBlockedCopy.title}</p>
-        <p class="chat-blocked-message">{accessState.message || accessBlockedCopy.message}</p>
-        {#if accessState.recoveryHint ?? accessBlockedCopy.recoveryHint}
-          <p class="chat-blocked-hint">{accessState.recoveryHint ?? accessBlockedCopy.recoveryHint}</p>
+        <p class="chat-blocked-message">{accessBlockedCopy.message}</p>
+        {#if accessBlockedCopy.recoveryHint}
+          <p class="chat-blocked-hint">{accessBlockedCopy.recoveryHint}</p>
         {/if}
       </div>
     {:else if isGlmSendBlocked}
@@ -332,139 +339,136 @@
       </div>
     {/if}
 
-    <div class="chat-controls-row">
-      <label class="chat-provider-field">
-        <span class="chat-mode-label">Provider</span>
-        <select
-          class="chat-provider-select"
-          aria-label="Select chat provider"
-          value={activeProvider}
-          disabled={isProviderSelectionDisabled}
-          onchange={(event) => {
-            const next = (event.currentTarget as HTMLSelectElement)
-              .value as ChatProviderId;
-            void selectProvider(next);
-          }}
-        >
-          {#each availableProviders as provider (provider.id)}
-            <option value={provider.id}>{provider.label}</option>
-          {/each}
-        </select>
-      </label>
-
-      <div class="chat-mode-toolbar" role="group" aria-label="Chat mode">
-        <span class="chat-mode-label">Mode</span>
-        <div class="chat-mode-options" role="radiogroup" aria-label="Select chat mode">
-          {#each availableModes as mode (mode.id)}
-            <button
-              type="button"
-              role="radio"
-              class="chat-mode-option"
-              class:chat-mode-option-active={activeMode === mode.id}
-              aria-checked={activeMode === mode.id}
-              disabled={isModeSelectionDisabled}
-              onclick={() => selectMode(mode.id)}
-            >
-              {mode.label}
-            </button>
-          {/each}
+    <div class="chat-panel-body">
+      {#if isEmpty}
+        <div class="chat-empty-state">
+          <p class="chat-title">Start chat</p>
+          <p class="chat-hint">
+            Ask or review ideas for this workspace. Pick a provider and mode, then send a message.
+          </p>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="chat-panel-body">
-    {#if isEmpty}
-      <div class="chat-empty-state">
-        <p class="chat-title">Start chat</p>
-        <p class="chat-hint">
-          Ask or review ideas for this workspace. Pick a provider and mode above, then send a
-          message.
-        </p>
-      </div>
-    {:else}
-      <ol class="chat-message-list" aria-label="Conversation">
-        {#each messages as message, index (message.id)}
-          <li
-            class={`chat-message chat-message-${message.role}`}
-            class:chat-message-system-event={isProviderSwitchMessage(message)}
-            class:chat-message-streaming={isGenerating &&
-              message.role === "assistant" &&
-              index === messages.length - 1}
-          >
-            <p class="chat-message-role">{messageRoleLabel(message)}</p>
-            {#if reviewSectionsForMessage(message)}
-              <div class="chat-review-sections">
-                {#each reviewSectionsForMessage(message) ?? [] as section (section.heading)}
-                  <section class="chat-review-section">
-                    <h3 class="chat-review-section-heading">{section.heading}</h3>
-                    <p class="chat-review-section-body">{section.body}</p>
-                  </section>
-                {/each}
-              </div>
-            {:else}
-              <p class="chat-message-content">
-                {#if message.role === "assistant" && message.content.length === 0 && isGenerating && index === messages.length - 1}
-                  <span class="chat-streaming-placeholder">Generating…</span>
+      {:else}
+        <div class="chat-message-scroll">
+          <ol class="chat-message-list" aria-label="Conversation">
+            {#each messages as message, index (message.id)}
+              <li
+                class={`chat-message chat-message-${message.role}`}
+                class:chat-message-system-event={isProviderSwitchMessage(message)}
+                class:chat-message-streaming={isGenerating &&
+                  message.role === "assistant" &&
+                  index === messages.length - 1}
+              >
+                <p class="chat-message-role">{messageRoleLabel(message)}</p>
+                {#if reviewSectionsForMessage(message)}
+                  <div class="chat-review-sections">
+                    {#each reviewSectionsForMessage(message) ?? [] as section (section.heading)}
+                      <section class="chat-review-section">
+                        <h3 class="chat-review-section-heading">{section.heading}</h3>
+                        <p class="chat-review-section-body">{section.body}</p>
+                      </section>
+                    {/each}
+                  </div>
                 {:else}
-                  {messageDisplayContent(message)}
+                  <p class="chat-message-content">
+                    {#if message.role === "assistant" && message.content.length === 0 && isGenerating && index === messages.length - 1}
+                      <span class="chat-streaming-placeholder">Generating…</span>
+                    {:else}
+                      {messageDisplayContent(message)}
+                    {/if}
+                  </p>
                 {/if}
-              </p>
-            {/if}
-          </li>
-        {/each}
-      </ol>
-    {/if}
-  </div>
+              </li>
+            {/each}
+          </ol>
+        </div>
+      {/if}
+    </div>
 
-  <div class="chat-composer" role="group" aria-label="Chat composer">
-    {#if composerError}
-      <div class="chat-inline-error" role="alert">
-        <p class="chat-inline-error-message">{composerError.message}</p>
-        {#if composerError.recoveryHint}
-          <p class="chat-inline-error-hint">{composerError.recoveryHint}</p>
+    <div class="chat-composer" role="group" aria-label="Chat composer">
+      {#if composerError}
+        <div class="chat-inline-error" role="alert">
+          <p class="chat-inline-error-message">{composerError.message}</p>
+          {#if composerError.recoveryHint}
+            <p class="chat-inline-error-hint">{composerError.recoveryHint}</p>
+          {/if}
+        </div>
+      {/if}
+      <textarea
+        class="chat-input"
+        rows="3"
+        bind:value={draft}
+        placeholder="Message agent"
+        aria-label="Chat message"
+        onkeydown={handleComposerKeydown}
+        disabled={composerDisabled}
+      ></textarea>
+      <div class="chat-composer-actions">
+        {#if canRetryLastTurn}
+          <button
+            type="button"
+            class="chat-retry-button"
+            onclick={() => void retryLastTurn()}
+            disabled={isRetryDisabled}
+          >
+            {retrying ? "Retrying…" : "Retry"}
+          </button>
         {/if}
-      </div>
-    {/if}
-    <textarea
-      class="chat-input"
-      rows="3"
-      bind:value={draft}
-      placeholder="Message agent"
-      aria-label="Chat message"
-      onkeydown={handleComposerKeydown}
-      disabled={composerDisabled}
-    ></textarea>
-    <div class="chat-composer-actions">
-      {#if canRetryLastTurn}
         <button
           type="button"
-          class="chat-retry-button"
-          onclick={() => void retryLastTurn()}
-          disabled={isRetryDisabled}
+          class="chat-send-button"
+          onclick={() => void submitMessage()}
+          disabled={isSendDisabled}
         >
-          {retrying ? "Retrying…" : "Retry"}
+          {isGenerating ? "Generating…" : "Send"}
         </button>
-      {/if}
-      <button
-        type="button"
-        class="chat-send-button"
-        onclick={() => void submitMessage()}
-        disabled={isSendDisabled}
-      >
-        {isGenerating ? "Generating…" : "Send"}
-      </button>
-      {#if generationStatus}
-        <span class="chat-assistant-status" role="status">{generationStatus}</span>
-      {/if}
+        <label class="chat-provider-field">
+          <span class="chat-mode-label">Provider</span>
+          <select
+            class="chat-provider-select"
+            aria-label="Select chat provider"
+            value={activeProvider}
+            disabled={isProviderSelectionDisabled}
+            onchange={(event) => {
+              const next = (event.currentTarget as HTMLSelectElement)
+                .value as ChatProviderId;
+              void selectProvider(next);
+            }}
+          >
+            {#each availableProviders as provider (provider.id)}
+              <option value={provider.id}>{provider.label}</option>
+            {/each}
+          </select>
+        </label>
+        <div class="chat-mode-toolbar" role="group" aria-label="Chat mode">
+          <span class="chat-mode-label">Mode</span>
+          <div class="chat-mode-options" role="radiogroup" aria-label="Select chat mode">
+            {#each availableModes as mode (mode.id)}
+              <button
+                type="button"
+                role="radio"
+                class="chat-mode-option"
+                class:chat-mode-option-active={activeMode === mode.id}
+                aria-checked={activeMode === mode.id}
+                disabled={isModeSelectionDisabled}
+                onclick={() => selectMode(mode.id)}
+              >
+                {mode.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+        {#if generationStatus}
+          <span class="chat-assistant-status" role="status">{generationStatus}</span>
+        {/if}
+      </div>
     </div>
   </div>
 </section>
 
 <style>
   .chat-panel {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: column;
     height: 100%;
     min-height: 0;
     min-width: 0;
@@ -474,26 +478,31 @@
     container-type: inline-size;
   }
 
-  .chat-panel-chrome {
+  .chat-panel-stack {
     display: flex;
+    flex: 1;
     flex-direction: column;
+    justify-content: flex-end;
     gap: var(--space-6);
     min-height: 0;
-    flex-shrink: 0;
   }
 
   .chat-panel-body {
+    flex: 1;
     min-height: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    justify-content: flex-end;
   }
 
-  .chat-controls-row {
+  .chat-message-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-8);
+    flex-direction: column;
+    justify-content: flex-end;
   }
 
   .chat-provider-field {
@@ -565,11 +574,8 @@
   }
 
   .chat-empty-state {
-    height: 100%;
-    min-height: 0;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     gap: var(--space-2);
     color: var(--color-text-secondary);
   }
@@ -711,9 +717,6 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
@@ -870,8 +873,13 @@
 
   .chat-composer-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-8);
+  }
+
+  .chat-composer-actions .chat-assistant-status {
+    margin-left: auto;
   }
 
   .chat-send-button {
@@ -942,19 +950,27 @@
       gap: var(--space-4);
     }
 
-    .chat-controls-row {
-      flex-direction: column;
-      align-items: stretch;
+    .chat-panel-stack {
+      gap: var(--space-4);
+    }
+
+    .chat-composer-actions {
+      gap: var(--space-4);
     }
 
     .chat-provider-field,
     .chat-mode-toolbar {
-      width: 100%;
+      flex: 1 1 100%;
     }
 
     .chat-provider-select {
       flex: 1;
       max-width: none;
+    }
+
+    .chat-composer-actions .chat-assistant-status {
+      margin-left: 0;
+      flex: 1 1 100%;
     }
   }
 </style>

@@ -12,12 +12,10 @@ describe("chat provider selection", () => {
   it("lists product providers and Debug only when enabled", () => {
     expect(listSelectableChatProviders({ ...defaultDebugProviderSettings, enabled: false })).toEqual([
       { id: "glm", label: "GLM" },
-      { id: "cursor", label: "Cursor" },
     ]);
 
     expect(listSelectableChatProviders({ ...defaultDebugProviderSettings, enabled: true })).toEqual([
       { id: "glm", label: "GLM" },
-      { id: "cursor", label: "Cursor" },
       { id: "debug", label: "Debug" },
     ]);
   });
@@ -38,6 +36,12 @@ describe("chat provider selection", () => {
         isGlmProviderConfigured(defaultGlmProviderSettings, ""),
       ),
     ).toBe("glm");
+  });
+
+  it("does not treat a registered GLM adapter as configured without credentials", () => {
+    expect(
+      isGlmProviderConfigured(defaultGlmProviderSettings, ""),
+    ).toBe(false);
   });
 
   it("formats provider switch notices for history rendering", () => {

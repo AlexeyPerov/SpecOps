@@ -120,6 +120,16 @@ describe("M5.3 milestone validation", () => {
     expect(result.message).toContain("Debug provider is ready");
   });
 
+  it("passes Debug access preflight for draft agents without thread metadata when Debug is the default provider", async () => {
+    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.createDraftAgent();
+
+    const result = await chatStore.runAccessPreflight();
+
+    expect(result.status).toBe("ready");
+    expect(chatStore.getActiveChatProvider()).toBe("debug");
+  });
+
   it("blocks GLM access preflight when credentials are missing", async () => {
     chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
@@ -154,7 +164,7 @@ describe("M5.3 milestone validation", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toBe("preflight");
+      expect(result.reason).toBe("debug_disabled");
       expect(result.message).toBe(DEBUG_PROVIDER_DISABLED_MESSAGE);
     }
     expect(chatStore.getMessages(agentId!)).toHaveLength(0);
@@ -168,7 +178,7 @@ describe("M5.3 milestone validation", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toBe("preflight");
+      expect(result.reason).toBe("glm_not_configured");
       expect(result.message).toBe(GLM_MISSING_CONFIG_MESSAGE);
     }
     expect(chatStore.getMessages(agentId!)).toHaveLength(0);

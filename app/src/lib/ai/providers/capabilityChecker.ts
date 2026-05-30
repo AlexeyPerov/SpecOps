@@ -6,16 +6,14 @@ import {
   type CapabilityChecker,
 } from "../capabilities";
 import {
+  PROVIDER_MISSING_CONFIG_MESSAGE,
+  PROVIDER_MISSING_CONFIG_RECOVERY,
   PROVIDER_NOT_REGISTERED_MESSAGE,
   PROVIDER_NOT_REGISTERED_RECOVERY,
   getUnknownProviderMessage,
   getUnknownProviderRecovery,
 } from "../chatErrorCopy";
-import {
-  getGlmProviderMissingConfigMessage,
-  getGlmProviderSetupHint,
-  isGlmProviderConfigured,
-} from "./glmProviderSettings";
+import { isGlmProviderConfigured } from "./glmProviderSettings";
 import { getChatProvider } from "./registry";
 
 export type DebugSettingsReader = () => DebugProviderSettings;
@@ -30,8 +28,8 @@ function missingGlmConfigResult(): CapabilityCheckResult {
     status: "blocked",
     reason: WorkspaceAccessReason.MissingProviderConfig,
     capabilities: null,
-    message: getGlmProviderMissingConfigMessage(),
-    recoveryHint: getGlmProviderSetupHint(),
+    message: PROVIDER_MISSING_CONFIG_MESSAGE,
+    recoveryHint: PROVIDER_MISSING_CONFIG_RECOVERY,
   };
 }
 

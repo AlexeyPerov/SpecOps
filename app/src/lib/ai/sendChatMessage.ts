@@ -140,15 +140,6 @@ type ProviderSendValidationSuccess = {
 async function validateProviderSend(
   activeAgentId: string,
 ): Promise<ProviderSendValidationFailure | ProviderSendValidationSuccess> {
-  const accessState = await chatStore.runAccessPreflight();
-  if (accessState.status !== "ready") {
-    return {
-      ok: false,
-      reason: "preflight",
-      message: accessState.message,
-    };
-  }
-
   const providerId = chatStore.getActiveChatProvider(activeAgentId);
   const appSettings = appState.getSnapshot().settings;
   const debugSettings = appSettings.debugProvider;
@@ -165,6 +156,15 @@ async function validateProviderSend(
       ok: false,
       reason: "glm_not_configured",
       message: getGlmProviderMissingConfigMessage(),
+    };
+  }
+
+  const accessState = await chatStore.runAccessPreflight();
+  if (accessState.status !== "ready") {
+    return {
+      ok: false,
+      reason: "preflight",
+      message: accessState.message,
     };
   }
 

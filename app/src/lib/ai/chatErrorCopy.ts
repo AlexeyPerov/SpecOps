@@ -23,6 +23,12 @@ export const GLM_MISSING_CONFIG_MESSAGE =
 export const GLM_MISSING_CONFIG_RECOVERY =
   "Open Settings → GLM, enter your API key, and try again.";
 
+export const PROVIDER_MISSING_CONFIG_MESSAGE =
+  "Complete provider setup in Settings before sending messages.";
+
+export const PROVIDER_MISSING_CONFIG_RECOVERY =
+  "Open Settings, finish setup for the selected provider, and try again.";
+
 export const DEBUG_PROVIDER_DISABLED_TITLE = "Debug provider is disabled";
 
 export const DEBUG_PROVIDER_DISABLED_MESSAGE =
@@ -86,17 +92,10 @@ export function getAccessBlockedCopy(
         recoveryHint: WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
       };
     case WorkspaceAccessReason.MissingProviderConfig:
-      if (options.activeProvider === "glm") {
-        return {
-          title: GLM_NOT_CONFIGURED_TITLE,
-          message: GLM_MISSING_CONFIG_MESSAGE,
-          recoveryHint: GLM_MISSING_CONFIG_RECOVERY,
-        };
-      }
       return {
         title: WORKSPACE_ACCESS_BLOCKED_TITLE,
-        message: "Provider setup is incomplete for this workspace.",
-        recoveryHint: "Open Settings and finish provider setup, then try again.",
+        message: PROVIDER_MISSING_CONFIG_MESSAGE,
+        recoveryHint: PROVIDER_MISSING_CONFIG_RECOVERY,
       };
     case WorkspaceAccessReason.ProviderUnsupported:
       return {

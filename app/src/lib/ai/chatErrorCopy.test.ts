@@ -25,13 +25,13 @@ describe("chatErrorCopy", () => {
     expect(copy.recoveryHint).toBe(WORKSPACE_PATH_INACCESSIBLE_RECOVERY);
   });
 
-  it("returns GLM-specific missing config copy for access preflight", () => {
+  it("returns generic missing config copy for access preflight", () => {
     const copy = getAccessBlockedCopy(WorkspaceAccessReason.MissingProviderConfig, {
       activeProvider: "glm",
     });
 
-    expect(copy.message).toBe(GLM_MISSING_CONFIG_MESSAGE);
-    expect(copy.recoveryHint).toBe(GLM_MISSING_CONFIG_RECOVERY);
+    expect(copy.message).not.toContain("GLM");
+    expect(copy.recoveryHint).not.toContain("GLM");
   });
 
   it("returns provider setup copy for inline GLM and Debug blocked states", () => {

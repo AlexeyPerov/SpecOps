@@ -74,7 +74,7 @@
     target?.setPointerCapture(pointerId);
 
     const onPointerMove = (moveEvent: PointerEvent): void => {
-      const deltaX = startX - moveEvent.clientX;
+      const deltaX = moveEvent.clientX - startX;
       displayWidth = clampPanelWidth(startWidth + deltaX);
     };
 
@@ -162,7 +162,7 @@
       onclick={() => onToggleCollapsed(!collapsed)}
       title={collapsed ? "Expand agents sidebar" : "Collapse agents sidebar"}
     >
-      {collapsed ? "⟪" : "⟫"}
+      {collapsed ? "⟫" : "⟪"}
     </button>
   </header>
 
@@ -233,7 +233,7 @@
 <style>
   .agents-sidebar {
     position: relative;
-    border-left: 1px solid var(--color-border-subtle);
+    border-right: 1px solid var(--color-border-subtle);
     background: var(--color-surface-1);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
@@ -251,7 +251,7 @@
 
   .agents-sidebar-resize-handle {
     position: absolute;
-    left: -3px;
+    right: -3px;
     top: 0;
     bottom: 0;
     width: 6px;

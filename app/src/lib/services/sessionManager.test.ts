@@ -65,7 +65,6 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
     editorPreferences: {
       zoomPercent: 100,
       wrapLines: true,
-      projectPanelCollapsed: false,
     },
     ...overrides,
   };

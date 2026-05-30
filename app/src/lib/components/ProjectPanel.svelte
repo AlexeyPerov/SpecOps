@@ -1,6 +1,12 @@
 <script lang="ts">
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
+  import {
+    DEFAULT_PANEL_WIDTH_PX,
+    MAX_PANEL_WIDTH_PX,
+    MIN_PANEL_WIDTH_PX,
+    normalizePanelWidthPx,
+  } from "../services/panelLayout";
 
   export let workspaceRoot: string;
   export let rootNodes: ProjectTreeNode[] = [];
@@ -10,16 +16,16 @@
   export let activeFilePath: string | null = null;
   export let showHidden = false;
   export let collapsed = false;
+  export let panelWidthPx = DEFAULT_PANEL_WIDTH_PX;
   export let onRefresh: () => void = () => {};
   export let onToggleHidden: (next: boolean) => void = () => {};
   export let onToggleCollapsed: (next: boolean) => void = () => {};
+  export let onPanelWidthChange: (width: number) => void = () => {};
   export let onToggleDirectory: (path: string) => void = () => {};
   export let onOpenFile: (path: string) => void = () => {};
   let panelBodyEl: HTMLDivElement | null = null;
-  let panelWidth = 240;
+  let displayWidth = panelWidthPx;
   let isResizing = false;
-  const MIN_PANEL_WIDTH = 180;
-  const MAX_PANEL_WIDTH = 520;
 
   function basename(path: string): string {
     const normalized = path.replaceAll("\\", "/");
@@ -32,8 +38,12 @@
     node?.scrollIntoView({ block: "nearest" });
   }
 
+  $: if (!isResizing) {
+    displayWidth = normalizePanelWidthPx(panelWidthPx);
+  }
+
   function clampPanelWidth(next: number): number {
-    return Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, next));
+    return Math.max(MIN_PANEL_WIDTH_PX, Math.min(MAX_PANEL_WIDTH_PX, next));
   }
 
   function handleResizeStart(event: PointerEvent): void {
@@ -44,13 +54,13 @@
     isResizing = true;
     const pointerId = event.pointerId;
     const startX = event.clientX;
-    const startWidth = panelWidth;
+    const startWidth = displayWidth;
     const target = event.currentTarget as HTMLElement | null;
     target?.setPointerCapture(pointerId);
 
     const onPointerMove = (moveEvent: PointerEvent): void => {
       const deltaX = startX - moveEvent.clientX;
-      panelWidth = clampPanelWidth(startWidth + deltaX);
+      displayWidth = clampPanelWidth(startWidth + deltaX);
     };
 
     const onPointerEnd = (): void => {
@@ -59,6 +69,7 @@
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerEnd);
       window.removeEventListener("pointercancel", onPointerEnd);
+      onPanelWidthChange(displayWidth);
     };
 
     window.addEventListener("pointermove", onPointerMove);
@@ -70,7 +81,7 @@
 <aside
   class={`project-panel ${collapsed ? "project-panel-collapsed" : ""} ${isResizing ? "project-panel-resizing" : ""}`}
   aria-label="Project panel"
-  style={collapsed ? undefined : `width:${panelWidth}px`}
+  style={collapsed ? undefined : `width:${displayWidth}px`}
 >
   {#if !collapsed}
     <div

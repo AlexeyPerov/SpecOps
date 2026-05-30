@@ -7,11 +7,19 @@
     groupAgentsByLastUsedDate,
     type AgentDateGroup,
   } from "../services/chatAgents";
+  import {
+    DEFAULT_PANEL_WIDTH_PX,
+    MAX_PANEL_WIDTH_PX,
+    MIN_PANEL_WIDTH_PX,
+    normalizePanelWidthPx,
+  } from "../services/panelLayout";
 
   interface Props {
     agents?: AgentIndexEntry[];
     activeAgentId?: string | null;
     collapsed?: boolean;
+    panelWidthPx?: number;
+    onPanelWidthChange?: (width: number) => void;
     onToggleCollapsed?: (next: boolean) => void;
     onSelectAgent?: (agentId: string) => void;
     onNewAgent?: () => void;
@@ -22,6 +30,8 @@
     agents = [],
     activeAgentId = null,
     collapsed = false,
+    panelWidthPx = DEFAULT_PANEL_WIDTH_PX,
+    onPanelWidthChange = () => {},
     onToggleCollapsed = () => {},
     onSelectAgent = () => {},
     onNewAgent = () => {},
@@ -29,13 +39,16 @@
   }: Props = $props();
 
   let searchQuery = $state("");
-  let panelWidth = $state(240);
+  let displayWidth = $state(DEFAULT_PANEL_WIDTH_PX);
   let isResizing = $state(false);
   let contextMenu = $state<{ agentId: string; x: number; y: number } | null>(null);
   let contextMenuEl = $state<HTMLDivElement | null>(null);
 
-  const MIN_PANEL_WIDTH = 180;
-  const MAX_PANEL_WIDTH = 520;
+  $effect(() => {
+    if (!isResizing) {
+      displayWidth = normalizePanelWidthPx(panelWidthPx);
+    }
+  });
 
   const filteredAgents = $derived(filterAgentsByTitle(agents, searchQuery));
   const groupedAgents = $derived(groupAgentsByLastUsedDate(filteredAgents));
@@ -45,7 +58,7 @@
   }
 
   function clampPanelWidth(next: number): number {
-    return Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, next));
+    return Math.max(MIN_PANEL_WIDTH_PX, Math.min(MAX_PANEL_WIDTH_PX, next));
   }
 
   function handleResizeStart(event: PointerEvent): void {
@@ -56,13 +69,13 @@
     isResizing = true;
     const pointerId = event.pointerId;
     const startX = event.clientX;
-    const startWidth = panelWidth;
+    const startWidth = displayWidth;
     const target = event.currentTarget as HTMLElement | null;
     target?.setPointerCapture(pointerId);
 
     const onPointerMove = (moveEvent: PointerEvent): void => {
       const deltaX = startX - moveEvent.clientX;
-      panelWidth = clampPanelWidth(startWidth + deltaX);
+      displayWidth = clampPanelWidth(startWidth + deltaX);
     };
 
     const onPointerEnd = (): void => {
@@ -71,6 +84,7 @@
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerEnd);
       window.removeEventListener("pointercancel", onPointerEnd);
+      onPanelWidthChange(displayWidth);
     };
 
     window.addEventListener("pointermove", onPointerMove);
@@ -124,7 +138,7 @@
 <aside
   class={`agents-sidebar ${collapsed ? "agents-sidebar-collapsed" : ""} ${isResizing ? "agents-sidebar-resizing" : ""}`}
   aria-label="Agents sidebar"
-  style={collapsed ? undefined : `width:${panelWidth}px`}
+  style={collapsed ? undefined : `width:${displayWidth}px`}
 >
   {#if !collapsed}
     <div

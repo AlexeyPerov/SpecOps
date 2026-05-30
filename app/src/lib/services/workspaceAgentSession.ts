@@ -1,5 +1,6 @@
 import type { AgentIndexEntry, AgentTabState, SessionState, TabState } from "../domain/contracts";
 import { isAgentTab, isFileTab } from "../domain/contracts";
+import { normalizeWorkspaceLayout } from "./panelLayout";
 import {
   AGENT_DATE_GROUP_ORDER,
   groupAgentsByLastUsedDate,
@@ -97,5 +98,6 @@ export function normalizeSessionState(session: SessionState): SessionState {
   return {
     ...session,
     lastActiveAgentId: session.lastActiveAgentId ?? null,
+    layout: session.layout ? normalizeWorkspaceLayout(session.layout) : undefined,
   };
 }

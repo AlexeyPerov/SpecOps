@@ -578,7 +578,6 @@ describe("appState settings and editor chrome", () => {
       editorPreferences: {
         zoomPercent: 100,
         wrapLines: true,
-        projectPanelCollapsed: false,
       },
     });
     expect(appState.getSnapshot().theme.activeTheme).toEqual({
@@ -587,7 +586,8 @@ describe("appState settings and editor chrome", () => {
     });
   });
 
-  it("setPreviewMode, zoom, and wrap update editor state", () => {
+  it("setPreviewMode, zoom, wrap, and workspace layout update editor state", () => {
+    appState.addWorkspace("/tmp/ws-layout");
     appState.setPreviewMode("diff");
     appState.setZoomPercent(110);
     appState.toggleWrap();
@@ -597,7 +597,7 @@ describe("appState settings and editor chrome", () => {
     expect(editor.previewMode).toBe("diff");
     expect(editor.zoomPercent).toBe(110);
     expect(editor.wrapLines).toBe(false);
-    expect(editor.projectPanelCollapsed).toBe(true);
+    expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
   });
 });
 
@@ -694,6 +694,12 @@ describe("appState session restore", () => {
                 openTabs: [createFileTab("tab-3", "doc-3")],
                 lastActiveWindowId: "main",
                 windowBounds: null,
+                layout: {
+                  projectPanelWidthPx: 320,
+                  agentsSidebarWidthPx: 280,
+                  projectPanelCollapsed: true,
+                  agentsSidebarCollapsed: false,
+                },
               },
             },
           },
@@ -701,7 +707,6 @@ describe("appState session restore", () => {
         editorPreferences: {
           zoomPercent: 120,
           wrapLines: false,
-          projectPanelCollapsed: true,
         },
       },
       ["/tmp/notepad.md"],
@@ -712,6 +717,34 @@ describe("appState session restore", () => {
     expect(snapshot.contexts.workspaces.map((workspace) => workspace.id)).toEqual(["ws-1", "ws-2"]);
     expect(snapshot.session.selectedTabId).toBe("tab-3");
     expect(snapshot.documents[0]?.filePath).toBe("/tmp/ws-two/b.ts");
-    expect(snapshot.editor.projectPanelCollapsed).toBe(true);
+    expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
+    expect(appState.getActiveWorkspaceLayout().projectPanelWidthPx).toBe(320);
+  });
+
+  it("keeps per-workspace panel layout when switching workspaces", () => {
+    appState.addWorkspace("/tmp/ws-one");
+    appState.updateActiveWorkspaceLayout({
+      projectPanelWidthPx: 300,
+      agentsSidebarWidthPx: 260,
+      projectPanelCollapsed: true,
+      agentsSidebarCollapsed: false,
+    });
+
+    appState.addWorkspace("/tmp/ws-two");
+    appState.updateActiveWorkspaceLayout({
+      projectPanelWidthPx: 400,
+      agentsSidebarWidthPx: 360,
+      projectPanelCollapsed: false,
+      agentsSidebarCollapsed: true,
+    });
+
+    const wsOneId = appState.getSnapshot().contexts.workspaces[0]?.id;
+    expect(wsOneId).toBeDefined();
+    appState.switchContext(wsOneId!);
+
+    expect(appState.getActiveWorkspaceLayout().projectPanelWidthPx).toBe(300);
+    expect(appState.getActiveWorkspaceLayout().agentsSidebarWidthPx).toBe(260);
+    expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
+    expect(appState.getActiveWorkspaceLayout().agentsSidebarCollapsed).toBe(false);
   });
 });

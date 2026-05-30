@@ -95,6 +95,13 @@ export function tabDocumentId(
   return isFileTab(normalized) ? normalized.documentId : null;
 }
 
+export interface WorkspaceLayoutState {
+  projectPanelWidthPx: number;
+  agentsSidebarWidthPx: number;
+  projectPanelCollapsed: boolean;
+  agentsSidebarCollapsed: boolean;
+}
+
 export interface SessionState {
   selectedTabId: string | null;
   openTabs: TabState[];
@@ -102,6 +109,8 @@ export interface SessionState {
   windowBounds: WindowBounds | null;
   /** Last focused agent in this workspace context; persisted in session snapshot. */
   lastActiveAgentId?: string | null;
+  /** Per-workspace panel layout; persisted in session snapshot. */
+  layout?: WorkspaceLayoutState;
 }
 
 export type ContextId = "notepad" | `ws-${number}`;
@@ -327,7 +336,6 @@ export interface AppDomainState {
     findReplaceOpen: boolean;
     goToOpen: boolean;
     previewMode: "editor" | "markdown" | "diff";
-    projectPanelCollapsed: boolean;
   };
 }
 
@@ -335,10 +343,7 @@ export interface WindowSessionSnapshot {
   activeContextId: ContextId;
   notepad: ContextSnapshot;
   workspaces: WorkspaceEntry[];
-  editorPreferences: Pick<
-    AppDomainState["editor"],
-    "zoomPercent" | "wrapLines" | "projectPanelCollapsed"
-  >;
+  editorPreferences: Pick<AppDomainState["editor"], "zoomPercent" | "wrapLines">;
 }
 
 export interface AppSessionSnapshot {

@@ -43,7 +43,6 @@ function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
     editorPreferences: {
       zoomPercent: state.editor.zoomPercent,
       wrapLines: state.editor.wrapLines,
-      projectPanelCollapsed: state.editor.projectPanelCollapsed,
     },
   };
 }

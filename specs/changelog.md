@@ -2,6 +2,8 @@
 
 ## 2026-05-30 (MSK)
 
+- **Per-workspace panel layout persistence:** Project panel and agents sidebar widths and collapsed state are stored in each workspace's session snapshot (`session.layout`) and restored on app restart. Switching workspaces restores that workspace's individual layout. Removed window-global `editorPreferences.projectPanelCollapsed`.
+
 - **Markdown view mode persistence:** Each markdown file remembers its edit/split/preview mode per document. Mode restores when switching tabs and is saved in the session snapshot between app restarts.
 
 - **Markdown preview links:** External `http`/`https`/`mailto`/`tel` links open in the system browser via `tauri-plugin-opener`; relative and `file:` links resolve against the open markdown file and open in the editor. In-webview navigation is blocked on all markdown preview surfaces.

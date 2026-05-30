@@ -105,6 +105,7 @@
     writeConsoleHeightPreference,
   } from "../lib/services/consoleTabPrefs";
   import { initializeChatProviders } from "../lib/ai/providers/bootstrap";
+  import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -146,7 +147,6 @@
   let projectTreeLoadingPaths = new Set<string>();
   let projectTreeShowHidden = false;
   let autoProjectPanelCollapsed = false;
-  let agentsSidebarCollapsed = false;
   let autoAgentsSidebarCollapsed = false;
   let lastChatWorkspaceRoot: string | null = null;
   const MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
@@ -155,11 +155,17 @@
   $: activeContextId = state.contexts.activeContextId;
   $: workspaces = state.contexts.workspaces;
   $: activeWorkspaceRoot = appState.getWorkspaceRoot(activeContextId);
+  $: workspaceLayout = activeWorkspaceRoot
+    ? normalizeWorkspaceLayout(state.session.layout)
+    : normalizeWorkspaceLayout();
   $: showProjectPanel =
     Boolean(activeWorkspaceRoot) &&
-    !state.editor.projectPanelCollapsed &&
+    !workspaceLayout.projectPanelCollapsed &&
     !autoProjectPanelCollapsed;
-  $: showAgentsSidebar = Boolean(activeWorkspaceRoot) && !agentsSidebarCollapsed && !autoAgentsSidebarCollapsed;
+  $: showAgentsSidebar =
+    Boolean(activeWorkspaceRoot) &&
+    !workspaceLayout.agentsSidebarCollapsed &&
+    !autoAgentsSidebarCollapsed;
   $: workspaceAgents = $chatAgentIndex;
   $: selectedAgentId = $chatActiveAgentId;
   $: showActivityRail = !(
@@ -276,7 +282,15 @@
   }
 
   function toggleAgentsSidebarCollapsed(next: boolean): void {
-    agentsSidebarCollapsed = next;
+    appState.setAgentsSidebarCollapsed(next);
+  }
+
+  function handleProjectPanelWidthChange(widthPx: number): void {
+    appState.updateActiveWorkspaceLayout({ projectPanelWidthPx: widthPx });
+  }
+
+  function handleAgentsSidebarWidthChange(widthPx: number): void {
+    appState.updateActiveWorkspaceLayout({ agentsSidebarWidthPx: widthPx });
   }
 
   function handleNewAgent(): void {
@@ -502,7 +516,7 @@
       autoAgentsSidebarCollapsed = shouldAutoCollapseAgents;
     }
 
-    const projectPanelCollapsed = state.editor.projectPanelCollapsed || autoProjectPanelCollapsed;
+    const projectPanelCollapsed = workspaceLayout.projectPanelCollapsed || autoProjectPanelCollapsed;
     if (shellMainRowWidth > 0 && shellMainRowWidth < 900 && projectPanelCollapsed) {
       consoleOpen = false;
     }
@@ -1434,9 +1448,11 @@
         activeFilePath={activeDocumentPath}
         showHidden={projectTreeShowHidden}
         collapsed={!showProjectPanel}
+        panelWidthPx={workspaceLayout.projectPanelWidthPx}
         onRefresh={refreshProjectTree}
         onToggleHidden={toggleProjectTreeHidden}
         onToggleCollapsed={toggleProjectPanelCollapsed}
+        onPanelWidthChange={handleProjectPanelWidthChange}
         onToggleDirectory={handleToggleProjectTreeDirectory}
         onOpenFile={handleOpenProjectTreeFile}
       />
@@ -1444,7 +1460,9 @@
         agents={workspaceAgents}
         activeAgentId={selectedAgentId}
         collapsed={!showAgentsSidebar}
+        panelWidthPx={workspaceLayout.agentsSidebarWidthPx}
         onToggleCollapsed={toggleAgentsSidebarCollapsed}
+        onPanelWidthChange={handleAgentsSidebarWidthChange}
         onSelectAgent={handleSelectAgent}
         onNewAgent={handleNewAgent}
         onDeleteAgent={(agentId) => void handleDeleteAgent(agentId)}

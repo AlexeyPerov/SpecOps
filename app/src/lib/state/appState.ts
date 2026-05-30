@@ -13,6 +13,7 @@ import type {
   GlmProviderSettings,
   TabState,
   WorkspaceEntry,
+  WorkspaceLayoutState,
   WindowBounds,
   WindowSessionSnapshot,
 } from "../domain/contracts";
@@ -34,6 +35,10 @@ import {
 } from "../ai/providers/glmProviderSettings";
 import { inferEditorLanguage } from "../editor/editorLanguage";
 import { normalizePathSync } from "../services/diskFingerprint";
+import {
+  defaultWorkspaceLayout,
+  normalizeWorkspaceLayout,
+} from "../services/panelLayout";
 import { findNextOpenAgentTabAfterClose } from "../services/workspaceAgentSession";
 import { bumpRecentFile } from "../services/recentFiles";
 import { syncRecentFiles } from "../services/recentFilesSync";
@@ -588,7 +593,6 @@ const initialState: AppDomainState = {
     findReplaceOpen: false,
     goToOpen: false,
     previewMode: "editor",
-    projectPanelCollapsed: false,
   },
 };
 
@@ -622,7 +626,6 @@ function createStateStore() {
       editorPreferences: {
         zoomPercent: synced.editor.zoomPercent,
         wrapLines: synced.editor.wrapLines,
-        projectPanelCollapsed: synced.editor.projectPanelCollapsed,
       },
     };
   }
@@ -1603,11 +1606,34 @@ function createStateStore() {
         editor: { ...state.editor, previewMode },
       }));
     },
+    getActiveWorkspaceLayout(): WorkspaceLayoutState {
+      const state = this.getSnapshot();
+      if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
+        return defaultWorkspaceLayout();
+      }
+      return normalizeWorkspaceLayout(state.session.layout);
+    },
+    updateActiveWorkspaceLayout(partial: Partial<WorkspaceLayoutState>): void {
+      update((state) => {
+        if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
+          return state;
+        }
+        const current = normalizeWorkspaceLayout(state.session.layout);
+        const nextLayout = normalizeWorkspaceLayout({ ...current, ...partial });
+        return {
+          ...state,
+          session: {
+            ...state.session,
+            layout: nextLayout,
+          },
+        };
+      });
+    },
     setProjectPanelCollapsed(projectPanelCollapsed: boolean) {
-      update((state) => ({
-        ...state,
-        editor: { ...state.editor, projectPanelCollapsed },
-      }));
+      this.updateActiveWorkspaceLayout({ projectPanelCollapsed });
+    },
+    setAgentsSidebarCollapsed(agentsSidebarCollapsed: boolean) {
+      this.updateActiveWorkspaceLayout({ agentsSidebarCollapsed });
     },
     toggleFindReplace() {
       update((state) => ({
@@ -1734,7 +1760,6 @@ function createStateStore() {
       hideActivityRailWhenNotepadOnly?: boolean;
       debugProvider?: DebugProviderSettings;
       glmProvider?: GlmProviderSettings;
-      projectPanelCollapsed?: boolean;
     }) {
       update((state) => {
         let next = state;
@@ -1792,15 +1817,6 @@ function createStateStore() {
             settings: {
               ...next.settings,
               glmProvider: normalizeGlmProviderSettings(partial.glmProvider),
-            },
-          };
-        }
-        if (typeof partial.projectPanelCollapsed === "boolean") {
-          next = {
-            ...next,
-            editor: {
-              ...next.editor,
-              projectPanelCollapsed: partial.projectPanelCollapsed,
             },
           };
         }

@@ -1295,27 +1295,42 @@ function createStateStore() {
       syncRecentFiles(recentFiles);
       return openedDocumentId;
     },
-    transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
+    buildTabTransferPayload(
+      tabId: string,
+    ): { filePath: string | null; content: string; title: string } | null {
       const snapshot = this.getSnapshot();
-      const selectedTab = snapshot.session.openTabs.find(
-        (tab) => tab.id === snapshot.session.selectedTabId,
-      );
-      if (!selectedTab) {
+      const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
+      if (!tab) {
         return null;
       }
-      const selectedDocumentId = tabDocumentId(selectedTab);
-      const doc = selectedDocumentId
-        ? snapshot.documents.find((documentState) => documentState.id === selectedDocumentId)
+      const documentId = tabDocumentId(tab);
+      const doc = documentId
+        ? snapshot.documents.find((documentState) => documentState.id === documentId)
         : undefined;
       if (!doc) {
         return null;
       }
-      this.closeTabForce(selectedTab.id);
       return {
         filePath: doc.filePath,
         content: doc.content,
         title: doc.title,
       };
+    },
+    removeTransferredTab(tabId: string): void {
+      this.closeTabForce(tabId);
+    },
+    transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
+      const snapshot = this.getSnapshot();
+      const selectedTabId = snapshot.session.selectedTabId;
+      if (!selectedTabId) {
+        return null;
+      }
+      const payload = this.buildTabTransferPayload(selectedTabId);
+      if (!payload) {
+        return null;
+      }
+      this.removeTransferredTab(selectedTabId);
+      return payload;
     },
     openTransferredTab(payload: {
       filePath: string | null;

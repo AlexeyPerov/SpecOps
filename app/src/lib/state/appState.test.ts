@@ -276,6 +276,24 @@ describe("appState tabs and selection", () => {
     ]);
   });
 
+  it("buildTabTransferPayload reads tab data without closing", () => {
+    appState.openFileInTab("/tmp/move-me.txt", "payload");
+    const tabId = appState.getSnapshot().session.selectedTabId!;
+    expect(appState.buildTabTransferPayload(tabId)).toEqual({
+      filePath: "/tmp/move-me.txt",
+      content: "payload",
+      title: "move-me.txt",
+    });
+    expect(appState.getSnapshot().session.openTabs).toHaveLength(2);
+  });
+
+  it("removeTransferredTab closes the requested tab", () => {
+    appState.openFileInTab("/tmp/move-me.txt", "payload");
+    const tabId = appState.getSnapshot().session.selectedTabId!;
+    appState.removeTransferredTab(tabId);
+    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
+  });
+
   it("transferActiveTabOut and openTransferredTab round-trip tab payload", () => {
     appState.openFileInTab("/tmp/move-me.txt", "payload");
     const transfer = appState.transferActiveTabOut();

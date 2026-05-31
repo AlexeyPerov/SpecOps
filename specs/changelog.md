@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-31 20:30 (MSK)
+
+- **Multi-window tab transfer:** Added Tauri webview window creation permissions. Hardened `createNewWindowWithTransfer` with error handling, parent window placement, focus/show, and a ready handshake before emitting tab transfer events. Split tab transfer into non-destructive payload build + post-success removal via `tabWindowTransfer.ts`. Moved transfer listener early in app startup and added drag-out tear-off in TabBar.
+
 ## 2026-05-31 15:48 (MSK)
 
 - **EX2-4 — Chat store model lifecycle:** Added `getActiveChatModel`, `switchThreadModel` (generation guards, `model-switched` system events, metadata persistence), and provider-switch model fallback via `resolveProviderSwitchModelId`. Extended `switchThreadProvider` to accept `providerModelCatalogs` and apply fallback policy.

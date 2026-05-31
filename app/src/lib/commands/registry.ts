@@ -16,6 +16,7 @@ import { untitledSaveDefaultPath } from "../services/untitledSavePath";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
 import { reloadActiveDocumentFromDisk } from "../services/externalFileChanges";
 import { createNewWindowWithTransfer } from "../services/windowManager";
+import { moveTabToNewWindow } from "../services/tabWindowTransfer";
 import { takeQueuedOpenRecentPath } from "../services/appMenu";
 import { openActivePath, describeOpenActivePathResult } from "../services/openActivePath";
 import { collectOpenableFolderFiles } from "../services/folderOpenableFiles";
@@ -334,8 +335,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     setSettingsDialogOpen(!isSettingsDialogOpen());
   },
   "app.newWindow": async ({ getState, notify }) => {
-    await createNewWindowWithTransfer(getState(), null);
-    notify("Opened new window.");
+    const createdWindowId = await createNewWindowWithTransfer(getState(), null);
+    if (createdWindowId) {
+      notify("Opened new window.");
+    } else {
+      notify("Failed to open new window.");
+    }
   },
   "view.cycleTheme": () => {
     appState.cycleTheme();
@@ -657,18 +662,20 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     appState.closeTab(selectedTab.id);
     notify("Tab closed.");
   },
-  "tab.moveToNewWindow": async ({ notify }) => {
-    if (!appState.isNotepadActive()) {
-      notify("Move to new window is only available for Notepad tabs.");
-      return;
-    }
-    const transfer = appState.transferActiveTabOut();
-    if (!transfer) {
+  "tab.moveToNewWindow": async ({ notify, getState, getWindowId }) => {
+    const selectedTabId = getState().session.selectedTabId;
+    if (!selectedTabId) {
       notify("No active tab to transfer.");
       return;
     }
-    await createNewWindowWithTransfer(appState.getSnapshot(), transfer);
-    notify("Transferred tab to new window.");
+    const transferred = await moveTabToNewWindow({
+      tabId: selectedTabId,
+      sourceWindowId: getWindowId(),
+      notify,
+    });
+    if (transferred) {
+      notify("Transferred tab to new window.");
+    }
   },
   "tab.next": ({ getState }) => {
     const state = getState();

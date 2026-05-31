@@ -11,6 +11,7 @@
   import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
   import { runInNotepadContext, workspaceRelativePath } from "../services/workspacePaths";
   import { renameDocumentOnDisk } from "../services/documentRename";
+  import { moveTabToNewWindow } from "../services/tabWindowTransfer";
 
   const DRAG_THRESHOLD_PX = 4;
   const revealLabel = revealInFileManagerLabel();
@@ -388,6 +389,27 @@
     dropIndex = nextDropIndex(event.clientX);
   }
 
+  function isPointerOutsideTabStrip(pointerX: number, pointerY: number): boolean {
+    if (!tabStripEl) {
+      return false;
+    }
+    const stripRect = tabStripEl.getBoundingClientRect();
+    const outsideStrip =
+      pointerX < stripRect.left ||
+      pointerX > stripRect.right ||
+      pointerY < stripRect.top ||
+      pointerY > stripRect.bottom;
+    if (outsideStrip) {
+      return true;
+    }
+    return (
+      pointerX < 0 ||
+      pointerY < 0 ||
+      pointerX > document.documentElement.clientWidth ||
+      pointerY > document.documentElement.clientHeight
+    );
+  }
+
   function finishDrag(commitReorder: boolean): void {
     if (isFinishingDrag) {
       return;
@@ -397,6 +419,9 @@
     const fromIndex = dragFromIndex;
     const toIndex = dropIndex;
     const activeTabId = dragTabId;
+    const pointerX = dragPointerX;
+    const pointerY = dragPointerY;
+    const wasDrag = didDrag;
 
     pointerId = null;
     pressedTabId = null;
@@ -420,12 +445,22 @@
       }
     }
 
-    if (commitReorder && didDrag && fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) {
-      appState.reorderTabs(fromIndex, toIndex);
-      if (activeTabId) {
+    if (commitReorder && wasDrag && activeTabId) {
+      if (isPointerOutsideTabStrip(pointerX, pointerY)) {
+        void moveTabToNewWindow({
+          tabId: activeTabId,
+          sourceWindowId: windowId,
+          notify,
+        }).then((transferred) => {
+          if (transferred) {
+            notify("Transferred tab to new window.");
+          }
+        });
+      } else if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) {
+        appState.reorderTabs(fromIndex, toIndex);
         onSelect(activeTabId);
       }
-    } else if (!didDrag && activeTabId) {
+    } else if (!wasDrag && activeTabId) {
       onSelect(activeTabId);
     }
 

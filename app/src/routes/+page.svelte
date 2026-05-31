@@ -35,13 +35,14 @@
     handleMarkdownPreviewLinkClick,
   } from "../lib/services/markdownPreviewLinks";
   import { listenForRecentFilesChanges } from "../lib/services/recentFilesSync";
-  import { listen, TauriEvent } from "@tauri-apps/api/event";
+  import { listen, emit, TauriEvent } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import {
     WINDOW_EVENT_ACTIVATE_FILE,
     WINDOW_EVENT_SELECT_TAB_FOR_PATH,
     WINDOW_EVENT_TRANSFER_TAB,
+    WINDOW_EVENT_WINDOW_READY,
     markWindowActive,
     routePathToLastActiveWindow,
   } from "../lib/services/windowManager";
@@ -780,6 +781,19 @@
     const currentWindow = getCurrentWebviewWindow();
     currentWindowId = currentWindow.label;
 
+    const unlistenTransfer = await listen<{ filePath: string | null; content: string; title: string }>(
+      WINDOW_EVENT_TRANSFER_TAB,
+      async (event) => {
+        const documentId = appState.openTransferredTab(event.payload);
+        if (event.payload.filePath && documentId) {
+          await claimOpenFile(event.payload.filePath, currentWindowId, documentId);
+          await initializeDocumentDiskState(documentId, event.payload.filePath);
+        }
+      },
+    );
+
+    await emit(WINDOW_EVENT_WINDOW_READY, { windowId: currentWindowId });
+
     const persistedSettings = await loadPersistedSettings();
     const glmApiKey = await loadGlmApiKey();
     setThemeSaveErrorNotifier(notify);
@@ -896,17 +910,6 @@
       WINDOW_EVENT_SELECT_TAB_FOR_PATH,
       async (event) => {
         selectTabForNormalizedPath(event.payload.path);
-      },
-    );
-
-    const unlistenTransfer = await listen<{ filePath: string | null; content: string; title: string }>(
-      WINDOW_EVENT_TRANSFER_TAB,
-      async (event) => {
-        const documentId = appState.openTransferredTab(event.payload);
-        if (event.payload.filePath && documentId) {
-          await claimOpenFile(event.payload.filePath, currentWindowId, documentId);
-          await initializeDocumentDiskState(documentId, event.payload.filePath);
-        }
       },
     );
 

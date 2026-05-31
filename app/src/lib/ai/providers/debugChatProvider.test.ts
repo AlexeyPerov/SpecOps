@@ -27,6 +27,7 @@ function sampleRequest(
 ): ProviderSendRequest {
   return {
     payload: samplePayload(mode),
+    modelId: "debug-simulator",
     turnKey,
     accessStatus: "ready",
   };

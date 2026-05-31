@@ -106,6 +106,85 @@ describe("agent thread snapshot codec", () => {
     expect(decoded).toEqual(snapshot);
   });
 
+  it("round-trips selectedModelId metadata and model-switched system events", () => {
+    const snapshot: ChatAgentThreadFileSnapshot = {
+      version: 1,
+      thread: {
+        ...sampleThread(),
+        metadata: {
+          ...sampleThread().metadata,
+          selectedModelId: "glm-4-flash",
+        },
+        messages: [
+          ...sampleThread().messages,
+          {
+            id: "m-3",
+            role: "system",
+            content: "model changed",
+            createdAt: "2026-05-25T00:00:02.000Z",
+            systemEvent: {
+              type: "model-switched",
+              fromModel: "glm-4-flash",
+              toModel: "glm-4-plus",
+            },
+          },
+        ],
+      },
+    };
+
+    const encoded = encodeChatAgentThreadFileSnapshot(snapshot);
+    const decoded = decodeChatAgentThreadFileSnapshot(encoded);
+    expect(decoded).toEqual(snapshot);
+  });
+
+  it("decodes legacy snapshots without selectedModelId or model-switched events", () => {
+    const legacy = encodeChatAgentThreadFileSnapshot({
+      version: 1,
+      thread: sampleThread(),
+    });
+
+    const decoded = decodeChatAgentThreadFileSnapshot(legacy);
+    expect(decoded?.thread.metadata.selectedModelId).toBeUndefined();
+    expect(decoded?.thread.messages.every((message) => message.systemEvent?.type !== "model-switched")).toBe(
+      true,
+    );
+  });
+
+  it("preserves provider-switched events when model-switched events are present", () => {
+    const snapshot: ChatAgentThreadFileSnapshot = {
+      version: 1,
+      thread: {
+        ...sampleThread(),
+        messages: [
+          sampleThread().messages[1],
+          {
+            id: "m-3",
+            role: "system",
+            content: "model changed",
+            createdAt: "2026-05-25T00:00:02.000Z",
+            systemEvent: {
+              type: "model-switched",
+              fromModel: null,
+              toModel: "glm-4-flash",
+            },
+          },
+        ],
+      },
+    };
+
+    const decoded = decodeChatAgentThreadFileSnapshot(encodeChatAgentThreadFileSnapshot(snapshot));
+    expect(decoded?.thread.messages[0]?.systemEvent).toEqual({
+      type: "provider-switched",
+      fromProvider: "glm",
+      toProvider: "cursor",
+    });
+    expect(decoded?.thread.messages[1]?.systemEvent).toEqual({
+      type: "model-switched",
+      fromModel: null,
+      toModel: "glm-4-flash",
+    });
+  });
+
   it("rejects legacy single-thread envelopes", () => {
     const legacy = JSON.stringify({ version: 1, thread: null });
     expect(decodeChatAgentThreadFileSnapshot(legacy)).toBeNull();

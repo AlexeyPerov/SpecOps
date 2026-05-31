@@ -2,7 +2,11 @@ import {
   GLM_MISSING_CONFIG_MESSAGE,
   GLM_MISSING_CONFIG_RECOVERY,
 } from "../chatErrorCopy";
-import type { ChatProviderId, GlmProviderSettings } from "../../domain/contracts";
+import type { ChatProviderId, GlmProviderSettings, ProviderModelCatalogs } from "../../domain/contracts";
+import {
+  getProviderDefaultModelId,
+  normalizeProviderModelCatalogs,
+} from "./providerModelCatalog";
 
 export const defaultGlmProviderSettings: GlmProviderSettings = {
   enabled: true,
@@ -29,14 +33,31 @@ function normalizeNonEmptyString(value: unknown, fallback: string): string {
 /** Validates GLM provider settings on load/save. */
 export function normalizeGlmProviderSettings(
   input?: Partial<GlmProviderSettings> | unknown,
+  catalogs?: ProviderModelCatalogs,
 ): GlmProviderSettings {
   const source = isRecord(input) ? input : {};
+  const catalogDefault =
+    catalogs === undefined
+      ? defaultGlmProviderSettings.modelId
+      : getProviderDefaultModelId(normalizeProviderModelCatalogs(catalogs), "glm");
 
   return {
     enabled: typeof source.enabled === "boolean" ? source.enabled : defaultGlmProviderSettings.enabled,
     baseUrl: normalizeNonEmptyString(source.baseUrl, defaultGlmProviderSettings.baseUrl),
-    modelId: normalizeNonEmptyString(source.modelId, defaultGlmProviderSettings.modelId),
+    modelId: normalizeNonEmptyString(source.modelId, catalogDefault),
   };
+}
+
+/** Keeps legacy GLM modelId aligned with the GLM catalog default. */
+export function syncGlmProviderSettingsWithCatalog(
+  settings: GlmProviderSettings,
+  catalogs: ProviderModelCatalogs,
+): GlmProviderSettings {
+  const defaultModelId = getProviderDefaultModelId(normalizeProviderModelCatalogs(catalogs), "glm");
+  if (settings.modelId === defaultModelId) {
+    return settings;
+  }
+  return normalizeGlmProviderSettings({ ...settings, modelId: defaultModelId }, catalogs);
 }
 
 export function isGlmProviderConfigured(

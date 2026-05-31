@@ -25,6 +25,7 @@ function samplePayload(mode: ProviderRequestPayload["mode"] = "ask"): ProviderRe
 function sampleRequest(mode: ProviderRequestPayload["mode"] = "ask"): ProviderSendRequest {
   return {
     payload: samplePayload(mode),
+    modelId: "glm-4-flash",
     turnKey: "turn-1",
     accessStatus: "ready",
   };
@@ -126,16 +127,16 @@ describe("GlmChatProvider", () => {
 
     const provider = createGlmChatProvider(
       () => ({
-        settings: {
-          ...defaultGlmProviderSettings,
-          modelId: "glm-4-flash",
-        },
+        settings: defaultGlmProviderSettings,
         apiKey: "secret-key",
       }),
       fetchMock,
     );
 
-    const response = await provider.sendMessage(sampleRequest("ask"));
+    const response = await provider.sendMessage({
+      ...sampleRequest("ask"),
+      modelId: "glm-4-plus",
+    });
 
     expect(response.content).toBe("GLM answer about retention.");
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -152,13 +153,37 @@ describe("GlmChatProvider", () => {
       stream: boolean;
       messages: Array<{ role: string; content: string }>;
     };
-    expect(body.model).toBe("glm-4-flash");
+    expect(body.model).toBe("glm-4-plus");
     expect(body.stream).toBe(false);
     expect(body.messages[0]?.role).toBe("system");
     expect(body.messages[0]?.content).toContain("Workspace: spec-ops (/work/spec-ops)");
     expect(body.messages.at(-1)).toEqual({
       role: "user",
       content: "How does retention work?",
+    });
+  });
+
+  it("maps invalid model HTTP errors to user-facing ChatProviderError", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { message: "Model not found: glm-unknown" } }), {
+        status: 404,
+      }),
+    );
+
+    const provider = createGlmChatProvider(
+      () => ({ settings: defaultGlmProviderSettings, apiKey: "test-key" }),
+      fetchMock,
+    );
+
+    await expect(
+      provider.sendMessage({ ...sampleRequest(), modelId: "glm-unknown" }),
+    ).rejects.toSatisfy((error: unknown) => {
+      expect(isChatProviderError(error)).toBe(true);
+      if (isChatProviderError(error)) {
+        expect(error.userMessage).toContain('glm-unknown');
+        expect(error.userMessage).toContain("Settings");
+      }
+      return true;
     });
   });
 

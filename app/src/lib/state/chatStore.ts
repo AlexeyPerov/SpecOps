@@ -6,6 +6,7 @@ import type {
   ChatProviderId,
   ChatThreadMetadata,
   ChatThreadSnapshot,
+  ProviderModelCatalogs,
 } from "../domain/contracts";
 import {
   WorkspaceAccessReason,
@@ -27,7 +28,17 @@ import {
 import { DRAFT_AGENT_TITLE, deriveAgentTitle } from "../services/chatAgents";
 import { compactChatThread } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
-import { formatProviderSwitchNotice } from "../ai/providers/selection";
+import { resolveEffectiveThreadModelId } from "../ai/providers/capabilityChecker";
+import {
+  formatModelSwitchNotice,
+  formatProviderSwitchNotice,
+  resolveProviderSwitchModelId,
+} from "../ai/providers/selection";
+import {
+  getProviderDefaultModelId,
+  isModelInProviderCatalog,
+  normalizeProviderModelCatalogs,
+} from "../ai/providers/providerModelCatalog";
 
 export interface WorkspaceAgentsState {
   activeAgentId: string | null;
@@ -66,6 +77,20 @@ export interface ChatAccessState {
 export interface SwitchThreadProviderResult {
   switched: boolean;
   message?: string;
+}
+
+export interface SwitchThreadModelResult {
+  switched: boolean;
+  message?: string;
+}
+
+export interface ChatProviderSwitchOptions {
+  debugProviderEnabled: boolean;
+  providerModelCatalogs: ProviderModelCatalogs;
+}
+
+export interface ChatModelSwitchOptions {
+  providerModelCatalogs: ProviderModelCatalogs;
 }
 
 const DEFAULT_CHAT_MODE: ChatModeId = "ask";
@@ -246,7 +271,7 @@ function createThreadMetadata(agentId: string, createdAt: string): ChatThreadMet
 
 function applyMetadataPatch(
   metadata: ChatThreadMetadata,
-  patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary">>,
+  patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId">>,
   updatedAt: string,
 ): ChatThreadMetadata {
   return {
@@ -901,7 +926,7 @@ function createChatStore() {
       return this.deleteAgent(agentId);
     },
     updateThreadMetadata(
-      patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary">>,
+      patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId">>,
       updatedAt: string = new Date().toISOString(),
       agentId?: string,
     ): boolean {
@@ -982,6 +1007,15 @@ function createChatStore() {
     },
     getActiveChatProvider(agentId?: string): ChatProviderId {
       return this.getMetadata(agentId)?.provider ?? defaultChatProviderResolver();
+    },
+    getActiveChatModel(providerModelCatalogs: ProviderModelCatalogs, agentId?: string): string {
+      const providerId = this.getActiveChatProvider(agentId);
+      const normalizedCatalogs = normalizeProviderModelCatalogs(providerModelCatalogs);
+      const thread = this.getActiveThreadSnapshot(agentId);
+      if (thread) {
+        return resolveEffectiveThreadModelId(thread, normalizedCatalogs);
+      }
+      return getProviderDefaultModelId(normalizedCatalogs, providerId);
     },
     hasThread(agentId?: string): boolean {
       return this.getMetadata(agentId) !== null;
@@ -1141,7 +1175,7 @@ function createChatStore() {
     },
     async switchThreadProvider(
       nextProvider: ChatProviderId,
-      options: { debugProviderEnabled: boolean },
+      options: ChatProviderSwitchOptions,
       agentId?: string,
     ): Promise<SwitchThreadProviderResult> {
       const root = this.getActiveWorkspaceRoot();
@@ -1173,6 +1207,17 @@ function createChatStore() {
       if (fromProvider === nextProvider) {
         return { switched: false };
       }
+
+      const normalizedCatalogs = normalizeProviderModelCatalogs(options.providerModelCatalogs);
+      const currentThread = this.getActiveThreadSnapshot(targetAgentId);
+      const currentModelId = currentThread
+        ? resolveEffectiveThreadModelId(currentThread, normalizedCatalogs)
+        : metadata?.selectedModelId;
+      const nextSelectedModelId = resolveProviderSwitchModelId(
+        normalizedCatalogs,
+        nextProvider,
+        currentModelId,
+      );
 
       const capabilityResult = await resolveCapabilityChecker().checkCapabilities({
         provider: nextProvider,
@@ -1227,7 +1272,107 @@ function createChatStore() {
               ...baseThread,
               metadata: applyMetadataPatch(
                 baseThread.metadata,
-                { provider: nextProvider, mode: nextMode },
+                { provider: nextProvider, mode: nextMode, selectedModelId: nextSelectedModelId },
+                updatedAt,
+              ),
+              messages: [...baseThread.messages, switchMessage],
+            },
+          },
+          runtimeByAgentId: {
+            ...workspace.runtimeByAgentId,
+            [targetAgentId]: defaultRuntimeState(),
+          },
+        });
+      });
+
+      return { switched };
+    },
+    async switchThreadModel(
+      nextModelId: string,
+      options: ChatModelSwitchOptions,
+      agentId?: string,
+    ): Promise<SwitchThreadModelResult> {
+      const root = this.getActiveWorkspaceRoot();
+      if (!root) {
+        return { switched: false, message: "Open a workspace to switch models." };
+      }
+
+      const targetAgentId = resolveTargetAgentId(this.getSnapshot(), agentId);
+      if (!targetAgentId) {
+        return { switched: false, message: "Select an agent to switch models." };
+      }
+
+      if (this.getRuntimeState(targetAgentId).isGenerating) {
+        return {
+          switched: false,
+          message: "Model cannot be changed while a response is generating.",
+        };
+      }
+
+      const trimmedModelId = nextModelId.trim();
+      if (!trimmedModelId) {
+        return { switched: false, message: "Choose a model from the list." };
+      }
+
+      const providerId = this.getActiveChatProvider(targetAgentId);
+      const normalizedCatalogs = normalizeProviderModelCatalogs(options.providerModelCatalogs);
+      if (!isModelInProviderCatalog(normalizedCatalogs, providerId, trimmedModelId)) {
+        return {
+          switched: false,
+          message: "That model is not configured for the active provider.",
+        };
+      }
+
+      const currentThread = this.getActiveThreadSnapshot(targetAgentId);
+      const fromModel = currentThread
+        ? resolveEffectiveThreadModelId(currentThread, normalizedCatalogs)
+        : null;
+      if (fromModel === trimmedModelId) {
+        return { switched: false };
+      }
+
+      const updatedAt = new Date().toISOString();
+      const systemEvent = {
+        type: "model-switched" as const,
+        fromModel,
+        toModel: trimmedModelId,
+      };
+      const switchMessage: ChatMessage = {
+        id: `model-switch-${updatedAt}`,
+        role: "system",
+        content: formatModelSwitchNotice(systemEvent),
+        createdAt: updatedAt,
+        systemEvent,
+      };
+
+      let switched = false;
+      update((state) => {
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const thread = workspace.threadsByAgentId[targetAgentId];
+        const baseThread =
+          thread ??
+          ({
+            metadata: applyMetadataPatch(
+              createThreadMetadata(targetAgentId, updatedAt),
+              {},
+              updatedAt,
+            ),
+            messages: [],
+          } satisfies ChatThreadSnapshot);
+
+        switched = true;
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: {
+              ...baseThread,
+              metadata: applyMetadataPatch(
+                baseThread.metadata,
+                { selectedModelId: trimmedModelId },
                 updatedAt,
               ),
               messages: [...baseThread.messages, switchMessage],

@@ -3,6 +3,7 @@ import type {
   AppDomainState,
   AppSettingsState,
   AppThemeState,
+  ChatProviderId,
   ContextId,
   ContextSnapshot,
   DebugProviderSettings,
@@ -11,6 +12,8 @@ import type {
   DocumentIdentity,
   ExternalFilesSettings,
   GlmProviderSettings,
+  ProviderModelCatalog,
+  ProviderModelCatalogs,
   TabState,
   WorkspaceEntry,
   WorkspaceLayoutState,
@@ -32,7 +35,14 @@ import {
 import {
   defaultGlmProviderSettings,
   normalizeGlmProviderSettings,
+  syncGlmProviderSettingsWithCatalog,
 } from "../ai/providers/glmProviderSettings";
+import {
+  defaultProviderModelCatalogs,
+  getProviderModelCatalog,
+  normalizeProviderModelCatalog,
+  normalizeProviderModelCatalogs,
+} from "../ai/providers/providerModelCatalog";
 import { inferEditorLanguage } from "../editor/editorLanguage";
 import { deriveUntitledTitle } from "../services/untitledTitle";
 import { normalizePathSync } from "../services/diskFingerprint";
@@ -77,6 +87,7 @@ const defaultSettings: AppSettingsState = {
   hideActivityRailWhenNotepadOnly: true,
   debugProvider: defaultDebugProviderSettings,
   glmProvider: defaultGlmProviderSettings,
+  providerModelCatalogs: defaultProviderModelCatalogs,
   glmApiKey: "",
 };
 
@@ -1720,7 +1731,10 @@ function createStateStore() {
         ...state,
         settings: {
           ...state.settings,
-          glmProvider: normalizeGlmProviderSettings(glmProvider),
+          glmProvider: normalizeGlmProviderSettings(
+            glmProvider,
+            state.settings.providerModelCatalogs,
+          ),
         },
       }));
     },
@@ -1729,12 +1743,63 @@ function createStateStore() {
         ...state,
         settings: {
           ...state.settings,
-          glmProvider: normalizeGlmProviderSettings({
-            ...state.settings.glmProvider,
-            ...patch,
-          }),
+          glmProvider: normalizeGlmProviderSettings(
+            {
+              ...state.settings.glmProvider,
+              ...patch,
+            },
+            state.settings.providerModelCatalogs,
+          ),
         },
       }));
+    },
+    setProviderModelCatalogs(providerModelCatalogs: ProviderModelCatalogs) {
+      update((state) => {
+        const normalizedCatalogs = normalizeProviderModelCatalogs(providerModelCatalogs, {
+          glmModelId: state.settings.glmProvider.modelId,
+        });
+        return {
+          ...state,
+          settings: {
+            ...state.settings,
+            providerModelCatalogs: normalizedCatalogs,
+            glmProvider: syncGlmProviderSettingsWithCatalog(
+              state.settings.glmProvider,
+              normalizedCatalogs,
+            ),
+          },
+        };
+      });
+    },
+    updateProviderModelCatalog(providerId: ChatProviderId, patch: Partial<ProviderModelCatalog>) {
+      update((state) => {
+        const currentCatalog = getProviderModelCatalog(
+          state.settings.providerModelCatalogs,
+          providerId,
+        );
+        const normalizedCatalog = normalizeProviderModelCatalog(providerId, {
+          ...currentCatalog,
+          ...patch,
+        });
+        const providerModelCatalogs = normalizeProviderModelCatalogs({
+          ...state.settings.providerModelCatalogs,
+          [providerId]: normalizedCatalog,
+        });
+        return {
+          ...state,
+          settings: {
+            ...state.settings,
+            providerModelCatalogs,
+            glmProvider:
+              providerId === "glm"
+                ? syncGlmProviderSettingsWithCatalog(
+                    state.settings.glmProvider,
+                    providerModelCatalogs,
+                  )
+                : state.settings.glmProvider,
+          },
+        };
+      });
     },
     setGlmApiKey(glmApiKey: string) {
       update((state) => ({
@@ -1753,6 +1818,7 @@ function createStateStore() {
       hideActivityRailWhenNotepadOnly?: boolean;
       debugProvider?: DebugProviderSettings;
       glmProvider?: GlmProviderSettings;
+      providerModelCatalogs?: ProviderModelCatalogs;
     }) {
       update((state) => {
         let next = state;
@@ -1804,15 +1870,29 @@ function createStateStore() {
             },
           };
         }
-        if (partial.glmProvider) {
+
+        const providerModelCatalogs = partial.providerModelCatalogs
+          ? normalizeProviderModelCatalogs(partial.providerModelCatalogs, {
+              glmModelId: partial.glmProvider?.modelId ?? next.settings.glmProvider.modelId,
+            })
+          : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs, {
+              glmModelId: partial.glmProvider?.modelId ?? next.settings.glmProvider.modelId,
+            });
+
+        if (partial.glmProvider || partial.providerModelCatalogs) {
           next = {
             ...next,
             settings: {
               ...next.settings,
-              glmProvider: normalizeGlmProviderSettings(partial.glmProvider),
+              providerModelCatalogs,
+              glmProvider: normalizeGlmProviderSettings(
+                partial.glmProvider ?? next.settings.glmProvider,
+                providerModelCatalogs,
+              ),
             },
           };
         }
+
         return next;
       });
     },

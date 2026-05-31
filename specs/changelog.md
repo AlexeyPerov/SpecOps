@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-05-31 15:48 (MSK)
+
+- **EX2-4 — Chat store model lifecycle:** Added `getActiveChatModel`, `switchThreadModel` (generation guards, `model-switched` system events, metadata persistence), and provider-switch model fallback via `resolveProviderSwitchModelId`. Extended `switchThreadProvider` to accept `providerModelCatalogs` and apply fallback policy.
+
+- **EX2-5 — Chat UI model selector:** Added Model selector in `ChatPanel` composer (provider-scoped list from settings), disabled controls during generate/send/retry, and alarm-style blocked state for locally invalid models with Settings recovery action. Model switch events render in message history.
+
+- **EX2-6 — Send pipeline model integration:** Send path resolves effective model from thread metadata + provider defaults, fails fast on local invalid model, and maps provider runtime model rejection to user-safe copy (wired in prior EX2-3; validated end-to-end).
+
+- **EX2-8 — Validation and tests:** Extended tests for model switch events, provider-switch fallback, local invalid model block, adapter model propagation, and GLM runtime rejection. All 496 tests pass; `npm run check` clean.
+
+## 2026-05-31 19:05 (MSK)
+
+- **EX2-3 — Provider model contract and validation:** Extended `ProviderSendRequest` with resolved `modelId`, added `modelValidation` helpers for local catalog checks and provider-runtime rejection mapping, wired send validation to block invalid models before network calls, and updated GLM/Debug adapters to consume explicit model ids.
+
+## 2026-05-31 18:10 (MSK)
+
+- **EX2-2 — Provider model catalogs in settings:** Added provider-agnostic `providerModelCatalogs` (model list + default per provider) with persistence in `settings.json`, legacy GLM `modelId` migration, and shared Settings UI for editing GLM/Debug model lists and defaults.
+
+## 2026-05-31 16:45 (MSK)
+
+- **EX2-1 / EX2-7 — Model metadata and system events:** Extended `ChatThreadMetadata` with optional `selectedModelId` and `ChatSystemEvent` with `model-switched` payload. Updated chat persistence codecs for tolerant decode of legacy snapshots and round-trip of new fields/events.
+
+## 2026-05-31 15:20 (MSK)
+
+- **AI Extra 2 execution plan:** Added `specs/ai-m-extra-2-execution-plan.md` for generic per-agent model selection across all providers, including settings-managed provider model catalogs, model-switch system events, dual invalid-model blocking (local + provider-runtime), deterministic provider-switch model fallback, and validation task breakdown.
+
 ## 2026-05-30 (MSK)
 
 - **Agent chat layout:** Title stays pinned at the top; blocked states, messages, and composer sit at the bottom so the conversation grows upward. Provider and mode controls moved to the composer row, to the right of Send.

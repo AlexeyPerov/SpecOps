@@ -11,6 +11,7 @@ import {
   getAccessBlockedCopy,
   getDebugProviderDisabledCopy,
   getGlmMissingConfigCopy,
+  getLocalInvalidModelBlockedCopy,
   getModeUnsupportedMessage,
   getModeUnsupportedRecovery,
   sanitizeUnexpectedProviderError,
@@ -38,6 +39,15 @@ describe("chatErrorCopy", () => {
     expect(getGlmMissingConfigCopy().message).toBe(GLM_MISSING_CONFIG_MESSAGE);
     expect(getDebugProviderDisabledCopy().message).toBe(DEBUG_PROVIDER_DISABLED_MESSAGE);
     expect(getDebugProviderDisabledCopy().recoveryHint).toBe(DEBUG_PROVIDER_DISABLED_RECOVERY);
+  });
+
+  it("returns local invalid model blocked copy for chat alarm state", () => {
+    const copy = getLocalInvalidModelBlockedCopy("unknown-model", "GLM");
+
+    expect(copy.title).toBe("Model unavailable");
+    expect(copy.message).toContain("unknown-model");
+    expect(copy.message).toContain("GLM");
+    expect(copy.recoveryHint).toContain("Settings");
   });
 
   it("describes unsupported modes with recovery guidance", () => {

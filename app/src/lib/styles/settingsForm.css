@@ -48,7 +48,29 @@
   font: inherit;
 }
 
-.settings-field input:focus-visible {
+.settings-field textarea,
+.settings-field select {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.settings-field textarea {
+  min-height: 72px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.settings-field select {
+  min-height: 28px;
+}
+
+.settings-field input:focus-visible,
+.settings-field textarea:focus-visible,
+.settings-field select:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
 }

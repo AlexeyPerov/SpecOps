@@ -1,6 +1,16 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import type { DebugProviderSettings, ExternalFilesSettings, GlmProviderSettings } from "../domain/contracts";
+  import type {
+    ChatProviderId,
+    DebugProviderSettings,
+    ExternalFilesSettings,
+    GlmProviderSettings,
+  } from "../domain/contracts";
+  import {
+    formatModelListForInput,
+    getProviderModelCatalog,
+    parseModelListInput,
+  } from "../ai/providers/providerModelCatalog";
   import { saveGlmApiKey } from "../services/glmSecretsStore";
   import type { SettingsDialogTab } from "../services/settingsDialogUi";
   import { appState } from "../state/appState";
@@ -88,6 +98,28 @@
     appState.setGlmApiKey(rawValue);
     await saveGlmApiKey(rawValue);
     void chatStore.runAccessPreflight();
+  }
+
+  function updateProviderModelList(providerId: ChatProviderId, rawValue: string): void {
+    const modelIds = parseModelListInput(rawValue);
+    const currentCatalog = getProviderModelCatalog(
+      snapshot.settings.providerModelCatalogs,
+      providerId,
+    );
+    appState.updateProviderModelCatalog(providerId, {
+      modelIds,
+      defaultModelId: currentCatalog.defaultModelId,
+    });
+    if (providerId === "glm") {
+      void chatStore.runAccessPreflight();
+    }
+  }
+
+  function updateProviderDefaultModel(providerId: ChatProviderId, defaultModelId: string): void {
+    appState.updateProviderModelCatalog(providerId, { defaultModelId });
+    if (providerId === "glm") {
+      void chatStore.runAccessPreflight();
+    }
   }
 
   function selectTab(nextTab: SettingsDialogTab): void {
@@ -215,6 +247,44 @@
   });
 </script>
 
+{#snippet providerModelCatalogPanel(providerId: ChatProviderId, heading: string)}
+  {@const catalog = getProviderModelCatalog(snapshot.settings.providerModelCatalogs, providerId)}
+  <div class="settings-subsection">
+    <h4>{heading}</h4>
+    <p class="settings-section-note">
+      One model ID per line. Invalid or duplicate entries are removed when saved.
+    </p>
+    <label class="settings-field">
+      <span>Model list</span>
+      <textarea
+        rows={Math.max(3, catalog.modelIds.length + 1)}
+        spellcheck="false"
+        value={formatModelListForInput(catalog.modelIds)}
+        onchange={(event) =>
+          updateProviderModelList(
+            providerId,
+            (event.currentTarget as HTMLTextAreaElement).value,
+          )}
+      ></textarea>
+    </label>
+    <label class="settings-field">
+      <span>Default model</span>
+      <select
+        value={catalog.defaultModelId}
+        onchange={(event) =>
+          updateProviderDefaultModel(
+            providerId,
+            (event.currentTarget as HTMLSelectElement).value,
+          )}
+      >
+        {#each catalog.modelIds as modelId (modelId)}
+          <option value={modelId}>{modelId}</option>
+        {/each}
+      </select>
+    </label>
+  </div>
+{/snippet}
+
 {#snippet editorSettingsPanel()}
   <section class="settings-section">
     <h3>Layout</h3>
@@ -336,20 +406,8 @@
             )}
         />
       </label>
-      <label class="settings-field">
-        <span>Model ID</span>
-        <input
-          type="text"
-          spellcheck="false"
-          value={snapshot.settings.glmProvider.modelId}
-          onchange={(event) =>
-            updateGlmProviderSetting(
-              "modelId",
-              (event.currentTarget as HTMLInputElement).value,
-            )}
-        />
-      </label>
     </div>
+    {@render providerModelCatalogPanel("glm", "Models")}
   </section>
 {/snippet}
 
@@ -483,6 +541,7 @@
         Include diagnostics appendix in replies
       </label>
     </div>
+    {@render providerModelCatalogPanel("debug", "Models")}
   </section>
 {/snippet}
 

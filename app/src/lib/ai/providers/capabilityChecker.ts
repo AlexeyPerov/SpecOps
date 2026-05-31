@@ -16,6 +16,12 @@ import {
 import { isGlmProviderConfigured } from "./glmProviderSettings";
 import { getChatProvider } from "./registry";
 
+export {
+  resolveEffectiveThreadModelId,
+  validateLocalModelSelection,
+  type LocalModelValidationResult,
+} from "./modelValidation";
+
 export type DebugSettingsReader = () => DebugProviderSettings;
 
 export type GlmSettingsReader = () => {

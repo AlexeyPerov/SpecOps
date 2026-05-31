@@ -3,6 +3,7 @@
     getAccessBlockedCopy,
     getDebugProviderDisabledCopy,
     getGlmMissingConfigCopy,
+    getLocalInvalidModelBlockedCopy,
     PROVIDER_REQUEST_FAILURE_RECOVERY,
   } from "../ai/chatErrorCopy";
   import { WorkspaceAccessReason } from "../ai/capabilities";
@@ -14,9 +15,13 @@
   } from "../ai/providers/glmProviderSettings";
   import {
     canSelectChatProvider,
+    formatChatProviderLabel,
+    formatModelSwitchNotice,
     formatProviderSwitchNotice,
     listSelectableChatProviders,
+    listSelectableModelsForProvider,
   } from "../ai/providers/selection";
+  import { validateLocalModelSelection } from "../ai/providers/capabilityChecker";
   import { listModesForProvider } from "../ai/modes/builtins";
   import { sendChatMessage, retryLastChatTurn } from "../ai/sendChatMessage";
   import { parseReviewMessageSections, type ReviewMessageSection } from "../ai/chatReviewContent";
@@ -56,6 +61,7 @@
   const debugProviderSettings = $derived($appState.settings.debugProvider);
   const glmProviderSettings = $derived($appState.settings.glmProvider);
   const glmApiKey = $derived($appState.settings.glmApiKey);
+  const providerModelCatalogs = $derived($appState.settings.providerModelCatalogs);
   const availableProviders = $derived(listSelectableChatProviders(debugProviderSettings));
   const availableModes = $derived(listModesForProvider(supportedModes));
   const activeMode = $derived(metadata?.mode ?? "ask");
@@ -66,6 +72,22 @@
     glmApiKey;
     return chatStore.getActiveChatProvider();
   });
+  const activeModel = $derived.by(() => {
+    metadata;
+    providerModelCatalogs;
+    activeProvider;
+    return chatStore.getActiveChatModel(providerModelCatalogs);
+  });
+  const availableModels = $derived(
+    listSelectableModelsForProvider(providerModelCatalogs, activeProvider),
+  );
+  const localModelValidation = $derived(
+    validateLocalModelSelection(providerModelCatalogs, activeProvider, activeModel),
+  );
+  const isModelSendBlocked = $derived(!localModelValidation.ok);
+  const modelBlockedCopy = $derived(
+    getLocalInvalidModelBlockedCopy(activeModel, formatChatProviderLabel(activeProvider)),
+  );
   const isDebugSendBlocked = $derived(
     isDebugProviderSendBlocked(activeProvider, debugProviderSettings),
   );
@@ -87,6 +109,7 @@
   const canDeleteAgent = $derived(activeAgentId !== null);
   const isModeSelectionDisabled = $derived(isGenerating || sending || retrying);
   const isProviderSelectionDisabled = $derived(isGenerating || sending || retrying);
+  const isModelSelectionDisabled = $derived(isGenerating || sending || retrying);
   const compactionNotice = $derived.by(() => {
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
@@ -95,16 +118,30 @@
     isBlocked ||
       isDebugSendBlocked ||
       isGlmSendBlocked ||
+      isModelSendBlocked ||
       isGenerating ||
       sending ||
       retrying ||
       draft.trim().length === 0,
   );
   const composerDisabled = $derived(
-    isBlocked || isDebugSendBlocked || isGlmSendBlocked || isGenerating || sending || retrying,
+    isBlocked ||
+      isDebugSendBlocked ||
+      isGlmSendBlocked ||
+      isModelSendBlocked ||
+      isGenerating ||
+      sending ||
+      retrying,
   );
   const isRetryDisabled = $derived(
-    !canRetryLastTurn || isGenerating || sending || retrying || isBlocked || isDebugSendBlocked || isGlmSendBlocked,
+    !canRetryLastTurn ||
+      isGenerating ||
+      sending ||
+      retrying ||
+      isBlocked ||
+      isDebugSendBlocked ||
+      isGlmSendBlocked ||
+      isModelSendBlocked,
   );
   const glmBlockedCopy = $derived(getGlmMissingConfigCopy());
   const debugBlockedCopy = $derived(getDebugProviderDisabledCopy());
@@ -127,11 +164,13 @@
 
   $effect(() => {
     activeProvider;
+    activeModel;
     metadata?.mode;
     debugProviderSettings.enabled;
     glmProviderSettings.enabled;
     glmProviderSettings.baseUrl;
     glmProviderSettings.modelId;
+    providerModelCatalogs;
     glmApiKey;
     const root = chatStore.getActiveWorkspaceRoot();
     if (!root) {
@@ -164,9 +203,20 @@
     return message.systemEvent?.type === "provider-switched";
   }
 
+  function isModelSwitchMessage(message: ChatMessage): boolean {
+    return message.systemEvent?.type === "model-switched";
+  }
+
+  function isSystemEventMessage(message: ChatMessage): boolean {
+    return isProviderSwitchMessage(message) || isModelSwitchMessage(message);
+  }
+
   function messageDisplayContent(message: ChatMessage): string {
     if (message.systemEvent?.type === "provider-switched") {
       return formatProviderSwitchNotice(message.systemEvent);
+    }
+    if (message.systemEvent?.type === "model-switched") {
+      return formatModelSwitchNotice(message.systemEvent);
     }
     return message.content;
   }
@@ -181,6 +231,9 @@
   function messageRoleLabel(message: ChatMessage): string {
     if (isProviderSwitchMessage(message)) {
       return "Provider switch";
+    }
+    if (isModelSwitchMessage(message)) {
+      return "Model switch";
     }
     if (message.role === "assistant") {
       return "Assistant";
@@ -206,7 +259,16 @@
 
   async function submitMessage(): Promise<void> {
     const content = draft.trim();
-    if (!content || sending || retrying || isBlocked || isDebugSendBlocked || isGlmSendBlocked || isGenerating) {
+    if (
+      !content ||
+      sending ||
+      retrying ||
+      isBlocked ||
+      isDebugSendBlocked ||
+      isGlmSendBlocked ||
+      isModelSendBlocked ||
+      isGenerating
+    ) {
       return;
     }
 
@@ -273,10 +335,26 @@
 
     const result = await chatStore.switchThreadProvider(nextProvider, {
       debugProviderEnabled: debugProviderSettings.enabled,
+      providerModelCatalogs,
     });
     if (result.switched) {
       persistActiveThreadSnapshot();
       void chatStore.runAccessPreflight();
+    }
+  }
+
+  async function selectModel(nextModelId: string): Promise<void> {
+    if (nextModelId === activeModel || isModelSelectionDisabled) {
+      return;
+    }
+
+    const result = await chatStore.switchThreadModel(nextModelId, {
+      providerModelCatalogs,
+    });
+    if (result.switched) {
+      persistActiveThreadSnapshot();
+    } else if (result.message) {
+      inlineError = result.message;
     }
   }
 
@@ -330,6 +408,15 @@
           Open Debug AI settings
         </button>
       </div>
+    {:else if isModelSendBlocked}
+      <div class="chat-blocked-state" role="status" aria-live="polite">
+        <p class="chat-blocked-title">{modelBlockedCopy.title}</p>
+        <p class="chat-blocked-message">{modelBlockedCopy.message}</p>
+        <p class="chat-blocked-hint">{modelBlockedCopy.recoveryHint}</p>
+        <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("glm")}>
+          Open model settings
+        </button>
+      </div>
     {/if}
 
     {#if compactionNotice}
@@ -353,7 +440,7 @@
             {#each messages as message, index (message.id)}
               <li
                 class={`chat-message chat-message-${message.role}`}
-                class:chat-message-system-event={isProviderSwitchMessage(message)}
+                class:chat-message-system-event={isSystemEventMessage(message)}
                 class:chat-message-streaming={isGenerating &&
                   message.role === "assistant" &&
                   index === messages.length - 1}
@@ -436,6 +523,23 @@
           >
             {#each availableProviders as provider (provider.id)}
               <option value={provider.id}>{provider.label}</option>
+            {/each}
+          </select>
+        </label>
+        <label class="chat-provider-field">
+          <span class="chat-mode-label">Model</span>
+          <select
+            class="chat-provider-select"
+            aria-label="Select chat model"
+            value={activeModel}
+            disabled={isModelSelectionDisabled}
+            onchange={(event) => {
+              const next = (event.currentTarget as HTMLSelectElement).value;
+              void selectModel(next);
+            }}
+          >
+            {#each availableModels as modelId (modelId)}
+              <option value={modelId}>{modelId}</option>
             {/each}
           </select>
         </label>

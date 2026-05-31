@@ -58,6 +58,18 @@ export const PROVIDER_REQUEST_FAILURE_MESSAGE = "The assistant could not finish 
 export const PROVIDER_REQUEST_FAILURE_RECOVERY =
   "Tap Retry to send again. If it keeps failing, check your provider settings.";
 
+export const LOCAL_INVALID_MODEL_MESSAGE =
+  "The selected model is not in your configured model list.";
+
+export const LOCAL_INVALID_MODEL_RECOVERY =
+  "Open Settings, choose a model from the provider list, or add this model ID to the list.";
+
+export const PROVIDER_INVALID_MODEL_MESSAGE =
+  "The provider rejected or could not use the selected model.";
+
+export const PROVIDER_INVALID_MODEL_RECOVERY =
+  "Choose a different model in chat or update the model list in Settings.";
+
 export interface ChatBlockedStateCopy {
   title: string;
   message: string;
@@ -130,6 +142,45 @@ export function getDebugProviderDisabledCopy(): ChatBlockedStateCopy {
 
 export function formatRetryFailureNote(previousMessage: string): string {
   return `Previous response failed: ${previousMessage}`;
+}
+
+export function getLocalInvalidModelMessage(modelId: string, providerLabel: string): string {
+  const trimmed = modelId.trim();
+  if (!trimmed) {
+    return LOCAL_INVALID_MODEL_MESSAGE;
+  }
+  return `Model "${trimmed}" is not configured for ${providerLabel}.`;
+}
+
+export function getLocalInvalidModelRecovery(_providerId?: ChatProviderId): string {
+  return LOCAL_INVALID_MODEL_RECOVERY;
+}
+
+export function getLocalInvalidModelBlockedCopy(
+  modelId: string,
+  providerLabel: string,
+): ChatBlockedStateCopy {
+  return {
+    title: "Model unavailable",
+    message: getLocalInvalidModelMessage(modelId, providerLabel),
+    recoveryHint: getLocalInvalidModelRecovery(),
+  };
+}
+
+export function getProviderInvalidModelMessage(modelId: string, providerLabel: string): string {
+  const trimmed = modelId.trim();
+  if (!trimmed) {
+    return PROVIDER_INVALID_MODEL_MESSAGE;
+  }
+  return `${providerLabel} rejected model "${trimmed}". It may be invalid or temporarily unavailable.`;
+}
+
+export function getProviderInvalidModelRecovery(_providerId?: ChatProviderId): string {
+  return PROVIDER_INVALID_MODEL_RECOVERY;
+}
+
+export function getProviderRuntimeModelRejectionMessage(providerLabel: string): string {
+  return `${providerLabel} could not use the selected model. ${PROVIDER_INVALID_MODEL_RECOVERY}`;
 }
 
 export function sanitizeUnexpectedProviderError(error: unknown): string {

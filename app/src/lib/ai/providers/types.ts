@@ -34,6 +34,8 @@ export interface ProviderRequestPayload {
 
 export interface ProviderSendRequest {
   payload: ProviderRequestPayload;
+  /** Resolved model id for this turn (from thread metadata + provider catalog default). */
+  modelId: string;
   /** Stable turn identity for deterministic Debug simulation (M5-4). */
   turnKey?: string;
   /** Optional access status for Debug diagnostics appendix. */

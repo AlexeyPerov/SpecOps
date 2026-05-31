@@ -15,6 +15,7 @@ import {
   isGlmProviderConfigured,
   normalizeGlmProviderSettings,
 } from "./glmProviderSettings";
+import { mapProviderModelRuntimeError, shouldMapProviderModelRejection } from "./modelValidation";
 import { buildGlmChatMessages } from "./glmPrompt";
 import type {
   ChatProvider,
@@ -99,6 +100,15 @@ class GlmChatProvider implements ChatProvider {
     const normalized = normalizeGlmProviderSettings(settings);
     this.assertConfigured(normalized, apiKey);
 
+    const modelId = request.modelId.trim();
+    if (!modelId) {
+      throw mapProviderModelRuntimeError(
+        new ChatProviderError("Missing model id for GLM request.", "Missing model id for GLM request."),
+        "glm",
+        request.modelId,
+      );
+    }
+
     const messages = buildGlmChatMessages(request.payload);
     const url = resolveGlmChatCompletionsUrl(normalized.baseUrl);
 
@@ -111,7 +121,7 @@ class GlmChatProvider implements ChatProvider {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: normalized.modelId,
+          model: modelId,
           messages,
           stream: false,
         }),
@@ -122,7 +132,7 @@ class GlmChatProvider implements ChatProvider {
 
     const rawBody = await response.text();
     if (!response.ok) {
-      throw mapGlmHttpError(response.status, rawBody);
+      throw mapGlmHttpError(response.status, rawBody, modelId);
     }
 
     let parsed: GlmChatCompletionResponse;
@@ -176,8 +186,16 @@ function mapGlmNetworkError(error: unknown): ChatProviderError {
   );
 }
 
-function mapGlmHttpError(status: number, rawBody: string): ChatProviderError {
+function mapGlmHttpError(status: number, rawBody: string, modelId: string): ChatProviderError {
   const apiMessage = extractGlmApiErrorMessage(rawBody);
+
+  if (apiMessage && shouldMapProviderModelRejection(status, apiMessage)) {
+    return mapProviderModelRuntimeError(
+      new ChatProviderError(apiMessage, apiMessage),
+      "glm",
+      modelId,
+    );
+  }
 
   switch (status) {
     case 401:

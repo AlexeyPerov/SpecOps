@@ -136,6 +136,9 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
   if (value.compactedMessageCount !== undefined && typeof value.compactedMessageCount !== "number") {
     return null;
   }
+  if (value.selectedModelId !== undefined && typeof value.selectedModelId !== "string") {
+    return null;
+  }
   return {
     agentId: value.agentId,
     threadId: value.threadId,
@@ -147,20 +150,13 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
     compactionCount: value.compactionCount,
     lastCompactedAt: value.lastCompactedAt,
     compactedMessageCount: value.compactedMessageCount,
+    selectedModelId: value.selectedModelId,
   };
 }
 
-function parseSystemEvent(value: unknown): ChatMessage["systemEvent"] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  if (value.type !== "provider-switched") {
-    return undefined;
-  }
-
+function parseProviderSwitchedEvent(
+  value: Record<string, unknown>,
+): Extract<ChatMessage["systemEvent"], { type: "provider-switched" }> | undefined {
   const fromProvider = value.fromProvider;
   if (fromProvider !== null && !isChatProviderId(fromProvider)) {
     return undefined;
@@ -174,6 +170,40 @@ function parseSystemEvent(value: unknown): ChatMessage["systemEvent"] | undefine
     fromProvider,
     toProvider: value.toProvider,
   };
+}
+
+function parseModelSwitchedEvent(
+  value: Record<string, unknown>,
+): Extract<ChatMessage["systemEvent"], { type: "model-switched" }> | undefined {
+  const fromModel = value.fromModel;
+  if (fromModel !== null && typeof fromModel !== "string") {
+    return undefined;
+  }
+  if (typeof value.toModel !== "string" || value.toModel.length === 0) {
+    return undefined;
+  }
+
+  return {
+    type: "model-switched",
+    fromModel,
+    toModel: value.toModel,
+  };
+}
+
+function parseSystemEvent(value: unknown): ChatMessage["systemEvent"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (value.type === "provider-switched") {
+    return parseProviderSwitchedEvent(value);
+  }
+  if (value.type === "model-switched") {
+    return parseModelSwitchedEvent(value);
+  }
+  return undefined;
 }
 
 function parseMessage(value: unknown): ChatMessage | null {

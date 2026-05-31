@@ -20,6 +20,7 @@ import { DEBUG_PROVIDER_DISABLED_MESSAGE, GLM_MISSING_CONFIG_MESSAGE } from "../
 import { sendChatMessage } from "../ai/sendChatMessage";
 import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
+import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { createGlmChatProvider } from "../ai/providers/glmChatProvider";
 import {
   registerChatProvider,
@@ -321,7 +322,10 @@ describe("M5.3 milestone validation", () => {
 
     const switchResult = await chatStore.switchThreadProvider(
       "debug",
-      { debugProviderEnabled: true },
+      {
+        debugProviderEnabled: true,
+        providerModelCatalogs: defaultProviderModelCatalogs,
+      },
       agentId!,
     );
 

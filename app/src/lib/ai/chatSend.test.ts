@@ -67,6 +67,7 @@ function sampleRequest(mode: "ask" | "review" = "ask"): ProviderSendRequest {
       workspaceRootPath: "/work/a",
       recentMessages: [],
     }),
+    modelId: "debug-simulator",
   };
 }
 

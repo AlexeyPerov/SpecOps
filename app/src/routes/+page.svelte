@@ -793,6 +793,7 @@
         hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
         debugProvider: persistedSettings.debugProvider,
         glmProvider: persistedSettings.glmProvider,
+        providerModelCatalogs: persistedSettings.providerModelCatalogs,
       });
     }
     appState.setGlmApiKey(glmApiKey);
@@ -1143,6 +1144,7 @@
           hideActivityRailWhenNotepadOnly: state.settings.hideActivityRailWhenNotepadOnly,
           debugProvider: state.settings.debugProvider,
           glmProvider: state.settings.glmProvider,
+          providerModelCatalogs: state.settings.providerModelCatalogs,
         }),
       );
     }

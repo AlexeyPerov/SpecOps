@@ -8,7 +8,16 @@ import {
   defaultGlmProviderSettings,
   normalizeGlmProviderSettings,
 } from "../ai/providers/glmProviderSettings";
-import type { DebugProviderSettings, ExternalFilesSettings, GlmProviderSettings } from "../domain/contracts";
+import {
+  defaultProviderModelCatalogs,
+  normalizeProviderModelCatalogs,
+} from "../ai/providers/providerModelCatalog";
+import type {
+  DebugProviderSettings,
+  ExternalFilesSettings,
+  GlmProviderSettings,
+  ProviderModelCatalogs,
+} from "../domain/contracts";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
 export interface PersistedSettings {
@@ -22,6 +31,7 @@ export interface PersistedSettings {
   hideActivityRailWhenNotepadOnly: boolean;
   debugProvider: DebugProviderSettings;
   glmProvider: GlmProviderSettings;
+  providerModelCatalogs: ProviderModelCatalogs;
 }
 
 export const defaultExternalFilesSettings: ExternalFilesSettings = {
@@ -39,6 +49,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   hideActivityRailWhenNotepadOnly: true,
   debugProvider: defaultDebugProviderSettings,
   glmProvider: defaultGlmProviderSettings,
+  providerModelCatalogs: defaultProviderModelCatalogs,
 };
 
 const FILE_NAME = "settings.json";
@@ -50,6 +61,10 @@ async function getSettingsPath(): Promise<string> {
 
 function isBoolean(value: unknown): value is boolean {
   return typeof value === "boolean";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function parseExternalFilesSettings(parsed: Partial<PersistedSettings>): ExternalFilesSettings {
@@ -77,6 +92,20 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
 
     if (isBoolean(parsed.wrapLines) && typeof parsed.zoomPercent === "number") {
       const externalFiles = parseExternalFilesSettings(parsed as Partial<PersistedSettings>);
+      const hasExplicitGlmCatalog =
+        isRecord(parsed.providerModelCatalogs) && isRecord(parsed.providerModelCatalogs.glm);
+      const providerModelCatalogs = normalizeProviderModelCatalogs(
+        parsed.providerModelCatalogs,
+        hasExplicitGlmCatalog
+          ? {}
+          : {
+              glmModelId:
+                isRecord(parsed.glmProvider) && typeof parsed.glmProvider.modelId === "string"
+                  ? parsed.glmProvider.modelId
+                  : undefined,
+            },
+      );
+      const glmProvider = normalizeGlmProviderSettings(parsed.glmProvider, providerModelCatalogs);
       return {
         wrapLines: parsed.wrapLines,
         zoomPercent: parsed.zoomPercent as number,
@@ -88,7 +117,8 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
           ? parsed.hideActivityRailWhenNotepadOnly
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
         debugProvider: normalizeDebugProviderSettings(parsed.debugProvider),
-        glmProvider: normalizeGlmProviderSettings(parsed.glmProvider),
+        glmProvider,
+        providerModelCatalogs,
       };
     }
     return null;
@@ -123,7 +153,11 @@ export function toPersistedSettings(input: {
   hideActivityRailWhenNotepadOnly: boolean;
   debugProvider: DebugProviderSettings;
   glmProvider: GlmProviderSettings;
+  providerModelCatalogs: ProviderModelCatalogs;
 }): PersistedSettings {
+  const providerModelCatalogs = normalizeProviderModelCatalogs(input.providerModelCatalogs, {
+    glmModelId: input.glmProvider.modelId,
+  });
   return {
     wrapLines: input.wrapLines,
     zoomPercent: input.zoomPercent,
@@ -131,6 +165,7 @@ export function toPersistedSettings(input: {
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
     debugProvider: normalizeDebugProviderSettings(input.debugProvider),
-    glmProvider: normalizeGlmProviderSettings(input.glmProvider),
+    glmProvider: normalizeGlmProviderSettings(input.glmProvider, providerModelCatalogs),
+    providerModelCatalogs,
   };
 }

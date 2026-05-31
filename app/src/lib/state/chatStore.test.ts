@@ -18,6 +18,7 @@ import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import { defaultGlmProviderSettings } from "../ai/providers/glmProviderSettings";
+import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import {
   registerChatProvider,
   resetChatProviderRegistryForTests,
@@ -41,6 +42,11 @@ const readAgentThreadFileSnapshotMock = vi.mocked(readAgentThreadFileSnapshot);
 const readWorkspaceAgentsIndexSnapshotMock = vi.mocked(readWorkspaceAgentsIndexSnapshot);
 const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
+
+const providerSwitchOptions = {
+  debugProviderEnabled: true,
+  providerModelCatalogs: defaultProviderModelCatalogs,
+};
 
 describe("chatStore", () => {
   beforeEach(() => {
@@ -774,7 +780,7 @@ describe("chatStore provider switching", () => {
   });
 
   it("appends a provider-switched system event and updates metadata", async () => {
-    const result = await chatStore.switchThreadProvider("debug", { debugProviderEnabled: true });
+    const result = await chatStore.switchThreadProvider("debug", providerSwitchOptions);
 
     expect(result.switched).toBe(true);
     expect(chatStore.getMetadata()?.provider).toBe("debug");
@@ -790,7 +796,10 @@ describe("chatStore provider switching", () => {
   });
 
   it("blocks switching to Debug when it is disabled in settings", async () => {
-    const result = await chatStore.switchThreadProvider("debug", { debugProviderEnabled: false });
+    const result = await chatStore.switchThreadProvider("debug", {
+      ...providerSwitchOptions,
+      debugProviderEnabled: false,
+    });
 
     expect(result.switched).toBe(false);
     expect(result.message).toContain("Debug AI");
@@ -799,9 +808,9 @@ describe("chatStore provider switching", () => {
   });
 
   it("supports switching from Debug back to GLM when both are available", async () => {
-    await chatStore.switchThreadProvider("debug", { debugProviderEnabled: true });
+    await chatStore.switchThreadProvider("debug", providerSwitchOptions);
 
-    const result = await chatStore.switchThreadProvider("glm", { debugProviderEnabled: true });
+    const result = await chatStore.switchThreadProvider("glm", providerSwitchOptions);
 
     expect(result.switched).toBe(true);
     expect(chatStore.getMetadata()?.provider).toBe("glm");
@@ -811,10 +820,98 @@ describe("chatStore provider switching", () => {
   it("blocks provider changes while generating", async () => {
     chatStore.beginTurn("turn-1");
 
-    const result = await chatStore.switchThreadProvider("debug", { debugProviderEnabled: true });
+    const result = await chatStore.switchThreadProvider("debug", providerSwitchOptions);
 
     expect(result.switched).toBe(false);
     expect(chatStore.getMetadata()?.provider).toBe("glm");
+  });
+});
+
+describe("chatStore model switching", () => {
+  beforeEach(() => {
+    chatStore.reset();
+    resetChatProviderRegistryForTests();
+    ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
+    registerChatProvider(
+      createDebugChatProvider(() => ({
+        ...defaultDebugProviderSettings,
+        enabled: true,
+      })),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => ({
+          ...defaultDebugProviderSettings,
+          enabled: true,
+        }),
+        () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+      ),
+    );
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+  });
+
+  it("appends a model-switched system event and updates metadata", async () => {
+    const result = await chatStore.switchThreadModel("glm-4-plus", {
+      providerModelCatalogs: defaultProviderModelCatalogs,
+    });
+
+    expect(result.switched).toBe(true);
+    expect(chatStore.getMetadata()?.selectedModelId).toBe("glm-4-plus");
+    expect(chatStore.getMessages().at(-1)).toMatchObject({
+      role: "system",
+      content: "Model switched from glm-4-flash to glm-4-plus.",
+      systemEvent: {
+        type: "model-switched",
+        fromModel: "glm-4-flash",
+        toModel: "glm-4-plus",
+      },
+    });
+  });
+
+  it("blocks model changes while generating", async () => {
+    chatStore.beginTurn("turn-1");
+
+    const result = await chatStore.switchThreadModel("glm-4-plus", {
+      providerModelCatalogs: defaultProviderModelCatalogs,
+    });
+
+    expect(result.switched).toBe(false);
+    expect(chatStore.getMetadata()?.selectedModelId).toBeUndefined();
+  });
+
+  it("falls back to target provider default when switching providers", async () => {
+    chatStore.updateThreadMetadata({ selectedModelId: "glm-4-plus" });
+
+    const result = await chatStore.switchThreadProvider("debug", providerSwitchOptions);
+
+    expect(result.switched).toBe(true);
+    expect(chatStore.getMetadata()?.provider).toBe("debug");
+    expect(chatStore.getMetadata()?.selectedModelId).toBe("debug-simulator");
+  });
+
+  it("keeps the current model on provider switch when valid for the target provider", async () => {
+    const sharedCatalogs = {
+      ...defaultProviderModelCatalogs,
+      glm: {
+        modelIds: ["shared-model", "glm-4-flash"],
+        defaultModelId: "shared-model",
+      },
+      debug: {
+        modelIds: ["shared-model", "debug-simulator"],
+        defaultModelId: "debug-simulator",
+      },
+    };
+
+    chatStore.updateThreadMetadata({ provider: "glm", selectedModelId: "shared-model" });
+
+    const result = await chatStore.switchThreadProvider("debug", {
+      debugProviderEnabled: true,
+      providerModelCatalogs: sharedCatalogs,
+    });
+
+    expect(result.switched).toBe(true);
+    expect(chatStore.getMetadata()?.selectedModelId).toBe("shared-model");
   });
 });
 

@@ -194,6 +194,7 @@ describe("ChatProvider contract (in-memory test double)", () => {
   it("supports buffered sendMessage completion", async () => {
     const provider = new InMemoryTestProvider("debug");
     const request: ProviderSendRequest = {
+      modelId: "debug-simulator",
       payload: buildProviderRequest({
         mode: "ask",
         provider: "debug",
@@ -210,6 +211,7 @@ describe("ChatProvider contract (in-memory test double)", () => {
   it("supports optional streaming completion via streamMessage", async () => {
     const provider = new InMemoryTestProvider("debug");
     const request: ProviderSendRequest = {
+      modelId: "debug-simulator",
       payload: buildProviderRequest({
         mode: "review",
         provider: "debug",

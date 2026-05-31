@@ -134,6 +134,7 @@ class DebugChatProvider implements ChatProvider {
   ): string {
     const diagnostics = buildDebugDiagnosticsAppendix({
       payload: request.payload,
+      modelId: request.modelId,
       accessStatus,
       simulation,
     });
@@ -142,5 +143,5 @@ class DebugChatProvider implements ChatProvider {
 }
 
 function resolveTurnKey(request: ProviderSendRequest): string {
-  return request.turnKey ?? `${request.payload.mode}:${request.payload.history.length}`;
+  return request.turnKey ?? `${request.modelId}:${request.payload.mode}:${request.payload.history.length}`;
 }

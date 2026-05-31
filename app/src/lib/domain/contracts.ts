@@ -162,8 +162,18 @@ export interface DebugProviderSettings {
 export interface GlmProviderSettings {
   enabled: boolean;
   baseUrl: string;
+  /** Legacy send default; kept in sync with GLM catalog default during transition. */
   modelId: string;
 }
+
+/** Settings-managed model list and default model for one chat provider. */
+export interface ProviderModelCatalog {
+  modelIds: string[];
+  defaultModelId: string;
+}
+
+/** Provider-scoped model catalogs keyed by chat provider id. */
+export type ProviderModelCatalogs = Partial<Record<ChatProviderId, ProviderModelCatalog>>;
 
 export interface AppThemeState {
   activeTheme: ActiveThemeRef;
@@ -177,6 +187,7 @@ export interface AppSettingsState {
   hideActivityRailWhenNotepadOnly: boolean;
   debugProvider: DebugProviderSettings;
   glmProvider: GlmProviderSettings;
+  providerModelCatalogs: ProviderModelCatalogs;
   /** In-memory only; loaded from glmSecretsStore, never written to settings.json. */
   glmApiKey: string;
 }
@@ -252,13 +263,19 @@ export const PRODUCT_CHAT_PROVIDER_IDS = ["glm"] as const satisfies readonly Cha
 
 /**
  * System-only marker events persisted in chat history.
- * Start with provider switching and expand as system event needs grow.
+ * Provider and model switches are auditable in thread message history.
  */
-export type ChatSystemEvent = {
-  type: "provider-switched";
-  fromProvider: ChatProviderId | null;
-  toProvider: ChatProviderId;
-};
+export type ChatSystemEvent =
+  | {
+      type: "provider-switched";
+      fromProvider: ChatProviderId | null;
+      toProvider: ChatProviderId;
+    }
+  | {
+      type: "model-switched";
+      fromModel: string | null;
+      toModel: string;
+    };
 
 export interface ChatMessage {
   id: string;
@@ -282,6 +299,8 @@ export interface ChatThreadMetadata {
   lastCompactedAt?: string;
   /** Cumulative count of messages removed by compaction (for UI indicators). */
   compactedMessageCount?: number;
+  /** Per-thread selected model for the active provider; omitted until explicitly set. */
+  selectedModelId?: string;
 }
 
 /** One persisted agent conversation (messages + per-agent settings). */

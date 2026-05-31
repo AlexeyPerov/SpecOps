@@ -472,4 +472,72 @@ describe("sendChatMessage", () => {
     );
     expect(chatStore.canRetryLastTurn()).toBe(false);
   });
+
+  it("blocks send when the selected model is not in the configured provider catalog", async () => {
+    chatStore.updateThreadMetadata({ provider: "debug", selectedModelId: "unknown-model" });
+
+    const result = await sendChatMessage("Hello");
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: "invalid_model",
+    });
+    expect(result.ok === false && result.message).toContain("not configured");
+    expect(chatStore.getMessages()).toHaveLength(0);
+  });
+
+  it("passes the resolved thread model id to the provider adapter", async () => {
+    resetChatProviderRegistryForTests();
+    const debugProvider = createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider);
+    const streamMessageSpy = vi.spyOn(debugProvider, "streamMessage");
+    registerChatProvider(debugProvider);
+
+    chatStore.updateThreadMetadata({ provider: "debug", selectedModelId: "debug-simulator" });
+
+    const sendPromise = sendChatMessage("Model check");
+    await vi.runAllTimersAsync();
+    const result = await sendPromise;
+
+    expect(result.ok).toBe(true);
+    expect(streamMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "debug-simulator",
+      }),
+    );
+  });
+
+  it("maps GLM provider model rejection to invalid-model copy", async () => {
+    resetChatProviderRegistryForTests();
+    appState.setGlmApiKey("glm-test-key");
+    const glmFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: "Model not found" } }), { status: 404 }),
+    );
+    registerChatProvider(
+      createGlmChatProvider(
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+        glmFetch as typeof fetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.debugProvider,
+        () => ({
+          settings: appState.getSnapshot().settings.glmProvider,
+          apiKey: "glm-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask", selectedModelId: "glm-4-flash" });
+
+    const sendPromise = sendChatMessage("Bad model");
+    await vi.runAllTimersAsync();
+    const result = await sendPromise;
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toBe("provider_error");
+    expect(result.ok === false && result.message).toContain("rejected model");
+  });
 });

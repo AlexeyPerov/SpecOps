@@ -9,6 +9,7 @@ import {
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { resetChatProvidersForTests } from "../ai/providers/bootstrap";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
+import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { appState } from "./appState";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
@@ -103,6 +104,7 @@ describe("M6-4 edge-case transitions", () => {
       "debug",
       {
         debugProviderEnabled: true,
+        providerModelCatalogs: defaultProviderModelCatalogs,
       },
       agentId!,
     );

@@ -37,6 +37,7 @@ export function buildDebugResponseBody(mode: ChatModeId, payload: ProviderReques
 
 export interface DebugDiagnosticsInput {
   payload: ProviderRequestPayload;
+  modelId: string;
   accessStatus: WorkspaceAccessStatus;
   simulation: DebugTurnSimulationPlan;
 }
@@ -47,6 +48,7 @@ export function buildDebugDiagnosticsAppendix(input: DebugDiagnosticsInput): str
     "---",
     "Debug diagnostics",
     `Mode: ${input.payload.mode}`,
+    `Model: ${input.modelId}`,
     `Workspace: ${input.payload.workspace.rootPath} (${input.payload.workspace.name})`,
     `Access: ${input.accessStatus}`,
     `Prompt preview: ${promptPreview}`,

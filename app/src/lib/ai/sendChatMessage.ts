@@ -13,6 +13,11 @@ import {
   getGlmProviderMissingConfigMessage,
   isGlmProviderSendBlocked,
 } from "./providers/glmProviderSettings";
+import {
+  resolveEffectiveThreadModelId,
+  validateLocalModelSelection,
+} from "./providers/capabilityChecker";
+import { getProviderDefaultModelId, normalizeProviderModelCatalogs } from "./providers/providerModelCatalog";
 import { getChatProvider } from "./providers/registry";
 import type { ChatProvider, ProviderSendRequest } from "./providers/types";
 import { appState } from "../state/appState";
@@ -40,6 +45,7 @@ export type SendChatMessageFailureReason =
   | "preflight"
   | "debug_disabled"
   | "glm_not_configured"
+  | "invalid_model"
   | "provider_unavailable"
   | "append_failed"
   | "provider_error";
@@ -135,6 +141,7 @@ type ProviderSendValidationSuccess = {
   ok: true;
   provider: ChatProvider;
   accessStatus: WorkspaceAccessStatus;
+  modelId: string;
 };
 
 async function validateProviderSend(
@@ -159,6 +166,26 @@ async function validateProviderSend(
     };
   }
 
+  const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
+  const modelId = thread
+    ? resolveEffectiveThreadModelId(thread, appSettings.providerModelCatalogs)
+    : getProviderDefaultModelId(
+        normalizeProviderModelCatalogs(appSettings.providerModelCatalogs),
+        providerId,
+      );
+  const localModelValidation = validateLocalModelSelection(
+    appSettings.providerModelCatalogs,
+    providerId,
+    modelId,
+  );
+  if (!localModelValidation.ok) {
+    return {
+      ok: false,
+      reason: "invalid_model",
+      message: `${localModelValidation.message} ${localModelValidation.recoveryHint}`,
+    };
+  }
+
   const accessState = await chatStore.runAccessPreflight();
   if (accessState.status !== "ready") {
     return {
@@ -177,7 +204,7 @@ async function validateProviderSend(
     };
   }
 
-  return { ok: true, provider, accessStatus: accessState.status };
+  return { ok: true, provider, accessStatus: accessState.status, modelId: localModelValidation.modelId };
 }
 
 async function executeProviderTurn(params: {
@@ -186,9 +213,10 @@ async function executeProviderTurn(params: {
   turnId: string;
   provider: ChatProvider;
   accessStatus: WorkspaceAccessStatus;
+  modelId: string;
   previousError?: ChatTurnError | null;
 }): Promise<SendChatMessageResult> {
-  const { root, activeAgentId, turnId, provider, accessStatus, previousError } = params;
+  const { root, activeAgentId, turnId, provider, accessStatus, modelId, previousError } = params;
 
   const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
   if (!thread) {
@@ -209,6 +237,7 @@ async function executeProviderTurn(params: {
 
   const request: ProviderSendRequest = {
     payload: buildThreadProviderRequest(thread, root),
+    modelId,
     turnKey: turnId,
     accessStatus,
   };
@@ -297,6 +326,7 @@ export async function retryLastChatTurn(agentId?: string): Promise<RetryLastChat
     turnId,
     provider: validation.provider,
     accessStatus: validation.accessStatus,
+    modelId: validation.modelId,
     previousError,
   });
 }
@@ -351,5 +381,6 @@ export async function sendChatMessage(
     turnId,
     provider: validation.provider,
     accessStatus: validation.accessStatus,
+    modelId: validation.modelId,
   });
 }

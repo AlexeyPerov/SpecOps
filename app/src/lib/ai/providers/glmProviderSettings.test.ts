@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { defaultGlmProviderSettings } from "./glmProviderSettings";
 import {
+  defaultGlmProviderSettings,
   getGlmProviderMissingConfigMessage,
   getGlmProviderSetupHint,
   isGlmProviderConfigured,
   isGlmProviderSendBlocked,
   normalizeGlmProviderSettings,
+  syncGlmProviderSettingsWithCatalog,
 } from "./glmProviderSettings";
+import { defaultProviderModelCatalogs } from "./providerModelCatalog";
 
 describe("normalizeGlmProviderSettings", () => {
   it("returns defaults for missing input", () => {
@@ -38,6 +40,40 @@ describe("normalizeGlmProviderSettings", () => {
       baseUrl: "https://example.test/v1",
       modelId: "custom-model",
     });
+  });
+
+  it("uses catalog default model when model id is empty", () => {
+    const catalogs = {
+      ...defaultProviderModelCatalogs,
+      glm: {
+        modelIds: ["glm-custom"],
+        defaultModelId: "glm-custom",
+      },
+    };
+
+    expect(normalizeGlmProviderSettings({ modelId: "" }, catalogs)).toEqual({
+      ...defaultGlmProviderSettings,
+      modelId: "glm-custom",
+    });
+  });
+});
+
+describe("syncGlmProviderSettingsWithCatalog", () => {
+  it("aligns legacy model id with catalog default", () => {
+    const catalogs = {
+      ...defaultProviderModelCatalogs,
+      glm: {
+        modelIds: ["glm-custom"],
+        defaultModelId: "glm-custom",
+      },
+    };
+
+    expect(
+      syncGlmProviderSettingsWithCatalog(
+        { ...defaultGlmProviderSettings, modelId: "glm-4-flash" },
+        catalogs,
+      ).modelId,
+    ).toBe("glm-custom");
   });
 });
 

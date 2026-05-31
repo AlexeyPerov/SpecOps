@@ -10,6 +10,7 @@ import {
   toPersistedSettings,
 } from "./settingsStore";
 import { defaultGlmProviderSettings } from "../ai/providers/glmProviderSettings";
+import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
@@ -55,6 +56,12 @@ describe("settings mapping", () => {
         enabled: true,
         baseUrl: "https://example.test/v1",
         modelId: "glm-test",
+      },
+      providerModelCatalogs: {
+        glm: {
+          modelIds: ["glm-test"],
+          defaultModelId: "glm-test",
+        },
       },
     });
 
@@ -109,6 +116,48 @@ describe("loadPersistedSettings", () => {
 
     const result = await loadPersistedSettings();
     expect(result?.glmProvider).toEqual(defaultGlmProviderSettings);
+    expect(result?.providerModelCatalogs).toEqual(defaultProviderModelCatalogs);
+  });
+
+  it("migrates legacy glm model id when provider catalogs are missing", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        wrapLines: true,
+        zoomPercent: 100,
+        glmProvider: {
+          enabled: true,
+          baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+          modelId: "legacy-glm",
+        },
+      }),
+    );
+
+    const result = await loadPersistedSettings();
+    expect(result?.providerModelCatalogs?.glm).toEqual({
+      modelIds: ["legacy-glm", "glm-4-flash", "glm-4-air", "glm-4-plus"],
+      defaultModelId: "legacy-glm",
+    });
+    expect(result?.glmProvider.modelId).toBe("legacy-glm");
+  });
+
+  it("normalizes invalid provider model catalogs on load", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        ...defaultPersistedSettings,
+        providerModelCatalogs: {
+          glm: {
+            modelIds: ["", "glm-custom", "glm-custom"],
+            defaultModelId: "missing",
+          },
+        },
+      }),
+    );
+
+    const result = await loadPersistedSettings();
+    expect(result?.providerModelCatalogs?.glm).toEqual({
+      modelIds: ["glm-custom"],
+      defaultModelId: "glm-custom",
+    });
   });
 
   it("normalizes invalid debug provider ranges on load", async () => {

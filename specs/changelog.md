@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-01 21:58 — R0 test baseline (R0-6 through R0-9)
+
+Completed recommended command/menu test tasks and R0 milestone validation.
+
+- **R0-6:** Added `app/src/lib/services/appMenu.test.ts` — open-recent path queue round-trip, empty queue, menu gating (`shouldInitializeAppMenu`).
+- **R0-7:** Extended `app/src/lib/commands/registry.test.ts` — handler coverage for `file.save`, `file.saveAll`, `file.new`, `tab.close`, `workspace.add`, `workspace.close` (success, cancel, and discard branches).
+- **R0-8:** Extended `registry.test.ts` — Windows/Linux `Ctrl+*` keymap parity and binding parity for all `commandDefinitions` entries with shortcuts.
+- **R0-9:** Validation gate — `npm test` and `npm run check` green.
+
+**Test inventory:** **573** tests in **68** files (plan baseline: 506 / 62). R0 milestone added **6** colocated test files (`openActivePath`, `appShellHelpers`, `windowBounds`, `settingsDialogUi`, `fileWatcher`, `appMenu`) plus registry extensions; **~67** new cases total (**~23** from R0-6–R0-8).
+
 ## 2026-06-01 (R0-3, R0-4, R0-5)
 
 - **R0-3:** Added `windowBounds.test.ts` — scale-factor division on read, maximized-only apply path, logical size/position on restore.

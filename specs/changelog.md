@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-01 (R0-3, R0-4, R0-5)
+
+- **R0-3:** Added `windowBounds.test.ts` — scale-factor division on read, maximized-only apply path, logical size/position on restore.
+- **R0-4:** Added `settingsDialogUi.test.ts` — null opener no-op, default/explicit tabs, re-register replaces opener.
+- **R0-5:** Added `fileWatcher.test.ts` — `sync_file_watcher_paths` invoke args, `FILE_CHANGED_EVENT` constant.
+
 ## 2026-06-01 (R0-1, R0-2)
 
 - **R0-1:** Added `openActivePath.test.ts` — gate redirect/existing, happy path, too_large, missing (recent prune), failed; `describeOpenActivePathResult` for all kinds.

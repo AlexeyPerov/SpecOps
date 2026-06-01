@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-05-31 23:10 (MSK)
+
+- **Architecture docs:** Added `docs/architecture.md` (app layering, state, persistence, Tauri role, agent conventions) and `docs/providers.md` (GLM provider integration, BigModel API used vs unused).
+
+## 2026-05-31 22:35 (MSK)
+
+- **Untitled document helpers:** Added `DEFAULT_UNTITLED_TITLE`, `isUnsavedDocument`, `isEmptyUnsavedDocument`, and `buildEmptyUnsavedDocument` to replace hardcoded `"Untitled"` title comparisons. Bootstrap window detection now uses empty unsaved document state instead of title string matching.
+
+## 2026-05-31 22:15 (MSK)
+
+- **Multi-window tab transfer:** Transferred tabs now replace the default bootstrap Untitled tab in a new window instead of opening beside it. Empty Untitled is still created only when a window would otherwise have no tabs.
+
 ## 2026-05-31 20:30 (MSK)
 
 - **Multi-window tab transfer:** Added Tauri webview window creation permissions. Hardened `createNewWindowWithTransfer` with error handling, parent window placement, focus/show, and a ready handshake before emitting tab transfer events. Split tab transfer into non-destructive payload build + post-success removal via `tabWindowTransfer.ts`. Moved transfer listener early in app startup and added drag-out tear-off in TabBar.

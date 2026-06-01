@@ -1,0 +1,207 @@
+# SpecOps architecture
+
+SpecOps is a desktop workspace app for specs, notes, and project files. The UI is a **SvelteKit** frontend; the shell is **Tauri 2** (Rust) with filesystem, dialogs, logging, and a small set of custom commands.
+
+## Repository layout
+
+| Path | Role |
+| --- | --- |
+| `app/` | Frontend (Svelte 5, Vite) and Tauri project root (`package.json`, `src-tauri/`) |
+| `app/src/routes/` | SvelteKit routes; `+page.svelte` is the main application shell |
+| `app/src/lib/domain/` | Shared types and pure helpers (`contracts.ts`) |
+| `app/src/lib/state/` | Writable stores and domain orchestration (`appState`, `chatStore`) |
+| `app/src/lib/services/` | I/O, persistence, platform, file watching, session |
+| `app/src/lib/ai/` | Chat providers, modes, send pipeline |
+| `app/src/lib/components/` | UI components |
+| `app/src/lib/commands/` | Menu and keyboard command registry |
+| `app/src-tauri/` | Rust: file watcher, macOS open-with, logging plugins |
+| `specs/` | Product specs, execution plans, changelog |
+| `docs/` | Architecture and integration docs (this folder) |
+
+Unit tests are colocated as `*.test.ts` next to source. Run them from `app/` with `npm test`.
+
+## Runtime stack
+
+```mermaid
+flowchart TB
+  subgraph ui [Svelte UI]
+    Page["+page.svelte"]
+    Components[Components]
+    State[appState / chatStore]
+  end
+  subgraph ai [AI layer]
+    Send[sendChatMessage]
+    Providers[Provider registry]
+  end
+  subgraph io [Services]
+    FS[fileSystem / Tauri FS]
+    Session[sessionManager]
+    Settings[settingsStore]
+    ChatDisk[chatPersistence]
+  end
+  subgraph native [Tauri Rust]
+    Watcher[file_watcher]
+    Events[opened-paths events]
+  end
+  Page --> Components
+  Components --> State
+  State --> Send
+  Send --> Providers
+  State --> io
+  io --> native
+```
+
+Most product logic lives in TypeScript. Rust is intentionally thin: watch paths, enqueue files opened from the OS, and plugin wiring.
+
+## Domain model
+
+Types live in `app/src/lib/domain/contracts.ts`. Important concepts:
+
+### Contexts and workspaces
+
+- **`notepad`** — scratch context without a folder root.
+- **`ws-{n}`** — folder-backed workspace (`WorkspaceEntry` with `rootPath`).
+
+Each context has a **`ContextSnapshot`**: `documents[]` and `session` (tabs, selection, layout, last active agent).
+
+`appState` holds `WindowContextState` (notepad + workspace list + `activeContextId`) and mirrors `documents` / `session` for the active context.
+
+### Documents and tabs
+
+- **`DocumentState`** — editor buffer, dirty flag, disk fingerprint, markdown view mode, etc.
+- **`TabState`** — `file` (links `documentId`) or `agent` (links `agentId`).
+
+File open/save flows go through `appState` and services (`fileSystem`, `openFileGate`, `externalFileChanges`).
+
+### AI agents (workspace-scoped)
+
+- One **agent** per conversation; many agents per workspace.
+- **`chatStore`** holds in-memory threads keyed by workspace root path.
+- Threads persist under the app data dir (see [Persistence](#persistence)).
+- Modes: **`ask`** and **`review`** (system prompts in `app/src/lib/ai/modes/builtins.ts`).
+
+Provider integration is documented in [providers.md](./providers.md).
+
+## State layer
+
+### `appState` (`app/src/lib/state/appState.ts`)
+
+Single source of truth for:
+
+- Active context, documents, tabs, editor chrome (zoom, wrap, find/replace)
+- **`AppSettingsState`** (including GLM settings and in-memory API key)
+- Theme (builtin + custom), recent files
+
+Mutations are methods on the exported store object (e.g. `openDocument`, `setGlmApiKey`, workspace close with dirty prompts).
+
+### `chatStore` (`app/src/lib/state/chatStore.ts`)
+
+Workspace-scoped chat:
+
+- Agent index, per-agent `ChatThreadSnapshot`, runtime (generating, last error)
+- Access preflight (`runAccessPreflight`) — provider capabilities + workspace path readability
+- Provider/model switches append **`ChatSystemEvent`** messages to the thread
+
+Chat providers are registered at startup via `initializeChatProviders()` in `app/src/lib/ai/providers/bootstrap.ts` (called from `+page.svelte` after settings and GLM key load).
+
+## Send pipeline (high level)
+
+1. UI calls `sendChatMessage` / `retryLastChatTurn` (`app/src/lib/ai/sendChatMessage.ts`).
+2. Validates provider (debug enabled, GLM configured), model catalog, access preflight.
+3. Appends user message; begins turn; builds **`ProviderRequestPayload`** via `buildThreadProviderRequest`.
+4. **`streamProviderMessage`** (`chatSend.ts`) — uses `streamMessage` if implemented (Debug), else buffered `sendMessage` (GLM).
+5. Updates assistant placeholder; compacts thread if needed; debounced persist.
+
+Shared prompt shape is defined in `app/src/lib/ai/providers/types.ts` so Debug and GLM stay aligned.
+
+## Commands and menus
+
+- **`AppCommandId`** — stable command ids in `contracts.ts`.
+- **`commands/registry.ts`** — bindings, menu initialization, dispatch from `+page.svelte` and native menu.
+
+Prefer adding behavior through a command id when it is user-facing and needs shortcuts or menu entries.
+
+## Persistence
+
+All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`).
+
+| File / area | Contents |
+| --- | --- |
+| `settings.json` | Editor, external files, debug/GLM provider settings, model catalogs (not API key) |
+| `glm-secrets.json` | GLM API key only (`glmSecretsStore.ts`) |
+| `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
+| `themes.json` | Active and custom themes |
+| `chat/{hash}/` | Per-workspace agent index and thread JSON |
+
+Session and chat writes are debounced. The project **does not** add backward-compatible migrations for persisted data unless explicitly requested (see agent rules below).
+
+## Tauri backend
+
+`app/src-tauri/src/lib.rs`:
+
+- Plugins: dialog, fs, log, opener
+- **`file_watcher`** — sync watch paths with frontend
+- macOS **`RunEvent::Opened`** — open files/folders from Finder; emits `spec-ops/app/opened-paths`
+
+Custom commands: `take_pending_opened_paths`, `sync_file_watcher_paths`.
+
+## UI composition
+
+`+page.svelte` wires:
+
+- Activity rail (notepad / workspaces)
+- Project panel, editor + tab bar, agents sidebar, chat panel
+- Settings dialog, theme pane, console (logs only)
+
+Routing helpers: `editorRouting.ts` (file vs agent tab), `workspaceAgentSession.ts` (agent tab lifecycle).
+
+Editor: CodeMirror via `EditorSurface.svelte`, language detection in `editorLanguage.ts`.
+
+## Testing conventions
+
+- **Vitest** for TypeScript; tests assert real behavior (persistence codecs, send pipeline, provider adapters).
+- Reset helpers exist for global singletons: `resetChatProvidersForTests`, `resetChatProviderRegistryForTests`, `resetSessionManagerForTests`, etc.
+- Validation suites under `app/src/lib/state/chatM*.validation.test.ts` encode milestone acceptance criteria.
+
+After structural changes, run `npm test` and `npm run check` from `app/`.
+
+## Recommendations for coding agents
+
+These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
+
+### Scope and storage
+
+- **Changelog** — Record user-visible or structural changes in `specs/changelog.md` with dated entries.
+- **No `references/` edits** — That folder is gitignored examples only.
+- **No unsolicited migrations** — Prefer breaking simplification of codecs over compatibility shims for `session.json`, chat files, or settings.
+
+### Where to change things
+
+| Task | Start here |
+| --- | --- |
+| New persisted field | `contracts.ts` → normalize in store/service → tests |
+| New menu action | `AppCommandId` + `registry.ts` + handler in `+page.svelte` or `appState` |
+| Chat behavior | `sendChatMessage.ts`, `chatStore.ts`, provider adapter under `ai/providers/` |
+| New LLM provider | Implement `ChatProvider`, register in `bootstrap.ts`, settings UI, catalog in `providerModelCatalog.ts` |
+| File on disk | `services/fileSystem.ts` or Tauri FS; keep paths normalized via `diskFingerprint` / workspace paths helpers |
+
+### Patterns to preserve
+
+1. **Domain types in `contracts.ts`** — Avoid duplicating shapes in components.
+2. **Provider-agnostic prompts** — Build `ProviderRequestPayload` once; adapters map to vendor APIs (see `glmPrompt.ts`).
+3. **Secrets separate from settings** — API keys go in `glm-secrets.json`, not `settings.json` or chat thread files.
+4. **User-facing errors** — Throw `ChatProviderError` with `userMessage` in providers; map HTTP/status in one place per provider.
+5. **Svelte 5** — Use runes (`$state`, `$derived`, `$effect`) consistent with existing components; load Svelte skills/MCP when editing `.svelte` files.
+6. **Minimal Rust** — Prefer implementing features in TypeScript unless OS integration requires native code.
+
+### Avoid
+
+- Attaching editor selection or console logs to AI context (not in MVP scope per README).
+- Implementing `cursor` provider without a full plan (id exists in types/catalog for future work).
+- Enabling GLM streaming in the UI without implementing `GlmChatProvider.streamMessage` and SSE parsing end-to-end.
+
+### Related docs
+
+- [providers.md](./providers.md) — GLM API integration, used vs unused endpoints
+- [README.md](../README.md) — product scope and dev commands
+- `specs/` — execution plans and requirements

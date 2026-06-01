@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import DocumentEditor from "../lib/components/DocumentEditor.svelte";
   import MarkdownEditorPane from "../lib/components/MarkdownEditorPane.svelte";
+  import DiffPreviewPane from "../lib/components/DiffPreviewPane.svelte";
   import ConsolePanel from "../lib/components/ConsolePanel.svelte";
   import SettingsDialog from "../lib/components/SettingsDialog.svelte";
   import ThemePane from "../lib/components/ThemePane.svelte";
@@ -31,10 +32,6 @@
   import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
   import { initializeLogging, logDiagnostic } from "../lib/services/logging";
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
-  import {
-    describeMarkdownPreviewLinkResult,
-    handleMarkdownPreviewLinkClick,
-  } from "../lib/services/markdownPreviewLinks";
   import { listenForRecentFilesChanges } from "../lib/services/recentFilesSync";
   import { listen, emit, TauriEvent } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
@@ -86,7 +83,6 @@
     syncFileWatcherPaths,
   } from "../lib/services/fileWatcher";
   import { marked } from "marked";
-  import { diffLines } from "diff";
   import type { AppDomainState } from "../lib/domain/contracts";
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
   import { isAgentTab, isFileTab, tabDocumentId } from "../lib/domain/contracts";
@@ -207,10 +203,6 @@
     isMarkdownDocument && activeDocument
       ? (marked.parse(activeDocument.content) as string)
       : "";
-  $: diffRows =
-    state.editor.previewMode === "diff" && activeDocument
-      ? diffLines(activeDocument.savedContent, activeDocument.content)
-      : [];
   $: statusPath = formatStatusPath(
     activeDocument?.filePath ?? null,
     activeDocument?.title,
@@ -475,20 +467,6 @@
       return;
     }
     appState.setDocumentMarkdownViewMode(activeDocument.id, nextMode);
-  }
-
-  async function onMarkdownPreviewClick(event: MouseEvent): Promise<void> {
-    const result = await handleMarkdownPreviewLinkClick(event, {
-      documentFilePath: activeDocument?.filePath ?? null,
-      windowId: currentWindowId,
-    });
-    if (!result) {
-      return;
-    }
-    const message = describeMarkdownPreviewLinkResult(result);
-    if (message) {
-      notify(message);
-    }
   }
 
   function updateLayoutMeasurements(): void {
@@ -1142,7 +1120,12 @@
       <section class="editor-pane" class:editor-pane-agent={isAgentTabActive} bind:this={editorPaneEl}>
     {#if isAgentTabActive}
       <ChatPanel onDeleteAgent={handleDeleteAgentFromChat} />
-    {:else if state.editor.previewMode === "editor"}
+    {:else if state.editor.previewMode === "diff"}
+      <DiffPreviewPane
+        savedContent={activeDocument?.savedContent ?? ""}
+        currentContent={activeDocument?.content ?? ""}
+      />
+    {:else}
       {#if isMarkdownDocument}
         <MarkdownEditorPane
           content={activeDocument?.content ?? ""}
@@ -1182,35 +1165,6 @@
           }}
         />
       {/if}
-    {:else if state.editor.previewMode === "markdown"}
-      <div class="preview-panel">
-        <div class="preview-title">Markdown Preview</div>
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="markdown-preview" onclick={onMarkdownPreviewClick}>
-          {@html markdownHtml}
-        </div>
-      </div>
-    {:else}
-      <div class="preview-panel diff-preview">
-        <div class="preview-title">Diff Preview (saved vs current)</div>
-        <div class="diff-grid">
-          <div class="diff-column">
-            <h4>Saved</h4>
-            {#each diffRows as row}
-              <pre class={`diff-row ${row.added ? "row-added" : row.removed ? "row-removed" : ""}`}>
-{row.removed ? row.value : row.added ? "" : row.value}</pre>
-            {/each}
-          </div>
-          <div class="diff-column">
-            <h4>Current</h4>
-            {#each diffRows as row}
-              <pre class={`diff-row ${row.added ? "row-added" : row.removed ? "row-removed" : ""}`}>
-{row.added ? row.value : row.removed ? "" : row.value}</pre>
-            {/each}
-          </div>
-        </div>
-      </div>
     {/if}
 
     {#if !isAgentTabActive && state.editor.findReplaceOpen}
@@ -1426,70 +1380,6 @@
     min-height: 0;
     min-width: 0;
     overflow: hidden;
-  }
-
-  .preview-panel {
-    height: 100%;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--color-surface-1);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .preview-title {
-    padding: var(--space-8);
-    border-bottom: 1px solid var(--color-border-subtle);
-    font-size: var(--font-size-status);
-    color: var(--color-text-secondary);
-  }
-
-  .markdown-preview {
-    padding: var(--space-12);
-    overflow: auto;
-    line-height: 1.55;
-  }
-
-  .markdown-preview :global(a[href]) {
-    cursor: pointer;
-  }
-
-  .diff-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-8);
-    height: 100%;
-    padding: var(--space-8);
-    overflow: auto;
-  }
-
-  .diff-column {
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    overflow: auto;
-  }
-
-  .diff-column h4 {
-    margin: 0;
-    padding: var(--space-6) var(--space-8);
-    border-bottom: 1px solid var(--color-border-subtle);
-    font-size: var(--font-size-status);
-  }
-
-  .diff-row {
-    margin: 0;
-    padding: var(--space-2) var(--space-8);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .row-added {
-    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
-  }
-
-  .row-removed {
-    background: color-mix(in srgb, #c53030 18%, transparent);
   }
 
   .floating-tool {

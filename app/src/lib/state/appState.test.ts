@@ -631,6 +631,11 @@ describe("appState settings and editor chrome", () => {
     expect(editor.wrapLines).toBe(false);
     expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
   });
+
+  it("setPreviewMode normalizes legacy markdown preview to editor", () => {
+    appState.setPreviewMode("markdown");
+    expect(appState.getSnapshot().editor.previewMode).toBe("editor");
+  });
 });
 
 describe("appState session restore", () => {

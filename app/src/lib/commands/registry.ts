@@ -352,10 +352,25 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     appState.toggleGoTo();
   },
   "view.toggleMarkdownPreview": ({ getState, notify }) => {
-    const next =
-      getState().editor.previewMode === "markdown" ? "editor" : "markdown";
-    appState.setPreviewMode(next);
-    notify(next === "markdown" ? "Markdown preview on." : "Markdown preview off.");
+    const state = getState();
+    if (state.editor.previewMode === "markdown") {
+      appState.setPreviewMode("editor");
+    }
+    const selectedTab = state.session.openTabs.find(
+      (tab) => tab.id === state.session.selectedTabId,
+    );
+    const activeDocumentId = tabDocumentId(selectedTab);
+    const activeDocument = activeDocumentId
+      ? state.documents.find((document) => document.id === activeDocumentId)
+      : undefined;
+    if (!activeDocument || activeDocument.language !== "markdown") {
+      notify("Markdown preview is only available for markdown files.");
+      return;
+    }
+    const currentMode = activeDocument.markdownViewMode ?? "edit";
+    const nextMode = currentMode === "preview" ? "edit" : "preview";
+    appState.setDocumentMarkdownViewMode(activeDocument.id, nextMode);
+    notify(nextMode === "preview" ? "Markdown preview on." : "Markdown preview off.");
   },
   "view.toggleDiffPreview": ({ getState, notify }) => {
     const next = getState().editor.previewMode === "diff" ? "editor" : "diff";

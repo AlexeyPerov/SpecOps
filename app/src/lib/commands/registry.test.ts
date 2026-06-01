@@ -380,6 +380,57 @@ describe("workspace.add command", () => {
   });
 });
 
+describe("view.toggleMarkdownPreview command", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("cycles the active markdown document between edit and preview", () => {
+    const { context, notify } = createCommandContext();
+    appState.openFileInTab("/tmp/readme.md", "# Hello");
+
+    dispatchCommand("view.toggleMarkdownPreview", context);
+    expect(
+      appState.getSnapshot().documents.find((doc) => doc.id === "doc-2")?.markdownViewMode,
+    ).toBe("preview");
+    expect(notify).toHaveBeenCalledWith("Markdown preview on.");
+
+    dispatchCommand("view.toggleMarkdownPreview", context);
+    expect(
+      appState.getSnapshot().documents.find((doc) => doc.id === "doc-2")?.markdownViewMode,
+    ).toBe("edit");
+    expect(notify).toHaveBeenCalledWith("Markdown preview off.");
+  });
+
+  it("no-ops with a status message for non-markdown files", () => {
+    const { context, notify } = createCommandContext();
+    appState.markDocumentSaved("doc-1", "/tmp/plain.txt", "hello");
+
+    dispatchCommand("view.toggleMarkdownPreview", context);
+
+    expect(notify).toHaveBeenCalledWith("Markdown preview is only available for markdown files.");
+    expect(appState.getSnapshot().documents[0]?.markdownViewMode).toBe("edit");
+  });
+});
+
+describe("view.toggleDiffPreview command", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("toggles global diff preview mode", () => {
+    const { context, notify } = createCommandContext();
+
+    dispatchCommand("view.toggleDiffPreview", context);
+    expect(appState.getSnapshot().editor.previewMode).toBe("diff");
+    expect(notify).toHaveBeenCalledWith("Diff preview on.");
+
+    dispatchCommand("view.toggleDiffPreview", context);
+    expect(appState.getSnapshot().editor.previewMode).toBe("editor");
+    expect(notify).toHaveBeenCalledWith("Diff preview off.");
+  });
+});
+
 describe("workspace.close command", () => {
   let confirmMock: ReturnType<typeof vi.fn>;
 

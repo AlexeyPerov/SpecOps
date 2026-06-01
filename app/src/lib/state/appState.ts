@@ -1642,9 +1642,10 @@ function createStateStore() {
       }));
     },
     setPreviewMode(previewMode: "editor" | "markdown" | "diff") {
+      const normalizedPreviewMode = previewMode === "markdown" ? "editor" : previewMode;
       update((state) => ({
         ...state,
-        editor: { ...state.editor, previewMode },
+        editor: { ...state.editor, previewMode: normalizedPreviewMode },
       }));
     },
     getActiveWorkspaceLayout(): WorkspaceLayoutState {

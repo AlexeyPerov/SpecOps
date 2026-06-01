@@ -1,0 +1,326 @@
+.shell {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--color-bg-root);
+  color: var(--color-text-primary);
+}
+
+.shell-main-row {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns:
+    auto
+    auto
+    minmax(var(--editor-min-width), 1fr)
+    auto;
+}
+
+.editor-shell {
+  grid-column: 3;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: var(--tab-header-height) minmax(0, 1fr) auto;
+  --editor-content-padding-x: var(--space-8);
+}
+
+.shell-main-row .agents-sidebar {
+  grid-column: 2;
+}
+
+.shell-main-row .project-panel {
+  grid-column: 4;
+}
+
+.bottom-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  grid-row: 3;
+}
+
+.tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 0 var(--space-8);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-1);
+}
+
+.header-left,
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.toolbar-button,
+.status-segment,
+.menu-action {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  height: calc(var(--tab-header-height) - var(--space-8));
+  padding: 0 var(--space-8);
+  transition:
+    background-color var(--motion-fast) var(--easing-standard),
+    border-color var(--motion-fast) var(--easing-standard);
+}
+
+.editor-pane {
+  position: relative;
+  padding: var(--space-8);
+  overflow: hidden;
+}
+
+.editor-pane-agent {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.floating-tool {
+  position: absolute;
+  top: var(--space-12);
+  left: var(--space-12);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-1);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--space-8);
+  display: grid;
+  gap: var(--space-6);
+}
+
+.goto-tool {
+  width: 240px;
+}
+
+.floating-tool input {
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  padding: 0 var(--space-8);
+}
+
+.tool-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: var(--font-size-status);
+}
+
+.tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.workspace-context-menu {
+  position: fixed;
+  z-index: 1100;
+  min-width: 180px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-overlay);
+}
+
+.workspace-context-item {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  text-align: left;
+  font: inherit;
+  padding: var(--space-4) var(--space-6);
+}
+
+.workspace-context-item:hover {
+  background: var(--color-hover);
+  cursor: pointer;
+}
+
+.status-bar {
+  flex-shrink: 0;
+  height: var(--statusbar-height);
+  overflow: hidden;
+  background: var(--color-statusbar-bg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.status-bar-button {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: var(--space-4);
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--editor-content-padding-x, var(--space-8));
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-status);
+  cursor: pointer;
+  text-align: left;
+}
+
+.status-bar-button:hover {
+  background: var(--color-hover);
+}
+
+.status-bar-button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.status-bar-console-open {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+.status-segment {
+  display: inline-flex;
+  align-items: center;
+  height: calc(var(--statusbar-height) - var(--space-4));
+  font-size: var(--font-size-status);
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-missing {
+  color: #e06c75;
+  border-color: color-mix(in srgb, #e06c75 35%, transparent);
+}
+
+.status-message {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.path-segment {
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.add-file-button {
+  min-width: 32px;
+  width: 32px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+@media (max-width: 1100px) {
+  .optional-message {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .optional-wrap,
+  .optional-zoom {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .optional-line-ending,
+  .optional-encoding {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .optional-cursor {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .status-segment:not(.path-segment) {
+    display: none;
+  }
+
+  .optional-segment {
+    display: none;
+  }
+
+  .path-segment {
+    margin-left: 0;
+    max-width: 100%;
+  }
+}
+
+.tab-header {
+  min-width: 0;
+}
+
+.header-left {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header-right {
+  flex-shrink: 0;
+}
+
+.path-segment:focus-visible,
+.path-segment:hover {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-demo {
+  position: absolute;
+  inset: auto auto calc(var(--statusbar-height) + var(--space-8)) var(--space-8);
+  display: flex;
+  gap: var(--space-6);
+}
+
+.toolbar-button:hover,
+.status-segment:hover,
+.menu-action:hover {
+  background: var(--color-hover);
+  cursor: pointer;
+}
+
+.toolbar-button:focus-visible,
+.status-segment:focus-visible,
+.menu-action:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.toolbar-button:active,
+.status-segment:active,
+.menu-action:active {
+  background: var(--color-pressed);
+}
+
+.cm-plaintext-symbol {
+  color: var(--color-accent);
+  opacity: 0.85;
+}

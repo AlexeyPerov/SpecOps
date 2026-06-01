@@ -187,7 +187,7 @@ Dependencies: R1-2, R1-3, R1-4 recommended (smaller page before this task) but n
 
 ---
 
-#### Task R1-6: Project tree controller [Score:5] [Agent:medium]
+#### Task R1-6: Project tree controller [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -212,7 +212,7 @@ Dependencies: R1-5 recommended (avoid concurrent large page edits).
 
 ---
 
-#### Task R1-7: Shell CSS extraction and validation [Score:3] [Agent:easy]
+#### Task R1-7: Shell CSS extraction and validation [Score:3] [Agent:easy] [DONE]
 
 **Required context**
 

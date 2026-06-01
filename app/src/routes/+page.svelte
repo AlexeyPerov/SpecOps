@@ -13,19 +13,8 @@
   import AgentsSidebar from "../lib/components/AgentsSidebar.svelte";
   import ChatPanel from "../lib/components/ChatPanel.svelte";
   import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
-  import {
-    nextSidebarAgentId,
-    openAgentTabIds,
-    resolveRestoredActiveAgent,
-    selectedTabAfterMissingLastAgent,
-  } from "../lib/services/workspaceAgentSession";
-  import {
-    dispatchMenuCommand,
-    initializeAppMenu,
-    keymapCommandForEvent,
-    refreshOpenRecentMenu,
-    shouldInitializeAppMenu,
-  } from "../lib/commands/registry";
+  import { nextSidebarAgentId, openAgentTabIds, resolveRestoredActiveAgent, selectedTabAfterMissingLastAgent } from "../lib/services/workspaceAgentSession";
+  import { dispatchMenuCommand, initializeAppMenu, keymapCommandForEvent, refreshOpenRecentMenu, shouldInitializeAppMenu } from "../lib/commands/registry";
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
@@ -34,49 +23,25 @@
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-  import {
-    routePathToLastActiveWindow,
-  } from "../lib/services/windowManager";
-  import {
-    scheduleSessionPersistence,
-  } from "../lib/services/sessionManager";
-  import {
-    savePersistedSettings,
-    toPersistedSettings,
-  } from "../lib/services/settingsStore";
-  import {
-    registerSettingsDialogOpener,
-    type SettingsDialogTab,
-  } from "../lib/services/settingsDialogUi";
-  import {
-    checkDocumentIfDeferred,
-  } from "../lib/services/externalFileChanges";
+  import { routePathToLastActiveWindow } from "../lib/services/windowManager";
+  import { scheduleSessionPersistence } from "../lib/services/sessionManager";
+  import { savePersistedSettings, toPersistedSettings } from "../lib/services/settingsStore";
+  import { registerSettingsDialogOpener, type SettingsDialogTab } from "../lib/services/settingsDialogUi";
+  import { checkDocumentIfDeferred } from "../lib/services/externalFileChanges";
   import { marked } from "marked";
   import type { AppDomainState } from "../lib/domain/contracts";
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
   import { isAgentTab, isFileTab, tabDocumentId } from "../lib/domain/contracts";
-  import { loadDirectoryChildren, type ProjectTreeNode } from "../lib/services/projectTree";
+  import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
   import { scheduleAgentThreadFilePersistence } from "../lib/services/chatPersistence";
-  import {
-    ensureWorkspaceReadAccess,
-    probeWorkspaceReadAccess,
-  } from "../lib/services/fileSystem";
-  import {
-    stopChatAccessMonitor,
-    syncChatAccessMonitor,
-  } from "../lib/services/chatAccessMonitor";
-  import {
-    DEFAULT_CONSOLE_HEIGHT_PX,
-    writeConsoleHeightPreference,
-  } from "../lib/services/consoleTabPrefs";
+  import { ensureWorkspaceReadAccess, probeWorkspaceReadAccess } from "../lib/services/fileSystem";
+  import { stopChatAccessMonitor, syncChatAccessMonitor } from "../lib/services/chatAccessMonitor";
+  import { DEFAULT_CONSOLE_HEIGHT_PX, writeConsoleHeightPreference } from "../lib/services/consoleTabPrefs";
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
   import { DEFAULT_UNTITLED_TITLE } from "../lib/services/untitledTitle";
-  import {
-    canFitMarkdownSplit as canFitMarkdownSplitForWidth,
-    computeResponsiveLayoutFlags,
-    formatStatusPath,
-  } from "../lib/services/appShellHelpers";
+  import { canFitMarkdownSplit as canFitMarkdownSplitForWidth, computeResponsiveLayoutFlags, formatStatusPath } from "../lib/services/appShellHelpers";
+  import "../lib/styles/app-shell.css";
 
   let themePaneOpen = false;
   let settingsDialogOpen = false;
@@ -105,11 +70,19 @@
     | { workspaceId: ContextId; x: number; y: number }
     | null = null;
   let workspaceContextMenuEl: HTMLDivElement | null = null;
-  let projectTreeRootNodes: ProjectTreeNode[] = [];
-  let projectTreeChildrenByPath = new Map<string, ProjectTreeNode[]>();
-  let projectTreeExpandedPaths = new Set<string>();
-  let projectTreeLoadingPaths = new Set<string>();
-  let projectTreeShowHidden = false;
+  let projectTreeControllerState: ProjectTreeControllerState = {
+    rootNodes: [],
+    childrenByPath: new Map(),
+    expandedPaths: new Set(),
+    loadingPaths: new Set(),
+    showHidden: false,
+  };
+  const projectTreeController = createProjectTreeController(
+    (nextState) => {
+      projectTreeControllerState = nextState;
+    },
+    { probeWorkspaceReadAccessFn: probeWorkspaceReadAccess },
+  );
   let autoProjectPanelCollapsed = false;
   let autoAgentsSidebarCollapsed = false;
   let lastChatWorkspaceRoot: string | null = null;
@@ -173,54 +146,21 @@
   $: activeDocumentPath = activeDocument?.filePath ? normalizePathSync(activeDocument.filePath) : null;
 
   async function loadProjectTreeRoot(): Promise<void> {
-    if (!activeWorkspaceRoot) {
-      projectTreeRootNodes = [];
-      projectTreeChildrenByPath = new Map();
-      projectTreeExpandedPaths = new Set();
-      projectTreeLoadingPaths = new Set();
-      return;
-    }
-    projectTreeRootNodes = await loadDirectoryChildren(activeWorkspaceRoot, activeWorkspaceRoot, {
-      showHidden: projectTreeShowHidden,
-    });
-    if (isAgentTabActive) {
-      const probe = await probeWorkspaceReadAccess(activeWorkspaceRoot);
-      if (probe === "blocked") {
+    await projectTreeController.loadProjectTreeRoot({
+      workspaceRoot: activeWorkspaceRoot,
+      isAgentTabActive,
+      onWorkspaceBlocked: () => {
         void chatStore.runAccessPreflight();
-      }
-    }
+      },
+    });
   }
 
   async function loadProjectTreeChildren(directoryPath: string): Promise<void> {
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    projectTreeLoadingPaths = new Set([...projectTreeLoadingPaths, directoryPath]);
-    try {
-      const children = await loadDirectoryChildren(activeWorkspaceRoot, directoryPath, {
-        showHidden: projectTreeShowHidden,
-      });
-      const next = new Map(projectTreeChildrenByPath);
-      next.set(directoryPath, children);
-      projectTreeChildrenByPath = next;
-    } finally {
-      const nextLoading = new Set(projectTreeLoadingPaths);
-      nextLoading.delete(directoryPath);
-      projectTreeLoadingPaths = nextLoading;
-    }
+    await projectTreeController.loadProjectTreeChildren(activeWorkspaceRoot, directoryPath);
   }
 
   async function handleToggleProjectTreeDirectory(path: string): Promise<void> {
-    if (projectTreeExpandedPaths.has(path)) {
-      const next = new Set(projectTreeExpandedPaths);
-      next.delete(path);
-      projectTreeExpandedPaths = next;
-      return;
-    }
-    projectTreeExpandedPaths = new Set([...projectTreeExpandedPaths, path]);
-    if (!projectTreeChildrenByPath.has(path)) {
-      await loadProjectTreeChildren(path);
-    }
+    await projectTreeController.handleToggleProjectTreeDirectory(activeWorkspaceRoot, path);
   }
 
   async function handleOpenProjectTreeFile(path: string): Promise<void> {
@@ -229,15 +169,7 @@
   }
 
   async function refreshProjectTree(): Promise<void> {
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    const expanded = [...projectTreeExpandedPaths];
-    projectTreeChildrenByPath = new Map();
-    await loadProjectTreeRoot();
-    for (const path of expanded) {
-      await loadProjectTreeChildren(path);
-    }
+    await projectTreeController.refreshProjectTree(activeWorkspaceRoot, isAgentTabActive);
   }
 
   function toggleProjectPanelCollapsed(next: boolean): void {
@@ -352,31 +284,8 @@
   }
 
   async function toggleProjectTreeHidden(next: boolean): Promise<void> {
-    projectTreeShowHidden = next;
+    projectTreeController.setShowHidden(next);
     await refreshProjectTree();
-  }
-
-  function expandAncestorsForActiveFile(path: string): void {
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    const normalizedRoot = normalizePathSync(activeWorkspaceRoot).replace(/\/+$/, "");
-    const normalizedPath = normalizePathSync(path).replace(/\/+$/, "");
-    if (!normalizedPath.startsWith(`${normalizedRoot}/`)) {
-      return;
-    }
-    const relative = normalizedPath.slice(normalizedRoot.length + 1);
-    const parts = relative.split("/").filter(Boolean);
-    if (parts.length <= 1) {
-      return;
-    }
-    const nextExpanded = new Set(projectTreeExpandedPaths);
-    let cursor = normalizedRoot;
-    for (const part of parts.slice(0, -1)) {
-      cursor = `${cursor}/${part}`;
-      nextExpanded.add(cursor);
-    }
-    projectTreeExpandedPaths = nextExpanded;
   }
 
   function handleDocumentScrollTop(documentId: string, scrollTop: number): void {
@@ -797,24 +706,7 @@
   }
 
   $: if (activeDocumentPath) {
-    expandAncestorsForActiveFile(activeDocumentPath);
-  }
-
-  $: if (activeDocumentPath && activeWorkspaceRoot) {
-    const normalizedRoot = normalizePathSync(activeWorkspaceRoot).replace(/\/+$/, "");
-    if (activeDocumentPath.startsWith(`${normalizedRoot}/`)) {
-      const relative = activeDocumentPath.slice(normalizedRoot.length + 1);
-      const segments = relative.split("/").filter(Boolean);
-      if (segments.length > 1) {
-        let cursor = normalizedRoot;
-        for (const segment of segments.slice(0, -1)) {
-          cursor = `${cursor}/${segment}`;
-          if (!projectTreeChildrenByPath.has(cursor) && !projectTreeLoadingPaths.has(cursor)) {
-            void loadProjectTreeChildren(cursor);
-          }
-        }
-      }
-    }
+    void projectTreeController.ensureExpandedForActiveFile(activeWorkspaceRoot, activeDocumentPath);
   }
 </script>
 
@@ -993,12 +885,12 @@
     {#if activeWorkspaceRoot}
       <ProjectPanel
         workspaceRoot={activeWorkspaceRoot}
-        rootNodes={projectTreeRootNodes}
-        expandedPaths={projectTreeExpandedPaths}
-        childrenByPath={projectTreeChildrenByPath}
-        loadingPaths={projectTreeLoadingPaths}
+        rootNodes={projectTreeControllerState.rootNodes}
+        expandedPaths={projectTreeControllerState.expandedPaths}
+        childrenByPath={projectTreeControllerState.childrenByPath}
+        loadingPaths={projectTreeControllerState.loadingPaths}
         activeFilePath={activeDocumentPath}
-        showHidden={projectTreeShowHidden}
+        showHidden={projectTreeControllerState.showHidden}
         collapsed={!showProjectPanel}
         panelWidthPx={workspaceLayout.projectPanelWidthPx}
         onRefresh={refreshProjectTree}
@@ -1044,332 +936,3 @@
     </button>
   </div>
 {/if}
-
-<style>
-  .shell {
-    height: 100vh;
-    display: grid;
-    grid-template-rows: minmax(0, 1fr);
-    background: var(--color-bg-root);
-    color: var(--color-text-primary);
-  }
-
-  .shell-main-row {
-    min-height: 0;
-    height: 100%;
-    display: grid;
-    grid-template-columns:
-      auto
-      auto
-      minmax(var(--editor-min-width), 1fr)
-      auto;
-  }
-
-  .editor-shell {
-    grid-column: 3;
-    min-width: 0;
-    min-height: 0;
-    display: grid;
-    grid-template-rows: var(--tab-header-height) minmax(0, 1fr) auto;
-    --editor-content-padding-x: var(--space-8);
-  }
-
-  .shell-main-row :global(.agents-sidebar) {
-    grid-column: 2;
-  }
-
-  .shell-main-row :global(.project-panel) {
-    grid-column: 4;
-  }
-
-  .bottom-panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    grid-row: 3;
-  }
-
-  .tab-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-8);
-    padding: 0 var(--space-8);
-    border-bottom: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
-  }
-
-  .header-left,
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-  }
-
-  .toolbar-button,
-  .status-segment,
-  .menu-action {
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: inherit;
-    height: calc(var(--tab-header-height) - var(--space-8));
-    padding: 0 var(--space-8);
-    transition:
-      background-color var(--motion-fast) var(--easing-standard),
-      border-color var(--motion-fast) var(--easing-standard);
-  }
-
-  .editor-pane {
-    position: relative;
-    padding: var(--space-8);
-    overflow: hidden;
-  }
-
-  .editor-pane-agent {
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .floating-tool {
-    position: absolute;
-    top: var(--space-12);
-    left: var(--space-12);
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-overlay);
-    padding: var(--space-8);
-    display: grid;
-    gap: var(--space-6);
-  }
-
-  .goto-tool {
-    width: 240px;
-  }
-
-  .floating-tool input {
-    height: 30px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    padding: 0 var(--space-8);
-  }
-
-  .tool-checkbox {
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-    font-size: var(--font-size-status);
-  }
-
-  .tool-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-6);
-  }
-
-  .workspace-context-menu {
-    position: fixed;
-    z-index: 1100;
-    min-width: 180px;
-    padding: var(--space-4);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    box-shadow: var(--shadow-overlay);
-  }
-
-  .workspace-context-item {
-    display: block;
-    width: 100%;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    text-align: left;
-    font: inherit;
-    padding: var(--space-4) var(--space-6);
-  }
-
-  .workspace-context-item:hover {
-    background: var(--color-hover);
-    cursor: pointer;
-  }
-
-  .status-bar {
-    flex-shrink: 0;
-    height: var(--statusbar-height);
-    overflow: hidden;
-    background: var(--color-statusbar-bg);
-    border-top: 1px solid var(--color-border-subtle);
-  }
-
-  .status-bar-button {
-    display: flex;
-    align-items: center;
-    flex-wrap: nowrap;
-    overflow: hidden;
-    gap: var(--space-4);
-    width: 100%;
-    height: 100%;
-    padding: 0 var(--editor-content-padding-x, var(--space-8));
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-size: var(--font-size-status);
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .status-bar-button:hover {
-    background: var(--color-hover);
-  }
-
-  .status-bar-button:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: -2px;
-  }
-
-  .status-bar-console-open {
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-accent) 35%, transparent);
-  }
-
-  .status-segment {
-    display: inline-flex;
-    align-items: center;
-    height: calc(var(--statusbar-height) - var(--space-4));
-    font-size: var(--font-size-status);
-    line-height: 1;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .status-missing {
-    color: #e06c75;
-    border-color: color-mix(in srgb, #e06c75 35%, transparent);
-  }
-
-  .status-message {
-    color: var(--color-text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .path-segment {
-    margin-left: auto;
-    white-space: nowrap;
-    overflow: visible;
-    text-overflow: clip;
-  }
-
-  .add-file-button {
-    min-width: 32px;
-    width: 32px;
-    padding: 0;
-    font-size: 16px;
-    line-height: 1;
-  }
-
-  @media (max-width: 1100px) {
-    .optional-message {
-      display: none;
-    }
-  }
-
-  @media (max-width: 900px) {
-    .optional-wrap,
-    .optional-zoom {
-      display: none;
-    }
-  }
-
-  @media (max-width: 760px) {
-    .optional-line-ending,
-    .optional-encoding {
-      display: none;
-    }
-  }
-
-  @media (max-width: 620px) {
-    .optional-cursor {
-      display: none;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .status-segment:not(.path-segment) {
-      display: none;
-    }
-
-    .optional-segment {
-      display: none;
-    }
-
-    .path-segment {
-      margin-left: 0;
-      max-width: 100%;
-    }
-  }
-
-  .tab-header {
-    min-width: 0;
-  }
-
-  .header-left {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .header-right {
-    flex-shrink: 0;
-  }
-
-  .path-segment:focus-visible,
-  .path-segment:hover {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .command-demo {
-    position: absolute;
-    inset: auto auto calc(var(--statusbar-height) + var(--space-8)) var(--space-8);
-    display: flex;
-    gap: var(--space-6);
-  }
-
-  .toolbar-button:hover,
-  .status-segment:hover,
-  .menu-action:hover {
-    background: var(--color-hover);
-    cursor: pointer;
-  }
-
-  .toolbar-button:focus-visible,
-  .status-segment:focus-visible,
-  .menu-action:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 1px;
-  }
-
-  .toolbar-button:active,
-  .status-segment:active,
-  .menu-action:active {
-    background: var(--color-pressed);
-  }
-
-  :global(.cm-plaintext-symbol) {
-    color: var(--color-accent);
-    opacity: 0.85;
-  }
-</style>

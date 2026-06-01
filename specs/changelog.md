@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-01 22:38 — R1 project tree controller + shell CSS extraction (R1-6, R1-7)
+
+- Added `app/src/lib/services/projectTreeController.ts` to own project-tree state (`rootNodes`, `childrenByPath`, `expandedPaths`, `loadingPaths`, `showHidden`) and behavior (`loadProjectTreeRoot`, child loading, directory toggle, refresh, hidden toggle, active-file ancestor expansion).
+- Added `app/src/lib/services/projectTreeController.test.ts` with coverage for ancestor expansion path derivation and controller expansion/loading behavior.
+- Updated `app/src/routes/+page.svelte` to consume `projectTreeController` instead of local project-tree `Map`/`Set` state and manual ancestor-reactive blocks; `ProjectPanel` now receives controller state props.
+- Extracted shell styles from `+page.svelte` into `app/src/lib/styles/app-shell.css` and imported the stylesheet from the route component.
+- Marked `Task R1-6` and `Task R1-7` as `[DONE]` in `specs/refactoring-1/r1-execution-plan.md`; validation run: `npm test` passed (582 tests), `npm run check` passed with pre-existing `ThemePane.svelte` CSS warnings only.
+
 ## 2026-06-01 22:14 — R1 appShellRuntime extraction (R1-5)
 
 - Added `app/src/lib/services/appShellRuntime.ts` with `startAppShellRuntime(options)` to own startup/runtime orchestration previously in `+page.svelte`: persisted settings/theme + GLM key load, chat provider bootstrap, logging init, session restore + bounds apply, open-file registry sync, startup external checks, watcher-path sync, and initial `take_pending_opened_paths` consume.

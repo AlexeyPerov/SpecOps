@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-06-01 (R0-1, R0-2)
+
+- **R0-1:** Added `openActivePath.test.ts` — gate redirect/existing, happy path, too_large, missing (recent prune), failed; `describeOpenActivePathResult` for all kinds.
+- **R0-2:** Extracted `appShellHelpers.ts` (`watchedPathsFromState`, `formatStatusPath`, `canFitMarkdownSplit`, `computeResponsiveLayoutFlags`) with `appShellHelpers.test.ts`; `+page.svelte` imports helpers.
+
+## 2026-06-01 21:45 (MSK)
+
+- **Refactoring R0 spec:** Added `specs/refactoring-1/r0-execution-plan.md` (test baseline before refactors: `openActivePath`, shell helpers, `windowBounds`, `fileWatcher`, command handlers, optional coverage/component tests). Updated `refactoring-plan.md` and R1–R3 prerequisites so **R0 → R1 → R2 → R3**.
+
+## 2026-06-01 21:30 (MSK)
+
+- **Refactoring specs:** Added `specs/refactoring-1/refactoring-plan.md` (codebase review findings, target architecture, milestone overview) and execution plans `r1-execution-plan.md` (app shell decomposition), `r2-execution-plan.md` (state store splits), `r3-execution-plan.md` (provider abstraction and Svelte 5 polish).
+
 ## 2026-05-31 23:10 (MSK)
 
 - **Architecture docs:** Added `docs/architecture.md` (app layering, state, persistence, Tauri role, agent conventions) and `docs/providers.md` (GLM provider integration, BigModel API used vs unused).

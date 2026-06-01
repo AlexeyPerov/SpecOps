@@ -108,6 +108,12 @@
   import { initializeChatProviders } from "../lib/ai/providers/bootstrap";
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
   import { DEFAULT_UNTITLED_TITLE } from "../lib/services/untitledTitle";
+  import {
+    canFitMarkdownSplit as canFitMarkdownSplitForWidth,
+    computeResponsiveLayoutFlags,
+    formatStatusPath,
+    watchedPathsFromState,
+  } from "../lib/services/appShellHelpers";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -151,7 +157,6 @@
   let autoProjectPanelCollapsed = false;
   let autoAgentsSidebarCollapsed = false;
   let lastChatWorkspaceRoot: string | null = null;
-  const MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
 
   $: state = $appState;
   $: activeContextId = state.contexts.activeContextId;
@@ -208,7 +213,11 @@
     state.editor.previewMode === "diff" && activeDocument
       ? diffLines(activeDocument.savedContent, activeDocument.content)
       : [];
-  $: statusPath = formatStatusPath(activeDocument?.filePath ?? null, activeDocument?.title);
+  $: statusPath = formatStatusPath(
+    activeDocument?.filePath ?? null,
+    activeDocument?.title,
+    DEFAULT_UNTITLED_TITLE,
+  );
   $: activeDocumentPath = activeDocument?.filePath ? normalizePathSync(activeDocument.filePath) : null;
 
   async function loadProjectTreeRoot(): Promise<void> {
@@ -447,18 +456,6 @@
     await persistSessionSnapshot(appState.getSnapshot(), currentWindowId);
   }
 
-  function formatStatusPath(filePath: string | null, fallbackTitle: string | undefined): string {
-    if (!filePath) {
-      return fallbackTitle ?? DEFAULT_UNTITLED_TITLE;
-    }
-    const normalized = filePath.replaceAll("\\", "/");
-    const parts = normalized.split("/").filter(Boolean);
-    if (parts.length >= 2) {
-      return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
-    }
-    return parts[parts.length - 1] ?? normalized;
-  }
-
   function notify(message: string): void {
     statusMessage = message;
   }
@@ -472,7 +469,7 @@
   }
 
   function canFitMarkdownSplit(): boolean {
-    return editorPaneWidth >= MARKDOWN_SPLIT_MIN_EDITOR_WIDTH;
+    return canFitMarkdownSplitForWidth(editorPaneWidth);
   }
 
   function setMarkdownViewMode(nextMode: "edit" | "split" | "preview"): void {
@@ -502,25 +499,21 @@
   }
 
   function applyResponsiveLayoutRules(): void {
-    const workspaceActive = Boolean(activeWorkspaceRoot);
-    const agentTabLayout = isAgentTabActive && workspaceActive;
-    const panelCollapseWidth = agentTabLayout ? 1200 : 1100;
-    const agentsCollapseWidth = agentTabLayout ? 1400 : 1320;
-    const shouldAutoCollapsePanel =
-      shellMainRowWidth > 0 && shellMainRowWidth < panelCollapseWidth && workspaceActive;
-    if (autoProjectPanelCollapsed !== shouldAutoCollapsePanel) {
-      autoProjectPanelCollapsed = shouldAutoCollapsePanel;
+    const flags = computeResponsiveLayoutFlags({
+      shellMainRowWidth,
+      workspaceActive: Boolean(activeWorkspaceRoot),
+      isAgentTabActive,
+      workspaceLayout,
+      consoleOpen,
+    });
+    if (autoProjectPanelCollapsed !== flags.autoProjectPanelCollapsed) {
+      autoProjectPanelCollapsed = flags.autoProjectPanelCollapsed;
     }
-
-    const shouldAutoCollapseAgents =
-      shellMainRowWidth > 0 && shellMainRowWidth < agentsCollapseWidth && workspaceActive;
-    if (autoAgentsSidebarCollapsed !== shouldAutoCollapseAgents) {
-      autoAgentsSidebarCollapsed = shouldAutoCollapseAgents;
+    if (autoAgentsSidebarCollapsed !== flags.autoAgentsSidebarCollapsed) {
+      autoAgentsSidebarCollapsed = flags.autoAgentsSidebarCollapsed;
     }
-
-    const projectPanelCollapsed = workspaceLayout.projectPanelCollapsed || autoProjectPanelCollapsed;
-    if (shellMainRowWidth > 0 && shellMainRowWidth < 900 && projectPanelCollapsed) {
-      consoleOpen = false;
+    if (consoleOpen !== flags.consoleOpen) {
+      consoleOpen = flags.consoleOpen;
     }
   }
 
@@ -723,20 +716,6 @@
   async function openAndActivatePath(path: string): Promise<void> {
     const result = await openActivePath(path, currentWindowId);
     notify(describeOpenActivePathResult(result));
-  }
-
-  function watchedPathsFromState(appDomainState: AppDomainState): string[] {
-    const paths = new Set<string>();
-    for (const tab of appDomainState.session.openTabs) {
-      if (!isFileTab(tab)) {
-        continue;
-      }
-      const documentState = appDomainState.documents.find((doc) => doc.id === tab.documentId);
-      if (documentState?.filePath) {
-        paths.add(documentState.filePath);
-      }
-    }
-    return [...paths];
   }
 
   async function syncExternalFileWatcher(appDomainState: AppDomainState): Promise<void> {

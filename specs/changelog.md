@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-01 22:40 — R2 document/tab and workspace context slice extraction (R2-4)
+
+- Added `app/src/lib/state/appState/documentTabsSlice.ts` with tab CRUD, agent tabs, file open/transfer, and document mutators via `createDocumentTabsSlice({ update, getSnapshot })`.
+- Added `app/src/lib/state/appState/workspaceContextsSlice.ts` with context switch, workspace open/close, session restore/snapshot, layout mutators, and agent-id tracking via `createWorkspaceContextsSlice(...)`.
+- `appState.ts` reduced from ~1290 to ~356 lines; merges `workspaceContextsSlice`, `documentTabsSlice`, and `settingsSlice` into the public store API. Legacy sync helpers remain in facade until R2-6.
+- Marked `Task R2-4` as `[DONE]` in `specs/refactoring-1/r2-execution-plan.md`; validation run: `npm test` passed (582 tests), `npm run check` passed with pre-existing `ThemePane.svelte` CSS warnings only.
+
 ## 2026-06-01 22:36 — R2 appState decomposition scaffold (R2-1, R2-2, R2-3)
 
 - **R2-1:** Added `app/src/lib/state/appState/` with pure helper modules: `contextHelpers.ts` (context snapshots, workspace lookup, document path lookup, ID counters), `documentHelpers.ts` (build/normalize document helpers), `tabHelpers.ts` (tab reorder/bulk-close helpers). `appState.ts` reduced from ~1940 to ~1300 lines; re-exports `findWorkspaceByPath`, `resetThemePersistenceForTests`, `setThemeSaveErrorNotifier`.

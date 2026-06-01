@@ -1,21 +1,12 @@
 import { writable } from "svelte/store";
 import type {
   AppDomainState,
-  AppSettingsState,
   AppThemeState,
-  ChatProviderId,
   ContextId,
   ContextSnapshot,
-  DebugProviderSettings,
   DiskFingerprint,
   DocumentState,
-  DocumentIdentity,
   ExternalFilesSettings,
-  GlmProviderSettings,
-  ProviderModelCatalog,
-  ProviderModelCatalogs,
-  TabState,
-  WorkspaceEntry,
   WorkspaceLayoutState,
   WindowBounds,
   WindowSessionSnapshot,
@@ -28,27 +19,8 @@ import {
   normalizeTabState,
   tabDocumentId,
 } from "../domain/contracts";
-import {
-  defaultDebugProviderSettings,
-  normalizeDebugProviderSettings,
-} from "../ai/providers/debugProviderSettings";
-import {
-  defaultGlmProviderSettings,
-  normalizeGlmProviderSettings,
-  syncGlmProviderSettingsWithCatalog,
-} from "../ai/providers/glmProviderSettings";
-import {
-  defaultProviderModelCatalogs,
-  getProviderModelCatalog,
-  normalizeProviderModelCatalog,
-  normalizeProviderModelCatalogs,
-} from "../ai/providers/providerModelCatalog";
-import { inferEditorLanguage } from "../editor/editorLanguage";
 import { deriveUntitledTitle } from "../services/untitledTitle";
-import {
-  emptyUnsavedDocumentTitle,
-  isEmptyUnsavedDocument,
-} from "../services/untitledDocument";
+import { isEmptyUnsavedDocument } from "../services/untitledDocument";
 import { normalizePathSync } from "../services/diskFingerprint";
 import {
   defaultWorkspaceLayout,
@@ -57,274 +29,54 @@ import {
 import { findNextOpenAgentTabAfterClose } from "../services/workspaceAgentSession";
 import { bumpRecentFile } from "../services/recentFiles";
 import { syncRecentFiles } from "../services/recentFilesSync";
-import {
-  defaultThemeFile,
-  loadThemeFile,
-  saveThemeFile,
-  type ActiveThemeRef,
-  type CustomThemeRecord,
-  type ThemeFileV1,
-} from "../services/themeStore";
+import { loadThemeFile } from "../services/themeStore";
 import type { BuiltinThemeId } from "../styles/themeTokens";
+import { DEFAULT_BUILTIN_THEME } from "../styles/themeTokens";
 import {
-  applyBuiltinTheme,
-  applyCustomTheme,
-  DEFAULT_BUILTIN_THEME,
-  getBuiltinThemeMode,
-  resolveBuiltinTokens,
-  snapshotThemeTokens,
+  cloneContextSnapshot,
+  findDocumentByPath,
+  findDocumentByPathInContext,
+  findWorkspaceByPath,
+  getActiveContextSnapshot,
+  getContextSnapshotById,
+  nextDocAndTabIds,
+  nextTabId,
+  nextWorkspaceId,
+  normalizeWorkspaceEntries,
+  NOTEPAD_CONTEXT_ID,
+  reindexIdCountersFromContexts,
+  resetIdCounters,
+} from "./appState/contextHelpers";
+import {
+  basename,
+  buildDocument,
+  buildEmptyUnsavedDocument,
+  inferLanguage,
+} from "./appState/documentHelpers";
+import { createSettingsSlice, defaultSettings } from "./appState/settingsSlice";
+import {
+  closeTabsForce,
+  missingTabIdsToClose,
+  moveTab,
+  nextSelectedTabAfterBulkClose,
+  tabIdsToCloseOtherThan,
+  tabIdsToCloseToRightOf,
+} from "./appState/tabHelpers";
+import {
+  applyThemeState,
+  baseModeForTheme,
+  createCustomThemeFromCurrent,
+  defaultThemeState,
+  persistThemeImmediate,
+  resetThemePersistenceForTests,
+  scheduleDebouncedThemeSave,
+  setThemeSaveErrorNotifier,
+  syncCustomThemeToken,
+  type ActiveThemeRef,
   type ThemeTokenKey,
-  type ThemeTokens,
-} from "../styles/themeTokens";
+} from "./appState/themeController";
 
-const defaultExternalFilesSettings: ExternalFilesSettings = {
-  watchExternalChanges: true,
-  autoReloadCleanFiles: true,
-  checkOnWindowFocus: true,
-  checkOnTabActivate: true,
-};
-
-const defaultSettings: AppSettingsState = {
-  statusBarVisible: true,
-  externalFiles: defaultExternalFilesSettings,
-  decoratePlaintextSymbols: true,
-  hideActivityRailWhenNotepadOnly: true,
-  debugProvider: defaultDebugProviderSettings,
-  glmProvider: defaultGlmProviderSettings,
-  providerModelCatalogs: defaultProviderModelCatalogs,
-  glmApiKey: "",
-};
-
-const defaultThemeState: AppThemeState = {
-  activeTheme: defaultThemeFile.activeTheme,
-  customThemes: defaultThemeFile.customThemes,
-};
-
-let themeSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let themeSaveErrorNotifier: ((message: string) => void) | null = null;
-
-const THEME_TOKEN_SAVE_DEBOUNCE_MS = 300;
-const THEME_SAVE_ERROR_MESSAGE =
-  "Failed to save theme. Changes kept in memory; will retry on next change.";
-
-/** Clears debounce timer between unit tests. */
-export function resetThemePersistenceForTests(): void {
-  if (themeSaveTimer) {
-    clearTimeout(themeSaveTimer);
-    themeSaveTimer = null;
-  }
-}
-
-export function setThemeSaveErrorNotifier(notifier: (message: string) => void): void {
-  themeSaveErrorNotifier = notifier;
-}
-
-function toThemeFile(theme: AppThemeState): ThemeFileV1 {
-  return {
-    version: 1,
-    activeTheme: theme.activeTheme,
-    customThemes: theme.customThemes,
-  };
-}
-
-async function persistThemeNow(theme: AppThemeState): Promise<void> {
-  try {
-    await saveThemeFile(toThemeFile(theme));
-  } catch {
-    themeSaveErrorNotifier?.(THEME_SAVE_ERROR_MESSAGE);
-  }
-}
-
-function persistThemeImmediate(theme: AppThemeState): void {
-  if (themeSaveTimer) {
-    clearTimeout(themeSaveTimer);
-    themeSaveTimer = null;
-  }
-  void persistThemeNow(theme);
-}
-
-function scheduleDebouncedThemeSave(theme: AppThemeState): void {
-  if (themeSaveTimer) {
-    clearTimeout(themeSaveTimer);
-  }
-  themeSaveTimer = setTimeout(() => {
-    themeSaveTimer = null;
-    void persistThemeNow(theme);
-  }, THEME_TOKEN_SAVE_DEBOUNCE_MS);
-}
-
-function findCustomTheme(theme: AppThemeState, id: string): CustomThemeRecord | undefined {
-  return theme.customThemes.find((entry) => entry.id === id);
-}
-
-function fallbackBuiltinForTheme(theme: AppThemeState): BuiltinThemeId {
-  if (theme.activeTheme.kind === "builtin") {
-    return theme.activeTheme.id;
-  }
-  const custom = findCustomTheme(theme, theme.activeTheme.id);
-  if (!custom) {
-    return DEFAULT_BUILTIN_THEME;
-  }
-  return custom.baseMode === "dark" ? "dark-amber" : "light-blue";
-}
-
-function baseModeForTheme(theme: AppThemeState): "dark" | "light" {
-  if (theme.activeTheme.kind === "builtin") {
-    return getBuiltinThemeMode(theme.activeTheme.id);
-  }
-  return findCustomTheme(theme, theme.activeTheme.id)?.baseMode ?? "dark";
-}
-
-function applyThemeState(theme: AppThemeState): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const root = document.documentElement;
-  if (theme.activeTheme.kind === "builtin") {
-    applyBuiltinTheme(theme.activeTheme.id, root);
-    return;
-  }
-
-  const custom = findCustomTheme(theme, theme.activeTheme.id);
-  if (custom) {
-    applyCustomTheme(custom, root);
-    return;
-  }
-
-  applyBuiltinTheme(DEFAULT_BUILTIN_THEME, root);
-}
-
-function nextCustomThemeName(customThemes: CustomThemeRecord[]): string {
-  const usedIndexes = new Set<number>();
-  for (const custom of customThemes) {
-    const match = /^Custom (\d+)$/.exec(custom.name.trim());
-    if (match) {
-      usedIndexes.add(Number(match[1]));
-    }
-  }
-  let index = 1;
-  while (usedIndexes.has(index)) {
-    index += 1;
-  }
-  return `Custom ${index}`;
-}
-
-function snapshotCurrentThemeTokens(theme: AppThemeState): ThemeTokens {
-  const fallbackBuiltin = fallbackBuiltinForTheme(theme);
-  if (typeof document !== "undefined") {
-    try {
-      return snapshotThemeTokens(document.documentElement, fallbackBuiltin);
-    } catch {
-      // jsdom or pre-paint environment
-    }
-  }
-  return resolveBuiltinTokens(fallbackBuiltin);
-}
-
-function createCustomThemeFromCurrent(theme: AppThemeState): AppThemeState {
-  const baseMode = baseModeForTheme(theme);
-  const tokens = snapshotCurrentThemeTokens(theme);
-  const id = crypto.randomUUID();
-  const custom: CustomThemeRecord = {
-    id,
-    name: nextCustomThemeName(theme.customThemes),
-    baseMode,
-    tokens,
-  };
-
-  const nextTheme: AppThemeState = {
-    activeTheme: { kind: "custom", id },
-    customThemes: [...theme.customThemes, custom],
-  };
-  applyThemeState(nextTheme);
-  return nextTheme;
-}
-let docCounter = 1;
-let tabCounter = 1;
-let workspaceCounter = 0;
-const NOTEPAD_CONTEXT_ID: ContextId = "notepad";
-
-function basename(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  const parts = normalized.split("/");
-  return parts[parts.length - 1] || path;
-}
-
-function inferLanguage(path: string | null): string {
-  return inferEditorLanguage(path);
-}
-
-function buildEmptyUnsavedDocument(documentId: string): DocumentState {
-  return buildDocument({ id: documentId, filePath: null }, "", emptyUnsavedDocumentTitle());
-}
-
-function buildDocument(identity: DocumentIdentity, content: string, title: string): DocumentState {
-  return {
-    id: identity.id,
-    filePath: identity.filePath,
-    title,
-    content,
-    savedContent: content,
-    isDirty: false,
-    language: inferLanguage(identity.filePath),
-    encoding: "utf-8",
-    lineEnding: content.includes("\r\n") ? "crlf" : "lf",
-    diskFingerprint: null,
-    dismissedFingerprint: null,
-    fileMissing: false,
-    scrollTop: 0,
-    markdownViewMode: "edit",
-  };
-}
-
-function normalizeDocument(documentState: DocumentState): DocumentState {
-  const markdownViewMode =
-    documentState.markdownViewMode === "split" || documentState.markdownViewMode === "preview"
-      ? documentState.markdownViewMode
-      : "edit";
-  return {
-    ...documentState,
-    diskFingerprint: documentState.diskFingerprint ?? null,
-    dismissedFingerprint: documentState.dismissedFingerprint ?? null,
-    fileMissing: documentState.fileMissing ?? false,
-    scrollTop: documentState.scrollTop ?? 0,
-    markdownViewMode,
-  };
-}
-
-function cloneContextSnapshot(snapshot: ContextSnapshot): ContextSnapshot {
-  return {
-    documents: snapshot.documents.map(normalizeDocument),
-    session: {
-      ...snapshot.session,
-      openTabs: snapshot.session.openTabs.map((tab) => ({ ...tab })),
-      windowBounds: snapshot.session.windowBounds ?? null,
-    },
-  };
-}
-
-function normalizeWorkspaceEntries(entries: WorkspaceEntry[]): WorkspaceEntry[] {
-  return entries.map((entry) => ({
-    id: entry.id,
-    rootPath: normalizePathSync(entry.rootPath),
-    snapshot: cloneContextSnapshot(entry.snapshot),
-  }));
-}
-
-function getContextSnapshotById(state: AppDomainState, contextId: ContextId): ContextSnapshot | null {
-  if (contextId === NOTEPAD_CONTEXT_ID) {
-    return state.contexts.notepad;
-  }
-  const workspace = state.contexts.workspaces.find((entry) => entry.id === contextId);
-  return workspace?.snapshot ?? null;
-}
-
-function getActiveContextSnapshot(state: AppDomainState): ContextSnapshot {
-  return (
-    getContextSnapshotById(state, state.contexts.activeContextId) ?? state.contexts.notepad
-  );
-}
+export { findWorkspaceByPath, resetThemePersistenceForTests, setThemeSaveErrorNotifier };
 
 function withActiveContextApplied(state: AppDomainState): AppDomainState {
   const activeContext = getActiveContextSnapshot(state);
@@ -362,23 +114,8 @@ function syncLegacyFieldsIntoActiveContext(state: AppDomainState): AppDomainStat
   };
 }
 
-function reindexWorkspaceCounter(workspaces: WorkspaceEntry[]): void {
-  workspaceCounter = Math.max(
-    0,
-    ...workspaces.map((workspace) => Number(workspace.id.replace("ws-", "")) || 0),
-  );
-}
-
-function nextWorkspaceId(): ContextId {
-  workspaceCounter += 1;
-  return `ws-${workspaceCounter}`;
-}
-
 function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
-  docCounter += 1;
-  tabCounter += 1;
-  const documentId = `doc-${docCounter}`;
-  const tabId = `tab-${tabCounter}`;
+  const { docId: documentId, tabId } = nextDocAndTabIds();
   return {
     documents: [buildEmptyUnsavedDocument(documentId)],
     session: {
@@ -398,38 +135,8 @@ function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot
   return fallbackContextSnapshot(snapshot.session.lastActiveWindowId);
 }
 
-export function findWorkspaceByPath(
-  workspaces: WorkspaceEntry[],
-  rootPath: string,
-): WorkspaceEntry | null {
-  const normalized = normalizePathSync(rootPath);
-  return workspaces.find((workspace) => normalizePathSync(workspace.rootPath) === normalized) ?? null;
-}
-
-function findDocumentByPath(state: AppDomainState, filePath: string): DocumentState | undefined {
-  const normalized = normalizePathSync(filePath);
-  return state.documents.find(
-    (documentState) =>
-      documentState.filePath !== null &&
-      normalizePathSync(documentState.filePath) === normalized,
-  );
-}
-
-function findDocumentByPathInContext(
-  context: ContextSnapshot,
-  filePath: string,
-): DocumentState | undefined {
-  const normalized = normalizePathSync(filePath);
-  return context.documents.find(
-    (documentState) =>
-      documentState.filePath !== null &&
-      normalizePathSync(documentState.filePath) === normalized,
-  );
-}
-
 function reopenTabForDocument(state: AppDomainState, documentId: string): AppDomainState {
-  tabCounter += 1;
-  const tabId = `tab-${tabCounter}`;
+  const tabId = nextTabId();
   return {
     ...state,
     session: {
@@ -453,133 +160,6 @@ function isDefaultBootstrapWindow(state: AppDomainState): boolean {
     return false;
   }
   return isEmptyUnsavedDocument(documentState);
-}
-
-function moveTab(tabs: TabState[], fromIndex: number, toIndex: number): TabState[] {
-  if (
-    fromIndex < 0 ||
-    toIndex < 0 ||
-    fromIndex >= tabs.length ||
-    toIndex >= tabs.length ||
-    fromIndex === toIndex
-  ) {
-    return tabs;
-  }
-  const next = [...tabs];
-  const [moved] = next.splice(fromIndex, 1);
-  if (!moved) {
-    return tabs;
-  }
-  next.splice(toIndex, 0, moved);
-  return next;
-}
-
-function tabIdsToCloseOtherThan(
-  openTabs: TabState[],
-  contextTabId: string,
-): string[] {
-  return openTabs
-    .filter((tab) => tab.id !== contextTabId && !tab.pinned)
-    .map((tab) => tab.id);
-}
-
-function tabIdsToCloseToRightOf(
-  openTabs: TabState[],
-  contextTabId: string,
-): string[] {
-  const contextIndex = openTabs.findIndex((tab) => tab.id === contextTabId);
-  if (contextIndex < 0) {
-    return [];
-  }
-  return openTabs
-    .slice(contextIndex + 1)
-    .filter((tab) => !tab.pinned)
-    .map((tab) => tab.id);
-}
-
-function missingTabIdsToClose(
-  openTabs: TabState[],
-  documents: DocumentState[],
-): string[] {
-  const missingByDocumentId = new Map(
-    documents.map((documentState) => [documentState.id, documentState.fileMissing]),
-  );
-  return openTabs
-    .map((rawTab) => normalizeTabState(rawTab))
-    .filter(
-      (tab) =>
-        isFileTab(tab) && !tab.pinned && missingByDocumentId.get(tab.documentId) === true,
-    )
-    .map((tab) => tab.id);
-}
-
-function nextSelectedTabAfterBulkClose(
-  previousTabs: TabState[],
-  remainingTabs: TabState[],
-  previousSelectedTabId: string | null,
-  preferredTabId: string | null = null,
-): string | null {
-  if (preferredTabId && remainingTabs.some((tab) => tab.id === preferredTabId)) {
-    return preferredTabId;
-  }
-  if (!previousSelectedTabId) {
-    return remainingTabs[0]?.id ?? null;
-  }
-  if (remainingTabs.some((tab) => tab.id === previousSelectedTabId)) {
-    return previousSelectedTabId;
-  }
-
-  const selectedIndex = previousTabs.findIndex((tab) => tab.id === previousSelectedTabId);
-  if (selectedIndex >= 0) {
-    for (let idx = selectedIndex - 1; idx >= 0; idx -= 1) {
-      const candidateId = previousTabs[idx]?.id;
-      if (candidateId && remainingTabs.some((tab) => tab.id === candidateId)) {
-        return candidateId;
-      }
-    }
-  }
-  return remainingTabs[0]?.id ?? null;
-}
-
-function closeTabsForce(state: AppDomainState, tabIds: string[], preferredTabId: string | null): AppDomainState {
-  if (tabIds.length === 0) {
-    return state;
-  }
-  const idsToClose = new Set(tabIds);
-  const filteredTabs = state.session.openTabs.filter((tab) => !idsToClose.has(tab.id));
-  if (filteredTabs.length === state.session.openTabs.length) {
-    return state;
-  }
-  if (filteredTabs.length === 0) {
-    docCounter += 1;
-    tabCounter += 1;
-    const docId = `doc-${docCounter}`;
-    const tabId = `tab-${tabCounter}`;
-    const newDocument = buildEmptyUnsavedDocument(docId);
-    return {
-      ...state,
-      documents: [...state.documents, newDocument],
-      session: {
-        ...state.session,
-        openTabs: [createFileTab(tabId, docId)],
-        selectedTabId: tabId,
-      },
-    };
-  }
-
-  return {
-    ...state,
-    session: {
-      ...state.session,
-      openTabs: filteredTabs,
-      selectedTabId: nextSelectedTabAfterBulkClose(
-        state.session.openTabs,
-        filteredTabs,
-        state.session.selectedTabId,
-        preferredTabId,
-      ),
-    },
-  };
 }
 
 const initialState: AppDomainState = {
@@ -652,6 +232,8 @@ function createStateStore() {
       },
     };
   }
+
+  const settingsSlice = createSettingsSlice(update);
 
   return {
     subscribe,
@@ -728,18 +310,7 @@ function createStateStore() {
         return;
       }
       update((state) => {
-        const customThemes = state.theme.customThemes.map((custom) => {
-          if (custom.id !== id) {
-            return custom;
-          }
-          const tokens = { ...custom.tokens, [key]: trimmed };
-          if (key === "accent-color") {
-            tokens["color-accent"] = trimmed;
-          } else if (key === "color-accent") {
-            tokens["accent-color"] = trimmed;
-          }
-          return { ...custom, tokens };
-        });
+        const customThemes = syncCustomThemeToken(state.theme.customThemes, id, key, value);
         const theme: AppThemeState = { ...state.theme, customThemes };
         if (state.theme.activeTheme.kind === "custom" && state.theme.activeTheme.id === id) {
           applyThemeState(theme);
@@ -761,9 +332,7 @@ function createStateStore() {
       applyThemeState(this.getSnapshot().theme);
     },
     resetAppState() {
-      docCounter = 1;
-      tabCounter = 1;
-      workspaceCounter = 0;
+      resetIdCounters();
       set(initialState);
       applyThemeState(initialState.theme);
     },
@@ -788,25 +357,7 @@ function createStateStore() {
           ? contexts.notepad
           : contexts.workspaces.find((workspace) => workspace.id === activeContextId)?.snapshot ??
             contexts.notepad;
-      docCounter = Math.max(
-        1,
-        ...[
-          ...contexts.notepad.documents,
-          ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.documents),
-        ].map((documentState) =>
-          Number(documentState.id.replace("doc-", "")) || 1,
-        ),
-      );
-      tabCounter = Math.max(
-        1,
-        ...[
-          ...contexts.notepad.session.openTabs,
-          ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.session.openTabs),
-        ].map((tab) =>
-          Number(tab.id.replace("tab-", "")) || 1,
-        ),
-      );
-      reindexWorkspaceCounter(contexts.workspaces);
+      reindexIdCountersFromContexts(contexts);
       const preservedSettings = this.getSnapshot().settings;
       const preservedTheme = this.getSnapshot().theme;
       set({
@@ -992,11 +543,8 @@ function createStateStore() {
     },
     createTab() {
       update((state) => {
-        docCounter += 1;
-        tabCounter += 1;
-        const id = `doc-${docCounter}`;
+        const { docId: id, tabId } = nextDocAndTabIds();
         const newDocument = buildEmptyUnsavedDocument(id);
-        const tabId = `tab-${tabCounter}`;
         const nextState = {
           ...state,
           documents: [...state.documents, newDocument],
@@ -1037,8 +585,7 @@ function createStateStore() {
         if (existingTab) {
           return selectTabInternal(state, existingTab.id);
         }
-        tabCounter += 1;
-        const tabId = `tab-${tabCounter}`;
+        const tabId = nextTabId();
         return {
           ...state,
           session: {
@@ -1146,10 +693,7 @@ function createStateStore() {
         }
         const filtered = openTabs.filter((tab) => tab.id !== tabId);
         if (filtered.length === 0) {
-          docCounter += 1;
-          tabCounter += 1;
-          const docId = `doc-${docCounter}`;
-          const tabIdNew = `tab-${tabCounter}`;
+          const { docId, tabId: tabIdNew } = nextDocAndTabIds();
           const newDocument = buildEmptyUnsavedDocument(docId);
           return {
             ...state,
@@ -1281,11 +825,8 @@ function createStateStore() {
           };
         }
 
-        docCounter += 1;
-        tabCounter += 1;
-        const docId = `doc-${docCounter}`;
+        const { docId, tabId } = nextDocAndTabIds();
         openedDocumentId = docId;
-        const tabId = `tab-${tabCounter}`;
         const documentState = buildDocument(
           { id: docId, filePath },
           content,
@@ -1363,11 +904,8 @@ function createStateStore() {
             return reopenTabForDocument(state, duplicate.id);
           }
         }
-        docCounter += 1;
-        tabCounter += 1;
-        const docId = `doc-${docCounter}`;
+        const { docId, tabId } = nextDocAndTabIds();
         documentId = docId;
-        const tabId = `tab-${tabCounter}`;
         const newDoc = buildDocument(
           { id: docId, filePath: payload.filePath },
           payload.content,
@@ -1743,197 +1281,7 @@ function createStateStore() {
         },
       }));
     },
-    setDebugProviderSettings(debugProvider: DebugProviderSettings) {
-      update((state) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          debugProvider: normalizeDebugProviderSettings(debugProvider),
-        },
-      }));
-    },
-    updateDebugProviderSettings(patch: Partial<DebugProviderSettings>) {
-      update((state) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          debugProvider: normalizeDebugProviderSettings({
-            ...state.settings.debugProvider,
-            ...patch,
-          }),
-        },
-      }));
-    },
-    setGlmProviderSettings(glmProvider: GlmProviderSettings) {
-      update((state) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          glmProvider: normalizeGlmProviderSettings(
-            glmProvider,
-            state.settings.providerModelCatalogs,
-          ),
-        },
-      }));
-    },
-    updateGlmProviderSettings(patch: Partial<GlmProviderSettings>) {
-      update((state) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          glmProvider: normalizeGlmProviderSettings(
-            {
-              ...state.settings.glmProvider,
-              ...patch,
-            },
-            state.settings.providerModelCatalogs,
-          ),
-        },
-      }));
-    },
-    setProviderModelCatalogs(providerModelCatalogs: ProviderModelCatalogs) {
-      update((state) => {
-        const normalizedCatalogs = normalizeProviderModelCatalogs(providerModelCatalogs, {
-          glmModelId: state.settings.glmProvider.modelId,
-        });
-        return {
-          ...state,
-          settings: {
-            ...state.settings,
-            providerModelCatalogs: normalizedCatalogs,
-            glmProvider: syncGlmProviderSettingsWithCatalog(
-              state.settings.glmProvider,
-              normalizedCatalogs,
-            ),
-          },
-        };
-      });
-    },
-    updateProviderModelCatalog(providerId: ChatProviderId, patch: Partial<ProviderModelCatalog>) {
-      update((state) => {
-        const currentCatalog = getProviderModelCatalog(
-          state.settings.providerModelCatalogs,
-          providerId,
-        );
-        const normalizedCatalog = normalizeProviderModelCatalog(providerId, {
-          ...currentCatalog,
-          ...patch,
-        });
-        const providerModelCatalogs = normalizeProviderModelCatalogs({
-          ...state.settings.providerModelCatalogs,
-          [providerId]: normalizedCatalog,
-        });
-        return {
-          ...state,
-          settings: {
-            ...state.settings,
-            providerModelCatalogs,
-            glmProvider:
-              providerId === "glm"
-                ? syncGlmProviderSettingsWithCatalog(
-                    state.settings.glmProvider,
-                    providerModelCatalogs,
-                  )
-                : state.settings.glmProvider,
-          },
-        };
-      });
-    },
-    setGlmApiKey(glmApiKey: string) {
-      update((state) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          glmApiKey,
-        },
-      }));
-    },
-    applyPersistedSettings(partial: {
-      wrapLines?: boolean;
-      zoomPercent?: number;
-      externalFiles?: ExternalFilesSettings;
-      decoratePlaintextSymbols?: boolean;
-      hideActivityRailWhenNotepadOnly?: boolean;
-      debugProvider?: DebugProviderSettings;
-      glmProvider?: GlmProviderSettings;
-      providerModelCatalogs?: ProviderModelCatalogs;
-    }) {
-      update((state) => {
-        let next = state;
-        if (typeof partial.wrapLines === "boolean" && partial.wrapLines !== next.editor.wrapLines) {
-          next = {
-            ...next,
-            editor: { ...next.editor, wrapLines: partial.wrapLines },
-          };
-        }
-        if (typeof partial.zoomPercent === "number") {
-          next = {
-            ...next,
-            editor: { ...next.editor, zoomPercent: partial.zoomPercent },
-          };
-        }
-        if (partial.externalFiles) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              externalFiles: partial.externalFiles,
-            },
-          };
-        }
-        if (typeof partial.decoratePlaintextSymbols === "boolean") {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              decoratePlaintextSymbols: partial.decoratePlaintextSymbols,
-            },
-          };
-        }
-        if (typeof partial.hideActivityRailWhenNotepadOnly === "boolean") {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              hideActivityRailWhenNotepadOnly: partial.hideActivityRailWhenNotepadOnly,
-            },
-          };
-        }
-        if (partial.debugProvider) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              debugProvider: normalizeDebugProviderSettings(partial.debugProvider),
-            },
-          };
-        }
-
-        const providerModelCatalogs = partial.providerModelCatalogs
-          ? normalizeProviderModelCatalogs(partial.providerModelCatalogs, {
-              glmModelId: partial.glmProvider?.modelId ?? next.settings.glmProvider.modelId,
-            })
-          : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs, {
-              glmModelId: partial.glmProvider?.modelId ?? next.settings.glmProvider.modelId,
-            });
-
-        if (partial.glmProvider || partial.providerModelCatalogs) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              providerModelCatalogs,
-              glmProvider: normalizeGlmProviderSettings(
-                partial.glmProvider ?? next.settings.glmProvider,
-                providerModelCatalogs,
-              ),
-            },
-          };
-        }
-
-        return next;
-      });
-    },
+    ...settingsSlice,
   };
 }
 

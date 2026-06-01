@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-01 22:36 — R2 appState decomposition scaffold (R2-1, R2-2, R2-3)
+
+- **R2-1:** Added `app/src/lib/state/appState/` with pure helper modules: `contextHelpers.ts` (context snapshots, workspace lookup, document path lookup, ID counters), `documentHelpers.ts` (build/normalize document helpers), `tabHelpers.ts` (tab reorder/bulk-close helpers). `appState.ts` reduced from ~1940 to ~1300 lines; re-exports `findWorkspaceByPath`, `resetThemePersistenceForTests`, `setThemeSaveErrorNotifier`.
+- **R2-2:** Extracted theme persistence, DOM application, and custom-theme transforms into `app/src/lib/state/appState/themeController.ts`; store theme methods delegate to the controller.
+- **R2-3:** Extracted settings defaults and provider/catalog mutators into `app/src/lib/state/appState/settingsSlice.ts` via `createSettingsSlice(update)`; `createStateStore` merges slice methods into the public store API.
+- Marked `Task R2-1`, `Task R2-2`, and `Task R2-3` as `[DONE]` in `specs/refactoring-1/r2-execution-plan.md`; validation run: `npm test` passed (582 tests), `npm run check` passed with pre-existing `ThemePane.svelte` CSS warnings only.
+
 ## 2026-06-01 22:38 — R1 project tree controller + shell CSS extraction (R1-6, R1-7)
 
 - Added `app/src/lib/services/projectTreeController.ts` to own project-tree state (`rootNodes`, `childrenByPath`, `expandedPaths`, `loadingPaths`, `showHidden`) and behavior (`loadProjectTreeRoot`, child loading, directory toggle, refresh, hidden toggle, active-file ancestor expansion).

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-01 22:46 — R2 chatStore module split (R2-5)
+
+- Added `app/src/lib/state/chatStore/` with `types.ts`, `workspace.ts`, `threadHelpers.ts`, `agents.ts`, `threads.ts`, `runtime.ts`, and `access.ts`; slice factories merge into `createChatStore()` while public API and derived exports stay on `chatStore.ts`.
+- `chatStore.ts` reduced from ~1500 to ~144 lines (facade wires agents, threads, runtime, and access slices; re-exports types, `createAgentId`, `formatCompactionNotice`, `resetAgentIdCounterForTests`, `setDefaultChatProviderResolver`).
+- Marked `Task R2-5` as `[DONE]` in `specs/refactoring-1/r2-execution-plan.md`; validation run: `npm test` passed (582 tests), `npm run check` passed with pre-existing `ThemePane.svelte` CSS warnings only.
+
 ## 2026-06-01 22:40 — R2 document/tab and workspace context slice extraction (R2-4)
 
 - Added `app/src/lib/state/appState/documentTabsSlice.ts` with tab CRUD, agent tabs, file open/transfer, and document mutators via `createDocumentTabsSlice({ update, getSnapshot })`.

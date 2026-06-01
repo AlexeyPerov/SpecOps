@@ -294,6 +294,20 @@ describe("appState tabs and selection", () => {
     expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
   });
 
+  it("openTransferredTab replaces bootstrap untitled in a fresh window", () => {
+    appState.resetAppState();
+    const documentId = appState.openTransferredTab({
+      filePath: "/tmp/move-me.txt",
+      content: "payload",
+      title: "move-me.txt",
+    });
+    expect(documentId).toBe("doc-2");
+    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
+    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-2");
+    expect(appState.getSnapshot().documents).toHaveLength(1);
+    expect(appState.getSnapshot().documents[0]?.filePath).toBe("/tmp/move-me.txt");
+  });
+
   it("transferActiveTabOut and openTransferredTab round-trip tab payload", () => {
     appState.openFileInTab("/tmp/move-me.txt", "payload");
     const transfer = appState.transferActiveTabOut();

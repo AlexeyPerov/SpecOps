@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 }));
 
 import { untitledSaveDefaultPath } from "./untitledSavePath";
+import { DEFAULT_UNTITLED_TITLE } from "./untitledTitle";
 
 describe("untitledSaveDefaultPath", () => {
   beforeEach(() => {
@@ -29,8 +30,8 @@ describe("untitledSaveDefaultPath", () => {
 
   it("uses Untitled for empty content", async () => {
     await expect(untitledSaveDefaultPath("", "/tmp/workspace")).resolves.toBe(
-      "/tmp/workspace/Untitled",
+      `/tmp/workspace/${DEFAULT_UNTITLED_TITLE}`,
     );
-    expect(joinMock).toHaveBeenCalledWith("/tmp/workspace", "Untitled");
+    expect(joinMock).toHaveBeenCalledWith("/tmp/workspace", DEFAULT_UNTITLED_TITLE);
   });
 });

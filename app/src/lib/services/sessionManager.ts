@@ -12,6 +12,7 @@ import type {
 import { createFileTab, isAgentTab, isFileTab, normalizeTabState } from "../domain/contracts";
 import { normalizeSessionState } from "./workspaceAgentSession";
 import { logDiagnostic } from "./logging";
+import { emptyUnsavedDocumentTitle } from "./untitledDocument";
 import {
   dedupeWindowSnapshotAgainstRegistry,
   syncOpenFileRegistryForWindow,
@@ -89,7 +90,7 @@ function buildFallbackDocument(documentId: string): DocumentState {
   return {
     id: documentId,
     filePath: null,
-    title: "Untitled",
+    title: emptyUnsavedDocumentTitle(),
     content: "",
     savedContent: "",
     isDirty: false,

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { deriveUntitledTitle } from "./untitledTitle";
+import { deriveUntitledTitle, DEFAULT_UNTITLED_TITLE } from "./untitledTitle";
 
 describe("deriveUntitledTitle", () => {
   it("returns Untitled for empty content", () => {
-    expect(deriveUntitledTitle("")).toBe("Untitled");
-    expect(deriveUntitledTitle("   \n")).toBe("Untitled");
+    expect(deriveUntitledTitle("")).toBe(DEFAULT_UNTITLED_TITLE);
+    expect(deriveUntitledTitle("   \n")).toBe(DEFAULT_UNTITLED_TITLE);
   });
 
   it("uses the trimmed first line", () => {

@@ -45,6 +45,10 @@ import {
 } from "../ai/providers/providerModelCatalog";
 import { inferEditorLanguage } from "../editor/editorLanguage";
 import { deriveUntitledTitle } from "../services/untitledTitle";
+import {
+  emptyUnsavedDocumentTitle,
+  isEmptyUnsavedDocument,
+} from "../services/untitledDocument";
 import { normalizePathSync } from "../services/diskFingerprint";
 import {
   defaultWorkspaceLayout,
@@ -251,6 +255,10 @@ function inferLanguage(path: string | null): string {
   return inferEditorLanguage(path);
 }
 
+function buildEmptyUnsavedDocument(documentId: string): DocumentState {
+  return buildDocument({ id: documentId, filePath: null }, "", emptyUnsavedDocumentTitle());
+}
+
 function buildDocument(identity: DocumentIdentity, content: string, title: string): DocumentState {
   return {
     id: identity.id,
@@ -372,7 +380,7 @@ function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
   const documentId = `doc-${docCounter}`;
   const tabId = `tab-${tabCounter}`;
   return {
-    documents: [buildDocument({ id: documentId, filePath: null }, "", "Untitled")],
+    documents: [buildEmptyUnsavedDocument(documentId)],
     session: {
       selectedTabId: tabId,
       openTabs: [createFileTab(tabId, documentId)],
@@ -430,6 +438,21 @@ function reopenTabForDocument(state: AppDomainState, documentId: string): AppDom
       selectedTabId: tabId,
     },
   };
+}
+
+function isDefaultBootstrapWindow(state: AppDomainState): boolean {
+  if (state.session.openTabs.length !== 1) {
+    return false;
+  }
+  const tab = state.session.openTabs[0];
+  if (!isFileTab(tab)) {
+    return false;
+  }
+  const documentState = state.documents.find((doc) => doc.id === tab.documentId);
+  if (!documentState) {
+    return false;
+  }
+  return isEmptyUnsavedDocument(documentState);
 }
 
 function moveTab(tabs: TabState[], fromIndex: number, toIndex: number): TabState[] {
@@ -532,11 +555,7 @@ function closeTabsForce(state: AppDomainState, tabIds: string[], preferredTabId:
     tabCounter += 1;
     const docId = `doc-${docCounter}`;
     const tabId = `tab-${tabCounter}`;
-    const newDocument = buildDocument(
-      { id: docId, filePath: null },
-      "",
-      "Untitled",
-    );
+    const newDocument = buildEmptyUnsavedDocument(docId);
     return {
       ...state,
       documents: [...state.documents, newDocument],
@@ -567,7 +586,7 @@ const initialState: AppDomainState = {
   contexts: {
     activeContextId: NOTEPAD_CONTEXT_ID,
     notepad: {
-      documents: [buildDocument({ id: "doc-1", filePath: null }, "", "Untitled")],
+      documents: [buildEmptyUnsavedDocument("doc-1")],
       session: {
         selectedTabId: "tab-1",
         openTabs: [createFileTab("tab-1", "doc-1")],
@@ -578,7 +597,7 @@ const initialState: AppDomainState = {
     },
     workspaces: [],
   },
-  documents: [buildDocument({ id: "doc-1", filePath: null }, "", "Untitled")],
+  documents: [buildEmptyUnsavedDocument("doc-1")],
   session: {
     selectedTabId: "tab-1",
     openTabs: [createFileTab("tab-1", "doc-1")],
@@ -976,11 +995,7 @@ function createStateStore() {
         docCounter += 1;
         tabCounter += 1;
         const id = `doc-${docCounter}`;
-        const newDocument = buildDocument(
-          { id, filePath: null },
-          "",
-          "Untitled",
-        );
+        const newDocument = buildEmptyUnsavedDocument(id);
         const tabId = `tab-${tabCounter}`;
         const nextState = {
           ...state,
@@ -1135,11 +1150,7 @@ function createStateStore() {
           tabCounter += 1;
           const docId = `doc-${docCounter}`;
           const tabIdNew = `tab-${tabCounter}`;
-          const newDocument = buildDocument(
-            { id: docId, filePath: null },
-            "",
-            "Untitled",
-          );
+          const newDocument = buildEmptyUnsavedDocument(docId);
           return {
             ...state,
             documents: [...state.documents, newDocument],
@@ -1362,6 +1373,17 @@ function createStateStore() {
           payload.content,
           payload.title,
         );
+        if (isDefaultBootstrapWindow(state)) {
+          return {
+            ...state,
+            documents: [newDoc],
+            session: {
+              ...state.session,
+              openTabs: [createFileTab(tabId, docId)],
+              selectedTabId: tabId,
+            },
+          };
+        }
         return {
           ...state,
           documents: [...state.documents, newDoc],

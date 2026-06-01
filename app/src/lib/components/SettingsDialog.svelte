@@ -252,7 +252,7 @@
   <div class="settings-subsection">
     <h4>{heading}</h4>
     <p class="settings-section-note">
-      One model ID per line. Invalid or duplicate entries are removed when saved.
+      One model ID per line. Duplicate entries are removed when saved.
     </p>
     <label class="settings-field">
       <span>Model list</span>

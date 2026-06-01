@@ -11,6 +11,7 @@
   import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
   import { runInNotepadContext, workspaceRelativePath } from "../services/workspacePaths";
   import { renameDocumentOnDisk } from "../services/documentRename";
+  import { DEFAULT_UNTITLED_TITLE } from "../services/untitledTitle";
   import { moveTabToNewWindow } from "../services/tabWindowTransfer";
 
   const DRAG_THRESHOLD_PX = 4;
@@ -64,7 +65,7 @@
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc) {
-      return "Untitled";
+      return DEFAULT_UNTITLED_TITLE;
     }
     const missingSuffix = tabDoc.fileMissing ? " (missing)" : "";
     return `${tabDoc.title}${tabDoc.isDirty ? "*" : ""}${missingSuffix}`;

@@ -107,6 +107,7 @@
   } from "../lib/services/consoleTabPrefs";
   import { initializeChatProviders } from "../lib/ai/providers/bootstrap";
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
+  import { DEFAULT_UNTITLED_TITLE } from "../lib/services/untitledTitle";
 
   const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
@@ -448,7 +449,7 @@
 
   function formatStatusPath(filePath: string | null, fallbackTitle: string | undefined): string {
     if (!filePath) {
-      return fallbackTitle ?? "Untitled";
+      return fallbackTitle ?? DEFAULT_UNTITLED_TITLE;
     }
     const normalized = filePath.replaceAll("\\", "/");
     const parts = normalized.split("/").filter(Boolean);

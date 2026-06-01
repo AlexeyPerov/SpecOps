@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-01 22:02 — R1 app shell decomposition (R1-1, R1-2)
+
+- **R1-1:** Added `DocumentEditor.svelte` — wraps `EditorSurface` with standard props, `appState.setDocumentContent` on dirty, and optional `onUntitledTitleRefresh` callback. Replaced three duplicated `EditorSurface` blocks in `+page.svelte`.
+- **R1-2:** Added `MarkdownEditorPane.svelte` — mode bar (edit/split/preview), preview/split/edit layouts, `{@html}` preview with link handling, split-scroll sync moved from page. Page renders `{#if isMarkdownDocument}<MarkdownEditorPane />{:else}<DocumentEditor />{/if}` in editor mode. Markdown layout CSS colocated in pane component.
+
 ## 2026-06-01 21:58 — R0 test baseline (R0-6 through R0-9)
 
 Completed recommended command/menu test tasks and R0 milestone validation.

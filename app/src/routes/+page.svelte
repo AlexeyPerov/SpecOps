@@ -28,60 +28,29 @@
   } from "../lib/commands/registry";
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
-  import { appState, setThemeSaveErrorNotifier } from "../lib/state/appState";
+  import { appState } from "../lib/state/appState";
   import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
-  import { initializeLogging, logDiagnostic } from "../lib/services/logging";
+  import { logDiagnostic } from "../lib/services/logging";
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
-  import { listenForRecentFilesChanges } from "../lib/services/recentFilesSync";
-  import { listen, emit, TauriEvent } from "@tauri-apps/api/event";
-  import { invoke } from "@tauri-apps/api/core";
+  import { startAppShellRuntime } from "../lib/services/appShellRuntime";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import {
-    WINDOW_EVENT_ACTIVATE_FILE,
-    WINDOW_EVENT_SELECT_TAB_FOR_PATH,
-    WINDOW_EVENT_TRANSFER_TAB,
-    WINDOW_EVENT_WINDOW_READY,
-    markWindowActive,
     routePathToLastActiveWindow,
   } from "../lib/services/windowManager";
   import {
-    restoreWindowSession,
     scheduleSessionPersistence,
-    persistSessionSnapshot,
   } from "../lib/services/sessionManager";
-  import { applyWindowBounds, readWindowBounds } from "../lib/services/windowBounds";
   import {
-    selectTabForNormalizedPath,
-  } from "../lib/services/openFileGate";
-  import {
-    claimOpenFile,
-    releaseAllOpenFilesForWindow,
-    syncOpenFileRegistryForWindow,
-  } from "../lib/services/openFileRegistry";
-  import {
-    loadPersistedSettings,
     savePersistedSettings,
-    toExternalFilesSettings,
     toPersistedSettings,
   } from "../lib/services/settingsStore";
-  import { loadGlmApiKey } from "../lib/services/glmSecretsStore";
   import {
     registerSettingsDialogOpener,
     type SettingsDialogTab,
   } from "../lib/services/settingsDialogUi";
   import {
     checkDocumentIfDeferred,
-    initializeDocumentDiskState,
-    runFocusExternalChecks,
-    runStartupExternalChecks,
-    runWatcherExternalCheck,
-    shouldSyncFileWatcher,
   } from "../lib/services/externalFileChanges";
-  import {
-    clearFileWatcherPaths,
-    FILE_CHANGED_EVENT,
-    syncFileWatcherPaths,
-  } from "../lib/services/fileWatcher";
   import { marked } from "marked";
   import type { AppDomainState } from "../lib/domain/contracts";
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
@@ -99,20 +68,15 @@
   } from "../lib/services/chatAccessMonitor";
   import {
     DEFAULT_CONSOLE_HEIGHT_PX,
-    readConsoleHeightPreference,
     writeConsoleHeightPreference,
   } from "../lib/services/consoleTabPrefs";
-  import { initializeChatProviders } from "../lib/ai/providers/bootstrap";
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
   import { DEFAULT_UNTITLED_TITLE } from "../lib/services/untitledTitle";
   import {
     canFitMarkdownSplit as canFitMarkdownSplitForWidth,
     computeResponsiveLayoutFlags,
     formatStatusPath,
-    watchedPathsFromState,
   } from "../lib/services/appShellHelpers";
-
-  const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 
   let themePaneOpen = false;
   let settingsDialogOpen = false;
@@ -135,10 +99,8 @@
   let previousActiveContextId: ContextId | null = null;
   let untitledTitleDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSelectedTabId: string | null = null;
-  let lastWatcherSyncKey = "";
   let runtimeReady = false;
-  let windowBoundsTimer: ReturnType<typeof setTimeout> | null = null;
-  let applyingWindowBounds = false;
+  let runtimeSyncExternalFileWatcher: ((state: AppDomainState) => Promise<void>) | null = null;
   let workspaceContextMenu:
     | { workspaceId: ContextId; x: number; y: number }
     | null = null;
@@ -421,31 +383,6 @@
     appState.setDocumentScrollTop(documentId, scrollTop);
   }
 
-  function scheduleWindowBoundsPersistence(): void {
-    if (applyingWindowBounds) {
-      return;
-    }
-    if (windowBoundsTimer) {
-      clearTimeout(windowBoundsTimer);
-    }
-    windowBoundsTimer = setTimeout(() => {
-      void (async () => {
-        const bounds = await readWindowBounds(getCurrentWebviewWindow());
-        appState.setWindowBounds(bounds);
-      })();
-    }, 400);
-  }
-
-  async function persistWindowBoundsNow(): Promise<void> {
-    if (windowBoundsTimer) {
-      clearTimeout(windowBoundsTimer);
-      windowBoundsTimer = null;
-    }
-    const bounds = await readWindowBounds(getCurrentWebviewWindow());
-    appState.setWindowBounds(bounds);
-    await persistSessionSnapshot(appState.getSnapshot(), currentWindowId);
-  }
-
   function notify(message: string): void {
     statusMessage = message;
   }
@@ -638,21 +575,6 @@
     notify(describeOpenActivePathResult(result));
   }
 
-  async function syncExternalFileWatcher(appDomainState: AppDomainState): Promise<void> {
-    const paths = watchedPathsFromState(appDomainState);
-    const syncKey = `${appDomainState.settings.externalFiles.watchExternalChanges}:${paths.join("\0")}`;
-    if (syncKey === lastWatcherSyncKey) {
-      return;
-    }
-    lastWatcherSyncKey = syncKey;
-
-    if (!shouldSyncFileWatcher(appDomainState.settings.externalFiles)) {
-      await clearFileWatcherPaths();
-      return;
-    }
-    await syncFileWatcherPaths(paths);
-  }
-
   async function onTabActivated(tabId: string): Promise<void> {
     if (!runtimeReady) {
       return;
@@ -666,7 +588,7 @@
   }
 
   $: if (runtimeReady && currentWindowId) {
-    void syncExternalFileWatcher(state);
+    void runtimeSyncExternalFileWatcher?.(state);
   }
 
   $: if (runtimeReady && state.session.selectedTabId !== lastSelectedTabId) {
@@ -675,191 +597,6 @@
       lastSelectedTabId = nextTabId;
       void onTabActivated(nextTabId);
     }
-  }
-
-  async function setupRuntime(): Promise<() => void> {
-    const currentWindow = getCurrentWebviewWindow();
-    currentWindowId = currentWindow.label;
-
-    const unlistenTransfer = await listen<{ filePath: string | null; content: string; title: string }>(
-      WINDOW_EVENT_TRANSFER_TAB,
-      async (event) => {
-        const documentId = appState.openTransferredTab(event.payload);
-        if (event.payload.filePath && documentId) {
-          await claimOpenFile(event.payload.filePath, currentWindowId, documentId);
-          await initializeDocumentDiskState(documentId, event.payload.filePath);
-        }
-      },
-    );
-
-    await emit(WINDOW_EVENT_WINDOW_READY, { windowId: currentWindowId });
-
-    const persistedSettings = await loadPersistedSettings();
-    const glmApiKey = await loadGlmApiKey();
-    setThemeSaveErrorNotifier(notify);
-    await appState.loadTheme();
-    if (persistedSettings) {
-      appState.applyPersistedSettings({
-        wrapLines: persistedSettings.wrapLines,
-        zoomPercent: persistedSettings.zoomPercent,
-        externalFiles: toExternalFilesSettings(persistedSettings),
-        decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
-        hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
-        debugProvider: persistedSettings.debugProvider,
-        glmProvider: persistedSettings.glmProvider,
-        providerModelCatalogs: persistedSettings.providerModelCatalogs,
-      });
-    }
-    appState.setGlmApiKey(glmApiKey);
-
-    initializeChatProviders();
-
-    consoleHeightPx = await readConsoleHeightPreference();
-
-    await initializeLogging();
-
-    const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
-      if (event.payload.type !== "drop") {
-        return;
-      }
-      await openDroppedPaths(event.payload.paths);
-    });
-
-    await markWindowActive(currentWindowId);
-
-    const restoredSession = await restoreWindowSession(currentWindowId);
-    if (restoredSession) {
-      appState.applyWindowSession(restoredSession.snapshot, restoredSession.recentFiles);
-      appState.normalizeUntitledTitles();
-      await syncOpenFileRegistryForWindow(currentWindowId, appState.getSnapshot());
-      const restoredBounds = appState.getSnapshot().session.windowBounds;
-      if (restoredBounds) {
-        applyingWindowBounds = true;
-        try {
-          await applyWindowBounds(currentWindow, restoredBounds);
-        } finally {
-          applyingWindowBounds = false;
-        }
-      }
-      statusMessage = "Session restored.";
-    }
-    const restoredWorkspaceRoot = appState.getWorkspaceRoot();
-    if (restoredWorkspaceRoot) {
-      const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
-      void ensureWorkspaceReadAccess(normalizedRoot);
-      chatStore.setActiveWorkspaceRoot(normalizedRoot);
-      await restoreWorkspaceAgentSession(normalizedRoot);
-    } else {
-      chatStore.setActiveWorkspaceRoot(null);
-    }
-    if (shouldInitializeAppMenu(currentWindowId)) {
-      await initializeAppMenu(runCommand, appState.getSnapshot().recentFiles);
-    }
-
-    await loadProjectTreeRoot();
-
-    await runStartupExternalChecks();
-    lastSelectedTabId = appState.getSnapshot().session.selectedTabId;
-    runtimeReady = true;
-    await syncExternalFileWatcher(appState.getSnapshot());
-
-    await currentWindow.onFocusChanged(async ({ payload }) => {
-      if (payload) {
-        await markWindowActive(currentWindowId);
-        if (runtimeReady) {
-          await runFocusExternalChecks();
-        }
-      }
-    });
-
-    const unlistenFileChanged = await listen<{ path: string }>(
-      FILE_CHANGED_EVENT,
-      async (event) => {
-        if (!runtimeReady) {
-          return;
-        }
-        await runWatcherExternalCheck(event.payload.path);
-      },
-    );
-
-    const unlistenRecentFiles = await listenForRecentFilesChanges((recentFiles) => {
-      if (shouldInitializeAppMenu(currentWindowId)) {
-        void refreshOpenRecentMenu(recentFiles);
-      }
-    });
-
-    const unlistenActivate = await listen<{ path: string }>(WINDOW_EVENT_ACTIVATE_FILE, async (event) => {
-      try {
-        await openAndActivatePath(event.payload.path);
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown error";
-        notify(`Failed to open routed file: ${message}`);
-      }
-    });
-
-    const unlistenOpenedPaths = await listen<{ paths: string[] }>(APP_EVENT_OPENED_PATHS, async (event) => {
-      await consumeOpenedPaths(event.payload.paths);
-    });
-
-    const initialOpenedPaths = await invoke<string[]>("take_pending_opened_paths");
-    if (initialOpenedPaths.length > 0) {
-      await consumeOpenedPaths(initialOpenedPaths);
-    }
-
-    const unlistenSelectTab = await listen<{ path: string }>(
-      WINDOW_EVENT_SELECT_TAB_FOR_PATH,
-      async (event) => {
-        selectTabForNormalizedPath(event.payload.path);
-      },
-    );
-
-    const unlistenDestroyed = await listen(TauriEvent.WINDOW_DESTROYED, async (event) => {
-      const destroyedWindowId =
-        typeof event.payload === "string" ? event.payload : currentWindowId;
-      if (destroyedWindowId === currentWindowId) {
-        await releaseAllOpenFilesForWindow(currentWindowId);
-      }
-      await logDiagnostic({
-        level: "warn",
-        source: "frontend",
-        timestamp: new Date().toISOString(),
-        message: "window destroyed",
-        metadata: { windowId: currentWindowId },
-      });
-    });
-
-    const unlistenWindowResized = await currentWindow.onResized(() => {
-      scheduleWindowBoundsPersistence();
-    });
-    const unlistenWindowMoved = await currentWindow.onMoved(() => {
-      scheduleWindowBoundsPersistence();
-    });
-    await logDiagnostic({
-      level: "info",
-      source: "frontend",
-      timestamp: new Date().toISOString(),
-      message: "app shell initialized",
-      metadata: { windowId: currentWindowId },
-    });
-
-    return () => {
-      runtimeReady = false;
-      unlistenRecentFiles();
-      unlistenActivate();
-      unlistenSelectTab();
-      unlistenOpenedPaths();
-      unlistenTransfer();
-      unlistenDestroyed();
-      unlistenDragDrop();
-      unlistenFileChanged();
-      unlistenWindowResized();
-      unlistenWindowMoved();
-      if (windowBoundsTimer) {
-        clearTimeout(windowBoundsTimer);
-        windowBoundsTimer = null;
-      }
-      void clearFileWatcherPaths();
-    };
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -925,9 +662,23 @@
       }
     });
 
-    void setupRuntime()
-      .then((cleanup) => {
-        runtimeCleanup = cleanup;
+    void startAppShellRuntime({
+      notify,
+      runCommand,
+      openAndActivatePath,
+      consumeOpenedPaths,
+      restoreWorkspaceAgentSession,
+      loadProjectTreeRoot,
+      setConsoleHeightPx: (heightPx) => {
+        consoleHeightPx = heightPx;
+      },
+    })
+      .then((runtimeHandle) => {
+        runtimeCleanup = runtimeHandle.cleanup;
+        runtimeSyncExternalFileWatcher = runtimeHandle.syncExternalFileWatcher;
+        currentWindowId = runtimeHandle.windowId;
+        lastSelectedTabId = appState.getSnapshot().session.selectedTabId;
+        runtimeReady = true;
       })
       .catch(async (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
@@ -935,7 +686,7 @@
           level: "error",
           source: "frontend",
           timestamp: new Date().toISOString(),
-          message: "setupRuntime failed",
+          message: "startAppShellRuntime failed",
           metadata: { error: message },
         });
       });
@@ -979,6 +730,8 @@
         clearTimeout(untitledTitleDebounceTimer);
         untitledTitleDebounceTimer = null;
       }
+      runtimeReady = false;
+      runtimeSyncExternalFileWatcher = null;
       runtimeCleanup?.();
       stopChatAccessMonitor();
       window.removeEventListener("keydown", onKeydown);

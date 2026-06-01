@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-01 22:14 — R1 appShellRuntime extraction (R1-5)
+
+- Added `app/src/lib/services/appShellRuntime.ts` with `startAppShellRuntime(options)` to own startup/runtime orchestration previously in `+page.svelte`: persisted settings/theme + GLM key load, chat provider bootstrap, logging init, session restore + bounds apply, open-file registry sync, startup external checks, watcher-path sync, and initial `take_pending_opened_paths` consume.
+- Moved app-shell listeners into runtime service: transfer tab, app/window opened paths, activate-file routing, select-tab-for-path, file changed watcher events, window ready/focus/resize/move, drag-drop open, window destroyed handling, and recent-files menu sync.
+- Simplified `app/src/routes/+page.svelte` by replacing `setupRuntime` and local watcher-sync/window-listener setup with a single `startAppShellRuntime(...)` call and a runtime-provided `syncExternalFileWatcher` handle.
+
+## 2026-06-01 22:05 — R1 preview unification (R1-3, R1-4)
+
+- **R1-3:** Removed global `previewMode === "markdown"` branch from `+page.svelte`. `view.toggleMarkdownPreview` now cycles the active markdown document's `markdownViewMode` (`edit` ↔ `preview`; split → preview on shortcut). Non-markdown files get a status message. `setPreviewMode("markdown")` normalizes to `"editor"`. Added command and appState tests.
+- **R1-4:** Added `DiffPreviewPane.svelte` with saved vs current diff grid; moved `diffLines` usage and diff CSS from page. Page uses `{#if previewMode === "diff"}<DiffPreviewPane />{:else}…{/if}`. Removed `diffLines` import from `+page.svelte`.
+
 ## 2026-06-01 22:02 — R1 app shell decomposition (R1-1, R1-2)
 
 - **R1-1:** Added `DocumentEditor.svelte` — wraps `EditorSurface` with standard props, `appState.setDocumentContent` on dirty, and optional `onUntitledTitleRefresh` callback. Replaced three duplicated `EditorSurface` blocks in `+page.svelte`.

@@ -1,25 +1,35 @@
 # <img src="app/static/favicon.png" alt="" width="32" height="32" align="top"> SpecOps
 
-Building desktop workspace for writing specs, notes, and project files. Tech: [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
+Building text and markdown files editor with support of workspace AI. Tech: [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
 
-Features:
+Curren Features:
 - notepad with syntax highlighting
-- folders as workspaces (with project view)
-- basic AI support
-
-![SpecOps main screen](screenshots/main-screen.png)
+- markdown viewer and editor
+- adding folders as workspaces (with project view)
+- themes
+- multi-window
+- WIP: AI support
 
 ## What works today
 
-- **Notepad and workspaces** — quick scratchpad plus folder-backed workspaces on the activity rail
+- **Notepad** with syntax highlighting for .md and code files
+- **Markdown** viewer and editor
+- **Folders as workspaces**
 - **Project panel** — file tree, open files in tabs, refresh and show/hide hidden files
-- **Editor** — syntax highlighting, Markdown preview, find/replace, go to line, unsaved-change diff
-- **Console** — resizable bottom panel with **Logs** only
-- **Session restore** — reopen tabs and workspace layout after restart
+- **Themes**
+- **Multi-Window**
+- **Console** — resizable bottom panel with **Logs**
+- WIP: AI support
 
-## AI agents (WIP)
+![SpecOps main screen](screenshots/main-screen.png)
+![SpecOps main screen](screenshots/main-screen-split-view.png)
+![SpecOps main screen](screenshots/main-screen-themes.png)
 
-Workspace-scoped AI agents with **Ask** and **Review** modes, for now only **GLM** as the production provider (plus settings-gated **Debug** for development), multiple conversations per workspace, retry on failure, streaming on Debug with buffered GLM fallback, and file-read access checks before chat is enabled.
+## What is planned
+
+- Massive **Notepad** UX improvements
+- **Git** module
+- **AI Support**
 
 ## Prerequisites
 

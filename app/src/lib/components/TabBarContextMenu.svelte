@@ -9,6 +9,11 @@
   import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
   import { runInNotepadContext, workspaceRelativePath } from "../services/workspacePaths";
   import { renameDocumentOnDisk } from "../services/documentRename";
+  import {
+    closeOtherTabsWithUnsavedPrompt,
+    closeTabWithUnsavedPrompt,
+    closeTabsToRightWithUnsavedPrompt,
+  } from "../services/closeTabFlow";
 
   const revealLabel = revealInFileManagerLabel();
 
@@ -211,27 +216,32 @@
     closeContextMenu();
   }
 
-  function closeContextTabWithPrompt(): void {
+  const closeTabDeps = $derived({
+    getWindowId: () => windowId,
+    notify,
+  });
+
+  async function closeContextTabWithPrompt(): Promise<void> {
     if (!contextMenuTab) {
       return;
     }
-    appState.closeTabWithPrompt(contextMenuTab.id, (message) => window.confirm(message));
+    await closeTabWithUnsavedPrompt(contextMenuTab.id, closeTabDeps);
     closeContextMenu();
   }
 
-  function closeOtherTabsWithPrompt(): void {
+  async function closeOtherTabsWithPrompt(): Promise<void> {
     if (!contextMenuTab) {
       return;
     }
-    appState.closeOtherTabs(contextMenuTab.id, (message) => window.confirm(message));
+    await closeOtherTabsWithUnsavedPrompt(contextMenuTab.id, closeTabDeps);
     closeContextMenu();
   }
 
-  function closeTabsToRightWithPrompt(): void {
+  async function closeTabsToRightWithPrompt(): Promise<void> {
     if (!contextMenuTab) {
       return;
     }
-    appState.closeTabsToRight(contextMenuTab.id, (message) => window.confirm(message));
+    await closeTabsToRightWithUnsavedPrompt(contextMenuTab.id, closeTabDeps);
     closeContextMenu();
   }
 

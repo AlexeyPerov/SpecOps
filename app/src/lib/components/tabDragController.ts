@@ -1,6 +1,6 @@
 import type { TabState } from "../domain/contracts";
 import { isAgentTab } from "../domain/contracts";
-import { moveTabToNewWindow } from "../services/tabWindowTransfer";
+import { moveTabFromDrag } from "../services/tabWindowTransfer";
 
 export const DRAG_THRESHOLD_PX = 4;
 
@@ -15,6 +15,9 @@ export interface TabDragState {
   dragPointerX: number;
   dragPointerY: number;
   dragPointerStartX: number;
+  dragPointerStartY: number;
+  dragPointerScreenX: number;
+  dragPointerScreenY: number;
   dragTabRect: DOMRect | null;
   tabRects: Map<string, DOMRect>;
   didDrag: boolean;
@@ -43,6 +46,9 @@ function createInitialState(): TabDragState {
     dragPointerX: 0,
     dragPointerY: 0,
     dragPointerStartX: 0,
+    dragPointerStartY: 0,
+    dragPointerScreenX: 0,
+    dragPointerScreenY: 0,
     dragTabRect: null,
     tabRects: new Map(),
     didDrag: false,
@@ -73,6 +79,26 @@ export function previewTabs(
   }
   next.splice(targetIndex, 0, moved);
   return next;
+}
+
+export function pointerDragDistance(
+  pointerX: number,
+  pointerY: number,
+  startX: number,
+  startY: number,
+): number {
+  return Math.hypot(pointerX - startX, pointerY - startY);
+}
+
+export function shouldTearOffTab(
+  pointerX: number,
+  pointerY: number,
+  startX: number,
+  startY: number,
+  didDrag: boolean,
+  thresholdPx = DRAG_THRESHOLD_PX,
+): boolean {
+  return didDrag || pointerDragDistance(pointerX, pointerY, startX, startY) >= thresholdPx;
 }
 
 export function createTabDragController(deps: TabDragControllerDeps) {
@@ -159,6 +185,10 @@ export function createTabDragController(deps: TabDragControllerDeps) {
     const activeTabId = state.dragTabId;
     const pointerX = state.dragPointerX;
     const pointerY = state.dragPointerY;
+    const pointerStartX = state.dragPointerStartX;
+    const pointerStartY = state.dragPointerStartY;
+    const pointerScreenX = state.dragPointerScreenX;
+    const pointerScreenY = state.dragPointerScreenY;
     const wasDrag = state.didDrag;
 
     state = {
@@ -176,18 +206,22 @@ export function createTabDragController(deps: TabDragControllerDeps) {
       }
     }
 
-    if (commitReorder && wasDrag && activeTabId) {
-      if (isPointerOutsideTabStrip(pointerX, pointerY)) {
-        void moveTabToNewWindow({
-          tabId: activeTabId,
-          sourceWindowId: deps.getWindowId(),
-          notify: deps.notify,
-        }).then((transferred) => {
-          if (transferred) {
-            deps.notify("Transferred tab to new window.");
-          }
-        });
-      } else if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) {
+    const tearOff =
+      commitReorder &&
+      activeTabId &&
+      isPointerOutsideTabStrip(pointerX, pointerY) &&
+      shouldTearOffTab(pointerX, pointerY, pointerStartX, pointerStartY, wasDrag);
+
+    if (tearOff) {
+      void moveTabFromDrag({
+        tabId: activeTabId,
+        sourceWindowId: deps.getWindowId(),
+        screenX: pointerScreenX,
+        screenY: pointerScreenY,
+        notify: deps.notify,
+      });
+    } else if (commitReorder && wasDrag && activeTabId) {
+      if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) {
         deps.onReorder(fromIndex, toIndex);
         deps.onSelect(activeTabId);
       }
@@ -206,8 +240,15 @@ export function createTabDragController(deps: TabDragControllerDeps) {
 
     state.dragPointerX = event.clientX;
     state.dragPointerY = event.clientY;
+    state.dragPointerScreenX = event.screenX;
+    state.dragPointerScreenY = event.screenY;
 
-    const distance = Math.abs(event.clientX - state.dragPointerStartX);
+    const distance = pointerDragDistance(
+      event.clientX,
+      event.clientY,
+      state.dragPointerStartX,
+      state.dragPointerStartY,
+    );
     if (!state.didDrag && distance < DRAG_THRESHOLD_PX) {
       emitState();
       return;
@@ -255,6 +296,9 @@ export function createTabDragController(deps: TabDragControllerDeps) {
       dragFromIndex: index,
       dropIndex: index,
       dragPointerStartX: event.clientX,
+      dragPointerStartY: event.clientY,
+      dragPointerScreenX: event.screenX,
+      dragPointerScreenY: event.screenY,
       dragPointerX: event.clientX,
       dragPointerY: event.clientY,
       dragTabRect,

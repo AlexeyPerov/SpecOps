@@ -15,8 +15,10 @@ import { getErrorMessage } from "../commands/commandErrors";
 import {
   WINDOW_EVENT_ACTIVATE_FILE,
   WINDOW_EVENT_SELECT_TAB_FOR_PATH,
+  WINDOW_EVENT_MERGE_TAB,
   WINDOW_EVENT_TRANSFER_TAB,
   WINDOW_EVENT_WINDOW_READY,
+  type MergeTabPayload,
   markWindowActive,
 } from "./windowManager";
 import { restoreWindowSession } from "./sessionManager";
@@ -43,6 +45,7 @@ import { readConsoleHeightPreference } from "./consoleTabPrefs";
 import { watchedPathsFromState } from "./appShellHelpers";
 
 const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
+const DOCK_NEW_WINDOW_EVENT = "spec-ops/dock/new-window";
 
 export interface AppShellRuntimeOptions {
   notify: (message: string) => void;
@@ -126,6 +129,22 @@ export async function startAppShellRuntime(
     },
   );
   cleanupCallbacks.push(unlistenTransfer);
+
+  const unlistenMergeTab = await listen<MergeTabPayload>(WINDOW_EVENT_MERGE_TAB, async (event) => {
+    const { sourceWindowId: _sourceWindowId, sourceTabId: _sourceTabId, ...payload } =
+      event.payload;
+    const documentId = appState.openTransferredTab(payload);
+    if (payload.filePath && documentId) {
+      await claimOpenFile(payload.filePath, windowId, documentId);
+      await initializeDocumentDiskState(documentId, payload.filePath);
+    }
+  });
+  cleanupCallbacks.push(unlistenMergeTab);
+
+  const unlistenDockNewWindow = await listen(DOCK_NEW_WINDOW_EVENT, () => {
+    options.runCommand("app.newWindow");
+  });
+  cleanupCallbacks.push(unlistenDockNewWindow);
 
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
 

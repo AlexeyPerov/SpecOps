@@ -1,5 +1,8 @@
 mod file_watcher;
 
+#[cfg(target_os = "macos")]
+mod dock_menu;
+
 use file_watcher::FileWatcherState;
 use serde::Serialize;
 use std::sync::{Mutex, OnceLock};
@@ -44,6 +47,8 @@ pub fn run() {
             if let Some(watcher_state) = app.try_state::<FileWatcherState>() {
                 watcher_state.set_app_handle(app.handle().clone());
             }
+            #[cfg(target_os = "macos")]
+            dock_menu::setup(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

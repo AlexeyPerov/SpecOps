@@ -152,6 +152,12 @@ export async function initializeAppMenu(
 
   menuRunCommand = runCommand;
 
+  const newTabItem = await MenuItem.new({
+    id: "cmd.file.newTab",
+    text: "New Tab",
+    accelerator: "CmdOrCtrl+N",
+    action: () => runCommand("file.new"),
+  });
   const openItem = await MenuItem.new({
     id: "cmd.file.open",
     text: "Open",
@@ -232,6 +238,7 @@ export async function initializeAppMenu(
   const fileMenu = await Submenu.new({
     text: "File",
     items: [
+      newTabItem,
       openItem,
       openRecentSubmenu,
       openAllInFolderItem,

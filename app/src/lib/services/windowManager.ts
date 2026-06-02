@@ -3,13 +3,21 @@ import {
   getCurrentWebviewWindow,
   WebviewWindow,
 } from "@tauri-apps/api/webviewWindow";
-import type { AppDomainState } from "../domain/contracts";
+import type { AppDomainState, WindowBounds } from "../domain/contracts";
+import { getActiveSession } from "../state/appState/contextHelpers";
+import { applyWindowBounds, readWindowBounds } from "./windowBounds";
 import { getLastActiveWindowId, updateLastActiveWindow } from "./sessionManager";
 
 export const WINDOW_EVENT_ACTIVATE_FILE = "spec-ops/window/activate-file";
 export const WINDOW_EVENT_TRANSFER_TAB = "spec-ops/window/transfer-tab";
 export const WINDOW_EVENT_SELECT_TAB_FOR_PATH = "spec-ops/window/select-tab-for-path";
 export const WINDOW_EVENT_WINDOW_READY = "spec-ops/window/ready";
+export const WINDOW_EVENT_MERGE_TAB = "spec-ops/window/merge-tab";
+
+export type MergeTabPayload = TabTransferPayload & {
+  sourceWindowId: string;
+  sourceTabId: string;
+};
 
 export type TabTransferPayload = {
   filePath: string | null;
@@ -43,36 +51,45 @@ export async function activateFileInWindow(
   await emitTo(windowId, WINDOW_EVENT_ACTIVATE_FILE, { path });
 }
 
-async function readParentWindowPlacement(): Promise<{
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-}> {
+const DEFAULT_WINDOW_BOUNDS: WindowBounds = {
+  width: 800,
+  height: 1020,
+  x: 0,
+  y: 0,
+  maximized: false,
+};
+
+function cascadeWindowBounds(bounds: WindowBounds): WindowBounds {
+  if (bounds.maximized) {
+    return bounds;
+  }
+  return {
+    ...bounds,
+    x: bounds.x + 24,
+    y: bounds.y + 24,
+  };
+}
+
+export async function resolveNewWindowBounds(snapshot: AppDomainState): Promise<WindowBounds> {
   try {
     const parent = getCurrentWebviewWindow();
-    const [position, size] = await Promise.all([
-      parent.outerPosition(),
-      parent.innerSize(),
-    ]);
-    return {
-      x: position.x + 24,
-      y: position.y + 24,
-      width: size.width,
-      height: size.height,
-    };
+    return cascadeWindowBounds(await readWindowBounds(parent));
   } catch {
-    return {};
+    const persisted = getActiveSession(snapshot).windowBounds;
+    if (persisted) {
+      return cascadeWindowBounds(persisted);
+    }
+    return { ...DEFAULT_WINDOW_BOUNDS };
   }
 }
 
 export async function createNewWindowWithTransfer(
-  _snapshot: AppDomainState,
+  snapshot: AppDomainState,
   transferPayload?: TabTransferPayload | null,
 ): Promise<string | null> {
   windowCounter += 1;
   const label = `window-${windowCounter}`;
-  const placement = await readParentWindowPlacement();
+  const bounds = await resolveNewWindowBounds(snapshot);
 
   return new Promise((resolve) => {
     let settled = false;
@@ -111,10 +128,6 @@ export async function createNewWindowWithTransfer(
 
     const windowRef = new WebviewWindow(label, {
       title: "SpecOps",
-      width: placement.width ?? 1000,
-      height: placement.height ?? 720,
-      x: placement.x,
-      y: placement.y,
       url: "/",
     });
 
@@ -124,6 +137,7 @@ export async function createNewWindowWithTransfer(
 
     windowRef.once("tauri://created", async () => {
       try {
+        await applyWindowBounds(windowRef, bounds);
         await updateLastActiveWindow(label);
         await windowRef.show();
         await windowRef.setFocus();

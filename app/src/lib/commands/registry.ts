@@ -17,6 +17,7 @@ import { untitledSaveDefaultPath } from "../services/untitledSavePath";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
 import { reloadActiveDocumentFromDisk } from "../services/externalFileChanges";
 import { createNewWindowWithTransfer } from "../services/windowManager";
+import { closeTabWithUnsavedPrompt } from "../services/closeTabFlow";
 import { moveTabToNewWindow } from "../services/tabWindowTransfer";
 import { takeQueuedOpenRecentPath } from "../services/appMenu";
 import { openActivePath, describeOpenActivePathResult } from "../services/openActivePath";
@@ -661,24 +662,20 @@ const handlers: Record<AppCommandId, CommandHandler> = {
         break;
     }
   },
-  "tab.close": ({ getState, confirm, notify }) => {
+  "tab.close": async ({ getState, notify, getWindowId }) => {
     const state = getState();
-    const selectedTab = getActiveSession(state).openTabs.find(
-      (tab) => tab.id === getActiveSession(state).selectedTabId,
+    const selectedTabId = getActiveSession(state).selectedTabId;
+    if (!selectedTabId) {
+      return;
+    }
+    const closed = await closeTabWithUnsavedPrompt(
+      selectedTabId,
+      { getWindowId, notify },
+      { forceClose: false },
     );
-    if (!selectedTab) {
-      return;
+    if (closed) {
+      notify("Tab closed.");
     }
-    const selectedDocumentId = tabDocumentId(selectedTab);
-    if (!selectedDocumentId) {
-      return;
-    }
-    const doc = getActiveDocuments(state).find((document) => document.id === selectedDocumentId);
-    if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
-      return;
-    }
-    appState.closeTab(selectedTab.id);
-    notify("Tab closed.");
   },
   "tab.moveToNewWindow": async ({ notify, getState, getWindowId }) => {
     const selectedTabId = getActiveSession(getState()).selectedTabId;
@@ -851,6 +848,18 @@ export function dispatchMenuCommand(
 }
 
 export { initializeAppMenu, refreshOpenRecentMenu, shouldInitializeAppMenu } from "../services/appMenu";
+
+export const EDITOR_GLOBAL_COMMANDS: ReadonlySet<AppCommandId> = new Set([
+  "file.new",
+  "file.save",
+  "file.saveAs",
+  "file.saveAll",
+  "tab.close",
+]);
+
+export function isEditorGlobalCommand(commandId: AppCommandId): boolean {
+  return EDITOR_GLOBAL_COMMANDS.has(commandId);
+}
 
 export function keymapCommandForEvent(event: KeyboardEvent): AppCommandId | null {
   const token = [

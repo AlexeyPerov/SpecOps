@@ -12,6 +12,10 @@ vi.mock("./openFileRegistry", () => ({
   syncOpenFileRegistryForWindow: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("./emptyWindowLifecycle", () => ({
+  closeCurrentWindowIfEmptyAfterTransfer: vi.fn().mockResolvedValue(false),
+}));
+
 const createNewWindowWithTransferMock = vi.mocked(createNewWindowWithTransfer);
 const syncOpenFileRegistryForWindowMock = vi.mocked(syncOpenFileRegistryForWindow);
 

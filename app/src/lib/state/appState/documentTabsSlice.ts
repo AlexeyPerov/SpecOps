@@ -326,6 +326,12 @@ export function createDocumentTabsSlice(deps: {
       update((state) => closeTabsForce(state, tabIds, contextTabId));
       return true;
     },
+    closeTabsByIds(tabIds: string[], preferredTabId: string | null): void {
+      if (tabIds.length === 0) {
+        return;
+      }
+      update((state) => closeTabsForce(state, tabIds, preferredTabId));
+    },
     closeMissingFileTabs(): boolean {
       const snapshot = getSnapshot();
       const tabIds = missingTabIdsToClose(getActiveSession(snapshot).openTabs, getActiveDocuments(snapshot));
@@ -404,7 +410,40 @@ export function createDocumentTabsSlice(deps: {
       };
     },
     removeTransferredTab(tabId: string): void {
-      closeTabForce(tabId);
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          const openTabs = ctx.session.openTabs;
+          const idx = openTabs.findIndex((tab) => tab.id === tabId);
+          if (idx < 0) {
+            return ctx;
+          }
+          const filtered = openTabs.filter((tab) => tab.id !== tabId);
+          if (filtered.length === 0) {
+            return {
+              ...ctx,
+              session: {
+                ...ctx.session,
+                openTabs: [],
+                selectedTabId: null,
+                lastActiveAgentId: null,
+              },
+            };
+          }
+          const closingTab = openTabs[idx];
+          const selectedTabId =
+            ctx.session.selectedTabId === tabId
+              ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
+              : ctx.session.selectedTabId;
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              openTabs: filtered,
+              selectedTabId,
+            },
+          };
+        }),
+      );
     },
     transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
       const snapshot = getSnapshot();

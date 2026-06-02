@@ -14,7 +14,8 @@
   import ChatPanel from "../lib/components/ChatPanel.svelte";
   import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
   import { nextSidebarAgentId, openAgentTabIds, resolveRestoredActiveAgent, selectedTabAfterMissingLastAgent } from "../lib/services/workspaceAgentSession";
-  import { dispatchMenuCommand, initializeAppMenu, keymapCommandForEvent, refreshOpenRecentMenu, shouldInitializeAppMenu } from "../lib/commands/registry";
+  import { closeTabWithUnsavedPrompt } from "../lib/services/closeTabFlow";
+  import { dispatchMenuCommand, initializeAppMenu, isEditorGlobalCommand, keymapCommandForEvent, refreshOpenRecentMenu, shouldInitializeAppMenu } from "../lib/commands/registry";
   import { getErrorMessage } from "../lib/commands/commandErrors";
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
@@ -252,7 +253,7 @@
     }
   }
 
-  function handleCloseTab(tabId: string): void {
+  async function handleCloseTab(tabId: string): Promise<void> {
     const beforeSession = appState.getActiveSession();
     const closingTab = beforeSession.openTabs.find((tab) => tab.id === tabId);
     const closedAgentId =
@@ -260,11 +261,17 @@
     const wasSelected = beforeSession.selectedTabId === tabId;
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
 
+    const closed = await closeTabWithUnsavedPrompt(tabId, {
+      getWindowId: () => currentWindowId,
+      notify,
+    });
+    if (!closed) {
+      return;
+    }
+
     if (closedAgentId && workspaceRoot) {
       chatStore.cancelAgentGeneration(workspaceRoot, closedAgentId);
     }
-
-    appState.closeTabForce(tabId);
 
     if (!closedAgentId || !wasSelected) {
       return;
@@ -508,6 +515,8 @@
       return;
     }
     if (
+      command &&
+      !isEditorGlobalCommand(command) &&
       (event.target as HTMLElement | null)?.closest(
         "input, textarea, [contenteditable=true]",
       )

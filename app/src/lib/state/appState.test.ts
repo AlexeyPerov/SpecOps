@@ -294,6 +294,13 @@ describe("appState tabs and selection", () => {
     expect(appState.getActiveSession().openTabs).toHaveLength(1);
   });
 
+  it("removeTransferredTab leaves no tabs when the last tab is transferred out", () => {
+    appState.resetAppState();
+    appState.removeTransferredTab("tab-1");
+    expect(appState.getActiveSession().openTabs).toHaveLength(0);
+    expect(appState.getActiveSession().selectedTabId).toBeNull();
+  });
+
   it("openTransferredTab replaces bootstrap untitled in a fresh window", () => {
     appState.resetAppState();
     const documentId = appState.openTransferredTab({

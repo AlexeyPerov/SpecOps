@@ -36,12 +36,17 @@ vi.mock("../services/windowManager", () => ({
   createNewWindowWithTransfer: vi.fn(),
 }));
 
+vi.mock("../services/closeTabFlow", () => ({
+  closeTabWithUnsavedPrompt: vi.fn(),
+}));
+
 import {
   dispatchCommand,
   commandDefinitions,
   expandPlatformKeymaps,
   getActiveDocumentContent,
   getRegisteredCommandIds,
+  isEditorGlobalCommand,
   keymapCommandForEvent,
 } from "./registry";
 import {
@@ -51,6 +56,9 @@ import {
   saveFileAs,
 } from "../services/fileSystem";
 import { renameOpenFileRegistry } from "../services/openFileRegistry";
+import { closeTabWithUnsavedPrompt } from "../services/closeTabFlow";
+
+const closeTabWithUnsavedPromptMock = vi.mocked(closeTabWithUnsavedPrompt);
 
 const savedFingerprint: DiskFingerprint = { mtimeMs: 1, sizeBytes: 5 };
 
@@ -120,6 +128,12 @@ describe("expandPlatformKeymaps", () => {
 });
 
 describe("keymapCommandForEvent", () => {
+  it("maps Meta+N to file.new", () => {
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "n", metaKey: true })),
+    ).toBe("file.new");
+  });
+
   it("maps Meta+S to file.save", () => {
     expect(
       keymapCommandForEvent(keyboardEvent({ key: "s", metaKey: true })),
@@ -190,6 +204,14 @@ describe("keymapCommandForEvent", () => {
         keymapCommandForEvent(keyboardEventFromBinding(definition.binding.windows, "windows")),
       ).toBe(definition.id);
     }
+  });
+});
+
+describe("isEditorGlobalCommand", () => {
+  it("includes file.new and tab.close", () => {
+    expect(isEditorGlobalCommand("file.new")).toBe(true);
+    expect(isEditorGlobalCommand("tab.close")).toBe(true);
+    expect(isEditorGlobalCommand("view.zoomIn")).toBe(false);
   });
 });
 
@@ -324,24 +346,29 @@ describe("file.new command", () => {
 describe("tab.close command", () => {
   beforeEach(() => {
     appState.resetAppState();
+    closeTabWithUnsavedPromptMock.mockReset();
   });
 
-  it("closes a clean tab", () => {
+  it("closes a clean tab", async () => {
     const { context, notify } = createCommandContext();
     appState.createTab();
+    closeTabWithUnsavedPromptMock.mockResolvedValue(true);
 
     dispatchCommand("tab.close", context);
+    await flushCommandQueue();
 
-    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    expect(closeTabWithUnsavedPromptMock).toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith("Tab closed.");
   });
 
-  it("cancels close when a dirty tab is not confirmed", () => {
-    const { context, notify } = createCommandContext({ confirm: () => false });
+  it("cancels close when a dirty tab is not confirmed", async () => {
+    const { context, notify } = createCommandContext();
     appState.createTab();
     appState.setDocumentContent("doc-2", "dirty");
+    closeTabWithUnsavedPromptMock.mockResolvedValue(false);
 
     dispatchCommand("tab.close", context);
+    await flushCommandQueue();
 
     expect(appState.getActiveSession().openTabs).toHaveLength(2);
     expect(notify).not.toHaveBeenCalledWith("Tab closed.");

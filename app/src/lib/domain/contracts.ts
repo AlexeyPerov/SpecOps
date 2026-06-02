@@ -145,9 +145,13 @@ export interface ExternalFilesSettings {
   checkOnTabActivate: boolean;
 }
 
-/** Settings-gated development provider; disabled by default (see M5-3). */
-export interface DebugProviderSettings {
+/** Shared toggle for provider-scoped settings blocks. */
+export interface ProviderSettingsBase {
   enabled: boolean;
+}
+
+/** Settings-gated development provider; disabled by default (see M5-3). */
+export interface DebugProviderSettings extends ProviderSettingsBase {
   simulationSeed: number | null;
   delayMsMin: number;
   delayMsMax: number;
@@ -159,8 +163,7 @@ export interface DebugProviderSettings {
 }
 
 /** Product GLM provider settings (API key stored separately; see providerSecretsStore). */
-export interface GlmProviderSettings {
-  enabled: boolean;
+export interface GlmProviderSettings extends ProviderSettingsBase {
   baseUrl: string;
   /** Legacy send default; kept in sync with GLM catalog default during transition. */
   modelId: string;
@@ -175,6 +178,15 @@ export interface ProviderModelCatalog {
 /** Provider-scoped model catalogs keyed by chat provider id. */
 export type ProviderModelCatalogs = Partial<Record<ChatProviderId, ProviderModelCatalog>>;
 
+/** Per-provider settings types; extend this map when adding a configured provider. */
+export interface ProviderSettingsById {
+  glm: GlmProviderSettings;
+  debug: DebugProviderSettings;
+}
+
+/** In-app and persisted bundle of provider-specific settings (excludes API keys). */
+export type AppProviderSettings = ProviderSettingsById;
+
 export interface AppThemeState {
   activeTheme: ActiveThemeRef;
   customThemes: CustomThemeRecord[];
@@ -185,8 +197,7 @@ export interface AppSettingsState {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
-  debugProvider: DebugProviderSettings;
-  glmProvider: GlmProviderSettings;
+  providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
   glmApiKey: string;

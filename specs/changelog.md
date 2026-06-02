@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-02 — R3 provider settings bundle (R3-7)
+
+- Added `ProviderSettingsBase`, `ProviderSettingsById`, and `AppProviderSettings`; `AppSettingsState` now uses `providerSettings: { glm, debug }` instead of top-level `glmProvider` / `debugProvider`.
+- Added `appProviderSettings.ts` with `normalizeAppProviderSettings`, `getProviderSettings`, and defaults; persisted `settings.json` uses `providerSettings` (breaking change — no read of legacy top-level provider keys).
+- Updated settings slice, store, bootstrap, ChatPanel, Settings dialog, and tests.
+- Documented final settings shape in `docs/providers.md`.
+- Marked `Task R3-7` as `[DONE]` in `specs/refactoring-1/r3-execution-plan.md`.
+
 ## 2026-06-02 — R3 Svelte 5 migration: +page.svelte (R3-6)
 
 - Migrated `+page.svelte` from legacy `$:` reactivity to Svelte 5 runes: local UI state via `$state`, store subscriptions via `$derived($appState)` / chat stores, side effects (persistence, project tree, chat workspace sync, tab activation, responsive layout) via `$effect`.

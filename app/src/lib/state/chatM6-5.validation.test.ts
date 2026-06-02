@@ -74,12 +74,12 @@ function glmFetchSuccess(content: string): typeof fetch {
 
 function registerProviders(includeGlm = false): void {
   resetChatProviderRegistryForTests();
-  registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+  registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
   if (includeGlm) {
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: appState.getSnapshot().settings.glmApiKey,
         }),
         glmFetchSuccess("GLM buffered response."),
@@ -88,9 +88,9 @@ function registerProviders(includeGlm = false): void {
   }
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
-      () => appState.getSnapshot().settings.debugProvider,
+      () => appState.getSnapshot().settings.providerSettings.debug,
       () => ({
-        settings: appState.getSnapshot().settings.glmProvider,
+        settings: appState.getSnapshot().settings.providerSettings.glm,
         apiKey: appState.getSnapshot().settings.glmApiKey,
       }),
     ),
@@ -133,7 +133,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     const agentId = chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -147,7 +147,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     expect(chatStore.canRetryLastTurn(agentId!)).toBe(true);
 
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       failureProbability: 0,
     });
 
@@ -175,11 +175,11 @@ describe("M6 milestone validation — AI chat MVP", () => {
         }),
       );
     resetChatProviderRegistryForTests();
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
         glmFetch as typeof fetch,
@@ -187,9 +187,9 @@ describe("M6 milestone validation — AI chat MVP", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
       ),
@@ -247,7 +247,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     const agentId = chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -257,7 +257,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     await failedPromise;
 
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       failureProbability: 0,
     });
 

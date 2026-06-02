@@ -1,6 +1,7 @@
 /** Theme persistence and migration are covered in `themeStore.test.ts`. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
 import {
   defaultExternalFilesSettings,
   defaultPersistedSettings,
@@ -9,7 +10,6 @@ import {
   toExternalFilesSettings,
   toPersistedSettings,
 } from "./settingsStore";
-import { defaultGlmProviderSettings } from "../ai/providers/glmProviderSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
@@ -41,21 +41,23 @@ describe("settings mapping", () => {
       },
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
-      debugProvider: {
-        enabled: true,
-        simulationSeed: 7,
-        delayMsMin: 100,
-        delayMsMax: 900,
-        chunkCharsMin: 4,
-        chunkCharsMax: 20,
-        failureProbability: 0.1,
-        failureMessage: "Test failure",
-        includeDiagnostics: false,
-      },
-      glmProvider: {
-        enabled: true,
-        baseUrl: "https://example.test/v1",
-        modelId: "glm-test",
+      providerSettings: {
+        debug: {
+          enabled: true,
+          simulationSeed: 7,
+          delayMsMin: 100,
+          delayMsMax: 900,
+          chunkCharsMin: 4,
+          chunkCharsMax: 20,
+          failureProbability: 0.1,
+          failureMessage: "Test failure",
+          includeDiagnostics: false,
+        },
+        glm: {
+          enabled: true,
+          baseUrl: "https://example.test/v1",
+          modelId: "glm-test",
+        },
       },
       providerModelCatalogs: {
         glm: {
@@ -95,18 +97,7 @@ describe("loadPersistedSettings", () => {
     await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
   });
 
-  it("defaults missing debug provider settings", async () => {
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        wrapLines: true,
-        zoomPercent: 100,
-      }),
-    );
-
-    await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
-  });
-
-  it("defaults missing glm provider settings", async () => {
+  it("defaults missing provider settings", async () => {
     readTextFileMock.mockResolvedValue(
       JSON.stringify({
         wrapLines: true,
@@ -115,7 +106,7 @@ describe("loadPersistedSettings", () => {
     );
 
     const result = await loadPersistedSettings();
-    expect(result?.glmProvider).toEqual(defaultGlmProviderSettings);
+    expect(result?.providerSettings).toEqual(defaultAppProviderSettings);
     expect(result?.providerModelCatalogs).toEqual(defaultProviderModelCatalogs);
   });
 
@@ -124,10 +115,12 @@ describe("loadPersistedSettings", () => {
       JSON.stringify({
         wrapLines: true,
         zoomPercent: 100,
-        glmProvider: {
-          enabled: true,
-          baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-          modelId: "legacy-glm",
+        providerSettings: {
+          glm: {
+            enabled: true,
+            baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+            modelId: "legacy-glm",
+          },
         },
       }),
     );
@@ -137,7 +130,7 @@ describe("loadPersistedSettings", () => {
       modelIds: ["legacy-glm", "glm-4-flash", "glm-4-air", "glm-4-plus"],
       defaultModelId: "legacy-glm",
     });
-    expect(result?.glmProvider.modelId).toBe("legacy-glm");
+    expect(result?.providerSettings.glm.modelId).toBe("legacy-glm");
   });
 
   it("normalizes invalid provider model catalogs on load", async () => {
@@ -164,22 +157,25 @@ describe("loadPersistedSettings", () => {
     readTextFileMock.mockResolvedValue(
       JSON.stringify({
         ...defaultPersistedSettings,
-        debugProvider: {
-          enabled: true,
-          simulationSeed: null,
-          delayMsMin: 5000,
-          delayMsMax: 100,
-          chunkCharsMin: 64,
-          chunkCharsMax: 8,
-          failureProbability: 3,
-          failureMessage: "Fail",
-          includeDiagnostics: true,
+        providerSettings: {
+          ...defaultAppProviderSettings,
+          debug: {
+            enabled: true,
+            simulationSeed: null,
+            delayMsMin: 5000,
+            delayMsMax: 100,
+            chunkCharsMin: 64,
+            chunkCharsMax: 8,
+            failureProbability: 3,
+            failureMessage: "Fail",
+            includeDiagnostics: true,
+          },
         },
       }),
     );
 
     const result = await loadPersistedSettings();
-    expect(result?.debugProvider).toEqual({
+    expect(result?.providerSettings.debug).toEqual({
       enabled: true,
       simulationSeed: null,
       delayMsMin: 5000,

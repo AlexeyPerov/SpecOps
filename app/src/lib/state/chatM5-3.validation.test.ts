@@ -59,12 +59,12 @@ function glmFetchSuccess(content: string): typeof fetch {
 
 function registerProviders(includeGlm = false): void {
   resetChatProviderRegistryForTests();
-  registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+  registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
   if (includeGlm) {
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: appState.getSnapshot().settings.glmApiKey,
         }),
         glmFetchSuccess("GLM buffered response."),
@@ -73,9 +73,9 @@ function registerProviders(includeGlm = false): void {
   }
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
-      () => appState.getSnapshot().settings.debugProvider,
+      () => appState.getSnapshot().settings.providerSettings.debug,
       () => ({
-        settings: appState.getSnapshot().settings.glmProvider,
+        settings: appState.getSnapshot().settings.providerSettings.glm,
         apiKey: appState.getSnapshot().settings.glmApiKey,
       }),
     ),
@@ -157,7 +157,7 @@ describe("M5.3 milestone validation", () => {
     const agentId = chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       enabled: false,
     });
 
@@ -262,7 +262,7 @@ describe("M5.3 milestone validation", () => {
     const agentId = chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -283,11 +283,11 @@ describe("M5.3 milestone validation", () => {
   it("runs GLM ask and review modes through the send pipeline", async () => {
     appState.setGlmApiKey("glm-test-key");
     resetChatProviderRegistryForTests();
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: appState.getSnapshot().settings.glmApiKey,
         }),
         glmFetchSuccess("## Summary\nReview output from GLM."),

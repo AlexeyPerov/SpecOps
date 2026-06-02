@@ -742,8 +742,7 @@
           externalFiles: snapshot.settings.externalFiles,
           decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
           hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
-          debugProvider: snapshot.settings.debugProvider,
-          glmProvider: snapshot.settings.glmProvider,
+          providerSettings: snapshot.settings.providerSettings,
           providerModelCatalogs: snapshot.settings.providerModelCatalogs,
         }),
       );

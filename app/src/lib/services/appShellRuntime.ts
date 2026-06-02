@@ -140,8 +140,7 @@ export async function startAppShellRuntime(
       externalFiles: toExternalFilesSettings(persistedSettings),
       decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
       hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
-      debugProvider: persistedSettings.debugProvider,
-      glmProvider: persistedSettings.glmProvider,
+      providerSettings: persistedSettings.providerSettings,
       providerModelCatalogs: persistedSettings.providerModelCatalogs,
     });
   }

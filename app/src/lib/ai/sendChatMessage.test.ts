@@ -60,12 +60,12 @@ describe("sendChatMessage", () => {
       failureProbability: 0,
       includeDiagnostics: false,
     });
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: appState.getSnapshot().settings.glmApiKey,
         }),
       ),
@@ -99,12 +99,12 @@ describe("sendChatMessage", () => {
 
   it("uses default provider resolver before thread metadata exists", async () => {
     chatStore.reset();
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: appState.getSnapshot().settings.glmApiKey,
         }),
       ),
@@ -158,7 +158,7 @@ describe("sendChatMessage", () => {
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
         glmFetchSuccess("Buffered GLM response."),
@@ -166,9 +166,9 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
       ),
@@ -212,7 +212,7 @@ describe("sendChatMessage", () => {
 
   it("records failed turns in retry scaffolding on simulated provider failure", async () => {
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -251,12 +251,12 @@ describe("sendChatMessage", () => {
 
   it("promotes draft agent and schedules persistence on first send", async () => {
     chatStore.reset();
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: appState.getSnapshot().settings.glmApiKey,
         }),
       ),
@@ -312,7 +312,7 @@ describe("sendChatMessage", () => {
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
         glmFetchSuccess("GLM response about retention."),
@@ -320,9 +320,9 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
       ),
@@ -344,7 +344,7 @@ describe("sendChatMessage", () => {
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
         vi.fn().mockResolvedValue(
@@ -354,9 +354,9 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
       ),
@@ -380,7 +380,7 @@ describe("sendChatMessage", () => {
 
   it("retries the last failed turn without duplicating user messages", async () => {
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -394,7 +394,7 @@ describe("sendChatMessage", () => {
     expect(chatStore.canRetryLastTurn()).toBe(true);
 
     appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.debugProvider,
+      ...appState.getSnapshot().settings.providerSettings.debug,
       failureProbability: 0,
     });
 
@@ -443,7 +443,7 @@ describe("sendChatMessage", () => {
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
         glmFetch as typeof fetch,
@@ -451,9 +451,9 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
       ),
@@ -488,7 +488,7 @@ describe("sendChatMessage", () => {
 
   it("passes the resolved thread model id to the provider adapter", async () => {
     resetChatProviderRegistryForTests();
-    const debugProvider = createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider);
+    const debugProvider = createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug);
     const streamMessageSpy = vi.spyOn(debugProvider, "streamMessage");
     registerChatProvider(debugProvider);
 
@@ -515,7 +515,7 @@ describe("sendChatMessage", () => {
     registerChatProvider(
       createGlmChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
         glmFetch as typeof fetch,
@@ -523,9 +523,9 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: "glm-test-key",
         }),
       ),

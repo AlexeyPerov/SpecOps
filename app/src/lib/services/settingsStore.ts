@@ -1,21 +1,16 @@
 import { join } from "@tauri-apps/api/path";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
-  defaultDebugProviderSettings,
-  normalizeDebugProviderSettings,
-} from "../ai/providers/debugProviderSettings";
-import {
-  defaultGlmProviderSettings,
-  normalizeGlmProviderSettings,
-} from "../ai/providers/glmProviderSettings";
+  defaultAppProviderSettings,
+  normalizeAppProviderSettings,
+} from "../ai/providers/appProviderSettings";
 import {
   defaultProviderModelCatalogs,
   normalizeProviderModelCatalogs,
 } from "../ai/providers/providerModelCatalog";
 import type {
-  DebugProviderSettings,
+  AppProviderSettings,
   ExternalFilesSettings,
-  GlmProviderSettings,
   ProviderModelCatalogs,
 } from "../domain/contracts";
 import { ensureSpecOpsDataDir } from "./appDataDir";
@@ -29,8 +24,7 @@ export interface PersistedSettings {
   checkOnTabActivate: boolean;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
-  debugProvider: DebugProviderSettings;
-  glmProvider: GlmProviderSettings;
+  providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
 }
 
@@ -47,8 +41,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
-  debugProvider: defaultDebugProviderSettings,
-  glmProvider: defaultGlmProviderSettings,
+  providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
 };
 
@@ -84,6 +77,14 @@ function parseExternalFilesSettings(parsed: Partial<PersistedSettings>): Externa
   };
 }
 
+function legacyGlmModelIdFromParsed(parsed: Record<string, unknown>): string | undefined {
+  const bundled = parsed.providerSettings;
+  if (isRecord(bundled) && isRecord(bundled.glm) && typeof bundled.glm.modelId === "string") {
+    return bundled.glm.modelId;
+  }
+  return undefined;
+}
+
 export async function loadPersistedSettings(): Promise<PersistedSettings | null> {
   try {
     const path = await getSettingsPath();
@@ -99,13 +100,13 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         hasExplicitGlmCatalog
           ? {}
           : {
-              glmModelId:
-                isRecord(parsed.glmProvider) && typeof parsed.glmProvider.modelId === "string"
-                  ? parsed.glmProvider.modelId
-                  : undefined,
+              glmModelId: legacyGlmModelIdFromParsed(parsed),
             },
       );
-      const glmProvider = normalizeGlmProviderSettings(parsed.glmProvider, providerModelCatalogs);
+      const providerSettings = normalizeAppProviderSettings(
+        isRecord(parsed.providerSettings) ? parsed.providerSettings : undefined,
+        providerModelCatalogs,
+      );
       return {
         wrapLines: parsed.wrapLines,
         zoomPercent: parsed.zoomPercent as number,
@@ -116,8 +117,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         hideActivityRailWhenNotepadOnly: isBoolean(parsed.hideActivityRailWhenNotepadOnly)
           ? parsed.hideActivityRailWhenNotepadOnly
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
-        debugProvider: normalizeDebugProviderSettings(parsed.debugProvider),
-        glmProvider,
+        providerSettings,
         providerModelCatalogs,
       };
     }
@@ -151,12 +151,11 @@ export function toPersistedSettings(input: {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
-  debugProvider: DebugProviderSettings;
-  glmProvider: GlmProviderSettings;
+  providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
 }): PersistedSettings {
   const providerModelCatalogs = normalizeProviderModelCatalogs(input.providerModelCatalogs, {
-    glmModelId: input.glmProvider.modelId,
+    glmModelId: input.providerSettings.glm.modelId,
   });
   return {
     wrapLines: input.wrapLines,
@@ -164,8 +163,7 @@ export function toPersistedSettings(input: {
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
-    debugProvider: normalizeDebugProviderSettings(input.debugProvider),
-    glmProvider: normalizeGlmProviderSettings(input.glmProvider, providerModelCatalogs),
+    providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),
     providerModelCatalogs,
   };
 }

@@ -53,7 +53,23 @@ GLM maps this to OpenAI-style messages in `glmPrompt.ts` (single combined `syste
 
 ### Settings (`settings.json`)
 
-`GlmProviderSettings` in `contracts.ts`, normalized in `glmProviderSettings.ts`:
+Provider-specific blocks live under **`providerSettings`** (`AppProviderSettings` in `contracts.ts`), normalized in `appProviderSettings.ts`. Each provider type extends **`ProviderSettingsBase`** (`enabled: boolean`).
+
+```json
+{
+  "providerSettings": {
+    "glm": { "enabled": true, "baseUrl": "...", "modelId": "glm-4-flash" },
+    "debug": { "enabled": true, "simulationSeed": null, "delayMsMin": 200, ... }
+  },
+  "providerModelCatalogs": { "glm": { "modelIds": [...], "defaultModelId": "..." } }
+}
+```
+
+**Breaking change (R3-7):** top-level `glmProvider` / `debugProvider` keys are no longer read or written; re-save settings or edit `providerSettings` in `settings.json`.
+
+#### GLM (`providerSettings.glm`)
+
+Normalized in `glmProviderSettings.ts`:
 
 | Field | Default | Purpose |
 | --- | --- | --- |
@@ -61,7 +77,13 @@ GLM maps this to OpenAI-style messages in `glmPrompt.ts` (single combined `syste
 | `baseUrl` | `https://open.bigmodel.cn/api/paas/v4` | API root (trailing slashes stripped) |
 | `modelId` | `glm-4-flash` | Legacy default; kept in sync with GLM catalog default |
 
+#### Debug (`providerSettings.debug`)
+
+Normalized in `debugProviderSettings.ts` (simulation timing, failure injection, diagnostics). Settings-gated; disabled by default in product builds.
+
 Model lists and per-thread selection use **`providerModelCatalogs.glm`** (`providerModelCatalog.ts`), editable in Settings. Defaults: `glm-4-flash`, `glm-4-air`, `glm-4-plus`.
+
+Use `getProviderSettings(settings, "glm")` from `appProviderSettings.ts` for typed access when adding providers — extend **`ProviderSettingsById`** once per new configured provider.
 
 ### Secrets (`provider-secrets.json`)
 
@@ -128,7 +150,7 @@ JSON body (only these fields are sent):
 }
 ```
 
-`model` comes from `ProviderSendRequest.modelId` (thread `selectedModelId` or provider default), not from the legacy `glmProvider.modelId` field at send time.
+`model` comes from `ProviderSendRequest.modelId` (thread `selectedModelId` or provider default), not from `providerSettings.glm.modelId` at send time.
 
 ### Response handling
 
@@ -213,7 +235,9 @@ Send blocked reasons include `glm_not_configured`, `invalid_model`, `preflight`,
 | --- | --- |
 | `glmChatProvider.ts` | HTTP adapter, error mapping |
 | `glmPrompt.ts` | Payload → `messages[]` |
-| `glmProviderSettings.ts` | Defaults, normalize, configured checks |
+| `appProviderSettings.ts` | Bundle normalize, `getProviderSettings` helpers |
+| `glmProviderSettings.ts` | GLM defaults, normalize, configured checks |
+| `debugProviderSettings.ts` | Debug simulator defaults and normalize |
 | `providerSecretsStore.ts` | Provider API key persistence |
 | `bootstrap.ts` | Register providers at startup |
 | `capabilityChecker.ts` | Registry-backed preflight |

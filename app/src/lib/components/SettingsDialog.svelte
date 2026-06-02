@@ -376,7 +376,7 @@
       <label class="settings-toggle">
         <input
           type="checkbox"
-          checked={snapshot.settings.glmProvider.enabled}
+          checked={snapshot.settings.providerSettings.glm.enabled}
           onchange={(event) =>
             updateGlmProviderSetting(
               "enabled",
@@ -405,7 +405,7 @@
         <input
           type="url"
           spellcheck="false"
-          value={snapshot.settings.glmProvider.baseUrl}
+          value={snapshot.settings.providerSettings.glm.baseUrl}
           onchange={(event) =>
             updateGlmProviderSetting(
               "baseUrl",
@@ -430,7 +430,7 @@
       <label class="settings-toggle">
         <input
           type="checkbox"
-          checked={snapshot.settings.debugProvider.enabled}
+          checked={snapshot.settings.providerSettings.debug.enabled}
           onchange={(event) =>
             updateDebugProviderSetting(
               "enabled",
@@ -448,7 +448,7 @@
           type="text"
           inputmode="numeric"
           placeholder="Random"
-          value={snapshot.settings.debugProvider.simulationSeed ?? ""}
+          value={snapshot.settings.providerSettings.debug.simulationSeed ?? ""}
           oninput={(event) =>
             updateDebugProviderSeed((event.currentTarget as HTMLInputElement).value)}
         />
@@ -458,7 +458,7 @@
         <input
           type="number"
           min="0"
-          value={snapshot.settings.debugProvider.delayMsMin}
+          value={snapshot.settings.providerSettings.debug.delayMsMin}
           onchange={(event) =>
             updateDebugProviderNumberSetting(
               "delayMsMin",
@@ -471,7 +471,7 @@
         <input
           type="number"
           min="0"
-          value={snapshot.settings.debugProvider.delayMsMax}
+          value={snapshot.settings.providerSettings.debug.delayMsMax}
           onchange={(event) =>
             updateDebugProviderNumberSetting(
               "delayMsMax",
@@ -484,7 +484,7 @@
         <input
           type="number"
           min="1"
-          value={snapshot.settings.debugProvider.chunkCharsMin}
+          value={snapshot.settings.providerSettings.debug.chunkCharsMin}
           onchange={(event) =>
             updateDebugProviderNumberSetting(
               "chunkCharsMin",
@@ -497,7 +497,7 @@
         <input
           type="number"
           min="1"
-          value={snapshot.settings.debugProvider.chunkCharsMax}
+          value={snapshot.settings.providerSettings.debug.chunkCharsMax}
           onchange={(event) =>
             updateDebugProviderNumberSetting(
               "chunkCharsMax",
@@ -512,7 +512,7 @@
           min="0"
           max="1"
           step="0.01"
-          value={snapshot.settings.debugProvider.failureProbability}
+          value={snapshot.settings.providerSettings.debug.failureProbability}
           onchange={(event) =>
             updateDebugProviderNumberSetting(
               "failureProbability",
@@ -524,7 +524,7 @@
         <span>Failure message</span>
         <input
           type="text"
-          value={snapshot.settings.debugProvider.failureMessage}
+          value={snapshot.settings.providerSettings.debug.failureMessage}
           onchange={(event) =>
             updateDebugProviderSetting(
               "failureMessage",
@@ -538,7 +538,7 @@
       <label class="settings-toggle">
         <input
           type="checkbox"
-          checked={snapshot.settings.debugProvider.includeDiagnostics}
+          checked={snapshot.settings.providerSettings.debug.includeDiagnostics}
           onchange={(event) =>
             updateDebugProviderSetting(
               "includeDiagnostics",

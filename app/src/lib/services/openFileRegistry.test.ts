@@ -7,8 +7,7 @@ import type {
 } from "../domain/contracts";
 import { createFileTab } from "../domain/contracts";
 import { createSessionFsMock } from "../test/sessionMock";
-import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
-import { defaultGlmProviderSettings } from "../ai/providers/glmProviderSettings";
+import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import {
   applyRegistryDedupeToWindowSnapshot,
@@ -196,8 +195,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         },
         decoratePlaintextSymbols: false,
         hideActivityRailWhenNotepadOnly: true,
-        debugProvider: defaultDebugProviderSettings,
-        glmProvider: defaultGlmProviderSettings,
+        providerSettings: defaultAppProviderSettings,
         providerModelCatalogs: defaultProviderModelCatalogs,
         glmApiKey: "",
       },
@@ -298,8 +296,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         },
         decoratePlaintextSymbols: false,
         hideActivityRailWhenNotepadOnly: true,
-        debugProvider: defaultDebugProviderSettings,
-        glmProvider: defaultGlmProviderSettings,
+        providerSettings: defaultAppProviderSettings,
         providerModelCatalogs: defaultProviderModelCatalogs,
         glmApiKey: "",
       },

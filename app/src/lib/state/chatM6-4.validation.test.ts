@@ -39,12 +39,12 @@ describe("M6-4 edge-case transitions", () => {
       failureProbability: 0,
       includeDiagnostics: false,
     });
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider));
+    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.debugProvider,
+        () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.glmProvider,
+          settings: appState.getSnapshot().settings.providerSettings.glm,
           apiKey: appState.getSnapshot().settings.glmApiKey,
         }),
       ),

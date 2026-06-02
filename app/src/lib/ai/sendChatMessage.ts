@@ -149,7 +149,7 @@ async function validateProviderSend(
 ): Promise<ProviderSendValidationFailure | ProviderSendValidationSuccess> {
   const providerId = chatStore.getActiveChatProvider(activeAgentId);
   const appSettings = appState.getSnapshot().settings;
-  const debugSettings = appSettings.debugProvider;
+  const debugSettings = appSettings.providerSettings.debug;
   if (isDebugProviderSendBlocked(providerId, debugSettings)) {
     return {
       ok: false,
@@ -158,7 +158,7 @@ async function validateProviderSend(
     };
   }
 
-  if (isGlmProviderSendBlocked(providerId, appSettings.glmProvider, appSettings.glmApiKey)) {
+  if (isGlmProviderSendBlocked(providerId, appSettings.providerSettings.glm, appSettings.glmApiKey)) {
     return {
       ok: false,
       reason: "glm_not_configured",

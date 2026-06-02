@@ -49,8 +49,8 @@
   const isGenerating = $derived($chatIsGenerating);
   const canRetryLastTurn = $derived($chatCanRetryLastTurn);
   const lastError = $derived($chatLastError);
-  const debugProviderSettings = $derived($appState.settings.debugProvider);
-  const glmProviderSettings = $derived($appState.settings.glmProvider);
+  const debugProviderSettings = $derived($appState.settings.providerSettings.debug);
+  const glmProviderSettings = $derived($appState.settings.providerSettings.glm);
   const glmApiKey = $derived($appState.settings.glmApiKey);
   const providerModelCatalogs = $derived($appState.settings.providerModelCatalogs);
   const activeMode = $derived(metadata?.mode ?? "ask");

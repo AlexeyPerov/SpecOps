@@ -14,19 +14,19 @@ export function initializeChatProviders(): void {
   }
 
   registerChatProvider(
-    createDebugChatProvider(() => appState.getSnapshot().settings.debugProvider),
+    createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug),
   );
   registerChatProvider(
     createGlmChatProvider(() => ({
-      settings: appState.getSnapshot().settings.glmProvider,
+      settings: appState.getSnapshot().settings.providerSettings.glm,
       apiKey: appState.getSnapshot().settings.glmApiKey,
     })),
   );
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
-      () => appState.getSnapshot().settings.debugProvider,
+      () => appState.getSnapshot().settings.providerSettings.debug,
       () => ({
-        settings: appState.getSnapshot().settings.glmProvider,
+        settings: appState.getSnapshot().settings.providerSettings.glm,
         apiKey: appState.getSnapshot().settings.glmApiKey,
       }),
     ),
@@ -34,8 +34,8 @@ export function initializeChatProviders(): void {
   chatStore.setDefaultChatProviderResolver(() => {
     const snapshot = appState.getSnapshot().settings;
     return resolveDefaultChatProvider(
-      snapshot.debugProvider,
-      isGlmProviderConfigured(snapshot.glmProvider, snapshot.glmApiKey),
+      snapshot.providerSettings.debug,
+      isGlmProviderConfigured(snapshot.providerSettings.glm, snapshot.glmApiKey),
     );
   });
   initialized = true;

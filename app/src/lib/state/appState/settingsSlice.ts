@@ -1,5 +1,6 @@
 import type {
   AppDomainState,
+  AppProviderSettings,
   AppSettingsState,
   ChatProviderId,
   DebugProviderSettings,
@@ -9,11 +10,11 @@ import type {
   ProviderModelCatalogs,
 } from "../../domain/contracts";
 import {
-  defaultDebugProviderSettings,
-  normalizeDebugProviderSettings,
-} from "../../ai/providers/debugProviderSettings";
+  defaultAppProviderSettings,
+  normalizeAppProviderSettings,
+} from "../../ai/providers/appProviderSettings";
+import { normalizeDebugProviderSettings } from "../../ai/providers/debugProviderSettings";
 import {
-  defaultGlmProviderSettings,
   normalizeGlmProviderSettings,
   syncGlmProviderSettingsWithCatalog,
 } from "../../ai/providers/glmProviderSettings";
@@ -36,8 +37,7 @@ export const defaultSettings: AppSettingsState = {
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
-  debugProvider: defaultDebugProviderSettings,
-  glmProvider: defaultGlmProviderSettings,
+  providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
   glmApiKey: "",
 };
@@ -64,7 +64,10 @@ export function createSettingsSlice(update: SettingsUpdate) {
         ...state,
         settings: {
           ...state.settings,
-          debugProvider: normalizeDebugProviderSettings(debugProvider),
+          providerSettings: {
+            ...state.settings.providerSettings,
+            debug: normalizeDebugProviderSettings(debugProvider),
+          },
         },
       }));
     },
@@ -73,10 +76,13 @@ export function createSettingsSlice(update: SettingsUpdate) {
         ...state,
         settings: {
           ...state.settings,
-          debugProvider: normalizeDebugProviderSettings({
-            ...state.settings.debugProvider,
-            ...patch,
-          }),
+          providerSettings: {
+            ...state.settings.providerSettings,
+            debug: normalizeDebugProviderSettings({
+              ...state.settings.providerSettings.debug,
+              ...patch,
+            }),
+          },
         },
       }));
     },
@@ -85,10 +91,10 @@ export function createSettingsSlice(update: SettingsUpdate) {
         ...state,
         settings: {
           ...state.settings,
-          glmProvider: normalizeGlmProviderSettings(
-            glmProvider,
-            state.settings.providerModelCatalogs,
-          ),
+          providerSettings: {
+            ...state.settings.providerSettings,
+            glm: normalizeGlmProviderSettings(glmProvider, state.settings.providerModelCatalogs),
+          },
         },
       }));
     },
@@ -97,30 +103,36 @@ export function createSettingsSlice(update: SettingsUpdate) {
         ...state,
         settings: {
           ...state.settings,
-          glmProvider: normalizeGlmProviderSettings(
-            {
-              ...state.settings.glmProvider,
-              ...patch,
-            },
-            state.settings.providerModelCatalogs,
-          ),
+          providerSettings: {
+            ...state.settings.providerSettings,
+            glm: normalizeGlmProviderSettings(
+              {
+                ...state.settings.providerSettings.glm,
+                ...patch,
+              },
+              state.settings.providerModelCatalogs,
+            ),
+          },
         },
       }));
     },
     setProviderModelCatalogs(providerModelCatalogs: ProviderModelCatalogs) {
       update((state) => {
         const normalizedCatalogs = normalizeProviderModelCatalogs(providerModelCatalogs, {
-          glmModelId: state.settings.glmProvider.modelId,
+          glmModelId: state.settings.providerSettings.glm.modelId,
         });
         return {
           ...state,
           settings: {
             ...state.settings,
             providerModelCatalogs: normalizedCatalogs,
-            glmProvider: syncGlmProviderSettingsWithCatalog(
-              state.settings.glmProvider,
-              normalizedCatalogs,
-            ),
+            providerSettings: {
+              ...state.settings.providerSettings,
+              glm: syncGlmProviderSettingsWithCatalog(
+                state.settings.providerSettings.glm,
+                normalizedCatalogs,
+              ),
+            },
           },
         };
       });
@@ -144,13 +156,16 @@ export function createSettingsSlice(update: SettingsUpdate) {
           settings: {
             ...state.settings,
             providerModelCatalogs,
-            glmProvider:
-              providerId === "glm"
-                ? syncGlmProviderSettingsWithCatalog(
-                    state.settings.glmProvider,
-                    providerModelCatalogs,
-                  )
-                : state.settings.glmProvider,
+            providerSettings: {
+              ...state.settings.providerSettings,
+              glm:
+                providerId === "glm"
+                  ? syncGlmProviderSettingsWithCatalog(
+                      state.settings.providerSettings.glm,
+                      providerModelCatalogs,
+                    )
+                  : state.settings.providerSettings.glm,
+            },
           },
         };
       });
@@ -165,8 +180,7 @@ export function createSettingsSlice(update: SettingsUpdate) {
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
       hideActivityRailWhenNotepadOnly?: boolean;
-      debugProvider?: DebugProviderSettings;
-      glmProvider?: GlmProviderSettings;
+      providerSettings?: Partial<AppProviderSettings>;
       providerModelCatalogs?: ProviderModelCatalogs;
     }) {
       update((state) => {
@@ -210,34 +224,38 @@ export function createSettingsSlice(update: SettingsUpdate) {
             },
           };
         }
-        if (partial.debugProvider) {
+        if (partial.providerSettings?.debug) {
           next = {
             ...next,
             settings: {
               ...next.settings,
-              debugProvider: normalizeDebugProviderSettings(partial.debugProvider),
+              providerSettings: {
+                ...next.settings.providerSettings,
+                debug: normalizeDebugProviderSettings(partial.providerSettings.debug),
+              },
             },
           };
         }
 
+        const glmModelId =
+          partial.providerSettings?.glm?.modelId ?? next.settings.providerSettings.glm.modelId;
         const providerModelCatalogs = partial.providerModelCatalogs
-          ? normalizeProviderModelCatalogs(partial.providerModelCatalogs, {
-              glmModelId: partial.glmProvider?.modelId ?? next.settings.glmProvider.modelId,
-            })
-          : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs, {
-              glmModelId: partial.glmProvider?.modelId ?? next.settings.glmProvider.modelId,
-            });
+          ? normalizeProviderModelCatalogs(partial.providerModelCatalogs, { glmModelId })
+          : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs, { glmModelId });
 
-        if (partial.glmProvider || partial.providerModelCatalogs) {
+        if (partial.providerSettings?.glm || partial.providerModelCatalogs) {
           next = {
             ...next,
             settings: {
               ...next.settings,
               providerModelCatalogs,
-              glmProvider: normalizeGlmProviderSettings(
-                partial.glmProvider ?? next.settings.glmProvider,
-                providerModelCatalogs,
-              ),
+              providerSettings: {
+                ...next.settings.providerSettings,
+                glm: normalizeGlmProviderSettings(
+                  partial.providerSettings?.glm ?? next.settings.providerSettings.glm,
+                  providerModelCatalogs,
+                ),
+              },
             },
           };
         }

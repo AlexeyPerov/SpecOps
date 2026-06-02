@@ -92,7 +92,7 @@ Single source of truth for:
 - **`AppSettingsState`** (including GLM settings and in-memory API key)
 - Theme (builtin + custom), recent files
 
-Mutations are methods on the exported store object (e.g. `openDocument`, `setGlmApiKey`, workspace close with dirty prompts).
+Mutations are methods on the exported store object (e.g. `openDocument`, `setProviderApiKey`, workspace close with dirty prompts). `setGlmApiKey` remains a thin `"glm"` wrapper for tests and legacy call sites.
 
 Implementation is split into colocated modules under `app/src/lib/state/appState/`:
 
@@ -140,7 +140,7 @@ Shared prompt shape is defined in `app/src/lib/ai/providers/types.ts` so Debug a
 ## Commands and menus
 
 - **`AppCommandId`** — stable command ids in `contracts.ts`.
-- **`commands/registry.ts`** — bindings, menu initialization, dispatch from `+page.svelte` and native menu.
+- **`commands/registry.ts`** — command definitions with per-platform `binding.mac` / `binding.windows`; `expandPlatformKeymaps()` builds platform keymaps from those bindings (no duplicated Meta/Ctrl maps). Menu initialization and dispatch run from `+page.svelte` and the native menu.
 
 Prefer adding behavior through a command id when it is user-facing and needs shortcuts or menu entries.
 
@@ -150,8 +150,8 @@ All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`)
 
 | File / area | Contents |
 | --- | --- |
-| `settings.json` | Editor, external files, debug/GLM provider settings, model catalogs (not API key) |
-| `provider-secrets.json` | Provider API keys (`providerSecretsStore.ts`) |
+| `settings.json` | Editor, external files, `providerSettings` (GLM + Debug), `providerModelCatalogs` (not API keys) |
+| `provider-secrets.json` | Provider API keys keyed by `ChatProviderId` (`providerSecretsStore.ts`: `loadProviderApiKey` / `saveProviderApiKey`) |
 | `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
 | `themes.json` | Active and custom themes |
 | `chat/{hash}/` | Per-workspace agent index and thread JSON |
@@ -170,15 +170,19 @@ Custom commands: `take_pending_opened_paths`, `sync_file_watcher_paths`.
 
 ## UI composition
 
-`+page.svelte` wires:
+`+page.svelte` wires (Svelte 5 runes: `$state`, `$derived`, `$effect`):
 
 - Activity rail (notepad / workspaces)
 - Project panel, editor + tab bar, agents sidebar, chat panel
 - Settings dialog, theme pane, console (logs only)
 
+### Settings dialog tab registry
+
+Tab ids and sidebar labels live in **`SETTINGS_TABS`** (`app/src/lib/services/settingsDialogUi.ts`), not as hardcoded unions scattered across the dialog. Each entry is a `SettingsTabDefinition` (`id`, `label`, `panelAriaLabel`). Current tabs: `editor`, `glm`, `debugAi`. `SettingsDialog.svelte` renders sidebar and panels from registry order; `openSettingsDialog(tab)` opens a specific tab (used by ChatPanel CTAs and commands).
+
 Routing helpers: `editorRouting.ts` (file vs agent tab), `workspaceAgentSession.ts` (agent tab lifecycle).
 
-Editor: CodeMirror via `EditorSurface.svelte`, language detection in `editorLanguage.ts`.
+Editor: CodeMirror via `EditorSurface.svelte` (Svelte 5 runes), language detection in `editorLanguage.ts`. `TabBar.svelte` and `TabBarContextMenu.svelte` also use runes.
 
 Chat panel subcomponents (extracted from `ChatPanel.svelte`):
 
@@ -229,7 +233,7 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 2. **Provider-agnostic prompts** — Build `ProviderRequestPayload` once; adapters map to vendor APIs (see `glmPrompt.ts`).
 3. **Secrets separate from settings** — API keys go in `provider-secrets.json`, not `settings.json` or chat thread files.
 4. **User-facing errors** — Throw `ChatProviderError` with `userMessage` in providers; map HTTP/status in one place per provider.
-5. **Svelte 5** — Use runes (`$state`, `$derived`, `$effect`) consistent with existing components; load Svelte skills/MCP when editing `.svelte` files.
+5. **Svelte 5** — Shell components (`+page.svelte`, `TabBar`, `EditorSurface`) use runes; match that style in new `.svelte` work. Load Svelte skills/MCP when editing `.svelte` files.
 6. **Minimal Rust** — Prefer implementing features in TypeScript unless OS integration requires native code.
 
 ### Avoid

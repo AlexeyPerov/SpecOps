@@ -196,7 +196,7 @@ Dependencies: R1 complete, R3-5 recommended first (smaller components migrated b
 
 ---
 
-#### Task R3-7: Provider settings naming cleanup (optional depth) [Score:4] [Agent:medium] [DONE] [DONE]
+#### Task R3-7: Provider settings naming cleanup (optional depth) [Score:4] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -220,7 +220,7 @@ Dependencies: R3-1, R3-2.
 
 ---
 
-#### Task R3-8: Validation and docs [Score:2] [Agent:easy]
+#### Task R3-8: Validation and docs [Score:2] [Agent:easy] [DONE]
 
 **Required context**
 

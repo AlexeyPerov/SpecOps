@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-02 — Refactoring R1–R3 complete (R3-8)
+
+Milestone series **R0 → R1 → R2 → R3** is complete. Validation: `npm test` (590 tests), `npm run check` (0 errors; pre-existing `ThemePane.svelte` CSS warnings only).
+
+**R0 — Test baseline:** Unit tests and pure extractions for shell/services (`openActivePath`, `windowBounds`, `settingsDialogUi`, `fileWatcher`, `appShellHelpers`) before structural refactors.
+
+**R1 — App shell decomposition:** Extracted `appShellRuntime.ts` and project-tree logic from `+page.svelte`; unified markdown preview on per-document `markdownViewMode`; added `MarkdownEditorPane`, `DiffPreviewPane`, `DocumentEditor`; reduced page script surface.
+
+**R2 — State store decomposition:** Split `appState` into colocated modules (`contextHelpers`, `documentTabsSlice`, `workspaceContextsSlice`, `settingsSlice`, `themeController`, …) and `chatStore` into `agents`, `threads`, `runtime`, `access`, …; removed legacy top-level `documents`/`session` mirror (single source of truth in context snapshots); decomposed `TabBar` (~287 lines) and `ChatPanel` (~298 lines) into subcomponents.
+
+**R3 — Provider abstraction and polish:** Provider-keyed `provider-secrets.json` and `providerSettings` bundle in `settings.json`; `SETTINGS_TABS` registry for settings dialog; DRY keymaps via `expandPlatformKeymaps()`; shared `DRAFT_AGENT_TITLE` and `getErrorMessage()`; Svelte 5 runes in `+page.svelte`, `TabBar`, `EditorSurface`.
+
+Updated `docs/architecture.md` (state layout, secrets store, settings tab registry, keymap helper, runes). Marked `Task R3-8` as `[DONE]` in `specs/refactoring-1/r3-execution-plan.md`.
+
 ## 2026-06-02 — R3 provider settings bundle (R3-7)
 
 - Added `ProviderSettingsBase`, `ProviderSettingsById`, and `AppProviderSettings`; `AppSettingsState` now uses `providerSettings: { glm, debug }` instead of top-level `glmProvider` / `debugProvider`.

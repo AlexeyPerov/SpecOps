@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-02 17:10 — Build warnings (dock menu, ThemePane CSS)
+
+- **macOS dock menu:** Reimplemented `dock_menu.rs` with `objc2` / `objc2-app-kit` (removed deprecated `cocoa` / `objc`); dropped erroneous `mem::forget` on menu target.
+- **ThemePane:** Split `settingsFormMultiline.css` from `settingsForm.css` so scoped imports no longer trigger unused `textarea` / `select` selector warnings; `SettingsDialog` imports both.
+
+## 2026-06-02 — Window sizing and tab transfer follow-up
+
+- New windows copy size from the **current** parent window (`readWindowBounds`) instead of stale persisted bounds; size is applied only via `applyWindowBounds` after create.
+- Dragging a tab onto another window merges it there (`spec-ops/window/merge-tab`) instead of always spawning another window.
+- After the last real tab leaves, source windows with only an empty bootstrap tab (or no tabs) close automatically.
+
+## 2026-06-02 15:56 — Window, tabs, and unsaved-close UX
+
+- **New window sizing:** Secondary windows inherit logical size from persisted `session.windowBounds` or the parent window via `readWindowBounds()` (fixes Retina 2× oversize); `applyWindowBounds()` runs after create.
+- **macOS dock menu:** Dock icon context menu adds “New Window” (`spec-ops/dock/new-window` → `app.newWindow`).
+- **Cmd+N:** File menu “New Tab” with `CmdOrCtrl+N`; editor focus no longer blocks `file.new` / save / `tab.close` (`EDITOR_GLOBAL_COMMANDS`).
+- **Tab tear-off:** 2D drag threshold and tear-off when dragging outside the tab strip; dirty tabs prompt before transfer.
+- **Unsaved close:** Native Save / Don’t Save / Cancel dialog (`@tauri-apps/plugin-dialog` `message`) on tab close (X, Cmd+W, context menu, bulk close).
+
 ## 2026-06-02 — Refactoring R1–R3 complete (R3-8)
 
 Milestone series **R0 → R1 → R2 → R3** is complete. Validation: `npm test` (590 tests), `npm run check` (0 errors; pre-existing `ThemePane.svelte` CSS warnings only).

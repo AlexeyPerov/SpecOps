@@ -640,6 +640,7 @@
 
 <style>
   @import "../styles/settingsForm.css";
+  @import "../styles/settingsFormMultiline.css";
   @import "../styles/settingsDialogForm.css";
 
   .settings-dialog-backdrop {

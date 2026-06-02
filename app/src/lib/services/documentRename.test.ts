@@ -38,7 +38,7 @@ describe("renameDocumentOnDisk", () => {
     await renameDocumentOnDisk("doc-1", { windowId: "main", notify });
 
     expect(renameFileMock).toHaveBeenCalledWith("/tmp/foo.txt");
-    const doc = appState.getSnapshot().documents.find((entry) => entry.id === "doc-1");
+    const doc = appState.getActiveDocuments().find((entry) => entry.id === "doc-1");
     expect(doc?.filePath).toBe("/tmp/bar.txt");
     expect(doc?.title).toBe("bar.txt");
     expect(renameOpenFileRegistryMock).toHaveBeenCalledWith(
@@ -56,7 +56,7 @@ describe("renameDocumentOnDisk", () => {
 
     await renameDocumentOnDisk("doc-1", { windowId: "main", notify });
 
-    const doc = appState.getSnapshot().documents.find((entry) => entry.id === "doc-1");
+    const doc = appState.getActiveDocuments().find((entry) => entry.id === "doc-1");
     expect(doc?.filePath).toBe("/tmp/foo.txt");
     expect(renameOpenFileRegistryMock).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
@@ -70,7 +70,7 @@ describe("renameDocumentOnDisk", () => {
 
     await renameDocumentOnDisk("doc-1", { windowId: "main", notify });
 
-    const doc = appState.getSnapshot().documents.find((entry) => entry.id === "doc-1");
+    const doc = appState.getActiveDocuments().find((entry) => entry.id === "doc-1");
     expect(doc?.isDirty).toBe(true);
     expect(doc?.content).toBe("changed");
   });

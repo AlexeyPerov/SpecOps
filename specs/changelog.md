@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-02 07:40 — R2 remove legacy documents/session mirror (R2-6)
+
+- Removed top-level `documents` and `session` from `AppDomainState`; active context data lives only in `WindowContextState` snapshots.
+- Added `patchActiveContext`, `getActiveDocuments`, and `getActiveSession` in `contextHelpers.ts`; document/tab and workspace slices mutate via `patchActiveContext` instead of legacy sync wrappers.
+- Removed `syncLegacyFieldsIntoActiveContext` and `withActiveContextApplied` from `appState.ts`; store `update()` applies mutators directly.
+- Updated `+page.svelte`, command registry, external file services, and tests to use getters or `getActiveContextSnapshot`.
+- Documented single-source-of-truth shape in `docs/architecture.md`. Marked `Task R2-6` as `[DONE]` in `specs/refactoring-1/r2-execution-plan.md`.
+- Validation: `npm test` (582 tests), `npm run check` (pre-existing ThemePane CSS warnings only).
+
 ## 2026-06-01 22:46 — R2 chatStore module split (R2-5)
 
 - Added `app/src/lib/state/chatStore/` with `types.ts`, `workspace.ts`, `threadHelpers.ts`, `agents.ts`, `threads.ts`, `runtime.ts`, and `access.ts`; slice factories merge into `createChatStore()` while public API and derived exports stay on `chatStore.ts`.

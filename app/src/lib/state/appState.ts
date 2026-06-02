@@ -1,10 +1,5 @@
 import { writable } from "svelte/store";
-import type {
-  AppDomainState,
-  AppThemeState,
-  ContextSnapshot,
-  ExternalFilesSettings,
-} from "../domain/contracts";
+import type { AppDomainState, AppThemeState, ExternalFilesSettings } from "../domain/contracts";
 import { createFileTab } from "../domain/contracts";
 import { bumpRecentFile } from "../services/recentFiles";
 import { syncRecentFiles } from "../services/recentFilesSync";
@@ -13,7 +8,6 @@ import type { BuiltinThemeId } from "../styles/themeTokens";
 import { DEFAULT_BUILTIN_THEME } from "../styles/themeTokens";
 import {
   findWorkspaceByPath,
-  getActiveContextSnapshot,
   NOTEPAD_CONTEXT_ID,
   resetIdCounters,
 } from "./appState/contextHelpers";
@@ -37,42 +31,6 @@ import { createWorkspaceContextsSlice } from "./appState/workspaceContextsSlice"
 
 export { findWorkspaceByPath, resetThemePersistenceForTests, setThemeSaveErrorNotifier };
 
-function withActiveContextApplied(state: AppDomainState): AppDomainState {
-  const activeContext = getActiveContextSnapshot(state);
-  return {
-    ...state,
-    documents: activeContext.documents,
-    session: activeContext.session,
-  };
-}
-
-function syncLegacyFieldsIntoActiveContext(state: AppDomainState): AppDomainState {
-  const activeSnapshot: ContextSnapshot = {
-    documents: state.documents,
-    session: state.session,
-  };
-  if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
-    return {
-      ...state,
-      contexts: {
-        ...state.contexts,
-        notepad: activeSnapshot,
-      },
-    };
-  }
-  return {
-    ...state,
-    contexts: {
-      ...state.contexts,
-      workspaces: state.contexts.workspaces.map((workspace) =>
-        workspace.id === state.contexts.activeContextId
-          ? { ...workspace, snapshot: activeSnapshot }
-          : workspace,
-      ),
-    },
-  };
-}
-
 const initialState: AppDomainState = {
   contexts: {
     activeContextId: NOTEPAD_CONTEXT_ID,
@@ -87,14 +45,6 @@ const initialState: AppDomainState = {
       },
     },
     workspaces: [],
-  },
-  documents: [buildEmptyUnsavedDocument("doc-1")],
-  session: {
-    selectedTabId: "tab-1",
-    openTabs: [createFileTab("tab-1", "doc-1")],
-    lastActiveWindowId: "main",
-    windowBounds: null,
-    lastActiveAgentId: null,
   },
   settings: defaultSettings,
   theme: defaultThemeState,
@@ -114,11 +64,7 @@ function createStateStore() {
   const { subscribe, update: rawUpdate, set } = writable<AppDomainState>(initialState);
 
   function update(mutator: (state: AppDomainState) => AppDomainState): void {
-    rawUpdate((state) => {
-      const base = withActiveContextApplied(syncLegacyFieldsIntoActiveContext(state));
-      const next = mutator(base);
-      return withActiveContextApplied(syncLegacyFieldsIntoActiveContext(next));
-    });
+    rawUpdate(mutator);
   }
 
   function getSnapshot(): AppDomainState {
@@ -138,8 +84,6 @@ function createStateStore() {
     set,
     applyTheme: applyThemeState,
     getInitialEditor: () => initialState.editor,
-    syncLegacyFieldsIntoActiveContext,
-    withActiveContextApplied,
   });
 
   return {

@@ -3,6 +3,7 @@ import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
 import { isFileTab, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
+import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import {
   diskChanged,
   fingerprintsEqual,
@@ -135,7 +136,7 @@ async function flushDirtyPrompts(): Promise<void> {
       }
 
       const snapshot = appState.getSnapshot();
-      const documentState = snapshot.documents.find((doc) => doc.id === documentId);
+      const documentState = getActiveDocuments(snapshot).find((doc) => doc.id === documentId);
       if (!documentState?.filePath || !documentState.isDirty) {
         pendingDirtyPromptByDocument.delete(documentId);
         continue;
@@ -246,7 +247,7 @@ async function checkDocumentExternalChangesInner(
   trigger: ExternalCheckTrigger,
 ): Promise<ExternalCheckResult> {
   const snapshot = appState.getSnapshot();
-  const documentState = snapshot.documents.find((doc) => doc.id === documentId);
+  const documentState = getActiveDocuments(snapshot).find((doc) => doc.id === documentId);
   if (!documentState?.filePath) {
     return "skipped";
   }
@@ -342,7 +343,7 @@ export async function runStartupExternalChecks(): Promise<void> {
     return;
   }
 
-  for (const tab of snapshot.session.openTabs) {
+  for (const tab of getActiveSession(snapshot).openTabs) {
     if (!isFileTab(tab)) {
       continue;
     }
@@ -356,7 +357,7 @@ export async function runFocusExternalChecks(): Promise<void> {
     return;
   }
 
-  for (const tab of snapshot.session.openTabs) {
+  for (const tab of getActiveSession(snapshot).openTabs) {
     if (!isFileTab(tab)) {
       continue;
     }
@@ -372,11 +373,11 @@ export async function runWatcherExternalCheck(normalizedOrRawPath: string): Prom
   }
 
   const normalized = normalizePathSync(normalizedOrRawPath);
-  for (const tab of snapshot.session.openTabs) {
+  for (const tab of getActiveSession(snapshot).openTabs) {
     if (!isFileTab(tab)) {
       continue;
     }
-    const documentState = snapshot.documents.find((doc) => doc.id === tab.documentId);
+    const documentState = getActiveDocuments(snapshot).find((doc) => doc.id === tab.documentId);
     if (
       documentState?.filePath &&
       normalizePathSync(documentState.filePath) === normalized
@@ -391,11 +392,11 @@ export async function runWatcherExternalCheck(normalizedOrRawPath: string): Prom
 export function collectOpenFilePaths(): string[] {
   const snapshot = appState.getSnapshot();
   const paths = new Set<string>();
-  for (const tab of snapshot.session.openTabs) {
+  for (const tab of getActiveSession(snapshot).openTabs) {
     if (!isFileTab(tab)) {
       continue;
     }
-    const documentState = snapshot.documents.find((doc) => doc.id === tab.documentId);
+    const documentState = getActiveDocuments(snapshot).find((doc) => doc.id === tab.documentId);
     if (documentState?.filePath) {
       paths.add(documentState.filePath);
     }
@@ -405,8 +406,8 @@ export function collectOpenFilePaths(): string[] {
 
 export async function reloadActiveDocumentFromDisk(): Promise<ExternalCheckResult> {
   const snapshot = appState.getSnapshot();
-  const selectedTab = snapshot.session.openTabs.find(
-    (tab) => tab.id === snapshot.session.selectedTabId,
+  const selectedTab = getActiveSession(snapshot).openTabs.find(
+    (tab) => tab.id === getActiveSession(snapshot).selectedTabId,
   );
   if (!selectedTab) {
     return "skipped";
@@ -417,7 +418,7 @@ export async function reloadActiveDocumentFromDisk(): Promise<ExternalCheckResul
     return "skipped";
   }
 
-  const documentState = snapshot.documents.find((doc) => doc.id === selectedDocumentId);
+  const documentState = getActiveDocuments(snapshot).find((doc) => doc.id === selectedDocumentId);
   if (!documentState?.filePath) {
     return "skipped";
   }

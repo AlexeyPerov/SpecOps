@@ -186,30 +186,6 @@ describe("syncOpenFileRegistryForWindow", () => {
         },
         workspaces: [],
       },
-      documents: [
-        {
-          id: "doc-1",
-          filePath: "/tmp/new.txt",
-          title: "new.txt",
-          content: "",
-          savedContent: "",
-          isDirty: false,
-          language: "plaintext",
-          encoding: "utf-8",
-          lineEnding: "lf",
-          diskFingerprint: null,
-          dismissedFingerprint: null,
-          fileMissing: false,
-          scrollTop: 0,
-          markdownViewMode: "edit",
-        },
-      ],
-      session: {
-        selectedTabId: "tab-1",
-        openTabs: [createFileTab("tab-1", "doc-1")],
-        lastActiveWindowId: "win-a",
-        windowBounds: null,
-      },
       settings: {
         statusBarVisible: true,
         externalFiles: {
@@ -311,13 +287,6 @@ describe("syncOpenFileRegistryForWindow", () => {
             },
           },
         ],
-      },
-      documents: [],
-      session: {
-        selectedTabId: null,
-        openTabs: [],
-        lastActiveWindowId: "win-a",
-        windowBounds: null,
       },
       settings: {
         statusBarVisible: true,

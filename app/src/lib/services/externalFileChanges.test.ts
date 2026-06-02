@@ -92,7 +92,7 @@ describe("checkDocumentExternalChanges", () => {
     readTextFileMock.mockResolvedValue("new");
 
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("reloaded");
-    const document = appState.getSnapshot().documents.find((doc) => doc.id === documentId);
+    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
     expect(document?.content).toBe("new");
     expect(document?.isDirty).toBe(false);
   });
@@ -123,7 +123,7 @@ describe("checkDocumentExternalChanges", () => {
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("deferred");
     await flushMicrotasks();
 
-    const document = appState.getSnapshot().documents.find((doc) => doc.id === documentId);
+    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
     expect(document?.content).toBe("from disk");
     expect(document?.isDirty).toBe(false);
     expect(confirmMock).toHaveBeenCalledOnce();
@@ -137,7 +137,7 @@ describe("checkDocumentExternalChanges", () => {
     await checkDocumentExternalChanges(documentId, "watcher");
     await flushMicrotasks();
 
-    const document = appState.getSnapshot().documents.find((doc) => doc.id === documentId);
+    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
     expect(document?.content).toBe("local edited");
     expect(document?.dismissedFingerprint).toEqual(fp2);
     expect(document?.isDirty).toBe(true);
@@ -148,7 +148,7 @@ describe("checkDocumentExternalChanges", () => {
     statMock.mockRejectedValue(new Error("no such file or directory"));
 
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("missing");
-    const document = appState.getSnapshot().documents.find((doc) => doc.id === documentId);
+    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
     expect(document?.fileMissing).toBe(true);
     expect(document?.content).toBe("keep me");
   });
@@ -161,7 +161,7 @@ describe("checkDocumentExternalChanges", () => {
 
     await checkDocumentExternalChanges(documentId, "watcher");
     expect(
-      appState.getSnapshot().documents.find((doc) => doc.id === documentId)?.fileMissing,
+      appState.getActiveDocuments().find((doc) => doc.id === documentId)?.fileMissing,
     ).toBe(false);
   });
 
@@ -296,10 +296,10 @@ describe("runWatcherExternalCheck", () => {
 
     await runWatcherExternalCheck("/tmp/watched.txt");
 
-    expect(appState.getSnapshot().documents.find((doc) => doc.id === "doc-2")?.content).toBe(
+    expect(appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.content).toBe(
       "updated",
     );
-    expect(appState.getSnapshot().documents.find((doc) => doc.id === "doc-3")?.content).toBe(
+    expect(appState.getActiveDocuments().find((doc) => doc.id === "doc-3")?.content).toBe(
       "other",
     );
   });

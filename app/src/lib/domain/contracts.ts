@@ -338,12 +338,6 @@ export type OpenFileRegistry = Record<string, OpenFileOwner>;
 
 export interface AppDomainState {
   contexts: WindowContextState;
-  /**
-   * Active context mirrors for legacy consumers.
-   * Keep in sync with `contexts[activeContextId]`.
-   */
-  documents: DocumentState[];
-  session: SessionState;
   settings: AppSettingsState;
   theme: AppThemeState;
   recentFiles: string[];

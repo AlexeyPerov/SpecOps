@@ -22,29 +22,29 @@ describe("appState tabs and selection", () => {
   it("createTab adds a document and selects it", () => {
     appState.createTab();
     const snapshot = appState.getSnapshot();
-    expect(snapshot.session.openTabs).toHaveLength(2);
-    expect(snapshot.documents).toHaveLength(2);
-    expect(snapshot.session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(appState.getActiveDocuments()).toHaveLength(2);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
   it("selectTab ignores unknown tab ids", () => {
     appState.selectTab("tab-missing");
-    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-1");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-1");
   });
 
   it("openOrFocusAgentTab opens a new agent tab and focuses an existing one", () => {
     appState.openOrFocusAgentTab("agent-a");
     let snapshot = appState.getSnapshot();
-    expect(snapshot.session.openTabs).toHaveLength(2);
-    const firstAgentTab = snapshot.session.openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a");
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    const firstAgentTab = appState.getActiveSession().openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a");
     expect(firstAgentTab?.id).toBe("tab-2");
-    expect(snapshot.session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
 
     appState.selectTab("tab-1");
     appState.openOrFocusAgentTab("agent-a");
     snapshot = appState.getSnapshot();
-    expect(snapshot.session.openTabs).toHaveLength(2);
-    expect(snapshot.session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
   it("closeTabsForAgent removes all tabs for that agent", () => {
@@ -53,38 +53,38 @@ describe("appState tabs and selection", () => {
     appState.closeTabsForAgent("agent-a");
 
     const snapshot = appState.getSnapshot();
-    expect(snapshot.session.openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-a")).toBe(false);
-    expect(snapshot.session.openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-b")).toBe(true);
+    expect(appState.getActiveSession().openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-a")).toBe(false);
+    expect(appState.getActiveSession().openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-b")).toBe(true);
   });
 
   it("closeTabForce focuses the next open agent tab in tab-bar order", () => {
     appState.openOrFocusAgentTab("agent-a");
     appState.openOrFocusAgentTab("agent-b");
     const agentATabId = appState
-      .getSnapshot()
-      .session.openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a")?.id;
+      .getActiveSession()
+      .openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a")?.id;
     expect(agentATabId).toBeDefined();
     appState.selectTab(agentATabId!);
 
     appState.closeTabForce(agentATabId!);
 
     const snapshot = appState.getSnapshot();
-    const selected = snapshot.session.openTabs.find((tab) => tab.id === snapshot.session.selectedTabId);
+    const selected = appState.getActiveSession().openTabs.find((tab) => tab.id === appState.getActiveSession().selectedTabId);
     expect(selected && isAgentTab(selected) ? selected.agentId : null).toBe("agent-b");
   });
 
   it("persists lastActiveAgentId in session state", () => {
     appState.setLastActiveAgentId("agent-a");
-    expect(appState.getSnapshot().session.lastActiveAgentId).toBe("agent-a");
+    expect(appState.getActiveSession().lastActiveAgentId).toBe("agent-a");
     appState.setLastActiveAgentId(null);
-    expect(appState.getSnapshot().session.lastActiveAgentId).toBeNull();
+    expect(appState.getActiveSession().lastActiveAgentId).toBeNull();
   });
 
   it("selectOrReopenTabForDocument selects an open tab", () => {
     appState.createTab();
     appState.selectTab("tab-1");
     appState.selectOrReopenTabForDocument("doc-2");
-    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
   it("selectOrReopenTabForDocument reopens a closed document in a new tab", () => {
@@ -92,31 +92,31 @@ describe("appState tabs and selection", () => {
     const documentId = appState.findDocumentIdByPath("/tmp/notes.txt");
     expect(documentId).not.toBeNull();
     appState.closeTabForce("tab-2");
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
 
     appState.selectOrReopenTabForDocument(documentId!);
     const snapshot = appState.getSnapshot();
-    expect(snapshot.session.openTabs).toHaveLength(2);
-    expect(snapshot.session.selectedTabId).toBe("tab-3");
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-3");
   });
 
   it("closeTab cannot remove the last remaining tab", () => {
     appState.closeTab("tab-1");
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
   });
 
   it("closeTab removes a tab when more than one is open", () => {
     appState.createTab();
     appState.closeTab("tab-2");
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
-    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-1");
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-1");
   });
 
   it("closeTabForce creates a new untitled tab when the last tab closes", () => {
     appState.closeTabForce("tab-1");
     const snapshot = appState.getSnapshot();
-    expect(snapshot.session.openTabs).toHaveLength(1);
-    expect(snapshot.documents[0]?.title).toBe("Untitled");
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    expect(appState.getActiveDocuments()[0]?.title).toBe("Untitled");
   });
 
   it("closeTabWithPrompt closes a non-selected dirty tab when confirmed", () => {
@@ -129,7 +129,7 @@ describe("appState tabs and selection", () => {
 
     expect(closed).toBe(true);
     expect(confirm).toHaveBeenCalledWith("Close a.txt without saving?");
-    expect(appState.getSnapshot().session.openTabs.some((tab) => tab.id === "tab-2")).toBe(false);
+    expect(appState.getActiveSession().openTabs.some((tab) => tab.id === "tab-2")).toBe(false);
   });
 
   it("closeOtherTabs keeps context tab and skips pinned tabs", () => {
@@ -158,20 +158,20 @@ describe("appState tabs and selection", () => {
 
     expect(closed).toBe(true);
     const snapshot = appState.getSnapshot();
-    expect(snapshot.session.openTabs.map((tab) => tab.id)).toEqual(["tab-2", "tab-3"]);
-    expect(snapshot.session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual(["tab-2", "tab-3"]);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
   it("closeOtherTabs aborts when a dirty tab is rejected", () => {
     appState.openFileInTab("/tmp/a.txt", "a");
     appState.openFileInTab("/tmp/b.txt", "b");
     appState.setDocumentContent("doc-3", "dirty");
-    const before = appState.getSnapshot().session.openTabs.map((tab) => tab.id);
+    const before = appState.getActiveSession().openTabs.map((tab) => tab.id);
 
     const closed = appState.closeOtherTabs("tab-2", () => false);
 
     expect(closed).toBe(false);
-    expect(appState.getSnapshot().session.openTabs.map((tab) => tab.id)).toEqual(before);
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual(before);
   });
 
   it("closeTabsToRight closes only right-side unpinned tabs", () => {
@@ -201,12 +201,12 @@ describe("appState tabs and selection", () => {
     const closed = appState.closeTabsToRight("tab-2", () => true);
 
     expect(closed).toBe(true);
-    expect(appState.getSnapshot().session.openTabs.map((tab) => tab.id)).toEqual([
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual([
       "tab-1",
       "tab-2",
       "tab-4",
     ]);
-    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
   it("closeMissingFileTabs closes missing tabs without prompt and keeps pinned missing", () => {
@@ -238,7 +238,7 @@ describe("appState tabs and selection", () => {
     const closed = appState.closeMissingFileTabs();
 
     expect(closed).toBe(true);
-    expect(appState.getSnapshot().session.openTabs.map((tab) => tab.id)).toEqual(["tab-1", "tab-3"]);
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual(["tab-1", "tab-3"]);
   });
 
   it("closeMissingFileTabs keeps one Untitled tab when all tabs close", () => {
@@ -255,22 +255,22 @@ describe("appState tabs and selection", () => {
     const snapshot = appState.getSnapshot();
 
     expect(closed).toBe(true);
-    expect(snapshot.session.openTabs).toHaveLength(1);
-    const selectedTab = snapshot.session.openTabs[0];
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    const selectedTab = appState.getActiveSession().openTabs[0];
     expect(selectedTab).toBeDefined();
-    expect(snapshot.documents.find((doc) => doc.id === tabDocumentId(selectedTab))?.title).toBe("Untitled");
+    expect(appState.getActiveDocuments().find((doc) => doc.id === tabDocumentId(selectedTab))?.title).toBe("Untitled");
   });
 
   it("reorderTabs moves tabs and ignores invalid indices", () => {
     appState.createTab();
     appState.reorderTabs(1, 0);
-    expect(appState.getSnapshot().session.openTabs.map((tab) => tab.id)).toEqual([
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual([
       "tab-2",
       "tab-1",
     ]);
 
     appState.reorderTabs(-1, 0);
-    expect(appState.getSnapshot().session.openTabs.map((tab) => tab.id)).toEqual([
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual([
       "tab-2",
       "tab-1",
     ]);
@@ -278,20 +278,20 @@ describe("appState tabs and selection", () => {
 
   it("buildTabTransferPayload reads tab data without closing", () => {
     appState.openFileInTab("/tmp/move-me.txt", "payload");
-    const tabId = appState.getSnapshot().session.selectedTabId!;
+    const tabId = appState.getActiveSession().selectedTabId!;
     expect(appState.buildTabTransferPayload(tabId)).toEqual({
       filePath: "/tmp/move-me.txt",
       content: "payload",
       title: "move-me.txt",
     });
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
   });
 
   it("removeTransferredTab closes the requested tab", () => {
     appState.openFileInTab("/tmp/move-me.txt", "payload");
-    const tabId = appState.getSnapshot().session.selectedTabId!;
+    const tabId = appState.getActiveSession().selectedTabId!;
     appState.removeTransferredTab(tabId);
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
   });
 
   it("openTransferredTab replaces bootstrap untitled in a fresh window", () => {
@@ -302,10 +302,10 @@ describe("appState tabs and selection", () => {
       title: "move-me.txt",
     });
     expect(documentId).toBe("doc-2");
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
-    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-2");
-    expect(appState.getSnapshot().documents).toHaveLength(1);
-    expect(appState.getSnapshot().documents[0]?.filePath).toBe("/tmp/move-me.txt");
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+    expect(appState.getActiveDocuments()).toHaveLength(1);
+    expect(appState.getActiveDocuments()[0]?.filePath).toBe("/tmp/move-me.txt");
   });
 
   it("transferActiveTabOut and openTransferredTab round-trip tab payload", () => {
@@ -316,12 +316,12 @@ describe("appState tabs and selection", () => {
       content: "payload",
       title: "move-me.txt",
     });
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
 
     const documentId = appState.openTransferredTab(transfer!);
     expect(documentId).toBe("doc-2");
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(2);
-    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-3");
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-3");
   });
 });
 
@@ -333,7 +333,7 @@ describe("appState documents and paths", () => {
   it("openFileInTab opens a new saved document", () => {
     appState.openFileInTab("/tmp/readme.md", "# Title");
     const snapshot = appState.getSnapshot();
-    const document = snapshot.documents.find((doc) => doc.filePath === "/tmp/readme.md");
+    const document = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/readme.md");
     expect(document?.content).toBe("# Title");
     expect(document?.language).toBe("markdown");
     expect(snapshot.recentFiles[0]).toBe("/tmp/readme.md");
@@ -344,8 +344,8 @@ describe("appState documents and paths", () => {
     appState.openFileInTab("/tmp/other.txt", "other");
     appState.openFileInTab("/tmp/dup.txt", "second");
     const snapshot = appState.getSnapshot();
-    expect(snapshot.documents.filter((doc) => doc.filePath === "/tmp/dup.txt")).toHaveLength(1);
-    expect(snapshot.session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveDocuments().filter((doc) => doc.filePath === "/tmp/dup.txt")).toHaveLength(1);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
     expect(snapshot.recentFiles[0]).toBe("/tmp/dup.txt");
   });
 
@@ -355,7 +355,7 @@ describe("appState documents and paths", () => {
 
   it("setDocumentContent marks documents dirty and detects CRLF", () => {
     appState.setDocumentContent("doc-1", "line\r\n");
-    const document = appState.getSnapshot().documents[0];
+    const document = appState.getActiveDocuments()[0];
     expect(document?.isDirty).toBe(true);
     expect(document?.lineEnding).toBe("crlf");
   });
@@ -363,7 +363,7 @@ describe("appState documents and paths", () => {
   it("markDocumentSaved clears dirty state and updates metadata", () => {
     appState.setDocumentContent("doc-1", "draft");
     appState.markDocumentSaved("doc-1", "/tmp/saved.txt", "draft");
-    const document = appState.getSnapshot().documents[0];
+    const document = appState.getActiveDocuments()[0];
     expect(document?.isDirty).toBe(false);
     expect(document?.filePath).toBe("/tmp/saved.txt");
     expect(document?.title).toBe("saved.txt");
@@ -374,20 +374,20 @@ describe("appState documents and paths", () => {
   it("refreshUntitledTitle derives title from first line", () => {
     appState.setDocumentContent("doc-1", "My Draft Title\nbody");
     appState.refreshUntitledTitle("doc-1");
-    expect(appState.getSnapshot().documents[0]?.title).toBe("My Draft Title");
+    expect(appState.getActiveDocuments()[0]?.title).toBe("My Draft Title");
   });
 
   it("refreshUntitledTitle truncates long first lines to 64 characters", () => {
     const longLine = "x".repeat(80);
     appState.setDocumentContent("doc-1", longLine);
     appState.refreshUntitledTitle("doc-1");
-    expect(appState.getSnapshot().documents[0]?.title).toHaveLength(64);
+    expect(appState.getActiveDocuments()[0]?.title).toHaveLength(64);
   });
 
   it("normalizeUntitledTitles leaves saved documents unchanged", () => {
     appState.openFileInTab("/tmp/saved.txt", "content");
     appState.normalizeUntitledTitles();
-    expect(appState.getSnapshot().documents.find((doc) => doc.id === "doc-2")?.title).toBe(
+    expect(appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.title).toBe(
       "saved.txt",
     );
   });
@@ -403,7 +403,7 @@ describe("appState documents and paths", () => {
   it("infers markdown for .markdown files on save", () => {
     appState.setDocumentContent("doc-1", "# hi");
     appState.markDocumentSaved("doc-1", "/tmp/readme.markdown", "# hi");
-    expect(appState.getSnapshot().documents[0]?.language).toBe("markdown");
+    expect(appState.getActiveDocuments()[0]?.language).toBe("markdown");
   });
 });
 
@@ -418,7 +418,7 @@ describe("appState external file fields", () => {
     appState.setDocumentDiskState("doc-2", { diskFingerprint: null, fileMissing: true });
 
     appState.applyDocumentDiskReload("doc-2", "new", { mtimeMs: 2, sizeBytes: 2 });
-    const document = appState.getSnapshot().documents.find((doc) => doc.id === "doc-2");
+    const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
     expect(document).toMatchObject({
       content: "new",
       savedContent: "new",
@@ -434,7 +434,7 @@ describe("appState external file fields", () => {
     appState.setDocumentContent("doc-2", "edited");
     appState.applyDocumentKeepLocal("doc-2", { mtimeMs: 9, sizeBytes: 9 });
 
-    const document = appState.getSnapshot().documents.find((doc) => doc.id === "doc-2");
+    const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
     expect(document?.dismissedFingerprint).toEqual({ mtimeMs: 9, sizeBytes: 9 });
     expect(document?.content).toBe("edited");
     expect(document?.isDirty).toBe(true);
@@ -446,7 +446,7 @@ describe("appState external file fields", () => {
       diskFingerprint: { mtimeMs: 3, sizeBytes: 3 },
       fileMissing: true,
     });
-    const document = appState.getSnapshot().documents.find((doc) => doc.id === "doc-2");
+    const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
     expect(document?.diskFingerprint).toEqual({ mtimeMs: 3, sizeBytes: 3 });
     expect(document?.fileMissing).toBe(true);
   });
@@ -454,7 +454,7 @@ describe("appState external file fields", () => {
   it("setDocumentMarkdownViewMode stores per-document markdown view mode", () => {
     appState.openFileInTab("/tmp/readme.md", "# Hello");
     appState.setDocumentMarkdownViewMode("doc-2", "preview");
-    const document = appState.getSnapshot().documents.find((doc) => doc.id === "doc-2");
+    const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
     expect(document?.markdownViewMode).toBe("preview");
   });
 });
@@ -752,8 +752,8 @@ describe("appState session restore", () => {
     const snapshot = appState.getSnapshot();
     expect(snapshot.contexts.activeContextId).toBe("ws-2");
     expect(snapshot.contexts.workspaces.map((workspace) => workspace.id)).toEqual(["ws-1", "ws-2"]);
-    expect(snapshot.session.selectedTabId).toBe("tab-3");
-    expect(snapshot.documents[0]?.filePath).toBe("/tmp/ws-two/b.ts");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-3");
+    expect(appState.getActiveDocuments()[0]?.filePath).toBe("/tmp/ws-two/b.ts");
     expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
     expect(appState.getActiveWorkspaceLayout().projectPanelWidthPx).toBe(320);
   });

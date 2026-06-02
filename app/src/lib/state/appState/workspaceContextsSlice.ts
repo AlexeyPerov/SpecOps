@@ -18,10 +18,13 @@ import {
   cloneContextSnapshot,
   findWorkspaceByPath,
   getActiveContextSnapshot,
+  getActiveDocuments,
+  getActiveSession,
   nextDocAndTabIds,
   nextWorkspaceId,
   normalizeWorkspaceEntries,
   NOTEPAD_CONTEXT_ID,
+  patchActiveContext,
   reindexIdCountersFromContexts,
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
@@ -55,28 +58,17 @@ export function createWorkspaceContextsSlice(deps: {
   set: (state: AppDomainState) => void;
   applyTheme: (theme: AppThemeState) => void;
   getInitialEditor: () => AppDomainState["editor"];
-  syncLegacyFieldsIntoActiveContext: (state: AppDomainState) => AppDomainState;
-  withActiveContextApplied: (state: AppDomainState) => AppDomainState;
 }) {
-  const {
-    update,
-    getSnapshot,
-    set,
-    applyTheme,
-    getInitialEditor,
-    syncLegacyFieldsIntoActiveContext,
-    withActiveContextApplied,
-  } = deps;
+  const { update, getSnapshot, set, applyTheme, getInitialEditor } = deps;
 
   function toCurrentWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
-    const synced = syncLegacyFieldsIntoActiveContext(state);
     return {
-      activeContextId: synced.contexts.activeContextId,
-      notepad: cloneContextSnapshot(synced.contexts.notepad),
-      workspaces: normalizeWorkspaceEntries(synced.contexts.workspaces),
+      activeContextId: state.contexts.activeContextId,
+      notepad: cloneContextSnapshot(state.contexts.notepad),
+      workspaces: normalizeWorkspaceEntries(state.contexts.workspaces),
       editorPreferences: {
-        zoomPercent: synced.editor.zoomPercent,
-        wrapLines: synced.editor.wrapLines,
+        zoomPercent: state.editor.zoomPercent,
+        wrapLines: state.editor.wrapLines,
       },
     };
   }
@@ -98,18 +90,11 @@ export function createWorkspaceContextsSlice(deps: {
         notepad: normalizedNotepad,
         workspaces: normalizedWorkspaces,
       };
-      const activeContextSnapshot =
-        activeContextId === NOTEPAD_CONTEXT_ID
-          ? contexts.notepad
-          : contexts.workspaces.find((workspace) => workspace.id === activeContextId)?.snapshot ??
-            contexts.notepad;
       reindexIdCountersFromContexts(contexts);
       const preservedSettings = getSnapshot().settings;
       const preservedTheme = getSnapshot().theme;
       set({
         contexts,
-        documents: activeContextSnapshot.documents,
-        session: activeContextSnapshot.session,
         settings: preservedSettings,
         theme: preservedTheme,
         recentFiles,
@@ -145,10 +130,10 @@ export function createWorkspaceContextsSlice(deps: {
       };
     },
     getActiveDocuments() {
-      return getSnapshot().documents;
+      return getActiveDocuments(getSnapshot());
     },
     getActiveSession() {
-      return getSnapshot().session;
+      return getActiveSession(getSnapshot());
     },
     isNotepadActive() {
       return getSnapshot().contexts.activeContextId === NOTEPAD_CONTEXT_ID;
@@ -164,49 +149,47 @@ export function createWorkspaceContextsSlice(deps: {
     switchContext(contextId: ContextId): boolean {
       let switched = false;
       update((state) => {
-        const synced = syncLegacyFieldsIntoActiveContext(state);
         const exists =
           contextId === NOTEPAD_CONTEXT_ID ||
-          synced.contexts.workspaces.some((workspace) => workspace.id === contextId);
-        if (!exists || synced.contexts.activeContextId === contextId) {
-          return synced;
+          state.contexts.workspaces.some((workspace) => workspace.id === contextId);
+        if (!exists || state.contexts.activeContextId === contextId) {
+          return state;
         }
         switched = true;
-        return withActiveContextApplied({
-          ...synced,
+        return {
+          ...state,
           contexts: {
-            ...synced.contexts,
+            ...state.contexts,
             activeContextId: contextId,
           },
           editor: {
-            ...synced.editor,
+            ...state.editor,
             findReplaceOpen: false,
             goToOpen: false,
             previewMode: "editor",
           },
-        });
+        };
       });
       return switched;
     },
     addWorkspace(rootPath: string): ContextId | null {
       let createdId: ContextId | null = null;
       update((state) => {
-        const synced = syncLegacyFieldsIntoActiveContext(state);
         const normalizedRoot = normalizePathSync(rootPath);
-        const duplicate = findWorkspaceByPath(synced.contexts.workspaces, normalizedRoot);
+        const duplicate = findWorkspaceByPath(state.contexts.workspaces, normalizedRoot);
         if (duplicate) {
-          return synced;
+          return state;
         }
         const workspaceId = nextWorkspaceId();
         createdId = workspaceId;
-        const workspaceSnapshot = fallbackContextSnapshot(synced.session.lastActiveWindowId);
-        return withActiveContextApplied({
-          ...synced,
+        const workspaceSnapshot = fallbackContextSnapshot(getActiveSession(state).lastActiveWindowId);
+        return {
+          ...state,
           contexts: {
-            ...synced.contexts,
+            ...state.contexts,
             activeContextId: workspaceId,
             workspaces: [
-              ...synced.contexts.workspaces,
+              ...state.contexts.workspaces,
               {
                 id: workspaceId,
                 rootPath: normalizedRoot,
@@ -215,12 +198,12 @@ export function createWorkspaceContextsSlice(deps: {
             ],
           },
           editor: {
-            ...synced.editor,
+            ...state.editor,
             findReplaceOpen: false,
             goToOpen: false,
             previewMode: "editor",
           },
-        });
+        };
       });
       return createdId;
     },
@@ -233,10 +216,9 @@ export function createWorkspaceContextsSlice(deps: {
     ): boolean {
       let closed = false;
       update((state) => {
-        const synced = syncLegacyFieldsIntoActiveContext(state);
-        const targetWorkspace = synced.contexts.workspaces.find((workspace) => workspace.id === workspaceId);
+        const targetWorkspace = state.contexts.workspaces.find((workspace) => workspace.id === workspaceId);
         if (!targetWorkspace) {
-          return synced;
+          return state;
         }
         const dirtyDocuments = targetWorkspace.snapshot.documents.filter((documentState) => documentState.isDirty);
         let action: "save-all" | "discard-all" | "cancel" = "discard-all";
@@ -244,84 +226,90 @@ export function createWorkspaceContextsSlice(deps: {
           action = options?.resolveAction?.(dirtyDocuments) ?? "cancel";
         }
         if (action === "cancel") {
-          return synced;
+          return state;
         }
         if (action === "save-all") {
           if (!options?.saveAllDirtyDocuments) {
-            return synced;
+            return state;
           }
           options.saveAllDirtyDocuments(dirtyDocuments);
         }
         closed = true;
-        return withActiveContextApplied({
-          ...synced,
+        return {
+          ...state,
           contexts: {
-            ...synced.contexts,
+            ...state.contexts,
             activeContextId: NOTEPAD_CONTEXT_ID,
-            workspaces: synced.contexts.workspaces.filter((workspace) => workspace.id !== workspaceId),
+            workspaces: state.contexts.workspaces.filter((workspace) => workspace.id !== workspaceId),
           },
           editor: {
-            ...synced.editor,
+            ...state.editor,
             findReplaceOpen: false,
             goToOpen: false,
             previewMode: "editor",
           },
-        });
+        };
       });
       return closed;
     },
     setLastActiveAgentId(agentId: string | null) {
-      update((state) => {
-        if (state.session.lastActiveAgentId === agentId) {
-          return state;
-        }
-        return {
-          ...state,
-          session: {
-            ...state.session,
-            lastActiveAgentId: agentId,
-          },
-        };
-      });
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          if (ctx.session.lastActiveAgentId === agentId) {
+            return ctx;
+          }
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              lastActiveAgentId: agentId,
+            },
+          };
+        }),
+      );
     },
     getLastActiveAgentId(): string | null {
-      return getSnapshot().session.lastActiveAgentId ?? null;
+      return getActiveSession(getSnapshot()).lastActiveAgentId ?? null;
     },
     setWindowBounds(windowBounds: WindowBounds | null) {
-      update((state) => {
-        if (state.session.windowBounds === windowBounds) {
-          return state;
-        }
-        return {
-          ...state,
-          session: {
-            ...state.session,
-            windowBounds,
-          },
-        };
-      });
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          if (ctx.session.windowBounds === windowBounds) {
+            return ctx;
+          }
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              windowBounds,
+            },
+          };
+        }),
+      );
     },
     getActiveWorkspaceLayout(): WorkspaceLayoutState {
       const state = getSnapshot();
       if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
         return defaultWorkspaceLayout();
       }
-      return normalizeWorkspaceLayout(state.session.layout);
+      return normalizeWorkspaceLayout(getActiveSession(state).layout);
     },
     updateActiveWorkspaceLayout(partial: Partial<WorkspaceLayoutState>): void {
       update((state) => {
         if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
           return state;
         }
-        const current = normalizeWorkspaceLayout(state.session.layout);
-        const nextLayout = normalizeWorkspaceLayout({ ...current, ...partial });
-        return {
-          ...state,
-          session: {
-            ...state.session,
-            layout: nextLayout,
-          },
-        };
+        return patchActiveContext(state, (ctx) => {
+          const current = normalizeWorkspaceLayout(ctx.session.layout);
+          const nextLayout = normalizeWorkspaceLayout({ ...current, ...partial });
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              layout: nextLayout,
+            },
+          };
+        });
       });
     },
     setProjectPanelCollapsed(projectPanelCollapsed: boolean) {

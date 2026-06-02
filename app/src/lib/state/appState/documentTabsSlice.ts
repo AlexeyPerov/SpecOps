@@ -15,8 +15,12 @@ import { syncRecentFiles } from "../../services/recentFilesSync";
 import {
   findDocumentByPath,
   findDocumentByPathInContext,
+  getActiveContextSnapshot,
+  getActiveDocuments,
+  getActiveSession,
   nextDocAndTabIds,
   nextTabId,
+  patchActiveContext,
 } from "./contextHelpers";
 import {
   basename,
@@ -35,36 +39,39 @@ import {
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
 function selectTabInternal(state: AppDomainState, tabId: string): AppDomainState {
-  if (!state.session.openTabs.some((tab) => tab.id === tabId)) {
-    return state;
-  }
-  return {
-    ...state,
-    session: { ...state.session, selectedTabId: tabId },
-  };
+  return patchActiveContext(state, (ctx) => {
+    if (!ctx.session.openTabs.some((tab) => tab.id === tabId)) {
+      return ctx;
+    }
+    return {
+      ...ctx,
+      session: { ...ctx.session, selectedTabId: tabId },
+    };
+  });
 }
 
 function reopenTabForDocument(state: AppDomainState, documentId: string): AppDomainState {
   const tabId = nextTabId();
-  return {
-    ...state,
+  return patchActiveContext(state, (ctx) => ({
+    ...ctx,
     session: {
-      ...state.session,
-      openTabs: [...state.session.openTabs, createFileTab(tabId, documentId)],
+      ...ctx.session,
+      openTabs: [...ctx.session.openTabs, createFileTab(tabId, documentId)],
       selectedTabId: tabId,
     },
-  };
+  }));
 }
 
 function isDefaultBootstrapWindow(state: AppDomainState): boolean {
-  if (state.session.openTabs.length !== 1) {
+  const ctx = getActiveContextSnapshot(state);
+  if (ctx.session.openTabs.length !== 1) {
     return false;
   }
-  const tab = state.session.openTabs[0];
+  const tab = ctx.session.openTabs[0];
   if (!isFileTab(tab)) {
     return false;
   }
-  const documentState = state.documents.find((doc) => doc.id === tab.documentId);
+  const documentState = ctx.documents.find((doc) => doc.id === tab.documentId);
   if (!documentState) {
     return false;
   }
@@ -78,93 +85,95 @@ export function createDocumentTabsSlice(deps: {
   const { update, getSnapshot } = deps;
 
   function closeTabForce(tabId: string): void {
-    update((state) => {
-      const openTabs = state.session.openTabs;
-      if (openTabs.length === 0) {
-        return state;
-      }
-      const idx = openTabs.findIndex((tab) => tab.id === tabId);
-      if (idx < 0) {
-        return state;
-      }
-      const filtered = openTabs.filter((tab) => tab.id !== tabId);
-      if (filtered.length === 0) {
-        const { docId, tabId: tabIdNew } = nextDocAndTabIds();
-        const newDocument = buildEmptyUnsavedDocument(docId);
+    update((state) =>
+      patchActiveContext(state, (ctx) => {
+        const openTabs = ctx.session.openTabs;
+        if (openTabs.length === 0) {
+          return ctx;
+        }
+        const idx = openTabs.findIndex((tab) => tab.id === tabId);
+        if (idx < 0) {
+          return ctx;
+        }
+        const filtered = openTabs.filter((tab) => tab.id !== tabId);
+        if (filtered.length === 0) {
+          const { docId, tabId: tabIdNew } = nextDocAndTabIds();
+          const newDocument = buildEmptyUnsavedDocument(docId);
+          return {
+            documents: [...ctx.documents, newDocument],
+            session: {
+              ...ctx.session,
+              openTabs: [createFileTab(tabIdNew, docId)],
+              selectedTabId: tabIdNew,
+              lastActiveAgentId: null,
+            },
+          };
+        }
+        const closingTab = openTabs[idx];
+        let selectedTabId =
+          ctx.session.selectedTabId === tabId
+            ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
+            : ctx.session.selectedTabId;
+        if (ctx.session.selectedTabId === tabId && isAgentTab(closingTab)) {
+          const nextAgentTab = findNextOpenAgentTabAfterClose(openTabs, tabId);
+          if (nextAgentTab) {
+            selectedTabId = nextAgentTab.id;
+          }
+        }
         return {
-          ...state,
-          documents: [...state.documents, newDocument],
+          ...ctx,
           session: {
-            ...state.session,
-            openTabs: [createFileTab(tabIdNew, docId)],
-            selectedTabId: tabIdNew,
-            lastActiveAgentId: null,
+            ...ctx.session,
+            openTabs: filtered,
+            selectedTabId,
           },
         };
-      }
-      const closingTab = openTabs[idx];
-      let selectedTabId =
-        state.session.selectedTabId === tabId
-          ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
-          : state.session.selectedTabId;
-      if (state.session.selectedTabId === tabId && isAgentTab(closingTab)) {
-        const nextAgentTab = findNextOpenAgentTabAfterClose(openTabs, tabId);
-        if (nextAgentTab) {
-          selectedTabId = nextAgentTab.id;
-        }
-      }
-      return {
-        ...state,
-        session: {
-          ...state.session,
-          openTabs: filtered,
-          selectedTabId,
-        },
-      };
-    });
+      }),
+    );
   }
 
   return {
     createTab() {
-      update((state) => {
-        const { docId: id, tabId } = nextDocAndTabIds();
-        const newDocument = buildEmptyUnsavedDocument(id);
-        return {
-          ...state,
-          documents: [...state.documents, newDocument],
-          session: {
-            ...state.session,
-            openTabs: [...state.session.openTabs, createFileTab(tabId, id)],
-            selectedTabId: tabId,
-          },
-        };
-      });
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          const { docId: id, tabId } = nextDocAndTabIds();
+          const newDocument = buildEmptyUnsavedDocument(id);
+          return {
+            documents: [...ctx.documents, newDocument],
+            session: {
+              ...ctx.session,
+              openTabs: [...ctx.session.openTabs, createFileTab(tabId, id)],
+              selectedTabId: tabId,
+            },
+          };
+        }),
+      );
     },
     selectTab(tabId: string) {
       update((state) => selectTabInternal(state, tabId));
     },
     openOrFocusAgentTab(agentId: string) {
       update((state) => {
-        const existingTab = state.session.openTabs
+        const existingTab = getActiveSession(state).openTabs
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isAgentTab(tab) && tab.agentId === agentId);
         if (existingTab) {
           return selectTabInternal(state, existingTab.id);
         }
         const tabId = nextTabId();
-        return {
-          ...state,
+        return patchActiveContext(state, (ctx) => ({
+          ...ctx,
           session: {
-            ...state.session,
-            openTabs: [...state.session.openTabs, createAgentTab(tabId, agentId)],
+            ...ctx.session,
+            openTabs: [...ctx.session.openTabs, createAgentTab(tabId, agentId)],
             selectedTabId: tabId,
           },
-        };
+        }));
       });
     },
     closeTabsForAgent(agentId: string) {
       update((state) => {
-        const tabIds = state.session.openTabs
+        const tabIds = getActiveSession(state).openTabs
           .map((rawTab) => normalizeTabState(rawTab))
           .filter((tab) => isAgentTab(tab) && tab.agentId === agentId)
           .map((tab) => tab.id);
@@ -173,7 +182,7 @@ export function createDocumentTabsSlice(deps: {
     },
     selectOrReopenTabForDocument(documentId: string) {
       update((state) => {
-        const existingTab = state.session.openTabs
+        const existingTab = getActiveSession(state).openTabs
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isFileTab(tab) && tab.documentId === documentId);
         if (existingTab) {
@@ -201,62 +210,66 @@ export function createDocumentTabsSlice(deps: {
       return null;
     },
     reorderTabs(fromIndex: number, toIndex: number) {
-      update((state) => {
-        const openTabs = moveTab(state.session.openTabs, fromIndex, toIndex);
-        if (openTabs === state.session.openTabs) {
-          return state;
-        }
-        return {
-          ...state,
-          session: {
-            ...state.session,
-            openTabs,
-          },
-        };
-      });
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          const openTabs = moveTab(ctx.session.openTabs, fromIndex, toIndex);
+          if (openTabs === ctx.session.openTabs) {
+            return ctx;
+          }
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              openTabs,
+            },
+          };
+        }),
+      );
     },
     closeTab(tabId: string) {
-      update((state) => {
-        const openTabs = state.session.openTabs;
-        if (openTabs.length <= 1) {
-          return state;
-        }
-        const idx = openTabs.findIndex((tab) => tab.id === tabId);
-        if (idx < 0) {
-          return state;
-        }
-        const filtered = openTabs.filter((tab) => tab.id !== tabId);
-        const closingTab = openTabs[idx];
-        let selectedTabId =
-          state.session.selectedTabId === tabId
-            ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
-            : state.session.selectedTabId;
-        if (state.session.selectedTabId === tabId && isAgentTab(closingTab)) {
-          const nextAgentTab = findNextOpenAgentTabAfterClose(openTabs, tabId);
-          if (nextAgentTab) {
-            selectedTabId = nextAgentTab.id;
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          const openTabs = ctx.session.openTabs;
+          if (openTabs.length <= 1) {
+            return ctx;
           }
-        }
-        return {
-          ...state,
-          session: {
-            ...state.session,
-            openTabs: filtered,
-            selectedTabId,
-          },
-        };
-      });
+          const idx = openTabs.findIndex((tab) => tab.id === tabId);
+          if (idx < 0) {
+            return ctx;
+          }
+          const filtered = openTabs.filter((tab) => tab.id !== tabId);
+          const closingTab = openTabs[idx];
+          let selectedTabId =
+            ctx.session.selectedTabId === tabId
+              ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
+              : ctx.session.selectedTabId;
+          if (ctx.session.selectedTabId === tabId && isAgentTab(closingTab)) {
+            const nextAgentTab = findNextOpenAgentTabAfterClose(openTabs, tabId);
+            if (nextAgentTab) {
+              selectedTabId = nextAgentTab.id;
+            }
+          }
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              openTabs: filtered,
+              selectedTabId,
+            },
+          };
+        }),
+      );
     },
     closeTabForce,
     closeTabWithPrompt(tabId: string, confirm: (message: string) => boolean): boolean {
       const snapshot = getSnapshot();
-      const targetTab = snapshot.session.openTabs.find((tab) => tab.id === tabId);
+      const targetTab = getActiveSession(snapshot).openTabs.find((tab) => tab.id === tabId);
       if (!targetTab) {
         return false;
       }
       const targetDocumentId = tabDocumentId(targetTab);
       const targetDocument = targetDocumentId
-        ? snapshot.documents.find((documentState) => documentState.id === targetDocumentId)
+        ? getActiveDocuments(snapshot).find((documentState) => documentState.id === targetDocumentId)
         : undefined;
       if (targetDocument?.isDirty && !confirm(`Close ${targetDocument.title} without saving?`)) {
         return false;
@@ -266,22 +279,22 @@ export function createDocumentTabsSlice(deps: {
     },
     closeOtherTabs(contextTabId: string, confirm: (message: string) => boolean): boolean {
       const snapshot = getSnapshot();
-      if (!snapshot.session.openTabs.some((tab) => tab.id === contextTabId)) {
+      if (!getActiveSession(snapshot).openTabs.some((tab) => tab.id === contextTabId)) {
         return false;
       }
-      const tabIds = tabIdsToCloseOtherThan(snapshot.session.openTabs, contextTabId);
+      const tabIds = tabIdsToCloseOtherThan(getActiveSession(snapshot).openTabs, contextTabId);
       if (tabIds.length === 0) {
         return false;
       }
 
       for (const tabId of tabIds) {
-        const tab = snapshot.session.openTabs
+        const tab = getActiveSession(snapshot).openTabs
           .map((rawTab) => normalizeTabState(rawTab))
           .find((entry) => entry.id === tabId);
         if (!tab || !isFileTab(tab)) {
           continue;
         }
-        const doc = snapshot.documents.find((documentState) => documentState.id === tab.documentId);
+        const doc = getActiveDocuments(snapshot).find((documentState) => documentState.id === tab.documentId);
         if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
           return false;
         }
@@ -292,19 +305,19 @@ export function createDocumentTabsSlice(deps: {
     },
     closeTabsToRight(contextTabId: string, confirm: (message: string) => boolean): boolean {
       const snapshot = getSnapshot();
-      const tabIds = tabIdsToCloseToRightOf(snapshot.session.openTabs, contextTabId);
+      const tabIds = tabIdsToCloseToRightOf(getActiveSession(snapshot).openTabs, contextTabId);
       if (tabIds.length === 0) {
         return false;
       }
 
       for (const tabId of tabIds) {
-        const tab = snapshot.session.openTabs
+        const tab = getActiveSession(snapshot).openTabs
           .map((rawTab) => normalizeTabState(rawTab))
           .find((entry) => entry.id === tabId);
         if (!tab || !isFileTab(tab)) {
           continue;
         }
-        const doc = snapshot.documents.find((documentState) => documentState.id === tab.documentId);
+        const doc = getActiveDocuments(snapshot).find((documentState) => documentState.id === tab.documentId);
         if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
           return false;
         }
@@ -315,7 +328,7 @@ export function createDocumentTabsSlice(deps: {
     },
     closeMissingFileTabs(): boolean {
       const snapshot = getSnapshot();
-      const tabIds = missingTabIdsToClose(snapshot.session.openTabs, snapshot.documents);
+      const tabIds = missingTabIdsToClose(getActiveSession(snapshot).openTabs, getActiveDocuments(snapshot));
       if (tabIds.length === 0) {
         return false;
       }
@@ -331,7 +344,7 @@ export function createDocumentTabsSlice(deps: {
         const duplicate = findDocumentByPath(state, filePath);
         if (duplicate) {
           openedDocumentId = duplicate.id;
-          const existingTab = state.session.openTabs
+          const existingTab = getActiveSession(state).openTabs
             .map((rawTab) => normalizeTabState(rawTab))
             .find((tab) => isFileTab(tab) && tab.documentId === duplicate.id);
           if (existingTab) {
@@ -355,14 +368,15 @@ export function createDocumentTabsSlice(deps: {
         );
 
         return {
-          ...state,
-          documents: [...state.documents, documentState],
+          ...patchActiveContext(state, (ctx) => ({
+            documents: [...ctx.documents, documentState],
+            session: {
+              ...ctx.session,
+              openTabs: [...ctx.session.openTabs, createFileTab(tabId, docId)],
+              selectedTabId: tabId,
+            },
+          })),
           recentFiles,
-          session: {
-            ...state.session,
-            openTabs: [...state.session.openTabs, createFileTab(tabId, docId)],
-            selectedTabId: tabId,
-          },
         };
       });
       syncRecentFiles(recentFiles);
@@ -372,13 +386,13 @@ export function createDocumentTabsSlice(deps: {
       tabId: string,
     ): { filePath: string | null; content: string; title: string } | null {
       const snapshot = getSnapshot();
-      const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
+      const tab = getActiveSession(snapshot).openTabs.find((entry) => entry.id === tabId);
       if (!tab) {
         return null;
       }
       const documentId = tabDocumentId(tab);
       const doc = documentId
-        ? snapshot.documents.find((documentState) => documentState.id === documentId)
+        ? getActiveDocuments(snapshot).find((documentState) => documentState.id === documentId)
         : undefined;
       if (!doc) {
         return null;
@@ -394,17 +408,17 @@ export function createDocumentTabsSlice(deps: {
     },
     transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
       const snapshot = getSnapshot();
-      const selectedTabId = snapshot.session.selectedTabId;
+      const selectedTabId = getActiveSession(snapshot).selectedTabId;
       if (!selectedTabId) {
         return null;
       }
-      const tab = snapshot.session.openTabs.find((entry) => entry.id === selectedTabId);
+      const tab = getActiveSession(snapshot).openTabs.find((entry) => entry.id === selectedTabId);
       if (!tab) {
         return null;
       }
       const documentId = tabDocumentId(tab);
       const doc = documentId
-        ? snapshot.documents.find((documentState) => documentState.id === documentId)
+        ? getActiveDocuments(snapshot).find((documentState) => documentState.id === documentId)
         : undefined;
       if (!doc) {
         return null;
@@ -428,7 +442,7 @@ export function createDocumentTabsSlice(deps: {
           const duplicate = findDocumentByPath(state, payload.filePath);
           if (duplicate) {
             documentId = duplicate.id;
-            const existingTab = state.session.openTabs.find(
+            const existingTab = getActiveSession(state).openTabs.find(
               (tab) => isFileTab(tab) && tab.documentId === duplicate.id,
             );
             if (existingTab) {
@@ -445,113 +459,114 @@ export function createDocumentTabsSlice(deps: {
           payload.title,
         );
         if (isDefaultBootstrapWindow(state)) {
-          return {
-            ...state,
+          return patchActiveContext(state, () => ({
             documents: [newDoc],
             session: {
-              ...state.session,
+              ...getActiveSession(state),
               openTabs: [createFileTab(tabId, docId)],
               selectedTabId: tabId,
             },
-          };
+          }));
         }
-        return {
-          ...state,
-          documents: [...state.documents, newDoc],
+        return patchActiveContext(state, (ctx) => ({
+          documents: [...ctx.documents, newDoc],
           session: {
-            ...state.session,
-            openTabs: [...state.session.openTabs, createFileTab(tabId, docId)],
+            ...ctx.session,
+            openTabs: [...ctx.session.openTabs, createFileTab(tabId, docId)],
             selectedTabId: tabId,
           },
-        };
+        }));
       });
       return documentId;
     },
     setDocumentContent(documentId: string, content: string) {
-      update((state) => {
-        const documents = state.documents.map((documentState) => {
-          if (documentState.id !== documentId) {
-            return documentState;
-          }
-          const lineEnding: "lf" | "crlf" = content.includes("\r\n")
-            ? "crlf"
-            : "lf";
-          return {
-            ...documentState,
-            content,
-            lineEnding,
-            isDirty: content !== documentState.savedContent,
-          };
-        });
-        return { ...state, documents };
-      });
+      update((state) =>
+        patchActiveContext(state, (ctx) => ({
+          ...ctx,
+          documents: ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            const lineEnding: "lf" | "crlf" = content.includes("\r\n") ? "crlf" : "lf";
+            return {
+              ...documentState,
+              content,
+              lineEnding,
+              isDirty: content !== documentState.savedContent,
+            };
+          }),
+        })),
+      );
     },
     refreshUntitledTitle(documentId: string) {
-      update((state) => {
-        let changed = false;
-        const documents = state.documents.map((documentState) => {
-          if (documentState.id !== documentId || documentState.filePath !== null) {
-            return documentState;
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          let changed = false;
+          const documents = ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId || documentState.filePath !== null) {
+              return documentState;
+            }
+            const title = deriveUntitledTitle(documentState.content);
+            if (title === documentState.title) {
+              return documentState;
+            }
+            changed = true;
+            return { ...documentState, title };
+          });
+          if (!changed) {
+            return ctx;
           }
-          const title = deriveUntitledTitle(documentState.content);
-          if (title === documentState.title) {
-            return documentState;
-          }
-          changed = true;
-          return { ...documentState, title };
-        });
-        if (!changed) {
-          return state;
-        }
-        return { ...state, documents };
-      });
+          return { ...ctx, documents };
+        }),
+      );
     },
     normalizeUntitledTitles() {
-      update((state) => {
-        let changed = false;
-        const documents = state.documents.map((documentState) => {
-          if (documentState.filePath !== null) {
-            return documentState;
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          let changed = false;
+          const documents = ctx.documents.map((documentState) => {
+            if (documentState.filePath !== null) {
+              return documentState;
+            }
+            const title = deriveUntitledTitle(documentState.content);
+            if (title === documentState.title) {
+              return documentState;
+            }
+            changed = true;
+            return { ...documentState, title };
+          });
+          if (!changed) {
+            return ctx;
           }
-          const title = deriveUntitledTitle(documentState.content);
-          if (title === documentState.title) {
-            return documentState;
-          }
-          changed = true;
-          return { ...documentState, title };
-        });
-        if (!changed) {
-          return state;
-        }
-        return { ...state, documents };
-      });
+          return { ...ctx, documents };
+        }),
+      );
     },
     markDocumentSaved(documentId: string, filePath: string | null, content: string) {
       let recentFiles: string[] = [];
       update((state) => {
-        const documents = state.documents.map((documentState) => {
-          if (documentState.id !== documentId) {
-            return documentState;
-          }
-          return {
-            ...documentState,
-            filePath,
-            title: filePath ? basename(filePath) : documentState.title,
-            savedContent: content,
-            content,
-            lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as
-              | "lf"
-              | "crlf",
-            isDirty: false,
-            language: inferLanguage(filePath),
-            fileMissing: false,
-          };
-        });
+        const nextState = patchActiveContext(state, (ctx) => ({
+          ...ctx,
+          documents: ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            return {
+              ...documentState,
+              filePath,
+              title: filePath ? basename(filePath) : documentState.title,
+              savedContent: content,
+              content,
+              lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
+              isDirty: false,
+              language: inferLanguage(filePath),
+              fileMissing: false,
+            };
+          }),
+        }));
         recentFiles =
-          filePath === null
-            ? state.recentFiles
-            : bumpRecentFile(state.recentFiles, filePath);
-        return { ...state, documents, recentFiles };
+          filePath === null ? state.recentFiles : bumpRecentFile(state.recentFiles, filePath);
+        return { ...nextState, recentFiles };
       });
       if (filePath !== null) {
         syncRecentFiles(recentFiles);
@@ -562,41 +577,45 @@ export function createDocumentTabsSlice(deps: {
       content: string,
       diskFingerprint: DiskFingerprint,
     ) {
-      update((state) => ({
-        ...state,
-        documents: state.documents.map((documentState) => {
-          if (documentState.id !== documentId) {
-            return documentState;
-          }
-          return {
-            ...documentState,
-            content,
-            savedContent: content,
-            isDirty: false,
-            diskFingerprint,
-            dismissedFingerprint: null,
-            fileMissing: false,
-            lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
-          };
-        }),
-      }));
+      update((state) =>
+        patchActiveContext(state, (ctx) => ({
+          ...ctx,
+          documents: ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            return {
+              ...documentState,
+              content,
+              savedContent: content,
+              isDirty: false,
+              diskFingerprint,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
+            };
+          }),
+        })),
+      );
     },
     applyDocumentKeepLocal(
       documentId: string,
       dismissedFingerprint: DiskFingerprint,
     ) {
-      update((state) => ({
-        ...state,
-        documents: state.documents.map((documentState) => {
-          if (documentState.id !== documentId) {
-            return documentState;
-          }
-          return {
-            ...documentState,
-            dismissedFingerprint,
-          };
-        }),
-      }));
+      update((state) =>
+        patchActiveContext(state, (ctx) => ({
+          ...ctx,
+          documents: ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            return {
+              ...documentState,
+              dismissedFingerprint,
+            };
+          }),
+        })),
+      );
     },
     setDocumentDiskState(
       documentId: string,
@@ -605,79 +624,90 @@ export function createDocumentTabsSlice(deps: {
         fileMissing: boolean;
       },
     ) {
-      update((state) => ({
-        ...state,
-        documents: state.documents.map((documentState) => {
-          if (documentState.id !== documentId) {
-            return documentState;
-          }
-          return {
-            ...documentState,
-            diskFingerprint: patch.diskFingerprint,
-            fileMissing: patch.fileMissing,
-          };
-        }),
-      }));
+      update((state) =>
+        patchActiveContext(state, (ctx) => ({
+          ...ctx,
+          documents: ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            return {
+              ...documentState,
+              diskFingerprint: patch.diskFingerprint,
+              fileMissing: patch.fileMissing,
+            };
+          }),
+        })),
+      );
     },
     renameDocument(documentId: string, filePath: string, title: string) {
       let recentFiles: string[] = [];
       update((state) => {
-        const documents = state.documents.map((documentState) => {
-          if (documentState.id !== documentId) {
-            return documentState;
-          }
-          return {
-            ...documentState,
-            filePath,
-            title,
-            language: inferLanguage(filePath),
-          };
-        });
         recentFiles = bumpRecentFile(state.recentFiles, filePath);
-        return { ...state, documents, recentFiles };
+        return {
+          ...patchActiveContext(state, (ctx) => ({
+            ...ctx,
+            documents: ctx.documents.map((documentState) => {
+              if (documentState.id !== documentId) {
+                return documentState;
+              }
+              return {
+                ...documentState,
+                filePath,
+                title,
+                language: inferLanguage(filePath),
+              };
+            }),
+          })),
+          recentFiles,
+        };
       });
       syncRecentFiles(recentFiles);
     },
     setDocumentScrollTop(documentId: string, scrollTop: number) {
-      update((state) => {
-        let changed = false;
-        const documents = state.documents.map((documentState) => {
-          if (documentState.id !== documentId) {
-            return documentState;
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          let changed = false;
+          const documents = ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            if (documentState.scrollTop === scrollTop) {
+              return documentState;
+            }
+            changed = true;
+            return { ...documentState, scrollTop };
+          });
+          if (!changed) {
+            return ctx;
           }
-          if (documentState.scrollTop === scrollTop) {
-            return documentState;
-          }
-          changed = true;
-          return { ...documentState, scrollTop };
-        });
-        if (!changed) {
-          return state;
-        }
-        return { ...state, documents };
-      });
+          return { ...ctx, documents };
+        }),
+      );
     },
     setDocumentMarkdownViewMode(
       documentId: string,
       markdownViewMode: DocumentState["markdownViewMode"],
     ) {
-      update((state) => {
-        let changed = false;
-        const documents = state.documents.map((documentState) => {
-          if (documentState.id !== documentId) {
-            return documentState;
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          let changed = false;
+          const documents = ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            if (documentState.markdownViewMode === markdownViewMode) {
+              return documentState;
+            }
+            changed = true;
+            return { ...documentState, markdownViewMode };
+          });
+          if (!changed) {
+            return ctx;
           }
-          if (documentState.markdownViewMode === markdownViewMode) {
-            return documentState;
-          }
-          changed = true;
-          return { ...documentState, markdownViewMode };
-        });
-        if (!changed) {
-          return state;
-        }
-        return { ...state, documents };
-      });
+          return { ...ctx, documents };
+        }),
+      );
     },
   };
 }

@@ -2,6 +2,7 @@ import { get } from "svelte/store";
 import type { AppCommandId, AppDomainState, CommandDefinition } from "../domain/contracts";
 import { tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
+import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import { logDiagnostic } from "../services/logging";
 import type { EditorCommandRunner } from "../types/editor";
 import {
@@ -356,12 +357,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (state.editor.previewMode === "markdown") {
       appState.setPreviewMode("editor");
     }
-    const selectedTab = state.session.openTabs.find(
-      (tab) => tab.id === state.session.selectedTabId,
+    const selectedTab = getActiveSession(state).openTabs.find(
+      (tab) => tab.id === getActiveSession(state).selectedTabId,
     );
     const activeDocumentId = tabDocumentId(selectedTab);
     const activeDocument = activeDocumentId
-      ? state.documents.find((document) => document.id === activeDocumentId)
+      ? getActiveDocuments(state).find((document) => document.id === activeDocumentId)
       : undefined;
     if (!activeDocument || activeDocument.language !== "markdown") {
       notify("Markdown preview is only available for markdown files.");
@@ -413,12 +414,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   "file.openAllInFolder": async ({ getState, getWindowId, confirm, notify }) =>
     runInNotepadContext(async () => {
       const state = getState();
-      const selectedTab = state.session.openTabs.find(
-        (tab) => tab.id === state.session.selectedTabId,
+      const selectedTab = getActiveSession(state).openTabs.find(
+        (tab) => tab.id === getActiveSession(state).selectedTabId,
       );
       const activeDocumentId = tabDocumentId(selectedTab);
       const activeDocument = activeDocumentId
-        ? state.documents.find((document) => document.id === activeDocumentId)
+        ? getActiveDocuments(state).find((document) => document.id === activeDocumentId)
         : undefined;
 
       let defaultPath: string | null = null;
@@ -475,8 +476,8 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     }),
   "file.save": async ({ getState, notify, getWindowId }) => {
     const state = getState();
-    const selected = state.session.openTabs.find(
-      (tab) => tab.id === state.session.selectedTabId,
+    const selected = getActiveSession(state).openTabs.find(
+      (tab) => tab.id === getActiveSession(state).selectedTabId,
     );
     if (!selected) {
       notify("No active tab to save.");
@@ -487,7 +488,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       notify("No active file tab to save.");
       return;
     }
-    const doc = state.documents.find((document) => document.id === selectedDocumentId);
+    const doc = getActiveDocuments(state).find((document) => document.id === selectedDocumentId);
     if (!doc) {
       return;
     }
@@ -515,8 +516,8 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
   "file.saveAs": async ({ getState, notify, getWindowId }) => {
     const state = getState();
-    const selected = state.session.openTabs.find(
-      (tab) => tab.id === state.session.selectedTabId,
+    const selected = getActiveSession(state).openTabs.find(
+      (tab) => tab.id === getActiveSession(state).selectedTabId,
     );
     if (!selected) {
       notify("No active tab to save.");
@@ -527,7 +528,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       notify("No active file tab to save.");
       return;
     }
-    const doc = state.documents.find((document) => document.id === selectedDocumentId);
+    const doc = getActiveDocuments(state).find((document) => document.id === selectedDocumentId);
     if (!doc) {
       return;
     }
@@ -567,7 +568,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   "file.saveAll": async ({ getState, notify, getWindowId }) => {
     const state = getState();
     let saved = 0;
-    for (const documentState of state.documents) {
+    for (const documentState of getActiveDocuments(state)) {
       if (!documentState.isDirty) {
         continue;
       }
@@ -604,8 +605,8 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
   "file.rename": async ({ getState, notify, getWindowId }) => {
     const state = getState();
-    const selected = state.session.openTabs.find(
-      (tab) => tab.id === state.session.selectedTabId,
+    const selected = getActiveSession(state).openTabs.find(
+      (tab) => tab.id === getActiveSession(state).selectedTabId,
     );
     if (!selected) {
       return;
@@ -622,8 +623,8 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
   "file.reloadFromDisk": async ({ getState, notify }) => {
     const state = getState();
-    const selected = state.session.openTabs.find(
-      (tab) => tab.id === state.session.selectedTabId,
+    const selected = getActiveSession(state).openTabs.find(
+      (tab) => tab.id === getActiveSession(state).selectedTabId,
     );
     if (!selected) {
       notify("No active tab to reload.");
@@ -634,7 +635,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       notify("No active file tab to save.");
       return;
     }
-    const doc = state.documents.find((document) => document.id === selectedDocumentId);
+    const doc = getActiveDocuments(state).find((document) => document.id === selectedDocumentId);
     if (!doc?.filePath) {
       notify("Save the document before reloading from disk.");
       return;
@@ -660,8 +661,8 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
   "tab.close": ({ getState, confirm, notify }) => {
     const state = getState();
-    const selectedTab = state.session.openTabs.find(
-      (tab) => tab.id === state.session.selectedTabId,
+    const selectedTab = getActiveSession(state).openTabs.find(
+      (tab) => tab.id === getActiveSession(state).selectedTabId,
     );
     if (!selectedTab) {
       return;
@@ -670,7 +671,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!selectedDocumentId) {
       return;
     }
-    const doc = state.documents.find((document) => document.id === selectedDocumentId);
+    const doc = getActiveDocuments(state).find((document) => document.id === selectedDocumentId);
     if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
       return;
     }
@@ -678,7 +679,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     notify("Tab closed.");
   },
   "tab.moveToNewWindow": async ({ notify, getState, getWindowId }) => {
-    const selectedTabId = getState().session.selectedTabId;
+    const selectedTabId = getActiveSession(getState()).selectedTabId;
     if (!selectedTabId) {
       notify("No active tab to transfer.");
       return;
@@ -694,8 +695,8 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
   "tab.next": ({ getState }) => {
     const state = getState();
-    const tabs = state.session.openTabs;
-    const index = tabs.findIndex((tab) => tab.id === state.session.selectedTabId);
+    const tabs = getActiveSession(state).openTabs;
+    const index = tabs.findIndex((tab) => tab.id === getActiveSession(state).selectedTabId);
     if (index < 0 || tabs.length < 2) {
       return;
     }
@@ -703,8 +704,8 @@ const handlers: Record<AppCommandId, CommandHandler> = {
   },
   "tab.previous": ({ getState }) => {
     const state = getState();
-    const tabs = state.session.openTabs;
-    const index = tabs.findIndex((tab) => tab.id === state.session.selectedTabId);
+    const tabs = getActiveSession(state).openTabs;
+    const index = tabs.findIndex((tab) => tab.id === getActiveSession(state).selectedTabId);
     if (index < 0 || tabs.length < 2) {
       return;
     }
@@ -864,14 +865,14 @@ export function keymapCommandForEvent(event: KeyboardEvent): AppCommandId | null
 
 export function getActiveDocumentContent(): string {
   const state = getSnapshot();
-  const activeTabId = state.session.selectedTabId;
-  const activeTab = state.session.openTabs.find((tab) => tab.id === activeTabId);
+  const activeTabId = getActiveSession(state).selectedTabId;
+  const activeTab = getActiveSession(state).openTabs.find((tab) => tab.id === activeTabId);
   if (!activeTab) {
     return "";
   }
   const activeDocumentId = tabDocumentId(activeTab);
   const activeDocument = activeDocumentId
-    ? state.documents.find((documentState) => documentState.id === activeDocumentId)
+    ? getActiveDocuments(state).find((documentState) => documentState.id === activeDocumentId)
     : undefined;
   return activeDocument?.content ?? "";
 }

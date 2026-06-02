@@ -64,7 +64,7 @@ Types live in `app/src/lib/domain/contracts.ts`. Important concepts:
 
 Each context has a **`ContextSnapshot`**: `documents[]` and `session` (tabs, selection, layout, last active agent).
 
-`appState` holds `WindowContextState` (notepad + workspace list + `activeContextId`) and mirrors `documents` / `session` for the active context.
+`appState` holds `WindowContextState` (notepad + workspace list + `activeContextId`). Active-context `documents` and `session` live only inside each `ContextSnapshot`; use `getActiveDocuments()` / `getActiveSession()` or `getActiveContextSnapshot(state)` for reads.
 
 ### Documents and tabs
 

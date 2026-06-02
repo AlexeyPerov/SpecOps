@@ -18,6 +18,7 @@
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
+  import { getActiveContextSnapshot } from "../lib/state/appState/contextHelpers";
   import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
   import { logDiagnostic } from "../lib/services/logging";
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
@@ -88,11 +89,14 @@
   let lastChatWorkspaceRoot: string | null = null;
 
   $: state = $appState;
+  $: activeContext = getActiveContextSnapshot(state);
+  $: session = activeContext.session;
+  $: documents = activeContext.documents;
   $: activeContextId = state.contexts.activeContextId;
   $: workspaces = state.contexts.workspaces;
   $: activeWorkspaceRoot = appState.getWorkspaceRoot(activeContextId);
   $: workspaceLayout = activeWorkspaceRoot
-    ? normalizeWorkspaceLayout(state.session.layout)
+    ? normalizeWorkspaceLayout(session.layout)
     : normalizeWorkspaceLayout();
   $: showProjectPanel =
     Boolean(activeWorkspaceRoot) &&
@@ -108,13 +112,8 @@
     state.settings.hideActivityRailWhenNotepadOnly &&
     state.contexts.workspaces.length === 0
   );
-  $: activeTab = state.session.openTabs.find(
-    (tab) => tab.id === state.session.selectedTabId,
-  );
-  $: isAgentTabActive = isAgentEditorPaneActive(
-    state.session.openTabs,
-    state.session.selectedTabId,
-  );
+  $: activeTab = session.openTabs.find((tab) => tab.id === session.selectedTabId);
+  $: isAgentTabActive = isAgentEditorPaneActive(session.openTabs, session.selectedTabId);
   $: if (activeTab && isAgentTab(activeTab)) {
     if (chatStore.getActiveAgentId() !== activeTab.agentId) {
       chatStore.setActiveAgentId(activeTab.agentId);
@@ -126,13 +125,13 @@
   $: if (
     runtimeReady &&
     activeWorkspaceRoot &&
-    $chatActiveAgentId !== (state.session.lastActiveAgentId ?? null)
+    $chatActiveAgentId !== (session.lastActiveAgentId ?? null)
   ) {
     appState.setLastActiveAgentId($chatActiveAgentId);
   }
   $: activeDocument =
-    state.documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
-    state.documents[0];
+    documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
+    documents[0];
   $: isMarkdownDocument = activeDocument?.language === "markdown";
   $: markdownHtml =
     isMarkdownDocument && activeDocument
@@ -225,7 +224,7 @@
   }
 
   async function restoreWorkspaceAgentSession(normalizedRoot: string): Promise<void> {
-    const session = appState.getSnapshot().session;
+    const session = appState.getActiveSession();
     await chatStore.loadWorkspaceAgents(normalizedRoot);
     chatStore.mergeSessionDraftAgents(normalizedRoot, openAgentTabIds(session.openTabs));
     const agentIndex = chatStore.getAgentIndex();
@@ -239,8 +238,8 @@
     }
     chatStore.setActiveAgentId(null);
     appState.setLastActiveAgentId(null);
-    const tabs = appState.getSnapshot().session.openTabs;
-    const selectedTabId = appState.getSnapshot().session.selectedTabId;
+    const tabs = appState.getActiveSession().openTabs;
+    const selectedTabId = appState.getActiveSession().selectedTabId;
     const nextSelected = selectedTabAfterMissingLastAgent(tabs, selectedTabId);
     if (nextSelected && nextSelected !== selectedTabId) {
       appState.selectTab(nextSelected);
@@ -248,11 +247,11 @@
   }
 
   function handleCloseTab(tabId: string): void {
-    const before = appState.getSnapshot();
-    const closingTab = before.session.openTabs.find((tab) => tab.id === tabId);
+    const beforeSession = appState.getActiveSession();
+    const closingTab = beforeSession.openTabs.find((tab) => tab.id === tabId);
     const closedAgentId =
       closingTab && isAgentTab(closingTab) ? closingTab.agentId : null;
-    const wasSelected = before.session.selectedTabId === tabId;
+    const wasSelected = beforeSession.selectedTabId === tabId;
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
 
     if (closedAgentId && workspaceRoot) {
@@ -265,9 +264,9 @@
       return;
     }
 
-    const after = appState.getSnapshot();
-    const selectedAfter = after.session.openTabs.find(
-      (tab) => tab.id === after.session.selectedTabId,
+    const afterSession = appState.getActiveSession();
+    const selectedAfter = afterSession.openTabs.find(
+      (tab) => tab.id === afterSession.selectedTabId,
     );
     if (selectedAfter && isAgentTab(selectedAfter)) {
       return;
@@ -488,8 +487,7 @@
     if (!runtimeReady) {
       return;
     }
-    const snapshot = appState.getSnapshot();
-    const tab = snapshot.session.openTabs.find((entry) => entry.id === tabId);
+    const tab = appState.getActiveSession().openTabs.find((entry) => entry.id === tabId);
     if (!tab || !isFileTab(tab)) {
       return;
     }
@@ -500,8 +498,8 @@
     void runtimeSyncExternalFileWatcher?.(state);
   }
 
-  $: if (runtimeReady && state.session.selectedTabId !== lastSelectedTabId) {
-    const nextTabId = state.session.selectedTabId;
+  $: if (runtimeReady && session.selectedTabId !== lastSelectedTabId) {
+    const nextTabId = session.selectedTabId;
     if (nextTabId && nextTabId !== lastSelectedTabId) {
       lastSelectedTabId = nextTabId;
       void onTabActivated(nextTabId);
@@ -586,7 +584,7 @@
         runtimeCleanup = runtimeHandle.cleanup;
         runtimeSyncExternalFileWatcher = runtimeHandle.syncExternalFileWatcher;
         currentWindowId = runtimeHandle.windowId;
-        lastSelectedTabId = appState.getSnapshot().session.selectedTabId;
+        lastSelectedTabId = appState.getActiveSession().selectedTabId;
         runtimeReady = true;
       })
       .catch(async (error: unknown) => {
@@ -738,9 +736,9 @@
       <header class="tab-header">
     <div class="header-left">
       <TabBar
-        openTabs={state.session.openTabs}
-        documents={state.documents}
-        selectedTabId={state.session.selectedTabId}
+        openTabs={session.openTabs}
+        documents={documents}
+        selectedTabId={session.selectedTabId}
         windowId={currentWindowId}
         notify={notify}
         onCloseTab={handleCloseTab}

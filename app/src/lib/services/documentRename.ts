@@ -7,7 +7,7 @@ export async function renameDocumentOnDisk(
   documentId: string,
   options: { windowId: string; notify: (message: string) => void },
 ): Promise<void> {
-  const doc = appState.getSnapshot().documents.find((document) => document.id === documentId);
+  const doc = appState.getActiveDocuments().find((document) => document.id === documentId);
   if (!doc?.filePath) {
     options.notify("Save document before renaming.");
     return;

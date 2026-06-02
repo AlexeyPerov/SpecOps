@@ -227,7 +227,7 @@ describe("file.save command", () => {
     await flushCommandQueue();
 
     expect(saveFile).toHaveBeenCalledWith({ path: "/tmp/draft.txt", content: "edited" });
-    expect(appState.getSnapshot().documents[0]?.isDirty).toBe(false);
+    expect(appState.getActiveDocuments()[0]?.isDirty).toBe(false);
     expect(notify).toHaveBeenCalledWith("Saved /tmp/draft.txt");
   });
 
@@ -241,7 +241,7 @@ describe("file.save command", () => {
 
     expect(saveFileAs).toHaveBeenCalled();
     expect(saveFile).not.toHaveBeenCalled();
-    expect(appState.getSnapshot().documents[0]?.filePath).toBeNull();
+    expect(appState.getActiveDocuments()[0]?.filePath).toBeNull();
   });
 
   it("saves an untitled document when save-as succeeds", async () => {
@@ -252,7 +252,7 @@ describe("file.save command", () => {
     dispatchCommand("file.save", context);
     await flushCommandQueue();
 
-    expect(appState.getSnapshot().documents[0]?.filePath).toBe("/tmp/new.txt");
+    expect(appState.getActiveDocuments()[0]?.filePath).toBe("/tmp/new.txt");
     expect(notify).toHaveBeenCalledWith("Saved /tmp/new.txt");
   });
 });
@@ -304,7 +304,7 @@ describe("file.new command", () => {
 
     dispatchCommand("file.new", context);
 
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
     expect(notify).toHaveBeenCalledWith("New tab created.");
   });
 });
@@ -320,7 +320,7 @@ describe("tab.close command", () => {
 
     dispatchCommand("tab.close", context);
 
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
     expect(notify).toHaveBeenCalledWith("Tab closed.");
   });
 
@@ -331,7 +331,7 @@ describe("tab.close command", () => {
 
     dispatchCommand("tab.close", context);
 
-    expect(appState.getSnapshot().session.openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
     expect(notify).not.toHaveBeenCalledWith("Tab closed.");
   });
 });
@@ -391,13 +391,13 @@ describe("view.toggleMarkdownPreview command", () => {
 
     dispatchCommand("view.toggleMarkdownPreview", context);
     expect(
-      appState.getSnapshot().documents.find((doc) => doc.id === "doc-2")?.markdownViewMode,
+      appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.markdownViewMode,
     ).toBe("preview");
     expect(notify).toHaveBeenCalledWith("Markdown preview on.");
 
     dispatchCommand("view.toggleMarkdownPreview", context);
     expect(
-      appState.getSnapshot().documents.find((doc) => doc.id === "doc-2")?.markdownViewMode,
+      appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.markdownViewMode,
     ).toBe("edit");
     expect(notify).toHaveBeenCalledWith("Markdown preview off.");
   });
@@ -409,7 +409,7 @@ describe("view.toggleMarkdownPreview command", () => {
     dispatchCommand("view.toggleMarkdownPreview", context);
 
     expect(notify).toHaveBeenCalledWith("Markdown preview is only available for markdown files.");
-    expect(appState.getSnapshot().documents[0]?.markdownViewMode).toBe("edit");
+    expect(appState.getActiveDocuments()[0]?.markdownViewMode).toBe("edit");
   });
 });
 
@@ -457,7 +457,7 @@ describe("workspace.close command", () => {
   it("cancels close when dirty workspace prompts are declined", () => {
     const { context, notify } = createCommandContext();
     appState.addWorkspace("/tmp/ws-dirty");
-    const activeDocumentId = appState.getSnapshot().documents[0]?.id;
+    const activeDocumentId = appState.getActiveDocuments()[0]?.id;
     expect(activeDocumentId).toBeDefined();
     appState.setDocumentContent(activeDocumentId!, "dirty workspace doc");
     confirmMock.mockReturnValueOnce(false).mockReturnValueOnce(false);
@@ -471,7 +471,7 @@ describe("workspace.close command", () => {
   it("discards dirty changes when the user confirms discard", () => {
     const { context, notify } = createCommandContext();
     appState.addWorkspace("/tmp/ws-discard");
-    const activeDocumentId = appState.getSnapshot().documents[0]?.id;
+    const activeDocumentId = appState.getActiveDocuments()[0]?.id;
     expect(activeDocumentId).toBeDefined();
     appState.setDocumentContent(activeDocumentId!, "dirty workspace doc");
     confirmMock.mockReturnValueOnce(false).mockReturnValueOnce(true);

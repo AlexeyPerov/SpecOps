@@ -165,7 +165,7 @@ export async function startAppShellRuntime(
     appState.applyWindowSession(restoredSession.snapshot, restoredSession.recentFiles);
     appState.normalizeUntitledTitles();
     await syncOpenFileRegistryForWindow(windowId, appState.getSnapshot());
-    const restoredBounds = appState.getSnapshot().session.windowBounds;
+    const restoredBounds = appState.getActiveSession().windowBounds;
     if (restoredBounds) {
       applyingWindowBounds = true;
       try {

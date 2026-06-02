@@ -81,7 +81,7 @@ describe("requestOpenPath", () => {
       documentId: "doc-2",
     });
     expect(claimOpenFileMock).toHaveBeenCalledWith("/tmp/existing.txt", "win-a", "doc-2");
-    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
   it("returns needs_read for a new path", async () => {
@@ -117,7 +117,7 @@ describe("selectTabForNormalizedPath", () => {
   it("selects the tab for a normalized path", () => {
     appState.openFileInTab("/tmp/select.txt", "content");
     expect(selectTabForNormalizedPath("/tmp/select.txt")).toBe(true);
-    expect(appState.getSnapshot().session.selectedTabId).toBe("tab-2");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
   it("returns false when no tab matches", () => {
@@ -145,7 +145,7 @@ describe("completeOpenPath", () => {
     await expect(completeOpenPath("/tmp/complete.txt", "payload", "win-a")).resolves.toBe("doc-2");
     expect(claimOpenFileMock).toHaveBeenCalledWith("/tmp/complete.txt", "win-a", "doc-2");
     expect(initializeDocumentDiskStateMock).toHaveBeenCalledWith("doc-2", "/tmp/complete.txt");
-    expect(appState.getSnapshot().documents.find((doc) => doc.id === "doc-2")?.content).toBe(
+    expect(appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.content).toBe(
       "payload",
     );
   });

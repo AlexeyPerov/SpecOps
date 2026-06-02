@@ -1,6 +1,6 @@
 import type { AppDomainState, DocumentState, TabState } from "../../domain/contracts";
 import { createFileTab, isFileTab, normalizeTabState } from "../../domain/contracts";
-import { nextDocAndTabIds, nextTabId } from "./contextHelpers";
+import { nextDocAndTabIds, nextTabId, patchActiveContext } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 
 export function moveTab(tabs: TabState[], fromIndex: number, toIndex: number): TabState[] {
@@ -93,36 +93,37 @@ export function closeTabsForce(state: AppDomainState, tabIds: string[], preferre
   if (tabIds.length === 0) {
     return state;
   }
-  const idsToClose = new Set(tabIds);
-  const filteredTabs = state.session.openTabs.filter((tab) => !idsToClose.has(tab.id));
-  if (filteredTabs.length === state.session.openTabs.length) {
-    return state;
-  }
-  if (filteredTabs.length === 0) {
-    const { docId, tabId } = nextDocAndTabIds();
-    const newDocument = buildEmptyUnsavedDocument(docId);
+  return patchActiveContext(state, (ctx) => {
+    const idsToClose = new Set(tabIds);
+    const filteredTabs = ctx.session.openTabs.filter((tab) => !idsToClose.has(tab.id));
+    if (filteredTabs.length === ctx.session.openTabs.length) {
+      return ctx;
+    }
+    if (filteredTabs.length === 0) {
+      const { docId, tabId } = nextDocAndTabIds();
+      const newDocument = buildEmptyUnsavedDocument(docId);
+      return {
+        documents: [...ctx.documents, newDocument],
+        session: {
+          ...ctx.session,
+          openTabs: [createFileTab(tabId, docId)],
+          selectedTabId: tabId,
+        },
+      };
+    }
+
     return {
-      ...state,
-      documents: [...state.documents, newDocument],
+      ...ctx,
       session: {
-        ...state.session,
-        openTabs: [createFileTab(tabId, docId)],
-        selectedTabId: tabId,
+        ...ctx.session,
+        openTabs: filteredTabs,
+        selectedTabId: nextSelectedTabAfterBulkClose(
+          ctx.session.openTabs,
+          filteredTabs,
+          ctx.session.selectedTabId,
+          preferredTabId,
+        ),
       },
     };
-  }
-
-  return {
-    ...state,
-    session: {
-      ...state.session,
-      openTabs: filteredTabs,
-      selectedTabId: nextSelectedTabAfterBulkClose(
-        state.session.openTabs,
-        filteredTabs,
-        state.session.selectedTabId,
-        preferredTabId,
-      ),
-    },
-  };
+  });
 }

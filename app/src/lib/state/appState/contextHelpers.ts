@@ -3,6 +3,7 @@ import type {
   ContextId,
   ContextSnapshot,
   DocumentState,
+  SessionState,
   WorkspaceEntry,
 } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
@@ -102,6 +103,44 @@ export function getActiveContextSnapshot(state: AppDomainState): ContextSnapshot
   return getContextSnapshotById(state, state.contexts.activeContextId) ?? state.contexts.notepad;
 }
 
+export function getActiveDocuments(state: AppDomainState): DocumentState[] {
+  return getActiveContextSnapshot(state).documents;
+}
+
+export function getActiveSession(state: AppDomainState): SessionState {
+  return getActiveContextSnapshot(state).session;
+}
+
+export function patchActiveContext(
+  state: AppDomainState,
+  patch: (snapshot: ContextSnapshot) => ContextSnapshot,
+): AppDomainState {
+  const contextId = state.contexts.activeContextId;
+  const current = getContextSnapshotById(state, contextId) ?? state.contexts.notepad;
+  const nextSnapshot = patch(current);
+  if (nextSnapshot === current) {
+    return state;
+  }
+  if (contextId === NOTEPAD_CONTEXT_ID) {
+    return {
+      ...state,
+      contexts: {
+        ...state.contexts,
+        notepad: nextSnapshot,
+      },
+    };
+  }
+  return {
+    ...state,
+    contexts: {
+      ...state.contexts,
+      workspaces: state.contexts.workspaces.map((workspace) =>
+        workspace.id === contextId ? { ...workspace, snapshot: nextSnapshot } : workspace,
+      ),
+    },
+  };
+}
+
 export function findWorkspaceByPath(
   workspaces: WorkspaceEntry[],
   rootPath: string,
@@ -112,7 +151,7 @@ export function findWorkspaceByPath(
 
 export function findDocumentByPath(state: AppDomainState, filePath: string): DocumentState | undefined {
   const normalized = normalizePathSync(filePath);
-  return state.documents.find(
+  return getActiveDocuments(state).find(
     (documentState) =>
       documentState.filePath !== null &&
       normalizePathSync(documentState.filePath) === normalized,

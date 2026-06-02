@@ -9,21 +9,23 @@ import {
 } from "./appShellHelpers";
 
 function domainState(overrides: {
-  openTabs?: AppDomainState["session"]["openTabs"];
-  documents?: AppDomainState["documents"];
+  openTabs?: AppDomainState["contexts"]["notepad"]["session"]["openTabs"];
+  documents?: AppDomainState["contexts"]["notepad"]["documents"];
 }): AppDomainState {
-  return {
-    contexts: {
-      activeContextId: "notepad",
-      notepad: { documents: [], session: { openTabs: [], selectedTabId: null, lastActiveWindowId: "main", windowBounds: null } },
-      workspaces: [],
-    },
+  const snapshot = {
     documents: overrides.documents ?? [],
     session: {
       openTabs: overrides.openTabs ?? [],
       selectedTabId: null,
       lastActiveWindowId: "main",
       windowBounds: null,
+    },
+  };
+  return {
+    contexts: {
+      activeContextId: "notepad",
+      notepad: snapshot,
+      workspaces: [],
     },
     settings: {} as AppDomainState["settings"],
     theme: {} as AppDomainState["theme"],

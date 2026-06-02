@@ -10,9 +10,11 @@ import {
 } from "../ai/providers/providerModelCatalog";
 import type {
   AppProviderSettings,
+  CommandBindingOverrides,
   ExternalFilesSettings,
   ProviderModelCatalogs,
 } from "../domain/contracts";
+import { normalizeCommandBindingOverrides } from "../commands/commandBindings";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
 export interface PersistedSettings {
@@ -26,6 +28,7 @@ export interface PersistedSettings {
   hideActivityRailWhenNotepadOnly: boolean;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
+  commandBindingOverrides: CommandBindingOverrides;
 }
 
 export const defaultExternalFilesSettings: ExternalFilesSettings = {
@@ -43,6 +46,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   hideActivityRailWhenNotepadOnly: true,
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
+  commandBindingOverrides: {},
 };
 
 const FILE_NAME = "settings.json";
@@ -119,6 +123,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
         providerSettings,
         providerModelCatalogs,
+        commandBindingOverrides: normalizeCommandBindingOverrides(
+          parsed.commandBindingOverrides,
+        ),
       };
     }
     return null;
@@ -153,6 +160,7 @@ export function toPersistedSettings(input: {
   hideActivityRailWhenNotepadOnly: boolean;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
+  commandBindingOverrides: CommandBindingOverrides;
 }): PersistedSettings {
   const providerModelCatalogs = normalizeProviderModelCatalogs(input.providerModelCatalogs, {
     glmModelId: input.providerSettings.glm.modelId,
@@ -165,5 +173,6 @@ export function toPersistedSettings(input: {
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
     providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),
     providerModelCatalogs,
+    commandBindingOverrides: normalizeCommandBindingOverrides(input.commandBindingOverrides),
   };
 }

@@ -37,6 +37,11 @@ import {
 } from "./commandErrors";
 import { openAndStoreFile } from "./openAndStoreFile";
 import { isPathUnderRoot, runInNotepadContext } from "../services/workspacePaths";
+import {
+  expandPlatformKeymaps,
+  mergeCommandDefinitionsWithOverrides,
+  type CommandBindingOverrides,
+} from "./commandBindings";
 
 type CommandContext = {
   setThemePaneOpen: (next: boolean) => void;
@@ -56,60 +61,7 @@ function getSnapshot() {
   return get(appState);
 }
 
-const BINDING_KEY_TO_KEYMAP_TOKEN: Record<string, string> = {
-  Up: "arrowup",
-  Down: "arrowdown",
-  Tab: "tab",
-};
-
-function bindingToKeymapToken(binding: string, platform: "mac" | "windows"): string | null {
-  if (binding === "none") {
-    return null;
-  }
-
-  const parts = binding.split("+");
-  const keyPart = parts[parts.length - 1] ?? "";
-  const modifierParts = parts.slice(0, -1);
-  const tokens: string[] = [];
-
-  for (const modifier of modifierParts) {
-    if (modifier === "Cmd") {
-      if (platform === "mac") {
-        tokens.push("Meta");
-      }
-    } else if (modifier === "Ctrl") {
-      tokens.push("Ctrl");
-    } else if (modifier === "Shift") {
-      tokens.push("Shift");
-    } else if (modifier === "Alt") {
-      tokens.push("Alt");
-    }
-  }
-
-  const keyToken = BINDING_KEY_TO_KEYMAP_TOKEN[keyPart] ?? keyPart.toLowerCase();
-  tokens.push(keyToken);
-  return tokens.join("+");
-}
-
-export function expandPlatformKeymaps(
-  definitions: CommandDefinition[],
-): Record<string, AppCommandId> {
-  const keymap: Record<string, AppCommandId> = {};
-  for (const definition of definitions) {
-    if (!definition.binding) {
-      continue;
-    }
-    const macToken = bindingToKeymapToken(definition.binding.mac, "mac");
-    if (macToken) {
-      keymap[macToken] = definition.id;
-    }
-    const windowsToken = bindingToKeymapToken(definition.binding.windows, "windows");
-    if (windowsToken) {
-      keymap[windowsToken] = definition.id;
-    }
-  }
-  return keymap;
-}
+export { expandPlatformKeymaps } from "./commandBindings";
 
 export const commandDefinitions: CommandDefinition[] = [
   {
@@ -329,7 +281,17 @@ export const commandDefinitions: CommandDefinition[] = [
   },
 ];
 
-const keyBindingsByPlatform = expandPlatformKeymaps(commandDefinitions);
+let keyBindingsByPlatform = expandPlatformKeymaps(commandDefinitions);
+
+export function setCommandBindingOverrides(overrides: CommandBindingOverrides): void {
+  keyBindingsByPlatform = expandPlatformKeymaps(
+    mergeCommandDefinitionsWithOverrides(commandDefinitions, overrides),
+  );
+}
+
+export function resetCommandBindingOverrides(): void {
+  setCommandBindingOverrides({});
+}
 
 const handlers: Record<AppCommandId, CommandHandler> = {
   "app.toggleThemePane": ({ isThemePaneOpen, setThemePaneOpen }) => {

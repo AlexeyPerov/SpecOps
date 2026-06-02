@@ -6,6 +6,7 @@ import type {
   SessionState,
   WorkspaceEntry,
 } from "../../domain/contracts";
+import { isFileTab } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { normalizeDocument } from "./documentHelpers";
 
@@ -168,4 +169,56 @@ export function findDocumentByPathInContext(
       documentState.filePath !== null &&
       normalizePathSync(documentState.filePath) === normalized,
   );
+}
+
+export function patchContextById(
+  state: AppDomainState,
+  contextId: ContextId,
+  patch: (snapshot: ContextSnapshot) => ContextSnapshot,
+): AppDomainState {
+  const current = getContextSnapshotById(state, contextId);
+  if (!current) {
+    return state;
+  }
+  const nextSnapshot = patch(current);
+  if (nextSnapshot === current) {
+    return state;
+  }
+  if (contextId === NOTEPAD_CONTEXT_ID) {
+    return {
+      ...state,
+      contexts: {
+        ...state.contexts,
+        notepad: nextSnapshot,
+      },
+    };
+  }
+  return {
+    ...state,
+    contexts: {
+      ...state.contexts,
+      workspaces: state.contexts.workspaces.map((workspace) =>
+        workspace.id === contextId ? { ...workspace, snapshot: nextSnapshot } : workspace,
+      ),
+    },
+  };
+}
+
+export function findFileTabForNormalizedPath(
+  context: ContextSnapshot,
+  normalizedPath: string,
+): { tabId: string; documentId: string; document: DocumentState } | null {
+  for (const tab of context.session.openTabs) {
+    if (!isFileTab(tab)) {
+      continue;
+    }
+    const documentState = context.documents.find((doc) => doc.id === tab.documentId);
+    if (
+      documentState?.filePath &&
+      normalizePathSync(documentState.filePath) === normalizedPath
+    ) {
+      return { tabId: tab.id, documentId: documentState.id, document: documentState };
+    }
+  }
+  return null;
 }

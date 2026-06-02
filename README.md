@@ -2,14 +2,6 @@
 
 Building text and markdown files editor with support of workspace AI. Tech: [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
 
-Curren Features:
-- notepad with syntax highlighting
-- markdown viewer and editor
-- adding folders as workspaces (with project view)
-- themes
-- multi-window
-- WIP: AI support
-
 ## What works today
 
 - **Notepad** with syntax highlighting for .md and code files
@@ -21,8 +13,11 @@ Curren Features:
 - **Console** — resizable bottom panel with **Logs**
 - WIP: AI support
 
+---
 ![SpecOps main screen](screenshots/main-screen.png)
+---
 ![SpecOps main screen](screenshots/main-screen-split-view.png)
+---
 ![SpecOps main screen](screenshots/main-screen-themes.png)
 
 ## What is planned

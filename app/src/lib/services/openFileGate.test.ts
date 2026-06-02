@@ -107,6 +107,37 @@ describe("requestOpenPath", () => {
     });
     expect(appState.getSnapshot().contexts.activeContextId).toBe("ws-1");
   });
+
+  it("migrates a notepad tab into the active workspace when opening a workspace file", async () => {
+    readOpenFileRegistryMock.mockResolvedValue({});
+    appState.addWorkspace("/tmp/ws");
+    appState.switchContext("notepad");
+    appState.openFileInTab("/tmp/ws/migrate-me.txt", "local edits");
+    const notepadDocId = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/ws/migrate-me.txt")?.id;
+    appState.setDocumentContent(notepadDocId!, "local edits changed");
+    appState.switchContext("ws-1");
+
+    const result = await requestOpenPath("/tmp/ws/migrate-me.txt", "win-a");
+    expect(result).toMatchObject({
+      kind: "existing",
+      path: "/tmp/ws/migrate-me.txt",
+      documentId: notepadDocId,
+    });
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("ws-1");
+    const workspaceDoc = appState
+      .getSnapshot()
+      .contexts.workspaces[0]?.snapshot.documents.find((doc) => doc.id === notepadDocId);
+    expect(workspaceDoc?.content).toBe("local edits changed");
+    expect(workspaceDoc?.isDirty).toBe(true);
+    const notepadHasTab = appState.getSnapshot().contexts.notepad.session.openTabs.some((tab) => {
+      if (tab.kind !== "file") {
+        return false;
+      }
+      const doc = appState.getSnapshot().contexts.notepad.documents.find((entry) => entry.id === tab.documentId);
+      return doc?.filePath === "/tmp/ws/migrate-me.txt";
+    });
+    expect(notepadHasTab).toBe(false);
+  });
 });
 
 describe("selectTabForNormalizedPath", () => {

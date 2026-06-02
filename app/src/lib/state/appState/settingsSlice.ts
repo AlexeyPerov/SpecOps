@@ -1,8 +1,10 @@
 import type {
+  AppCommandId,
   AppDomainState,
   AppProviderSettings,
   AppSettingsState,
   ChatProviderId,
+  CommandBindingOverrides,
   DebugProviderSettings,
   ExternalFilesSettings,
   GlmProviderSettings,
@@ -24,6 +26,10 @@ import {
   normalizeProviderModelCatalog,
   normalizeProviderModelCatalogs,
 } from "../../ai/providers/providerModelCatalog";
+import {
+  normalizeCommandBindingOverrides,
+} from "../../commands/commandBindings";
+import { setCommandBindingOverrides } from "../../commands/registry";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -37,6 +43,7 @@ export const defaultSettings: AppSettingsState = {
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
+  commandBindingOverrides: {},
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
   glmApiKey: "",
@@ -174,6 +181,49 @@ export function createSettingsSlice(update: SettingsUpdate) {
     setGlmApiKey(glmApiKey: string) {
       setProviderApiKey("glm", glmApiKey);
     },
+    setCommandBindingOverrides(commandBindingOverrides: CommandBindingOverrides) {
+      const normalized = normalizeCommandBindingOverrides(commandBindingOverrides);
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          commandBindingOverrides: normalized,
+        },
+      }));
+      setCommandBindingOverrides(normalized);
+    },
+    updateCommandBinding(commandId: AppCommandId, binding: Partial<CommandBindingOverrides[AppCommandId]>) {
+      update((state) => {
+        const current = state.settings.commandBindingOverrides[commandId] ?? {};
+        const nextOverride = { ...current, ...binding };
+        const commandBindingOverrides = {
+          ...state.settings.commandBindingOverrides,
+          [commandId]: nextOverride,
+        };
+        setCommandBindingOverrides(commandBindingOverrides);
+        return {
+          ...state,
+          settings: {
+            ...state.settings,
+            commandBindingOverrides,
+          },
+        };
+      });
+    },
+    resetCommandBinding(commandId: AppCommandId) {
+      update((state) => {
+        const { [commandId]: _removed, ...commandBindingOverrides } =
+          state.settings.commandBindingOverrides;
+        setCommandBindingOverrides(commandBindingOverrides);
+        return {
+          ...state,
+          settings: {
+            ...state.settings,
+            commandBindingOverrides,
+          },
+        };
+      });
+    },
     applyPersistedSettings(partial: {
       wrapLines?: boolean;
       zoomPercent?: number;
@@ -182,6 +232,7 @@ export function createSettingsSlice(update: SettingsUpdate) {
       hideActivityRailWhenNotepadOnly?: boolean;
       providerSettings?: Partial<AppProviderSettings>;
       providerModelCatalogs?: ProviderModelCatalogs;
+      commandBindingOverrides?: CommandBindingOverrides;
     }) {
       update((state) => {
         let next = state;
@@ -258,6 +309,20 @@ export function createSettingsSlice(update: SettingsUpdate) {
               },
             },
           };
+        }
+
+        if (partial.commandBindingOverrides) {
+          const commandBindingOverrides = normalizeCommandBindingOverrides(
+            partial.commandBindingOverrides,
+          );
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              commandBindingOverrides,
+            },
+          };
+          setCommandBindingOverrides(commandBindingOverrides);
         }
 
         return next;

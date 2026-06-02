@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-02 — Keyboard shortcuts in Settings
+
+- **Settings → Shortcuts:** New tab lists every command with an active keyboard shortcut on the current platform; click a binding to record a new combo, reset per command, with conflict detection. Overrides persist in `settings.json` as `commandBindingOverrides` and apply to the in-app keymap immediately.
+
+## 2026-06-02 — Workspace tab migration from Notepad
+
+- **Open file:** Opening a workspace file while it is already open in Notepad moves the tab into the active workspace (preserving unsaved edits) and closes the Notepad tab instead of focusing Notepad.
+
 ## 2026-06-02 — macOS dock menu Open Recent
 
 - **Dock menu:** Right-click on the dock icon now lists the same recent files as **File → Open Recent** (formatted paths, **Clear Recent**), kept in sync via `refresh_dock_menu`; selections emit `spec-ops/dock/open-recent` / `spec-ops/dock/clear-recent`.

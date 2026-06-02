@@ -13,6 +13,7 @@ import {
 } from "./appState/contextHelpers";
 import { buildEmptyUnsavedDocument } from "./appState/documentHelpers";
 import { createDocumentTabsSlice } from "./appState/documentTabsSlice";
+import { resetCommandBindingOverrides } from "../commands/registry";
 import { createSettingsSlice, defaultSettings } from "./appState/settingsSlice";
 import {
   applyThemeState,
@@ -179,6 +180,7 @@ function createStateStore() {
       resetIdCounters();
       set(initialState);
       applyThemeState(initialState.theme);
+      resetCommandBindingOverrides();
     },
     replaceRecentFiles(recentFiles: string[]) {
       update((state) => ({ ...state, recentFiles }));

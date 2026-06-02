@@ -197,6 +197,7 @@ export interface AppSettingsState {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  commandBindingOverrides: CommandBindingOverrides;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
@@ -245,6 +246,8 @@ export interface CommandBinding {
   mac: string;
   windows: string;
 }
+
+export type CommandBindingOverrides = Partial<Record<AppCommandId, Partial<CommandBinding>>>;
 
 export interface CommandDefinition {
   id: AppCommandId;

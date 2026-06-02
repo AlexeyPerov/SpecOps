@@ -17,6 +17,7 @@
     SETTINGS_TABS,
     type SettingsDialogTab,
   } from "../services/settingsDialogUi";
+  import KeyboardShortcutsSettings from "./KeyboardShortcutsSettings.svelte";
   import { appState } from "../state/appState";
   import { chatStore } from "../state/chatStore";
 
@@ -285,6 +286,8 @@
 {#snippet settingsPanel(tabId: SettingsDialogTab)}
   {#if tabId === "editor"}
     {@render editorSettingsPanel()}
+  {:else if tabId === "shortcuts"}
+    <KeyboardShortcutsSettings />
   {:else if tabId === "glm"}
     {@render glmSettingsPanel()}
   {:else}

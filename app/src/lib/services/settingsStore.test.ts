@@ -65,6 +65,7 @@ describe("settings mapping", () => {
           defaultModelId: "glm-test",
         },
       },
+      commandBindingOverrides: {},
     });
 
     expect(toExternalFilesSettings(persisted)).toEqual({

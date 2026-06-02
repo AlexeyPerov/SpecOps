@@ -40,14 +40,16 @@ vi.mock("../services/closeTabFlow", () => ({
   closeTabWithUnsavedPrompt: vi.fn(),
 }));
 
+import { expandPlatformKeymaps } from "./commandBindings";
 import {
   dispatchCommand,
   commandDefinitions,
-  expandPlatformKeymaps,
   getActiveDocumentContent,
   getRegisteredCommandIds,
   isEditorGlobalCommand,
   keymapCommandForEvent,
+  resetCommandBindingOverrides,
+  setCommandBindingOverrides,
 } from "./registry";
 import {
   ensureWorkspaceReadAccess,
@@ -128,6 +130,18 @@ describe("expandPlatformKeymaps", () => {
 });
 
 describe("keymapCommandForEvent", () => {
+  beforeEach(() => {
+    resetCommandBindingOverrides();
+  });
+
+  it("honors binding overrides", () => {
+    setCommandBindingOverrides({ "file.new": { mac: "Cmd+Shift+O" } });
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "o", metaKey: true, shiftKey: true })),
+    ).toBe("file.new");
+    expect(keymapCommandForEvent(keyboardEvent({ key: "n", metaKey: true }))).toBeNull();
+  });
+
   it("maps Meta+N to file.new", () => {
     expect(
       keymapCommandForEvent(keyboardEvent({ key: "n", metaKey: true })),

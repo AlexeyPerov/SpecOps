@@ -175,6 +175,7 @@ export async function startAppShellRuntime(
       hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
       providerSettings: persistedSettings.providerSettings,
       providerModelCatalogs: persistedSettings.providerModelCatalogs,
+      commandBindingOverrides: persistedSettings.commandBindingOverrides,
     });
   }
   appState.setProviderApiKey("glm", glmApiKey);

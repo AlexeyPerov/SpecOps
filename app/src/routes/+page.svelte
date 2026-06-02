@@ -753,6 +753,7 @@
           hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
           providerSettings: snapshot.settings.providerSettings,
           providerModelCatalogs: snapshot.settings.providerModelCatalogs,
+          commandBindingOverrides: snapshot.settings.commandBindingOverrides,
         }),
       );
     }

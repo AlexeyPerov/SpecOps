@@ -14,7 +14,7 @@ import {
 import {
   WINDOW_EVENT_SELECT_TAB_FOR_PATH,
 } from "./windowManager";
-import { ensureNotepadForOutsidePath } from "./workspacePaths";
+import { ensureNotepadForOutsidePath, isPathUnderRoot } from "./workspacePaths";
 
 export type RequestOpenPathResult =
   | { kind: "redirected"; path: string; ownerWindowId: string }
@@ -63,6 +63,24 @@ export async function requestOpenPath(
   if (owner && owner.windowId !== windowId) {
     await redirectToOwnerWindow(normalized, owner.windowId);
     return { kind: "redirected", path: normalized, ownerWindowId: owner.windowId };
+  }
+
+  const activeContextId = appState.getSnapshot().contexts.activeContextId;
+  const activeWorkspaceRoot = appState.getWorkspaceRoot();
+  if (
+    activeWorkspaceRoot &&
+    activeContextId !== "notepad" &&
+    isPathUnderRoot(path, activeWorkspaceRoot)
+  ) {
+    const migratedDocumentId = appState.migrateNotepadFileTabToWorkspace(
+      normalized,
+      activeContextId,
+    );
+    if (migratedDocumentId) {
+      appState.touchRecentFile(path);
+      await claimOpenFile(path, windowId, migratedDocumentId);
+      return { kind: "existing", path: normalized, documentId: migratedDocumentId };
+    }
   }
 
   const existingLocal = findLocalDocumentForNormalizedPath(normalized);

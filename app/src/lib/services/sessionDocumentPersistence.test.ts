@@ -84,20 +84,20 @@ describe("stripWindowSnapshotForSession", () => {
         session: {
           selectedTabId: "tab-1",
           openTabs: [],
-          lastActiveWindowId: null,
+          lastActiveWindowId: "main",
           windowBounds: null,
         },
       },
       workspaces: [
         {
           id: "ws-1",
-          name: "WS",
+          rootPath: "/tmp/ws",
           snapshot: {
             documents: [baseDocument({ id: "doc-2" })],
             session: {
               selectedTabId: null,
               openTabs: [],
-              lastActiveWindowId: null,
+              lastActiveWindowId: "main",
               windowBounds: null,
             },
           },

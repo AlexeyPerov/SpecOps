@@ -11,22 +11,19 @@
 
   let { filePath = null, title = "Image", sizeBytes = 0 }: Props = $props();
 
-  let resolvedSrc = $state<string | null>(null);
   let blobObjectUrl = $state<string | null>(null);
   let loadFailed = $state(false);
 
+  const tauriSrc = $derived(filePath ? convertFileSrc(filePath) : null);
+  const resolvedSrc = $derived(blobObjectUrl ?? tauriSrc);
+
   $effect(() => {
-    const path = filePath;
+    filePath;
     if (blobObjectUrl) {
       URL.revokeObjectURL(blobObjectUrl);
       blobObjectUrl = null;
     }
     loadFailed = false;
-    if (!path) {
-      resolvedSrc = null;
-      return;
-    }
-    resolvedSrc = convertFileSrc(path);
   });
 
   async function loadBlobFallback(): Promise<void> {
@@ -40,7 +37,6 @@
         new Blob([bytes], { type: mimeTypeForImagePath(path) }),
       );
       blobObjectUrl = url;
-      resolvedSrc = url;
       loadFailed = false;
     } catch {
       loadFailed = true;

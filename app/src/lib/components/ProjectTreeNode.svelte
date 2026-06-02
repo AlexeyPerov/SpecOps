@@ -3,14 +3,39 @@
   import DirectoryIcon from "./icons/DirectoryIcon.svelte";
   import FileIcon from "./icons/FileIcon.svelte";
 
-  export let node: ProjectTreeNodeModel;
-  export let depth = 0;
-  export let isExpanded = false;
-  export let canExpand = false;
-  export let isActiveFile = false;
-  export let rowPath = "";
-  export let onToggleDirectory: (path: string) => void = () => {};
-  export let onOpenFile: (path: string) => void = () => {};
+  interface Props {
+    node: ProjectTreeNodeModel;
+    depth?: number;
+    isExpanded?: boolean;
+    canExpand?: boolean;
+    isActiveFile?: boolean;
+    isDropTarget?: boolean;
+    isDragging?: boolean;
+    rowPath?: string;
+    onToggleDirectory?: (path: string) => void;
+    onOpenFile?: (path: string) => void;
+    onContextMenu?: (event: MouseEvent, node: ProjectTreeNodeModel) => void;
+    onPointerDown?: (event: PointerEvent, node: ProjectTreeNodeModel) => void;
+    onPointerEnter?: (node: ProjectTreeNodeModel) => void;
+    onPointerLeave?: () => void;
+  }
+
+  let {
+    node,
+    depth = 0,
+    isExpanded = false,
+    canExpand = false,
+    isActiveFile = false,
+    isDropTarget = false,
+    isDragging = false,
+    rowPath = "",
+    onToggleDirectory = () => {},
+    onOpenFile = () => {},
+    onContextMenu = () => {},
+    onPointerDown = () => {},
+    onPointerEnter = () => {},
+    onPointerLeave = () => {},
+  }: Props = $props();
 
   function depthStyle(value: number): string {
     return `--node-depth:${value}`;
@@ -26,6 +51,10 @@
     }
     onOpenFile(node.path);
   }
+
+  function handlePointerDown(event: PointerEvent): void {
+    onPointerDown(event, node);
+  }
 </script>
 
 <li
@@ -35,11 +64,16 @@
 >
   <button
     data-path={rowPath}
-    class={`project-tree-row ${isActiveFile ? "project-tree-row-active" : ""}`}
+    data-tree-kind={node.kind}
+    class={`project-tree-row ${isActiveFile ? "project-tree-row-active" : ""} ${isDropTarget ? "project-tree-row-drop-target" : ""} ${isDragging ? "project-tree-row-dragging" : ""}`}
     type="button"
     title={node.path}
     style={depthStyle(depth)}
     onclick={handleClick}
+    oncontextmenu={(event) => onContextMenu(event, node)}
+    onpointerdown={handlePointerDown}
+    onpointerenter={() => onPointerEnter(node)}
+    onpointerleave={onPointerLeave}
   >
     <span class={`project-tree-chevron ${node.kind === "directory" && canExpand && isExpanded ? "project-tree-chevron-open" : ""}`}>
       {node.kind === "directory" && canExpand ? "▶" : ""}
@@ -78,6 +112,15 @@
   .project-tree-row-active {
     background: var(--color-hover);
     border: 1px solid var(--color-border-subtle);
+  }
+
+  .project-tree-row-drop-target {
+    outline: 1px solid var(--color-accent, var(--color-border-subtle));
+    background: var(--color-hover);
+  }
+
+  .project-tree-row-dragging {
+    opacity: 0.45;
   }
 
   .project-tree-chevron {

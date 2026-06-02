@@ -1,16 +1,40 @@
 <script lang="ts">
   import type { ProjectTreeNode as ProjectTreeNodeModel } from "../services/projectTree";
-  import ProjectTreeList from "./ProjectTreeList.svelte";
+  import type { ProjectTreeDragState } from "./projectTreeDrag";
   import ProjectTreeNode from "./ProjectTreeNode.svelte";
+  import Self from "./ProjectTreeList.svelte";
 
-  export let nodes: ProjectTreeNodeModel[] = [];
-  export let depth = 0;
-  export let expandedPaths = new Set<string>();
-  export let childrenByPath = new Map<string, ProjectTreeNodeModel[]>();
-  export let loadingPaths = new Set<string>();
-  export let activeFilePath: string | null = null;
-  export let onToggleDirectory: (path: string) => void = () => {};
-  export let onOpenFile: (path: string) => void = () => {};
+  interface Props {
+    nodes?: ProjectTreeNodeModel[];
+    depth?: number;
+    expandedPaths?: Set<string>;
+    childrenByPath?: Map<string, ProjectTreeNodeModel[]>;
+    loadingPaths?: Set<string>;
+    activeFilePath?: string | null;
+    dragState?: ProjectTreeDragState | null;
+    onToggleDirectory?: (path: string) => void;
+    onOpenFile?: (path: string) => void;
+    onContextMenu?: (event: MouseEvent, node: ProjectTreeNodeModel) => void;
+    onPointerDown?: (event: PointerEvent, node: ProjectTreeNodeModel) => void;
+    onPointerEnter?: (node: ProjectTreeNodeModel) => void;
+    onPointerLeave?: () => void;
+  }
+
+  let {
+    nodes = [],
+    depth = 0,
+    expandedPaths = new Set<string>(),
+    childrenByPath = new Map<string, ProjectTreeNodeModel[]>(),
+    loadingPaths = new Set<string>(),
+    activeFilePath = null,
+    dragState = null,
+    onToggleDirectory = () => {},
+    onOpenFile = () => {},
+    onContextMenu = () => {},
+    onPointerDown = () => {},
+    onPointerEnter = () => {},
+    onPointerLeave = () => {},
+  }: Props = $props();
 </script>
 
 <ul class="project-tree-list" role="group">
@@ -26,8 +50,16 @@
       isExpanded={expandedPaths.has(node.path)}
       {canExpand}
       isActiveFile={node.kind === "file" && activeFilePath === node.path}
+      isDropTarget={dragState?.didDrag === true &&
+        node.kind === "directory" &&
+        dragState.dropTargetPath === node.path}
+      isDragging={dragState?.didDrag === true && dragState.sourcePath === node.path}
       {onToggleDirectory}
       {onOpenFile}
+      {onContextMenu}
+      {onPointerDown}
+      {onPointerEnter}
+      {onPointerLeave}
     />
     {#if node.kind === "directory" && canExpand && expandedPaths.has(node.path)}
       {#if loadingPaths.has(node.path)}
@@ -35,15 +67,20 @@
           Loading...
         </li>
       {:else}
-        <ProjectTreeList
+        <Self
           nodes={children}
           depth={depth + 1}
           {expandedPaths}
           {childrenByPath}
           {loadingPaths}
           {activeFilePath}
+          {dragState}
           {onToggleDirectory}
           {onOpenFile}
+          {onContextMenu}
+          {onPointerDown}
+          {onPointerEnter}
+          {onPointerLeave}
         />
       {/if}
     {/if}

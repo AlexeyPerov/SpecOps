@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-03 — Build warnings (ProjectTreeView, ImagePreviewPane)
+
+- **ProjectTreeView:** Wrap `onMoveEntry` / `notify` in closures for Svelte 5 prop reactivity; add `tabindex="0"` on `role="tree"` container.
+- **ImagePreviewPane:** Derive Tauri asset URL with `$derived` so `convertFileSrc` is not tree-shaken as unused during SSR.
+
+## 2026-06-03 — sessionDocumentPersistence.test types
+
+- **Tests:** Use valid `lastActiveWindowId` and `rootPath` on `WorkspaceEntry` in `stripWindowSnapshotForSession` fixture so `svelte-check` passes.
+
+## 2026-06-03 — Project panel: DnD, context menu, live tree
+
+- **Project tree:** Lists all files (not only openable extensions); click still uses the same open pipeline as File → Open (text, image, binary).
+- **Context menu:** Open, New File, New Folder, Rename, Delete on files and folders; empty tree area creates at workspace root.
+- **Drag-and-drop:** Move files and folders between directories within the workspace (Tauri `rename`).
+- **Live refresh:** Recursive workspace watcher (`sync_project_tree_watcher`) debounces FS events and reloads expanded directories; independent of the external-file reload setting.
+- **Tabs:** Renames/moves update open document paths and registry; deletes mark affected tabs as file missing.
+- **Tauri:** `fs:allow-mkdir` and `fs:allow-remove` under `$HOME/**` for workspace CRUD.
+
 ## 2026-06-03 — CI Windows release builds
 
 - **GitHub Actions:** Renamed `release-macos.yml` to `release.yml`; same `v*` tag trigger now builds macOS (universal) and Windows and uploads both to the GitHub release.

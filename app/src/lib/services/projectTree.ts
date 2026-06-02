@@ -4,7 +4,6 @@ import {
   shouldSkipFileEntry,
   type FolderListEntry,
 } from "./folderOpenableFiles";
-import { isOpenableFilePath } from "../editor/editorLanguage";
 import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
 
 export interface ProjectTreeNode {
@@ -42,20 +41,14 @@ function shouldKeepDirectoryEntry(entry: FolderListEntry, showHidden: boolean): 
   return !entry.isHidden && !skippedHeavy;
 }
 
-function shouldKeepFileEntry(entry: FolderListEntry, fullPath: string, showHidden: boolean): boolean {
+function shouldKeepFileEntry(entry: FolderListEntry, showHidden: boolean): boolean {
   if (entry.isDirectory) {
     return false;
   }
   if (showHidden) {
-    if (entry.isHidden) {
-      return false;
-    }
-    return isOpenableFilePath(fullPath);
+    return !entry.isHidden;
   }
-  if (shouldSkipFileEntry(entry)) {
-    return false;
-  }
-  return isOpenableFilePath(fullPath);
+  return !shouldSkipFileEntry(entry);
 }
 
 function sortNodes(nodes: ProjectTreeNode[]): ProjectTreeNode[] {
@@ -97,7 +90,7 @@ export async function loadDirectoryChildren(
       nodes.push({ name: entry.name, path, kind: "directory" });
       continue;
     }
-    if (shouldKeepFileEntry(entry, path, options.showHidden)) {
+    if (shouldKeepFileEntry(entry, options.showHidden)) {
       nodes.push({ name: entry.name, path, kind: "file" });
     }
   }

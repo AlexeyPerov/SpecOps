@@ -1,5 +1,6 @@
 <script lang="ts">
   import ProjectTreeView from "./ProjectTreeView.svelte";
+  import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
   import {
     DEFAULT_PANEL_WIDTH_PX,
@@ -23,7 +24,14 @@
   export let onPanelWidthChange: (width: number) => void = () => {};
   export let onToggleDirectory: (path: string) => void = () => {};
   export let onOpenFile: (path: string) => void = () => {};
+  export let onMoveEntry: (sourcePath: string, destDirPath: string) => Promise<void> = async () => {};
+  export let onNewFile: (parentDirPath: string) => void = () => {};
+  export let onNewFolder: (parentDirPath: string) => void = () => {};
+  export let onRenameEntry: (path: string, kind: ProjectTreeNode["kind"]) => void = () => {};
+  export let onDeleteEntry: (path: string, kind: ProjectTreeNode["kind"]) => void = () => {};
+  export let notify: (message: string) => void = () => {};
   let panelBodyEl: HTMLDivElement | null = null;
+  let contextMenuComponent: ProjectTreeContextMenu | undefined;
   let displayWidth = panelWidthPx;
   let isResizing = false;
 
@@ -76,6 +84,34 @@
     window.addEventListener("pointerup", onPointerEnd);
     window.addEventListener("pointercancel", onPointerEnd);
   }
+
+  function openContextMenu(
+    event: MouseEvent,
+    target: { node: ProjectTreeNode | null; parentDirPath: string },
+  ): void {
+    contextMenuComponent?.openContextMenu(event, target);
+  }
+
+  function handleContextMenuRoot(event: MouseEvent): void {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    if (!target.closest(".project-tree-view")) {
+      return;
+    }
+    if (target.closest("[data-path]")) {
+      return;
+    }
+    event.preventDefault();
+    openContextMenu(event, { node: null, parentDirPath: workspaceRoot });
+  }
+
+  function handleContextMenuNode(event: MouseEvent, node: ProjectTreeNode): void {
+    const parentDirPath =
+      node.kind === "directory" ? node.path : node.path.replace(/[/\\][^/\\]+$/, "") || workspaceRoot;
+    openContextMenu(event, { node, parentDirPath });
+  }
 </script>
 
 <aside
@@ -119,16 +155,30 @@
     <div class="project-panel-body" bind:this={panelBodyEl}>
       <ProjectTreeView
         nodes={rootNodes}
+        {workspaceRoot}
         {expandedPaths}
         {childrenByPath}
         {loadingPaths}
         {activeFilePath}
         {onToggleDirectory}
         {onOpenFile}
+        onContextMenuRoot={handleContextMenuRoot}
+        onContextMenuNode={handleContextMenuNode}
+        {onMoveEntry}
+        {notify}
       />
     </div>
   {/if}
 </aside>
+
+<ProjectTreeContextMenu
+  bind:this={contextMenuComponent}
+  onOpenFile={onOpenFile}
+  onNewFile={onNewFile}
+  onNewFolder={onNewFolder}
+  onRename={onRenameEntry}
+  onDelete={onDeleteEntry}
+/>
 
 <style>
   .project-panel {

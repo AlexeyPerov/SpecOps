@@ -20,6 +20,7 @@ pub struct FileWatcherState {
 struct FileWatcherInner {
     debouncer: Option<Debouncer<notify::RecommendedWatcher, FileIdMap>>,
     watched_paths: HashSet<String>,
+    project_tree_roots: HashSet<String>,
     app_handle: Option<AppHandle>,
 }
 
@@ -29,6 +30,7 @@ impl FileWatcherState {
             inner: Mutex::new(FileWatcherInner {
                 debouncer: None,
                 watched_paths: HashSet::new(),
+                project_tree_roots: HashSet::new(),
                 app_handle: None,
             }),
         }
@@ -131,6 +133,47 @@ pub fn sync_file_watcher_paths(
     }
 
     inner.watched_paths = next_paths;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn sync_project_tree_watcher(
+    root: Option<String>,
+    state: State<'_, FileWatcherState>,
+) -> Result<(), String> {
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|error| error.to_string())?;
+
+    ensure_debouncer(&mut inner)?;
+
+    let next_roots: HashSet<String> = root.into_iter().collect();
+    let (to_remove, to_add) =
+        compute_watcher_path_diff(&inner.project_tree_roots, &next_roots);
+
+    let debouncer = inner
+        .debouncer
+        .as_mut()
+        .ok_or_else(|| "File watcher debouncer is not initialized".to_string())?;
+
+    for path in to_remove {
+        let path_buf = PathBuf::from(&path);
+        debouncer
+            .watcher()
+            .unwatch(path_buf.as_path())
+            .map_err(|error| error.to_string())?;
+    }
+
+    for path in to_add {
+        let path_buf = PathBuf::from(&path);
+        debouncer
+            .watcher()
+            .watch(path_buf.as_path(), RecursiveMode::Recursive)
+            .map_err(|error| error.to_string())?;
+    }
+
+    inner.project_tree_roots = next_roots;
     Ok(())
 }
 

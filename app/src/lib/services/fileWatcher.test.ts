@@ -4,6 +4,7 @@ import {
   clearFileWatcherPaths,
   FILE_CHANGED_EVENT,
   syncFileWatcherPaths,
+  syncProjectTreeWatcher,
 } from "./fileWatcher";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -33,5 +34,11 @@ describe("fileWatcher", () => {
     await clearFileWatcherPaths();
 
     expect(invokeMock).toHaveBeenCalledWith("sync_file_watcher_paths", { paths: [] });
+  });
+
+  it("syncProjectTreeWatcher invokes sync_project_tree_watcher", async () => {
+    await syncProjectTreeWatcher("/tmp/ws");
+
+    expect(invokeMock).toHaveBeenCalledWith("sync_project_tree_watcher", { root: "/tmp/ws" });
   });
 });

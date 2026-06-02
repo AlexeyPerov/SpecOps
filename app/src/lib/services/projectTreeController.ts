@@ -75,6 +75,48 @@ export function expandedAncestorPathsForFile(
   return paths;
 }
 
+const FILESYSTEM_CHANGE_DEBOUNCE_MS = 400;
+
+function parentDirectoryPath(path: string): string {
+  const normalized = normalizePathForComparison(path);
+  const slash = normalized.lastIndexOf("/");
+  if (slash <= 0) {
+    return normalized;
+  }
+  return normalized.slice(0, slash);
+}
+
+export function directoriesToRefreshForChange(
+  workspaceRoot: string,
+  changedPath: string,
+  expandedPaths: Set<string>,
+): string[] {
+  const normalizedRoot = normalizePathForComparison(workspaceRoot);
+  const normalizedChanged = normalizePathForComparison(changedPath);
+  if (
+    normalizedChanged !== normalizedRoot &&
+    !normalizedChanged.startsWith(`${normalizedRoot}/`)
+  ) {
+    return [];
+  }
+
+  const dirs = new Set<string>();
+  const parent = parentDirectoryPath(normalizedChanged);
+  if (parent === normalizedRoot || expandedPaths.has(parent)) {
+    dirs.add(parent);
+  }
+  if (expandedPaths.has(normalizedChanged)) {
+    dirs.add(normalizedChanged);
+  }
+  if (normalizedChanged !== normalizedRoot && parent !== normalizedRoot) {
+    const grandparent = parentDirectoryPath(parent);
+    if (grandparent === normalizedRoot || expandedPaths.has(grandparent)) {
+      dirs.add(grandparent);
+    }
+  }
+  return [...dirs];
+}
+
 export function createProjectTreeController(
   onStateChange: (state: ProjectTreeControllerState) => void,
   deps: ProjectTreeControllerDeps = {},
@@ -89,10 +131,15 @@ export function createProjectTreeController(
     workspaceRoot: string | null,
     activePath: string | null,
   ) => Promise<void>;
+  handleFilesystemChange: (workspaceRoot: string | null, changedPath: string) => void;
+  reloadDirectories: (workspaceRoot: string | null, directoryPaths: string[]) => Promise<void>;
+  clearFilesystemChangeDebounce: () => void;
 } {
   const loadChildren = deps.loadDirectoryChildrenFn ?? loadDirectoryChildren;
   const probeAccess = deps.probeWorkspaceReadAccessFn;
   let state = createInitialState();
+  let filesystemChangeTimer: ReturnType<typeof setTimeout> | null = null;
+  const pendingFilesystemDirs = new Set<string>();
 
   const publish = (): void => {
     onStateChange(cloneState(state));
@@ -238,6 +285,80 @@ export function createProjectTreeController(
     }
   };
 
+  const reloadDirectories = async (
+    workspaceRoot: string | null,
+    directoryPaths: string[],
+  ): Promise<void> => {
+    if (!workspaceRoot || directoryPaths.length === 0) {
+      return;
+    }
+    const normalizedRoot = normalizePathForComparison(workspaceRoot);
+    const unique = [...new Set(directoryPaths.map((path) => normalizePathForComparison(path)))];
+    if (unique.includes(normalizedRoot)) {
+      const rootNodes = await loadChildren(workspaceRoot, workspaceRoot, {
+        showHidden: state.showHidden,
+      });
+      state = {
+        ...state,
+        rootNodes,
+      };
+      publish();
+    }
+    for (const directoryPath of unique) {
+      if (directoryPath === normalizedRoot) {
+        continue;
+      }
+      if (!isPathInsideRoot(directoryPath, workspaceRoot)) {
+        continue;
+      }
+      await loadProjectTreeChildren(workspaceRoot, directoryPath);
+    }
+  };
+
+  const flushFilesystemChanges = async (workspaceRoot: string | null): Promise<void> => {
+    if (!workspaceRoot || pendingFilesystemDirs.size === 0) {
+      pendingFilesystemDirs.clear();
+      return;
+    }
+    const dirs = [...pendingFilesystemDirs];
+    pendingFilesystemDirs.clear();
+    await reloadDirectories(workspaceRoot, dirs);
+  };
+
+  const handleFilesystemChange = (workspaceRoot: string | null, changedPath: string): void => {
+    if (!workspaceRoot) {
+      return;
+    }
+    const dirs = directoriesToRefreshForChange(
+      workspaceRoot,
+      changedPath,
+      state.expandedPaths,
+    );
+    const normalizedRoot = normalizePathForComparison(workspaceRoot);
+    if (dirs.length === 0 && normalizePathForComparison(changedPath) !== normalizedRoot) {
+      return;
+    }
+    for (const dir of dirs) {
+      pendingFilesystemDirs.add(dir);
+    }
+    pendingFilesystemDirs.add(normalizedRoot);
+    if (filesystemChangeTimer) {
+      clearTimeout(filesystemChangeTimer);
+    }
+    filesystemChangeTimer = setTimeout(() => {
+      filesystemChangeTimer = null;
+      void flushFilesystemChanges(workspaceRoot);
+    }, FILESYSTEM_CHANGE_DEBOUNCE_MS);
+  };
+
+  const clearFilesystemChangeDebounce = (): void => {
+    if (filesystemChangeTimer) {
+      clearTimeout(filesystemChangeTimer);
+      filesystemChangeTimer = null;
+    }
+    pendingFilesystemDirs.clear();
+  };
+
   publish();
 
   return {
@@ -257,5 +378,8 @@ export function createProjectTreeController(
     handleToggleProjectTreeDirectory,
     refreshProjectTree,
     ensureExpandedForActiveFile,
+    handleFilesystemChange,
+    reloadDirectories,
+    clearFilesystemChangeDebounce,
   };
 }

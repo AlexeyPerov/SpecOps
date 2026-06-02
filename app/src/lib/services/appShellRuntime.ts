@@ -38,7 +38,12 @@ import {
   runWatcherExternalCheck,
   shouldSyncFileWatcher,
 } from "./externalFileChanges";
-import { clearFileWatcherPaths, FILE_CHANGED_EVENT, syncFileWatcherPaths } from "./fileWatcher";
+import {
+  clearFileWatcherPaths,
+  FILE_CHANGED_EVENT,
+  syncFileWatcherPaths,
+  syncProjectTreeWatcher,
+} from "./fileWatcher";
 import { selectTabForNormalizedPath } from "./openFileGate";
 import { initializeChatProviders } from "../ai/providers/bootstrap";
 import { normalizePathSync } from "./diskFingerprint";
@@ -58,6 +63,8 @@ export interface AppShellRuntimeOptions {
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceAgentSession: (normalizedRoot: string) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
+  onFilesystemChange?: (path: string) => void;
+  syncProjectTreeWatcher?: (root: string | null) => Promise<void>;
   setConsoleHeightPx: (heightPx: number) => void;
 }
 
@@ -248,6 +255,7 @@ export async function startAppShellRuntime(
     if (!runtimeReady) {
       return;
     }
+    options.onFilesystemChange?.(event.payload.path);
     await runWatcherExternalCheck(event.payload.path);
   });
   cleanupCallbacks.push(unlistenFileChanged);

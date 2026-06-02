@@ -41,19 +41,25 @@ describe("loadDirectoryChildren", () => {
     const hiddenOn = await loadDirectoryChildren("/tmp/ws", "/tmp/ws", { showHidden: true });
 
     expect(hiddenOff.map((node) => node.name)).toEqual(["index.ts"]);
-    expect(hiddenOn.map((node) => node.name)).toEqual([".notes.md", "index.ts"]);
+    expect(hiddenOn.map((node) => node.name)).toEqual([".env", ".notes.md", "index.ts"]);
   });
 
-  it("skips symlinks and non-openable files", async () => {
+  it("skips symlinks but lists all files including non-openable extensions", async () => {
     readDirMock.mockResolvedValue([
       { name: "linked", isDirectory: false, isFile: true, isSymlink: true },
       { name: "archive.zip", isDirectory: false, isFile: true, isSymlink: false },
+      { name: "data.bin", isDirectory: false, isFile: true, isSymlink: false },
       { name: "photo.png", isDirectory: false, isFile: true, isSymlink: false },
       { name: "README.md", isDirectory: false, isFile: true, isSymlink: false },
     ]);
 
     const nodes = await loadDirectoryChildren("/tmp/ws", "/tmp/ws", { showHidden: false });
-    expect(nodes.map((node) => node.name)).toEqual(["photo.png", "README.md"]);
+    expect(nodes.map((node) => node.name)).toEqual([
+      "archive.zip",
+      "data.bin",
+      "photo.png",
+      "README.md",
+    ]);
   });
 
   it("returns empty list for paths outside workspace root", async () => {

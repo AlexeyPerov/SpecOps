@@ -38,6 +38,16 @@
   import type { ContextId, DocumentState } from "../lib/domain/contracts";
   import { isAgentTab, isFileTab, tabDocumentId } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
+  import {
+    createProjectFile,
+    createProjectFolder,
+    deleteProjectEntry,
+    moveProjectEntry,
+    parentDirForRefresh,
+    renameProjectEntry,
+  } from "../lib/services/projectFileOps";
+  import { syncProjectTreeWatcher } from "../lib/services/fileWatcher";
+  import type { ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
   import { scheduleAgentThreadFilePersistence } from "../lib/services/chatPersistence";
   import { ensureWorkspaceReadAccess, probeWorkspaceReadAccess } from "../lib/services/fileSystem";
@@ -186,6 +196,137 @@
 
   async function refreshProjectTree(): Promise<void> {
     await projectTreeController.refreshProjectTree(activeWorkspaceRoot, isAgentTabActive);
+  }
+
+  function notifyProjectTreeFilesystemChange(path: string): void {
+    projectTreeController.handleFilesystemChange(activeWorkspaceRoot, path);
+  }
+
+  async function refreshProjectTreeDirectories(directoryPaths: string[]): Promise<void> {
+    await projectTreeController.reloadDirectories(activeWorkspaceRoot, directoryPaths);
+  }
+
+  async function afterProjectTreeMutation(...paths: string[]): Promise<void> {
+    const dirs = new Set<string>();
+    if (activeWorkspaceRoot) {
+      dirs.add(activeWorkspaceRoot);
+    }
+    for (const path of paths) {
+      dirs.add(parentDirForRefresh(path));
+    }
+    await refreshProjectTreeDirectories([...dirs]);
+    for (const path of paths) {
+      notifyProjectTreeFilesystemChange(path);
+    }
+  }
+
+  async function handleMoveProjectTreeEntry(
+    sourcePath: string,
+    destDirPath: string,
+  ): Promise<void> {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    const result = await moveProjectEntry(
+      activeWorkspaceRoot,
+      sourcePath,
+      destDirPath,
+      currentWindowId,
+    );
+    if (!result.ok) {
+      notify(result.reason);
+      return;
+    }
+    notify(`Moved to ${destDirPath}`);
+    await afterProjectTreeMutation(sourcePath, result.path, destDirPath);
+  }
+
+  function promptEntryName(title: string, defaultValue: string): string | null {
+    const value = window.prompt(title, defaultValue);
+    if (value === null) {
+      return null;
+    }
+    return value;
+  }
+
+  async function handleNewProjectFile(parentDirPath: string): Promise<void> {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    const name = promptEntryName("New file name", "untitled.txt");
+    if (name === null) {
+      return;
+    }
+    const result = await createProjectFile(activeWorkspaceRoot, parentDirPath, name);
+    if (!result.ok) {
+      notify(result.reason);
+      return;
+    }
+    notify(`Created ${name}`);
+    await afterProjectTreeMutation(result.path);
+    await handleOpenProjectTreeFile(result.path);
+  }
+
+  async function handleNewProjectFolder(parentDirPath: string): Promise<void> {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    const name = promptEntryName("New folder name", "New Folder");
+    if (name === null) {
+      return;
+    }
+    const result = await createProjectFolder(activeWorkspaceRoot, parentDirPath, name);
+    if (!result.ok) {
+      notify(result.reason);
+      return;
+    }
+    notify(`Created folder ${name}`);
+    await afterProjectTreeMutation(result.path);
+  }
+
+  async function handleRenameProjectEntry(
+    path: string,
+    kind: ProjectTreeNode["kind"],
+  ): Promise<void> {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    const currentName = path.replaceAll("\\", "/").split("/").pop() ?? path;
+    const name = promptEntryName("Rename", currentName);
+    if (name === null) {
+      return;
+    }
+    const result = await renameProjectEntry(activeWorkspaceRoot, path, name, currentWindowId);
+    if (!result.ok) {
+      notify(result.reason);
+      return;
+    }
+    notify(`Renamed to ${name}`);
+    await afterProjectTreeMutation(path, result.path);
+    if (kind === "file") {
+      await handleOpenProjectTreeFile(result.path);
+    }
+  }
+
+  async function handleDeleteProjectEntry(
+    path: string,
+    kind: ProjectTreeNode["kind"],
+  ): Promise<void> {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
+    const label = kind === "directory" ? "folder" : "file";
+    const confirmed = window.confirm(`Delete ${label} "${path.replaceAll("\\", "/").split("/").pop()}"?`);
+    if (!confirmed) {
+      return;
+    }
+    const result = await deleteProjectEntry(activeWorkspaceRoot, path);
+    if (!result.ok) {
+      notify(result.reason);
+      return;
+    }
+    notify("Deleted");
+    await afterProjectTreeMutation(path);
   }
 
   function toggleProjectPanelCollapsed(next: boolean): void {
@@ -589,6 +730,9 @@
       consumeOpenedPaths,
       restoreWorkspaceAgentSession,
       loadProjectTreeRoot,
+      onFilesystemChange: (path) => {
+        notifyProjectTreeFilesystemChange(path);
+      },
       setConsoleHeightPx: (heightPx) => {
         consoleHeightPx = heightPx;
       },
@@ -771,9 +915,24 @@
 
   $effect(() => {
     if (!activeWorkspaceRoot) {
+      void syncProjectTreeWatcher(null);
+      projectTreeController.clearFilesystemChangeDebounce();
       return;
     }
     void loadProjectTreeRoot();
+    if (runtimeReady) {
+      void syncProjectTreeWatcher(activeWorkspaceRoot);
+    }
+  });
+
+  $effect(() => {
+    if (!runtimeReady || !activeWorkspaceRoot) {
+      if (runtimeReady && !activeWorkspaceRoot) {
+        void syncProjectTreeWatcher(null);
+      }
+      return;
+    }
+    void syncProjectTreeWatcher(activeWorkspaceRoot);
   });
 
   $effect(() => {
@@ -991,6 +1150,12 @@
         onPanelWidthChange={handleProjectPanelWidthChange}
         onToggleDirectory={handleToggleProjectTreeDirectory}
         onOpenFile={handleOpenProjectTreeFile}
+        onMoveEntry={handleMoveProjectTreeEntry}
+        onNewFile={(parent) => void handleNewProjectFile(parent)}
+        onNewFolder={(parent) => void handleNewProjectFolder(parent)}
+        onRenameEntry={(path, kind) => void handleRenameProjectEntry(path, kind)}
+        onDeleteEntry={(path, kind) => void handleDeleteProjectEntry(path, kind)}
+        {notify}
       />
     {/if}
   </div>

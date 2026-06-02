@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createProjectTreeController,
+  directoriesToRefreshForChange,
   expandedAncestorPathsForFile,
   type ProjectTreeControllerState,
 } from "./projectTreeController";
@@ -24,6 +25,19 @@ describe("expandedAncestorPathsForFile", () => {
 
   it("returns empty for paths outside root", () => {
     expect(expandedAncestorPathsForFile("/repo", "/other/main.ts")).toEqual([]);
+  });
+});
+
+describe("directoriesToRefreshForChange", () => {
+  it("includes workspace root parent and expanded dirs", () => {
+    const expanded = new Set(["/repo/src"]);
+    const dirs = directoriesToRefreshForChange("/repo", "/repo/src/main.ts", expanded);
+    expect(dirs).toContain("/repo");
+    expect(dirs).toContain("/repo/src");
+  });
+
+  it("returns empty for paths outside workspace", () => {
+    expect(directoriesToRefreshForChange("/repo", "/other/x.txt", new Set())).toEqual([]);
   });
 });
 

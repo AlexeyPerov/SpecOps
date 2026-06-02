@@ -7,7 +7,7 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 - **Notepad** with syntax highlighting for .md and code files
 - **Markdown** viewer and editor
 - **Folders as workspaces**
-- **Project panel** — file tree, open files in tabs, refresh and show/hide hidden files
+- **Project panel** — file tree (all files), drag-and-drop move, context menu (new/rename/delete), live refresh, open in tabs, show/hide hidden files
 - **Themes**
 - **Multi-Window**
 - **Images** preview

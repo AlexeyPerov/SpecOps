@@ -54,6 +54,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             take_pending_opened_paths,
             file_watcher::sync_file_watcher_paths,
+            file_watcher::sync_project_tree_watcher,
             #[cfg(target_os = "macos")]
             dock_menu::refresh_dock_menu,
         ])

@@ -3,6 +3,7 @@ import type {
   ContextId,
   ContextSnapshot,
   DiskFingerprint,
+  DocumentContentKind,
   DocumentState,
 } from "../../domain/contracts";
 import {
@@ -34,6 +35,7 @@ import {
   basename,
   buildDocument,
   buildEmptyUnsavedDocument,
+  documentWithOpenedFilePayload,
   inferLanguage,
 } from "./documentHelpers";
 import {
@@ -421,7 +423,24 @@ export function createDocumentTabsSlice(deps: {
       update((state) => closeTabsForce(state, tabIds, null));
       return true;
     },
-    openFileInTab(filePath: string, content: string): string {
+    upgradeDocumentFromOpenedFile(
+      documentId: string,
+      filePath: string,
+      content: string,
+      contentKind: DocumentContentKind,
+    ): void {
+      update((state) =>
+        patchActiveContext(state, (ctx) => ({
+          ...ctx,
+          documents: ctx.documents.map((documentState) =>
+            documentState.id === documentId
+              ? documentWithOpenedFilePayload(documentState, filePath, content, contentKind)
+              : documentState,
+          ),
+        })),
+      );
+    },
+    openFileInTab(filePath: string, content: string, contentKind: DocumentContentKind = "text"): string {
       let openedDocumentId = "";
       let recentFiles: string[] = [];
       update((state) => {
@@ -429,17 +448,30 @@ export function createDocumentTabsSlice(deps: {
         const duplicate = findDocumentByPath(state, filePath);
         if (duplicate) {
           openedDocumentId = duplicate.id;
-          const existingTab = getActiveSession(state).openTabs
+          const upgradedState = patchActiveContext(state, (ctx) => ({
+            ...ctx,
+            documents: ctx.documents.map((documentState) =>
+              documentState.id === duplicate.id
+                ? documentWithOpenedFilePayload(
+                    documentState,
+                    filePath,
+                    content,
+                    contentKind,
+                  )
+                : documentState,
+            ),
+          }));
+          const existingTab = getActiveSession(upgradedState).openTabs
             .map((rawTab) => normalizeTabState(rawTab))
             .find((tab) => isFileTab(tab) && tab.documentId === duplicate.id);
           if (existingTab) {
             return {
-              ...selectTabInternal(state, existingTab.id),
+              ...selectTabInternal(upgradedState, existingTab.id),
               recentFiles,
             };
           }
           return {
-            ...reopenTabForDocument(state, duplicate.id),
+            ...reopenTabForDocument(upgradedState, duplicate.id),
             recentFiles,
           };
         }
@@ -450,6 +482,7 @@ export function createDocumentTabsSlice(deps: {
           { id: docId, filePath },
           content,
           basename(filePath),
+          contentKind,
         );
 
         return {
@@ -698,6 +731,9 @@ export function createDocumentTabsSlice(deps: {
           ...ctx,
           documents: ctx.documents.map((documentState) => {
             if (documentState.id !== documentId) {
+              return documentState;
+            }
+            if (documentState.contentKind !== "text") {
               return documentState;
             }
             const lineEnding: "lf" | "crlf" = content.includes("\r\n") ? "crlf" : "lf";

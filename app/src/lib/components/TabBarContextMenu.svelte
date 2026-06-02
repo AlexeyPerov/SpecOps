@@ -6,7 +6,11 @@
   import { revealInFileManager } from "../services/revealInFileManager";
   import { readNearbyTextFiles, type NearbyTextFile } from "../services/nearbyFiles";
   import { openPath } from "../services/fileSystem";
-  import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
+  import {
+    completeOpenPath,
+    refreshExistingDocumentFromDisk,
+    requestOpenPath,
+  } from "../services/openFileGate";
   import { runInNotepadContext, workspaceRelativePath } from "../services/workspacePaths";
   import { renameDocumentOnDisk } from "../services/documentRename";
   import {
@@ -195,7 +199,9 @@
       }
       const gateResult = await requestOpenPath(opened.path, windowId);
       if (gateResult.kind === "needs_read") {
-        await completeOpenPath(opened.path, opened.content, windowId);
+        await completeOpenPath(opened.path, opened.content, windowId, opened.contentKind);
+      } else if (gateResult.kind === "existing") {
+        await refreshExistingDocumentFromDisk(gateResult.documentId, opened.path);
       }
     } catch {
       // nearby open is best-effort from the tab menu

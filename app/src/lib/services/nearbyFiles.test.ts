@@ -50,6 +50,7 @@ describe("listNearbyTextFiles", () => {
 
     expect(files.map((entry) => entry.basename)).toEqual([
       "beta.markdown",
+      "photo.png",
       "README",
       "skip.ts",
       "vibe notes",

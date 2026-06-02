@@ -9,10 +9,18 @@ import {
   type OpenActivePathResult,
 } from "./openActivePath";
 
-vi.mock("./openFileGate", () => ({
-  requestOpenPath: vi.fn(),
-  completeOpenPath: vi.fn(),
+vi.mock("./externalFileChanges", () => ({
+  initializeDocumentDiskState: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock("./openFileGate", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./openFileGate")>();
+  return {
+    ...actual,
+    requestOpenPath: vi.fn(),
+    completeOpenPath: vi.fn(),
+  };
+});
 
 vi.mock("./fileSystem", () => ({
   openPath: vi.fn(),
@@ -55,17 +63,23 @@ describe("openActivePath", () => {
     expect(completeOpenPathMock).not.toHaveBeenCalled();
   });
 
-  it("returns existing without reading disk when gate finds local tab", async () => {
+  it("re-reads disk and upgrades existing documents when gate finds local tab", async () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "existing",
       path: FILE_PATH,
       documentId: "doc-1",
     });
+    openPathMock.mockResolvedValue({
+      path: FILE_PATH,
+      content: "",
+      sizeBytes: 1200,
+      contentKind: "image",
+    });
 
     const result = await openActivePath(FILE_PATH, WINDOW_ID);
 
     expect(result).toEqual({ kind: "existing", path: FILE_PATH });
-    expect(openPathMock).not.toHaveBeenCalled();
+    expect(openPathMock).toHaveBeenCalledWith(FILE_PATH);
     expect(completeOpenPathMock).not.toHaveBeenCalled();
   });
 
@@ -79,6 +93,7 @@ describe("openActivePath", () => {
       path: FILE_PATH,
       content: "hello",
       sizeBytes: 100,
+      contentKind: "text",
     });
     completeOpenPathMock.mockResolvedValue("doc-new");
 
@@ -86,7 +101,7 @@ describe("openActivePath", () => {
 
     expect(result).toEqual({ kind: "opened", path: FILE_PATH });
     expect(openPathMock).toHaveBeenCalledWith(FILE_PATH);
-    expect(completeOpenPathMock).toHaveBeenCalledWith(FILE_PATH, "hello", WINDOW_ID);
+    expect(completeOpenPathMock).toHaveBeenCalledWith(FILE_PATH, "hello", WINDOW_ID, "text");
   });
 
   it("returns too_large without completing open when file exceeds 10MB", async () => {
@@ -100,6 +115,7 @@ describe("openActivePath", () => {
       path: FILE_PATH,
       content: "",
       sizeBytes: maxBytes + 1,
+      contentKind: "text",
     });
 
     const result = await openActivePath(FILE_PATH, WINDOW_ID);

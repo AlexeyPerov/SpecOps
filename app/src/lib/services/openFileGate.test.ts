@@ -176,8 +176,19 @@ describe("completeOpenPath", () => {
     await expect(completeOpenPath("/tmp/complete.txt", "payload", "win-a")).resolves.toBe("doc-2");
     expect(claimOpenFileMock).toHaveBeenCalledWith("/tmp/complete.txt", "win-a", "doc-2");
     expect(initializeDocumentDiskStateMock).toHaveBeenCalledWith("doc-2", "/tmp/complete.txt");
-    expect(appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.content).toBe(
-      "payload",
+    const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
+    expect(document?.content).toBe("payload");
+    expect(document?.contentKind).toBe("text");
+  });
+
+  it("upgrades stale text documents when reopening the same image path", async () => {
+    appState.openFileInTab("/tmp/keenetic-dns.png", "stale-text", "text");
+    await expect(completeOpenPath("/tmp/keenetic-dns.png", "", "win-a", "image")).resolves.toBe(
+      "doc-2",
     );
+    const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
+    expect(document?.contentKind).toBe("image");
+    expect(document?.content).toBe("");
+    expect(document?.isDirty).toBe(false);
   });
 });

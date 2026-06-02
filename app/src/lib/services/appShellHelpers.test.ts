@@ -42,6 +42,7 @@ function emptyDocument(id: string, filePath: string | null) {
     content: "",
     savedContent: "",
     isDirty: false,
+    contentKind: "text" as const,
     language: "plaintext",
     encoding: "utf-8" as const,
     lineEnding: "lf" as const,

@@ -41,6 +41,7 @@ describe("collectOpenablePathsFromEntries", () => {
 
     expect(paths).toEqual([
       joinDirectoryPath("/tmp/project", "notes.txt"),
+      joinDirectoryPath("/tmp/project", "photo.png"),
       joinDirectoryPath("/tmp/project", "README"),
       joinDirectoryPath("/tmp/project", "vibe notes"),
       joinDirectoryPath("/tmp/project", "zeta.ts"),

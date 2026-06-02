@@ -1,5 +1,7 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, readTextFile, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readDir, readFile, readTextFile, rename, stat, writeTextFile } from "@tauri-apps/plugin-fs";
+import type { FileContentKind } from "./fileContentKind";
+import { inferFileContentKind } from "./fileContentKind";
 import { join } from "@tauri-apps/api/path";
 import type { DiskFingerprint } from "../domain/contracts";
 import type { WorkspaceAccessStatus } from "../ai/capabilities";
@@ -14,6 +16,7 @@ export interface OpenedFile {
   path: string;
   content: string;
   sizeBytes: number;
+  contentKind: FileContentKind;
 }
 
 export interface FileSavePayload {
@@ -187,10 +190,23 @@ export async function renameFile(oldPath: string): Promise<string | null> {
 }
 
 export async function openPath(path: string): Promise<OpenedFile> {
-  const content = await readTextFile(path);
+  const fileStat = await stat(path);
+  const sizeBytes = Number(fileStat.size);
+  const bytes = await readFile(path);
+  const contentKind = inferFileContentKind(path, bytes);
+  if (contentKind !== "text") {
+    return {
+      path,
+      content: "",
+      sizeBytes,
+      contentKind,
+    };
+  }
+  const content = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
   return {
     path,
     content,
-    sizeBytes: new TextEncoder().encode(content).length,
+    sizeBytes,
+    contentKind: "text",
   };
 }

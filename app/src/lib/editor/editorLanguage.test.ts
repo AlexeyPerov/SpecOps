@@ -15,7 +15,7 @@ describe("isOpenableFilePath", () => {
   });
 
   it("rejects unsupported files", () => {
-    expect(isOpenableFilePath("/tmp/image.png")).toBe(false);
+    expect(isOpenableFilePath("/tmp/image.png")).toBe(true);
     expect(isOpenableFilePath("/tmp/data.bin")).toBe(false);
   });
 });

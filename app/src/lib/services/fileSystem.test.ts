@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readDir, readFile, readTextFile, stat, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
   ensureWorkspaceReadAccess,
   openFileDialog,
@@ -21,7 +21,9 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readDir: vi.fn(),
+  readFile: vi.fn(),
   readTextFile: vi.fn(),
+  stat: vi.fn(),
   writeTextFile: vi.fn(),
   rename: vi.fn(),
 }));
@@ -57,7 +59,9 @@ vi.mock("./logging", () => ({
 const openMock = vi.mocked(open);
 const saveMock = vi.mocked(save);
 const readDirMock = vi.mocked(readDir);
+const readFileMock = vi.mocked(readFile);
 const readTextFileMock = vi.mocked(readTextFile);
+const statMockFs = vi.mocked(stat);
 const writeTextFileMock = vi.mocked(writeTextFile);
 const statMock = vi.mocked(statDiskFingerprint);
 const recordWriteMock = vi.mocked(recordWriteFingerprint);
@@ -65,15 +69,44 @@ const logDiagnosticMock = vi.mocked(logDiagnostic);
 
 describe("openPath", () => {
   beforeEach(() => {
-    readTextFileMock.mockReset();
+    readFileMock.mockReset();
+    statMockFs.mockReset();
+    statMockFs.mockResolvedValue({ size: 5 } as Awaited<ReturnType<typeof stat>>);
   });
 
-  it("returns path, content, and UTF-8 byte length", async () => {
-    readTextFileMock.mockResolvedValue("hello");
+  it("returns path, content, and UTF-8 byte length for text files", async () => {
+    readFileMock.mockResolvedValue(new TextEncoder().encode("hello"));
     await expect(openPath("/tmp/open.txt")).resolves.toEqual({
       path: "/tmp/open.txt",
       content: "hello",
       sizeBytes: 5,
+      contentKind: "text",
+    });
+  });
+
+  it("opens images without loading text content", async () => {
+    statMockFs.mockResolvedValue({ size: 1200 } as Awaited<ReturnType<typeof stat>>);
+    readFileMock.mockResolvedValue(
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+    await expect(openPath("/tmp/photo.png")).resolves.toEqual({
+      path: "/tmp/photo.png",
+      content: "",
+      sizeBytes: 1200,
+      contentKind: "image",
+    });
+  });
+
+  it("opens binary files without decoding as text", async () => {
+    statMockFs.mockResolvedValue({ size: 32 } as Awaited<ReturnType<typeof stat>>);
+    const bytes = new Uint8Array(32);
+    bytes.fill(0x01);
+    readFileMock.mockResolvedValue(bytes);
+    await expect(openPath("/tmp/app.bin")).resolves.toEqual({
+      path: "/tmp/app.bin",
+      content: "",
+      sizeBytes: 32,
+      contentKind: "binary",
     });
   });
 });

@@ -1,9 +1,11 @@
 import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
+import { initializeDocumentDiskState } from "../services/externalFileChanges";
+import { appState } from "../state/appState";
 
 export async function openAndStoreFile(
   notify: (message: string) => void,
   windowId: string,
-  opened: { path: string; content: string; sizeBytes: number } | null,
+  opened: { path: string; content: string; sizeBytes: number; contentKind: "text" | "image" | "binary" } | null,
 ): Promise<void> {
   if (!opened) {
     return;
@@ -19,10 +21,17 @@ export async function openAndStoreFile(
     return;
   }
   if (gateResult.kind === "existing") {
+    appState.upgradeDocumentFromOpenedFile(
+      gateResult.documentId,
+      opened.path,
+      opened.content,
+      opened.contentKind,
+    );
+    await initializeDocumentDiskState(gateResult.documentId, opened.path);
     notify(`Opened ${opened.path}`);
     return;
   }
 
-  await completeOpenPath(opened.path, opened.content, windowId);
+  await completeOpenPath(opened.path, opened.content, windowId, opened.contentKind);
   notify(`Opened ${opened.path}`);
 }

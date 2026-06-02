@@ -18,6 +18,10 @@ import {
   dedupeWindowSnapshotAgainstRegistry,
   syncOpenFileRegistryForWindow,
 } from "./openFileRegistry";
+import {
+  refreshDocumentFromDiskIfNeeded,
+  stripWindowSnapshotForSession,
+} from "./sessionDocumentPersistence";
 
 const SESSION_FILE = "session.json";
 const SESSION_BACKUP_FILE = "session.backup.json";
@@ -38,7 +42,7 @@ async function getSessionPath(fileName: string): Promise<string> {
 }
 
 function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
-  return {
+  return stripWindowSnapshotForSession({
     activeContextId: state.contexts.activeContextId,
     notepad: state.contexts.notepad,
     workspaces: state.contexts.workspaces,
@@ -46,7 +50,7 @@ function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
       zoomPercent: state.editor.zoomPercent,
       wrapLines: state.editor.wrapLines,
     },
-  };
+  });
 }
 
 function emptySessionSnapshot(): AppSessionSnapshot {
@@ -95,6 +99,7 @@ function buildFallbackDocument(documentId: string): DocumentState {
     content: "",
     savedContent: "",
     isDirty: false,
+    contentKind: "text",
     language: "plaintext",
     encoding: "utf-8",
     lineEnding: "lf",
@@ -151,6 +156,10 @@ function normalizeRestoredDocument(documentState: DocumentState): DocumentState 
       documentState.markdownViewMode === "split" || documentState.markdownViewMode === "preview"
         ? documentState.markdownViewMode
         : "edit",
+    contentKind:
+      documentState.contentKind === "image" || documentState.contentKind === "binary"
+        ? documentState.contentKind
+        : "text",
   };
 }
 
@@ -159,10 +168,16 @@ export async function sanitizeWindowSnapshot(
 ): Promise<WindowSessionSnapshot> {
   async function sanitizeContext(context: WindowSessionSnapshot["notepad"]): Promise<WindowSessionSnapshot["notepad"]> {
     const documentsById = new Map(
-      context.documents.map((documentState) => [
-        documentState.id,
-        normalizeRestoredDocument(documentState),
-      ]),
+      await Promise.all(
+        context.documents.map(async (documentState) => {
+          const normalized = normalizeRestoredDocument(documentState);
+          const refreshed = await refreshDocumentFromDiskIfNeeded(
+            normalized,
+            isFileMissingError,
+          );
+          return [documentState.id, refreshed] as const;
+        }),
+      ),
     );
     const openTabs: TabState[] = [];
 

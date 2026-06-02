@@ -11,6 +11,9 @@ import {
 import {
   initializeDocumentDiskState,
 } from "./externalFileChanges";
+import type { FileContentKind } from "./fileContentKind";
+import type { OpenedFile } from "./fileSystem";
+import { openPath } from "./fileSystem";
 import {
   WINDOW_EVENT_SELECT_TAB_FOR_PATH,
 } from "./windowManager";
@@ -136,12 +139,28 @@ export function selectTabForNormalizedPath(normalizedPath: string): boolean {
   return false;
 }
 
+export async function refreshExistingDocumentFromDisk(
+  documentId: string,
+  path: string,
+): Promise<OpenedFile> {
+  const opened = await openPath(path);
+  appState.upgradeDocumentFromOpenedFile(
+    documentId,
+    opened.path,
+    opened.content,
+    opened.contentKind,
+  );
+  await initializeDocumentDiskState(documentId, path);
+  return opened;
+}
+
 export async function completeOpenPath(
   path: string,
   content: string,
   windowId: string,
+  contentKind: FileContentKind = "text",
 ): Promise<string> {
-  const documentId = appState.openFileInTab(path, content);
+  const documentId = appState.openFileInTab(path, content, contentKind);
   await claimOpenFile(path, windowId, documentId);
   await initializeDocumentDiskState(documentId, path);
   return documentId;

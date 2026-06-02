@@ -31,6 +31,14 @@ vi.mock("./openFileRegistry", () => ({
   syncOpenFileRegistryForWindow: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("./fileSystem", () => ({
+  openPath: vi.fn(),
+}));
+
+import { openPath } from "./fileSystem";
+
+const openPathMock = vi.mocked(openPath);
+
 function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowSessionSnapshot {
   const notepad: WindowSessionSnapshot["notepad"] = {
     documents: [
@@ -41,6 +49,7 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
         content: "saved",
         savedContent: "saved",
         isDirty: false,
+        contentKind: "text",
         language: "plaintext",
         encoding: "utf-8",
         lineEnding: "lf",
@@ -93,6 +102,7 @@ describe("nextNumericId", () => {
 describe("sanitizeWindowSnapshot", () => {
   beforeEach(() => {
     sessionMock.diskFiles.clear();
+    openPathMock.mockReset();
   });
 
   it("marks missing files on disk without dropping tabs", async () => {
@@ -120,6 +130,36 @@ describe("sanitizeWindowSnapshot", () => {
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
     expect(sanitized.notepad.session.openTabs.map((tab) => tab.id)).toEqual(["tab-1"]);
+  });
+
+  it("refreshes legacy image documents from disk on restore", async () => {
+    openPathMock.mockResolvedValue({
+      path: "/tmp/keenetic-dns.png",
+      content: "",
+      sizeBytes: 42,
+      contentKind: "image",
+    });
+    const snapshot = windowSnapshot({
+      notepad: {
+        ...windowSnapshot().notepad,
+        documents: [
+          {
+            ...windowSnapshot().notepad.documents[0]!,
+            id: "doc-1",
+            filePath: "/tmp/keenetic-dns.png",
+            title: "keenetic-dns.png",
+            content: "x".repeat(10_000),
+            savedContent: "x".repeat(10_000),
+            contentKind: "text",
+          },
+        ],
+      },
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    expect(sanitized.notepad.documents[0]?.contentKind).toBe("image");
+    expect(sanitized.notepad.documents[0]?.content).toBe("");
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/keenetic-dns.png");
   });
 
   it("creates a fallback untitled tab when no tabs remain", async () => {
@@ -201,6 +241,19 @@ describe("persistSessionSnapshot", () => {
   beforeEach(() => {
     sessionMock.setSessionStore(null);
     appState.resetAppState();
+  });
+
+  it("does not persist buffers for image documents", async () => {
+    appState.openFileInTab("/tmp/persist-photo.png", "", "image");
+
+    await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
+
+    const persisted = sessionMock.getSessionStore()?.windows["win-a"]?.notepad.documents.find(
+      (documentState) => documentState.filePath === "/tmp/persist-photo.png",
+    );
+    expect(persisted?.contentKind).toBe("image");
+    expect(persisted?.content).toBe("");
+    expect(persisted?.savedContent).toBe("");
   });
 
   it("merges window state into session.json and writes backup", async () => {

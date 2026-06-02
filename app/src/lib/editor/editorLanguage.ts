@@ -5,6 +5,20 @@ import { markdown } from "@codemirror/lang-markdown";
 import { LanguageSupport, StreamLanguage } from "@codemirror/language";
 export type EditorLanguageId = string;
 
+const IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".svg",
+  ".ico",
+  ".bmp",
+  ".avif",
+  ".heic",
+  ".heif",
+] as const;
+
 const EXTENSION_MAP: Record<string, EditorLanguageId> = {
   ".md": "markdown",
   ".markdown": "markdown",
@@ -58,6 +72,11 @@ function fileBasename(path: string): string {
 
 export function isOpenableFilePath(filePath: string): boolean {
   const lower = filePath.toLowerCase();
+  for (const extension of IMAGE_EXTENSIONS) {
+    if (lower.endsWith(extension)) {
+      return true;
+    }
+  }
   for (const extension of OPENABLE_FILE_EXTENSIONS) {
     if (lower.endsWith(extension)) {
       return true;

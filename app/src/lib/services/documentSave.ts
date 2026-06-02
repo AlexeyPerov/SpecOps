@@ -1,4 +1,5 @@
 import type { DocumentState } from "../domain/contracts";
+import { isEditableContentKind } from "./fileContentKind";
 import { appState } from "../state/appState";
 import { saveFile, saveFileAs } from "./fileSystem";
 import { renameOpenFileRegistry } from "./openFileRegistry";
@@ -15,6 +16,10 @@ async function persistDocument(
   deps: SaveDocumentDeps,
   options?: { allowWorkspaceTabMove?: boolean },
 ): Promise<boolean> {
+  if (!isEditableContentKind(document.contentKind)) {
+    deps.notify("This file is not editable in the text editor.");
+    return false;
+  }
   let targetPath = document.filePath;
   const previousPath = document.filePath;
   let fingerprint;

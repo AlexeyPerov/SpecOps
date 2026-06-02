@@ -12,11 +12,14 @@ export interface DocumentIdentity {
 
 export type MarkdownViewMode = "edit" | "split" | "preview";
 
+export type DocumentContentKind = "text" | "image" | "binary";
+
 export interface DocumentState extends DocumentIdentity {
   title: string;
   content: string;
   savedContent: string;
   isDirty: boolean;
+  contentKind: DocumentContentKind;
   language: string;
   encoding: "utf-8";
   lineEnding: "lf" | "crlf";

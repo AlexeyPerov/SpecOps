@@ -17,6 +17,7 @@ function doc(overrides: Partial<DocumentState> = {}): DocumentState {
     content: "hello",
     savedContent: "",
     isDirty: true,
+    contentKind: "text",
     language: "plaintext",
     encoding: "utf-8",
     lineEnding: "lf",

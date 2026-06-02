@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-06-02 — Image preview asset protocol
+
+- **Tauri:** Enable `protocol-asset` and `assetProtocol` scope (`$HOME`, `$APPDATA`) plus CSP `img-src` for `asset:` / `http://asset.localhost` so `convertFileSrc` loads in the WebView.
+- **Image preview:** Fall back to `readFile` + blob URL when the asset URL fails (broken-image icon).
+
+## 2026-06-02 — Session: no binary buffers, restore re-reads disk
+
+- **Session persist:** Image and binary tabs save empty `content` / `savedContent` (legacy image paths stored as text are stripped on write).
+- **Session restore:** Sanitize re-opens those files via `openPath` so `contentKind` and buffers match disk (fixes huge PNG-as-text blobs reloaded from `session.json` on startup).
+
+## 2026-06-02 — Re-open upgrades stale documents to image/binary
+
+- **Open file:** Re-opening an existing path re-reads the file and upgrades `contentKind` (e.g. legacy PNG tabs opened as text switch to image preview with empty editor buffer).
+
+## 2026-06-02 — Tab click after micro-drag
+
+- **Tab bar:** A pointer-up with tiny movement (`didDrag` but same index) now still activates the tab; previously `finishDrag` skipped `onSelect`, so tab switches and clicks could appear to do nothing.
+
+## 2026-06-02 — Image preview and binary file handling
+
+- **Open file:** Images open in an inline preview (`convertFileSrc`) instead of a text editor; binary files show a read-only notice without loading bytes into CodeMirror (fixes frozen tabs and non-working close after opening binaries as text).
+- **Detection:** `openPath` reads raw bytes, classifies text vs image vs binary, and stores `contentKind` on documents; images are openable from the project tree.
+
 ## 2026-06-02 — Keyboard shortcuts in Settings
 
 - **Settings → Shortcuts:** New tab lists every command with an active keyboard shortcut on the current platform; click a binding to record a new combo, reset per command, with conflict detection. Overrides persist in `settings.json` as `commandBindingOverrides` and apply to the in-app keymap immediately.

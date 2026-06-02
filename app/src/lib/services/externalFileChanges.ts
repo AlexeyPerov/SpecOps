@@ -252,6 +252,10 @@ async function checkDocumentExternalChangesInner(
     return "skipped";
   }
 
+  if (documentState.contentKind !== "text") {
+    return "skipped";
+  }
+
   if (trigger !== "manual" && !shouldRunAutomaticCheck(snapshot.settings.externalFiles, trigger)) {
     return "skipped";
   }

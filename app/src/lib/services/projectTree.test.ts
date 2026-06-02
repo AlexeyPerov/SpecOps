@@ -47,12 +47,13 @@ describe("loadDirectoryChildren", () => {
   it("skips symlinks and non-openable files", async () => {
     readDirMock.mockResolvedValue([
       { name: "linked", isDirectory: false, isFile: true, isSymlink: true },
+      { name: "archive.zip", isDirectory: false, isFile: true, isSymlink: false },
       { name: "photo.png", isDirectory: false, isFile: true, isSymlink: false },
       { name: "README.md", isDirectory: false, isFile: true, isSymlink: false },
     ]);
 
     const nodes = await loadDirectoryChildren("/tmp/ws", "/tmp/ws", { showHidden: false });
-    expect(nodes.map((node) => node.name)).toEqual(["README.md"]);
+    expect(nodes.map((node) => node.name)).toEqual(["photo.png", "README.md"]);
   });
 
   it("returns empty list for paths outside workspace root", async () => {

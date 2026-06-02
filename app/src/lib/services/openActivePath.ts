@@ -1,6 +1,6 @@
 import { isFileMissingError } from "./diskFingerprint";
 import { openPath } from "./fileSystem";
-import { completeOpenPath, requestOpenPath } from "./openFileGate";
+import { completeOpenPath, refreshExistingDocumentFromDisk, requestOpenPath } from "./openFileGate";
 import { appState } from "../state/appState";
 import { syncRecentFiles } from "./recentFilesSync";
 import { getErrorMessage } from "../commands/commandErrors";
@@ -36,6 +36,10 @@ export async function openActivePath(
       return { kind: "redirected", path: gateResult.path };
     }
     if (gateResult.kind === "existing") {
+      const opened = await refreshExistingDocumentFromDisk(gateResult.documentId, path);
+      if (opened.sizeBytes > MAX_OPEN_BYTES) {
+        return { kind: "too_large", path: opened.path };
+      }
       return { kind: "existing", path: gateResult.path };
     }
 
@@ -44,7 +48,7 @@ export async function openActivePath(
       return { kind: "too_large", path: opened.path };
     }
 
-    await completeOpenPath(opened.path, opened.content, windowId);
+    await completeOpenPath(opened.path, opened.content, windowId, opened.contentKind);
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {
     if (isFileMissingError(error)) {

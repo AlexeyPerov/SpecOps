@@ -3,6 +3,8 @@
   import DocumentEditor from "../lib/components/DocumentEditor.svelte";
   import MarkdownEditorPane from "../lib/components/MarkdownEditorPane.svelte";
   import DiffPreviewPane from "../lib/components/DiffPreviewPane.svelte";
+  import ImagePreviewPane from "../lib/components/ImagePreviewPane.svelte";
+  import BinaryFilePane from "../lib/components/BinaryFilePane.svelte";
   import ConsolePanel from "../lib/components/ConsolePanel.svelte";
   import SettingsDialog from "../lib/components/SettingsDialog.svelte";
   import ThemePane from "../lib/components/ThemePane.svelte";
@@ -134,7 +136,15 @@
     documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
       documents[0],
   );
-  const isMarkdownDocument = $derived(activeDocument?.language === "markdown");
+  const isImageDocument = $derived(activeDocument?.contentKind === "image");
+  const isBinaryDocument = $derived(activeDocument?.contentKind === "binary");
+  const isTextEditorDocument = $derived(
+    !isImageDocument && !isBinaryDocument && activeDocument !== undefined,
+  );
+  const previewFileSizeBytes = $derived(activeDocument?.diskFingerprint?.sizeBytes ?? 0);
+  const isMarkdownDocument = $derived(
+    isTextEditorDocument && activeDocument?.language === "markdown",
+  );
   const markdownHtml = $derived(
     isMarkdownDocument && activeDocument
       ? (marked.parse(activeDocument.content) as string)
@@ -834,6 +844,18 @@
         savedContent={activeDocument?.savedContent ?? ""}
         currentContent={activeDocument?.content ?? ""}
       />
+    {:else if isImageDocument}
+      <ImagePreviewPane
+        filePath={activeDocument?.filePath ?? null}
+        title={activeDocument?.title ?? "Image"}
+        sizeBytes={previewFileSizeBytes}
+      />
+    {:else if isBinaryDocument}
+      <BinaryFilePane
+        filePath={activeDocument?.filePath ?? null}
+        title={activeDocument?.title ?? "Binary file"}
+        sizeBytes={previewFileSizeBytes}
+      />
     {:else}
       {#if isMarkdownDocument}
         <MarkdownEditorPane
@@ -876,7 +898,7 @@
       {/if}
     {/if}
 
-    {#if !isAgentTabActive && snapshot.editor.findReplaceOpen}
+    {#if isTextEditorDocument && !isAgentTabActive && snapshot.editor.findReplaceOpen}
       <FindReplacePanel
         bind:findQuery
         bind:replaceValue
@@ -887,7 +909,7 @@
       />
     {/if}
 
-    {#if !isAgentTabActive && snapshot.editor.goToOpen}
+    {#if isTextEditorDocument && !isAgentTabActive && snapshot.editor.goToOpen}
       <div class="floating-tool goto-tool">
         <h3>Go To Line</h3>
         <input placeholder="Line number..." bind:value={goToLineValue} />
@@ -921,7 +943,13 @@
               Ln {snapshot.editor.cursorLine}, Col {snapshot.editor.cursorColumn}
             </span>
             <span class="status-segment optional-segment optional-encoding">
-              {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+              {#if isImageDocument}
+                Image
+              {:else if isBinaryDocument}
+                Binary
+              {:else}
+                {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+              {/if}
             </span>
             <span class="status-segment optional-segment optional-line-ending">
               {activeDocument?.lineEnding.toUpperCase() ?? "LF"}

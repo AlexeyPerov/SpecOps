@@ -457,6 +457,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!doc) {
       return;
     }
+    if (doc.contentKind !== "text") {
+      notify("This file is not editable in the text editor.");
+      return;
+    }
 
     let targetPath = doc.filePath;
     const previousPath = doc.filePath;
@@ -497,6 +501,10 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     if (!doc) {
       return;
     }
+    if (doc.contentKind !== "text") {
+      notify("This file is not editable in the text editor.");
+      return;
+    }
     const activeWorkspaceRoot = appState.getWorkspaceRoot();
     const saveAsDefaultPath = doc.filePath
       ? activeWorkspaceRoot
@@ -534,7 +542,7 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     const state = getState();
     let saved = 0;
     for (const documentState of getActiveDocuments(state)) {
-      if (!documentState.isDirty) {
+      if (!documentState.isDirty || documentState.contentKind !== "text") {
         continue;
       }
       let targetPath = documentState.filePath;

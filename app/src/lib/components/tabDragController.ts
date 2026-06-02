@@ -224,6 +224,9 @@ export function createTabDragController(deps: TabDragControllerDeps) {
       if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) {
         deps.onReorder(fromIndex, toIndex);
         deps.onSelect(activeTabId);
+      } else if (fromIndex >= 0 && toIndex >= 0 && fromIndex === toIndex) {
+        // Slight pointer movement still counts as a tab click.
+        deps.onSelect(activeTabId);
       }
     } else if (!wasDrag && activeTabId) {
       deps.onSelect(activeTabId);

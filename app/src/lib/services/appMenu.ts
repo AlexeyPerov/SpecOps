@@ -14,7 +14,7 @@ let refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const REFRESH_DEBOUNCE_MS = 50;
 
-async function resolveHomeDir(): Promise<string | null> {
+export async function resolveHomeDirForMenu(): Promise<string | null> {
   if (cachedHomeDir !== undefined) {
     return cachedHomeDir;
   }
@@ -66,7 +66,7 @@ async function refreshOpenRecentMenuInternal(recentFiles: string[]): Promise<voi
   }
 
   openRecentPathByItemId.clear();
-  const resolvedHomeDir = await resolveHomeDir();
+  const resolvedHomeDir = await resolveHomeDirForMenu();
 
   for (const [index, path] of recentFiles.entries()) {
     const itemId = openRecentItemId(index);

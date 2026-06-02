@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-02 — macOS dock menu Open Recent
+
+- **Dock menu:** Right-click on the dock icon now lists the same recent files as **File → Open Recent** (formatted paths, **Clear Recent**), kept in sync via `refresh_dock_menu`; selections emit `spec-ops/dock/open-recent` / `spec-ops/dock/clear-recent`.
+
 ## 2026-06-02 17:10 — Build warnings (dock menu, ThemePane CSS)
 
 - **macOS dock menu:** Reimplemented `dock_menu.rs` with `objc2` / `objc2-app-kit` (removed deprecated `cocoa` / `objc`); dropped erroneous `mem::forget` on menu target.

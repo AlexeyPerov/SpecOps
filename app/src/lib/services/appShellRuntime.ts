@@ -11,6 +11,8 @@ import {
   refreshOpenRecentMenu,
   shouldInitializeAppMenu,
 } from "../commands/registry";
+import { queueOpenRecentPath } from "./appMenu";
+import { refreshDockMenu } from "./dockMenu";
 import { getErrorMessage } from "../commands/commandErrors";
 import {
   WINDOW_EVENT_ACTIVATE_FILE,
@@ -46,6 +48,8 @@ import { watchedPathsFromState } from "./appShellHelpers";
 
 const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 const DOCK_NEW_WINDOW_EVENT = "spec-ops/dock/new-window";
+const DOCK_OPEN_RECENT_EVENT = "spec-ops/dock/open-recent";
+const DOCK_CLEAR_RECENT_EVENT = "spec-ops/dock/clear-recent";
 
 export interface AppShellRuntimeOptions {
   notify: (message: string) => void;
@@ -146,6 +150,16 @@ export async function startAppShellRuntime(
   });
   cleanupCallbacks.push(unlistenDockNewWindow);
 
+  const unlistenDockOpenRecent = await listen<{ path: string }>(DOCK_OPEN_RECENT_EVENT, (event) => {
+    queueOpenRecentPath(event.payload.path);
+  });
+  cleanupCallbacks.push(unlistenDockOpenRecent);
+
+  const unlistenDockClearRecent = await listen(DOCK_CLEAR_RECENT_EVENT, () => {
+    options.runCommand("file.clearRecentFiles");
+  });
+  cleanupCallbacks.push(unlistenDockClearRecent);
+
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
 
   const persistedSettings = await loadPersistedSettings();
@@ -207,7 +221,9 @@ export async function startAppShellRuntime(
   }
 
   if (shouldInitializeAppMenu(windowId)) {
-    await initializeAppMenu(options.runCommand, appState.getSnapshot().recentFiles);
+    const recentFiles = appState.getSnapshot().recentFiles;
+    await initializeAppMenu(options.runCommand, recentFiles);
+    await refreshDockMenu(recentFiles);
   }
 
   await options.loadProjectTreeRoot();
@@ -238,6 +254,7 @@ export async function startAppShellRuntime(
   const unlistenRecentFiles = await listenForRecentFilesChanges((recentFiles) => {
     if (shouldInitializeAppMenu(windowId)) {
       void refreshOpenRecentMenu(recentFiles);
+      void refreshDockMenu(recentFiles);
     }
   });
   cleanupCallbacks.push(unlistenRecentFiles);

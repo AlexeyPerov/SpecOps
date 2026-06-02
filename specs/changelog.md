@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-02 07:48 — R2 TabBar decomposition (R2-7)
+
+- Extracted `TabBarContextMenu.svelte` for tab context menu UI and actions (close variants, rename, reveal, copy path, nearby files submenu).
+- Extracted `tabDragController.ts` for pointer drag state machine, tab reorder preview, and tear-off-to-new-window via `DRAG_THRESHOLD_PX`.
+- `TabBar.svelte` reduced from ~1003 to ~287 lines (strip rendering and wiring only).
+- Marked `Task R2-7` as `[DONE]` in `specs/refactoring-1/r2-execution-plan.md`.
+- Validation: `npm test` (582 tests), `npm run check` (pre-existing ThemePane CSS warnings only).
+
 ## 2026-06-02 07:40 — R2 remove legacy documents/session mirror (R2-6)
 
 - Removed top-level `documents` and `session` from `AppDomainState`; active context data lives only in `WindowContextState` snapshots.

@@ -151,7 +151,7 @@ All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`)
 | File / area | Contents |
 | --- | --- |
 | `settings.json` | Editor, external files, debug/GLM provider settings, model catalogs (not API key) |
-| `glm-secrets.json` | GLM API key only (`glmSecretsStore.ts`) |
+| `provider-secrets.json` | Provider API keys (`providerSecretsStore.ts`) |
 | `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
 | `themes.json` | Active and custom themes |
 | `chat/{hash}/` | Per-workspace agent index and thread JSON |
@@ -227,7 +227,7 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 
 1. **Domain types in `contracts.ts`** — Avoid duplicating shapes in components.
 2. **Provider-agnostic prompts** — Build `ProviderRequestPayload` once; adapters map to vendor APIs (see `glmPrompt.ts`).
-3. **Secrets separate from settings** — API keys go in `glm-secrets.json`, not `settings.json` or chat thread files.
+3. **Secrets separate from settings** — API keys go in `provider-secrets.json`, not `settings.json` or chat thread files.
 4. **User-facing errors** — Throw `ChatProviderError` with `userMessage` in providers; map HTTP/status in one place per provider.
 5. **Svelte 5** — Use runes (`$state`, `$derived`, `$effect`) consistent with existing components; load Svelte skills/MCP when editing `.svelte` files.
 6. **Minimal Rust** — Prefer implementing features in TypeScript unless OS integration requires native code.

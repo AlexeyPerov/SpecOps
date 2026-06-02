@@ -1,8 +1,17 @@
 # Changelog
 
+## 2026-06-02 — R3 provider secrets and settings tab registry (R3-1, R3-2)
+
+- Added `providerSecretsStore.ts` with provider-keyed `provider-secrets.json` (`{ version: 1, keys: Partial<Record<ChatProviderId, string>> }`); removed `glm-secrets.json` / `glmSecretsStore.ts` without migration (re-enter GLM API key after upgrade).
+- Added `appState.setProviderApiKey(providerId, key)`; kept `setGlmApiKey` as a thin `"glm"` wrapper for existing tests.
+- `appShellRuntime.ts` and Settings dialog GLM key field now load/save via `loadProviderApiKey` / `saveProviderApiKey`.
+- Renamed tests to `providerSecretsStore.test.ts` with merge/remove key coverage.
+- Added `SETTINGS_TABS` registry and `SettingsTabDefinition` in `settingsDialogUi.ts`; Settings dialog sidebar and tab panels render from registry order (`editor`, `glm`, `debugAi`).
+- Updated `docs/providers.md` and `docs/architecture.md` for new secrets path/shape.
+- Marked `Task R3-1` and `Task R3-2` as `[DONE]` in `specs/refactoring-1/r3-execution-plan.md`.
+
 ## 2026-06-02 08:26 — R2 ChatPanel decomposition and validation (R2-8, R2-9)
 
-- Extracted `ChatMessageList.svelte` for message rendering, review sections, system events, and compaction notice.
 - Extracted `ChatComposer.svelte` for draft input, send/retry, and provider/mode/model selectors (`sendChatMessage` / `retryLastChatTurn` called from composer).
 - Extracted `ChatBlockedState.svelte` for access blocked and provider config alarm UI with Settings CTA.
 - `ChatPanel.svelte` reduced from ~1080 to ~298 lines (layout, header, derived state, wiring only).

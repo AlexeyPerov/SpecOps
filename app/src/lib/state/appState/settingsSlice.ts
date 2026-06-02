@@ -45,6 +45,19 @@ export const defaultSettings: AppSettingsState = {
 type SettingsUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
 export function createSettingsSlice(update: SettingsUpdate) {
+  function setProviderApiKey(providerId: ChatProviderId, apiKey: string) {
+    if (providerId !== "glm") {
+      return;
+    }
+    update((state) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        glmApiKey: apiKey,
+      },
+    }));
+  }
+
   return {
     setDebugProviderSettings(debugProvider: DebugProviderSettings) {
       update((state) => ({
@@ -142,14 +155,9 @@ export function createSettingsSlice(update: SettingsUpdate) {
         };
       });
     },
+    setProviderApiKey,
     setGlmApiKey(glmApiKey: string) {
-      update((state) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          glmApiKey,
-        },
-      }));
+      setProviderApiKey("glm", glmApiKey);
     },
     applyPersistedSettings(partial: {
       wrapLines?: boolean;

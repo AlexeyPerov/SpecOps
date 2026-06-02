@@ -25,7 +25,7 @@ import {
   loadPersistedSettings,
   toExternalFilesSettings,
 } from "./settingsStore";
-import { loadGlmApiKey } from "./glmSecretsStore";
+import { loadProviderApiKey } from "./providerSecretsStore";
 import {
   initializeDocumentDiskState,
   runFocusExternalChecks,
@@ -129,7 +129,7 @@ export async function startAppShellRuntime(
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
 
   const persistedSettings = await loadPersistedSettings();
-  const glmApiKey = await loadGlmApiKey();
+  const glmApiKey = await loadProviderApiKey("glm");
   setThemeSaveErrorNotifier(options.notify);
   await appState.loadTheme();
   if (persistedSettings) {
@@ -144,7 +144,7 @@ export async function startAppShellRuntime(
       providerModelCatalogs: persistedSettings.providerModelCatalogs,
     });
   }
-  appState.setGlmApiKey(glmApiKey);
+  appState.setProviderApiKey("glm", glmApiKey);
 
   initializeChatProviders();
   options.setConsoleHeightPx(await readConsoleHeightPreference());

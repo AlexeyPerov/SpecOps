@@ -158,7 +158,7 @@ export interface DebugProviderSettings {
   includeDiagnostics: boolean;
 }
 
-/** Product GLM provider settings (API key stored separately; see glmSecretsStore). */
+/** Product GLM provider settings (API key stored separately; see providerSecretsStore). */
 export interface GlmProviderSettings {
   enabled: boolean;
   baseUrl: string;
@@ -188,7 +188,7 @@ export interface AppSettingsState {
   debugProvider: DebugProviderSettings;
   glmProvider: GlmProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
-  /** In-memory only; loaded from glmSecretsStore, never written to settings.json. */
+  /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
   glmApiKey: string;
 }
 

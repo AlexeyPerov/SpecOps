@@ -11,8 +11,12 @@
     getProviderModelCatalog,
     parseModelListInput,
   } from "../ai/providers/providerModelCatalog";
-  import { saveGlmApiKey } from "../services/glmSecretsStore";
-  import type { SettingsDialogTab } from "../services/settingsDialogUi";
+  import { saveProviderApiKey } from "../services/providerSecretsStore";
+  import {
+    getSettingsTabDefinition,
+    SETTINGS_TABS,
+    type SettingsDialogTab,
+  } from "../services/settingsDialogUi";
   import { appState } from "../state/appState";
   import { chatStore } from "../state/chatStore";
 
@@ -33,9 +37,7 @@
   let activeTab = $state<SettingsDialogTab>("editor");
   let dialogEl: HTMLDivElement | null = $state(null);
   let headerEl: HTMLElement | null = $state(null);
-  let editorMeasureEl: HTMLElement | null = $state(null);
-  let glmMeasureEl: HTMLElement | null = $state(null);
-  let debugMeasureEl: HTMLElement | null = $state(null);
+  let tabMeasureEls = $state<Partial<Record<SettingsDialogTab, HTMLElement>>>({});
   let isResizing = $state(false);
 
   let initialWidthPx = $state(560);
@@ -95,8 +97,8 @@
   }
 
   async function updateGlmApiKey(rawValue: string): Promise<void> {
-    appState.setGlmApiKey(rawValue);
-    await saveGlmApiKey(rawValue);
+    appState.setProviderApiKey("glm", rawValue);
+    await saveProviderApiKey("glm", rawValue);
     void chatStore.runAccessPreflight();
   }
 
@@ -146,15 +148,10 @@
   async function measureAndApplyInitialSize(): Promise<void> {
     await tick();
     const headerHeight = headerEl?.offsetHeight ?? 0;
-    const editorHeight = editorMeasureEl?.scrollHeight ?? 0;
-    const glmHeight = glmMeasureEl?.scrollHeight ?? 0;
-    const debugHeight = debugMeasureEl?.scrollHeight ?? 0;
-    const editorWidth = editorMeasureEl?.scrollWidth ?? 0;
-    const glmWidth = glmMeasureEl?.scrollWidth ?? 0;
-    const debugWidth = debugMeasureEl?.scrollWidth ?? 0;
-
-    const bodyHeight = Math.max(editorHeight, glmHeight, debugHeight);
-    const bodyWidth = Math.max(editorWidth, glmWidth, debugWidth);
+    const tabHeights = SETTINGS_TABS.map((tab) => tabMeasureEls[tab.id]?.scrollHeight ?? 0);
+    const tabWidths = SETTINGS_TABS.map((tab) => tabMeasureEls[tab.id]?.scrollWidth ?? 0);
+    const bodyHeight = Math.max(...tabHeights, 0);
+    const bodyWidth = Math.max(...tabWidths, 0);
 
     const measuredWidth =
       SETTINGS_TAB_SIDEBAR_WIDTH_PX +
@@ -283,6 +280,16 @@
       </select>
     </label>
   </div>
+{/snippet}
+
+{#snippet settingsPanel(tabId: SettingsDialogTab)}
+  {#if tabId === "editor"}
+    {@render editorSettingsPanel()}
+  {:else if tabId === "glm"}
+    {@render glmSettingsPanel()}
+  {:else}
+    {@render debugAiSettingsPanel()}
+  {/if}
 {/snippet}
 
 {#snippet editorSettingsPanel()}
@@ -560,18 +567,14 @@
         <div bind:this={headerEl} class="settings-dialog-header settings-dialog-header-measure">
           <h2 class="settings-dialog-title">Settings</h2>
         </div>
-        <div
-          class="settings-dialog-body settings-dialog-body-measure"
-          bind:this={editorMeasureEl}
-        >
-          {@render editorSettingsPanel()}
-        </div>
-        <div class="settings-dialog-body settings-dialog-body-measure" bind:this={glmMeasureEl}>
-          {@render glmSettingsPanel()}
-        </div>
-        <div class="settings-dialog-body settings-dialog-body-measure" bind:this={debugMeasureEl}>
-          {@render debugAiSettingsPanel()}
-        </div>
+        {#each SETTINGS_TABS as tab (tab.id)}
+          <div
+            class="settings-dialog-body settings-dialog-body-measure"
+            bind:this={tabMeasureEls[tab.id]}
+          >
+            {@render settingsPanel(tab.id)}
+          </div>
+        {/each}
       </div>
     {/if}
 
@@ -602,54 +605,26 @@
           role="tablist"
           aria-label="Settings sections"
         >
-          <button
-            type="button"
-            role="tab"
-            class="settings-dialog-tab"
-            class:settings-dialog-tab-active={activeTab === "editor"}
-            aria-selected={activeTab === "editor"}
-            onclick={() => selectTab("editor")}
-          >
-            Editor
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="settings-dialog-tab"
-            class:settings-dialog-tab-active={activeTab === "glm"}
-            aria-selected={activeTab === "glm"}
-            onclick={() => selectTab("glm")}
-          >
-            GLM
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="settings-dialog-tab"
-            class:settings-dialog-tab-active={activeTab === "debugAi"}
-            aria-selected={activeTab === "debugAi"}
-            onclick={() => selectTab("debugAi")}
-          >
-            Debug AI
-          </button>
+          {#each SETTINGS_TABS as tab (tab.id)}
+            <button
+              type="button"
+              role="tab"
+              class="settings-dialog-tab"
+              class:settings-dialog-tab-active={activeTab === tab.id}
+              aria-selected={activeTab === tab.id}
+              onclick={() => selectTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          {/each}
         </div>
 
         <div
           class="settings-dialog-body"
           role="tabpanel"
-          aria-label={activeTab === "editor"
-            ? "Editor settings"
-            : activeTab === "glm"
-              ? "GLM provider settings"
-              : "Debug AI provider settings"}
+          aria-label={getSettingsTabDefinition(activeTab).panelAriaLabel}
         >
-          {#if activeTab === "editor"}
-            {@render editorSettingsPanel()}
-          {:else if activeTab === "glm"}
-            {@render glmSettingsPanel()}
-          {:else}
-            {@render debugAiSettingsPanel()}
-          {/if}
+          {@render settingsPanel(activeTab)}
         </div>
       </div>
 

@@ -63,14 +63,15 @@ GLM maps this to OpenAI-style messages in `glmPrompt.ts` (single combined `syste
 
 Model lists and per-thread selection use **`providerModelCatalogs.glm`** (`providerModelCatalog.ts`), editable in Settings. Defaults: `glm-4-flash`, `glm-4-air`, `glm-4-plus`.
 
-### Secrets (`glm-secrets.json`)
+### Secrets (`provider-secrets.json`)
 
-API key only — `glmSecretsStore.ts`:
+API keys per provider — `providerSecretsStore.ts`:
 
-- Path: `{appDataDir}/spec-ops/glm-secrets.json`
-- Format: `{ "version": 1, "apiKey": "..." }`
-- Loaded at startup in `+page.svelte` → `appState.setGlmApiKey`
+- Path: `{appDataDir}/spec-ops/provider-secrets.json`
+- Format: `{ "version": 1, "keys": { "glm": "..." } }` (`Partial<Record<ChatProviderId, string>>`)
+- Loaded at startup in `appShellRuntime.ts` → `appState.setProviderApiKey("glm", …)`
 - **Never** written to `settings.json` or chat thread files
+- **Breaking change (R3-1):** `glm-secrets.json` is no longer read; re-enter GLM API key after upgrade
 
 ### “Configured” definition
 
@@ -213,7 +214,7 @@ Send blocked reasons include `glm_not_configured`, `invalid_model`, `preflight`,
 | `glmChatProvider.ts` | HTTP adapter, error mapping |
 | `glmPrompt.ts` | Payload → `messages[]` |
 | `glmProviderSettings.ts` | Defaults, normalize, configured checks |
-| `glmSecretsStore.ts` | API key persistence |
+| `providerSecretsStore.ts` | Provider API key persistence |
 | `bootstrap.ts` | Register providers at startup |
 | `capabilityChecker.ts` | Registry-backed preflight |
 | `selection.ts` | Default provider, switch fallbacks |
@@ -230,6 +231,6 @@ When adding features, keep the adapter thin:
 1. Extend **`ProviderRequestPayload`** or mode prompts if context changes — not GLM-only fields in the send path.
 2. Add request fields in **`glmChatProvider.ts`** only with tests in `glmChatProvider.test.ts`.
 3. For streaming, implement **`streamMessage`** with SSE parsing and keep `sendMessage` as fallback; update `streamProviderMessage` consumers and UX copy.
-4. Never persist API keys outside **`glmSecretsStore`**.
+4. Never persist API keys outside **`providerSecretsStore`**.
 
 See [architecture.md](./architecture.md) for overall layering and agent conventions.

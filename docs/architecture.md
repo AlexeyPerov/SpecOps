@@ -94,6 +94,18 @@ Single source of truth for:
 
 Mutations are methods on the exported store object (e.g. `openDocument`, `setGlmApiKey`, workspace close with dirty prompts).
 
+Implementation is split into colocated modules under `app/src/lib/state/appState/`:
+
+| Module | Role |
+| --- | --- |
+| `contextHelpers.ts` | Context snapshots, workspace lookup, document path lookup, ID counters |
+| `documentHelpers.ts` | Build/normalize document helpers |
+| `tabHelpers.ts` | Tab reorder and bulk-close helpers |
+| `themeController.ts` | Theme persistence, DOM application, custom-theme transforms |
+| `settingsSlice.ts` | Settings defaults and provider/catalog mutators |
+| `documentTabsSlice.ts` | Tab CRUD, agent tabs, file open/transfer, document mutators |
+| `workspaceContextsSlice.ts` | Context switch, workspace open/close, session restore/snapshot |
+
 ### `chatStore` (`app/src/lib/state/chatStore.ts`)
 
 Workspace-scoped chat:
@@ -101,6 +113,17 @@ Workspace-scoped chat:
 - Agent index, per-agent `ChatThreadSnapshot`, runtime (generating, last error)
 - Access preflight (`runAccessPreflight`) — provider capabilities + workspace path readability
 - Provider/model switches append **`ChatSystemEvent`** messages to the thread
+
+Implementation is split into colocated modules under `app/src/lib/state/chatStore/`:
+
+| Module | Role |
+| --- | --- |
+| `agents.ts` | Agent index, drafts, titles, agent CRUD helpers |
+| `threads.ts` | Thread clone/patch, messages, metadata, system events, compaction |
+| `runtime.ts` | Generation state, placeholders, retry, cancel |
+| `access.ts` | Preflight, access loss messages, capability checker wiring |
+| `workspace.ts` | Per-root workspace state patch helpers |
+| `threadHelpers.ts`, `types.ts` | Shared thread types and pure helpers |
 
 Chat providers are registered at startup via `initializeChatProviders()` in `app/src/lib/ai/providers/bootstrap.ts` (called from `+page.svelte` after settings and GLM key load).
 
@@ -156,6 +179,21 @@ Custom commands: `take_pending_opened_paths`, `sync_file_watcher_paths`.
 Routing helpers: `editorRouting.ts` (file vs agent tab), `workspaceAgentSession.ts` (agent tab lifecycle).
 
 Editor: CodeMirror via `EditorSurface.svelte`, language detection in `editorLanguage.ts`.
+
+Chat panel subcomponents (extracted from `ChatPanel.svelte`):
+
+| Component | Role |
+| --- | --- |
+| `ChatMessageList.svelte` | Message rendering, review sections, system events, compaction notice |
+| `ChatComposer.svelte` | Draft input, send/retry, provider/mode/model selectors |
+| `ChatBlockedState.svelte` | Access blocked and provider config alarm UI |
+
+Tab bar subcomponents (extracted from `TabBar.svelte`):
+
+| Component / module | Role |
+| --- | --- |
+| `TabBarContextMenu.svelte` | Tab context menu UI and actions |
+| `tabDragController.ts` | Pointer drag state machine, reorder, tear-off threshold |
 
 ## Testing conventions
 

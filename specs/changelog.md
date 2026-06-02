@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-02 08:26 — R2 ChatPanel decomposition and validation (R2-8, R2-9)
+
+- Extracted `ChatMessageList.svelte` for message rendering, review sections, system events, and compaction notice.
+- Extracted `ChatComposer.svelte` for draft input, send/retry, and provider/mode/model selectors (`sendChatMessage` / `retryLastChatTurn` called from composer).
+- Extracted `ChatBlockedState.svelte` for access blocked and provider config alarm UI with Settings CTA.
+- `ChatPanel.svelte` reduced from ~1080 to ~298 lines (layout, header, derived state, wiring only).
+- Updated `docs/architecture.md` with `appState/` and `chatStore/` module tables and ChatPanel/TabBar subcomponent paths.
+- Marked `Task R2-8` and `Task R2-9` as `[DONE]` in `specs/refactoring-1/r2-execution-plan.md`.
+- R2 exit criteria confirmed: `appState.ts` 298 lines, `chatStore.ts` 144 lines, `TabBar.svelte` 287 lines, `ChatPanel.svelte` 298 lines; `npm test` (582 tests), `npm run check` (pre-existing ThemePane CSS warnings only).
+
 ## 2026-06-02 07:48 — R2 TabBar decomposition (R2-7)
 
 - Extracted `TabBarContextMenu.svelte` for tab context menu UI and actions (close variants, rename, reveal, copy path, nearby files submenu).

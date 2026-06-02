@@ -39,6 +39,7 @@ vi.mock("../services/windowManager", () => ({
 import {
   dispatchCommand,
   commandDefinitions,
+  expandPlatformKeymaps,
   getActiveDocumentContent,
   getRegisteredCommandIds,
   keymapCommandForEvent,
@@ -106,6 +107,17 @@ function createCommandContext(overrides?: { confirm?: (message: string) => boole
 async function flushCommandQueue(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+describe("expandPlatformKeymaps", () => {
+  it("builds mac and windows tokens from command definitions", () => {
+    const keymap = expandPlatformKeymaps(commandDefinitions);
+    expect(keymap["Meta+s"]).toBe("file.save");
+    expect(keymap["Ctrl+s"]).toBe("file.save");
+    expect(keymap["Alt+arrowup"]).toBe("edit.moveLineUp");
+    expect(keymap["Ctrl+tab"]).toBe("tab.next");
+    expect(keymap["Meta+Shift+]"]).toBe("tab.next");
+  });
+});
 
 describe("keymapCommandForEvent", () => {
   it("maps Meta+S to file.save", () => {

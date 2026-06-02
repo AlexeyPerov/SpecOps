@@ -55,60 +55,60 @@ function getSnapshot() {
   return get(appState);
 }
 
-const keyBindingsByPlatform: Record<string, string> = {
-  "Meta+,": "app.toggleSettings",
-  "Meta+Shift+t": "view.cycleTheme",
-  "Meta+f": "app.toggleFindReplace",
-  "Meta+l": "app.toggleGoTo",
-  "Meta+Shift+m": "view.toggleMarkdownPreview",
-  "Meta+Shift+d": "view.toggleDiffPreview",
-  "Meta+n": "file.new",
-  "Meta+o": "file.open",
-  "Meta+s": "file.save",
-  "Meta+Shift+s": "file.saveAll",
-  "Meta+Alt+s": "file.saveAs",
-  "Meta+w": "tab.close",
-  "Meta+Shift+n": "app.newWindow",
-  "Meta+Shift+]": "tab.next",
-  "Meta+Shift+[": "tab.previous",
-  "Meta+z": "edit.undo",
-  "Meta+Shift+z": "edit.redo",
-  "Meta+]": "edit.indent",
-  "Meta+[": "edit.outdent",
-  "Alt+arrowup": "edit.moveLineUp",
-  "Alt+arrowdown": "edit.moveLineDown",
-  "Meta+d": "edit.duplicateLine",
-  "Meta+j": "edit.joinLines",
-  "Meta+Alt+z": "view.toggleWrap",
-  "Meta+=": "view.zoomIn",
-  "Meta+-": "view.zoomOut",
-  "Meta+0": "view.zoomReset",
-  "Ctrl+,": "app.toggleSettings",
-  "Ctrl+Shift+t": "view.cycleTheme",
-  "Ctrl+f": "app.toggleFindReplace",
-  "Ctrl+l": "app.toggleGoTo",
-  "Ctrl+Shift+m": "view.toggleMarkdownPreview",
-  "Ctrl+Shift+d": "view.toggleDiffPreview",
-  "Ctrl+n": "file.new",
-  "Ctrl+o": "file.open",
-  "Ctrl+s": "file.save",
-  "Ctrl+Shift+s": "file.saveAll",
-  "Ctrl+Alt+s": "file.saveAs",
-  "Ctrl+w": "tab.close",
-  "Ctrl+Shift+n": "app.newWindow",
-  "Ctrl+tab": "tab.next",
-  "Ctrl+Shift+tab": "tab.previous",
-  "Ctrl+z": "edit.undo",
-  "Ctrl+y": "edit.redo",
-  "Ctrl+]": "edit.indent",
-  "Ctrl+[": "edit.outdent",
-  "Ctrl+d": "edit.duplicateLine",
-  "Ctrl+j": "edit.joinLines",
-  "Ctrl+Alt+z": "view.toggleWrap",
-  "Ctrl+=": "view.zoomIn",
-  "Ctrl+-": "view.zoomOut",
-  "Ctrl+0": "view.zoomReset",
+const BINDING_KEY_TO_KEYMAP_TOKEN: Record<string, string> = {
+  Up: "arrowup",
+  Down: "arrowdown",
+  Tab: "tab",
 };
+
+function bindingToKeymapToken(binding: string, platform: "mac" | "windows"): string | null {
+  if (binding === "none") {
+    return null;
+  }
+
+  const parts = binding.split("+");
+  const keyPart = parts[parts.length - 1] ?? "";
+  const modifierParts = parts.slice(0, -1);
+  const tokens: string[] = [];
+
+  for (const modifier of modifierParts) {
+    if (modifier === "Cmd") {
+      if (platform === "mac") {
+        tokens.push("Meta");
+      }
+    } else if (modifier === "Ctrl") {
+      tokens.push("Ctrl");
+    } else if (modifier === "Shift") {
+      tokens.push("Shift");
+    } else if (modifier === "Alt") {
+      tokens.push("Alt");
+    }
+  }
+
+  const keyToken = BINDING_KEY_TO_KEYMAP_TOKEN[keyPart] ?? keyPart.toLowerCase();
+  tokens.push(keyToken);
+  return tokens.join("+");
+}
+
+export function expandPlatformKeymaps(
+  definitions: CommandDefinition[],
+): Record<string, AppCommandId> {
+  const keymap: Record<string, AppCommandId> = {};
+  for (const definition of definitions) {
+    if (!definition.binding) {
+      continue;
+    }
+    const macToken = bindingToKeymapToken(definition.binding.mac, "mac");
+    if (macToken) {
+      keymap[macToken] = definition.id;
+    }
+    const windowsToken = bindingToKeymapToken(definition.binding.windows, "windows");
+    if (windowsToken) {
+      keymap[windowsToken] = definition.id;
+    }
+  }
+  return keymap;
+}
 
 export const commandDefinitions: CommandDefinition[] = [
   {
@@ -327,6 +327,8 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "Cmd+0", windows: "Ctrl+0" },
   },
 ];
+
+const keyBindingsByPlatform = expandPlatformKeymaps(commandDefinitions);
 
 const handlers: Record<AppCommandId, CommandHandler> = {
   "app.toggleThemePane": ({ isThemePaneOpen, setThemePaneOpen }) => {

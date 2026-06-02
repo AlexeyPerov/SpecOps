@@ -3,6 +3,7 @@
   import {
     AGENT_DATE_GROUP_LABELS,
     AGENT_DATE_GROUP_ORDER,
+    DRAFT_AGENT_TITLE,
     filterAgentsByTitle,
     groupAgentsByLastUsedDate,
     type AgentDateGroup,
@@ -153,7 +154,7 @@
     {#if !collapsed}
       <div class="agents-sidebar-title">Agents</div>
       <button class="agents-sidebar-button agents-sidebar-new" type="button" onclick={onNewAgent}>
-        New agent
+        {DRAFT_AGENT_TITLE}
       </button>
     {/if}
     <button

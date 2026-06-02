@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-02 — R3 keymap DRY and shared error/title constants (R3-3, R3-4)
+
+- Added `expandPlatformKeymaps()` in `registry.ts` to build `keyBindingsByPlatform` from each command definition's `binding.mac` / `binding.windows`; removed ~50 lines of duplicated Meta/Ctrl maps.
+- Added `getErrorMessage(error, fallback?)` in `commandErrors.ts` and replaced repeated `error instanceof Error ? …` patterns in `+page.svelte`, `appShellRuntime.ts`, `sessionManager.ts`, `markdownPreviewLinks.ts`, and `openActivePath.ts`.
+- Replaced hardcoded `"New agent"` in `TabBar.svelte`, `ChatPanel.svelte`, and `AgentsSidebar.svelte` with `DRAFT_AGENT_TITLE` from `chatAgents.ts`.
+- Added unit tests for `expandPlatformKeymaps` and `getErrorMessage`.
+- Marked `Task R3-3` and `Task R3-4` as `[DONE]` in `specs/refactoring-1/r3-execution-plan.md`.
+
 ## 2026-06-02 — R3 provider secrets and settings tab registry (R3-1, R3-2)
 
 - Added `providerSecretsStore.ts` with provider-keyed `provider-secrets.json` (`{ version: 1, keys: Partial<Record<ChatProviderId, string>> }`); removed `glm-secrets.json` / `glmSecretsStore.ts` without migration (re-enter GLM API key after upgrade).

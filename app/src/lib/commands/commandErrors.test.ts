@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getErrorMessage,
   sanitizeErrorDetails,
   sanitizePermissionNoise,
   serializeUnknownError,
@@ -15,6 +16,21 @@ describe("sanitizePermissionNoise", () => {
 
   it("returns the original string when no suffix is present", () => {
     expect(sanitizePermissionNoise("plain error")).toBe("plain error");
+  });
+});
+
+describe("getErrorMessage", () => {
+  it("returns Error.message", () => {
+    expect(getErrorMessage(new Error("boom"))).toBe("boom");
+  });
+
+  it("uses default fallback for unknown values", () => {
+    expect(getErrorMessage(42)).toBe("unknown error");
+    expect(getErrorMessage("bad things")).toBe("unknown error");
+  });
+
+  it("uses custom fallback when provided", () => {
+    expect(getErrorMessage(42, String(42))).toBe("42");
   });
 });
 

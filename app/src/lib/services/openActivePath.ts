@@ -3,6 +3,7 @@ import { openPath } from "./fileSystem";
 import { completeOpenPath, requestOpenPath } from "./openFileGate";
 import { appState } from "../state/appState";
 import { syncRecentFiles } from "./recentFilesSync";
+import { getErrorMessage } from "../commands/commandErrors";
 
 const MAX_OPEN_BYTES = 10 * 1024 * 1024;
 
@@ -50,7 +51,7 @@ export async function openActivePath(
       await pruneMissingRecentFile(path);
       return { kind: "missing", path };
     }
-    const reason = error instanceof Error ? error.message : "unknown error";
+    const reason = getErrorMessage(error);
     return { kind: "failed", path, reason };
   }
 }

@@ -29,6 +29,7 @@
     chatStore,
     formatCompactionNotice,
   } from "../state/chatStore";
+  import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
   import ChatBlockedState from "./ChatBlockedState.svelte";
   import ChatComposer from "./ChatComposer.svelte";
   import ChatMessageList from "./ChatMessageList.svelte";
@@ -89,7 +90,7 @@
     if (!activeAgentId) {
       return "Agent";
     }
-    return chatStore.getAgentTitle(activeAgentId) ?? "New agent";
+    return chatStore.getAgentTitle(activeAgentId) ?? DRAFT_AGENT_TITLE;
   });
   const canDeleteAgent = $derived(activeAgentId !== null);
   const compactionNotice = $derived.by(() => {

@@ -15,6 +15,7 @@
   import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
   import { nextSidebarAgentId, openAgentTabIds, resolveRestoredActiveAgent, selectedTabAfterMissingLastAgent } from "../lib/services/workspaceAgentSession";
   import { dispatchMenuCommand, initializeAppMenu, keymapCommandForEvent, refreshOpenRecentMenu, shouldInitializeAppMenu } from "../lib/commands/registry";
+  import { getErrorMessage } from "../lib/commands/commandErrors";
   import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
@@ -467,7 +468,7 @@
       try {
         await openAndActivatePath(droppedPath);
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown error";
+        const message = getErrorMessage(error);
         notify(`Failed to open dropped file: ${message}`);
       }
     }
@@ -588,7 +589,7 @@
         runtimeReady = true;
       })
       .catch(async (error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error, String(error));
         await logDiagnostic({
           level: "error",
           source: "frontend",
@@ -613,7 +614,7 @@
           await openAndActivatePath(openParam);
         })
         .catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : "unknown error";
+          const message = getErrorMessage(error);
           notify(`Failed to open file from path: ${message}`);
         });
     }

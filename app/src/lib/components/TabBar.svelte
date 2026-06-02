@@ -4,6 +4,7 @@
   import { isAgentTab, isFileTab } from "../domain/contracts";
   import { appState } from "../state/appState";
   import { chatAgentIndex } from "../state/chatStore";
+  import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
   import { DEFAULT_UNTITLED_TITLE } from "../services/untitledTitle";
   import TabBarContextMenu from "./TabBarContextMenu.svelte";
   import {
@@ -63,7 +64,7 @@
 
   function tabTitle(tab: TabState): string {
     if (isAgentTab(tab)) {
-      return agentTitleById.get(tab.agentId) ?? "New agent";
+      return agentTitleById.get(tab.agentId) ?? DRAFT_AGENT_TITLE;
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc) {

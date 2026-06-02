@@ -11,6 +11,7 @@ import {
   refreshOpenRecentMenu,
   shouldInitializeAppMenu,
 } from "../commands/registry";
+import { getErrorMessage } from "../commands/commandErrors";
 import {
   WINDOW_EVENT_ACTIVATE_FILE,
   WINDOW_EVENT_SELECT_TAB_FOR_PATH,
@@ -108,7 +109,7 @@ export async function startAppShellRuntime(
       try {
         await options.openAndActivatePath(droppedPath);
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown error";
+        const message = getErrorMessage(error);
         options.notify(`Failed to open dropped file: ${message}`);
       }
     }
@@ -227,7 +228,7 @@ export async function startAppShellRuntime(
     try {
       await options.openAndActivatePath(event.payload.path);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "unknown error";
+      const message = getErrorMessage(error);
       options.notify(`Failed to open routed file: ${message}`);
     }
   });

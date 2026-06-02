@@ -5,6 +5,7 @@ import {
   openActivePath,
   type OpenActivePathResult,
 } from "./openActivePath";
+import { getErrorMessage } from "../commands/commandErrors";
 
 export type MarkdownLinkHrefKind =
   | "external"
@@ -87,7 +88,7 @@ export async function openMarkdownPreviewLink(input: {
       await openUrl(input.href.trim());
       return { kind: "opened-external", url: input.href.trim() };
     } catch (error: unknown) {
-      const reason = error instanceof Error ? error.message : "unknown error";
+      const reason = getErrorMessage(error);
       return { kind: "failed", reason };
     }
   }
@@ -106,7 +107,7 @@ export async function openMarkdownPreviewLink(input: {
     try {
       localPath = await resolveLocalMarkdownLinkPath(input.documentFilePath, input.href);
     } catch (error: unknown) {
-      const reason = error instanceof Error ? error.message : "unknown error";
+      const reason = getErrorMessage(error);
       return { kind: "failed", reason };
     }
   }

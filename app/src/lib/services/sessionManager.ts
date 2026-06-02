@@ -12,6 +12,7 @@ import type {
 import { createFileTab, isAgentTab, isFileTab, normalizeTabState } from "../domain/contracts";
 import { normalizeSessionState } from "./workspaceAgentSession";
 import { logDiagnostic } from "./logging";
+import { getErrorMessage } from "../commands/commandErrors";
 import { emptyUnsavedDocumentTitle } from "./untitledDocument";
 import {
   dedupeWindowSnapshotAgainstRegistry,
@@ -117,7 +118,7 @@ export function nextNumericId(prefix: "doc" | "tab", ids: string[]): string {
 }
 
 function isFileMissingError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error, String(error));
   const lower = message.toLowerCase();
   return (
     lower.includes("no such file") ||
@@ -311,7 +312,7 @@ export async function restoreWindowSession(
     const parsed = JSON.parse(raw) as AppSessionSnapshot;
     return restoreWindowSessionFromSnapshot(windowId, parsed);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "unknown error";
+    const message = getErrorMessage(error);
     await logDiagnostic({
       level: "warn",
       source: "frontend",
@@ -336,7 +337,7 @@ export async function restoreWindowSession(
     });
     return restoreWindowSessionFromSnapshot(windowId, parsed);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "unknown error";
+    const message = getErrorMessage(error);
     await logDiagnostic({
       level: "error",
       source: "frontend",

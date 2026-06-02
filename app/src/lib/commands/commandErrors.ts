@@ -31,6 +31,13 @@ export function sanitizePermissionNoise(value: string): string {
   return value.slice(0, markerIndex).trim();
 }
 
+export function getErrorMessage(error: unknown, fallback = "unknown error"): string {
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
+}
+
 export function summarizeError(error: unknown): string {
   if (error instanceof Error) {
     return sanitizePermissionNoise(error.message || error.name || "Unknown command error");

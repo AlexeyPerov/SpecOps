@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-03 — CodeMirror layout in production builds
+
+- **Tauri CSP:** Add `style-src 'self' 'unsafe-inline'` so CodeMirror 6 runtime theme injection works in `tauri build` (fixes gutter/line numbers rendering as document text).
+
 ## 2026-06-03 — Build warnings (ProjectTreeView, ImagePreviewPane)
 
 - **ProjectTreeView:** Wrap `onMoveEntry` / `notify` in closures for Svelte 5 prop reactivity; add `tabindex="0"` on `role="tree"` container.

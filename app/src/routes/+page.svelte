@@ -45,105 +45,110 @@
   import { canFitMarkdownSplit as canFitMarkdownSplitForWidth, computeResponsiveLayoutFlags, formatStatusPath } from "../lib/services/appShellHelpers";
   import "../lib/styles/app-shell.css";
 
-  let themePaneOpen = false;
-  let settingsDialogOpen = false;
-  let settingsDialogInitialTab: SettingsDialogTab = "editor";
-  let consoleOpen = false;
-  let consoleHeightPx = DEFAULT_CONSOLE_HEIGHT_PX;
-  let statusMessage = "Ready";
-  let editorRunner: EditorCommandRunner | null = null;
-  let currentWindowId = "main";
-  let findQuery = "";
-  let replaceValue = "";
-  let findCaseSensitive = false;
-  let goToLineValue = "";
-  let shellMainRowEl: HTMLDivElement | null = null;
-  let editorShellEl: HTMLElement | null = null;
-  let editorPaneEl: HTMLElement | null = null;
-  let shellMainRowWidth = 0;
-  let editorPaneWidth = 0;
-  let layoutResizeObserver: ResizeObserver | null = null;
-  let previousActiveContextId: ContextId | null = null;
-  let untitledTitleDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let lastSelectedTabId: string | null = null;
-  let runtimeReady = false;
-  let runtimeSyncExternalFileWatcher: ((state: AppDomainState) => Promise<void>) | null = null;
-  let workspaceContextMenu:
-    | { workspaceId: ContextId; x: number; y: number }
-    | null = null;
-  let workspaceContextMenuEl: HTMLDivElement | null = null;
-  let projectTreeControllerState: ProjectTreeControllerState = {
+  let themePaneOpen = $state(false);
+  let settingsDialogOpen = $state(false);
+  let settingsDialogInitialTab = $state<SettingsDialogTab>("editor");
+  let consoleOpen = $state(false);
+  let consoleHeightPx = $state(DEFAULT_CONSOLE_HEIGHT_PX);
+  let statusMessage = $state("Ready");
+  let editorRunner = $state<EditorCommandRunner | null>(null);
+  let currentWindowId = $state("main");
+  let findQuery = $state("");
+  let replaceValue = $state("");
+  let findCaseSensitive = $state(false);
+  let goToLineValue = $state("");
+  let shellMainRowEl = $state<HTMLDivElement | null>(null);
+  let editorShellEl = $state<HTMLElement | null>(null);
+  let editorPaneEl = $state<HTMLElement | null>(null);
+  let shellMainRowWidth = $state(0);
+  let editorPaneWidth = $state(0);
+  let layoutResizeObserver = $state<ResizeObserver | null>(null);
+  let previousActiveContextId = $state<ContextId | null>(null);
+  let untitledTitleDebounceTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+  let lastSelectedTabId = $state<string | null>(null);
+  let runtimeReady = $state(false);
+  let runtimeSyncExternalFileWatcher = $state<
+    ((state: AppDomainState) => Promise<void>) | null
+  >(null);
+  let workspaceContextMenu = $state<{
+    workspaceId: ContextId;
+    x: number;
+    y: number;
+  } | null>(null);
+  let workspaceContextMenuEl = $state<HTMLDivElement | null>(null);
+  let projectTreeControllerState = $state<ProjectTreeControllerState>({
     rootNodes: [],
     childrenByPath: new Map(),
     expandedPaths: new Set(),
     loadingPaths: new Set(),
     showHidden: false,
-  };
+  });
   const projectTreeController = createProjectTreeController(
     (nextState) => {
       projectTreeControllerState = nextState;
     },
     { probeWorkspaceReadAccessFn: probeWorkspaceReadAccess },
   );
-  let autoProjectPanelCollapsed = false;
-  let autoAgentsSidebarCollapsed = false;
-  let lastChatWorkspaceRoot: string | null = null;
+  let autoProjectPanelCollapsed = $state(false);
+  let autoAgentsSidebarCollapsed = $state(false);
+  let lastChatWorkspaceRoot = $state<string | null>(null);
 
-  $: state = $appState;
-  $: activeContext = getActiveContextSnapshot(state);
-  $: session = activeContext.session;
-  $: documents = activeContext.documents;
-  $: activeContextId = state.contexts.activeContextId;
-  $: workspaces = state.contexts.workspaces;
-  $: activeWorkspaceRoot = appState.getWorkspaceRoot(activeContextId);
-  $: workspaceLayout = activeWorkspaceRoot
-    ? normalizeWorkspaceLayout(session.layout)
-    : normalizeWorkspaceLayout();
-  $: showProjectPanel =
-    Boolean(activeWorkspaceRoot) &&
-    !workspaceLayout.projectPanelCollapsed &&
-    !autoProjectPanelCollapsed;
-  $: showAgentsSidebar =
-    Boolean(activeWorkspaceRoot) &&
-    !workspaceLayout.agentsSidebarCollapsed &&
-    !autoAgentsSidebarCollapsed;
-  $: workspaceAgents = $chatAgentIndex;
-  $: selectedAgentId = $chatActiveAgentId;
-  $: showActivityRail = !(
-    state.settings.hideActivityRailWhenNotepadOnly &&
-    state.contexts.workspaces.length === 0
+  const snapshot = $derived($appState);
+  const activeContext = $derived(getActiveContextSnapshot(snapshot));
+  const session = $derived(activeContext.session);
+  const documents = $derived(activeContext.documents);
+  const activeContextId = $derived(snapshot.contexts.activeContextId);
+  const workspaces = $derived(snapshot.contexts.workspaces);
+  const activeWorkspaceRoot = $derived(appState.getWorkspaceRoot(activeContextId));
+  const workspaceLayout = $derived(
+    activeWorkspaceRoot
+      ? normalizeWorkspaceLayout(session.layout)
+      : normalizeWorkspaceLayout(),
   );
-  $: activeTab = session.openTabs.find((tab) => tab.id === session.selectedTabId);
-  $: isAgentTabActive = isAgentEditorPaneActive(session.openTabs, session.selectedTabId);
-  $: if (activeTab && isAgentTab(activeTab)) {
-    if (chatStore.getActiveAgentId() !== activeTab.agentId) {
-      chatStore.setActiveAgentId(activeTab.agentId);
-      appState.setLastActiveAgentId(activeTab.agentId);
-      void chatStore.runAccessPreflight();
-    }
-  }
-
-  $: if (
-    runtimeReady &&
-    activeWorkspaceRoot &&
-    $chatActiveAgentId !== (session.lastActiveAgentId ?? null)
-  ) {
-    appState.setLastActiveAgentId($chatActiveAgentId);
-  }
-  $: activeDocument =
+  const showProjectPanel = $derived(
+    Boolean(activeWorkspaceRoot) &&
+      !workspaceLayout.projectPanelCollapsed &&
+      !autoProjectPanelCollapsed,
+  );
+  const showAgentsSidebar = $derived(
+    Boolean(activeWorkspaceRoot) &&
+      !workspaceLayout.agentsSidebarCollapsed &&
+      !autoAgentsSidebarCollapsed,
+  );
+  const workspaceAgents = $derived($chatAgentIndex);
+  const selectedAgentId = $derived($chatActiveAgentId);
+  const showActivityRail = $derived(
+    !(
+      snapshot.settings.hideActivityRailWhenNotepadOnly &&
+      snapshot.contexts.workspaces.length === 0
+    ),
+  );
+  const activeTab = $derived(
+    session.openTabs.find((tab) => tab.id === session.selectedTabId),
+  );
+  const isAgentTabActive = $derived(
+    isAgentEditorPaneActive(session.openTabs, session.selectedTabId),
+  );
+  const activeDocument = $derived(
     documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
-    documents[0];
-  $: isMarkdownDocument = activeDocument?.language === "markdown";
-  $: markdownHtml =
+      documents[0],
+  );
+  const isMarkdownDocument = $derived(activeDocument?.language === "markdown");
+  const markdownHtml = $derived(
     isMarkdownDocument && activeDocument
       ? (marked.parse(activeDocument.content) as string)
-      : "";
-  $: statusPath = formatStatusPath(
-    activeDocument?.filePath ?? null,
-    activeDocument?.title,
-    DEFAULT_UNTITLED_TITLE,
+      : "",
   );
-  $: activeDocumentPath = activeDocument?.filePath ? normalizePathSync(activeDocument.filePath) : null;
+  const statusPath = $derived(
+    formatStatusPath(
+      activeDocument?.filePath ?? null,
+      activeDocument?.title,
+      DEFAULT_UNTITLED_TITLE,
+    ),
+  );
+  const activeDocumentPath = $derived(
+    activeDocument?.filePath ? normalizePathSync(activeDocument.filePath) : null,
+  );
 
   async function loadProjectTreeRoot(): Promise<void> {
     await projectTreeController.loadProjectTreeRoot({
@@ -456,7 +461,7 @@
         settingsDialogOpen = next;
       },
       notify,
-      getState: () => state,
+      getState: () => snapshot,
       getWindowId: () => currentWindowId,
       confirm: (message) => window.confirm(message),
       getEditorRunner: () => editorRunner,
@@ -493,18 +498,6 @@
       return;
     }
     await checkDocumentIfDeferred(tab.documentId, "tab");
-  }
-
-  $: if (runtimeReady && currentWindowId) {
-    void runtimeSyncExternalFileWatcher?.(state);
-  }
-
-  $: if (runtimeReady && session.selectedTabId !== lastSelectedTabId) {
-    const nextTabId = session.selectedTabId;
-    if (nextTabId && nextTabId !== lastSelectedTabId) {
-      lastSelectedTabId = nextTabId;
-      void onTabActivated(nextTabId);
-    }
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -647,66 +640,129 @@
     };
   });
 
-  $: if (runtimeReady) {
+  $effect(() => {
+    if (!activeTab || !isAgentTab(activeTab)) {
+      return;
+    }
+    if (chatStore.getActiveAgentId() !== activeTab.agentId) {
+      chatStore.setActiveAgentId(activeTab.agentId);
+      appState.setLastActiveAgentId(activeTab.agentId);
+      void chatStore.runAccessPreflight();
+    }
+  });
+
+  $effect(() => {
+    if (!runtimeReady || !activeWorkspaceRoot) {
+      return;
+    }
+    const chatActiveId = selectedAgentId;
+    const sessionLastActive = session.lastActiveAgentId ?? null;
+    if (chatActiveId !== sessionLastActive) {
+      appState.setLastActiveAgentId(chatActiveId);
+    }
+  });
+
+  $effect(() => {
+    if (!runtimeReady || !currentWindowId) {
+      return;
+    }
+    void runtimeSyncExternalFileWatcher?.(snapshot);
+  });
+
+  $effect(() => {
+    if (!runtimeReady) {
+      return;
+    }
+    const nextTabId = session.selectedTabId;
+    if (nextTabId && nextTabId !== lastSelectedTabId) {
+      lastSelectedTabId = nextTabId;
+      void onTabActivated(nextTabId);
+    }
+  });
+
+  $effect(() => {
+    if (!runtimeReady) {
+      return;
+    }
     syncChatAccessMonitor(isAgentTabActive && Boolean(activeWorkspaceRoot));
-  }
+  });
 
-  $: if (activeContextId) {
+  $effect(() => {
+    if (!activeContextId) {
+      return;
+    }
     handleActiveContextSwitch(activeContextId);
-  }
+  });
 
-  $: {
+  $effect(() => {
     if (!activeWorkspaceRoot) {
       if (lastChatWorkspaceRoot !== null) {
         chatStore.cancelAllGenerations(lastChatWorkspaceRoot);
         lastChatWorkspaceRoot = null;
       }
       chatStore.setActiveWorkspaceRoot(null);
-    } else {
-      const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
-      if (lastChatWorkspaceRoot !== normalizedWorkspaceRoot) {
-        if (lastChatWorkspaceRoot !== null) {
-          chatStore.cancelAllGenerations(lastChatWorkspaceRoot);
-        }
-        lastChatWorkspaceRoot = normalizedWorkspaceRoot;
-        void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
-        chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
-        void restoreWorkspaceAgentSession(normalizedWorkspaceRoot).catch(() => {
-          if (isAgentTabActive) {
-            void chatStore.runAccessPreflight();
-          }
-        });
-      }
+      return;
     }
-  }
+    const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
+    if (lastChatWorkspaceRoot !== normalizedWorkspaceRoot) {
+      if (lastChatWorkspaceRoot !== null) {
+        chatStore.cancelAllGenerations(lastChatWorkspaceRoot);
+      }
+      lastChatWorkspaceRoot = normalizedWorkspaceRoot;
+      void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
+      chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
+      void restoreWorkspaceAgentSession(normalizedWorkspaceRoot).catch(() => {
+        if (isAgentTabActive) {
+          void chatStore.runAccessPreflight();
+        }
+      });
+    }
+  });
 
-  $: applyResponsiveLayoutRules();
+  $effect(() => {
+    shellMainRowWidth;
+    editorPaneWidth;
+    activeWorkspaceRoot;
+    isAgentTabActive;
+    workspaceLayout;
+    consoleOpen;
+    applyResponsiveLayoutRules();
+  });
 
-  $: if (runtimeReady && state) {
-    scheduleSessionPersistence(state, currentWindowId);
+  $effect(() => {
+    if (!runtimeReady) {
+      return;
+    }
+    scheduleSessionPersistence(snapshot, currentWindowId);
     if (currentWindowId) {
       void savePersistedSettings(
         toPersistedSettings({
-          wrapLines: state.editor.wrapLines,
-          zoomPercent: state.editor.zoomPercent,
-          externalFiles: state.settings.externalFiles,
-          decoratePlaintextSymbols: state.settings.decoratePlaintextSymbols,
-          hideActivityRailWhenNotepadOnly: state.settings.hideActivityRailWhenNotepadOnly,
-          debugProvider: state.settings.debugProvider,
-          glmProvider: state.settings.glmProvider,
-          providerModelCatalogs: state.settings.providerModelCatalogs,
+          wrapLines: snapshot.editor.wrapLines,
+          zoomPercent: snapshot.editor.zoomPercent,
+          externalFiles: snapshot.settings.externalFiles,
+          decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
+          hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
+          debugProvider: snapshot.settings.debugProvider,
+          glmProvider: snapshot.settings.glmProvider,
+          providerModelCatalogs: snapshot.settings.providerModelCatalogs,
         }),
       );
     }
-  }
+  });
 
-  $: if (activeWorkspaceRoot) {
+  $effect(() => {
+    if (!activeWorkspaceRoot) {
+      return;
+    }
     void loadProjectTreeRoot();
-  }
+  });
 
-  $: if (activeDocumentPath) {
+  $effect(() => {
+    if (!activeDocumentPath) {
+      return;
+    }
     void projectTreeController.ensureExpandedForActiveFile(activeWorkspaceRoot, activeDocumentPath);
-  }
+  });
 </script>
 
 <main class="shell">
@@ -764,7 +820,7 @@
       <section class="editor-pane" class:editor-pane-agent={isAgentTabActive} bind:this={editorPaneEl}>
     {#if isAgentTabActive}
       <ChatPanel onDeleteAgent={handleDeleteAgentFromChat} />
-    {:else if state.editor.previewMode === "diff"}
+    {:else if snapshot.editor.previewMode === "diff"}
       <DiffPreviewPane
         savedContent={activeDocument?.savedContent ?? ""}
         currentContent={activeDocument?.content ?? ""}
@@ -777,9 +833,9 @@
           documentFilePath={activeDocument?.filePath ?? null}
           scrollTop={activeDocument?.scrollTop ?? 0}
           language={activeDocument?.language ?? "markdown"}
-          wrapLines={state.editor.wrapLines}
-          zoomPercent={state.editor.zoomPercent}
-          decoratePlaintextSymbols={state.settings.decoratePlaintextSymbols}
+          wrapLines={snapshot.editor.wrapLines}
+          zoomPercent={snapshot.editor.zoomPercent}
+          decoratePlaintextSymbols={snapshot.settings.decoratePlaintextSymbols}
           {markdownHtml}
           storedMarkdownViewMode={activeDocument?.markdownViewMode ?? "edit"}
           canFitSplit={canFitMarkdownSplit()}
@@ -797,10 +853,10 @@
           content={activeDocument?.content ?? ""}
           documentId={activeDocument?.id ?? null}
           scrollTop={activeDocument?.scrollTop ?? 0}
-          wrapLines={state.editor.wrapLines}
-          zoomPercent={state.editor.zoomPercent}
+          wrapLines={snapshot.editor.wrapLines}
+          zoomPercent={snapshot.editor.zoomPercent}
           language={activeDocument?.language ?? "plaintext"}
-          decoratePlaintextSymbols={state.settings.decoratePlaintextSymbols}
+          decoratePlaintextSymbols={snapshot.settings.decoratePlaintextSymbols}
           onStatusMessage={notify}
           onUntitledTitleRefresh={scheduleUntitledTitleRefresh}
           onScrollTopChange={handleDocumentScrollTop}
@@ -811,7 +867,7 @@
       {/if}
     {/if}
 
-    {#if !isAgentTabActive && state.editor.findReplaceOpen}
+    {#if !isAgentTabActive && snapshot.editor.findReplaceOpen}
       <FindReplacePanel
         bind:findQuery
         bind:replaceValue
@@ -822,7 +878,7 @@
       />
     {/if}
 
-    {#if !isAgentTabActive && state.editor.goToOpen}
+    {#if !isAgentTabActive && snapshot.editor.goToOpen}
       <div class="floating-tool goto-tool">
         <h3>Go To Line</h3>
         <input placeholder="Line number..." bind:value={goToLineValue} />
@@ -853,7 +909,7 @@
             onclick={toggleConsole}
           >
             <span class="status-segment optional-segment optional-cursor">
-              Ln {state.editor.cursorLine}, Col {state.editor.cursorColumn}
+              Ln {snapshot.editor.cursorLine}, Col {snapshot.editor.cursorColumn}
             </span>
             <span class="status-segment optional-segment optional-encoding">
               {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
@@ -862,10 +918,10 @@
               {activeDocument?.lineEnding.toUpperCase() ?? "LF"}
             </span>
             <span class="status-segment optional-segment optional-zoom">
-              {state.editor.zoomPercent}%
+              {snapshot.editor.zoomPercent}%
             </span>
             <span class="status-segment optional-segment optional-wrap">
-              {state.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
+              {snapshot.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
             </span>
             <span class="status-segment">{activeDocument?.isDirty ? "Modified" : "Saved"}</span>
             {#if activeDocument?.fileMissing}

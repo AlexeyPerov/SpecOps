@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-02 — R3 Svelte 5 migration: +page.svelte (R3-6)
+
+- Migrated `+page.svelte` from legacy `$:` reactivity to Svelte 5 runes: local UI state via `$state`, store subscriptions via `$derived($appState)` / chat stores, side effects (persistence, project tree, chat workspace sync, tab activation, responsive layout) via `$effect`.
+- Renamed derived app store binding to `snapshot` to avoid shadowing the `$state` rune.
+- Marked `Task R3-6` as `[DONE]` in `specs/refactoring-1/r3-execution-plan.md`.
+
 ## 2026-06-02 — R3 Svelte 5 migration: EditorSurface and TabBar (R3-5)
 
 - Migrated `EditorSurface.svelte` from `export let` / `$:` to `$props()`, `$state`, and `$effect` (document scroll, wrap, zoom, content sync, language, plaintext decorations).

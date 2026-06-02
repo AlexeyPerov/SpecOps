@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-02 — R3 Svelte 5 migration: EditorSurface and TabBar (R3-5)
+
+- Migrated `EditorSurface.svelte` from `export let` / `$:` to `$props()`, `$state`, and `$effect` (document scroll, wrap, zoom, content sync, language, plaintext decorations).
+- Migrated `TabBar.svelte` and `TabBarContextMenu.svelte` to `$props()`, `$state`, and `$derived`; preserved `registerEditorCommandRunner` and tab context menu public API.
+- Marked `Task R3-5` as `[DONE]` in `specs/refactoring-1/r3-execution-plan.md`.
+
 ## 2026-06-02 — R3 keymap DRY and shared error/title constants (R3-3, R3-4)
 
 - Added `expandPlatformKeymaps()` in `registry.ts` to build `keyBindingsByPlatform` from each command definition's `binding.mac` / `binding.windows`; removed ~50 lines of duplicated Meta/Ctrl maps.

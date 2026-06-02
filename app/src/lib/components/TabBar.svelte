@@ -13,18 +13,30 @@
     type TabDragState,
   } from "./tabDragController";
 
-  export let openTabs: TabState[] = [];
-  export let documents: DocumentState[] = [];
-  export let selectedTabId: string | null = null;
-  export let onSelect: (tabId: string) => void = (tabId: string) => appState.selectTab(tabId);
-  export let onCloseTab: (tabId: string) => void = (tabId: string) => appState.closeTabForce(tabId);
-  export let windowId = "main";
-  export let notify: (message: string) => void = () => {};
+  interface Props {
+    openTabs?: TabState[];
+    documents?: DocumentState[];
+    selectedTabId?: string | null;
+    onSelect?: (tabId: string) => void;
+    onCloseTab?: (tabId: string) => void;
+    windowId?: string;
+    notify?: (message: string) => void;
+  }
 
-  let tabStripEl: HTMLDivElement | null = null;
-  let contextMenuComponent: TabBarContextMenu;
+  let {
+    openTabs = [],
+    documents = [],
+    selectedTabId = null,
+    onSelect = (tabId: string) => appState.selectTab(tabId),
+    onCloseTab = (tabId: string) => appState.closeTabForce(tabId),
+    windowId = "main",
+    notify = () => {},
+  }: Props = $props();
 
-  let dragState: TabDragState = {
+  let tabStripEl = $state<HTMLDivElement | null>(null);
+  let contextMenuComponent = $state<TabBarContextMenu | undefined>(undefined);
+
+  let dragState = $state<TabDragState>({
     pointerId: null,
     pressedTabId: null,
     dragTabId: null,
@@ -39,15 +51,15 @@
     tabRects: new Map(),
     didDrag: false,
     isFinishingDrag: false,
-  };
+  });
 
   const dragController = createTabDragController({
     getOpenTabs: () => openTabs,
     getTabStripEl: () => tabStripEl,
-    onSelect,
+    onSelect: (tabId) => onSelect(tabId),
     onReorder: (fromIndex, toIndex) => appState.reorderTabs(fromIndex, toIndex),
     getWindowId: () => windowId,
-    notify,
+    notify: (message) => notify(message),
     onStateChange: (nextState) => {
       dragState = nextState;
     },
@@ -60,7 +72,7 @@
     return documents.find((doc) => doc.id === tab.documentId);
   }
 
-  $: agentTitleById = new Map($chatAgentIndex.map((entry) => [entry.id, entry.title]));
+  const agentTitleById = $derived(new Map($chatAgentIndex.map((entry) => [entry.id, entry.title])));
 
   function tabTitle(tab: TabState): string {
     if (isAgentTab(tab)) {
@@ -85,15 +97,20 @@
     return tabDoc.filePath;
   }
 
-  $: tabsForRender = previewTabs(
-    openTabs,
-    dragState.didDrag,
-    dragState.dragFromIndex,
-    dragState.dropIndex,
+  const tabsForRender = $derived(
+    previewTabs(
+      openTabs,
+      dragState.didDrag,
+      dragState.dragFromIndex,
+      dragState.dropIndex,
+    ),
   );
-  $: draggedTab = dragState.dragTabId
-    ? openTabs.find((tab) => tab.id === dragState.dragTabId) ?? null
-    : null;
+
+  const draggedTab = $derived(
+    dragState.dragTabId
+      ? (openTabs.find((tab) => tab.id === dragState.dragTabId) ?? null)
+      : null,
+  );
 
   onDestroy(() => {
     dragController.destroy();
@@ -112,7 +129,7 @@
           data-tab-id={tab.id}
           type="button"
           title={tabTooltip(tab)}
-          oncontextmenu={(event) => contextMenuComponent.openContextMenu(event, tab)}
+          oncontextmenu={(event) => contextMenuComponent?.openContextMenu(event, tab)}
           onpointerdown={(event) => {
             if (isAgentTab(tab)) {
               if (event.button === 0) {

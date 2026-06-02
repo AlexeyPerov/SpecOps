@@ -25,32 +25,47 @@
   } from "../editor/searchHighlight";
   import type { MatchInfo } from "../types/editor";
 
-  let hostEl: HTMLDivElement | undefined;
-  let view: EditorView | undefined;
+  interface Props {
+    content?: string;
+    documentId?: string | null;
+    scrollTop?: number;
+    wrapLines?: boolean;
+    zoomPercent?: number;
+    language?: EditorLanguageId;
+    decoratePlaintextSymbols?: boolean;
+    onStatusMessage?: (message: string) => void;
+    onDocumentDirty?: (nextContent: string) => void;
+    onScrollTopChange?: (documentId: string, scrollTop: number) => void;
+    registerEditorCommandRunner?: ((runner: EditorCommandRunner) => void) | undefined;
+  }
+
+  let {
+    content = "",
+    documentId = null,
+    scrollTop = 0,
+    wrapLines = false,
+    zoomPercent = 100,
+    language = "plaintext",
+    decoratePlaintextSymbols = true,
+    onStatusMessage = () => {},
+    onDocumentDirty = () => {},
+    onScrollTopChange = () => {},
+    registerEditorCommandRunner = undefined,
+  }: Props = $props();
+
+  let hostEl = $state<HTMLDivElement | undefined>(undefined);
+  let view = $state<EditorView | undefined>(undefined);
   const lineWrapCompartment = new Compartment();
   const fontSizeCompartment = new Compartment();
   const languageCompartment = new Compartment();
   const highlightCompartment = new Compartment();
   const decorationCompartment = new Compartment();
-  let muted = false;
+  let muted = $state(false);
 
-  export let content = "";
-  export let documentId: string | null = null;
-  export let scrollTop = 0;
-  export let wrapLines = false;
-  export let zoomPercent = 100;
-  export let language: EditorLanguageId = "plaintext";
-  export let decoratePlaintextSymbols = true;
-  export let onStatusMessage: (message: string) => void = () => {};
-  export let onDocumentDirty: (nextContent: string) => void = () => {};
-  export let onScrollTopChange: (documentId: string, scrollTop: number) => void = () => {};
-  export let registerEditorCommandRunner: ((runner: EditorCommandRunner) => void) | undefined =
-    undefined;
-
-  let trackedDocumentId: string | null = null;
-  let currentEditorLanguage: EditorLanguageId = "plaintext";
-  let lastDecoState = "";
-  let applyingScroll = false;
+  let trackedDocumentId = $state<string | null>(null);
+  let currentEditorLanguage = $state<EditorLanguageId>("plaintext");
+  let lastDecoState = $state("");
+  let applyingScroll = $state(false);
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let detachScrollListener: (() => void) | null = null;
 
@@ -526,29 +541,44 @@
     view?.destroy();
   });
 
-  $: if (view && documentId !== trackedDocumentId) {
+  $effect(() => {
+    if (!view || documentId === trackedDocumentId) {
+      return;
+    }
     flushScrollTopSave();
     trackedDocumentId = documentId;
     applyScrollTop(scrollTop);
-  }
+  });
 
-  $: if (view && wrapLines !== undefined) {
+  $effect(() => {
+    if (!view) {
+      return;
+    }
     applyWrap(wrapLines);
-  }
+  });
 
-  $: if (view && zoomPercent) {
+  $effect(() => {
+    if (!view || !zoomPercent) {
+      return;
+    }
     applyZoom(zoomPercent);
-  }
+  });
 
-  $: if (view && content !== view.state.doc.toString()) {
+  $effect(() => {
+    if (!view || content === view.state.doc.toString()) {
+      return;
+    }
     muted = true;
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: content },
     });
     muted = false;
-  }
+  });
 
-  $: if (view && language !== undefined && language !== currentEditorLanguage) {
+  $effect(() => {
+    if (!view || language === undefined || language === currentEditorLanguage) {
+      return;
+    }
     currentEditorLanguage = language;
     void loadLanguageSupport(language).then((support) => {
       if (view) {
@@ -557,9 +587,12 @@
         });
       }
     });
-  }
+  });
 
-  $: if (view) {
+  $effect(() => {
+    if (!view) {
+      return;
+    }
     const key = `${language}:${decoratePlaintextSymbols}`;
     if (key !== lastDecoState) {
       lastDecoState = key;
@@ -570,7 +603,7 @@
         ),
       });
     }
-  }
+  });
 </script>
 
 <div bind:this={hostEl} class="editor-host"></div>

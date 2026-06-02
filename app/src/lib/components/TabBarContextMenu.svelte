@@ -12,16 +12,25 @@
 
   const revealLabel = revealInFileManagerLabel();
 
-  export let openTabs: TabState[] = [];
-  export let documents: DocumentState[] = [];
-  export let windowId = "main";
-  export let notify: (message: string) => void = () => {};
+  interface Props {
+    openTabs?: TabState[];
+    documents?: DocumentState[];
+    windowId?: string;
+    notify?: (message: string) => void;
+  }
 
-  let contextMenu: { tabId: string; x: number; y: number } | null = null;
-  let contextMenuEl: HTMLDivElement | null = null;
-  let nearbySubmenuOpen = false;
-  let nearbyFiles: NearbyTextFile[] = [];
-  let nearbyFilesLoading = false;
+  let {
+    openTabs = [],
+    documents = [],
+    windowId = "main",
+    notify = () => {},
+  }: Props = $props();
+
+  let contextMenu = $state<{ tabId: string; x: number; y: number } | null>(null);
+  let contextMenuEl = $state<HTMLDivElement | null>(null);
+  let nearbySubmenuOpen = $state(false);
+  let nearbyFiles = $state<NearbyTextFile[]>([]);
+  let nearbyFilesLoading = $state(false);
   let nearbyRequestId = 0;
 
   function tabDocument(tab: TabState): DocumentState | undefined {
@@ -231,40 +240,63 @@
     closeContextMenu();
   }
 
-  $: contextMenuTab = contextMenu
-    ? openTabs.find((tab) => tab.id === contextMenu?.tabId) ?? null
-    : null;
-  $: contextMenuCanReveal = Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath);
-  $: contextMenuCanRename = Boolean(
-    contextMenuTab &&
-      isFileTab(contextMenuTab) &&
-      contextMenuTabDoc?.filePath &&
-      !contextMenuTabDoc.fileMissing,
+  const contextMenuTab = $derived(
+    contextMenu ? (openTabs.find((tab) => tab.id === contextMenu?.tabId) ?? null) : null,
   );
-  $: contextMenuTabIndex = contextMenuTab ? openTabs.findIndex((tab) => tab.id === contextMenuTab.id) : -1;
-  $: contextMenuTabDoc = contextMenuTab ? tabDocument(contextMenuTab) : null;
-  $: contextMenuWorkspaceRoot = appState.getWorkspaceRoot();
-  $: contextMenuRelativePath =
+
+  const contextMenuTabDoc = $derived(contextMenuTab ? tabDocument(contextMenuTab) : null);
+
+  const contextMenuCanReveal = $derived(Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath));
+
+  const contextMenuCanRename = $derived(
+    Boolean(
+      contextMenuTab &&
+        isFileTab(contextMenuTab) &&
+        contextMenuTabDoc?.filePath &&
+        !contextMenuTabDoc.fileMissing,
+    ),
+  );
+
+  const contextMenuTabIndex = $derived(
+    contextMenuTab ? openTabs.findIndex((tab) => tab.id === contextMenuTab.id) : -1,
+  );
+
+  const contextMenuWorkspaceRoot = $derived(appState.getWorkspaceRoot());
+
+  const contextMenuRelativePath = $derived(
     contextMenuTabDoc?.filePath && contextMenuWorkspaceRoot
       ? workspaceRelativePath(contextMenuTabDoc.filePath, contextMenuWorkspaceRoot)
-      : null;
-  $: contextMenuCanCloseOtherTabs = Boolean(
-    contextMenuTab &&
-      openTabs.some((tab) => tab.id !== contextMenuTab.id && !tab.pinned),
+      : null,
   );
-  $: contextMenuCanCloseTabsToRight =
+
+  const contextMenuCanCloseOtherTabs = $derived(
+    Boolean(
+      contextMenuTab &&
+        openTabs.some((tab) => tab.id !== contextMenuTab.id && !tab.pinned),
+    ),
+  );
+
+  const contextMenuCanCloseTabsToRight = $derived(
     contextMenuTabIndex >= 0 &&
-    openTabs.slice(contextMenuTabIndex + 1).some((tab) => !tab.pinned);
-  $: contextMenuCanCloseMissingFileTabs = openTabs.some((tab) => {
-    if (tab.pinned) {
-      return false;
-    }
-    return Boolean(tabDocument(tab)?.fileMissing);
-  });
-  $: contextMenuCanOpenNearby = Boolean(contextMenuTabDoc?.filePath);
-  $: contextMenuCanCopyPath = Boolean(contextMenuTabDoc?.filePath);
-  $: contextMenuCanCopyRelativePath = contextMenuRelativePath !== null;
-  $: contextMenuHasNearbyFiles = nearbyFiles.length > 0;
+      openTabs.slice(contextMenuTabIndex + 1).some((tab) => !tab.pinned),
+  );
+
+  const contextMenuCanCloseMissingFileTabs = $derived(
+    openTabs.some((tab) => {
+      if (tab.pinned) {
+        return false;
+      }
+      return Boolean(tabDocument(tab)?.fileMissing);
+    }),
+  );
+
+  const contextMenuCanOpenNearby = $derived(Boolean(contextMenuTabDoc?.filePath));
+
+  const contextMenuCanCopyPath = $derived(Boolean(contextMenuTabDoc?.filePath));
+
+  const contextMenuCanCopyRelativePath = $derived(contextMenuRelativePath !== null);
+
+  const contextMenuHasNearbyFiles = $derived(nearbyFiles.length > 0);
 </script>
 
 {#if contextMenu && contextMenuTab}

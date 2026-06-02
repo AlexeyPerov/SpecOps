@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-03 — CI Windows release builds
+
+- **GitHub Actions:** Renamed `release-macos.yml` to `release.yml`; same `v*` tag trigger now builds macOS (universal) and Windows and uploads both to the GitHub release.
+- **README:** Document macOS and Windows CI releases under Build.
+
 ## 2026-06-02 — Image preview asset protocol
 
 - **Tauri:** Enable `protocol-asset` and `assetProtocol` scope (`$HOME`, `$APPDATA`) plus CSP `img-src` for `asset:` / `http://asset.localhost` so `convertFileSrc` loads in the WebView.

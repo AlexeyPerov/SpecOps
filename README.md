@@ -10,6 +10,7 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 - **Project panel** — file tree, open files in tabs, refresh and show/hide hidden files
 - **Themes**
 - **Multi-Window**
+- **Images** preview
 - **Console** — resizable bottom panel with **Logs**
 - WIP: AI support
 
@@ -84,4 +85,6 @@ npm run tauri build
 
 Installers and bundles are written to `app/src-tauri/target/release/bundle/`.
 
-On macOS, CI builds a universal binary when you push a semver tag (`v1.0.0`).
+### CI releases
+
+Pushing a semver tag (for example `v1.0.0`) triggers the [Release](.github/workflows/release.yml) workflow. It builds macOS (universal binary) and Windows installers and publishes them as assets on the GitHub release for that tag.

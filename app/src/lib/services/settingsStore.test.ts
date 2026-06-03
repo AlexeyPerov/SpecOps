@@ -38,6 +38,7 @@ describe("settings mapping", () => {
         autoReloadCleanFiles: false,
         checkOnWindowFocus: false,
         checkOnTabActivate: true,
+        maxBinaryOpenAsTextBytes: 200 * 1024,
       },
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
@@ -73,6 +74,7 @@ describe("settings mapping", () => {
       autoReloadCleanFiles: false,
       checkOnWindowFocus: false,
       checkOnTabActivate: true,
+      maxBinaryOpenAsTextBytes: 200 * 1024,
     });
   });
 });
@@ -243,6 +245,7 @@ describe("defaultExternalFilesSettings", () => {
       autoReloadCleanFiles: true,
       checkOnWindowFocus: true,
       checkOnTabActivate: true,
+      maxBinaryOpenAsTextBytes: 200 * 1024,
     });
   });
 });

@@ -30,12 +30,14 @@ import {
   normalizeCommandBindingOverrides,
 } from "../../commands/commandBindings";
 import { setCommandBindingOverrides } from "../../commands/registry";
+import { DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES } from "../../services/binaryFileOpen";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
   autoReloadCleanFiles: true,
   checkOnWindowFocus: true,
   checkOnTabActivate: true,
+  maxBinaryOpenAsTextBytes: DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES,
 };
 
 export const defaultSettings: AppSettingsState = {

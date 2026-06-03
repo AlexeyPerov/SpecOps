@@ -16,6 +16,10 @@ import type {
 } from "../domain/contracts";
 import { normalizeCommandBindingOverrides } from "../commands/commandBindings";
 import { ensureSpecOpsDataDir } from "./appDataDir";
+import {
+  DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES,
+  normalizeMaxBinaryOpenAsTextBytes,
+} from "./binaryFileOpen";
 
 export interface PersistedSettings {
   wrapLines: boolean;
@@ -24,6 +28,7 @@ export interface PersistedSettings {
   autoReloadCleanFiles: boolean;
   checkOnWindowFocus: boolean;
   checkOnTabActivate: boolean;
+  maxBinaryOpenAsTextBytes: number;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   providerSettings: AppProviderSettings;
@@ -36,6 +41,7 @@ export const defaultExternalFilesSettings: ExternalFilesSettings = {
   autoReloadCleanFiles: true,
   checkOnWindowFocus: true,
   checkOnTabActivate: true,
+  maxBinaryOpenAsTextBytes: DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES,
 };
 
 export const defaultPersistedSettings: PersistedSettings = {
@@ -78,6 +84,7 @@ function parseExternalFilesSettings(parsed: Partial<PersistedSettings>): Externa
     checkOnTabActivate: isBoolean(parsed.checkOnTabActivate)
       ? parsed.checkOnTabActivate
       : defaultExternalFilesSettings.checkOnTabActivate,
+    maxBinaryOpenAsTextBytes: normalizeMaxBinaryOpenAsTextBytes(parsed.maxBinaryOpenAsTextBytes),
   };
 }
 
@@ -149,6 +156,7 @@ export function toExternalFilesSettings(
     autoReloadCleanFiles: settings.autoReloadCleanFiles,
     checkOnWindowFocus: settings.checkOnWindowFocus,
     checkOnTabActivate: settings.checkOnTabActivate,
+    maxBinaryOpenAsTextBytes: settings.maxBinaryOpenAsTextBytes,
   };
 }
 

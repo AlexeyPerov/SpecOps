@@ -146,6 +146,8 @@ export interface ExternalFilesSettings {
   autoReloadCleanFiles: boolean;
   checkOnWindowFocus: boolean;
   checkOnTabActivate: boolean;
+  /** Max size (bytes) for non-image binary files opened as text in the editor. */
+  maxBinaryOpenAsTextBytes: number;
 }
 
 /** Shared toggle for provider-scoped settings blocks. */

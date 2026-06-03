@@ -13,6 +13,7 @@ const defaultSettings: ExternalFilesSettings = {
   autoReloadCleanFiles: true,
   checkOnWindowFocus: true,
   checkOnTabActivate: true,
+  maxBinaryOpenAsTextBytes: 200 * 1024,
 };
 
 describe("shouldSyncFileWatcher", () => {

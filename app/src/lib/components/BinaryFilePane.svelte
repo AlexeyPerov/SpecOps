@@ -3,9 +3,15 @@
     filePath?: string | null;
     title?: string;
     sizeBytes?: number;
+    maxOpenAsTextBytes?: number;
   }
 
-  let { filePath = null, title = "Binary file", sizeBytes = 0 }: Props = $props();
+  let {
+    filePath = null,
+    title = "Binary file",
+    sizeBytes = 0,
+    maxOpenAsTextBytes = 0,
+  }: Props = $props();
 
   function formatSize(bytes: number): string {
     if (bytes <= 0) {
@@ -19,16 +25,29 @@
     }
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
+
+  const exceedsOpenAsTextLimit = $derived(
+    maxOpenAsTextBytes > 0 && sizeBytes > maxOpenAsTextBytes,
+  );
 </script>
 
 <div class="preview-panel binary-preview">
   <div class="preview-title">{title}</div>
   <div class="binary-preview-body">
-    <p class="preview-message">
-      This file looks binary. It was opened without loading the contents into the text editor, so
-      tabs and close actions stay responsive.
-    </p>
-    <p class="preview-detail">Size: {formatSize(sizeBytes)}</p>
+    {#if exceedsOpenAsTextLimit}
+      <p class="preview-message">
+        This file looks binary and exceeds the size limit for opening as text. The editor did not
+        load its contents so tabs and close actions stay responsive.
+      </p>
+      <p class="preview-detail">Open-as-text limit: {formatSize(maxOpenAsTextBytes)}</p>
+      <p class="preview-detail">File size: {formatSize(sizeBytes)}</p>
+    {:else}
+      <p class="preview-message">
+        This file looks binary. It was opened without loading the contents into the text editor, so
+        tabs and close actions stay responsive.
+      </p>
+      <p class="preview-detail">Size: {formatSize(sizeBytes)}</p>
+    {/if}
     {#if filePath}
       <p class="preview-path" title={filePath}>{filePath}</p>
     {/if}

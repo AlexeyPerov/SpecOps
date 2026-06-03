@@ -20,6 +20,7 @@
   import KeyboardShortcutsSettings from "./KeyboardShortcutsSettings.svelte";
   import { appState } from "../state/appState";
   import { chatStore } from "../state/chatStore";
+  import { normalizeMaxBinaryOpenAsTextBytes } from "../services/binaryFileOpen";
 
   const SETTINGS_TAB_SIDEBAR_WIDTH_PX = 132;
   const SETTINGS_BODY_PADDING_X_PX = 24;
@@ -51,13 +52,24 @@
 
   function updateExternalFilesSetting(
     key: keyof ExternalFilesSettings,
-    value: boolean,
+    value: boolean | number,
   ): void {
     const current = appState.getSnapshot().settings.externalFiles;
     appState.setExternalFilesSettings({
       ...current,
       [key]: value,
     });
+  }
+
+  function updateMaxBinaryOpenAsTextKb(rawValue: string): void {
+    const parsedKb = Number.parseInt(rawValue, 10);
+    if (!Number.isFinite(parsedKb)) {
+      return;
+    }
+    updateExternalFilesSetting(
+      "maxBinaryOpenAsTextBytes",
+      normalizeMaxBinaryOpenAsTextBytes(parsedKb * 1024),
+    );
   }
 
   function updateDebugProviderSetting(
@@ -364,6 +376,22 @@
       />
       Check when tab becomes active
     </label>
+    <label class="settings-field">
+      <span>Max binary file size to open as text (KB)</span>
+      <input
+        type="number"
+        min="1"
+        max="10240"
+        step="1"
+        value={Math.round(snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes / 1024)}
+        onchange={(event) =>
+          updateMaxBinaryOpenAsTextKb((event.currentTarget as HTMLInputElement).value)}
+      />
+    </label>
+    <p class="settings-section-note">
+      Non-image binary files larger than this limit show a size notice instead of loading into the
+      text editor.
+    </p>
   </section>
 {/snippet}
 

@@ -11,6 +11,10 @@ import { appState } from "../state/appState";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import { logDiagnostic } from "./logging";
+import {
+  DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES,
+  resolveBinaryFileOpen,
+} from "./binaryFileOpen";
 
 export interface OpenedFile {
   path: string;
@@ -189,17 +193,34 @@ export async function renameFile(oldPath: string): Promise<string | null> {
   return selectedPath;
 }
 
-export async function openPath(path: string): Promise<OpenedFile> {
+export interface OpenPathOptions {
+  maxBinaryOpenAsTextBytes?: number;
+}
+
+export async function openPath(path: string, options?: OpenPathOptions): Promise<OpenedFile> {
   const fileStat = await stat(path);
   const sizeBytes = Number(fileStat.size);
   const bytes = await readFile(path);
   const contentKind = inferFileContentKind(path, bytes);
-  if (contentKind !== "text") {
+  if (contentKind === "image") {
     return {
       path,
       content: "",
       sizeBytes,
       contentKind,
+    };
+  }
+  if (contentKind === "binary") {
+    const maxBinaryOpenAsTextBytes =
+      options?.maxBinaryOpenAsTextBytes ??
+      appState.getSnapshot().settings.externalFiles.maxBinaryOpenAsTextBytes ??
+      DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES;
+    const resolved = resolveBinaryFileOpen(bytes, sizeBytes, maxBinaryOpenAsTextBytes);
+    return {
+      path,
+      content: resolved.content,
+      sizeBytes,
+      contentKind: resolved.contentKind,
     };
   }
   const content = new TextDecoder("utf-8", { fatal: false }).decode(bytes);

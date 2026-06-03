@@ -1014,6 +1014,7 @@
         filePath={activeDocument?.filePath ?? null}
         title={activeDocument?.title ?? "Binary file"}
         sizeBytes={previewFileSizeBytes}
+        maxOpenAsTextBytes={snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes}
       />
     {:else}
       {#if isMarkdownDocument}

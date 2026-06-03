@@ -97,15 +97,32 @@ describe("openPath", () => {
     });
   });
 
-  it("opens binary files without decoding as text", async () => {
+  it("opens small binary files as text when under the size limit", async () => {
     statMockFs.mockResolvedValue({ size: 32 } as Awaited<ReturnType<typeof stat>>);
     const bytes = new Uint8Array(32);
     bytes.fill(0x01);
     readFileMock.mockResolvedValue(bytes);
-    await expect(openPath("/tmp/app.bin")).resolves.toEqual({
+    await expect(
+      openPath("/tmp/app.bin", { maxBinaryOpenAsTextBytes: 200 * 1024 }),
+    ).resolves.toEqual({
+      path: "/tmp/app.bin",
+      content: "\u0001".repeat(32),
+      sizeBytes: 32,
+      contentKind: "text",
+    });
+  });
+
+  it("opens large binary files without decoding as text", async () => {
+    statMockFs.mockResolvedValue({ size: 300 * 1024 } as Awaited<ReturnType<typeof stat>>);
+    const bytes = new Uint8Array(300 * 1024);
+    bytes.fill(0x01);
+    readFileMock.mockResolvedValue(bytes);
+    await expect(
+      openPath("/tmp/app.bin", { maxBinaryOpenAsTextBytes: 200 * 1024 }),
+    ).resolves.toEqual({
       path: "/tmp/app.bin",
       content: "",
-      sizeBytes: 32,
+      sizeBytes: 300 * 1024,
       contentKind: "binary",
     });
   });

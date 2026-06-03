@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-03 — Binary open-as-text size limit
+
+- **Settings:** `maxBinaryOpenAsTextBytes` (default 200 KB) under External files controls how large non-image binary files may be decoded into the text editor.
+- **Open pipeline:** Small binary files open as text; larger ones stay on the binary preview pane with limit and file size shown.
+
 ## 2026-06-03 — CodeMirror layout in production builds
 
 - **Tauri CSP:** Add `style-src 'self' 'unsafe-inline'` so CodeMirror 6 runtime theme injection works in `tauri build` (fixes gutter/line numbers rendering as document text).

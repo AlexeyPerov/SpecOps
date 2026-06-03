@@ -42,6 +42,7 @@ const defaultExternalFiles: ExternalFilesSettings = {
   autoReloadCleanFiles: true,
   checkOnWindowFocus: true,
   checkOnTabActivate: true,
+  maxBinaryOpenAsTextBytes: 200 * 1024,
 };
 
 function setExternalFiles(overrides: Partial<ExternalFilesSettings> = {}): void {

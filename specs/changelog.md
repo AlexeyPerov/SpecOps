@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-03 — Project pane file name colors
+
+- **Project tree:** Dot-prefixed entries use a muted label color; `.txt`, `.md`, `.markdown`, and extensionless files use a cyan tone; other names keep primary text color (hidden wins over text).
+- **Theme:** `project-pane-color-hidden` and `project-pane-color-text` tokens in built-in themes and editable under **Project pane** for custom themes.
+
 ## 2026-06-03 — Binary open-as-text size limit
 
 - **Settings:** `maxBinaryOpenAsTextBytes` (default 200 KB) under External files controls how large non-image binary files may be decoded into the text editor.

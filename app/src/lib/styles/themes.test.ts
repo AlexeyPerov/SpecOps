@@ -39,17 +39,17 @@ function createMockRoot(): HTMLElement {
 }
 
 describe("THEME_TOKEN_KEYS", () => {
-  it("lists exactly 26 keys in five groups", () => {
-    expect(THEME_TOKEN_KEYS).toHaveLength(26);
+  it("lists exactly 28 keys in six groups", () => {
+    expect(THEME_TOKEN_KEYS).toHaveLength(28);
     const grouped = THEME_TOKEN_GROUPS.flatMap((group) => group.keys);
-    expect(new Set(grouped).size).toBe(26);
+    expect(new Set(grouped).size).toBe(28);
     expect([...THEME_TOKEN_KEYS].sort()).toEqual([...grouped].sort());
   });
 });
 
 describe("resolveBuiltinTokens", () => {
   it.each<BuiltinThemeId>(["dark-amber", "light-blue"])(
-    "returns all 26 non-empty token values for %s",
+    "returns all 28 non-empty token values for %s",
     (id) => {
       const tokens = resolveBuiltinTokens(id);
       for (const key of THEME_TOKEN_KEYS) {
@@ -153,6 +153,6 @@ describe("snapshotThemeTokens", () => {
 
     const snapshot = snapshotThemeTokens(root, "dark-amber");
     expect(snapshot["accent-color"]).toBe("#d97706");
-    expect(Object.keys(snapshot)).toHaveLength(26);
+    expect(Object.keys(snapshot)).toHaveLength(28);
   });
 });

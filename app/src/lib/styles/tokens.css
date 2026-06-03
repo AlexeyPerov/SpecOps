@@ -66,6 +66,8 @@
   --scrollbar-track: #e8edf4;
   --scrollbar-thumb: rgb(71 84 103 / 45%);
   --scrollbar-thumb-hover: rgb(71 84 103 / 62%);
+  --project-pane-color-hidden: #475467;
+  --project-pane-color-text: #0891b2;
 }
 
 :root[data-theme="dark"] {
@@ -96,6 +98,8 @@
   --scrollbar-track: #0f141b;
   --scrollbar-thumb: rgb(122 137 159 / 72%);
   --scrollbar-thumb-hover: rgb(151 169 196 / 82%);
+  --project-pane-color-hidden: #9db0c8;
+  --project-pane-color-text: #56b6c2;
 }
 
 *,

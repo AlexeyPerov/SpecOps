@@ -31,6 +31,8 @@ export const THEME_TOKEN_KEYS = [
   "syntax-link",
   "syntax-markup",
   "syntax-punctuation",
+  "project-pane-color-hidden",
+  "project-pane-color-text",
 ] as const;
 
 export type ThemeTokenKey = (typeof THEME_TOKEN_KEYS)[number];
@@ -42,7 +44,8 @@ export type ThemeTokenGroupId =
   | "text"
   | "accent"
   | "syntax"
-  | "search";
+  | "search"
+  | "project-pane";
 
 export interface ThemeTokenGroup {
   id: ThemeTokenGroupId;
@@ -100,6 +103,11 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
     label: "Search",
     keys: ["color-search-match", "color-search-match-current"],
   },
+  {
+    id: "project-pane",
+    label: "Project pane",
+    keys: ["project-pane-color-hidden", "project-pane-color-text"],
+  },
 ];
 
 export const THEME_TOKEN_LABELS: Record<ThemeTokenKey, string> = {
@@ -129,6 +137,8 @@ export const THEME_TOKEN_LABELS: Record<ThemeTokenKey, string> = {
   "syntax-link": "Link",
   "syntax-markup": "Markup",
   "syntax-punctuation": "Punctuation",
+  "project-pane-color-hidden": "Hidden (dot-prefixed)",
+  "project-pane-color-text": "Text, Markdown, extensionless",
 };
 
 const BUILTIN_LABELS: Record<BuiltinThemeId, string> = {
@@ -195,6 +205,20 @@ const MODE_UI_TOKENS: Record<"dark" | "light", Record<ModeUiTokenKey, string>> =
     "scrollbar-track": "#e8edf4",
     "scrollbar-thumb": "rgb(71 84 103 / 45%)",
     "scrollbar-thumb-hover": "rgb(71 84 103 / 62%)",
+  },
+};
+
+const PROJECT_PANE_TOKENS: Record<
+  "dark" | "light",
+  Record<"project-pane-color-hidden" | "project-pane-color-text", string>
+> = {
+  dark: {
+    "project-pane-color-hidden": "#9db0c8",
+    "project-pane-color-text": "#56b6c2",
+  },
+  light: {
+    "project-pane-color-hidden": "#475467",
+    "project-pane-color-text": "#0891b2",
   },
 };
 
@@ -344,6 +368,7 @@ export function resolveBuiltinTokens(id: BuiltinThemeId): ThemeTokens {
     "accent-color": accent,
     "color-accent": accent,
     ...syntax,
+    ...PROJECT_PANE_TOKENS[mode],
   };
 }
 

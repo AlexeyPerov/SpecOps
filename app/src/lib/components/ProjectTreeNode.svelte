@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ProjectTreeNode as ProjectTreeNodeModel } from "../services/projectTree";
+  import { classifyProjectTreeLabelTone } from "../services/projectTreeLabelTone";
   import DirectoryIcon from "./icons/DirectoryIcon.svelte";
   import FileIcon from "./icons/FileIcon.svelte";
 
@@ -55,6 +56,8 @@
   function handlePointerDown(event: PointerEvent): void {
     onPointerDown(event, node);
   }
+
+  const labelTone = $derived(classifyProjectTreeLabelTone(node.name, node.kind));
 </script>
 
 <li
@@ -83,7 +86,7 @@
     {:else}
       <FileIcon />
     {/if}
-    <span class="project-tree-label">{node.name}</span>
+    <span class="project-tree-label project-tree-label-{labelTone}">{node.name}</span>
   </button>
 </li>
 
@@ -139,5 +142,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .project-tree-label-hidden {
+    color: var(--project-pane-color-hidden);
+  }
+
+  .project-tree-label-text {
+    color: var(--project-pane-color-text);
   }
 </style>

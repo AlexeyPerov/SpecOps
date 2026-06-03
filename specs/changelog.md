@@ -1,8 +1,11 @@
 # Changelog
 
-## 2026-06-03 — Project pane context menu: copy paths
+## 2026-06-03 — Project pane context menu fixes
 
-- **Project tree context menu:** Copy Path and Copy Relative Path on files and folders (same behavior as tab context menu).
+- **New / rename / delete:** Replace `window.prompt` / `window.confirm` with in-app name prompt and Tauri `confirm` so create, rename, and delete work in production Tauri builds.
+- **Empty pane area:** Right-click below the file list (project panel body) opens root context menu with New File… and New Folder… at workspace root.
+- **Copy paths:** Copy Path and Copy Relative Path on files and folders (same behavior as tab context menu).
+- **Reveal:** Reveal in Finder / Show in Explorer on files and folders (same as tab context menu).
 
 ## 2026-06-03 — Project pane file name colors
 

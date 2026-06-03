@@ -97,10 +97,15 @@
     if (!(target instanceof HTMLElement)) {
       return;
     }
-    if (!target.closest(".project-tree-view")) {
+    if (target.closest("[data-path]")) {
       return;
     }
-    if (target.closest("[data-path]")) {
+    if (target.closest(".project-panel-header")) {
+      return;
+    }
+    const inTree = target.closest(".project-tree-view");
+    const inPanelBody = target.closest(".project-panel-body");
+    if (!inTree && !inPanelBody) {
       return;
     }
     event.preventDefault();
@@ -152,7 +157,13 @@
   </header>
 
   {#if !collapsed}
-    <div class="project-panel-body" bind:this={panelBodyEl}>
+    <div
+      class="project-panel-body"
+      role="region"
+      aria-label="Project files"
+      bind:this={panelBodyEl}
+      oncontextmenu={handleContextMenuRoot}
+    >
       <ProjectTreeView
         nodes={rootNodes}
         {workspaceRoot}

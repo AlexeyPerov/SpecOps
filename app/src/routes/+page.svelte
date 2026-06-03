@@ -7,6 +7,7 @@
   import BinaryFilePane from "../lib/components/BinaryFilePane.svelte";
   import ConsolePanel from "../lib/components/ConsolePanel.svelte";
   import SettingsDialog from "../lib/components/SettingsDialog.svelte";
+  import EntryNamePrompt from "../lib/components/EntryNamePrompt.svelte";
   import ThemePane from "../lib/components/ThemePane.svelte";
   import FindReplacePanel from "../lib/components/FindReplacePanel.svelte";
   import TabBar from "../lib/components/TabBar.svelte";
@@ -32,6 +33,8 @@
   import { scheduleSessionPersistence } from "../lib/services/sessionManager";
   import { savePersistedSettings, toPersistedSettings } from "../lib/services/settingsStore";
   import { registerSettingsDialogOpener, type SettingsDialogTab } from "../lib/services/settingsDialogUi";
+  import { promptEntryName } from "../lib/services/entryNamePrompt";
+  import { confirm } from "@tauri-apps/plugin-dialog";
   import { checkDocumentIfDeferred } from "../lib/services/externalFileChanges";
   import { marked } from "marked";
   import type { AppDomainState } from "../lib/domain/contracts";
@@ -241,19 +244,15 @@
     await afterProjectTreeMutation(sourcePath, result.path, destDirPath);
   }
 
-  function promptEntryName(title: string, defaultValue: string): string | null {
-    const value = window.prompt(title, defaultValue);
-    if (value === null) {
-      return null;
-    }
-    return value;
-  }
-
   async function handleNewProjectFile(parentDirPath: string): Promise<void> {
     if (!activeWorkspaceRoot) {
       return;
     }
-    const name = promptEntryName("New file name", "untitled.txt");
+    const name = await promptEntryName({
+      title: "New file name",
+      defaultValue: "untitled.txt",
+      confirmLabel: "Create",
+    });
     if (name === null) {
       return;
     }
@@ -271,7 +270,11 @@
     if (!activeWorkspaceRoot) {
       return;
     }
-    const name = promptEntryName("New folder name", "New Folder");
+    const name = await promptEntryName({
+      title: "New folder name",
+      defaultValue: "New Folder",
+      confirmLabel: "Create",
+    });
     if (name === null) {
       return;
     }
@@ -292,7 +295,11 @@
       return;
     }
     const currentName = path.replaceAll("\\", "/").split("/").pop() ?? path;
-    const name = promptEntryName("Rename", currentName);
+    const name = await promptEntryName({
+      title: "Rename",
+      defaultValue: currentName,
+      confirmLabel: "Rename",
+    });
     if (name === null) {
       return;
     }
@@ -316,7 +323,13 @@
       return;
     }
     const label = kind === "directory" ? "folder" : "file";
-    const confirmed = window.confirm(`Delete ${label} "${path.replaceAll("\\", "/").split("/").pop()}"?`);
+    const entryLabel = path.replaceAll("\\", "/").split("/").pop() ?? path;
+    const confirmed = await confirm(`Delete ${label} "${entryLabel}"?`, {
+      title: "Delete",
+      okLabel: "Delete",
+      cancelLabel: "Cancel",
+      kind: "warning",
+    });
     if (!confirmed) {
       return;
     }
@@ -1168,6 +1181,8 @@
   initialTab={settingsDialogInitialTab}
   onClose={() => (settingsDialogOpen = false)}
 />
+
+<EntryNamePrompt onNotify={notify} />
 
 {#if workspaceContextMenu}
   <div

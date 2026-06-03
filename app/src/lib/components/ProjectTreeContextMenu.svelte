@@ -1,6 +1,10 @@
 <script lang="ts">
   import type { ProjectTreeNode } from "../services/projectTree";
+  import { revealInFileManagerLabel } from "../services/platform";
+  import { revealInFileManager } from "../services/revealInFileManager";
   import { workspaceRelativePath } from "../services/workspacePaths";
+
+  const revealLabel = revealInFileManagerLabel();
 
   export interface ProjectTreeContextTarget {
     node: ProjectTreeNode | null;
@@ -101,6 +105,19 @@
     }
     closeContextMenu();
   }
+
+  async function revealEntryInFileManager(): Promise<void> {
+    if (!nodePath) {
+      closeContextMenu();
+      return;
+    }
+    try {
+      await revealInFileManager(nodePath);
+    } catch {
+      // reveal is best-effort from the project tree menu
+    }
+    closeContextMenu();
+  }
 </script>
 
 {#if contextMenu && menuTarget}
@@ -117,7 +134,8 @@
         class="project-tree-context-item"
         type="button"
         role="menuitem"
-        onclick={() => {
+        onpointerdown={(event) => {
+          event.stopPropagation();
           onOpenFile(nodePath);
           closeContextMenu();
         }}
@@ -130,7 +148,8 @@
         class="project-tree-context-item"
         type="button"
         role="menuitem"
-        onclick={() => {
+        onpointerdown={(event) => {
+          event.stopPropagation();
           onNewFile(parentDirPath);
           closeContextMenu();
         }}
@@ -141,7 +160,8 @@
         class="project-tree-context-item"
         type="button"
         role="menuitem"
-        onclick={() => {
+        onpointerdown={(event) => {
+          event.stopPropagation();
           onNewFolder(parentDirPath);
           closeContextMenu();
         }}
@@ -188,7 +208,8 @@
         class="project-tree-context-item"
         type="button"
         role="menuitem"
-        onclick={() => {
+        onpointerdown={(event) => {
+          event.stopPropagation();
           onRename(nodePath, nodeKind);
           closeContextMenu();
         }}
@@ -199,12 +220,25 @@
         class="project-tree-context-item project-tree-context-item-danger"
         type="button"
         role="menuitem"
-        onclick={() => {
+        onpointerdown={(event) => {
+          event.stopPropagation();
           onDelete(nodePath, nodeKind);
           closeContextMenu();
         }}
       >
         Delete
+      </button>
+      <div class="project-tree-context-separator" role="separator"></div>
+      <button
+        class="project-tree-context-item"
+        type="button"
+        role="menuitem"
+        onpointerdown={(event) => {
+          event.stopPropagation();
+          void revealEntryInFileManager();
+        }}
+      >
+        {revealLabel}
       </button>
     {/if}
   </div>

@@ -173,6 +173,7 @@
 
 <ProjectTreeContextMenu
   bind:this={contextMenuComponent}
+  {workspaceRoot}
   onOpenFile={onOpenFile}
   onNewFile={onNewFile}
   onNewFolder={onNewFolder}

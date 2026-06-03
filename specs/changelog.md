@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-03 — Project pane context menu: copy paths
+
+- **Project tree context menu:** Copy Path and Copy Relative Path on files and folders (same behavior as tab context menu).
+
 ## 2026-06-03 — Project pane file name colors
 
 - **Project tree:** Dot-prefixed entries use a muted label color; `.txt`, `.md`, `.markdown`, and extensionless files use a cyan tone; other names keep primary text color (hidden wins over text).

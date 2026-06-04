@@ -44,8 +44,8 @@ describe("M6-4 edge-case transitions", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
-          apiKey: appState.getSnapshot().settings.glmApiKey,
+          settings: appState.getSnapshot().settings.providerSettings.http,
+          apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );

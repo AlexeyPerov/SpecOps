@@ -2,11 +2,11 @@ import type {
   ChatProviderId,
   ChatSystemEvent,
   DebugProviderSettings,
-  GlmProviderSettings,
+  HttpConnectionSettings,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
 import { PRODUCT_CHAT_PROVIDER_IDS } from "../../domain/contracts";
-import { isGlmProviderConfigured as hasGlmProviderCredentials } from "./glmProviderSettings";
+import { isHttpProviderConfigured as hasHttpProviderCredentials } from "./httpConnectionSettings";
 import {
   getProviderDefaultModelId,
   getProviderModelCatalog,
@@ -20,6 +20,7 @@ export interface ChatProviderOption {
 }
 
 const PROVIDER_LABELS: Record<ChatProviderId, string> = {
+  http: "HTTP",
   glm: "GLM",
   cursor: "Cursor",
   debug: "Debug",
@@ -27,28 +28,28 @@ const PROVIDER_LABELS: Record<ChatProviderId, string> = {
 
 /**
  * Default provider precedence for new threads:
- * 1. GLM when configured (settings + API key, or registered adapter)
+ * 1. HTTP when configured (settings + API key, or registered adapter)
  * 2. Debug when enabled in Developer Settings
- * 3. GLM as product default fallback
+ * 3. HTTP as product default fallback
  */
-export function isGlmProviderConfigured(
-  glmSettings: GlmProviderSettings,
+export function isHttpProviderConfigured(
+  httpSettings: HttpConnectionSettings,
   apiKey: string,
 ): boolean {
-  return hasGlmProviderCredentials(glmSettings, apiKey);
+  return hasHttpProviderCredentials(httpSettings, apiKey);
 }
 
 export function resolveDefaultChatProvider(
   settings: DebugProviderSettings,
-  glmConfigured = false,
+  httpConfigured = false,
 ): ChatProviderId {
-  if (glmConfigured) {
-    return "glm";
+  if (httpConfigured) {
+    return "http";
   }
   if (settings.enabled) {
     return "debug";
   }
-  return "glm";
+  return "http";
 }
 
 export function listSelectableChatProviders(
@@ -120,5 +121,5 @@ export function canSelectChatProvider(
   if (provider === "debug") {
     return settings.enabled;
   }
-  return provider === "glm";
+  return provider === "http";
 }

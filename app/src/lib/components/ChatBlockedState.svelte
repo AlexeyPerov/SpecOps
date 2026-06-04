@@ -43,8 +43,8 @@
     <p class="chat-blocked-title">{glmBlockedCopy.title}</p>
     <p class="chat-blocked-message">{glmBlockedCopy.message}</p>
     <p class="chat-blocked-hint">{glmBlockedCopy.recoveryHint}</p>
-    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("glm")}>
-      Open GLM settings
+    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("connections")}>
+      Open connection settings
     </button>
   </div>
 {:else if isDebugBlocked && debugBlockedCopy}
@@ -61,7 +61,7 @@
     <p class="chat-blocked-title">{modelBlockedCopy.title}</p>
     <p class="chat-blocked-message">{modelBlockedCopy.message}</p>
     <p class="chat-blocked-hint">{modelBlockedCopy.recoveryHint}</p>
-    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("glm")}>
+    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("connections")}>
       Open model settings
     </button>
   </div>

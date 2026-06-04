@@ -9,7 +9,7 @@ describe("settingsDialogUi", () => {
   it("no-ops when opener is null", () => {
     registerSettingsDialogOpener(null);
     expect(() => openSettingsDialog()).not.toThrow();
-    expect(() => openSettingsDialog("glm")).not.toThrow();
+    expect(() => openSettingsDialog("connections")).not.toThrow();
   });
 
   it("calls registered opener with default editor tab", () => {
@@ -21,13 +21,13 @@ describe("settingsDialogUi", () => {
     expect(opener).toHaveBeenCalledWith("editor");
   });
 
-  it("calls registered opener with explicit glm tab", () => {
+  it("calls registered opener with explicit connections tab", () => {
     const opener = vi.fn();
     registerSettingsDialogOpener(opener);
 
-    openSettingsDialog("glm");
+    openSettingsDialog("connections");
 
-    expect(opener).toHaveBeenCalledWith("glm");
+    expect(opener).toHaveBeenCalledWith("connections");
   });
 
   it("calls registered opener with explicit debugAi tab", () => {
@@ -45,9 +45,9 @@ describe("settingsDialogUi", () => {
     registerSettingsDialogOpener(first);
     registerSettingsDialogOpener(second);
 
-    openSettingsDialog("glm");
+    openSettingsDialog("connections");
 
     expect(first).not.toHaveBeenCalled();
-    expect(second).toHaveBeenCalledWith("glm");
+    expect(second).toHaveBeenCalledWith("connections");
   });
 });

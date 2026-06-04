@@ -96,6 +96,6 @@ describe("GLM provider readiness helpers", () => {
   it("exposes setup copy for inline CTA", () => {
     expect(getGlmProviderMissingConfigMessage()).toContain("API key");
     expect(getGlmProviderSetupHint()).toContain("Settings");
-    expect(getGlmProviderSetupHint()).toContain("GLM");
+    expect(getGlmProviderSetupHint()).toContain("Connections");
   });
 });

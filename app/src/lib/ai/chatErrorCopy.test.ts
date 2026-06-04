@@ -3,8 +3,8 @@ import { WorkspaceAccessReason } from "./capabilities";
 import {
   DEBUG_PROVIDER_DISABLED_MESSAGE,
   DEBUG_PROVIDER_DISABLED_RECOVERY,
-  GLM_MISSING_CONFIG_MESSAGE,
-  GLM_MISSING_CONFIG_RECOVERY,
+  HTTP_MISSING_CONFIG_MESSAGE,
+  HTTP_MISSING_CONFIG_RECOVERY,
   PROVIDER_REQUEST_FAILURE_MESSAGE,
   WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
   WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
@@ -36,7 +36,8 @@ describe("chatErrorCopy", () => {
   });
 
   it("returns provider setup copy for inline GLM and Debug blocked states", () => {
-    expect(getGlmMissingConfigCopy().message).toBe(GLM_MISSING_CONFIG_MESSAGE);
+    expect(getGlmMissingConfigCopy().message).toBe(HTTP_MISSING_CONFIG_MESSAGE);
+    expect(getGlmMissingConfigCopy().recoveryHint).toBe(HTTP_MISSING_CONFIG_RECOVERY);
     expect(getDebugProviderDisabledCopy().message).toBe(DEBUG_PROVIDER_DISABLED_MESSAGE);
     expect(getDebugProviderDisabledCopy().recoveryHint).toBe(DEBUG_PROVIDER_DISABLED_RECOVERY);
   });

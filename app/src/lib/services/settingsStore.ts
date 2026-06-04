@@ -105,7 +105,8 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
     if (isBoolean(parsed.wrapLines) && typeof parsed.zoomPercent === "number") {
       const externalFiles = parseExternalFilesSettings(parsed as Partial<PersistedSettings>);
       const hasExplicitGlmCatalog =
-        isRecord(parsed.providerModelCatalogs) && isRecord(parsed.providerModelCatalogs.glm);
+        isRecord(parsed.providerModelCatalogs) &&
+        (isRecord(parsed.providerModelCatalogs.glm) || isRecord(parsed.providerModelCatalogs.http));
       const providerModelCatalogs = normalizeProviderModelCatalogs(
         parsed.providerModelCatalogs,
         hasExplicitGlmCatalog
@@ -170,9 +171,7 @@ export function toPersistedSettings(input: {
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
 }): PersistedSettings {
-  const providerModelCatalogs = normalizeProviderModelCatalogs(input.providerModelCatalogs, {
-    glmModelId: input.providerSettings.glm.modelId,
-  });
+  const providerModelCatalogs = normalizeProviderModelCatalogs(input.providerModelCatalogs);
   return {
     wrapLines: input.wrapLines,
     zoomPercent: input.zoomPercent,

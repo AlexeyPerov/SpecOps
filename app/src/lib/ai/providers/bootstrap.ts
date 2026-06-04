@@ -2,9 +2,9 @@ import { chatStore } from "../../state/chatStore";
 import { appState } from "../../state/appState";
 import { createRegistryCapabilityChecker } from "./capabilityChecker";
 import { createDebugChatProvider } from "./debugChatProvider";
-import { createGlmChatProvider } from "./glmChatProvider";
+import { createOpenAiCompatibleChatProvider } from "./openAiCompatibleChatProvider";
 import { registerChatProvider } from "./registry";
-import { isGlmProviderConfigured, resolveDefaultChatProvider } from "./selection";
+import { isHttpProviderConfigured, resolveDefaultChatProvider } from "./selection";
 
 let initialized = false;
 
@@ -17,17 +17,17 @@ export function initializeChatProviders(): void {
     createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug),
   );
   registerChatProvider(
-    createGlmChatProvider(() => ({
-      settings: appState.getSnapshot().settings.providerSettings.glm,
-      apiKey: appState.getSnapshot().settings.glmApiKey,
+    createOpenAiCompatibleChatProvider(() => ({
+      settings: appState.getSnapshot().settings.providerSettings.http,
+      apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
     })),
   );
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
       () => appState.getSnapshot().settings.providerSettings.debug,
       () => ({
-        settings: appState.getSnapshot().settings.providerSettings.glm,
-        apiKey: appState.getSnapshot().settings.glmApiKey,
+        settings: appState.getSnapshot().settings.providerSettings.http,
+        apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
       }),
     ),
   );
@@ -35,7 +35,10 @@ export function initializeChatProviders(): void {
     const snapshot = appState.getSnapshot().settings;
     return resolveDefaultChatProvider(
       snapshot.providerSettings.debug,
-      isGlmProviderConfigured(snapshot.providerSettings.glm, snapshot.glmApiKey),
+      isHttpProviderConfigured(
+        snapshot.providerSettings.http,
+        snapshot.providerApiKeys.http ?? "",
+      ),
     );
   });
   initialized = true;

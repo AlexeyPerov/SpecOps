@@ -15,13 +15,13 @@ export const WORKSPACE_ACCESS_LOST_MESSAGE =
 export const DEBUG_PROVIDER_SWITCH_BLOCKED_MESSAGE =
   "Enable the Debug provider in Settings → Debug AI first.";
 
-export const GLM_NOT_CONFIGURED_TITLE = "GLM is not configured";
+export const HTTP_NOT_CONFIGURED_TITLE = "Connection is not configured";
 
-export const GLM_MISSING_CONFIG_MESSAGE =
-  "Add your GLM API key in Settings before sending messages.";
+export const HTTP_MISSING_CONFIG_MESSAGE =
+  "Add your HTTP connection API key in Settings before sending messages.";
 
-export const GLM_MISSING_CONFIG_RECOVERY =
-  "Open Settings → GLM, enter your API key, and try again.";
+export const HTTP_MISSING_CONFIG_RECOVERY =
+  "Open Settings → Connections, enter your API key, and try again.";
 
 export const PROVIDER_MISSING_CONFIG_MESSAGE =
   "Complete provider setup in Settings before sending messages.";
@@ -40,13 +40,13 @@ export const DEBUG_PROVIDER_DISABLED_RECOVERY =
 export const PROVIDER_UNAVAILABLE_MESSAGE = "The selected provider is not available.";
 
 export const PROVIDER_UNAVAILABLE_RECOVERY =
-  "Choose GLM or enable Debug in Settings → Debug AI.";
+  "Choose HTTP or enable Debug in Settings → Debug AI.";
 
 export const PROVIDER_UNSUPPORTED_ACCESS_MESSAGE =
   "The selected provider cannot read files in this workspace.";
 
 export const PROVIDER_UNSUPPORTED_ACCESS_RECOVERY =
-  "Choose GLM or enable Debug in Settings → Debug AI.";
+  "Choose HTTP or enable Debug in Settings → Debug AI.";
 
 export const PROVIDER_NOT_REGISTERED_MESSAGE = "The Debug provider is not ready yet.";
 
@@ -126,9 +126,9 @@ export function getAccessBlockedCopy(
 
 export function getGlmMissingConfigCopy(): ChatBlockedStateCopy {
   return {
-    title: GLM_NOT_CONFIGURED_TITLE,
-    message: GLM_MISSING_CONFIG_MESSAGE,
-    recoveryHint: GLM_MISSING_CONFIG_RECOVERY,
+    title: HTTP_NOT_CONFIGURED_TITLE,
+    message: HTTP_MISSING_CONFIG_MESSAGE,
+    recoveryHint: HTTP_MISSING_CONFIG_RECOVERY,
   };
 }
 

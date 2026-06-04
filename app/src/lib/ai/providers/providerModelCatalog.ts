@@ -1,8 +1,12 @@
 import type { ChatProviderId, ProviderModelCatalog, ProviderModelCatalogs } from "../../domain/contracts";
 
-const PROVIDER_IDS: readonly ChatProviderId[] = ["glm", "cursor", "debug"];
+const PROVIDER_IDS: readonly ChatProviderId[] = ["http", "glm", "cursor", "debug"];
 
 export const defaultProviderModelCatalogs: ProviderModelCatalogs = {
+  http: {
+    modelIds: ["gpt-4o-mini"],
+    defaultModelId: "gpt-4o-mini",
+  },
   glm: {
     modelIds: ["glm-4-flash", "glm-4-air", "glm-4-plus"],
     defaultModelId: "glm-4-flash",

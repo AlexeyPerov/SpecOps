@@ -4,7 +4,7 @@
     ChatProviderId,
     DebugProviderSettings,
     ExternalFilesSettings,
-    GlmProviderSettings,
+    HttpConnectionSettings,
   } from "../domain/contracts";
   import {
     formatModelListForInput,
@@ -101,17 +101,17 @@
     );
   }
 
-  function updateGlmProviderSetting(
-    key: keyof GlmProviderSettings,
-    value: GlmProviderSettings[keyof GlmProviderSettings],
+  function updateHttpConnectionSetting(
+    key: keyof HttpConnectionSettings,
+    value: HttpConnectionSettings[keyof HttpConnectionSettings],
   ): void {
-    appState.updateGlmProviderSettings({ [key]: value });
+    appState.updateHttpConnectionSettings({ [key]: value });
     void chatStore.runAccessPreflight();
   }
 
-  async function updateGlmApiKey(rawValue: string): Promise<void> {
-    appState.setProviderApiKey("glm", rawValue);
-    await saveProviderApiKey("glm", rawValue);
+  async function updateHttpApiKey(rawValue: string): Promise<void> {
+    appState.setProviderApiKey("http", rawValue);
+    await saveProviderApiKey("http", rawValue);
     void chatStore.runAccessPreflight();
   }
 
@@ -125,14 +125,14 @@
       modelIds,
       defaultModelId: currentCatalog.defaultModelId,
     });
-    if (providerId === "glm") {
+    if (providerId === "http") {
       void chatStore.runAccessPreflight();
     }
   }
 
   function updateProviderDefaultModel(providerId: ChatProviderId, defaultModelId: string): void {
     appState.updateProviderModelCatalog(providerId, { defaultModelId });
-    if (providerId === "glm") {
+    if (providerId === "http") {
       void chatStore.runAccessPreflight();
     }
   }
@@ -300,8 +300,8 @@
     {@render editorSettingsPanel()}
   {:else if tabId === "shortcuts"}
     <KeyboardShortcutsSettings />
-  {:else if tabId === "glm"}
-    {@render glmSettingsPanel()}
+  {:else if tabId === "connections"}
+    {@render connectionsSettingsPanel()}
   {:else}
     {@render debugAiSettingsPanel()}
   {/if}
@@ -395,26 +395,26 @@
   </section>
 {/snippet}
 
-{#snippet glmSettingsPanel()}
+{#snippet connectionsSettingsPanel()}
   <section class="settings-section">
-    <h3>GLM provider</h3>
+    <h3>Connections</h3>
     <p class="settings-section-note">
-      Credentials for the GLM chat provider. The API key is stored in a separate secrets file and
-      is never written to chat history or Debug diagnostics.
+      Configure an HTTP/OpenAI-compatible connection for chat. The API key is stored in a separate
+      secrets file and is never written to chat history or Debug diagnostics.
     </p>
     <div class="settings-subsection">
       <h4>Enable</h4>
       <label class="settings-toggle">
         <input
           type="checkbox"
-          checked={snapshot.settings.providerSettings.glm.enabled}
+          checked={snapshot.settings.providerSettings.http.enabled}
           onchange={(event) =>
-            updateGlmProviderSetting(
+            updateHttpConnectionSetting(
               "enabled",
               (event.currentTarget as HTMLInputElement).checked,
             )}
         />
-        Enable GLM provider in chat
+        Enable HTTP connection in chat
       </label>
     </div>
     <div class="settings-subsection">
@@ -425,10 +425,10 @@
           type="password"
           autocomplete="off"
           spellcheck="false"
-          placeholder="Enter GLM API key"
-          value={snapshot.settings.glmApiKey}
+          placeholder="Enter API key"
+          value={snapshot.settings.providerApiKeys.http ?? ""}
           oninput={(event) =>
-            void updateGlmApiKey((event.currentTarget as HTMLInputElement).value)}
+            void updateHttpApiKey((event.currentTarget as HTMLInputElement).value)}
         />
       </label>
       <label class="settings-field">
@@ -436,16 +436,16 @@
         <input
           type="url"
           spellcheck="false"
-          value={snapshot.settings.providerSettings.glm.baseUrl}
+          value={snapshot.settings.providerSettings.http.baseUrl}
           onchange={(event) =>
-            updateGlmProviderSetting(
+            updateHttpConnectionSetting(
               "baseUrl",
               (event.currentTarget as HTMLInputElement).value,
             )}
         />
       </label>
     </div>
-    {@render providerModelCatalogPanel("glm", "Models")}
+    {@render providerModelCatalogPanel("http", "Models")}
   </section>
 {/snippet}
 

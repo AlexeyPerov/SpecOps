@@ -1,4 +1,4 @@
-export type SettingsDialogTab = "editor" | "shortcuts" | "glm" | "debugAi";
+export type SettingsDialogTab = "editor" | "shortcuts" | "connections" | "debugAi";
 
 export interface SettingsTabDefinition {
   id: SettingsDialogTab;
@@ -18,9 +18,9 @@ export const SETTINGS_TABS = [
     panelAriaLabel: "Keyboard shortcuts",
   },
   {
-    id: "glm",
-    label: "GLM",
-    panelAriaLabel: "GLM provider settings",
+    id: "connections",
+    label: "Connections",
+    panelAriaLabel: "HTTP connections settings",
   },
   {
     id: "debugAi",

@@ -10,9 +10,9 @@ import {
   isDebugProviderSendBlocked,
 } from "./providers/debugProviderSettings";
 import {
-  getGlmProviderMissingConfigMessage,
-  isGlmProviderSendBlocked,
-} from "./providers/glmProviderSettings";
+  getHttpProviderMissingConfigMessage,
+  isHttpProviderSendBlocked,
+} from "./providers/httpConnectionSettings";
 import {
   resolveEffectiveThreadModelId,
   validateLocalModelSelection,
@@ -44,7 +44,7 @@ export type SendChatMessageFailureReason =
   | "generating"
   | "preflight"
   | "debug_disabled"
-  | "glm_not_configured"
+  | "http_not_configured"
   | "invalid_model"
   | "provider_unavailable"
   | "append_failed"
@@ -158,11 +158,17 @@ async function validateProviderSend(
     };
   }
 
-  if (isGlmProviderSendBlocked(providerId, appSettings.providerSettings.glm, appSettings.glmApiKey)) {
+  if (
+    isHttpProviderSendBlocked(
+      providerId,
+      appSettings.providerSettings.http,
+      appSettings.providerApiKeys.http ?? "",
+    )
+  ) {
     return {
       ok: false,
-      reason: "glm_not_configured",
-      message: getGlmProviderMissingConfigMessage(),
+      reason: "http_not_configured",
+      message: getHttpProviderMissingConfigMessage(),
     };
   }
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-06-05 00:25 (MSK)
+
+- **Phase 1 Task 1 (P1-1):** Added OpenAI-compatible HTTP provider implementation (`openAiCompatibleChatProvider.ts`, `openAiChatMessages.ts`, `httpConnectionSettings.ts`) with `/chat/completions` buffered send (`stream: false`), provider id `http`, capability checks, model-error mapping, and ported provider tests.
+- **Phase 1 Task 2 (P1-2):** Replaced Settings **GLM** tab with **Connections** and wired single-connection fields (`enabled`, `baseUrl`, model catalog) to `providerSettings.http`; API key now persists/loads through `provider-secrets.json` as `providerApiKeys.http`; removed `glmApiKey` from app settings domain state.
+- **Integration + validation:** Updated provider bootstrap, selection defaults, send pipeline blocking, chat UI blocked-state/settings CTA, and affected tests to use HTTP connection APIs; validated in `app/` with `npm test` (**665 passed**) and `npm run check` (**0 errors**, 1 pre-existing a11y warning).
+
+## 2026-06-05 00:13 (MSK)
+
+- **Settings dialog:** Migrated `SettingsDialog.svelte` GLM settings panel to **Connections** (`http`) with `HttpConnectionSettings`, HTTP provider API key storage (`providerApiKeys.http` via `setProviderApiKey/saveProviderApiKey`), updated tab routing (`connections`), and access preflight triggers bound to the `http` provider model/catalog updates.
+
+## 2026-06-05 00:19 (MSK)
+
+- **Task1/2 migration compile fixes:** Updated remaining GLM-era call sites/tests to HTTP connection APIs (`providerSettings.http`, `providerApiKeys.http`) and switched Settings tab routing from `"glm"` to `"connections"` in chat blocked-state UI/tests.
+- **Legacy GLM compile compatibility:** Kept `glmProviderSettings.ts`/`glmChatProvider.ts` filenames, but adapted imports/types to current contracts and HTTP missing-config copy so old GLM adapter/tests compile without reintroducing `glmApiKey` in app settings state.
+- **Validation:** Ran `npm run check` in `app`; result: **0 errors** (1 pre-existing `EntryNamePrompt.svelte` a11y warning).
+
 ## 2026-06-04 — Phase 1 execution plan
 
 - **Add** [execution-plan.md](specs/ops/phase-1/execution-plan.md) — agent task breakdown (11 tasks) from [phase-1.md](specs/ops/phase-1/phase-1.md), template: `specs/archive/execution-plan.md`.

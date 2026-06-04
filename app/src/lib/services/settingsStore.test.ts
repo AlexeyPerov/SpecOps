@@ -54,16 +54,15 @@ describe("settings mapping", () => {
           failureMessage: "Test failure",
           includeDiagnostics: false,
         },
-        glm: {
+        http: {
           enabled: true,
           baseUrl: "https://example.test/v1",
-          modelId: "glm-test",
         },
       },
       providerModelCatalogs: {
-        glm: {
-          modelIds: ["glm-test"],
-          defaultModelId: "glm-test",
+        http: {
+          modelIds: ["gpt-test"],
+          defaultModelId: "gpt-test",
         },
       },
       commandBindingOverrides: {},
@@ -113,27 +112,23 @@ describe("loadPersistedSettings", () => {
     expect(result?.providerModelCatalogs).toEqual(defaultProviderModelCatalogs);
   });
 
-  it("migrates legacy glm model id when provider catalogs are missing", async () => {
+      it("retains default catalogs when provider catalogs are missing", async () => {
     readTextFileMock.mockResolvedValue(
       JSON.stringify({
         wrapLines: true,
         zoomPercent: 100,
         providerSettings: {
-          glm: {
+          http: {
             enabled: true,
             baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-            modelId: "legacy-glm",
           },
         },
       }),
     );
 
     const result = await loadPersistedSettings();
-    expect(result?.providerModelCatalogs?.glm).toEqual({
-      modelIds: ["legacy-glm", "glm-4-flash", "glm-4-air", "glm-4-plus"],
-      defaultModelId: "legacy-glm",
-    });
-    expect(result?.providerSettings.glm.modelId).toBe("legacy-glm");
+    expect(result?.providerModelCatalogs).toEqual(defaultProviderModelCatalogs);
+    expect(result?.providerSettings.http.baseUrl).toBe("https://open.bigmodel.cn/api/paas/v4");
   });
 
   it("normalizes invalid provider model catalogs on load", async () => {
@@ -141,8 +136,8 @@ describe("loadPersistedSettings", () => {
       JSON.stringify({
         ...defaultPersistedSettings,
         providerModelCatalogs: {
-          glm: {
-            modelIds: ["", "glm-custom", "glm-custom"],
+          http: {
+            modelIds: ["", "gpt-custom", "gpt-custom"],
             defaultModelId: "missing",
           },
         },
@@ -150,9 +145,9 @@ describe("loadPersistedSettings", () => {
     );
 
     const result = await loadPersistedSettings();
-    expect(result?.providerModelCatalogs?.glm).toEqual({
-      modelIds: ["glm-custom"],
-      defaultModelId: "glm-custom",
+    expect(result?.providerModelCatalogs?.http).toEqual({
+      modelIds: ["gpt-custom"],
+      defaultModelId: "gpt-custom",
     });
   });
 

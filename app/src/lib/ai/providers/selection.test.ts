@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
-import { defaultGlmProviderSettings } from "./glmProviderSettings";
+import { defaultHttpConnectionSettings } from "./httpConnectionSettings";
 import {
   formatModelSwitchNotice,
   formatProviderSwitchNotice,
-  isGlmProviderConfigured,
+  isHttpProviderConfigured,
   listSelectableChatProviders,
   listSelectableModelsForProvider,
   resolveDefaultChatProvider,
@@ -15,36 +15,36 @@ import { defaultProviderModelCatalogs } from "./providerModelCatalog";
 describe("chat provider selection", () => {
   it("lists product providers and Debug only when enabled", () => {
     expect(listSelectableChatProviders({ ...defaultDebugProviderSettings, enabled: false })).toEqual([
-      { id: "glm", label: "GLM" },
+      { id: "http", label: "HTTP" },
     ]);
 
     expect(listSelectableChatProviders({ ...defaultDebugProviderSettings, enabled: true })).toEqual([
-      { id: "glm", label: "GLM" },
+      { id: "http", label: "HTTP" },
       { id: "debug", label: "Debug" },
     ]);
   });
 
-  it("prefers GLM for new threads when configured, otherwise Debug when enabled", () => {
+  it("prefers HTTP for new threads when configured, otherwise Debug when enabled", () => {
     expect(
       resolveDefaultChatProvider(
         defaultDebugProviderSettings,
-        isGlmProviderConfigured(defaultGlmProviderSettings, "key-123"),
+        isHttpProviderConfigured({ ...defaultHttpConnectionSettings, enabled: true }, "key-123"),
       ),
-    ).toBe("glm");
+    ).toBe("http");
     expect(resolveDefaultChatProvider({ ...defaultDebugProviderSettings, enabled: true }, false)).toBe(
       "debug",
     );
     expect(
       resolveDefaultChatProvider(
         { ...defaultDebugProviderSettings, enabled: false },
-        isGlmProviderConfigured(defaultGlmProviderSettings, ""),
+        isHttpProviderConfigured(defaultHttpConnectionSettings, ""),
       ),
-    ).toBe("glm");
+    ).toBe("http");
   });
 
-  it("does not treat a registered GLM adapter as configured without credentials", () => {
+  it("does not treat an HTTP adapter as configured without credentials", () => {
     expect(
-      isGlmProviderConfigured(defaultGlmProviderSettings, ""),
+      isHttpProviderConfigured(defaultHttpConnectionSettings, ""),
     ).toBe(false);
   });
 
@@ -52,25 +52,23 @@ describe("chat provider selection", () => {
     expect(
       formatProviderSwitchNotice({
         type: "provider-switched",
-        fromProvider: "glm",
+        fromProvider: "http",
         toProvider: "debug",
       }),
-    ).toBe("Provider switched from GLM to Debug.");
+    ).toBe("Provider switched from HTTP to Debug.");
 
     expect(
       formatProviderSwitchNotice({
         type: "provider-switched",
         fromProvider: null,
-        toProvider: "glm",
+        toProvider: "http",
       }),
-    ).toBe("Provider switched to GLM.");
+    ).toBe("Provider switched to HTTP.");
   });
 
   it("lists selectable models for a provider from settings catalogs", () => {
-    expect(listSelectableModelsForProvider(defaultProviderModelCatalogs, "glm")).toEqual([
-      "glm-4-flash",
-      "glm-4-air",
-      "glm-4-plus",
+    expect(listSelectableModelsForProvider(defaultProviderModelCatalogs, "http")).toEqual([
+      "gpt-4o-mini",
     ]);
   });
 
@@ -78,27 +76,27 @@ describe("chat provider selection", () => {
     expect(
       formatModelSwitchNotice({
         type: "model-switched",
-        fromModel: "glm-4-flash",
-        toModel: "glm-4-plus",
+        fromModel: "gpt-4o-mini",
+        toModel: "gpt-4.1-mini",
       }),
-    ).toBe("Model switched from glm-4-flash to glm-4-plus.");
+    ).toBe("Model switched from gpt-4o-mini to gpt-4.1-mini.");
 
     expect(
       formatModelSwitchNotice({
         type: "model-switched",
         fromModel: null,
-        toModel: "glm-4-flash",
+        toModel: "gpt-4o-mini",
       }),
-    ).toBe("Model switched to glm-4-flash.");
+    ).toBe("Model switched to gpt-4o-mini.");
   });
 
   it("resolves provider-switch model fallback policy", () => {
     expect(
-      resolveProviderSwitchModelId(defaultProviderModelCatalogs, "debug", "glm-4-plus"),
+      resolveProviderSwitchModelId(defaultProviderModelCatalogs, "debug", "gpt-4o-mini"),
     ).toBe("debug-simulator");
 
     expect(
-      resolveProviderSwitchModelId(defaultProviderModelCatalogs, "glm", "glm-4-plus"),
-    ).toBe("glm-4-plus");
+      resolveProviderSwitchModelId(defaultProviderModelCatalogs, "http", "gpt-4o-mini"),
+    ).toBe("gpt-4o-mini");
   });
 });

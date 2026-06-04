@@ -3,9 +3,8 @@ import type { ChatMessage } from "../domain/contracts";
 import { chatStore } from "../state/chatStore";
 import { appState } from "../state/appState";
 import { defaultDebugProviderSettings } from "./providers/debugProviderSettings";
-import { defaultGlmProviderSettings } from "./providers/glmProviderSettings";
 import { createDebugChatProvider } from "./providers/debugChatProvider";
-import { createGlmChatProvider } from "./providers/glmChatProvider";
+import { createOpenAiCompatibleChatProvider } from "./providers/openAiCompatibleChatProvider";
 import {
   registerChatProvider,
   resetChatProviderRegistryForTests,
@@ -65,8 +64,8 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
-          apiKey: appState.getSnapshot().settings.glmApiKey,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+          apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );
@@ -104,8 +103,8 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
-          apiKey: appState.getSnapshot().settings.glmApiKey,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+          apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );
@@ -152,13 +151,14 @@ describe("sendChatMessage", () => {
     expect(assistant?.content).toBe(chatStore.getMessages().find((message) => message.role === "assistant")?.content);
   });
 
-  it("uses buffered fallback for GLM without streaming partial updates", async () => {
+  it("uses buffered fallback for HTTP without streaming partial updates", async () => {
     resetChatProviderRegistryForTests();
-    appState.setGlmApiKey("glm-test-key");
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "glm-test-key");
     registerChatProvider(
-      createGlmChatProvider(
+      createOpenAiCompatibleChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
         glmFetchSuccess("Buffered GLM response."),
@@ -168,12 +168,12 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
       ),
     );
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
 
     const observedLengths: number[] = [];
     const unsubscribe = chatStore.subscribe(() => {
@@ -187,9 +187,10 @@ describe("sendChatMessage", () => {
     unsubscribe();
 
     expect(result.ok).toBe(true);
+    const finalLength = "Buffered GLM response.".length;
     expect(observedLengths[0]).toBe(0);
-    expect(observedLengths.every((length) => length === 0 || length === 22)).toBe(true);
-    expect(new Set(observedLengths.filter((length) => length > 0))).toEqual(new Set([22]));
+    expect(observedLengths.every((length) => length === 0 || length === finalLength)).toBe(true);
+    expect(new Set(observedLengths.filter((length) => length > 0))).toEqual(new Set([finalLength]));
     expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
       "Buffered GLM response.",
     );
@@ -256,8 +257,8 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
-          apiKey: appState.getSnapshot().settings.glmApiKey,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+          apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );
@@ -306,13 +307,14 @@ describe("sendChatMessage", () => {
     expect(assistant?.content).toContain("T-shirt size");
   });
 
-  it("runs end-to-end ask conversation with GLM provider", async () => {
+  it("runs end-to-end ask conversation with HTTP provider", async () => {
     resetChatProviderRegistryForTests();
-    appState.setGlmApiKey("glm-test-key");
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "glm-test-key");
     registerChatProvider(
-      createGlmChatProvider(
+      createOpenAiCompatibleChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
         glmFetchSuccess("GLM response about retention."),
@@ -322,12 +324,12 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
       ),
     );
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
 
     const result = await sendChatMessage("How does retention work?");
 
@@ -338,13 +340,14 @@ describe("sendChatMessage", () => {
     expect(schedulePersistMock).toHaveBeenCalledOnce();
   });
 
-  it("records GLM provider errors in retry scaffolding", async () => {
+  it("records HTTP provider errors in retry scaffolding", async () => {
     resetChatProviderRegistryForTests();
-    appState.setGlmApiKey("glm-test-key");
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "glm-test-key");
     registerChatProvider(
-      createGlmChatProvider(
+      createOpenAiCompatibleChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
         vi.fn().mockResolvedValue(
@@ -356,24 +359,29 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
       ),
     );
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
 
     const result = await sendChatMessage("This should fail");
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toBe("Invalid GLM API key. Check Settings → GLM.");
+      expect(result.message).toBe(
+        "Invalid API key for the configured HTTP provider. Check Settings → Connections.",
+      );
     }
     expect(chatStore.getMessages()).toHaveLength(1);
     expect(chatStore.getRuntimeState()).toMatchObject({
       isGenerating: false,
       lastFailedTurnId: expect.stringMatching(/^turn-/),
-      lastError: { message: "Invalid GLM API key. Check Settings → GLM.", code: "provider_error" },
+      lastError: {
+        message: "Invalid API key for the configured HTTP provider. Check Settings → Connections.",
+        code: "provider_error",
+      },
     });
     expect(chatStore.canRetryLastTurn()).toBe(true);
   });
@@ -426,9 +434,10 @@ describe("sendChatMessage", () => {
     });
   });
 
-  it("retries failed GLM turns successfully", async () => {
+  it("retries failed HTTP turns successfully", async () => {
     resetChatProviderRegistryForTests();
-    appState.setGlmApiKey("glm-test-key");
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "glm-test-key");
     const glmFetch = vi
       .fn()
       .mockResolvedValueOnce(
@@ -441,9 +450,9 @@ describe("sendChatMessage", () => {
         }),
       );
     registerChatProvider(
-      createGlmChatProvider(
+      createOpenAiCompatibleChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
         glmFetch as typeof fetch,
@@ -453,14 +462,14 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
       ),
     );
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
 
-    const failed = await sendChatMessage("Retry GLM");
+    const failed = await sendChatMessage("Retry HTTP");
     expect(failed.ok).toBe(false);
     expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
 
@@ -506,16 +515,17 @@ describe("sendChatMessage", () => {
     );
   });
 
-  it("maps GLM provider model rejection to invalid-model copy", async () => {
+  it("maps HTTP provider model rejection to invalid-model copy", async () => {
     resetChatProviderRegistryForTests();
-    appState.setGlmApiKey("glm-test-key");
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "glm-test-key");
     const glmFetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { message: "Model not found" } }), { status: 404 }),
     );
     registerChatProvider(
-      createGlmChatProvider(
+      createOpenAiCompatibleChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
         glmFetch as typeof fetch,
@@ -525,12 +535,12 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
       ),
     );
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask", selectedModelId: "glm-4-flash" });
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask", selectedModelId: "gpt-4o-mini" });
 
     const sendPromise = sendChatMessage("Bad model");
     await vi.runAllTimersAsync();

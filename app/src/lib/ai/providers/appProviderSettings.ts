@@ -1,7 +1,7 @@
 import type {
   AppProviderSettings,
   DebugProviderSettings,
-  GlmProviderSettings,
+  HttpConnectionSettings,
   ProviderModelCatalogs,
   ProviderSettingsById,
 } from "../../domain/contracts";
@@ -10,12 +10,12 @@ import {
   normalizeDebugProviderSettings,
 } from "./debugProviderSettings";
 import {
-  defaultGlmProviderSettings,
-  normalizeGlmProviderSettings,
-} from "./glmProviderSettings";
+  defaultHttpConnectionSettings,
+  normalizeHttpConnectionSettings,
+} from "./httpConnectionSettings";
 
 export const defaultAppProviderSettings: AppProviderSettings = {
-  glm: defaultGlmProviderSettings,
+  http: defaultHttpConnectionSettings,
   debug: defaultDebugProviderSettings,
 };
 
@@ -34,17 +34,17 @@ export function getProviderSettings<K extends keyof ProviderSettingsById>(
 /** Normalizes persisted or partial provider settings for all configured providers. */
 export function normalizeAppProviderSettings(
   input?: Partial<AppProviderSettings> | unknown,
-  catalogs?: ProviderModelCatalogs,
+  _catalogs?: ProviderModelCatalogs,
 ): AppProviderSettings {
   const source = isRecord(input) ? input : {};
   return {
-    glm: normalizeGlmProviderSettings(source.glm, catalogs),
+    http: normalizeHttpConnectionSettings(source.http),
     debug: normalizeDebugProviderSettings(source.debug),
   };
 }
 
-export function appGlmProviderSettings(settings: AppProviderSettings): GlmProviderSettings {
-  return settings.glm;
+export function appHttpConnectionSettings(settings: AppProviderSettings): HttpConnectionSettings {
+  return settings.http;
 }
 
 export function appDebugProviderSettings(settings: AppProviderSettings): DebugProviderSettings {

@@ -170,7 +170,7 @@ export async function startAppShellRuntime(
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
 
   const persistedSettings = await loadPersistedSettings();
-  const glmApiKey = await loadProviderApiKey("glm");
+  const httpApiKey = await loadProviderApiKey("http");
   setThemeSaveErrorNotifier(options.notify);
   await appState.loadTheme();
   if (persistedSettings) {
@@ -185,7 +185,7 @@ export async function startAppShellRuntime(
       commandBindingOverrides: persistedSettings.commandBindingOverrides,
     });
   }
-  appState.setProviderApiKey("glm", glmApiKey);
+  appState.setProviderApiKey("http", httpApiKey);
 
   initializeChatProviders();
   options.setConsoleHeightPx(await readConsoleHeightPreference());

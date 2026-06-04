@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceAccessReason } from "../ai/capabilities";
 import {
   DEBUG_PROVIDER_DISABLED_RECOVERY,
-  GLM_MISSING_CONFIG_RECOVERY,
+  HTTP_MISSING_CONFIG_RECOVERY,
   PROVIDER_MISSING_CONFIG_RECOVERY,
   PROVIDER_REQUEST_FAILURE_RECOVERY,
   WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
@@ -33,7 +33,7 @@ import {
 import { retryLastChatTurn, sendChatMessage } from "../ai/sendChatMessage";
 import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
-import { createGlmChatProvider } from "../ai/providers/glmChatProvider";
+import { createOpenAiCompatibleChatProvider } from "../ai/providers/openAiCompatibleChatProvider";
 import {
   registerChatProvider,
   resetChatProviderRegistryForTests,
@@ -72,17 +72,17 @@ function glmFetchSuccess(content: string): typeof fetch {
   ) as typeof fetch;
 }
 
-function registerProviders(includeGlm = false): void {
+function registerProviders(includeHttp = false): void {
   resetChatProviderRegistryForTests();
   registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
-  if (includeGlm) {
+  if (includeHttp) {
     registerChatProvider(
-      createGlmChatProvider(
+      createOpenAiCompatibleChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
-          apiKey: appState.getSnapshot().settings.glmApiKey,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
-        glmFetchSuccess("GLM buffered response."),
+        glmFetchSuccess("HTTP buffered response."),
       ),
     );
   }
@@ -90,8 +90,8 @@ function registerProviders(includeGlm = false): void {
     createRegistryCapabilityChecker(
       () => appState.getSnapshot().settings.providerSettings.debug,
       () => ({
-        settings: appState.getSnapshot().settings.providerSettings.glm,
-        apiKey: appState.getSnapshot().settings.glmApiKey,
+        settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+        apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
       }),
     ),
   );
@@ -108,7 +108,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     ensureWorkspaceReadAccessMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
     setChatRetentionMaxTurnsForTests(undefined);
-    appState.setGlmApiKey("");
+    appState.setProviderApiKey("http", "");
     appState.updateDebugProviderSettings({
       ...defaultDebugProviderSettings,
       enabled: true,
@@ -120,6 +120,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
       failureProbability: 0,
       includeDiagnostics: false,
     });
+    appState.updateHttpConnectionSettings({ enabled: false });
     registerProviders();
     chatStore.setDefaultChatProviderResolver(() => "debug");
     chatStore.setActiveWorkspaceRoot("/work/a");
@@ -161,15 +162,16 @@ describe("M6 milestone validation — AI chat MVP", () => {
     expect(chatStore.canRetryLastTurn(agentId!)).toBe(false);
   });
 
-  it("retries failed GLM turns without duplicating the user message", async () => {
-    appState.setGlmApiKey("glm-test-key");
+  it("retries failed HTTP turns without duplicating the user message", async () => {
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "glm-test-key");
     const glmFetch = vi
       .fn()
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ choices: [{ message: { content: "Retried GLM response." } }] }), {
+        new Response(JSON.stringify({ choices: [{ message: { content: "Retried HTTP response." } }] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
@@ -177,9 +179,9 @@ describe("M6 milestone validation — AI chat MVP", () => {
     resetChatProviderRegistryForTests();
     registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
     registerChatProvider(
-      createGlmChatProvider(
+      createOpenAiCompatibleChatProvider(
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
         glmFetch as typeof fetch,
@@ -189,16 +191,16 @@ describe("M6 milestone validation — AI chat MVP", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: appState.getSnapshot().settings.providerSettings.glm,
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
       ),
     );
 
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, agentId!);
 
-    const failed = await sendChatMessage("Retry GLM", agentId!);
+    const failed = await sendChatMessage("Retry HTTP", agentId!);
     expect(failed.ok).toBe(false);
     expect(chatStore.getMessages(agentId!).filter((message) => message.role === "user")).toHaveLength(1);
 
@@ -206,41 +208,42 @@ describe("M6 milestone validation — AI chat MVP", () => {
     expect(retried.ok).toBe(true);
     expect(chatStore.getMessages(agentId!).filter((message) => message.role === "user")).toHaveLength(1);
     expect(chatStore.getMessages(agentId!).find((message) => message.role === "assistant")?.content).toBe(
-      "Retried GLM response.",
+      "Retried HTTP response.",
     );
   });
 
-  it("streams Debug partial updates and uses GLM buffered fallback", async () => {
-    appState.setGlmApiKey("glm-test-key");
+  it("streams Debug partial updates and uses HTTP buffered fallback", async () => {
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "glm-test-key");
     registerProviders(true);
 
     const debugAgent = chatStore.createDraftAgent({ activate: false });
-    const glmAgent = chatStore.createDraftAgent({ activate: true });
+    const httpAgent = chatStore.createDraftAgent({ activate: true });
     chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, debugAgent!);
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" }, undefined, glmAgent!);
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, httpAgent!);
 
     const debugLengths: number[] = [];
-    const glmLengths: number[] = [];
+    const httpLengths: number[] = [];
     const unsubscribe = chatStore.subscribe(() => {
       const debugAssistant = chatStore.getMessages(debugAgent!).find((message) => message.role === "assistant");
-      const glmAssistant = chatStore.getMessages(glmAgent!).find((message) => message.role === "assistant");
+      const httpAssistant = chatStore.getMessages(httpAgent!).find((message) => message.role === "assistant");
       if (debugAssistant) {
         debugLengths.push(debugAssistant.content.length);
       }
-      if (glmAssistant) {
-        glmLengths.push(glmAssistant.content.length);
+      if (httpAssistant) {
+        httpLengths.push(httpAssistant.content.length);
       }
     });
 
     const debugSend = sendChatMessage("Stream please", debugAgent!);
-    const glmSend = sendChatMessage("Buffer please", glmAgent!);
+    const httpSend = sendChatMessage("Buffer please", httpAgent!);
     await vi.runAllTimersAsync();
-    await Promise.all([debugSend, glmSend]);
+    await Promise.all([debugSend, httpSend]);
     unsubscribe();
 
     expect(new Set(debugLengths).size).toBeGreaterThan(1);
-    expect(glmLengths.every((length) => length === 0 || length === glmLengths.at(-1))).toBe(true);
-    expect(new Set(glmLengths.filter((length) => length > 0)).size).toBeLessThanOrEqual(1);
+    expect(httpLengths.every((length) => length === 0 || length === httpLengths.at(-1))).toBe(true);
+    expect(new Set(httpLengths.filter((length) => length > 0)).size).toBeLessThanOrEqual(1);
   });
 
   it("blocks retry while generation is in progress", async () => {
@@ -275,7 +278,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
   });
 
   it("exposes recovery hints for major blocked and failure paths", () => {
-    expect(getGlmMissingConfigCopy().recoveryHint).toBe(GLM_MISSING_CONFIG_RECOVERY);
+    expect(getGlmMissingConfigCopy().recoveryHint).toBe(HTTP_MISSING_CONFIG_RECOVERY);
     expect(getDebugProviderDisabledCopy().recoveryHint).toBe(DEBUG_PROVIDER_DISABLED_RECOVERY);
     expect(
       getAccessBlockedCopy(WorkspaceAccessReason.WorkspacePathInaccessible).recoveryHint,
@@ -333,26 +336,27 @@ describe("M6 milestone validation — AI chat MVP", () => {
   });
 
   it("allows two agents to generate concurrently without blocking each other", async () => {
-    appState.setGlmApiKey("glm-test-key");
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "glm-test-key");
     registerProviders(true);
 
     const debugAgent = chatStore.createDraftAgent({ activate: false });
-    const glmAgent = chatStore.createDraftAgent({ activate: true });
+    const httpAgent = chatStore.createDraftAgent({ activate: true });
     chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, debugAgent!);
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" }, undefined, glmAgent!);
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, httpAgent!);
 
     const debugSend = sendChatMessage("Debug parallel", debugAgent!);
-    const glmSend = sendChatMessage("GLM parallel", glmAgent!);
+    const httpSend = sendChatMessage("HTTP parallel", httpAgent!);
 
     expect(chatStore.getRuntimeState(debugAgent!).isGenerating).toBe(true);
-    expect(chatStore.getRuntimeState(glmAgent!).isGenerating).toBe(true);
+    expect(chatStore.getRuntimeState(httpAgent!).isGenerating).toBe(true);
 
     await vi.runAllTimersAsync();
-    const [debugResult, glmResult] = await Promise.all([debugSend, glmSend]);
+    const [debugResult, httpResult] = await Promise.all([debugSend, httpSend]);
 
     expect(debugResult.ok).toBe(true);
-    expect(glmResult.ok).toBe(true);
+    expect(httpResult.ok).toBe(true);
     expect(chatStore.getRuntimeState(debugAgent!).isGenerating).toBe(false);
-    expect(chatStore.getRuntimeState(glmAgent!).isGenerating).toBe(false);
+    expect(chatStore.getRuntimeState(httpAgent!).isGenerating).toBe(false);
   });
 });

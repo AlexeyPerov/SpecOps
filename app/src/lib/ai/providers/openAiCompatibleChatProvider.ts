@@ -1,4 +1,4 @@
-import type { ChatModeId } from "../../domain/contracts";
+import type { ChatModeId, HttpConnectionSettings } from "../../domain/contracts";
 import {
   WorkspaceAccessReason,
   type CapabilityCheckInput,
@@ -10,30 +10,29 @@ import {
 } from "../chatErrorCopy";
 import { ChatProviderError } from "./errors";
 import {
-  getGlmProviderMissingConfigMessage,
-  getGlmProviderSetupHint,
-  isGlmProviderConfigured,
-  type GlmProviderSettings,
-  normalizeGlmProviderSettings,
-} from "./glmProviderSettings";
+  getHttpProviderMissingConfigMessage,
+  getHttpProviderSetupHint,
+  isHttpProviderConfigured,
+  normalizeHttpConnectionSettings,
+} from "./httpConnectionSettings";
 import { mapProviderModelRuntimeError, shouldMapProviderModelRejection } from "./modelValidation";
-import { buildGlmChatMessages } from "./glmPrompt";
+import { buildOpenAiChatMessages } from "./openAiChatMessages";
 import type {
   ChatProvider,
   ProviderSendRequest,
   ProviderSendResponse,
 } from "./types";
 
-export type GlmSettingsReader = () => {
-  settings: GlmProviderSettings;
+export type HttpSettingsReader = () => {
+  settings: HttpConnectionSettings;
   apiKey: string;
 };
 
-export type GlmFetchFn = typeof fetch;
+export type HttpFetchFn = typeof fetch;
 
 const SUPPORTED_MODES: readonly ChatModeId[] = ["ask", "review"];
 
-interface GlmChatCompletionResponse {
+interface OpenAiChatCompletionResponse {
   choices?: Array<{
     message?: { content?: string | null };
   }>;
@@ -43,32 +42,32 @@ interface GlmChatCompletionResponse {
   };
 }
 
-export function createGlmChatProvider(
-  getSettings: GlmSettingsReader,
-  fetchFn: GlmFetchFn = fetch,
+export function createOpenAiCompatibleChatProvider(
+  getSettings: HttpSettingsReader,
+  fetchFn: HttpFetchFn = fetch,
 ): ChatProvider {
-  return new GlmChatProvider(getSettings, fetchFn);
+  return new OpenAiCompatibleChatProvider(getSettings, fetchFn);
 }
 
-class GlmChatProvider implements ChatProvider {
-  readonly id = "glm" as const;
+class OpenAiCompatibleChatProvider implements ChatProvider {
+  readonly id = "http" as const;
 
   constructor(
-    private readonly getSettings: GlmSettingsReader,
-    private readonly fetchFn: GlmFetchFn,
+    private readonly getSettings: HttpSettingsReader,
+    private readonly fetchFn: HttpFetchFn,
   ) {}
 
   async checkCapabilities(input: CapabilityCheckInput): Promise<CapabilityCheckResult> {
     const { settings, apiKey } = this.getSettings();
-    const normalized = normalizeGlmProviderSettings(settings);
+    const normalized = normalizeHttpConnectionSettings(settings);
 
-    if (!isGlmProviderConfigured(normalized, apiKey)) {
+    if (!isHttpProviderConfigured(normalized, apiKey)) {
       return {
         status: "blocked",
         reason: WorkspaceAccessReason.MissingProviderConfig,
         capabilities: null,
-        message: getGlmProviderMissingConfigMessage(),
-        recoveryHint: getGlmProviderSetupHint(),
+        message: getHttpProviderMissingConfigMessage(),
+        recoveryHint: getHttpProviderSetupHint(),
       };
     }
 
@@ -80,7 +79,7 @@ class GlmChatProvider implements ChatProvider {
           canReadWorkspaceFiles: false,
           supportedModes: [...SUPPORTED_MODES],
         },
-        message: getModeUnsupportedMessage(input.mode, "GLM"),
+        message: getModeUnsupportedMessage(input.mode, "HTTP provider"),
         recoveryHint: getModeUnsupportedRecovery(),
       };
     }
@@ -92,26 +91,26 @@ class GlmChatProvider implements ChatProvider {
         canReadWorkspaceFiles: true,
         supportedModes: [...SUPPORTED_MODES],
       },
-      message: "GLM provider is ready for workspace chat.",
+      message: "HTTP provider is ready for workspace chat.",
     };
   }
 
   async sendMessage(request: ProviderSendRequest): Promise<ProviderSendResponse> {
     const { settings, apiKey } = this.getSettings();
-    const normalized = normalizeGlmProviderSettings(settings);
+    const normalized = normalizeHttpConnectionSettings(settings);
     this.assertConfigured(normalized, apiKey);
 
     const modelId = request.modelId.trim();
     if (!modelId) {
       throw mapProviderModelRuntimeError(
-        new ChatProviderError("Missing model id for GLM request.", "Missing model id for GLM request."),
-        "glm",
+        new ChatProviderError("Missing model id for HTTP request.", "Missing model id for HTTP request."),
+        "http",
         request.modelId,
       );
     }
 
-    const messages = buildGlmChatMessages(request.payload);
-    const url = resolveGlmChatCompletionsUrl(normalized.baseUrl);
+    const messages = buildOpenAiChatMessages(request.payload);
+    const url = resolveHttpChatCompletionsUrl(normalized.baseUrl);
 
     let response: Response;
     try {
@@ -128,72 +127,72 @@ class GlmChatProvider implements ChatProvider {
         }),
       });
     } catch (error) {
-      throw mapGlmNetworkError(error);
+      throw mapHttpNetworkError(error);
     }
 
     const rawBody = await response.text();
     if (!response.ok) {
-      throw mapGlmHttpError(response.status, rawBody, modelId);
+      throw mapHttpError(response.status, rawBody, modelId);
     }
 
-    let parsed: GlmChatCompletionResponse;
+    let parsed: OpenAiChatCompletionResponse;
     try {
-      parsed = JSON.parse(rawBody) as GlmChatCompletionResponse;
+      parsed = JSON.parse(rawBody) as OpenAiChatCompletionResponse;
     } catch {
       throw new ChatProviderError(
-        "GLM returned an invalid response.",
-        "GLM returned an unexpected response. Try again or check Settings → GLM.",
+        "HTTP provider returned an invalid response.",
+        "HTTP provider returned an unexpected response. Check Settings → Connections.",
       );
     }
 
     if (parsed.error?.message) {
       throw new ChatProviderError(
         parsed.error.message,
-        sanitizeGlmApiErrorMessage(parsed.error.message),
+        sanitizeApiErrorMessage(parsed.error.message),
       );
     }
 
     const content = parsed.choices?.[0]?.message?.content?.trim();
     if (!content) {
       throw new ChatProviderError(
-        "GLM returned an empty response.",
-        "GLM returned an empty response. Try again.",
+        "HTTP provider returned an empty response.",
+        "HTTP provider returned an empty response. Try again.",
       );
     }
 
     return { content };
   }
 
-  private assertConfigured(settings: GlmProviderSettings, apiKey: string): void {
-    if (!isGlmProviderConfigured(settings, apiKey)) {
+  private assertConfigured(settings: HttpConnectionSettings, apiKey: string): void {
+    if (!isHttpProviderConfigured(settings, apiKey)) {
       throw new ChatProviderError(
-        getGlmProviderMissingConfigMessage(),
-        getGlmProviderMissingConfigMessage(),
+        getHttpProviderMissingConfigMessage(),
+        getHttpProviderMissingConfigMessage(),
       );
     }
   }
 }
 
-export function resolveGlmChatCompletionsUrl(baseUrl: string): string {
+export function resolveHttpChatCompletionsUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, "");
   return `${trimmed}/chat/completions`;
 }
 
-function mapGlmNetworkError(error: unknown): ChatProviderError {
+function mapHttpNetworkError(error: unknown): ChatProviderError {
   const detail = error instanceof Error ? error.message : "Network request failed";
   return new ChatProviderError(
     detail,
-    "Could not reach the GLM API. Check your network connection and base URL in Settings → GLM.",
+    "Could not reach the HTTP provider. Check your network and base URL in Settings → Connections.",
   );
 }
 
-function mapGlmHttpError(status: number, rawBody: string, modelId: string): ChatProviderError {
-  const apiMessage = extractGlmApiErrorMessage(rawBody);
+function mapHttpError(status: number, rawBody: string, modelId: string): ChatProviderError {
+  const apiMessage = extractApiErrorMessage(rawBody);
 
   if (apiMessage && shouldMapProviderModelRejection(status, apiMessage)) {
     return mapProviderModelRuntimeError(
       new ChatProviderError(apiMessage, apiMessage),
-      "glm",
+      "http",
       modelId,
     );
   }
@@ -201,43 +200,43 @@ function mapGlmHttpError(status: number, rawBody: string, modelId: string): Chat
   switch (status) {
     case 401:
       return new ChatProviderError(
-        apiMessage ?? "GLM API rejected the request.",
-        "Invalid GLM API key. Check Settings → GLM.",
+        apiMessage ?? "HTTP provider rejected the request.",
+        "Invalid API key for the configured HTTP provider. Check Settings → Connections.",
       );
     case 403:
       return new ChatProviderError(
-        apiMessage ?? "GLM API access denied.",
-        "GLM API access denied. Check your API key and subscription.",
+        apiMessage ?? "HTTP provider access denied.",
+        "HTTP provider access denied. Check your API key and permissions.",
       );
     case 429:
       return new ChatProviderError(
-        apiMessage ?? "GLM rate limit reached.",
-        "GLM rate limit reached. Wait a moment and try again.",
+        apiMessage ?? "HTTP provider rate limit reached.",
+        "HTTP provider rate limit reached. Wait a moment and try again.",
       );
     default:
       if (status >= 500) {
         return new ChatProviderError(
-          apiMessage ?? `GLM service error (${status}).`,
-          "GLM service is temporarily unavailable. Try again later.",
+          apiMessage ?? `HTTP provider service error (${status}).`,
+          "HTTP provider is temporarily unavailable. Try again later.",
         );
       }
       return new ChatProviderError(
-        apiMessage ?? `GLM request failed (${status}).`,
-        apiMessage ?? "GLM request failed. Check Settings → GLM and try again.",
+        apiMessage ?? `HTTP provider request failed (${status}).`,
+        apiMessage ?? "HTTP provider request failed. Check Settings → Connections and try again.",
       );
   }
 }
 
-function extractGlmApiErrorMessage(rawBody: string): string | null {
+function extractApiErrorMessage(rawBody: string): string | null {
   try {
-    const parsed = JSON.parse(rawBody) as GlmChatCompletionResponse;
+    const parsed = JSON.parse(rawBody) as OpenAiChatCompletionResponse;
     const message = parsed.error?.message?.trim();
-    return message ? sanitizeGlmApiErrorMessage(message) : null;
+    return message ? sanitizeApiErrorMessage(message) : null;
   } catch {
     return null;
   }
 }
 
-function sanitizeGlmApiErrorMessage(message: string): string {
+function sanitizeApiErrorMessage(message: string): string {
   return message.replace(/Bearer\s+\S+/gi, "[redacted]").trim();
 }

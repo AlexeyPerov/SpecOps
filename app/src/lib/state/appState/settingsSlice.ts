@@ -7,7 +7,7 @@ import type {
   CommandBindingOverrides,
   DebugProviderSettings,
   ExternalFilesSettings,
-  GlmProviderSettings,
+  HttpConnectionSettings,
   ProviderModelCatalog,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
@@ -17,9 +17,8 @@ import {
 } from "../../ai/providers/appProviderSettings";
 import { normalizeDebugProviderSettings } from "../../ai/providers/debugProviderSettings";
 import {
-  normalizeGlmProviderSettings,
-  syncGlmProviderSettingsWithCatalog,
-} from "../../ai/providers/glmProviderSettings";
+  normalizeHttpConnectionSettings,
+} from "../../ai/providers/httpConnectionSettings";
 import {
   defaultProviderModelCatalogs,
   getProviderModelCatalog,
@@ -48,23 +47,29 @@ export const defaultSettings: AppSettingsState = {
   commandBindingOverrides: {},
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
-  glmApiKey: "",
+  providerApiKeys: {},
 };
 
 type SettingsUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
 export function createSettingsSlice(update: SettingsUpdate) {
   function setProviderApiKey(providerId: ChatProviderId, apiKey: string) {
-    if (providerId !== "glm") {
-      return;
-    }
-    update((state) => ({
-      ...state,
-      settings: {
-        ...state.settings,
-        glmApiKey: apiKey,
-      },
-    }));
+    const normalized = apiKey.trim();
+    update((state) => {
+      const providerApiKeys = { ...state.settings.providerApiKeys };
+      if (normalized.length === 0) {
+        delete providerApiKeys[providerId];
+      } else {
+        providerApiKeys[providerId] = normalized;
+      }
+      return {
+        ...state,
+        settings: {
+          ...state.settings,
+          providerApiKeys,
+        },
+      };
+    });
   }
 
   return {
@@ -95,53 +100,41 @@ export function createSettingsSlice(update: SettingsUpdate) {
         },
       }));
     },
-    setGlmProviderSettings(glmProvider: GlmProviderSettings) {
+    setHttpConnectionSettings(httpConnection: HttpConnectionSettings) {
       update((state) => ({
         ...state,
         settings: {
           ...state.settings,
           providerSettings: {
             ...state.settings.providerSettings,
-            glm: normalizeGlmProviderSettings(glmProvider, state.settings.providerModelCatalogs),
+            http: normalizeHttpConnectionSettings(httpConnection),
           },
         },
       }));
     },
-    updateGlmProviderSettings(patch: Partial<GlmProviderSettings>) {
+    updateHttpConnectionSettings(patch: Partial<HttpConnectionSettings>) {
       update((state) => ({
         ...state,
         settings: {
           ...state.settings,
           providerSettings: {
             ...state.settings.providerSettings,
-            glm: normalizeGlmProviderSettings(
-              {
-                ...state.settings.providerSettings.glm,
-                ...patch,
-              },
-              state.settings.providerModelCatalogs,
-            ),
+            http: normalizeHttpConnectionSettings({
+              ...state.settings.providerSettings.http,
+              ...patch,
+            }),
           },
         },
       }));
     },
     setProviderModelCatalogs(providerModelCatalogs: ProviderModelCatalogs) {
       update((state) => {
-        const normalizedCatalogs = normalizeProviderModelCatalogs(providerModelCatalogs, {
-          glmModelId: state.settings.providerSettings.glm.modelId,
-        });
+        const normalizedCatalogs = normalizeProviderModelCatalogs(providerModelCatalogs);
         return {
           ...state,
           settings: {
             ...state.settings,
             providerModelCatalogs: normalizedCatalogs,
-            providerSettings: {
-              ...state.settings.providerSettings,
-              glm: syncGlmProviderSettingsWithCatalog(
-                state.settings.providerSettings.glm,
-                normalizedCatalogs,
-              ),
-            },
           },
         };
       });
@@ -165,24 +158,12 @@ export function createSettingsSlice(update: SettingsUpdate) {
           settings: {
             ...state.settings,
             providerModelCatalogs,
-            providerSettings: {
-              ...state.settings.providerSettings,
-              glm:
-                providerId === "glm"
-                  ? syncGlmProviderSettingsWithCatalog(
-                      state.settings.providerSettings.glm,
-                      providerModelCatalogs,
-                    )
-                  : state.settings.providerSettings.glm,
-            },
           },
         };
       });
     },
     setProviderApiKey,
-    setGlmApiKey(glmApiKey: string) {
-      setProviderApiKey("glm", glmApiKey);
-    },
+    setGlmApiKey(_glmApiKey: string) {},
     setCommandBindingOverrides(commandBindingOverrides: CommandBindingOverrides) {
       const normalized = normalizeCommandBindingOverrides(commandBindingOverrides);
       update((state) => ({
@@ -290,13 +271,11 @@ export function createSettingsSlice(update: SettingsUpdate) {
           };
         }
 
-        const glmModelId =
-          partial.providerSettings?.glm?.modelId ?? next.settings.providerSettings.glm.modelId;
         const providerModelCatalogs = partial.providerModelCatalogs
-          ? normalizeProviderModelCatalogs(partial.providerModelCatalogs, { glmModelId })
-          : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs, { glmModelId });
+          ? normalizeProviderModelCatalogs(partial.providerModelCatalogs)
+          : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs);
 
-        if (partial.providerSettings?.glm || partial.providerModelCatalogs) {
+        if (partial.providerSettings?.http || partial.providerModelCatalogs) {
           next = {
             ...next,
             settings: {
@@ -304,9 +283,8 @@ export function createSettingsSlice(update: SettingsUpdate) {
               providerModelCatalogs,
               providerSettings: {
                 ...next.settings.providerSettings,
-                glm: normalizeGlmProviderSettings(
-                  partial.providerSettings?.glm ?? next.settings.providerSettings.glm,
-                  providerModelCatalogs,
+                http: normalizeHttpConnectionSettings(
+                  partial.providerSettings?.http ?? next.settings.providerSettings.http,
                 ),
               },
             },

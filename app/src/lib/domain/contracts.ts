@@ -167,11 +167,9 @@ export interface DebugProviderSettings extends ProviderSettingsBase {
   includeDiagnostics: boolean;
 }
 
-/** Product GLM provider settings (API key stored separately; see providerSecretsStore). */
-export interface GlmProviderSettings extends ProviderSettingsBase {
+/** OpenAI-compatible HTTP connection settings (API key stored separately). */
+export interface HttpConnectionSettings extends ProviderSettingsBase {
   baseUrl: string;
-  /** Legacy send default; kept in sync with GLM catalog default during transition. */
-  modelId: string;
 }
 
 /** Settings-managed model list and default model for one chat provider. */
@@ -185,7 +183,7 @@ export type ProviderModelCatalogs = Partial<Record<ChatProviderId, ProviderModel
 
 /** Per-provider settings types; extend this map when adding a configured provider. */
 export interface ProviderSettingsById {
-  glm: GlmProviderSettings;
+  http: HttpConnectionSettings;
   debug: DebugProviderSettings;
 }
 
@@ -206,7 +204,7 @@ export interface AppSettingsState {
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
-  glmApiKey: string;
+  providerApiKeys: Partial<Record<ChatProviderId, string>>;
 }
 
 export type AppCommandId =
@@ -275,10 +273,10 @@ export type ChatMessageRole = "user" | "assistant" | "system";
 
 export type ChatModeId = "ask" | "review";
 
-export type ChatProviderId = "glm" | "cursor" | "debug";
+export type ChatProviderId = "http" | "glm" | "cursor" | "debug";
 
 /** MVP product providers; Debug is dev-only and settings-gated (see M5-3). */
-export const PRODUCT_CHAT_PROVIDER_IDS = ["glm"] as const satisfies readonly ChatProviderId[];
+export const PRODUCT_CHAT_PROVIDER_IDS = ["http"] as const satisfies readonly ChatProviderId[];
 
 /**
  * System-only marker events persisted in chat history.

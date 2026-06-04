@@ -202,7 +202,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         commandBindingOverrides: {},
         providerSettings: defaultAppProviderSettings,
         providerModelCatalogs: defaultProviderModelCatalogs,
-        glmApiKey: "",
+        providerApiKeys: {},
       },
       theme: {
         activeTheme: { kind: "builtin", id: "dark-amber" },
@@ -307,7 +307,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         commandBindingOverrides: {},
         providerSettings: defaultAppProviderSettings,
         providerModelCatalogs: defaultProviderModelCatalogs,
-        glmApiKey: "",
+        providerApiKeys: {},
       },
       theme: {
         activeTheme: { kind: "builtin", id: "dark-amber" },

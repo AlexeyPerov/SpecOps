@@ -1,4 +1,4 @@
-import type { DebugProviderSettings, GlmProviderSettings } from "../../domain/contracts";
+import type { DebugProviderSettings, HttpConnectionSettings } from "../../domain/contracts";
 import {
   WorkspaceAccessReason,
   type CapabilityCheckInput,
@@ -13,7 +13,7 @@ import {
   getUnknownProviderMessage,
   getUnknownProviderRecovery,
 } from "../chatErrorCopy";
-import { isGlmProviderConfigured } from "./glmProviderSettings";
+import { isHttpProviderConfigured } from "./httpConnectionSettings";
 import { getChatProvider } from "./registry";
 
 export {
@@ -24,12 +24,12 @@ export {
 
 export type DebugSettingsReader = () => DebugProviderSettings;
 
-export type GlmSettingsReader = () => {
-  settings: GlmProviderSettings;
+export type HttpSettingsReader = () => {
+  settings: HttpConnectionSettings;
   apiKey: string;
 };
 
-function missingGlmConfigResult(): CapabilityCheckResult {
+function missingHttpConfigResult(): CapabilityCheckResult {
   return {
     status: "blocked",
     reason: WorkspaceAccessReason.MissingProviderConfig,
@@ -41,14 +41,14 @@ function missingGlmConfigResult(): CapabilityCheckResult {
 
 export function createRegistryCapabilityChecker(
   getDebugProviderSettings: DebugSettingsReader,
-  getGlmProviderSettings: GlmSettingsReader,
+  getHttpConnectionSettings: HttpSettingsReader,
 ): CapabilityChecker {
   return {
     async checkCapabilities(input: CapabilityCheckInput): Promise<CapabilityCheckResult> {
-      if (input.provider === "glm") {
-        const { settings, apiKey } = getGlmProviderSettings();
-        if (!isGlmProviderConfigured(settings, apiKey)) {
-          return missingGlmConfigResult();
+      if (input.provider === "http") {
+        const { settings, apiKey } = getHttpConnectionSettings();
+        if (!isHttpProviderConfigured(settings, apiKey)) {
+          return missingHttpConfigResult();
         }
 
         const provider = getChatProvider(input.provider);
@@ -56,7 +56,7 @@ export function createRegistryCapabilityChecker(
           return provider.checkCapabilities(input);
         }
 
-        return missingGlmConfigResult();
+        return missingHttpConfigResult();
       }
 
       const provider = getChatProvider(input.provider);

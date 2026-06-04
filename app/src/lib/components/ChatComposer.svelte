@@ -10,7 +10,7 @@
     ChatModeId,
     ChatProviderId,
     DebugProviderSettings,
-    GlmProviderSettings,
+    HttpConnectionSettings,
     ProviderModelCatalogs,
   } from "../domain/contracts";
   import { chatStore } from "../state/chatStore";
@@ -33,7 +33,7 @@
     activeModel: string;
     supportedModes: ChatModeId[];
     debugProviderSettings: DebugProviderSettings;
-    glmProviderSettings: GlmProviderSettings;
+    glmProviderSettings: HttpConnectionSettings;
     providerModelCatalogs: ProviderModelCatalogs;
     composerError: ComposerError | null;
     onInlineError?: (message: string) => void;

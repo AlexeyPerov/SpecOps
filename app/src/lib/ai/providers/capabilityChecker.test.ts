@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceAccessReason } from "../capabilities";
 import { chatStore } from "../../state/chatStore";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
-import { defaultGlmProviderSettings } from "./glmProviderSettings";
+import { defaultHttpConnectionSettings } from "./httpConnectionSettings";
 import { initializeChatProviders, resetChatProvidersForTests } from "./bootstrap";
 import { createRegistryCapabilityChecker } from "./capabilityChecker";
 import { createDebugChatProvider } from "./debugChatProvider";
-import { createGlmChatProvider } from "./glmChatProvider";
+import { createOpenAiCompatibleChatProvider } from "./openAiCompatibleChatProvider";
 import { registerChatProvider, resetChatProviderRegistryForTests } from "./registry";
 
 describe("registry-backed capability checker", () => {
@@ -25,7 +25,7 @@ describe("registry-backed capability checker", () => {
     );
     const checker = createRegistryCapabilityChecker(
       () => defaultDebugProviderSettings,
-      () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+      () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
     );
 
     const result = await checker.checkCapabilities({
@@ -38,14 +38,14 @@ describe("registry-backed capability checker", () => {
     expect(result.capabilities?.supportedModes).toEqual(["ask", "review"]);
   });
 
-  it("reports missing GLM config when GLM is not registered", async () => {
+  it("reports missing HTTP config when HTTP provider is not registered", async () => {
     const checker = createRegistryCapabilityChecker(
       () => defaultDebugProviderSettings,
-      () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+      () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
     );
 
     const result = await checker.checkCapabilities({
-      provider: "glm",
+      provider: "http",
       mode: "ask",
       workspaceRootPath: "/work/a",
     });
@@ -54,20 +54,20 @@ describe("registry-backed capability checker", () => {
     expect(result.reason).toBe(WorkspaceAccessReason.MissingProviderConfig);
   });
 
-  it("delegates to registered GLM provider when credentials are configured", async () => {
+  it("delegates to registered HTTP provider when credentials are configured", async () => {
     registerChatProvider(
-      createGlmChatProvider(() => ({
-        settings: defaultGlmProviderSettings,
+      createOpenAiCompatibleChatProvider(() => ({
+        settings: { ...defaultHttpConnectionSettings, enabled: true },
         apiKey: "test-key",
       })),
     );
     const checker = createRegistryCapabilityChecker(
       () => defaultDebugProviderSettings,
-      () => ({ settings: defaultGlmProviderSettings, apiKey: "test-key" }),
+      () => ({ settings: { ...defaultHttpConnectionSettings, enabled: true }, apiKey: "test-key" }),
     );
 
     const result = await checker.checkCapabilities({
-      provider: "glm",
+      provider: "http",
       mode: "ask",
       workspaceRootPath: "/work/a",
     });

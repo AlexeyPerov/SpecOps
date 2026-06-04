@@ -1,12 +1,16 @@
 import {
-  GLM_MISSING_CONFIG_MESSAGE,
-  GLM_MISSING_CONFIG_RECOVERY,
+  HTTP_MISSING_CONFIG_MESSAGE,
+  HTTP_MISSING_CONFIG_RECOVERY,
 } from "../chatErrorCopy";
-import type { ChatProviderId, GlmProviderSettings, ProviderModelCatalogs } from "../../domain/contracts";
+import type { ChatProviderId, HttpConnectionSettings, ProviderModelCatalogs } from "../../domain/contracts";
 import {
   getProviderDefaultModelId,
   normalizeProviderModelCatalogs,
 } from "./providerModelCatalog";
+
+export interface GlmProviderSettings extends HttpConnectionSettings {
+  modelId: string;
+}
 
 export const defaultGlmProviderSettings: GlmProviderSettings = {
   enabled: true,
@@ -14,9 +18,9 @@ export const defaultGlmProviderSettings: GlmProviderSettings = {
   modelId: "glm-4-flash",
 };
 
-export const GLM_PROVIDER_MISSING_CONFIG_MESSAGE = GLM_MISSING_CONFIG_MESSAGE;
+export const GLM_PROVIDER_MISSING_CONFIG_MESSAGE = HTTP_MISSING_CONFIG_MESSAGE;
 
-export const GLM_PROVIDER_SETUP_HINT = GLM_MISSING_CONFIG_RECOVERY;
+export const GLM_PROVIDER_SETUP_HINT = HTTP_MISSING_CONFIG_RECOVERY;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

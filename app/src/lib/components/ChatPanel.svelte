@@ -11,8 +11,8 @@
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
   import {
-    isGlmProviderSendBlocked,
-  } from "../ai/providers/glmProviderSettings";
+    isHttpProviderSendBlocked,
+  } from "../ai/providers/httpConnectionSettings";
   import {
     formatChatProviderLabel,
   } from "../ai/providers/selection";
@@ -50,15 +50,15 @@
   const canRetryLastTurn = $derived($chatCanRetryLastTurn);
   const lastError = $derived($chatLastError);
   const debugProviderSettings = $derived($appState.settings.providerSettings.debug);
-  const glmProviderSettings = $derived($appState.settings.providerSettings.glm);
-  const glmApiKey = $derived($appState.settings.glmApiKey);
+  const httpProviderSettings = $derived($appState.settings.providerSettings.http);
+  const httpApiKey = $derived($appState.settings.providerApiKeys.http ?? "");
   const providerModelCatalogs = $derived($appState.settings.providerModelCatalogs);
   const activeMode = $derived(metadata?.mode ?? "ask");
   const activeProvider = $derived.by(() => {
     metadata;
     debugProviderSettings;
-    glmProviderSettings;
-    glmApiKey;
+    httpProviderSettings;
+    httpApiKey;
     return chatStore.getActiveChatProvider();
   });
   const activeModel = $derived.by(() => {
@@ -78,7 +78,7 @@
     isDebugProviderSendBlocked(activeProvider, debugProviderSettings),
   );
   const isGlmSendBlocked = $derived(
-    isGlmProviderSendBlocked(activeProvider, glmProviderSettings, glmApiKey),
+    isHttpProviderSendBlocked(activeProvider, httpProviderSettings, httpApiKey),
   );
   const isBlocked = $derived(
     accessState.status === "blocked" &&
@@ -120,11 +120,10 @@
     activeModel;
     metadata?.mode;
     debugProviderSettings.enabled;
-    glmProviderSettings.enabled;
-    glmProviderSettings.baseUrl;
-    glmProviderSettings.modelId;
+    httpProviderSettings.enabled;
+    httpProviderSettings.baseUrl;
     providerModelCatalogs;
-    glmApiKey;
+    httpApiKey;
     const root = chatStore.getActiveWorkspaceRoot();
     if (!root) {
       supportedModes = ["ask", "review"];
@@ -217,7 +216,7 @@
       {activeModel}
       {supportedModes}
       {debugProviderSettings}
-      {glmProviderSettings}
+      glmProviderSettings={httpProviderSettings}
       {providerModelCatalogs}
       {composerError}
       onInlineError={(message) => {

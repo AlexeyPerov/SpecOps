@@ -2,7 +2,7 @@
   import {
     getAccessBlockedCopy,
     getDebugProviderDisabledCopy,
-    getGlmMissingConfigCopy,
+    getHttpMissingConfigCopy,
     getLocalInvalidModelBlockedCopy,
     PROVIDER_REQUEST_FAILURE_RECOVERY,
   } from "../ai/chatErrorCopy";
@@ -77,7 +77,7 @@
   const isDebugSendBlocked = $derived(
     isDebugProviderSendBlocked(activeProvider, debugProviderSettings),
   );
-  const isGlmSendBlocked = $derived(
+  const isHttpSendBlocked = $derived(
     isHttpProviderSendBlocked(activeProvider, httpProviderSettings, httpApiKey),
   );
   const isBlocked = $derived(
@@ -97,7 +97,7 @@
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
   });
-  const glmBlockedCopy = $derived(getGlmMissingConfigCopy());
+  const httpBlockedCopy = $derived(getHttpMissingConfigCopy());
   const debugBlockedCopy = $derived(getDebugProviderDisabledCopy());
   const accessBlockedCopy = $derived(
     getAccessBlockedCopy(accessState.reason, { activeProvider }),
@@ -139,8 +139,8 @@
   });
 
   function composerErrorRecoveryHint(message: string): string {
-    if (message === glmBlockedCopy.message) {
-      return glmBlockedCopy.recoveryHint;
+    if (message === httpBlockedCopy.message) {
+      return httpBlockedCopy.recoveryHint;
     }
     if (message === debugBlockedCopy.message) {
       return debugBlockedCopy.recoveryHint;
@@ -187,11 +187,11 @@
   <div class="chat-panel-stack">
     <ChatBlockedState
       isAccessBlocked={isBlocked}
-      isGlmBlocked={isGlmSendBlocked}
+      isGlmBlocked={isHttpSendBlocked}
       isDebugBlocked={isDebugSendBlocked}
       isModelBlocked={isModelSendBlocked}
       {accessBlockedCopy}
-      {glmBlockedCopy}
+      glmBlockedCopy={httpBlockedCopy}
       {debugBlockedCopy}
       {modelBlockedCopy}
     />
@@ -207,7 +207,7 @@
     <ChatComposer
       {isBlocked}
       isDebugSendBlocked={isDebugSendBlocked}
-      isGlmSendBlocked={isGlmSendBlocked}
+      isGlmSendBlocked={isHttpSendBlocked}
       isModelSendBlocked={isModelSendBlocked}
       {isGenerating}
       {canRetryLastTurn}

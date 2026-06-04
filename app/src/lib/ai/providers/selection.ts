@@ -21,8 +21,6 @@ export interface ChatProviderOption {
 
 const PROVIDER_LABELS: Record<ChatProviderId, string> = {
   http: "HTTP",
-  glm: "GLM",
-  cursor: "Cursor",
   debug: "Debug",
 };
 

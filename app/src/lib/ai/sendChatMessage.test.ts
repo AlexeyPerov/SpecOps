@@ -64,7 +64,7 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
@@ -103,7 +103,7 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
@@ -161,7 +161,7 @@ describe("sendChatMessage", () => {
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
-        glmFetchSuccess("Buffered GLM response."),
+        glmFetchSuccess("Buffered HTTP response."),
       ),
     );
     chatStore.setCapabilityChecker(
@@ -183,16 +183,16 @@ describe("sendChatMessage", () => {
       }
     });
 
-    const result = await sendChatMessage("Buffered GLM please");
+    const result = await sendChatMessage("Buffered HTTP please");
     unsubscribe();
 
     expect(result.ok).toBe(true);
-    const finalLength = "Buffered GLM response.".length;
+    const finalLength = "Buffered HTTP response.".length;
     expect(observedLengths[0]).toBe(0);
     expect(observedLengths.every((length) => length === 0 || length === finalLength)).toBe(true);
     expect(new Set(observedLengths.filter((length) => length > 0))).toEqual(new Set([finalLength]));
     expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
-      "Buffered GLM response.",
+      "Buffered HTTP response.",
     );
   });
 
@@ -257,7 +257,7 @@ describe("sendChatMessage", () => {
       createRegistryCapabilityChecker(
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
-          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
@@ -317,7 +317,7 @@ describe("sendChatMessage", () => {
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "glm-test-key",
         }),
-        glmFetchSuccess("GLM response about retention."),
+        glmFetchSuccess("HTTP response about retention."),
       ),
     );
     chatStore.setCapabilityChecker(
@@ -335,7 +335,7 @@ describe("sendChatMessage", () => {
 
     expect(result.ok).toBe(true);
     expect(chatStore.getMessages()).toHaveLength(2);
-    expect(chatStore.getMessages()[1].content).toBe("GLM response about retention.");
+    expect(chatStore.getMessages()[1].content).toBe("HTTP response about retention.");
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
     expect(schedulePersistMock).toHaveBeenCalledOnce();
   });
@@ -444,7 +444,7 @@ describe("sendChatMessage", () => {
         new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ choices: [{ message: { content: "Retried GLM response." } }] }), {
+        new Response(JSON.stringify({ choices: [{ message: { content: "Retried HTTP response." } }] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
@@ -477,7 +477,7 @@ describe("sendChatMessage", () => {
     expect(retried.ok).toBe(true);
     expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
     expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
-      "Retried GLM response.",
+      "Retried HTTP response.",
     );
     expect(chatStore.canRetryLastTurn()).toBe(false);
   });

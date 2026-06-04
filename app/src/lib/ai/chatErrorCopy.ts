@@ -51,7 +51,7 @@ export const PROVIDER_UNSUPPORTED_ACCESS_RECOVERY =
 export const PROVIDER_NOT_REGISTERED_MESSAGE = "The Debug provider is not ready yet.";
 
 export const PROVIDER_NOT_REGISTERED_RECOVERY =
-  "Restart the app. If the problem continues, choose GLM instead.";
+  "Restart the app. If the problem continues, choose HTTP instead.";
 
 export const PROVIDER_REQUEST_FAILURE_MESSAGE = "The assistant could not finish this response.";
 
@@ -124,7 +124,7 @@ export function getAccessBlockedCopy(
   }
 }
 
-export function getGlmMissingConfigCopy(): ChatBlockedStateCopy {
+export function getHttpMissingConfigCopy(): ChatBlockedStateCopy {
   return {
     title: HTTP_NOT_CONFIGURED_TITLE,
     message: HTTP_MISSING_CONFIG_MESSAGE,

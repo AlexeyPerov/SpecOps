@@ -40,7 +40,7 @@ class StreamingTestProvider implements ChatProvider {
 }
 
 class BufferedOnlyTestProvider implements ChatProvider {
-  readonly id = "glm" as const;
+  readonly id = "http" as const;
 
   sendMessage = vi.fn(async (request: ProviderSendRequest): Promise<ProviderSendResponse> => ({
     content: `buffered:${request.payload.mode}`,

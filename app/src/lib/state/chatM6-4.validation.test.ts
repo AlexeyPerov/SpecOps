@@ -94,7 +94,7 @@ describe("M6-4 edge-case transitions", () => {
 
   it("clears failed retry state when switching providers", async () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, agentId!);
     chatStore.beginTurn("turn-fail", agentId!);
     chatStore.failTurn({ message: "Provider failed" }, "turn-fail", agentId!);
 

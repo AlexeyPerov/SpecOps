@@ -19,7 +19,7 @@ function threadSnapshot(mode: ChatThreadSnapshot["metadata"]["mode"]): ChatThrea
       agentId: "agent-test",
       threadId: "agent-test",
       mode,
-      provider: "glm",
+      provider: "http",
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:01.000Z",
       summary: "Earlier context",
@@ -88,7 +88,7 @@ describe("mode-aware prompt assembly", () => {
     const fromThread = buildThreadProviderRequest(thread, "/work/spec-ops");
     const manual = buildProviderRequest({
       mode: "review",
-      provider: "glm",
+      provider: "http",
       workspaceRootPath: "/work/spec-ops",
       summary: "Earlier context",
       recentMessages: thread.messages,

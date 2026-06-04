@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 00:39 (MSK)
+
+- **Phase 1 Task 3 (P1-3):** Removed legacy `glm`/`cursor` chat provider ids from contracts and provider model catalogs; aligned defaults and validation to HTTP + Debug only (`ChatProviderId`, `PRODUCT_CHAT_PROVIDER_IDS`, model catalog normalization/parsing, and default thread provider policy).
+- **Phase 1 Task 4 (P1-4):** Finalized HTTP+Debug provider pipeline by removing GLM provider modules/tests (`glmChatProvider.ts`, `glmPrompt.ts`, `glmProviderSettings.ts` and their tests), updating bootstrap/selection/send/error-copy paths to HTTP naming, and deleting remaining GLM/Cursor test references in active suites.
+- **Validation:** Ran `npm run check` (0 errors, one pre-existing a11y warning) and `npm test` (646 passed) in `app/`.
+
 ## 2026-06-05 00:25 (MSK)
 
 - **Phase 1 Task 1 (P1-1):** Added OpenAI-compatible HTTP provider implementation (`openAiCompatibleChatProvider.ts`, `openAiChatMessages.ts`, `httpConnectionSettings.ts`) with `/chat/completions` buffered send (`stream: false`), provider id `http`, capability checks, model-error mapping, and ported provider tests.

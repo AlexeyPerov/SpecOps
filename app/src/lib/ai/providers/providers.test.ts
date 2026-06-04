@@ -90,7 +90,7 @@ describe("buildProviderRequest", () => {
   it("assembles mode, provider, workspace metadata, summary, and history", () => {
     const payload = buildProviderRequest({
       mode: "review",
-      provider: "glm",
+      provider: "http",
       workspaceRootPath: "/work/spec-ops",
       summary: "Earlier turns compacted",
       recentMessages: [
@@ -103,7 +103,7 @@ describe("buildProviderRequest", () => {
           createdAt: "2026-05-26T00:00:02.000Z",
           systemEvent: {
             type: "provider-switched",
-            fromProvider: "glm",
+            fromProvider: "http",
             toProvider: "debug",
           },
         },
@@ -113,7 +113,7 @@ describe("buildProviderRequest", () => {
 
     expect(payload).toEqual({
       mode: "review",
-      provider: "glm",
+      provider: "http",
       workspace: {
         rootPath: "/work/spec-ops",
         name: "spec-ops",
@@ -143,12 +143,12 @@ describe("buildProviderRequest", () => {
   });
 
   it("builds identical payloads from thread snapshots via buildProviderRequestFromThread", () => {
-    const thread = threadSnapshot({ mode: "review", provider: "glm", summary: "Compacted" });
+    const thread = threadSnapshot({ mode: "review", provider: "http", summary: "Compacted" });
 
     expect(buildProviderRequestFromThread(thread, "/work/spec-ops", "Ask mode")).toEqual(
       buildProviderRequest({
         mode: "review",
-        provider: "glm",
+        provider: "http",
         workspaceRootPath: "/work/spec-ops",
         summary: "Compacted",
         recentMessages: thread.messages,
@@ -173,19 +173,19 @@ describe("chat provider registry", () => {
   it("throws when resolving an unregistered provider", () => {
     resetChatProviderRegistryForTests();
 
-    expect(() => resolveChatProvider("glm")).toThrow(
-      "No chat provider registered for id: glm",
+    expect(() => resolveChatProvider("http")).toThrow(
+      "No chat provider registered for id: http",
     );
   });
 
   it("unregisters providers", () => {
     resetChatProviderRegistryForTests();
-    const provider = new InMemoryTestProvider("glm");
+    const provider = new InMemoryTestProvider("http");
     registerChatProvider(provider);
 
-    unregisterChatProvider("glm");
+    unregisterChatProvider("http");
 
-    expect(getChatProvider("glm")).toBeNull();
+    expect(getChatProvider("http")).toBeNull();
     expect(listRegisteredChatProviders()).toEqual([]);
   });
 });
@@ -229,11 +229,11 @@ describe("ChatProvider contract (in-memory test double)", () => {
   });
 
   it("includes checkCapabilities on the provider contract", async () => {
-    const provider = new InMemoryTestProvider("glm");
+    const provider = new InMemoryTestProvider("http");
     const checkCapabilities = vi.spyOn(provider, "checkCapabilities");
 
     await provider.checkCapabilities({
-      provider: "glm",
+      provider: "http",
       mode: "ask",
       workspaceRootPath: "/work/a",
     });

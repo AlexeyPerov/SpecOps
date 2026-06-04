@@ -91,7 +91,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 3: Domain types and provider ids (P1-3) [Score:6] [Agent:medium]
+#### Task 3: Domain types and provider ids (P1-3) [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -114,7 +114,7 @@ Dependencies: Task 2.
 
 ---
 
-#### Task 4: Bootstrap, selection, and send pipeline (P1-4) [Score:7] [Agent:medium]
+#### Task 4: Bootstrap, selection, and send pipeline (P1-4) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

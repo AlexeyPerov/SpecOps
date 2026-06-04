@@ -44,8 +44,8 @@ function providerSwitchEvent(id: string): ChatMessage {
     createdAt: `2026-05-26T00:03:${id.padStart(2, "0")}.000Z`,
     systemEvent: {
       type: "provider-switched",
-      fromProvider: "glm",
-      toProvider: "cursor",
+      fromProvider: "http",
+      toProvider: "debug",
     },
   };
 }
@@ -56,7 +56,7 @@ function threadWithMessages(messages: ChatMessage[]): ChatThreadSnapshot {
       agentId: "agent-test",
       threadId: "agent-test",
       mode: "ask",
-      provider: "glm",
+      provider: "http",
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:00.000Z",
       summary: "existing summary",

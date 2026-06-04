@@ -40,8 +40,8 @@ describe("chat retention policy constants", () => {
         createdAt: "2026-05-26T00:00:03.000Z",
         systemEvent: {
           type: "provider-switched",
-          fromProvider: "glm",
-          toProvider: "cursor",
+          fromProvider: "http",
+          toProvider: "debug",
         },
       },
       userMessage("2"),

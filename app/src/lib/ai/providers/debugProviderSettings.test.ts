@@ -76,7 +76,7 @@ describe("debug provider send blocking", () => {
     expect(
       isDebugProviderSendBlocked("debug", { ...defaultDebugProviderSettings, enabled: true }),
     ).toBe(false);
-    expect(isDebugProviderSendBlocked("glm", defaultDebugProviderSettings)).toBe(false);
+    expect(isDebugProviderSendBlocked("http", defaultDebugProviderSettings)).toBe(false);
     expect(isDebugProviderSendBlocked(undefined, defaultDebugProviderSettings)).toBe(false);
   });
 

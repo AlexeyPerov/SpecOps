@@ -4,18 +4,18 @@
  * Manual smoke (workspace UI; not covered here):
  * - Workspace → agents sidebar visible; notepad → sidebar hidden
  * - New agent draft → first message persists thread and updates title
- * - Send ask and review prompts via GLM in agent tab (Debug when enabled)
- * - Simulate GLM misconfig → setup CTA → recovery
+ * - Send ask and review prompts via HTTP in agent tab (Debug when enabled)
+ * - Simulate HTTP misconfig → setup CTA → recovery
  * - Simulate workspace access loss → blocked chat → recovery
  * - Exceed retention cap → compaction banner + summary preserved
  * - Delete agent removes thread and sidebar entry
  * - Trigger failed response → Retry succeeds
- * - Verify streaming on Debug and buffered fallback on GLM
+ * - Verify streaming on Debug and buffered fallback on HTTP
  * - Two agent tabs generating simultaneously without blocking each other
  *
- * Optional manual GLM integration smoke (requires network + credentials):
- * - Enter API key in Settings → GLM (stored in glm-secrets.json)
- * - Defaults: base URL https://open.bigmodel.cn/api/paas/v4, model glm-4-flash
+ * Optional manual HTTP integration smoke (requires network + credentials):
+ * - Enter API key in Settings → HTTP (stored in glm-secrets.json)
+ * - Defaults: base URL https://open.bigmodel.cn/api/paas/v4, model gpt-4o-mini
  * - Send ask and review messages; verify assistant replies persist after restart
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +28,7 @@ import {
   WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
   getAccessBlockedCopy,
   getDebugProviderDisabledCopy,
-  getGlmMissingConfigCopy,
+  getHttpMissingConfigCopy,
 } from "../ai/chatErrorCopy";
 import { retryLastChatTurn, sendChatMessage } from "../ai/sendChatMessage";
 import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
@@ -90,7 +90,7 @@ function registerProviders(includeHttp = false): void {
     createRegistryCapabilityChecker(
       () => appState.getSnapshot().settings.providerSettings.debug,
       () => ({
-        settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+        settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
         apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
       }),
     ),
@@ -278,13 +278,13 @@ describe("M6 milestone validation — AI chat MVP", () => {
   });
 
   it("exposes recovery hints for major blocked and failure paths", () => {
-    expect(getGlmMissingConfigCopy().recoveryHint).toBe(HTTP_MISSING_CONFIG_RECOVERY);
+    expect(getHttpMissingConfigCopy().recoveryHint).toBe(HTTP_MISSING_CONFIG_RECOVERY);
     expect(getDebugProviderDisabledCopy().recoveryHint).toBe(DEBUG_PROVIDER_DISABLED_RECOVERY);
     expect(
       getAccessBlockedCopy(WorkspaceAccessReason.WorkspacePathInaccessible).recoveryHint,
     ).toBe(WORKSPACE_PATH_INACCESSIBLE_RECOVERY);
     expect(
-      getAccessBlockedCopy(WorkspaceAccessReason.MissingProviderConfig, { activeProvider: "glm" }).recoveryHint,
+      getAccessBlockedCopy(WorkspaceAccessReason.MissingProviderConfig, { activeProvider: "http" }).recoveryHint,
     ).toBe(PROVIDER_MISSING_CONFIG_RECOVERY);
     expect(PROVIDER_REQUEST_FAILURE_RECOVERY).toContain("Retry");
   });

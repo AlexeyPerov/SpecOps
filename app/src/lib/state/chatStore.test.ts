@@ -17,7 +17,7 @@ import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
-import { defaultGlmProviderSettings } from "../ai/providers/glmProviderSettings";
+import { defaultHttpConnectionSettings } from "../ai/providers/httpConnectionSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import {
   registerChatProvider,
@@ -78,7 +78,7 @@ describe("chatStore", () => {
       agentId: "agent-1",
       threadId: "agent-1",
       mode: "ask",
-      provider: "glm",
+      provider: "http",
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:00.000Z",
     });
@@ -101,7 +101,7 @@ describe("chatStore", () => {
     });
 
     const metadataUpdated = chatStore.updateThreadMetadata(
-      { mode: "review", provider: "cursor", summary: "brief summary" },
+      { mode: "review", provider: "debug", summary: "brief summary" },
       "2026-05-25T00:00:02.000Z",
     );
 
@@ -112,7 +112,7 @@ describe("chatStore", () => {
       agentId: "agent-1",
       threadId: "agent-1",
       mode: "review",
-      provider: "cursor",
+      provider: "debug",
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:02.000Z",
       summary: "brief summary",
@@ -130,7 +130,7 @@ describe("chatStore", () => {
       agentId: "agent-1",
       threadId: "agent-1",
       mode: "review",
-      provider: "glm",
+      provider: "http",
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:00.000Z",
     });
@@ -176,7 +176,7 @@ describe("chatStore", () => {
     ]);
     expect(chatStore.getMetadata()).toMatchObject({
       mode: "ask",
-      provider: "glm",
+      provider: "http",
       createdAt: "2026-05-26T00:00:01.000Z",
       compactionCount: 2,
       compactedMessageCount: 4,
@@ -190,7 +190,7 @@ describe("chatStore", () => {
         agentId: "agent-a",
         threadId: "agent-a",
         mode: "ask",
-        provider: "glm",
+        provider: "http",
         createdAt: "2026-05-25T00:00:00.000Z",
         updatedAt: "2026-05-25T00:00:00.000Z",
       },
@@ -209,7 +209,7 @@ describe("chatStore", () => {
         agentId: "agent-b",
         threadId: "agent-b",
         mode: "review",
-        provider: "cursor",
+        provider: "debug",
         createdAt: "2026-05-25T00:00:03.000Z",
         updatedAt: "2026-05-25T00:00:03.000Z",
       },
@@ -233,7 +233,7 @@ describe("chatStore", () => {
     chatStore.setActiveAgentId("agent-b");
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["b-1"]);
     expect(chatStore.getMetadata()?.mode).toBe("review");
-    expect(chatStore.getMetadata()?.provider).toBe("cursor");
+    expect(chatStore.getMetadata()?.provider).toBe("debug");
   });
 
   it("loads workspace agents from index and thread files", async () => {
@@ -242,7 +242,7 @@ describe("chatStore", () => {
         agentId: "agent-a",
         threadId: "agent-a",
         mode: "ask",
-        provider: "glm",
+        provider: "http",
         createdAt: "2026-05-25T00:00:00.000Z",
         updatedAt: "2026-05-25T00:00:00.000Z",
       },
@@ -359,7 +359,7 @@ describe("chatStore", () => {
     const result = await chatStore.checkActiveWorkspaceCapabilities();
 
     expect(checker.checkCapabilities).toHaveBeenCalledWith({
-      provider: "glm",
+      provider: "http",
       mode: "ask",
       workspaceRootPath: "/work/a",
     });
@@ -519,7 +519,7 @@ describe("chatStore", () => {
         agentId: "agent-a",
         threadId: "agent-a",
         mode: "ask",
-        provider: "glm",
+        provider: "http",
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
       },
@@ -537,7 +537,7 @@ describe("chatStore", () => {
         agentId: "agent-b",
         threadId: "agent-b",
         mode: "review",
-        provider: "cursor",
+        provider: "debug",
         createdAt: "2026-05-26T00:00:01.000Z",
         updatedAt: "2026-05-26T00:00:01.000Z",
       },
@@ -563,8 +563,8 @@ describe("chatStore", () => {
 
   it("allows parallel generation on two agents in the same workspace", () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.updateThreadMetadata({ mode: "ask", provider: "glm" }, "2026-05-26T00:00:00.000Z", "agent-a");
-    chatStore.updateThreadMetadata({ mode: "ask", provider: "glm" }, "2026-05-26T00:00:00.000Z", "agent-b");
+    chatStore.updateThreadMetadata({ mode: "ask", provider: "http" }, "2026-05-26T00:00:00.000Z", "agent-a");
+    chatStore.updateThreadMetadata({ mode: "ask", provider: "http" }, "2026-05-26T00:00:00.000Z", "agent-b");
 
     expect(chatStore.beginTurn("turn-a", "agent-a")).toBe(true);
     expect(chatStore.beginTurn("turn-b", "agent-b")).toBe(true);
@@ -772,11 +772,11 @@ describe("chatStore provider switching", () => {
           ...defaultDebugProviderSettings,
           enabled: true,
         }),
-        () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+        () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
       ),
     );
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
   });
 
   it("appends a provider-switched system event and updates metadata", async () => {
@@ -786,10 +786,10 @@ describe("chatStore provider switching", () => {
     expect(chatStore.getMetadata()?.provider).toBe("debug");
     expect(chatStore.getMessages().at(-1)).toMatchObject({
       role: "system",
-      content: "Provider switched from GLM to Debug.",
+      content: "Provider switched from HTTP to Debug.",
       systemEvent: {
         type: "provider-switched",
-        fromProvider: "glm",
+        fromProvider: "http",
         toProvider: "debug",
       },
     });
@@ -803,18 +803,18 @@ describe("chatStore provider switching", () => {
 
     expect(result.switched).toBe(false);
     expect(result.message).toContain("Debug AI");
-    expect(chatStore.getMetadata()?.provider).toBe("glm");
+    expect(chatStore.getMetadata()?.provider).toBe("http");
     expect(chatStore.getMessages()).toHaveLength(0);
   });
 
-  it("supports switching from Debug back to GLM when both are available", async () => {
+  it("supports switching from Debug back to HTTP when both are available", async () => {
     await chatStore.switchThreadProvider("debug", providerSwitchOptions);
 
-    const result = await chatStore.switchThreadProvider("glm", providerSwitchOptions);
+    const result = await chatStore.switchThreadProvider("http", providerSwitchOptions);
 
     expect(result.switched).toBe(true);
-    expect(chatStore.getMetadata()?.provider).toBe("glm");
-    expect(chatStore.getMessages().at(-1)?.content).toBe("Provider switched from Debug to GLM.");
+    expect(chatStore.getMetadata()?.provider).toBe("http");
+    expect(chatStore.getMessages().at(-1)?.content).toBe("Provider switched from Debug to HTTP.");
   });
 
   it("blocks provider changes while generating", async () => {
@@ -823,7 +823,7 @@ describe("chatStore provider switching", () => {
     const result = await chatStore.switchThreadProvider("debug", providerSwitchOptions);
 
     expect(result.switched).toBe(false);
-    expect(chatStore.getMetadata()?.provider).toBe("glm");
+    expect(chatStore.getMetadata()?.provider).toBe("http");
   });
 });
 
@@ -844,36 +844,50 @@ describe("chatStore model switching", () => {
           ...defaultDebugProviderSettings,
           enabled: true,
         }),
-        () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+        () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
       ),
     );
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
   });
 
   it("appends a model-switched system event and updates metadata", async () => {
-    const result = await chatStore.switchThreadModel("glm-4-plus", {
-      providerModelCatalogs: defaultProviderModelCatalogs,
+    const catalogs = {
+      ...defaultProviderModelCatalogs,
+      http: {
+        modelIds: ["gpt-4o-mini", "gpt-4.1"],
+        defaultModelId: "gpt-4o-mini",
+      },
+    };
+    const result = await chatStore.switchThreadModel("gpt-4.1", {
+      providerModelCatalogs: catalogs,
     });
 
     expect(result.switched).toBe(true);
-    expect(chatStore.getMetadata()?.selectedModelId).toBe("glm-4-plus");
+    expect(chatStore.getMetadata()?.selectedModelId).toBe("gpt-4.1");
     expect(chatStore.getMessages().at(-1)).toMatchObject({
       role: "system",
-      content: "Model switched from glm-4-flash to glm-4-plus.",
+      content: "Model switched from gpt-4o-mini to gpt-4.1.",
       systemEvent: {
         type: "model-switched",
-        fromModel: "glm-4-flash",
-        toModel: "glm-4-plus",
+        fromModel: "gpt-4o-mini",
+        toModel: "gpt-4.1",
       },
     });
   });
 
   it("blocks model changes while generating", async () => {
     chatStore.beginTurn("turn-1");
+    const catalogs = {
+      ...defaultProviderModelCatalogs,
+      http: {
+        modelIds: ["gpt-4o-mini", "gpt-4.1"],
+        defaultModelId: "gpt-4o-mini",
+      },
+    };
 
-    const result = await chatStore.switchThreadModel("glm-4-plus", {
-      providerModelCatalogs: defaultProviderModelCatalogs,
+    const result = await chatStore.switchThreadModel("gpt-4.1", {
+      providerModelCatalogs: catalogs,
     });
 
     expect(result.switched).toBe(false);
@@ -881,7 +895,7 @@ describe("chatStore model switching", () => {
   });
 
   it("falls back to target provider default when switching providers", async () => {
-    chatStore.updateThreadMetadata({ selectedModelId: "glm-4-plus" });
+    chatStore.updateThreadMetadata({ selectedModelId: "gpt-4.1" });
 
     const result = await chatStore.switchThreadProvider("debug", providerSwitchOptions);
 
@@ -893,8 +907,8 @@ describe("chatStore model switching", () => {
   it("keeps the current model on provider switch when valid for the target provider", async () => {
     const sharedCatalogs = {
       ...defaultProviderModelCatalogs,
-      glm: {
-        modelIds: ["shared-model", "glm-4-flash"],
+      http: {
+        modelIds: ["shared-model", "gpt-4o-mini"],
         defaultModelId: "shared-model",
       },
       debug: {
@@ -903,7 +917,7 @@ describe("chatStore model switching", () => {
       },
     };
 
-    chatStore.updateThreadMetadata({ provider: "glm", selectedModelId: "shared-model" });
+    chatStore.updateThreadMetadata({ provider: "http", selectedModelId: "shared-model" });
 
     const result = await chatStore.switchThreadProvider("debug", {
       debugProviderEnabled: true,
@@ -932,7 +946,7 @@ describe("chatStore active provider resolution", () => {
           ...defaultDebugProviderSettings,
           enabled: true,
         }),
-        () => ({ settings: defaultGlmProviderSettings, apiKey: "" }),
+        () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
       ),
     );
     chatStore.setDefaultChatProviderResolver(() => "debug");

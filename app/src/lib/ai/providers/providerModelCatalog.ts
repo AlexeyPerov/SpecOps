@@ -1,23 +1,15 @@
 import type { ChatProviderId, ProviderModelCatalog, ProviderModelCatalogs } from "../../domain/contracts";
 
-const PROVIDER_IDS: readonly ChatProviderId[] = ["http", "glm", "cursor", "debug"];
+const PROVIDER_IDS: readonly ChatProviderId[] = ["http", "debug"];
 
 export const defaultProviderModelCatalogs: ProviderModelCatalogs = {
   http: {
     modelIds: ["gpt-4o-mini"],
     defaultModelId: "gpt-4o-mini",
   },
-  glm: {
-    modelIds: ["glm-4-flash", "glm-4-air", "glm-4-plus"],
-    defaultModelId: "glm-4-flash",
-  },
   debug: {
     modelIds: ["debug-simulator"],
     defaultModelId: "debug-simulator",
-  },
-  cursor: {
-    modelIds: ["auto"],
-    defaultModelId: "auto",
   },
 };
 
@@ -124,14 +116,6 @@ export function normalizeProviderModelCatalogs(
   const catalogs = {} as ProviderModelCatalogs;
   for (const providerId of PROVIDER_IDS) {
     catalogs[providerId] = normalizeProviderModelCatalog(providerId, source[providerId]);
-  }
-
-  if (legacyGlmModelId && !isRecord(source.glm)) {
-    const glmCatalog = catalogs.glm!;
-    if (!glmCatalog.modelIds.includes(legacyGlmModelId)) {
-      glmCatalog.modelIds = dedupeModelIds([legacyGlmModelId, ...glmCatalog.modelIds]);
-    }
-    glmCatalog.defaultModelId = legacyGlmModelId;
   }
 
   return catalogs;

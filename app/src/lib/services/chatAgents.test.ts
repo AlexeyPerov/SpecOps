@@ -45,7 +45,7 @@ describe("agent title helpers", () => {
         agentId: "agent-1",
         threadId: "agent-1",
         mode: "ask" as const,
-        provider: "glm" as const,
+        provider: "http" as const,
         createdAt: "2026-05-28T12:00:00.000Z",
         updatedAt: "2026-05-28T12:00:00.000Z",
       },

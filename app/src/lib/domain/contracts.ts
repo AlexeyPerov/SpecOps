@@ -273,7 +273,7 @@ export type ChatMessageRole = "user" | "assistant" | "system";
 
 export type ChatModeId = "ask" | "review";
 
-export type ChatProviderId = "http" | "glm" | "cursor" | "debug";
+export type ChatProviderId = "http" | "debug";
 
 /** MVP product providers; Debug is dev-only and settings-gated (see M5-3). */
 export const PRODUCT_CHAT_PROVIDER_IDS = ["http"] as const satisfies readonly ChatProviderId[];

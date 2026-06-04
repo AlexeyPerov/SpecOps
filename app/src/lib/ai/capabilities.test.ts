@@ -28,7 +28,7 @@ describe("capabilities contract", () => {
     };
 
     const result = await checker.checkCapabilities({
-      provider: "glm",
+      provider: "http",
       mode: "ask",
       workspaceRootPath: "/work/a",
     });

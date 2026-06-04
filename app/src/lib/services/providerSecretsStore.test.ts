@@ -25,34 +25,34 @@ describe("providerSecretsStore", () => {
     writeTextFileMock.mockResolvedValue(undefined);
   });
 
-  it("loads and trims the GLM API key from the secrets file", async () => {
+  it("loads and trims the HTTP API key from the secrets file", async () => {
     readTextFileMock.mockResolvedValue(
-      JSON.stringify({ version: 1, keys: { glm: "  secret-key  " } }),
+      JSON.stringify({ version: 1, keys: { http: "  secret-key  " } }),
     );
 
-    await expect(loadProviderApiKey("glm")).resolves.toBe("secret-key");
+    await expect(loadProviderApiKey("http")).resolves.toBe("secret-key");
   });
 
   it("returns an empty key when the secrets file is missing or invalid", async () => {
     readTextFileMock.mockRejectedValue(new Error("missing"));
-    await expect(loadProviderApiKey("glm")).resolves.toBe("");
+    await expect(loadProviderApiKey("http")).resolves.toBe("");
 
-    readTextFileMock.mockResolvedValue(JSON.stringify({ version: 2, keys: { glm: "ignored" } }));
-    await expect(loadProviderApiKey("glm")).resolves.toBe("");
+    readTextFileMock.mockResolvedValue(JSON.stringify({ version: 2, keys: { http: "ignored" } }));
+    await expect(loadProviderApiKey("http")).resolves.toBe("");
   });
 
-  it("writes the GLM API key to a provider-keyed secrets file", async () => {
-    await saveProviderApiKey("glm", "  secret-key  ");
+  it("writes the HTTP API key to a provider-keyed secrets file", async () => {
+    await saveProviderApiKey("http", "  secret-key  ");
 
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",
-      JSON.stringify({ version: 1, keys: { glm: "secret-key" } }, null, 2),
+      JSON.stringify({ version: 1, keys: { http: "secret-key" } }, null, 2),
     );
   });
 
   it("merges keys for multiple providers without overwriting unrelated entries", async () => {
     readTextFileMock.mockResolvedValue(
-      JSON.stringify({ version: 1, keys: { glm: "existing-glm" } }),
+      JSON.stringify({ version: 1, keys: { http: "existing-http" } }),
     );
 
     await saveProviderApiKey("debug", "debug-key");
@@ -60,7 +60,7 @@ describe("providerSecretsStore", () => {
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",
       JSON.stringify(
-        { version: 1, keys: { glm: "existing-glm", debug: "debug-key" } },
+        { version: 1, keys: { http: "existing-http", debug: "debug-key" } },
         null,
         2,
       ),
@@ -69,10 +69,10 @@ describe("providerSecretsStore", () => {
 
   it("removes a provider key when saving an empty string", async () => {
     readTextFileMock.mockResolvedValue(
-      JSON.stringify({ version: 1, keys: { glm: "existing-glm", debug: "debug-key" } }),
+      JSON.stringify({ version: 1, keys: { http: "existing-http", debug: "debug-key" } }),
     );
 
-    await saveProviderApiKey("glm", "   ");
+    await saveProviderApiKey("http", "   ");
 
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",

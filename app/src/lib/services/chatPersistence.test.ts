@@ -50,7 +50,7 @@ function sampleThread(agentId = AGENT_ID): ChatThreadSnapshot {
       agentId,
       threadId: agentId,
       mode: "review",
-      provider: "glm",
+      provider: "http",
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:01.000Z",
       summary: "summary",
@@ -69,8 +69,8 @@ function sampleThread(agentId = AGENT_ID): ChatThreadSnapshot {
         createdAt: "2026-05-25T00:00:01.000Z",
         systemEvent: {
           type: "provider-switched",
-          fromProvider: "glm",
-          toProvider: "cursor",
+          fromProvider: "http",
+          toProvider: "debug",
         },
       },
     ],
@@ -113,7 +113,7 @@ describe("agent thread snapshot codec", () => {
         ...sampleThread(),
         metadata: {
           ...sampleThread().metadata,
-          selectedModelId: "glm-4-flash",
+          selectedModelId: "gpt-4o-mini",
         },
         messages: [
           ...sampleThread().messages,
@@ -124,8 +124,8 @@ describe("agent thread snapshot codec", () => {
             createdAt: "2026-05-25T00:00:02.000Z",
             systemEvent: {
               type: "model-switched",
-              fromModel: "glm-4-flash",
-              toModel: "glm-4-plus",
+              fromModel: "gpt-4o-mini",
+              toModel: "gpt-4.1",
             },
           },
         ],
@@ -165,7 +165,7 @@ describe("agent thread snapshot codec", () => {
             systemEvent: {
               type: "model-switched",
               fromModel: null,
-              toModel: "glm-4-flash",
+              toModel: "gpt-4o-mini",
             },
           },
         ],
@@ -175,13 +175,13 @@ describe("agent thread snapshot codec", () => {
     const decoded = decodeChatAgentThreadFileSnapshot(encodeChatAgentThreadFileSnapshot(snapshot));
     expect(decoded?.thread.messages[0]?.systemEvent).toEqual({
       type: "provider-switched",
-      fromProvider: "glm",
-      toProvider: "cursor",
+      fromProvider: "http",
+      toProvider: "debug",
     });
     expect(decoded?.thread.messages[1]?.systemEvent).toEqual({
       type: "model-switched",
       fromModel: null,
-      toModel: "glm-4-flash",
+      toModel: "gpt-4o-mini",
     });
   });
 

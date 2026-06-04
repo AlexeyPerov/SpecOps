@@ -6,7 +6,7 @@ import type {
 } from "../../domain/contracts";
 
 export const DEFAULT_CHAT_MODE = "ask" as const;
-const DEFAULT_CHAT_PROVIDER: ChatProviderId = "glm";
+const DEFAULT_CHAT_PROVIDER: ChatProviderId = "http";
 
 let defaultChatProviderResolver: () => ChatProviderId = () => DEFAULT_CHAT_PROVIDER;
 

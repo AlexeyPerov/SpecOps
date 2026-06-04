@@ -10,7 +10,7 @@ import {
   WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
   getAccessBlockedCopy,
   getDebugProviderDisabledCopy,
-  getGlmMissingConfigCopy,
+  getHttpMissingConfigCopy,
   getLocalInvalidModelBlockedCopy,
   getModeUnsupportedMessage,
   getModeUnsupportedRecovery,
@@ -28,31 +28,31 @@ describe("chatErrorCopy", () => {
 
   it("returns generic missing config copy for access preflight", () => {
     const copy = getAccessBlockedCopy(WorkspaceAccessReason.MissingProviderConfig, {
-      activeProvider: "glm",
+      activeProvider: "http",
     });
 
-    expect(copy.message).not.toContain("GLM");
-    expect(copy.recoveryHint).not.toContain("GLM");
+    expect(copy.message).not.toContain("HTTP");
+    expect(copy.recoveryHint).not.toContain("HTTP");
   });
 
-  it("returns provider setup copy for inline GLM and Debug blocked states", () => {
-    expect(getGlmMissingConfigCopy().message).toBe(HTTP_MISSING_CONFIG_MESSAGE);
-    expect(getGlmMissingConfigCopy().recoveryHint).toBe(HTTP_MISSING_CONFIG_RECOVERY);
+  it("returns provider setup copy for inline HTTP and Debug blocked states", () => {
+    expect(getHttpMissingConfigCopy().message).toBe(HTTP_MISSING_CONFIG_MESSAGE);
+    expect(getHttpMissingConfigCopy().recoveryHint).toBe(HTTP_MISSING_CONFIG_RECOVERY);
     expect(getDebugProviderDisabledCopy().message).toBe(DEBUG_PROVIDER_DISABLED_MESSAGE);
     expect(getDebugProviderDisabledCopy().recoveryHint).toBe(DEBUG_PROVIDER_DISABLED_RECOVERY);
   });
 
   it("returns local invalid model blocked copy for chat alarm state", () => {
-    const copy = getLocalInvalidModelBlockedCopy("unknown-model", "GLM");
+    const copy = getLocalInvalidModelBlockedCopy("unknown-model", "HTTP");
 
     expect(copy.title).toBe("Model unavailable");
     expect(copy.message).toContain("unknown-model");
-    expect(copy.message).toContain("GLM");
+    expect(copy.message).toContain("HTTP");
     expect(copy.recoveryHint).toContain("Settings");
   });
 
   it("describes unsupported modes with recovery guidance", () => {
-    expect(getModeUnsupportedMessage("review", "GLM")).toContain("review");
+    expect(getModeUnsupportedMessage("review", "HTTP")).toContain("review");
     expect(getModeUnsupportedRecovery()).toContain("Ask or Review");
   });
 

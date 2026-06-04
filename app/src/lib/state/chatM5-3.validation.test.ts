@@ -1,17 +1,17 @@
 /**
- * M5.3 milestone validation — automated exit-criteria checks for GLM in agent tabs.
+ * M5.3 milestone validation — automated exit-criteria checks for HTTP in agent tabs.
  *
  * Manual smoke (workspace UI; not covered here):
  * - Enable Debug in Developer Settings; ask + review in agent tab with streaming visible
- * - Two agents: one Debug, one GLM generating concurrently (when GLM configured)
+ * - Two agents: one Debug, one HTTP generating concurrently (when HTTP configured)
  * - Toggle Debug failure probability; confirm inline error + retry scaffolding state
  * - Disable Debug with agent on Debug provider; confirm send blocked with hint
- * - GLM ask + review when credentials configured in Settings → GLM
+ * - HTTP ask + review when credentials configured in Settings → HTTP
  * - Provider switch event persists in agent thread after restart
  *
- * Optional manual GLM integration smoke (requires network + credentials):
- * - Enter API key in Settings → GLM (stored in glm-secrets.json, never in settings.json or thread files)
- * - Defaults: base URL https://open.bigmodel.cn/api/paas/v4, model glm-4-flash
+ * Optional manual HTTP integration smoke (requires network + credentials):
+ * - Enter API key in Settings → HTTP (stored in glm-secrets.json, never in settings.json or thread files)
+ * - Defaults: base URL https://open.bigmodel.cn/api/paas/v4, model gpt-4o-mini
  * - Send ask and review messages; verify assistant replies persist after app restart
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -75,7 +75,7 @@ function registerProviders(includeHttp = false): void {
     createRegistryCapabilityChecker(
       () => appState.getSnapshot().settings.providerSettings.debug,
       () => ({
-        settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "glm-4-flash" },
+        settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
         apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
       }),
     ),
@@ -314,7 +314,7 @@ describe("M5.3 milestone validation", () => {
     registerProviders(true);
 
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "glm", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, agentId!);
     chatStore.appendMessage(
       {
         id: "m-1",
@@ -338,10 +338,10 @@ describe("M5.3 milestone validation", () => {
     expect(chatStore.getMetadata(agentId!)?.provider).toBe("debug");
     expect(chatStore.getMessages(agentId!).at(-1)).toMatchObject({
       role: "system",
-      content: "Provider switched from GLM to Debug.",
+      content: "Provider switched from HTTP to Debug.",
       systemEvent: {
         type: "provider-switched",
-        fromProvider: "glm",
+        fromProvider: "http",
         toProvider: "debug",
       },
     });

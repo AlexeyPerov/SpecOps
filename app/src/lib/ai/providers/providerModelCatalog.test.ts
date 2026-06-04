@@ -12,28 +12,28 @@ import {
 
 describe("parseModelListInput", () => {
   it("parses newline and comma separated model ids", () => {
-    expect(parseModelListInput("glm-4-flash\n glm-4-plus , glm-4-air ")).toEqual([
-      "glm-4-flash",
-      "glm-4-plus",
-      "glm-4-air",
+    expect(parseModelListInput("gpt-4o-mini\n gpt-4.1 , gpt-4.1-mini ")).toEqual([
+      "gpt-4o-mini",
+      "gpt-4.1",
+      "gpt-4.1-mini",
     ]);
   });
 
   it("removes empty entries and duplicates", () => {
-    expect(parseModelListInput("\n, glm-4-flash\n, glm-4-flash\n")).toEqual(["glm-4-flash"]);
+    expect(parseModelListInput("\n, gpt-4o-mini\n, gpt-4o-mini\n")).toEqual(["gpt-4o-mini"]);
   });
 });
 
 describe("normalizeProviderModelCatalog", () => {
   it("falls back to provider defaults for invalid input", () => {
-    expect(normalizeProviderModelCatalog("glm", undefined)).toEqual(
-      defaultProviderModelCatalogs.glm,
+    expect(normalizeProviderModelCatalog("http", undefined)).toEqual(
+      defaultProviderModelCatalogs.http,
     );
   });
 
   it("normalizes invalid default model to first list entry", () => {
     expect(
-      normalizeProviderModelCatalog("glm", {
+      normalizeProviderModelCatalog("http", {
         modelIds: ["alpha", "beta"],
         defaultModelId: "missing",
       }),
@@ -57,35 +57,6 @@ describe("normalizeProviderModelCatalogs", () => {
   it("returns defaults for all providers", () => {
     expect(normalizeProviderModelCatalogs()).toEqual(defaultProviderModelCatalogs);
   });
-
-  it("migrates legacy glm model id into catalog when catalogs are missing", () => {
-    expect(
-      normalizeProviderModelCatalogs(undefined, { glmModelId: "legacy-model" }),
-    ).toEqual({
-      ...defaultProviderModelCatalogs,
-      glm: {
-        modelIds: ["legacy-model", "glm-4-flash", "glm-4-air", "glm-4-plus"],
-        defaultModelId: "legacy-model",
-      },
-    });
-  });
-
-  it("preserves explicit glm catalog default over legacy model id", () => {
-    expect(
-      normalizeProviderModelCatalogs(
-        {
-          glm: {
-            modelIds: ["glm-4-flash", "glm-4-plus"],
-            defaultModelId: "glm-4-plus",
-          },
-        },
-        { glmModelId: "legacy-model" },
-      ).glm,
-    ).toEqual({
-      modelIds: ["glm-4-flash", "glm-4-plus"],
-      defaultModelId: "glm-4-plus",
-    });
-  });
 });
 
 describe("catalog helpers", () => {
@@ -95,9 +66,9 @@ describe("catalog helpers", () => {
 
   it("checks membership and resolves default model id", () => {
     const catalogs = normalizeProviderModelCatalogs();
-    expect(isModelInProviderCatalog(catalogs, "glm", "glm-4-flash")).toBe(true);
-    expect(isModelInProviderCatalog(catalogs, "glm", "unknown")).toBe(false);
+    expect(isModelInProviderCatalog(catalogs, "http", "gpt-4o-mini")).toBe(true);
+    expect(isModelInProviderCatalog(catalogs, "http", "unknown")).toBe(false);
     expect(getProviderDefaultModelId(catalogs, "debug")).toBe("debug-simulator");
-    expect(getProviderModelCatalog(catalogs, "cursor").defaultModelId).toBe("auto");
+    expect(getProviderModelCatalog(catalogs, "debug").defaultModelId).toBe("debug-simulator");
   });
 });

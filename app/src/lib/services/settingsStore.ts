@@ -88,14 +88,6 @@ function parseExternalFilesSettings(parsed: Partial<PersistedSettings>): Externa
   };
 }
 
-function legacyGlmModelIdFromParsed(parsed: Record<string, unknown>): string | undefined {
-  const bundled = parsed.providerSettings;
-  if (isRecord(bundled) && isRecord(bundled.glm) && typeof bundled.glm.modelId === "string") {
-    return bundled.glm.modelId;
-  }
-  return undefined;
-}
-
 export async function loadPersistedSettings(): Promise<PersistedSettings | null> {
   try {
     const path = await getSettingsPath();
@@ -104,17 +96,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
 
     if (isBoolean(parsed.wrapLines) && typeof parsed.zoomPercent === "number") {
       const externalFiles = parseExternalFilesSettings(parsed as Partial<PersistedSettings>);
-      const hasExplicitGlmCatalog =
-        isRecord(parsed.providerModelCatalogs) &&
-        (isRecord(parsed.providerModelCatalogs.glm) || isRecord(parsed.providerModelCatalogs.http));
-      const providerModelCatalogs = normalizeProviderModelCatalogs(
-        parsed.providerModelCatalogs,
-        hasExplicitGlmCatalog
-          ? {}
-          : {
-              glmModelId: legacyGlmModelIdFromParsed(parsed),
-            },
-      );
+      const providerModelCatalogs = normalizeProviderModelCatalogs(parsed.providerModelCatalogs);
       const providerSettings = normalizeAppProviderSettings(
         isRecord(parsed.providerSettings) ? parsed.providerSettings : undefined,
         providerModelCatalogs,

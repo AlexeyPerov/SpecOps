@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-06-04 — Phase 1 execution plan
+
+- **Add** [execution-plan.md](specs/ops/phase-1/execution-plan.md) — agent task breakdown (11 tasks) from [phase-1.md](specs/ops/phase-1/phase-1.md), template: `specs/archive/execution-plan.md`.
+- **Link** execution plan from phase-1 spec header.
+
+## 2026-06-04 — Phase docs: per-phase folders
+
+- **Move** `specs/ops/phase-N.md` → `specs/ops/phase-N/phase-N.md` for N = 1…7.
+- **Update** [roadmap.md](specs/ops/roadmap.md), [roadmap-questions.md](specs/ops/roadmap-questions.md), [migration-plan.md](specs/ops/migration-plan.md), and cross-links inside phase docs.
+
+## 2026-06-04 — Split optional phase 6 and phase 7
+
+- **phase-6.md:** own agent platform / harness (OpenCode alternative); content from former `migration-plan.md`, aligned with roadmap and G2A.
+- **phase-7.md:** optional Open WebUI tier 2/3 in `chat-http` context (G1E).
+- **roadmap.md:** phase index 1–7; B5 multi-connection → phase 7.
+- **migration-plan.md:** stub redirect → phase-6.md.
+
+## 2026-06-04 — AI roadmap docs: source of truth
+
+- **Restructure** `specs/ops/`: [roadmap.md](specs/ops/roadmap.md) is index + authoritative decisions (incl. A2D rail gating: Chat = HTTP connection configured, Cloud = `CURSOR_API_KEY`).
+- **Add** [phase-1.md](specs/ops/phase-1.md) … [phase-5.md](specs/ops/phase-5.md) — detailed execution per phase; phase 1 replaces glm-removal plan (generalize GLM first per B1A).
+- **Remove** `specs/ops/glm-removal-plan.md` (superseded by phase-1.md).
+- **Archive** [roadmap-questions.md](specs/ops/roadmap-questions.md) — historical Q&A only.
+- Update [migration-plan.md](specs/ops/migration-plan.md) related-doc links.
+
+## 2026-06-03 — Roadmap questionnaire: inline answers + E1C decisions
+
+- `roadmap-questions.md`: **Answer** / **Notes** fields per question; locked B1A, B2A, B4A, E1C, E2A, E3B, F1–F3A, H1A (OpenCode alternative UI).
+- `roadmap.md`: **Decisions** table and end-user OpenCode (E1C) summary.
+
+## 2026-06-03 — AI roadmap and clarification questionnaire
+
+- Add `specs/ops/roadmap.md`: phased plan (preparation → Chat/WebUI tier 1 → Cloud/Cursor → OpenCode workspace → Cursor local toggle → optional tier 2/3 and own platform).
+- Add `specs/ops/roadmap-questions.md`: letter-option questionnaire (sections A–H) with recommendations and pros/cons.
+- Link roadmap from `migration-plan.md` and `glm-removal-plan.md`.
+
+## 2026-06-03 — GLM removal execution plan
+
+- Add `specs/ops/glm-removal-plan.md`: task breakdown (GR-0–GR-11) for removing Zhipu BigModel (GLM) provider support ahead of OpenCode / agent-backend integration.
+
 ## 2026-06-03 — Project pane context menu fixes
 
 - **New / rename / delete:** Replace `window.prompt` / `window.confirm` with in-app name prompt and Tauri `confirm` so create, rename, and delete work in production Tauri builds.

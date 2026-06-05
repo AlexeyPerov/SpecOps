@@ -74,7 +74,7 @@ Dependencies: Milestone 1 complete.
 
 ---
 
-#### Task 2: Chats sidebar and agent tabs (P2-4, C1) [Score:7] [Agent:medium]
+#### Task 2: Chats sidebar and agent tabs (P2-4, C1) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

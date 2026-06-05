@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 16:39 (MSK)
+
+- **Phase 2 M2 Task 2 (Chats sidebar + agent tabs):** Extended `app/src/lib/components/AgentsSidebar.svelte` with a context-driven `sidebarTitle` prop (default `"Agents"`), and made sidebar copy/aria/tooltips/context-menu labels adaptive so `chat-http` renders **Chats** wording while workspace retains **Agents**.
+- **Chat agent-tab bootstrap:** Updated `app/src/routes/+page.svelte` to pass `sidebarTitle="Chats"` in `chat-http` and enforce agent-only tabs there by creating/focusing a draft agent tab when needed and removing any residual file tabs in chat context.
+- **Plan tracking:** Marked Task 2 as `[DONE]` in `specs/ops/phase-2/execution-plan-m2.md`.
+
 ## 2026-06-05 16:27 (MSK)
 
 - **Phase 2 M2 Task 1 (chat-only page layout):** Updated `app/src/routes/+page.svelte` to derive `isChatHttpActive`, render chat context as sidebar + tab bar + `ChatPanel` only, hide project tree/file editor UI in `chat-http`, and prevent responsive workspace panel auto-rules/effects (project tree load/watch/expand and workspace chat access monitor) from running in chat context.

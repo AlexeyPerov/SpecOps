@@ -402,6 +402,37 @@
     }
   }
 
+  function ensureChatHttpAgentTab(): void {
+    if (!isChatHttpActive) {
+      return;
+    }
+    const activeScope = chatStore.getActiveChatScopeKey();
+    if (activeScope !== CHAT_HTTP_CONTEXT_ID) {
+      return;
+    }
+    const sessionSnapshot = appState.getActiveSession();
+    const hasAgentTab = sessionSnapshot.openTabs.some((tab) => isAgentTab(tab));
+    if (hasAgentTab) {
+      return;
+    }
+    let agentId = chatStore.getActiveAgentId();
+    if (!agentId) {
+      agentId = chatStore.createDraftAgent();
+    }
+    if (!agentId) {
+      return;
+    }
+    chatStore.setActiveAgentId(agentId);
+    appState.setLastActiveAgentId(agentId);
+    const fileTabIds = sessionSnapshot.openTabs
+      .filter((tab) => isFileTab(tab))
+      .map((tab) => tab.id);
+    if (fileTabIds.length > 0) {
+      appState.closeTabsByIds(fileTabIds, null);
+    }
+    appState.openOrFocusAgentTab(agentId);
+  }
+
   async function handleDeleteAgentFromChat(): Promise<void> {
     const agentId = chatStore.getActiveAgentId();
     if (!agentId) {
@@ -898,6 +929,7 @@
         chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
         void chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
       }
+      ensureChatHttpAgentTab();
       return;
     }
 
@@ -1003,6 +1035,7 @@
       <AgentsSidebar
         agents={workspaceAgents}
         activeAgentId={selectedAgentId}
+        sidebarTitle={isChatHttpActive ? "Chats" : "Agents"}
         collapsed={!showAgentsSidebar}
         panelWidthPx={workspaceLayout.agentsSidebarWidthPx}
         onToggleCollapsed={toggleAgentsSidebarCollapsed}

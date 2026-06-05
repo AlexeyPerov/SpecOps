@@ -18,6 +18,7 @@
   interface Props {
     agents?: AgentIndexEntry[];
     activeAgentId?: string | null;
+    sidebarTitle?: string;
     collapsed?: boolean;
     panelWidthPx?: number;
     onPanelWidthChange?: (width: number) => void;
@@ -30,6 +31,7 @@
   let {
     agents = [],
     activeAgentId = null,
+    sidebarTitle = "Agents",
     collapsed = false,
     panelWidthPx = DEFAULT_PANEL_WIDTH_PX,
     onPanelWidthChange = () => {},
@@ -53,6 +55,10 @@
 
   const filteredAgents = $derived(filterAgentsByTitle(agents, searchQuery));
   const groupedAgents = $derived(groupAgentsByLastUsedDate(filteredAgents));
+  const isChatsSidebar = $derived(sidebarTitle.trim().toLowerCase() === "chats");
+  const entryPluralLabel = $derived(isChatsSidebar ? "chats" : "agents");
+  const entrySingularLabel = $derived(isChatsSidebar ? "chat" : "agent");
+  const newEntryLabel = $derived(isChatsSidebar ? "New chat" : DRAFT_AGENT_TITLE);
 
   function groupsWithAgents(): AgentDateGroup[] {
     return AGENT_DATE_GROUP_ORDER.filter((group) => groupedAgents[group].length > 0);
@@ -126,8 +132,10 @@
 
   function confirmDeleteAgent(agentId: string): void {
     const entry = agents.find((agent) => agent.id === agentId);
-    const title = entry?.title ?? "this agent";
-    const confirmed = window.confirm(`Delete agent "${title}"? This cannot be undone.`);
+    const title = entry?.title ?? `this ${entrySingularLabel}`;
+    const confirmed = window.confirm(
+      `Delete ${entrySingularLabel} "${title}"? This cannot be undone.`,
+    );
     if (!confirmed) {
       return;
     }
@@ -138,7 +146,7 @@
 
 <aside
   class={`agents-sidebar ${collapsed ? "agents-sidebar-collapsed" : ""} ${isResizing ? "agents-sidebar-resizing" : ""}`}
-  aria-label="Agents sidebar"
+  aria-label={`${sidebarTitle} sidebar`}
   style={collapsed ? undefined : `width:${displayWidth}px`}
 >
   {#if !collapsed}
@@ -146,22 +154,22 @@
       class="agents-sidebar-resize-handle"
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize agents sidebar"
+      aria-label={`Resize ${entryPluralLabel} sidebar`}
       onpointerdown={handleResizeStart}
     ></div>
   {/if}
   <header class="agents-sidebar-header">
     {#if !collapsed}
-      <div class="agents-sidebar-title">Agents</div>
+      <div class="agents-sidebar-title">{sidebarTitle}</div>
       <button class="agents-sidebar-button agents-sidebar-new" type="button" onclick={onNewAgent}>
-        {DRAFT_AGENT_TITLE}
+        {newEntryLabel}
       </button>
     {/if}
     <button
       class="agents-sidebar-button"
       type="button"
       onclick={() => onToggleCollapsed(!collapsed)}
-      title={collapsed ? "Expand agents sidebar" : "Collapse agents sidebar"}
+      title={collapsed ? `Expand ${entryPluralLabel} sidebar` : `Collapse ${entryPluralLabel} sidebar`}
     >
       {collapsed ? "⟫" : "⟪"}
     </button>
@@ -170,11 +178,11 @@
   {#if !collapsed}
     <div class="agents-sidebar-body">
       <label class="agents-search-field">
-        <span class="agents-search-label">Search agents</span>
+        <span class="agents-search-label">{`Search ${entryPluralLabel}`}</span>
         <input
           class="agents-search-input"
           type="search"
-          placeholder="Search agents…"
+          placeholder={`Search ${entryPluralLabel}…`}
           bind:value={searchQuery}
         />
       </label>
@@ -182,7 +190,9 @@
       <div class="agents-list">
         {#if filteredAgents.length === 0}
           <p class="agents-empty" role="status">
-            {searchQuery.trim() ? "No agents match your search." : "No agents yet."}
+            {searchQuery.trim()
+              ? `No ${entryPluralLabel} match your search.`
+              : `No ${entryPluralLabel} yet.`}
           </p>
         {:else}
           {#each groupsWithAgents() as group (group)}
@@ -226,7 +236,7 @@
         }
       }}
     >
-      Delete agent
+      Delete {entrySingularLabel}
     </button>
   </div>
 {/if}

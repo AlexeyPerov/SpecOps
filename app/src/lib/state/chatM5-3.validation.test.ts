@@ -305,7 +305,7 @@ describe("M5.3 milestone validation", () => {
 
     expect(result.ok).toBe(true);
     expect(chatStore.getMessages(agentId!).at(-1)?.content).toContain("## Summary");
-    expect(schedulePersistMock).toHaveBeenCalledOnce();
+    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
   });
 
   it("persists provider switch system event in agent thread", async () => {

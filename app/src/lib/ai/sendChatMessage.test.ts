@@ -40,6 +40,13 @@ function httpFetchStreamSuccess(content: string): typeof fetch {
   ) as typeof fetch;
 }
 
+function makeSseResponse(events: string[]): Response {
+  return new Response(events.join(""), {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
 describe("sendChatMessage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -94,7 +101,7 @@ describe("sendChatMessage", () => {
     expect(chatStore.getMessages()[1].role).toBe("assistant");
     expect(chatStore.getMessages()[1].content).toContain("simulated answer");
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
-    expect(schedulePersistMock).toHaveBeenCalledOnce();
+    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
   });
 
   it("uses default provider resolver before thread metadata exists", async () => {
@@ -145,11 +152,56 @@ describe("sendChatMessage", () => {
     const result = await resultPromise;
 
     expect(result.ok).toBe(true);
-    expect(schedulePersistMock).toHaveBeenCalledOnce();
-    const persistedSnapshot = schedulePersistMock.mock.calls[0]?.[2];
+    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
+    const persistedSnapshot = schedulePersistMock.mock.calls.at(-1)?.[2];
     const assistant = persistedSnapshot?.thread.messages.find((message) => message.role === "assistant");
     expect(assistant?.content).toContain("simulated answer");
     expect(assistant?.content).toBe(chatStore.getMessages().find((message) => message.role === "assistant")?.content);
+  });
+
+  it("schedules stream persistence on first HTTP chunk and final content at completion", async () => {
+    resetChatProviderRegistryForTests();
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "http-test-key");
+    registerChatProvider(
+      createOpenAiCompatibleChatProvider(
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+        vi.fn().mockResolvedValue(
+          makeSseResponse([
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "chunk one " } }] })}\n\n`,
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "chunk two" } }] })}\n\n`,
+            "data: [DONE]\n\n",
+          ]),
+        ) as typeof fetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
+
+    const result = await sendChatMessage("Persist while streaming");
+
+    expect(result.ok).toBe(true);
+    expect(schedulePersistMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const firstAssistant =
+      schedulePersistMock.mock.calls[0]?.[2].thread.messages.find((message) => message.role === "assistant")
+        ?.content ?? "";
+    const lastAssistant =
+      schedulePersistMock.mock.calls.at(-1)?.[2].thread.messages.find((message) => message.role === "assistant")
+        ?.content ?? "";
+    expect(firstAssistant.length).toBeGreaterThan(0);
+    expect(firstAssistant.length).toBeLessThan("chunk one chunk two".length);
+    expect(lastAssistant).toBe("chunk one chunk two");
   });
 
   it("streams HTTP partial updates when the provider supports SSE", async () => {
@@ -162,7 +214,14 @@ describe("sendChatMessage", () => {
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
         }),
-        httpFetchStreamSuccess("Streamed HTTP response."),
+        vi.fn().mockResolvedValue(
+          makeSseResponse([
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "Streamed " } }] })}\n\n`,
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "HTTP " } }] })}\n\n`,
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "response." } }] })}\n\n`,
+            "data: [DONE]\n\n",
+          ]),
+        ) as typeof fetch,
       ),
     );
     chatStore.setCapabilityChecker(
@@ -190,11 +249,75 @@ describe("sendChatMessage", () => {
     expect(result.ok).toBe(true);
     const finalLength = "Streamed HTTP response.".length;
     expect(observedLengths[0]).toBe(0);
-    expect(observedLengths.every((length) => length === 0 || length === finalLength)).toBe(true);
-    expect(new Set(observedLengths.filter((length) => length > 0))).toEqual(new Set([finalLength]));
+    expect(observedLengths).toContain("Streamed ".length);
+    expect(observedLengths).toContain("Streamed HTTP ".length);
+    expect(observedLengths.at(-1)).toBe(finalLength);
     expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
       "Streamed HTTP response.",
     );
+  });
+
+  it("aborts an in-flight HTTP stream when generation is cancelled", async () => {
+    resetChatProviderRegistryForTests();
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "http-test-key");
+    const abortSignals: AbortSignal[] = [];
+    const sseFetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal | undefined;
+      if (signal) {
+        abortSignals.push(signal);
+      }
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({ choices: [{ delta: { content: "partial " } }] })}\n\n`,
+            ),
+          );
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+    registerChatProvider(
+      createOpenAiCompatibleChatProvider(
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+        sseFetch as typeof fetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+      ),
+    );
+    const agentId = chatStore.getActiveAgentId();
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
+
+    const sendPromise = sendChatMessage("Cancel streamed HTTP");
+    await Promise.resolve();
+    expect(chatStore.getRuntimeState().isGenerating).toBe(true);
+    expect(agentId).toBeTruthy();
+    const cancelled = chatStore.cancelAgentGeneration("/work/a", agentId!);
+    expect(cancelled).toBe(true);
+    const result = await sendPromise;
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "generating",
+      message: "Response was cancelled.",
+    });
+    expect(abortSignals).toHaveLength(1);
+    expect(abortSignals[0]?.aborted).toBe(true);
+    expect(chatStore.getRuntimeState().isGenerating).toBe(false);
   });
 
   it("prevents duplicate sends while generating", async () => {
@@ -336,8 +459,8 @@ describe("sendChatMessage", () => {
     expect(result.ok).toBe(true);
     expect(chatStore.isAgentDraft(agentId!)).toBe(false);
     expect(chatStore.getAgentTitle(agentId!)).toBe("Sidebar title from first send");
-    expect(schedulePersistMock).toHaveBeenCalledOnce();
-    const persistedSnapshot = schedulePersistMock.mock.calls[0]?.[2];
+    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
+    const persistedSnapshot = schedulePersistMock.mock.calls.at(-1)?.[2];
     expect(persistedSnapshot?.thread.messages.some((message) => message.role === "user")).toBe(true);
   });
 
@@ -398,7 +521,7 @@ describe("sendChatMessage", () => {
     expect(chatStore.getMessages()).toHaveLength(2);
     expect(chatStore.getMessages()[1].content).toBe("HTTP response about retention.");
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
-    expect(schedulePersistMock).toHaveBeenCalledOnce();
+    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
   });
 
   it("records HTTP provider errors in retry scaffolding", async () => {

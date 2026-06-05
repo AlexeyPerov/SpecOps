@@ -251,6 +251,7 @@ async function executeProviderTurn(params: {
   previousError?: ChatTurnError | null;
 }): Promise<SendChatMessageResult> {
   const { root, activeAgentId, turnId, provider, accessStatus, modelId, previousError } = params;
+  const abortController = new AbortController();
 
   const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
   if (!thread) {
@@ -274,15 +275,25 @@ async function executeProviderTurn(params: {
     modelId,
     turnKey: turnId,
     accessStatus,
+    signal: abortController.signal,
   };
 
   const assistantMessage = createAssistantPlaceholder(turnId);
   chatStore.appendMessage(assistantMessage, { agentId: activeAgentId, skipCompaction: true });
+  const usesStreamingProvider = Boolean(provider.streamMessage);
+  let hasScheduledStreamingPersistence = false;
 
   try {
     const finalContent = await streamProviderMessage(provider, request, (_delta, accumulated) => {
-      assertTurnStillActive(root, activeAgentId, turnId);
+      if (!chatStore.isGenerationTurnActive(root, activeAgentId, turnId)) {
+        abortController.abort();
+        throw new TurnCancelledError();
+      }
       chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
+      if (usesStreamingProvider && !hasScheduledStreamingPersistence) {
+        hasScheduledStreamingPersistence = true;
+        persistAgentThreadOnce(root, activeAgentId);
+      }
     });
     assertTurnStillActive(root, activeAgentId, turnId);
     chatStore.updateMessageContent(assistantMessage.id, finalContent, activeAgentId, root);

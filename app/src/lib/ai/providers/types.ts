@@ -40,6 +40,8 @@ export interface ProviderSendRequest {
   turnKey?: string;
   /** Optional access status for Debug diagnostics appendix. */
   accessStatus?: WorkspaceAccessStatus;
+  /** Optional cancellation signal for in-flight provider requests. */
+  signal?: AbortSignal;
 }
 
 export interface ProviderSendResponse {

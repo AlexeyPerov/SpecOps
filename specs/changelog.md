@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-05 17:24 (MSK)
+
+- **Phase 2 M3 Task 2 (send pipeline streaming integration):** Updated `sendChatMessage` turn execution to wire cancellation through `AbortController` into provider requests, stream assistant content into the existing placeholder message incrementally, and keep retry path on the shared streaming pipeline.
+- **Persistence behavior during stream:** Added debounced stream persistence scheduling from the first chunk (without per-chunk writes), while preserving final persistence semantics and completion/runtime cleanup.
+- **Provider request contract:** Extended `ProviderSendRequest` with optional `signal` and passed it through the OpenAI-compatible HTTP provider fetch calls (`sendMessage` and `streamMessage`) for unified cancellation semantics.
+- **Tests:** Extended `sendChatMessage` tests for true multi-chunk HTTP incremental growth and explicit mid-stream cancellation abort behavior (including abort signal assertions and `isGenerating` reset).
+- **Plan tracking:** Marked Task 2 as `[DONE]` in `specs/ops/phase-2/execution-plan-m3.md`.
+
 ## 2026-06-05 17:13 (MSK)
 
 - **Phase 2 M3 Task 1 (HTTP SSE streaming):** Added `streamMessage` to the OpenAI-compatible HTTP provider with `stream: true` requests, SSE delta parsing, `[DONE]` handling, and typed provider errors for HTTP status failures, malformed JSON, in-band stream errors, and truncated streams.

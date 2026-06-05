@@ -114,6 +114,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
           Authorization: `Bearer ${apiKey.trim()}`,
           "Content-Type": "application/json",
         },
+        signal: request.signal,
         body: JSON.stringify({
           model: modelId,
           messages,
@@ -175,6 +176,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
           Authorization: `Bearer ${apiKey.trim()}`,
           "Content-Type": "application/json",
         },
+        signal: request.signal,
         body: JSON.stringify({
           model: modelId,
           messages,

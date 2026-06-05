@@ -72,7 +72,7 @@ Dependencies: Milestone 2 complete.
 
 ---
 
-#### Task 2: Send pipeline streaming integration (P2-5) [Score:8] [Agent:medium]
+#### Task 2: Send pipeline streaming integration (P2-5) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 

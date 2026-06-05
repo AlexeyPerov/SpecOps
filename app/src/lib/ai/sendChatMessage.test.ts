@@ -31,11 +31,11 @@ vi.mock("../services/fileSystem", () => ({
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
-function httpFetchSuccess(content: string): typeof fetch {
+function httpFetchStreamSuccess(content: string): typeof fetch {
   return vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+    new Response(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`, {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/event-stream" },
     }),
   ) as typeof fetch;
 }
@@ -152,7 +152,7 @@ describe("sendChatMessage", () => {
     expect(assistant?.content).toBe(chatStore.getMessages().find((message) => message.role === "assistant")?.content);
   });
 
-  it("uses buffered fallback for HTTP without streaming partial updates", async () => {
+  it("streams HTTP partial updates when the provider supports SSE", async () => {
     resetChatProviderRegistryForTests();
     appState.updateHttpConnectionSettings({ enabled: true });
     appState.setProviderApiKey("http", "http-test-key");
@@ -162,7 +162,7 @@ describe("sendChatMessage", () => {
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
         }),
-        httpFetchSuccess("Buffered HTTP response."),
+        httpFetchStreamSuccess("Streamed HTTP response."),
       ),
     );
     chatStore.setCapabilityChecker(
@@ -184,16 +184,16 @@ describe("sendChatMessage", () => {
       }
     });
 
-    const result = await sendChatMessage("Buffered HTTP please");
+    const result = await sendChatMessage("Streamed HTTP please");
     unsubscribe();
 
     expect(result.ok).toBe(true);
-    const finalLength = "Buffered HTTP response.".length;
+    const finalLength = "Streamed HTTP response.".length;
     expect(observedLengths[0]).toBe(0);
     expect(observedLengths.every((length) => length === 0 || length === finalLength)).toBe(true);
     expect(new Set(observedLengths.filter((length) => length > 0))).toEqual(new Set([finalLength]));
     expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
-      "Buffered HTTP response.",
+      "Streamed HTTP response.",
     );
   });
 
@@ -378,7 +378,7 @@ describe("sendChatMessage", () => {
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
         }),
-        httpFetchSuccess("HTTP response about retention."),
+        httpFetchStreamSuccess("HTTP response about retention."),
       ),
     );
     chatStore.setCapabilityChecker(
@@ -505,10 +505,13 @@ describe("sendChatMessage", () => {
         new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ choices: [{ message: { content: "Retried HTTP response." } }] }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Retried HTTP response." } }] })}\n\ndata: [DONE]\n\n`,
+          {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          },
+        ),
       );
     registerChatProvider(
       createOpenAiCompatibleChatProvider(

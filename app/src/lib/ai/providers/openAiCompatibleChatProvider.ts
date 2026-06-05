@@ -17,10 +17,12 @@ import {
 } from "./httpConnectionSettings";
 import { mapProviderModelRuntimeError, shouldMapProviderModelRejection } from "./modelValidation";
 import { buildOpenAiChatMessages } from "./openAiChatMessages";
+import { parseOpenAiSseStream } from "./openAiSseParser";
 import type {
   ChatProvider,
   ProviderSendRequest,
   ProviderSendResponse,
+  ProviderStreamChunk,
 } from "./types";
 
 export type HttpSettingsReader = () => {
@@ -100,15 +102,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     const normalized = normalizeHttpConnectionSettings(settings);
     this.assertConfigured(normalized, apiKey);
 
-    const modelId = request.modelId.trim();
-    if (!modelId) {
-      throw mapProviderModelRuntimeError(
-        new ChatProviderError("Missing model id for HTTP request.", "Missing model id for HTTP request."),
-        "http",
-        request.modelId,
-      );
-    }
-
+    const modelId = resolveRuntimeModelId(request.modelId);
     const messages = buildOpenAiChatMessages(request.payload);
     const url = resolveHttpChatCompletionsUrl(normalized.baseUrl);
 
@@ -163,6 +157,50 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     return { content };
   }
 
+  async *streamMessage(request: ProviderSendRequest): AsyncIterable<ProviderStreamChunk> {
+    const { settings, apiKey } = this.getSettings();
+    const normalized = normalizeHttpConnectionSettings(settings);
+    this.assertConfigured(normalized, apiKey);
+
+    const modelId = resolveRuntimeModelId(request.modelId);
+    const messages = buildOpenAiChatMessages(request.payload);
+    const url = resolveHttpChatCompletionsUrl(normalized.baseUrl);
+
+    let response: Response;
+    try {
+      response = await this.fetchFn(url, {
+        method: "POST",
+        headers: {
+          Accept: "text/event-stream",
+          Authorization: `Bearer ${apiKey.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          stream: true,
+        }),
+      });
+    } catch (error) {
+      throw mapHttpNetworkError(error);
+    }
+
+    if (!response.ok) {
+      throw mapHttpError(response.status, await response.text(), modelId);
+    }
+
+    if (!response.body) {
+      throw new ChatProviderError(
+        "HTTP provider returned an empty stream body.",
+        "HTTP provider returned an empty streaming response. Try again.",
+      );
+    }
+
+    for await (const delta of parseOpenAiSseStream(response.body)) {
+      yield { delta };
+    }
+  }
+
   private assertConfigured(settings: HttpConnectionSettings, apiKey: string): void {
     if (!isHttpProviderConfigured(settings, apiKey)) {
       throw new ChatProviderError(
@@ -171,6 +209,18 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
       );
     }
   }
+}
+
+function resolveRuntimeModelId(modelId: string): string {
+  const trimmed = modelId.trim();
+  if (!trimmed) {
+    throw mapProviderModelRuntimeError(
+      new ChatProviderError("Missing model id for HTTP request.", "Missing model id for HTTP request."),
+      "http",
+      modelId,
+    );
+  }
+  return trimmed;
 }
 
 export function resolveHttpChatCompletionsUrl(baseUrl: string): string {

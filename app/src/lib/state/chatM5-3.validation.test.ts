@@ -50,9 +50,9 @@ const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function httpFetchSuccess(content: string): typeof fetch {
   return vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+    new Response(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`, {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/event-stream" },
     }),
   ) as typeof fetch;
 }

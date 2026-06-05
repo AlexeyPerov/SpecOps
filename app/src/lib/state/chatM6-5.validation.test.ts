@@ -66,9 +66,9 @@ const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function httpFetchSuccess(content: string): typeof fetch {
   return vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+    new Response(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`, {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/event-stream" },
     }),
   ) as typeof fetch;
 }
@@ -172,10 +172,13 @@ describe("M6 milestone validation — AI chat MVP", () => {
         new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ choices: [{ message: { content: "Retried HTTP response." } }] }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Retried HTTP response." } }] })}\n\ndata: [DONE]\n\n`,
+          {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          },
+        ),
       );
     resetChatProviderRegistryForTests();
     registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));

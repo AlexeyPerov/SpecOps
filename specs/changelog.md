@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 17:13 (MSK)
+
+- **Phase 2 M3 Task 1 (HTTP SSE streaming):** Added `streamMessage` to the OpenAI-compatible HTTP provider with `stream: true` requests, SSE delta parsing, `[DONE]` handling, and typed provider errors for HTTP status failures, malformed JSON, in-band stream errors, and truncated streams.
+- **Parser + provider tests:** Added focused SSE parser/provider coverage and updated affected HTTP send-pipeline fixtures to use SSE responses now that HTTP exposes streaming.
+- **Plan tracking:** Marked Task 1 as `[DONE]` in `specs/ops/phase-2/execution-plan-m3.md`.
+
 ## 2026-06-05 16:58 (MSK)
 
 - **Phase 2 M2 Task 6 (tests + verification):** Ran full verification gates in `app/` — `npm test` (**671 passed**) and `npm run check` (**0 errors**, 1 pre-existing a11y warning in `EntryNamePrompt.svelte`).

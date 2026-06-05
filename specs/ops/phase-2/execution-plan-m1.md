@@ -93,7 +93,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 3: `chatStore` scope by context id + persistence path (P2-2) [Score:9] [Agent:heavy]
+#### Task 3: `chatStore` scope by context id + persistence path (P2-2) [Score:9] [Agent:heavy] [DONE]
 
 **Required context**
 
@@ -222,7 +222,7 @@ Task 4 can start in parallel with Task 1.
 
 - [ ] `chat-http` context loads/saves in session snapshot.
 - [ ] Chat rail button visible when HTTP connection configured; hidden otherwise.
-- [ ] `chatStore` + persistence scoped to `chat-http` under `chat/chat-http/`.
+- [x] `chatStore` + persistence scoped to `chat-http` under `chat/chat-http/`.
 - [ ] Workspace HTTP chat unchanged (B2A).
 - [ ] `npm test` / `npm run check` pass.
 

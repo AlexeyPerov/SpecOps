@@ -75,7 +75,7 @@ export function resolveTargetAgentId(state: ChatStoreState, agentId?: string): s
 export function ensureActiveAgent(
   state: ChatStoreState,
 ): { state: ChatStoreState; workspace: WorkspaceAgentsState; agentId: string } | null {
-  const root = state.activeWorkspaceRoot;
+  const root = state.activeChatScopeKey;
   if (!root) {
     return null;
   }
@@ -105,9 +105,9 @@ type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => v
 export function createAgentsSlice(deps: {
   update: ChatStoreUpdate;
   getSnapshot: () => ChatStoreState;
-  getActiveWorkspaceRoot: () => string | null;
+  getActiveChatScopeKey: () => string | null;
 }) {
-  const { update, getSnapshot, getActiveWorkspaceRoot } = deps;
+  const { update, getSnapshot, getActiveChatScopeKey } = deps;
 
   return {
     getActiveAgentId(): string | null {
@@ -115,7 +115,7 @@ export function createAgentsSlice(deps: {
     },
     setActiveAgentId(agentId: string | null): void {
       update((state) => {
-        const root = state.activeWorkspaceRoot;
+        const root = state.activeChatScopeKey;
         if (!root) {
           return state;
         }
@@ -130,7 +130,7 @@ export function createAgentsSlice(deps: {
       });
     },
     createDraftAgent(options?: { activate?: boolean }): string | null {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return null;
       }
@@ -151,7 +151,7 @@ export function createAgentsSlice(deps: {
       return createdAgentId;
     },
     isAgentDraft(agentId: string): boolean {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return false;
       }
@@ -162,7 +162,7 @@ export function createAgentsSlice(deps: {
       return isDraftAgentEntry(findAgentIndexEntry(workspace, agentId));
     },
     getAgentTitle(agentId: string): string | null {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return null;
       }
@@ -173,7 +173,7 @@ export function createAgentsSlice(deps: {
       return findAgentIndexEntry(workspace, agentId)?.title ?? null;
     },
     getAgentIndex(): AgentIndexEntry[] {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return [];
       }
@@ -254,7 +254,7 @@ export function createAgentsSlice(deps: {
       await this.loadWorkspaceAgents(normalizedRootPath);
     },
     async deleteAgent(agentId: string): Promise<boolean> {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return false;
       }

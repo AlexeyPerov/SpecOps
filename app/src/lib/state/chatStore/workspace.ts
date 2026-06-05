@@ -54,27 +54,35 @@ export function patchWorkspaceState(
 }
 
 export function activeAgentId(state: ChatStoreState): string | null {
-  return workspaceState(state, state.activeWorkspaceRoot)?.activeAgentId ?? null;
+  return workspaceState(state, state.activeChatScopeKey)?.activeAgentId ?? null;
 }
 
 export function threadForAgent(
   state: ChatStoreState,
   agentId: string | null,
 ): ChatThreadSnapshot | null {
-  const root = state.activeWorkspaceRoot;
-  if (!root || !agentId) {
+  const scopeKey = state.activeChatScopeKey;
+  if (!scopeKey || !agentId) {
     return null;
   }
-  return state.workspaces[root]?.threadsByAgentId[agentId] ?? null;
+  return state.workspaces[scopeKey]?.threadsByAgentId[agentId] ?? null;
 }
 
 export function activeThread(state: ChatStoreState): ChatThreadSnapshot | null {
   return threadForAgent(state, activeAgentId(state));
 }
 
+export function resolveChatScopeKey(
+  state: ChatStoreState,
+  scopeKey?: string | null,
+): string | null {
+  return scopeKey ?? state.activeChatScopeKey;
+}
+
+/** @deprecated Use resolveChatScopeKey. */
 export function resolveWorkspaceRoot(
   state: ChatStoreState,
   workspaceRoot?: string | null,
 ): string | null {
-  return workspaceRoot ?? state.activeWorkspaceRoot;
+  return resolveChatScopeKey(state, workspaceRoot);
 }

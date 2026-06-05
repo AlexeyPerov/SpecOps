@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, readTextFile, remove, writeTextFile } from "@tauri-apps/plugin-fs";
+import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import {
+  chatScopeStorageSegment,
   decodeChatAgentThreadFileSnapshot,
   decodeWorkspaceAgentsIndexSnapshot,
   deleteAgentPersistence,
@@ -91,6 +93,17 @@ describe("workspace agent path mapping", () => {
     expect(workspaceDir).toBe("/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE));
     expect(indexPath).toBe(workspaceDir + "/index.json");
     expect(threadPath).toBe(workspaceDir + "/" + AGENT_ID + ".json");
+  });
+
+  it("maps chat-http scope to a literal chat/chat-http/ directory", async () => {
+    const chatHttpDir = await getWorkspaceAgentsDir(CHAT_HTTP_CONTEXT_ID);
+    const indexPath = await getWorkspaceAgentsIndexFilePath(CHAT_HTTP_CONTEXT_ID);
+    const threadPath = await getAgentThreadFilePath(CHAT_HTTP_CONTEXT_ID, AGENT_ID);
+
+    expect(chatScopeStorageSegment(CHAT_HTTP_CONTEXT_ID)).toBe("chat-http");
+    expect(chatHttpDir).toBe("/data/spec-ops/chat/chat-http");
+    expect(indexPath).toBe("/data/spec-ops/chat/chat-http/index.json");
+    expect(threadPath).toBe("/data/spec-ops/chat/chat-http/" + AGENT_ID + ".json");
   });
 });
 

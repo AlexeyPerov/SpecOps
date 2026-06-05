@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-05 15:16 (MSK)
+
+- **Phase 2 M1 Task 3 (`chatStore` scope + persistence):** Migrated chat store active scope from `activeWorkspaceRoot` to `activeChatScopeKey`, with `setActiveChatScope` / `getActiveChatScopeKey` for context-id scope (`chat-http`) while preserving `setActiveWorkspaceRoot` for workspace paths.
+- **Persistence paths:** Updated `chatPersistence` to resolve storage via `chatScopeStorageSegment` — workspace scopes use hashed `chat/{hash}/` paths; `chat-http` uses literal `chat/chat-http/` for index and per-agent thread files.
+- **App shell wiring:** Updated `+page.svelte` context effect and `appShellRuntime` restore to set `chat-http` scope, load its agent index, and skip workspace access preflight / `restoreWorkspaceAgentSession`.
+- **Tests:** Added `chat-http` path mapping coverage in `chatPersistence.test.ts` and scope isolation test in `chatStore.test.ts`.
+
 ## 2026-06-05 15:05 (MSK)
 
 - **Phase 2 M1 Task 2 (`chat-http` session + switching):** Completed session round-trip wiring for `chatHttp` by persisting/sanitizing it through `sessionManager` and `sessionDocumentPersistence`, including support for restoring `activeContextId: "chat-http"` from `session.json`.

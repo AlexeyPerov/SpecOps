@@ -58,11 +58,11 @@ type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => v
 export function createThreadsSlice(deps: {
   update: ChatStoreUpdate;
   getSnapshot: () => ChatStoreState;
-  getActiveWorkspaceRoot: () => string | null;
+  getActiveChatScopeKey: () => string | null;
   getRuntimeState: (agentId?: string) => { isGenerating: boolean };
   capabilityCheckerRef: { current: CapabilityChecker | null };
 }) {
-  const { update, getSnapshot, getActiveWorkspaceRoot, getRuntimeState, capabilityCheckerRef } =
+  const { update, getSnapshot, getActiveChatScopeKey, getRuntimeState, capabilityCheckerRef } =
     deps;
 
   function resolveCapabilityChecker(): CapabilityChecker {
@@ -71,7 +71,7 @@ export function createThreadsSlice(deps: {
 
   return {
     setAgentThread(agentId: string, thread: ChatThreadSnapshot | null): void {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return;
       }
@@ -104,7 +104,7 @@ export function createThreadsSlice(deps: {
             ];
         return {
           ...state,
-          activeWorkspaceRoot: normalizedRootPath,
+          activeChatScopeKey: normalizedRootPath,
           workspaces: {
             ...nextState.workspaces,
             [normalizedRootPath]: {
@@ -126,7 +126,7 @@ export function createThreadsSlice(deps: {
     ): boolean {
       let appended = false;
       update((state) => {
-        const root = state.activeWorkspaceRoot;
+        const root = state.activeChatScopeKey;
         if (!root) {
           return state;
         }
@@ -298,7 +298,7 @@ export function createThreadsSlice(deps: {
     compactActiveThread(agentId?: string): boolean {
       let compacted = false;
       update((state) => {
-        const root = state.activeWorkspaceRoot;
+        const root = state.activeChatScopeKey;
         const targetAgentId = resolveTargetAgentId(state, agentId);
         if (!root || !targetAgentId) {
           return state;
@@ -330,7 +330,7 @@ export function createThreadsSlice(deps: {
     ): boolean {
       let updatedMetadata = false;
       update((state) => {
-        const root = state.activeWorkspaceRoot;
+        const root = state.activeChatScopeKey;
         if (!root) {
           return state;
         }
@@ -426,7 +426,7 @@ export function createThreadsSlice(deps: {
       options: ChatProviderSwitchOptions,
       agentId?: string,
     ): Promise<SwitchThreadProviderResult> {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return { switched: false, message: "Open a workspace to switch providers." };
       }
@@ -540,7 +540,7 @@ export function createThreadsSlice(deps: {
       options: ChatModelSwitchOptions,
       agentId?: string,
     ): Promise<SwitchThreadModelResult> {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return { switched: false, message: "Open a workspace to switch models." };
       }

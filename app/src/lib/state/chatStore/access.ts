@@ -43,6 +43,7 @@ type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => v
 export function createAccessSlice(deps: {
   update: ChatStoreUpdate;
   getSnapshot: () => ChatStoreState;
+  getActiveChatScopeKey: () => import("./types").ChatScopeKey | null;
   getActiveWorkspaceRoot: () => string | null;
   getMetadata: (agentId?: string) => import("../../domain/contracts").ChatThreadMetadata | null;
   capabilityCheckerRef: { current: CapabilityChecker | null };
@@ -158,22 +159,22 @@ export function createAccessSlice(deps: {
       });
     },
     getChatAccessState(): ChatAccessState {
-      const snapshot = getSnapshot();
-      const rootPath = snapshot.activeWorkspaceRoot;
+      const rootPath = getActiveWorkspaceRoot();
       if (!rootPath) {
         return defaultUnknownAccessState("Open a workspace to use AI chat.");
       }
+      const snapshot = getSnapshot();
       return (
         snapshot.accessByWorkspace[rootPath] ??
         defaultUnknownAccessState("Chat access preflight has not run yet.")
       );
     },
     async runAccessPreflight(): Promise<ChatAccessState> {
-      const snapshot = getSnapshot();
-      const rootPath = snapshot.activeWorkspaceRoot;
+      const rootPath = getActiveWorkspaceRoot();
       if (!rootPath) {
         return defaultUnknownAccessState("Open a workspace to use AI chat.");
       }
+      const snapshot = getSnapshot();
 
       const previousState = snapshot.accessByWorkspace[rootPath];
 

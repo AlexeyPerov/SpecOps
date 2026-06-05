@@ -111,7 +111,7 @@
   );
   let autoProjectPanelCollapsed = $state(false);
   let autoAgentsSidebarCollapsed = $state(false);
-  let lastChatWorkspaceRoot = $state<string | null>(null);
+  let lastChatScopeKey = $state<string | null>(null);
 
   const snapshot = $derived($appState);
   const activeContext = $derived(getActiveContextSnapshot(snapshot));
@@ -877,20 +877,32 @@
   });
 
   $effect(() => {
+    if (activeContextId === CHAT_HTTP_CONTEXT_ID) {
+      if (lastChatScopeKey !== CHAT_HTTP_CONTEXT_ID) {
+        if (lastChatScopeKey !== null) {
+          chatStore.cancelAllGenerations(lastChatScopeKey);
+        }
+        lastChatScopeKey = CHAT_HTTP_CONTEXT_ID;
+        chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+        void chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+      }
+      return;
+    }
+
     if (!activeWorkspaceRoot) {
-      if (lastChatWorkspaceRoot !== null) {
-        chatStore.cancelAllGenerations(lastChatWorkspaceRoot);
-        lastChatWorkspaceRoot = null;
+      if (lastChatScopeKey !== null) {
+        chatStore.cancelAllGenerations(lastChatScopeKey);
+        lastChatScopeKey = null;
       }
       chatStore.setActiveWorkspaceRoot(null);
       return;
     }
     const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
-    if (lastChatWorkspaceRoot !== normalizedWorkspaceRoot) {
-      if (lastChatWorkspaceRoot !== null) {
-        chatStore.cancelAllGenerations(lastChatWorkspaceRoot);
+    if (lastChatScopeKey !== normalizedWorkspaceRoot) {
+      if (lastChatScopeKey !== null) {
+        chatStore.cancelAllGenerations(lastChatScopeKey);
       }
-      lastChatWorkspaceRoot = normalizedWorkspaceRoot;
+      lastChatScopeKey = normalizedWorkspaceRoot;
       void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
       chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
       void restoreWorkspaceAgentSession(normalizedWorkspaceRoot).catch(() => {

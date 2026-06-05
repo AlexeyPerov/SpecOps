@@ -11,6 +11,8 @@ import type {
   ChatThreadSnapshot,
   WorkspaceAgentsIndexSnapshot,
 } from "../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
+import type { ChatScopeKey } from "../state/chatStore/types";
 import { deriveAgentTitleFromThread } from "./chatAgents";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
@@ -45,13 +47,13 @@ const AGENTS_INDEX_FILE = "index.json";
 const PERSIST_DEBOUNCE_MS = 700;
 
 type PendingAgentPersist = {
-  normalizedRootPath: string;
+  scopeKey: ChatScopeKey;
   agentId: string;
   snapshot: ChatAgentThreadFileSnapshot;
 };
 
 type PendingIndexPersist = {
-  normalizedRootPath: string;
+  scopeKey: ChatScopeKey;
   snapshot: WorkspaceAgentsIndexSnapshot;
 };
 
@@ -85,6 +87,14 @@ function hashNormalizedPath(path: string): string {
 
 export function workspaceChatPathHashKey(normalizedRootPath: string): string {
   return hashNormalizedPath(normalizedRootPath);
+}
+
+/** Resolves the on-disk segment under `chat/` for a chat scope key. */
+export function chatScopeStorageSegment(scopeKey: ChatScopeKey): string {
+  if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
+    return CHAT_HTTP_CONTEXT_ID;
+  }
+  return workspaceChatPathHashKey(scopeKey);
 }
 
 function emptyAgentsIndexSnapshot(): WorkspaceAgentsIndexSnapshot {
@@ -353,32 +363,32 @@ export function encodeWorkspaceAgentsIndexSnapshot(snapshot: WorkspaceAgentsInde
   return JSON.stringify(normalizedSnapshot, null, 2);
 }
 
-export async function getWorkspaceAgentsDir(normalizedRootPath: string): Promise<string> {
+export async function getWorkspaceAgentsDir(scopeKey: ChatScopeKey): Promise<string> {
   const base = await ensureSpecOpsDataDir();
   const chatDir = await join(base, CHAT_DIR_NAME);
-  const workspaceDir = await join(chatDir, workspaceChatPathHashKey(normalizedRootPath));
+  const workspaceDir = await join(chatDir, chatScopeStorageSegment(scopeKey));
   await mkdir(workspaceDir, { recursive: true });
   return workspaceDir;
 }
 
-export async function getWorkspaceAgentsIndexFilePath(normalizedRootPath: string): Promise<string> {
-  const workspaceDir = await getWorkspaceAgentsDir(normalizedRootPath);
+export async function getWorkspaceAgentsIndexFilePath(scopeKey: ChatScopeKey): Promise<string> {
+  const workspaceDir = await getWorkspaceAgentsDir(scopeKey);
   return join(workspaceDir, AGENTS_INDEX_FILE);
 }
 
 export async function getAgentThreadFilePath(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   agentId: string,
 ): Promise<string> {
-  const workspaceDir = await getWorkspaceAgentsDir(normalizedRootPath);
+  const workspaceDir = await getWorkspaceAgentsDir(scopeKey);
   return join(workspaceDir, `${agentId}.json`);
 }
 
 export async function readWorkspaceAgentsIndexSnapshot(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
 ): Promise<WorkspaceAgentsIndexSnapshot> {
   try {
-    const indexPath = await getWorkspaceAgentsIndexFilePath(normalizedRootPath);
+    const indexPath = await getWorkspaceAgentsIndexFilePath(scopeKey);
     const raw = await readTextFile(indexPath);
     return decodeWorkspaceAgentsIndexSnapshot(raw);
   } catch {
@@ -387,19 +397,19 @@ export async function readWorkspaceAgentsIndexSnapshot(
 }
 
 export async function writeWorkspaceAgentsIndexSnapshot(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   snapshot: WorkspaceAgentsIndexSnapshot,
 ): Promise<void> {
-  const indexPath = await getWorkspaceAgentsIndexFilePath(normalizedRootPath);
+  const indexPath = await getWorkspaceAgentsIndexFilePath(scopeKey);
   await writeTextFile(indexPath, encodeWorkspaceAgentsIndexSnapshot(snapshot));
 }
 
 export async function readAgentThreadFileSnapshot(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   agentId: string,
 ): Promise<ChatThreadSnapshot | null> {
   try {
-    const threadPath = await getAgentThreadFilePath(normalizedRootPath, agentId);
+    const threadPath = await getAgentThreadFilePath(scopeKey, agentId);
     const raw = await readTextFile(threadPath);
     const decoded = decodeChatAgentThreadFileSnapshot(raw);
     return decoded?.thread ?? null;
@@ -409,11 +419,11 @@ export async function readAgentThreadFileSnapshot(
 }
 
 export async function writeAgentThreadFileSnapshot(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   agentId: string,
   snapshot: ChatAgentThreadFileSnapshot,
 ): Promise<void> {
-  const threadPath = await getAgentThreadFilePath(normalizedRootPath, agentId);
+  const threadPath = await getAgentThreadFilePath(scopeKey, agentId);
   await writeTextFile(threadPath, encodeChatAgentThreadFileSnapshot(snapshot));
 }
 
@@ -439,45 +449,42 @@ export function removeAgentIndexEntry(
 }
 
 export async function syncAgentIndexEntryForThread(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   agentId: string,
   thread: ChatThreadSnapshot,
 ): Promise<WorkspaceAgentsIndexSnapshot> {
-  const currentIndex = await readWorkspaceAgentsIndexSnapshot(normalizedRootPath);
+  const currentIndex = await readWorkspaceAgentsIndexSnapshot(scopeKey);
   const nextIndex = upsertAgentIndexEntry(currentIndex, {
     id: agentId,
     title: deriveAgentTitleFromThread(thread),
     lastUsedAt: thread.metadata.updatedAt,
   });
-  await writeWorkspaceAgentsIndexSnapshot(normalizedRootPath, nextIndex);
+  await writeWorkspaceAgentsIndexSnapshot(scopeKey, nextIndex);
   return nextIndex;
 }
 
 export async function persistAgentThreadSnapshot(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   agentId: string,
   thread: ChatThreadSnapshot,
 ): Promise<void> {
-  await syncAgentIndexEntryForThread(normalizedRootPath, agentId, thread);
-  await writeAgentThreadFileSnapshot(normalizedRootPath, agentId, {
+  await syncAgentIndexEntryForThread(scopeKey, agentId, thread);
+  await writeAgentThreadFileSnapshot(scopeKey, agentId, {
     version: CHAT_THREAD_VERSION,
     thread,
   });
 }
 
 export async function deleteAgentThreadFileSnapshot(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   agentId: string,
 ): Promise<void> {
-  if (
-    pendingAgentPersist?.normalizedRootPath === normalizedRootPath &&
-    pendingAgentPersist.agentId === agentId
-  ) {
+  if (pendingAgentPersist?.scopeKey === scopeKey && pendingAgentPersist.agentId === agentId) {
     pendingAgentPersist = null;
   }
 
   try {
-    const threadPath = await getAgentThreadFilePath(normalizedRootPath, agentId);
+    const threadPath = await getAgentThreadFilePath(scopeKey, agentId);
     await remove(threadPath);
   } catch {
     // missing thread file is fine for drafts and already-deleted agents
@@ -485,21 +492,21 @@ export async function deleteAgentThreadFileSnapshot(
 }
 
 export async function deleteAgentPersistence(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   agentId: string,
 ): Promise<void> {
-  await deleteAgentThreadFileSnapshot(normalizedRootPath, agentId);
-  const currentIndex = await readWorkspaceAgentsIndexSnapshot(normalizedRootPath);
+  await deleteAgentThreadFileSnapshot(scopeKey, agentId);
+  const currentIndex = await readWorkspaceAgentsIndexSnapshot(scopeKey);
   const nextIndex = removeAgentIndexEntry(currentIndex, agentId);
-  await writeWorkspaceAgentsIndexSnapshot(normalizedRootPath, nextIndex);
+  await writeWorkspaceAgentsIndexSnapshot(scopeKey, nextIndex);
 }
 
 export function scheduleAgentThreadFilePersistence(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   agentId: string,
   snapshot: ChatAgentThreadFileSnapshot,
 ): void {
-  pendingAgentPersist = { normalizedRootPath, agentId, snapshot };
+  pendingAgentPersist = { scopeKey, agentId, snapshot };
   if (agentPersistTimer) {
     clearTimeout(agentPersistTimer);
   }
@@ -510,15 +517,15 @@ export function scheduleAgentThreadFilePersistence(
     if (!next) {
       return;
     }
-    void persistAgentThreadSnapshot(next.normalizedRootPath, next.agentId, next.snapshot.thread);
+    void persistAgentThreadSnapshot(next.scopeKey, next.agentId, next.snapshot.thread);
   }, PERSIST_DEBOUNCE_MS);
 }
 
 export function scheduleWorkspaceAgentsIndexPersistence(
-  normalizedRootPath: string,
+  scopeKey: ChatScopeKey,
   snapshot: WorkspaceAgentsIndexSnapshot,
 ): void {
-  pendingIndexPersist = { normalizedRootPath, snapshot };
+  pendingIndexPersist = { scopeKey, snapshot };
   if (indexPersistTimer) {
     clearTimeout(indexPersistTimer);
   }
@@ -529,6 +536,6 @@ export function scheduleWorkspaceAgentsIndexPersistence(
     if (!next) {
       return;
     }
-    void writeWorkspaceAgentsIndexSnapshot(next.normalizedRootPath, next.snapshot);
+    void writeWorkspaceAgentsIndexSnapshot(next.scopeKey, next.snapshot);
   }, PERSIST_DEBOUNCE_MS);
 }

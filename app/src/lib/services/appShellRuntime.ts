@@ -2,6 +2,7 @@ import { emit, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { initializeLogging, logDiagnostic } from "./logging";
@@ -218,14 +219,20 @@ export async function startAppShellRuntime(
     options.notify("Session restored.");
   }
 
-  const restoredWorkspaceRoot = appState.getWorkspaceRoot();
-  if (restoredWorkspaceRoot) {
-    const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
-    void ensureWorkspaceReadAccess(normalizedRoot);
-    chatStore.setActiveWorkspaceRoot(normalizedRoot);
-    await options.restoreWorkspaceAgentSession(normalizedRoot);
+  const restoredActiveContextId = appState.getSnapshot().contexts.activeContextId;
+  if (restoredActiveContextId === CHAT_HTTP_CONTEXT_ID) {
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
   } else {
-    chatStore.setActiveWorkspaceRoot(null);
+    const restoredWorkspaceRoot = appState.getWorkspaceRoot();
+    if (restoredWorkspaceRoot) {
+      const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
+      void ensureWorkspaceReadAccess(normalizedRoot);
+      chatStore.setActiveWorkspaceRoot(normalizedRoot);
+      await options.restoreWorkspaceAgentSession(normalizedRoot);
+    } else {
+      chatStore.setActiveWorkspaceRoot(null);
+    }
   }
 
   if (shouldInitializeAppMenu(windowId)) {

@@ -1,5 +1,7 @@
 import { derived, writable } from "svelte/store";
 import type { CapabilityChecker } from "../ai/capabilities";
+import type { ContextId } from "../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { createAccessSlice } from "./chatStore/access";
 import { createAgentsSlice, resetAgentIdCounterForTests, createAgentId } from "./chatStore/agents";
 import { createRuntimeSlice, activeRuntime } from "./chatStore/runtime";
@@ -14,6 +16,7 @@ import type {
   ChatAccessState,
   ChatModelSwitchOptions,
   ChatProviderSwitchOptions,
+  ChatScopeKey,
   ChatStoreState,
   ChatThreadRuntimeState,
   ChatTurnError,
@@ -21,11 +24,13 @@ import type {
   SwitchThreadProviderResult,
   WorkspaceAgentsState,
 } from "./chatStore/types";
+import { chatScopeKeyForContextId, isChatContextScopeKey } from "./chatStore/types";
 
 export type {
   ChatAccessState,
   ChatModelSwitchOptions,
   ChatProviderSwitchOptions,
+  ChatScopeKey,
   ChatThreadRuntimeState,
   ChatTurnError,
   SwitchThreadModelResult,
@@ -41,7 +46,7 @@ export {
 };
 
 const initialState: ChatStoreState = {
-  activeWorkspaceRoot: null,
+  activeChatScopeKey: null,
   workspaces: {},
   accessByWorkspace: {},
 };
@@ -59,26 +64,35 @@ function createChatStore() {
     return snapshot;
   }
 
-  function getActiveWorkspaceRoot(): string | null {
-    return getSnapshot().activeWorkspaceRoot;
+  function getActiveChatScopeKey(): ChatScopeKey | null {
+    return getSnapshot().activeChatScopeKey;
   }
 
-  const runtimeSlice = createRuntimeSlice({ update, getSnapshot, getActiveWorkspaceRoot });
+  function getActiveWorkspaceRoot(): string | null {
+    const scopeKey = getActiveChatScopeKey();
+    if (!scopeKey || isChatContextScopeKey(scopeKey)) {
+      return null;
+    }
+    return scopeKey;
+  }
+
+  const runtimeSlice = createRuntimeSlice({ update, getSnapshot, getActiveChatScopeKey });
   const threadsSlice = createThreadsSlice({
     update,
     getSnapshot,
-    getActiveWorkspaceRoot,
+    getActiveChatScopeKey,
     getRuntimeState: (agentId) => runtimeSlice.getRuntimeState(agentId),
     capabilityCheckerRef,
   });
   const accessSlice = createAccessSlice({
     update,
     getSnapshot,
+    getActiveChatScopeKey,
     getActiveWorkspaceRoot,
     getMetadata: (agentId) => threadsSlice.getMetadata(agentId),
     capabilityCheckerRef,
   });
-  const agentsSlice = createAgentsSlice({ update, getSnapshot, getActiveWorkspaceRoot });
+  const agentsSlice = createAgentsSlice({ update, getSnapshot, getActiveChatScopeKey });
 
   return {
     subscribe,
@@ -87,17 +101,28 @@ function createChatStore() {
       resetAgentIdCounterForTests();
     },
     getSnapshot,
-    setActiveWorkspaceRoot(normalizedRootPath: string | null): void {
+    setActiveChatScopeKey(scopeKey: ChatScopeKey | null): void {
       update((state) => {
-        if (state.activeWorkspaceRoot === normalizedRootPath) {
+        if (state.activeChatScopeKey === scopeKey) {
           return state;
         }
         return {
           ...state,
-          activeWorkspaceRoot: normalizedRootPath,
+          activeChatScopeKey: scopeKey,
         };
       });
     },
+    setActiveWorkspaceRoot(normalizedRootPath: string | null): void {
+      this.setActiveChatScopeKey(normalizedRootPath);
+    },
+    setActiveChatScope(contextId: ContextId): void {
+      const scopeKey = chatScopeKeyForContextId(contextId);
+      if (!scopeKey) {
+        return;
+      }
+      this.setActiveChatScopeKey(scopeKey);
+    },
+    getActiveChatScopeKey,
     getActiveWorkspaceRoot,
     setDefaultChatProviderResolver,
     ...agentsSlice,
@@ -117,12 +142,12 @@ export const chatIsEmpty = derived(
   ($chatStore) => (activeThread($chatStore)?.messages.length ?? 0) === 0,
 );
 export const chatAccessState = derived(chatStore, ($chatStore) => {
-  const rootPath = $chatStore.activeWorkspaceRoot;
-  if (!rootPath) {
+  const scopeKey = $chatStore.activeChatScopeKey;
+  if (!scopeKey || isChatContextScopeKey(scopeKey)) {
     return defaultUnknownAccessState("Open a workspace to use AI chat.");
   }
   return (
-    $chatStore.accessByWorkspace[rootPath] ??
+    $chatStore.accessByWorkspace[scopeKey] ??
     defaultUnknownAccessState("Chat access preflight has not run yet.")
   );
 });
@@ -134,11 +159,11 @@ export const chatCanRetryLastTurn = derived(chatRuntimeState, ($runtime) =>
 );
 
 export const chatAgentIndex = derived(chatStore, ($chatStore) => {
-  const root = $chatStore.activeWorkspaceRoot;
-  if (!root) {
+  const scopeKey = $chatStore.activeChatScopeKey;
+  if (!scopeKey) {
     return [];
   }
-  return [...($chatStore.workspaces[root]?.agentIndex ?? [])];
+  return [...($chatStore.workspaces[scopeKey]?.agentIndex ?? [])];
 });
 
 export const chatActiveAgentId = derived(chatStore, ($chatStore) => activeAgentId($chatStore));

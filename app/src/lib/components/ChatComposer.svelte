@@ -105,7 +105,7 @@
   const generationStatus = $derived(isGenerating ? "Generating response…" : "");
 
   function persistActiveThreadSnapshot(): void {
-    const root = chatStore.getActiveWorkspaceRoot();
+    const root = chatStore.getActiveChatScopeKey();
     const agentId = chatStore.getActiveAgentId();
     const thread = agentId ? chatStore.getActiveThreadSnapshot(agentId) : null;
     if (!root || !agentId || !thread || !thread.messages.some((message) => message.role === "user")) {

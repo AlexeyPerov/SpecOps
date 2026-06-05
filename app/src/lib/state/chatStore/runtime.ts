@@ -27,7 +27,7 @@ export function runtimeForAgentInWorkspace(
 }
 
 export function runtimeForAgent(state: ChatStoreState, agentId: string | null): ChatThreadRuntimeState {
-  return runtimeForAgentInWorkspace(state, state.activeWorkspaceRoot, agentId);
+  return runtimeForAgentInWorkspace(state, state.activeChatScopeKey, agentId);
 }
 
 export function activeRuntime(state: ChatStoreState): ChatThreadRuntimeState {
@@ -43,9 +43,9 @@ type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => v
 export function createRuntimeSlice(deps: {
   update: ChatStoreUpdate;
   getSnapshot: () => ChatStoreState;
-  getActiveWorkspaceRoot: () => string | null;
+  getActiveChatScopeKey: () => string | null;
 }) {
-  const { update, getSnapshot, getActiveWorkspaceRoot } = deps;
+  const { update, getSnapshot, getActiveChatScopeKey } = deps;
 
   function updateAgentRuntime(
     agentId: string,
@@ -150,7 +150,7 @@ export function createRuntimeSlice(deps: {
       return cancelled;
     },
     beginTurn(turnId: string, agentId?: string): boolean {
-      const root = getActiveWorkspaceRoot();
+      const root = getActiveChatScopeKey();
       if (!root) {
         return false;
       }

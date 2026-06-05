@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { chatStore, formatCompactionNotice, resetAgentIdCounterForTests } from "./chatStore";
 import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
 import type { ChatThreadSnapshot } from "../domain/contracts";
@@ -296,6 +297,37 @@ describe("chatStore", () => {
     expect(chatStore.isEmpty()).toBe(true);
     expect(chatStore.getMessages()).toEqual([]);
     expect(chatStore.getMetadata()).toBeNull();
+  });
+
+  it("scopes chat-http agents separately from workspace agents", async () => {
+    const workspaceIndex = {
+      version: 1 as const,
+      agents: [{ id: "ws-agent", title: "Workspace", lastUsedAt: "2026-06-05T00:00:00.000Z" }],
+    };
+    const chatHttpIndex = {
+      version: 1 as const,
+      agents: [{ id: "http-agent", title: "Chat HTTP", lastUsedAt: "2026-06-05T00:00:01.000Z" }],
+    };
+
+    readWorkspaceAgentsIndexSnapshotMock.mockImplementation(async (scopeKey: string) => {
+      if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
+        return chatHttpIndex;
+      }
+      return workspaceIndex;
+    });
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    await chatStore.loadWorkspaceAgents("/work/a");
+    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
+
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+    expect(chatStore.getActiveChatScopeKey()).toBe(CHAT_HTTP_CONTEXT_ID);
+    expect(chatStore.getActiveWorkspaceRoot()).toBeNull();
+    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["http-agent"]);
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
   });
 
   it("clears active chat binding in notepad mode", () => {

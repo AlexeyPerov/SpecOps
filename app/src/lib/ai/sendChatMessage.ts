@@ -90,12 +90,12 @@ function createAssistantPlaceholder(turnId: string): ChatMessage {
   };
 }
 
-function persistAgentThreadOnce(root: string, agentId: string): void {
-  const thread = chatStore.getWorkspaceAgentsState(root)?.threadsByAgentId[agentId] ?? null;
+function persistAgentThreadOnce(scopeKey: string, agentId: string): void {
+  const thread = chatStore.getWorkspaceAgentsState(scopeKey)?.threadsByAgentId[agentId] ?? null;
   if (!thread || !thread.messages.some((message) => message.role === "user")) {
     return;
   }
-  scheduleAgentThreadFilePersistence(root, agentId, {
+  scheduleAgentThreadFilePersistence(scopeKey, agentId, {
     version: 1,
     thread,
   });
@@ -284,7 +284,7 @@ async function executeProviderTurn(params: {
 }
 
 export async function retryLastChatTurn(agentId?: string): Promise<RetryLastChatTurnResult> {
-  const root = chatStore.getActiveWorkspaceRoot();
+  const root = chatStore.getActiveChatScopeKey();
   if (!root) {
     return { ok: false, reason: "no_workspace", message: "Open a workspace to retry chat messages." };
   }
@@ -346,7 +346,7 @@ export async function sendChatMessage(
     return { ok: false, reason: "empty", message: "Message cannot be empty." };
   }
 
-  const root = chatStore.getActiveWorkspaceRoot();
+  const root = chatStore.getActiveChatScopeKey();
   if (!root) {
     return { ok: false, reason: "no_workspace", message: "Open a workspace to send chat messages." };
   }

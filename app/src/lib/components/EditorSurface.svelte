@@ -237,7 +237,16 @@
     }
     view.dispatch({
       effects: lineWrapCompartment.reconfigure(
-        nextWrap ? EditorView.lineWrapping : [],
+        nextWrap
+          ? [
+              EditorView.lineWrapping,
+              EditorView.theme({
+                ".cm-scroller": {
+                  overflowX: "hidden",
+                },
+              }),
+            ]
+          : [],
       ),
     });
   }
@@ -449,6 +458,8 @@
         EditorView.theme({
           "&": {
             height: "100%",
+            width: "100%",
+            maxWidth: "100%",
             fontFamily: "var(--font-family-ui)",
             color: "var(--color-text-primary)",
             backgroundColor: "var(--color-surface-1)",
@@ -610,7 +621,10 @@
 
 <style>
   .editor-host {
+    width: 100%;
     height: 100%;
+    min-width: 0;
+    min-height: 0;
     border-radius: var(--radius-md);
     overflow: hidden;
     border: 1px solid var(--color-border-subtle);

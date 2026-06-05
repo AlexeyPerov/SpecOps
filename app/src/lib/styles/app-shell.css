@@ -21,6 +21,7 @@
   grid-column: 3;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-rows: var(--tab-header-height) minmax(0, 1fr) auto;
   --editor-content-padding-x: var(--space-8);
@@ -76,6 +77,8 @@
   position: relative;
   padding: var(--space-8);
   overflow: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 
 .editor-pane-agent {

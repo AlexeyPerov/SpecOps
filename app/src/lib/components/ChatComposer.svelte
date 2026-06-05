@@ -24,7 +24,7 @@
   interface Props {
     isBlocked: boolean;
     isDebugSendBlocked: boolean;
-    isGlmSendBlocked: boolean;
+    isHttpSendBlocked: boolean;
     isModelSendBlocked: boolean;
     isGenerating: boolean;
     canRetryLastTurn: boolean;
@@ -33,7 +33,7 @@
     activeModel: string;
     supportedModes: ChatModeId[];
     debugProviderSettings: DebugProviderSettings;
-    glmProviderSettings: HttpConnectionSettings;
+    httpProviderSettings: HttpConnectionSettings;
     providerModelCatalogs: ProviderModelCatalogs;
     composerError: ComposerError | null;
     onInlineError?: (message: string) => void;
@@ -42,7 +42,7 @@
   let {
     isBlocked,
     isDebugSendBlocked,
-    isGlmSendBlocked,
+    isHttpSendBlocked,
     isModelSendBlocked,
     isGenerating,
     canRetryLastTurn,
@@ -51,7 +51,7 @@
     activeModel,
     supportedModes,
     debugProviderSettings,
-    glmProviderSettings,
+    httpProviderSettings,
     providerModelCatalogs,
     composerError,
     onInlineError = () => {},
@@ -61,7 +61,11 @@
   let sending = $state(false);
   let retrying = $state(false);
 
-  const availableProviders = $derived(listSelectableChatProviders(debugProviderSettings));
+  const availableProviders = $derived.by(() => {
+    debugProviderSettings;
+    httpProviderSettings.enabled;
+    return listSelectableChatProviders(debugProviderSettings);
+  });
   const availableModes = $derived(listModesForProvider(supportedModes));
   const availableModels = $derived(
     listSelectableModelsForProvider(providerModelCatalogs, activeProvider),
@@ -72,7 +76,7 @@
   const isSendDisabled = $derived(
     isBlocked ||
       isDebugSendBlocked ||
-      isGlmSendBlocked ||
+      isHttpSendBlocked ||
       isModelSendBlocked ||
       isGenerating ||
       sending ||
@@ -82,7 +86,7 @@
   const composerDisabled = $derived(
     isBlocked ||
       isDebugSendBlocked ||
-      isGlmSendBlocked ||
+      isHttpSendBlocked ||
       isModelSendBlocked ||
       isGenerating ||
       sending ||
@@ -95,7 +99,7 @@
       retrying ||
       isBlocked ||
       isDebugSendBlocked ||
-      isGlmSendBlocked ||
+      isHttpSendBlocked ||
       isModelSendBlocked,
   );
   const generationStatus = $derived(isGenerating ? "Generating response…" : "");
@@ -121,7 +125,7 @@
       retrying ||
       isBlocked ||
       isDebugSendBlocked ||
-      isGlmSendBlocked ||
+      isHttpSendBlocked ||
       isModelSendBlocked ||
       isGenerating
     ) {

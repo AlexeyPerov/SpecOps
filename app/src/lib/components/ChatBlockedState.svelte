@@ -9,22 +9,22 @@
 
   interface Props {
     isAccessBlocked?: boolean;
-    isGlmBlocked?: boolean;
+    isHttpBlocked?: boolean;
     isDebugBlocked?: boolean;
     isModelBlocked?: boolean;
     accessBlockedCopy?: BlockedCopy;
-    glmBlockedCopy?: BlockedCopy;
+    httpBlockedCopy?: BlockedCopy;
     debugBlockedCopy?: BlockedCopy;
     modelBlockedCopy?: BlockedCopy;
   }
 
   let {
     isAccessBlocked = false,
-    isGlmBlocked = false,
+    isHttpBlocked = false,
     isDebugBlocked = false,
     isModelBlocked = false,
     accessBlockedCopy,
-    glmBlockedCopy,
+    httpBlockedCopy,
     debugBlockedCopy,
     modelBlockedCopy,
   }: Props = $props();
@@ -38,13 +38,13 @@
       <p class="chat-blocked-hint">{accessBlockedCopy.recoveryHint}</p>
     {/if}
   </div>
-{:else if isGlmBlocked && glmBlockedCopy}
+{:else if isHttpBlocked && httpBlockedCopy}
   <div class="chat-blocked-state" role="status" aria-live="polite">
-    <p class="chat-blocked-title">{glmBlockedCopy.title}</p>
-    <p class="chat-blocked-message">{glmBlockedCopy.message}</p>
-    <p class="chat-blocked-hint">{glmBlockedCopy.recoveryHint}</p>
+    <p class="chat-blocked-title">{httpBlockedCopy.title}</p>
+    <p class="chat-blocked-message">{httpBlockedCopy.message}</p>
+    <p class="chat-blocked-hint">{httpBlockedCopy.recoveryHint}</p>
     <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("connections")}>
-      Open connection settings
+      Open Connections settings
     </button>
   </div>
 {:else if isDebugBlocked && debugBlockedCopy}
@@ -62,7 +62,7 @@
     <p class="chat-blocked-message">{modelBlockedCopy.message}</p>
     <p class="chat-blocked-hint">{modelBlockedCopy.recoveryHint}</p>
     <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("connections")}>
-      Open model settings
+      Open Connections settings
     </button>
   </div>
 {/if}

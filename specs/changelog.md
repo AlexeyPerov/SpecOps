@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 09:07 (MSK)
+
+- **Phase 1 Task 5 (P1-5):** Updated chat blocked-state and composer wiring to HTTP terminology only (`isHttpBlocked`, `isHttpSendBlocked`, `httpBlockedCopy`, `httpProviderSettings`) and adjusted blocked-state CTA copy to consistently point users to **Connections** settings.
+- **Phase 1 Task 6 (P1-6):** Added legacy provider normalization on persisted thread decode so `provider: "glm"` snapshots load as `provider: "http"` and remain sendable under the current provider registry.
+- **Plan tracking:** Marked Task 5 and Task 6 as `[DONE]` in `specs/ops/phase-1/execution-plan.md`.
+
 ## 2026-06-05 00:39 (MSK)
 
 - **Phase 1 Task 3 (P1-3):** Removed legacy `glm`/`cursor` chat provider ids from contracts and provider model catalogs; aligned defaults and validation to HTTP + Debug only (`ChatProviderId`, `PRODUCT_CHAT_PROVIDER_IDS`, model catalog normalization/parsing, and default thread provider policy).

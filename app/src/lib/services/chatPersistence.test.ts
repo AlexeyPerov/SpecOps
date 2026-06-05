@@ -150,6 +150,33 @@ describe("agent thread snapshot codec", () => {
     );
   });
 
+  it('normalizes legacy provider "glm" to "http" on decode', () => {
+    const rawLegacySnapshot = JSON.stringify({
+      version: 1,
+      thread: {
+        metadata: {
+          agentId: AGENT_ID,
+          threadId: AGENT_ID,
+          mode: "ask",
+          provider: "glm",
+          createdAt: "2026-05-25T00:00:00.000Z",
+          updatedAt: "2026-05-25T00:00:01.000Z",
+        },
+        messages: [
+          {
+            id: "m-1",
+            role: "user",
+            content: "hello",
+            createdAt: "2026-05-25T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const decoded = decodeChatAgentThreadFileSnapshot(rawLegacySnapshot);
+    expect(decoded?.thread.metadata.provider).toBe("http");
+  });
+
   it("preserves provider-switched events when model-switched events are present", () => {
     const snapshot: ChatAgentThreadFileSnapshot = {
       version: 1,

@@ -107,7 +107,14 @@ function isChatModeId(value: unknown): value is ChatModeId {
 }
 
 function isChatProviderId(value: unknown): value is ChatProviderId {
-  return value === "http" || value === "debug";
+  return value === "http" || value === "debug" || value === "glm";
+}
+
+function normalizeLegacyProviderId(provider: ChatProviderId): ChatProviderId {
+  if (provider === "glm") {
+    return "http";
+  }
+  return provider;
 }
 
 function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
@@ -143,7 +150,7 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
     agentId: value.agentId,
     threadId: value.threadId,
     mode: value.mode,
-    provider: value.provider,
+    provider: normalizeLegacyProviderId(value.provider),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     summary: value.summary,

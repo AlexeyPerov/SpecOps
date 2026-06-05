@@ -137,7 +137,7 @@ Dependencies: Task 3.
 
 ---
 
-#### Task 5: Chat UI blocked states (P1-5) [Score:5] [Agent:medium]
+#### Task 5: Chat UI blocked states (P1-5) [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -156,7 +156,7 @@ Dependencies: Task 4.
 
 ---
 
-#### Task 6: Thread legacy provider normalization (P1-6) [Score:5] [Agent:medium]
+#### Task 6: Thread legacy provider normalization (P1-6) [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 

@@ -187,11 +187,11 @@
   <div class="chat-panel-stack">
     <ChatBlockedState
       isAccessBlocked={isBlocked}
-      isGlmBlocked={isHttpSendBlocked}
+      isHttpBlocked={isHttpSendBlocked}
       isDebugBlocked={isDebugSendBlocked}
       isModelBlocked={isModelSendBlocked}
       {accessBlockedCopy}
-      glmBlockedCopy={httpBlockedCopy}
+      {httpBlockedCopy}
       {debugBlockedCopy}
       {modelBlockedCopy}
     />
@@ -207,7 +207,7 @@
     <ChatComposer
       {isBlocked}
       isDebugSendBlocked={isDebugSendBlocked}
-      isGlmSendBlocked={isHttpSendBlocked}
+      isHttpSendBlocked={isHttpSendBlocked}
       isModelSendBlocked={isModelSendBlocked}
       {isGenerating}
       {canRetryLastTurn}
@@ -216,7 +216,7 @@
       {activeModel}
       {supportedModes}
       {debugProviderSettings}
-      glmProviderSettings={httpProviderSettings}
+      {httpProviderSettings}
       {providerModelCatalogs}
       {composerError}
       onInlineError={(message) => {

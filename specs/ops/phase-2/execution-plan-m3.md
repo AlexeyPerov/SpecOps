@@ -166,7 +166,7 @@ Dependencies: Task 4.
 
 ---
 
-#### Task 6: Final verification, docs, and phase-2 closure (P2-7) [Score:5] [Agent:easy]
+#### Task 6: Final verification, docs, and phase-2 closure (P2-7) [Score:5] [Agent:easy] [DONE]
 
 **Required context**
 
@@ -218,9 +218,9 @@ Requires Milestone 2 complete before Task 1.
 
 ## Phase 2 exit criteria (full)
 
-- [ ] User completes Connections setup → Chat appears on rail.
-- [ ] User creates chats, sends messages, sees streamed assistant text.
-- [ ] Debug works in Chat when enabled (C3A).
-- [ ] Notepad has no AI entry points.
-- [ ] Workspace HTTP chat still works (B2A).
-- [ ] `npm test` / `npm run check` pass.
+- [x] User completes Connections setup → Chat appears on rail.
+- [x] User creates chats, sends messages, sees streamed assistant text.
+- [x] Debug works in Chat when enabled (C3A).
+- [x] Notepad has no AI entry points.
+- [x] Workspace HTTP chat still works (B2A).
+- [x] `npm test` / `npm run check` pass.

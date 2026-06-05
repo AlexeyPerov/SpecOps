@@ -16,11 +16,11 @@ sequenceDiagram
   Send->>Send: validateProviderSend
   Send->>Reg: getChatProvider("http")
   Send->>Send: buildThreadProviderRequest
-  Send->>HTTP: streamProviderMessage -> sendMessage
+  Send->>HTTP: streamProviderMessage -> streamMessage
   HTTP->>HTTP: buildOpenAiChatMessages
   HTTP->>API: POST .../chat/completions
-  API-->>HTTP: JSON choices[0].message.content
-  HTTP-->>Send: ProviderSendResponse
+  API-->>HTTP: SSE token deltas + [DONE]
+  HTTP-->>Send: ProviderStreamChunk deltas
   Send-->>UI: update assistant message
 ```
 
@@ -168,11 +168,12 @@ Unsupported modes return `WorkspaceAccessReason.ProviderUnsupported`.
 | Provider | `streamMessage` | UI behavior |
 | --- | --- | --- |
 | **Debug** | Implemented | Token-style partial updates in chat |
-| **HTTP** | Not implemented | `streamProviderMessage` falls back to `sendMessage`; UI receives one chunk (full text) |
+| **HTTP** | Implemented | OpenAI-compatible SSE parsing with incremental chat updates |
 
-HTTP explicitly sets **`stream: false`**. There is no SSE client, no `stream: true` path, and no `OpenAiCompatibleChatProvider.streamMessage`.
+HTTP supports both paths:
 
-README describes this as “streaming on Debug with buffered HTTP fallback.”
+- `streamMessage` sends `stream: true` and parses OpenAI-compatible SSE (`data: {...}` and `[DONE]`).
+- `sendMessage` remains as buffered fallback (`stream: false`) for non-stream call sites/tests.
 
 ## OpenAI-compatible API: used vs unused
 
@@ -190,7 +191,7 @@ These are common on OpenAI-compatible platforms but **absent from the codebase**
 
 | Category | Examples | Notes |
 | --- | --- | --- |
-| Streaming | `stream: true`, SSE chunks | Explicitly disabled |
+| Streaming | `stream: true`, SSE chunks | Used by `streamMessage` |
 | Other chat params | `temperature`, `top_p`, `max_tokens`, `stop`, `presence_penalty`, `frequency_penalty`, `tools`, `tool_choice`, `response_format` | Not sent |
 | Multimodal / files | Image, file, or audio content in messages | Text-only `content` strings |
 | Embeddings | `/embeddings` | — |

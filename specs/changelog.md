@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 17:54 (MSK)
+
+- **Phase 2 M3 Task 6 (final verification + closure):** Ran full validation gates in `app/` — `npm test` (**692 passed**) and `npm run check` (**0 errors**, 1 pre-existing a11y warning in `EntryNamePrompt.svelte`).
+- **Phase 2 closure docs:** Marked Task 6 as `[DONE]` in `specs/ops/phase-2/execution-plan-m3.md`, checked all exit criteria in `specs/ops/phase-2/phase-2.md`, and updated phase status to `done`.
+- **Provider/architecture docs refresh:** Updated `docs/providers.md` and `docs/architecture.md` to reflect implemented HTTP SSE streaming (`streamMessage`) with buffered `sendMessage` retained as fallback.
+
 ## 2026-06-05 17:50 (MSK)
 
 - **Phase 2 M3 Task 5 (validation test sweep):** Added `app/src/lib/state/chatPhase2.validation.test.ts` covering chat-http rail gating, ask-only scope behavior, workspace-preflight bypass, HTTP SSE `ReadableStream` integration, and workspace HTTP streaming continuity.

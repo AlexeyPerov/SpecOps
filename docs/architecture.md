@@ -132,7 +132,7 @@ Chat providers are registered at startup via `initializeChatProviders()` in `app
 1. UI calls `sendChatMessage` / `retryLastChatTurn` (`app/src/lib/ai/sendChatMessage.ts`).
 2. Validates provider (debug enabled, HTTP configured), model catalog, access preflight.
 3. Appends user message; begins turn; builds **`ProviderRequestPayload`** via `buildThreadProviderRequest`.
-4. **`streamProviderMessage`** (`chatSend.ts`) — uses `streamMessage` if implemented (Debug), else buffered `sendMessage` (HTTP).
+4. **`streamProviderMessage`** (`chatSend.ts`) — uses `streamMessage` when available (Debug + HTTP SSE), else buffered `sendMessage`.
 5. Updates assistant placeholder; compacts thread if needed; debounced persist.
 
 Shared prompt shape is defined in `app/src/lib/ai/providers/types.ts` so Debug and HTTP stay aligned.

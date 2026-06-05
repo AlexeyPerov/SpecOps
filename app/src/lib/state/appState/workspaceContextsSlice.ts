@@ -15,6 +15,7 @@ import {
   normalizeWorkspaceLayout,
 } from "../../services/panelLayout";
 import {
+  CHAT_HTTP_CONTEXT_KEY,
   cloneContextSnapshot,
   findWorkspaceByPath,
   getActiveContextSnapshot,
@@ -23,6 +24,7 @@ import {
   nextDocAndTabIds,
   nextWorkspaceId,
   normalizeWorkspaceEntries,
+  isChatHttpContext,
   NOTEPAD_CONTEXT_ID,
   patchActiveContext,
   reindexIdCountersFromContexts,
@@ -65,6 +67,7 @@ export function createWorkspaceContextsSlice(deps: {
     return {
       activeContextId: state.contexts.activeContextId,
       notepad: cloneContextSnapshot(state.contexts.notepad),
+      chatHttp: cloneContextSnapshot(state.contexts.chatHttp),
       workspaces: normalizeWorkspaceEntries(state.contexts.workspaces),
       editorPreferences: {
         zoomPercent: state.editor.zoomPercent,
@@ -76,18 +79,23 @@ export function createWorkspaceContextsSlice(deps: {
   const slice = {
     applyWindowSession(snapshot: WindowSessionSnapshot, recentFiles: string[] = []) {
       const normalizedNotepad = ensureContextSnapshotHasTab(cloneContextSnapshot(snapshot.notepad));
+      const normalizedChatHttp = ensureContextSnapshotHasTab(
+        cloneContextSnapshot(snapshot.chatHttp ?? snapshot.notepad),
+      );
       const normalizedWorkspaces = normalizeWorkspaceEntries(snapshot.workspaces).map((workspace) => ({
         ...workspace,
         snapshot: ensureContextSnapshotHasTab(workspace.snapshot),
       }));
       const activeContextId =
         snapshot.activeContextId === NOTEPAD_CONTEXT_ID ||
+        isChatHttpContext(snapshot.activeContextId) ||
         normalizedWorkspaces.some((workspace) => workspace.id === snapshot.activeContextId)
           ? snapshot.activeContextId
           : NOTEPAD_CONTEXT_ID;
       const contexts = {
         activeContextId,
         notepad: normalizedNotepad,
+        chatHttp: normalizedChatHttp,
         workspaces: normalizedWorkspaces,
       };
       reindexIdCountersFromContexts(contexts);
@@ -120,6 +128,13 @@ export function createWorkspaceContextsSlice(deps: {
           snapshot: getActiveContextSnapshot(state),
         };
       }
+      if (isChatHttpContext(state.contexts.activeContextId)) {
+        return {
+          id: CHAT_HTTP_CONTEXT_KEY,
+          kind: "chat-http" as const,
+          snapshot: getActiveContextSnapshot(state),
+        };
+      }
       const workspace =
         state.contexts.workspaces.find((entry) => entry.id === state.contexts.activeContextId) ?? null;
       return {
@@ -141,7 +156,7 @@ export function createWorkspaceContextsSlice(deps: {
     getWorkspaceRoot(contextId?: ContextId): string | null {
       const state = getSnapshot();
       const targetId = contextId ?? state.contexts.activeContextId;
-      if (targetId === NOTEPAD_CONTEXT_ID) {
+      if (targetId === NOTEPAD_CONTEXT_ID || isChatHttpContext(targetId)) {
         return null;
       }
       return state.contexts.workspaces.find((workspace) => workspace.id === targetId)?.rootPath ?? null;
@@ -151,6 +166,7 @@ export function createWorkspaceContextsSlice(deps: {
       update((state) => {
         const exists =
           contextId === NOTEPAD_CONTEXT_ID ||
+          isChatHttpContext(contextId) ||
           state.contexts.workspaces.some((workspace) => workspace.id === contextId);
         if (!exists || state.contexts.activeContextId === contextId) {
           return state;

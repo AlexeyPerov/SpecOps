@@ -145,11 +145,8 @@ export interface WorkspaceEntry {
 export interface WindowContextState {
   activeContextId: ContextId;
   notepad: ContextSnapshot;
-  /**
-   * Reserved for phase-2 context persistence.
-   * Phase 1 adds type foundations only (no rail UI and no persisted usage yet).
-   */
-  chatHttp?: ContextSnapshot;
+  /** Dedicated chat-http runtime context snapshot (no workspace root). */
+  chatHttp: ContextSnapshot;
   /**
    * Reserved for phase-2 context persistence.
    * Phase 1 adds type foundations only (no rail UI and no persisted usage yet).

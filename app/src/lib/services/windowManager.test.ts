@@ -83,6 +83,16 @@ function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
           windowBounds: bounds,
         },
       },
+      chatHttp: {
+        documents: [],
+        session: {
+          openTabs: [],
+          selectedTabId: null,
+          lastActiveAgentId: null,
+          lastActiveWindowId: "main",
+          windowBounds: bounds,
+        },
+      },
       workspaces: [],
     },
     settings: {} as AppDomainState["settings"],

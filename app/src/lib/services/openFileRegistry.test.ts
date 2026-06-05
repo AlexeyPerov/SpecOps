@@ -86,6 +86,7 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
   return {
     activeContextId: "notepad",
     notepad,
+    chatHttp: notepad,
     workspaces: [],
     editorPreferences: {
       zoomPercent: 100,
@@ -186,6 +187,15 @@ describe("syncOpenFileRegistryForWindow", () => {
             windowBounds: null,
           },
         },
+        chatHttp: {
+          documents: [],
+          session: {
+            selectedTabId: null,
+            openTabs: [],
+            lastActiveWindowId: "win-a",
+            windowBounds: null,
+          },
+        },
         workspaces: [],
       },
       settings: {
@@ -255,6 +265,15 @@ describe("syncOpenFileRegistryForWindow", () => {
           session: {
             selectedTabId: "tab-n",
             openTabs: [createFileTab("tab-n", "doc-n")],
+            lastActiveWindowId: "win-a",
+            windowBounds: null,
+          },
+        },
+        chatHttp: {
+          documents: [],
+          session: {
+            selectedTabId: null,
+            openTabs: [],
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },

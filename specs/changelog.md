@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-06-05 15:01 (MSK)
+
+- **Phase 2 M1 Task 1 (`chat-http` context foundations):** Promoted runtime `WindowContextState.chatHttp` to a required `ContextSnapshot` and initialized a default `chatHttp` snapshot in `appState` bootstrap state.
+- **Context helper coverage:** Extended `contextHelpers` for `chat-http` parity (`getContextSnapshotById`, `patchActiveContext`, `patchContextById`, `reindexIdCountersFromContexts`) and added `isChatHttpContext` plus `getChatHttpContextSnapshot` helpers.
+- **Workspace/context slice wiring:** Updated `workspaceContextsSlice` to treat `chat-http` as a first-class context for snapshot export/restore (`chatHttp` in window snapshot), active-context resolution, `switchContext`, and `getWorkspaceRoot` returning `null` for `chat-http`.
+- **Tests:** Added `app/src/lib/state/appState/contextHelpers.test.ts` for `chat-http` snapshot/patch behavior and updated affected test fixtures that construct `WindowContextState`/`WindowSessionSnapshot` to include required `chatHttp`.
+- **Validation:** Ran `npm run check` (0 errors; 1 pre-existing a11y warning in `EntryNamePrompt.svelte`) and targeted tests `npm test -- src/lib/state/appState/contextHelpers.test.ts src/lib/state/appState.test.ts` (53 passed).
+
+## 2026-06-05 14:55 (MSK)
+
+- **Phase 2 execution plans:** Added three milestone execution-plan documents under `specs/ops/phase-2/`, following the Phase 1 template structure:
+  - `execution-plan-m1.md` — context/session snapshot, `chatStore` scope + `chat/chat-http/` persistence, activity rail Chat button and HTTP gating (P2-1, P2-2, P2-3).
+  - `execution-plan-m2.md` — chat-only UI shell, **Chats** sidebar label, ask-only mode, Debug in Chat, workspace/notepad regression guards (P2-4, P2-6).
+  - `execution-plan-m3.md` — HTTP `streamMessage` + SSE parsing, send/UI streaming integration, validation sweep, phase-2 exit closure (P2-5, P2-7).
+- **Phase 2 spec:** Linked execution-plan milestone chain from `specs/ops/phase-2/phase-2.md`.
+
 ## 2026-06-05 09:21 (MSK)
 
 - **Phase 1 Task 11 (P1-11):** Completed final verification and cleanup for phase 1 by running validation gates in `app/` (`npm test`: **647 passed**; `npm run check`: **0 errors**, 1 pre-existing a11y warning in `EntryNamePrompt.svelte`).

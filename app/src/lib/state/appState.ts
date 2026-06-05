@@ -30,6 +30,16 @@ import {
 } from "./appState/themeController";
 import { createWorkspaceContextsSlice } from "./appState/workspaceContextsSlice";
 
+function buildDefaultContextSession() {
+  return {
+    selectedTabId: "tab-1",
+    openTabs: [createFileTab("tab-1", "doc-1")],
+    lastActiveWindowId: "main",
+    windowBounds: null,
+    lastActiveAgentId: null,
+  };
+}
+
 export { findWorkspaceByPath, resetThemePersistenceForTests, setThemeSaveErrorNotifier };
 
 const initialState: AppDomainState = {
@@ -37,13 +47,11 @@ const initialState: AppDomainState = {
     activeContextId: NOTEPAD_CONTEXT_ID,
     notepad: {
       documents: [buildEmptyUnsavedDocument("doc-1")],
-      session: {
-        selectedTabId: "tab-1",
-        openTabs: [createFileTab("tab-1", "doc-1")],
-        lastActiveWindowId: "main",
-        windowBounds: null,
-        lastActiveAgentId: null,
-      },
+      session: buildDefaultContextSession(),
+    },
+    chatHttp: {
+      documents: [buildEmptyUnsavedDocument("doc-1")],
+      session: buildDefaultContextSession(),
     },
     workspaces: [],
   },

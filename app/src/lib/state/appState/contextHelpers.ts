@@ -6,11 +6,12 @@ import type {
   SessionState,
   WorkspaceEntry,
 } from "../../domain/contracts";
-import { isFileTab } from "../../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID, isFileTab } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { normalizeDocument } from "./documentHelpers";
 
 export const NOTEPAD_CONTEXT_ID: ContextId = "notepad";
+export const CHAT_HTTP_CONTEXT_KEY: ContextId = CHAT_HTTP_CONTEXT_ID;
 
 const idCounters = {
   doc: 1,
@@ -60,6 +61,7 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
     1,
     ...[
       ...contexts.notepad.documents,
+      ...contexts.chatHttp.documents,
       ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.documents),
     ].map((documentState) => Number(documentState.id.replace("doc-", "")) || 1),
   );
@@ -67,6 +69,7 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
     1,
     ...[
       ...contexts.notepad.session.openTabs,
+      ...contexts.chatHttp.session.openTabs,
       ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.session.openTabs),
     ].map((tab) => Number(tab.id.replace("tab-", "")) || 1),
   );
@@ -96,8 +99,19 @@ export function getContextSnapshotById(state: AppDomainState, contextId: Context
   if (contextId === NOTEPAD_CONTEXT_ID) {
     return state.contexts.notepad;
   }
+  if (contextId === CHAT_HTTP_CONTEXT_KEY) {
+    return state.contexts.chatHttp;
+  }
   const workspace = state.contexts.workspaces.find((entry) => entry.id === contextId);
   return workspace?.snapshot ?? null;
+}
+
+export function isChatHttpContext(contextId: ContextId): boolean {
+  return contextId === CHAT_HTTP_CONTEXT_KEY;
+}
+
+export function getChatHttpContextSnapshot(state: AppDomainState): ContextSnapshot {
+  return state.contexts.chatHttp;
 }
 
 export function getActiveContextSnapshot(state: AppDomainState): ContextSnapshot {
@@ -128,6 +142,15 @@ export function patchActiveContext(
       contexts: {
         ...state.contexts,
         notepad: nextSnapshot,
+      },
+    };
+  }
+  if (isChatHttpContext(contextId)) {
+    return {
+      ...state,
+      contexts: {
+        ...state.contexts,
+        chatHttp: nextSnapshot,
       },
     };
   }
@@ -190,6 +213,15 @@ export function patchContextById(
       contexts: {
         ...state.contexts,
         notepad: nextSnapshot,
+      },
+    };
+  }
+  if (isChatHttpContext(contextId)) {
+    return {
+      ...state,
+      contexts: {
+        ...state.contexts,
+        chatHttp: nextSnapshot,
       },
     };
   }

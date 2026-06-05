@@ -25,6 +25,7 @@ function domainState(overrides: {
     contexts: {
       activeContextId: "notepad",
       notepad: snapshot,
+      chatHttp: snapshot,
       workspaces: [],
     },
     settings: {} as AppDomainState["settings"],

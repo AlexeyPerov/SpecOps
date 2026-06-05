@@ -330,6 +330,39 @@ describe("chatStore", () => {
     expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
   });
 
+  it("normalizes persisted chat-http review mode threads to ask on load", async () => {
+    const chatHttpThread: ChatThreadSnapshot = {
+      metadata: {
+        agentId: "http-agent",
+        threadId: "http-agent",
+        mode: "review",
+        provider: "http",
+        createdAt: "2026-06-05T00:00:00.000Z",
+        updatedAt: "2026-06-05T00:00:01.000Z",
+      },
+      messages: [
+        {
+          id: "m-1",
+          role: "user",
+          content: "legacy review",
+          createdAt: "2026-06-05T00:00:00.000Z",
+        },
+      ],
+    };
+
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      agents: [{ id: "http-agent", title: "Chat HTTP", lastUsedAt: "2026-06-05T00:00:01.000Z" }],
+    });
+    readAgentThreadFileSnapshotMock.mockResolvedValue(chatHttpThread);
+
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+    chatStore.setActiveAgentId("http-agent");
+
+    expect(chatStore.getMetadata()?.mode).toBe("ask");
+  });
+
   it("clears active chat binding in notepad mode", () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.appendMessage({

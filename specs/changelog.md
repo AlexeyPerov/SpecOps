@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-05 16:38 (MSK)
+
+- **Phase 2 M2 Task 3 (ask-only mode enforcement):** Updated `app/src/lib/components/ChatComposer.svelte` and `app/src/lib/components/ChatPanel.svelte` to pass explicit `chatContextKind` and filter mode options to **ask** only in `chat-http`, while preserving provider-driven ask/review mode options in workspace contexts.
+- **chat-http mode normalization:** Updated `app/src/lib/state/chatStore/threads.ts` and `app/src/lib/state/chatStore/agents.ts` to normalize chat-http thread metadata to `mode: "ask"` on metadata updates, provider switches, and persisted thread load; legacy `review` thread metadata is automatically coerced in chat-http scope.
+- **Send pipeline context guard:** Updated `app/src/lib/ai/sendChatMessage.ts` to accept chat-context options and skip workspace access preflight in `chat-http` sends/retries while keeping preflight behavior unchanged for workspace sends.
+- **Tests + verification:** Added coverage in `app/src/lib/ai/sendChatMessage.test.ts` and `app/src/lib/state/chatStore.test.ts` for chat-http preflight skip and review→ask normalization; validated with targeted tests (`sendChatMessage`, `chatStore`) and `npm run check` (0 errors, 1 pre-existing `EntryNamePrompt.svelte` a11y warning).
+- **Plan tracking:** Marked Task 3 as `[DONE]` in `specs/ops/phase-2/execution-plan-m2.md`.
+
 ## 2026-06-05 16:39 (MSK)
 
 - **Phase 2 M2 Task 2 (Chats sidebar + agent tabs):** Extended `app/src/lib/components/AgentsSidebar.svelte` with a context-driven `sidebarTitle` prop (default `"Agents"`), and made sidebar copy/aria/tooltips/context-menu labels adaptive so `chat-http` renders **Chats** wording while workspace retains **Agents**.

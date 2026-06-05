@@ -31,6 +31,7 @@
     activeMode: ChatModeId;
     activeProvider: ChatProviderId;
     activeModel: string;
+    chatContextKind: "workspace" | "chat-http";
     supportedModes: ChatModeId[];
     debugProviderSettings: DebugProviderSettings;
     httpProviderSettings: HttpConnectionSettings;
@@ -49,6 +50,7 @@
     activeMode,
     activeProvider,
     activeModel,
+    chatContextKind,
     supportedModes,
     debugProviderSettings,
     httpProviderSettings,
@@ -66,7 +68,13 @@
     httpProviderSettings.enabled;
     return listSelectableChatProviders(debugProviderSettings);
   });
-  const availableModes = $derived(listModesForProvider(supportedModes));
+  const availableModes = $derived.by(() => {
+    const providerModes = listModesForProvider(supportedModes);
+    if (chatContextKind === "chat-http") {
+      return providerModes.filter((mode) => mode.id === "ask");
+    }
+    return providerModes;
+  });
   const availableModels = $derived(
     listSelectableModelsForProvider(providerModelCatalogs, activeProvider),
   );
@@ -134,7 +142,7 @@
 
     sending = true;
     onInlineError("");
-    const result = await sendChatMessage(content);
+    const result = await sendChatMessage(content, undefined, { chatContextKind });
     if (result.ok) {
       draft = "";
     } else {
@@ -150,7 +158,7 @@
 
     retrying = true;
     onInlineError("");
-    const result = await retryLastChatTurn();
+    const result = await retryLastChatTurn(undefined, { chatContextKind });
     if (!result.ok) {
       onInlineError(result.message);
     }
@@ -158,7 +166,11 @@
   }
 
   function selectMode(nextMode: ChatModeId): void {
-    if (nextMode === activeMode || isModeSelectionDisabled) {
+    if (
+      nextMode === activeMode ||
+      isModeSelectionDisabled ||
+      (chatContextKind === "chat-http" && nextMode !== "ask")
+    ) {
       return;
     }
     const updated = chatStore.updateThreadMetadata({ mode: nextMode });

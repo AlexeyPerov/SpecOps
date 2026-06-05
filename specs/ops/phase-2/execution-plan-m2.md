@@ -99,7 +99,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 3: Ask-only mode enforcement (C2) [Score:6] [Agent:medium]
+#### Task 3: Ask-only mode enforcement (C2) [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 

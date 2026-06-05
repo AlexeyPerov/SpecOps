@@ -12,6 +12,7 @@ import {
   activeAgentId,
 } from "./workspace";
 import { cloneThread } from "./threadHelpers";
+import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 
 let agentIdCounter = 0;
 
@@ -109,6 +110,36 @@ export function createAgentsSlice(deps: {
 }) {
   const { update, getSnapshot, getActiveChatScopeKey } = deps;
 
+  function normalizeModeForScope(
+    scopeKey: string,
+    mode: import("../../domain/contracts").ChatThreadSnapshot["metadata"]["mode"],
+  ): import("../../domain/contracts").ChatThreadSnapshot["metadata"]["mode"] {
+    if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
+      return "ask";
+    }
+    return mode;
+  }
+
+  function normalizeThreadForScope(
+    scopeKey: string,
+    thread: import("../../domain/contracts").ChatThreadSnapshot | null,
+  ): import("../../domain/contracts").ChatThreadSnapshot | null {
+    if (!thread) {
+      return null;
+    }
+    const nextMode = normalizeModeForScope(scopeKey, thread.metadata.mode);
+    if (nextMode === thread.metadata.mode) {
+      return thread;
+    }
+    return {
+      ...thread,
+      metadata: {
+        ...thread.metadata,
+        mode: nextMode,
+      },
+    };
+  }
+
   return {
     getActiveAgentId(): string | null {
       return activeAgentId(getSnapshot());
@@ -200,7 +231,10 @@ export function createAgentsSlice(deps: {
           continue;
         }
         const thread = await readAgentThreadFileSnapshot(normalizedRootPath, entry.id);
-        threadsByAgentId[entry.id] = cloneThread(thread);
+        threadsByAgentId[entry.id] = normalizeThreadForScope(
+          normalizedRootPath,
+          cloneThread(thread),
+        );
       }
 
       update((state) => {

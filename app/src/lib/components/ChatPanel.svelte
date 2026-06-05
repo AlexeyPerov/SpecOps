@@ -17,7 +17,7 @@
     formatChatProviderLabel,
   } from "../ai/providers/selection";
   import { validateLocalModelSelection } from "../ai/providers/capabilityChecker";
-  import type { ChatModeId } from "../domain/contracts";
+  import { CHAT_HTTP_CONTEXT_ID, type ChatModeId } from "../domain/contracts";
   import { appState } from "../state/appState";
   import {
     chatAccessState,
@@ -85,6 +85,7 @@
       accessState.reason !== WorkspaceAccessReason.MissingProviderConfig,
   );
   const isEmpty = $derived(messages.length === 0);
+  const isChatHttpScope = $derived(chatStore.getActiveChatScopeKey() === CHAT_HTTP_CONTEXT_ID);
   const activeAgentId = $derived(chatStore.getActiveAgentId());
   const activeAgentTitle = $derived.by(() => {
     if (!activeAgentId) {
@@ -126,7 +127,7 @@
     httpApiKey;
     const root = chatStore.getActiveWorkspaceRoot();
     if (!root) {
-      supportedModes = ["ask", "review"];
+      supportedModes = ["ask"];
       return;
     }
     void chatStore.runAccessPreflight().then(async () => {
@@ -214,6 +215,7 @@
       {activeMode}
       {activeProvider}
       {activeModel}
+      chatContextKind={isChatHttpScope ? "chat-http" : "workspace"}
       {supportedModes}
       {debugProviderSettings}
       {httpProviderSettings}

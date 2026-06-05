@@ -5,6 +5,7 @@ import type {
   ChatThreadSnapshot,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 import type { CapabilityChecker } from "../../ai/capabilities";
 import { DEBUG_PROVIDER_SWITCH_BLOCKED_MESSAGE } from "../../ai/chatErrorCopy";
 import { compactChatThread } from "../../services/chatRetention";
@@ -69,6 +70,46 @@ export function createThreadsSlice(deps: {
     return capabilityCheckerRef.current ?? stubCapabilityChecker;
   }
 
+  function normalizeModeForScope(mode: ChatThreadMetadata["mode"], scopeKey: string): ChatThreadMetadata["mode"] {
+    if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
+      return "ask";
+    }
+    return mode;
+  }
+
+  function normalizeThreadForScope(
+    thread: ChatThreadSnapshot | null,
+    scopeKey: string,
+  ): ChatThreadSnapshot | null {
+    if (!thread) {
+      return null;
+    }
+    const nextMode = normalizeModeForScope(thread.metadata.mode, scopeKey);
+    if (nextMode === thread.metadata.mode) {
+      return thread;
+    }
+    return {
+      ...thread,
+      metadata: {
+        ...thread.metadata,
+        mode: nextMode,
+      },
+    };
+  }
+
+  function normalizeMetadataPatchForScope(
+    patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId">>,
+    scopeKey: string,
+  ): Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId">> {
+    if (!("mode" in patch)) {
+      return patch;
+    }
+    return {
+      ...patch,
+      mode: patch.mode ? normalizeModeForScope(patch.mode, scopeKey) : patch.mode,
+    };
+  }
+
   return {
     setAgentThread(agentId: string, thread: ChatThreadSnapshot | null): void {
       const root = getActiveChatScopeKey();
@@ -81,7 +122,7 @@ export function createThreadsSlice(deps: {
           ...workspace,
           threadsByAgentId: {
             ...workspace.threadsByAgentId,
-            [agentId]: cloneThread(thread),
+            [agentId]: normalizeThreadForScope(cloneThread(thread), root),
           },
         });
       });
@@ -113,7 +154,7 @@ export function createThreadsSlice(deps: {
               agentIndex: nextIndex,
               threadsByAgentId: {
                 ...workspace.threadsByAgentId,
-                [agentId]: cloneThread(thread),
+                [agentId]: normalizeThreadForScope(cloneThread(thread), normalizedRootPath),
               },
             },
           },
@@ -364,7 +405,7 @@ export function createThreadsSlice(deps: {
               [targetAgentId]: {
                 metadata: applyMetadataPatch(
                   createThreadMetadata(targetAgentId, updatedAt),
-                  patch,
+                  normalizeMetadataPatchForScope(patch, root),
                   updatedAt,
                 ),
                 messages: [],
@@ -380,7 +421,11 @@ export function createThreadsSlice(deps: {
             ...workspace.threadsByAgentId,
             [targetAgentId]: {
               ...thread,
-              metadata: applyMetadataPatch(thread.metadata, patch, updatedAt),
+              metadata: applyMetadataPatch(
+                thread.metadata,
+                normalizeMetadataPatchForScope(patch, root),
+                updatedAt,
+              ),
             },
           },
         });
@@ -478,6 +523,7 @@ export function createThreadsSlice(deps: {
       if (supportedModes && supportedModes.length > 0 && !supportedModes.includes(nextMode)) {
         nextMode = supportedModes[0];
       }
+      nextMode = normalizeModeForScope(nextMode, root);
 
       const updatedAt = new Date().toISOString();
       const systemEvent = {

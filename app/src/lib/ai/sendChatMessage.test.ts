@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { chatStore } from "../state/chatStore";
 import { appState } from "../state/appState";
 import { defaultDebugProviderSettings } from "./providers/debugProviderSettings";
@@ -248,6 +249,36 @@ describe("sendChatMessage", () => {
     }
     expect(chatStore.getMessages()).toHaveLength(0);
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
+  });
+
+  it("skips workspace access preflight for chat-http sends", async () => {
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+    ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
+
+    const resultPromise = sendChatMessage("chat-http still sends");
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(true);
+    expect(chatStore.getMessages()).toHaveLength(2);
+    expect(ensureWorkspaceReadAccessMock).not.toHaveBeenCalled();
+  });
+
+  it("normalizes review mode to ask before sending in chat-http", async () => {
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "debug", mode: "review" });
+
+    const resultPromise = sendChatMessage("must be ask-only", undefined, {
+      chatContextKind: "chat-http",
+    });
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(true);
+    expect(chatStore.getMetadata()?.mode).toBe("ask");
   });
 
   it("promotes draft agent and schedules persistence on first send", async () => {

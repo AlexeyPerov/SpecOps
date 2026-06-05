@@ -25,6 +25,7 @@ import { chatStore, type ChatTurnError } from "../state/chatStore";
 import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 import { isChatProviderError, streamProviderMessage } from "./chatSend";
 import type { WorkspaceAccessStatus } from "../ai/capabilities";
+import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 
 class TurnCancelledError extends Error {
   constructor() {
@@ -144,9 +145,32 @@ type ProviderSendValidationSuccess = {
   modelId: string;
 };
 
+type ChatContextKind = "workspace" | "chat-http";
+
+interface ChatSendContextOptions {
+  chatContextKind?: ChatContextKind;
+}
+
+function resolveChatContextKind(root: string, options?: ChatSendContextOptions): ChatContextKind {
+  if (options?.chatContextKind) {
+    return options.chatContextKind;
+  }
+  return root === CHAT_HTTP_CONTEXT_ID ? "chat-http" : "workspace";
+}
+
 async function validateProviderSend(
   activeAgentId: string,
+  options?: ChatSendContextOptions,
 ): Promise<ProviderSendValidationFailure | ProviderSendValidationSuccess> {
+  const root = chatStore.getActiveChatScopeKey();
+  if (!root) {
+    return {
+      ok: false,
+      reason: "no_workspace",
+      message: "Open a workspace to send chat messages.",
+    };
+  }
+  const chatContextKind = resolveChatContextKind(root, options);
   const providerId = chatStore.getActiveChatProvider(activeAgentId);
   const appSettings = appState.getSnapshot().settings;
   const debugSettings = appSettings.providerSettings.debug;
@@ -192,13 +216,17 @@ async function validateProviderSend(
     };
   }
 
-  const accessState = await chatStore.runAccessPreflight();
-  if (accessState.status !== "ready") {
-    return {
-      ok: false,
-      reason: "preflight",
-      message: accessState.message,
-    };
+  let accessStatus: WorkspaceAccessStatus = "unknown";
+  if (chatContextKind === "workspace") {
+    const accessState = await chatStore.runAccessPreflight();
+    if (accessState.status !== "ready") {
+      return {
+        ok: false,
+        reason: "preflight",
+        message: accessState.message,
+      };
+    }
+    accessStatus = accessState.status;
   }
 
   const provider = getChatProvider(providerId);
@@ -210,7 +238,7 @@ async function validateProviderSend(
     };
   }
 
-  return { ok: true, provider, accessStatus: accessState.status, modelId: localModelValidation.modelId };
+  return { ok: true, provider, accessStatus, modelId: localModelValidation.modelId };
 }
 
 async function executeProviderTurn(params: {
@@ -283,7 +311,10 @@ async function executeProviderTurn(params: {
   }
 }
 
-export async function retryLastChatTurn(agentId?: string): Promise<RetryLastChatTurnResult> {
+export async function retryLastChatTurn(
+  agentId?: string,
+  options?: ChatSendContextOptions,
+): Promise<RetryLastChatTurnResult> {
   const root = chatStore.getActiveChatScopeKey();
   if (!root) {
     return { ok: false, reason: "no_workspace", message: "Open a workspace to retry chat messages." };
@@ -311,7 +342,7 @@ export async function retryLastChatTurn(agentId?: string): Promise<RetryLastChat
     };
   }
 
-  const validation = await validateProviderSend(activeAgentId);
+  const validation = await validateProviderSend(activeAgentId, options);
   if (!validation.ok) {
     return validation;
   }
@@ -340,6 +371,7 @@ export async function retryLastChatTurn(agentId?: string): Promise<RetryLastChat
 export async function sendChatMessage(
   content: string,
   agentId?: string,
+  options?: ChatSendContextOptions,
 ): Promise<SendChatMessageResult> {
   const trimmed = content.trim();
   if (!trimmed) {
@@ -365,7 +397,7 @@ export async function sendChatMessage(
     };
   }
 
-  const validation = await validateProviderSend(activeAgentId);
+  const validation = await validateProviderSend(activeAgentId, options);
   if (!validation.ok) {
     abortTurn(activeAgentId, root);
     return validation;

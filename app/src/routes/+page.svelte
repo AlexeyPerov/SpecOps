@@ -15,6 +15,7 @@
   import ProjectPanel from "../lib/components/ProjectPanel.svelte";
   import AgentsSidebar from "../lib/components/AgentsSidebar.svelte";
   import ChatPanel from "../lib/components/ChatPanel.svelte";
+  import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
   import { nextSidebarAgentId, openAgentTabIds, resolveRestoredActiveAgent, selectedTabAfterMissingLastAgent } from "../lib/services/workspaceAgentSession";
   import { closeTabWithUnsavedPrompt } from "../lib/services/closeTabFlow";
@@ -141,6 +142,13 @@
     !(
       snapshot.settings.hideActivityRailWhenNotepadOnly &&
       snapshot.contexts.workspaces.length === 0
+    ),
+  );
+  const chatHttpRailVisible = $derived(
+    isChatHttpRailVisible(
+      snapshot.settings.providerSettings.http,
+      snapshot.settings.providerApiKeys.http ?? "",
+      snapshot.settings.providerModelCatalogs,
     ),
   );
   const activeTab = $derived(
@@ -980,6 +988,7 @@
       <ActivityRail
         workspaces={workspaces}
         activeContextId={activeContextId}
+        showChatHttp={chatHttpRailVisible}
         onSelectContext={handleSelectContext}
         onAddWorkspace={handleAddWorkspace}
         onRequestCloseWorkspace={handleOpenWorkspaceContextMenu}

@@ -148,7 +148,7 @@ Dependencies: none (parallel with Tasks 1–2 after phase 1 complete).
 
 ---
 
-#### Task 5: Activity rail Chat button and wiring (P2-3) [Score:7] [Agent:medium]
+#### Task 5: Activity rail Chat button and wiring (P2-3) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -221,7 +221,7 @@ Task 4 can start in parallel with Task 1.
 ## Milestone 1 exit criteria
 
 - [ ] `chat-http` context loads/saves in session snapshot.
-- [ ] Chat rail button visible when HTTP connection configured; hidden otherwise.
+- [x] Chat rail button visible when HTTP connection configured; hidden otherwise.
 - [x] `chatStore` + persistence scoped to `chat-http` under `chat/chat-http/`.
 - [ ] Workspace HTTP chat unchanged (B2A).
 - [ ] `npm test` / `npm run check` pass.

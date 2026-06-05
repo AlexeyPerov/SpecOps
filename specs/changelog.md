@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-05 16:10 (MSK)
+
+- **Phase 2 M1 Task 5 (activity rail Chat button):** Added gated Chat rail button to `ActivityRail.svelte` after the Notepad separator (chat bubble icon, tooltip, active state for `chat-http`); button hidden unless `isChatHttpRailVisible` passes.
+- **App shell wiring:** `+page.svelte` derives `chatHttpRailVisible` from HTTP connection settings, API key, and provider catalogs and passes `showChatHttp` to the activity rail; click routes through existing `handleSelectContext("chat-http")`.
+
 ## 2026-06-05 15:35 (MSK)
 
 - **Phase 2 M1 Task 4 (HTTP connection rail gating):** Added `isChatHttpRailVisible` in `chatHttpRailGating.ts` — pure helper combining `isHttpProviderConfigured`, trimmed API key/base URL checks, and HTTP default-model resolution via `validateLocalModelSelection` (roadmap A2D; HTTP Chat only, no `chat-cloud` gating).

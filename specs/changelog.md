@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-05 17:35 (MSK)
+
+- **Phase 2 M3 Task 4 (stream failure + retry + error copy):** Added stream-specific provider error/recovery copy in `app/src/lib/ai/chatErrorCopy.ts` for connection-drop, malformed stream payload, truncated stream, HTTP 401, and HTTP 429 cases, plus `getProviderErrorRecoveryHint` mapping used by chat runtime errors.
+- **UI error recovery hints:** Updated `app/src/lib/components/ChatPanel.svelte` to show stream-aware recovery hints in the turn error banner path (instead of one generic retry hint), while preserving existing blocked-state copy behavior.
+- **Tests:** Extended `app/src/lib/ai/chatErrorCopy.test.ts` with recovery-hint mapping coverage and expanded `app/src/lib/ai/sendChatMessage.test.ts` with stream-parse failure scaffolding/retry scenarios (including no partial assistant residue and successful retry with a single user message).
+- **Plan tracking:** Marked Task 4 as `[DONE]` in `specs/ops/phase-2/execution-plan-m3.md`.
+
 ## 2026-06-05 17:27 (MSK)
 
 - **Phase 2 M3 Task 3 (UI token delta rendering):** Updated `ChatMessageList.svelte` streaming presentation so in-progress assistant output always renders as stable plain text during generation (including review mode), preventing section-layout churn/flicker until completion.

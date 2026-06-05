@@ -120,7 +120,7 @@ Dependencies: Task 2.
 
 ---
 
-#### Task 4: Stream failure, retry, and provider error copy (P2-5) [Score:6] [Agent:medium]
+#### Task 4: Stream failure, retry, and provider error copy (P2-5) [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 

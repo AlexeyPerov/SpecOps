@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { WorkspaceAccessReason } from "./capabilities";
 import {
+  HTTP_RATE_LIMIT_FAILURE_MESSAGE,
+  HTTP_RATE_LIMIT_FAILURE_RECOVERY,
+  HTTP_UNAUTHORIZED_FAILURE_MESSAGE,
+  HTTP_UNAUTHORIZED_FAILURE_RECOVERY,
   DEBUG_PROVIDER_DISABLED_MESSAGE,
   DEBUG_PROVIDER_DISABLED_RECOVERY,
   HTTP_MISSING_CONFIG_MESSAGE,
   HTTP_MISSING_CONFIG_RECOVERY,
   PROVIDER_REQUEST_FAILURE_MESSAGE,
+  PROVIDER_REQUEST_FAILURE_RECOVERY,
+  STREAM_CONNECTION_FAILURE_MESSAGE,
+  STREAM_CONNECTION_FAILURE_RECOVERY,
+  STREAM_PARSE_FAILURE_MESSAGE,
+  STREAM_PARSE_FAILURE_RECOVERY,
+  STREAM_TRUNCATED_FAILURE_MESSAGE,
+  STREAM_TRUNCATED_FAILURE_RECOVERY,
+  getProviderErrorRecoveryHint,
   WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
   WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
   getAccessBlockedCopy,
@@ -60,5 +72,26 @@ describe("chatErrorCopy", () => {
     const stackError = new Error("TypeError: boom\n    at Object.<anonymous> (/tmp/x.js:1:1)");
     expect(sanitizeUnexpectedProviderError(stackError)).toBe(PROVIDER_REQUEST_FAILURE_MESSAGE);
     expect(sanitizeUnexpectedProviderError("not an error")).toBe(PROVIDER_REQUEST_FAILURE_MESSAGE);
+  });
+
+  it("returns stream and auth specific recovery hints", () => {
+    expect(getProviderErrorRecoveryHint(STREAM_CONNECTION_FAILURE_MESSAGE)).toBe(
+      STREAM_CONNECTION_FAILURE_RECOVERY,
+    );
+    expect(getProviderErrorRecoveryHint(STREAM_PARSE_FAILURE_MESSAGE)).toBe(
+      STREAM_PARSE_FAILURE_RECOVERY,
+    );
+    expect(getProviderErrorRecoveryHint(STREAM_TRUNCATED_FAILURE_MESSAGE)).toBe(
+      STREAM_TRUNCATED_FAILURE_RECOVERY,
+    );
+    expect(getProviderErrorRecoveryHint(HTTP_UNAUTHORIZED_FAILURE_MESSAGE)).toBe(
+      HTTP_UNAUTHORIZED_FAILURE_RECOVERY,
+    );
+    expect(getProviderErrorRecoveryHint(HTTP_RATE_LIMIT_FAILURE_MESSAGE)).toBe(
+      HTTP_RATE_LIMIT_FAILURE_RECOVERY,
+    );
+    expect(getProviderErrorRecoveryHint("Some other provider error")).toBe(
+      PROVIDER_REQUEST_FAILURE_RECOVERY,
+    );
   });
 });

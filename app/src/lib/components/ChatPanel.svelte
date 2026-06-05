@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    getProviderErrorRecoveryHint,
     getAccessBlockedCopy,
     getDebugProviderDisabledCopy,
     getHttpMissingConfigCopy,
@@ -110,7 +111,7 @@
     if (lastError && !isGenerating) {
       return {
         message: lastError.message,
-        recoveryHint: PROVIDER_REQUEST_FAILURE_RECOVERY,
+        recoveryHint: getProviderErrorRecoveryHint(lastError.message),
       };
     }
     return null;

@@ -620,6 +620,56 @@ describe("sendChatMessage", () => {
     expect(chatStore.canRetryLastTurn()).toBe(true);
   });
 
+  it("surfaces stream parse failures with retry scaffolding and no partial assistant residue", async () => {
+    resetChatProviderRegistryForTests();
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "http-test-key");
+    registerChatProvider(
+      createOpenAiCompatibleChatProvider(
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+        vi.fn().mockResolvedValue(
+          makeSseResponse([
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "partial " } }] })}\n\n`,
+            "data: {bad-json}\n\n",
+          ]),
+        ) as typeof fetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
+
+    const result = await sendChatMessage("This stream should fail");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toBe("HTTP provider returned an invalid streaming response. Try again.");
+    }
+    const messages = chatStore.getMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.role).toBe("user");
+    expect(messages.some((message) => message.role === "assistant")).toBe(false);
+    expect(chatStore.getRuntimeState()).toMatchObject({
+      isGenerating: false,
+      lastFailedTurnId: expect.stringMatching(/^turn-/),
+      lastError: {
+        message: "HTTP provider returned an invalid streaming response. Try again.",
+        code: "provider_error",
+      },
+    });
+    expect(chatStore.canRetryLastTurn()).toBe(true);
+  });
+
   it("retries the last failed turn without duplicating user messages", async () => {
     appState.updateDebugProviderSettings({
       ...appState.getSnapshot().settings.providerSettings.debug,
@@ -715,6 +765,60 @@ describe("sendChatMessage", () => {
     expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
     expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
       "Retried HTTP response.",
+    );
+    expect(chatStore.canRetryLastTurn()).toBe(false);
+  });
+
+  it("retries after an HTTP stream parse failure and preserves single user message", async () => {
+    resetChatProviderRegistryForTests();
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "http-test-key");
+    const httpFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "partial " } }] })}\n\n`,
+          "data: {bad-json}\n\n",
+        ]),
+      )
+      .mockResolvedValueOnce(
+        makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Retried " } }] })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "stream response." } }] })}\n\n`,
+          "data: [DONE]\n\n",
+        ]),
+      );
+    registerChatProvider(
+      createOpenAiCompatibleChatProvider(
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+        httpFetch as typeof fetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
+
+    const failed = await sendChatMessage("Retry failed stream");
+    expect(failed.ok).toBe(false);
+    expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
+    expect(chatStore.getMessages().filter((message) => message.role === "assistant")).toHaveLength(0);
+    expect(chatStore.canRetryLastTurn()).toBe(true);
+
+    const retried = await retryLastChatTurn();
+    expect(retried.ok).toBe(true);
+    expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
+    expect(chatStore.getMessages().find((message) => message.role === "assistant")?.content).toBe(
+      "Retried stream response.",
     );
     expect(chatStore.canRetryLastTurn()).toBe(false);
   });

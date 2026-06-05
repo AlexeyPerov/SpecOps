@@ -58,6 +58,36 @@ export const PROVIDER_REQUEST_FAILURE_MESSAGE = "The assistant could not finish 
 export const PROVIDER_REQUEST_FAILURE_RECOVERY =
   "Tap Retry to send again. If it keeps failing, check your provider settings.";
 
+export const STREAM_CONNECTION_FAILURE_MESSAGE =
+  "HTTP provider stream failed while reading the response. Try again.";
+
+export const STREAM_CONNECTION_FAILURE_RECOVERY =
+  "Your connection may have dropped mid-response. Retry now, then check network/base URL if it repeats.";
+
+export const STREAM_PARSE_FAILURE_MESSAGE =
+  "HTTP provider returned an invalid streaming response. Try again.";
+
+export const STREAM_PARSE_FAILURE_RECOVERY =
+  "The provider returned malformed stream data. Retry once, then verify provider compatibility.";
+
+export const STREAM_TRUNCATED_FAILURE_MESSAGE =
+  "HTTP provider stream ended unexpectedly. Try again.";
+
+export const STREAM_TRUNCATED_FAILURE_RECOVERY =
+  "The stream ended before completion. Retry now; if this repeats, check provider/proxy stability.";
+
+export const HTTP_UNAUTHORIZED_FAILURE_MESSAGE =
+  "Invalid API key for the configured HTTP provider. Check Settings → Connections.";
+
+export const HTTP_RATE_LIMIT_FAILURE_MESSAGE =
+  "HTTP provider rate limit reached. Wait a moment and try again.";
+
+export const HTTP_UNAUTHORIZED_FAILURE_RECOVERY =
+  "Open Settings → Connections, update the API key, and retry.";
+
+export const HTTP_RATE_LIMIT_FAILURE_RECOVERY =
+  "Wait a short time and retry. If this happens often, lower request volume or change provider limits.";
+
 export const LOCAL_INVALID_MODEL_MESSAGE =
   "The selected model is not in your configured model list.";
 
@@ -198,4 +228,23 @@ export function sanitizeUnexpectedProviderError(error: unknown): string {
   }
 
   return PROVIDER_REQUEST_FAILURE_MESSAGE;
+}
+
+export function getProviderErrorRecoveryHint(message: string): string {
+  if (message === STREAM_CONNECTION_FAILURE_MESSAGE) {
+    return STREAM_CONNECTION_FAILURE_RECOVERY;
+  }
+  if (message === STREAM_PARSE_FAILURE_MESSAGE) {
+    return STREAM_PARSE_FAILURE_RECOVERY;
+  }
+  if (message === STREAM_TRUNCATED_FAILURE_MESSAGE) {
+    return STREAM_TRUNCATED_FAILURE_RECOVERY;
+  }
+  if (message === HTTP_UNAUTHORIZED_FAILURE_MESSAGE) {
+    return HTTP_UNAUTHORIZED_FAILURE_RECOVERY;
+  }
+  if (message === HTTP_RATE_LIMIT_FAILURE_MESSAGE) {
+    return HTTP_RATE_LIMIT_FAILURE_RECOVERY;
+  }
+  return PROVIDER_REQUEST_FAILURE_RECOVERY;
 }

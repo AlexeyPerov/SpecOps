@@ -97,7 +97,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 3: UI token delta rendering (P2-5) [Score:7] [Agent:medium]
+#### Task 3: UI token delta rendering (P2-5) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

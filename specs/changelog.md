@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-05 17:27 (MSK)
+
+- **Phase 2 M3 Task 3 (UI token delta rendering):** Updated `ChatMessageList.svelte` streaming presentation so in-progress assistant output always renders as stable plain text during generation (including review mode), preventing section-layout churn/flicker until completion.
+- **In-progress affordance:** Added subtle streaming treatment for the active assistant bubble (dashed in-progress styling + blinking cursor appended to chunked content) while keeping existing placeholder behavior for empty first chunk.
+- **Regression guard:** Extended `sendChatMessage` streaming tests to assert that chunk updates reuse one assistant placeholder/message id and never duplicate assistant rows on stream completion.
+- **Plan tracking:** Marked Task 3 as `[DONE]` in `specs/ops/phase-2/execution-plan-m3.md`.
+
 ## 2026-06-05 17:24 (MSK)
 
 - **Phase 2 M3 Task 2 (send pipeline streaming integration):** Updated `sendChatMessage` turn execution to wire cancellation through `AbortController` into provider requests, stream assistant content into the existing placeholder message incrementally, and keep retry path on the shared streaming pipeline.

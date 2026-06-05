@@ -257,6 +257,56 @@ describe("sendChatMessage", () => {
     );
   });
 
+  it("keeps a single assistant placeholder message id across streaming updates", async () => {
+    resetChatProviderRegistryForTests();
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "http-test-key");
+    registerChatProvider(
+      createOpenAiCompatibleChatProvider(
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+        vi.fn().mockResolvedValue(
+          makeSseResponse([
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "One " } }] })}\n\n`,
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "message" } }] })}\n\n`,
+            "data: [DONE]\n\n",
+          ]),
+        ) as typeof fetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
+
+    const assistantIdsDuringStream = new Set<string>();
+    const unsubscribe = chatStore.subscribe(() => {
+      for (const message of chatStore.getMessages()) {
+        if (message.role === "assistant") {
+          assistantIdsDuringStream.add(message.id);
+        }
+      }
+    });
+
+    const result = await sendChatMessage("No duplicate assistant rows");
+    unsubscribe();
+
+    expect(result.ok).toBe(true);
+    expect(assistantIdsDuringStream.size).toBe(1);
+    const assistantMessages = chatStore.getMessages().filter((message) => message.role === "assistant");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.content).toBe("One message");
+    expect(chatStore.getRuntimeState().isGenerating).toBe(false);
+  });
+
   it("aborts an in-flight HTTP stream when generation is cancelled", async () => {
     resetChatProviderRegistryForTests();
     appState.updateHttpConnectionSettings({ enabled: true });

@@ -45,6 +45,16 @@
     return parseReviewMessageSections(message.content);
   }
 
+  function isStreamingAssistantMessage(message: ChatMessage, index: number): boolean {
+    return isGenerating && message.role === "assistant" && index === messages.length - 1;
+  }
+
+  function shouldRenderReviewSections(message: ChatMessage, index: number): boolean {
+    // Keep streaming output in plain text until generation completes to avoid
+    // section layout churn while partial markdown headings arrive.
+    return !isStreamingAssistantMessage(message, index) && Boolean(reviewSectionsForMessage(message));
+  }
+
   function messageRoleLabel(message: ChatMessage): string {
     if (isProviderSwitchMessage(message)) {
       return "Provider switch";
@@ -84,12 +94,10 @@
           <li
             class={`chat-message chat-message-${message.role}`}
             class:chat-message-system-event={isSystemEventMessage(message)}
-            class:chat-message-streaming={isGenerating &&
-              message.role === "assistant" &&
-              index === messages.length - 1}
+            class:chat-message-streaming={isStreamingAssistantMessage(message, index)}
           >
             <p class="chat-message-role">{messageRoleLabel(message)}</p>
-            {#if reviewSectionsForMessage(message)}
+            {#if shouldRenderReviewSections(message, index)}
               <div class="chat-review-sections">
                 {#each reviewSectionsForMessage(message) ?? [] as section (section.heading)}
                   <section class="chat-review-section">
@@ -100,10 +108,13 @@
               </div>
             {:else}
               <p class="chat-message-content">
-                {#if message.role === "assistant" && message.content.length === 0 && isGenerating && index === messages.length - 1}
+                {#if message.role === "assistant" && message.content.length === 0 && isStreamingAssistantMessage(message, index)}
                   <span class="chat-streaming-placeholder">Generating…</span>
                 {:else}
                   {messageDisplayContent(message)}
+                  {#if isStreamingAssistantMessage(message, index)}
+                    <span class="chat-streaming-cursor" aria-hidden="true"></span>
+                  {/if}
                 {/if}
               </p>
             {/if}
@@ -266,9 +277,35 @@
     border-style: dashed;
   }
 
+  .chat-message-streaming .chat-message-content {
+    color: color-mix(in srgb, var(--color-text-primary) 94%, var(--color-text-secondary));
+  }
+
   .chat-streaming-placeholder {
     color: var(--color-text-secondary);
     font-style: italic;
+  }
+
+  .chat-streaming-cursor {
+    display: inline-block;
+    width: 0.55ch;
+    height: 1em;
+    margin-left: 0.08em;
+    vertical-align: -0.1em;
+    background: color-mix(in srgb, var(--color-text-primary) 80%, var(--color-text-secondary));
+    opacity: 0.9;
+    animation: chat-streaming-cursor-blink 1.15s steps(1, end) infinite;
+  }
+
+  @keyframes chat-streaming-cursor-blink {
+    0%,
+    49% {
+      opacity: 0.9;
+    }
+    50%,
+    100% {
+      opacity: 0;
+    }
   }
 
   .chat-title {

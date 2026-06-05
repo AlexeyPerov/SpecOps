@@ -219,6 +219,7 @@
       {supportedModes}
       {debugProviderSettings}
       {httpProviderSettings}
+      {httpApiKey}
       {providerModelCatalogs}
       {composerError}
       onInlineError={(message) => {

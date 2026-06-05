@@ -124,7 +124,7 @@ Dependencies: Task 2.
 
 ---
 
-#### Task 4: Debug provider in Chat context (C3) [Score:5] [Agent:medium]
+#### Task 4: Debug provider in Chat context (C3) [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 

@@ -19,6 +19,11 @@ export interface ChatProviderOption {
   label: string;
 }
 
+export interface ChatProviderSelectionOptions {
+  chatContextKind?: "workspace" | "chat-http";
+  httpConfigured?: boolean;
+}
+
 const PROVIDER_LABELS: Record<ChatProviderId, string> = {
   http: "HTTP",
   debug: "Debug",
@@ -52,17 +57,23 @@ export function resolveDefaultChatProvider(
 
 export function listSelectableChatProviders(
   settings: DebugProviderSettings,
+  options: ChatProviderSelectionOptions = {},
 ): ChatProviderOption[] {
-  const options: ChatProviderOption[] = PRODUCT_CHAT_PROVIDER_IDS.map((id) => ({
+  const providerOptions: ChatProviderOption[] = PRODUCT_CHAT_PROVIDER_IDS.map((id) => ({
     id,
     label: PROVIDER_LABELS[id],
   }));
+  const isChatHttp = options.chatContextKind === "chat-http";
+  const canUseHttp = !isChatHttp || options.httpConfigured === true;
+  const selectable = canUseHttp
+    ? providerOptions
+    : providerOptions.filter((provider) => provider.id !== "http");
 
   if (settings.enabled) {
-    options.push({ id: "debug", label: PROVIDER_LABELS.debug });
+    selectable.push({ id: "debug", label: PROVIDER_LABELS.debug });
   }
 
-  return options;
+  return selectable;
 }
 
 export function formatChatProviderLabel(provider: ChatProviderId): string {
@@ -115,9 +126,16 @@ export function resolveProviderSwitchModelId(
 export function canSelectChatProvider(
   provider: ChatProviderId,
   settings: DebugProviderSettings,
+  options: ChatProviderSelectionOptions = {},
 ): boolean {
   if (provider === "debug") {
     return settings.enabled;
   }
-  return provider === "http";
+  if (provider !== "http") {
+    return false;
+  }
+  if (options.chatContextKind === "chat-http") {
+    return options.httpConfigured === true;
+  }
+  return true;
 }

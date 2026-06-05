@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
 import { defaultHttpConnectionSettings } from "./httpConnectionSettings";
 import {
+  canSelectChatProvider,
   formatModelSwitchNotice,
   formatProviderSwitchNotice,
   isHttpProviderConfigured,
@@ -22,6 +23,46 @@ describe("chat provider selection", () => {
       { id: "http", label: "HTTP" },
       { id: "debug", label: "Debug" },
     ]);
+  });
+
+  it("filters chat-http providers by HTTP configuration", () => {
+    expect(
+      listSelectableChatProviders(
+        { ...defaultDebugProviderSettings, enabled: true },
+        { chatContextKind: "chat-http", httpConfigured: false },
+      ),
+    ).toEqual([{ id: "debug", label: "Debug" }]);
+
+    expect(
+      listSelectableChatProviders(
+        { ...defaultDebugProviderSettings, enabled: true },
+        { chatContextKind: "chat-http", httpConfigured: true },
+      ),
+    ).toEqual([
+      { id: "http", label: "HTTP" },
+      { id: "debug", label: "Debug" },
+    ]);
+  });
+
+  it("validates provider selectability for chat-http", () => {
+    expect(
+      canSelectChatProvider("http", { ...defaultDebugProviderSettings, enabled: true }, {
+        chatContextKind: "chat-http",
+        httpConfigured: false,
+      }),
+    ).toBe(false);
+    expect(
+      canSelectChatProvider("http", { ...defaultDebugProviderSettings, enabled: true }, {
+        chatContextKind: "chat-http",
+        httpConfigured: true,
+      }),
+    ).toBe(true);
+    expect(
+      canSelectChatProvider("debug", { ...defaultDebugProviderSettings, enabled: false }, {
+        chatContextKind: "chat-http",
+        httpConfigured: true,
+      }),
+    ).toBe(false);
   });
 
   it("prefers HTTP for new threads when configured, otherwise Debug when enabled", () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-05 16:52 (MSK)
+
+- **Phase 2 M2 Task 4 (Debug provider in Chat context):** Updated `app/src/lib/ai/providers/selection.ts` and `app/src/lib/components/ChatComposer.svelte` to make provider options/selectability context-aware — in `chat-http`, **HTTP** appears/selects only when configured, and **Debug** appears when enabled in settings.
+- **Composer wiring:** Updated `app/src/lib/components/ChatPanel.svelte` to pass `httpApiKey` into composer provider filtering so chat context provider defaults/choices align with connection readiness.
+- **Tests:** Extended `app/src/lib/ai/providers/selection.test.ts` with chat-http-specific coverage for provider visibility/selectability when HTTP is configured vs not configured.
+- **Plan tracking:** Marked Task 4 as `[DONE]` in `specs/ops/phase-2/execution-plan-m2.md`.
+
 ## 2026-06-05 16:38 (MSK)
 
 - **Phase 2 M2 Task 3 (ask-only mode enforcement):** Updated `app/src/lib/components/ChatComposer.svelte` and `app/src/lib/components/ChatPanel.svelte` to pass explicit `chatContextKind` and filter mode options to **ask** only in `chat-http`, while preserving provider-driven ask/review mode options in workspace contexts.

@@ -15,6 +15,7 @@
   } from "../domain/contracts";
   import { chatStore } from "../state/chatStore";
   import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+  import { isHttpProviderConfigured } from "../ai/providers/httpConnectionSettings";
 
   interface ComposerError {
     message: string;
@@ -35,6 +36,7 @@
     supportedModes: ChatModeId[];
     debugProviderSettings: DebugProviderSettings;
     httpProviderSettings: HttpConnectionSettings;
+    httpApiKey: string;
     providerModelCatalogs: ProviderModelCatalogs;
     composerError: ComposerError | null;
     onInlineError?: (message: string) => void;
@@ -54,6 +56,7 @@
     supportedModes,
     debugProviderSettings,
     httpProviderSettings,
+    httpApiKey,
     providerModelCatalogs,
     composerError,
     onInlineError = () => {},
@@ -65,8 +68,15 @@
 
   const availableProviders = $derived.by(() => {
     debugProviderSettings;
+    chatContextKind;
     httpProviderSettings.enabled;
-    return listSelectableChatProviders(debugProviderSettings);
+    httpProviderSettings.baseUrl;
+    httpApiKey;
+    const httpConfigured = isHttpProviderConfigured(httpProviderSettings, httpApiKey);
+    return listSelectableChatProviders(debugProviderSettings, {
+      chatContextKind,
+      httpConfigured,
+    });
   });
   const availableModes = $derived.by(() => {
     const providerModes = listModesForProvider(supportedModes);
@@ -183,7 +193,10 @@
     if (
       nextProvider === activeProvider ||
       isProviderSelectionDisabled ||
-      !canSelectChatProvider(nextProvider, debugProviderSettings)
+      !canSelectChatProvider(nextProvider, debugProviderSettings, {
+        chatContextKind,
+        httpConfigured: isHttpProviderConfigured(httpProviderSettings, httpApiKey),
+      })
     ) {
       return;
     }

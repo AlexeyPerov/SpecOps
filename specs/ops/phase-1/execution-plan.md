@@ -255,7 +255,7 @@ Dependencies: Task 9 (or in parallel once behavior is stable).
 
 ---
 
-#### Task 11: Final verification and cleanup (P1-11) [Score:4] [Agent:easy]
+#### Task 11: Final verification and cleanup (P1-11) [Score:4] [Agent:easy] [DONE]
 
 **Required context**
 

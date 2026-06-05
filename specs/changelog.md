@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 09:21 (MSK)
+
+- **Phase 1 Task 11 (P1-11):** Completed final verification and cleanup for phase 1 by running validation gates in `app/` (`npm test`: **647 passed**; `npm run check`: **0 errors**, 1 pre-existing a11y warning in `EntryNamePrompt.svelte`).
+- **Legacy-term sweep:** Verified no remaining `GLM`, `BigModel`, or `glm_not_configured` references in repository product paths; kept intentional `provider: "glm"` legacy-normalization compatibility code/tests and migration-note mentions in docs.
+- **Phase completion:** Marked Task 11 as `[DONE]` in `specs/ops/phase-1/execution-plan.md` and checked all phase-1 exit criteria boxes in `specs/ops/phase-1/phase-1.md`.
+
 ## 2026-06-05 09:07 (MSK)
 
 - **Phase 1 Task 9 (P1-9):** Completed the test and validation sweep by removing remaining GLM/BigModel wording from active send/retry/stream validation suites, re-homing HTTP mock helper naming and fixtures, and keeping only intentional legacy provider normalization coverage in `chatPersistence`.

@@ -26,6 +26,7 @@ import {
   getActiveContextSnapshot,
   getActiveDocuments,
   getActiveSession,
+  isChatHttpContext,
   nextDocAndTabIds,
   nextTabId,
   patchActiveContext,
@@ -47,6 +48,10 @@ import {
 } from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
+
+function canCreateFileTabs(state: AppDomainState): boolean {
+  return !isChatHttpContext(state.contexts.activeContextId);
+}
 
 function selectTabInternal(state: AppDomainState, tabId: string): AppDomainState {
   return patchActiveContext(state, (ctx) => {
@@ -178,6 +183,17 @@ export function createDocumentTabsSlice(deps: {
         }
         const filtered = openTabs.filter((tab) => tab.id !== tabId);
         if (filtered.length === 0) {
+          if (!canCreateFileTabs(state)) {
+            return {
+              ...ctx,
+              session: {
+                ...ctx.session,
+                openTabs: [],
+                selectedTabId: null,
+                lastActiveAgentId: null,
+              },
+            };
+          }
           const { docId, tabId: tabIdNew } = nextDocAndTabIds();
           const newDocument = buildEmptyUnsavedDocument(docId);
           return {
@@ -215,8 +231,11 @@ export function createDocumentTabsSlice(deps: {
 
   return {
     createTab() {
-      update((state) =>
-        patchActiveContext(state, (ctx) => {
+      update((state) => {
+        if (!canCreateFileTabs(state)) {
+          return state;
+        }
+        return patchActiveContext(state, (ctx) => {
           const { docId: id, tabId } = nextDocAndTabIds();
           const newDocument = buildEmptyUnsavedDocument(id);
           return {
@@ -227,8 +246,8 @@ export function createDocumentTabsSlice(deps: {
               selectedTabId: tabId,
             },
           };
-        }),
-      );
+        });
+      });
     },
     selectTab(tabId: string) {
       update((state) => selectTabInternal(state, tabId));
@@ -268,6 +287,9 @@ export function createDocumentTabsSlice(deps: {
           .find((tab) => isFileTab(tab) && tab.documentId === documentId);
         if (existingTab) {
           return selectTabInternal(state, existingTab.id);
+        }
+        if (!canCreateFileTabs(state)) {
+          return state;
         }
         return reopenTabForDocument(state, documentId);
       });
@@ -444,6 +466,9 @@ export function createDocumentTabsSlice(deps: {
       let openedDocumentId = "";
       let recentFiles: string[] = [];
       update((state) => {
+        if (!canCreateFileTabs(state)) {
+          return state;
+        }
         recentFiles = bumpRecentFile(state.recentFiles, filePath);
         const duplicate = findDocumentByPath(state, filePath);
         if (duplicate) {
@@ -684,6 +709,9 @@ export function createDocumentTabsSlice(deps: {
     }): string | null {
       let documentId: string | null = null;
       update((state) => {
+        if (!canCreateFileTabs(state)) {
+          return state;
+        }
         if (payload.filePath) {
           const duplicate = findDocumentByPath(state, payload.filePath);
           if (duplicate) {

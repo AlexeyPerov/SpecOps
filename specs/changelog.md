@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-05 16:27 (MSK)
+
+- **Phase 2 M2 Task 1 (chat-only page layout):** Updated `app/src/routes/+page.svelte` to derive `isChatHttpActive`, render chat context as sidebar + tab bar + `ChatPanel` only, hide project tree/file editor UI in `chat-http`, and prevent responsive workspace panel auto-rules/effects (project tree load/watch/expand and workspace chat access monitor) from running in chat context.
+- **No file-tab creation in `chat-http`:** Added context guards in `app/src/lib/state/appState/documentTabsSlice.ts` (and fallback in `tabHelpers.ts`) so file-tab creation/reopen/open-transfer paths are no-ops in chat context; bootstrap fallback tabs are no longer synthesized in `chat-http`.
+- **Command-level guard:** Updated `app/src/lib/commands/registry.ts` so `file.new` is blocked in `chat-http` with explicit user feedback.
+- **Tests + validation:** Added `chat-http` file-tab guard coverage in `app/src/lib/state/appState.test.ts`; ran targeted tests (`appState`, `registry`, `appShellHelpers`) (**106 passed**) and `npm run check` (**0 errors**, 1 pre-existing `EntryNamePrompt.svelte` a11y warning).
+- **Plan tracking:** Marked Task 1 as `[DONE]` in `specs/ops/phase-2/execution-plan-m2.md`.
+
 ## 2026-06-05 16:16 (MSK)
 
 - **Phase 2 M1 Task 6 (tests + verification):** Added explicit `switchContext("chat-http")` coverage in `app/src/lib/state/appState.test.ts` to verify workspace <-> `chat-http` switching preserves workspace state and returns to the same selected tab.

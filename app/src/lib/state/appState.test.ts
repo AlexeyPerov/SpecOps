@@ -886,6 +886,19 @@ describe("appState session restore", () => {
     expect(appState.getActiveSession().selectedTabId).toBe(workspaceSelectedTabId);
   });
 
+  it("does not create file tabs in chat-http context", () => {
+    expect(appState.switchContext("chat-http")).toBe(true);
+    const beforeTabs = appState.getActiveSession().openTabs.length;
+    const beforeDocuments = appState.getActiveDocuments().length;
+
+    appState.createTab();
+    appState.openFileInTab("/tmp/chat-http-no-file-tabs.txt", "content");
+
+    expect(appState.getActiveSession().openTabs).toHaveLength(beforeTabs);
+    expect(appState.getActiveDocuments()).toHaveLength(beforeDocuments);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-1");
+  });
+
   it("restores chat-http as active when HTTP connection is configured", () => {
     const defaultHttpModelId = getProviderDefaultModelId(defaultProviderModelCatalogs, "http");
     appState.applyPersistedSettings({

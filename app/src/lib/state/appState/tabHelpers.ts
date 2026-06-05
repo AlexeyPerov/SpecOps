@@ -1,6 +1,6 @@
 import type { AppDomainState, DocumentState, TabState } from "../../domain/contracts";
 import { createFileTab, isFileTab, normalizeTabState } from "../../domain/contracts";
-import { nextDocAndTabIds, nextTabId, patchActiveContext } from "./contextHelpers";
+import { isChatHttpContext, nextDocAndTabIds, nextTabId, patchActiveContext } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 
 export function moveTab(tabs: TabState[], fromIndex: number, toIndex: number): TabState[] {
@@ -100,6 +100,16 @@ export function closeTabsForce(state: AppDomainState, tabIds: string[], preferre
       return ctx;
     }
     if (filteredTabs.length === 0) {
+      if (isChatHttpContext(state.contexts.activeContextId)) {
+        return {
+          ...ctx,
+          session: {
+            ...ctx.session,
+            openTabs: [],
+            selectedTabId: null,
+          },
+        };
+      }
       const { docId, tabId } = nextDocAndTabIds();
       const newDocument = buildEmptyUnsavedDocument(docId);
       return {

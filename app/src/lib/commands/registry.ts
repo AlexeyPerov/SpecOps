@@ -1,6 +1,6 @@
 import { get } from "svelte/store";
 import type { AppCommandId, AppDomainState, CommandDefinition } from "../domain/contracts";
-import { tabDocumentId } from "../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import { logDiagnostic } from "../services/logging";
@@ -343,7 +343,11 @@ const handlers: Record<AppCommandId, CommandHandler> = {
     appState.setPreviewMode(next);
     notify(next === "diff" ? "Diff preview on." : "Diff preview off.");
   },
-  "file.new": ({ notify }) => {
+  "file.new": ({ notify, getState }) => {
+    if (getState().contexts.activeContextId === CHAT_HTTP_CONTEXT_ID) {
+      notify("File tabs are unavailable in Chat.");
+      return;
+    }
     appState.createTab();
     notify("New tab created.");
   },

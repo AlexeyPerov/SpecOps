@@ -119,6 +119,7 @@
   const session = $derived(activeContext.session);
   const documents = $derived(activeContext.documents);
   const activeContextId = $derived(snapshot.contexts.activeContextId);
+  const isChatHttpActive = $derived(activeContextId === CHAT_HTTP_CONTEXT_ID);
   const workspaces = $derived(snapshot.contexts.workspaces);
   const activeWorkspaceRoot = $derived(appState.getWorkspaceRoot(activeContextId));
   const workspaceLayout = $derived(
@@ -127,14 +128,17 @@
       : normalizeWorkspaceLayout(),
   );
   const showProjectPanel = $derived(
-    Boolean(activeWorkspaceRoot) &&
+    !isChatHttpActive &&
+      Boolean(activeWorkspaceRoot) &&
       !workspaceLayout.projectPanelCollapsed &&
       !autoProjectPanelCollapsed,
   );
   const showAgentsSidebar = $derived(
-    Boolean(activeWorkspaceRoot) &&
-      !workspaceLayout.agentsSidebarCollapsed &&
-      !autoAgentsSidebarCollapsed,
+    isChatHttpActive
+      ? !autoAgentsSidebarCollapsed
+      : Boolean(activeWorkspaceRoot) &&
+          !workspaceLayout.agentsSidebarCollapsed &&
+          !autoAgentsSidebarCollapsed,
   );
   const workspaceAgents = $derived($chatAgentIndex);
   const selectedAgentId = $derived($chatActiveAgentId);
@@ -511,7 +515,7 @@
   function applyResponsiveLayoutRules(): void {
     const flags = computeResponsiveLayoutFlags({
       shellMainRowWidth,
-      workspaceActive: Boolean(activeWorkspaceRoot),
+      workspaceActive: Boolean(activeWorkspaceRoot) && !isChatHttpActive,
       isAgentTabActive,
       workspaceLayout,
       consoleOpen,
@@ -874,7 +878,7 @@
     if (!runtimeReady) {
       return;
     }
-    syncChatAccessMonitor(isAgentTabActive && Boolean(activeWorkspaceRoot));
+    syncChatAccessMonitor(isAgentTabActive && Boolean(activeWorkspaceRoot) && !isChatHttpActive);
   });
 
   $effect(() => {
@@ -925,6 +929,7 @@
     shellMainRowWidth;
     editorPaneWidth;
     activeWorkspaceRoot;
+    isChatHttpActive;
     isAgentTabActive;
     workspaceLayout;
     consoleOpen;
@@ -953,7 +958,7 @@
   });
 
   $effect(() => {
-    if (!activeWorkspaceRoot) {
+    if (!activeWorkspaceRoot || isChatHttpActive) {
       void syncProjectTreeWatcher(null);
       projectTreeController.clearFilesystemChangeDebounce();
       return;
@@ -965,8 +970,8 @@
   });
 
   $effect(() => {
-    if (!runtimeReady || !activeWorkspaceRoot) {
-      if (runtimeReady && !activeWorkspaceRoot) {
+    if (!runtimeReady || !activeWorkspaceRoot || isChatHttpActive) {
+      if (runtimeReady && (!activeWorkspaceRoot || isChatHttpActive)) {
         void syncProjectTreeWatcher(null);
       }
       return;
@@ -975,7 +980,7 @@
   });
 
   $effect(() => {
-    if (!activeDocumentPath) {
+    if (!activeDocumentPath || isChatHttpActive) {
       return;
     }
     void projectTreeController.ensureExpandedForActiveFile(activeWorkspaceRoot, activeDocumentPath);
@@ -994,7 +999,7 @@
         onRequestCloseWorkspace={handleOpenWorkspaceContextMenu}
       />
     {/if}
-    {#if activeWorkspaceRoot}
+    {#if activeWorkspaceRoot || isChatHttpActive}
       <AgentsSidebar
         agents={workspaceAgents}
         activeAgentId={selectedAgentId}
@@ -1018,15 +1023,17 @@
         notify={notify}
         onCloseTab={handleCloseTab}
       />
-      <button
-        class="toolbar-button add-file-button"
-        type="button"
-        aria-label="Create new untitled file"
-        title="New Untitled File"
-        onclick={() => runCommand("file.new")}
-      >
-        +
-      </button>
+      {#if !isChatHttpActive}
+        <button
+          class="toolbar-button add-file-button"
+          type="button"
+          aria-label="Create new untitled file"
+          title="New Untitled File"
+          onclick={() => runCommand("file.new")}
+        >
+          +
+        </button>
+      {/if}
     </div>
     <div class="header-right">
       <button class="toolbar-button" type="button" onclick={() => runCommand("app.toggleThemePane")}>
@@ -1036,7 +1043,7 @@
       </header>
 
       <section class="editor-pane" class:editor-pane-agent={isAgentTabActive} bind:this={editorPaneEl}>
-    {#if isAgentTabActive}
+    {#if isChatHttpActive || isAgentTabActive}
       <ChatPanel onDeleteAgent={handleDeleteAgentFromChat} />
     {:else if snapshot.editor.previewMode === "diff"}
       <DiffPreviewPane
@@ -1098,7 +1105,7 @@
       {/if}
     {/if}
 
-    {#if isTextEditorDocument && !isAgentTabActive && snapshot.editor.findReplaceOpen}
+    {#if isTextEditorDocument && !isAgentTabActive && !isChatHttpActive && snapshot.editor.findReplaceOpen}
       <FindReplacePanel
         bind:findQuery
         bind:replaceValue
@@ -1109,7 +1116,7 @@
       />
     {/if}
 
-    {#if isTextEditorDocument && !isAgentTabActive && snapshot.editor.goToOpen}
+    {#if isTextEditorDocument && !isAgentTabActive && !isChatHttpActive && snapshot.editor.goToOpen}
       <div class="floating-tool goto-tool">
         <h3>Go To Line</h3>
         <input placeholder="Line number..." bind:value={goToLineValue} />

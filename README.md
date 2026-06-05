@@ -15,11 +15,11 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 - WIP: AI support (HTTP connection + Debug provider groundwork)
 
 ---
-![SpecOps main screen](screenshots/main-screen.png)
----
-![SpecOps main screen](screenshots/main-screen-split-view.png)
----
-![SpecOps main screen](screenshots/main-screen-themes.png)
+
+| ![SpecOps main screen](screenshots/main-screen.png) | ![SpecOps main screen](screenshots/main-screen-split-view.png)|
+|------------------------------------------|-------------------------------------------------|
+| ![SpecOps main screen](screenshots/main-screen-themes.png) | ![SpecOps main screen](screenshots/main-screen-logs.png) |
+
 
 ## What is planned
 

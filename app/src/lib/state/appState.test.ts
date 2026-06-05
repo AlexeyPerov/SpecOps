@@ -866,6 +866,26 @@ describe("appState session restore", () => {
     expect(appState.getActiveWorkspaceLayout().agentsSidebarCollapsed).toBe(false);
   });
 
+  it("switches between workspace and chat-http contexts without mutating workspace state", () => {
+    appState.addWorkspace("/tmp/ws-chat-switch");
+    const workspaceId = appState.getSnapshot().contexts.activeContextId;
+    expect(workspaceId).not.toBe("chat-http");
+    expect(workspaceId).not.toBe("notepad");
+
+    appState.openFileInTab("/tmp/ws-chat-switch/note.ts", "export const ok = true;");
+    const workspaceSelectedTabId = appState.getActiveSession().selectedTabId;
+    expect(workspaceSelectedTabId).toBeTruthy();
+
+    expect(appState.switchContext("chat-http")).toBe(true);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("chat-http");
+    expect(appState.getWorkspaceRoot()).toBeNull();
+
+    expect(appState.switchContext(workspaceId)).toBe(true);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(workspaceId);
+    expect(appState.getWorkspaceRoot()).toBe("/tmp/ws-chat-switch");
+    expect(appState.getActiveSession().selectedTabId).toBe(workspaceSelectedTabId);
+  });
+
   it("restores chat-http as active when HTTP connection is configured", () => {
     const defaultHttpModelId = getProviderDefaultModelId(defaultProviderModelCatalogs, "http");
     appState.applyPersistedSettings({

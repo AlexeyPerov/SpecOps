@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 16:16 (MSK)
+
+- **Phase 2 M1 Task 6 (tests + verification):** Added explicit `switchContext("chat-http")` coverage in `app/src/lib/state/appState.test.ts` to verify workspace <-> `chat-http` switching preserves workspace state and returns to the same selected tab.
+- **Validation sweep:** Ran `npm test` (**663 passed**) and `npm run check` (**0 errors**, 1 pre-existing a11y warning in `EntryNamePrompt.svelte`) in `app/`.
+- **Plan tracking:** Marked Task 6 as `[DONE]` in `specs/ops/phase-2/execution-plan-m1.md`.
+
 ## 2026-06-05 16:10 (MSK)
 
 - **Phase 2 M1 Task 5 (activity rail Chat button):** Added gated Chat rail button to `ActivityRail.svelte` after the Notepad separator (chat bubble icon, tooltip, active state for `chat-http`); button hidden unless `isChatHttpRailVisible` passes.

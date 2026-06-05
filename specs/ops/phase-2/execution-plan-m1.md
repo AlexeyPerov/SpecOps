@@ -175,7 +175,7 @@ Dependencies: Tasks 2, 4.
 
 ---
 
-#### Task 6: Milestone 1 tests and verification (P2-7 partial) [Score:7] [Agent:medium]
+#### Task 6: Milestone 1 tests and verification (P2-7 partial) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

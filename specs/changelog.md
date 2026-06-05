@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-05 16:58 (MSK)
+
+- **Phase 2 M2 Task 6 (tests + verification):** Ran full verification gates in `app/` — `npm test` (**671 passed**) and `npm run check` (**0 errors**, 1 pre-existing a11y warning in `EntryNamePrompt.svelte`).
+- **Plan tracking:** Marked Task 6 as `[DONE]` in `specs/ops/phase-2/execution-plan-m2.md`.
+
 ## 2026-06-05 16:54 (MSK)
 
 - **Phase 2 M2 Task 5 (cross-context regression guards):** Extended `app/src/lib/ai/sendChatMessage.test.ts` with explicit regression coverage that send persistence uses workspace scope keys in workspace contexts and `chat-http` scope key in chat context.

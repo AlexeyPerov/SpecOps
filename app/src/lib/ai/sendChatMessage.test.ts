@@ -30,7 +30,7 @@ vi.mock("../services/fileSystem", () => ({
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
-function glmFetchSuccess(content: string): typeof fetch {
+function httpFetchSuccess(content: string): typeof fetch {
   return vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
       status: 200,
@@ -154,14 +154,14 @@ describe("sendChatMessage", () => {
   it("uses buffered fallback for HTTP without streaming partial updates", async () => {
     resetChatProviderRegistryForTests();
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     registerChatProvider(
       createOpenAiCompatibleChatProvider(
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
-        glmFetchSuccess("Buffered HTTP response."),
+        httpFetchSuccess("Buffered HTTP response."),
       ),
     );
     chatStore.setCapabilityChecker(
@@ -169,7 +169,7 @@ describe("sendChatMessage", () => {
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
       ),
     );
@@ -310,14 +310,14 @@ describe("sendChatMessage", () => {
   it("runs end-to-end ask conversation with HTTP provider", async () => {
     resetChatProviderRegistryForTests();
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     registerChatProvider(
       createOpenAiCompatibleChatProvider(
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
-        glmFetchSuccess("HTTP response about retention."),
+        httpFetchSuccess("HTTP response about retention."),
       ),
     );
     chatStore.setCapabilityChecker(
@@ -325,7 +325,7 @@ describe("sendChatMessage", () => {
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
       ),
     );
@@ -343,12 +343,12 @@ describe("sendChatMessage", () => {
   it("records HTTP provider errors in retry scaffolding", async () => {
     resetChatProviderRegistryForTests();
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     registerChatProvider(
       createOpenAiCompatibleChatProvider(
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
         vi.fn().mockResolvedValue(
           new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
@@ -360,7 +360,7 @@ describe("sendChatMessage", () => {
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
       ),
     );
@@ -437,8 +437,8 @@ describe("sendChatMessage", () => {
   it("retries failed HTTP turns successfully", async () => {
     resetChatProviderRegistryForTests();
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
-    const glmFetch = vi
+    appState.setProviderApiKey("http", "http-test-key");
+    const httpFetch = vi
       .fn()
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
@@ -453,9 +453,9 @@ describe("sendChatMessage", () => {
       createOpenAiCompatibleChatProvider(
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
-        glmFetch as typeof fetch,
+        httpFetch as typeof fetch,
       ),
     );
     chatStore.setCapabilityChecker(
@@ -463,7 +463,7 @@ describe("sendChatMessage", () => {
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
       ),
     );
@@ -518,17 +518,17 @@ describe("sendChatMessage", () => {
   it("maps HTTP provider model rejection to invalid-model copy", async () => {
     resetChatProviderRegistryForTests();
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
-    const glmFetch = vi.fn().mockResolvedValue(
+    appState.setProviderApiKey("http", "http-test-key");
+    const httpFetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { message: "Model not found" } }), { status: 404 }),
     );
     registerChatProvider(
       createOpenAiCompatibleChatProvider(
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
-        glmFetch as typeof fetch,
+        httpFetch as typeof fetch,
       ),
     );
     chatStore.setCapabilityChecker(
@@ -536,7 +536,7 @@ describe("sendChatMessage", () => {
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
       ),
     );

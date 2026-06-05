@@ -215,7 +215,7 @@ Dependencies: none (parallel with Task 7).
 
 ---
 
-#### Task 9: Test and validation sweep (P1-9) [Score:8] [Agent:heavy]
+#### Task 9: Test and validation sweep (P1-9) [Score:8] [Agent:heavy] [DONE]
 
 **Required context**
 
@@ -235,7 +235,7 @@ Dependencies: Tasks 4, 5, 6; Task 7–8 should be complete or stable.
 
 ---
 
-#### Task 10: Documentation (P1-10) [Score:3] [Agent:easy]
+#### Task 10: Documentation (P1-10) [Score:3] [Agent:easy] [DONE]
 
 **Required context**
 

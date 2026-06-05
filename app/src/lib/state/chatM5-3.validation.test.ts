@@ -10,7 +10,7 @@
  * - Provider switch event persists in agent thread after restart
  *
  * Optional manual HTTP integration smoke (requires network + credentials):
- * - Enter API key in Settings → HTTP (stored in glm-secrets.json, never in settings.json or thread files)
+ * - Enter API key in Settings → Connections (stored in provider-secrets.json, never in settings.json or thread files)
  * - Defaults: base URL https://open.bigmodel.cn/api/paas/v4, model gpt-4o-mini
  * - Send ask and review messages; verify assistant replies persist after app restart
  */
@@ -48,7 +48,7 @@ vi.mock("../services/fileSystem", () => ({
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
-function glmFetchSuccess(content: string): typeof fetch {
+function httpFetchSuccess(content: string): typeof fetch {
   return vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
       status: 200,
@@ -67,7 +67,7 @@ function registerProviders(includeHttp = false): void {
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
-        glmFetchSuccess("HTTP buffered response."),
+        httpFetchSuccess("HTTP buffered response."),
       ),
     );
   }
@@ -144,7 +144,7 @@ describe("M5.3 milestone validation", () => {
 
   it("passes HTTP access preflight when credentials are configured", async () => {
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
     chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
@@ -189,7 +189,7 @@ describe("M5.3 milestone validation", () => {
 
   it("allows Debug and HTTP agents to generate concurrently", async () => {
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
 
     const debugAgent = chatStore.createDraftAgent({ activate: false });
@@ -285,7 +285,7 @@ describe("M5.3 milestone validation", () => {
 
   it("runs HTTP ask and review modes through the send pipeline", async () => {
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     resetChatProviderRegistryForTests();
     registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
     registerChatProvider(
@@ -294,7 +294,7 @@ describe("M5.3 milestone validation", () => {
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
-        glmFetchSuccess("## Summary\nReview output from HTTP."),
+        httpFetchSuccess("## Summary\nReview output from HTTP."),
       ),
     );
 
@@ -310,7 +310,7 @@ describe("M5.3 milestone validation", () => {
 
   it("persists provider switch system event in agent thread", async () => {
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
 
     const agentId = chatStore.createDraftAgent();

@@ -14,7 +14,7 @@
  * - Two agent tabs generating simultaneously without blocking each other
  *
  * Optional manual HTTP integration smoke (requires network + credentials):
- * - Enter API key in Settings → HTTP (stored in glm-secrets.json)
+ * - Enter API key in Settings → Connections (stored in provider-secrets.json)
  * - Defaults: base URL https://open.bigmodel.cn/api/paas/v4, model gpt-4o-mini
  * - Send ask and review messages; verify assistant replies persist after restart
  */
@@ -63,7 +63,7 @@ const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
-function glmFetchSuccess(content: string): typeof fetch {
+function httpFetchSuccess(content: string): typeof fetch {
   return vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
       status: 200,
@@ -82,7 +82,7 @@ function registerProviders(includeHttp = false): void {
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
-        glmFetchSuccess("HTTP buffered response."),
+        httpFetchSuccess("HTTP buffered response."),
       ),
     );
   }
@@ -164,8 +164,8 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
   it("retries failed HTTP turns without duplicating the user message", async () => {
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
-    const glmFetch = vi
+    appState.setProviderApiKey("http", "http-test-key");
+    const httpFetch = vi
       .fn()
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401 }),
@@ -182,9 +182,9 @@ describe("M6 milestone validation — AI chat MVP", () => {
       createOpenAiCompatibleChatProvider(
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
-        glmFetch as typeof fetch,
+        httpFetch as typeof fetch,
       ),
     );
     chatStore.setCapabilityChecker(
@@ -192,7 +192,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
         () => appState.getSnapshot().settings.providerSettings.debug,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-          apiKey: "glm-test-key",
+          apiKey: "http-test-key",
         }),
       ),
     );
@@ -214,7 +214,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
   it("streams Debug partial updates and uses HTTP buffered fallback", async () => {
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
 
     const debugAgent = chatStore.createDraftAgent({ activate: false });
@@ -337,7 +337,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
   it("allows two agents to generate concurrently without blocking each other", async () => {
     appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "glm-test-key");
+    appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
 
     const debugAgent = chatStore.createDraftAgent({ activate: false });

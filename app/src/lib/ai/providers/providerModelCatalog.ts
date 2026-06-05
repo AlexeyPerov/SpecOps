@@ -101,17 +101,11 @@ export function normalizeProviderModelCatalog(
   return { modelIds, defaultModelId };
 }
 
-export interface ProviderModelCatalogLegacyInput {
-  glmModelId?: string;
-}
-
-/** Validates provider model catalogs on load/save and migrates legacy GLM modelId. */
+/** Validates provider model catalogs on load/save. */
 export function normalizeProviderModelCatalogs(
   input?: Partial<ProviderModelCatalogs> | unknown,
-  legacy: ProviderModelCatalogLegacyInput = {},
 ): ProviderModelCatalogs {
   const source = isRecord(input) ? input : {};
-  const legacyGlmModelId = normalizeModelId(legacy.glmModelId);
 
   const catalogs = {} as ProviderModelCatalogs;
   for (const providerId of PROVIDER_IDS) {

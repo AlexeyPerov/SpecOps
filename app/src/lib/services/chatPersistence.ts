@@ -131,7 +131,7 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
     typeof value.agentId !== "string" ||
     typeof value.threadId !== "string" ||
     !isChatModeId(value.mode) ||
-    !isChatProviderId(value.provider) ||
+    !isLegacyChatProviderId(value.provider) ||
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string"
   ) {

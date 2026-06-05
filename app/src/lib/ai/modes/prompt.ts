@@ -7,7 +7,7 @@ import {
 import { resolveModeSystemPrompt } from "./builtins";
 
 /**
- * Shared prompt payload for Debug diagnostics and GLM adapter input.
+ * Shared prompt payload for Debug diagnostics and HTTP adapter input.
  * Resolves the active mode system prompt and thread context in one call.
  */
 export function buildThreadProviderRequest(

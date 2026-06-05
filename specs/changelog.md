@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-05 09:07 (MSK)
+
+- **Phase 1 Task 9 (P1-9):** Completed the test and validation sweep by removing remaining GLM/BigModel wording from active send/retry/stream validation suites, re-homing HTTP mock helper naming and fixtures, and keeping only intentional legacy provider normalization coverage in `chatPersistence`.
+- **Phase 1 Task 10 (P1-10):** Updated `docs/providers.md`, `docs/architecture.md`, and `README.md` to document HTTP Connections + Debug provider behavior, current settings tab/routes, and roadmap links for phase tracking.
+- **Validation:** Ran `npm test` (**647 passed**) and `npm run check` (**0 errors**, 1 pre-existing a11y warning in `EntryNamePrompt.svelte`) in `app/`.
+- **Plan tracking:** Marked Task 9 and Task 10 as `[DONE]` in `specs/ops/phase-1/execution-plan.md`.
+
 ## 2026-06-05 09:02 (MSK)
 
 - **Phase 1 Task 7 (P1-7):** Extended context/session type foundations in `contracts.ts` with `ContextId` support for `chat-http` and `chat-cloud`, added exported context-id constants, and documented optional `WindowContextState`/`WindowSessionSnapshot` placeholders (`chatHttp`, `chatCloud`) for phase-2 persistence without shipping activity-rail UI.

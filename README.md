@@ -12,7 +12,7 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 - **Multi-Window**
 - **Images** preview
 - **Console** — resizable bottom panel with **Logs**
-- WIP: AI support
+- WIP: AI support (HTTP connection + Debug provider groundwork)
 
 ---
 ![SpecOps main screen](screenshots/main-screen.png)
@@ -26,6 +26,11 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 - Massive **Notepad** UX improvements
 - **Git** module
 - **AI Support**
+
+### AI roadmap status
+
+- Current migration and rollout plan is tracked in `specs/ops/roadmap.md`.
+- Phase 1 execution details are documented in `specs/ops/phase-1/phase-1.md` and `specs/ops/phase-1/execution-plan.md`.
 
 ## Prerequisites
 

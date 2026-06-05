@@ -76,7 +76,7 @@ File open/save flows go through `appState` and services (`fileSystem`, `openFile
 ### AI agents (workspace-scoped)
 
 - One **agent** per conversation; many agents per workspace.
-- **`chatStore`** holds in-memory threads keyed by workspace root path.
+- **`chatStore`** holds in-memory threads keyed by workspace root path (phase-1 baseline; context-id scoping is planned for later phases).
 - Threads persist under the app data dir (see [Persistence](#persistence)).
 - Modes: **`ask`** and **`review`** (system prompts in `app/src/lib/ai/modes/builtins.ts`).
 
@@ -89,10 +89,10 @@ Provider integration is documented in [providers.md](./providers.md).
 Single source of truth for:
 
 - Active context, documents, tabs, editor chrome (zoom, wrap, find/replace)
-- **`AppSettingsState`** (including GLM settings and in-memory API key)
+- **`AppSettingsState`** (including Connections/HTTP settings and in-memory API key)
 - Theme (builtin + custom), recent files
 
-Mutations are methods on the exported store object (e.g. `openDocument`, `setProviderApiKey`, workspace close with dirty prompts). `setGlmApiKey` remains a thin `"glm"` wrapper for tests and legacy call sites.
+Mutations are methods on the exported store object (e.g. `openDocument`, `setProviderApiKey`, workspace close with dirty prompts).
 
 Implementation is split into colocated modules under `app/src/lib/state/appState/`:
 
@@ -125,17 +125,17 @@ Implementation is split into colocated modules under `app/src/lib/state/chatStor
 | `workspace.ts` | Per-root workspace state patch helpers |
 | `threadHelpers.ts`, `types.ts` | Shared thread types and pure helpers |
 
-Chat providers are registered at startup via `initializeChatProviders()` in `app/src/lib/ai/providers/bootstrap.ts` (called from `+page.svelte` after settings and GLM key load).
+Chat providers are registered at startup via `initializeChatProviders()` in `app/src/lib/ai/providers/bootstrap.ts` (called from `+page.svelte` after settings and provider API key load).
 
 ## Send pipeline (high level)
 
 1. UI calls `sendChatMessage` / `retryLastChatTurn` (`app/src/lib/ai/sendChatMessage.ts`).
-2. Validates provider (debug enabled, GLM configured), model catalog, access preflight.
+2. Validates provider (debug enabled, HTTP configured), model catalog, access preflight.
 3. Appends user message; begins turn; builds **`ProviderRequestPayload`** via `buildThreadProviderRequest`.
-4. **`streamProviderMessage`** (`chatSend.ts`) — uses `streamMessage` if implemented (Debug), else buffered `sendMessage` (GLM).
+4. **`streamProviderMessage`** (`chatSend.ts`) — uses `streamMessage` if implemented (Debug), else buffered `sendMessage` (HTTP).
 5. Updates assistant placeholder; compacts thread if needed; debounced persist.
 
-Shared prompt shape is defined in `app/src/lib/ai/providers/types.ts` so Debug and GLM stay aligned.
+Shared prompt shape is defined in `app/src/lib/ai/providers/types.ts` so Debug and HTTP stay aligned.
 
 ## Commands and menus
 
@@ -150,7 +150,7 @@ All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`)
 
 | File / area | Contents |
 | --- | --- |
-| `settings.json` | Editor, external files, `providerSettings` (GLM + Debug), `providerModelCatalogs` (not API keys) |
+| `settings.json` | Editor, external files, `providerSettings` (HTTP + Debug), `providerModelCatalogs` (not API keys) |
 | `provider-secrets.json` | Provider API keys keyed by `ChatProviderId` (`providerSecretsStore.ts`: `loadProviderApiKey` / `saveProviderApiKey`) |
 | `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
 | `themes.json` | Active and custom themes |
@@ -178,7 +178,7 @@ Custom commands: `take_pending_opened_paths`, `sync_file_watcher_paths`.
 
 ### Settings dialog tab registry
 
-Tab ids and sidebar labels live in **`SETTINGS_TABS`** (`app/src/lib/services/settingsDialogUi.ts`), not as hardcoded unions scattered across the dialog. Each entry is a `SettingsTabDefinition` (`id`, `label`, `panelAriaLabel`). Current tabs: `editor`, `glm`, `debugAi`. `SettingsDialog.svelte` renders sidebar and panels from registry order; `openSettingsDialog(tab)` opens a specific tab (used by ChatPanel CTAs and commands).
+Tab ids and sidebar labels live in **`SETTINGS_TABS`** (`app/src/lib/services/settingsDialogUi.ts`), not as hardcoded unions scattered across the dialog. Each entry is a `SettingsTabDefinition` (`id`, `label`, `panelAriaLabel`). Current tabs: `editor`, `connections`, `debugAi`. `SettingsDialog.svelte` renders sidebar and panels from registry order; `openSettingsDialog(tab)` opens a specific tab (used by ChatPanel CTAs and commands).
 
 Routing helpers: `editorRouting.ts` (file vs agent tab), `workspaceAgentSession.ts` (agent tab lifecycle).
 
@@ -230,7 +230,7 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 ### Patterns to preserve
 
 1. **Domain types in `contracts.ts`** — Avoid duplicating shapes in components.
-2. **Provider-agnostic prompts** — Build `ProviderRequestPayload` once; adapters map to vendor APIs (see `glmPrompt.ts`).
+2. **Provider-agnostic prompts** — Build `ProviderRequestPayload` once; adapters map to vendor APIs (see `openAiChatMessages.ts`).
 3. **Secrets separate from settings** — API keys go in `provider-secrets.json`, not `settings.json` or chat thread files.
 4. **User-facing errors** — Throw `ChatProviderError` with `userMessage` in providers; map HTTP/status in one place per provider.
 5. **Svelte 5** — Shell components (`+page.svelte`, `TabBar`, `EditorSurface`) use runes; match that style in new `.svelte` work. Load Svelte skills/MCP when editing `.svelte` files.
@@ -240,10 +240,10 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 
 - Attaching editor selection or console logs to AI context (not in MVP scope per README).
 - Implementing `cursor` provider without a full plan (id exists in types/catalog for future work).
-- Enabling GLM streaming in the UI without implementing `GlmChatProvider.streamMessage` and SSE parsing end-to-end.
+- Enabling HTTP streaming in the UI without implementing provider `streamMessage` and SSE parsing end-to-end.
 
 ### Related docs
 
-- [providers.md](./providers.md) — GLM API integration, used vs unused endpoints
+- [providers.md](./providers.md) — HTTP provider integration, used vs unused endpoints
 - [README.md](../README.md) — product scope and dev commands
 - `specs/` — execution plans and requirements

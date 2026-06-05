@@ -20,7 +20,7 @@ export interface ProviderHistoryMessage {
 
 /**
  * Mode-aware, provider-agnostic prompt payload assembled from thread context.
- * Consumed by Debug, GLM, and future providers via the shared builder.
+ * Consumed by Debug, HTTP, and future providers via the shared builder.
  */
 export interface ProviderRequestPayload {
   mode: ChatModeId;

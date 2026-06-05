@@ -1,6 +1,6 @@
-# Chat providers — GLM integration
+# Chat providers — HTTP connection integration
 
-SpecOps routes workspace AI chat through a small **provider registry**. Production traffic uses **GLM** (Zhipu BigModel Open Platform). **Debug** is a settings-gated local simulator for development.
+SpecOps routes workspace AI chat through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings -> Connections**. **Debug** is a settings-gated local simulator for development.
 
 ## Provider abstraction
 
@@ -9,18 +9,18 @@ sequenceDiagram
   participant UI as ChatPanel
   participant Send as sendChatMessage
   participant Reg as registry
-  participant GLM as GlmChatProvider
-  participant API as BigModel API
+  participant HTTP as OpenAiCompatibleChatProvider
+  participant API as OpenAI-compatible API
 
   UI->>Send: sendChatMessage(text)
   Send->>Send: validateProviderSend
-  Send->>Reg: getChatProvider("glm")
+  Send->>Reg: getChatProvider("http")
   Send->>Send: buildThreadProviderRequest
-  Send->>GLM: streamProviderMessage → sendMessage
-  GLM->>GLM: buildGlmChatMessages
-  GLM->>API: POST .../chat/completions
-  API-->>GLM: JSON choices[0].message.content
-  GLM-->>Send: ProviderSendResponse
+  Send->>HTTP: streamProviderMessage -> sendMessage
+  HTTP->>HTTP: buildOpenAiChatMessages
+  HTTP->>API: POST .../chat/completions
+  API-->>HTTP: JSON choices[0].message.content
+  HTTP-->>Send: ProviderSendResponse
   Send-->>UI: update assistant message
 ```
 
@@ -34,7 +34,7 @@ Defined in `app/src/lib/ai/providers/types.ts`:
 | `sendMessage` | Non-streaming completion; returns full assistant text |
 | `streamMessage` (optional) | Async iterable of text deltas |
 
-Registry: `registerChatProvider` / `getChatProvider` in `registry.ts`. Bootstrap: `initializeChatProviders()` registers Debug and GLM and wires `chatStore` capability checker + default provider resolver.
+Registry: `registerChatProvider` / `getChatProvider` in `registry.ts`. Bootstrap: `initializeChatProviders()` registers Debug and HTTP and wires `chatStore` capability checker + default provider resolver.
 
 ### Shared prompt payload
 
@@ -47,9 +47,9 @@ All providers receive the same **`ProviderRequestPayload`**:
 
 Built by `buildThreadProviderRequest` → `buildProviderRequestFromThread` in `modes/prompt.ts`.
 
-GLM maps this to OpenAI-style messages in `glmPrompt.ts` (single combined `system` message + history).
+HTTP maps this to OpenAI-style messages in `openAiChatMessages.ts` (single combined `system` message + history).
 
-## GLM configuration
+## HTTP connection configuration
 
 ### Settings (`settings.json`)
 
@@ -58,60 +58,59 @@ Provider-specific blocks live under **`providerSettings`** (`AppProviderSettings
 ```json
 {
   "providerSettings": {
-    "glm": { "enabled": true, "baseUrl": "...", "modelId": "glm-4-flash" },
+    "http": { "enabled": true, "baseUrl": "https://api.openai.com/v1" },
     "debug": { "enabled": true, "simulationSeed": null, "delayMsMin": 200, ... }
   },
-  "providerModelCatalogs": { "glm": { "modelIds": [...], "defaultModelId": "..." } }
+  "providerModelCatalogs": { "http": { "modelIds": ["gpt-4o-mini"], "defaultModelId": "gpt-4o-mini" } }
 }
 ```
 
-**Breaking change (R3-7):** top-level `glmProvider` / `debugProvider` keys are no longer read or written; re-save settings or edit `providerSettings` in `settings.json`.
+**Breaking change (phase 1):** legacy `providerSettings.glm` and top-level provider blocks are no longer used; re-save settings or edit `providerSettings.http` in `settings.json`.
 
-#### GLM (`providerSettings.glm`)
+#### HTTP (`providerSettings.http`)
 
-Normalized in `glmProviderSettings.ts`:
+Normalized in `httpConnectionSettings.ts`:
 
 | Field | Default | Purpose |
 | --- | --- | --- |
 | `enabled` | `true` | Provider toggle |
-| `baseUrl` | `https://open.bigmodel.cn/api/paas/v4` | API root (trailing slashes stripped) |
-| `modelId` | `glm-4-flash` | Legacy default; kept in sync with GLM catalog default |
+| `baseUrl` | `https://api.openai.com/v1` | API root (trailing slashes stripped) |
 
 #### Debug (`providerSettings.debug`)
 
 Normalized in `debugProviderSettings.ts` (simulation timing, failure injection, diagnostics). Settings-gated; disabled by default in product builds.
 
-Model lists and per-thread selection use **`providerModelCatalogs.glm`** (`providerModelCatalog.ts`), editable in Settings. Defaults: `glm-4-flash`, `glm-4-air`, `glm-4-plus`.
+Model lists and per-thread selection use **`providerModelCatalogs.http`** (`providerModelCatalog.ts`), editable in Settings. Default model: `gpt-4o-mini`.
 
-Use `getProviderSettings(settings, "glm")` from `appProviderSettings.ts` for typed access when adding providers — extend **`ProviderSettingsById`** once per new configured provider.
+Use `getProviderSettings(settings, "http")` from `appProviderSettings.ts` for typed access when adding providers — extend **`ProviderSettingsById`** once per new configured provider.
 
 ### Secrets (`provider-secrets.json`)
 
 API keys per provider — `providerSecretsStore.ts`:
 
 - Path: `{appDataDir}/spec-ops/provider-secrets.json`
-- Format: `{ "version": 1, "keys": { "glm": "..." } }` (`Partial<Record<ChatProviderId, string>>`)
-- Loaded at startup in `appShellRuntime.ts` → `appState.setProviderApiKey("glm", …)`
+- Format: `{ "version": 1, "keys": { "http": "..." } }` (`Partial<Record<ChatProviderId, string>>`)
+- Loaded at startup in `appShellRuntime.ts` → `appState.setProviderApiKey("http", …)`
 - **Never** written to `settings.json` or chat thread files
-- **Breaking change (R3-1):** `glm-secrets.json` is no longer read; re-enter GLM API key after upgrade
+- Legacy `glm-secrets.json` is not used.
 
 ### “Configured” definition
 
-`isGlmProviderConfigured(settings, apiKey)` — `enabled` and non-empty trimmed API key. Unconfigured GLM blocks send and shows inline setup CTA in `ChatPanel.svelte` (Settings → GLM).
+`isHttpConnectionConfigured(settings, apiKey)` — `enabled` and non-empty trimmed API key. Unconfigured HTTP blocks send and shows inline setup CTA in `ChatPanel.svelte` (Settings -> Connections).
 
 ### Default provider selection
 
 `resolveDefaultChatProvider` (`selection.ts`):
 
-1. **GLM** if configured (settings + key)
+1. **HTTP** if configured (settings + key)
 2. Else **debug** if debug provider enabled in Developer Settings
-3. Else **glm** as product fallback (still blocked until key is set)
+3. Else **http** as product fallback (still blocked until key is set)
 
-Product-selectable providers in UI: **`glm`** only; debug appears when enabled.
+Product-selectable providers in UI: **`http`** only; debug appears when enabled.
 
-## GLM adapter (`GlmChatProvider`)
+## HTTP adapter (`OpenAiCompatibleChatProvider`)
 
-Implementation: `app/src/lib/ai/providers/glmChatProvider.ts`.
+Implementation: `app/src/lib/ai/providers/openAiCompatibleChatProvider.ts`.
 
 ### Endpoint used
 
@@ -121,13 +120,7 @@ Implementation: `app/src/lib/ai/providers/glmChatProvider.ts`.
 POST {baseUrl}/chat/completions
 ```
 
-Resolver: `resolveGlmChatCompletionsUrl(baseUrl)` → `{trimmedBase}/chat/completions`.
-
-Default full URL:
-
-`https://open.bigmodel.cn/api/paas/v4/chat/completions`
-
-This is the [Zhipu BigModel](https://open.bigmodel.cn/) **PAAS v4** HTTP API (same family as OpenAI’s chat completions schema).
+Resolver: `resolveOpenAiChatCompletionsUrl(baseUrl)` -> `{trimmedBase}/chat/completions`.
 
 ### Request
 
@@ -150,7 +143,7 @@ JSON body (only these fields are sent):
 }
 ```
 
-`model` comes from `ProviderSendRequest.modelId` (thread `selectedModelId` or provider default), not from `providerSettings.glm.modelId` at send time.
+`model` comes from `ProviderSendRequest.modelId` (thread `selectedModelId` or provider default).
 
 ### Response handling
 
@@ -159,7 +152,7 @@ Success (HTTP 2xx): parse JSON, read:
 - `choices[0].message.content` — required non-empty trimmed string
 - Top-level `error.message` — treated as failure even on 200
 
-Errors: map status **401**, **403**, **429**, **5xx**, and model rejection messages via `mapGlmHttpError` / `modelValidation.ts`. Bearer tokens in API messages are redacted in user copy.
+Errors: map status **401**, **403**, **429**, **5xx**, and model rejection messages via `mapHttpError` / `modelValidation.ts`. Bearer tokens in API messages are redacted in user copy.
 
 ### Capabilities
 
@@ -175,15 +168,15 @@ Unsupported modes return `WorkspaceAccessReason.ProviderUnsupported`.
 | Provider | `streamMessage` | UI behavior |
 | --- | --- | --- |
 | **Debug** | Implemented | Token-style partial updates in chat |
-| **GLM** | Not implemented | `streamProviderMessage` falls back to `sendMessage`; UI receives one chunk (full text) |
+| **HTTP** | Not implemented | `streamProviderMessage` falls back to `sendMessage`; UI receives one chunk (full text) |
 
-GLM explicitly sets **`stream: false`**. There is no SSE client, no `stream: true` path, and no `GlmChatProvider.streamMessage`.
+HTTP explicitly sets **`stream: false`**. There is no SSE client, no `stream: true` path, and no `OpenAiCompatibleChatProvider.streamMessage`.
 
-README describes this as “streaming on Debug with buffered GLM fallback.”
+README describes this as “streaming on Debug with buffered HTTP fallback.”
 
-## BigModel / GLM API: used vs unused
+## OpenAI-compatible API: used vs unused
 
-The app targets the **v4 PAAS OpenAI-compatible** surface. Only **one operation** is implemented.
+The app targets an OpenAI-compatible chat-completions surface. Only **one operation** is implemented.
 
 ### Used
 
@@ -193,7 +186,7 @@ The app targets the **v4 PAAS OpenAI-compatible** surface. Only **one operation*
 
 ### Not used (no code paths)
 
-These are common on the BigModel / OpenAI-compatible platform but **absent from the codebase**:
+These are common on OpenAI-compatible platforms but **absent from the codebase**:
 
 | Category | Examples | Notes |
 | --- | --- | --- |
@@ -207,19 +200,14 @@ These are common on the BigModel / OpenAI-compatible platform but **absent from 
 | Tool / function calling | `tools`, function messages | — |
 | Reasoning / thinking blocks | Vendor-specific extended fields | — |
 
-If Zhipu adds endpoints under the same `baseUrl`, they are unused unless a new adapter method is added.
-
-### Alternate base URLs
-
-`baseUrl` is user-configurable in Settings (for proxies or regional endpoints). The app always appends `/chat/completions` — the base must be the API **root** that exposes that path (default PAAS v4 root above).
+`baseUrl` is user-configurable in Settings (for hosted APIs, gateways, or proxies). The app always appends `/chat/completions` — the base must be an API root that exposes that path.
 
 ## Other provider IDs
 
 | Id | Status |
 | --- | --- |
-| `glm` | Implemented (`glmChatProvider.ts`) |
+| `http` | Implemented (`openAiCompatibleChatProvider.ts`) |
 | `debug` | Implemented (`debugChatProvider.ts`); dev-only |
-| `cursor` | Type + catalog placeholder (`auto` model); **not registered**; planned optional provider |
 
 ## Error and validation flow
 
@@ -227,16 +215,16 @@ If Zhipu adds endpoints under the same `baseUrl`, they are unused unless a new a
 2. **Preflight** — `chatStore.runAccessPreflight` + `createRegistryCapabilityChecker`.
 3. **Runtime** — HTTP errors and model rejection strings → `ChatProviderError` with user-safe `userMessage`.
 
-Send blocked reasons include `glm_not_configured`, `invalid_model`, `preflight`, `provider_error` (`sendChatMessage.ts`).
+Send blocked reasons include `http_not_configured`, `invalid_model`, `preflight`, `provider_error` (`sendChatMessage.ts`).
 
 ## Key source files
 
 | File | Responsibility |
 | --- | --- |
-| `glmChatProvider.ts` | HTTP adapter, error mapping |
-| `glmPrompt.ts` | Payload → `messages[]` |
+| `openAiCompatibleChatProvider.ts` | HTTP adapter, error mapping |
+| `openAiChatMessages.ts` | Payload -> `messages[]` |
 | `appProviderSettings.ts` | Bundle normalize, `getProviderSettings` helpers |
-| `glmProviderSettings.ts` | GLM defaults, normalize, configured checks |
+| `httpConnectionSettings.ts` | HTTP defaults, normalize, configured checks |
 | `debugProviderSettings.ts` | Debug simulator defaults and normalize |
 | `providerSecretsStore.ts` | Provider API key persistence |
 | `bootstrap.ts` | Register providers at startup |
@@ -245,16 +233,16 @@ Send blocked reasons include `glm_not_configured`, `invalid_model`, `preflight`,
 | `providerModelCatalog.ts` | Model lists per provider |
 | `sendChatMessage.ts` | End-to-end turn lifecycle |
 | `chatSend.ts` | Stream vs buffered dispatch |
-| `SettingsDialog.svelte` | GLM base URL, key, catalogs |
+| `SettingsDialog.svelte` | Connections base URL, key, catalogs |
 | `ChatPanel.svelte` | Composer, blocked states, model selector |
 
-## Extending GLM integration
+## Extending HTTP integration
 
 When adding features, keep the adapter thin:
 
-1. Extend **`ProviderRequestPayload`** or mode prompts if context changes — not GLM-only fields in the send path.
-2. Add request fields in **`glmChatProvider.ts`** only with tests in `glmChatProvider.test.ts`.
+1. Extend **`ProviderRequestPayload`** or mode prompts if context changes — not provider-specific fields in the send path.
+2. Add request fields in **`openAiCompatibleChatProvider.ts`** with tests in provider adapter tests.
 3. For streaming, implement **`streamMessage`** with SSE parsing and keep `sendMessage` as fallback; update `streamProviderMessage` consumers and UX copy.
 4. Never persist API keys outside **`providerSecretsStore`**.
 
-See [architecture.md](./architecture.md) for overall layering and agent conventions.
+See [architecture.md](./architecture.md) for overall layering and agent conventions. Product migration context lives in [ops roadmap](../specs/ops/roadmap.md).

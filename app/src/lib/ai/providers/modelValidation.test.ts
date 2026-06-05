@@ -87,7 +87,7 @@ describe("provider model rejection mapping", () => {
     expect(mapped.userMessage).toContain("Settings");
   });
 
-  it("requires both status and message for glm http mapping", () => {
+  it("requires both status and message for HTTP model-rejection mapping", () => {
     expect(shouldMapProviderModelRejection(404, "Model not found")).toBe(true);
     expect(shouldMapProviderModelRejection(401, "Model not found")).toBe(false);
   });

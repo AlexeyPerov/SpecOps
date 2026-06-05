@@ -126,7 +126,8 @@ describe("M5.2 milestone validation", () => {
     expect(result.ok).toBe(true);
     expect(chatStore.isAgentDraft(agentId!)).toBe(false);
     expect(chatStore.getAgentTitle(agentId!)).toBe("First persisted line");
-    expect(schedulePersistMock).toHaveBeenCalledOnce();
+    expect(schedulePersistMock).toHaveBeenCalled();
+    expect(schedulePersistMock.mock.calls.at(-1)?.[2].thread.messages.at(-1)?.role).toBe("assistant");
   });
 
   it("allows two agents to generate with Debug at the same time", async () => {

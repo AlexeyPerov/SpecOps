@@ -143,7 +143,7 @@ Dependencies: Task 3.
 
 ---
 
-#### Task 5: Validation test sweep (P2-7) [Score:8] [Agent:heavy]
+#### Task 5: Validation test sweep (P2-7) [Score:8] [Agent:heavy] [DONE]
 
 **Required context**
 

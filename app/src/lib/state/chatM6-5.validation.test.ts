@@ -10,7 +10,7 @@
  * - Exceed retention cap → compaction banner + summary preserved
  * - Delete agent removes thread and sidebar entry
  * - Trigger failed response → Retry succeeds
- * - Verify streaming on Debug and buffered fallback on HTTP
+ * - Verify streaming on Debug and HTTP
  * - Two agent tabs generating simultaneously without blocking each other
  * - Notepad context keeps no chat/AI entry points (manual UI regression check)
  *
@@ -65,11 +65,16 @@ const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function httpFetchSuccess(content: string): typeof fetch {
+  const splitAt = Math.ceil(content.length / 2);
+  const chunks = [content.slice(0, splitAt), content.slice(splitAt)].filter(Boolean);
   return vi.fn().mockResolvedValue(
-    new Response(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`, {
-      status: 200,
-      headers: { "Content-Type": "text/event-stream" },
-    }),
+    new Response(
+      `${chunks.map((chunk) => `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`).join("")}data: [DONE]\n\n`,
+      {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      },
+    ),
   ) as typeof fetch;
 }
 
@@ -216,7 +221,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     );
   });
 
-  it("streams Debug partial updates and uses HTTP buffered fallback", async () => {
+  it("streams Debug and HTTP partial updates", async () => {
     appState.updateHttpConnectionSettings({ enabled: true });
     appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
@@ -246,8 +251,9 @@ describe("M6 milestone validation — AI chat MVP", () => {
     unsubscribe();
 
     expect(new Set(debugLengths).size).toBeGreaterThan(1);
-    expect(httpLengths.every((length) => length === 0 || length === httpLengths.at(-1))).toBe(true);
-    expect(new Set(httpLengths.filter((length) => length > 0)).size).toBeLessThanOrEqual(1);
+    expect(new Set(httpLengths).size).toBeGreaterThan(1);
+    expect(httpLengths).toContain("HTTP buffere".length);
+    expect(httpLengths.at(-1)).toBe("HTTP buffered response.".length);
   });
 
   it("blocks retry while generation is in progress", async () => {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 17:50 (MSK)
+
+- **Phase 2 M3 Task 5 (validation test sweep):** Added `app/src/lib/state/chatPhase2.validation.test.ts` covering chat-http rail gating, ask-only scope behavior, workspace-preflight bypass, HTTP SSE `ReadableStream` integration, and workspace HTTP streaming continuity.
+- **Validation suite refresh:** Updated the M6 validation sweep to treat HTTP as streaming (not buffered fallback) and assert partial HTTP updates in the existing multi-agent validation scenario.
+- **Plan tracking:** Marked Task 5 as `[DONE]` in `specs/ops/phase-2/execution-plan-m3.md`.
+
 ## 2026-06-05 17:35 (MSK)
 
 - **Phase 2 M3 Task 4 (stream failure + retry + error copy):** Added stream-specific provider error/recovery copy in `app/src/lib/ai/chatErrorCopy.ts` for connection-drop, malformed stream payload, truncated stream, HTTP 401, and HTTP 429 cases, plus `getProviderErrorRecoveryHint` mapping used by chat runtime errors.

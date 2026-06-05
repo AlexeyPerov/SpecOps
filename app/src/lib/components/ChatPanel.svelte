@@ -90,7 +90,7 @@
   const activeAgentId = $derived(chatStore.getActiveAgentId());
   const activeAgentTitle = $derived.by(() => {
     if (!activeAgentId) {
-      return "Agent";
+      return isChatHttpScope ? "Chat" : "Agent";
     }
     return chatStore.getAgentTitle(activeAgentId) ?? DRAFT_AGENT_TITLE;
   });
@@ -126,6 +126,10 @@
     httpProviderSettings.baseUrl;
     providerModelCatalogs;
     httpApiKey;
+    if (isChatHttpScope) {
+      supportedModes = ["ask"];
+      return;
+    }
     const root = chatStore.getActiveWorkspaceRoot();
     if (!root) {
       supportedModes = ["ask"];
@@ -157,8 +161,9 @@
     if (!canDeleteAgent || !activeAgentId) {
       return;
     }
+    const targetLabel = isChatHttpScope ? "chat" : "agent";
     const confirmed = window.confirm(
-      `Delete agent "${activeAgentTitle}"? This removes the agent and its chat history. This cannot be undone.`,
+      `Delete ${targetLabel} "${activeAgentTitle}"? This removes the ${targetLabel} and its history. This cannot be undone.`,
     );
     if (!confirmed) {
       return;
@@ -171,7 +176,7 @@
   }
 </script>
 
-<section class="chat-panel" aria-label="Agent chat">
+<section class="chat-panel" aria-label={isChatHttpScope ? "Chats panel" : "Agent chat"}>
   <div class="chat-panel-header">
     <p class="chat-panel-title">{activeAgentTitle}</p>
     {#if canDeleteAgent}
@@ -181,7 +186,7 @@
         onclick={() => void deleteAgent()}
         disabled={isBlocked || isGenerating}
       >
-        Delete agent
+        {isChatHttpScope ? "Delete chat" : "Delete agent"}
       </button>
     {/if}
   </div>
@@ -204,6 +209,11 @@
       {isGenerating}
       {activeMode}
       {compactionNotice}
+      emptyHint={
+        isChatHttpScope
+          ? "Ask questions with your configured connection. Pick a provider and model, then send a message."
+          : "Ask or review ideas for this workspace. Pick a provider and mode, then send a message."
+      }
     />
 
     <ChatComposer

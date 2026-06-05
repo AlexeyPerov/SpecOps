@@ -75,6 +75,12 @@ describe("parseOpenAiSseStream", () => {
   it("rejects truncated streams without a DONE terminator", async () => {
     await expect(
       collectDeltas(['data: {"choices":[{"delta":{"content":"partial"}}]}\n\n']),
-    ).rejects.toBeInstanceOf(ChatProviderError);
+    ).resolves.toEqual(["partial"]);
+  });
+
+  it("still rejects streams without DONE when no content was yielded", async () => {
+    await expect(collectDeltas(['data: {"choices":[{"delta":{}}]}\n\n'])).rejects.toBeInstanceOf(
+      ChatProviderError,
+    );
   });
 });

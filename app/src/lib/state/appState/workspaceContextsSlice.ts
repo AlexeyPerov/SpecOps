@@ -174,9 +174,11 @@ export function createWorkspaceContextsSlice(deps: {
     switchContext(contextId: ContextId): boolean {
       let switched = false;
       update((state) => {
+        const canOpenChatHttpContext =
+          !isChatHttpContext(contextId) || canRestoreChatHttpAsActive(state.settings);
         const exists =
           contextId === NOTEPAD_CONTEXT_ID ||
-          isChatHttpContext(contextId) ||
+          (isChatHttpContext(contextId) && canOpenChatHttpContext) ||
           state.contexts.workspaces.some((workspace) => workspace.id === contextId);
         if (!exists || state.contexts.activeContextId === contextId) {
           return state;

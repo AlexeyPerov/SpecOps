@@ -26,6 +26,7 @@ export async function* parseOpenAiSseStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let sawDone = false;
+  let yieldedDeltaCount = 0;
 
   try {
     while (true) {
@@ -44,6 +45,7 @@ export async function* parseOpenAiSseStream(
           return;
         }
         if (result.delta) {
+          yieldedDeltaCount += 1;
           yield result.delta;
         }
       }
@@ -68,11 +70,15 @@ export async function* parseOpenAiSseStream(
     if (result.done) {
       sawDone = true;
     } else if (result.delta) {
+      yieldedDeltaCount += 1;
       yield result.delta;
     }
   }
 
   if (!sawDone) {
+    if (yieldedDeltaCount > 0) {
+      return;
+    }
     throw new ChatProviderError(
       "HTTP provider stream ended before [DONE].",
       "HTTP provider stream ended unexpectedly. Try again.",

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-05 18:35 (MSK)
+
+- **Phase 2 follow-up hardening (post-review):** Aligned runtime chat-http gating with restore policy by preventing `switchContext("chat-http")` when HTTP setup/model resolution is incomplete (`workspaceContextsSlice`), and added test coverage in `appState.test.ts`.
+- **Runtime fallback behavior:** Added an app-shell guard in `+page.svelte` to auto-switch from `chat-http` to `notepad` when chat rail gating becomes invalid during a live session (for example, connection disabled or model unset).
+- **Chat UX copy cleanup:** Updated chat context copy to avoid workspace-only wording — context-aware empty-state hint, chat-title fallback, delete confirmation/button label (`Delete chat` in chat-http), and clearer no-scope/switch-model/switch-provider messages.
+- **SSE compatibility tweak:** Relaxed OpenAI SSE parser end-of-stream handling to accept clean EOF after yielding deltas even without explicit `[DONE]`, while still rejecting empty/truly truncated streams; expanded parser tests accordingly.
+- **Docs/task-tracking consistency:** Refreshed README AI status to reflect shipped phase-2 chat capabilities and corrected stale milestone-1 exit checkboxes in `specs/ops/phase-2/execution-plan-m1.md`.
+
 ## 2026-06-05 17:54 (MSK)
 
 - **Phase 2 M3 Task 6 (final verification + closure):** Ran full validation gates in `app/` — `npm test` (**692 passed**) and `npm run check` (**0 errors**, 1 pre-existing a11y warning in `EntryNamePrompt.svelte`).

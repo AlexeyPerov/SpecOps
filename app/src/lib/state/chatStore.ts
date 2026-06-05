@@ -144,7 +144,7 @@ export const chatIsEmpty = derived(
 export const chatAccessState = derived(chatStore, ($chatStore) => {
   const scopeKey = $chatStore.activeChatScopeKey;
   if (!scopeKey || isChatContextScopeKey(scopeKey)) {
-    return defaultUnknownAccessState("Open a workspace to use AI chat.");
+    return defaultUnknownAccessState("Open a workspace to use workspace AI chat.");
   }
   return (
     $chatStore.accessByWorkspace[scopeKey] ??

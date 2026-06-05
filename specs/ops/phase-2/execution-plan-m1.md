@@ -220,10 +220,10 @@ Task 4 can start in parallel with Task 1.
 
 ## Milestone 1 exit criteria
 
-- [ ] `chat-http` context loads/saves in session snapshot.
+- [x] `chat-http` context loads/saves in session snapshot.
 - [x] Chat rail button visible when HTTP connection configured; hidden otherwise.
 - [x] `chatStore` + persistence scoped to `chat-http` under `chat/chat-http/`.
-- [ ] Workspace HTTP chat unchanged (B2A).
-- [ ] `npm test` / `npm run check` pass.
+- [x] Workspace HTTP chat unchanged (B2A).
+- [x] `npm test` / `npm run check` pass.
 
 **Next:** [execution-plan-m2.md](./execution-plan-m2.md)

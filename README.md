@@ -12,7 +12,11 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 - **Multi-Window**
 - **Images** preview
 - **Console** — resizable bottom panel with **Logs**
-- WIP: AI support (HTTP connection + Debug provider groundwork)
+- **AI chat**
+  - Workspace agent chat (ask/review)
+  - Dedicated **Chat** context (`chat-http`) gated by HTTP connection setup
+  - OpenAI-compatible HTTP provider and Debug provider
+  - Streaming assistant responses (SSE)
 
 ---
 
@@ -31,6 +35,7 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 
 - Current migration and rollout plan is tracked in `specs/ops/roadmap.md`.
 - Phase 1 execution details are documented in `specs/ops/phase-1/phase-1.md` and `specs/ops/phase-1/execution-plan.md`.
+- Phase 2 implementation and validation details are documented in `specs/ops/phase-2/phase-2.md` and milestone plans in `specs/ops/phase-2/`.
 
 ## Prerequisites
 

@@ -12,9 +12,17 @@
     isGenerating: boolean;
     activeMode: ChatModeId;
     compactionNotice?: string;
+    emptyHint?: string;
   }
 
-  let { messages, isEmpty, isGenerating, activeMode, compactionNotice = "" }: Props = $props();
+  let {
+    messages,
+    isEmpty,
+    isGenerating,
+    activeMode,
+    compactionNotice = "",
+    emptyHint = "Ask or review ideas for this workspace. Pick a provider and mode, then send a message.",
+  }: Props = $props();
 
   function isProviderSwitchMessage(message: ChatMessage): boolean {
     return message.systemEvent?.type === "provider-switched";
@@ -84,7 +92,7 @@
     <div class="chat-empty-state">
       <p class="chat-title">Start chat</p>
       <p class="chat-hint">
-        Ask or review ideas for this workspace. Pick a provider and mode, then send a message.
+        {emptyHint}
       </p>
     </div>
   {:else}

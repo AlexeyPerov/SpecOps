@@ -110,10 +110,19 @@ describe("OpenAiCompatibleChatProvider", () => {
     });
   });
 
-  it("maps truncated SSE streams to a provider error", async () => {
+  it("accepts truncated SSE streams when content was already streamed", async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       sseResponse('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'),
     );
+    const provider = createOpenAiCompatibleChatProvider(() => ({ settings, apiKey: "test-key" }), fetchFn);
+
+    await expect(collectStream(provider)).resolves.toEqual(["partial"]);
+  });
+
+  it("maps empty truncated SSE streams to a provider error", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(sseResponse('data: {"choices":[{"delta":{}}]}\n\n'));
     const provider = createOpenAiCompatibleChatProvider(() => ({ settings, apiKey: "test-key" }), fetchFn);
 
     await expect(collectStream(provider)).rejects.toBeInstanceOf(ChatProviderError);

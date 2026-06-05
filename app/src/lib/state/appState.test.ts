@@ -867,6 +867,25 @@ describe("appState session restore", () => {
   });
 
   it("switches between workspace and chat-http contexts without mutating workspace state", () => {
+    const defaultHttpModelId = getProviderDefaultModelId(defaultProviderModelCatalogs, "http");
+    appState.applyPersistedSettings({
+      providerSettings: {
+        ...appState.getSnapshot().settings.providerSettings,
+        http: {
+          enabled: true,
+          baseUrl: "http://localhost:11434/v1",
+        },
+      },
+      providerModelCatalogs: {
+        ...defaultProviderModelCatalogs,
+        http: {
+          modelIds: [defaultHttpModelId],
+          defaultModelId: defaultHttpModelId,
+        },
+      },
+    });
+    appState.setProviderApiKey("http", "configured-key");
+
     appState.addWorkspace("/tmp/ws-chat-switch");
     const workspaceId = appState.getSnapshot().contexts.activeContextId;
     expect(workspaceId).not.toBe("chat-http");
@@ -887,6 +906,25 @@ describe("appState session restore", () => {
   });
 
   it("does not create file tabs in chat-http context", () => {
+    const defaultHttpModelId = getProviderDefaultModelId(defaultProviderModelCatalogs, "http");
+    appState.applyPersistedSettings({
+      providerSettings: {
+        ...appState.getSnapshot().settings.providerSettings,
+        http: {
+          enabled: true,
+          baseUrl: "http://localhost:11434/v1",
+        },
+      },
+      providerModelCatalogs: {
+        ...defaultProviderModelCatalogs,
+        http: {
+          modelIds: [defaultHttpModelId],
+          defaultModelId: defaultHttpModelId,
+        },
+      },
+    });
+    appState.setProviderApiKey("http", "configured-key");
+
     expect(appState.switchContext("chat-http")).toBe(true);
     const beforeTabs = appState.getActiveSession().openTabs.length;
     const beforeDocuments = appState.getActiveDocuments().length;
@@ -947,6 +985,28 @@ describe("appState session restore", () => {
       ...appState.getWindowSessionSnapshot(),
       activeContextId: "chat-http",
     });
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+  });
+
+  it("does not switch into chat-http when HTTP connection is not configured", () => {
+    appState.applyPersistedSettings({
+      providerSettings: {
+        ...appState.getSnapshot().settings.providerSettings,
+        http: {
+          enabled: false,
+          baseUrl: "",
+        },
+      },
+      providerModelCatalogs: {
+        ...defaultProviderModelCatalogs,
+        http: {
+          modelIds: [],
+          defaultModelId: "",
+        },
+      },
+    });
+    appState.setProviderApiKey("http", "");
+    expect(appState.switchContext("chat-http")).toBe(false);
     expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
   });
 });

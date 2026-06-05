@@ -473,7 +473,7 @@ export function createThreadsSlice(deps: {
     ): Promise<SwitchThreadProviderResult> {
       const root = getActiveChatScopeKey();
       if (!root) {
-        return { switched: false, message: "Open a workspace to switch providers." };
+        return { switched: false, message: "Open Chat and select a chat to switch providers." };
       }
 
       const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
@@ -588,7 +588,7 @@ export function createThreadsSlice(deps: {
     ): Promise<SwitchThreadModelResult> {
       const root = getActiveChatScopeKey();
       if (!root) {
-        return { switched: false, message: "Open a workspace to switch models." };
+        return { switched: false, message: "Open Chat and select a chat to switch models." };
       }
 
       const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);

@@ -920,6 +920,13 @@
   });
 
   $effect(() => {
+    if (isChatHttpActive && !chatHttpRailVisible) {
+      appState.switchContext("notepad");
+      return;
+    }
+  });
+
+  $effect(() => {
     if (activeContextId === CHAT_HTTP_CONTEXT_ID) {
       if (lastChatScopeKey !== CHAT_HTTP_CONTEXT_ID) {
         if (lastChatScopeKey !== null) {

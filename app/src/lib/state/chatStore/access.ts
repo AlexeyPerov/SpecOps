@@ -161,7 +161,7 @@ export function createAccessSlice(deps: {
     getChatAccessState(): ChatAccessState {
       const rootPath = getActiveWorkspaceRoot();
       if (!rootPath) {
-        return defaultUnknownAccessState("Open a workspace to use AI chat.");
+        return defaultUnknownAccessState("Open a workspace to use workspace AI chat.");
       }
       const snapshot = getSnapshot();
       return (
@@ -172,7 +172,7 @@ export function createAccessSlice(deps: {
     async runAccessPreflight(): Promise<ChatAccessState> {
       const rootPath = getActiveWorkspaceRoot();
       if (!rootPath) {
-        return defaultUnknownAccessState("Open a workspace to use AI chat.");
+        return defaultUnknownAccessState("Open a workspace to use workspace AI chat.");
       }
       const snapshot = getSnapshot();
 

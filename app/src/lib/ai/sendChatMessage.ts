@@ -151,6 +151,19 @@ interface ChatSendContextOptions {
   chatContextKind?: ChatContextKind;
 }
 
+function noChatScopeMessage(action: "send" | "retry"): string {
+  const contextId = appState.getSnapshot().contexts.activeContextId;
+  const isChatHttpContext = contextId === CHAT_HTTP_CONTEXT_ID;
+  if (action === "retry") {
+    return isChatHttpContext
+      ? "Open Chat and select a chat thread to retry messages."
+      : "Open a workspace to retry chat messages.";
+  }
+  return isChatHttpContext
+    ? "Open Chat and select a chat thread to send messages."
+    : "Open a workspace to send chat messages.";
+}
+
 function resolveChatContextKind(root: string, options?: ChatSendContextOptions): ChatContextKind {
   if (options?.chatContextKind) {
     return options.chatContextKind;
@@ -167,7 +180,7 @@ async function validateProviderSend(
     return {
       ok: false,
       reason: "no_workspace",
-      message: "Open a workspace to send chat messages.",
+      message: noChatScopeMessage("send"),
     };
   }
   const chatContextKind = resolveChatContextKind(root, options);
@@ -328,7 +341,7 @@ export async function retryLastChatTurn(
 ): Promise<RetryLastChatTurnResult> {
   const root = chatStore.getActiveChatScopeKey();
   if (!root) {
-    return { ok: false, reason: "no_workspace", message: "Open a workspace to retry chat messages." };
+    return { ok: false, reason: "no_workspace", message: noChatScopeMessage("retry") };
   }
 
   const activeAgentId = agentId ?? chatStore.getActiveAgentId();
@@ -391,7 +404,7 @@ export async function sendChatMessage(
 
   const root = chatStore.getActiveChatScopeKey();
   if (!root) {
-    return { ok: false, reason: "no_workspace", message: "Open a workspace to send chat messages." };
+    return { ok: false, reason: "no_workspace", message: noChatScopeMessage("send") };
   }
 
   const activeAgentId = agentId ?? chatStore.getActiveAgentId();

@@ -45,6 +45,7 @@ function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
   return stripWindowSnapshotForSession({
     activeContextId: state.contexts.activeContextId,
     notepad: state.contexts.notepad,
+    chatHttp: state.contexts.chatHttp,
     workspaces: state.contexts.workspaces,
     editorPreferences: {
       zoomPercent: state.editor.zoomPercent,
@@ -246,6 +247,7 @@ export async function sanitizeWindowSnapshot(
   }
 
   const notepad = await sanitizeContext(snapshot.notepad);
+  const chatHttp = await sanitizeContext(snapshot.chatHttp ?? snapshot.notepad);
   const workspaces = [];
   for (const workspace of snapshot.workspaces) {
     workspaces.push({
@@ -255,6 +257,7 @@ export async function sanitizeWindowSnapshot(
   }
   const activeContextId =
     snapshot.activeContextId === "notepad" ||
+    snapshot.activeContextId === "chat-http" ||
     workspaces.some((workspace) => workspace.id === snapshot.activeContextId)
       ? snapshot.activeContextId
       : "notepad";
@@ -263,6 +266,7 @@ export async function sanitizeWindowSnapshot(
     ...snapshot,
     activeContextId,
     notepad,
+    chatHttp,
     workspaces,
   };
 }

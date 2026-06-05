@@ -45,6 +45,7 @@ export function stripWindowSnapshotForSession(
   return {
     ...snapshot,
     notepad: stripContextSnapshot(snapshot.notepad),
+    chatHttp: stripContextSnapshot(snapshot.chatHttp ?? snapshot.notepad),
     workspaces: snapshot.workspaces.map((workspace) => ({
       ...workspace,
       snapshot: stripContextSnapshot(workspace.snapshot),

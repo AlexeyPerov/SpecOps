@@ -69,7 +69,7 @@ Dependencies: none.
 
 ---
 
-#### Task 2: Session persistence and context switch (P2-1) [Score:8] [Agent:medium]
+#### Task 2: Session persistence and context switch (P2-1) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 

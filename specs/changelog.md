@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-05 15:05 (MSK)
+
+- **Phase 2 M1 Task 2 (`chat-http` session + switching):** Completed session round-trip wiring for `chatHttp` by persisting/sanitizing it through `sessionManager` and `sessionDocumentPersistence`, including support for restoring `activeContextId: "chat-http"` from `session.json`.
+- **Restore fallback policy:** Updated `applyWindowSession` to validate `chat-http` restore against HTTP connection gating (`enabled`, non-empty API key/base URL, resolvable default model) and fall back to `notepad` when configuration is invalid.
+- **Context switch integration:** Updated app shell context-switch handling in `+page.svelte` so `chat-http` context switches skip workspace project-tree loading.
+- **Tests:** Extended `appState`, `sessionManager`, and session document persistence tests to cover `chat-http` snapshot persistence, active-context restore, and fallback behavior.
+
 ## 2026-06-05 15:01 (MSK)
 
 - **Phase 2 M1 Task 1 (`chat-http` context foundations):** Promoted runtime `WindowContextState.chatHttp` to a required `ContextSnapshot` and initialized a default `chatHttp` snapshot in `appState` bootstrap state.

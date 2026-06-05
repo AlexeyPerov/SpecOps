@@ -10,6 +10,11 @@ import type {
 } from "../../domain/contracts";
 import { createFileTab } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
+import { isHttpProviderConfigured } from "../../ai/providers/httpConnectionSettings";
+import {
+  getProviderDefaultModelId,
+  normalizeProviderModelCatalogs,
+} from "../../ai/providers/providerModelCatalog";
 import {
   defaultWorkspaceLayout,
   normalizeWorkspaceLayout,
@@ -54,6 +59,17 @@ function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot
   return fallbackContextSnapshot(snapshot.session.lastActiveWindowId);
 }
 
+function canRestoreChatHttpAsActive(
+  settings: AppDomainState["settings"],
+): boolean {
+  const apiKey = settings.providerApiKeys.http ?? "";
+  if (!isHttpProviderConfigured(settings.providerSettings.http, apiKey)) {
+    return false;
+  }
+  const catalogs = normalizeProviderModelCatalogs(settings.providerModelCatalogs);
+  return getProviderDefaultModelId(catalogs, "http").trim().length > 0;
+}
+
 export function createWorkspaceContextsSlice(deps: {
   update: AppStateUpdate;
   getSnapshot: () => AppDomainState;
@@ -78,6 +94,7 @@ export function createWorkspaceContextsSlice(deps: {
 
   const slice = {
     applyWindowSession(snapshot: WindowSessionSnapshot, recentFiles: string[] = []) {
+      const preservedSettings = getSnapshot().settings;
       const normalizedNotepad = ensureContextSnapshotHasTab(cloneContextSnapshot(snapshot.notepad));
       const normalizedChatHttp = ensureContextSnapshotHasTab(
         cloneContextSnapshot(snapshot.chatHttp ?? snapshot.notepad),
@@ -88,7 +105,8 @@ export function createWorkspaceContextsSlice(deps: {
       }));
       const activeContextId =
         snapshot.activeContextId === NOTEPAD_CONTEXT_ID ||
-        isChatHttpContext(snapshot.activeContextId) ||
+        (isChatHttpContext(snapshot.activeContextId) &&
+          canRestoreChatHttpAsActive(preservedSettings)) ||
         normalizedWorkspaces.some((workspace) => workspace.id === snapshot.activeContextId)
           ? snapshot.activeContextId
           : NOTEPAD_CONTEXT_ID;
@@ -99,7 +117,6 @@ export function createWorkspaceContextsSlice(deps: {
         workspaces: normalizedWorkspaces,
       };
       reindexIdCountersFromContexts(contexts);
-      const preservedSettings = getSnapshot().settings;
       const preservedTheme = getSnapshot().theme;
       set({
         contexts,

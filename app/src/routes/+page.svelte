@@ -38,7 +38,11 @@
   import { checkDocumentIfDeferred } from "../lib/services/externalFileChanges";
   import { marked } from "marked";
   import type { AppDomainState } from "../lib/domain/contracts";
-  import type { ContextId, DocumentState } from "../lib/domain/contracts";
+  import {
+    CHAT_HTTP_CONTEXT_ID,
+    type ContextId,
+    type DocumentState,
+  } from "../lib/domain/contracts";
   import { isAgentTab, isFileTab, tabDocumentId } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
   import {
@@ -526,7 +530,9 @@
     previousActiveContextId = nextContextId;
     consoleOpen = false;
     closeWorkspaceContextMenu();
-    void loadProjectTreeRoot();
+    if (nextContextId !== CHAT_HTTP_CONTEXT_ID) {
+      void loadProjectTreeRoot();
+    }
   }
 
   function handleSelectContext(contextId: ContextId): void {

@@ -70,6 +70,33 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
   return {
     activeContextId: "notepad",
     notepad,
+    chatHttp: {
+      documents: [
+        {
+          id: "doc-chat",
+          filePath: null,
+          title: "Untitled",
+          content: "",
+          savedContent: "",
+          isDirty: false,
+          contentKind: "text",
+          language: "plaintext",
+          encoding: "utf-8",
+          lineEnding: "lf",
+          diskFingerprint: null,
+          dismissedFingerprint: null,
+          fileMissing: false,
+          scrollTop: 0,
+          markdownViewMode: "edit",
+        },
+      ],
+      session: {
+        selectedTabId: "tab-chat",
+        openTabs: [createFileTab("tab-chat", "doc-chat")],
+        lastActiveWindowId: "win-a",
+        windowBounds: null,
+      },
+    },
     workspaces: [],
     editorPreferences: {
       zoomPercent: 100,
@@ -197,6 +224,16 @@ describe("restoreWindowSession", () => {
     expect(restored?.recentFiles).toEqual(["/tmp/restored.txt"]);
   });
 
+  it("preserves chat-http active context during restore sanitization", async () => {
+    const snapshot = windowSnapshot({ activeContextId: "chat-http" });
+    sessionMock.setSessionStore(sessionWithWindow("win-a", snapshot));
+    sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
+
+    const restored = await sessionManager.restoreWindowSession("win-a");
+    expect(restored?.snapshot.activeContextId).toBe("chat-http");
+    expect(restored?.snapshot.chatHttp?.session.selectedTabId).toBe("tab-chat");
+  });
+
   it("falls back to backup when primary session is corrupt", async () => {
     const snapshot = windowSnapshot();
     sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
@@ -264,6 +301,13 @@ describe("persistSessionSnapshot", () => {
       "/data/spec-ops/session.backup.json",
       expect.any(String),
     );
+  });
+
+  it("persists chat-http snapshot alongside notepad/workspaces", async () => {
+    await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
+    const persistedWindow = sessionMock.getSessionStore()?.windows["win-a"];
+    expect(persistedWindow?.chatHttp).toBeDefined();
+    expect(persistedWindow?.chatHttp?.session.openTabs).toHaveLength(1);
   });
 
   it("preserves global recent files when persisting a window snapshot", async () => {

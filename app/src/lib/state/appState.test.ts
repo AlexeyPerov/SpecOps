@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentTab, createFileTab, isAgentTab, tabDocumentId } from "../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "./appState";
 import { saveThemeFile } from "../services/themeStore";
+import {
+  defaultProviderModelCatalogs,
+  getProviderDefaultModelId,
+} from "../ai/providers/providerModelCatalog";
 
 vi.mock("../services/themeStore", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/themeStore")>();
@@ -614,6 +618,33 @@ describe("appState settings and editor chrome", () => {
           windowBounds: null,
         },
       },
+      chatHttp: {
+        documents: [
+          {
+            id: "doc-chat",
+            filePath: null,
+            title: "Untitled",
+            content: "",
+            savedContent: "",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+        ],
+        session: {
+          selectedTabId: "tab-chat",
+          openTabs: [createFileTab("tab-chat", "doc-chat")],
+          lastActiveWindowId: "main",
+          windowBounds: null,
+        },
+      },
       workspaces: [],
       editorPreferences: {
         zoomPercent: 100,
@@ -652,6 +683,17 @@ describe("appState session restore", () => {
   });
 
   it("restores active workspace context, order, tabs, and project panel state", () => {
+    appState.applyPersistedSettings({
+      providerSettings: {
+        ...appState.getSnapshot().settings.providerSettings,
+        http: {
+          enabled: true,
+          baseUrl: "http://localhost:11434/v1",
+        },
+      },
+      providerModelCatalogs: defaultProviderModelCatalogs,
+    });
+    appState.setProviderApiKey("http", "test-api-key");
     appState.applyWindowSession(
       {
         activeContextId: "ws-2",
@@ -680,6 +722,34 @@ describe("appState session restore", () => {
             openTabs: [createFileTab("tab-1", "doc-1")],
             lastActiveWindowId: "main",
             windowBounds: null,
+          },
+        },
+        chatHttp: {
+          documents: [
+            {
+              id: "doc-chat",
+              filePath: null,
+              title: "Untitled",
+              content: "",
+              savedContent: "",
+              isDirty: false,
+              contentKind: "text",
+              language: "plaintext",
+              encoding: "utf-8",
+              lineEnding: "lf",
+              diskFingerprint: null,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              scrollTop: 0,
+              markdownViewMode: "edit",
+            },
+          ],
+          session: {
+            selectedTabId: "tab-chat",
+            openTabs: [createFileTab("tab-chat", "doc-chat")],
+            lastActiveWindowId: "main",
+            windowBounds: null,
+            lastActiveAgentId: null,
           },
         },
         workspaces: [
@@ -794,5 +864,56 @@ describe("appState session restore", () => {
     expect(appState.getActiveWorkspaceLayout().agentsSidebarWidthPx).toBe(260);
     expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
     expect(appState.getActiveWorkspaceLayout().agentsSidebarCollapsed).toBe(false);
+  });
+
+  it("restores chat-http as active when HTTP connection is configured", () => {
+    const defaultHttpModelId = getProviderDefaultModelId(defaultProviderModelCatalogs, "http");
+    appState.applyPersistedSettings({
+      providerSettings: {
+        ...appState.getSnapshot().settings.providerSettings,
+        http: {
+          enabled: true,
+          baseUrl: "http://localhost:11434/v1",
+        },
+      },
+      providerModelCatalogs: {
+        ...defaultProviderModelCatalogs,
+        http: {
+          modelIds: [defaultHttpModelId],
+          defaultModelId: defaultHttpModelId,
+        },
+      },
+    });
+    appState.setProviderApiKey("http", "configured-key");
+    appState.applyWindowSession({
+      ...appState.getWindowSessionSnapshot(),
+      activeContextId: "chat-http",
+    });
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("chat-http");
+  });
+
+  it("falls back to notepad when restoring chat-http without configured HTTP connection", () => {
+    appState.applyPersistedSettings({
+      providerSettings: {
+        ...appState.getSnapshot().settings.providerSettings,
+        http: {
+          enabled: false,
+          baseUrl: "",
+        },
+      },
+      providerModelCatalogs: {
+        ...defaultProviderModelCatalogs,
+        http: {
+          modelIds: [],
+          defaultModelId: "",
+        },
+      },
+    });
+    appState.setProviderApiKey("http", "");
+    appState.applyWindowSession({
+      ...appState.getWindowSessionSnapshot(),
+      activeContextId: "chat-http",
+    });
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
   });
 });

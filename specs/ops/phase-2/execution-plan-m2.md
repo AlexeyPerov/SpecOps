@@ -148,7 +148,7 @@ Dependencies: Task 3.
 
 ---
 
-#### Task 5: Cross-context regression guards (B2A, notepad) [Score:6] [Agent:medium]
+#### Task 5: Cross-context regression guards (B2A, notepad) [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 

@@ -266,6 +266,36 @@ describe("sendChatMessage", () => {
     expect(ensureWorkspaceReadAccessMock).not.toHaveBeenCalled();
   });
 
+  it("persists workspace sends under the active workspace scope key", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+
+    const sendPromise = sendChatMessage("workspace scope persistence");
+    await vi.runAllTimersAsync();
+    const result = await sendPromise;
+
+    expect(result.ok).toBe(true);
+    expect(schedulePersistMock).toHaveBeenCalled();
+    expect(schedulePersistMock.mock.calls.at(-1)?.[0]).toBe("/work/a");
+  });
+
+  it("persists chat-http sends under the chat-http scope key", async () => {
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+
+    const sendPromise = sendChatMessage("chat-http scope persistence", undefined, {
+      chatContextKind: "chat-http",
+    });
+    await vi.runAllTimersAsync();
+    const result = await sendPromise;
+
+    expect(result.ok).toBe(true);
+    expect(schedulePersistMock).toHaveBeenCalled();
+    expect(schedulePersistMock.mock.calls.at(-1)?.[0]).toBe(CHAT_HTTP_CONTEXT_ID);
+  });
+
   it("normalizes review mode to ask before sending in chat-http", async () => {
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
     chatStore.createDraftAgent();

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 16:54 (MSK)
+
+- **Phase 2 M2 Task 5 (cross-context regression guards):** Extended `app/src/lib/ai/sendChatMessage.test.ts` with explicit regression coverage that send persistence uses workspace scope keys in workspace contexts and `chat-http` scope key in chat context.
+- **Validation notes:** Updated `app/src/lib/state/chatM6-5.validation.test.ts` manual checklist header to record the notepad regression requirement (no AI/chat entry points).
+- **Plan tracking:** Marked Task 5 as `[DONE]` in `specs/ops/phase-2/execution-plan-m2.md`.
+
 ## 2026-06-05 16:52 (MSK)
 
 - **Phase 2 M2 Task 4 (Debug provider in Chat context):** Updated `app/src/lib/ai/providers/selection.ts` and `app/src/lib/components/ChatComposer.svelte` to make provider options/selectability context-aware — in `chat-http`, **HTTP** appears/selects only when configured, and **Debug** appears when enabled in settings.

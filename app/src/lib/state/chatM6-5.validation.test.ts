@@ -12,6 +12,7 @@
  * - Trigger failed response → Retry succeeds
  * - Verify streaming on Debug and buffered fallback on HTTP
  * - Two agent tabs generating simultaneously without blocking each other
+ * - Notepad context keeps no chat/AI entry points (manual UI regression check)
  *
  * Optional manual HTTP integration smoke (requires network + credentials):
  * - Enter API key in Settings → Connections (stored in provider-secrets.json)

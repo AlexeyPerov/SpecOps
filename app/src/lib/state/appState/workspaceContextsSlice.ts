@@ -10,11 +10,7 @@ import type {
 } from "../../domain/contracts";
 import { createFileTab } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
-import { isHttpProviderConfigured } from "../../ai/providers/httpConnectionSettings";
-import {
-  getProviderDefaultModelId,
-  normalizeProviderModelCatalogs,
-} from "../../ai/providers/providerModelCatalog";
+import { isChatHttpRailVisible } from "../../ai/providers/chatHttpRailGating";
 import {
   defaultWorkspaceLayout,
   normalizeWorkspaceLayout,
@@ -59,15 +55,12 @@ function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot
   return fallbackContextSnapshot(snapshot.session.lastActiveWindowId);
 }
 
-function canRestoreChatHttpAsActive(
-  settings: AppDomainState["settings"],
-): boolean {
-  const apiKey = settings.providerApiKeys.http ?? "";
-  if (!isHttpProviderConfigured(settings.providerSettings.http, apiKey)) {
-    return false;
-  }
-  const catalogs = normalizeProviderModelCatalogs(settings.providerModelCatalogs);
-  return getProviderDefaultModelId(catalogs, "http").trim().length > 0;
+function canRestoreChatHttpAsActive(settings: AppDomainState["settings"]): boolean {
+  return isChatHttpRailVisible(
+    settings.providerSettings.http,
+    settings.providerApiKeys.http ?? "",
+    settings.providerModelCatalogs,
+  );
 }
 
 export function createWorkspaceContextsSlice(deps: {

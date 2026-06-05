@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-05 15:35 (MSK)
+
+- **Phase 2 M1 Task 4 (HTTP connection rail gating):** Added `isChatHttpRailVisible` in `chatHttpRailGating.ts` — pure helper combining `isHttpProviderConfigured`, trimmed API key/base URL checks, and HTTP default-model resolution via `validateLocalModelSelection` (roadmap A2D; HTTP Chat only, no `chat-cloud` gating).
+- **Refactor:** Updated `workspaceContextsSlice` `canRestoreChatHttpAsActive` to delegate to `isChatHttpRailVisible` for consistent session-restore and rail visibility policy.
+- **Tests:** Added `chatHttpRailGating.test.ts` covering disabled connection, missing key, empty baseUrl, unresolvable default model, and valid full config.
+
 ## 2026-06-05 15:16 (MSK)
 
 - **Phase 2 M1 Task 3 (`chatStore` scope + persistence):** Migrated chat store active scope from `activeWorkspaceRoot` to `activeChatScopeKey`, with `setActiveChatScope` / `getActiveChatScopeKey` for context-id scope (`chat-http`) while preserving `setActiveWorkspaceRoot` for workspace paths.

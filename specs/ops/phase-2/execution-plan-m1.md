@@ -122,7 +122,7 @@ Dependencies: Task 2.
 
 ---
 
-#### Task 4: HTTP connection rail gating helper (P2-3) [Score:6] [Agent:medium]
+#### Task 4: HTTP connection rail gating helper (P2-3) [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 

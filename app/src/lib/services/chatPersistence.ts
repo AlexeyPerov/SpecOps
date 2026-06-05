@@ -107,10 +107,16 @@ function isChatModeId(value: unknown): value is ChatModeId {
 }
 
 function isChatProviderId(value: unknown): value is ChatProviderId {
+  return value === "http" || value === "debug";
+}
+
+type LegacyChatProviderId = ChatProviderId | "glm";
+
+function isLegacyChatProviderId(value: unknown): value is LegacyChatProviderId {
   return value === "http" || value === "debug" || value === "glm";
 }
 
-function normalizeLegacyProviderId(provider: ChatProviderId): ChatProviderId {
+function normalizeLegacyProviderId(provider: LegacyChatProviderId): ChatProviderId {
   if (provider === "glm") {
     return "http";
   }
@@ -165,17 +171,17 @@ function parseProviderSwitchedEvent(
   value: Record<string, unknown>,
 ): Extract<ChatMessage["systemEvent"], { type: "provider-switched" }> | undefined {
   const fromProvider = value.fromProvider;
-  if (fromProvider !== null && !isChatProviderId(fromProvider)) {
+  if (fromProvider !== null && !isLegacyChatProviderId(fromProvider)) {
     return undefined;
   }
-  if (!isChatProviderId(value.toProvider)) {
+  if (!isLegacyChatProviderId(value.toProvider)) {
     return undefined;
   }
 
   return {
     type: "provider-switched",
-    fromProvider,
-    toProvider: value.toProvider,
+    fromProvider: fromProvider === null ? null : normalizeLegacyProviderId(fromProvider),
+    toProvider: normalizeLegacyProviderId(value.toProvider),
   };
 }
 

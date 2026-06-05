@@ -116,7 +116,14 @@ export interface SessionState {
   layout?: WorkspaceLayoutState;
 }
 
-export type ContextId = "notepad" | `ws-${number}`;
+export const CHAT_HTTP_CONTEXT_ID = "chat-http" as const;
+export const CHAT_CLOUD_CONTEXT_ID = "chat-cloud" as const;
+
+export type ContextId =
+  | "notepad"
+  | typeof CHAT_HTTP_CONTEXT_ID
+  | typeof CHAT_CLOUD_CONTEXT_ID
+  | `ws-${number}`;
 
 export interface ContextSnapshot {
   documents: DocumentState[];
@@ -138,6 +145,16 @@ export interface WorkspaceEntry {
 export interface WindowContextState {
   activeContextId: ContextId;
   notepad: ContextSnapshot;
+  /**
+   * Reserved for phase-2 context persistence.
+   * Phase 1 adds type foundations only (no rail UI and no persisted usage yet).
+   */
+  chatHttp?: ContextSnapshot;
+  /**
+   * Reserved for phase-2 context persistence.
+   * Phase 1 adds type foundations only (no rail UI and no persisted usage yet).
+   */
+  chatCloud?: ContextSnapshot;
   workspaces: WorkspaceEntry[];
 }
 
@@ -372,6 +389,10 @@ export interface AppDomainState {
 export interface WindowSessionSnapshot {
   activeContextId: ContextId;
   notepad: ContextSnapshot;
+  /** Reserved for phase-2 persistence. */
+  chatHttp?: ContextSnapshot;
+  /** Reserved for phase-2 persistence. */
+  chatCloud?: ContextSnapshot;
   workspaces: WorkspaceEntry[];
   editorPreferences: Pick<AppDomainState["editor"], "zoomPercent" | "wrapLines">;
 }

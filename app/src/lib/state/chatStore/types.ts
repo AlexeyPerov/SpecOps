@@ -15,6 +15,10 @@ export interface WorkspaceAgentsState {
 }
 
 export interface ChatStoreState {
+  /**
+   * Active chat scope key; currently a normalized workspace root path.
+   * Planned migration path: align this key with `ContextId` (phase 2+).
+   */
   activeWorkspaceRoot: string | null;
   workspaces: Record<string, WorkspaceAgentsState>;
   accessByWorkspace: Record<string, ChatAccessState>;

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-05 09:02 (MSK)
+
+- **Phase 1 Task 7 (P1-7):** Extended context/session type foundations in `contracts.ts` with `ContextId` support for `chat-http` and `chat-cloud`, added exported context-id constants, and documented optional `WindowContextState`/`WindowSessionSnapshot` placeholders (`chatHttp`, `chatCloud`) for phase-2 persistence without shipping activity-rail UI.
+- **Phase 1 Task 8 (P1-8):** Added `app/src/lib/ai/backends/workspaceAgentBackend.ts` with `WorkspaceAgentBackendId`, `WorkspaceAgentBackend` interface, and a phase-1 stub factory (`createWorkspaceAgentBackend`) that throws a typed `WorkspaceAgentBackendNotImplementedError`.
+- **Chat scope design note:** Added a minimal comment hook in `chatStore/types.ts` documenting planned migration of chat scope keying from workspace root path to `ContextId`.
+- **Plan tracking:** Marked Task 7 and Task 8 as `[DONE]` in `specs/ops/phase-1/execution-plan.md`.
+
 ## 2026-06-05 09:07 (MSK)
 
 - **Phase 1 Task 5 (P1-5):** Updated chat blocked-state and composer wiring to HTTP terminology only (`isHttpBlocked`, `isHttpSendBlocked`, `httpBlockedCopy`, `httpProviderSettings`) and adjusted blocked-state CTA copy to consistently point users to **Connections** settings.

@@ -175,7 +175,7 @@ Dependencies: Task 4.
 
 ---
 
-#### Task 7: Context and session type foundations (P1-7) [Score:4] [Agent:easy]
+#### Task 7: Context and session type foundations (P1-7) [Score:4] [Agent:easy] [DONE]
 
 **Required context**
 
@@ -196,7 +196,7 @@ Dependencies: Task 1 (can run in parallel with Tasks 2–6 after Task 1 starts).
 
 ---
 
-#### Task 8: WorkspaceAgentBackend stub (P1-8) [Score:3] [Agent:easy]
+#### Task 8: WorkspaceAgentBackend stub (P1-8) [Score:3] [Agent:easy] [DONE]
 
 **Required context**
 

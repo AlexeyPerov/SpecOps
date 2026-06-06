@@ -2,9 +2,9 @@
 
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md)  
-**Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md)  
-**Status:** done  
-**Estimate:** ~2–3 weeks after phase 1
+**Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md)  
+**Status:** tier 1 done; **M4** (multiple providers) planned  
+**Estimate:** tier 1 ~2–3 weeks after phase 1; M4 ~1 week incremental
 
 ## Goal
 
@@ -78,11 +78,23 @@ Otherwise hide button (or show disabled with link to Settings → Connections).
 - [x] Workspace HTTP chat still works (B2A).
 - [x] `npm test` / `npm run check` pass.
 
-## Non-goals
+## Non-goals (tier 1 — M1–M3)
 
 - `chat-cloud` context (phase 3).
-- Multi-connection settings (phase 6 tier 2).
 - OpenCode workspace agents.
+
+## Milestone 4 — Multiple providers (extension)
+
+See [execution-plan-m4-multiple-providers.md](./execution-plan-m4-multiple-providers.md).
+
+Named **HTTP (OpenAI-compatible) connections** in Settings → Providers; composer picks **connection → model**. Pulls forward phase-7 tier 2A only (not regenerate/edit, system prompt, or RAG).
+
+| Exit (M4) | |
+|-----------|--|
+| [ ] | Multiple connections in Settings |
+| [ ] | Per-connection API key and model catalog |
+| [ ] | Composer connection picker in Chats and workspace HTTP chat |
+| [ ] | Rail gating: ≥1 configured connection (or Debug Provider in Chats) |
 
 ## Key files (expected touch)
 
@@ -103,10 +115,12 @@ Otherwise hide button (or show disabled with link to Settings → Connections).
 | P2-5 | SSE streaming end-to-end |
 | P2-6 | Chats label, ask-only modes, Debug in Chat |
 | P2-7 | Tests + validation suite updates |
+| P2-8 | Multiple HTTP providers (M4) — [execution-plan-m4](./execution-plan-m4-multiple-providers.md) |
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-06 | Added M4 execution plan — multiple HTTP providers (connections list) |
 | 2026-06-05 | Added milestone execution plans (m1–m3) |
 | 2026-06-04 | Initial phase 2 spec |

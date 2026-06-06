@@ -1,37 +1,69 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appState } from "../state/appState";
 import { openAndStoreFile } from "./openAndStoreFile";
-import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
+import {
+  completeLargePendingOpen,
+  completeOpenPath,
+  requestOpenPath,
+} from "../services/openFileGate";
+import { statDiskFingerprint } from "../services/diskFingerprint";
 
 vi.mock("../services/externalFileChanges", () => ({
   initializeDocumentDiskState: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../services/diskFingerprint", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/diskFingerprint")>();
+  return {
+    ...actual,
+    statDiskFingerprint: vi.fn(),
+  };
+});
+
 vi.mock("../services/openFileGate", () => ({
   requestOpenPath: vi.fn(),
   completeOpenPath: vi.fn().mockResolvedValue("doc-2"),
+  completeLargePendingOpen: vi.fn().mockResolvedValue("doc-pending"),
 }));
 
 const requestOpenPathMock = vi.mocked(requestOpenPath);
 const completeOpenPathMock = vi.mocked(completeOpenPath);
+const completeLargePendingOpenMock = vi.mocked(completeLargePendingOpen);
+const statDiskFingerprintMock = vi.mocked(statDiskFingerprint);
 
 describe("openAndStoreFile", () => {
   beforeEach(() => {
+    appState.resetAppState();
     requestOpenPathMock.mockReset();
     completeOpenPathMock.mockClear();
+    completeLargePendingOpenMock.mockClear();
+    statDiskFingerprintMock.mockReset();
   });
 
-  it("rejects files larger than 10 MB", async () => {
+  it("opens large files as pending confirm tabs", async () => {
     const notify = vi.fn();
+    const limit = 1024 * 1024;
+    requestOpenPathMock.mockResolvedValue({
+      kind: "needs_read",
+      path: "/tmp/huge.txt",
+      switchedToNotepad: false,
+    });
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: limit + 1 });
+
     await openAndStoreFile(notify, "win-a", {
       path: "/tmp/huge.txt",
       content: "x",
-      sizeBytes: 10 * 1024 * 1024 + 1,
+      sizeBytes: limit + 1,
       contentKind: "text",
     });
 
-    expect(notify).toHaveBeenCalledWith("Open failed: file exceeds 10MB MVP limit.");
-    expect(requestOpenPathMock).not.toHaveBeenCalled();
+    expect(completeLargePendingOpenMock).toHaveBeenCalledWith(
+      "/tmp/huge.txt",
+      { mtimeMs: 1, sizeBytes: limit + 1 },
+      "win-a",
+    );
+    expect(completeOpenPathMock).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith("Opened /tmp/huge.txt (confirm to load contents)");
   });
 
   it("opens files within the size limit through the gate", async () => {

@@ -1,7 +1,7 @@
 import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { appState } from "../state/appState";
-import type { ContextId } from "../domain/contracts";
+import type { ContextId, DiskFingerprint } from "../domain/contracts";
 import { isFileTab, normalizeTabState } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import {
@@ -164,4 +164,29 @@ export async function completeOpenPath(
   await claimOpenFile(path, windowId, documentId);
   await initializeDocumentDiskState(documentId, path);
   return documentId;
+}
+
+export async function completeLargePendingOpen(
+  path: string,
+  fingerprint: DiskFingerprint,
+  windowId: string,
+): Promise<string> {
+  const documentId = appState.openFileInTab(path, "", "large_pending");
+  appState.setDocumentDiskState(documentId, {
+    diskFingerprint: fingerprint,
+    fileMissing: false,
+  });
+  await claimOpenFile(path, windowId, documentId);
+  return documentId;
+}
+
+export async function confirmLargeFileOpen(documentId: string, path: string): Promise<void> {
+  const opened = await openPath(path);
+  appState.upgradeDocumentFromOpenedFile(
+    documentId,
+    opened.path,
+    opened.content,
+    opened.contentKind,
+  );
+  await initializeDocumentDiskState(documentId, path);
 }

@@ -48,11 +48,12 @@ export function documentWithOpenedFilePayload(
   content: string,
   contentKind: DocumentContentKind,
 ): DocumentState {
-  const normalizedContent = contentKind === "text" ? content : "";
+  const normalizedContent =
+    contentKind === "text" ? content : contentKind === "large_pending" ? "" : "";
   const kindChanged = documentState.contentKind !== contentKind;
   const shouldReplaceBuffer =
     kindChanged ||
-    (contentKind !== "text" && documentState.content.length > 0) ||
+    (contentKind !== "text" && contentKind !== "large_pending" && documentState.content.length > 0) ||
     (contentKind === "text" && !documentState.isDirty && documentState.content !== normalizedContent);
 
   if (!kindChanged && !shouldReplaceBuffer) {
@@ -73,7 +74,8 @@ export function documentWithOpenedFilePayload(
     isDirty:
       contentKind === "text" ? (kindChanged ? false : documentState.isDirty) : false,
     lineEnding: (nextContent.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
-    markdownViewMode: contentKind === "text" ? documentState.markdownViewMode : "edit",
+    markdownViewMode:
+      contentKind === "text" ? documentState.markdownViewMode : "edit",
     scrollTop: kindChanged ? 0 : documentState.scrollTop,
   };
 }
@@ -84,7 +86,9 @@ export function normalizeDocument(documentState: DocumentState): DocumentState {
       ? documentState.markdownViewMode
       : "edit";
   const contentKind =
-    documentState.contentKind === "image" || documentState.contentKind === "binary"
+    documentState.contentKind === "image" ||
+    documentState.contentKind === "binary" ||
+    documentState.contentKind === "large_pending"
       ? documentState.contentKind
       : "text";
   return {

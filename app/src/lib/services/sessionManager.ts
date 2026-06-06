@@ -18,7 +18,9 @@ import {
   dedupeWindowSnapshotAgainstRegistry,
   syncOpenFileRegistryForWindow,
 } from "./openFileRegistry";
+import { appState } from "../state/appState";
 import {
+  applyLargeFileConfirmGateOnRestore,
   refreshDocumentFromDiskIfNeeded,
   stripWindowSnapshotForSession,
 } from "./sessionDocumentPersistence";
@@ -158,7 +160,9 @@ function normalizeRestoredDocument(documentState: DocumentState): DocumentState 
         ? documentState.markdownViewMode
         : "edit",
     contentKind:
-      documentState.contentKind === "image" || documentState.contentKind === "binary"
+      documentState.contentKind === "image" ||
+      documentState.contentKind === "binary" ||
+      documentState.contentKind === "large_pending"
         ? documentState.contentKind
         : "text",
   };
@@ -172,8 +176,15 @@ export async function sanitizeWindowSnapshot(
       await Promise.all(
         context.documents.map(async (documentState) => {
           const normalized = normalizeRestoredDocument(documentState);
-          const refreshed = await refreshDocumentFromDiskIfNeeded(
+          const maxOpenWithoutConfirmBytes =
+            appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes;
+          const gated = await applyLargeFileConfirmGateOnRestore(
             normalized,
+            maxOpenWithoutConfirmBytes,
+            isFileMissingError,
+          );
+          const refreshed = await refreshDocumentFromDiskIfNeeded(
+            gated,
             isFileMissingError,
           );
           return [documentState.id, refreshed] as const;

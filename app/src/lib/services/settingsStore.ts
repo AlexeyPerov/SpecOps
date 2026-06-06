@@ -20,6 +20,10 @@ import {
   DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES,
   normalizeMaxBinaryOpenAsTextBytes,
 } from "./binaryFileOpen";
+import {
+  DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES,
+  normalizeMaxOpenWithoutConfirmBytes,
+} from "./largeFileOpen";
 
 export interface PersistedSettings {
   wrapLines: boolean;
@@ -29,6 +33,7 @@ export interface PersistedSettings {
   checkOnWindowFocus: boolean;
   checkOnTabActivate: boolean;
   maxBinaryOpenAsTextBytes: number;
+  maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   providerSettings: AppProviderSettings;
@@ -42,6 +47,7 @@ export const defaultExternalFilesSettings: ExternalFilesSettings = {
   checkOnWindowFocus: true,
   checkOnTabActivate: true,
   maxBinaryOpenAsTextBytes: DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES,
+  maxOpenWithoutConfirmBytes: DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES,
 };
 
 export const defaultPersistedSettings: PersistedSettings = {
@@ -85,6 +91,9 @@ function parseExternalFilesSettings(parsed: Partial<PersistedSettings>): Externa
       ? parsed.checkOnTabActivate
       : defaultExternalFilesSettings.checkOnTabActivate,
     maxBinaryOpenAsTextBytes: normalizeMaxBinaryOpenAsTextBytes(parsed.maxBinaryOpenAsTextBytes),
+    maxOpenWithoutConfirmBytes: normalizeMaxOpenWithoutConfirmBytes(
+      parsed.maxOpenWithoutConfirmBytes,
+    ),
   };
 }
 
@@ -140,6 +149,7 @@ export function toExternalFilesSettings(
     checkOnWindowFocus: settings.checkOnWindowFocus,
     checkOnTabActivate: settings.checkOnTabActivate,
     maxBinaryOpenAsTextBytes: settings.maxBinaryOpenAsTextBytes,
+    maxOpenWithoutConfirmBytes: settings.maxOpenWithoutConfirmBytes,
   };
 }
 

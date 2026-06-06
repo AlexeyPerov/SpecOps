@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appState } from "../state/appState";
-import { completeOpenPath, requestOpenPath } from "./openFileGate";
+import {
+  completeLargePendingOpen,
+  completeOpenPath,
+  refreshExistingDocumentFromDisk,
+  requestOpenPath,
+} from "./openFileGate";
 import { openPath } from "./fileSystem";
+import { statDiskFingerprint } from "./diskFingerprint";
 import { syncRecentFiles } from "./recentFilesSync";
 import {
   describeOpenActivePathResult,
@@ -19,6 +25,8 @@ vi.mock("./openFileGate", async (importOriginal) => {
     ...actual,
     requestOpenPath: vi.fn(),
     completeOpenPath: vi.fn(),
+    completeLargePendingOpen: vi.fn(),
+    refreshExistingDocumentFromDisk: vi.fn(),
   };
 });
 
@@ -26,13 +34,24 @@ vi.mock("./fileSystem", () => ({
   openPath: vi.fn(),
 }));
 
+vi.mock("./diskFingerprint", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./diskFingerprint")>();
+  return {
+    ...actual,
+    statDiskFingerprint: vi.fn(),
+  };
+});
+
 vi.mock("./recentFilesSync", () => ({
   syncRecentFiles: vi.fn(),
 }));
 
 const requestOpenPathMock = vi.mocked(requestOpenPath);
 const completeOpenPathMock = vi.mocked(completeOpenPath);
+const completeLargePendingOpenMock = vi.mocked(completeLargePendingOpen);
+const refreshExistingDocumentFromDiskMock = vi.mocked(refreshExistingDocumentFromDisk);
 const openPathMock = vi.mocked(openPath);
+const statDiskFingerprintMock = vi.mocked(statDiskFingerprint);
 const syncRecentFilesMock = vi.mocked(syncRecentFiles);
 
 const WINDOW_ID = "main";
@@ -43,7 +62,10 @@ describe("openActivePath", () => {
     appState.resetAppState();
     requestOpenPathMock.mockReset();
     completeOpenPathMock.mockReset();
+    completeLargePendingOpenMock.mockReset();
+    refreshExistingDocumentFromDiskMock.mockReset();
     openPathMock.mockReset();
+    statDiskFingerprintMock.mockReset();
     syncRecentFilesMock.mockReset();
   });
 
@@ -64,12 +86,13 @@ describe("openActivePath", () => {
   });
 
   it("re-reads disk and upgrades existing documents when gate finds local tab", async () => {
+    const documentId = appState.openFileInTab(FILE_PATH, "hello", "text");
     requestOpenPathMock.mockResolvedValue({
       kind: "existing",
       path: FILE_PATH,
-      documentId: "doc-1",
+      documentId,
     });
-    openPathMock.mockResolvedValue({
+    refreshExistingDocumentFromDiskMock.mockResolvedValue({
       path: FILE_PATH,
       content: "",
       sizeBytes: 1200,
@@ -79,8 +102,22 @@ describe("openActivePath", () => {
     const result = await openActivePath(FILE_PATH, WINDOW_ID);
 
     expect(result).toEqual({ kind: "existing", path: FILE_PATH });
-    expect(openPathMock).toHaveBeenCalledWith(FILE_PATH);
+    expect(refreshExistingDocumentFromDiskMock).toHaveBeenCalledWith(documentId, FILE_PATH);
     expect(completeOpenPathMock).not.toHaveBeenCalled();
+  });
+
+  it("skips disk refresh for existing large_pending documents", async () => {
+    const documentId = appState.openFileInTab(FILE_PATH, "", "large_pending");
+    requestOpenPathMock.mockResolvedValue({
+      kind: "existing",
+      path: FILE_PATH,
+      documentId,
+    });
+
+    const result = await openActivePath(FILE_PATH, WINDOW_ID);
+
+    expect(result).toEqual({ kind: "existing", path: FILE_PATH });
+    expect(refreshExistingDocumentFromDiskMock).not.toHaveBeenCalled();
   });
 
   it("completes open on happy path", async () => {
@@ -89,6 +126,7 @@ describe("openActivePath", () => {
       path: FILE_PATH,
       switchedToNotepad: false,
     });
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 100 });
     openPathMock.mockResolvedValue({
       path: FILE_PATH,
       content: "hello",
@@ -104,23 +142,25 @@ describe("openActivePath", () => {
     expect(completeOpenPathMock).toHaveBeenCalledWith(FILE_PATH, "hello", WINDOW_ID, "text");
   });
 
-  it("returns too_large without completing open when file exceeds 10MB", async () => {
-    const maxBytes = 10 * 1024 * 1024;
+  it("opens pending confirm tab without reading when file exceeds limit", async () => {
+    const limit = 1024 * 1024;
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: FILE_PATH,
       switchedToNotepad: false,
     });
-    openPathMock.mockResolvedValue({
-      path: FILE_PATH,
-      content: "",
-      sizeBytes: maxBytes + 1,
-      contentKind: "text",
-    });
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: limit + 1 });
+    completeLargePendingOpenMock.mockResolvedValue("doc-pending");
 
     const result = await openActivePath(FILE_PATH, WINDOW_ID);
 
-    expect(result).toEqual({ kind: "too_large", path: FILE_PATH });
+    expect(result).toEqual({ kind: "pending_confirm", path: FILE_PATH });
+    expect(openPathMock).not.toHaveBeenCalled();
+    expect(completeLargePendingOpenMock).toHaveBeenCalledWith(
+      FILE_PATH,
+      { mtimeMs: 1, sizeBytes: limit + 1 },
+      WINDOW_ID,
+    );
     expect(completeOpenPathMock).not.toHaveBeenCalled();
   });
 
@@ -131,7 +171,7 @@ describe("openActivePath", () => {
       path: FILE_PATH,
       switchedToNotepad: false,
     });
-    openPathMock.mockRejectedValue(new Error("no such file or directory"));
+    statDiskFingerprintMock.mockRejectedValue(new Error("no such file or directory"));
 
     const result = await openActivePath(FILE_PATH, WINDOW_ID);
 
@@ -147,6 +187,7 @@ describe("openActivePath", () => {
       path: FILE_PATH,
       switchedToNotepad: false,
     });
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 100 });
     openPathMock.mockRejectedValue(new Error("permission denied"));
 
     const result = await openActivePath(FILE_PATH, WINDOW_ID);
@@ -180,8 +221,8 @@ describe("describeOpenActivePathResult", () => {
       expected: "Switched to /a.txt in another window.",
     },
     {
-      result: { kind: "too_large", path: "/big.bin" },
-      expected: "Open failed: file exceeds 10MB MVP limit.",
+      result: { kind: "pending_confirm", path: "/big.txt" },
+      expected: "Opened /big.txt (confirm to load contents)",
     },
     {
       result: { kind: "missing", path: "/gone.txt" },

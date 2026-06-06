@@ -1,5 +1,11 @@
-import { completeOpenPath, requestOpenPath } from "../services/openFileGate";
+import {
+  completeLargePendingOpen,
+  completeOpenPath,
+  requestOpenPath,
+} from "../services/openFileGate";
 import { initializeDocumentDiskState } from "../services/externalFileChanges";
+import { statDiskFingerprint } from "../services/diskFingerprint";
+import { shouldGateFileOpenBySize } from "../services/largeFileOpen";
 import { appState } from "../state/appState";
 
 export async function openAndStoreFile(
@@ -10,17 +16,32 @@ export async function openAndStoreFile(
   if (!opened) {
     return;
   }
-  if (opened.sizeBytes > 10 * 1024 * 1024) {
-    notify("Open failed: file exceeds 10MB MVP limit.");
-    return;
-  }
 
   const gateResult = await requestOpenPath(opened.path, windowId);
   if (gateResult.kind === "redirected") {
     notify(`Switched to ${opened.path} in another window.`);
     return;
   }
+
+  const maxOpenWithoutConfirmBytes =
+    appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes;
+  const needsConfirm = shouldGateFileOpenBySize(
+    opened.path,
+    opened.sizeBytes,
+    maxOpenWithoutConfirmBytes,
+  );
+
   if (gateResult.kind === "existing") {
+    if (needsConfirm) {
+      const fingerprint = await statDiskFingerprint(opened.path);
+      appState.upgradeDocumentFromOpenedFile(gateResult.documentId, opened.path, "", "large_pending");
+      appState.setDocumentDiskState(gateResult.documentId, {
+        diskFingerprint: fingerprint,
+        fileMissing: false,
+      });
+      notify(`Opened ${opened.path} (confirm to load contents)`);
+      return;
+    }
     appState.upgradeDocumentFromOpenedFile(
       gateResult.documentId,
       opened.path,
@@ -29,6 +50,13 @@ export async function openAndStoreFile(
     );
     await initializeDocumentDiskState(gateResult.documentId, opened.path);
     notify(`Opened ${opened.path}`);
+    return;
+  }
+
+  if (needsConfirm) {
+    const fingerprint = await statDiskFingerprint(opened.path);
+    await completeLargePendingOpen(opened.path, fingerprint, windowId);
+    notify(`Opened ${opened.path} (confirm to load contents)`);
     return;
   }
 

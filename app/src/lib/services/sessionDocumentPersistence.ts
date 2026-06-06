@@ -1,10 +1,12 @@
 import type { ContextSnapshot, DocumentState, WindowSessionSnapshot } from "../domain/contracts";
 import { isImageFilePath } from "./fileContentKind";
+import { statDiskFingerprint } from "./diskFingerprint";
+import { shouldGateFileOpenBySize } from "./largeFileOpen";
 import { openPath } from "./fileSystem";
 import { documentWithOpenedFilePayload } from "../state/appState/documentHelpers";
 
 export function shouldStripDocumentContentForSession(doc: DocumentState): boolean {
-  if (doc.contentKind === "image" || doc.contentKind === "binary") {
+  if (doc.contentKind === "image" || doc.contentKind === "binary" || doc.contentKind === "large_pending") {
     return true;
   }
   if (doc.filePath && isImageFilePath(doc.filePath) && doc.content.length > 0) {
@@ -18,7 +20,9 @@ export function documentForSessionPersistence(doc: DocumentState): DocumentState
     return doc;
   }
   const contentKind =
-    doc.contentKind === "image" || doc.contentKind === "binary"
+    doc.contentKind === "image" ||
+    doc.contentKind === "binary" ||
+    doc.contentKind === "large_pending"
       ? doc.contentKind
       : doc.filePath && isImageFilePath(doc.filePath)
         ? "image"
@@ -57,6 +61,9 @@ export function needsDocumentRefreshFromDisk(doc: DocumentState): boolean {
   if (!doc.filePath) {
     return false;
   }
+  if (doc.contentKind === "large_pending") {
+    return false;
+  }
   if (doc.contentKind === "image" || doc.contentKind === "binary") {
     return true;
   }
@@ -69,11 +76,51 @@ export function needsDocumentRefreshFromDisk(doc: DocumentState): boolean {
   return false;
 }
 
+export async function applyLargeFileConfirmGateOnRestore(
+  documentState: DocumentState,
+  maxOpenWithoutConfirmBytes: number,
+  isFileMissingError: (error: unknown) => boolean,
+): Promise<DocumentState> {
+  if (!documentState.filePath) {
+    return documentState;
+  }
+  try {
+    const fingerprint = await statDiskFingerprint(documentState.filePath);
+    if (
+      shouldGateFileOpenBySize(
+        documentState.filePath,
+        fingerprint.sizeBytes,
+        maxOpenWithoutConfirmBytes,
+      )
+    ) {
+      return {
+        ...documentState,
+        content: "",
+        savedContent: "",
+        isDirty: false,
+        contentKind: "large_pending",
+        diskFingerprint: fingerprint,
+        fileMissing: false,
+      };
+    }
+    return documentState;
+  } catch (error: unknown) {
+    if (isFileMissingError(error)) {
+      return { ...documentState, fileMissing: true };
+    }
+    return documentState;
+  }
+}
+
 function inferredContentKindWhenDiskUnavailable(
   filePath: string,
   doc: DocumentState,
 ): DocumentState["contentKind"] {
-  if (doc.contentKind === "image" || doc.contentKind === "binary") {
+  if (
+    doc.contentKind === "image" ||
+    doc.contentKind === "binary" ||
+    doc.contentKind === "large_pending"
+  ) {
     return doc.contentKind;
   }
   if (isImageFilePath(filePath)) {

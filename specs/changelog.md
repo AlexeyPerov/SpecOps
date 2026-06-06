@@ -2,6 +2,7 @@
 
 ## 2026-06-06 (MSK)
 
+- **Large file open confirmation:** Added `maxOpenWithoutConfirmBytes` setting (default 1 MB) under External files. Text-editor files above the limit open a tab with a warning pane showing file size and limit plus an **Open file** button; contents load only after confirmation. Confirmation is required again after app relaunch for large restored tabs. Removed the previous hard 10 MB open block. Added `test-files/test-0.9mb.txt` and `test-files/test-1.5mb.txt` fixtures.
 - **Project tree delete:** Closing open editor tabs immediately when the user deletes a file or folder from the project pane, instead of leaving tabs stuck in a missing-file state.
 
 ## 2026-06-05 19:10 (MSK)

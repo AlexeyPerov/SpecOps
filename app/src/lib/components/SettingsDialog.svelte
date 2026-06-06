@@ -21,6 +21,7 @@
   import { appState } from "../state/appState";
   import { chatStore } from "../state/chatStore";
   import { normalizeMaxBinaryOpenAsTextBytes } from "../services/binaryFileOpen";
+  import { normalizeMaxOpenWithoutConfirmBytes } from "../services/largeFileOpen";
 
   const SETTINGS_TAB_SIDEBAR_WIDTH_PX = 132;
   const SETTINGS_BODY_PADDING_X_PX = 24;
@@ -69,6 +70,17 @@
     updateExternalFilesSetting(
       "maxBinaryOpenAsTextBytes",
       normalizeMaxBinaryOpenAsTextBytes(parsedKb * 1024),
+    );
+  }
+
+  function updateMaxOpenWithoutConfirmKb(rawValue: string): void {
+    const parsedKb = Number.parseInt(rawValue, 10);
+    if (!Number.isFinite(parsedKb)) {
+      return;
+    }
+    updateExternalFilesSetting(
+      "maxOpenWithoutConfirmBytes",
+      normalizeMaxOpenWithoutConfirmBytes(parsedKb * 1024),
     );
   }
 
@@ -376,6 +388,22 @@
       />
       Check when tab becomes active
     </label>
+    <label class="settings-field">
+      <span>Max file size to open without confirmation (KB)</span>
+      <input
+        type="number"
+        min="1"
+        max="10240"
+        step="1"
+        value={Math.round(snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes / 1024)}
+        onchange={(event) =>
+          updateMaxOpenWithoutConfirmKb((event.currentTarget as HTMLInputElement).value)}
+      />
+    </label>
+    <p class="settings-section-note">
+      Text-editor files larger than this limit open a tab with a confirmation step before loading
+      contents. The confirmation is shown again after app relaunch.
+    </p>
     <label class="settings-field">
       <span>Max binary file size to open as text (KB)</span>
       <input

@@ -12,7 +12,7 @@ export interface DocumentIdentity {
 
 export type MarkdownViewMode = "edit" | "split" | "preview";
 
-export type DocumentContentKind = "text" | "image" | "binary";
+export type DocumentContentKind = "text" | "image" | "binary" | "large_pending";
 
 export interface DocumentState extends DocumentIdentity {
   title: string;
@@ -162,6 +162,8 @@ export interface ExternalFilesSettings {
   checkOnTabActivate: boolean;
   /** Max size (bytes) for non-image binary files opened as text in the editor. */
   maxBinaryOpenAsTextBytes: number;
+  /** Max size (bytes) for opening text-editor files without a confirmation step. */
+  maxOpenWithoutConfirmBytes: number;
 }
 
 /** Shared toggle for provider-scoped settings blocks. */

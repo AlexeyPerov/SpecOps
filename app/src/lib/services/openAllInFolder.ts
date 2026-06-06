@@ -33,9 +33,9 @@ function countResultKind(
     case "redirected":
       summary.skippedExisting += 1;
       return "existing";
-    case "too_large":
-      summary.skippedTooLarge += 1;
-      return "other";
+    case "pending_confirm":
+      summary.opened += 1;
+      return "opened";
     case "missing":
     case "failed":
       summary.skippedFailed += 1;

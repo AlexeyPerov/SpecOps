@@ -5,6 +5,7 @@
   import DiffPreviewPane from "../lib/components/DiffPreviewPane.svelte";
   import ImagePreviewPane from "../lib/components/ImagePreviewPane.svelte";
   import BinaryFilePane from "../lib/components/BinaryFilePane.svelte";
+  import LargeFileConfirmPane from "../lib/components/LargeFileConfirmPane.svelte";
   import ConsolePanel from "../lib/components/ConsolePanel.svelte";
   import SettingsDialog from "../lib/components/SettingsDialog.svelte";
   import EntryNamePrompt from "../lib/components/EntryNamePrompt.svelte";
@@ -28,6 +29,7 @@
   import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
   import { logDiagnostic } from "../lib/services/logging";
   import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
+  import { confirmLargeFileOpen } from "../lib/services/openFileGate";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
@@ -167,9 +169,14 @@
   );
   const isImageDocument = $derived(activeDocument?.contentKind === "image");
   const isBinaryDocument = $derived(activeDocument?.contentKind === "binary");
+  const isLargePendingDocument = $derived(activeDocument?.contentKind === "large_pending");
   const isTextEditorDocument = $derived(
-    !isImageDocument && !isBinaryDocument && activeDocument !== undefined,
+    !isImageDocument &&
+      !isBinaryDocument &&
+      !isLargePendingDocument &&
+      activeDocument !== undefined,
   );
+  let largeFileConfirming = $state(false);
   const previewFileSizeBytes = $derived(activeDocument?.diskFingerprint?.sizeBytes ?? 0);
   const isMarkdownDocument = $derived(
     isTextEditorDocument && activeDocument?.language === "markdown",
@@ -211,6 +218,22 @@
   async function handleOpenProjectTreeFile(path: string): Promise<void> {
     const result = await openActivePath(path, currentWindowId);
     notify(describeOpenActivePathResult(result));
+  }
+
+  async function handleConfirmLargeFile(): Promise<void> {
+    const document = activeDocument;
+    if (!document?.filePath || document.contentKind !== "large_pending" || largeFileConfirming) {
+      return;
+    }
+    largeFileConfirming = true;
+    try {
+      await confirmLargeFileOpen(document.id, document.filePath);
+      notify(`Opened ${document.filePath}`);
+    } catch (error: unknown) {
+      notify(`Failed to open file: ${getErrorMessage(error)}`);
+    } finally {
+      largeFileConfirming = false;
+    }
   }
 
   async function refreshProjectTree(): Promise<void> {
@@ -1103,6 +1126,15 @@
         sizeBytes={previewFileSizeBytes}
         maxOpenAsTextBytes={snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes}
       />
+    {:else if isLargePendingDocument}
+      <LargeFileConfirmPane
+        filePath={activeDocument?.filePath ?? null}
+        title={activeDocument?.title ?? "Large file"}
+        sizeBytes={previewFileSizeBytes}
+        maxOpenWithoutConfirmBytes={snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes}
+        confirming={largeFileConfirming}
+        onConfirm={handleConfirmLargeFile}
+      />
     {:else}
       {#if isMarkdownDocument}
         <MarkdownEditorPane
@@ -1194,6 +1226,8 @@
                 Image
               {:else if isBinaryDocument}
                 Binary
+              {:else if isLargePendingDocument}
+                Large file
               {:else}
                 {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
               {/if}

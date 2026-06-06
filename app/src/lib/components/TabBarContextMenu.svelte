@@ -5,12 +5,7 @@
   import { revealInFileManagerLabel } from "../services/platform";
   import { revealInFileManager } from "../services/revealInFileManager";
   import { readNearbyTextFiles, type NearbyTextFile } from "../services/nearbyFiles";
-  import { openPath } from "../services/fileSystem";
-  import {
-    completeOpenPath,
-    refreshExistingDocumentFromDisk,
-    requestOpenPath,
-  } from "../services/openFileGate";
+  import { describeOpenActivePathResult, openActivePath } from "../services/openActivePath";
   import { runInNotepadContext, workspaceRelativePath } from "../services/workspacePaths";
   import { renameDocumentOnDisk } from "../services/documentRename";
   import {
@@ -193,15 +188,9 @@
 
   async function openPathWithPipeline(path: string): Promise<void> {
     try {
-      const opened = await openPath(path);
-      if (opened.sizeBytes > 10 * 1024 * 1024) {
-        return;
-      }
-      const gateResult = await requestOpenPath(opened.path, windowId);
-      if (gateResult.kind === "needs_read") {
-        await completeOpenPath(opened.path, opened.content, windowId, opened.contentKind);
-      } else if (gateResult.kind === "existing") {
-        await refreshExistingDocumentFromDisk(gateResult.documentId, opened.path);
+      const result = await openActivePath(path, windowId);
+      if (result.kind === "failed") {
+        notify(describeOpenActivePathResult(result));
       }
     } catch {
       // nearby open is best-effort from the tab menu

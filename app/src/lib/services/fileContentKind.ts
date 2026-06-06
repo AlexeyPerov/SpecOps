@@ -1,3 +1,5 @@
+import type { DocumentContentKind } from "../domain/contracts";
+
 export type FileContentKind = "text" | "image" | "binary";
 
 const IMAGE_EXTENSIONS = [
@@ -86,10 +88,14 @@ export function inferFileContentKind(filePath: string, bytes: Uint8Array): FileC
   return "text";
 }
 
-export function isEditableContentKind(contentKind: FileContentKind | undefined): boolean {
+export function isEditableContentKind(contentKind: DocumentContentKind | undefined): boolean {
   return (contentKind ?? "text") === "text";
 }
 
-export function isPreviewContentKind(contentKind: FileContentKind | undefined): boolean {
-  return contentKind === "image" || contentKind === "binary";
+export function isPreviewContentKind(contentKind: DocumentContentKind | undefined): boolean {
+  return (
+    contentKind === "image" ||
+    contentKind === "binary" ||
+    contentKind === "large_pending"
+  );
 }

@@ -1,19 +1,27 @@
-import { isFileMissingError } from "./diskFingerprint";
+import { isFileMissingError, normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
 import { openPath } from "./fileSystem";
-import { completeOpenPath, refreshExistingDocumentFromDisk, requestOpenPath } from "./openFileGate";
+import {
+  completeLargePendingOpen,
+  completeOpenPath,
+  refreshExistingDocumentFromDisk,
+  requestOpenPath,
+} from "./openFileGate";
+import { shouldGateFileOpenBySize } from "./largeFileOpen";
 import { appState } from "../state/appState";
 import { syncRecentFiles } from "./recentFilesSync";
 import { getErrorMessage } from "../commands/commandErrors";
-
-const MAX_OPEN_BYTES = 10 * 1024 * 1024;
 
 export type OpenActivePathResult =
   | { kind: "opened"; path: string }
   | { kind: "existing"; path: string }
   | { kind: "redirected"; path: string }
-  | { kind: "too_large"; path: string }
+  | { kind: "pending_confirm"; path: string }
   | { kind: "missing"; path: string }
   | { kind: "failed"; path: string; reason: string };
+
+function getMaxOpenWithoutConfirmBytes(): number {
+  return appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes;
+}
 
 async function pruneMissingRecentFile(path: string): Promise<void> {
   const snapshot = appState.getSnapshot();
@@ -36,18 +44,24 @@ export async function openActivePath(
       return { kind: "redirected", path: gateResult.path };
     }
     if (gateResult.kind === "existing") {
-      const opened = await refreshExistingDocumentFromDisk(gateResult.documentId, path);
-      if (opened.sizeBytes > MAX_OPEN_BYTES) {
-        return { kind: "too_large", path: opened.path };
+      const existingDocument = appState
+        .getActiveDocuments()
+        .find((documentState) => documentState.id === gateResult.documentId);
+      if (existingDocument?.contentKind === "large_pending") {
+        return { kind: "existing", path: gateResult.path };
       }
+      await refreshExistingDocumentFromDisk(gateResult.documentId, path);
       return { kind: "existing", path: gateResult.path };
     }
 
-    const opened = await openPath(path);
-    if (opened.sizeBytes > MAX_OPEN_BYTES) {
-      return { kind: "too_large", path: opened.path };
+    const maxOpenWithoutConfirmBytes = getMaxOpenWithoutConfirmBytes();
+    const fingerprint = await statDiskFingerprint(path);
+    if (shouldGateFileOpenBySize(path, fingerprint.sizeBytes, maxOpenWithoutConfirmBytes)) {
+      await completeLargePendingOpen(path, fingerprint, windowId);
+      return { kind: "pending_confirm", path: normalizePathSync(path) };
     }
 
+    const opened = await openPath(path);
     await completeOpenPath(opened.path, opened.content, windowId, opened.contentKind);
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {
@@ -68,8 +82,8 @@ export function describeOpenActivePathResult(result: OpenActivePathResult): stri
       return `Opened ${result.path}`;
     case "redirected":
       return `Switched to ${result.path} in another window.`;
-    case "too_large":
-      return "Open failed: file exceeds 10MB MVP limit.";
+    case "pending_confirm":
+      return `Opened ${result.path} (confirm to load contents)`;
     case "missing":
       return `Removed missing file from recents: ${result.path}`;
     case "failed":

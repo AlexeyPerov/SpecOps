@@ -1,18 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentState } from "../domain/contracts";
 import {
+  applyLargeFileConfirmGateOnRestore,
   documentForSessionPersistence,
   needsDocumentRefreshFromDisk,
   refreshDocumentFromDiskIfNeeded,
   stripWindowSnapshotForSession,
 } from "./sessionDocumentPersistence";
+import { statDiskFingerprint } from "./diskFingerprint";
 import { openPath } from "./fileSystem";
 
 vi.mock("./fileSystem", () => ({
   openPath: vi.fn(),
 }));
 
+vi.mock("./diskFingerprint", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./diskFingerprint")>();
+  return {
+    ...actual,
+    statDiskFingerprint: vi.fn(),
+  };
+});
+
 const openPathMock = vi.mocked(openPath);
+const statDiskFingerprintMock = vi.mocked(statDiskFingerprint);
 
 function baseDocument(overrides: Partial<DocumentState> = {}): DocumentState {
   return {
@@ -186,5 +197,53 @@ describe("needsDocumentRefreshFromDisk", () => {
         baseDocument({ filePath: "/tmp/data.bin", content: "a\0b", contentKind: "text" }),
       ),
     ).toBe(true);
+  });
+
+  it("does not refresh large_pending documents", () => {
+    expect(
+      needsDocumentRefreshFromDisk(
+        baseDocument({ filePath: "/tmp/big.txt", contentKind: "large_pending" }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("applyLargeFileConfirmGateOnRestore", () => {
+  beforeEach(() => {
+    statDiskFingerprintMock.mockReset();
+  });
+
+  it("forces large_pending for persisted text over the limit", async () => {
+    const limit = 1024 * 1024;
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 2, sizeBytes: limit + 100 });
+    const doc = baseDocument({
+      filePath: "/tmp/big.txt",
+      content: "loaded before relaunch",
+      savedContent: "loaded before relaunch",
+      contentKind: "text",
+    });
+
+    const result = await applyLargeFileConfirmGateOnRestore(doc, limit, () => false);
+
+    expect(result).toMatchObject({
+      content: "",
+      savedContent: "",
+      isDirty: false,
+      contentKind: "large_pending",
+      diskFingerprint: { mtimeMs: 2, sizeBytes: limit + 100 },
+    });
+  });
+
+  it("leaves documents within the limit unchanged", async () => {
+    const limit = 1024 * 1024;
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 2, sizeBytes: 512 });
+    const doc = baseDocument({
+      filePath: "/tmp/small.txt",
+      content: "still here",
+      contentKind: "text",
+    });
+
+    const result = await applyLargeFileConfirmGateOnRestore(doc, limit, () => false);
+    expect(result).toBe(doc);
   });
 });

@@ -60,6 +60,7 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
         checkOnWindowFocus: false,
         checkOnTabActivate: false,
         maxBinaryOpenAsTextBytes: 200_000,
+        maxOpenWithoutConfirmBytes: 1024 * 1024,
       },
       decoratePlaintextSymbols: true,
       hideActivityRailWhenNotepadOnly: true,

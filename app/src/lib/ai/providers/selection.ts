@@ -2,12 +2,11 @@ import type {
   AppProviderSettings,
   ChatProviderId,
   ChatSystemEvent,
-  HttpConnectionSettings,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID, PRODUCT_CHAT_PROVIDER_IDS } from "../../domain/contracts";
 import { isDebugProviderEnabled } from "./debugProviderSettings";
-import { isHttpProviderConfigured as hasHttpProviderCredentials } from "./httpConnectionSettings";
+import { listConfiguredHttpConnections } from "./httpConnectionSettings";
 import {
   getProviderDefaultModelId,
   getProviderModelCatalog,
@@ -38,10 +37,10 @@ const PROVIDER_LABELS: Record<ChatProviderId, string> = {
  * 3. HTTP as product default fallback
  */
 export function isHttpProviderConfigured(
-  httpSettings: HttpConnectionSettings,
-  apiKey: string,
+  providerSettings: AppProviderSettings,
+  apiKeys: Partial<Record<string, string>>,
 ): boolean {
-  return hasHttpProviderCredentials(httpSettings, apiKey);
+  return listConfiguredHttpConnections(providerSettings, apiKeys).length > 0;
 }
 
 export function resolveDefaultChatProvider(

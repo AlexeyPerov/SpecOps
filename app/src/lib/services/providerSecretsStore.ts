@@ -1,13 +1,13 @@
 import { join } from "@tauri-apps/api/path";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import type { ChatProviderId } from "../domain/contracts";
 import { ensureSpecOpsDataDir } from "./appDataDir";
+import { DEFAULT_HTTP_CONNECTION_ID } from "../ai/providers/httpConnectionSettings";
 
 const FILE_NAME = "provider-secrets.json";
 
 interface ProviderSecretsFileV1 {
   version: 1;
-  keys: Partial<Record<ChatProviderId, string>>;
+  keys: Record<string, string>;
 }
 
 async function getSecretsPath(): Promise<string> {
@@ -27,30 +27,47 @@ function normalizeSecretsFile(raw: unknown): ProviderSecretsFileV1 {
   if (parsed.version !== 1 || !parsed.keys || typeof parsed.keys !== "object") {
     return { version: 1, keys: {} };
   }
-  const keys: Partial<Record<ChatProviderId, string>> = {};
-  for (const [providerId, apiKey] of Object.entries(parsed.keys)) {
-    keys[providerId as ChatProviderId] = normalizeApiKey(apiKey);
+  const keys: Record<string, string> = {};
+  for (const [providerOrConnectionId, apiKey] of Object.entries(parsed.keys)) {
+    const normalizedKey = normalizeApiKey(apiKey);
+    if (normalizedKey.length === 0) {
+      continue;
+    }
+    keys[providerOrConnectionId] = normalizedKey;
+  }
+  // One-time legacy read normalization: old files used provider id "http".
+  if (!keys[DEFAULT_HTTP_CONNECTION_ID] && keys.http) {
+    keys[DEFAULT_HTTP_CONNECTION_ID] = keys.http;
   }
   return { version: 1, keys };
 }
 
-/** Loads a provider API key from a dedicated secrets file (never settings.json). */
-export async function loadProviderApiKey(providerId: ChatProviderId): Promise<string> {
+/** Loads one API key by connection id from dedicated secrets storage. */
+export async function loadConnectionApiKey(connectionId: string): Promise<string> {
   try {
     const path = await getSecretsPath();
     const raw = await readTextFile(path);
     const parsed = normalizeSecretsFile(JSON.parse(raw));
-    return normalizeApiKey(parsed.keys[providerId]);
+    return normalizeApiKey(parsed.keys[connectionId]);
   } catch {
     return "";
   }
 }
 
-/** Persists a provider API key to a dedicated secrets file (never settings.json). */
-export async function saveProviderApiKey(
-  providerId: ChatProviderId,
-  apiKey: string,
-): Promise<void> {
+/** Loads all API keys keyed by HTTP connection id from dedicated secrets storage. */
+export async function loadConnectionApiKeys(): Promise<Record<string, string>> {
+  try {
+    const path = await getSecretsPath();
+    const raw = await readTextFile(path);
+    const parsed = normalizeSecretsFile(JSON.parse(raw));
+    return { ...parsed.keys };
+  } catch {
+    return {};
+  }
+}
+
+/** Persists one connection API key to dedicated secrets storage. */
+export async function saveConnectionApiKey(connectionId: string, apiKey: string): Promise<void> {
   const path = await getSecretsPath();
   let existing: ProviderSecretsFileV1 = { version: 1, keys: {} };
   try {
@@ -63,9 +80,9 @@ export async function saveProviderApiKey(
   const keys = { ...existing.keys };
   const trimmed = apiKey.trim();
   if (trimmed.length === 0) {
-    delete keys[providerId];
+    delete keys[connectionId];
   } else {
-    keys[providerId] = trimmed;
+    keys[connectionId] = trimmed;
   }
 
   const payload: ProviderSecretsFileV1 = {
@@ -73,4 +90,19 @@ export async function saveProviderApiKey(
     keys,
   };
   await writeTextFile(path, JSON.stringify(payload, null, 2));
+}
+
+/** Deletes one connection API key from dedicated secrets storage. */
+export async function deleteConnectionApiKey(connectionId: string): Promise<void> {
+  await saveConnectionApiKey(connectionId, "");
+}
+
+/** @deprecated Use `loadConnectionApiKey`. */
+export async function loadProviderApiKey(providerId: string): Promise<string> {
+  return loadConnectionApiKey(providerId);
+}
+
+/** @deprecated Use `saveConnectionApiKey`. */
+export async function saveProviderApiKey(providerId: string, apiKey: string): Promise<void> {
+  await saveConnectionApiKey(providerId, apiKey);
 }

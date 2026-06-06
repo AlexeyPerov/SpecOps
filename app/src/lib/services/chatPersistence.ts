@@ -166,6 +166,9 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
   if (value.selectedModelId !== undefined && typeof value.selectedModelId !== "string") {
     return null;
   }
+  if (value.connectionId !== undefined && typeof value.connectionId !== "string") {
+    return null;
+  }
   return {
     agentId: value.agentId,
     threadId: value.threadId,
@@ -178,6 +181,7 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
     lastCompactedAt: value.lastCompactedAt,
     compactedMessageCount: value.compactedMessageCount,
     selectedModelId: value.selectedModelId,
+    connectionId: value.connectionId,
   };
 }
 

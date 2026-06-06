@@ -11,6 +11,7 @@ import {
 } from "./providers/debugProviderSettings";
 import {
   getHttpProviderMissingConfigMessage,
+  resolveHttpConnection,
   isHttpProviderSendBlocked,
 } from "./providers/httpConnectionSettings";
 import {
@@ -217,8 +218,16 @@ async function validateProviderSend(
   if (
     isHttpProviderSendBlocked(
       providerId,
-      appSettings.providerSettings.http,
-      appSettings.providerApiKeys.http ?? "",
+      resolveHttpConnection(
+        appSettings.providerSettings,
+        appSettings.providerApiKeys,
+        chatStore.getMetadata(activeAgentId)?.connectionId,
+      )?.connection ?? appSettings.providerSettings.http,
+      resolveHttpConnection(
+        appSettings.providerSettings,
+        appSettings.providerApiKeys,
+        chatStore.getMetadata(activeAgentId)?.connectionId,
+      )?.apiKey ?? "",
     )
   ) {
     return {

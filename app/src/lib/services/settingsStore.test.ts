@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
 import {
+  defaultHttpConnection,
+  DEFAULT_HTTP_CONNECTION_ID,
+} from "../ai/providers/httpConnectionSettings";
+import {
   defaultExternalFilesSettings,
   defaultPersistedSettings,
   loadPersistedSettings,
@@ -44,6 +48,16 @@ describe("settings mapping", () => {
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
       providerSettings: {
+        httpConnections: [
+          {
+            ...defaultHttpConnection,
+            id: DEFAULT_HTTP_CONNECTION_ID,
+            label: "HTTP",
+            enabled: true,
+            baseUrl: "https://example.test/v1",
+          },
+        ],
+        defaultConnectionId: DEFAULT_HTTP_CONNECTION_ID,
         debugChat: {
           enabled: true,
           simulationSeed: 7,
@@ -142,6 +156,9 @@ describe("loadPersistedSettings", () => {
     const result = await loadPersistedSettings();
     expect(result?.providerModelCatalogs).toEqual(defaultProviderModelCatalogs);
     expect(result?.providerSettings.http.baseUrl).toBe("https://open.bigmodel.cn/api/paas/v4");
+    expect(result?.providerSettings.httpConnections?.[0]?.baseUrl).toBe(
+      "https://open.bigmodel.cn/api/paas/v4",
+    );
   });
 
   it("normalizes invalid provider model catalogs on load", async () => {

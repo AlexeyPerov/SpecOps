@@ -2,6 +2,7 @@
   import { sendChatMessage, retryLastChatTurn } from "../ai/sendChatMessage";
   import {
     canSelectChatProvider,
+    isHttpProviderConfigured,
     listSelectableChatProviders,
     listSelectableModelsForProvider,
   } from "../ai/providers/selection";
@@ -15,7 +16,6 @@
   } from "../domain/contracts";
   import { chatStore } from "../state/chatStore";
   import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
-  import { isHttpProviderConfigured } from "../ai/providers/httpConnectionSettings";
 
   interface ComposerError {
     message: string;
@@ -37,6 +37,7 @@
     providerSettings: AppProviderSettings;
     httpProviderSettings: HttpConnectionSettings;
     httpApiKey: string;
+    providerApiKeys: Partial<Record<string, string>>;
     providerModelCatalogs: ProviderModelCatalogs;
     composerError: ComposerError | null;
     onInlineError?: (message: string) => void;
@@ -57,6 +58,7 @@
     providerSettings,
     httpProviderSettings,
     httpApiKey,
+    providerApiKeys,
     providerModelCatalogs,
     composerError,
     onInlineError = () => {},
@@ -72,7 +74,7 @@
     httpProviderSettings.enabled;
     httpProviderSettings.baseUrl;
     httpApiKey;
-    const httpConfigured = isHttpProviderConfigured(httpProviderSettings, httpApiKey);
+    const httpConfigured = isHttpProviderConfigured(providerSettings, providerApiKeys);
     return listSelectableChatProviders(providerSettings, {
       chatContextKind,
       httpConfigured,
@@ -213,7 +215,7 @@
       isProviderSelectionDisabled ||
       !canSelectChatProvider(nextProvider, providerSettings, {
         chatContextKind,
-        httpConfigured: isHttpProviderConfigured(httpProviderSettings, httpApiKey),
+        httpConfigured: isHttpProviderConfigured(providerSettings, providerApiKeys),
       })
     ) {
       return;

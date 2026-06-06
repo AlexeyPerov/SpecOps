@@ -48,7 +48,14 @@ export function createRegistryCapabilityChecker(
           getHttpConnectionSettings ??
           (() => {
             const settings = getProviderSettings();
-            return { settings: settings.http, apiKey: "" };
+            const fallback = settings.httpConnections?.[0] ?? settings.http;
+            if (!fallback) {
+              return {
+                settings: { enabled: false, baseUrl: "" },
+                apiKey: "",
+              };
+            }
+            return { settings: fallback, apiKey: "" };
           });
         const { settings, apiKey } = httpReader();
         if (!isHttpProviderConfigured(settings, apiKey)) {

@@ -5,10 +5,10 @@ import { createDebugChatProvider } from "./debugChatProvider";
 import { createOpenAiCompatibleChatProvider } from "./openAiCompatibleChatProvider";
 import { registerChatProvider } from "./registry";
 import {
-  isHttpProviderConfigured,
   resolveChatContextKind,
   resolveDefaultChatProvider,
 } from "./selection";
+import { listConfiguredHttpConnections, resolveHttpConnection } from "./httpConnectionSettings";
 
 let initialized = false;
 
@@ -37,16 +37,36 @@ export function initializeChatProviders(): void {
   );
   registerChatProvider(
     createOpenAiCompatibleChatProvider(() => ({
-      settings: appState.getSnapshot().settings.providerSettings.http,
-      apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
+      settings:
+        resolveHttpConnection(
+          appState.getSnapshot().settings.providerSettings,
+          appState.getSnapshot().settings.providerApiKeys,
+        )?.connection ??
+        appState.getSnapshot().settings.providerSettings.httpConnections?.[0] ??
+        appState.getSnapshot().settings.providerSettings.http,
+      apiKey:
+        resolveHttpConnection(
+          appState.getSnapshot().settings.providerSettings,
+          appState.getSnapshot().settings.providerApiKeys,
+        )?.apiKey ?? "",
     })),
   );
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
       () => appState.getSnapshot().settings.providerSettings,
       () => ({
-        settings: appState.getSnapshot().settings.providerSettings.http,
-        apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
+        settings:
+          resolveHttpConnection(
+            appState.getSnapshot().settings.providerSettings,
+            appState.getSnapshot().settings.providerApiKeys,
+          )?.connection ??
+          appState.getSnapshot().settings.providerSettings.httpConnections?.[0] ??
+          appState.getSnapshot().settings.providerSettings.http,
+        apiKey:
+          resolveHttpConnection(
+            appState.getSnapshot().settings.providerSettings,
+            appState.getSnapshot().settings.providerApiKeys,
+          )?.apiKey ?? "",
       }),
     ),
   );
@@ -57,10 +77,7 @@ export function initializeChatProviders(): void {
     return resolveDefaultChatProvider(
       snapshot.providerSettings,
       { chatContextKind },
-      isHttpProviderConfigured(
-        snapshot.providerSettings.http,
-        snapshot.providerApiKeys.http ?? "",
-      ),
+      listConfiguredHttpConnections(snapshot.providerSettings, snapshot.providerApiKeys).length > 0,
     );
   });
   initialized = true;

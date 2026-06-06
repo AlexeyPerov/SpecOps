@@ -90,9 +90,13 @@ export function createThreadsSlice(deps: {
   }
 
   function normalizeMetadataPatchForScope(
-    patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId">>,
+    patch: Partial<
+      Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId" | "connectionId">
+    >,
     scopeKey: string,
-  ): Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId">> {
+  ): Partial<
+    Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId" | "connectionId">
+  > {
     if (!("mode" in patch)) {
       return patch;
     }
@@ -357,7 +361,9 @@ export function createThreadsSlice(deps: {
       return compacted;
     },
     updateThreadMetadata(
-      patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId">>,
+      patch: Partial<
+        Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId" | "connectionId">
+      >,
       updatedAt: string = new Date().toISOString(),
       agentId?: string,
     ): boolean {

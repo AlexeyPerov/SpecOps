@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProviderModelCatalogs } from "../../domain/contracts";
+import type { AppProviderSettings, ProviderModelCatalogs } from "../../domain/contracts";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
-import { defaultHttpConnectionSettings } from "./httpConnectionSettings";
+import {
+  defaultHttpConnectionSettings,
+  DEFAULT_HTTP_CONNECTION_ID,
+} from "./httpConnectionSettings";
 import { isChatHttpRailVisible } from "./chatHttpRailGating";
 import * as providerModelCatalog from "./providerModelCatalog";
 import { defaultProviderModelCatalogs } from "./providerModelCatalog";
+import { defaultAppProviderSettings } from "./appProviderSettings";
 
 describe("isChatHttpRailVisible", () => {
   afterEach(() => {
@@ -20,11 +24,27 @@ describe("isChatHttpRailVisible", () => {
   const debugChatDisabled = { ...defaultDebugProviderSettings, enabled: false };
   const debugChatEnabled = { ...defaultDebugProviderSettings, enabled: true };
 
+  function withHttpConnection(settings: typeof configuredSettings): AppProviderSettings {
+    return {
+      ...defaultAppProviderSettings,
+      http: settings,
+      httpConnections: [
+        {
+          id: DEFAULT_HTTP_CONNECTION_ID,
+          label: "HTTP",
+          ...settings,
+          modelCatalog: defaultProviderModelCatalogs.http!,
+        },
+      ],
+      defaultConnectionId: DEFAULT_HTTP_CONNECTION_ID,
+    };
+  }
+
   it("returns true when all HTTP gating conditions pass", () => {
     expect(
       isChatHttpRailVisible(
-        configuredSettings,
-        configuredApiKey,
+        withHttpConnection(configuredSettings),
+        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
@@ -34,8 +54,8 @@ describe("isChatHttpRailVisible", () => {
   it("returns true when Debug AI is enabled without HTTP configuration", () => {
     expect(
       isChatHttpRailVisible(
-        { ...configuredSettings, enabled: false },
-        "",
+        withHttpConnection({ ...configuredSettings, enabled: false }),
+        {},
         defaultProviderModelCatalogs,
         debugChatEnabled,
       ),
@@ -45,8 +65,8 @@ describe("isChatHttpRailVisible", () => {
   it("returns false when HTTP is not configured and Debug AI is disabled", () => {
     expect(
       isChatHttpRailVisible(
-        { ...configuredSettings, enabled: false },
-        "",
+        withHttpConnection({ ...configuredSettings, enabled: false }),
+        {},
         defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
@@ -56,8 +76,8 @@ describe("isChatHttpRailVisible", () => {
   it("returns false when the HTTP connection is disabled and Debug AI is disabled", () => {
     expect(
       isChatHttpRailVisible(
-        { ...configuredSettings, enabled: false },
-        configuredApiKey,
+        withHttpConnection({ ...configuredSettings, enabled: false }),
+        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
@@ -66,12 +86,17 @@ describe("isChatHttpRailVisible", () => {
 
   it("returns false when the API key is missing or whitespace", () => {
     expect(
-      isChatHttpRailVisible(configuredSettings, "", defaultProviderModelCatalogs, debugChatDisabled),
+      isChatHttpRailVisible(
+        withHttpConnection(configuredSettings),
+        {},
+        defaultProviderModelCatalogs,
+        debugChatDisabled,
+      ),
     ).toBe(false);
     expect(
       isChatHttpRailVisible(
-        configuredSettings,
-        "   ",
+        withHttpConnection(configuredSettings),
+        { [DEFAULT_HTTP_CONNECTION_ID]: "   " },
         defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
@@ -81,16 +106,16 @@ describe("isChatHttpRailVisible", () => {
   it("returns false when baseUrl is empty or whitespace", () => {
     expect(
       isChatHttpRailVisible(
-        { ...configuredSettings, baseUrl: "" },
-        configuredApiKey,
+        withHttpConnection({ ...configuredSettings, baseUrl: "" }),
+        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(false);
     expect(
       isChatHttpRailVisible(
-        { ...configuredSettings, baseUrl: "   " },
-        configuredApiKey,
+        withHttpConnection({ ...configuredSettings, baseUrl: "   " }),
+        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
@@ -101,19 +126,29 @@ describe("isChatHttpRailVisible", () => {
     vi.spyOn(providerModelCatalog, "getProviderDefaultModelId").mockReturnValue("");
 
     expect(
-      isChatHttpRailVisible(configuredSettings, configuredApiKey, {
-        http: { modelIds: [], defaultModelId: "" },
-        "debug-chat": defaultProviderModelCatalogs["debug-chat"],
-      } satisfies ProviderModelCatalogs, debugChatDisabled),
+      isChatHttpRailVisible(
+        withHttpConnection(configuredSettings),
+        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
+        {
+          http: { modelIds: [], defaultModelId: "" },
+          "debug-chat": defaultProviderModelCatalogs["debug-chat"],
+        } satisfies ProviderModelCatalogs,
+        debugChatDisabled,
+      ),
     ).toBe(false);
   });
 
   it("does not apply chat-cloud gating", () => {
     expect(
-      isChatHttpRailVisible(configuredSettings, configuredApiKey, {
-        ...defaultProviderModelCatalogs,
-        "debug-chat": { modelIds: [], defaultModelId: "" },
-      }, debugChatDisabled),
+      isChatHttpRailVisible(
+        withHttpConnection(configuredSettings),
+        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
+        {
+          ...defaultProviderModelCatalogs,
+          "debug-chat": { modelIds: [], defaultModelId: "" },
+        },
+        debugChatDisabled,
+      ),
     ).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import type {
   AppProviderSettings,
   DebugProviderSettings,
+  HttpConnection,
   HttpConnectionSettings,
   ProviderModelCatalogs,
   ProviderSettingsById,
@@ -10,11 +11,17 @@ import {
   normalizeDebugProviderSettings,
 } from "./debugProviderSettings";
 import {
+  defaultHttpConnection,
+  DEFAULT_HTTP_CONNECTION_ID,
   defaultHttpConnectionSettings,
+  normalizeHttpConnection,
+  normalizeHttpConnections,
   normalizeHttpConnectionSettings,
 } from "./httpConnectionSettings";
 
 export const defaultAppProviderSettings: AppProviderSettings = {
+  httpConnections: [defaultHttpConnection],
+  defaultConnectionId: DEFAULT_HTTP_CONNECTION_ID,
   http: defaultHttpConnectionSettings,
   debugChat: defaultDebugProviderSettings,
   debugWorkspace: defaultDebugProviderSettings,
@@ -42,13 +49,45 @@ export function getProviderSettings<K extends keyof ProviderSettingsById>(
 /** Normalizes persisted or partial provider settings for all configured providers. */
 export function normalizeAppProviderSettings(
   input?: Partial<AppProviderSettings> | unknown,
-  _catalogs?: ProviderModelCatalogs,
+  catalogs?: ProviderModelCatalogs,
 ): AppProviderSettings {
   const source = isRecord(input) ? input : {};
   const legacyDebug = resolveLegacyDebugSettings(source);
+  const normalizedHttpConnections = normalizeHttpConnections(source.httpConnections);
+  const defaultConnectionId =
+    typeof source.defaultConnectionId === "string" && source.defaultConnectionId.trim().length > 0
+      ? source.defaultConnectionId.trim()
+      : normalizedHttpConnections[0]?.id ?? DEFAULT_HTTP_CONNECTION_ID;
+
+  // Load-time normalization for legacy singleton `providerSettings.http`.
+  if (isRecord(source.http) && !Array.isArray(source.httpConnections)) {
+    const legacyTransport = normalizeHttpConnectionSettings(source.http);
+    const legacyConnection: HttpConnection = normalizeHttpConnection({
+      ...legacyTransport,
+      id: DEFAULT_HTTP_CONNECTION_ID,
+      label: "HTTP",
+      modelCatalog: catalogs?.http,
+    });
+    return {
+      httpConnections: [legacyConnection],
+      defaultConnectionId: legacyConnection.id,
+      // Transitional compatibility for legacy callers; remove after M4 migration.
+      http: legacyTransport,
+      debugChat: normalizeDebugProviderSettings(
+        source.debugChat ?? legacyDebug ?? defaultDebugProviderSettings,
+      ),
+      debugWorkspace: normalizeDebugProviderSettings(
+        source.debugWorkspace ?? legacyDebug ?? defaultDebugProviderSettings,
+      ),
+    };
+  }
 
   return {
-    http: normalizeHttpConnectionSettings(source.http),
+    httpConnections: normalizedHttpConnections,
+    defaultConnectionId,
+    http: normalizeHttpConnectionSettings(
+      source.http ?? normalizedHttpConnections[0] ?? defaultHttpConnectionSettings,
+    ),
     debugChat: normalizeDebugProviderSettings(
       source.debugChat ?? legacyDebug ?? defaultDebugProviderSettings,
     ),
@@ -59,7 +98,7 @@ export function normalizeAppProviderSettings(
 }
 
 export function appHttpConnectionSettings(settings: AppProviderSettings): HttpConnectionSettings {
-  return settings.http;
+  return settings.httpConnections?.[0] ?? settings.http ?? defaultHttpConnectionSettings;
 }
 
 export function appDebugChatProviderSettings(settings: AppProviderSettings): DebugProviderSettings {

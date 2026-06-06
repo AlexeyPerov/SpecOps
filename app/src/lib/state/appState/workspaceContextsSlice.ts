@@ -58,8 +58,8 @@ function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot
 
 function canRestoreChatHttpAsActive(settings: AppDomainState["settings"]): boolean {
   return isChatHttpRailVisible(
-    settings.providerSettings.http,
-    settings.providerApiKeys.http ?? "",
+    settings.providerSettings,
+    settings.providerApiKeys,
     settings.providerModelCatalogs,
     settings.providerSettings.debugChat,
   );

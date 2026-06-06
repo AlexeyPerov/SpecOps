@@ -4,6 +4,7 @@
     ChatProviderId,
     DebugProviderSettings,
     ExternalFilesSettings,
+    HttpConnection,
     HttpConnectionSettings,
   } from "../domain/contracts";
   import {
@@ -11,7 +12,11 @@
     getProviderModelCatalog,
     parseModelListInput,
   } from "../ai/providers/providerModelCatalog";
-  import { saveProviderApiKey } from "../services/providerSecretsStore";
+  import { saveConnectionApiKey } from "../services/providerSecretsStore";
+  import {
+    DEFAULT_HTTP_CONNECTION_ID,
+    defaultHttpConnection,
+  } from "../ai/providers/httpConnectionSettings";
   import {
     getSettingsTabDefinition,
     SETTINGS_SIDEBAR,
@@ -123,17 +128,37 @@
     );
   }
 
+  function activeHttpConnection(): HttpConnection {
+    const [first] = snapshot.settings.providerSettings.httpConnections ?? [];
+    return first ?? { ...defaultHttpConnection, id: DEFAULT_HTTP_CONNECTION_ID };
+  }
+
   function updateHttpConnectionSetting(
     key: keyof HttpConnectionSettings,
     value: HttpConnectionSettings[keyof HttpConnectionSettings],
   ): void {
+    const connection = activeHttpConnection();
+    if (
+      snapshot.settings.providerSettings.httpConnections &&
+      snapshot.settings.providerSettings.httpConnections.length > 0
+    ) {
+      appState.updateHttpConnection(connection.id, { [key]: value });
+    } else {
+      appState.addHttpConnection({
+        ...connection,
+        [key]: value,
+      });
+      appState.setDefaultConnectionId(connection.id);
+    }
     appState.updateHttpConnectionSettings({ [key]: value });
     void chatStore.runAccessPreflight();
   }
 
   async function updateHttpApiKey(rawValue: string): Promise<void> {
+    const connection = activeHttpConnection();
+    appState.setConnectionApiKey(connection.id, rawValue);
+    await saveConnectionApiKey(connection.id, rawValue);
     appState.setProviderApiKey("http", rawValue);
-    await saveProviderApiKey("http", rawValue);
     void chatStore.runAccessPreflight();
   }
 
@@ -459,7 +484,7 @@
       <label class="settings-toggle">
         <input
           type="checkbox"
-          checked={snapshot.settings.providerSettings.http.enabled}
+          checked={activeHttpConnection().enabled}
           onchange={(event) =>
             updateHttpConnectionSetting(
               "enabled",
@@ -478,7 +503,7 @@
           autocomplete="off"
           spellcheck="false"
           placeholder="Enter API key"
-          value={snapshot.settings.providerApiKeys.http ?? ""}
+          value={snapshot.settings.providerApiKeys[activeHttpConnection().id] ?? ""}
           oninput={(event) =>
             void updateHttpApiKey((event.currentTarget as HTMLInputElement).value)}
         />
@@ -488,7 +513,7 @@
         <input
           type="url"
           spellcheck="false"
-          value={snapshot.settings.providerSettings.http.baseUrl}
+          value={activeHttpConnection().baseUrl}
           onchange={(event) =>
             updateHttpConnectionSetting(
               "baseUrl",

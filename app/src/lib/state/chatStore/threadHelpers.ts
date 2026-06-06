@@ -44,7 +44,9 @@ export function createThreadMetadata(agentId: string, createdAt: string): ChatTh
 
 export function applyMetadataPatch(
   metadata: ChatThreadMetadata,
-  patch: Partial<Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId">>,
+  patch: Partial<
+    Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId" | "connectionId">
+  >,
   updatedAt: string,
 ): ChatThreadMetadata {
   return {

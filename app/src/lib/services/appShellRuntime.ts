@@ -31,7 +31,7 @@ import {
   loadPersistedSettings,
   toExternalFilesSettings,
 } from "./settingsStore";
-import { loadProviderApiKey } from "./providerSecretsStore";
+import { loadConnectionApiKeys } from "./providerSecretsStore";
 import {
   initializeDocumentDiskState,
   runFocusExternalChecks,
@@ -171,7 +171,7 @@ export async function startAppShellRuntime(
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
 
   const persistedSettings = await loadPersistedSettings();
-  const httpApiKey = await loadProviderApiKey("http");
+  const connectionApiKeys = await loadConnectionApiKeys();
   setThemeSaveErrorNotifier(options.notify);
   await appState.loadTheme();
   if (persistedSettings) {
@@ -186,7 +186,9 @@ export async function startAppShellRuntime(
       commandBindingOverrides: persistedSettings.commandBindingOverrides,
     });
   }
-  appState.setProviderApiKey("http", httpApiKey);
+  for (const [connectionId, apiKey] of Object.entries(connectionApiKeys)) {
+    appState.setConnectionApiKey(connectionId, apiKey);
+  }
 
   initializeChatProviders();
   options.setConsoleHeightPx(await readConsoleHeightPreference());

@@ -152,8 +152,8 @@
   );
   const chatHttpRailVisible = $derived(
     isChatHttpRailVisible(
-      snapshot.settings.providerSettings.http,
-      snapshot.settings.providerApiKeys.http ?? "",
+      snapshot.settings.providerSettings,
+      snapshot.settings.providerApiKeys,
       snapshot.settings.providerModelCatalogs,
       snapshot.settings.providerSettings.debugChat,
     ),
@@ -664,10 +664,11 @@
   }
 
   function workspaceContextMenuIndex(): number {
-    if (!workspaceContextMenu) {
+    const menu = workspaceContextMenu;
+    if (!menu) {
       return -1;
     }
-    return workspaces.findIndex((workspace) => workspace.id === workspaceContextMenu.workspaceId);
+    return workspaces.findIndex((workspace) => workspace.id === menu.workspaceId);
   }
 
   function moveWorkspaceFromContextMenu(direction: "up" | "down"): void {

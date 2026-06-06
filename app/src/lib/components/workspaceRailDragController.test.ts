@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WorkspaceEntry } from "../domain/contracts";
+import type { ContextId, WorkspaceEntry } from "../domain/contracts";
 import {
   isPointerInsideRect,
   nextWorkspaceDropIndex,
@@ -20,7 +20,7 @@ function testRect(left: number, top: number, width: number, height: number): DOM
   } as DOMRect;
 }
 
-function workspace(id: string, rootPath: string): WorkspaceEntry {
+function workspace(id: ContextId, rootPath: string): WorkspaceEntry {
   return {
     id,
     rootPath,
@@ -56,7 +56,7 @@ describe("previewWorkspaces", () => {
 describe("nextWorkspaceDropIndex", () => {
   it("uses vertical midpoints to choose drop index", () => {
     const workspaces = [workspace("ws-1", "/a"), workspace("ws-2", "/b"), workspace("ws-3", "/c")];
-    const rects = new Map([
+    const rects = new Map<ContextId, DOMRect>([
       ["ws-1", testRect(0, 0, 32, 32)],
       ["ws-2", testRect(0, 40, 32, 32)],
       ["ws-3", testRect(0, 80, 32, 32)],

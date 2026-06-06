@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { defaultAppProviderSettings } from "./appProviderSettings";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
-import { defaultHttpConnectionSettings } from "./httpConnectionSettings";
+import {
+  defaultHttpConnection,
+  defaultHttpConnectionSettings,
+  DEFAULT_HTTP_CONNECTION_ID,
+} from "./httpConnectionSettings";
 import {
   canSelectChatProvider,
   formatModelSwitchNotice,
@@ -17,6 +21,8 @@ import { defaultProviderModelCatalogs } from "./providerModelCatalog";
 function providerSettingsWithDebugEnabled(enabled: boolean) {
   return {
     ...defaultAppProviderSettings,
+    httpConnections: [{ ...defaultHttpConnection, enabled: true }],
+    defaultConnectionId: DEFAULT_HTTP_CONNECTION_ID,
     debugChat: { ...defaultDebugProviderSettings, enabled },
     debugWorkspace: { ...defaultDebugProviderSettings, enabled },
   };
@@ -111,7 +117,7 @@ describe("chat provider selection", () => {
       resolveDefaultChatProvider(
         enabled,
         { chatContextKind: "workspace" },
-        isHttpProviderConfigured({ ...defaultHttpConnectionSettings, enabled: true }, "key-123"),
+        isHttpProviderConfigured(enabled, { [DEFAULT_HTTP_CONNECTION_ID]: "key-123" }),
       ),
     ).toBe("http");
     expect(
@@ -121,7 +127,7 @@ describe("chat provider selection", () => {
       resolveDefaultChatProvider(
         providerSettingsWithDebugEnabled(false),
         { chatContextKind: "workspace" },
-        isHttpProviderConfigured(defaultHttpConnectionSettings, ""),
+        isHttpProviderConfigured(providerSettingsWithDebugEnabled(false), {}),
       ),
     ).toBe("http");
     expect(
@@ -130,7 +136,15 @@ describe("chat provider selection", () => {
   });
 
   it("does not treat an HTTP adapter as configured without credentials", () => {
-    expect(isHttpProviderConfigured(defaultHttpConnectionSettings, "")).toBe(false);
+    expect(
+      isHttpProviderConfigured(
+        {
+          ...providerSettingsWithDebugEnabled(false),
+          httpConnections: [{ ...defaultHttpConnection, ...defaultHttpConnectionSettings }],
+        },
+        {},
+      ),
+    ).toBe(false);
   });
 
   it("formats provider switch notices for history rendering", () => {

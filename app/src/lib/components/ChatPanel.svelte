@@ -12,6 +12,7 @@
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
   import {
+    defaultHttpConnectionSettings,
     isHttpProviderSendBlocked,
   } from "../ai/providers/httpConnectionSettings";
   import {
@@ -52,8 +53,11 @@
   const canRetryLastTurn = $derived($chatCanRetryLastTurn);
   const lastError = $derived($chatLastError);
   const providerSettings = $derived($appState.settings.providerSettings);
-  const httpProviderSettings = $derived($appState.settings.providerSettings.http);
+  const httpProviderSettings = $derived(
+    $appState.settings.providerSettings.http ?? defaultHttpConnectionSettings,
+  );
   const httpApiKey = $derived($appState.settings.providerApiKeys.http ?? "");
+  const providerApiKeys = $derived($appState.settings.providerApiKeys);
   const providerModelCatalogs = $derived($appState.settings.providerModelCatalogs);
   const activeMode = $derived(metadata?.mode ?? "ask");
   const activeProvider = $derived.by(() => {
@@ -237,6 +241,7 @@
       {providerSettings}
       {httpProviderSettings}
       {httpApiKey}
+      {providerApiKeys}
       {providerModelCatalogs}
       {composerError}
       onInlineError={(message) => {

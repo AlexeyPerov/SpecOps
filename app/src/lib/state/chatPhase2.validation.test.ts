@@ -20,6 +20,7 @@ import { createRegistryCapabilityChecker } from "../ai/providers/capabilityCheck
 import { registerTestDebugWorkspaceProvider, createTestCapabilityChecker } from "../ai/providers/debugProviderTestHelpers";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
+import { DEFAULT_HTTP_CONNECTION_ID } from "../ai/providers/httpConnectionSettings";
 import { createOpenAiCompatibleChatProvider } from "../ai/providers/openAiCompatibleChatProvider";
 import {
   registerChatProvider,
@@ -77,7 +78,9 @@ function registerPhase2Providers(fetchFn: typeof fetch): void {
     createOpenAiCompatibleChatProvider(
       () => ({
         settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-        apiKey: "http-test-key",
+        apiKey:
+          appState.getSnapshot().settings.providerApiKeys[DEFAULT_HTTP_CONNECTION_ID] ??
+          "http-test-key",
       }),
       fetchFn,
     ),
@@ -124,8 +127,8 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
   it("passes chat-http gating when HTTP connection settings and catalog are valid", () => {
     expect(
       isChatHttpRailVisible(
-        { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
-        "http-test-key",
+        appState.getSnapshot().settings.providerSettings,
+        { [DEFAULT_HTTP_CONNECTION_ID]: "http-test-key" },
         defaultProviderModelCatalogs,
         appState.getSnapshot().settings.providerSettings.debugChat,
       ),

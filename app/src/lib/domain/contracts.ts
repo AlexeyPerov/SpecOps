@@ -183,7 +183,7 @@ export interface DebugProviderSettings extends ProviderSettingsBase {
   includeDiagnostics: boolean;
 }
 
-/** OpenAI-compatible HTTP connection settings (API key stored separately). */
+/** OpenAI-compatible HTTP connection transport settings (API key stored separately). */
 export interface HttpConnectionSettings extends ProviderSettingsBase {
   baseUrl: string;
 }
@@ -197,11 +197,22 @@ export interface ProviderModelCatalog {
 /** Provider-scoped model catalogs keyed by chat provider id. */
 export type ProviderModelCatalogs = Partial<Record<ChatProviderId, ProviderModelCatalog>>;
 
+/** One named OpenAI-compatible HTTP provider connection. */
+export interface HttpConnection extends HttpConnectionSettings {
+  id: string;
+  label: string;
+  modelCatalog: ProviderModelCatalog;
+}
+
 /** Per-provider settings types; extend this map when adding a configured provider. */
 export interface ProviderSettingsById {
-  http: HttpConnectionSettings;
+  httpConnections?: HttpConnection[];
+  /** Preferred HTTP connection id. Falls back to first configured connection when missing/stale. */
+  defaultConnectionId?: string;
   debugChat: DebugProviderSettings;
   debugWorkspace: DebugProviderSettings;
+  /** Legacy singleton HTTP settings kept during M4 migration. */
+  http: HttpConnectionSettings;
 }
 
 /** In-app and persisted bundle of provider-specific settings (excludes API keys). */
@@ -221,7 +232,7 @@ export interface AppSettingsState {
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
-  providerApiKeys: Partial<Record<ChatProviderId, string>>;
+  providerApiKeys: Partial<Record<string, string>>;
 }
 
 export type AppCommandId =
@@ -350,6 +361,8 @@ export interface ChatThreadMetadata {
   compactedMessageCount?: number;
   /** Per-thread selected model for the active provider; omitted until explicitly set. */
   selectedModelId?: string;
+  /** Selected HTTP connection for `provider === "http"` threads. */
+  connectionId?: string;
 }
 
 /** One persisted agent conversation (messages + per-agent settings). */

@@ -1,10 +1,10 @@
 import type {
   DebugProviderSettings,
-  HttpConnectionSettings,
+  AppProviderSettings,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
 import { validateLocalModelSelection } from "./modelValidation";
-import { isHttpProviderConfigured } from "./httpConnectionSettings";
+import { listConfiguredHttpConnections } from "./httpConnectionSettings";
 import {
   getProviderDefaultModelId,
   normalizeProviderModelCatalogs,
@@ -24,15 +24,15 @@ function isHttpDefaultModelResolvable(providerModelCatalogs: ProviderModelCatalo
  * enabled for chat-http.
  */
 export function isChatHttpRailVisible(
-  settings: HttpConnectionSettings,
-  apiKey: string,
+  settings: AppProviderSettings,
+  apiKeys: Partial<Record<string, string>>,
   providerModelCatalogs: ProviderModelCatalogs,
   debugChatSettings: DebugProviderSettings,
 ): boolean {
   if (debugChatSettings.enabled) {
     return true;
   }
-  if (!isHttpProviderConfigured(settings, apiKey)) {
+  if (listConfiguredHttpConnections(settings, apiKeys).length === 0) {
     return false;
   }
   return isHttpDefaultModelResolvable(providerModelCatalogs);

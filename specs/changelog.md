@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-06 (MSK)
+
+- **Project tree delete:** Closing open editor tabs immediately when the user deletes a file or folder from the project pane, instead of leaving tabs stuck in a missing-file state.
+
 ## 2026-06-05 19:10 (MSK)
 
 - **Editor wrap + project panel:** Fixed line wrap extending under the project panel by constraining editor pane and CodeMirror width (`min-width: 0`, `width: 100%` on `.editor-pane`, `.editor-host`, and `.cm-editor`) and hiding horizontal overflow on `.cm-scroller` when wrap is enabled.

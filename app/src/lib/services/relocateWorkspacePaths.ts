@@ -72,17 +72,21 @@ export async function syncDocumentsAfterPathRelocation(
   }
 }
 
-export function markDocumentsMissingUnderPath(workspaceRoot: string, deletedPath: string): void {
+function documentIdsUnderDeletedPath(
+  workspaceRoot: string,
+  deletedPath: string,
+): Set<string> {
   const snapshot = appState.getSnapshot();
   const activeId = snapshot.contexts.activeContextId;
   if (activeId === "notepad") {
-    return;
+    return new Set();
   }
   const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === activeId);
   if (!workspace) {
-    return;
+    return new Set();
   }
 
+  const deletedDocumentIds = new Set<string>();
   for (const documentState of workspace.snapshot.documents) {
     if (!documentState.filePath) {
       continue;
@@ -93,10 +97,46 @@ export function markDocumentsMissingUnderPath(workspaceRoot: string, deletedPath
     if (!isPathEqualOrUnder(deletedPath, documentState.filePath)) {
       continue;
     }
-    appState.setDocumentDiskState(documentState.id, {
+    deletedDocumentIds.add(documentState.id);
+  }
+  return deletedDocumentIds;
+}
+
+export function markDocumentsMissingUnderPath(workspaceRoot: string, deletedPath: string): void {
+  for (const documentId of documentIdsUnderDeletedPath(workspaceRoot, deletedPath)) {
+    appState.setDocumentDiskState(documentId, {
       diskFingerprint: null,
       fileMissing: true,
     });
+  }
+}
+
+export function closeTabsForDeletedDocumentsUnderPath(
+  workspaceRoot: string,
+  deletedPath: string,
+): void {
+  const deletedDocumentIds = documentIdsUnderDeletedPath(workspaceRoot, deletedPath);
+  if (deletedDocumentIds.size === 0) {
+    return;
+  }
+
+  const snapshot = appState.getSnapshot();
+  const activeId = snapshot.contexts.activeContextId;
+  if (activeId === "notepad") {
+    return;
+  }
+  const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === activeId);
+  if (!workspace) {
+    return;
+  }
+
+  const tabIds = workspace.snapshot.session.openTabs
+    .map((rawTab) => normalizeTabState(rawTab))
+    .filter((tab) => isFileTab(tab) && deletedDocumentIds.has(tab.documentId))
+    .map((tab) => tab.id);
+
+  if (tabIds.length > 0) {
+    appState.closeTabsByIds(tabIds, null);
   }
 }
 

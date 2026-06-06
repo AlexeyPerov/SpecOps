@@ -3,6 +3,7 @@ import { exists, mkdir, remove, rename, writeTextFile } from "@tauri-apps/plugin
 import { SKIPPED_DIRECTORY_NAMES } from "./folderOpenableFiles";
 import { normalizePathSync } from "./diskFingerprint";
 import {
+  closeTabsForDeletedDocumentsUnderPath,
   markDocumentsMissingUnderPath,
   syncDocumentsAfterPathRelocation,
 } from "./relocateWorkspacePaths";
@@ -199,6 +200,7 @@ export async function deleteProjectEntry(
   try {
     await remove(entryPath, { recursive: true });
     markDocumentsMissingUnderPath(workspaceRoot, entryPath);
+    closeTabsForDeletedDocumentsUnderPath(workspaceRoot, entryPath);
     return { ok: true, path: entryPath };
   } catch (error: unknown) {
     const reason = error instanceof Error ? error.message : String(error);

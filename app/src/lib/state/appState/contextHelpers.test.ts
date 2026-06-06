@@ -70,7 +70,18 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
           enabled: false,
           baseUrl: "",
         },
-        debug: {
+        debugChat: {
+          enabled: false,
+          simulationSeed: null,
+          delayMsMin: 0,
+          delayMsMax: 0,
+          chunkCharsMin: 1,
+          chunkCharsMax: 1,
+          failureProbability: 0,
+          failureMessage: "",
+          includeDiagnostics: false,
+        },
+        debugWorkspace: {
           enabled: false,
           simulationSeed: null,
           delayMsMin: 0,

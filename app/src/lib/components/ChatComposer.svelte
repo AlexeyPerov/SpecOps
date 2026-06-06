@@ -7,9 +7,9 @@
   } from "../ai/providers/selection";
   import { listModesForProvider } from "../ai/modes/builtins";
   import type {
+    AppProviderSettings,
     ChatModeId,
     ChatProviderId,
-    DebugProviderSettings,
     HttpConnectionSettings,
     ProviderModelCatalogs,
   } from "../domain/contracts";
@@ -34,7 +34,7 @@
     activeModel: string;
     chatContextKind: "workspace" | "chat-http";
     supportedModes: ChatModeId[];
-    debugProviderSettings: DebugProviderSettings;
+    providerSettings: AppProviderSettings;
     httpProviderSettings: HttpConnectionSettings;
     httpApiKey: string;
     providerModelCatalogs: ProviderModelCatalogs;
@@ -54,7 +54,7 @@
     activeModel,
     chatContextKind,
     supportedModes,
-    debugProviderSettings,
+    providerSettings,
     httpProviderSettings,
     httpApiKey,
     providerModelCatalogs,
@@ -67,13 +67,13 @@
   let retrying = $state(false);
 
   const availableProviders = $derived.by(() => {
-    debugProviderSettings;
+    providerSettings;
     chatContextKind;
     httpProviderSettings.enabled;
     httpProviderSettings.baseUrl;
     httpApiKey;
     const httpConfigured = isHttpProviderConfigured(httpProviderSettings, httpApiKey);
-    return listSelectableChatProviders(debugProviderSettings, {
+    return listSelectableChatProviders(providerSettings, {
       chatContextKind,
       httpConfigured,
     });
@@ -121,6 +121,24 @@
       isModelSendBlocked,
   );
   const generationStatus = $derived(isGenerating ? "Generating response…" : "");
+  const composerPlaceholder = $derived(
+    chatContextKind === "chat-http" ? "Message chat" : "Message agent",
+  );
+
+  $effect(() => {
+    activeProvider;
+    availableProviders;
+    if (
+      availableProviders.some((provider) => provider.id === activeProvider) ||
+      isProviderSelectionDisabled
+    ) {
+      return;
+    }
+    const fallback = availableProviders[0];
+    if (fallback) {
+      void selectProvider(fallback.id);
+    }
+  });
 
   function persistActiveThreadSnapshot(): void {
     const root = chatStore.getActiveChatScopeKey();
@@ -193,7 +211,7 @@
     if (
       nextProvider === activeProvider ||
       isProviderSelectionDisabled ||
-      !canSelectChatProvider(nextProvider, debugProviderSettings, {
+      !canSelectChatProvider(nextProvider, providerSettings, {
         chatContextKind,
         httpConfigured: isHttpProviderConfigured(httpProviderSettings, httpApiKey),
       })
@@ -202,7 +220,7 @@
     }
 
     const result = await chatStore.switchThreadProvider(nextProvider, {
-      debugProviderEnabled: debugProviderSettings.enabled,
+      providerSettings,
       providerModelCatalogs,
     });
     if (result.switched) {
@@ -247,7 +265,7 @@
     class="chat-input"
     rows="3"
     bind:value={draft}
-    placeholder="Message agent"
+    placeholder={composerPlaceholder}
     aria-label="Chat message"
     onkeydown={handleComposerKeydown}
     disabled={composerDisabled}

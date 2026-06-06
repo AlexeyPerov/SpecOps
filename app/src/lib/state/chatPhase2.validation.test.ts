@@ -17,7 +17,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendChatMessage } from "../ai/sendChatMessage";
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
-import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
+import { registerTestDebugWorkspaceProvider, createTestCapabilityChecker } from "../ai/providers/debugProviderTestHelpers";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { createOpenAiCompatibleChatProvider } from "../ai/providers/openAiCompatibleChatProvider";
@@ -72,7 +72,7 @@ function sseDelta(content: string): string {
 
 function registerPhase2Providers(fetchFn: typeof fetch): void {
   resetChatProviderRegistryForTests();
-  registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+  registerTestDebugWorkspaceProvider();
   registerChatProvider(
     createOpenAiCompatibleChatProvider(
       () => ({
@@ -84,8 +84,8 @@ function registerPhase2Providers(fetchFn: typeof fetch): void {
   );
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
-      () => appState.getSnapshot().settings.providerSettings.debug,
-      () => ({
+        () => appState.getSnapshot().settings.providerSettings,
+        () => ({
         settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
         apiKey: "http-test-key",
       }),
@@ -101,7 +101,7 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
     schedulePersistMock.mockReset();
     ensureWorkspaceReadAccessMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
-    appState.updateDebugProviderSettings({
+    appState.updateDebugWorkspaceProviderSettings({
       ...defaultDebugProviderSettings,
       enabled: true,
       simulationSeed: 42,
@@ -127,6 +127,7 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
         { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
         "http-test-key",
         defaultProviderModelCatalogs,
+        appState.getSnapshot().settings.providerSettings.debugChat,
       ),
     ).toBe(true);
   });

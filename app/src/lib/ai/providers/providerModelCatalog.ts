@@ -1,13 +1,17 @@
 import type { ChatProviderId, ProviderModelCatalog, ProviderModelCatalogs } from "../../domain/contracts";
 
-const PROVIDER_IDS: readonly ChatProviderId[] = ["http", "debug"];
+const PROVIDER_IDS: readonly ChatProviderId[] = ["http", "debug-chat", "debug-workspace"];
 
 export const defaultProviderModelCatalogs: ProviderModelCatalogs = {
   http: {
     modelIds: ["gpt-4o-mini"],
     defaultModelId: "gpt-4o-mini",
   },
-  debug: {
+  "debug-chat": {
+    modelIds: ["debug-simulator"],
+    defaultModelId: "debug-simulator",
+  },
+  "debug-workspace": {
     modelIds: ["debug-simulator"],
     defaultModelId: "debug-simulator",
   },
@@ -101,15 +105,28 @@ export function normalizeProviderModelCatalog(
   return { modelIds, defaultModelId };
 }
 
+function resolveLegacyDebugCatalog(source: Record<string, unknown>): unknown {
+  if (isRecord(source.debug)) {
+    return source.debug;
+  }
+  return undefined;
+}
+
 /** Validates provider model catalogs on load/save. */
 export function normalizeProviderModelCatalogs(
   input?: Partial<ProviderModelCatalogs> | unknown,
 ): ProviderModelCatalogs {
   const source = isRecord(input) ? input : {};
+  const legacyDebugCatalog = resolveLegacyDebugCatalog(source);
 
   const catalogs = {} as ProviderModelCatalogs;
   for (const providerId of PROVIDER_IDS) {
-    catalogs[providerId] = normalizeProviderModelCatalog(providerId, source[providerId]);
+    const scopedSource =
+      source[providerId] ??
+      (providerId === "debug-chat" || providerId === "debug-workspace"
+        ? legacyDebugCatalog
+        : undefined);
+    catalogs[providerId] = normalizeProviderModelCatalog(providerId, scopedSource);
   }
 
   return catalogs;

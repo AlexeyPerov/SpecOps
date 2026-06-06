@@ -1,4 +1,4 @@
-export type SettingsDialogTab = "editor" | "shortcuts" | "connections" | "debugAi";
+export type SettingsDialogTab = "editor" | "shortcuts" | "connections" | "debugAi" | "debugAgent";
 
 export interface SettingsTabDefinition {
   id: SettingsDialogTab;
@@ -24,21 +24,27 @@ const SHORTCUTS_TAB = {
 
 const CONNECTIONS_TAB = {
   id: "connections",
-  label: "Connections",
-  panelAriaLabel: "HTTP connections settings",
+  label: "Providers",
+  panelAriaLabel: "HTTP provider settings",
 } as const satisfies SettingsTabDefinition;
 
 const DEBUG_AI_TAB = {
   id: "debugAi",
-  label: "Debug AI",
-  panelAriaLabel: "Debug AI provider settings",
+  label: "Debug Provider",
+  panelAriaLabel: "Debug Provider settings for Chats",
+} as const satisfies SettingsTabDefinition;
+
+const DEBUG_AGENT_TAB = {
+  id: "debugAgent",
+  label: "Debug Provider",
+  panelAriaLabel: "Debug Provider settings for Workspaces",
 } as const satisfies SettingsTabDefinition;
 
 export const SETTINGS_SIDEBAR = [
   { kind: "tab", tab: EDITOR_TAB },
   { kind: "tab", tab: SHORTCUTS_TAB },
-  { kind: "section", label: "Chats", tabs: [CONNECTIONS_TAB] },
-  { kind: "section", label: "Workspaces", tabs: [DEBUG_AI_TAB] },
+  { kind: "section", label: "Chats", tabs: [CONNECTIONS_TAB, DEBUG_AI_TAB] },
+  { kind: "section", label: "Workspaces", tabs: [DEBUG_AGENT_TAB] },
 ] as const satisfies readonly SettingsSidebarEntry[];
 
 export const SETTINGS_TABS = [
@@ -46,6 +52,7 @@ export const SETTINGS_TABS = [
   SHORTCUTS_TAB,
   CONNECTIONS_TAB,
   DEBUG_AI_TAB,
+  DEBUG_AGENT_TAB,
 ] as const satisfies readonly SettingsTabDefinition[];
 
 type SettingsDialogOpener = (tab: SettingsDialogTab) => void;

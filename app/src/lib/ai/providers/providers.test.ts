@@ -77,7 +77,7 @@ function threadSnapshot(overrides?: Partial<ChatThreadSnapshot["metadata"]>): Ch
       agentId: "agent-test",
       threadId: "agent-test",
       mode: "ask",
-      provider: "debug",
+      provider: "debug-workspace",
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:01.000Z",
       ...overrides,
@@ -104,7 +104,7 @@ describe("buildProviderRequest", () => {
           systemEvent: {
             type: "provider-switched",
             fromProvider: "http",
-            toProvider: "debug",
+            toProvider: "debug-workspace",
           },
         },
       ],
@@ -130,7 +130,7 @@ describe("buildProviderRequest", () => {
   it("omits blank summary and system prompt fields", () => {
     const payload = buildProviderRequest({
       mode: "ask",
-      provider: "debug",
+      provider: "debug-workspace",
       workspaceRootPath: "/tmp",
       summary: "   ",
       recentMessages: [],
@@ -161,13 +161,13 @@ describe("buildProviderRequest", () => {
 describe("chat provider registry", () => {
   it("registers, lists, and resolves providers by id", () => {
     resetChatProviderRegistryForTests();
-    const provider = new InMemoryTestProvider("debug");
+    const provider = new InMemoryTestProvider("debug-workspace");
 
     registerChatProvider(provider);
 
-    expect(listRegisteredChatProviders()).toEqual(["debug"]);
-    expect(getChatProvider("debug")).toBe(provider);
-    expect(resolveChatProvider("debug")).toBe(provider);
+    expect(listRegisteredChatProviders()).toEqual(["debug-workspace"]);
+    expect(getChatProvider("debug-workspace")).toBe(provider);
+    expect(resolveChatProvider("debug-workspace")).toBe(provider);
   });
 
   it("throws when resolving an unregistered provider", () => {
@@ -192,12 +192,12 @@ describe("chat provider registry", () => {
 
 describe("ChatProvider contract (in-memory test double)", () => {
   it("supports buffered sendMessage completion", async () => {
-    const provider = new InMemoryTestProvider("debug");
+    const provider = new InMemoryTestProvider("debug-workspace");
     const request: ProviderSendRequest = {
       modelId: "debug-simulator",
       payload: buildProviderRequest({
         mode: "ask",
-        provider: "debug",
+        provider: "debug-workspace",
         workspaceRootPath: "/work/a",
         recentMessages: [userMessage("one"), assistantMessage("two")],
       }),
@@ -209,12 +209,12 @@ describe("ChatProvider contract (in-memory test double)", () => {
   });
 
   it("supports optional streaming completion via streamMessage", async () => {
-    const provider = new InMemoryTestProvider("debug");
+    const provider = new InMemoryTestProvider("debug-workspace");
     const request: ProviderSendRequest = {
       modelId: "debug-simulator",
       payload: buildProviderRequest({
         mode: "review",
-        provider: "debug",
+        provider: "debug-workspace",
         workspaceRootPath: "/work/a",
         recentMessages: [userMessage("one")],
       }),

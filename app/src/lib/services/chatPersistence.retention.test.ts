@@ -41,7 +41,7 @@ describe("chat retention policy constants", () => {
         systemEvent: {
           type: "provider-switched",
           fromProvider: "http",
-          toProvider: "debug",
+          toProvider: "debug-workspace",
         },
       },
       userMessage("2"),

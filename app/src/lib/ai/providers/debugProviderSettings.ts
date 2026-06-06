@@ -1,8 +1,17 @@
 import {
+  DEBUG_AGENT_PROVIDER_DISABLED_MESSAGE,
+  DEBUG_AGENT_PROVIDER_DISABLED_RECOVERY,
+  DEBUG_AI_PROVIDER_DISABLED_MESSAGE,
+  DEBUG_AI_PROVIDER_DISABLED_RECOVERY,
   DEBUG_PROVIDER_DISABLED_MESSAGE,
   DEBUG_PROVIDER_DISABLED_RECOVERY,
 } from "../chatErrorCopy";
-import type { ChatProviderId, DebugProviderSettings } from "../../domain/contracts";
+import type {
+  AppProviderSettings,
+  ChatProviderId,
+  DebugProviderSettings,
+} from "../../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID, isDebugChatProviderId } from "../../domain/contracts";
 
 export const defaultDebugProviderSettings: DebugProviderSettings = {
   enabled: true,
@@ -107,17 +116,97 @@ export function normalizeDebugProviderSettings(
   };
 }
 
-export function isDebugProviderSendBlocked(
-  provider: ChatProviderId | undefined,
-  settings: DebugProviderSettings,
-): boolean {
-  return provider === "debug" && !settings.enabled;
+export function getDebugProviderSettingsForId(
+  providerId: ChatProviderId,
+  providerSettings: AppProviderSettings,
+): DebugProviderSettings | null {
+  if (providerId === "debug-chat") {
+    return providerSettings.debugChat;
+  }
+  if (providerId === "debug-workspace") {
+    return providerSettings.debugWorkspace;
+  }
+  return null;
 }
 
-export function getDebugProviderSendBlockHint(): string {
+export function isDebugProviderEnabled(
+  providerId: ChatProviderId,
+  providerSettings: AppProviderSettings,
+): boolean {
+  const settings = getDebugProviderSettingsForId(providerId, providerSettings);
+  return settings?.enabled === true;
+}
+
+export function isDebugProviderSendBlocked(
+  provider: ChatProviderId | undefined,
+  providerSettings: AppProviderSettings,
+): boolean {
+  if (!provider || !isDebugChatProviderId(provider)) {
+    return false;
+  }
+  return !isDebugProviderEnabled(provider, providerSettings);
+}
+
+export function getDebugProviderSendBlockHint(providerId?: ChatProviderId): string {
+  if (providerId === "debug-chat") {
+    return DEBUG_AI_PROVIDER_DISABLED_MESSAGE;
+  }
+  if (providerId === "debug-workspace") {
+    return DEBUG_AGENT_PROVIDER_DISABLED_MESSAGE;
+  }
   return DEBUG_PROVIDER_DISABLED_SEND_HINT;
 }
 
-export function getDebugProviderSendBlockRecovery(): string {
+export function getDebugProviderSendBlockRecovery(providerId?: ChatProviderId): string {
+  if (providerId === "debug-chat") {
+    return DEBUG_AI_PROVIDER_DISABLED_RECOVERY;
+  }
+  if (providerId === "debug-workspace") {
+    return DEBUG_AGENT_PROVIDER_DISABLED_RECOVERY;
+  }
   return DEBUG_PROVIDER_DISABLED_RECOVERY;
+}
+
+export function resolveDebugProviderIdForScope(scopeKey: string): ChatProviderId {
+  return scopeKey === CHAT_HTTP_CONTEXT_ID ? "debug-chat" : "debug-workspace";
+}
+
+export type LegacyChatProviderId = ChatProviderId | "debug" | "glm";
+
+export function isLegacyChatProviderId(value: unknown): value is LegacyChatProviderId {
+  return (
+    value === "http" ||
+    value === "debug" ||
+    value === "debug-chat" ||
+    value === "debug-workspace" ||
+    value === "glm"
+  );
+}
+
+/** Maps persisted legacy provider ids to the current scoped debug provider ids. */
+export function normalizeLegacyChatProviderId(
+  provider: LegacyChatProviderId,
+  scopeKey: string,
+): ChatProviderId {
+  if (provider === "glm") {
+    return "http";
+  }
+  if (provider === "debug") {
+    return resolveDebugProviderIdForScope(scopeKey);
+  }
+  return provider;
+}
+
+/** Remaps scoped debug providers when the active chat scope changes. */
+export function coerceProviderForScope(
+  provider: ChatProviderId,
+  scopeKey: string,
+): ChatProviderId {
+  const legacy = isLegacyChatProviderId(provider)
+    ? normalizeLegacyChatProviderId(provider, scopeKey)
+    : provider;
+  if (legacy === "debug-chat" || legacy === "debug-workspace") {
+    return resolveDebugProviderIdForScope(scopeKey);
+  }
+  return legacy;
 }

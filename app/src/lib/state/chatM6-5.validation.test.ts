@@ -32,7 +32,7 @@ import {
   getHttpMissingConfigCopy,
 } from "../ai/chatErrorCopy";
 import { retryLastChatTurn, sendChatMessage } from "../ai/sendChatMessage";
-import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
+import { registerTestDebugWorkspaceProvider, createTestCapabilityChecker } from "../ai/providers/debugProviderTestHelpers";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import { createOpenAiCompatibleChatProvider } from "../ai/providers/openAiCompatibleChatProvider";
 import {
@@ -80,7 +80,7 @@ function httpFetchSuccess(content: string): typeof fetch {
 
 function registerProviders(includeHttp = false): void {
   resetChatProviderRegistryForTests();
-  registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+  registerTestDebugWorkspaceProvider();
   if (includeHttp) {
     registerChatProvider(
       createOpenAiCompatibleChatProvider(
@@ -94,8 +94,8 @@ function registerProviders(includeHttp = false): void {
   }
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
-      () => appState.getSnapshot().settings.providerSettings.debug,
-      () => ({
+        () => appState.getSnapshot().settings.providerSettings,
+        () => ({
         settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
         apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
       }),
@@ -115,7 +115,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
     setChatRetentionMaxTurnsForTests(undefined);
     appState.setProviderApiKey("http", "");
-    appState.updateDebugProviderSettings({
+    appState.updateDebugWorkspaceProviderSettings({
       ...defaultDebugProviderSettings,
       enabled: true,
       simulationSeed: 42,
@@ -128,7 +128,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     });
     appState.updateHttpConnectionSettings({ enabled: false });
     registerProviders();
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
   });
 
@@ -138,9 +138,9 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
   it("retries failed Debug turns without duplicating the user message", async () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -153,8 +153,8 @@ describe("M6 milestone validation — AI chat MVP", () => {
     expect(chatStore.getMessages(agentId!).filter((message) => message.role === "user")).toHaveLength(1);
     expect(chatStore.canRetryLastTurn(agentId!)).toBe(true);
 
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       failureProbability: 0,
     });
 
@@ -186,7 +186,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
         ),
       );
     resetChatProviderRegistryForTests();
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+    registerTestDebugWorkspaceProvider();
     registerChatProvider(
       createOpenAiCompatibleChatProvider(
         () => ({
@@ -198,7 +198,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -228,7 +228,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
     const debugAgent = chatStore.createDraftAgent({ activate: false });
     const httpAgent = chatStore.createDraftAgent({ activate: true });
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, debugAgent!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, debugAgent!);
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, httpAgent!);
 
     const debugLengths: number[] = [];
@@ -258,9 +258,9 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
   it("blocks retry while generation is in progress", async () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -269,8 +269,8 @@ describe("M6 milestone validation — AI chat MVP", () => {
     await vi.runAllTimersAsync();
     await failedPromise;
 
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       failureProbability: 0,
     });
 
@@ -302,7 +302,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
   it("preserves compaction metadata and delete agent clears the thread", async () => {
     setChatRetentionMaxTurnsForTests(1);
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     chatStore.appendMessage(
       {
@@ -352,7 +352,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
     const debugAgent = chatStore.createDraftAgent({ activate: false });
     const httpAgent = chatStore.createDraftAgent({ activate: true });
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, debugAgent!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, debugAgent!);
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, httpAgent!);
 
     const debugSend = sendChatMessage("Debug parallel", debugAgent!);

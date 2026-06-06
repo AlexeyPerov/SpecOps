@@ -24,12 +24,13 @@ describe("settingsDialogUi", () => {
 
     expect(topLevelLabels).toEqual(["Editor", "Shortcuts"]);
     expect(sectionLabels).toEqual(["Chats", "Workspaces"]);
-    expect(sectionTabLabels).toEqual(["Connections", "Debug AI"]);
+    expect(sectionTabLabels).toEqual(["Providers", "Debug Provider", "Debug Provider"]);
     expect(SETTINGS_TABS.map((tab) => tab.label)).toEqual([
       "Editor",
       "Shortcuts",
-      "Connections",
-      "Debug AI",
+      "Providers",
+      "Debug Provider",
+      "Debug Provider",
     ]);
   });
 
@@ -64,6 +65,15 @@ describe("settingsDialogUi", () => {
     openSettingsDialog("debugAi");
 
     expect(opener).toHaveBeenCalledWith("debugAi");
+  });
+
+  it("calls registered opener with explicit debugAgent tab", () => {
+    const opener = vi.fn();
+    registerSettingsDialogOpener(opener);
+
+    openSettingsDialog("debugAgent");
+
+    expect(opener).toHaveBeenCalledWith("debugAgent");
   });
 
   it("re-register replaces previous opener", () => {

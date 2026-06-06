@@ -155,6 +155,7 @@
       snapshot.settings.providerSettings.http,
       snapshot.settings.providerApiKeys.http ?? "",
       snapshot.settings.providerModelCatalogs,
+      snapshot.settings.providerSettings.debugChat,
     ),
   );
   const activeTab = $derived(
@@ -1106,6 +1107,7 @@
         openTabs={session.openTabs}
         documents={documents}
         selectedTabId={session.selectedTabId}
+        useChatTerminology={isChatHttpActive}
         windowId={currentWindowId}
         notify={notify}
         onCloseTab={handleCloseTab}
@@ -1131,7 +1133,10 @@
 
       <section class="editor-pane" class:editor-pane-agent={isAgentTabActive} bind:this={editorPaneEl}>
     {#if isChatHttpActive || isAgentTabActive}
-      <ChatPanel onDeleteAgent={handleDeleteAgentFromChat} />
+      <ChatPanel
+        chatContextKind={isChatHttpActive ? "chat-http" : "workspace"}
+        onDeleteAgent={handleDeleteAgentFromChat}
+      />
     {:else if snapshot.editor.previewMode === "diff"}
       <DiffPreviewPane
         savedContent={activeDocument?.savedContent ?? ""}

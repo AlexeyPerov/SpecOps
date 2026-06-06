@@ -45,11 +45,11 @@ describe("normalizeProviderModelCatalog", () => {
 
   it("restores defaults when model list is empty after sanitization", () => {
     expect(
-      normalizeProviderModelCatalog("debug", {
+      normalizeProviderModelCatalog("debug-workspace", {
         modelIds: ["", "  "],
         defaultModelId: "debug-simulator",
       }),
-    ).toEqual(defaultProviderModelCatalogs.debug);
+    ).toEqual(defaultProviderModelCatalogs["debug-workspace"]);
   });
 });
 
@@ -68,7 +68,7 @@ describe("catalog helpers", () => {
     const catalogs = normalizeProviderModelCatalogs();
     expect(isModelInProviderCatalog(catalogs, "http", "gpt-4o-mini")).toBe(true);
     expect(isModelInProviderCatalog(catalogs, "http", "unknown")).toBe(false);
-    expect(getProviderDefaultModelId(catalogs, "debug")).toBe("debug-simulator");
-    expect(getProviderModelCatalog(catalogs, "debug").defaultModelId).toBe("debug-simulator");
+    expect(getProviderDefaultModelId(catalogs, "debug-workspace")).toBe("debug-simulator");
+    expect(getProviderModelCatalog(catalogs, "debug-workspace").defaultModelId).toBe("debug-simulator");
   });
 });

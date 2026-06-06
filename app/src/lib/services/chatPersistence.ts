@@ -13,6 +13,12 @@ import type {
 } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import type { ChatScopeKey } from "../state/chatStore/types";
+import {
+  isLegacyChatProviderId,
+  normalizeLegacyChatProviderId,
+  type LegacyChatProviderId,
+} from "../ai/providers/debugProviderSettings";
+import { normalizeThreadSnapshotForScope } from "../ai/providers/threadScopeNormalization";
 import { deriveAgentTitleFromThread } from "./chatAgents";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
@@ -117,23 +123,21 @@ function isChatModeId(value: unknown): value is ChatModeId {
 }
 
 function isChatProviderId(value: unknown): value is ChatProviderId {
-  return value === "http" || value === "debug";
+  return (
+    value === "http" ||
+    value === "debug-chat" ||
+    value === "debug-workspace"
+  );
 }
 
-type LegacyChatProviderId = ChatProviderId | "glm";
-
-function isLegacyChatProviderId(value: unknown): value is LegacyChatProviderId {
-  return value === "http" || value === "debug" || value === "glm";
+function normalizeLegacyProviderId(
+  provider: LegacyChatProviderId,
+  scopeKey: string,
+): ChatProviderId {
+  return normalizeLegacyChatProviderId(provider, scopeKey);
 }
 
-function normalizeLegacyProviderId(provider: LegacyChatProviderId): ChatProviderId {
-  if (provider === "glm") {
-    return "http";
-  }
-  return provider;
-}
-
-function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
+function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetadata | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -166,7 +170,7 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
     agentId: value.agentId,
     threadId: value.threadId,
     mode: value.mode,
-    provider: normalizeLegacyProviderId(value.provider),
+    provider: normalizeLegacyProviderId(value.provider, scopeKey),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     summary: value.summary,
@@ -179,6 +183,7 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
 
 function parseProviderSwitchedEvent(
   value: Record<string, unknown>,
+  scopeKey: string,
 ): Extract<ChatMessage["systemEvent"], { type: "provider-switched" }> | undefined {
   const fromProvider = value.fromProvider;
   if (fromProvider !== null && !isLegacyChatProviderId(fromProvider)) {
@@ -190,8 +195,9 @@ function parseProviderSwitchedEvent(
 
   return {
     type: "provider-switched",
-    fromProvider: fromProvider === null ? null : normalizeLegacyProviderId(fromProvider),
-    toProvider: normalizeLegacyProviderId(value.toProvider),
+    fromProvider:
+      fromProvider === null ? null : normalizeLegacyProviderId(fromProvider, scopeKey),
+    toProvider: normalizeLegacyProviderId(value.toProvider, scopeKey),
   };
 }
 
@@ -213,7 +219,7 @@ function parseModelSwitchedEvent(
   };
 }
 
-function parseSystemEvent(value: unknown): ChatMessage["systemEvent"] | undefined {
+function parseSystemEvent(value: unknown, scopeKey: string): ChatMessage["systemEvent"] | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -221,7 +227,7 @@ function parseSystemEvent(value: unknown): ChatMessage["systemEvent"] | undefine
     return undefined;
   }
   if (value.type === "provider-switched") {
-    return parseProviderSwitchedEvent(value);
+    return parseProviderSwitchedEvent(value, scopeKey);
   }
   if (value.type === "model-switched") {
     return parseModelSwitchedEvent(value);
@@ -229,7 +235,7 @@ function parseSystemEvent(value: unknown): ChatMessage["systemEvent"] | undefine
   return undefined;
 }
 
-function parseMessage(value: unknown): ChatMessage | null {
+function parseMessage(value: unknown, scopeKey: string): ChatMessage | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -246,23 +252,23 @@ function parseMessage(value: unknown): ChatMessage | null {
     role: value.role,
     content: value.content,
     createdAt: value.createdAt,
-    systemEvent: parseSystemEvent(value.systemEvent),
+    systemEvent: parseSystemEvent(value.systemEvent, scopeKey),
   };
 }
 
-function parseThread(value: unknown): ChatThreadSnapshot | null {
+function parseThread(value: unknown, scopeKey: string): ChatThreadSnapshot | null {
   if (!isRecord(value) || !Array.isArray(value.messages)) {
     return null;
   }
 
-  const metadata = parseThreadMetadata(value.metadata);
+  const metadata = parseThreadMetadata(value.metadata, scopeKey);
   if (!metadata) {
     return null;
   }
 
   const messages: ChatMessage[] = [];
   for (const entry of value.messages) {
-    const message = parseMessage(entry);
+    const message = parseMessage(entry, scopeKey);
     if (!message) {
       return null;
     }
@@ -297,13 +303,16 @@ function parseAgentIndexEntry(value: unknown): AgentIndexEntry | null {
   };
 }
 
-export function decodeChatAgentThreadFileSnapshot(raw: string): ChatAgentThreadFileSnapshot | null {
+export function decodeChatAgentThreadFileSnapshot(
+  raw: string,
+  scopeKey: string = CHAT_HTTP_CONTEXT_ID,
+): ChatAgentThreadFileSnapshot | null {
   try {
     const parsed = JSON.parse(raw) as { version?: unknown; thread?: unknown };
     if (parsed.version !== CHAT_THREAD_VERSION) {
       return null;
     }
-    const thread = parseThread(parsed.thread);
+    const thread = parseThread(parsed.thread, scopeKey);
     if (!thread) {
       return null;
     }
@@ -411,8 +420,8 @@ export async function readAgentThreadFileSnapshot(
   try {
     const threadPath = await getAgentThreadFilePath(scopeKey, agentId);
     const raw = await readTextFile(threadPath);
-    const decoded = decodeChatAgentThreadFileSnapshot(raw);
-    return decoded?.thread ?? null;
+    const decoded = decodeChatAgentThreadFileSnapshot(raw, scopeKey);
+    return normalizeThreadSnapshotForScope(decoded?.thread ?? null, scopeKey);
   } catch {
     return null;
   }

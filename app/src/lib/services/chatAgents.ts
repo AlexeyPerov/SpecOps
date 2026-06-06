@@ -1,6 +1,11 @@
 import type { AgentIndexEntry, ChatMessage, ChatThreadSnapshot } from "../domain/contracts";
 
 export const DRAFT_AGENT_TITLE = "New agent";
+export const DRAFT_CHAT_TITLE = "New chat";
+
+export function draftEntryTitleForScope(scopeKey: string | null | undefined): string {
+  return scopeKey === "chat-http" ? DRAFT_CHAT_TITLE : DRAFT_AGENT_TITLE;
+}
 export const AGENT_TITLE_MAX_LENGTH = 64;
 
 export type AgentDateGroup = "today" | "yesterday" | "last-7-days" | "older";

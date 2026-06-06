@@ -2,8 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REVIEW_REQUIRED_SECTIONS } from "../modes/builtins";
 import { isChatProviderError, streamProviderMessage } from "../chatSend";
 import { chatStore } from "../../state/chatStore";
+import type { DebugProviderSettings } from "../../domain/contracts";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
 import { createDebugChatProvider } from "./debugChatProvider";
+
+function createWorkspaceTestProvider(getSettings: () => DebugProviderSettings) {
+  return createDebugChatProvider({
+    id: "debug-workspace",
+    getSettings,
+    supportedModes: ["ask", "review"],
+    canReadWorkspaceFiles: true,
+    readyMessage: "Debug Agent provider is ready for workspace chat.",
+  });
+}
 import { deriveDebugTurnSimulation } from "./debugSimulation";
 import { buildDebugResponseBody } from "./debugResponses";
 import type { ProviderRequestPayload, ProviderSendRequest } from "./types";
@@ -11,7 +22,7 @@ import type { ProviderRequestPayload, ProviderSendRequest } from "./types";
 function samplePayload(mode: ProviderRequestPayload["mode"] = "ask"): ProviderRequestPayload {
   return {
     mode,
-    provider: "debug",
+    provider: "debug-workspace",
     workspace: {
       rootPath: "/work/spec-ops",
       name: "spec-ops",
@@ -80,30 +91,30 @@ describe("DebugChatProvider", () => {
   });
 
   it("blocks capability checks when Debug is disabled", async () => {
-    const provider = createDebugChatProvider(() => ({
+    const provider = createWorkspaceTestProvider(() => ({
       ...defaultDebugProviderSettings,
       enabled: false,
     }));
 
     const result = await provider.checkCapabilities({
-      provider: "debug",
+      provider: "debug-workspace",
       mode: "ask",
       workspaceRootPath: "/work/a",
     });
 
     expect(result.status).toBe("blocked");
     expect(result.capabilities?.supportedModes).toEqual([]);
-    expect(result.recoveryHint).toContain("Debug AI");
+    expect(result.recoveryHint).toContain("Debug Provider");
   });
 
   it("returns ready capabilities with both modes when Debug is enabled", async () => {
-    const provider = createDebugChatProvider(() => ({
+    const provider = createWorkspaceTestProvider(() => ({
       ...defaultDebugProviderSettings,
       enabled: true,
     }));
 
     const result = await provider.checkCapabilities({
-      provider: "debug",
+      provider: "debug-workspace",
       mode: "review",
       workspaceRootPath: "/work/a",
     });
@@ -116,7 +127,7 @@ describe("DebugChatProvider", () => {
   });
 
   it("produces ask and review responses without network calls", async () => {
-    const provider = createDebugChatProvider(() => ({
+    const provider = createWorkspaceTestProvider(() => ({
       ...defaultDebugProviderSettings,
       enabled: true,
       delayMsMin: 0,
@@ -137,7 +148,7 @@ describe("DebugChatProvider", () => {
   });
 
   it("omits diagnostics appendix when includeDiagnostics is false", async () => {
-    const provider = createDebugChatProvider(() => ({
+    const provider = createWorkspaceTestProvider(() => ({
       ...defaultDebugProviderSettings,
       enabled: true,
       delayMsMin: 0,
@@ -151,7 +162,7 @@ describe("DebugChatProvider", () => {
   });
 
   it("includes diagnostics appendix when includeDiagnostics is true", async () => {
-    const provider = createDebugChatProvider(() => ({
+    const provider = createWorkspaceTestProvider(() => ({
       ...defaultDebugProviderSettings,
       enabled: true,
       delayMsMin: 0,
@@ -169,7 +180,7 @@ describe("DebugChatProvider", () => {
   });
 
   it("streams partial content updates in configured chunks", async () => {
-    const provider = createDebugChatProvider(() => ({
+    const provider = createWorkspaceTestProvider(() => ({
       ...defaultDebugProviderSettings,
       enabled: true,
       simulationSeed: 7,
@@ -197,9 +208,9 @@ describe("DebugChatProvider", () => {
 
   it("throws simulated failures that map to failTurn scaffolding", async () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
-    const provider = createDebugChatProvider(() => ({
+    const provider = createWorkspaceTestProvider(() => ({
       ...defaultDebugProviderSettings,
       enabled: true,
       simulationSeed: 42,
@@ -235,7 +246,7 @@ describe("DebugChatProvider", () => {
       delayMsMax: 1200,
       includeDiagnostics: false,
     };
-    const provider = createDebugChatProvider(() => settings);
+    const provider = createWorkspaceTestProvider(() => settings);
     const request = sampleRequest("ask", "delay-turn");
     const simulation = deriveDebugTurnSimulation(
       settings,

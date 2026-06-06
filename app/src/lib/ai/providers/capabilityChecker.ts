@@ -1,4 +1,4 @@
-import type { DebugProviderSettings, HttpConnectionSettings } from "../../domain/contracts";
+import type { AppProviderSettings, HttpConnectionSettings } from "../../domain/contracts";
 import {
   WorkspaceAccessReason,
   type CapabilityCheckInput,
@@ -8,8 +8,6 @@ import {
 import {
   PROVIDER_MISSING_CONFIG_MESSAGE,
   PROVIDER_MISSING_CONFIG_RECOVERY,
-  PROVIDER_NOT_REGISTERED_MESSAGE,
-  PROVIDER_NOT_REGISTERED_RECOVERY,
   getUnknownProviderMessage,
   getUnknownProviderRecovery,
 } from "../chatErrorCopy";
@@ -22,7 +20,7 @@ export {
   type LocalModelValidationResult,
 } from "./modelValidation";
 
-export type DebugSettingsReader = () => DebugProviderSettings;
+export type AppProviderSettingsReader = () => AppProviderSettings;
 
 export type HttpSettingsReader = () => {
   settings: HttpConnectionSettings;
@@ -40,13 +38,19 @@ function missingHttpConfigResult(): CapabilityCheckResult {
 }
 
 export function createRegistryCapabilityChecker(
-  getDebugProviderSettings: DebugSettingsReader,
-  getHttpConnectionSettings: HttpSettingsReader,
+  getProviderSettings: AppProviderSettingsReader,
+  getHttpConnectionSettings?: HttpSettingsReader,
 ): CapabilityChecker {
   return {
     async checkCapabilities(input: CapabilityCheckInput): Promise<CapabilityCheckResult> {
       if (input.provider === "http") {
-        const { settings, apiKey } = getHttpConnectionSettings();
+        const httpReader =
+          getHttpConnectionSettings ??
+          (() => {
+            const settings = getProviderSettings();
+            return { settings: settings.http, apiKey: "" };
+          });
+        const { settings, apiKey } = httpReader();
         if (!isHttpProviderConfigured(settings, apiKey)) {
           return missingHttpConfigResult();
         }
@@ -62,19 +66,6 @@ export function createRegistryCapabilityChecker(
       const provider = getChatProvider(input.provider);
       if (provider) {
         return provider.checkCapabilities(input);
-      }
-
-      if (input.provider === "debug") {
-        return {
-          status: "blocked",
-          reason: WorkspaceAccessReason.ProviderUnsupported,
-          capabilities: {
-            canReadWorkspaceFiles: false,
-            supportedModes: [],
-          },
-          message: PROVIDER_NOT_REGISTERED_MESSAGE,
-          recoveryHint: PROVIDER_NOT_REGISTERED_RECOVERY,
-        };
       }
 
       return {

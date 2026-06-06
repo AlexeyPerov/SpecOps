@@ -5,7 +5,8 @@ import { defaultDebugProviderSettings } from "./debugProviderSettings";
 import { defaultHttpConnectionSettings } from "./httpConnectionSettings";
 import { initializeChatProviders, resetChatProvidersForTests } from "./bootstrap";
 import { createRegistryCapabilityChecker } from "./capabilityChecker";
-import { createDebugChatProvider } from "./debugChatProvider";
+import { createTestDebugWorkspaceProvider } from "./debugProviderTestHelpers";
+import { defaultAppProviderSettings } from "./appProviderSettings";
 import { createOpenAiCompatibleChatProvider } from "./openAiCompatibleChatProvider";
 import { registerChatProvider, resetChatProviderRegistryForTests } from "./registry";
 
@@ -18,18 +19,18 @@ describe("registry-backed capability checker", () => {
 
   it("delegates to registered Debug provider capabilities", async () => {
     registerChatProvider(
-      createDebugChatProvider(() => ({
+      createTestDebugWorkspaceProvider(() => ({
         ...defaultDebugProviderSettings,
         enabled: true,
       })),
     );
     const checker = createRegistryCapabilityChecker(
-      () => defaultDebugProviderSettings,
+      () => defaultAppProviderSettings,
       () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
     );
 
     const result = await checker.checkCapabilities({
-      provider: "debug",
+      provider: "debug-workspace",
       mode: "ask",
       workspaceRootPath: "/work/a",
     });
@@ -40,7 +41,7 @@ describe("registry-backed capability checker", () => {
 
   it("reports missing HTTP config when HTTP provider is not registered", async () => {
     const checker = createRegistryCapabilityChecker(
-      () => defaultDebugProviderSettings,
+      () => defaultAppProviderSettings,
       () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
     );
 
@@ -62,7 +63,7 @@ describe("registry-backed capability checker", () => {
       })),
     );
     const checker = createRegistryCapabilityChecker(
-      () => defaultDebugProviderSettings,
+      () => defaultAppProviderSettings,
       () => ({ settings: { ...defaultHttpConnectionSettings, enabled: true }, apiKey: "test-key" }),
     );
 

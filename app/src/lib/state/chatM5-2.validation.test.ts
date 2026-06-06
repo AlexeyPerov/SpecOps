@@ -14,7 +14,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendChatMessage } from "../ai/sendChatMessage";
-import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
+import { registerTestDebugWorkspaceProvider, createTestCapabilityChecker } from "../ai/providers/debugProviderTestHelpers";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import {
   registerChatProvider,
@@ -68,7 +68,7 @@ describe("M5.2 milestone validation", () => {
     schedulePersistMock.mockReset();
     deleteAgentPersistenceMock.mockReset();
     deleteAgentPersistenceMock.mockResolvedValue(undefined);
-    appState.updateDebugProviderSettings({
+    appState.updateDebugWorkspaceProviderSettings({
       ...defaultDebugProviderSettings,
       enabled: true,
       simulationSeed: 7,
@@ -79,17 +79,17 @@ describe("M5.2 milestone validation", () => {
       failureProbability: 0,
       includeDiagnostics: false,
     });
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+    registerTestDebugWorkspaceProvider();
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: appState.getSnapshot().settings.providerSettings.http,
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
   });
 
@@ -117,7 +117,7 @@ describe("M5.2 milestone validation", () => {
 
   it("promotes draft title and persists thread on first send", async () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     const resultPromise = sendChatMessage("First persisted line", agentId!);
     await vi.runAllTimersAsync();
@@ -133,8 +133,8 @@ describe("M5.2 milestone validation", () => {
   it("allows two agents to generate with Debug at the same time", async () => {
     const agentA = chatStore.createDraftAgent({ activate: false });
     const agentB = chatStore.createDraftAgent({ activate: true });
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentA!);
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentB!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentA!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentB!);
 
     const sendA = sendChatMessage("Parallel question A", agentA!);
     const sendB = sendChatMessage("Parallel question B", agentB!);

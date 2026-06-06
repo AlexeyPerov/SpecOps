@@ -85,14 +85,22 @@
     );
   }
 
-  function updateDebugProviderSetting(
+  type DebugSettingsScope = "debugChat" | "debugWorkspace";
+
+  function updateScopedDebugProviderSetting(
+    scope: DebugSettingsScope,
     key: keyof DebugProviderSettings,
     value: DebugProviderSettings[keyof DebugProviderSettings],
   ): void {
-    appState.updateDebugProviderSettings({ [key]: value });
+    if (scope === "debugChat") {
+      appState.updateDebugChatProviderSettings({ [key]: value });
+      return;
+    }
+    appState.updateDebugWorkspaceProviderSettings({ [key]: value });
   }
 
-  function updateDebugProviderNumberSetting(
+  function updateScopedDebugProviderNumberSetting(
+    scope: DebugSettingsScope,
     key:
       | "delayMsMin"
       | "delayMsMax"
@@ -103,12 +111,13 @@
   ): void {
     const parsed =
       key === "failureProbability" ? Number.parseFloat(rawValue) : Number.parseInt(rawValue, 10);
-    updateDebugProviderSetting(key, Number.isFinite(parsed) ? parsed : 0);
+    updateScopedDebugProviderSetting(scope, key, Number.isFinite(parsed) ? parsed : 0);
   }
 
-  function updateDebugProviderSeed(rawValue: string): void {
+  function updateScopedDebugProviderSeed(scope: DebugSettingsScope, rawValue: string): void {
     const trimmed = rawValue.trim();
-    updateDebugProviderSetting(
+    updateScopedDebugProviderSetting(
+      scope,
       "simulationSeed",
       trimmed.length === 0 ? null : Number.parseInt(trimmed, 10),
     );
@@ -315,8 +324,22 @@
     <KeyboardShortcutsSettings />
   {:else if tabId === "connections"}
     {@render connectionsSettingsPanel()}
+  {:else if tabId === "debugAi"}
+    {@render debugProviderSettingsPanel(
+      "debugChat",
+      "debug-chat",
+      "Debug Provider",
+      "Settings for the Chats Debug Provider. Enabled by default for development dogfooding; uncheck Enable to hide it from Chats.",
+      "Show Debug Provider in Chats",
+    )}
   {:else}
-    {@render debugAiSettingsPanel()}
+    {@render debugProviderSettingsPanel(
+      "debugWorkspace",
+      "debug-workspace",
+      "Debug Provider",
+      "Settings for the workspace Debug Provider. Enabled by default for development dogfooding; uncheck Enable to hide it from workspace chat.",
+      "Show Debug Provider in workspace chat",
+    )}
   {/if}
 {/snippet}
 
@@ -478,26 +501,31 @@
   </section>
 {/snippet}
 
-{#snippet debugAiSettingsPanel()}
+{#snippet debugProviderSettingsPanel(
+  settingsScope: DebugSettingsScope,
+  catalogProviderId: ChatProviderId,
+  title: string,
+  note: string,
+  enableLabel: string,
+)}
+  {@const debugSettings = snapshot.settings.providerSettings[settingsScope]}
   <section class="settings-section">
-    <h3>Debug AI provider</h3>
-    <p class="settings-section-note">
-      Settings for the Debug chat provider only. Enabled by default for development dogfooding;
-      uncheck Enable to hide it from chat.
-    </p>
+    <h3>{title}</h3>
+    <p class="settings-section-note">{note}</p>
     <div class="settings-subsection">
       <h4>Enable</h4>
       <label class="settings-toggle">
         <input
           type="checkbox"
-          checked={snapshot.settings.providerSettings.debug.enabled}
+          checked={debugSettings.enabled}
           onchange={(event) =>
-            updateDebugProviderSetting(
+            updateScopedDebugProviderSetting(
+              settingsScope,
               "enabled",
               (event.currentTarget as HTMLInputElement).checked,
             )}
         />
-        Show Debug provider in chat
+        {enableLabel}
       </label>
     </div>
     <div class="settings-subsection">
@@ -508,9 +536,12 @@
           type="text"
           inputmode="numeric"
           placeholder="Random"
-          value={snapshot.settings.providerSettings.debug.simulationSeed ?? ""}
+          value={debugSettings.simulationSeed ?? ""}
           oninput={(event) =>
-            updateDebugProviderSeed((event.currentTarget as HTMLInputElement).value)}
+            updateScopedDebugProviderSeed(
+              settingsScope,
+              (event.currentTarget as HTMLInputElement).value,
+            )}
         />
       </label>
       <label class="settings-field">
@@ -518,9 +549,10 @@
         <input
           type="number"
           min="0"
-          value={snapshot.settings.providerSettings.debug.delayMsMin}
+          value={debugSettings.delayMsMin}
           onchange={(event) =>
-            updateDebugProviderNumberSetting(
+            updateScopedDebugProviderNumberSetting(
+              settingsScope,
               "delayMsMin",
               (event.currentTarget as HTMLInputElement).value,
             )}
@@ -531,9 +563,10 @@
         <input
           type="number"
           min="0"
-          value={snapshot.settings.providerSettings.debug.delayMsMax}
+          value={debugSettings.delayMsMax}
           onchange={(event) =>
-            updateDebugProviderNumberSetting(
+            updateScopedDebugProviderNumberSetting(
+              settingsScope,
               "delayMsMax",
               (event.currentTarget as HTMLInputElement).value,
             )}
@@ -544,9 +577,10 @@
         <input
           type="number"
           min="1"
-          value={snapshot.settings.providerSettings.debug.chunkCharsMin}
+          value={debugSettings.chunkCharsMin}
           onchange={(event) =>
-            updateDebugProviderNumberSetting(
+            updateScopedDebugProviderNumberSetting(
+              settingsScope,
               "chunkCharsMin",
               (event.currentTarget as HTMLInputElement).value,
             )}
@@ -557,9 +591,10 @@
         <input
           type="number"
           min="1"
-          value={snapshot.settings.providerSettings.debug.chunkCharsMax}
+          value={debugSettings.chunkCharsMax}
           onchange={(event) =>
-            updateDebugProviderNumberSetting(
+            updateScopedDebugProviderNumberSetting(
+              settingsScope,
               "chunkCharsMax",
               (event.currentTarget as HTMLInputElement).value,
             )}
@@ -572,9 +607,10 @@
           min="0"
           max="1"
           step="0.01"
-          value={snapshot.settings.providerSettings.debug.failureProbability}
+          value={debugSettings.failureProbability}
           onchange={(event) =>
-            updateDebugProviderNumberSetting(
+            updateScopedDebugProviderNumberSetting(
+              settingsScope,
               "failureProbability",
               (event.currentTarget as HTMLInputElement).value,
             )}
@@ -584,9 +620,10 @@
         <span>Failure message</span>
         <input
           type="text"
-          value={snapshot.settings.providerSettings.debug.failureMessage}
+          value={debugSettings.failureMessage}
           onchange={(event) =>
-            updateDebugProviderSetting(
+            updateScopedDebugProviderSetting(
+              settingsScope,
               "failureMessage",
               (event.currentTarget as HTMLInputElement).value,
             )}
@@ -598,9 +635,10 @@
       <label class="settings-toggle">
         <input
           type="checkbox"
-          checked={snapshot.settings.providerSettings.debug.includeDiagnostics}
+          checked={debugSettings.includeDiagnostics}
           onchange={(event) =>
-            updateDebugProviderSetting(
+            updateScopedDebugProviderSetting(
+              settingsScope,
               "includeDiagnostics",
               (event.currentTarget as HTMLInputElement).checked,
             )}
@@ -608,7 +646,7 @@
         Include diagnostics appendix in replies
       </label>
     </div>
-    {@render providerModelCatalogPanel("debug", "Models")}
+    {@render providerModelCatalogPanel(catalogProviderId, "Models")}
   </section>
 {/snippet}
 

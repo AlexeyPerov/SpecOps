@@ -7,9 +7,14 @@ import type {
 } from "../../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 import type { CapabilityChecker } from "../../ai/capabilities";
-import { DEBUG_PROVIDER_SWITCH_BLOCKED_MESSAGE } from "../../ai/chatErrorCopy";
+import { getDebugProviderSwitchBlockedMessage } from "../../ai/chatErrorCopy";
+import {
+  coerceProviderForScope,
+  isDebugProviderEnabled,
+} from "../../ai/providers/debugProviderSettings";
+import { normalizeThreadSnapshotForScope } from "../../ai/providers/threadScopeNormalization";
 import { compactChatThread } from "../../services/chatRetention";
-import { DRAFT_AGENT_TITLE } from "../../services/chatAgents";
+import { draftEntryTitleForScope } from "../../services/chatAgents";
 import { resolveEffectiveThreadModelId } from "../../ai/providers/capabilityChecker";
 import {
   formatModelSwitchNotice,
@@ -81,20 +86,7 @@ export function createThreadsSlice(deps: {
     thread: ChatThreadSnapshot | null,
     scopeKey: string,
   ): ChatThreadSnapshot | null {
-    if (!thread) {
-      return null;
-    }
-    const nextMode = normalizeModeForScope(thread.metadata.mode, scopeKey);
-    if (nextMode === thread.metadata.mode) {
-      return thread;
-    }
-    return {
-      ...thread,
-      metadata: {
-        ...thread.metadata,
-        mode: nextMode,
-      },
-    };
+    return normalizeThreadSnapshotForScope(thread, scopeKey);
   }
 
   function normalizeMetadataPatchForScope(
@@ -138,7 +130,7 @@ export function createThreadsSlice(deps: {
               ...workspace.agentIndex,
               {
                 id: agentId,
-                title: DRAFT_AGENT_TITLE,
+                title: draftEntryTitleForScope(normalizedRootPath),
                 lastUsedAt: thread?.metadata.updatedAt ?? new Date().toISOString(),
                 isDraft: !thread || thread.messages.length === 0,
               },
@@ -449,7 +441,12 @@ export function createThreadsSlice(deps: {
       return thread?.metadata ?? null;
     },
     getActiveChatProvider(agentId?: string): ChatProviderId {
-      return this.getMetadata(agentId)?.provider ?? getDefaultChatProvider();
+      const root = getActiveChatScopeKey();
+      const raw = this.getMetadata(agentId)?.provider ?? getDefaultChatProvider();
+      if (!root) {
+        return raw;
+      }
+      return coerceProviderForScope(raw, root);
     },
     getActiveChatModel(providerModelCatalogs: ProviderModelCatalogs, agentId?: string): string {
       const providerId = this.getActiveChatProvider(agentId);
@@ -488,10 +485,13 @@ export function createThreadsSlice(deps: {
         };
       }
 
-      if (nextProvider === "debug" && !options.debugProviderEnabled) {
+      if (
+        (nextProvider === "debug-chat" || nextProvider === "debug-workspace") &&
+        !isDebugProviderEnabled(nextProvider, options.providerSettings)
+      ) {
         return {
           switched: false,
-          message: DEBUG_PROVIDER_SWITCH_BLOCKED_MESSAGE,
+          message: getDebugProviderSwitchBlockedMessage(nextProvider),
         };
       }
 

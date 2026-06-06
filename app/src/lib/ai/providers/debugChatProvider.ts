@@ -1,4 +1,4 @@
-import type { DebugProviderSettings } from "../../domain/contracts";
+import type { ChatModeId, ChatProviderId, DebugProviderSettings } from "../../domain/contracts";
 import {
   WorkspaceAccessReason,
   type CapabilityCheckInput,
@@ -6,11 +6,8 @@ import {
   type WorkspaceAccessStatus,
 } from "../capabilities";
 import {
-  DEBUG_PROVIDER_DISABLED_MESSAGE,
-  DEBUG_PROVIDER_DISABLED_RECOVERY,
-} from "../chatErrorCopy";
-import {
   getDebugProviderSendBlockHint,
+  getDebugProviderSendBlockRecovery,
   normalizeDebugProviderSettings,
 } from "./debugProviderSettings";
 import {
@@ -33,17 +30,31 @@ import type {
 
 export type DebugSettingsReader = () => DebugProviderSettings;
 
-export function createDebugChatProvider(getSettings: DebugSettingsReader): ChatProvider {
-  return new DebugChatProvider(getSettings);
+export interface DebugChatProviderOptions {
+  id: Extract<ChatProviderId, "debug-chat" | "debug-workspace">;
+  getSettings: DebugSettingsReader;
+  supportedModes: readonly ChatModeId[];
+  canReadWorkspaceFiles: boolean;
+  readyMessage: string;
+}
+
+export function createDebugChatProvider(options: DebugChatProviderOptions): ChatProvider {
+  return new DebugChatProvider(options);
 }
 
 class DebugChatProvider implements ChatProvider {
-  readonly id = "debug" as const;
+  readonly id: Extract<ChatProviderId, "debug-chat" | "debug-workspace">;
 
-  constructor(private readonly getSettings: DebugSettingsReader) {}
+  constructor(private readonly options: DebugChatProviderOptions) {
+    this.id = options.id;
+  }
+
+  private getSettings(): DebugProviderSettings {
+    return normalizeDebugProviderSettings(this.options.getSettings());
+  }
 
   async checkCapabilities(input: CapabilityCheckInput): Promise<CapabilityCheckResult> {
-    const settings = normalizeDebugProviderSettings(this.getSettings());
+    const settings = this.getSettings();
     if (!settings.enabled) {
       return {
         status: "blocked",
@@ -52,8 +63,8 @@ class DebugChatProvider implements ChatProvider {
           canReadWorkspaceFiles: false,
           supportedModes: [],
         },
-        message: DEBUG_PROVIDER_DISABLED_MESSAGE,
-        recoveryHint: DEBUG_PROVIDER_DISABLED_RECOVERY,
+        message: getDebugProviderSendBlockHint(this.id),
+        recoveryHint: getDebugProviderSendBlockRecovery(this.id),
       };
     }
 
@@ -61,15 +72,15 @@ class DebugChatProvider implements ChatProvider {
       status: "ready",
       reason: WorkspaceAccessReason.Unknown,
       capabilities: {
-        canReadWorkspaceFiles: true,
-        supportedModes: ["ask", "review"],
+        canReadWorkspaceFiles: this.options.canReadWorkspaceFiles,
+        supportedModes: [...this.options.supportedModes],
       },
-      message: "Debug provider is ready for workspace chat.",
+      message: this.options.readyMessage,
     };
   }
 
   async sendMessage(request: ProviderSendRequest): Promise<ProviderSendResponse> {
-    const settings = normalizeDebugProviderSettings(this.getSettings());
+    const settings = this.getSettings();
     this.assertEnabled(settings);
 
     const turnKey = resolveTurnKey(request);
@@ -97,7 +108,7 @@ class DebugChatProvider implements ChatProvider {
   }
 
   async *streamMessage(request: ProviderSendRequest): AsyncIterable<ProviderStreamChunk> {
-    const settings = normalizeDebugProviderSettings(this.getSettings());
+    const settings = this.getSettings();
     this.assertEnabled(settings);
 
     const turnKey = resolveTurnKey(request);
@@ -119,8 +130,8 @@ class DebugChatProvider implements ChatProvider {
   private assertEnabled(settings: DebugProviderSettings): void {
     if (!settings.enabled) {
       throw new ChatProviderError(
-        DEBUG_PROVIDER_DISABLED_MESSAGE,
-        getDebugProviderSendBlockHint(),
+        getDebugProviderSendBlockHint(this.id),
+        getDebugProviderSendBlockHint(this.id),
       );
     }
   }

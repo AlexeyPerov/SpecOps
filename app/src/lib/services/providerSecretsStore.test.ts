@@ -55,12 +55,12 @@ describe("providerSecretsStore", () => {
       JSON.stringify({ version: 1, keys: { http: "existing-http" } }),
     );
 
-    await saveProviderApiKey("debug", "debug-key");
+    await saveProviderApiKey("debug-chat", "debug-key");
 
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",
       JSON.stringify(
-        { version: 1, keys: { http: "existing-http", debug: "debug-key" } },
+        { version: 1, keys: { http: "existing-http", "debug-chat": "debug-key" } },
         null,
         2,
       ),
@@ -69,14 +69,14 @@ describe("providerSecretsStore", () => {
 
   it("removes a provider key when saving an empty string", async () => {
     readTextFileMock.mockResolvedValue(
-      JSON.stringify({ version: 1, keys: { http: "existing-http", debug: "debug-key" } }),
+      JSON.stringify({ version: 1, keys: { http: "existing-http", "debug-chat": "debug-key" } }),
     );
 
     await saveProviderApiKey("http", "   ");
 
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",
-      JSON.stringify({ version: 1, keys: { debug: "debug-key" } }, null, 2),
+      JSON.stringify({ version: 1, keys: { "debug-chat": "debug-key" } }, null, 2),
     );
   });
 });

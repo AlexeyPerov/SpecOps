@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProviderModelCatalogs } from "../../domain/contracts";
+import { defaultDebugProviderSettings } from "./debugProviderSettings";
 import { defaultHttpConnectionSettings } from "./httpConnectionSettings";
 import { isChatHttpRailVisible } from "./chatHttpRailGating";
 import * as providerModelCatalog from "./providerModelCatalog";
@@ -16,29 +17,64 @@ describe("isChatHttpRailVisible", () => {
     baseUrl: "http://localhost:11434/v1",
   };
   const configuredApiKey = "secret-key";
+  const debugChatDisabled = { ...defaultDebugProviderSettings, enabled: false };
+  const debugChatEnabled = { ...defaultDebugProviderSettings, enabled: true };
 
-  it("returns true when all gating conditions pass", () => {
+  it("returns true when all HTTP gating conditions pass", () => {
     expect(
-      isChatHttpRailVisible(configuredSettings, configuredApiKey, defaultProviderModelCatalogs),
+      isChatHttpRailVisible(
+        configuredSettings,
+        configuredApiKey,
+        defaultProviderModelCatalogs,
+        debugChatDisabled,
+      ),
     ).toBe(true);
   });
 
-  it("returns false when the HTTP connection is disabled", () => {
+  it("returns true when Debug AI is enabled without HTTP configuration", () => {
+    expect(
+      isChatHttpRailVisible(
+        { ...configuredSettings, enabled: false },
+        "",
+        defaultProviderModelCatalogs,
+        debugChatEnabled,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when HTTP is not configured and Debug AI is disabled", () => {
+    expect(
+      isChatHttpRailVisible(
+        { ...configuredSettings, enabled: false },
+        "",
+        defaultProviderModelCatalogs,
+        debugChatDisabled,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when the HTTP connection is disabled and Debug AI is disabled", () => {
     expect(
       isChatHttpRailVisible(
         { ...configuredSettings, enabled: false },
         configuredApiKey,
         defaultProviderModelCatalogs,
+        debugChatDisabled,
       ),
     ).toBe(false);
   });
 
   it("returns false when the API key is missing or whitespace", () => {
     expect(
-      isChatHttpRailVisible(configuredSettings, "", defaultProviderModelCatalogs),
+      isChatHttpRailVisible(configuredSettings, "", defaultProviderModelCatalogs, debugChatDisabled),
     ).toBe(false);
     expect(
-      isChatHttpRailVisible(configuredSettings, "   ", defaultProviderModelCatalogs),
+      isChatHttpRailVisible(
+        configuredSettings,
+        "   ",
+        defaultProviderModelCatalogs,
+        debugChatDisabled,
+      ),
     ).toBe(false);
   });
 
@@ -48,6 +84,7 @@ describe("isChatHttpRailVisible", () => {
         { ...configuredSettings, baseUrl: "" },
         configuredApiKey,
         defaultProviderModelCatalogs,
+        debugChatDisabled,
       ),
     ).toBe(false);
     expect(
@@ -55,6 +92,7 @@ describe("isChatHttpRailVisible", () => {
         { ...configuredSettings, baseUrl: "   " },
         configuredApiKey,
         defaultProviderModelCatalogs,
+        debugChatDisabled,
       ),
     ).toBe(false);
   });
@@ -65,8 +103,8 @@ describe("isChatHttpRailVisible", () => {
     expect(
       isChatHttpRailVisible(configuredSettings, configuredApiKey, {
         http: { modelIds: [], defaultModelId: "" },
-        debug: defaultProviderModelCatalogs.debug,
-      } satisfies ProviderModelCatalogs),
+        "debug-chat": defaultProviderModelCatalogs["debug-chat"],
+      } satisfies ProviderModelCatalogs, debugChatDisabled),
     ).toBe(false);
   });
 
@@ -74,8 +112,8 @@ describe("isChatHttpRailVisible", () => {
     expect(
       isChatHttpRailVisible(configuredSettings, configuredApiKey, {
         ...defaultProviderModelCatalogs,
-        debug: { modelIds: [], defaultModelId: "" },
-      }),
+        "debug-chat": { modelIds: [], defaultModelId: "" },
+      }, debugChatDisabled),
     ).toBe(true);
   });
 });

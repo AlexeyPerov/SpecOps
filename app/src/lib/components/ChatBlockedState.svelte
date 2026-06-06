@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ChatProviderId } from "../domain/contracts";
   import { openSettingsDialog } from "../services/settingsDialogUi";
 
   interface BlockedCopy {
@@ -12,6 +13,7 @@
     isHttpBlocked?: boolean;
     isDebugBlocked?: boolean;
     isModelBlocked?: boolean;
+    activeProvider?: ChatProviderId;
     accessBlockedCopy?: BlockedCopy;
     httpBlockedCopy?: BlockedCopy;
     debugBlockedCopy?: BlockedCopy;
@@ -23,11 +25,17 @@
     isHttpBlocked = false,
     isDebugBlocked = false,
     isModelBlocked = false,
+    activeProvider = "debug-chat",
     accessBlockedCopy,
     httpBlockedCopy,
     debugBlockedCopy,
     modelBlockedCopy,
   }: Props = $props();
+
+  const debugSettingsTab = $derived(
+    activeProvider === "debug-workspace" ? "debugAgent" : "debugAi",
+  );
+  const debugSettingsLabel = $derived("Debug Provider");
 </script>
 
 {#if isAccessBlocked && accessBlockedCopy}
@@ -44,7 +52,7 @@
     <p class="chat-blocked-message">{httpBlockedCopy.message}</p>
     <p class="chat-blocked-hint">{httpBlockedCopy.recoveryHint}</p>
     <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("connections")}>
-      Open Connections settings
+      Open Providers settings
     </button>
   </div>
 {:else if isDebugBlocked && debugBlockedCopy}
@@ -52,8 +60,12 @@
     <p class="chat-blocked-title">{debugBlockedCopy.title}</p>
     <p class="chat-blocked-message">{debugBlockedCopy.message}</p>
     <p class="chat-blocked-hint">{debugBlockedCopy.recoveryHint}</p>
-    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("debugAi")}>
-      Open Debug AI settings
+    <button
+      type="button"
+      class="chat-setup-button"
+      onclick={() => openSettingsDialog(debugSettingsTab)}
+    >
+      Open {debugSettingsLabel} settings
     </button>
   </div>
 {:else if isModelBlocked && modelBlockedCopy}
@@ -62,7 +74,7 @@
     <p class="chat-blocked-message">{modelBlockedCopy.message}</p>
     <p class="chat-blocked-hint">{modelBlockedCopy.recoveryHint}</p>
     <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("connections")}>
-      Open Connections settings
+      Open Providers settings
     </button>
   </div>
 {/if}

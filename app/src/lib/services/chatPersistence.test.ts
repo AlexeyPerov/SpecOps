@@ -72,7 +72,7 @@ function sampleThread(agentId = AGENT_ID): ChatThreadSnapshot {
         systemEvent: {
           type: "provider-switched",
           fromProvider: "http",
-          toProvider: "debug",
+          toProvider: "debug-workspace",
         },
       },
     ],
@@ -216,7 +216,7 @@ describe("agent thread snapshot codec", () => {
     expect(decoded?.thread.messages[0]?.systemEvent).toEqual({
       type: "provider-switched",
       fromProvider: "http",
-      toProvider: "debug",
+      toProvider: "debug-workspace",
     });
     expect(decoded?.thread.messages[1]?.systemEvent).toEqual({
       type: "model-switched",

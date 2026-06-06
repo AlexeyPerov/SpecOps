@@ -75,27 +75,54 @@ export function createSettingsSlice(update: SettingsUpdate) {
   }
 
   return {
-    setDebugProviderSettings(debugProvider: DebugProviderSettings) {
+    setDebugChatProviderSettings(debugProvider: DebugProviderSettings) {
       update((state) => ({
         ...state,
         settings: {
           ...state.settings,
           providerSettings: {
             ...state.settings.providerSettings,
-            debug: normalizeDebugProviderSettings(debugProvider),
+            debugChat: normalizeDebugProviderSettings(debugProvider),
           },
         },
       }));
     },
-    updateDebugProviderSettings(patch: Partial<DebugProviderSettings>) {
+    updateDebugChatProviderSettings(patch: Partial<DebugProviderSettings>) {
       update((state) => ({
         ...state,
         settings: {
           ...state.settings,
           providerSettings: {
             ...state.settings.providerSettings,
-            debug: normalizeDebugProviderSettings({
-              ...state.settings.providerSettings.debug,
+            debugChat: normalizeDebugProviderSettings({
+              ...state.settings.providerSettings.debugChat,
+              ...patch,
+            }),
+          },
+        },
+      }));
+    },
+    setDebugWorkspaceProviderSettings(debugProvider: DebugProviderSettings) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          providerSettings: {
+            ...state.settings.providerSettings,
+            debugWorkspace: normalizeDebugProviderSettings(debugProvider),
+          },
+        },
+      }));
+    },
+    updateDebugWorkspaceProviderSettings(patch: Partial<DebugProviderSettings>) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          providerSettings: {
+            ...state.settings.providerSettings,
+            debugWorkspace: normalizeDebugProviderSettings({
+              ...state.settings.providerSettings.debugWorkspace,
               ...patch,
             }),
           },
@@ -260,35 +287,28 @@ export function createSettingsSlice(update: SettingsUpdate) {
             },
           };
         }
-        if (partial.providerSettings?.debug) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              providerSettings: {
-                ...next.settings.providerSettings,
-                debug: normalizeDebugProviderSettings(partial.providerSettings.debug),
-              },
-            },
-          };
-        }
-
         const providerModelCatalogs = partial.providerModelCatalogs
           ? normalizeProviderModelCatalogs(partial.providerModelCatalogs)
           : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs);
 
-        if (partial.providerSettings?.http || partial.providerModelCatalogs) {
+        if (partial.providerSettings) {
           next = {
             ...next,
             settings: {
               ...next.settings,
               providerModelCatalogs,
-              providerSettings: {
+              providerSettings: normalizeAppProviderSettings({
                 ...next.settings.providerSettings,
-                http: normalizeHttpConnectionSettings(
-                  partial.providerSettings?.http ?? next.settings.providerSettings.http,
-                ),
-              },
+                ...partial.providerSettings,
+              }),
+            },
+          };
+        } else if (partial.providerModelCatalogs) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              providerModelCatalogs,
             },
           };
         }

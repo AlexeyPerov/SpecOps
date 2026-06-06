@@ -15,8 +15,12 @@ import {
 } from "../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
-import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
-import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
+import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
+import {
+  createTestCapabilityChecker,
+  registerTestDebugWorkspaceProvider,
+} from "../ai/providers/debugProviderTestHelpers";
+import { appState } from "./appState";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import { defaultHttpConnectionSettings } from "../ai/providers/httpConnectionSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
@@ -44,10 +48,12 @@ const readWorkspaceAgentsIndexSnapshotMock = vi.mocked(readWorkspaceAgentsIndexS
 const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
-const providerSwitchOptions = {
-  debugProviderEnabled: true,
-  providerModelCatalogs: defaultProviderModelCatalogs,
-};
+function providerSwitchOptions() {
+  return {
+    providerSettings: appState.getSnapshot().settings.providerSettings,
+    providerModelCatalogs: defaultProviderModelCatalogs,
+  };
+}
 
 describe("chatStore", () => {
   beforeEach(() => {
@@ -102,7 +108,7 @@ describe("chatStore", () => {
     });
 
     const metadataUpdated = chatStore.updateThreadMetadata(
-      { mode: "review", provider: "debug", summary: "brief summary" },
+      { mode: "review", provider: "debug-workspace", summary: "brief summary" },
       "2026-05-25T00:00:02.000Z",
     );
 
@@ -113,7 +119,7 @@ describe("chatStore", () => {
       agentId: "agent-1",
       threadId: "agent-1",
       mode: "review",
-      provider: "debug",
+      provider: "debug-workspace",
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:02.000Z",
       summary: "brief summary",
@@ -210,7 +216,7 @@ describe("chatStore", () => {
         agentId: "agent-b",
         threadId: "agent-b",
         mode: "review",
-        provider: "debug",
+        provider: "debug-workspace",
         createdAt: "2026-05-25T00:00:03.000Z",
         updatedAt: "2026-05-25T00:00:03.000Z",
       },
@@ -234,7 +240,7 @@ describe("chatStore", () => {
     chatStore.setActiveAgentId("agent-b");
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["b-1"]);
     expect(chatStore.getMetadata()?.mode).toBe("review");
-    expect(chatStore.getMetadata()?.provider).toBe("debug");
+    expect(chatStore.getMetadata()?.provider).toBe("debug-workspace");
   });
 
   it("loads workspace agents from index and thread files", async () => {
@@ -602,7 +608,7 @@ describe("chatStore", () => {
         agentId: "agent-b",
         threadId: "agent-b",
         mode: "review",
-        provider: "debug",
+        provider: "debug-workspace",
         createdAt: "2026-05-26T00:00:01.000Z",
         updatedAt: "2026-05-26T00:00:01.000Z",
       },
@@ -825,67 +831,59 @@ describe("chatStore provider switching", () => {
     chatStore.reset();
     resetChatProviderRegistryForTests();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
-    registerChatProvider(
-      createDebugChatProvider(() => ({
-        ...defaultDebugProviderSettings,
-        enabled: true,
-      })),
-    );
-    chatStore.setCapabilityChecker(
-      createRegistryCapabilityChecker(
-        () => ({
-          ...defaultDebugProviderSettings,
-          enabled: true,
-        }),
-        () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
-      ),
-    );
+    registerTestDebugWorkspaceProvider(() => ({
+      ...defaultDebugProviderSettings,
+      enabled: true,
+    }));
+    chatStore.setCapabilityChecker(createTestCapabilityChecker());
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
   });
 
   it("appends a provider-switched system event and updates metadata", async () => {
-    const result = await chatStore.switchThreadProvider("debug", providerSwitchOptions);
+    const result = await chatStore.switchThreadProvider("debug-workspace", providerSwitchOptions());
 
     expect(result.switched).toBe(true);
-    expect(chatStore.getMetadata()?.provider).toBe("debug");
+    expect(chatStore.getMetadata()?.provider).toBe("debug-workspace");
     expect(chatStore.getMessages().at(-1)).toMatchObject({
       role: "system",
-      content: "Provider switched from HTTP to Debug.",
+      content: "Provider switched from HTTP to Debug Provider.",
       systemEvent: {
         type: "provider-switched",
         fromProvider: "http",
-        toProvider: "debug",
+        toProvider: "debug-workspace",
       },
     });
   });
 
   it("blocks switching to Debug when it is disabled in settings", async () => {
-    const result = await chatStore.switchThreadProvider("debug", {
-      ...providerSwitchOptions,
-      debugProviderEnabled: false,
+    const result = await chatStore.switchThreadProvider("debug-workspace", {
+      ...providerSwitchOptions(),
+      providerSettings: { ...appState.getSnapshot().settings.providerSettings, debugWorkspace: { ...appState.getSnapshot().settings.providerSettings.debugWorkspace, enabled: false } },
     });
 
     expect(result.switched).toBe(false);
-    expect(result.message).toContain("Debug AI");
+    expect(result.message).toContain("Debug Provider");
     expect(chatStore.getMetadata()?.provider).toBe("http");
     expect(chatStore.getMessages()).toHaveLength(0);
   });
 
   it("supports switching from Debug back to HTTP when both are available", async () => {
-    await chatStore.switchThreadProvider("debug", providerSwitchOptions);
+    await chatStore.switchThreadProvider("debug-workspace", providerSwitchOptions());
 
-    const result = await chatStore.switchThreadProvider("http", providerSwitchOptions);
+    const result = await chatStore.switchThreadProvider("http", providerSwitchOptions());
 
     expect(result.switched).toBe(true);
     expect(chatStore.getMetadata()?.provider).toBe("http");
-    expect(chatStore.getMessages().at(-1)?.content).toBe("Provider switched from Debug to HTTP.");
+    expect(chatStore.getMessages().at(-1)?.content).toBe(
+      "Provider switched from Debug Provider to HTTP.",
+    );
   });
 
   it("blocks provider changes while generating", async () => {
     chatStore.beginTurn("turn-1");
 
-    const result = await chatStore.switchThreadProvider("debug", providerSwitchOptions);
+    const result = await chatStore.switchThreadProvider("debug-workspace", providerSwitchOptions());
 
     expect(result.switched).toBe(false);
     expect(chatStore.getMetadata()?.provider).toBe("http");
@@ -897,21 +895,11 @@ describe("chatStore model switching", () => {
     chatStore.reset();
     resetChatProviderRegistryForTests();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
-    registerChatProvider(
-      createDebugChatProvider(() => ({
-        ...defaultDebugProviderSettings,
-        enabled: true,
-      })),
-    );
-    chatStore.setCapabilityChecker(
-      createRegistryCapabilityChecker(
-        () => ({
-          ...defaultDebugProviderSettings,
-          enabled: true,
-        }),
-        () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
-      ),
-    );
+    registerTestDebugWorkspaceProvider(() => ({
+      ...defaultDebugProviderSettings,
+      enabled: true,
+    }));
+    chatStore.setCapabilityChecker(createTestCapabilityChecker());
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
   });
@@ -962,10 +950,10 @@ describe("chatStore model switching", () => {
   it("falls back to target provider default when switching providers", async () => {
     chatStore.updateThreadMetadata({ selectedModelId: "gpt-4.1" });
 
-    const result = await chatStore.switchThreadProvider("debug", providerSwitchOptions);
+    const result = await chatStore.switchThreadProvider("debug-workspace", providerSwitchOptions());
 
     expect(result.switched).toBe(true);
-    expect(chatStore.getMetadata()?.provider).toBe("debug");
+    expect(chatStore.getMetadata()?.provider).toBe("debug-workspace");
     expect(chatStore.getMetadata()?.selectedModelId).toBe("debug-simulator");
   });
 
@@ -976,7 +964,7 @@ describe("chatStore model switching", () => {
         modelIds: ["shared-model", "gpt-4o-mini"],
         defaultModelId: "shared-model",
       },
-      debug: {
+      "debug-workspace": {
         modelIds: ["shared-model", "debug-simulator"],
         defaultModelId: "debug-simulator",
       },
@@ -984,8 +972,8 @@ describe("chatStore model switching", () => {
 
     chatStore.updateThreadMetadata({ provider: "http", selectedModelId: "shared-model" });
 
-    const result = await chatStore.switchThreadProvider("debug", {
-      debugProviderEnabled: true,
+    const result = await chatStore.switchThreadProvider("debug-workspace", {
+      providerSettings: appState.getSnapshot().settings.providerSettings,
       providerModelCatalogs: sharedCatalogs,
     });
 
@@ -999,35 +987,25 @@ describe("chatStore active provider resolution", () => {
     chatStore.reset();
     resetChatProviderRegistryForTests();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
-    registerChatProvider(
-      createDebugChatProvider(() => ({
-        ...defaultDebugProviderSettings,
-        enabled: true,
-      })),
-    );
-    chatStore.setCapabilityChecker(
-      createRegistryCapabilityChecker(
-        () => ({
-          ...defaultDebugProviderSettings,
-          enabled: true,
-        }),
-        () => ({ settings: defaultHttpConnectionSettings, apiKey: "" }),
-      ),
-    );
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    registerTestDebugWorkspaceProvider(() => ({
+      ...defaultDebugProviderSettings,
+      enabled: true,
+    }));
+    chatStore.setCapabilityChecker(createTestCapabilityChecker());
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
   });
 
   it("uses default provider resolver when thread metadata is missing", () => {
     expect(chatStore.getMetadata()).toBeNull();
-    expect(chatStore.getActiveChatProvider()).toBe("debug");
+    expect(chatStore.getActiveChatProvider()).toBe("debug-workspace");
   });
 
   it("preflights Debug when no thread exists yet", async () => {
     const result = await chatStore.runAccessPreflight();
 
     expect(result.status).toBe("ready");
-    expect(result.message).toContain("Debug provider is ready");
+    expect(result.message).toContain("Debug Agent provider is ready");
   });
 
   it("checks capabilities for Debug without persisted thread metadata", async () => {

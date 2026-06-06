@@ -1,4 +1,8 @@
-import type { HttpConnectionSettings, ProviderModelCatalogs } from "../../domain/contracts";
+import type {
+  DebugProviderSettings,
+  HttpConnectionSettings,
+  ProviderModelCatalogs,
+} from "../../domain/contracts";
 import { validateLocalModelSelection } from "./modelValidation";
 import { isHttpProviderConfigured } from "./httpConnectionSettings";
 import {
@@ -16,17 +20,18 @@ function isHttpDefaultModelResolvable(providerModelCatalogs: ProviderModelCatalo
  * Whether the activity-rail Chat button should be visible for `chat-http`.
  *
  * Gating policy ([roadmap A2D](../../../../specs/ops/roadmap.md#activity-rail-gating-a2d)):
- * the button stays **hidden** until the HTTP connection is fully configured —
- * `enabled`, non-empty trimmed API key, valid trimmed `baseUrl`, and a
- * resolvable default model in the HTTP provider catalog.
- *
- * Cloud (`chat-cloud`) rail gating is separate; this helper covers HTTP Chat only.
+ * show Chat when the HTTP connection is fully configured, or when Debug AI is
+ * enabled for chat-http.
  */
 export function isChatHttpRailVisible(
   settings: HttpConnectionSettings,
   apiKey: string,
   providerModelCatalogs: ProviderModelCatalogs,
+  debugChatSettings: DebugProviderSettings,
 ): boolean {
+  if (debugChatSettings.enabled) {
+    return true;
+  }
   if (!isHttpProviderConfigured(settings, apiKey)) {
     return false;
   }

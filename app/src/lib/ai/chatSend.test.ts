@@ -14,7 +14,7 @@ import {
 } from "./providers/types";
 
 class StreamingTestProvider implements ChatProvider {
-  readonly id = "debug" as const;
+  readonly id = "debug-workspace" as const;
 
   async checkCapabilities(_input: CapabilityCheckInput): Promise<CapabilityCheckResult> {
     return {
@@ -63,7 +63,7 @@ function sampleRequest(mode: "ask" | "review" = "ask"): ProviderSendRequest {
   return {
     payload: buildProviderRequest({
       mode,
-      provider: "debug",
+      provider: "debug-workspace",
       workspaceRootPath: "/work/a",
       recentMessages: [],
     }),

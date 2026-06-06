@@ -4,7 +4,10 @@ import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { chatStore } from "../state/chatStore";
 import { appState } from "../state/appState";
 import { defaultDebugProviderSettings } from "./providers/debugProviderSettings";
-import { createDebugChatProvider } from "./providers/debugChatProvider";
+import {
+  createTestDebugWorkspaceProvider,
+  registerBothTestDebugProviders,
+} from "./providers/debugProviderTestHelpers";
 import { createOpenAiCompatibleChatProvider } from "./providers/openAiCompatibleChatProvider";
 import {
   registerChatProvider,
@@ -56,7 +59,7 @@ describe("sendChatMessage", () => {
     schedulePersistMock.mockReset();
     ensureWorkspaceReadAccessMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
-    appState.updateDebugProviderSettings({
+    const debugSettings = {
       ...defaultDebugProviderSettings,
       enabled: true,
       simulationSeed: 42,
@@ -66,21 +69,23 @@ describe("sendChatMessage", () => {
       chunkCharsMax: 6,
       failureProbability: 0,
       includeDiagnostics: false,
-    });
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+    };
+    appState.updateDebugWorkspaceProviderSettings(debugSettings);
+    appState.updateDebugChatProviderSettings(debugSettings);
+    registerBothTestDebugProviders();
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
   });
 
   afterEach(() => {
@@ -106,17 +111,17 @@ describe("sendChatMessage", () => {
 
   it("uses default provider resolver before thread metadata exists", async () => {
     chatStore.reset();
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+    registerBothTestDebugProviders();
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.createDraftAgent();
 
@@ -125,7 +130,7 @@ describe("sendChatMessage", () => {
     const result = await resultPromise;
 
     expect(result.ok).toBe(true);
-    expect(chatStore.getMetadata()?.provider).toBe("debug");
+    expect(chatStore.getMetadata()?.provider).toBe("debug-workspace");
   });
 
   it("streams partial assistant updates during generation", async () => {
@@ -180,7 +185,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -226,7 +231,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -278,7 +283,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -342,7 +347,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -386,8 +391,8 @@ describe("sendChatMessage", () => {
   });
 
   it("records failed turns in retry scaffolding on simulated provider failure", async () => {
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -427,7 +432,7 @@ describe("sendChatMessage", () => {
   it("skips workspace access preflight for chat-http sends", async () => {
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
     chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
     ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
 
     const resultPromise = sendChatMessage("chat-http still sends");
@@ -442,7 +447,7 @@ describe("sendChatMessage", () => {
   it("persists workspace sends under the active workspace scope key", async () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
     const sendPromise = sendChatMessage("workspace scope persistence");
     await vi.runAllTimersAsync();
@@ -456,7 +461,7 @@ describe("sendChatMessage", () => {
   it("persists chat-http sends under the chat-http scope key", async () => {
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
     chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
     const sendPromise = sendChatMessage("chat-http scope persistence", undefined, {
       chatContextKind: "chat-http",
@@ -472,7 +477,7 @@ describe("sendChatMessage", () => {
   it("normalizes review mode to ask before sending in chat-http", async () => {
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
     chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "review" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "review" });
 
     const resultPromise = sendChatMessage("must be ask-only", undefined, {
       chatContextKind: "chat-http",
@@ -486,17 +491,17 @@ describe("sendChatMessage", () => {
 
   it("promotes draft agent and schedules persistence on first send", async () => {
     chatStore.reset();
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+    registerBothTestDebugProviders();
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
     const agentId = chatStore.createDraftAgent();
     expect(agentId).toBe("agent-1");
@@ -529,7 +534,7 @@ describe("sendChatMessage", () => {
   });
 
   it("produces structured review output for review mode threads", async () => {
-    chatStore.updateThreadMetadata({ mode: "review", provider: "debug" });
+    chatStore.updateThreadMetadata({ mode: "review", provider: "debug-workspace" });
 
     const resultPromise = sendChatMessage("Review this idea");
     await vi.runAllTimersAsync();
@@ -556,7 +561,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -591,7 +596,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -640,7 +645,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -671,8 +676,8 @@ describe("sendChatMessage", () => {
   });
 
   it("retries the last failed turn without duplicating user messages", async () => {
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -685,8 +690,8 @@ describe("sendChatMessage", () => {
     expect(chatStore.getMessages().filter((message) => message.role === "user")).toHaveLength(1);
     expect(chatStore.canRetryLastTurn()).toBe(true);
 
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       failureProbability: 0,
     });
 
@@ -747,7 +752,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -799,7 +804,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",
@@ -824,7 +829,7 @@ describe("sendChatMessage", () => {
   });
 
   it("blocks send when the selected model is not in the configured provider catalog", async () => {
-    chatStore.updateThreadMetadata({ provider: "debug", selectedModelId: "unknown-model" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", selectedModelId: "unknown-model" });
 
     const result = await sendChatMessage("Hello");
 
@@ -838,11 +843,20 @@ describe("sendChatMessage", () => {
 
   it("passes the resolved thread model id to the provider adapter", async () => {
     resetChatProviderRegistryForTests();
-    const debugProvider = createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug);
+    const debugProvider = createTestDebugWorkspaceProvider();
     const streamMessageSpy = vi.spyOn(debugProvider, "streamMessage");
     registerChatProvider(debugProvider);
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.providerSettings,
+        () => ({
+          settings: appState.getSnapshot().settings.providerSettings.http,
+          apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
+        }),
+      ),
+    );
 
-    chatStore.updateThreadMetadata({ provider: "debug", selectedModelId: "debug-simulator" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", selectedModelId: "debug-simulator" });
 
     const sendPromise = sendChatMessage("Model check");
     await vi.runAllTimersAsync();
@@ -874,7 +888,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
           apiKey: "http-test-key",

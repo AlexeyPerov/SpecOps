@@ -16,11 +16,19 @@ import {
 
 export const defaultAppProviderSettings: AppProviderSettings = {
   http: defaultHttpConnectionSettings,
-  debug: defaultDebugProviderSettings,
+  debugChat: defaultDebugProviderSettings,
+  debugWorkspace: defaultDebugProviderSettings,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function resolveLegacyDebugSettings(source: Record<string, unknown>): DebugProviderSettings | undefined {
+  if (!isRecord(source.debug)) {
+    return undefined;
+  }
+  return normalizeDebugProviderSettings(source.debug);
 }
 
 /** Typed access to one provider's settings from the app bundle. */
@@ -37,9 +45,16 @@ export function normalizeAppProviderSettings(
   _catalogs?: ProviderModelCatalogs,
 ): AppProviderSettings {
   const source = isRecord(input) ? input : {};
+  const legacyDebug = resolveLegacyDebugSettings(source);
+
   return {
     http: normalizeHttpConnectionSettings(source.http),
-    debug: normalizeDebugProviderSettings(source.debug),
+    debugChat: normalizeDebugProviderSettings(
+      source.debugChat ?? legacyDebug ?? defaultDebugProviderSettings,
+    ),
+    debugWorkspace: normalizeDebugProviderSettings(
+      source.debugWorkspace ?? legacyDebug ?? defaultDebugProviderSettings,
+    ),
   };
 }
 
@@ -47,6 +62,12 @@ export function appHttpConnectionSettings(settings: AppProviderSettings): HttpCo
   return settings.http;
 }
 
-export function appDebugProviderSettings(settings: AppProviderSettings): DebugProviderSettings {
-  return settings.debug;
+export function appDebugChatProviderSettings(settings: AppProviderSettings): DebugProviderSettings {
+  return settings.debugChat;
+}
+
+export function appDebugWorkspaceProviderSettings(
+  settings: AppProviderSettings,
+): DebugProviderSettings {
+  return settings.debugWorkspace;
 }

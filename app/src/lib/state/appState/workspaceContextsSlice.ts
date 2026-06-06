@@ -61,6 +61,7 @@ function canRestoreChatHttpAsActive(settings: AppDomainState["settings"]): boole
     settings.providerSettings.http,
     settings.providerApiKeys.http ?? "",
     settings.providerModelCatalogs,
+    settings.providerSettings.debugChat,
   );
 }
 

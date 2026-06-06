@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { defaultAppProviderSettings } from "./appProviderSettings";
 import {
-  DEBUG_PROVIDER_DISABLED_SEND_HINT,
+  DEBUG_AI_PROVIDER_DISABLED_MESSAGE,
+  DEBUG_AI_PROVIDER_DISABLED_RECOVERY,
+} from "../chatErrorCopy";
+import {
   defaultDebugProviderSettings,
   getDebugProviderSendBlockHint,
   getDebugProviderSendBlockRecovery,
+  isDebugProviderEnabled,
   isDebugProviderSendBlocked,
+  coerceProviderForScope,
   normalizeDebugProviderSettings,
+  normalizeLegacyChatProviderId,
 } from "./debugProviderSettings";
 
 describe("normalizeDebugProviderSettings", () => {
@@ -71,17 +78,39 @@ describe("normalizeDebugProviderSettings", () => {
 describe("debug provider send blocking", () => {
   it("blocks send when debug is selected but disabled in settings", () => {
     expect(
-      isDebugProviderSendBlocked("debug", { ...defaultDebugProviderSettings, enabled: false }),
+      isDebugProviderSendBlocked("debug-workspace", {
+        ...defaultAppProviderSettings,
+        debugWorkspace: { ...defaultDebugProviderSettings, enabled: false },
+      }),
     ).toBe(true);
     expect(
-      isDebugProviderSendBlocked("debug", { ...defaultDebugProviderSettings, enabled: true }),
+      isDebugProviderSendBlocked("debug-chat", {
+        ...defaultAppProviderSettings,
+        debugChat: { ...defaultDebugProviderSettings, enabled: false },
+      }),
+    ).toBe(true);
+    expect(
+      isDebugProviderSendBlocked("debug-workspace", defaultAppProviderSettings),
     ).toBe(false);
-    expect(isDebugProviderSendBlocked("http", defaultDebugProviderSettings)).toBe(false);
-    expect(isDebugProviderSendBlocked(undefined, defaultDebugProviderSettings)).toBe(false);
+    expect(isDebugProviderSendBlocked("http", defaultAppProviderSettings)).toBe(false);
+    expect(isDebugProviderSendBlocked(undefined, defaultAppProviderSettings)).toBe(false);
   });
 
-  it("exposes a recovery hint pointing to Debug AI settings", () => {
-    expect(getDebugProviderSendBlockHint()).toBe(DEBUG_PROVIDER_DISABLED_SEND_HINT);
-    expect(getDebugProviderSendBlockRecovery()).toContain("Debug AI");
+  it("exposes scoped recovery hints", () => {
+    expect(getDebugProviderSendBlockHint("debug-chat")).toBe(DEBUG_AI_PROVIDER_DISABLED_MESSAGE);
+    expect(getDebugProviderSendBlockRecovery("debug-chat")).toContain("Debug Provider");
+    expect(getDebugProviderSendBlockRecovery("debug-workspace")).toContain("Debug Provider");
+  });
+
+  it("maps legacy debug provider ids by scope on load", () => {
+    expect(normalizeLegacyChatProviderId("debug", "chat-http")).toBe("debug-chat");
+    expect(normalizeLegacyChatProviderId("debug", "/work/a")).toBe("debug-workspace");
+    expect(isDebugProviderEnabled("debug-chat", defaultAppProviderSettings)).toBe(true);
+  });
+
+  it("coerces scoped debug providers when chat scope changes", () => {
+    expect(coerceProviderForScope("debug-workspace", "chat-http")).toBe("debug-chat");
+    expect(coerceProviderForScope("debug-chat", "/work/a")).toBe("debug-workspace");
+    expect(coerceProviderForScope("http", "chat-http")).toBe("http");
   });
 });

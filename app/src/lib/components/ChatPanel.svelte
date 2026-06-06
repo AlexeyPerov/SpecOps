@@ -30,16 +30,17 @@
     chatStore,
     formatCompactionNotice,
   } from "../state/chatStore";
-  import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
+  import { draftEntryTitleForScope } from "../services/chatAgents";
   import ChatBlockedState from "./ChatBlockedState.svelte";
   import ChatComposer from "./ChatComposer.svelte";
   import ChatMessageList from "./ChatMessageList.svelte";
 
   interface Props {
+    chatContextKind?: "workspace" | "chat-http";
     onDeleteAgent?: () => void | Promise<void>;
   }
 
-  let { onDeleteAgent }: Props = $props();
+  let { chatContextKind = "workspace", onDeleteAgent }: Props = $props();
 
   let inlineError = $state("");
   let supportedModes = $state<ChatModeId[]>(["ask", "review"]);
@@ -50,14 +51,14 @@
   const isGenerating = $derived($chatIsGenerating);
   const canRetryLastTurn = $derived($chatCanRetryLastTurn);
   const lastError = $derived($chatLastError);
-  const debugProviderSettings = $derived($appState.settings.providerSettings.debug);
+  const providerSettings = $derived($appState.settings.providerSettings);
   const httpProviderSettings = $derived($appState.settings.providerSettings.http);
   const httpApiKey = $derived($appState.settings.providerApiKeys.http ?? "");
   const providerModelCatalogs = $derived($appState.settings.providerModelCatalogs);
   const activeMode = $derived(metadata?.mode ?? "ask");
   const activeProvider = $derived.by(() => {
     metadata;
-    debugProviderSettings;
+    providerSettings;
     httpProviderSettings;
     httpApiKey;
     return chatStore.getActiveChatProvider();
@@ -76,7 +77,7 @@
     getLocalInvalidModelBlockedCopy(activeModel, formatChatProviderLabel(activeProvider)),
   );
   const isDebugSendBlocked = $derived(
-    isDebugProviderSendBlocked(activeProvider, debugProviderSettings),
+    isDebugProviderSendBlocked(activeProvider, providerSettings),
   );
   const isHttpSendBlocked = $derived(
     isHttpProviderSendBlocked(activeProvider, httpProviderSettings, httpApiKey),
@@ -86,13 +87,16 @@
       accessState.reason !== WorkspaceAccessReason.MissingProviderConfig,
   );
   const isEmpty = $derived(messages.length === 0);
-  const isChatHttpScope = $derived(chatStore.getActiveChatScopeKey() === CHAT_HTTP_CONTEXT_ID);
+  const isChatHttpScope = $derived(chatContextKind === "chat-http");
   const activeAgentId = $derived(chatStore.getActiveAgentId());
   const activeAgentTitle = $derived.by(() => {
     if (!activeAgentId) {
       return isChatHttpScope ? "Chat" : "Agent";
     }
-    return chatStore.getAgentTitle(activeAgentId) ?? DRAFT_AGENT_TITLE;
+    return (
+      chatStore.getAgentTitle(activeAgentId) ??
+      draftEntryTitleForScope(isChatHttpScope ? CHAT_HTTP_CONTEXT_ID : null)
+    );
   });
   const canDeleteAgent = $derived(activeAgentId !== null);
   const compactionNotice = $derived.by(() => {
@@ -100,7 +104,7 @@
     return count > 0 ? formatCompactionNotice(count) : "";
   });
   const httpBlockedCopy = $derived(getHttpMissingConfigCopy());
-  const debugBlockedCopy = $derived(getDebugProviderDisabledCopy());
+  const debugBlockedCopy = $derived(getDebugProviderDisabledCopy(activeProvider));
   const accessBlockedCopy = $derived(
     getAccessBlockedCopy(accessState.reason, { activeProvider }),
   );
@@ -121,7 +125,8 @@
     activeProvider;
     activeModel;
     metadata?.mode;
-    debugProviderSettings.enabled;
+    providerSettings.debugChat.enabled;
+    providerSettings.debugWorkspace.enabled;
     httpProviderSettings.enabled;
     httpProviderSettings.baseUrl;
     providerModelCatalogs;
@@ -197,6 +202,7 @@
       isHttpBlocked={isHttpSendBlocked}
       isDebugBlocked={isDebugSendBlocked}
       isModelBlocked={isModelSendBlocked}
+      {activeProvider}
       {accessBlockedCopy}
       {httpBlockedCopy}
       {debugBlockedCopy}
@@ -226,9 +232,9 @@
       {activeMode}
       {activeProvider}
       {activeModel}
-      chatContextKind={isChatHttpScope ? "chat-http" : "workspace"}
+      {chatContextKind}
       {supportedModes}
-      {debugProviderSettings}
+      {providerSettings}
       {httpProviderSettings}
       {httpApiKey}
       {providerModelCatalogs}

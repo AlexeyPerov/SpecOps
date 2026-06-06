@@ -12,8 +12,11 @@ export const WORKSPACE_PATH_INACCESSIBLE_RECOVERY =
 export const WORKSPACE_ACCESS_LOST_MESSAGE =
   "Workspace file access was lost. Chat is paused until access is restored.";
 
-export const DEBUG_PROVIDER_SWITCH_BLOCKED_MESSAGE =
-  "Enable the Debug provider in Settings → Debug AI first.";
+export const DEBUG_AI_PROVIDER_SWITCH_BLOCKED_MESSAGE =
+  "Enable Debug Provider in Settings → Chats → Debug Provider first.";
+
+export const DEBUG_AGENT_PROVIDER_SWITCH_BLOCKED_MESSAGE =
+  "Enable Debug Provider in Settings → Workspaces → Debug Provider first.";
 
 export const HTTP_NOT_CONFIGURED_TITLE = "Connection is not configured";
 
@@ -21,7 +24,7 @@ export const HTTP_MISSING_CONFIG_MESSAGE =
   "Add your HTTP connection API key in Settings before sending messages.";
 
 export const HTTP_MISSING_CONFIG_RECOVERY =
-  "Open Settings → Connections, enter your API key, and try again.";
+  "Open Settings → Chats → Providers, enter your API key, and try again.";
 
 export const PROVIDER_MISSING_CONFIG_MESSAGE =
   "Complete provider setup in Settings before sending messages.";
@@ -31,24 +34,36 @@ export const PROVIDER_MISSING_CONFIG_RECOVERY =
 
 export const DEBUG_PROVIDER_DISABLED_TITLE = "Debug provider is disabled";
 
-export const DEBUG_PROVIDER_DISABLED_MESSAGE =
-  "The Debug provider is turned off in Developer Settings.";
+export const DEBUG_AI_PROVIDER_DISABLED_MESSAGE =
+  "Debug Provider is turned off in Settings.";
 
-export const DEBUG_PROVIDER_DISABLED_RECOVERY =
-  "Open Settings → Debug AI and enable the Debug provider.";
+export const DEBUG_AI_PROVIDER_DISABLED_RECOVERY =
+  "Open Settings → Chats → Debug Provider and enable the Debug Provider.";
+
+export const DEBUG_AGENT_PROVIDER_DISABLED_MESSAGE =
+  "Debug Provider is turned off in Settings.";
+
+export const DEBUG_AGENT_PROVIDER_DISABLED_RECOVERY =
+  "Open Settings → Workspaces → Debug Provider and enable the Debug Provider.";
+
+/** @deprecated Use scoped debug copy helpers instead. */
+export const DEBUG_PROVIDER_DISABLED_MESSAGE = DEBUG_AI_PROVIDER_DISABLED_MESSAGE;
+
+/** @deprecated Use scoped debug copy helpers instead. */
+export const DEBUG_PROVIDER_DISABLED_RECOVERY = DEBUG_AI_PROVIDER_DISABLED_RECOVERY;
 
 export const PROVIDER_UNAVAILABLE_MESSAGE = "The selected provider is not available.";
 
 export const PROVIDER_UNAVAILABLE_RECOVERY =
-  "Choose HTTP or enable Debug in Settings → Debug AI.";
+  "Choose HTTP or enable the scoped debug provider in Settings.";
 
 export const PROVIDER_UNSUPPORTED_ACCESS_MESSAGE =
   "The selected provider cannot read files in this workspace.";
 
 export const PROVIDER_UNSUPPORTED_ACCESS_RECOVERY =
-  "Choose HTTP or enable Debug in Settings → Debug AI.";
+  "Choose HTTP or enable Debug Provider in Settings → Workspaces → Debug Provider.";
 
-export const PROVIDER_NOT_REGISTERED_MESSAGE = "The Debug provider is not ready yet.";
+export const PROVIDER_NOT_REGISTERED_MESSAGE = "The debug provider is not ready yet.";
 
 export const PROVIDER_NOT_REGISTERED_RECOVERY =
   "Restart the app. If the problem continues, choose HTTP instead.";
@@ -162,12 +177,27 @@ export function getHttpMissingConfigCopy(): ChatBlockedStateCopy {
   };
 }
 
-export function getDebugProviderDisabledCopy(): ChatBlockedStateCopy {
+export function getDebugProviderDisabledCopy(
+  providerId: ChatProviderId = "debug-chat",
+): ChatBlockedStateCopy {
+  if (providerId === "debug-workspace") {
+    return {
+      title: DEBUG_PROVIDER_DISABLED_TITLE,
+      message: DEBUG_AGENT_PROVIDER_DISABLED_MESSAGE,
+      recoveryHint: DEBUG_AGENT_PROVIDER_DISABLED_RECOVERY,
+    };
+  }
   return {
     title: DEBUG_PROVIDER_DISABLED_TITLE,
-    message: DEBUG_PROVIDER_DISABLED_MESSAGE,
-    recoveryHint: DEBUG_PROVIDER_DISABLED_RECOVERY,
+    message: DEBUG_AI_PROVIDER_DISABLED_MESSAGE,
+    recoveryHint: DEBUG_AI_PROVIDER_DISABLED_RECOVERY,
   };
+}
+
+export function getDebugProviderSwitchBlockedMessage(providerId: ChatProviderId): string {
+  return providerId === "debug-workspace"
+    ? DEBUG_AGENT_PROVIDER_SWITCH_BLOCKED_MESSAGE
+    : DEBUG_AI_PROVIDER_SWITCH_BLOCKED_MESSAGE;
 }
 
 export function formatRetryFailureNote(previousMessage: string): string {

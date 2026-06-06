@@ -1013,6 +1013,10 @@ describe("appState session restore", () => {
           enabled: false,
           baseUrl: "",
         },
+        debugChat: {
+          ...appState.getSnapshot().settings.providerSettings.debugChat,
+          enabled: false,
+        },
       },
       providerModelCatalogs: {
         ...defaultProviderModelCatalogs,
@@ -1037,6 +1041,10 @@ describe("appState session restore", () => {
         http: {
           enabled: false,
           baseUrl: "",
+        },
+        debugChat: {
+          ...appState.getSnapshot().settings.providerSettings.debugChat,
+          enabled: false,
         },
       },
       providerModelCatalogs: {

@@ -74,7 +74,7 @@ export interface SwitchThreadModelResult {
 }
 
 export interface ChatProviderSwitchOptions {
-  debugProviderEnabled: boolean;
+  providerSettings: import("../../domain/contracts").AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
 }
 

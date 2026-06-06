@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defaultAppProviderSettings } from "./appProviderSettings";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
 import { defaultHttpConnectionSettings } from "./httpConnectionSettings";
 import {
@@ -13,80 +14,123 @@ import {
 } from "./selection";
 import { defaultProviderModelCatalogs } from "./providerModelCatalog";
 
+function providerSettingsWithDebugEnabled(enabled: boolean) {
+  return {
+    ...defaultAppProviderSettings,
+    debugChat: { ...defaultDebugProviderSettings, enabled },
+    debugWorkspace: { ...defaultDebugProviderSettings, enabled },
+  };
+}
+
 describe("chat provider selection", () => {
-  it("lists product providers and Debug only when enabled", () => {
-    expect(listSelectableChatProviders({ ...defaultDebugProviderSettings, enabled: false })).toEqual([
-      { id: "http", label: "HTTP" },
+  it("lists scoped debug providers when enabled and omits HTTP until configured", () => {
+    expect(listSelectableChatProviders(providerSettingsWithDebugEnabled(false))).toEqual([]);
+
+    expect(listSelectableChatProviders(providerSettingsWithDebugEnabled(true))).toEqual([
+      { id: "debug-workspace", label: "Debug Provider" },
     ]);
 
-    expect(listSelectableChatProviders({ ...defaultDebugProviderSettings, enabled: true })).toEqual([
+    expect(
+      listSelectableChatProviders(providerSettingsWithDebugEnabled(true), {
+        chatContextKind: "workspace",
+        httpConfigured: true,
+      }),
+    ).toEqual([
       { id: "http", label: "HTTP" },
-      { id: "debug", label: "Debug" },
+      { id: "debug-workspace", label: "Debug Provider" },
     ]);
   });
 
   it("filters chat-http providers by HTTP configuration", () => {
+    const enabled = providerSettingsWithDebugEnabled(true);
     expect(
-      listSelectableChatProviders(
-        { ...defaultDebugProviderSettings, enabled: true },
-        { chatContextKind: "chat-http", httpConfigured: false },
-      ),
-    ).toEqual([{ id: "debug", label: "Debug" }]);
+      listSelectableChatProviders(enabled, {
+        chatContextKind: "chat-http",
+        httpConfigured: false,
+      }),
+    ).toEqual([{ id: "debug-chat", label: "Debug Provider" }]);
 
     expect(
-      listSelectableChatProviders(
-        { ...defaultDebugProviderSettings, enabled: true },
-        { chatContextKind: "chat-http", httpConfigured: true },
-      ),
+      listSelectableChatProviders(enabled, {
+        chatContextKind: "chat-http",
+        httpConfigured: true,
+      }),
     ).toEqual([
       { id: "http", label: "HTTP" },
-      { id: "debug", label: "Debug" },
+      { id: "debug-chat", label: "Debug Provider" },
     ]);
   });
 
-  it("validates provider selectability for chat-http", () => {
+  it("requires HTTP configuration before listing HTTP in workspace chat", () => {
+    const enabled = providerSettingsWithDebugEnabled(true);
     expect(
-      canSelectChatProvider("http", { ...defaultDebugProviderSettings, enabled: true }, {
+      canSelectChatProvider("http", enabled, {
+        chatContextKind: "workspace",
+        httpConfigured: false,
+      }),
+    ).toBe(false);
+    expect(
+      canSelectChatProvider("http", enabled, {
+        chatContextKind: "workspace",
+        httpConfigured: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("validates provider selectability for chat-http", () => {
+    const enabled = providerSettingsWithDebugEnabled(true);
+    expect(
+      canSelectChatProvider("http", enabled, {
         chatContextKind: "chat-http",
         httpConfigured: false,
       }),
     ).toBe(false);
     expect(
-      canSelectChatProvider("http", { ...defaultDebugProviderSettings, enabled: true }, {
+      canSelectChatProvider("http", enabled, {
         chatContextKind: "chat-http",
         httpConfigured: true,
       }),
     ).toBe(true);
     expect(
-      canSelectChatProvider("debug", { ...defaultDebugProviderSettings, enabled: false }, {
+      canSelectChatProvider("debug-chat", providerSettingsWithDebugEnabled(false), {
+        chatContextKind: "chat-http",
+        httpConfigured: true,
+      }),
+    ).toBe(false);
+    expect(
+      canSelectChatProvider("debug-workspace", enabled, {
         chatContextKind: "chat-http",
         httpConfigured: true,
       }),
     ).toBe(false);
   });
 
-  it("prefers HTTP for new threads when configured, otherwise Debug when enabled", () => {
+  it("prefers HTTP for new threads when configured, otherwise scoped debug when enabled", () => {
+    const enabled = providerSettingsWithDebugEnabled(true);
     expect(
       resolveDefaultChatProvider(
-        defaultDebugProviderSettings,
+        enabled,
+        { chatContextKind: "workspace" },
         isHttpProviderConfigured({ ...defaultHttpConnectionSettings, enabled: true }, "key-123"),
       ),
     ).toBe("http");
-    expect(resolveDefaultChatProvider({ ...defaultDebugProviderSettings, enabled: true }, false)).toBe(
-      "debug",
-    );
+    expect(
+      resolveDefaultChatProvider(enabled, { chatContextKind: "workspace" }, false),
+    ).toBe("debug-workspace");
     expect(
       resolveDefaultChatProvider(
-        { ...defaultDebugProviderSettings, enabled: false },
+        providerSettingsWithDebugEnabled(false),
+        { chatContextKind: "workspace" },
         isHttpProviderConfigured(defaultHttpConnectionSettings, ""),
       ),
     ).toBe("http");
+    expect(
+      resolveDefaultChatProvider(enabled, { chatContextKind: "chat-http" }, false),
+    ).toBe("debug-chat");
   });
 
   it("does not treat an HTTP adapter as configured without credentials", () => {
-    expect(
-      isHttpProviderConfigured(defaultHttpConnectionSettings, ""),
-    ).toBe(false);
+    expect(isHttpProviderConfigured(defaultHttpConnectionSettings, "")).toBe(false);
   });
 
   it("formats provider switch notices for history rendering", () => {
@@ -94,9 +138,9 @@ describe("chat provider selection", () => {
       formatProviderSwitchNotice({
         type: "provider-switched",
         fromProvider: "http",
-        toProvider: "debug",
+        toProvider: "debug-workspace",
       }),
-    ).toBe("Provider switched from HTTP to Debug.");
+    ).toBe("Provider switched from HTTP to Debug Provider.");
 
     expect(
       formatProviderSwitchNotice({
@@ -133,7 +177,7 @@ describe("chat provider selection", () => {
 
   it("resolves provider-switch model fallback policy", () => {
     expect(
-      resolveProviderSwitchModelId(defaultProviderModelCatalogs, "debug", "gpt-4o-mini"),
+      resolveProviderSwitchModelId(defaultProviderModelCatalogs, "debug-workspace", "gpt-4o-mini"),
     ).toBe("debug-simulator");
 
     expect(

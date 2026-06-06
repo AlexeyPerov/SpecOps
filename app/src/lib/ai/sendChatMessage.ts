@@ -171,6 +171,26 @@ function resolveChatContextKind(root: string, options?: ChatSendContextOptions):
   return root === CHAT_HTTP_CONTEXT_ID ? "chat-http" : "workspace";
 }
 
+function noActiveChatTargetMessage(chatContextKind: ChatContextKind): string {
+  return chatContextKind === "chat-http"
+    ? "Select or create a chat to send messages."
+    : "Could not resolve an active agent.";
+}
+
+function resolveActiveAgentIdForSend(
+  agentId: string | undefined,
+  chatContextKind: ChatContextKind,
+): string | null {
+  const resolved = agentId ?? chatStore.getActiveAgentId();
+  if (resolved) {
+    return resolved;
+  }
+  if (chatContextKind !== "chat-http") {
+    return null;
+  }
+  return chatStore.createDraftAgent();
+}
+
 async function validateProviderSend(
   activeAgentId: string,
   options?: ChatSendContextOptions,
@@ -186,12 +206,11 @@ async function validateProviderSend(
   const chatContextKind = resolveChatContextKind(root, options);
   const providerId = chatStore.getActiveChatProvider(activeAgentId);
   const appSettings = appState.getSnapshot().settings;
-  const debugSettings = appSettings.providerSettings.debug;
-  if (isDebugProviderSendBlocked(providerId, debugSettings)) {
+  if (isDebugProviderSendBlocked(providerId, appSettings.providerSettings)) {
     return {
       ok: false,
       reason: "debug_disabled",
-      message: getDebugProviderSendBlockHint(),
+      message: getDebugProviderSendBlockHint(providerId),
     };
   }
 
@@ -344,9 +363,10 @@ export async function retryLastChatTurn(
     return { ok: false, reason: "no_workspace", message: noChatScopeMessage("retry") };
   }
 
-  const activeAgentId = agentId ?? chatStore.getActiveAgentId();
+  const chatContextKind = resolveChatContextKind(root, options);
+  const activeAgentId = resolveActiveAgentIdForSend(agentId, chatContextKind);
   if (!activeAgentId) {
-    return { ok: false, reason: "no_agent", message: "Could not resolve an active agent." };
+    return { ok: false, reason: "no_agent", message: noActiveChatTargetMessage(chatContextKind) };
   }
 
   if (!chatStore.canRetryLastTurn(activeAgentId)) {
@@ -407,9 +427,10 @@ export async function sendChatMessage(
     return { ok: false, reason: "no_workspace", message: noChatScopeMessage("send") };
   }
 
-  const activeAgentId = agentId ?? chatStore.getActiveAgentId();
+  const chatContextKind = resolveChatContextKind(root, options);
+  const activeAgentId = resolveActiveAgentIdForSend(agentId, chatContextKind);
   if (!activeAgentId) {
-    return { ok: false, reason: "no_agent", message: "Could not resolve an active agent." };
+    return { ok: false, reason: "no_agent", message: noActiveChatTargetMessage(chatContextKind) };
   }
 
   const turnId = `turn-${Date.now()}`;

@@ -45,7 +45,7 @@ function providerSwitchEvent(id: string): ChatMessage {
     systemEvent: {
       type: "provider-switched",
       fromProvider: "http",
-      toProvider: "debug",
+      toProvider: "debug-workspace",
     },
   };
 }

@@ -12,7 +12,7 @@ describe("normalizeAppProviderSettings", () => {
     expect(normalizeAppProviderSettings()).toEqual(defaultAppProviderSettings);
   });
 
-  it("normalizes partial http and debug blocks", () => {
+  it("normalizes partial http and legacy debug blocks into scoped settings", () => {
     expect(
       normalizeAppProviderSettings({
         http: { enabled: false, baseUrl: "https://example.test/v1" },
@@ -23,7 +23,8 @@ describe("normalizeAppProviderSettings", () => {
         enabled: false,
         baseUrl: "https://example.test/v1",
       },
-      debug: { ...defaultDebugProviderSettings, enabled: false },
+      debugChat: { ...defaultDebugProviderSettings, enabled: false },
+      debugWorkspace: { ...defaultDebugProviderSettings, enabled: false },
     });
   });
 });
@@ -33,7 +34,10 @@ describe("getProviderSettings", () => {
     expect(getProviderSettings(defaultAppProviderSettings, "http")).toEqual(
       defaultHttpConnectionSettings,
     );
-    expect(getProviderSettings(defaultAppProviderSettings, "debug")).toEqual(
+    expect(getProviderSettings(defaultAppProviderSettings, "debugWorkspace")).toEqual(
+      defaultDebugProviderSettings,
+    );
+    expect(getProviderSettings(defaultAppProviderSettings, "debugChat")).toEqual(
       defaultDebugProviderSettings,
     );
   });

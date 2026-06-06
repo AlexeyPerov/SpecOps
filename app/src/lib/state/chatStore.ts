@@ -24,6 +24,7 @@ import type {
   SwitchThreadProviderResult,
   WorkspaceAgentsState,
 } from "./chatStore/types";
+import { normalizeWorkspaceThreadsForScope } from "../ai/providers/threadScopeNormalization";
 import { chatScopeKeyForContextId, isChatContextScopeKey } from "./chatStore/types";
 
 export type {
@@ -106,10 +107,14 @@ function createChatStore() {
         if (state.activeChatScopeKey === scopeKey) {
           return state;
         }
-        return {
+        let next: ChatStoreState = {
           ...state,
           activeChatScopeKey: scopeKey,
         };
+        if (scopeKey) {
+          next = normalizeWorkspaceThreadsForScope(next, scopeKey);
+        }
+        return next;
       });
     },
     setActiveWorkspaceRoot(normalizedRootPath: string | null): void {

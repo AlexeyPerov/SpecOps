@@ -16,9 +16,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceAccessReason } from "../ai/capabilities";
-import { DEBUG_PROVIDER_DISABLED_MESSAGE, HTTP_MISSING_CONFIG_MESSAGE } from "../ai/chatErrorCopy";
+import {
+  DEBUG_AGENT_PROVIDER_DISABLED_MESSAGE,
+  HTTP_MISSING_CONFIG_MESSAGE,
+} from "../ai/chatErrorCopy";
 import { sendChatMessage } from "../ai/sendChatMessage";
-import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
+import { registerTestDebugWorkspaceProvider, createTestCapabilityChecker } from "../ai/providers/debugProviderTestHelpers";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { createOpenAiCompatibleChatProvider } from "../ai/providers/openAiCompatibleChatProvider";
@@ -59,7 +62,7 @@ function httpFetchSuccess(content: string): typeof fetch {
 
 function registerProviders(includeHttp = false): void {
   resetChatProviderRegistryForTests();
-  registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+  registerTestDebugWorkspaceProvider();
   if (includeHttp) {
     registerChatProvider(
       createOpenAiCompatibleChatProvider(
@@ -73,8 +76,8 @@ function registerProviders(includeHttp = false): void {
   }
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
-      () => appState.getSnapshot().settings.providerSettings.debug,
-      () => ({
+        () => appState.getSnapshot().settings.providerSettings,
+        () => ({
         settings: { ...appState.getSnapshot().settings.providerSettings.http, modelId: "gpt-4o-mini" },
         apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
       }),
@@ -90,7 +93,7 @@ describe("M5.3 milestone validation", () => {
     schedulePersistMock.mockReset();
     ensureWorkspaceReadAccessMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
-    appState.updateDebugProviderSettings({
+    appState.updateDebugWorkspaceProviderSettings({
       ...defaultDebugProviderSettings,
       enabled: true,
       simulationSeed: 11,
@@ -104,7 +107,7 @@ describe("M5.3 milestone validation", () => {
     appState.updateHttpConnectionSettings({ enabled: false });
     appState.setProviderApiKey("http", "");
     registerProviders();
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
   });
 
@@ -114,22 +117,22 @@ describe("M5.3 milestone validation", () => {
 
   it("passes Debug access preflight when Debug is enabled", async () => {
     chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" });
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
     const result = await chatStore.runAccessPreflight();
 
     expect(result.status).toBe("ready");
-    expect(result.message).toContain("Debug provider is ready");
+    expect(result.message).toContain("Debug Agent provider is ready");
   });
 
   it("passes Debug access preflight for draft agents without thread metadata when Debug is the default provider", async () => {
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.createDraftAgent();
 
     const result = await chatStore.runAccessPreflight();
 
     expect(result.status).toBe("ready");
-    expect(chatStore.getActiveChatProvider()).toBe("debug");
+    expect(chatStore.getActiveChatProvider()).toBe("debug-workspace");
   });
 
   it("blocks HTTP access preflight when credentials are missing", async () => {
@@ -157,9 +160,9 @@ describe("M5.3 milestone validation", () => {
 
   it("blocks send when Debug provider is disabled", async () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       enabled: false,
     });
 
@@ -168,7 +171,7 @@ describe("M5.3 milestone validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("debug_disabled");
-      expect(result.message).toBe(DEBUG_PROVIDER_DISABLED_MESSAGE);
+      expect(result.message).toBe(DEBUG_AGENT_PROVIDER_DISABLED_MESSAGE);
     }
     expect(chatStore.getMessages(agentId!)).toHaveLength(0);
   });
@@ -194,7 +197,7 @@ describe("M5.3 milestone validation", () => {
 
     const debugAgent = chatStore.createDraftAgent({ activate: false });
     const httpAgent = chatStore.createDraftAgent({ activate: true });
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, debugAgent!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, debugAgent!);
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, httpAgent!);
 
     const debugSend = sendChatMessage("Debug parallel question", debugAgent!);
@@ -217,8 +220,8 @@ describe("M5.3 milestone validation", () => {
   it("locks generation per agent while allowing other agents to send", async () => {
     const agentA = chatStore.createDraftAgent({ activate: false });
     const agentB = chatStore.createDraftAgent({ activate: true });
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentA!);
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentB!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentA!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentB!);
 
     const firstOnA = sendChatMessage("First on A", agentA!);
     const duplicateOnA = await sendChatMessage("Duplicate on A", agentA!);
@@ -240,7 +243,7 @@ describe("M5.3 milestone validation", () => {
 
   it("streams Debug partial updates then finalizes generation state", async () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     const observedLengths: number[] = [];
     const unsubscribe = chatStore.subscribe(() => {
@@ -263,9 +266,9 @@ describe("M5.3 milestone validation", () => {
 
   it("records Debug failure in retry scaffolding", async () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
-    appState.updateDebugProviderSettings({
-      ...appState.getSnapshot().settings.providerSettings.debug,
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
+    appState.updateDebugWorkspaceProviderSettings({
+      ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
       failureProbability: 1,
       failureMessage: "Simulated provider failure",
     });
@@ -287,7 +290,7 @@ describe("M5.3 milestone validation", () => {
     appState.updateHttpConnectionSettings({ enabled: true });
     appState.setProviderApiKey("http", "http-test-key");
     resetChatProviderRegistryForTests();
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+    registerTestDebugWorkspaceProvider();
     registerChatProvider(
       createOpenAiCompatibleChatProvider(
         () => ({
@@ -325,24 +328,23 @@ describe("M5.3 milestone validation", () => {
       { agentId: agentId! },
     );
 
-    const switchResult = await chatStore.switchThreadProvider(
-      "debug",
+    const switchResult = await chatStore.switchThreadProvider("debug-workspace",
       {
-        debugProviderEnabled: true,
+        providerSettings: appState.getSnapshot().settings.providerSettings,
         providerModelCatalogs: defaultProviderModelCatalogs,
       },
       agentId!,
     );
 
     expect(switchResult.switched).toBe(true);
-    expect(chatStore.getMetadata(agentId!)?.provider).toBe("debug");
+    expect(chatStore.getMetadata(agentId!)?.provider).toBe("debug-workspace");
     expect(chatStore.getMessages(agentId!).at(-1)).toMatchObject({
       role: "system",
-      content: "Provider switched from HTTP to Debug.",
+      content: "Provider switched from HTTP to Debug Provider.",
       systemEvent: {
         type: "provider-switched",
         fromProvider: "http",
-        toProvider: "debug",
+        toProvider: "debug-workspace",
       },
     });
 
@@ -359,7 +361,7 @@ describe("M5.3 milestone validation", () => {
   it("blocks send when workspace access preflight fails", async () => {
     ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     const result = await sendChatMessage("Should be blocked", agentId!);
 

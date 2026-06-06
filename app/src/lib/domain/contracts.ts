@@ -200,7 +200,8 @@ export type ProviderModelCatalogs = Partial<Record<ChatProviderId, ProviderModel
 /** Per-provider settings types; extend this map when adding a configured provider. */
 export interface ProviderSettingsById {
   http: HttpConnectionSettings;
-  debug: DebugProviderSettings;
+  debugChat: DebugProviderSettings;
+  debugWorkspace: DebugProviderSettings;
 }
 
 /** In-app and persisted bundle of provider-specific settings (excludes API keys). */
@@ -295,10 +296,19 @@ export type ChatMessageRole = "user" | "assistant" | "system";
 
 export type ChatModeId = "ask" | "review";
 
-export type ChatProviderId = "http" | "debug";
+export type ChatProviderId = "http" | "debug-chat" | "debug-workspace";
 
-/** MVP product providers; Debug is dev-only and settings-gated (see M5-3). */
+/** MVP product providers; debug variants are dev-only and settings-gated (see M5-3). */
 export const PRODUCT_CHAT_PROVIDER_IDS = ["http"] as const satisfies readonly ChatProviderId[];
+
+export const DEBUG_CHAT_PROVIDER_IDS = [
+  "debug-chat",
+  "debug-workspace",
+] as const satisfies readonly ChatProviderId[];
+
+export function isDebugChatProviderId(provider: ChatProviderId): provider is (typeof DEBUG_CHAT_PROVIDER_IDS)[number] {
+  return provider === "debug-chat" || provider === "debug-workspace";
+}
 
 /**
  * System-only marker events persisted in chat history.

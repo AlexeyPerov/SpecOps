@@ -1,11 +1,12 @@
 import type {
+  AppProviderSettings,
   ChatProviderId,
   ChatSystemEvent,
-  DebugProviderSettings,
   HttpConnectionSettings,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
-import { PRODUCT_CHAT_PROVIDER_IDS } from "../../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID, PRODUCT_CHAT_PROVIDER_IDS } from "../../domain/contracts";
+import { isDebugProviderEnabled } from "./debugProviderSettings";
 import { isHttpProviderConfigured as hasHttpProviderCredentials } from "./httpConnectionSettings";
 import {
   getProviderDefaultModelId,
@@ -26,13 +27,14 @@ export interface ChatProviderSelectionOptions {
 
 const PROVIDER_LABELS: Record<ChatProviderId, string> = {
   http: "HTTP",
-  debug: "Debug",
+  "debug-chat": "Debug Provider",
+  "debug-workspace": "Debug Provider",
 };
 
 /**
  * Default provider precedence for new threads:
- * 1. HTTP when configured (settings + API key, or registered adapter)
- * 2. Debug when enabled in Developer Settings
+ * 1. HTTP when configured (settings + API key)
+ * 2. Scoped debug provider when enabled in settings
  * 3. HTTP as product default fallback
  */
 export function isHttpProviderConfigured(
@@ -43,20 +45,23 @@ export function isHttpProviderConfigured(
 }
 
 export function resolveDefaultChatProvider(
-  settings: DebugProviderSettings,
+  providerSettings: AppProviderSettings,
+  options: ChatProviderSelectionOptions = {},
   httpConfigured = false,
 ): ChatProviderId {
   if (httpConfigured) {
     return "http";
   }
-  if (settings.enabled) {
-    return "debug";
+  const debugProviderId =
+    options.chatContextKind === "chat-http" ? "debug-chat" : "debug-workspace";
+  if (isDebugProviderEnabled(debugProviderId, providerSettings)) {
+    return debugProviderId;
   }
   return "http";
 }
 
 export function listSelectableChatProviders(
-  settings: DebugProviderSettings,
+  providerSettings: AppProviderSettings,
   options: ChatProviderSelectionOptions = {},
 ): ChatProviderOption[] {
   const providerOptions: ChatProviderOption[] = PRODUCT_CHAT_PROVIDER_IDS.map((id) => ({
@@ -64,13 +69,14 @@ export function listSelectableChatProviders(
     label: PROVIDER_LABELS[id],
   }));
   const isChatHttp = options.chatContextKind === "chat-http";
-  const canUseHttp = !isChatHttp || options.httpConfigured === true;
+  const canUseHttp = options.httpConfigured === true;
   const selectable = canUseHttp
     ? providerOptions
     : providerOptions.filter((provider) => provider.id !== "http");
 
-  if (settings.enabled) {
-    selectable.push({ id: "debug", label: PROVIDER_LABELS.debug });
+  const debugProviderId = isChatHttp ? "debug-chat" : "debug-workspace";
+  if (isDebugProviderEnabled(debugProviderId, providerSettings)) {
+    selectable.push({ id: debugProviderId, label: PROVIDER_LABELS[debugProviderId] });
   }
 
   return selectable;
@@ -125,17 +131,22 @@ export function resolveProviderSwitchModelId(
 
 export function canSelectChatProvider(
   provider: ChatProviderId,
-  settings: DebugProviderSettings,
+  providerSettings: AppProviderSettings,
   options: ChatProviderSelectionOptions = {},
 ): boolean {
-  if (provider === "debug") {
-    return settings.enabled;
+  if (provider === "debug-chat" || provider === "debug-workspace") {
+    const expectedContext = provider === "debug-chat" ? "chat-http" : "workspace";
+    if (options.chatContextKind && options.chatContextKind !== expectedContext) {
+      return false;
+    }
+    return isDebugProviderEnabled(provider, providerSettings);
   }
   if (provider !== "http") {
     return false;
   }
-  if (options.chatContextKind === "chat-http") {
-    return options.httpConfigured === true;
-  }
-  return true;
+  return options.httpConfigured === true;
+}
+
+export function resolveChatContextKind(scopeKey: string): "workspace" | "chat-http" {
+  return scopeKey === CHAT_HTTP_CONTEXT_ID ? "chat-http" : "workspace";
 }

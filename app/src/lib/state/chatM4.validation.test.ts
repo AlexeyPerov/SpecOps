@@ -165,7 +165,7 @@ describe("M4 milestone validation", () => {
         agentId: "agent-b",
         threadId: "agent-b",
         mode: "review",
-        provider: "debug",
+        provider: "debug-workspace",
         createdAt: "2026-05-26T00:00:01.000Z",
         updatedAt: "2026-05-26T00:00:01.000Z",
         compactedMessageCount: 2,

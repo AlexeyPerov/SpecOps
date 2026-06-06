@@ -178,7 +178,7 @@ Custom commands: `take_pending_opened_paths`, `sync_file_watcher_paths`.
 
 ### Settings dialog tab registry
 
-Tab ids and sidebar labels live in **`SETTINGS_TABS`** (`app/src/lib/services/settingsDialogUi.ts`), not as hardcoded unions scattered across the dialog. Each entry is a `SettingsTabDefinition` (`id`, `label`, `panelAriaLabel`). Current tabs: `editor`, `connections`, `debugAi`. `SettingsDialog.svelte` renders sidebar and panels from registry order; `openSettingsDialog(tab)` opens a specific tab (used by ChatPanel CTAs and commands).
+Tab ids and sidebar labels live in **`SETTINGS_TABS`** (`app/src/lib/services/settingsDialogUi.ts`), not as hardcoded unions scattered across the dialog. Each entry is a `SettingsTabDefinition` (`id`, `label`, `panelAriaLabel`). Current tabs: `editor`, `shortcuts`, `connections`, `debugAi`, `debugAgent`. Sidebar sections: **Chats** (`connections`, `debugAi`) and **Workspaces** (`debugAgent`). `SettingsDialog.svelte` renders sidebar and panels from registry order; `openSettingsDialog(tab)` opens a specific tab (used by ChatPanel CTAs and commands).
 
 Routing helpers: `editorRouting.ts` (file vs agent tab), `workspaceAgentSession.ts` (agent tab lifecycle).
 

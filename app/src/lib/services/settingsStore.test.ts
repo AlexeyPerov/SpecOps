@@ -44,7 +44,18 @@ describe("settings mapping", () => {
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
       providerSettings: {
-        debug: {
+        debugChat: {
+          enabled: true,
+          simulationSeed: 7,
+          delayMsMin: 100,
+          delayMsMax: 900,
+          chunkCharsMin: 4,
+          chunkCharsMax: 20,
+          failureProbability: 0.1,
+          failureMessage: "Test failure",
+          includeDiagnostics: false,
+        },
+        debugWorkspace: {
           enabled: true,
           simulationSeed: 7,
           delayMsMin: 100,
@@ -158,7 +169,7 @@ describe("loadPersistedSettings", () => {
       JSON.stringify({
         ...defaultPersistedSettings,
         providerSettings: {
-          ...defaultAppProviderSettings,
+          http: defaultAppProviderSettings.http,
           debug: {
             enabled: true,
             simulationSeed: null,
@@ -175,7 +186,18 @@ describe("loadPersistedSettings", () => {
     );
 
     const result = await loadPersistedSettings();
-    expect(result?.providerSettings.debug).toEqual({
+    expect(result?.providerSettings.debugChat).toEqual({
+      enabled: true,
+      simulationSeed: null,
+      delayMsMin: 5000,
+      delayMsMax: 5000,
+      chunkCharsMin: 64,
+      chunkCharsMax: 64,
+      failureProbability: 1,
+      failureMessage: "Fail",
+      includeDiagnostics: true,
+    });
+    expect(result?.providerSettings.debugWorkspace).toEqual({
       enabled: true,
       simulationSeed: null,
       delayMsMin: 5000,

@@ -1,5 +1,5 @@
 import type { AgentIndexEntry } from "../../domain/contracts";
-import { DRAFT_AGENT_TITLE, deriveAgentTitle } from "../../services/chatAgents";
+import { draftEntryTitleForScope, deriveAgentTitle } from "../../services/chatAgents";
 import {
   deleteAgentPersistence,
   readAgentThreadFileSnapshot,
@@ -11,6 +11,7 @@ import {
   patchWorkspaceState,
   activeAgentId,
 } from "./workspace";
+import { normalizeThreadSnapshotForScope } from "../../ai/providers/threadScopeNormalization";
 import { cloneThread } from "./threadHelpers";
 import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 
@@ -26,10 +27,14 @@ export function createAgentId(): string {
   return `agent-${agentIdCounter}`;
 }
 
-export function createDraftAgentEntry(agentId: string, lastUsedAt: string): AgentIndexEntry {
+export function createDraftAgentEntry(
+  agentId: string,
+  lastUsedAt: string,
+  scopeKey?: string | null,
+): AgentIndexEntry {
   return {
     id: agentId,
-    title: DRAFT_AGENT_TITLE,
+    title: draftEntryTitleForScope(scopeKey),
     lastUsedAt,
     isDraft: true,
   };
@@ -91,7 +96,7 @@ export function ensureActiveAgent(
   const nextWorkspace: WorkspaceAgentsState = {
     ...workspace,
     activeAgentId: agentId,
-    agentIndex: [...workspace.agentIndex, createDraftAgentEntry(agentId, lastUsedAt)],
+    agentIndex: [...workspace.agentIndex, createDraftAgentEntry(agentId, lastUsedAt, root)],
   };
 
   return {
@@ -124,20 +129,7 @@ export function createAgentsSlice(deps: {
     scopeKey: string,
     thread: import("../../domain/contracts").ChatThreadSnapshot | null,
   ): import("../../domain/contracts").ChatThreadSnapshot | null {
-    if (!thread) {
-      return null;
-    }
-    const nextMode = normalizeModeForScope(scopeKey, thread.metadata.mode);
-    if (nextMode === thread.metadata.mode) {
-      return thread;
-    }
-    return {
-      ...thread,
-      metadata: {
-        ...thread.metadata,
-        mode: nextMode,
-      },
-    };
+    return normalizeThreadSnapshotForScope(thread, scopeKey);
   }
 
   return {
@@ -176,7 +168,7 @@ export function createAgentsSlice(deps: {
         return patchWorkspaceState(nextState, root, {
           ...workspace,
           activeAgentId: activate ? agentId : workspace.activeAgentId,
-          agentIndex: [...workspace.agentIndex, createDraftAgentEntry(agentId, lastUsedAt)],
+          agentIndex: [...workspace.agentIndex, createDraftAgentEntry(agentId, lastUsedAt, root)],
         });
       });
       return createdAgentId;
@@ -272,7 +264,7 @@ export function createAgentsSlice(deps: {
             continue;
           }
           knownIds.add(agentId);
-          additions.push(createDraftAgentEntry(agentId, lastUsedAt));
+          additions.push(createDraftAgentEntry(agentId, lastUsedAt, normalizedRootPath));
         }
         if (additions.length === 0) {
           return nextState;

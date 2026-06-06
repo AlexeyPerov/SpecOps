@@ -4,7 +4,8 @@
   import { isAgentTab, isFileTab } from "../domain/contracts";
   import { appState } from "../state/appState";
   import { chatAgentIndex } from "../state/chatStore";
-  import { DRAFT_AGENT_TITLE } from "../services/chatAgents";
+  import { draftEntryTitleForScope } from "../services/chatAgents";
+  import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import { DEFAULT_UNTITLED_TITLE } from "../services/untitledTitle";
   import TabBarContextMenu from "./TabBarContextMenu.svelte";
   import {
@@ -17,6 +18,7 @@
     openTabs?: TabState[];
     documents?: DocumentState[];
     selectedTabId?: string | null;
+    useChatTerminology?: boolean;
     onSelect?: (tabId: string) => void;
     onCloseTab?: (tabId: string) => void;
     windowId?: string;
@@ -27,6 +29,7 @@
     openTabs = [],
     documents = [],
     selectedTabId = null,
+    useChatTerminology = false,
     onSelect = (tabId: string) => appState.selectTab(tabId),
     onCloseTab = (tabId: string) => appState.closeTabForce(tabId),
     windowId = "main",
@@ -77,9 +80,13 @@
 
   const agentTitleById = $derived(new Map($chatAgentIndex.map((entry) => [entry.id, entry.title])));
 
+  const draftTabTitle = $derived(
+    draftEntryTitleForScope(useChatTerminology ? CHAT_HTTP_CONTEXT_ID : null),
+  );
+
   function tabTitle(tab: TabState): string {
     if (isAgentTab(tab)) {
-      return agentTitleById.get(tab.agentId) ?? DRAFT_AGENT_TITLE;
+      return agentTitleById.get(tab.agentId) ?? draftTabTitle;
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc) {
@@ -91,7 +98,7 @@
 
   function tabTooltip(tab: TabState): string {
     if (isAgentTab(tab)) {
-      return "Agent chat";
+      return useChatTerminology ? "Chat" : "Agent chat";
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc?.filePath) {

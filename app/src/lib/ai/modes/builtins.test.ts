@@ -109,7 +109,7 @@ describe("mode-aware prompt assembly", () => {
   it("matches buildProviderRequestWithMode for direct inputs", () => {
     const input = {
       mode: "review" as const,
-      provider: "debug" as const,
+      provider: "debug-workspace" as const,
       workspaceRootPath: "/work/a",
       recentMessages: threadSnapshot("review").messages,
     };

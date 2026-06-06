@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chatStore } from "./chatStore";
 import { sendChatMessage } from "../ai/sendChatMessage";
-import { createDebugChatProvider } from "../ai/providers/debugChatProvider";
+import { registerTestDebugWorkspaceProvider, createTestCapabilityChecker } from "../ai/providers/debugProviderTestHelpers";
 import {
   registerChatProvider,
   resetChatProviderRegistryForTests,
@@ -28,7 +28,7 @@ describe("M6-4 edge-case transitions", () => {
     ensureWorkspaceReadAccessMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
 
-    appState.updateDebugProviderSettings({
+    appState.updateDebugWorkspaceProviderSettings({
       ...defaultDebugProviderSettings,
       enabled: true,
       simulationSeed: 42,
@@ -39,17 +39,17 @@ describe("M6-4 edge-case transitions", () => {
       failureProbability: 0,
       includeDiagnostics: false,
     });
-    registerChatProvider(createDebugChatProvider(() => appState.getSnapshot().settings.providerSettings.debug));
+    registerTestDebugWorkspaceProvider();
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(
-        () => appState.getSnapshot().settings.providerSettings.debug,
+        () => appState.getSnapshot().settings.providerSettings,
         () => ({
           settings: appState.getSnapshot().settings.providerSettings.http,
           apiKey: appState.getSnapshot().settings.providerApiKeys.http ?? "",
         }),
       ),
     );
-    chatStore.setDefaultChatProviderResolver(() => "debug");
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
   });
 
@@ -59,7 +59,7 @@ describe("M6-4 edge-case transitions", () => {
 
   it("cancels in-flight generation and removes the partial assistant placeholder", () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
     chatStore.appendMessage(
       {
         id: "user-1",
@@ -100,10 +100,9 @@ describe("M6-4 edge-case transitions", () => {
 
     expect(chatStore.canRetryLastTurn(agentId!)).toBe(true);
 
-    const result = await chatStore.switchThreadProvider(
-      "debug",
+    const result = await chatStore.switchThreadProvider("debug-workspace",
       {
-        debugProviderEnabled: true,
+        providerSettings: appState.getSnapshot().settings.providerSettings,
         providerModelCatalogs: defaultProviderModelCatalogs,
       },
       agentId!,
@@ -119,7 +118,7 @@ describe("M6-4 edge-case transitions", () => {
 
   it("does not leave isGenerating stuck after workspace cancellation during send", async () => {
     const agentId = chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "debug", mode: "ask" }, undefined, agentId!);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     const sendPromise = sendChatMessage("Hold please", agentId!);
     await Promise.resolve();

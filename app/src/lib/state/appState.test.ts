@@ -280,6 +280,48 @@ describe("appState tabs and selection", () => {
     ]);
   });
 
+  it("reorderWorkspaces moves workspaces and ignores invalid indices", () => {
+    appState.addWorkspace("/tmp/ws-a");
+    const wsAId = appState.getSnapshot().contexts.workspaces[0]?.id;
+    appState.addWorkspace("/tmp/ws-b");
+    const wsBId = appState.getSnapshot().contexts.workspaces[1]?.id;
+    const activeBefore = appState.getSnapshot().contexts.activeContextId;
+
+    appState.reorderWorkspaces(1, 0);
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.rootPath)).toEqual([
+      "/tmp/ws-b",
+      "/tmp/ws-a",
+    ]);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(activeBefore);
+
+    appState.reorderWorkspaces(-1, 0);
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.rootPath)).toEqual([
+      "/tmp/ws-b",
+      "/tmp/ws-a",
+    ]);
+
+    appState.switchContext(wsAId!);
+    appState.reorderWorkspaces(0, 1);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(wsAId);
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.id)).toEqual([
+      wsAId,
+      wsBId,
+    ]);
+  });
+
+  it("addWorkspace appends to end after manual reorder", () => {
+    appState.addWorkspace("/tmp/ws-first");
+    appState.addWorkspace("/tmp/ws-second");
+    appState.reorderWorkspaces(1, 0);
+    appState.addWorkspace("/tmp/ws-third");
+
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.rootPath)).toEqual([
+      "/tmp/ws-second",
+      "/tmp/ws-first",
+      "/tmp/ws-third",
+    ]);
+  });
+
   it("buildTabTransferPayload reads tab data without closing", () => {
     appState.openFileInTab("/tmp/move-me.txt", "payload");
     const tabId = appState.getActiveSession().selectedTabId!;

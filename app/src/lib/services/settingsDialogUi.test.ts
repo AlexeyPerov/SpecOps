@@ -1,11 +1,38 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openSettingsDialog, registerSettingsDialogOpener } from "./settingsDialogUi";
+import {
+  openSettingsDialog,
+  registerSettingsDialogOpener,
+  SETTINGS_SIDEBAR,
+  SETTINGS_TABS,
+} from "./settingsDialogUi";
 
 afterEach(() => {
   registerSettingsDialogOpener(null);
 });
 
 describe("settingsDialogUi", () => {
+  it("groups sidebar entries into top-level tabs and sectioned tabs", () => {
+    const topLevelLabels = SETTINGS_SIDEBAR.filter((entry) => entry.kind === "tab").map(
+      (entry) => entry.tab.label,
+    );
+    const sectionLabels = SETTINGS_SIDEBAR.filter((entry) => entry.kind === "section").map(
+      (entry) => entry.label,
+    );
+    const sectionTabLabels = SETTINGS_SIDEBAR.flatMap((entry) =>
+      entry.kind === "section" ? entry.tabs.map((tab) => tab.label) : [],
+    );
+
+    expect(topLevelLabels).toEqual(["Editor", "Shortcuts"]);
+    expect(sectionLabels).toEqual(["Chats", "Workspaces"]);
+    expect(sectionTabLabels).toEqual(["Connections", "Debug AI"]);
+    expect(SETTINGS_TABS.map((tab) => tab.label)).toEqual([
+      "Editor",
+      "Shortcuts",
+      "Connections",
+      "Debug AI",
+    ]);
+  });
+
   it("no-ops when opener is null", () => {
     registerSettingsDialogOpener(null);
     expect(() => openSettingsDialog()).not.toThrow();

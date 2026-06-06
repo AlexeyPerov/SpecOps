@@ -3,23 +3,27 @@ import { createFileTab, isFileTab, normalizeTabState } from "../../domain/contra
 import { isChatHttpContext, nextDocAndTabIds, nextTabId, patchActiveContext } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 
-export function moveTab(tabs: TabState[], fromIndex: number, toIndex: number): TabState[] {
+export function moveArrayItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   if (
     fromIndex < 0 ||
     toIndex < 0 ||
-    fromIndex >= tabs.length ||
-    toIndex >= tabs.length ||
+    fromIndex >= items.length ||
+    toIndex >= items.length ||
     fromIndex === toIndex
   ) {
-    return tabs;
+    return items;
   }
-  const next = [...tabs];
+  const next = [...items];
   const [moved] = next.splice(fromIndex, 1);
-  if (!moved) {
-    return tabs;
+  if (moved === undefined) {
+    return items;
   }
   next.splice(toIndex, 0, moved);
   return next;
+}
+
+export function moveTab(tabs: TabState[], fromIndex: number, toIndex: number): TabState[] {
+  return moveArrayItem(tabs, fromIndex, toIndex);
 }
 
 export function tabIdsToCloseOtherThan(

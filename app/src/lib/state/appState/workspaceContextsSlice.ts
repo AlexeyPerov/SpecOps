@@ -31,6 +31,7 @@ import {
   reindexIdCountersFromContexts,
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
+import { moveArrayItem } from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
@@ -345,6 +346,21 @@ export function createWorkspaceContextsSlice(deps: {
     },
     setAgentsSidebarCollapsed(agentsSidebarCollapsed: boolean) {
       slice.updateActiveWorkspaceLayout({ agentsSidebarCollapsed });
+    },
+    reorderWorkspaces(fromIndex: number, toIndex: number) {
+      update((state) => {
+        const workspaces = moveArrayItem(state.contexts.workspaces, fromIndex, toIndex);
+        if (workspaces === state.contexts.workspaces) {
+          return state;
+        }
+        return {
+          ...state,
+          contexts: {
+            ...state.contexts,
+            workspaces,
+          },
+        };
+      });
     },
   };
 

@@ -6,27 +6,46 @@ export interface SettingsTabDefinition {
   panelAriaLabel: string;
 }
 
+export type SettingsSidebarEntry =
+  | { kind: "tab"; tab: SettingsTabDefinition }
+  | { kind: "section"; label: string; tabs: readonly SettingsTabDefinition[] };
+
+const EDITOR_TAB = {
+  id: "editor",
+  label: "Editor",
+  panelAriaLabel: "Editor settings",
+} as const satisfies SettingsTabDefinition;
+
+const SHORTCUTS_TAB = {
+  id: "shortcuts",
+  label: "Shortcuts",
+  panelAriaLabel: "Keyboard shortcuts",
+} as const satisfies SettingsTabDefinition;
+
+const CONNECTIONS_TAB = {
+  id: "connections",
+  label: "Connections",
+  panelAriaLabel: "HTTP connections settings",
+} as const satisfies SettingsTabDefinition;
+
+const DEBUG_AI_TAB = {
+  id: "debugAi",
+  label: "Debug AI",
+  panelAriaLabel: "Debug AI provider settings",
+} as const satisfies SettingsTabDefinition;
+
+export const SETTINGS_SIDEBAR = [
+  { kind: "tab", tab: EDITOR_TAB },
+  { kind: "tab", tab: SHORTCUTS_TAB },
+  { kind: "section", label: "Chats", tabs: [CONNECTIONS_TAB] },
+  { kind: "section", label: "Workspaces", tabs: [DEBUG_AI_TAB] },
+] as const satisfies readonly SettingsSidebarEntry[];
+
 export const SETTINGS_TABS = [
-  {
-    id: "editor",
-    label: "Editor",
-    panelAriaLabel: "Editor settings",
-  },
-  {
-    id: "shortcuts",
-    label: "Shortcuts",
-    panelAriaLabel: "Keyboard shortcuts",
-  },
-  {
-    id: "connections",
-    label: "Connections",
-    panelAriaLabel: "HTTP connections settings",
-  },
-  {
-    id: "debugAi",
-    label: "Debug AI",
-    panelAriaLabel: "Debug AI provider settings",
-  },
+  EDITOR_TAB,
+  SHORTCUTS_TAB,
+  CONNECTIONS_TAB,
+  DEBUG_AI_TAB,
 ] as const satisfies readonly SettingsTabDefinition[];
 
 type SettingsDialogOpener = (tab: SettingsDialogTab) => void;

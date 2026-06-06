@@ -14,6 +14,7 @@
   import { saveProviderApiKey } from "../services/providerSecretsStore";
   import {
     getSettingsTabDefinition,
+    SETTINGS_SIDEBAR,
     SETTINGS_TABS,
     type SettingsDialogTab,
   } from "../services/settingsDialogUi";
@@ -664,17 +665,33 @@
           role="tablist"
           aria-label="Settings sections"
         >
-          {#each SETTINGS_TABS as tab (tab.id)}
-            <button
-              type="button"
-              role="tab"
-              class="settings-dialog-tab"
-              class:settings-dialog-tab-active={activeTab === tab.id}
-              aria-selected={activeTab === tab.id}
-              onclick={() => selectTab(tab.id)}
-            >
-              {tab.label}
-            </button>
+          {#each SETTINGS_SIDEBAR as entry (entry.kind === "tab" ? entry.tab.id : entry.label)}
+            {#if entry.kind === "tab"}
+              <button
+                type="button"
+                role="tab"
+                class="settings-dialog-tab"
+                class:settings-dialog-tab-active={activeTab === entry.tab.id}
+                aria-selected={activeTab === entry.tab.id}
+                onclick={() => selectTab(entry.tab.id)}
+              >
+                {entry.tab.label}
+              </button>
+            {:else}
+              <p class="settings-dialog-section-label">{entry.label}</p>
+              {#each entry.tabs as tab (tab.id)}
+                <button
+                  type="button"
+                  role="tab"
+                  class="settings-dialog-tab"
+                  class:settings-dialog-tab-active={activeTab === tab.id}
+                  aria-selected={activeTab === tab.id}
+                  onclick={() => selectTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              {/each}
+            {/if}
           {/each}
         </div>
 
@@ -818,13 +835,14 @@
   .settings-dialog-tab {
     width: 100%;
     min-height: 32px;
-    padding: 0 var(--space-6);
+    padding: 0 var(--space-6) 0 var(--space-12);
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--color-text-secondary);
     font: inherit;
     font-size: 12px;
+    font-weight: var(--font-weight-normal);
     line-height: 1.3;
     text-align: left;
     cursor: pointer;
@@ -844,6 +862,20 @@
     border-color: var(--color-accent);
     background: color-mix(in srgb, var(--color-accent) 12%, transparent);
     color: var(--color-text-primary);
+  }
+
+  .settings-dialog-section-label {
+    margin: var(--space-8) 0 var(--space-2);
+    padding: 0 var(--space-6) 0 var(--space-2);
+    font-size: var(--font-size-body);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    line-height: 1.3;
+    user-select: none;
+  }
+
+  .settings-dialog-section-label:first-child {
+    margin-top: 0;
   }
 
   .settings-dialog-body {

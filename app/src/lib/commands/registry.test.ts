@@ -535,3 +535,41 @@ describe("workspace.close command", () => {
     expect(notify).toHaveBeenCalledWith("Workspace closed.");
   });
 });
+
+describe("workspace.reorder command", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("reorders workspaces from payload without changing active context", () => {
+    const { context } = createCommandContext();
+    appState.addWorkspace("/tmp/ws-a");
+    const wsAId = appState.getSnapshot().contexts.workspaces[0]?.id;
+    appState.addWorkspace("/tmp/ws-b");
+    appState.switchContext("notepad");
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+
+    dispatchCommand("workspace.reorder", context, { fromIndex: 1, toIndex: 0 });
+
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.rootPath)).toEqual([
+      "/tmp/ws-b",
+      "/tmp/ws-a",
+    ]);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+    expect(appState.getSnapshot().contexts.workspaces[1]?.id).toBe(wsAId);
+  });
+
+  it("ignores invalid payload", () => {
+    const { context } = createCommandContext();
+    appState.addWorkspace("/tmp/ws-a");
+    appState.addWorkspace("/tmp/ws-b");
+
+    dispatchCommand("workspace.reorder", context, { fromIndex: 0 });
+    dispatchCommand("workspace.reorder", context, null);
+
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.rootPath)).toEqual([
+      "/tmp/ws-a",
+      "/tmp/ws-b",
+    ]);
+  });
+});

@@ -259,7 +259,13 @@ export type AppCommandId =
   | "view.zoomOut"
   | "view.zoomReset"
   | "workspace.add"
-  | "workspace.close";
+  | "workspace.close"
+  | "workspace.reorder";
+
+export interface WorkspaceReorderPayload {
+  fromIndex: number;
+  toIndex: number;
+}
 
 export interface CommandBinding {
   mac: string;

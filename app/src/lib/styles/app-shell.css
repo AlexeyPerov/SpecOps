@@ -153,9 +153,15 @@
   padding: var(--space-4) var(--space-6);
 }
 
-.workspace-context-item:hover {
+.workspace-context-item:hover:not(:disabled) {
   background: var(--color-hover);
   cursor: pointer;
+}
+
+.workspace-context-item:disabled {
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+  cursor: default;
 }
 
 .status-bar {

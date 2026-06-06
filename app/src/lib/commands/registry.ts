@@ -1,5 +1,10 @@
 import { get } from "svelte/store";
-import type { AppCommandId, AppDomainState, CommandDefinition } from "../domain/contracts";
+import type {
+  AppCommandId,
+  AppDomainState,
+  CommandDefinition,
+  WorkspaceReorderPayload,
+} from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
@@ -55,7 +60,20 @@ type CommandContext = {
   getEditorRunner: () => EditorCommandRunner | null;
 };
 
-type CommandHandler = (context: CommandContext) => Promise<void> | void;
+type CommandHandler = (context: CommandContext, payload?: unknown) => Promise<void> | void;
+
+function isWorkspaceReorderPayload(payload: unknown): payload is WorkspaceReorderPayload {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+  const candidate = payload as WorkspaceReorderPayload;
+  return (
+    typeof candidate.fromIndex === "number" &&
+    typeof candidate.toIndex === "number" &&
+    Number.isInteger(candidate.fromIndex) &&
+    Number.isInteger(candidate.toIndex)
+  );
+}
 
 function getSnapshot() {
   return get(appState);
@@ -151,6 +169,12 @@ export const commandDefinitions: CommandDefinition[] = [
     id: "workspace.close",
     label: "Close Workspace",
     menuPath: "Hidden/Close Workspace",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "workspace.reorder",
+    label: "Reorder Workspace",
+    menuPath: "Hidden/Reorder Workspace",
     binding: { mac: "none", windows: "none" },
   },
   {
@@ -778,6 +802,12 @@ const handlers: Record<AppCommandId, CommandHandler> = {
       notify("Workspace closed.");
     }
   },
+  "workspace.reorder": (_context, payload) => {
+    if (!isWorkspaceReorderPayload(payload)) {
+      return;
+    }
+    appState.reorderWorkspaces(payload.fromIndex, payload.toIndex);
+  },
 };
 
 export function getRegisteredCommandIds(): AppCommandId[] {
@@ -787,6 +817,7 @@ export function getRegisteredCommandIds(): AppCommandId[] {
 export function dispatchCommand(
   commandId: AppCommandId,
   context: CommandContext,
+  payload?: unknown,
 ): void {
   const handler = handlers[commandId];
   if (!handler) {
@@ -800,7 +831,7 @@ export function dispatchCommand(
     message: `command dispatched: ${commandId}`,
     metadata: { commandId },
   });
-  Promise.resolve(handler(context)).catch((error: unknown) => {
+  Promise.resolve(handler(context, payload)).catch((error: unknown) => {
     const message = summarizeError(error);
     context.notify(`Command failed: ${message}`);
     const details = sanitizeErrorDetails(serializeUnknownError(error));

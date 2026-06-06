@@ -662,6 +662,29 @@
     return discard ? "discard-all" : "cancel";
   }
 
+  function workspaceContextMenuIndex(): number {
+    if (!workspaceContextMenu) {
+      return -1;
+    }
+    return workspaces.findIndex((workspace) => workspace.id === workspaceContextMenu.workspaceId);
+  }
+
+  function moveWorkspaceFromContextMenu(direction: "up" | "down"): void {
+    if (!workspaceContextMenu) {
+      return;
+    }
+    const index = workspaceContextMenuIndex();
+    if (index < 0) {
+      return;
+    }
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= workspaces.length) {
+      return;
+    }
+    appState.reorderWorkspaces(index, targetIndex);
+    closeWorkspaceContextMenu();
+  }
+
   function closeWorkspaceFromContextMenu(workspaceId: ContextId): void {
     const closed = appState.closeWorkspace(workspaceId, {
       resolveAction: resolveCloseWorkspaceAction,
@@ -1059,6 +1082,7 @@
         onSelectContext={handleSelectContext}
         onAddWorkspace={handleAddWorkspace}
         onRequestCloseWorkspace={handleOpenWorkspaceContextMenu}
+        onReorderWorkspaces={(fromIndex, toIndex) => appState.reorderWorkspaces(fromIndex, toIndex)}
       />
     {/if}
     {#if activeWorkspaceRoot || isChatHttpActive}
@@ -1293,6 +1317,7 @@
 <EntryNamePrompt onNotify={notify} />
 
 {#if workspaceContextMenu}
+  {@const menuIndex = workspaceContextMenuIndex()}
   <div
     bind:this={workspaceContextMenuEl}
     class="workspace-context-menu"
@@ -1301,6 +1326,30 @@
     tabindex="-1"
     onpointerdown={(event) => event.stopPropagation()}
   >
+    <button
+      class="workspace-context-item"
+      type="button"
+      role="menuitem"
+      disabled={menuIndex <= 0 || workspaces.length <= 1}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        moveWorkspaceFromContextMenu("up");
+      }}
+    >
+      Move Up
+    </button>
+    <button
+      class="workspace-context-item"
+      type="button"
+      role="menuitem"
+      disabled={menuIndex < 0 || menuIndex >= workspaces.length - 1 || workspaces.length <= 1}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        moveWorkspaceFromContextMenu("down");
+      }}
+    >
+      Move Down
+    </button>
     <button
       class="workspace-context-item"
       type="button"

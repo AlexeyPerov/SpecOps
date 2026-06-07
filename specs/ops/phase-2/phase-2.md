@@ -3,7 +3,7 @@
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md)  
 **Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md) → [m5 custom modes](./execution-plan-m5-custom-modes.md)  
-**Status:** tier 1 done; **M4** (multiple providers) done; **M5** (custom modes) planned  
+**Status:** tier 1 done; **M4** (multiple providers) done; **M5** (custom modes) done  
 **Estimate:** tier 1 ~2–3 weeks after phase 1; M4 ~1 week incremental
 
 ## Goal
@@ -104,11 +104,11 @@ User-defined chat modes in Settings → **Chat modes**; built-in **Raw**; placeh
 
 | Exit (M5) | |
 |-----------|--|
-| [ ] | Chat modes settings tab (built-ins read-only + custom CRUD) |
-| [ ] | Raw built-in (disabled by default) |
-| [ ] | Presets: Ideation, Critical analysis, Technical specification, Executive summary |
-| [ ] | Review + custom structured modes in Chats composer |
-| [ ] | Missing/disabled custom mode → Ask fallback |
+| [x] | Chat modes settings tab (built-ins read-only + custom CRUD) |
+| [x] | Raw built-in (disabled by default) |
+| [x] | Presets: Ideation, Critical analysis, Technical specification, Executive summary |
+| [x] | Review + custom structured modes in Chats composer |
+| [x] | Missing/disabled custom mode → Ask fallback |
 
 ## Key files (expected touch)
 

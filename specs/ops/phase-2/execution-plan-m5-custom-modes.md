@@ -261,7 +261,7 @@ Dependencies: Task 1, Task 2.
 
 ---
 
-#### Task 7: Tests, validation suite, and docs (P2-9) [Score:7] [Agent:medium]
+#### Task 7: Tests, validation suite, and docs (P2-9) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -311,14 +311,14 @@ Phase 7 tier 2B (regenerate/edit) and tier 3 remain unchanged.
 
 ## Milestone 5 exit criteria
 
-- [ ] Settings → Chat modes lists Ask, Review, Raw (read-only prompts) and custom modes (CRUD).
-- [ ] Raw built-in disabled by default; enable toggle shows it in composer.
-- [ ] Custom modes support name, prompt with `{{workspace}}` / `{{summary}}`, toggles, required sections, enable/disable.
-- [ ] Formal presets seeded on first run (Ideation, Critical analysis, Technical specification, Executive summary).
-- [ ] Structured custom modes and Review render section cards from required sections.
-- [ ] All enabled modes available in Chats and workspace HTTP chat; Review works in Chats.
-- [ ] Deleted/disabled/missing custom mode threads fall back to Ask.
-- [ ] `npm test` / `npm run check` pass.
+- [x] Settings → Chat modes lists Ask, Review, Raw (read-only prompts) and custom modes (CRUD).
+- [x] Raw built-in disabled by default; enable toggle shows it in composer.
+- [x] Custom modes support name, prompt with `{{workspace}}` / `{{summary}}`, toggles, required sections, enable/disable.
+- [x] Formal presets seeded on first run (Ideation, Critical analysis, Technical specification, Executive summary).
+- [x] Structured custom modes and Review render section cards from required sections.
+- [x] All enabled modes available in Chats and workspace HTTP chat; Review works in Chats.
+- [x] Deleted/disabled/missing custom mode threads fall back to Ask.
+- [x] `npm test` / `npm run check` pass.
 
 ## Non-goals (M5)
 

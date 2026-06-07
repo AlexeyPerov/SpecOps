@@ -12,12 +12,22 @@ import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSetti
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { appState } from "./appState";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
+import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 
 vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
+vi.mock("../services/chatPersistence", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/chatPersistence")>();
+  return {
+    ...actual,
+    scheduleAgentThreadFilePersistence: vi.fn(),
+  };
+});
+
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
+const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 
 describe("M6-4 edge-case transitions", () => {
   beforeEach(() => {
@@ -27,6 +37,7 @@ describe("M6-4 edge-case transitions", () => {
     resetChatProvidersForTests();
     ensureWorkspaceReadAccessMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
+    schedulePersistMock.mockReset();
 
     appState.updateDebugWorkspaceProviderSettings({
       ...defaultDebugProviderSettings,

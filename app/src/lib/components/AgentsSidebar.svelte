@@ -1,4 +1,5 @@
 <script lang="ts">
+  import "../styles/agents-sidebar.css";
   import type { AgentIndexEntry } from "../domain/contracts";
   import {
     AGENT_DATE_GROUP_LABELS,
@@ -9,11 +10,11 @@
     type AgentDateGroup,
   } from "../services/chatAgents";
   import {
-    DEFAULT_PANEL_WIDTH_PX,
-    MAX_PANEL_WIDTH_PX,
-    MIN_PANEL_WIDTH_PX,
-    normalizePanelWidthPx,
-  } from "../services/panelLayout";
+    createAgentsSidebarController,
+    syncAgentsSidebarDisplayWidth,
+  } from "../services/agentsSidebarController";
+  import { DEFAULT_PANEL_WIDTH_PX } from "../services/panelLayout";
+  import AgentSidebarRow from "./AgentSidebarRow.svelte";
 
   interface Props {
     agents?: AgentIndexEntry[];
@@ -47,9 +48,25 @@
   let contextMenu = $state<{ agentId: string; x: number; y: number } | null>(null);
   let contextMenuEl = $state<HTMLDivElement | null>(null);
 
+  const sidebarController = createAgentsSidebarController({
+    getCollapsed: () => collapsed,
+    getDisplayWidth: () => displayWidth,
+    setDisplayWidth: (width) => {
+      displayWidth = width;
+    },
+    setIsResizing: (value) => {
+      isResizing = value;
+    },
+    onPanelWidthChange: (width) => onPanelWidthChange(width),
+    onToggleCollapsed: (next) => onToggleCollapsed(next),
+    onNewAgent: () => onNewAgent(),
+    onDeleteAgent: (id) => onDeleteAgent(id),
+  });
+
   $effect(() => {
-    if (!isResizing) {
-      displayWidth = normalizePanelWidthPx(panelWidthPx);
+    const syncedWidth = syncAgentsSidebarDisplayWidth(panelWidthPx, isResizing);
+    if (syncedWidth !== null) {
+      displayWidth = syncedWidth;
     }
   });
 
@@ -62,70 +79,6 @@
 
   function groupsWithAgents(): AgentDateGroup[] {
     return AGENT_DATE_GROUP_ORDER.filter((group) => groupedAgents[group].length > 0);
-  }
-
-  function clampPanelWidth(next: number): number {
-    return Math.max(MIN_PANEL_WIDTH_PX, Math.min(MAX_PANEL_WIDTH_PX, next));
-  }
-
-  function handleResizeStart(event: PointerEvent): void {
-    if (collapsed) {
-      return;
-    }
-    event.preventDefault();
-    isResizing = true;
-    const pointerId = event.pointerId;
-    const startX = event.clientX;
-    const startWidth = displayWidth;
-    const target = event.currentTarget as HTMLElement | null;
-    target?.setPointerCapture(pointerId);
-
-    const onPointerMove = (moveEvent: PointerEvent): void => {
-      const deltaX = moveEvent.clientX - startX;
-      displayWidth = clampPanelWidth(startWidth + deltaX);
-    };
-
-    const onPointerEnd = (): void => {
-      isResizing = false;
-      target?.releasePointerCapture(pointerId);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerEnd);
-      window.removeEventListener("pointercancel", onPointerEnd);
-      onPanelWidthChange(displayWidth);
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerEnd);
-    window.addEventListener("pointercancel", onPointerEnd);
-  }
-
-  function handleToggleClick(): void {
-    onToggleCollapsed(!collapsed);
-  }
-
-  function handleTogglePointerDown(event: PointerEvent): void {
-    event.preventDefault();
-    handleToggleClick();
-  }
-
-  function handleToggleButtonClick(event: MouseEvent): void {
-    // Pointer/touch action is handled in pointerdown to avoid lost click dispatch.
-    if (event.detail !== 0) {
-      return;
-    }
-    handleToggleClick();
-  }
-
-  function handleNewAgentPointerDown(event: PointerEvent): void {
-    event.preventDefault();
-    onNewAgent();
-  }
-
-  function handleNewAgentClick(event: MouseEvent): void {
-    if (event.detail !== 0) {
-      return;
-    }
-    onNewAgent();
   }
 
   function openContextMenu(event: MouseEvent, agentId: string): void {
@@ -159,16 +112,13 @@
     }
   }
 
-  function confirmDeleteAgent(agentId: string): void {
-    const entry = agents.find((agent) => agent.id === agentId);
-    const title = entry?.title ?? `this ${entrySingularLabel}`;
-    const confirmed = window.confirm(
-      `Delete ${entrySingularLabel} "${title}"? This cannot be undone.`,
-    );
-    if (!confirmed) {
+  function handleDeleteFromContextMenu(): void {
+    if (!contextMenu) {
       return;
     }
-    onDeleteAgent(agentId);
+    const entry = agents.find((agent) => agent.id === contextMenu?.agentId);
+    const title = entry?.title ?? `this ${entrySingularLabel}`;
+    sidebarController.confirmDeleteAgent(contextMenu.agentId, title, entrySingularLabel);
     closeContextMenu();
   }
 </script>
@@ -184,7 +134,7 @@
       role="separator"
       aria-orientation="vertical"
       aria-label={`Resize ${entryPluralLabel} sidebar`}
-      onpointerdown={handleResizeStart}
+      onpointerdown={sidebarController.handleResizeStart}
     ></div>
   {/if}
   <header class="agents-sidebar-header">
@@ -193,8 +143,8 @@
       <button
         class="agents-sidebar-button agents-sidebar-new"
         type="button"
-        onpointerdown={handleNewAgentPointerDown}
-        onclick={handleNewAgentClick}
+        onpointerdown={sidebarController.handleNewAgentPointerDown}
+        onclick={sidebarController.handleNewAgentClick}
       >
         {newEntryLabel}
       </button>
@@ -202,8 +152,8 @@
     <button
       class="agents-sidebar-button"
       type="button"
-      onpointerup={handleTogglePointerDown}
-      onclick={handleToggleButtonClick}
+      onpointerup={sidebarController.handleTogglePointerDown}
+      onclick={sidebarController.handleToggleButtonClick}
       title={collapsed ? `Expand ${entryPluralLabel} sidebar` : `Collapse ${entryPluralLabel} sidebar`}
     >
       {collapsed ? "⟫" : "⟪"}
@@ -234,15 +184,12 @@
             <section class="agents-group" aria-label={AGENT_DATE_GROUP_LABELS[group]}>
               <h3 class="agents-group-label">{AGENT_DATE_GROUP_LABELS[group]}</h3>
               {#each groupedAgents[group] as agent (agent.id)}
-                <button
-                  class={`agents-row ${agent.id === activeAgentId ? "agents-row-selected" : ""}`}
-                  type="button"
-                  title={agent.title}
-                  onclick={() => onSelectAgent(agent.id)}
-                  oncontextmenu={(event) => openContextMenu(event, agent.id)}
-                >
-                  <span class="agents-row-title">{agent.title}</span>
-                </button>
+                <AgentSidebarRow
+                  {agent}
+                  selected={agent.id === activeAgentId}
+                  onSelect={onSelectAgent}
+                  onContextMenu={openContextMenu}
+                />
               {/each}
             </section>
           {/each}
@@ -265,235 +212,9 @@
       class="agents-context-item agents-context-item-danger"
       type="button"
       role="menuitem"
-      onclick={() => {
-        if (contextMenu) {
-          confirmDeleteAgent(contextMenu.agentId);
-        }
-      }}
+      onclick={handleDeleteFromContextMenu}
     >
       Delete {entrySingularLabel}
     </button>
   </div>
 {/if}
-
-<style>
-  .agents-sidebar {
-    position: relative;
-    border-right: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    min-height: 0;
-  }
-
-  .agents-sidebar-collapsed {
-    width: 36px;
-    grid-template-rows: auto;
-    overflow: hidden;
-  }
-
-  .agents-sidebar-collapsed .agents-sidebar-header {
-    padding: 0;
-    gap: 0;
-    justify-content: center;
-  }
-
-  .agents-sidebar-collapsed .agents-sidebar-button {
-    width: 36px;
-    height: var(--tab-header-height);
-    border-radius: 0;
-    padding: 0;
-  }
-
-  .agents-sidebar-resizing {
-    user-select: none;
-  }
-
-  .agents-sidebar-resize-handle {
-    position: absolute;
-    right: -3px;
-    top: 0;
-    bottom: 0;
-    width: 6px;
-    cursor: col-resize;
-    touch-action: none;
-  }
-
-  .agents-sidebar-header {
-    height: var(--tab-header-height);
-    border-bottom: 1px solid var(--color-border-subtle);
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    padding: 0 var(--space-6);
-    min-width: 0;
-  }
-
-  .agents-sidebar-title {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: var(--font-size-status);
-    color: var(--color-text-secondary);
-  }
-
-  .agents-sidebar-button {
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-secondary);
-    font: inherit;
-    height: 22px;
-    padding: 0 var(--space-6);
-    white-space: nowrap;
-  }
-
-  .agents-sidebar-button:hover {
-    background: var(--color-hover);
-    color: var(--color-text-primary);
-    cursor: pointer;
-  }
-
-  .agents-sidebar-new {
-    flex-shrink: 0;
-  }
-
-  .agents-sidebar-body {
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    padding: var(--space-6);
-  }
-
-  .agents-search-field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    min-width: 0;
-  }
-
-  .agents-search-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .agents-search-input {
-    width: 100%;
-    min-width: 0;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-bg-root);
-    color: var(--color-text-primary);
-    font: inherit;
-    height: 28px;
-    padding: 0 var(--space-6);
-  }
-
-  .agents-search-input:focus {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 1px;
-  }
-
-  .agents-list {
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-  }
-
-  .agents-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 0;
-  }
-
-  .agents-group-label {
-    margin: 0;
-    padding: 0 var(--space-4);
-    font-size: var(--font-size-status);
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .agents-row {
-    width: 100%;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-primary);
-    font: inherit;
-    text-align: left;
-    padding: var(--space-4) var(--space-6);
-    min-width: 0;
-  }
-
-  .agents-row:hover {
-    background: var(--color-hover);
-    cursor: pointer;
-  }
-
-  .agents-row-selected {
-    background: var(--color-selection);
-    border-color: var(--color-border-subtle);
-  }
-
-  .agents-row-title {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .agents-empty {
-    margin: 0;
-    padding: var(--space-4);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-status);
-  }
-
-  .agents-context-menu {
-    position: fixed;
-    z-index: 40;
-    min-width: 160px;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
-    padding: var(--space-4) 0;
-  }
-
-  .agents-context-item {
-    display: block;
-    width: 100%;
-    border: none;
-    background: transparent;
-    color: var(--color-text-primary);
-    font: inherit;
-    text-align: left;
-    padding: var(--space-4) var(--space-8);
-  }
-
-  .agents-context-item:hover {
-    background: var(--color-hover);
-    cursor: pointer;
-  }
-
-  .agents-context-item-danger {
-    color: var(--color-danger, #c44);
-  }
-</style>

@@ -1,3 +1,8 @@
+import { EditorSelection, type Compartment } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
+import type { MatchInfo } from "../types/editor";
+import { createSearchHighlightExtension, findAllMatches } from "./searchHighlight";
+
 export function normalizeForSearch(value: string, caseSensitive: boolean): string {
   return caseSensitive ? value : value.toLowerCase();
 }
@@ -116,4 +121,154 @@ export function buildReplaceAllChanges(
     index = found + Math.max(1, query.length);
   }
   return { changes, count };
+}
+
+export function editorFindNext(
+  view: EditorView | undefined,
+  query: string,
+  caseSensitive: boolean,
+): boolean {
+  if (!view || query.length === 0) {
+    return false;
+  }
+  const doc = view.state.doc.toString();
+  const idx = findNextMatchIndex(doc, query, caseSensitive, view.state.selection.main.to);
+  if (idx === null) {
+    return false;
+  }
+  view.dispatch({
+    selection: EditorSelection.range(idx, idx + query.length),
+    scrollIntoView: true,
+  });
+  return true;
+}
+
+export function editorFindPrevious(
+  view: EditorView | undefined,
+  query: string,
+  caseSensitive: boolean,
+): boolean {
+  if (!view || query.length === 0) {
+    return false;
+  }
+  const doc = view.state.doc.toString();
+  const idx = findPreviousMatchIndex(
+    doc,
+    query,
+    caseSensitive,
+    view.state.selection.main.from,
+  );
+  if (idx === null) {
+    return false;
+  }
+  view.dispatch({
+    selection: EditorSelection.range(idx, idx + query.length),
+    scrollIntoView: true,
+  });
+  return true;
+}
+
+export function editorReplaceCurrent(
+  view: EditorView | undefined,
+  query: string,
+  replacement: string,
+  caseSensitive: boolean,
+): boolean {
+  if (!view || query.length === 0) {
+    return false;
+  }
+  const sel = view.state.selection.main;
+  const selectedText = view.state.sliceDoc(sel.from, sel.to);
+  if (!selectionMatchesQuery(selectedText, query, caseSensitive)) {
+    return false;
+  }
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert: replacement },
+    selection: EditorSelection.range(sel.from, sel.from + replacement.length),
+    userEvent: "input",
+  });
+  return true;
+}
+
+export function editorReplaceAll(
+  view: EditorView | undefined,
+  query: string,
+  replacement: string,
+  caseSensitive: boolean,
+): number {
+  if (!view || query.length === 0) {
+    return 0;
+  }
+  const source = view.state.doc.toString();
+  const { changes, count } = buildReplaceAllChanges(
+    source,
+    query,
+    replacement,
+    caseSensitive,
+  );
+  if (changes.length > 0) {
+    view.dispatch({ changes, userEvent: "input" });
+  }
+  return count;
+}
+
+export function editorReplaceAndFindNext(
+  view: EditorView | undefined,
+  query: string,
+  replacement: string,
+  caseSensitive: boolean,
+): boolean {
+  if (!view || query.length === 0) {
+    return false;
+  }
+  const sel = view.state.selection.main;
+  const selectedText = view.state.sliceDoc(sel.from, sel.to);
+  if (selectionMatchesQuery(selectedText, query, caseSensitive)) {
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: replacement },
+      selection: EditorSelection.range(sel.from, sel.from + replacement.length),
+      userEvent: "input",
+    });
+  }
+  return editorFindNext(view, query, caseSensitive);
+}
+
+export function editorSetSearchQuery(
+  view: EditorView | undefined,
+  query: string,
+  caseSensitive: boolean,
+  searchHighlightCompartment: Compartment,
+): void {
+  if (!view) {
+    return;
+  }
+  view.dispatch({
+    effects: searchHighlightCompartment.reconfigure(
+      query ? [createSearchHighlightExtension(query, caseSensitive)] : [],
+    ),
+  });
+}
+
+export function editorGetMatchInfo(
+  view: EditorView | undefined,
+  query: string,
+  caseSensitive: boolean,
+): MatchInfo {
+  if (!view || query.length === 0) {
+    return { total: 0, current: 0 };
+  }
+  const doc = view.state.doc.toString();
+  const matches = findAllMatches(doc, query, caseSensitive);
+  if (matches.length === 0) {
+    return { total: 0, current: 0 };
+  }
+  const sel = view.state.selection.main;
+  let current = 0;
+  for (let i = 0; i < matches.length; i++) {
+    if (matches[i].from === sel.from && matches[i].to === sel.to) {
+      current = i + 1;
+      break;
+    }
+  }
+  return { total: matches.length, current };
 }

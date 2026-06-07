@@ -1,15 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
+  import { Compartment, EditorState } from "@codemirror/state";
   import {
     defaultKeymap,
     history,
     historyKeymap,
     indentWithTab,
-    indentMore,
-    indentLess,
-    redo,
-    undo,
   } from "@codemirror/commands";
   import { EditorView, keymap, lineNumbers } from "@codemirror/view";
   import { appState } from "../state/appState";
@@ -19,23 +15,11 @@
   import type { EditorLanguageId } from "../editor/editorLanguage";
   import { createPlaintextSymbolDecorations } from "../editor/plaintextDecorations";
   import {
-    duplicateLineText,
-    joinLinesText,
-    moveLineDown,
-    moveLineUp,
-  } from "../editor/editorLineOps";
-  import {
-    buildReplaceAllChanges,
-    findNextMatchIndex,
-    findPreviousMatchIndex,
-    selectionMatchesQuery,
-  } from "../editor/editorSearchOps";
-  import {
-    createSearchHighlightExtension,
-    findAllMatches,
-    searchHighlightCompartment,
-  } from "../editor/searchHighlight";
-  import type { MatchInfo } from "../types/editor";
+    applyWrap,
+    applyZoom,
+    createEditorCommandRunner,
+  } from "../editor/editorCommandRunner";
+  import { searchHighlightCompartment } from "../editor/searchHighlight";
 
   interface Props {
     content?: string;
@@ -80,44 +64,6 @@
   let applyingScroll = $state(false);
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let detachScrollListener: (() => void) | null = null;
-
-  function withEditorSelection(
-    transform: (text: string, from: number, to: number) => {
-      text: string;
-      from: number;
-      to: number;
-      message?: string;
-    },
-  ): void {
-    if (!view) {
-      return;
-    }
-    const state = view.state;
-    const range = state.selection.main;
-    const result = transform(state.doc.toString(), range.from, range.to);
-    view.dispatch({
-      changes: { from: 0, to: state.doc.length, insert: result.text },
-      selection: EditorSelection.range(result.from, result.to),
-      userEvent: "input",
-    });
-    if (result.message) {
-      onStatusMessage(result.message);
-    }
-  }
-
-  function moveLine(direction: "up" | "down"): void {
-    withEditorSelection((text, from, to) =>
-      direction === "up" ? moveLineUp(text, from, to) : moveLineDown(text, from, to),
-    );
-  }
-
-  function duplicateLine(): void {
-    withEditorSelection((text, from, to) => duplicateLineText(text, from, to));
-  }
-
-  function joinLines(): void {
-    withEditorSelection((text, from, to) => joinLinesText(text, from, to));
-  }
 
   function updateCursor(): void {
     if (!view) {
@@ -175,183 +121,6 @@
     detachScrollListener = () => {
       scroller.removeEventListener("scroll", onScroll);
     };
-  }
-
-  function applyWrap(nextWrap: boolean): void {
-    if (!view) {
-      return;
-    }
-    view.dispatch({
-      effects: lineWrapCompartment.reconfigure(
-        nextWrap
-          ? [
-              EditorView.lineWrapping,
-              EditorView.theme({
-                ".cm-scroller": {
-                  overflowX: "hidden",
-                },
-              }),
-            ]
-          : [],
-      ),
-    });
-  }
-
-  function applyZoom(nextZoom: number): void {
-    if (!view) {
-      return;
-    }
-    const px = Math.round((13 * nextZoom) / 100);
-    view.dispatch({
-      effects: fontSizeCompartment.reconfigure(
-        EditorView.theme({
-          "&": {
-            fontSize: `${px}px`,
-          },
-        }),
-      ),
-    });
-  }
-
-  function findNext(query: string, caseSensitive: boolean): boolean {
-    if (!view || query.length === 0) {
-      return false;
-    }
-    const doc = view.state.doc.toString();
-    const idx = findNextMatchIndex(doc, query, caseSensitive, view.state.selection.main.to);
-    if (idx === null) {
-      return false;
-    }
-    view.dispatch({
-      selection: EditorSelection.range(idx, idx + query.length),
-      scrollIntoView: true,
-    });
-    updateCursor();
-    return true;
-  }
-
-  function replaceCurrent(
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ): boolean {
-    if (!view || query.length === 0) {
-      return false;
-    }
-    const sel = view.state.selection.main;
-    const selectedText = view.state.sliceDoc(sel.from, sel.to);
-    if (!selectionMatchesQuery(selectedText, query, caseSensitive)) {
-      return false;
-    }
-    view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: replacement },
-      selection: EditorSelection.range(sel.from, sel.from + replacement.length),
-      userEvent: "input",
-    });
-    return true;
-  }
-
-  function replaceAll(
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ): number {
-    if (!view || query.length === 0) {
-      return 0;
-    }
-    const source = view.state.doc.toString();
-    const { changes, count } = buildReplaceAllChanges(
-      source,
-      query,
-      replacement,
-      caseSensitive,
-    );
-    if (changes.length > 0) {
-      view.dispatch({ changes, userEvent: "input" });
-      updateCursor();
-    }
-    return count;
-  }
-
-  function findPrevious(query: string, caseSensitive: boolean): boolean {
-    if (!view || query.length === 0) {
-      return false;
-    }
-    const doc = view.state.doc.toString();
-    const idx = findPreviousMatchIndex(
-      doc,
-      query,
-      caseSensitive,
-      view.state.selection.main.from,
-    );
-    if (idx === null) {
-      return false;
-    }
-    view.dispatch({
-      selection: EditorSelection.range(idx, idx + query.length),
-      scrollIntoView: true,
-    });
-    updateCursor();
-    return true;
-  }
-
-  function replaceAndFindNext(
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ): boolean {
-    if (!view || query.length === 0) {
-      return false;
-    }
-    const sel = view.state.selection.main;
-    const selectedText = view.state.sliceDoc(sel.from, sel.to);
-    if (selectionMatchesQuery(selectedText, query, caseSensitive)) {
-      view.dispatch({
-        changes: { from: sel.from, to: sel.to, insert: replacement },
-        selection: EditorSelection.range(sel.from, sel.from + replacement.length),
-        userEvent: "input",
-      });
-    }
-    return findNext(query, caseSensitive);
-  }
-
-  function setSearchQuery(query: string, caseSensitive: boolean): void {
-    if (!view) return;
-    view.dispatch({
-      effects: searchHighlightCompartment.reconfigure(
-        query ? [createSearchHighlightExtension(query, caseSensitive)] : [],
-      ),
-    });
-  }
-
-  function getMatchInfo(query: string, caseSensitive: boolean): MatchInfo {
-    if (!view || query.length === 0) return { total: 0, current: 0 };
-    const doc = view.state.doc.toString();
-    const matches = findAllMatches(doc, query, caseSensitive);
-    if (matches.length === 0) return { total: 0, current: 0 };
-    const sel = view.state.selection.main;
-    let current = 0;
-    for (let i = 0; i < matches.length; i++) {
-      if (matches[i].from === sel.from && matches[i].to === sel.to) {
-        current = i + 1;
-        break;
-      }
-    }
-    return { total: matches.length, current };
-  }
-
-  function goToLine(line: number): boolean {
-    if (!view || !Number.isFinite(line) || line < 1) {
-      return false;
-    }
-    const clampedLine = Math.min(line, view.state.doc.lines);
-    const target = view.state.doc.line(clampedLine);
-    view.dispatch({
-      selection: EditorSelection.cursor(target.from),
-      scrollIntoView: true,
-    });
-    updateCursor();
-    return true;
   }
 
   onMount(() => {
@@ -423,46 +192,24 @@
       parent: hostEl,
     });
 
-    applyWrap(wrapLines);
-    applyZoom(zoomPercent);
+    applyWrap(view, lineWrapCompartment, wrapLines);
+    applyZoom(view, fontSizeCompartment, zoomPercent);
     updateCursor();
     attachScrollListener();
     trackedDocumentId = documentId;
     currentEditorLanguage = language;
     applyScrollTop(scrollTop);
 
-    registerEditorCommandRunner?.({
-      undo: () => {
-        if (!view) return;
-        undo(view);
-      },
-      redo: () => {
-        if (!view) return;
-        redo(view);
-      },
-      indent: () => {
-        if (!view) return;
-        indentMore(view);
-      },
-      outdent: () => {
-        if (!view) return;
-        indentLess(view);
-      },
-      moveLineUp: () => moveLine("up"),
-      moveLineDown: () => moveLine("down"),
-      duplicateLine,
-      joinLines,
-      setWrap: (value) => applyWrap(value),
-      setZoom: (zoom) => applyZoom(zoom),
-      findNext,
-      findPrevious,
-      replaceCurrent,
-      replaceAndFindNext,
-      replaceAll,
-      setSearchQuery,
-      getMatchInfo,
-      goToLine,
-    });
+    registerEditorCommandRunner?.(
+      createEditorCommandRunner({
+        getView: () => view,
+        lineWrapCompartment,
+        fontSizeCompartment,
+        searchHighlightCompartment,
+        onStatusMessage,
+        updateCursor,
+      }),
+    );
   });
 
   onDestroy(() => {
@@ -487,14 +234,14 @@
     if (!view) {
       return;
     }
-    applyWrap(wrapLines);
+    applyWrap(view, lineWrapCompartment, wrapLines);
   });
 
   $effect(() => {
     if (!view || !zoomPercent) {
       return;
     }
-    applyZoom(zoomPercent);
+    applyZoom(view, fontSizeCompartment, zoomPercent);
   });
 
   $effect(() => {

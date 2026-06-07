@@ -1,18 +1,10 @@
 <script lang="ts">
+  import "../styles/tab-context-menu.css";
   import type { DocumentState, TabState } from "../domain/contracts";
   import { isFileTab } from "../domain/contracts";
   import { appState } from "../state/appState";
   import { revealInFileManagerLabel } from "../services/platform";
-  import { revealInFileManager } from "../services/revealInFileManager";
-  import { readNearbyTextFiles, type NearbyTextFile } from "../services/nearbyFiles";
-  import { describeOpenActivePathResult, openActivePath } from "../services/openActivePath";
-  import { runInNotepadContext, workspaceRelativePath } from "../services/workspacePaths";
-  import { renameDocumentOnDisk } from "../services/documentRename";
-  import {
-    closeOtherTabsWithUnsavedPrompt,
-    closeTabWithUnsavedPrompt,
-    closeTabsToRightWithUnsavedPrompt,
-  } from "../services/closeTabFlow";
+  import type { NearbyTextFile } from "../services/nearbyFiles";
   import {
     canCloseMissingFileTabs,
     canCloseOtherTabs,
@@ -22,9 +14,11 @@
     canOpenNearbyFiles,
     canRenameTab,
     canRevealTabInFileManager,
-    collectTabOpenPaths,
+    createTabContextMenuHandlers,
+    prefetchNearbyFilesForTab,
     tabDocumentForTab,
   } from "../services/tabContextMenuActions";
+  import TabBarNearbySubmenu from "./TabBarNearbySubmenu.svelte";
 
   const revealLabel = revealInFileManagerLabel();
 
@@ -49,9 +43,23 @@
   let nearbyFilesLoading = $state(false);
   let nearbyRequestId = 0;
 
-  function tabDocument(tab: TabState): DocumentState | undefined {
-    return tabDocumentForTab(tab, documents);
-  }
+  const contextMenuTab = $derived(
+    contextMenu ? (openTabs.find((tab) => tab.id === contextMenu?.tabId) ?? null) : null,
+  );
+
+  const contextMenuTabDoc = $derived(
+    contextMenuTab ? (tabDocumentForTab(contextMenuTab, documents) ?? null) : null,
+  );
+
+  const menuHandlers = createTabContextMenuHandlers({
+    getContextTab: () => contextMenuTab,
+    getOpenTabs: () => openTabs,
+    getDocuments: () => documents,
+    getWindowId: () => windowId,
+    notify: (message) => notify(message),
+    closeContextMenu,
+    getNearbyFiles: () => nearbyFiles,
+  });
 
   export function openContextMenu(event: MouseEvent, tab: TabState): void {
     if (!isFileTab(tab)) {
@@ -64,7 +72,7 @@
     nearbySubmenuOpen = false;
     window.addEventListener("pointerdown", onWindowPointerDown);
     window.addEventListener("keydown", onWindowKeydown);
-    void prefetchNearbyFiles(tab);
+    void loadNearbyFiles(tab);
   }
 
   export function closeContextMenu(): void {
@@ -75,67 +83,6 @@
     nearbySubmenuOpen = false;
     window.removeEventListener("pointerdown", onWindowPointerDown);
     window.removeEventListener("keydown", onWindowKeydown);
-  }
-
-  async function renameContextTab(): Promise<void> {
-    const tabDoc = contextMenuTab ? tabDocument(contextMenuTab) : undefined;
-    if (!tabDoc?.filePath) {
-      closeContextMenu();
-      return;
-    }
-    try {
-      await renameDocumentOnDisk(tabDoc.id, { windowId, notify });
-    } finally {
-      closeContextMenu();
-    }
-  }
-
-  async function revealTabInFileManager(tab: TabState): Promise<void> {
-    const tabDoc = tabDocument(tab);
-    if (!tabDoc?.filePath) {
-      closeContextMenu();
-      return;
-    }
-    try {
-      await revealInFileManager(tabDoc.filePath);
-    } catch {
-      // reveal is best-effort from the tab menu
-    }
-    closeContextMenu();
-  }
-
-  async function copyTabPath(tab: TabState): Promise<void> {
-    const tabDoc = tabDocument(tab);
-    if (!tabDoc?.filePath) {
-      closeContextMenu();
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(tabDoc.filePath);
-    } catch {
-      // clipboard is best-effort from the tab menu
-    }
-    closeContextMenu();
-  }
-
-  async function copyTabRelativePath(tab: TabState): Promise<void> {
-    const tabDoc = tabDocument(tab);
-    const workspaceRoot = appState.getWorkspaceRoot();
-    if (!tabDoc?.filePath || !workspaceRoot) {
-      closeContextMenu();
-      return;
-    }
-    const relativePath = workspaceRelativePath(tabDoc.filePath, workspaceRoot);
-    if (relativePath === null) {
-      closeContextMenu();
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(relativePath);
-    } catch {
-      // clipboard is best-effort from the tab menu
-    }
-    closeContextMenu();
   }
 
   function onWindowPointerDown(event: PointerEvent): void {
@@ -155,127 +102,30 @@
     }
   }
 
-  function tabOpenPaths(): string[] {
-    return collectTabOpenPaths(openTabs, documents);
-  }
-
-  async function prefetchNearbyFiles(tab: TabState): Promise<void> {
-    const tabDoc = tabDocument(tab);
-    if (!tabDoc?.filePath) {
-      nearbyFiles = [];
-      nearbyFilesLoading = false;
-      return;
-    }
+  async function loadNearbyFiles(tab: TabState): Promise<void> {
     nearbyFilesLoading = true;
     nearbyFiles = [];
     const requestId = nearbyRequestId + 1;
     nearbyRequestId = requestId;
-    try {
-      const files = await readNearbyTextFiles(tabDoc.filePath, tabOpenPaths(), 10);
-      if (nearbyRequestId !== requestId) {
-        return;
-      }
-      nearbyFiles = files;
-    } catch {
-      if (nearbyRequestId !== requestId) {
-        return;
-      }
-      nearbyFiles = [];
-    } finally {
-      if (nearbyRequestId === requestId) {
-        nearbyFilesLoading = false;
-      }
-    }
-  }
-
-  async function openPathWithPipeline(path: string): Promise<void> {
-    try {
-      const result = await openActivePath(path, windowId);
-      if (result.kind === "failed") {
-        notify(describeOpenActivePathResult(result));
-      }
-    } catch {
-      // nearby open is best-effort from the tab menu
-    }
-  }
-
-  async function openNearbyFile(path: string): Promise<void> {
-    await openPathWithPipeline(path);
-    closeContextMenu();
-  }
-
-  async function openAllNearbyFiles(): Promise<void> {
-    await runInNotepadContext(async () => {
-      for (const nearbyFile of nearbyFiles) {
-        await openPathWithPipeline(nearbyFile.path);
-      }
-    });
-    closeContextMenu();
-  }
-
-  const closeTabDeps = $derived({
-    getWindowId: () => windowId,
-    notify,
-  });
-
-  async function closeContextTabWithPrompt(): Promise<void> {
-    if (!contextMenuTab) {
+    const result = await prefetchNearbyFilesForTab(tab, documents, openTabs, requestId);
+    if (!result || nearbyRequestId !== requestId) {
       return;
     }
-    await closeTabWithUnsavedPrompt(contextMenuTab.id, closeTabDeps);
-    closeContextMenu();
+    nearbyFiles = result.files;
+    nearbyFilesLoading = false;
   }
-
-  async function closeOtherTabsWithPrompt(): Promise<void> {
-    if (!contextMenuTab) {
-      return;
-    }
-    await closeOtherTabsWithUnsavedPrompt(contextMenuTab.id, closeTabDeps);
-    closeContextMenu();
-  }
-
-  async function closeTabsToRightWithPrompt(): Promise<void> {
-    if (!contextMenuTab) {
-      return;
-    }
-    await closeTabsToRightWithUnsavedPrompt(contextMenuTab.id, closeTabDeps);
-    closeContextMenu();
-  }
-
-  function closeMissingFileTabs(): void {
-    appState.closeMissingFileTabs();
-    closeContextMenu();
-  }
-
-  const contextMenuTab = $derived(
-    contextMenu ? (openTabs.find((tab) => tab.id === contextMenu?.tabId) ?? null) : null,
-  );
-
-  const contextMenuTabDoc = $derived(
-    contextMenuTab ? (tabDocument(contextMenuTab) ?? null) : null,
-  );
 
   const contextMenuCanReveal = $derived(canRevealTabInFileManager(contextMenuTab, documents));
-
   const contextMenuCanRename = $derived(canRenameTab(contextMenuTab, contextMenuTabDoc));
-
   const contextMenuWorkspaceRoot = $derived(appState.getWorkspaceRoot());
-
   const contextMenuCanCloseOtherTabs = $derived(canCloseOtherTabs(openTabs, contextMenuTab));
-
   const contextMenuCanCloseTabsToRight = $derived(canCloseTabsToRight(openTabs, contextMenuTab));
-
   const contextMenuCanCloseMissingFileTabs = $derived(canCloseMissingFileTabs(openTabs, documents));
-
   const contextMenuCanOpenNearby = $derived(canOpenNearbyFiles(contextMenuTabDoc));
-
   const contextMenuCanCopyPath = $derived(canCopyTabPath(contextMenuTabDoc));
-
   const contextMenuCanCopyRelativePath = $derived(
     canCopyRelativePath(contextMenuTabDoc?.filePath, contextMenuWorkspaceRoot),
   );
-
-  const contextMenuHasNearbyFiles = $derived(nearbyFiles.length > 0);
 </script>
 
 {#if contextMenu && contextMenuTab}
@@ -293,7 +143,7 @@
       role="menuitem"
       onpointerdown={(event) => {
         event.stopPropagation();
-        closeContextTabWithPrompt();
+        menuHandlers.closeContextTabWithPrompt();
       }}
     >
       Close Tab
@@ -305,10 +155,9 @@
       disabled={!contextMenuCanCloseOtherTabs}
       onpointerdown={(event) => {
         event.stopPropagation();
-        if (!contextMenuCanCloseOtherTabs) {
-          return;
+        if (contextMenuCanCloseOtherTabs) {
+          menuHandlers.closeOtherTabsWithPrompt();
         }
-        closeOtherTabsWithPrompt();
       }}
     >
       Close Other Tabs
@@ -323,10 +172,9 @@
       disabled={!contextMenuCanCloseTabsToRight}
       onpointerdown={(event) => {
         event.stopPropagation();
-        if (!contextMenuCanCloseTabsToRight) {
-          return;
+        if (contextMenuCanCloseTabsToRight) {
+          menuHandlers.closeTabsToRightWithPrompt();
         }
-        closeTabsToRightWithPrompt();
       }}
     >
       Close Tabs to the Right
@@ -338,10 +186,9 @@
       disabled={!contextMenuCanCloseMissingFileTabs}
       onpointerdown={(event) => {
         event.stopPropagation();
-        if (!contextMenuCanCloseMissingFileTabs) {
-          return;
+        if (contextMenuCanCloseMissingFileTabs) {
+          menuHandlers.closeMissingFileTabs();
         }
-        closeMissingFileTabs();
       }}
     >
       Close Missing File Tabs
@@ -349,93 +196,22 @@
 
     <div class="tab-context-separator" role="separator"></div>
 
-    <div
-      class="tab-context-submenu"
-      role="none"
-      onpointerenter={() => {
-        if (!contextMenuCanOpenNearby) {
-          return;
-        }
-        nearbySubmenuOpen = true;
+    <TabBarNearbySubmenu
+      open={nearbySubmenuOpen}
+      enabled={contextMenuCanOpenNearby}
+      loading={nearbyFilesLoading}
+      files={nearbyFiles}
+      menuEl={contextMenuEl}
+      onOpenChange={(next) => {
+        nearbySubmenuOpen = next;
       }}
-      onpointerleave={() => {
-        nearbySubmenuOpen = false;
+      onOpenFile={(path) => {
+        void menuHandlers.openNearbyFile(path);
       }}
-      onfocusin={() => {
-        if (!contextMenuCanOpenNearby) {
-          return;
-        }
-        nearbySubmenuOpen = true;
+      onOpenAll={() => {
+        void menuHandlers.openAllNearbyFiles();
       }}
-      onfocusout={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!(nextTarget instanceof Node) || !contextMenuEl?.contains(nextTarget)) {
-          nearbySubmenuOpen = false;
-        }
-      }}
-    >
-      <button
-        class="tab-context-item tab-context-item-submenu"
-        type="button"
-        role="menuitem"
-        aria-haspopup="menu"
-        aria-expanded={nearbySubmenuOpen}
-        disabled={!contextMenuCanOpenNearby}
-        onpointerdown={(event) => {
-          event.stopPropagation();
-          if (!contextMenuCanOpenNearby) {
-            return;
-          }
-          nearbySubmenuOpen = true;
-        }}
-      >
-        <span>Open Nearby</span>
-        <span class="tab-context-chevron">›</span>
-      </button>
-      {#if nearbySubmenuOpen && contextMenuCanOpenNearby}
-        <div class="tab-context-submenu-panel" role="menu">
-          {#if nearbyFilesLoading}
-            <button class="tab-context-item" type="button" role="menuitem" disabled>Loading...</button>
-          {:else if !contextMenuHasNearbyFiles}
-            <button class="tab-context-item" type="button" role="menuitem" disabled>
-              No nearby files
-            </button>
-          {:else}
-            {#each nearbyFiles as nearbyFile (nearbyFile.path)}
-              <button
-                class="tab-context-item"
-                type="button"
-                role="menuitem"
-                onpointerdown={(event) => {
-                  event.stopPropagation();
-                  void openNearbyFile(nearbyFile.path);
-                }}
-              >
-                {nearbyFile.basename}
-              </button>
-            {/each}
-          {/if}
-
-          <div class="tab-context-separator" role="separator"></div>
-
-          <button
-            class="tab-context-item"
-            type="button"
-            role="menuitem"
-            disabled={!contextMenuHasNearbyFiles}
-            onpointerdown={(event) => {
-              event.stopPropagation();
-              if (!contextMenuHasNearbyFiles) {
-                return;
-              }
-              void openAllNearbyFiles();
-            }}
-          >
-            Open All Nearby
-          </button>
-        </div>
-      {/if}
-    </div>
+    />
 
     <div class="tab-context-separator" role="separator"></div>
 
@@ -446,10 +222,9 @@
       disabled={!contextMenuCanCopyPath}
       onpointerdown={(event) => {
         event.stopPropagation();
-        if (!contextMenuCanCopyPath || !contextMenuTab) {
-          return;
+        if (contextMenuCanCopyPath && contextMenuTab) {
+          void menuHandlers.copyTabPath(contextMenuTab);
         }
-        void copyTabPath(contextMenuTab);
       }}
     >
       Copy Path
@@ -462,10 +237,9 @@
         disabled={!contextMenuCanCopyRelativePath}
         onpointerdown={(event) => {
           event.stopPropagation();
-          if (!contextMenuCanCopyRelativePath || !contextMenuTab) {
-            return;
+          if (contextMenuCanCopyRelativePath && contextMenuTab) {
+            void menuHandlers.copyTabRelativePath(contextMenuTab);
           }
-          void copyTabRelativePath(contextMenuTab);
         }}
       >
         Copy Relative Path
@@ -474,14 +248,13 @@
 
     {#if contextMenuCanRename}
       <div class="tab-context-separator" role="separator"></div>
-
       <button
         class="tab-context-item"
         type="button"
         role="menuitem"
         onpointerdown={(event) => {
           event.stopPropagation();
-          void renameContextTab();
+          void menuHandlers.renameContextTab();
         }}
       >
         Rename
@@ -497,84 +270,12 @@
       disabled={!contextMenuCanReveal}
       onpointerdown={(event) => {
         event.stopPropagation();
-        if (!contextMenuCanReveal) {
-          return;
+        if (contextMenuCanReveal) {
+          void menuHandlers.revealTabInFileManager(contextMenuTab);
         }
-        void revealTabInFileManager(contextMenuTab);
       }}
     >
       {revealLabel}
     </button>
   </div>
 {/if}
-
-<style>
-  .tab-context-menu {
-    position: fixed;
-    z-index: 1100;
-    min-width: 180px;
-    padding: var(--space-4);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    box-shadow: var(--shadow-overlay);
-  }
-
-  .tab-context-item {
-    display: block;
-    width: 100%;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    text-align: left;
-    font: inherit;
-    padding: var(--space-4) var(--space-6);
-  }
-
-  .tab-context-item-submenu {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-8);
-  }
-
-  .tab-context-chevron {
-    color: var(--color-text-secondary);
-  }
-
-  .tab-context-separator {
-    height: 1px;
-    margin: var(--space-4) var(--space-2);
-    background: var(--color-border-subtle);
-  }
-
-  .tab-context-submenu {
-    position: relative;
-  }
-
-  .tab-context-submenu-panel {
-    position: absolute;
-    top: 0;
-    left: calc(100% + var(--space-4));
-    z-index: 1;
-    min-width: 180px;
-    padding: var(--space-4);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    box-shadow: var(--shadow-overlay);
-  }
-
-  .tab-context-item:not(:disabled):hover {
-    background: var(--color-hover);
-    cursor: pointer;
-  }
-
-  .tab-context-item:disabled {
-    color: var(--color-text-secondary);
-    cursor: not-allowed;
-  }
-</style>

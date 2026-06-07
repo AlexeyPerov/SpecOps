@@ -2,8 +2,8 @@
 
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md)  
-**Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md) → [m5 custom modes](./execution-plan-m5-custom-modes.md)  
-**Status:** tier 1 done; **M4** (multiple providers) done; **M5** (custom modes) done  
+**Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md) → [m5 custom modes](./execution-plan-m5-custom-modes.md) → [m6 refactoring](./execution-plan-m6-refactoring.md)  
+**Status:** tier 1 done; **M4** (multiple providers) done; **M5** (custom modes) done; **M6** (refactoring) planned  
 **Estimate:** tier 1 ~2–3 weeks after phase 1; M4 ~1 week incremental
 
 ## Goal
@@ -110,6 +110,21 @@ User-defined chat modes in Settings → **Chat modes**; built-in **Raw**; placeh
 | [x] | Review + custom structured modes in Chats composer |
 | [x] | Missing/disabled custom mode → Ask fallback |
 
+## Milestone 6 — Codebase refactoring (extension)
+
+See [execution-plan-m6-refactoring.md](./execution-plan-m6-refactoring.md) (sub-plans: [UI](./execution-plan-m6-ui-refactoring.md), [state](./execution-plan-m6-state-refactoring.md), [platform](./execution-plan-m6-platform-refactoring.md)).
+
+Behavior-preserving splits of oversized modules (settings dialog, app shell, state slices, command registry, services, tests). No new user-facing features.
+
+| Exit (M6) | |
+|-----------|--|
+| [ ] | Settings dialog and `+page.svelte` ≤600 lines each |
+| [ ] | State slices and `contracts.ts` split by domain |
+| [ ] | Command registry, chatPersistence, sendChatMessage split |
+| [ ] | Tier 2–3 components and services split |
+| [ ] | Large test files mirror production modules |
+| [ ] | `npm test` / `npm run check` pass |
+
 ## Key files (expected touch)
 
 - `ActivityRail.svelte`, `+page.svelte` (context switch, layout)
@@ -131,11 +146,13 @@ User-defined chat modes in Settings → **Chat modes**; built-in **Raw**; placeh
 | P2-7 | Tests + validation suite updates |
 | P2-8 | Multiple HTTP providers (M4) — [execution-plan-m4](./execution-plan-m4-multiple-providers.md) |
 | P2-9 | Custom chat modes (M5) — [execution-plan-m5-custom-modes](./execution-plan-m5-custom-modes.md) |
+| P2-10 | Codebase refactoring (M6) — [execution-plan-m6-refactoring](./execution-plan-m6-refactoring.md) |
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-07 | Added M6 execution plan — codebase refactoring (M6-UI, M6-State, M6-Platform sub-plans) |
 | 2026-06-07 | Added M5 execution plan — custom chat modes (Raw built-in, chat-http scope unification) |
 | 2026-06-06 | Added M4 execution plan — multiple HTTP providers (connections list) |
 | 2026-06-05 | Added milestone execution plans (m1–m3) |

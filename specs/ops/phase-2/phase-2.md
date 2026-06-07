@@ -3,7 +3,7 @@
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md)  
 **Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md)  
-**Status:** tier 1 done; **M4** (multiple providers) planned  
+**Status:** tier 1 done; **M4** (multiple providers) done  
 **Estimate:** tier 1 ~2–3 weeks after phase 1; M4 ~1 week incremental
 
 ## Goal
@@ -91,10 +91,10 @@ Named **HTTP (OpenAI-compatible) connections** in Settings → Providers; compos
 
 | Exit (M4) | |
 |-----------|--|
-| [ ] | Multiple connections in Settings |
-| [ ] | Per-connection API key and model catalog |
-| [ ] | Composer connection picker in Chats and workspace HTTP chat |
-| [ ] | Rail gating: ≥1 configured connection (or Debug Provider in Chats) |
+| [x] | Multiple connections in Settings |
+| [x] | Per-connection API key and model catalog |
+| [x] | Composer connection picker in Chats and workspace HTTP chat |
+| [x] | Rail gating: ≥1 configured connection (or Debug Provider in Chats) |
 
 ## Key files (expected touch)
 

@@ -234,7 +234,7 @@ Dependencies: Task 2, Task 5.
 
 ---
 
-#### Task 7: Tests, validation suite, and docs (P2-8) [Score:7] [Agent:medium]
+#### Task 7: Tests, validation suite, and docs (P2-8) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -282,13 +282,13 @@ Phase 7 tier 2B–C (regenerate/edit, system prompt) remain in [phase-7.md](../p
 
 ## Milestone 4 exit criteria
 
-- [ ] User can add multiple named HTTP connections in Settings → Providers.
-- [ ] Each connection has its own API key (secrets file) and model catalog.
-- [ ] Chats composer picks connection then model; sends use the correct base URL and key.
-- [ ] Workspace HTTP chat uses the same connection list.
-- [ ] Chat rail visible when ≥1 connection is configured (or Debug Provider enabled in Chats).
-- [ ] Legacy single `http` settings normalize to one default connection on load.
-- [ ] `npm test` / `npm run check` pass.
+- [x] User can add multiple named HTTP connections in Settings → Providers.
+- [x] Each connection has its own API key (secrets file) and model catalog.
+- [x] Chats composer picks connection then model; sends use the correct base URL and key.
+- [x] Workspace HTTP chat uses the same connection list.
+- [x] Chat rail visible when ≥1 connection is configured (or Debug Provider enabled in Chats).
+- [x] Legacy single `http` settings normalize to one default connection on load.
+- [x] `npm test` / `npm run check` pass.
 
 ## Non-goals (M4)
 

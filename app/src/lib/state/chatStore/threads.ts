@@ -26,11 +26,13 @@ import {
   isModelInProviderCatalog,
   normalizeProviderModelCatalogs,
 } from "../../ai/providers/providerModelCatalog";
+import { resolveHttpConnection } from "../../ai/providers/httpConnectionSettings";
 import { stubCapabilityChecker } from "./access";
 import type {
   ChatModelSwitchOptions,
   ChatProviderSwitchOptions,
   ChatStoreState,
+  SwitchThreadConnectionResult,
   SwitchThreadModelResult,
   SwitchThreadProviderResult,
 } from "./types";
@@ -50,6 +52,7 @@ import {
   createThreadMetadata,
   DEFAULT_CHAT_MODE,
   getDefaultChatProvider,
+  resolveModelForConnection,
 } from "./threadHelpers";
 import {
   getOrCreateWorkspaceState,
@@ -517,6 +520,14 @@ export function createThreadsSlice(deps: {
         nextProvider,
         currentModelId,
       );
+      const resolvedConnectionId =
+        nextProvider === "http"
+          ? resolveHttpConnection(
+              options.providerSettings,
+              {},
+              metadata?.connectionId,
+            )?.connection.id
+          : undefined;
 
       const capabilityResult = await resolveCapabilityChecker().checkCapabilities({
         provider: nextProvider,
@@ -572,7 +583,12 @@ export function createThreadsSlice(deps: {
               ...baseThread,
               metadata: applyMetadataPatch(
                 baseThread.metadata,
-                { provider: nextProvider, mode: nextMode, selectedModelId: nextSelectedModelId },
+                {
+                  provider: nextProvider,
+                  mode: nextMode,
+                  selectedModelId: nextSelectedModelId,
+                  connectionId: resolvedConnectionId,
+                },
                 updatedAt,
               ),
               messages: [...baseThread.messages, switchMessage],
@@ -585,6 +601,77 @@ export function createThreadsSlice(deps: {
         });
       });
 
+      return { switched };
+    },
+    switchThreadConnection(
+      nextConnectionId: string,
+      options: ChatProviderSwitchOptions,
+      agentId?: string,
+    ): SwitchThreadConnectionResult {
+      const root = getActiveChatScopeKey();
+      if (!root) {
+        return { switched: false, message: "Open Chat and select a chat to switch connections." };
+      }
+      const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
+      if (!targetAgentId) {
+        return { switched: false, message: "Select a chat to switch connections." };
+      }
+      if (getRuntimeState(targetAgentId).isGenerating) {
+        return {
+          switched: false,
+          message: "Connection cannot be changed while a response is generating.",
+        };
+      }
+      const trimmedConnectionId = nextConnectionId.trim();
+      if (!trimmedConnectionId) {
+        return { switched: false, message: "Choose a configured connection." };
+      }
+      const metadata = this.getMetadata(targetAgentId);
+      if (!metadata || metadata.provider !== "http") {
+        return { switched: false, message: "Connection switching is available only for HTTP chats." };
+      }
+      const resolved = resolveHttpConnection(options.providerSettings, {}, trimmedConnectionId);
+      if (!resolved || resolved.connection.id !== trimmedConnectionId) {
+        return { switched: false, message: "That connection is no longer available." };
+      }
+      if (metadata.connectionId === trimmedConnectionId) {
+        return { switched: false };
+      }
+      const updatedAt = new Date().toISOString();
+      const nextModelId = resolveModelForConnection(
+        options.providerModelCatalogs,
+        resolved.connection.modelCatalog,
+      );
+      let switched = false;
+      update((state) => {
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const thread = workspace.threadsByAgentId[targetAgentId];
+        if (!thread) {
+          return state;
+        }
+        switched = true;
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: {
+              ...thread,
+              metadata: applyMetadataPatch(
+                thread.metadata,
+                { connectionId: trimmedConnectionId, selectedModelId: nextModelId },
+                updatedAt,
+              ),
+            },
+          },
+          runtimeByAgentId: {
+            ...workspace.runtimeByAgentId,
+            [targetAgentId]: defaultRuntimeState(),
+          },
+        });
+      });
       return { switched };
     },
     async switchThreadModel(

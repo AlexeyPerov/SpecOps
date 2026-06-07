@@ -8,6 +8,7 @@ import { createRuntimeSlice, activeRuntime } from "./chatStore/runtime";
 import { createThreadsSlice } from "./chatStore/threads";
 import {
   formatCompactionNotice,
+  setDefaultThreadConnectionResolver,
   setDefaultChatProviderResolver,
 } from "./chatStore/threadHelpers";
 import { activeThread, activeAgentId } from "./chatStore/workspace";
@@ -21,6 +22,7 @@ import type {
   ChatThreadRuntimeState,
   ChatTurnError,
   SwitchThreadModelResult,
+  SwitchThreadConnectionResult,
   SwitchThreadProviderResult,
   WorkspaceAgentsState,
 } from "./chatStore/types";
@@ -35,6 +37,7 @@ export type {
   ChatThreadRuntimeState,
   ChatTurnError,
   SwitchThreadModelResult,
+  SwitchThreadConnectionResult,
   SwitchThreadProviderResult,
   WorkspaceAgentsState,
 };
@@ -42,6 +45,7 @@ export type {
 export {
   createAgentId,
   formatCompactionNotice,
+  setDefaultThreadConnectionResolver,
   resetAgentIdCounterForTests,
   setDefaultChatProviderResolver,
 };
@@ -130,6 +134,7 @@ function createChatStore() {
     getActiveChatScopeKey,
     getActiveWorkspaceRoot,
     setDefaultChatProviderResolver,
+    setDefaultThreadConnectionResolver,
     ...agentsSlice,
     ...threadsSlice,
     ...runtimeSlice,

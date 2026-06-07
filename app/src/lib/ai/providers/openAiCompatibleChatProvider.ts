@@ -25,7 +25,7 @@ import type {
   ProviderStreamChunk,
 } from "./types";
 
-export type HttpSettingsReader = () => {
+export type HttpSettingsReader = (connectionId?: string) => {
   settings: HttpConnectionSettings;
   apiKey: string;
 };
@@ -60,7 +60,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
   ) {}
 
   async checkCapabilities(input: CapabilityCheckInput): Promise<CapabilityCheckResult> {
-    const { settings, apiKey } = this.getSettings();
+    const { settings, apiKey } = this.getSettings(input.connectionId);
     const normalized = normalizeHttpConnectionSettings(settings);
 
     if (!isHttpProviderConfigured(normalized, apiKey)) {
@@ -98,7 +98,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
   }
 
   async sendMessage(request: ProviderSendRequest): Promise<ProviderSendResponse> {
-    const { settings, apiKey } = this.getSettings();
+    const { settings, apiKey } = this.getSettings(request.connectionId);
     const normalized = normalizeHttpConnectionSettings(settings);
     this.assertConfigured(normalized, apiKey);
 
@@ -159,7 +159,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
   }
 
   async *streamMessage(request: ProviderSendRequest): AsyncIterable<ProviderStreamChunk> {
-    const { settings, apiKey } = this.getSettings();
+    const { settings, apiKey } = this.getSettings(request.connectionId);
     const normalized = normalizeHttpConnectionSettings(settings);
     this.assertConfigured(normalized, apiKey);
 

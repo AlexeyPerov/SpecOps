@@ -26,6 +26,7 @@ export interface CapabilityCheckInput {
   provider: ChatProviderId;
   mode: ChatModeId;
   workspaceRootPath: string | null;
+  connectionId?: string;
 }
 
 export interface CapabilityChecker {

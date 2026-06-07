@@ -9,6 +9,7 @@ import {
   resolveDefaultChatProvider,
 } from "./selection";
 import { listConfiguredHttpConnections, resolveHttpConnection } from "./httpConnectionSettings";
+import { resolveDefaultConnectionForProvider } from "../../state/chatStore/threadHelpers";
 
 let initialized = false;
 
@@ -36,37 +37,44 @@ export function initializeChatProviders(): void {
     }),
   );
   registerChatProvider(
-    createOpenAiCompatibleChatProvider(() => ({
-      settings:
-        resolveHttpConnection(
-          appState.getSnapshot().settings.providerSettings,
-          appState.getSnapshot().settings.providerApiKeys,
-        )?.connection ??
-        appState.getSnapshot().settings.providerSettings.httpConnections?.[0] ??
-        appState.getSnapshot().settings.providerSettings.http,
-      apiKey:
-        resolveHttpConnection(
-          appState.getSnapshot().settings.providerSettings,
-          appState.getSnapshot().settings.providerApiKeys,
-        )?.apiKey ?? "",
-    })),
+    createOpenAiCompatibleChatProvider((connectionId) => {
+      const snapshot = appState.getSnapshot().settings;
+      const resolved = resolveHttpConnection(
+        snapshot.providerSettings,
+        snapshot.providerApiKeys,
+        connectionId,
+      );
+      return {
+        settings:
+          resolved?.connection ??
+          snapshot.providerSettings.httpConnections?.[0] ??
+          snapshot.providerSettings.http,
+        apiKey: resolved?.apiKey ?? "",
+      };
+    }),
   );
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(
       () => appState.getSnapshot().settings.providerSettings,
       () => ({
-        settings:
-          resolveHttpConnection(
-            appState.getSnapshot().settings.providerSettings,
-            appState.getSnapshot().settings.providerApiKeys,
-          )?.connection ??
-          appState.getSnapshot().settings.providerSettings.httpConnections?.[0] ??
-          appState.getSnapshot().settings.providerSettings.http,
-        apiKey:
-          resolveHttpConnection(
-            appState.getSnapshot().settings.providerSettings,
-            appState.getSnapshot().settings.providerApiKeys,
-          )?.apiKey ?? "",
+        settings: (() => {
+          const snapshot = appState.getSnapshot().settings;
+          const resolved = resolveHttpConnection(
+            snapshot.providerSettings,
+            snapshot.providerApiKeys,
+          );
+          return (
+            resolved?.connection ??
+            snapshot.providerSettings.httpConnections?.[0] ??
+            snapshot.providerSettings.http
+          );
+        })(),
+        apiKey: (() => {
+          const snapshot = appState.getSnapshot().settings;
+          return (
+            resolveHttpConnection(snapshot.providerSettings, snapshot.providerApiKeys)?.apiKey ?? ""
+          );
+        })(),
       }),
     ),
   );
@@ -78,6 +86,14 @@ export function initializeChatProviders(): void {
       snapshot.providerSettings,
       { chatContextKind },
       listConfiguredHttpConnections(snapshot.providerSettings, snapshot.providerApiKeys).length > 0,
+    );
+  });
+  chatStore.setDefaultThreadConnectionResolver((provider) => {
+    const snapshot = appState.getSnapshot().settings;
+    return resolveDefaultConnectionForProvider(
+      provider,
+      snapshot.providerSettings,
+      snapshot.providerApiKeys,
     );
   });
   initialized = true;

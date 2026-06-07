@@ -73,6 +73,11 @@ export interface SwitchThreadModelResult {
   message?: string;
 }
 
+export interface SwitchThreadConnectionResult {
+  switched: boolean;
+  message?: string;
+}
+
 export interface ChatProviderSwitchOptions {
   providerSettings: import("../../domain/contracts").AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;

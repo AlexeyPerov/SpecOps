@@ -156,6 +156,7 @@ export function createAccessSlice(deps: {
         provider: metadata?.provider ?? getDefaultChatProvider(),
         mode: metadata?.mode ?? "ask",
         workspaceRootPath: rootPath,
+        connectionId: metadata?.connectionId,
       });
     },
     getChatAccessState(): ChatAccessState {

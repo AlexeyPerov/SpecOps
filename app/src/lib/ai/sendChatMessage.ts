@@ -144,6 +144,7 @@ type ProviderSendValidationSuccess = {
   provider: ChatProvider;
   accessStatus: WorkspaceAccessStatus;
   modelId: string;
+  connectionId?: string;
 };
 
 type ChatContextKind = "workspace" | "chat-http";
@@ -207,6 +208,20 @@ async function validateProviderSend(
   const chatContextKind = resolveChatContextKind(root, options);
   const providerId = chatStore.getActiveChatProvider(activeAgentId);
   const appSettings = appState.getSnapshot().settings;
+  const resolvedConnection =
+    providerId === "http"
+      ? resolveHttpConnection(
+          appSettings.providerSettings,
+          appSettings.providerApiKeys,
+          chatStore.getMetadata(activeAgentId)?.connectionId,
+        )
+      : null;
+  if (providerId === "http" && !chatStore.getMetadata(activeAgentId)?.connectionId) {
+    const defaultConnectionId = resolvedConnection?.connection.id;
+    if (defaultConnectionId) {
+      chatStore.updateThreadMetadata({ connectionId: defaultConnectionId }, undefined, activeAgentId);
+    }
+  }
   if (isDebugProviderSendBlocked(providerId, appSettings.providerSettings)) {
     return {
       ok: false,
@@ -218,16 +233,8 @@ async function validateProviderSend(
   if (
     isHttpProviderSendBlocked(
       providerId,
-      resolveHttpConnection(
-        appSettings.providerSettings,
-        appSettings.providerApiKeys,
-        chatStore.getMetadata(activeAgentId)?.connectionId,
-      )?.connection ?? appSettings.providerSettings.http,
-      resolveHttpConnection(
-        appSettings.providerSettings,
-        appSettings.providerApiKeys,
-        chatStore.getMetadata(activeAgentId)?.connectionId,
-      )?.apiKey ?? "",
+      resolvedConnection?.connection ?? appSettings.providerSettings.http,
+      resolvedConnection?.apiKey ?? "",
     )
   ) {
     return {
@@ -279,7 +286,13 @@ async function validateProviderSend(
     };
   }
 
-  return { ok: true, provider, accessStatus, modelId: localModelValidation.modelId };
+  return {
+    ok: true,
+    provider,
+    accessStatus,
+    modelId: localModelValidation.modelId,
+    connectionId: resolvedConnection?.connection.id,
+  };
 }
 
 async function executeProviderTurn(params: {
@@ -289,9 +302,11 @@ async function executeProviderTurn(params: {
   provider: ChatProvider;
   accessStatus: WorkspaceAccessStatus;
   modelId: string;
+  connectionId?: string;
   previousError?: ChatTurnError | null;
 }): Promise<SendChatMessageResult> {
-  const { root, activeAgentId, turnId, provider, accessStatus, modelId, previousError } = params;
+  const { root, activeAgentId, turnId, provider, accessStatus, modelId, connectionId, previousError } =
+    params;
   const abortController = new AbortController();
 
   const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
@@ -314,6 +329,7 @@ async function executeProviderTurn(params: {
   const request: ProviderSendRequest = {
     payload: buildThreadProviderRequest(thread, root),
     modelId,
+    connectionId,
     turnKey: turnId,
     accessStatus,
     signal: abortController.signal,
@@ -417,6 +433,7 @@ export async function retryLastChatTurn(
     provider: validation.provider,
     accessStatus: validation.accessStatus,
     modelId: validation.modelId,
+    connectionId: validation.connectionId,
     previousError,
   });
 }
@@ -474,5 +491,6 @@ export async function sendChatMessage(
     provider: validation.provider,
     accessStatus: validation.accessStatus,
     modelId: validation.modelId,
+    connectionId: validation.connectionId,
   });
 }

@@ -91,6 +91,8 @@
   }
 
   type DebugSettingsScope = "debugChat" | "debugWorkspace";
+  const NEW_CONNECTION_PREFIX = "conn";
+  let selectedConnectionId = $state<string | null>(null);
 
   function updateScopedDebugProviderSetting(
     scope: DebugSettingsScope,
@@ -128,9 +130,17 @@
     );
   }
 
+  function httpConnections(): HttpConnection[] {
+    return snapshot.settings.providerSettings.httpConnections ?? [];
+  }
+
   function activeHttpConnection(): HttpConnection {
-    const [first] = snapshot.settings.providerSettings.httpConnections ?? [];
-    return first ?? { ...defaultHttpConnection, id: DEFAULT_HTTP_CONNECTION_ID };
+    const connections = httpConnections();
+    const selected = selectedConnectionId
+      ? connections.find((connection) => connection.id === selectedConnectionId)
+      : null;
+    const fallback = connections[0] ?? { ...defaultHttpConnection, id: DEFAULT_HTTP_CONNECTION_ID };
+    return selected ?? fallback;
   }
 
   function updateHttpConnectionSetting(
@@ -138,18 +148,7 @@
     value: HttpConnectionSettings[keyof HttpConnectionSettings],
   ): void {
     const connection = activeHttpConnection();
-    if (
-      snapshot.settings.providerSettings.httpConnections &&
-      snapshot.settings.providerSettings.httpConnections.length > 0
-    ) {
-      appState.updateHttpConnection(connection.id, { [key]: value });
-    } else {
-      appState.addHttpConnection({
-        ...connection,
-        [key]: value,
-      });
-      appState.setDefaultConnectionId(connection.id);
-    }
+    appState.updateHttpConnection(connection.id, { [key]: value });
     appState.updateHttpConnectionSettings({ [key]: value });
     void chatStore.runAccessPreflight();
   }
@@ -158,7 +157,6 @@
     const connection = activeHttpConnection();
     appState.setConnectionApiKey(connection.id, rawValue);
     await saveConnectionApiKey(connection.id, rawValue);
-    appState.setProviderApiKey("http", rawValue);
     void chatStore.runAccessPreflight();
   }
 
@@ -181,6 +179,87 @@
     appState.updateProviderModelCatalog(providerId, { defaultModelId });
     if (providerId === "http") {
       void chatStore.runAccessPreflight();
+    }
+  }
+
+  function updateConnectionModelList(connectionId: string, rawValue: string): void {
+    const connection = httpConnections().find((entry) => entry.id === connectionId);
+    if (!connection) {
+      return;
+    }
+    const modelIds = parseModelListInput(rawValue);
+    const currentCatalog = connection.modelCatalog;
+    appState.updateHttpConnection(connectionId, {
+      modelCatalog: {
+        modelIds,
+        defaultModelId: currentCatalog.defaultModelId,
+      },
+    });
+    void chatStore.runAccessPreflight();
+  }
+
+  function updateConnectionDefaultModel(connectionId: string, defaultModelId: string): void {
+    const connection = httpConnections().find((entry) => entry.id === connectionId);
+    if (!connection) {
+      return;
+    }
+    appState.updateHttpConnection(connectionId, {
+      modelCatalog: {
+        ...connection.modelCatalog,
+        defaultModelId,
+      },
+    });
+    void chatStore.runAccessPreflight();
+  }
+
+  function makeConnectionId(label: string): string {
+    const slug = label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    const base = `${NEW_CONNECTION_PREFIX}-${slug || "http"}`;
+    const ids = new Set(httpConnections().map((connection) => connection.id));
+    if (!ids.has(base)) {
+      return base;
+    }
+    let index = 2;
+    while (ids.has(`${base}-${index}`)) {
+      index += 1;
+    }
+    return `${base}-${index}`;
+  }
+
+  function addHttpConnection(): void {
+    const id = makeConnectionId(`provider-${httpConnections().length + 1}`);
+    const next: HttpConnection = {
+      ...defaultHttpConnection,
+      id,
+      label: `Provider ${httpConnections().length + 1}`,
+      enabled: true,
+    };
+    appState.addHttpConnection(next);
+    appState.setDefaultConnectionId(snapshot.settings.providerSettings.defaultConnectionId ?? id);
+    selectedConnectionId = id;
+    void chatStore.runAccessPreflight();
+  }
+
+  async function removeHttpConnection(connectionId: string): Promise<void> {
+    appState.removeHttpConnection(connectionId);
+    await saveConnectionApiKey(connectionId, "");
+    const remaining = httpConnections().filter((connection) => connection.id !== connectionId);
+    selectedConnectionId = remaining[0]?.id ?? null;
+    void chatStore.runAccessPreflight();
+  }
+
+  function selectConnection(connectionId: string): void {
+    selectedConnectionId = connectionId;
+  }
+
+  function setDefaultConnection(connectionId: string): void {
+    appState.setDefaultConnectionId(connectionId);
+    if (!selectedConnectionId) {
+      selectedConnectionId = connectionId;
     }
   }
 
@@ -273,11 +352,22 @@
   $effect(() => {
     if (open && !wasOpen) {
       activeTab = initialTab;
+      selectedConnectionId = snapshot.settings.providerSettings.defaultConnectionId ?? httpConnections()[0]?.id ?? null;
       if (!sizeInitialized) {
         void measureAndApplyInitialSize();
       }
     }
     wasOpen = open;
+  });
+
+  $effect(() => {
+    const ids = new Set(httpConnections().map((connection) => connection.id));
+    if (!selectedConnectionId || !ids.has(selectedConnectionId)) {
+      selectedConnectionId =
+        snapshot.settings.providerSettings.defaultConnectionId ??
+        httpConnections()[0]?.id ??
+        null;
+    }
   });
 
   $effect(() => {
@@ -474,55 +564,138 @@
 
 {#snippet connectionsSettingsPanel()}
   <section class="settings-section">
-    <h3>Connections</h3>
+    <h3>Providers</h3>
     <p class="settings-section-note">
-      Configure an HTTP/OpenAI-compatible connection for chat. The API key is stored in a separate
-      secrets file and is never written to chat history or Debug diagnostics.
+      HTTP (OpenAI-compatible) connections. API keys are stored in a separate secrets file and are
+      never written to chat history or diagnostics.
     </p>
     <div class="settings-subsection">
-      <h4>Enable</h4>
-      <label class="settings-toggle">
-        <input
-          type="checkbox"
-          checked={activeHttpConnection().enabled}
-          onchange={(event) =>
-            updateHttpConnectionSetting(
-              "enabled",
-              (event.currentTarget as HTMLInputElement).checked,
-            )}
-        />
-        Enable HTTP connection in chat
-      </label>
+      <h4>Connection list</h4>
+      <button type="button" class="settings-action" onclick={addHttpConnection}>Add connection</button>
+      {#if httpConnections().length === 0}
+        <p class="settings-section-note">No providers configured yet. Add one to enable HTTP chat.</p>
+      {:else}
+        <div class="connection-list" role="listbox" aria-label="HTTP connections">
+          {#each httpConnections() as connection (connection.id)}
+            <button
+              type="button"
+              class="connection-row"
+              class:connection-row-active={connection.id === activeHttpConnection().id}
+              onclick={() => selectConnection(connection.id)}
+            >
+              <span>{connection.label}</span>
+              {#if snapshot.settings.providerSettings.defaultConnectionId === connection.id}
+                <small>Default</small>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
-    <div class="settings-subsection">
-      <h4>Credentials</h4>
-      <label class="settings-field">
-        <span>API key</span>
-        <input
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="Enter API key"
-          value={snapshot.settings.providerApiKeys[activeHttpConnection().id] ?? ""}
-          oninput={(event) =>
-            void updateHttpApiKey((event.currentTarget as HTMLInputElement).value)}
-        />
-      </label>
-      <label class="settings-field">
-        <span>Base URL</span>
-        <input
-          type="url"
-          spellcheck="false"
-          value={activeHttpConnection().baseUrl}
-          onchange={(event) =>
-            updateHttpConnectionSetting(
-              "baseUrl",
-              (event.currentTarget as HTMLInputElement).value,
-            )}
-        />
-      </label>
-    </div>
-    {@render providerModelCatalogPanel("http", "Models")}
+    {#if httpConnections().length > 0}
+      {@const activeConnection = activeHttpConnection()}
+      <div class="settings-subsection">
+        <h4>Selected connection</h4>
+        <label class="settings-field">
+          <span>Label</span>
+          <input
+            type="text"
+            value={activeConnection.label}
+            onchange={(event) =>
+              appState.updateHttpConnection(activeConnection.id, {
+                label: (event.currentTarget as HTMLInputElement).value,
+              })}
+          />
+        </label>
+        <label class="settings-field">
+          <span>Base URL</span>
+          <input
+            type="url"
+            spellcheck="false"
+            value={activeConnection.baseUrl}
+            onchange={(event) =>
+              updateHttpConnectionSetting(
+                "baseUrl",
+                (event.currentTarget as HTMLInputElement).value,
+              )}
+          />
+        </label>
+        <label class="settings-toggle">
+          <input
+            type="checkbox"
+            checked={activeConnection.enabled}
+            onchange={(event) =>
+              updateHttpConnectionSetting(
+                "enabled",
+                (event.currentTarget as HTMLInputElement).checked,
+              )}
+          />
+          Enabled
+        </label>
+        <label class="settings-toggle">
+          <input
+            type="radio"
+            name="default-http-connection"
+            checked={snapshot.settings.providerSettings.defaultConnectionId === activeConnection.id}
+            onchange={() => setDefaultConnection(activeConnection.id)}
+          />
+          Use as default
+        </label>
+        <button
+          type="button"
+          class="settings-action settings-action-danger"
+          disabled={httpConnections().length <= 1}
+          onclick={() => void removeHttpConnection(activeConnection.id)}
+        >
+          Remove connection
+        </button>
+      </div>
+      <div class="settings-subsection">
+        <h4>Credentials</h4>
+        <label class="settings-field">
+          <span>API key</span>
+          <input
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Enter API key"
+          value={snapshot.settings.providerApiKeys[activeConnection.id] ?? ""}
+            oninput={(event) => void updateHttpApiKey((event.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+      </div>
+      <div class="settings-subsection">
+        <h4>Models</h4>
+        <label class="settings-field">
+          <span>Model list</span>
+          <textarea
+            rows={Math.max(3, activeConnection.modelCatalog.modelIds.length + 1)}
+            spellcheck="false"
+            value={formatModelListForInput(activeConnection.modelCatalog.modelIds)}
+            onchange={(event) =>
+              updateConnectionModelList(
+                activeConnection.id,
+                (event.currentTarget as HTMLTextAreaElement).value,
+              )}
+          ></textarea>
+        </label>
+        <label class="settings-field">
+          <span>Default model</span>
+          <select
+            value={activeConnection.modelCatalog.defaultModelId}
+            onchange={(event) =>
+              updateConnectionDefaultModel(
+                activeConnection.id,
+                (event.currentTarget as HTMLSelectElement).value,
+              )}
+          >
+            {#each activeConnection.modelCatalog.modelIds as modelId (modelId)}
+              <option value={modelId}>{modelId}</option>
+            {/each}
+          </select>
+        </label>
+      </div>
+    {/if}
   </section>
 {/snippet}
 
@@ -970,5 +1143,45 @@
     border-right: 2px solid var(--color-text-secondary);
     border-bottom: 2px solid var(--color-text-secondary);
     opacity: 0.65;
+  }
+
+  .connection-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+  }
+
+  .connection-row {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    padding: var(--space-4) var(--space-6);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .connection-row-active {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-1));
+  }
+
+  .settings-action {
+    align-self: flex-start;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-primary);
+    padding: var(--space-3) var(--space-6);
+    cursor: pointer;
+  }
+
+  .settings-action-danger {
+    color: var(--color-text-danger);
   }
 </style>

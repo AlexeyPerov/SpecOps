@@ -22,7 +22,7 @@ export {
 
 export type AppProviderSettingsReader = () => AppProviderSettings;
 
-export type HttpSettingsReader = () => {
+export type HttpSettingsReader = (connectionId?: string) => {
   settings: HttpConnectionSettings;
   apiKey: string;
 };
@@ -57,14 +57,17 @@ export function createRegistryCapabilityChecker(
             }
             return { settings: fallback, apiKey: "" };
           });
-        const { settings, apiKey } = httpReader();
+        const { settings, apiKey } = httpReader(input.connectionId);
         if (!isHttpProviderConfigured(settings, apiKey)) {
           return missingHttpConfigResult();
         }
 
         const provider = getChatProvider(input.provider);
         if (provider) {
-          return provider.checkCapabilities(input);
+          return provider.checkCapabilities({
+            ...input,
+            connectionId: input.connectionId,
+          });
         }
 
         return missingHttpConfigResult();

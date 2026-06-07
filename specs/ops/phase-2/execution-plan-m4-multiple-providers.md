@@ -134,7 +134,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 3: HTTP provider send path uses connection resolver (P2-8) [Score:8] [Agent:medium]
+#### Task 3: HTTP provider send path uses connection resolver (P2-8) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -159,7 +159,7 @@ Dependencies: Task 2.
 
 ---
 
-#### Task 4: Settings UI — Providers connection list (P2-8) [Score:7] [Agent:medium]
+#### Task 4: Settings UI — Providers connection list (P2-8) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

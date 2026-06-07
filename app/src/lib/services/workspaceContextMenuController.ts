@@ -1,4 +1,13 @@
+import { CHAT_HTTP_CONTEXT_ID, type ContextId, type DocumentState } from "../domain/contracts";
+import { appState } from "../state/appState";
+
 export type CloseWorkspaceAction = "save-all" | "discard-all" | "cancel";
+
+export interface WorkspaceContextMenuState {
+  workspaceId: ContextId;
+  x: number;
+  y: number;
+}
 
 export interface CloseWorkspacePrompts {
   confirmSaveAll: (dirtyCount: number) => boolean;
@@ -38,4 +47,141 @@ export function computeWorkspaceReorderTarget(
     return null;
   }
   return targetIndex;
+}
+
+export interface WorkspaceContextMenuActionsDeps {
+  getMenu: () => WorkspaceContextMenuState | null;
+  setMenu: (menu: WorkspaceContextMenuState | null) => void;
+  getMenuEl: () => HTMLDivElement | null;
+  getWorkspaceIds: () => readonly ContextId[];
+  getPreviousActiveContextId: () => ContextId | null;
+  setPreviousActiveContextId: (contextId: ContextId) => void;
+  setConsoleOpen: (open: boolean) => void;
+  setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
+  loadProjectTreeRoot: () => Promise<void>;
+  notify: (message: string) => void;
+  confirmSaveAll: (count: number) => boolean;
+  confirmDiscardAll: () => boolean;
+}
+
+export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActionsDeps) {
+  function onWindowPointerDown(event: PointerEvent): void {
+    if (!deps.getMenu()) {
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Node && deps.getMenuEl()?.contains(target)) {
+      return;
+    }
+    close();
+  }
+
+  function onWindowKeydown(event: KeyboardEvent): void {
+    if (deps.getMenu() && event.key === "Escape") {
+      close();
+    }
+  }
+
+  function close(): void {
+    if (!deps.getMenu()) {
+      return;
+    }
+    deps.setMenu(null);
+    window.removeEventListener("pointerdown", onWindowPointerDown);
+    window.removeEventListener("keydown", onWindowKeydown);
+  }
+
+  function open(workspaceId: ContextId, x: number, y: number): void {
+    deps.setMenu({ workspaceId, x, y });
+    window.addEventListener("pointerdown", onWindowPointerDown);
+    window.addEventListener("keydown", onWindowKeydown);
+  }
+
+  function resolveCloseAction(dirtyDocuments: DocumentState[]): CloseWorkspaceAction {
+    return resolveCloseWorkspaceAction(dirtyDocuments.length, {
+      confirmSaveAll: deps.confirmSaveAll,
+      confirmDiscardAll: deps.confirmDiscardAll,
+    });
+  }
+
+  function menuIndex(): number {
+    const menu = deps.getMenu();
+    if (!menu) {
+      return -1;
+    }
+    return findWorkspaceIndex(deps.getWorkspaceIds(), menu.workspaceId);
+  }
+
+  function move(direction: "up" | "down"): void {
+    if (!deps.getMenu()) {
+      return;
+    }
+    const index = menuIndex();
+    const targetIndex = computeWorkspaceReorderTarget(
+      index,
+      direction,
+      deps.getWorkspaceIds().length,
+    );
+    if (targetIndex === null) {
+      return;
+    }
+    appState.reorderWorkspaces(index, targetIndex);
+    close();
+  }
+
+  function handleActiveContextSwitch(nextContextId: ContextId): void {
+    const previousActiveContextId = deps.getPreviousActiveContextId();
+    if (previousActiveContextId === null) {
+      deps.setPreviousActiveContextId(nextContextId);
+      return;
+    }
+    if (previousActiveContextId === nextContextId) {
+      return;
+    }
+    deps.setPreviousActiveContextId(nextContextId);
+    deps.setConsoleOpen(false);
+    close();
+    if (nextContextId !== CHAT_HTTP_CONTEXT_ID) {
+      void deps.loadProjectTreeRoot();
+    }
+  }
+
+  function handleSelectContext(contextId: ContextId): void {
+    const switched = appState.switchContext(contextId);
+    if (!switched) {
+      return;
+    }
+    close();
+  }
+
+  function closeWorkspace(workspaceId: ContextId): void {
+    const closed = appState.closeWorkspace(workspaceId, {
+      resolveAction: resolveCloseAction,
+      saveAllDirtyDocuments: (dirtyDocuments) => {
+        for (const doc of dirtyDocuments) {
+          if (!doc.filePath) {
+            continue;
+          }
+          appState.markDocumentSaved(doc.id, doc.filePath, doc.content);
+        }
+      },
+    });
+    if (closed) {
+      deps.notify("Workspace closed.");
+      deps.setConsoleOpen(false);
+      deps.setMarkdownViewMode("edit");
+      void deps.loadProjectTreeRoot();
+    }
+    close();
+  }
+
+  return {
+    open,
+    close,
+    menuIndex,
+    move,
+    closeWorkspace,
+    handleActiveContextSwitch,
+    handleSelectContext,
+  };
 }

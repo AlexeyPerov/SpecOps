@@ -3,8 +3,9 @@
   import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
-  import { nextSidebarAgentId, openAgentTabIds, resolveRestoredActiveAgent, selectedTabAfterMissingLastAgent } from "../lib/services/workspaceAgentSession";
-  import { closeTabWithUnsavedPrompt } from "../lib/services/closeTabFlow";
+  import { createAppShellAgentHandlers } from "../lib/services/appShellAgentHandlers";
+  import { createAppShellLayoutHandlers } from "../lib/services/appShellLayoutHandlers";
+  import { createAppShellProjectTreeHandlers } from "../lib/services/appShellProjectTreeHandlers";
   import { dispatchMenuCommand, initializeAppMenu, isEditorGlobalCommand, keymapCommandForEvent, refreshOpenRecentMenu, shouldInitializeAppMenu } from "../lib/commands/registry";
   import { getErrorMessage } from "../lib/commands/commandErrors";
   import type { AppCommandId } from "../lib/domain/contracts";
@@ -21,41 +22,22 @@
   import { scheduleSessionPersistence } from "../lib/services/sessionManager";
   import { savePersistedSettings, toPersistedSettings } from "../lib/services/settingsStore";
   import { registerSettingsDialogOpener, type SettingsDialogTab } from "../lib/services/settingsDialogUi";
-  import { promptEntryName } from "../lib/services/entryNamePrompt";
-  import { confirm } from "@tauri-apps/plugin-dialog";
   import { checkDocumentIfDeferred } from "../lib/services/externalFileChanges";
   import { marked } from "marked";
   import type { AppDomainState } from "../lib/domain/contracts";
-  import {
-    CHAT_HTTP_CONTEXT_ID,
-    type ContextId,
-    type DocumentState,
-  } from "../lib/domain/contracts";
+  import { CHAT_HTTP_CONTEXT_ID, type ContextId } from "../lib/domain/contracts";
   import { isAgentTab, isFileTab, tabDocumentId } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
-  import {
-    createProjectFile,
-    createProjectFolder,
-    deleteProjectEntry,
-    moveProjectEntry,
-    parentDirForRefresh,
-    renameProjectEntry,
-  } from "../lib/services/projectFileOps";
   import { syncProjectTreeWatcher } from "../lib/services/fileWatcher";
-  import type { ProjectTreeNode } from "../lib/services/projectTree";
   import { normalizePathSync } from "../lib/services/diskFingerprint";
   import { scheduleAgentThreadFilePersistence } from "../lib/services/chatPersistence";
   import { ensureWorkspaceReadAccess, probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor, syncChatAccessMonitor } from "../lib/services/chatAccessMonitor";
-  import { DEFAULT_CONSOLE_HEIGHT_PX, writeConsoleHeightPreference } from "../lib/services/consoleTabPrefs";
+  import { DEFAULT_CONSOLE_HEIGHT_PX } from "../lib/services/consoleTabPrefs";
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
   import { DEFAULT_UNTITLED_TITLE } from "../lib/services/untitledTitle";
-  import { canFitMarkdownSplit as canFitMarkdownSplitForWidth, computeResponsiveLayoutFlags, formatStatusPath } from "../lib/services/appShellHelpers";
-  import {
-    computeWorkspaceReorderTarget,
-    findWorkspaceIndex,
-    resolveCloseWorkspaceAction as resolveCloseWorkspaceActionFromPrompts,
-  } from "../lib/services/workspaceContextMenuController";
+  import { formatStatusPath } from "../lib/services/appShellHelpers";
+  import { createWorkspaceContextMenuActions } from "../lib/services/workspaceContextMenuController";
   let themePaneOpen = $state(false);
   let settingsDialogOpen = $state(false);
   let settingsDialogInitialTab = $state<SettingsDialogTab>("editor");
@@ -180,28 +162,130 @@
     activeDocument?.filePath ? normalizePathSync(activeDocument.filePath) : null,
   );
 
-  async function loadProjectTreeRoot(): Promise<void> {
-    await projectTreeController.loadProjectTreeRoot({
-      workspaceRoot: activeWorkspaceRoot,
-      isAgentTabActive,
-      onWorkspaceBlocked: () => {
-        void chatStore.runAccessPreflight();
-      },
-    });
+  function notify(message: string): void {
+    statusMessage = message;
   }
 
-  async function loadProjectTreeChildren(directoryPath: string): Promise<void> {
-    await projectTreeController.loadProjectTreeChildren(activeWorkspaceRoot, directoryPath);
-  }
+  const projectTreeHandlers = createAppShellProjectTreeHandlers({
+    getActiveWorkspaceRoot: () => activeWorkspaceRoot,
+    getIsAgentTabActive: () => isAgentTabActive,
+    getCurrentWindowId: () => currentWindowId,
+    notify,
+    projectTreeController,
+  });
 
-  async function handleToggleProjectTreeDirectory(path: string): Promise<void> {
-    await projectTreeController.handleToggleProjectTreeDirectory(activeWorkspaceRoot, path);
-  }
+  const {
+    loadProjectTreeRoot,
+    handleToggleProjectTreeDirectory,
+    handleOpenProjectTreeFile,
+    refreshProjectTree,
+    notifyProjectTreeFilesystemChange,
+    handleMoveProjectTreeEntry,
+    handleNewProjectFile,
+    handleNewProjectFolder,
+    handleRenameProjectEntry,
+    handleDeleteProjectEntry,
+    toggleProjectTreeHidden,
+  } = projectTreeHandlers;
 
-  async function handleOpenProjectTreeFile(path: string): Promise<void> {
-    const result = await openActivePath(path, currentWindowId);
-    notify(describeOpenActivePathResult(result));
-  }
+  const layoutHandlers = createAppShellLayoutHandlers({
+    getShellMainRowEl: () => shellMainRowEl,
+    getEditorPaneEl: () => editorPaneEl,
+    setShellMainRowWidth: (width) => {
+      shellMainRowWidth = width;
+    },
+    setEditorPaneWidth: (width) => {
+      editorPaneWidth = width;
+    },
+    getShellMainRowWidth: () => shellMainRowWidth,
+    getEditorPaneWidth: () => editorPaneWidth,
+    getActiveWorkspaceRoot: () => activeWorkspaceRoot,
+    getIsChatHttpActive: () => isChatHttpActive,
+    getIsAgentTabActive: () => isAgentTabActive,
+    getWorkspaceLayout: () => workspaceLayout,
+    getConsoleOpen: () => consoleOpen,
+    setConsoleOpen: (open) => {
+      consoleOpen = open;
+    },
+    getAutoProjectPanelCollapsed: () => autoProjectPanelCollapsed,
+    setAutoProjectPanelCollapsed: (collapsed) => {
+      autoProjectPanelCollapsed = collapsed;
+    },
+    getAutoAgentsSidebarCollapsed: () => autoAgentsSidebarCollapsed,
+    setAutoAgentsSidebarCollapsed: (collapsed) => {
+      autoAgentsSidebarCollapsed = collapsed;
+    },
+    getActiveDocument: () => activeDocument,
+    getConsoleHeightPx: () => consoleHeightPx,
+    setConsoleHeightPx: (heightPx) => {
+      consoleHeightPx = heightPx;
+    },
+    getLayoutResizeObserver: () => layoutResizeObserver,
+    setLayoutResizeObserver: (observer) => {
+      layoutResizeObserver = observer;
+    },
+  });
+
+  const {
+    toggleProjectPanelCollapsed,
+    toggleAgentsSidebarCollapsed,
+    handleProjectPanelWidthChange,
+    handleAgentsSidebarWidthChange,
+    toggleConsole,
+    persistConsoleHeightNow,
+    canFitMarkdownSplit,
+    setMarkdownViewMode,
+    applyResponsiveLayoutRules,
+    setupLayoutObserver,
+    disconnectLayoutObserver,
+  } = layoutHandlers;
+
+  const {
+    handleNewAgent,
+    handleSelectAgent,
+    handleDeleteAgent,
+    ensureChatHttpAgentTab,
+    handleDeleteAgentFromChat,
+    restoreWorkspaceAgentSession,
+    handleCloseTab,
+  } = createAppShellAgentHandlers({
+    getIsChatHttpActive: () => isChatHttpActive,
+    getCurrentWindowId: () => currentWindowId,
+    notify,
+  });
+
+  const {
+    open: handleOpenWorkspaceContextMenu,
+    close: closeWorkspaceContextMenu,
+    menuIndex: workspaceContextMenuIndex,
+    move: moveWorkspaceFromContextMenu,
+    closeWorkspace: closeWorkspaceFromContextMenu,
+    handleActiveContextSwitch,
+    handleSelectContext,
+  } = createWorkspaceContextMenuActions({
+    getMenu: () => workspaceContextMenu,
+    setMenu: (menu) => {
+      workspaceContextMenu = menu;
+    },
+    getMenuEl: () => workspaceContextMenuEl,
+    getWorkspaceIds: () => workspaces.map((workspace) => workspace.id),
+    getPreviousActiveContextId: () => previousActiveContextId,
+    setPreviousActiveContextId: (contextId) => {
+      previousActiveContextId = contextId;
+    },
+    setConsoleOpen: (open) => {
+      consoleOpen = open;
+    },
+    setMarkdownViewMode,
+    loadProjectTreeRoot,
+    notify,
+    confirmSaveAll: (count) =>
+      window.confirm(
+        `This workspace has ${count} unsaved file(s). Press OK to Save All, or Cancel for more options.`,
+      ),
+    confirmDiscardAll: () =>
+      window.confirm("Discard all unsaved changes and close this workspace?"),
+  });
 
   async function handleConfirmLargeFile(): Promise<void> {
     const document = activeDocument;
@@ -219,476 +303,13 @@
     }
   }
 
-  async function refreshProjectTree(): Promise<void> {
-    await projectTreeController.refreshProjectTree(activeWorkspaceRoot, isAgentTabActive);
-  }
-
-  function notifyProjectTreeFilesystemChange(path: string): void {
-    projectTreeController.handleFilesystemChange(activeWorkspaceRoot, path);
-  }
-
-  async function refreshProjectTreeDirectories(directoryPaths: string[]): Promise<void> {
-    await projectTreeController.reloadDirectories(activeWorkspaceRoot, directoryPaths);
-  }
-
-  async function afterProjectTreeMutation(...paths: string[]): Promise<void> {
-    const dirs = new Set<string>();
-    if (activeWorkspaceRoot) {
-      dirs.add(activeWorkspaceRoot);
-    }
-    for (const path of paths) {
-      dirs.add(parentDirForRefresh(path));
-    }
-    await refreshProjectTreeDirectories([...dirs]);
-    for (const path of paths) {
-      notifyProjectTreeFilesystemChange(path);
-    }
-  }
-
-  async function handleMoveProjectTreeEntry(
-    sourcePath: string,
-    destDirPath: string,
-  ): Promise<void> {
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    const result = await moveProjectEntry(
-      activeWorkspaceRoot,
-      sourcePath,
-      destDirPath,
-      currentWindowId,
-    );
-    if (!result.ok) {
-      notify(result.reason);
-      return;
-    }
-    notify(`Moved to ${destDirPath}`);
-    await afterProjectTreeMutation(sourcePath, result.path, destDirPath);
-  }
-
-  async function handleNewProjectFile(parentDirPath: string): Promise<void> {
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    const name = await promptEntryName({
-      title: "New file name",
-      defaultValue: "untitled.txt",
-      confirmLabel: "Create",
-    });
-    if (name === null) {
-      return;
-    }
-    const result = await createProjectFile(activeWorkspaceRoot, parentDirPath, name);
-    if (!result.ok) {
-      notify(result.reason);
-      return;
-    }
-    notify(`Created ${name}`);
-    await afterProjectTreeMutation(result.path);
-    await handleOpenProjectTreeFile(result.path);
-  }
-
-  async function handleNewProjectFolder(parentDirPath: string): Promise<void> {
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    const name = await promptEntryName({
-      title: "New folder name",
-      defaultValue: "New Folder",
-      confirmLabel: "Create",
-    });
-    if (name === null) {
-      return;
-    }
-    const result = await createProjectFolder(activeWorkspaceRoot, parentDirPath, name);
-    if (!result.ok) {
-      notify(result.reason);
-      return;
-    }
-    notify(`Created folder ${name}`);
-    await afterProjectTreeMutation(result.path);
-  }
-
-  async function handleRenameProjectEntry(
-    path: string,
-    kind: ProjectTreeNode["kind"],
-  ): Promise<void> {
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    const currentName = path.replaceAll("\\", "/").split("/").pop() ?? path;
-    const name = await promptEntryName({
-      title: "Rename",
-      defaultValue: currentName,
-      confirmLabel: "Rename",
-    });
-    if (name === null) {
-      return;
-    }
-    const result = await renameProjectEntry(activeWorkspaceRoot, path, name, currentWindowId);
-    if (!result.ok) {
-      notify(result.reason);
-      return;
-    }
-    notify(`Renamed to ${name}`);
-    await afterProjectTreeMutation(path, result.path);
-    if (kind === "file") {
-      await handleOpenProjectTreeFile(result.path);
-    }
-  }
-
-  async function handleDeleteProjectEntry(
-    path: string,
-    kind: ProjectTreeNode["kind"],
-  ): Promise<void> {
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    const label = kind === "directory" ? "folder" : "file";
-    const entryLabel = path.replaceAll("\\", "/").split("/").pop() ?? path;
-    const confirmed = await confirm(`Delete ${label} "${entryLabel}"?`, {
-      title: "Delete",
-      okLabel: "Delete",
-      cancelLabel: "Cancel",
-      kind: "warning",
-    });
-    if (!confirmed) {
-      return;
-    }
-    const result = await deleteProjectEntry(activeWorkspaceRoot, path);
-    if (!result.ok) {
-      notify(result.reason);
-      return;
-    }
-    notify("Deleted");
-    await afterProjectTreeMutation(path);
-  }
-
-  function toggleProjectPanelCollapsed(next: boolean): void {
-    appState.setProjectPanelCollapsed(next);
-  }
-
-  function toggleAgentsSidebarCollapsed(next: boolean): void {
-    appState.setAgentsSidebarCollapsed(next);
-  }
-
-  function handleProjectPanelWidthChange(widthPx: number): void {
-    appState.updateActiveWorkspaceLayout({ projectPanelWidthPx: widthPx });
-  }
-
-  function handleAgentsSidebarWidthChange(widthPx: number): void {
-    appState.updateActiveWorkspaceLayout({ agentsSidebarWidthPx: widthPx });
-  }
-
-  function handleNewAgent(): void {
-    const agentId = chatStore.createDraftAgent();
-    if (!agentId) {
-      return;
-    }
-    appState.setLastActiveAgentId(agentId);
-    appState.openOrFocusAgentTab(agentId);
-  }
-
-  function handleSelectAgent(agentId: string): void {
-    chatStore.setActiveAgentId(agentId);
-    appState.setLastActiveAgentId(agentId);
-    appState.openOrFocusAgentTab(agentId);
-    void chatStore.runAccessPreflight();
-  }
-
-  async function handleDeleteAgent(agentId: string): Promise<void> {
-    appState.closeTabsForAgent(agentId);
-    const deleted = await chatStore.deleteAgent(agentId);
-    if (!deleted) {
-      return;
-    }
-    const nextAgentId = chatStore.getActiveAgentId();
-    if (nextAgentId) {
-      appState.openOrFocusAgentTab(nextAgentId);
-    }
-  }
-
-  function ensureChatHttpAgentTab(): void {
-    if (!isChatHttpActive) {
-      return;
-    }
-    const activeScope = chatStore.getActiveChatScopeKey();
-    if (activeScope !== CHAT_HTTP_CONTEXT_ID) {
-      return;
-    }
-    let agentId = chatStore.getActiveAgentId();
-    if (!agentId) {
-      agentId = chatStore.createDraftAgent();
-    }
-    if (!agentId) {
-      return;
-    }
-    chatStore.setActiveAgentId(agentId);
-    appState.setLastActiveAgentId(agentId);
-    const sessionSnapshot = appState.getActiveSession();
-    const selectedTab = sessionSnapshot.openTabs.find((tab) => tab.id === sessionSnapshot.selectedTabId);
-    const selectedMatchesChatAgent =
-      selectedTab && isAgentTab(selectedTab) && selectedTab.agentId === agentId;
-    if (selectedMatchesChatAgent) {
-      return;
-    }
-    const fileTabIds = sessionSnapshot.openTabs
-      .filter((tab) => isFileTab(tab))
-      .map((tab) => tab.id);
-    if (fileTabIds.length > 0) {
-      appState.closeTabsByIds(fileTabIds, null);
-    }
-    appState.openOrFocusAgentTab(agentId);
-  }
-
-  async function handleDeleteAgentFromChat(): Promise<void> {
-    const agentId = chatStore.getActiveAgentId();
-    if (!agentId) {
-      return;
-    }
-    await handleDeleteAgent(agentId);
-  }
-
-  async function restoreWorkspaceAgentSession(normalizedRoot: string): Promise<void> {
-    const session = appState.getActiveSession();
-    await chatStore.loadWorkspaceAgents(normalizedRoot);
-    chatStore.mergeSessionDraftAgents(normalizedRoot, openAgentTabIds(session.openTabs));
-    const agentIndex = chatStore.getAgentIndex();
-    const restored = resolveRestoredActiveAgent(session, agentIndex);
-    if (restored.shouldFocusAgentTab && restored.activeAgentId) {
-      chatStore.setActiveAgentId(restored.activeAgentId);
-      appState.setLastActiveAgentId(restored.activeAgentId);
-      appState.openOrFocusAgentTab(restored.activeAgentId);
-      void chatStore.runAccessPreflight();
-      return;
-    }
-    chatStore.setActiveAgentId(null);
-    appState.setLastActiveAgentId(null);
-    const tabs = appState.getActiveSession().openTabs;
-    const selectedTabId = appState.getActiveSession().selectedTabId;
-    const nextSelected = selectedTabAfterMissingLastAgent(tabs, selectedTabId);
-    if (nextSelected && nextSelected !== selectedTabId) {
-      appState.selectTab(nextSelected);
-    }
-  }
-
-  async function handleCloseTab(tabId: string): Promise<void> {
-    const beforeSession = appState.getActiveSession();
-    const closingTab = beforeSession.openTabs.find((tab) => tab.id === tabId);
-    const closedAgentId =
-      closingTab && isAgentTab(closingTab) ? closingTab.agentId : null;
-    const wasSelected = beforeSession.selectedTabId === tabId;
-    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
-
-    const closed = await closeTabWithUnsavedPrompt(tabId, {
-      getWindowId: () => currentWindowId,
-      notify,
-    });
-    if (!closed) {
-      return;
-    }
-
-    if (closedAgentId && workspaceRoot) {
-      chatStore.cancelAgentGeneration(workspaceRoot, closedAgentId);
-    }
-
-    if (!closedAgentId || !wasSelected) {
-      return;
-    }
-
-    const afterSession = appState.getActiveSession();
-    const selectedAfter = afterSession.openTabs.find(
-      (tab) => tab.id === afterSession.selectedTabId,
-    );
-    if (selectedAfter && isAgentTab(selectedAfter)) {
-      return;
-    }
-
-    const nextSidebarId = nextSidebarAgentId(chatStore.getAgentIndex(), closedAgentId);
-    if (nextSidebarId) {
-      chatStore.setActiveAgentId(nextSidebarId);
-      appState.setLastActiveAgentId(nextSidebarId);
-      return;
-    }
-    chatStore.setActiveAgentId(null);
-    appState.setLastActiveAgentId(null);
-  }
-
-  async function toggleProjectTreeHidden(next: boolean): Promise<void> {
-    projectTreeController.setShowHidden(next);
-    await refreshProjectTree();
-  }
-
   function handleDocumentScrollTop(documentId: string, scrollTop: number): void {
     appState.setDocumentScrollTop(documentId, scrollTop);
-  }
-
-  function notify(message: string): void {
-    statusMessage = message;
-  }
-
-  function toggleConsole(): void {
-    consoleOpen = !consoleOpen;
-  }
-
-  function persistConsoleHeightNow(): void {
-    void writeConsoleHeightPreference(consoleHeightPx);
-  }
-
-  function canFitMarkdownSplit(): boolean {
-    return canFitMarkdownSplitForWidth(editorPaneWidth);
-  }
-
-  function setMarkdownViewMode(nextMode: "edit" | "split" | "preview"): void {
-    if (!activeDocument) {
-      return;
-    }
-    appState.setDocumentMarkdownViewMode(activeDocument.id, nextMode);
-  }
-
-  function updateLayoutMeasurements(): void {
-    shellMainRowWidth = shellMainRowEl?.clientWidth ?? 0;
-    editorPaneWidth = editorPaneEl?.clientWidth ?? 0;
-  }
-
-  function applyResponsiveLayoutRules(): void {
-    const flags = computeResponsiveLayoutFlags({
-      shellMainRowWidth,
-      workspaceActive: Boolean(activeWorkspaceRoot) && !isChatHttpActive,
-      isAgentTabActive,
-      workspaceLayout,
-      consoleOpen,
-    });
-    if (autoProjectPanelCollapsed !== flags.autoProjectPanelCollapsed) {
-      autoProjectPanelCollapsed = flags.autoProjectPanelCollapsed;
-    }
-    if (autoAgentsSidebarCollapsed !== flags.autoAgentsSidebarCollapsed) {
-      autoAgentsSidebarCollapsed = flags.autoAgentsSidebarCollapsed;
-    }
-    if (consoleOpen !== flags.consoleOpen) {
-      consoleOpen = flags.consoleOpen;
-    }
-  }
-
-  function handleActiveContextSwitch(nextContextId: ContextId): void {
-    if (previousActiveContextId === null) {
-      previousActiveContextId = nextContextId;
-      return;
-    }
-    if (previousActiveContextId === nextContextId) {
-      return;
-    }
-    previousActiveContextId = nextContextId;
-    consoleOpen = false;
-    closeWorkspaceContextMenu();
-    if (nextContextId !== CHAT_HTTP_CONTEXT_ID) {
-      void loadProjectTreeRoot();
-    }
-  }
-
-  function handleSelectContext(contextId: ContextId): void {
-    const switched = appState.switchContext(contextId);
-    if (!switched) {
-      return;
-    }
-    closeWorkspaceContextMenu();
   }
 
   function handleAddWorkspace(): void {
     runCommand("workspace.add");
     void loadProjectTreeRoot();
-  }
-
-  function handleOpenWorkspaceContextMenu(
-    workspaceId: ContextId,
-    x: number,
-    y: number,
-  ): void {
-    workspaceContextMenu = { workspaceId, x, y };
-    window.addEventListener("pointerdown", onWindowPointerDownWorkspaceMenu);
-    window.addEventListener("keydown", onWindowKeydownWorkspaceMenu);
-  }
-
-  function closeWorkspaceContextMenu(): void {
-    if (!workspaceContextMenu) {
-      return;
-    }
-    workspaceContextMenu = null;
-    window.removeEventListener("pointerdown", onWindowPointerDownWorkspaceMenu);
-    window.removeEventListener("keydown", onWindowKeydownWorkspaceMenu);
-  }
-
-  function onWindowPointerDownWorkspaceMenu(event: PointerEvent): void {
-    if (!workspaceContextMenu) {
-      return;
-    }
-    const target = event.target;
-    if (target instanceof Node && workspaceContextMenuEl?.contains(target)) {
-      return;
-    }
-    closeWorkspaceContextMenu();
-  }
-
-  function onWindowKeydownWorkspaceMenu(event: KeyboardEvent): void {
-    if (workspaceContextMenu && event.key === "Escape") {
-      closeWorkspaceContextMenu();
-    }
-  }
-
-  function resolveCloseWorkspaceAction(dirtyDocuments: DocumentState[]): "save-all" | "discard-all" | "cancel" {
-    return resolveCloseWorkspaceActionFromPrompts(dirtyDocuments.length, {
-      confirmSaveAll: (count) =>
-        window.confirm(
-          `This workspace has ${count} unsaved file(s). Press OK to Save All, or Cancel for more options.`,
-        ),
-      confirmDiscardAll: () =>
-        window.confirm("Discard all unsaved changes and close this workspace?"),
-    });
-  }
-
-  function workspaceContextMenuIndex(): number {
-    const menu = workspaceContextMenu;
-    if (!menu) {
-      return -1;
-    }
-    return findWorkspaceIndex(
-      workspaces.map((workspace) => workspace.id),
-      menu.workspaceId,
-    );
-  }
-
-  function moveWorkspaceFromContextMenu(direction: "up" | "down"): void {
-    if (!workspaceContextMenu) {
-      return;
-    }
-    const index = workspaceContextMenuIndex();
-    const targetIndex = computeWorkspaceReorderTarget(index, direction, workspaces.length);
-    if (targetIndex === null) {
-      return;
-    }
-    appState.reorderWorkspaces(index, targetIndex);
-    closeWorkspaceContextMenu();
-  }
-
-  function closeWorkspaceFromContextMenu(workspaceId: ContextId): void {
-    const closed = appState.closeWorkspace(workspaceId, {
-      resolveAction: resolveCloseWorkspaceAction,
-      saveAllDirtyDocuments: (dirtyDocuments) => {
-        for (const doc of dirtyDocuments) {
-          if (!doc.filePath) {
-            continue;
-          }
-          appState.markDocumentSaved(doc.id, doc.filePath, doc.content);
-        }
-      },
-    });
-    if (closed) {
-      notify("Workspace closed.");
-      consoleOpen = false;
-      setMarkdownViewMode("edit");
-      void loadProjectTreeRoot();
-    }
-    closeWorkspaceContextMenu();
   }
 
   function scheduleUntitledTitleRefresh(documentId: string): void {
@@ -794,22 +415,6 @@
       settingsDialogOpen = true;
     });
 
-    const setupLayoutObserver = (): void => {
-      updateLayoutMeasurements();
-      if (typeof ResizeObserver === "undefined") {
-        return;
-      }
-      layoutResizeObserver = new ResizeObserver(() => {
-        updateLayoutMeasurements();
-      });
-      if (shellMainRowEl) {
-        layoutResizeObserver.observe(shellMainRowEl);
-      }
-      if (editorPaneEl) {
-        layoutResizeObserver.observe(editorPaneEl);
-      }
-    };
-
     void tick().then(() => {
       if (!resizeObserverDisconnected) {
         setupLayoutObserver();
@@ -881,8 +486,7 @@
     return () => {
       registerSettingsDialogOpener(null);
       resizeObserverDisconnected = true;
-      layoutResizeObserver?.disconnect();
-      layoutResizeObserver = null;
+      disconnectLayoutObserver();
       if (untitledTitleDebounceTimer) {
         clearTimeout(untitledTitleDebounceTimer);
         untitledTitleDebounceTimer = null;

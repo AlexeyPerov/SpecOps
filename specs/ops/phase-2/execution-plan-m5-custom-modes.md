@@ -125,7 +125,7 @@ Dependencies: M4 complete.
 
 ---
 
-#### Task 2: Prompt assembly — placeholders, toggles, required sections (P2-9) [Score:8] [Agent:heavy]
+#### Task 2: Prompt assembly — placeholders, toggles, required sections (P2-9) [Score:8] [Agent:heavy] [DONE]
 
 **Required context**
 

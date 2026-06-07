@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatThreadSnapshot } from "../../domain/contracts";
+import type { AppSettingsState } from "../../domain/contracts";
+import { defaultSettings } from "../../state/appState/settingsSlice";
 import {
   ASK_MODE_SYSTEM_PROMPT,
   RAW_MODE_SYSTEM_PROMPT,
@@ -9,10 +11,24 @@ import {
   getChatMode,
   listBuiltinChatModes,
   listModesForProvider,
-  resolveModeSystemPrompt,
 } from "./builtins";
-import { buildProviderRequestWithMode, buildThreadProviderRequest } from "./prompt";
+import {
+  buildProviderRequestWithMode,
+  buildThreadProviderRequest,
+  resolveModeSystemText,
+} from "./prompt";
 import { buildProviderRequest } from "../providers/types";
+import { resolveChatMode } from "./resolve";
+
+function settingsWith(overrides: Partial<AppSettingsState["chatModes"]>): AppSettingsState {
+  return {
+    ...defaultSettings,
+    chatModes: {
+      ...defaultSettings.chatModes,
+      ...overrides,
+    },
+  };
+}
 
 function threadSnapshot(mode: ChatThreadSnapshot["metadata"]["mode"]): ChatThreadSnapshot {
   return {
@@ -63,7 +79,7 @@ describe("builtin chat modes", () => {
   it("resolves mode definitions by id", () => {
     expect(getChatMode("ask").label).toBe("Ask");
     expect(getChatMode("review").outputStyle).toBe("structured-review");
-    expect(resolveModeSystemPrompt("review")).toBe(REVIEW_MODE_SYSTEM_PROMPT);
+    expect(resolveChatMode("review", defaultSettings).promptTemplate).toBe(REVIEW_MODE_SYSTEM_PROMPT);
   });
 
   it("filters modes by provider-supported ids", () => {
@@ -91,26 +107,38 @@ describe("builtin chat modes", () => {
 describe("mode-aware prompt assembly", () => {
   it("builds identical payloads via buildThreadProviderRequest and manual mode resolution", () => {
     const thread = threadSnapshot("review");
+    const resolvedMode = resolveChatMode("review", defaultSettings);
+    const expectedSystemText = resolveModeSystemText(resolvedMode, {
+      workspaceRootPath: "/work/spec-ops",
+      workspaceName: "spec-ops",
+      summary: "Earlier context",
+      scopeKind: "workspace",
+    });
 
-    const fromThread = buildThreadProviderRequest(thread, "/work/spec-ops");
+    const fromThread = buildThreadProviderRequest(
+      thread,
+      "/work/spec-ops",
+      defaultSettings,
+      "workspace",
+    );
     const manual = buildProviderRequest({
       mode: "review",
       provider: "http",
       workspaceRootPath: "/work/spec-ops",
       summary: "Earlier context",
       recentMessages: thread.messages,
-      systemPrompt: resolveModeSystemPrompt("review"),
+      systemPrompt: expectedSystemText,
     });
 
     expect(fromThread).toEqual(manual);
-    expect(fromThread.systemPrompt).toBe(REVIEW_MODE_SYSTEM_PROMPT);
+    expect(fromThread.systemPrompt).toContain("## Summary");
   });
 
   it("uses ask mode template for ask threads", () => {
-    const payload = buildThreadProviderRequest(threadSnapshot("ask"), "/work/a");
+    const payload = buildThreadProviderRequest(threadSnapshot("ask"), "/work/a", defaultSettings, "workspace");
 
     expect(payload.mode).toBe("ask");
-    expect(payload.systemPrompt).toBe(ASK_MODE_SYSTEM_PROMPT);
+    expect(payload.systemPrompt).toContain(ASK_MODE_SYSTEM_PROMPT);
   });
 
   it("matches buildProviderRequestWithMode for direct inputs", () => {
@@ -119,13 +147,94 @@ describe("mode-aware prompt assembly", () => {
       provider: "debug-workspace" as const,
       workspaceRootPath: "/work/a",
       recentMessages: threadSnapshot("review").messages,
+      settings: defaultSettings,
+      scopeKind: "workspace" as const,
     };
+
+    const systemPrompt = resolveModeSystemText(resolveChatMode("review", defaultSettings), {
+      workspaceRootPath: "/work/a",
+      workspaceName: "a",
+      scopeKind: "workspace",
+    });
 
     expect(buildProviderRequestWithMode(input)).toEqual(
       buildProviderRequest({
-        ...input,
-        systemPrompt: REVIEW_MODE_SYSTEM_PROMPT,
+        mode: "review",
+        provider: "debug-workspace",
+        workspaceRootPath: "/work/a",
+        recentMessages: input.recentMessages,
+        systemPrompt,
       }),
     );
+  });
+
+  it("omits workspace and summary when Ask toggles are disabled", () => {
+    const askSettings = settingsWith({
+      builtinToggles: {
+        ...defaultSettings.chatModes.builtinToggles,
+        ask: { includeWorkspace: false, includeSummary: false },
+      },
+    });
+    const prompt = resolveModeSystemText(resolveChatMode("ask", askSettings), {
+      workspaceRootPath: "/work/spec-ops",
+      workspaceName: "spec-ops",
+      summary: "Earlier context",
+      scopeKind: "workspace",
+    });
+
+    expect(prompt).toBe(ASK_MODE_SYSTEM_PROMPT);
+    expect(prompt).not.toContain("Workspace:");
+    expect(prompt).not.toContain("Earlier conversation summary:");
+  });
+
+  it("substitutes custom placeholders from mode toggles", () => {
+    const customId = defaultSettings.chatModes.customModes[0]?.id ?? "custom-ideation";
+    const customSettings = settingsWith({
+      customModes: [
+        {
+          id: customId,
+          name: "Custom",
+          prompt: "Context:\n{{workspace}}\n\nSummary:\n{{summary}}",
+          enabled: true,
+          includeWorkspace: true,
+          includeSummary: true,
+          requiredSections: [],
+        },
+      ],
+    });
+    const prompt = resolveModeSystemText(resolveChatMode(customId, customSettings), {
+      workspaceRootPath: "/work/spec-ops",
+      workspaceName: "spec-ops",
+      summary: "Compacted context",
+      scopeKind: "workspace",
+    });
+
+    expect(prompt).toContain("Workspace: spec-ops (/work/spec-ops)");
+    expect(prompt).toContain("Earlier conversation summary:\nCompacted context");
+  });
+
+  it("keeps review required sections in resolved system text", () => {
+    const prompt = resolveModeSystemText(resolveChatMode("review", defaultSettings), {
+      workspaceRootPath: "/work/spec-ops",
+      workspaceName: "spec-ops",
+      scopeKind: "workspace",
+    });
+
+    expect(prompt).toContain("## Summary");
+    expect(prompt).toContain("## Critique");
+    expect(prompt).toContain("## Risk / effort estimate");
+    expect(prompt).toContain("## Open questions");
+  });
+
+  it("does not inject ask persona text for raw mode", () => {
+    const rawSettings = settingsWith({ rawEnabled: true });
+    const prompt = resolveModeSystemText(resolveChatMode("raw", rawSettings), {
+      workspaceRootPath: "/work/spec-ops",
+      workspaceName: "spec-ops",
+      summary: "Earlier context",
+      scopeKind: "workspace",
+    });
+
+    expect(prompt).not.toContain("helpful workspace assistant");
   });
 });

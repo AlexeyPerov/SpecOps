@@ -7,21 +7,10 @@ export interface OpenAiChatMessage {
 
 /** Maps shared provider payload to OpenAI-compatible chat messages. */
 export function buildOpenAiChatMessages(payload: ProviderRequestPayload): OpenAiChatMessage[] {
-  const systemParts: string[] = [];
-  const systemPrompt = payload.systemPrompt?.trim();
-  if (systemPrompt) {
-    systemParts.push(systemPrompt);
-  }
-
-  systemParts.push(`Workspace: ${payload.workspace.name} (${payload.workspace.rootPath})`);
-
-  const summary = payload.summary?.trim();
-  if (summary) {
-    systemParts.push(`Earlier conversation summary:\n${summary}`);
-  }
+  const systemPrompt = payload.systemPrompt?.trim() ?? "";
 
   return [
-    { role: "system", content: systemParts.join("\n\n") },
+    { role: "system", content: systemPrompt },
     ...payload.history.map((message) => ({
       role: message.role,
       content: message.content,

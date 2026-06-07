@@ -85,13 +85,6 @@ export function getChatMode(id: BuiltinChatModeId): ChatModeDefinition {
   return getBuiltinChatMode(id);
 }
 
-export function resolveModeSystemPrompt(id: ChatModeId): string {
-  if (isBuiltinChatModeId(id)) {
-    return getBuiltinChatMode(id).systemPrompt;
-  }
-  return ASK_MODE_SYSTEM_PROMPT;
-}
-
 export function listModesForProvider(supportedModes: readonly ChatModeId[]): ChatModeDefinition[] {
   const allowed = new Set(supportedModes);
   return BUILTIN_CHAT_MODES.filter((mode) => allowed.has(mode.id));

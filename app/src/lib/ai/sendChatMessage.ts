@@ -308,6 +308,7 @@ async function validateProviderSend(
 
 async function executeProviderTurn(params: {
   root: string;
+  chatContextKind: ChatContextKind;
   activeAgentId: string;
   turnId: string;
   provider: ChatProvider;
@@ -316,7 +317,7 @@ async function executeProviderTurn(params: {
   connectionId?: string;
   previousError?: ChatTurnError | null;
 }): Promise<SendChatMessageResult> {
-  const { root, activeAgentId, turnId, provider, accessStatus, modelId, connectionId, previousError } =
+  const { root, chatContextKind, activeAgentId, turnId, provider, accessStatus, modelId, connectionId, previousError } =
     params;
   const abortController = new AbortController();
 
@@ -338,7 +339,12 @@ async function executeProviderTurn(params: {
   }
 
   const request: ProviderSendRequest = {
-    payload: buildThreadProviderRequest(thread, root),
+    payload: buildThreadProviderRequest(
+      thread,
+      root,
+      appState.getSnapshot().settings,
+      chatContextKind,
+    ),
     modelId,
     connectionId,
     turnKey: turnId,
@@ -487,6 +493,7 @@ export async function retryLastChatTurn(
 
   return executeProviderTurn({
     root,
+    chatContextKind,
     activeAgentId,
     turnId,
     provider: validation.provider,
@@ -547,6 +554,7 @@ export async function sendChatMessage(
 
   return executeProviderTurn({
     root,
+    chatContextKind,
     activeAgentId,
     turnId,
     provider: validation.provider,

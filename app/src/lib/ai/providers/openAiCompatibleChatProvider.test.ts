@@ -148,6 +148,7 @@ describe("OpenAiCompatibleChatProvider", () => {
         settings: { ...settings, enabled: false },
         apiKey: "test-key",
       }),
+      () => ["ask", "review", "raw", "custom-ideation"],
       vi.fn(),
     );
 
@@ -157,5 +158,31 @@ describe("OpenAiCompatibleChatProvider", () => {
       name: "ChatProviderError",
       userMessage: "Add your HTTP connection API key in Settings before sending messages.",
     });
+  });
+
+  it("supports raw and custom modes when supplied by resolver", async () => {
+    const provider = createOpenAiCompatibleChatProvider(
+      () => ({ settings, apiKey: "test-key" }),
+      () => ["ask", "review", "raw", "custom-ideation"],
+      vi.fn(),
+    );
+
+    await expect(
+      provider.checkCapabilities({
+        provider: "http",
+        mode: "raw",
+        workspaceRootPath: "/work/a",
+      }),
+    ).resolves.toMatchObject({
+      status: "ready",
+      capabilities: { supportedModes: ["ask", "review", "raw", "custom-ideation"] },
+    });
+    await expect(
+      provider.checkCapabilities({
+        provider: "http",
+        mode: "custom-ideation",
+        workspaceRootPath: "/work/a",
+      }),
+    ).resolves.toMatchObject({ status: "ready" });
   });
 });

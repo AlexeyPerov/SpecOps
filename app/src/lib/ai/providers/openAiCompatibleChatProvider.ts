@@ -37,10 +37,9 @@ export type HttpSettingsReader = (connectionId?: string) => {
   settings: HttpConnectionSettings;
   apiKey: string;
 };
+export type SupportedModesReader = () => ChatModeId[];
 
 export type HttpFetchFn = typeof fetch;
-
-const SUPPORTED_MODES: readonly ChatModeId[] = ["ask", "review"];
 
 interface OpenAiChatCompletionResponse {
   choices?: Array<{
@@ -54,9 +53,28 @@ interface OpenAiChatCompletionResponse {
 
 export function createOpenAiCompatibleChatProvider(
   getSettings: HttpSettingsReader,
-  fetchFn: HttpFetchFn = fetch,
+  fetchFn?: HttpFetchFn,
+): ChatProvider;
+export function createOpenAiCompatibleChatProvider(
+  getSettings: HttpSettingsReader,
+  getSupportedModes: SupportedModesReader,
+  fetchFn?: HttpFetchFn,
+): ChatProvider;
+export function createOpenAiCompatibleChatProvider(
+  getSettings: HttpSettingsReader,
+  getSupportedModesOrFetchFn?: SupportedModesReader | HttpFetchFn,
+  fetchFn?: HttpFetchFn,
 ): ChatProvider {
-  return new OpenAiCompatibleChatProvider(getSettings, fetchFn);
+  const isLikelyFetchFn = typeof getSupportedModesOrFetchFn === "function" && fetchFn === undefined;
+  const getSupportedModes =
+    isLikelyFetchFn
+      ? (() => ["ask", "review"]) as SupportedModesReader
+      : (getSupportedModesOrFetchFn as SupportedModesReader | undefined) ?? (() => ["ask", "review"]);
+  const resolvedFetchFn =
+    isLikelyFetchFn
+      ? (getSupportedModesOrFetchFn as HttpFetchFn)
+      : (fetchFn ?? fetch);
+  return new OpenAiCompatibleChatProvider(getSettings, getSupportedModes, resolvedFetchFn);
 }
 
 class OpenAiCompatibleChatProvider implements ChatProvider {
@@ -64,6 +82,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
 
   constructor(
     private readonly getSettings: HttpSettingsReader,
+    private readonly getSupportedModes: SupportedModesReader,
     private readonly fetchFn: HttpFetchFn,
   ) {}
 
@@ -81,13 +100,14 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
       };
     }
 
-    if (!SUPPORTED_MODES.includes(input.mode)) {
+    const supportedModes = this.getSupportedModes();
+    if (!supportedModes.includes(input.mode)) {
       return {
         status: "blocked",
         reason: WorkspaceAccessReason.ProviderUnsupported,
         capabilities: {
           canReadWorkspaceFiles: false,
-          supportedModes: [...SUPPORTED_MODES],
+          supportedModes: [...supportedModes],
         },
         message: getModeUnsupportedMessage(input.mode, "HTTP provider"),
         recoveryHint: getModeUnsupportedRecovery(),
@@ -99,7 +119,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
       reason: WorkspaceAccessReason.Unknown,
       capabilities: {
         canReadWorkspaceFiles: true,
-        supportedModes: [...SUPPORTED_MODES],
+        supportedModes: [...supportedModes],
       },
       message: "HTTP provider is ready for workspace chat.",
     };

@@ -10,7 +10,7 @@ function createWorkspaceTestProvider(getSettings: () => DebugProviderSettings) {
   return createDebugChatProvider({
     id: "debug-workspace",
     getSettings,
-    supportedModes: ["ask", "review"],
+    getSupportedModes: () => ["ask", "review", "raw", "custom-ideation"],
     canReadWorkspaceFiles: true,
     readyMessage: "Debug Agent provider is ready for workspace chat.",
   });
@@ -122,7 +122,7 @@ describe("DebugChatProvider", () => {
     expect(result.status).toBe("ready");
     expect(result.capabilities).toEqual({
       canReadWorkspaceFiles: true,
-      supportedModes: ["ask", "review"],
+      supportedModes: ["ask", "review", "raw", "custom-ideation"],
     });
   });
 

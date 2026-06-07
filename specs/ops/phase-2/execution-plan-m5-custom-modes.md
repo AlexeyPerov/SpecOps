@@ -210,7 +210,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 5: Composer and chat-http scope unification (P2-9) [Score:7] [Agent:medium]
+#### Task 5: Composer and chat-http scope unification (P2-9) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -237,7 +237,7 @@ Dependencies: Task 1, Task 2.
 
 ---
 
-#### Task 6: Provider capabilities and Debug provider (P2-9) [Score:5] [Agent:easy]
+#### Task 6: Provider capabilities and Debug provider (P2-9) [Score:5] [Agent:easy] [DONE]
 
 **Required context**
 

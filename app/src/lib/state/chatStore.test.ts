@@ -354,7 +354,7 @@ describe("chatStore", () => {
     expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
   });
 
-  it("normalizes persisted chat-http review mode threads to ask on load", async () => {
+  it("keeps persisted chat-http review mode threads unchanged on load", async () => {
     const chatHttpThread: ChatThreadSnapshot = {
       metadata: {
         agentId: "http-agent",
@@ -384,7 +384,7 @@ describe("chatStore", () => {
     await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
     chatStore.setActiveAgentId("http-agent");
 
-    expect(chatStore.getMetadata()?.mode).toBe("ask");
+    expect(chatStore.getMetadata()?.mode).toBe("review");
   });
 
   it("clears active chat binding in notepad mode", () => {
@@ -1084,6 +1084,7 @@ describe("chatStore active provider resolution", () => {
     const result = await chatStore.checkActiveWorkspaceCapabilities();
 
     expect(result.status).toBe("ready");
-    expect(result.capabilities?.supportedModes).toEqual(["ask", "review"]);
+    expect(result.capabilities?.supportedModes).toContain("ask");
+    expect(result.capabilities?.supportedModes).toContain("review");
   });
 });

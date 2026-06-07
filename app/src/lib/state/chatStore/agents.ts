@@ -13,7 +13,6 @@ import {
 } from "./workspace";
 import { normalizeThreadSnapshotForScope } from "../../ai/providers/threadScopeNormalization";
 import { cloneThread } from "./threadHelpers";
-import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 
 let agentIdCounter = 0;
 
@@ -114,16 +113,6 @@ export function createAgentsSlice(deps: {
   getActiveChatScopeKey: () => string | null;
 }) {
   const { update, getSnapshot, getActiveChatScopeKey } = deps;
-
-  function normalizeModeForScope(
-    scopeKey: string,
-    mode: import("../../domain/contracts").ChatThreadSnapshot["metadata"]["mode"],
-  ): import("../../domain/contracts").ChatThreadSnapshot["metadata"]["mode"] {
-    if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
-      return "ask";
-    }
-    return mode;
-  }
 
   function normalizeThreadForScope(
     scopeKey: string,

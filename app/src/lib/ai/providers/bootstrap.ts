@@ -10,6 +10,7 @@ import {
 } from "./selection";
 import { listConfiguredHttpConnections, resolveHttpConnection } from "./httpConnectionSettings";
 import { resolveDefaultConnectionForProvider } from "../../state/chatStore/threadHelpers";
+import { listSelectableChatModes } from "../modes/resolve";
 
 let initialized = false;
 
@@ -22,7 +23,8 @@ export function initializeChatProviders(): void {
     createDebugChatProvider({
       id: "debug-workspace",
       getSettings: () => appState.getSnapshot().settings.providerSettings.debugWorkspace,
-      supportedModes: ["ask", "review"],
+      getSupportedModes: () =>
+        listSelectableChatModes(appState.getSnapshot().settings).map((mode) => mode.id),
       canReadWorkspaceFiles: true,
       readyMessage: "Debug Agent provider is ready for workspace chat.",
     }),
@@ -31,27 +33,31 @@ export function initializeChatProviders(): void {
     createDebugChatProvider({
       id: "debug-chat",
       getSettings: () => appState.getSnapshot().settings.providerSettings.debugChat,
-      supportedModes: ["ask"],
+      getSupportedModes: () =>
+        listSelectableChatModes(appState.getSnapshot().settings).map((mode) => mode.id),
       canReadWorkspaceFiles: false,
       readyMessage: "Debug AI provider is ready for chat.",
     }),
   );
   registerChatProvider(
-    createOpenAiCompatibleChatProvider((connectionId) => {
-      const snapshot = appState.getSnapshot().settings;
-      const resolved = resolveHttpConnection(
-        snapshot.providerSettings,
-        snapshot.providerApiKeys,
-        connectionId,
-      );
-      return {
-        settings:
-          resolved?.connection ??
-          snapshot.providerSettings.httpConnections?.[0] ??
-          snapshot.providerSettings.http,
-        apiKey: resolved?.apiKey ?? "",
-      };
-    }),
+    createOpenAiCompatibleChatProvider(
+      (connectionId) => {
+        const snapshot = appState.getSnapshot().settings;
+        const resolved = resolveHttpConnection(
+          snapshot.providerSettings,
+          snapshot.providerApiKeys,
+          connectionId,
+        );
+        return {
+          settings:
+            resolved?.connection ??
+            snapshot.providerSettings.httpConnections?.[0] ??
+            snapshot.providerSettings.http,
+          apiKey: resolved?.apiKey ?? "",
+        };
+      },
+      () => listSelectableChatModes(appState.getSnapshot().settings).map((mode) => mode.id),
+    ),
   );
   chatStore.setCapabilityChecker(
     createRegistryCapabilityChecker(

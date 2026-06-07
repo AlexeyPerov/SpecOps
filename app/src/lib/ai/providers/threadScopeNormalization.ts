@@ -1,5 +1,4 @@
 import type { ChatMessage, ChatThreadSnapshot } from "../../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 import {
   coerceProviderForScope,
   isLegacyChatProviderId,
@@ -41,7 +40,7 @@ function normalizeMessageForScope(message: ChatMessage, scopeKey: string): ChatM
   return message;
 }
 
-/** Normalizes legacy provider ids and chat-http mode constraints for a loaded thread. */
+/** Normalizes legacy provider ids for a loaded thread. */
 export function normalizeThreadSnapshotForScope(
   thread: ChatThreadSnapshot | null,
   scopeKey: string,
@@ -60,12 +59,6 @@ export function normalizeThreadSnapshotForScope(
   const nextProvider = coerceProviderForScope(normalizedLegacy, scopeKey);
   if (nextProvider !== metadata.provider) {
     metadata = { ...metadata, provider: nextProvider };
-    changed = true;
-  }
-
-  const nextMode = scopeKey === CHAT_HTTP_CONTEXT_ID ? "ask" : metadata.mode;
-  if (nextMode !== metadata.mode) {
-    metadata = { ...metadata, mode: nextMode };
     changed = true;
   }
 

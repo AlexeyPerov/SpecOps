@@ -66,7 +66,7 @@ describe("chatErrorCopy", () => {
 
   it("describes unsupported modes with recovery guidance", () => {
     expect(getModeUnsupportedMessage("review", "HTTP")).toContain("review");
-    expect(getModeUnsupportedRecovery()).toContain("Ask or Review");
+    expect(getModeUnsupportedRecovery()).toContain("Settings");
   });
 
   it("sanitizes technical unexpected provider errors", () => {

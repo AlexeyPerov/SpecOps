@@ -2,13 +2,15 @@ import { appState } from "../../state/appState";
 import { createRegistryCapabilityChecker } from "./capabilityChecker";
 import { createDebugChatProvider, type DebugSettingsReader } from "./debugChatProvider";
 import { registerChatProvider } from "./registry";
+import { listSelectableChatModes } from "../modes/resolve";
 
 export function createTestDebugWorkspaceProvider(getSettings?: DebugSettingsReader) {
   return createDebugChatProvider({
       id: "debug-workspace",
       getSettings:
         getSettings ?? (() => appState.getSnapshot().settings.providerSettings.debugWorkspace),
-      supportedModes: ["ask", "review"],
+      getSupportedModes: () =>
+        listSelectableChatModes(appState.getSnapshot().settings).map((mode) => mode.id),
       canReadWorkspaceFiles: true,
       readyMessage: "Debug Agent provider is ready for workspace chat.",
     });
@@ -23,7 +25,8 @@ export function createTestDebugChatProvider(getSettings?: DebugSettingsReader) {
       id: "debug-chat",
       getSettings:
         getSettings ?? (() => appState.getSnapshot().settings.providerSettings.debugChat),
-      supportedModes: ["ask"],
+      getSupportedModes: () =>
+        listSelectableChatModes(appState.getSnapshot().settings).map((mode) => mode.id),
       canReadWorkspaceFiles: false,
       readyMessage: "Debug AI provider is ready for chat.",
     });

@@ -12,7 +12,7 @@
   import {
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
-  import { resolveChatMode } from "../ai/modes/resolve";
+  import { listSelectableChatModes, resolveChatMode } from "../ai/modes/resolve";
   import {
     isHttpConnectionConfigured,
     isHttpProviderSendBlocked,
@@ -177,21 +177,20 @@
     httpProviderSettings.baseUrl;
     providerModelCatalogs;
     httpApiKey;
-    if (isChatHttpScope) {
-      supportedModes = ["ask"];
-      return;
-    }
+    const selectableModeIds = listSelectableChatModes($appState.settings).map((mode) => mode.id);
     const root = chatStore.getActiveWorkspaceRoot();
     if (!root) {
-      supportedModes = ["ask"];
+      supportedModes = selectableModeIds;
       return;
     }
     void chatStore.runAccessPreflight().then(async () => {
       const result = await chatStore.checkActiveWorkspaceCapabilities();
-      supportedModes =
+      const providerSupportedModes =
         result.capabilities?.supportedModes && result.capabilities.supportedModes.length > 0
           ? result.capabilities.supportedModes
-          : ["ask", "review"];
+          : selectableModeIds;
+      const allowed = new Set(providerSupportedModes);
+      supportedModes = selectableModeIds.filter((modeId) => allowed.has(modeId));
     });
   });
 
@@ -266,7 +265,7 @@
       {compactionNotice}
       emptyHint={
         isChatHttpScope
-          ? "Ask questions with your configured connection. Pick a provider and model, then send a message."
+          ? "Send messages with your configured connection. Pick a provider, mode, and model, then send."
           : "Ask or review ideas for this workspace. Pick a provider and mode, then send a message."
       }
     />

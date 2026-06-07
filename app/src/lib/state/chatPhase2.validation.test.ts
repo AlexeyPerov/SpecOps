@@ -3,7 +3,7 @@
  *
  * Automated invariants covered here:
  * - Chat rail gating state can expose chat-http when HTTP settings, API key, and model catalog are valid.
- * - chat-http sends are scoped to `chat-http`, skip workspace file access preflight, and normalize to ask-only.
+ * - chat-http sends are scoped to `chat-http`, skip workspace file access preflight, and preserve selected mode.
  * - HTTP provider uses OpenAI-compatible SSE streaming with token deltas rendered into one assistant message.
  * - Workspace HTTP chat still works through the shared streaming send path.
  *
@@ -133,7 +133,7 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
     ).toBe(true);
   });
 
-  it("streams chat-http HTTP SSE deltas without workspace preflight or review mode", async () => {
+  it("streams chat-http HTTP SSE deltas without workspace preflight and keeps review mode", async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       sseStreamResponse([sseDelta("Hel"), sseDelta("lo "), sseDelta("chat."), "data: [DONE]\n\n"]),
     );
@@ -158,7 +158,7 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
 
     expect(result.ok).toBe(true);
     expect(ensureWorkspaceReadAccessMock).not.toHaveBeenCalled();
-    expect(chatStore.getMetadata()?.mode).toBe("ask");
+    expect(chatStore.getMetadata()?.mode).toBe("review");
     expect(observedContents).toEqual(expect.arrayContaining(["", "Hel", "Hello ", "Hello chat."]));
     expect(chatStore.getMessages().filter((message) => message.role === "assistant")).toHaveLength(1);
     expect(chatStore.getMessages().at(-1)?.content).toBe("Hello chat.");

@@ -5,7 +5,6 @@ import type {
   ChatThreadSnapshot,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 import type { CapabilityChecker } from "../../ai/capabilities";
 import { getDebugProviderSwitchBlockedMessage } from "../../ai/chatErrorCopy";
 import {
@@ -83,13 +82,6 @@ export function createThreadsSlice(deps: {
     return capabilityCheckerRef.current ?? stubCapabilityChecker;
   }
 
-  function normalizeModeForScope(mode: ChatThreadMetadata["mode"], scopeKey: string): ChatThreadMetadata["mode"] {
-    if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
-      return "ask";
-    }
-    return mode;
-  }
-
   function normalizeThreadForScope(
     thread: ChatThreadSnapshot | null,
     scopeKey: string,
@@ -108,10 +100,7 @@ export function createThreadsSlice(deps: {
     if (!("mode" in patch)) {
       return patch;
     }
-    return {
-      ...patch,
-      mode: patch.mode ? normalizeModeForScope(patch.mode, scopeKey) : patch.mode,
-    };
+    return patch;
   }
 
   function resolveOrEnsureTargetAgentId(agentId?: string): string | null {
@@ -580,8 +569,6 @@ export function createThreadsSlice(deps: {
       if (supportedModes && supportedModes.length > 0 && !supportedModes.includes(nextMode)) {
         nextMode = supportedModes[0];
       }
-      nextMode = normalizeModeForScope(nextMode, root);
-
       const updatedAt = new Date().toISOString();
       const systemEvent = {
         type: "provider-switched" as const,

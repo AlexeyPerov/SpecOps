@@ -33,11 +33,12 @@ import type {
 } from "./types";
 
 export type DebugSettingsReader = () => DebugProviderSettings;
+export type DebugSupportedModesReader = () => ChatModeId[];
 
 export interface DebugChatProviderOptions {
   id: Extract<ChatProviderId, "debug-chat" | "debug-workspace">;
   getSettings: DebugSettingsReader;
-  supportedModes: readonly ChatModeId[];
+  getSupportedModes: DebugSupportedModesReader;
   canReadWorkspaceFiles: boolean;
   readyMessage: string;
 }
@@ -77,7 +78,7 @@ class DebugChatProvider implements ChatProvider {
       reason: WorkspaceAccessReason.Unknown,
       capabilities: {
         canReadWorkspaceFiles: this.options.canReadWorkspaceFiles,
-        supportedModes: [...this.options.supportedModes],
+        supportedModes: [...this.options.getSupportedModes()],
       },
       message: this.options.readyMessage,
     };

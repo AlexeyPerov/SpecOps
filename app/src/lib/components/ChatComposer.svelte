@@ -6,7 +6,7 @@
     parseChatConnectionSelection,
     resolveActiveChatConnectionSelection,
   } from "../ai/providers/selection";
-  import { listModesForProvider } from "../ai/modes/builtins";
+  import { listSelectableChatModes } from "../ai/modes/resolve";
   import type {
     AppProviderSettings,
     ChatModeId,
@@ -15,6 +15,7 @@
     ProviderModelCatalogs,
   } from "../domain/contracts";
   import { chatStore } from "../state/chatStore";
+  import { appState } from "../state/appState";
   import { resolveComposerModelId } from "../ai/providers/threadModelCatalog";
   import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 
@@ -94,11 +95,8 @@
     );
   });
   const availableModes = $derived.by(() => {
-    const providerModes = listModesForProvider(supportedModes);
-    if (chatContextKind === "chat-http") {
-      return providerModes.filter((mode) => mode.id === "ask");
-    }
-    return providerModes;
+    supportedModes;
+    return listSelectableChatModes($appState.settings).filter((mode) => supportedModes.includes(mode.id));
   });
   const availableModels = $derived.by(() => {
     providerModelCatalogs;
@@ -161,6 +159,24 @@
     const fallback = availableConnections[0];
     if (fallback) {
       void selectConnection(fallback.value);
+    }
+  });
+
+  $effect(() => {
+    activeMode;
+    availableModes;
+    if (isModeSelectionDisabled) {
+      return;
+    }
+    if (availableModes.some((mode) => mode.id === activeMode)) {
+      return;
+    }
+    const fallback = availableModes[0];
+    if (fallback) {
+      const updated = chatStore.updateThreadMetadata({ mode: fallback.id });
+      if (updated) {
+        persistActiveThreadSnapshot();
+      }
     }
   });
 
@@ -252,11 +268,7 @@
   }
 
   function selectMode(nextMode: ChatModeId): void {
-    if (
-      nextMode === activeMode ||
-      isModeSelectionDisabled ||
-      (chatContextKind === "chat-http" && nextMode !== "ask")
-    ) {
+    if (nextMode === activeMode || isModeSelectionDisabled) {
       return;
     }
     const updated = chatStore.updateThreadMetadata({ mode: nextMode });
@@ -423,7 +435,7 @@
             disabled={isModeSelectionDisabled}
             onclick={() => selectMode(mode.id)}
           >
-            {mode.label}
+            {mode.name}
           </button>
         {/each}
       </div>

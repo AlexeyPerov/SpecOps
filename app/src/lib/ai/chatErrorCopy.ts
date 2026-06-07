@@ -126,7 +126,7 @@ export function getModeUnsupportedMessage(mode: ChatModeId, providerLabel = "Thi
 }
 
 export function getModeUnsupportedRecovery(): string {
-  return "Switch to Ask or Review mode.";
+  return "Switch to a supported mode or update Settings → Chats → Chat modes.";
 }
 
 export function getUnknownProviderMessage(provider: ChatProviderId): string {

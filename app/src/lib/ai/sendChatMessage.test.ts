@@ -479,7 +479,7 @@ describe("sendChatMessage", () => {
     expect(schedulePersistMock.mock.calls.at(-1)?.[0]).toBe(CHAT_HTTP_CONTEXT_ID);
   });
 
-  it("normalizes review mode to ask before sending in chat-http", async () => {
+  it("keeps review mode selected when sending in chat-http", async () => {
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
     chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "review" });
@@ -491,7 +491,7 @@ describe("sendChatMessage", () => {
     const result = await resultPromise;
 
     expect(result.ok).toBe(true);
-    expect(chatStore.getMetadata()?.mode).toBe("ask");
+    expect(chatStore.getMetadata()?.mode).toBe("review");
   });
 
   it("promotes draft agent and schedules persistence on first send", async () => {

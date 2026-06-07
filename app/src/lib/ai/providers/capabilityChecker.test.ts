@@ -36,7 +36,8 @@ describe("registry-backed capability checker", () => {
     });
 
     expect(result.status).toBe("ready");
-    expect(result.capabilities?.supportedModes).toEqual(["ask", "review"]);
+    expect(result.capabilities?.supportedModes).toContain("ask");
+    expect(result.capabilities?.supportedModes).toContain("review");
   });
 
   it("reports missing HTTP config when HTTP provider is not registered", async () => {
@@ -74,7 +75,8 @@ describe("registry-backed capability checker", () => {
     });
 
     expect(result.status).toBe("ready");
-    expect(result.capabilities?.supportedModes).toEqual(["ask", "review"]);
+    expect(result.capabilities?.supportedModes).toContain("ask");
+    expect(result.capabilities?.supportedModes).toContain("review");
   });
 
   it("installs registry-backed checker during provider bootstrap", async () => {

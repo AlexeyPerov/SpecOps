@@ -15,6 +15,7 @@ import {
   toPersistedSettings,
 } from "./settingsStore";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
+import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
@@ -48,6 +49,7 @@ describe("settings mapping", () => {
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
       logSettings: { verboseProviderLogging: false },
+      chatModes: defaultChatModesSettings,
       providerSettings: {
         httpConnections: [
           {

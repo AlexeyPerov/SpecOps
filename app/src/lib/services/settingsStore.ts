@@ -10,11 +10,13 @@ import {
 } from "../ai/providers/providerModelCatalog";
 import type {
   AppProviderSettings,
+  ChatModesSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
   LogSettings,
   ProviderModelCatalogs,
 } from "../domain/contracts";
+import { normalizeChatModesSettings } from "../ai/modes/chatModesSettings";
 import { normalizeCommandBindingOverrides } from "../commands/commandBindings";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import {
@@ -26,6 +28,7 @@ import {
   normalizeMaxOpenWithoutConfirmBytes,
 } from "./largeFileOpen";
 import { defaultLogSettings, normalizeLogSettings } from "./logSettings";
+import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
 
 export interface PersistedSettings {
   wrapLines: boolean;
@@ -39,6 +42,7 @@ export interface PersistedSettings {
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   logSettings: LogSettings;
+  chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
@@ -60,6 +64,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
   logSettings: defaultLogSettings,
+  chatModes: defaultChatModesSettings,
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
   commandBindingOverrides: {},
@@ -125,6 +130,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
           ? parsed.hideActivityRailWhenNotepadOnly
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
         logSettings: normalizeLogSettings(parsed.logSettings),
+        chatModes: normalizeChatModesSettings(parsed.chatModes),
         providerSettings,
         providerModelCatalogs,
         commandBindingOverrides: normalizeCommandBindingOverrides(
@@ -165,6 +171,7 @@ export function toPersistedSettings(input: {
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   logSettings: LogSettings;
+  chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
@@ -177,6 +184,7 @@ export function toPersistedSettings(input: {
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
     logSettings: normalizeLogSettings(input.logSettings),
+    chatModes: normalizeChatModesSettings(input.chatModes),
     providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),
     providerModelCatalogs,
     commandBindingOverrides: normalizeCommandBindingOverrides(input.commandBindingOverrides),

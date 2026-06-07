@@ -236,6 +236,7 @@ export interface AppSettingsState {
   hideActivityRailWhenNotepadOnly: boolean;
   commandBindingOverrides: CommandBindingOverrides;
   logSettings: LogSettings;
+  chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
@@ -312,7 +313,34 @@ export interface DiagnosticEvent {
 
 export type ChatMessageRole = "user" | "assistant" | "system";
 
-export type ChatModeId = "ask" | "review";
+export type BuiltinChatModeId = "ask" | "review" | "raw";
+
+/** Built-in ids or user-defined custom mode ids (e.g. `custom-{uuid}`). */
+export type ChatModeId = BuiltinChatModeId | (string & {});
+
+export interface ChatModeContextToggles {
+  includeWorkspace: boolean;
+  includeSummary: boolean;
+}
+
+export type BuiltinChatModeToggles = Record<BuiltinChatModeId, ChatModeContextToggles>;
+
+export interface CustomChatModeDefinition {
+  id: string;
+  name: string;
+  prompt: string;
+  enabled: boolean;
+  includeWorkspace: boolean;
+  includeSummary: boolean;
+  requiredSections: string[];
+  sectionGuidance?: string;
+}
+
+export interface ChatModesSettings {
+  rawEnabled: boolean;
+  builtinToggles: BuiltinChatModeToggles;
+  customModes: CustomChatModeDefinition[];
+}
 
 export type ChatProviderId = "http" | "debug-chat" | "debug-workspace";
 

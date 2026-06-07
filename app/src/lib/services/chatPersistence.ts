@@ -19,6 +19,7 @@ import {
   type LegacyChatProviderId,
 } from "../ai/providers/debugProviderSettings";
 import { normalizeThreadSnapshotForScope } from "../ai/providers/threadScopeNormalization";
+import { isPersistedChatModeId } from "../ai/modes/chatModesSettings";
 import { deriveAgentTitleFromThread } from "./chatAgents";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
@@ -119,7 +120,14 @@ function isChatMessageRole(value: unknown): value is ChatMessageRole {
 }
 
 function isChatModeId(value: unknown): value is ChatModeId {
-  return value === "ask" || value === "review";
+  return isPersistedChatModeId(value);
+}
+
+function normalizeParsedChatModeId(value: unknown): ChatModeId {
+  if (isChatModeId(value)) {
+    return value;
+  }
+  return "ask";
 }
 
 function isChatProviderId(value: unknown): value is ChatProviderId {
@@ -144,10 +152,14 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
   if (
     typeof value.agentId !== "string" ||
     typeof value.threadId !== "string" ||
-    !isChatModeId(value.mode) ||
-    !isLegacyChatProviderId(value.provider) ||
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string"
+  ) {
+    return null;
+  }
+  const mode = normalizeParsedChatModeId(value.mode);
+  if (
+    !isLegacyChatProviderId(value.provider)
   ) {
     return null;
   }
@@ -172,7 +184,7 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
   return {
     agentId: value.agentId,
     threadId: value.threadId,
-    mode: value.mode,
+    mode,
     provider: normalizeLegacyProviderId(value.provider, scopeKey),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,

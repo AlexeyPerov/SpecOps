@@ -6,6 +6,7 @@ import {
   patchActiveContext,
   patchContextById,
 } from "./contextHelpers";
+import { defaultSettings } from "./settingsSlice";
 
 function buildSnapshot(docId: string, tabId: string): ContextSnapshot {
   return {
@@ -53,7 +54,7 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
       ],
     },
     settings: {
-      statusBarVisible: true,
+      ...defaultSettings,
       externalFiles: {
         watchExternalChanges: false,
         autoReloadCleanFiles: false,
@@ -62,39 +63,6 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
         maxBinaryOpenAsTextBytes: 200_000,
         maxOpenWithoutConfirmBytes: 1024 * 1024,
       },
-      decoratePlaintextSymbols: true,
-      hideActivityRailWhenNotepadOnly: true,
-      commandBindingOverrides: {},
-      providerSettings: {
-        http: {
-          enabled: false,
-          baseUrl: "",
-        },
-        debugChat: {
-          enabled: false,
-          simulationSeed: null,
-          delayMsMin: 0,
-          delayMsMax: 0,
-          chunkCharsMin: 1,
-          chunkCharsMax: 1,
-          failureProbability: 0,
-          failureMessage: "",
-          includeDiagnostics: false,
-        },
-        debugWorkspace: {
-          enabled: false,
-          simulationSeed: null,
-          delayMsMin: 0,
-          delayMsMax: 0,
-          chunkCharsMin: 1,
-          chunkCharsMax: 1,
-          failureProbability: 0,
-          failureMessage: "",
-          includeDiagnostics: false,
-        },
-      },
-      providerModelCatalogs: {},
-      providerApiKeys: {},
     },
     theme: {
       activeTheme: { kind: "builtin", id: "dark-amber" },

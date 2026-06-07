@@ -1,9 +1,10 @@
-import type { ChatModeId } from "../../domain/contracts";
+import type { BuiltinChatModeId, ChatModeId } from "../../domain/contracts";
+import { isBuiltinChatModeId } from "./chatModesSettings";
 
 export type ChatModeOutputStyle = "conversational" | "structured-review";
 
 export interface ChatModeDefinition {
-  id: ChatModeId;
+  id: BuiltinChatModeId;
   label: string;
   outputStyle: ChatModeOutputStyle;
   systemPrompt: string;
@@ -39,6 +40,9 @@ export const REVIEW_MODE_SYSTEM_PROMPT = [
   "## Open questions",
 ].join("\n");
 
+/** Raw mode ships with no default assistant persona (CM-3). */
+export const RAW_MODE_SYSTEM_PROMPT = "";
+
 const BUILTIN_CHAT_MODES: readonly ChatModeDefinition[] = [
   {
     id: "ask",
@@ -52,9 +56,15 @@ const BUILTIN_CHAT_MODES: readonly ChatModeDefinition[] = [
     outputStyle: "structured-review",
     systemPrompt: REVIEW_MODE_SYSTEM_PROMPT,
   },
+  {
+    id: "raw",
+    label: "Raw",
+    outputStyle: "conversational",
+    systemPrompt: RAW_MODE_SYSTEM_PROMPT,
+  },
 ];
 
-const modesById = new Map<ChatModeId, ChatModeDefinition>(
+const modesById = new Map<BuiltinChatModeId, ChatModeDefinition>(
   BUILTIN_CHAT_MODES.map((mode) => [mode.id, mode]),
 );
 
@@ -62,16 +72,24 @@ export function listBuiltinChatModes(): readonly ChatModeDefinition[] {
   return BUILTIN_CHAT_MODES;
 }
 
-export function getChatMode(id: ChatModeId): ChatModeDefinition {
+export function getBuiltinChatMode(id: BuiltinChatModeId): ChatModeDefinition {
   const mode = modesById.get(id);
   if (!mode) {
-    throw new Error(`Unknown chat mode: ${id}`);
+    throw new Error(`Unknown builtin chat mode: ${id}`);
   }
   return mode;
 }
 
+/** @deprecated Use getBuiltinChatMode for built-ins or resolveChatMode for runtime resolution. */
+export function getChatMode(id: BuiltinChatModeId): ChatModeDefinition {
+  return getBuiltinChatMode(id);
+}
+
 export function resolveModeSystemPrompt(id: ChatModeId): string {
-  return getChatMode(id).systemPrompt;
+  if (isBuiltinChatModeId(id)) {
+    return getBuiltinChatMode(id).systemPrompt;
+  }
+  return ASK_MODE_SYSTEM_PROMPT;
 }
 
 export function listModesForProvider(supportedModes: readonly ChatModeId[]): ChatModeDefinition[] {

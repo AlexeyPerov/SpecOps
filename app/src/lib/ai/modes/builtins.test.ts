@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChatThreadSnapshot } from "../../domain/contracts";
 import {
   ASK_MODE_SYSTEM_PROMPT,
+  RAW_MODE_SYSTEM_PROMPT,
   REVIEW_EFFORT_ESTIMATE_GUIDANCE,
   REVIEW_MODE_SYSTEM_PROMPT,
   REVIEW_REQUIRED_SECTIONS,
@@ -36,7 +37,7 @@ function threadSnapshot(mode: ChatThreadSnapshot["metadata"]["mode"]): ChatThrea
 }
 
 describe("builtin chat modes", () => {
-  it("registers ask and review with metadata", () => {
+  it("registers ask, review, and raw with metadata", () => {
     expect(listBuiltinChatModes()).toEqual([
       {
         id: "ask",
@@ -49,6 +50,12 @@ describe("builtin chat modes", () => {
         label: "Review",
         outputStyle: "structured-review",
         systemPrompt: REVIEW_MODE_SYSTEM_PROMPT,
+      },
+      {
+        id: "raw",
+        label: "Raw",
+        outputStyle: "conversational",
+        systemPrompt: RAW_MODE_SYSTEM_PROMPT,
       },
     ]);
   });

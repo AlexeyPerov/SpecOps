@@ -9,6 +9,7 @@ import { createFileTab } from "../domain/contracts";
 import { createSessionFsMock } from "../test/sessionMock";
 import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
+import { defaultSettings } from "../state/appState/settingsSlice";
 import {
   applyRegistryDedupeToWindowSnapshot,
   claimOpenFile,
@@ -199,21 +200,8 @@ describe("syncOpenFileRegistryForWindow", () => {
         workspaces: [],
       },
       settings: {
-        statusBarVisible: true,
-        externalFiles: {
-          watchExternalChanges: true,
-          autoReloadCleanFiles: true,
-          checkOnWindowFocus: true,
-          checkOnTabActivate: true,
-          maxBinaryOpenAsTextBytes: 200 * 1024,
-          maxOpenWithoutConfirmBytes: 1024 * 1024,
-        },
+        ...defaultSettings,
         decoratePlaintextSymbols: false,
-        hideActivityRailWhenNotepadOnly: true,
-        commandBindingOverrides: {},
-        providerSettings: defaultAppProviderSettings,
-        providerModelCatalogs: defaultProviderModelCatalogs,
-        providerApiKeys: {},
       },
       theme: {
         activeTheme: { kind: "builtin", id: "dark-amber" },
@@ -314,21 +302,8 @@ describe("syncOpenFileRegistryForWindow", () => {
         ],
       },
       settings: {
-        statusBarVisible: true,
-        externalFiles: {
-          watchExternalChanges: true,
-          autoReloadCleanFiles: true,
-          checkOnWindowFocus: true,
-          checkOnTabActivate: true,
-          maxBinaryOpenAsTextBytes: 200 * 1024,
-          maxOpenWithoutConfirmBytes: 1024 * 1024,
-        },
+        ...defaultSettings,
         decoratePlaintextSymbols: false,
-        hideActivityRailWhenNotepadOnly: true,
-        commandBindingOverrides: {},
-        providerSettings: defaultAppProviderSettings,
-        providerModelCatalogs: defaultProviderModelCatalogs,
-        providerApiKeys: {},
       },
       theme: {
         activeTheme: { kind: "builtin", id: "dark-amber" },

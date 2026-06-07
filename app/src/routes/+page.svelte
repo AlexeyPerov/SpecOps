@@ -1049,6 +1049,7 @@
           decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
           hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
           logSettings: snapshot.settings.logSettings,
+          chatModes: snapshot.settings.chatModes,
           providerSettings: snapshot.settings.providerSettings,
           providerModelCatalogs: snapshot.settings.providerModelCatalogs,
           commandBindingOverrides: snapshot.settings.commandBindingOverrides,

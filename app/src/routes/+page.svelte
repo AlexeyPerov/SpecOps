@@ -1,43 +1,45 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
   import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
   import { createAppShellAgentHandlers } from "../lib/services/appShellAgentHandlers";
   import { createAppShellLayoutHandlers } from "../lib/services/appShellLayoutHandlers";
+  import {
+    createAppShellCommandHandlers,
+    createAppShellEditorHandlers,
+    createAppShellFileHandlers,
+    setupAppShellMount,
+  } from "../lib/services/appShellPageHandlers";
   import { createAppShellProjectTreeHandlers } from "../lib/services/appShellProjectTreeHandlers";
-  import { dispatchMenuCommand, initializeAppMenu, isEditorGlobalCommand, keymapCommandForEvent, refreshOpenRecentMenu, shouldInitializeAppMenu } from "../lib/commands/registry";
-  import { getErrorMessage } from "../lib/commands/commandErrors";
-  import type { AppCommandId } from "../lib/domain/contracts";
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
   import { getActiveContextSnapshot } from "../lib/state/appState/contextHelpers";
-  import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
-  import { logDiagnostic } from "../lib/services/logging";
-  import { describeOpenActivePathResult, openActivePath } from "../lib/services/openActivePath";
-  import { confirmLargeFileOpen } from "../lib/services/openFileGate";
+  import { chatActiveAgentId, chatAgentIndex } from "../lib/state/chatStore";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
-  import { scheduleSessionPersistence } from "../lib/services/sessionManager";
-  import { savePersistedSettings, toPersistedSettings } from "../lib/services/settingsStore";
   import { registerSettingsDialogOpener, type SettingsDialogTab } from "../lib/services/settingsDialogUi";
-  import { checkDocumentIfDeferred } from "../lib/services/externalFileChanges";
-  import { marked } from "marked";
   import type { AppDomainState } from "../lib/domain/contracts";
-  import { CHAT_HTTP_CONTEXT_ID, type ContextId } from "../lib/domain/contracts";
-  import { isAgentTab, isFileTab, tabDocumentId } from "../lib/domain/contracts";
+  import { CHAT_HTTP_CONTEXT_ID, type ContextId, tabDocumentId } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
-  import { syncProjectTreeWatcher } from "../lib/services/fileWatcher";
-  import { normalizePathSync } from "../lib/services/diskFingerprint";
-  import { scheduleAgentThreadFilePersistence } from "../lib/services/chatPersistence";
-  import { ensureWorkspaceReadAccess, probeWorkspaceReadAccess } from "../lib/services/fileSystem";
-  import { stopChatAccessMonitor, syncChatAccessMonitor } from "../lib/services/chatAccessMonitor";
+  import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
+  import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
   import { DEFAULT_CONSOLE_HEIGHT_PX } from "../lib/services/consoleTabPrefs";
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
-  import { DEFAULT_UNTITLED_TITLE } from "../lib/services/untitledTitle";
-  import { formatStatusPath } from "../lib/services/appShellHelpers";
+  import { deriveAppShellDocumentView } from "../lib/services/appShellDocumentView";
   import { createWorkspaceContextMenuActions } from "../lib/services/workspaceContextMenuController";
+  import {
+    syncActiveFileTreeExpandEffect,
+    syncAgentTabEffect,
+    syncChatAccessMonitorEffect,
+    syncExternalFileWatcherEffect,
+    syncProjectTreeWatcherEffect,
+    syncResponsiveLayoutEffect,
+    syncSessionPersistenceEffect,
+    syncSettingsPersistenceEffect,
+    syncWorkspaceContextEffect,
+  } from "../lib/services/appShellEffects";
   let themePaneOpen = $state(false);
   let settingsDialogOpen = $state(false);
   let settingsDialogInitialTab = $state<SettingsDialogTab>("editor");
@@ -132,35 +134,8 @@
     documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
       documents[0],
   );
-  const isImageDocument = $derived(activeDocument?.contentKind === "image");
-  const isBinaryDocument = $derived(activeDocument?.contentKind === "binary");
-  const isLargePendingDocument = $derived(activeDocument?.contentKind === "large_pending");
-  const isTextEditorDocument = $derived(
-    !isImageDocument &&
-      !isBinaryDocument &&
-      !isLargePendingDocument &&
-      activeDocument !== undefined,
-  );
+  const documentView = $derived(deriveAppShellDocumentView(activeDocument));
   let largeFileConfirming = $state(false);
-  const previewFileSizeBytes = $derived(activeDocument?.diskFingerprint?.sizeBytes ?? 0);
-  const isMarkdownDocument = $derived(
-    isTextEditorDocument && activeDocument?.language === "markdown",
-  );
-  const markdownHtml = $derived(
-    isMarkdownDocument && activeDocument
-      ? (marked.parse(activeDocument.content) as string)
-      : "",
-  );
-  const statusPath = $derived(
-    formatStatusPath(
-      activeDocument?.filePath ?? null,
-      activeDocument?.title,
-      DEFAULT_UNTITLED_TITLE,
-    ),
-  );
-  const activeDocumentPath = $derived(
-    activeDocument?.filePath ? normalizePathSync(activeDocument.filePath) : null,
-  );
 
   function notify(message: string): void {
     statusMessage = message;
@@ -287,390 +262,197 @@
       window.confirm("Discard all unsaved changes and close this workspace?"),
   });
 
-  async function handleConfirmLargeFile(): Promise<void> {
-    const document = activeDocument;
-    if (!document?.filePath || document.contentKind !== "large_pending" || largeFileConfirming) {
-      return;
-    }
-    largeFileConfirming = true;
-    try {
-      await confirmLargeFileOpen(document.id, document.filePath);
-      notify(`Opened ${document.filePath}`);
-    } catch (error: unknown) {
-      notify(`Failed to open file: ${getErrorMessage(error)}`);
-    } finally {
-      largeFileConfirming = false;
-    }
-  }
+  const { runCommand, handleKeydown } = createAppShellCommandHandlers({
+    getThemePaneOpen: () => themePaneOpen,
+    setThemePaneOpen: (open) => {
+      themePaneOpen = open;
+    },
+    getSettingsDialogOpen: () => settingsDialogOpen,
+    setSettingsDialogOpen: (open) => {
+      settingsDialogOpen = open;
+    },
+    notify,
+    getSnapshot: () => snapshot,
+    getCurrentWindowId: () => currentWindowId,
+    getEditorRunner: () => editorRunner,
+  });
 
-  function handleDocumentScrollTop(documentId: string, scrollTop: number): void {
-    appState.setDocumentScrollTop(documentId, scrollTop);
-  }
+  const { openAndActivatePath, consumeOpenedPaths, onTabActivated } = createAppShellFileHandlers({
+    getCurrentWindowId: () => currentWindowId,
+    getRuntimeReady: () => runtimeReady,
+    notify,
+  });
+
+  const {
+    handleConfirmLargeFile,
+    handleDocumentScrollTop,
+    scheduleUntitledTitleRefresh,
+    runGoToLine,
+    clearUntitledTitleDebounceTimer,
+  } = createAppShellEditorHandlers({
+    getActiveDocument: () => activeDocument,
+    getLargeFileConfirming: () => largeFileConfirming,
+    setLargeFileConfirming: (value) => {
+      largeFileConfirming = value;
+    },
+    getGoToLineValue: () => goToLineValue,
+    getEditorRunner: () => editorRunner,
+    getUntitledTitleDebounceTimer: () => untitledTitleDebounceTimer,
+    setUntitledTitleDebounceTimer: (timer) => {
+      untitledTitleDebounceTimer = timer;
+    },
+    notify,
+  });
 
   function handleAddWorkspace(): void {
     runCommand("workspace.add");
     void loadProjectTreeRoot();
   }
 
-  function scheduleUntitledTitleRefresh(documentId: string): void {
-    if (untitledTitleDebounceTimer) {
-      clearTimeout(untitledTitleDebounceTimer);
-    }
-    untitledTitleDebounceTimer = setTimeout(() => {
-      appState.refreshUntitledTitle(documentId);
-      untitledTitleDebounceTimer = null;
-    }, 300);
-  }
-
-  function runCommand(commandId: AppCommandId): void {
-    dispatchMenuCommand(commandId, {
-      isThemePaneOpen: () => themePaneOpen,
-      setThemePaneOpen: (next) => {
-        themePaneOpen = next;
+  onMount(() =>
+    setupAppShellMount({
+      registerSettingsDialogOpener,
+      setSettingsDialogInitialTab: (tab) => {
+        settingsDialogInitialTab = tab;
       },
-      isSettingsDialogOpen: () => settingsDialogOpen,
-      setSettingsDialogOpen: (next) => {
-        settingsDialogOpen = next;
+      setSettingsDialogOpen: (open) => {
+        settingsDialogOpen = open;
       },
-      notify,
-      getState: () => snapshot,
-      getWindowId: () => currentWindowId,
-      confirm: (message) => window.confirm(message),
-      getEditorRunner: () => editorRunner,
-    });
-  }
-
-  async function openDroppedPaths(paths: string[]): Promise<void> {
-    for (const droppedPath of paths) {
-      try {
-        await openAndActivatePath(droppedPath);
-      } catch (error: unknown) {
-        const message = getErrorMessage(error);
-        notify(`Failed to open dropped file: ${message}`);
-      }
-    }
-  }
-
-  async function consumeOpenedPaths(paths: string[]): Promise<void> {
-    await openDroppedPaths(paths);
-    notify(`Opened ${paths.length} file(s) from app icon.`);
-  }
-
-  async function openAndActivatePath(path: string): Promise<void> {
-    const result = await openActivePath(path, currentWindowId);
-    notify(describeOpenActivePathResult(result));
-  }
-
-  async function onTabActivated(tabId: string): Promise<void> {
-    if (!runtimeReady) {
-      return;
-    }
-    const tab = appState.getActiveSession().openTabs.find((entry) => entry.id === tabId);
-    if (!tab || !isFileTab(tab)) {
-      return;
-    }
-    await checkDocumentIfDeferred(tab.documentId, "tab");
-  }
-
-  function handleKeydown(event: KeyboardEvent): void {
-    const command = keymapCommandForEvent(event);
-    if (command === "app.toggleFindReplace") {
-      event.preventDefault();
-      runCommand(command);
-      return;
-    }
-    if (
-      command &&
-      !isEditorGlobalCommand(command) &&
-      (event.target as HTMLElement | null)?.closest(
-        "input, textarea, [contenteditable=true]",
-      )
-    ) {
-      return;
-    }
-    if (!command) {
-      return;
-    }
-
-    event.preventDefault();
-    runCommand(command);
-  }
-
-  function runGoToLine(): void {
-    const line = Number(goToLineValue);
-    if (!Number.isInteger(line) || line < 1) {
-      notify("Go-to line must be a positive integer.");
-      return;
-    }
-    const moved = editorRunner?.goToLine(line) ?? false;
-    notify(moved ? `Moved to line ${line}.` : "Line is out of range.");
-  }
-
-  onMount(() => {
-    let runtimeCleanup: (() => void) | undefined;
-    let resizeObserverDisconnected = false;
-
-    registerSettingsDialogOpener((tab) => {
-      settingsDialogInitialTab = tab;
-      settingsDialogOpen = true;
-    });
-
-    void tick().then(() => {
-      if (!resizeObserverDisconnected) {
-        setupLayoutObserver();
-      }
-    });
-
-    void startAppShellRuntime({
+      setupLayoutObserver,
+      startAppShellRuntime,
       notify,
       runCommand,
       openAndActivatePath,
       consumeOpenedPaths,
       restoreWorkspaceAgentSession,
       loadProjectTreeRoot,
-      onFilesystemChange: (path) => {
-        notifyProjectTreeFilesystemChange(path);
-      },
+      notifyProjectTreeFilesystemChange,
       setConsoleHeightPx: (heightPx) => {
         consoleHeightPx = heightPx;
       },
-    })
-      .then((runtimeHandle) => {
-        runtimeCleanup = runtimeHandle.cleanup;
-        runtimeSyncExternalFileWatcher = runtimeHandle.syncExternalFileWatcher;
-        currentWindowId = runtimeHandle.windowId;
-        lastSelectedTabId = appState.getActiveSession().selectedTabId;
-        runtimeReady = true;
-      })
-      .catch(async (error: unknown) => {
-        const message = getErrorMessage(error, String(error));
-        await logDiagnostic({
-          level: "error",
-          source: "frontend",
-          timestamp: new Date().toISOString(),
-          message: "startAppShellRuntime failed",
-          metadata: { error: message },
-        });
-      });
-
-    const search = new URLSearchParams(window.location.search);
-    const openParam = search.get("open");
-    if (openParam) {
-      void routePathToLastActiveWindow(openParam)
-        .then(() => {
-          notify("File open routed to last active window.");
-        })
-        .catch(async () => {
-          const self = getCurrentWebviewWindow().label;
-          if (self !== "main") {
-            return;
-          }
-          await openAndActivatePath(openParam);
-        })
-        .catch((error: unknown) => {
-          const message = getErrorMessage(error);
-          notify(`Failed to open file from path: ${message}`);
-        });
-    }
-
-    function onKeydown(event: KeyboardEvent): void {
-      handleKeydown(event);
-    }
-
-    function preventBrowserDragOver(event: DragEvent): void {
-      event.preventDefault();
-    }
-
-    window.addEventListener("keydown", onKeydown);
-    window.addEventListener("dragover", preventBrowserDragOver);
-    return () => {
-      registerSettingsDialogOpener(null);
-      resizeObserverDisconnected = true;
-      disconnectLayoutObserver();
-      if (untitledTitleDebounceTimer) {
-        clearTimeout(untitledTitleDebounceTimer);
-        untitledTitleDebounceTimer = null;
-      }
-      runtimeReady = false;
-      runtimeSyncExternalFileWatcher = null;
-      runtimeCleanup?.();
-      stopChatAccessMonitor();
-      window.removeEventListener("keydown", onKeydown);
-      window.removeEventListener("dragover", preventBrowserDragOver);
-    };
-  });
+      setRuntimeSyncExternalFileWatcher: (sync) => {
+        runtimeSyncExternalFileWatcher = sync;
+      },
+      setCurrentWindowId: (windowId) => {
+        currentWindowId = windowId;
+      },
+      setLastSelectedTabId: (tabId) => {
+        lastSelectedTabId = tabId;
+      },
+      setRuntimeReady: (ready) => {
+        runtimeReady = ready;
+      },
+      routePathToLastActiveWindow,
+      getCurrentWebviewWindowLabel: () => getCurrentWebviewWindow().label,
+      handleKeydown,
+      stopChatAccessMonitor,
+      cleanup: {
+        disconnectLayoutObserver,
+        clearUntitledTitleDebounceTimer,
+      },
+    }),
+  );
 
   $effect(() => {
-    if (!activeTab || !isAgentTab(activeTab) || isChatHttpActive) {
-      return;
-    }
-    if (chatStore.getActiveAgentId() !== activeTab.agentId) {
-      chatStore.setActiveAgentId(activeTab.agentId);
-      appState.setLastActiveAgentId(activeTab.agentId);
-      void chatStore.runAccessPreflight();
-    }
-  });
-
-  $effect(() => {
-    if (!runtimeReady || !activeWorkspaceRoot) {
-      return;
-    }
-    const chatActiveId = selectedAgentId;
-    const sessionLastActive = session.lastActiveAgentId ?? null;
-    if (chatActiveId !== sessionLastActive) {
-      appState.setLastActiveAgentId(chatActiveId);
-    }
-  });
-
-  $effect(() => {
-    if (!runtimeReady || !currentWindowId) {
-      return;
-    }
-    void runtimeSyncExternalFileWatcher?.(snapshot);
-  });
-
-  $effect(() => {
-    if (!runtimeReady) {
-      return;
-    }
-    const nextTabId = session.selectedTabId;
-    if (nextTabId && nextTabId !== lastSelectedTabId) {
-      lastSelectedTabId = nextTabId;
-      void onTabActivated(nextTabId);
-    }
-  });
-
-  $effect(() => {
-    if (!runtimeReady) {
-      return;
-    }
-    syncChatAccessMonitor(isAgentTabActive && Boolean(activeWorkspaceRoot) && !isChatHttpActive);
-  });
-
-  $effect(() => {
-    if (!activeContextId) {
-      return;
-    }
-    handleActiveContextSwitch(activeContextId);
-  });
-
-  $effect(() => {
-    if (isChatHttpActive && !chatHttpRailVisible) {
-      appState.switchContext("notepad");
-      return;
-    }
-  });
-
-  $effect(() => {
-    if (!isChatHttpActive) {
-      return;
-    }
+    activeTab;
+    isChatHttpActive;
+    chatHttpRailVisible;
+    activeContextId;
+    activeWorkspaceRoot;
+    isAgentTabActive;
     selectedAgentId;
-    ensureChatHttpAgentTab();
+    lastChatScopeKey;
+    syncAgentTabEffect({
+      activeTab,
+      isChatHttpActive,
+      chatHttpRailVisible,
+      activeContextId,
+      activeWorkspaceRoot,
+      isAgentTabActive,
+      selectedAgentId,
+      lastChatScopeKey,
+      ensureChatHttpAgentTab,
+      restoreWorkspaceAgentSession,
+      setLastChatScopeKey: (key) => {
+        lastChatScopeKey = key;
+      },
+    });
   });
 
   $effect(() => {
-    if (activeContextId === CHAT_HTTP_CONTEXT_ID) {
-      if (lastChatScopeKey !== CHAT_HTTP_CONTEXT_ID) {
-        if (lastChatScopeKey !== null) {
-          chatStore.cancelAllGenerations(lastChatScopeKey);
-        }
-        lastChatScopeKey = CHAT_HTTP_CONTEXT_ID;
-        chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-        void chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID).then(() => {
-          ensureChatHttpAgentTab();
-        });
-      } else {
-        ensureChatHttpAgentTab();
-      }
-      return;
-    }
-
-    if (!activeWorkspaceRoot) {
-      if (lastChatScopeKey !== null) {
-        chatStore.cancelAllGenerations(lastChatScopeKey);
-        lastChatScopeKey = null;
-      }
-      chatStore.setActiveWorkspaceRoot(null);
-      return;
-    }
-    const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
-    if (lastChatScopeKey !== normalizedWorkspaceRoot) {
-      if (lastChatScopeKey !== null) {
-        chatStore.cancelAllGenerations(lastChatScopeKey);
-      }
-      lastChatScopeKey = normalizedWorkspaceRoot;
-      void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
-      chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
-      void restoreWorkspaceAgentSession(normalizedWorkspaceRoot).catch(() => {
-        if (isAgentTabActive) {
-          void chatStore.runAccessPreflight();
-        }
-      });
-    }
+    runtimeReady;
+    snapshot;
+    currentWindowId;
+    activeWorkspaceRoot;
+    selectedAgentId;
+    session.lastActiveAgentId;
+    session.selectedTabId;
+    lastSelectedTabId;
+    syncSessionPersistenceEffect({
+      runtimeReady,
+      snapshot,
+      currentWindowId,
+      activeWorkspaceRoot,
+      selectedAgentId,
+      sessionLastActiveAgentId: session.lastActiveAgentId,
+      selectedTabId: session.selectedTabId,
+      lastSelectedTabId,
+      onTabActivated,
+      setLastSelectedTabId: (tabId) => {
+        lastSelectedTabId = tabId;
+      },
+    });
+    syncSettingsPersistenceEffect({ runtimeReady, currentWindowId, snapshot });
   });
 
   $effect(() => {
-    shellMainRowWidth;
-    editorPaneWidth;
+    runtimeReady;
     activeWorkspaceRoot;
     isChatHttpActive;
+    documentView.activeDocumentPath;
+    syncProjectTreeWatcherEffect({
+      runtimeReady,
+      activeWorkspaceRoot,
+      isChatHttpActive,
+      projectTreeController,
+      loadProjectTreeRoot,
+    });
+    syncActiveFileTreeExpandEffect({
+      activeDocumentPath: documentView.activeDocumentPath,
+      isChatHttpActive,
+      activeWorkspaceRoot,
+      projectTreeController,
+    });
+  });
+
+  $effect(() => {
+    runtimeReady;
+    snapshot;
+    runtimeSyncExternalFileWatcher;
     isAgentTabActive;
+    activeWorkspaceRoot;
+    isChatHttpActive;
+    activeContextId;
+    shellMainRowWidth;
+    editorPaneWidth;
     workspaceLayout;
     consoleOpen;
-    applyResponsiveLayoutRules();
-  });
-
-  $effect(() => {
-    if (!runtimeReady) {
-      return;
-    }
-    scheduleSessionPersistence(snapshot, currentWindowId);
-    if (currentWindowId) {
-      void savePersistedSettings(
-        toPersistedSettings({
-          wrapLines: snapshot.editor.wrapLines,
-          zoomPercent: snapshot.editor.zoomPercent,
-          externalFiles: snapshot.settings.externalFiles,
-          decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
-          hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
-          logSettings: snapshot.settings.logSettings,
-          chatModes: snapshot.settings.chatModes,
-          providerSettings: snapshot.settings.providerSettings,
-          providerModelCatalogs: snapshot.settings.providerModelCatalogs,
-          commandBindingOverrides: snapshot.settings.commandBindingOverrides,
-        }),
-      );
-    }
-  });
-
-  $effect(() => {
-    if (!activeWorkspaceRoot || isChatHttpActive) {
-      void syncProjectTreeWatcher(null);
-      projectTreeController.clearFilesystemChangeDebounce();
-      return;
-    }
-    void loadProjectTreeRoot();
-    if (runtimeReady) {
-      void syncProjectTreeWatcher(activeWorkspaceRoot);
-    }
-  });
-
-  $effect(() => {
-    if (!runtimeReady || !activeWorkspaceRoot || isChatHttpActive) {
-      if (runtimeReady && (!activeWorkspaceRoot || isChatHttpActive)) {
-        void syncProjectTreeWatcher(null);
-      }
-      return;
-    }
-    void syncProjectTreeWatcher(activeWorkspaceRoot);
-  });
-
-  $effect(() => {
-    if (!activeDocumentPath || isChatHttpActive) {
-      return;
-    }
-    void projectTreeController.ensureExpandedForActiveFile(activeWorkspaceRoot, activeDocumentPath);
+    syncExternalFileWatcherEffect({
+      runtimeReady,
+      snapshot,
+      syncExternalFileWatcher: runtimeSyncExternalFileWatcher,
+    });
+    syncChatAccessMonitorEffect({
+      runtimeReady,
+      isAgentTabActive,
+      activeWorkspaceRoot,
+      isChatHttpActive,
+    });
+    syncWorkspaceContextEffect({
+      activeContextId,
+      handleActiveContextSwitch,
+    });
+    syncResponsiveLayoutEffect({ applyResponsiveLayoutRules });
   });
 </script>
 
@@ -713,7 +495,7 @@
   projectTree={{
     workspaceRoot: activeWorkspaceRoot,
     state: projectTreeControllerState,
-    activeFilePath: activeDocumentPath,
+    activeFilePath: documentView.activeDocumentPath,
     collapsed: !showProjectPanel,
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
     onRefresh: refreshProjectTree,
@@ -735,13 +517,13 @@
     activeDocument,
     isChatHttpActive,
     isAgentTabActive,
-    isImageDocument,
-    isBinaryDocument,
-    isLargePendingDocument,
-    isTextEditorDocument,
-    isMarkdownDocument,
-    previewFileSizeBytes,
-    markdownHtml,
+    isImageDocument: documentView.isImageDocument,
+    isBinaryDocument: documentView.isBinaryDocument,
+    isLargePendingDocument: documentView.isLargePendingDocument,
+    isTextEditorDocument: documentView.isTextEditorDocument,
+    isMarkdownDocument: documentView.isMarkdownDocument,
+    previewFileSizeBytes: documentView.previewFileSizeBytes,
+    markdownHtml: documentView.markdownHtml,
     previewMode: snapshot.editor.previewMode,
     findReplaceOpen: snapshot.editor.findReplaceOpen,
     goToOpen: snapshot.editor.goToOpen,
@@ -767,7 +549,7 @@
     notify,
   }}
   statusBar={{
-    statusPath,
+    statusPath: documentView.statusPath,
     statusMessage,
     consoleOpen,
     onToggleConsole: toggleConsole,

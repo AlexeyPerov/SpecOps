@@ -1,0 +1,332 @@
+import { tick } from "svelte";
+import type { AppCommandId, AppDomainState } from "../domain/contracts";
+import { isFileTab } from "../domain/contracts";
+import { appState } from "../state/appState";
+import type { EditorCommandRunner } from "../types/editor";
+import {
+  dispatchMenuCommand,
+  isEditorGlobalCommand,
+  keymapCommandForEvent,
+} from "../commands/registry";
+import { getErrorMessage } from "../commands/commandErrors";
+import { checkDocumentIfDeferred } from "./externalFileChanges";
+import { confirmLargeFileOpen } from "./openFileGate";
+import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
+import { logDiagnostic } from "./logging";
+import type { SettingsDialogTab } from "./settingsDialogUi";
+
+export interface AppShellCommandHandlersDeps {
+  getThemePaneOpen: () => boolean;
+  setThemePaneOpen: (open: boolean) => void;
+  getSettingsDialogOpen: () => boolean;
+  setSettingsDialogOpen: (open: boolean) => void;
+  notify: (message: string) => void;
+  getSnapshot: () => AppDomainState;
+  getCurrentWindowId: () => string;
+  getEditorRunner: () => EditorCommandRunner | null;
+}
+
+export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps) {
+  function runCommand(commandId: AppCommandId): void {
+    dispatchMenuCommand(commandId, {
+      isThemePaneOpen: deps.getThemePaneOpen,
+      setThemePaneOpen: deps.setThemePaneOpen,
+      isSettingsDialogOpen: deps.getSettingsDialogOpen,
+      setSettingsDialogOpen: deps.setSettingsDialogOpen,
+      notify: deps.notify,
+      getState: deps.getSnapshot,
+      getWindowId: deps.getCurrentWindowId,
+      confirm: (message) => window.confirm(message),
+      getEditorRunner: deps.getEditorRunner,
+    });
+  }
+
+  function handleKeydown(event: KeyboardEvent): void {
+    const command = keymapCommandForEvent(event);
+    if (command === "app.toggleFindReplace") {
+      event.preventDefault();
+      runCommand(command);
+      return;
+    }
+    if (
+      command &&
+      !isEditorGlobalCommand(command) &&
+      (event.target as HTMLElement | null)?.closest(
+        "input, textarea, [contenteditable=true]",
+      )
+    ) {
+      return;
+    }
+    if (!command) {
+      return;
+    }
+
+    event.preventDefault();
+    runCommand(command);
+  }
+
+  return { runCommand, handleKeydown };
+}
+
+export interface AppShellFileHandlersDeps {
+  getCurrentWindowId: () => string;
+  getRuntimeReady: () => boolean;
+  notify: (message: string) => void;
+}
+
+export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
+  async function openAndActivatePath(path: string): Promise<void> {
+    const result = await openActivePath(path, deps.getCurrentWindowId());
+    deps.notify(describeOpenActivePathResult(result));
+  }
+
+  async function openDroppedPaths(paths: string[]): Promise<void> {
+    for (const droppedPath of paths) {
+      try {
+        await openAndActivatePath(droppedPath);
+      } catch (error: unknown) {
+        deps.notify(`Failed to open dropped file: ${getErrorMessage(error)}`);
+      }
+    }
+  }
+
+  async function consumeOpenedPaths(paths: string[]): Promise<void> {
+    await openDroppedPaths(paths);
+    deps.notify(`Opened ${paths.length} file(s) from app icon.`);
+  }
+
+  async function onTabActivated(tabId: string): Promise<void> {
+    if (!deps.getRuntimeReady()) {
+      return;
+    }
+    const tab = appState.getActiveSession().openTabs.find((entry) => entry.id === tabId);
+    if (!tab || !isFileTab(tab)) {
+      return;
+    }
+    await checkDocumentIfDeferred(tab.documentId, "tab");
+  }
+
+  return {
+    openAndActivatePath,
+    openDroppedPaths,
+    consumeOpenedPaths,
+    onTabActivated,
+  };
+}
+
+export interface AppShellEditorHandlersDeps {
+  getActiveDocument: () =>
+    | {
+        id: string;
+        filePath?: string | null;
+        contentKind?: string;
+      }
+    | undefined;
+  getLargeFileConfirming: () => boolean;
+  setLargeFileConfirming: (value: boolean) => void;
+  getGoToLineValue: () => string;
+  getEditorRunner: () => EditorCommandRunner | null;
+  getUntitledTitleDebounceTimer: () => ReturnType<typeof setTimeout> | null;
+  setUntitledTitleDebounceTimer: (timer: ReturnType<typeof setTimeout> | null) => void;
+  notify: (message: string) => void;
+}
+
+export function createAppShellEditorHandlers(deps: AppShellEditorHandlersDeps) {
+  async function handleConfirmLargeFile(): Promise<void> {
+    const document = deps.getActiveDocument();
+    if (
+      !document?.filePath ||
+      document.contentKind !== "large_pending" ||
+      deps.getLargeFileConfirming()
+    ) {
+      return;
+    }
+    deps.setLargeFileConfirming(true);
+    try {
+      await confirmLargeFileOpen(document.id, document.filePath);
+      deps.notify(`Opened ${document.filePath}`);
+    } catch (error: unknown) {
+      deps.notify(`Failed to open file: ${getErrorMessage(error)}`);
+    } finally {
+      deps.setLargeFileConfirming(false);
+    }
+  }
+
+  function handleDocumentScrollTop(documentId: string, scrollTop: number): void {
+    appState.setDocumentScrollTop(documentId, scrollTop);
+  }
+
+  function scheduleUntitledTitleRefresh(documentId: string): void {
+    const existingTimer = deps.getUntitledTitleDebounceTimer();
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    deps.setUntitledTitleDebounceTimer(
+      setTimeout(() => {
+        appState.refreshUntitledTitle(documentId);
+        deps.setUntitledTitleDebounceTimer(null);
+      }, 300),
+    );
+  }
+
+  function runGoToLine(): void {
+    const line = Number(deps.getGoToLineValue());
+    if (!Number.isInteger(line) || line < 1) {
+      deps.notify("Go-to line must be a positive integer.");
+      return;
+    }
+    const moved = deps.getEditorRunner()?.goToLine(line) ?? false;
+    deps.notify(moved ? `Moved to line ${line}.` : "Line is out of range.");
+  }
+
+  function clearUntitledTitleDebounceTimer(): void {
+    const timer = deps.getUntitledTitleDebounceTimer();
+    if (timer) {
+      clearTimeout(timer);
+      deps.setUntitledTitleDebounceTimer(null);
+    }
+  }
+
+  return {
+    handleConfirmLargeFile,
+    handleDocumentScrollTop,
+    scheduleUntitledTitleRefresh,
+    runGoToLine,
+    clearUntitledTitleDebounceTimer,
+  };
+}
+
+export interface AppShellMountCleanup {
+  disconnectLayoutObserver: () => void;
+  clearUntitledTitleDebounceTimer: () => void;
+}
+
+export interface AppShellMountDeps {
+  registerSettingsDialogOpener: (
+    opener: ((tab: SettingsDialogTab) => void) | null,
+  ) => void;
+  setSettingsDialogInitialTab: (tab: SettingsDialogTab) => void;
+  setSettingsDialogOpen: (open: boolean) => void;
+  setupLayoutObserver: () => void;
+  startAppShellRuntime: (options: {
+    notify: (message: string) => void;
+    runCommand: (commandId: AppCommandId) => void;
+    openAndActivatePath: (path: string) => Promise<void>;
+    consumeOpenedPaths: (paths: string[]) => Promise<void>;
+    restoreWorkspaceAgentSession: (workspaceRoot: string) => Promise<void>;
+    loadProjectTreeRoot: () => Promise<void>;
+    onFilesystemChange: (path: string) => void;
+    setConsoleHeightPx: (heightPx: number) => void;
+  }) => Promise<{
+    cleanup: () => void;
+    syncExternalFileWatcher: (state: AppDomainState) => Promise<void>;
+    windowId: string;
+  }>;
+  notify: (message: string) => void;
+  runCommand: (commandId: AppCommandId) => void;
+  openAndActivatePath: (path: string) => Promise<void>;
+  consumeOpenedPaths: (paths: string[]) => Promise<void>;
+  restoreWorkspaceAgentSession: (workspaceRoot: string) => Promise<void>;
+  loadProjectTreeRoot: () => Promise<void>;
+  notifyProjectTreeFilesystemChange: (path: string) => void;
+  setConsoleHeightPx: (heightPx: number) => void;
+  setRuntimeSyncExternalFileWatcher: (
+    sync: ((state: AppDomainState) => Promise<void>) | null,
+  ) => void;
+  setCurrentWindowId: (windowId: string) => void;
+  setLastSelectedTabId: (tabId: string | null) => void;
+  setRuntimeReady: (ready: boolean) => void;
+  routePathToLastActiveWindow: (path: string) => Promise<void>;
+  getCurrentWebviewWindowLabel: () => string;
+  handleKeydown: (event: KeyboardEvent) => void;
+  stopChatAccessMonitor: () => void;
+  cleanup: AppShellMountCleanup;
+}
+
+export function setupAppShellMount(deps: AppShellMountDeps): () => void {
+  let runtimeCleanup: (() => void) | undefined;
+  let resizeObserverDisconnected = false;
+
+  deps.registerSettingsDialogOpener((tab) => {
+    deps.setSettingsDialogInitialTab(tab);
+    deps.setSettingsDialogOpen(true);
+  });
+
+  void tick().then(() => {
+    if (!resizeObserverDisconnected) {
+      deps.setupLayoutObserver();
+    }
+  });
+
+  void deps
+    .startAppShellRuntime({
+      notify: deps.notify,
+      runCommand: deps.runCommand,
+      openAndActivatePath: deps.openAndActivatePath,
+      consumeOpenedPaths: deps.consumeOpenedPaths,
+      restoreWorkspaceAgentSession: deps.restoreWorkspaceAgentSession,
+      loadProjectTreeRoot: deps.loadProjectTreeRoot,
+      onFilesystemChange: deps.notifyProjectTreeFilesystemChange,
+      setConsoleHeightPx: deps.setConsoleHeightPx,
+    })
+    .then((runtimeHandle) => {
+      runtimeCleanup = runtimeHandle.cleanup;
+      deps.setRuntimeSyncExternalFileWatcher(runtimeHandle.syncExternalFileWatcher);
+      deps.setCurrentWindowId(runtimeHandle.windowId);
+      deps.setLastSelectedTabId(appState.getActiveSession().selectedTabId);
+      deps.setRuntimeReady(true);
+    })
+    .catch(async (error: unknown) => {
+      const message = getErrorMessage(error, String(error));
+      await logDiagnostic({
+        level: "error",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "startAppShellRuntime failed",
+        metadata: { error: message },
+      });
+    });
+
+  const search = new URLSearchParams(window.location.search);
+  const openParam = search.get("open");
+  if (openParam) {
+    void deps
+      .routePathToLastActiveWindow(openParam)
+      .then(() => {
+        deps.notify("File open routed to last active window.");
+      })
+      .catch(async () => {
+        if (deps.getCurrentWebviewWindowLabel() !== "main") {
+          return;
+        }
+        await deps.openAndActivatePath(openParam);
+      })
+      .catch((error: unknown) => {
+        deps.notify(`Failed to open file from path: ${getErrorMessage(error)}`);
+      });
+  }
+
+  function onKeydown(event: KeyboardEvent): void {
+    deps.handleKeydown(event);
+  }
+
+  function preventBrowserDragOver(event: DragEvent): void {
+    event.preventDefault();
+  }
+
+  window.addEventListener("keydown", onKeydown);
+  window.addEventListener("dragover", preventBrowserDragOver);
+
+  return () => {
+    deps.registerSettingsDialogOpener(null);
+    resizeObserverDisconnected = true;
+    deps.cleanup.disconnectLayoutObserver();
+    deps.cleanup.clearUntitledTitleDebounceTimer();
+    deps.setRuntimeReady(false);
+    deps.setRuntimeSyncExternalFileWatcher(null);
+    runtimeCleanup?.();
+    deps.stopChatAccessMonitor();
+    window.removeEventListener("keydown", onKeydown);
+    window.removeEventListener("dragover", preventBrowserDragOver);
+  };
+}

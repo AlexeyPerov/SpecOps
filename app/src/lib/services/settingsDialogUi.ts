@@ -1,4 +1,11 @@
-export type SettingsDialogTab = "editor" | "shortcuts" | "connections" | "debugAi" | "debugAgent" | "logs";
+export type SettingsDialogTab =
+  | "editor"
+  | "shortcuts"
+  | "connections"
+  | "chatModes"
+  | "debugAi"
+  | "debugAgent"
+  | "logs";
 
 export interface SettingsTabDefinition {
   id: SettingsDialogTab;
@@ -28,6 +35,12 @@ const CONNECTIONS_TAB = {
   panelAriaLabel: "HTTP provider settings",
 } as const satisfies SettingsTabDefinition;
 
+const CHAT_MODES_TAB = {
+  id: "chatModes",
+  label: "Chat modes",
+  panelAriaLabel: "Chat modes settings",
+} as const satisfies SettingsTabDefinition;
+
 const DEBUG_AI_TAB = {
   id: "debugAi",
   label: "Debug Provider",
@@ -49,7 +62,7 @@ const LOGS_TAB = {
 export const SETTINGS_SIDEBAR = [
   { kind: "tab", tab: EDITOR_TAB },
   { kind: "tab", tab: SHORTCUTS_TAB },
-  { kind: "section", label: "Chats", tabs: [CONNECTIONS_TAB, DEBUG_AI_TAB] },
+  { kind: "section", label: "Chats", tabs: [CONNECTIONS_TAB, CHAT_MODES_TAB, DEBUG_AI_TAB] },
   { kind: "section", label: "Workspaces", tabs: [DEBUG_AGENT_TAB] },
   { kind: "section", label: "Logging", tabs: [LOGS_TAB] },
 ] as const satisfies readonly SettingsSidebarEntry[];
@@ -58,6 +71,7 @@ export const SETTINGS_TABS = [
   EDITOR_TAB,
   SHORTCUTS_TAB,
   CONNECTIONS_TAB,
+  CHAT_MODES_TAB,
   DEBUG_AI_TAB,
   DEBUG_AGENT_TAB,
   LOGS_TAB,

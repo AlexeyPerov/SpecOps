@@ -181,7 +181,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 4: Settings UI — Chat modes tab (P2-9) [Score:7] [Agent:medium]
+#### Task 4: Settings UI — Chat modes tab (P2-9) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

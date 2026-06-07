@@ -23,14 +23,16 @@ describe("settingsDialogUi", () => {
     );
 
     expect(topLevelLabels).toEqual(["Editor", "Shortcuts"]);
-    expect(sectionLabels).toEqual(["Chats", "Workspaces"]);
-    expect(sectionTabLabels).toEqual(["Providers", "Debug Provider", "Debug Provider"]);
+    expect(sectionLabels).toEqual(["Chats", "Workspaces", "Logging"]);
+    expect(sectionTabLabels).toEqual(["Providers", "Chat modes", "Debug Provider", "Debug Provider", "Logs"]);
     expect(SETTINGS_TABS.map((tab) => tab.label)).toEqual([
       "Editor",
       "Shortcuts",
       "Providers",
+      "Chat modes",
       "Debug Provider",
       "Debug Provider",
+      "Logs",
     ]);
   });
 
@@ -65,6 +67,15 @@ describe("settingsDialogUi", () => {
     openSettingsDialog("debugAi");
 
     expect(opener).toHaveBeenCalledWith("debugAi");
+  });
+
+  it("calls registered opener with explicit chatModes tab", () => {
+    const opener = vi.fn();
+    registerSettingsDialogOpener(opener);
+
+    openSettingsDialog("chatModes");
+
+    expect(opener).toHaveBeenCalledWith("chatModes");
   });
 
   it("calls registered opener with explicit debugAgent tab", () => {

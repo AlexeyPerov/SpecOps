@@ -156,7 +156,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 3: Structured message UI — generalize required sections (P2-9) [Score:6] [Agent:medium]
+#### Task 3: Structured message UI — generalize required sections (P2-9) [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 

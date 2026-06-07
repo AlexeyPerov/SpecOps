@@ -12,6 +12,7 @@
   import {
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
+  import { resolveChatMode } from "../ai/modes/resolve";
   import {
     isHttpConnectionConfigured,
     isHttpProviderSendBlocked,
@@ -69,6 +70,7 @@
   const httpApiKey = $derived(resolvedHttpConnection?.apiKey ?? "");
   const providerModelCatalogs = $derived($appState.settings.providerModelCatalogs);
   const activeMode = $derived(metadata?.mode ?? "ask");
+  const activeResolvedMode = $derived(resolveChatMode(activeMode, $appState.settings));
   const activeProvider = $derived.by(() => {
     metadata;
     providerSettings;
@@ -260,7 +262,7 @@
       {messages}
       {isEmpty}
       {isGenerating}
-      {activeMode}
+      activeModeRequiredSections={activeResolvedMode.requiredSections}
       {compactionNotice}
       emptyHint={
         isChatHttpScope

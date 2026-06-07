@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseReviewMessageSections } from "./chatReviewContent";
+import { parseStructuredMessageSections } from "./chatReviewContent";
 
-describe("parseReviewMessageSections", () => {
+describe("parseStructuredMessageSections", () => {
   it("parses review headings into sections for structured rendering", () => {
     const content = [
       "## Summary",
@@ -18,7 +18,12 @@ describe("parseReviewMessageSections", () => {
       "- What is the rollout plan?",
     ].join("\n");
 
-    const sections = parseReviewMessageSections(content);
+    const sections = parseStructuredMessageSections(content, [
+      "Summary",
+      "Critique",
+      "Risk / effort estimate",
+      "Open questions",
+    ]);
     expect(sections).toEqual([
       {
         heading: "Summary",
@@ -39,8 +44,23 @@ describe("parseReviewMessageSections", () => {
     ]);
   });
 
-  it("returns null for non-review assistant text", () => {
-    expect(parseReviewMessageSections("Plain conversational answer.")).toBeNull();
-    expect(parseReviewMessageSections("## Notes\nNo known review sections here.")).toBeNull();
+  it("matches required headings case-insensitively", () => {
+    const content = ["## SUMMARY", "High level takeaway.", "", "## OPEN QUESTIONS", "- What next?"].join(
+      "\n",
+    );
+    const sections = parseStructuredMessageSections(content, ["Summary", "Open questions"]);
+    expect(sections).toEqual([
+      { heading: "SUMMARY", body: "High level takeaway." },
+      { heading: "OPEN QUESTIONS", body: "- What next?" },
+    ]);
+  });
+
+  it("returns null for conversational text and missing required headings", () => {
+    expect(parseStructuredMessageSections("Plain conversational answer.", ["Summary"])).toBeNull();
+    expect(parseStructuredMessageSections("## Notes\nNo known sections here.", ["Summary"])).toBeNull();
+  });
+
+  it("returns null when required sections are empty", () => {
+    expect(parseStructuredMessageSections("## Summary\nSomething", [])).toBeNull();
   });
 });

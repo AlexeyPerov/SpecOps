@@ -3,14 +3,17 @@
     formatModelSwitchNotice,
     formatProviderSwitchNotice,
   } from "../ai/providers/selection";
-  import { parseReviewMessageSections, type ReviewMessageSection } from "../ai/chatReviewContent";
-  import type { ChatMessage, ChatModeId } from "../domain/contracts";
+  import {
+    parseStructuredMessageSections,
+    type StructuredMessageSection,
+  } from "../ai/chatReviewContent";
+  import type { ChatMessage } from "../domain/contracts";
 
   interface Props {
     messages: ChatMessage[];
     isEmpty: boolean;
     isGenerating: boolean;
-    activeMode: ChatModeId;
+    activeModeRequiredSections?: readonly string[];
     compactionNotice?: string;
     emptyHint?: string;
   }
@@ -19,7 +22,7 @@
     messages,
     isEmpty,
     isGenerating,
-    activeMode,
+    activeModeRequiredSections = [],
     compactionNotice = "",
     emptyHint = "Ask or review ideas for this workspace. Pick a provider and mode, then send a message.",
   }: Props = $props();
@@ -46,21 +49,21 @@
     return message.content;
   }
 
-  function reviewSectionsForMessage(message: ChatMessage): ReviewMessageSection[] | null {
-    if (message.role !== "assistant" || activeMode !== "review") {
+  function structuredSectionsForMessage(message: ChatMessage): StructuredMessageSection[] | null {
+    if (message.role !== "assistant" || activeModeRequiredSections.length === 0) {
       return null;
     }
-    return parseReviewMessageSections(message.content);
+    return parseStructuredMessageSections(message.content, activeModeRequiredSections);
   }
 
   function isStreamingAssistantMessage(message: ChatMessage, index: number): boolean {
     return isGenerating && message.role === "assistant" && index === messages.length - 1;
   }
 
-  function shouldRenderReviewSections(message: ChatMessage, index: number): boolean {
+  function shouldRenderStructuredSections(message: ChatMessage, index: number): boolean {
     // Keep streaming output in plain text until generation completes to avoid
     // section layout churn while partial markdown headings arrive.
-    return !isStreamingAssistantMessage(message, index) && Boolean(reviewSectionsForMessage(message));
+    return !isStreamingAssistantMessage(message, index) && Boolean(structuredSectionsForMessage(message));
   }
 
   function messageRoleLabel(message: ChatMessage): string {
@@ -105,9 +108,9 @@
             class:chat-message-streaming={isStreamingAssistantMessage(message, index)}
           >
             <p class="chat-message-role">{messageRoleLabel(message)}</p>
-            {#if shouldRenderReviewSections(message, index)}
+            {#if shouldRenderStructuredSections(message, index)}
               <div class="chat-review-sections">
-                {#each reviewSectionsForMessage(message) ?? [] as section (section.heading)}
+                {#each structuredSectionsForMessage(message) ?? [] as section (section.heading)}
                   <section class="chat-review-section">
                     <h3 class="chat-review-section-heading">{section.heading}</h3>
                     <p class="chat-review-section-body">{section.body}</p>

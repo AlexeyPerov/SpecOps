@@ -1048,6 +1048,7 @@
           externalFiles: snapshot.settings.externalFiles,
           decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
           hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
+          logSettings: snapshot.settings.logSettings,
           providerSettings: snapshot.settings.providerSettings,
           providerModelCatalogs: snapshot.settings.providerModelCatalogs,
           commandBindingOverrides: snapshot.settings.commandBindingOverrides,

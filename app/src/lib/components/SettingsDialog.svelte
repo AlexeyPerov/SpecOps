@@ -557,6 +557,8 @@
       "Settings for the Chats Debug Provider. Enabled by default for development dogfooding; uncheck Enable to hide it from Chats.",
       "Show Debug Provider in Chats",
     )}
+  {:else if tabId === "logs"}
+    {@render logsSettingsPanel()}
   {:else}
     {@render debugProviderSettingsPanel(
       "debugWorkspace",
@@ -566,6 +568,26 @@
       "Show Debug Provider in workspace chat",
     )}
   {/if}
+{/snippet}
+
+{#snippet logsSettingsPanel()}
+  <section class="settings-section">
+    <h3>Provider logging</h3>
+    <p class="settings-section-note">
+      Verbose logging writes full provider request and response payloads to the console.
+    </p>
+    <label class="settings-toggle">
+      <input
+        type="checkbox"
+        checked={snapshot.settings.logSettings.verboseProviderLogging}
+        onchange={(event) =>
+          appState.updateLogSettings({
+            verboseProviderLogging: (event.currentTarget as HTMLInputElement).checked,
+          })}
+      />
+      Verbose provider logging
+    </label>
+  </section>
 {/snippet}
 
 {#snippet editorSettingsPanel()}

@@ -19,7 +19,9 @@ import { mapProviderModelRuntimeError, shouldMapProviderModelRejection } from ".
 import {
   logChatHttpError,
   logChatHttpRequest,
+  logChatHttpRequestBody,
   logChatHttpResponse,
+  logChatHttpResponseBody,
   logChatHttpStreamEnd,
 } from "../chatDiagnostics";
 import { buildOpenAiChatMessages } from "./openAiChatMessages";
@@ -112,6 +114,11 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     const messages = buildOpenAiChatMessages(request.payload);
     const url = resolveHttpChatCompletionsUrl(normalized.baseUrl);
     const startedAt = Date.now();
+    const requestBody = {
+      model: modelId,
+      messages,
+      stream: false,
+    };
 
     logChatHttpRequest({
       turnId: request.turnKey,
@@ -119,6 +126,14 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
       url,
       modelId,
       stream: false,
+    });
+    logChatHttpRequestBody({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      url,
+      modelId,
+      stream: false,
+      body: requestBody,
     });
 
     let response: Response;
@@ -130,11 +145,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
           "Content-Type": "application/json",
         },
         signal: request.signal,
-        body: JSON.stringify({
-          model: modelId,
-          messages,
-          stream: false,
-        }),
+        body: JSON.stringify(requestBody),
       });
     } catch (error) {
       logChatHttpError({
@@ -159,6 +170,14 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     });
 
     const rawBody = await response.text();
+    logChatHttpResponseBody({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      modelId,
+      stream: false,
+      status: response.status,
+      body: rawBody,
+    });
     if (!response.ok) {
       throw mapHttpError(response.status, rawBody, modelId);
     }
@@ -200,6 +219,11 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     const messages = buildOpenAiChatMessages(request.payload);
     const url = resolveHttpChatCompletionsUrl(normalized.baseUrl);
     const startedAt = Date.now();
+    const requestBody = {
+      model: modelId,
+      messages,
+      stream: true,
+    };
 
     logChatHttpRequest({
       turnId: request.turnKey,
@@ -207,6 +231,14 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
       url,
       modelId,
       stream: true,
+    });
+    logChatHttpRequestBody({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      url,
+      modelId,
+      stream: true,
+      body: requestBody,
     });
 
     let response: Response;
@@ -219,11 +251,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
           "Content-Type": "application/json",
         },
         signal: request.signal,
-        body: JSON.stringify({
-          model: modelId,
-          messages,
-          stream: true,
-        }),
+        body: JSON.stringify(requestBody),
       });
     } catch (error) {
       logChatHttpError({
@@ -248,7 +276,16 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     });
 
     if (!response.ok) {
-      throw mapHttpError(response.status, await response.text(), modelId);
+      const errorBody = await response.text();
+      logChatHttpResponseBody({
+        turnId: request.turnKey,
+        connectionId: request.connectionId,
+        modelId,
+        stream: true,
+        status: response.status,
+        body: errorBody,
+      });
+      throw mapHttpError(response.status, errorBody, modelId);
     }
 
     if (!response.body) {
@@ -259,9 +296,11 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     }
 
     let deltaCount = 0;
+    let streamedBody = "";
     try {
       for await (const delta of parseOpenAiSseStream(response.body)) {
         deltaCount += 1;
+        streamedBody += delta;
         yield { delta };
       }
     } catch (error) {
@@ -282,6 +321,14 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
       modelId,
       durationMs: Date.now() - startedAt,
       deltaCount,
+    });
+    logChatHttpResponseBody({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      modelId,
+      stream: true,
+      status: response.status,
+      body: streamedBody,
     });
   }
 

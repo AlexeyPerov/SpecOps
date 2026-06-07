@@ -12,6 +12,7 @@ import type {
   AppProviderSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
+  LogSettings,
   ProviderModelCatalogs,
 } from "../domain/contracts";
 import { normalizeCommandBindingOverrides } from "../commands/commandBindings";
@@ -24,6 +25,7 @@ import {
   DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES,
   normalizeMaxOpenWithoutConfirmBytes,
 } from "./largeFileOpen";
+import { defaultLogSettings, normalizeLogSettings } from "./logSettings";
 
 export interface PersistedSettings {
   wrapLines: boolean;
@@ -36,6 +38,7 @@ export interface PersistedSettings {
   maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  logSettings: LogSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
@@ -56,6 +59,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
+  logSettings: defaultLogSettings,
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
   commandBindingOverrides: {},
@@ -120,6 +124,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         hideActivityRailWhenNotepadOnly: isBoolean(parsed.hideActivityRailWhenNotepadOnly)
           ? parsed.hideActivityRailWhenNotepadOnly
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
+        logSettings: normalizeLogSettings(parsed.logSettings),
         providerSettings,
         providerModelCatalogs,
         commandBindingOverrides: normalizeCommandBindingOverrides(
@@ -159,6 +164,7 @@ export function toPersistedSettings(input: {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  logSettings: LogSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
@@ -170,6 +176,7 @@ export function toPersistedSettings(input: {
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
+    logSettings: normalizeLogSettings(input.logSettings),
     providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),
     providerModelCatalogs,
     commandBindingOverrides: normalizeCommandBindingOverrides(input.commandBindingOverrides),

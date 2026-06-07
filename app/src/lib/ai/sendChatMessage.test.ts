@@ -110,7 +110,7 @@ describe("sendChatMessage", () => {
     expect(chatStore.getMessages()[1].role).toBe("assistant");
     expect(chatStore.getMessages()[1].content).toContain("simulated answer");
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
-    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
+    expect(schedulePersistMock).toHaveBeenCalledTimes(3);
   });
 
   it("uses default provider resolver before thread metadata exists", async () => {
@@ -161,7 +161,7 @@ describe("sendChatMessage", () => {
     const result = await resultPromise;
 
     expect(result.ok).toBe(true);
-    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
+    expect(schedulePersistMock).toHaveBeenCalledTimes(3);
     const persistedSnapshot = schedulePersistMock.mock.calls.at(-1)?.[2];
     const assistant = persistedSnapshot?.thread.messages.find((message) => message.role === "assistant");
     expect(assistant?.content).toContain("simulated answer");
@@ -201,10 +201,11 @@ describe("sendChatMessage", () => {
     const result = await sendChatMessage("Persist while streaming");
 
     expect(result.ok).toBe(true);
-    expect(schedulePersistMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(schedulePersistMock.mock.calls.length).toBeGreaterThanOrEqual(3);
     const firstAssistant =
-      schedulePersistMock.mock.calls[0]?.[2].thread.messages.find((message) => message.role === "assistant")
-        ?.content ?? "";
+      schedulePersistMock.mock.calls
+        .map((call) => call[2].thread.messages.find((message) => message.role === "assistant")?.content ?? "")
+        .find((content) => content.length > 0) ?? "";
     const lastAssistant =
       schedulePersistMock.mock.calls.at(-1)?.[2].thread.messages.find((message) => message.role === "assistant")
         ?.content ?? "";
@@ -417,7 +418,7 @@ describe("sendChatMessage", () => {
       lastError: { message: "Simulated provider failure", code: "provider_error" },
     });
     expect(chatStore.canRetryLastTurn()).toBe(true);
-    expect(schedulePersistMock).toHaveBeenCalledOnce();
+    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
   });
 
   it("blocks send when access preflight is not ready", async () => {
@@ -518,7 +519,7 @@ describe("sendChatMessage", () => {
     expect(result.ok).toBe(true);
     expect(chatStore.isAgentDraft(agentId!)).toBe(false);
     expect(chatStore.getAgentTitle(agentId!)).toBe("Sidebar title from first send");
-    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
+    expect(schedulePersistMock).toHaveBeenCalledTimes(3);
     const persistedSnapshot = schedulePersistMock.mock.calls.at(-1)?.[2];
     expect(persistedSnapshot?.thread.messages.some((message) => message.role === "user")).toBe(true);
   });
@@ -580,7 +581,7 @@ describe("sendChatMessage", () => {
     expect(chatStore.getMessages()).toHaveLength(2);
     expect(chatStore.getMessages()[1].content).toBe("HTTP response about retention.");
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
-    expect(schedulePersistMock).toHaveBeenCalledTimes(2);
+    expect(schedulePersistMock).toHaveBeenCalledTimes(3);
   });
 
   it("records HTTP provider errors in retry scaffolding", async () => {

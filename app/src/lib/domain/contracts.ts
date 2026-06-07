@@ -223,12 +223,19 @@ export interface AppThemeState {
   customThemes: CustomThemeRecord[];
 }
 
+/** Console and file logging preferences. */
+export interface LogSettings {
+  /** When enabled, logs full provider request and response payloads. */
+  verboseProviderLogging: boolean;
+}
+
 export interface AppSettingsState {
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   commandBindingOverrides: CommandBindingOverrides;
+  logSettings: LogSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */

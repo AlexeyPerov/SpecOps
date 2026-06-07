@@ -47,6 +47,7 @@ describe("settings mapping", () => {
       },
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
+      logSettings: { verboseProviderLogging: false },
       providerSettings: {
         httpConnections: [
           {

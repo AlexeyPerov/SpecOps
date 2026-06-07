@@ -1,4 +1,6 @@
 import type { ChatProviderId } from "../domain/contracts";
+import { isVerboseProviderLoggingEnabled } from "./providerVerboseLogging";
+import type { ProviderRequestPayload } from "./providers/types";
 import { logDiagnostic } from "../services/logging";
 
 type ChatDiagnosticMetadata = Record<string, unknown>;
@@ -11,6 +13,25 @@ function emit(level: "debug" | "info" | "warn" | "error", message: string, metad
     message,
     metadata,
   });
+}
+
+function sanitizeVerboseLogValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replace(/Bearer\s+\S+/gi, "[redacted]");
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeVerboseLogValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, sanitizeVerboseLogValue(entry)]),
+    );
+  }
+  return value;
+}
+
+function sanitizeVerboseLogBody(body: unknown): unknown {
+  return sanitizeVerboseLogValue(body);
 }
 
 export function logChatProviderSwitch(params: {
@@ -185,5 +206,95 @@ export function logChatHttpError(params: {
   emit("error", "chat http error", {
     kind: "chat.http.error",
     ...params,
+  });
+}
+
+export function logChatProviderPayload(params: {
+  turnId?: string;
+  providerId: ChatProviderId;
+  connectionId?: string;
+  modelId: string;
+  payload: ProviderRequestPayload;
+}): void {
+  if (!isVerboseProviderLoggingEnabled()) {
+    return;
+  }
+
+  emit("debug", "chat provider payload", {
+    kind: "chat.provider.payload",
+    turnId: params.turnId,
+    providerId: params.providerId,
+    connectionId: params.connectionId,
+    modelId: params.modelId,
+    payload: sanitizeVerboseLogBody(params.payload),
+  });
+}
+
+export function logChatHttpRequestBody(params: {
+  turnId?: string;
+  connectionId?: string;
+  url: string;
+  modelId: string;
+  stream: boolean;
+  body: unknown;
+}): void {
+  if (!isVerboseProviderLoggingEnabled()) {
+    return;
+  }
+
+  emit("debug", "chat http request body", {
+    kind: "chat.http.request.body",
+    turnId: params.turnId,
+    connectionId: params.connectionId,
+    url: params.url,
+    modelId: params.modelId,
+    stream: params.stream,
+    body: sanitizeVerboseLogBody(params.body),
+  });
+}
+
+export function logChatHttpResponseBody(params: {
+  turnId?: string;
+  connectionId?: string;
+  modelId: string;
+  stream: boolean;
+  status: number;
+  body: string;
+}): void {
+  if (!isVerboseProviderLoggingEnabled()) {
+    return;
+  }
+
+  emit("debug", "chat http response body", {
+    kind: "chat.http.response.body",
+    turnId: params.turnId,
+    connectionId: params.connectionId,
+    modelId: params.modelId,
+    stream: params.stream,
+    status: params.status,
+    body: sanitizeVerboseLogBody(params.body),
+  });
+}
+
+export function logChatProviderResponseBody(params: {
+  turnId?: string;
+  providerId: ChatProviderId;
+  connectionId?: string;
+  modelId: string;
+  stream: boolean;
+  body: string;
+}): void {
+  if (!isVerboseProviderLoggingEnabled()) {
+    return;
+  }
+
+  emit("debug", "chat provider response body", {
+    kind: "chat.provider.response.body",
+    turnId: params.turnId,
+    providerId: params.providerId,
+    connectionId: params.connectionId,
+    modelId: params.modelId,
+    stream: params.stream,
+    body: sanitizeVerboseLogBody(params.body),
   });
 }

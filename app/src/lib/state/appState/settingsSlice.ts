@@ -9,6 +9,7 @@ import type {
   ExternalFilesSettings,
   HttpConnection,
   HttpConnectionSettings,
+  LogSettings,
   ProviderModelCatalog,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
@@ -37,6 +38,7 @@ import {
 import { setCommandBindingOverrides } from "../../commands/registry";
 import { DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES } from "../../services/binaryFileOpen";
 import { DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES } from "../../services/largeFileOpen";
+import { defaultLogSettings, normalizeLogSettings } from "../../services/logSettings";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -53,6 +55,7 @@ export const defaultSettings: AppSettingsState = {
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
   commandBindingOverrides: {},
+  logSettings: defaultLogSettings,
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
   providerApiKeys: {},
@@ -354,12 +357,25 @@ export function createSettingsSlice(update: SettingsUpdate) {
         };
       });
     },
+    updateLogSettings(patch: Partial<LogSettings>) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          logSettings: normalizeLogSettings({
+            ...state.settings.logSettings,
+            ...patch,
+          }),
+        },
+      }));
+    },
     applyPersistedSettings(partial: {
       wrapLines?: boolean;
       zoomPercent?: number;
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
       hideActivityRailWhenNotepadOnly?: boolean;
+      logSettings?: Partial<LogSettings>;
       providerSettings?: Partial<AppProviderSettings>;
       providerModelCatalogs?: ProviderModelCatalogs;
       commandBindingOverrides?: CommandBindingOverrides;
@@ -402,6 +418,18 @@ export function createSettingsSlice(update: SettingsUpdate) {
             settings: {
               ...next.settings,
               hideActivityRailWhenNotepadOnly: partial.hideActivityRailWhenNotepadOnly,
+            },
+          };
+        }
+        if (partial.logSettings) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              logSettings: normalizeLogSettings({
+                ...next.settings.logSettings,
+                ...partial.logSettings,
+              }),
             },
           };
         }

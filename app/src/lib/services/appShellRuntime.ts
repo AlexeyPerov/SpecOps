@@ -184,6 +184,7 @@ export async function startAppShellRuntime(
       providerSettings: persistedSettings.providerSettings,
       providerModelCatalogs: persistedSettings.providerModelCatalogs,
       commandBindingOverrides: persistedSettings.commandBindingOverrides,
+      logSettings: persistedSettings.logSettings,
     });
   }
   for (const [connectionId, apiKey] of Object.entries(connectionApiKeys)) {

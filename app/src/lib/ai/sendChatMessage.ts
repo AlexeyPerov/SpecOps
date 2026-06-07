@@ -24,6 +24,7 @@ import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
 import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 import {
+  logChatProviderPayload,
   logChatSendComplete,
   logChatSendFailed,
   logChatSendStart,
@@ -345,6 +346,14 @@ async function executeProviderTurn(params: {
     signal: abortController.signal,
   };
 
+  logChatProviderPayload({
+    turnId,
+    providerId: chatStore.getActiveChatProvider(activeAgentId),
+    connectionId,
+    modelId,
+    payload: request.payload,
+  });
+
   const assistantMessage = createAssistantPlaceholder(turnId);
   chatStore.appendMessage(assistantMessage, { agentId: activeAgentId, skipCompaction: true });
   const usesStreamingProvider = Boolean(provider.streamMessage);
@@ -518,12 +527,6 @@ export async function sendChatMessage(
     };
   }
 
-  const validation = await validateProviderSend(activeAgentId, options);
-  if (!validation.ok) {
-    abortTurn(activeAgentId, root);
-    return validation;
-  }
-
   const userMessage = createUserMessage(trimmed);
   if (!chatStore.appendMessage(userMessage, { agentId: activeAgentId })) {
     abortTurn(activeAgentId, root);
@@ -532,6 +535,14 @@ export async function sendChatMessage(
       reason: "append_failed",
       message: "Could not append your message to the active thread.",
     };
+  }
+  persistAgentThreadOnce(root, activeAgentId);
+
+  const validation = await validateProviderSend(activeAgentId, options);
+  if (!validation.ok) {
+    chatStore.removeMessage(userMessage.id, activeAgentId, root);
+    abortTurn(activeAgentId, root);
+    return validation;
   }
 
   return executeProviderTurn({

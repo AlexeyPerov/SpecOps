@@ -21,6 +21,10 @@ import {
   splitIntoChunks,
 } from "./debugSimulation";
 import { ChatProviderError } from "./errors";
+import {
+  logChatProviderPayload,
+  logChatProviderResponseBody,
+} from "../chatDiagnostics";
 import type {
   ChatProvider,
   ProviderSendRequest,
@@ -84,6 +88,13 @@ class DebugChatProvider implements ChatProvider {
     this.assertEnabled(settings);
 
     const turnKey = resolveTurnKey(request);
+    logChatProviderPayload({
+      turnId: turnKey,
+      providerId: this.id,
+      connectionId: request.connectionId,
+      modelId: request.modelId,
+      payload: request.payload,
+    });
     const body = buildDebugResponseBody(request.payload.mode, request.payload);
     const simulation = deriveDebugTurnSimulation(settings, turnKey, body.length);
     const accessStatus = request.accessStatus ?? "unknown";
@@ -92,9 +103,9 @@ class DebugChatProvider implements ChatProvider {
       if (simulation.shouldFail) {
         throw new ChatProviderError(settings.failureMessage, settings.failureMessage);
       }
-      return {
-        content: this.buildFinalContent(body, request, settings, simulation, accessStatus),
-      };
+      const content = this.buildFinalContent(body, request, settings, simulation, accessStatus);
+      this.logResponse(request, turnKey, false, content);
+      return { content };
     }
 
     await sleep(simulation.delayMs);
@@ -102,9 +113,9 @@ class DebugChatProvider implements ChatProvider {
       throw new ChatProviderError(settings.failureMessage, settings.failureMessage);
     }
 
-    return {
-      content: this.buildFinalContent(body, request, settings, simulation, accessStatus),
-    };
+    const content = this.buildFinalContent(body, request, settings, simulation, accessStatus);
+    this.logResponse(request, turnKey, false, content);
+    return { content };
   }
 
   async *streamMessage(request: ProviderSendRequest): AsyncIterable<ProviderStreamChunk> {
@@ -112,6 +123,13 @@ class DebugChatProvider implements ChatProvider {
     this.assertEnabled(settings);
 
     const turnKey = resolveTurnKey(request);
+    logChatProviderPayload({
+      turnId: turnKey,
+      providerId: this.id,
+      connectionId: request.connectionId,
+      modelId: request.modelId,
+      payload: request.payload,
+    });
     const body = buildDebugResponseBody(request.payload.mode, request.payload);
     const simulation = deriveDebugTurnSimulation(settings, turnKey, body.length);
     const accessStatus = request.accessStatus ?? "unknown";
@@ -125,6 +143,23 @@ class DebugChatProvider implements ChatProvider {
     for (const delta of splitIntoChunks(finalContent, simulation.chunkSizes)) {
       yield { delta };
     }
+    this.logResponse(request, turnKey, true, finalContent);
+  }
+
+  private logResponse(
+    request: ProviderSendRequest,
+    turnKey: string,
+    stream: boolean,
+    body: string,
+  ): void {
+    logChatProviderResponseBody({
+      turnId: turnKey,
+      providerId: this.id,
+      connectionId: request.connectionId,
+      modelId: request.modelId,
+      stream,
+      body,
+    });
   }
 
   private assertEnabled(settings: DebugProviderSettings): void {

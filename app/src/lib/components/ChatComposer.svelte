@@ -68,7 +68,7 @@
   }: Props = $props();
 
   let draft = $state("");
-  let sending = $state(false);
+  let submitInFlight = $state(false);
   let retrying = $state(false);
 
   const availableConnections = $derived.by(() => {
@@ -112,16 +112,16 @@
       activeConnectionId,
     );
   });
-  const isModeSelectionDisabled = $derived(isGenerating || sending || retrying);
-  const isProviderSelectionDisabled = $derived(isGenerating || sending || retrying);
-  const isModelSelectionDisabled = $derived(isGenerating || sending || retrying);
+  const isModeSelectionDisabled = $derived(isGenerating || submitInFlight || retrying);
+  const isProviderSelectionDisabled = $derived(isGenerating || submitInFlight || retrying);
+  const isModelSelectionDisabled = $derived(isGenerating || submitInFlight || retrying);
   const isSendDisabled = $derived(
     isBlocked ||
       isDebugSendBlocked ||
       isHttpSendBlocked ||
       isModelSendBlocked ||
       isGenerating ||
-      sending ||
+      submitInFlight ||
       retrying ||
       draft.trim().length === 0,
   );
@@ -131,13 +131,12 @@
       isHttpSendBlocked ||
       isModelSendBlocked ||
       isGenerating ||
-      sending ||
       retrying,
   );
   const isRetryDisabled = $derived(
     !canRetryLastTurn ||
       isGenerating ||
-      sending ||
+      submitInFlight ||
       retrying ||
       isBlocked ||
       isDebugSendBlocked ||
@@ -214,7 +213,7 @@
     const content = draft.trim();
     if (
       !content ||
-      sending ||
+      submitInFlight ||
       retrying ||
       isBlocked ||
       isDebugSendBlocked ||
@@ -225,17 +224,16 @@
       return;
     }
 
-    sending = true;
+    submitInFlight = true;
+    draft = "";
     onInlineError("");
     try {
       const result = await sendChatMessage(content, undefined, { chatContextKind });
-      if (result.ok) {
-        draft = "";
-      } else {
+      if (!result.ok) {
         onInlineError(result.message);
       }
     } finally {
-      sending = false;
+      submitInFlight = false;
     }
   }
 

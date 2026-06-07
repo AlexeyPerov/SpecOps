@@ -93,6 +93,34 @@ export function nextSelectedTabAfterBulkClose(
   return remainingTabs[0]?.id ?? null;
 }
 
+export function canCreateFileTabs(state: AppDomainState): boolean {
+  return !isChatHttpContext(state.contexts.activeContextId);
+}
+
+export function selectTabInternal(state: AppDomainState, tabId: string): AppDomainState {
+  return patchActiveContext(state, (ctx) => {
+    if (!ctx.session.openTabs.some((tab) => tab.id === tabId)) {
+      return ctx;
+    }
+    return {
+      ...ctx,
+      session: { ...ctx.session, selectedTabId: tabId },
+    };
+  });
+}
+
+export function reopenTabForDocument(state: AppDomainState, documentId: string): AppDomainState {
+  const tabId = nextTabId();
+  return patchActiveContext(state, (ctx) => ({
+    ...ctx,
+    session: {
+      ...ctx.session,
+      openTabs: [...ctx.session.openTabs, createFileTab(tabId, documentId)],
+      selectedTabId: tabId,
+    },
+  }));
+}
+
 export function closeTabsForce(state: AppDomainState, tabIds: string[], preferredTabId: string | null): AppDomainState {
   if (tabIds.length === 0) {
     return state;

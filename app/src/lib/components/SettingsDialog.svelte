@@ -28,6 +28,12 @@
   import { chatStore } from "../state/chatStore";
   import { normalizeMaxBinaryOpenAsTextBytes } from "../services/binaryFileOpen";
   import { normalizeMaxOpenWithoutConfirmBytes } from "../services/largeFileOpen";
+  import {
+    centerDialogPosition,
+    clampDialogPosition,
+    SETTINGS_DIALOG_VIEWPORT_MARGIN_PX,
+  } from "../services/settingsDialogGeometry";
+  import { confirm } from "@tauri-apps/plugin-dialog";
 
   const SETTINGS_TAB_SIDEBAR_WIDTH_PX = 132;
   const SETTINGS_BODY_PADDING_X_PX = 24;
@@ -48,12 +54,16 @@
   let headerEl: HTMLElement | null = $state(null);
   let tabMeasureEls = $state<Partial<Record<SettingsDialogTab, HTMLElement>>>({});
   let isResizing = $state(false);
+  let isDragging = $state(false);
 
   let initialWidthPx = $state(560);
   let initialHeightPx = $state(640);
   let dialogWidthPx = $state(560);
   let dialogHeightPx = $state(640);
+  let dialogLeftPx = $state(SETTINGS_DIALOG_VIEWPORT_MARGIN_PX);
+  let dialogTopPx = $state(SETTINGS_DIALOG_VIEWPORT_MARGIN_PX);
   let sizeInitialized = $state(false);
+  let positionInitialized = $state(false);
 
   const snapshot = $derived($appState);
 
@@ -252,6 +262,21 @@
     void chatStore.runAccessPreflight();
   }
 
+  async function confirmRemoveHttpConnection(connectionId: string): Promise<void> {
+    const connection = httpConnections().find((entry) => entry.id === connectionId);
+    const label = connection?.label ?? "this connection";
+    const confirmed = await confirm(`Remove provider "${label}"?`, {
+      title: "Remove connection",
+      okLabel: "Remove",
+      cancelLabel: "Cancel",
+      kind: "warning",
+    });
+    if (!confirmed) {
+      return;
+    }
+    await removeHttpConnection(connectionId);
+  }
+
   function selectConnection(connectionId: string): void {
     selectedConnectionId = connectionId;
   }
@@ -284,6 +309,34 @@
     };
   }
 
+  function centerDialogInViewport(): void {
+    const centered = centerDialogPosition(
+      dialogWidthPx,
+      dialogHeightPx,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    dialogLeftPx = centered.left;
+    dialogTopPx = centered.top;
+    positionInitialized = true;
+  }
+
+  function syncDialogBoundsToViewport(): void {
+    const nextSize = clampDialogSize(dialogWidthPx, dialogHeightPx);
+    dialogWidthPx = nextSize.width;
+    dialogHeightPx = nextSize.height;
+    const nextPosition = clampDialogPosition(
+      dialogLeftPx,
+      dialogTopPx,
+      dialogWidthPx,
+      dialogHeightPx,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    dialogLeftPx = nextPosition.left;
+    dialogTopPx = nextPosition.top;
+  }
+
   async function measureAndApplyInitialSize(): Promise<void> {
     await tick();
     const headerHeight = headerEl?.offsetHeight ?? 0;
@@ -310,6 +363,58 @@
     dialogWidthPx = width;
     dialogHeightPx = height;
     sizeInitialized = true;
+    if (!positionInitialized) {
+      centerDialogInViewport();
+    } else {
+      syncDialogBoundsToViewport();
+    }
+  }
+
+  function handleDragStart(event: PointerEvent): void {
+    if (!sizeInitialized || isResizing) {
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(".settings-dialog-close, .settings-dialog-resize-handle")) {
+      return;
+    }
+
+    event.preventDefault();
+    isDragging = true;
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startLeft = dialogLeftPx;
+    const startTop = dialogTopPx;
+    const dragTarget = event.currentTarget as HTMLElement | null;
+    dragTarget?.setPointerCapture(pointerId);
+
+    const onPointerMove = (moveEvent: PointerEvent): void => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      const next = clampDialogPosition(
+        startLeft + deltaX,
+        startTop + deltaY,
+        dialogWidthPx,
+        dialogHeightPx,
+        window.innerWidth,
+        window.innerHeight,
+      );
+      dialogLeftPx = next.left;
+      dialogTopPx = next.top;
+    };
+
+    const onPointerEnd = (): void => {
+      isDragging = false;
+      dragTarget?.releasePointerCapture(pointerId);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerEnd);
+      window.removeEventListener("pointercancel", onPointerEnd);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerEnd);
+    window.addEventListener("pointercancel", onPointerEnd);
   }
 
   function handleResizeStart(event: PointerEvent): void {
@@ -355,6 +460,8 @@
       selectedConnectionId = snapshot.settings.providerSettings.defaultConnectionId ?? httpConnections()[0]?.id ?? null;
       if (!sizeInitialized) {
         void measureAndApplyInitialSize();
+      } else if (positionInitialized) {
+        syncDialogBoundsToViewport();
       }
     }
     wasOpen = open;
@@ -375,8 +482,6 @@
       return;
     }
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     queueMicrotask(() => dialogEl?.focus());
 
     const onWindowKeydown = (event: KeyboardEvent): void => {
@@ -385,11 +490,16 @@
         onClose();
       }
     };
+    const onWindowResize = (): void => {
+      syncDialogBoundsToViewport();
+    };
+
     window.addEventListener("keydown", onWindowKeydown, true);
+    window.addEventListener("resize", onWindowResize);
 
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onWindowKeydown, true);
+      window.removeEventListener("resize", onWindowResize);
     };
   });
 </script>
@@ -577,24 +687,39 @@
       {:else}
         <div class="connection-list" role="listbox" aria-label="HTTP connections">
           {#each httpConnections() as connection (connection.id)}
-            <button
-              type="button"
+            <div
               class="connection-row"
               class:connection-row-active={connection.id === activeHttpConnection().id}
-              onclick={() => selectConnection(connection.id)}
+              role="option"
+              aria-selected={connection.id === activeHttpConnection().id}
             >
-              <span>{connection.label}</span>
-              {#if snapshot.settings.providerSettings.defaultConnectionId === connection.id}
-                <small>Default</small>
-              {/if}
-            </button>
+              <button
+                type="button"
+                class="connection-row-select"
+                onclick={() => selectConnection(connection.id)}
+              >
+                <span>{connection.label}</span>
+                {#if snapshot.settings.providerSettings.defaultConnectionId === connection.id}
+                  <small>Default</small>
+                {/if}
+              </button>
+              <button
+                type="button"
+                class="connection-row-remove settings-action settings-action-danger"
+                disabled={httpConnections().length <= 1}
+                aria-label={`Remove ${connection.label}`}
+                onclick={() => void confirmRemoveHttpConnection(connection.id)}
+              >
+                Remove
+              </button>
+            </div>
           {/each}
         </div>
       {/if}
     </div>
     {#if httpConnections().length > 0}
       {@const activeConnection = activeHttpConnection()}
-      <div class="settings-subsection">
+      <div class="settings-subsection settings-subsection-separated">
         <h4>Selected connection</h4>
         <label class="settings-field">
           <span>Label</span>
@@ -641,14 +766,6 @@
           />
           Use as default
         </label>
-        <button
-          type="button"
-          class="settings-action settings-action-danger"
-          disabled={httpConnections().length <= 1}
-          onclick={() => void removeHttpConnection(activeConnection.id)}
-        >
-          Remove connection
-        </button>
       </div>
       <div class="settings-subsection">
         <h4>Credentials</h4>
@@ -849,50 +966,49 @@
 {/snippet}
 
 {#if open}
-  <div
-    class="settings-dialog-backdrop"
-    role="presentation"
-    onclick={(event) => {
-      if (event.target === event.currentTarget) {
-        onClose();
-      }
-    }}
-  >
-    {#if !sizeInitialized}
-      <div class="settings-dialog-measure" aria-hidden="true">
-        <div bind:this={headerEl} class="settings-dialog-header settings-dialog-header-measure">
-          <h2 class="settings-dialog-title">Settings</h2>
-        </div>
-        {#each SETTINGS_TABS as tab (tab.id)}
-          <div
-            class="settings-dialog-body settings-dialog-body-measure"
-            bind:this={tabMeasureEls[tab.id]}
-          >
-            {@render settingsPanel(tab.id)}
-          </div>
-        {/each}
+  {#if !sizeInitialized}
+    <div class="settings-dialog-measure" aria-hidden="true">
+      <div bind:this={headerEl} class="settings-dialog-header settings-dialog-header-measure">
+        <h2 class="settings-dialog-title">Settings</h2>
       </div>
-    {/if}
+      {#each SETTINGS_TABS as tab (tab.id)}
+        <div
+          class="settings-dialog-body settings-dialog-body-measure"
+          bind:this={tabMeasureEls[tab.id]}
+        >
+          {@render settingsPanel(tab.id)}
+        </div>
+      {/each}
+    </div>
+  {/if}
 
-    <div
-      bind:this={dialogEl}
-      class="settings-dialog"
-      class:settings-dialog-resizing={isResizing}
-      class:settings-dialog-sizing={!sizeInitialized}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="settings-dialog-title"
-      tabindex="-1"
-      style={`width:${dialogWidthPx}px; height:${dialogHeightPx}px; min-width:${initialWidthPx}px; min-height:${initialHeightPx}px;`}
-      onkeydown={handleDialogKeydown}
-      onclick={(event) => event.stopPropagation()}
-    >
-      <header class="settings-dialog-header">
+  <div
+    bind:this={dialogEl}
+    class="settings-dialog"
+    class:settings-dialog-resizing={isResizing}
+    class:settings-dialog-dragging={isDragging}
+    class:settings-dialog-sizing={!sizeInitialized}
+    role="dialog"
+    aria-modal="false"
+    aria-labelledby="settings-dialog-title"
+    tabindex="-1"
+    style={`left:${dialogLeftPx}px; top:${dialogTopPx}px; width:${dialogWidthPx}px; height:${dialogHeightPx}px; min-width:${initialWidthPx}px; min-height:${initialHeightPx}px;`}
+    onkeydown={handleDialogKeydown}
+  >
+    <header class="settings-dialog-header">
+      <div
+        class="settings-dialog-drag-region"
+        role="button"
+        tabindex="-1"
+        aria-label="Drag to move settings window"
+        onpointerdown={handleDragStart}
+      >
         <h2 id="settings-dialog-title" class="settings-dialog-title">Settings</h2>
-        <button type="button" class="settings-dialog-close" aria-label="Close settings" onclick={onClose}>
-          ×
-        </button>
-      </header>
+      </div>
+      <button type="button" class="settings-dialog-close" aria-label="Close settings" onclick={onClose}>
+        ×
+      </button>
+    </header>
 
       <div class="settings-dialog-main">
         <div
@@ -946,7 +1062,6 @@
         aria-label="Resize settings dialog"
         onpointerdown={handleResizeStart}
       ></div>
-    </div>
   </div>
 {/if}
 
@@ -954,18 +1069,6 @@
   @import "../styles/settingsForm.css";
   @import "../styles/settingsFormMultiline.css";
   @import "../styles/settingsDialogForm.css";
-
-  .settings-dialog-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 1300;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-12);
-    background: color-mix(in srgb, var(--color-bg-root) 55%, transparent);
-    backdrop-filter: blur(4px);
-  }
 
   .settings-dialog-measure {
     position: fixed;
@@ -990,7 +1093,8 @@
   }
 
   .settings-dialog {
-    position: relative;
+    position: fixed;
+    z-index: 1300;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -1009,7 +1113,8 @@
     pointer-events: none;
   }
 
-  .settings-dialog-resizing {
+  .settings-dialog-resizing,
+  .settings-dialog-dragging {
     user-select: none;
   }
 
@@ -1021,6 +1126,23 @@
     padding: var(--space-12) var(--space-12) var(--space-8);
     border-bottom: 1px solid var(--color-border-subtle);
     flex-shrink: 0;
+  }
+
+  .settings-dialog-drag-region {
+    flex: 1;
+    min-width: 0;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .settings-dialog-dragging .settings-dialog-drag-region {
+    cursor: grabbing;
+  }
+
+  .settings-dialog-drag-region:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
+    border-radius: var(--radius-sm);
   }
 
   .settings-dialog-title {
@@ -1039,6 +1161,7 @@
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
+    touch-action: auto;
   }
 
   .settings-dialog-close:hover {
@@ -1145,6 +1268,12 @@
     opacity: 0.65;
   }
 
+  .settings-subsection-separated {
+    margin-top: var(--space-8);
+    padding-top: var(--space-8);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
   .connection-list {
     display: flex;
     flex-direction: column;
@@ -1157,18 +1286,44 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: var(--space-4);
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-sm);
     background: var(--color-surface-1);
     color: var(--color-text-primary);
-    padding: var(--space-4) var(--space-6);
-    cursor: pointer;
-    text-align: left;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-6);
   }
 
   .connection-row-active {
     border-color: var(--color-accent);
     background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-1));
+  }
+
+  .connection-row-select {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    border: none;
+    background: transparent;
+    color: inherit;
+    padding: var(--space-2) 0;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+  }
+
+  .connection-row-remove {
+    flex-shrink: 0;
+    padding: var(--space-2) var(--space-4);
+    font-size: 0.75rem;
+  }
+
+  .connection-row-remove:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .settings-action {

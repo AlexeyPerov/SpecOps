@@ -433,11 +433,6 @@
     if (activeScope !== CHAT_HTTP_CONTEXT_ID) {
       return;
     }
-    const sessionSnapshot = appState.getActiveSession();
-    const hasAgentTab = sessionSnapshot.openTabs.some((tab) => isAgentTab(tab));
-    if (hasAgentTab) {
-      return;
-    }
     let agentId = chatStore.getActiveAgentId();
     if (!agentId) {
       agentId = chatStore.createDraftAgent();
@@ -447,6 +442,13 @@
     }
     chatStore.setActiveAgentId(agentId);
     appState.setLastActiveAgentId(agentId);
+    const sessionSnapshot = appState.getActiveSession();
+    const selectedTab = sessionSnapshot.openTabs.find((tab) => tab.id === sessionSnapshot.selectedTabId);
+    const selectedMatchesChatAgent =
+      selectedTab && isAgentTab(selectedTab) && selectedTab.agentId === agentId;
+    if (selectedMatchesChatAgent) {
+      return;
+    }
     const fileTabIds = sessionSnapshot.openTabs
       .filter((tab) => isFileTab(tab))
       .map((tab) => tab.id);
@@ -913,7 +915,7 @@
   });
 
   $effect(() => {
-    if (!activeTab || !isAgentTab(activeTab)) {
+    if (!activeTab || !isAgentTab(activeTab) || isChatHttpActive) {
       return;
     }
     if (chatStore.getActiveAgentId() !== activeTab.agentId) {
@@ -974,6 +976,14 @@
   });
 
   $effect(() => {
+    if (!isChatHttpActive) {
+      return;
+    }
+    selectedAgentId;
+    ensureChatHttpAgentTab();
+  });
+
+  $effect(() => {
     if (activeContextId === CHAT_HTTP_CONTEXT_ID) {
       if (lastChatScopeKey !== CHAT_HTTP_CONTEXT_ID) {
         if (lastChatScopeKey !== null) {
@@ -981,9 +991,12 @@
         }
         lastChatScopeKey = CHAT_HTTP_CONTEXT_ID;
         chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-        void chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+        void chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID).then(() => {
+          ensureChatHttpAgentTab();
+        });
+      } else {
+        ensureChatHttpAgentTab();
       }
-      ensureChatHttpAgentTab();
       return;
     }
 

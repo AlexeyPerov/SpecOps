@@ -6,6 +6,7 @@
     getHttpMissingConfigCopy,
     getLocalInvalidModelBlockedCopy,
     PROVIDER_REQUEST_FAILURE_RECOVERY,
+    isComposerConfigurationError,
   } from "../ai/chatErrorCopy";
   import { WorkspaceAccessReason } from "../ai/capabilities";
   import {
@@ -78,11 +79,22 @@
   const activeModel = $derived.by(() => {
     metadata;
     providerModelCatalogs;
+    providerSettings;
     activeProvider;
-    return chatStore.getActiveChatModel(providerModelCatalogs);
+    activeConnectionId;
+    return chatStore.getActiveChatModel(providerModelCatalogs, providerSettings);
+  });
+  const modelCatalogContext = $derived({
+    providerSettings,
+    connectionId: activeConnectionId,
   });
   const localModelValidation = $derived(
-    validateLocalModelSelection(providerModelCatalogs, activeProvider, activeModel),
+    validateLocalModelSelection(
+      providerModelCatalogs,
+      activeProvider,
+      activeModel,
+      modelCatalogContext,
+    ),
   );
   const isModelSendBlocked = $derived(!localModelValidation.ok);
   const modelBlockedCopy = $derived(
@@ -190,6 +202,9 @@
     }
     if (message === accessBlockedCopy.message || message === accessState.message) {
       return accessState.recoveryHint ?? accessBlockedCopy.recoveryHint;
+    }
+    if (isComposerConfigurationError(message)) {
+      return "";
     }
     return PROVIDER_REQUEST_FAILURE_RECOVERY;
   }

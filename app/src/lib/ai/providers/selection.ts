@@ -10,9 +10,13 @@ import { listConfiguredHttpConnections, resolveHttpConnection } from "./httpConn
 import {
   getProviderDefaultModelId,
   getProviderModelCatalog,
-  isModelInProviderCatalog,
   normalizeProviderModelCatalogs,
 } from "./providerModelCatalog";
+import {
+  isModelInThreadCatalog,
+  resolveThreadCatalogDefaultModelId,
+  type ThreadModelCatalogContext,
+} from "./threadModelCatalog";
 
 export interface ChatProviderOption {
   id: ChatProviderId;
@@ -234,13 +238,14 @@ export function resolveProviderSwitchModelId(
   catalogs: ProviderModelCatalogs,
   toProvider: ChatProviderId,
   currentModelId: string | undefined,
+  context?: ThreadModelCatalogContext,
 ): string {
   const normalizedCatalogs = normalizeProviderModelCatalogs(catalogs);
   const trimmed = currentModelId?.trim();
-  if (trimmed && isModelInProviderCatalog(normalizedCatalogs, toProvider, trimmed)) {
+  if (trimmed && isModelInThreadCatalog(normalizedCatalogs, toProvider, trimmed, context)) {
     return trimmed;
   }
-  return getProviderDefaultModelId(normalizedCatalogs, toProvider);
+  return resolveThreadCatalogDefaultModelId(normalizedCatalogs, toProvider, context);
 }
 
 export function canSelectChatProvider(

@@ -231,8 +231,24 @@ export function createAgentsSlice(deps: {
 
       update((state) => {
         const existing = state.workspaces[normalizedRootPath];
+        const persistedIds = new Set(index.agents.map((entry) => entry.id));
+        const sessionDrafts = (existing?.agentIndex ?? []).filter(
+          (entry) => entry.isDraft && !persistedIds.has(entry.id),
+        );
+        const mergedIndex = [...index.agents, ...sessionDrafts];
+        const mergedIds = new Set(mergedIndex.map((entry) => entry.id));
+        const mergedThreadsByAgentId = { ...threadsByAgentId };
+        const mergedRuntimeByAgentId = { ...(existing?.runtimeByAgentId ?? {}) };
+        for (const draft of sessionDrafts) {
+          if (existing?.threadsByAgentId[draft.id]) {
+            mergedThreadsByAgentId[draft.id] = existing.threadsByAgentId[draft.id];
+          }
+          if (existing?.runtimeByAgentId[draft.id]) {
+            mergedRuntimeByAgentId[draft.id] = existing.runtimeByAgentId[draft.id];
+          }
+        }
         const activeAgentIdValue =
-          existing?.activeAgentId && index.agents.some((entry) => entry.id === existing.activeAgentId)
+          existing?.activeAgentId && mergedIds.has(existing.activeAgentId)
             ? existing.activeAgentId
             : null;
 
@@ -242,9 +258,9 @@ export function createAgentsSlice(deps: {
             ...state.workspaces,
             [normalizedRootPath]: {
               activeAgentId: activeAgentIdValue,
-              agentIndex: index.agents,
-              threadsByAgentId,
-              runtimeByAgentId: existing?.runtimeByAgentId ?? {},
+              agentIndex: mergedIndex,
+              threadsByAgentId: mergedThreadsByAgentId,
+              runtimeByAgentId: mergedRuntimeByAgentId,
             },
           },
         };

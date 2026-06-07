@@ -290,4 +290,31 @@ describe("chat provider selection", () => {
       resolveProviderSwitchModelId(defaultProviderModelCatalogs, "http", "gpt-4o-mini"),
     ).toBe("gpt-4o-mini");
   });
+
+  it("uses HTTP connection catalog defaults when switching providers", () => {
+    const settings = {
+      ...providerSettingsWithDebugEnabled(false),
+      httpConnections: [
+        {
+          ...defaultHttpConnection,
+          id: "conn-glm",
+          label: "GLM",
+          enabled: true,
+          modelCatalog: {
+            modelIds: ["GLM-4.7"],
+            defaultModelId: "GLM-4.7",
+          },
+        },
+      ],
+    };
+
+    expect(
+      resolveProviderSwitchModelId(
+        defaultProviderModelCatalogs,
+        "http",
+        "debug-simulator",
+        { providerSettings: settings, connectionId: "conn-glm" },
+      ),
+    ).toBe("GLM-4.7");
+  });
 });

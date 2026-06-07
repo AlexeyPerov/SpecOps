@@ -17,15 +17,20 @@ import { compactChatThread } from "../../services/chatRetention";
 import { draftEntryTitleForScope } from "../../services/chatAgents";
 import { resolveEffectiveThreadModelId } from "../../ai/providers/capabilityChecker";
 import {
+  logChatConnectionSwitch,
+  logChatModelSwitch,
+  logChatProviderSwitch,
+} from "../../ai/chatDiagnostics";
+import {
   formatModelSwitchNotice,
   formatProviderSwitchNotice,
   resolveProviderSwitchModelId,
 } from "../../ai/providers/selection";
 import {
   getProviderDefaultModelId,
-  isModelInProviderCatalog,
   normalizeProviderModelCatalogs,
 } from "../../ai/providers/providerModelCatalog";
+import { isModelInThreadCatalog, resolveComposerModelId } from "../../ai/providers/threadModelCatalog";
 import { resolveHttpConnection } from "../../ai/providers/httpConnectionSettings";
 import { stubCapabilityChecker } from "./access";
 import type {
@@ -107,6 +112,19 @@ export function createThreadsSlice(deps: {
       ...patch,
       mode: patch.mode ? normalizeModeForScope(patch.mode, scopeKey) : patch.mode,
     };
+  }
+
+  function resolveOrEnsureTargetAgentId(agentId?: string): string | null {
+    const existing = resolveTargetAgentId(getSnapshot(), agentId);
+    if (existing) {
+      return existing;
+    }
+    const ensured = ensureActiveAgent(getSnapshot());
+    if (!ensured) {
+      return null;
+    }
+    update(() => ensured.state);
+    return ensured.agentId;
   }
 
   return {
@@ -457,14 +475,26 @@ export function createThreadsSlice(deps: {
       }
       return coerceProviderForScope(raw, root);
     },
-    getActiveChatModel(providerModelCatalogs: ProviderModelCatalogs, agentId?: string): string {
+    getActiveChatModel(
+      providerModelCatalogs: ProviderModelCatalogs,
+      providerSettings?: import("../../domain/contracts").AppProviderSettings,
+      agentId?: string,
+    ): string {
       const providerId = this.getActiveChatProvider(agentId);
-      const normalizedCatalogs = normalizeProviderModelCatalogs(providerModelCatalogs);
       const thread = this.getActiveThreadSnapshot(agentId);
-      if (thread) {
-        return resolveEffectiveThreadModelId(thread, normalizedCatalogs);
+      if (!providerSettings) {
+        return getProviderDefaultModelId(
+          normalizeProviderModelCatalogs(providerModelCatalogs),
+          providerId,
+        );
       }
-      return getProviderDefaultModelId(normalizedCatalogs, providerId);
+      return resolveComposerModelId({
+        thread,
+        providerId,
+        providerSettings,
+        providerModelCatalogs,
+        connectionId: thread?.metadata.connectionId,
+      });
     },
     hasThread(agentId?: string): boolean {
       return this.getMetadata(agentId) !== null;
@@ -482,7 +512,7 @@ export function createThreadsSlice(deps: {
         return { switched: false, message: "Open Chat and select a chat to switch providers." };
       }
 
-      const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
+      const targetAgentId = resolveOrEnsureTargetAgentId(agentId);
       if (!targetAgentId) {
         return { switched: false, message: "Select an agent to switch providers." };
       }
@@ -511,15 +541,14 @@ export function createThreadsSlice(deps: {
       }
 
       const normalizedCatalogs = normalizeProviderModelCatalogs(options.providerModelCatalogs);
+      const catalogContext = {
+        providerSettings: options.providerSettings,
+        connectionId: metadata?.connectionId,
+      };
       const currentThread = this.getActiveThreadSnapshot(targetAgentId);
       const currentModelId = currentThread
-        ? resolveEffectiveThreadModelId(currentThread, normalizedCatalogs)
+        ? resolveEffectiveThreadModelId(currentThread, normalizedCatalogs, catalogContext)
         : metadata?.selectedModelId;
-      const nextSelectedModelId = resolveProviderSwitchModelId(
-        normalizedCatalogs,
-        nextProvider,
-        currentModelId,
-      );
       const resolvedConnectionId =
         nextProvider === "http"
           ? resolveHttpConnection(
@@ -528,6 +557,17 @@ export function createThreadsSlice(deps: {
               metadata?.connectionId,
             )?.connection.id
           : undefined;
+      const nextSelectedModelId = resolveProviderSwitchModelId(
+        normalizedCatalogs,
+        nextProvider,
+        currentModelId,
+        nextProvider === "http"
+          ? {
+              providerSettings: options.providerSettings,
+              connectionId: resolvedConnectionId,
+            }
+          : undefined,
+      );
 
       const capabilityResult = await resolveCapabilityChecker().checkCapabilities({
         provider: nextProvider,
@@ -601,6 +641,15 @@ export function createThreadsSlice(deps: {
         });
       });
 
+      logChatProviderSwitch({
+        agentId: targetAgentId,
+        fromProvider,
+        toProvider: nextProvider,
+        connectionId: resolvedConnectionId,
+        modelId: nextSelectedModelId,
+        switched,
+        reason: switched ? undefined : "thread update failed",
+      });
       return { switched };
     },
     switchThreadConnection(
@@ -612,7 +661,7 @@ export function createThreadsSlice(deps: {
       if (!root) {
         return { switched: false, message: "Open Chat and select a chat to switch connections." };
       }
-      const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
+      const targetAgentId = resolveOrEnsureTargetAgentId(agentId);
       if (!targetAgentId) {
         return { switched: false, message: "Select a chat to switch connections." };
       }
@@ -649,18 +698,25 @@ export function createThreadsSlice(deps: {
           return state;
         }
         const thread = workspace.threadsByAgentId[targetAgentId];
-        if (!thread) {
-          return state;
-        }
+        const baseThread =
+          thread ??
+          ({
+            metadata: applyMetadataPatch(
+              createThreadMetadata(targetAgentId, updatedAt),
+              { provider: "http", connectionId: trimmedConnectionId, selectedModelId: nextModelId },
+              updatedAt,
+            ),
+            messages: [],
+          } satisfies ChatThreadSnapshot);
         switched = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
           threadsByAgentId: {
             ...workspace.threadsByAgentId,
             [targetAgentId]: {
-              ...thread,
+              ...baseThread,
               metadata: applyMetadataPatch(
-                thread.metadata,
+                baseThread.metadata,
                 { connectionId: trimmedConnectionId, selectedModelId: nextModelId },
                 updatedAt,
               ),
@@ -671,6 +727,14 @@ export function createThreadsSlice(deps: {
             [targetAgentId]: defaultRuntimeState(),
           },
         });
+      });
+      logChatConnectionSwitch({
+        agentId: targetAgentId,
+        fromConnectionId: metadata.connectionId ?? null,
+        toConnectionId: trimmedConnectionId,
+        modelId: nextModelId,
+        switched,
+        reason: switched ? undefined : "thread update failed",
       });
       return { switched };
     },
@@ -684,7 +748,7 @@ export function createThreadsSlice(deps: {
         return { switched: false, message: "Open Chat and select a chat to switch models." };
       }
 
-      const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
+      const targetAgentId = resolveOrEnsureTargetAgentId(agentId);
       if (!targetAgentId) {
         return { switched: false, message: "Select an agent to switch models." };
       }
@@ -702,8 +766,21 @@ export function createThreadsSlice(deps: {
       }
 
       const providerId = this.getActiveChatProvider(targetAgentId);
+      const metadata = this.getMetadata(targetAgentId);
       const normalizedCatalogs = normalizeProviderModelCatalogs(options.providerModelCatalogs);
-      if (!isModelInProviderCatalog(normalizedCatalogs, providerId, trimmedModelId)) {
+      const catalogContext = {
+        providerSettings: options.providerSettings,
+        connectionId: metadata?.connectionId,
+      };
+      if (!isModelInThreadCatalog(normalizedCatalogs, providerId, trimmedModelId, catalogContext)) {
+        logChatModelSwitch({
+          agentId: targetAgentId,
+          providerId,
+          connectionId: metadata?.connectionId,
+          toModel: trimmedModelId,
+          switched: false,
+          reason: "model not in thread catalog",
+        });
         return {
           switched: false,
           message: "That model is not configured for the active provider.",
@@ -712,7 +789,7 @@ export function createThreadsSlice(deps: {
 
       const currentThread = this.getActiveThreadSnapshot(targetAgentId);
       const fromModel = currentThread
-        ? resolveEffectiveThreadModelId(currentThread, normalizedCatalogs)
+        ? resolveEffectiveThreadModelId(currentThread, normalizedCatalogs, catalogContext)
         : null;
       if (fromModel === trimmedModelId) {
         return { switched: false };
@@ -772,6 +849,15 @@ export function createThreadsSlice(deps: {
         });
       });
 
+      logChatModelSwitch({
+        agentId: targetAgentId,
+        providerId,
+        connectionId: metadata?.connectionId,
+        fromModel,
+        toModel: trimmedModelId,
+        switched,
+        reason: switched ? undefined : "thread update failed",
+      });
       return { switched };
     },
   };

@@ -84,5 +84,6 @@ export interface ChatProviderSwitchOptions {
 }
 
 export interface ChatModelSwitchOptions {
+  providerSettings: import("../../domain/contracts").AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
 }

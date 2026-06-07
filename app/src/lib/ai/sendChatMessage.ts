@@ -15,15 +15,19 @@ import {
   isHttpProviderSendBlocked,
 } from "./providers/httpConnectionSettings";
 import {
-  resolveEffectiveThreadModelId,
   validateLocalModelSelection,
 } from "./providers/capabilityChecker";
-import { getProviderDefaultModelId, normalizeProviderModelCatalogs } from "./providers/providerModelCatalog";
+import { resolveComposerModelId } from "./providers/threadModelCatalog";
 import { getChatProvider } from "./providers/registry";
 import type { ChatProvider, ProviderSendRequest } from "./providers/types";
 import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
 import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import {
+  logChatSendComplete,
+  logChatSendFailed,
+  logChatSendStart,
+} from "./chatDiagnostics";
 import { isChatProviderError, streamProviderMessage } from "./chatSend";
 import type { WorkspaceAccessStatus } from "../ai/capabilities";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
@@ -245,16 +249,22 @@ async function validateProviderSend(
   }
 
   const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
-  const modelId = thread
-    ? resolveEffectiveThreadModelId(thread, appSettings.providerModelCatalogs)
-    : getProviderDefaultModelId(
-        normalizeProviderModelCatalogs(appSettings.providerModelCatalogs),
-        providerId,
-      );
+  const catalogContext = {
+    providerSettings: appSettings.providerSettings,
+    connectionId: resolvedConnection?.connection.id ?? chatStore.getMetadata(activeAgentId)?.connectionId,
+  };
+  const modelId = resolveComposerModelId({
+    thread,
+    providerId,
+    providerSettings: appSettings.providerSettings,
+    providerModelCatalogs: appSettings.providerModelCatalogs,
+    connectionId: catalogContext.connectionId,
+  });
   const localModelValidation = validateLocalModelSelection(
     appSettings.providerModelCatalogs,
     providerId,
     modelId,
+    catalogContext,
   );
   if (!localModelValidation.ok) {
     return {
@@ -339,6 +349,18 @@ async function executeProviderTurn(params: {
   chatStore.appendMessage(assistantMessage, { agentId: activeAgentId, skipCompaction: true });
   const usesStreamingProvider = Boolean(provider.streamMessage);
   let hasScheduledStreamingPersistence = false;
+  const startedAt = Date.now();
+  const providerId = chatStore.getActiveChatProvider(activeAgentId);
+
+  logChatSendStart({
+    agentId: activeAgentId,
+    turnId,
+    providerId,
+    connectionId,
+    modelId,
+    mode: thread.metadata.mode,
+    retry: Boolean(previousError),
+  });
 
   try {
     const finalContent = await streamProviderMessage(provider, request, (_delta, accumulated) => {
@@ -357,9 +379,28 @@ async function executeProviderTurn(params: {
     chatStore.compactActiveThread(activeAgentId);
     chatStore.completeTurn(activeAgentId, root);
     persistAgentThreadOnce(root, activeAgentId);
+    logChatSendComplete({
+      agentId: activeAgentId,
+      turnId,
+      providerId,
+      connectionId,
+      modelId,
+      durationMs: Date.now() - startedAt,
+      contentLength: finalContent.length,
+    });
     return { ok: true, turnId, assistantMessageId: assistantMessage.id, agentId: activeAgentId };
   } catch (error) {
     if (isTurnCancelledError(error)) {
+      logChatSendFailed({
+        agentId: activeAgentId,
+        turnId,
+        providerId,
+        connectionId,
+        modelId,
+        durationMs: Date.now() - startedAt,
+        reason: "turn cancelled",
+        cancelled: true,
+      });
       return {
         ok: false,
         reason: "generating",
@@ -375,6 +416,15 @@ async function executeProviderTurn(params: {
       : sanitizeUnexpectedProviderError(error);
     chatStore.failTurn({ message, code: "provider_error" }, turnId, activeAgentId, root);
     persistAgentThreadOnce(root, activeAgentId);
+    logChatSendFailed({
+      agentId: activeAgentId,
+      turnId,
+      providerId,
+      connectionId,
+      modelId,
+      durationMs: Date.now() - startedAt,
+      reason: message,
+    });
     return { ok: false, reason: "provider_error", message };
   }
 }

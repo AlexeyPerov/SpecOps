@@ -24,6 +24,7 @@ import {
   getDebugProviderDisabledCopy,
   getHttpMissingConfigCopy,
   getLocalInvalidModelBlockedCopy,
+  isComposerConfigurationError,
   getModeUnsupportedMessage,
   getModeUnsupportedRecovery,
   sanitizeUnexpectedProviderError,
@@ -72,6 +73,11 @@ describe("chatErrorCopy", () => {
     const stackError = new Error("TypeError: boom\n    at Object.<anonymous> (/tmp/x.js:1:1)");
     expect(sanitizeUnexpectedProviderError(stackError)).toBe(PROVIDER_REQUEST_FAILURE_MESSAGE);
     expect(sanitizeUnexpectedProviderError("not an error")).toBe(PROVIDER_REQUEST_FAILURE_MESSAGE);
+  });
+
+  it("identifies composer configuration errors", () => {
+    expect(isComposerConfigurationError("Select an agent to switch models.")).toBe(true);
+    expect(isComposerConfigurationError("The assistant could not finish this response.")).toBe(false);
   });
 
   it("returns stream and auth specific recovery hints", () => {

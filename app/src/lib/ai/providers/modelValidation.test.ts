@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ChatThreadSnapshot } from "../../domain/contracts";
 import { ChatProviderError } from "./errors";
+import { defaultHttpConnection } from "./httpConnectionSettings";
+import { defaultAppProviderSettings } from "./appProviderSettings";
 import {
   isProviderModelRejectionMessage,
   mapProviderModelRuntimeError,
@@ -40,6 +42,30 @@ describe("resolveEffectiveThreadModelId", () => {
       "gpt-4o-mini",
     );
   });
+
+  it("uses HTTP connection catalog default when provider settings are provided", () => {
+    const settings = {
+      ...defaultAppProviderSettings,
+      httpConnections: [
+        {
+          ...defaultHttpConnection,
+          id: "conn-glm",
+          label: "GLM",
+          enabled: true,
+          modelCatalog: {
+            modelIds: ["GLM-4.7"],
+            defaultModelId: "GLM-4.7",
+          },
+        },
+      ],
+    };
+
+    expect(
+      resolveEffectiveThreadModelId(threadSnapshot({ connectionId: "conn-glm" }), defaultProviderModelCatalogs, {
+        providerSettings: settings,
+      }),
+    ).toBe("GLM-4.7");
+  });
 });
 
 describe("validateLocalModelSelection", () => {
@@ -67,6 +93,33 @@ describe("validateLocalModelSelection", () => {
       expect(result.message).toContain("unknown-model");
       expect(result.recoveryHint).toContain("Settings");
     }
+  });
+
+  it("accepts models present in the active HTTP connection catalog", () => {
+    const settings = {
+      ...defaultAppProviderSettings,
+      httpConnections: [
+        {
+          ...defaultHttpConnection,
+          id: "conn-glm",
+          label: "GLM",
+          enabled: true,
+          modelCatalog: {
+            modelIds: ["GLM-4.7"],
+            defaultModelId: "GLM-4.7",
+          },
+        },
+      ],
+    };
+
+    expect(
+      validateLocalModelSelection(
+        defaultProviderModelCatalogs,
+        "http",
+        "GLM-4.7",
+        { providerSettings: settings, connectionId: "conn-glm" },
+      ),
+    ).toEqual({ ok: true, modelId: "GLM-4.7" });
   });
 });
 

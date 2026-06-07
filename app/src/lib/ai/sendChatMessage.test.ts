@@ -10,6 +10,10 @@ import {
 } from "./providers/debugProviderTestHelpers";
 import { createOpenAiCompatibleChatProvider } from "./providers/openAiCompatibleChatProvider";
 import {
+  DEFAULT_HTTP_CONNECTION_ID,
+  resolveHttpConnection,
+} from "./providers/httpConnectionSettings";
+import {
   registerChatProvider,
   resetChatProviderRegistryForTests,
 } from "./providers/registry";
@@ -841,6 +845,65 @@ describe("sendChatMessage", () => {
     expect(chatStore.getMessages()).toHaveLength(0);
   });
 
+  it("uses connection catalog default when sending before a thread exists", async () => {
+    resetChatProviderRegistryForTests();
+    chatStore.reset();
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    chatStore.createDraftAgent();
+    appState.updateHttpConnection(DEFAULT_HTTP_CONNECTION_ID, {
+      enabled: true,
+      modelCatalog: {
+        modelIds: ["GLM-4.5-Air"],
+        defaultModelId: "GLM-4.5-Air",
+      },
+    });
+    appState.setProviderApiKey(DEFAULT_HTTP_CONNECTION_ID, "http-test-key");
+    const httpFetch = httpFetchStreamSuccess("Hello from GLM");
+    registerChatProvider(
+      createOpenAiCompatibleChatProvider(
+        (connectionId) => {
+          const snapshot = appState.getSnapshot().settings;
+          const resolved = resolveHttpConnection(
+            snapshot.providerSettings,
+            snapshot.providerApiKeys,
+            connectionId,
+          );
+          return {
+            settings: resolved?.connection ?? snapshot.providerSettings.http,
+            apiKey: resolved?.apiKey ?? "http-test-key",
+          };
+        },
+        httpFetch,
+      ),
+    );
+    chatStore.setCapabilityChecker(
+      createRegistryCapabilityChecker(
+        () => appState.getSnapshot().settings.providerSettings,
+        () => ({
+          settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+          apiKey: "http-test-key",
+        }),
+      ),
+    );
+    chatStore.updateThreadMetadata({
+      provider: "http",
+      mode: "ask",
+      connectionId: DEFAULT_HTTP_CONNECTION_ID,
+    });
+
+    const sendPromise = sendChatMessage("Hello", undefined, { chatContextKind: "chat-http" });
+    await vi.runAllTimersAsync();
+    const result = await sendPromise;
+
+    expect(result.ok).toBe(true);
+    expect(httpFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"model":"GLM-4.5-Air"'),
+      }),
+    );
+  });
+
   it("passes the resolved thread model id to the provider adapter", async () => {
     resetChatProviderRegistryForTests();
     const debugProvider = createTestDebugWorkspaceProvider();
@@ -872,8 +935,14 @@ describe("sendChatMessage", () => {
 
   it("maps HTTP provider model rejection to invalid-model copy", async () => {
     resetChatProviderRegistryForTests();
-    appState.updateHttpConnectionSettings({ enabled: true });
-    appState.setProviderApiKey("http", "http-test-key");
+    appState.updateHttpConnection(DEFAULT_HTTP_CONNECTION_ID, {
+      enabled: true,
+      modelCatalog: {
+        modelIds: ["gpt-4o-mini"],
+        defaultModelId: "gpt-4o-mini",
+      },
+    });
+    appState.setProviderApiKey(DEFAULT_HTTP_CONNECTION_ID, "http-test-key");
     const httpFetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { message: "Model not found" } }), { status: 404 }),
     );
@@ -895,7 +964,12 @@ describe("sendChatMessage", () => {
         }),
       ),
     );
-    chatStore.updateThreadMetadata({ provider: "http", mode: "ask", selectedModelId: "gpt-4o-mini" });
+    chatStore.updateThreadMetadata({
+      provider: "http",
+      mode: "ask",
+      selectedModelId: "gpt-4o-mini",
+      connectionId: DEFAULT_HTTP_CONNECTION_ID,
+    });
 
     const sendPromise = sendChatMessage("Bad model");
     await vi.runAllTimersAsync();

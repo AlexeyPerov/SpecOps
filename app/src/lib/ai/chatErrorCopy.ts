@@ -278,3 +278,21 @@ export function getProviderErrorRecoveryHint(message: string): string {
   }
   return PROVIDER_REQUEST_FAILURE_RECOVERY;
 }
+
+const COMPOSER_CONFIGURATION_ERROR_PATTERNS = [
+  /switch models/i,
+  /switch connections/i,
+  /switch providers/i,
+  /select a chat/i,
+  /select an agent/i,
+  /choose a model/i,
+  /choose a configured connection/i,
+] as const;
+
+export function isComposerConfigurationError(message: string): boolean {
+  const normalized = message.trim();
+  if (!normalized) {
+    return false;
+  }
+  return COMPOSER_CONFIGURATION_ERROR_PATTERNS.some((pattern) => pattern.test(normalized));
+}

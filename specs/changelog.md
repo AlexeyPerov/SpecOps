@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-07
+
+- **Chat-http send + workspace switch freeze.** Fixed chat-http sends going to a draft agent while the UI still followed a stale workspace agent tab (`$effect` tab sync now skips chat-http). `ensureChatHttpAgentTab` always focuses the active chat agent instead of bailing when any agent tab exists. `switchThreadConnection` now creates a thread for draft agents so composer connection fallback cannot spin forever.
+- **Chat-http empty-state and model selection.** Fixed blank model dropdown on chat open by resolving composer models from the active HTTP connection catalog (not global defaults). Model/connection/provider switches now ensure a draft agent exists; `loadWorkspaceAgents` preserves in-memory session drafts across async disk loads; chat-http init waits for agent index load before creating tabs. Composer silently initializes default model metadata; configuration switch errors no longer show misleading “Tap Retry” hints.
+- **Chat diagnostics and connection model validation.** Added structured chat diagnostics logging (provider/connection/model switches, send lifecycle, HTTP request/response/stream events) to the app console and Tauri log via `chatDiagnostics.ts`. Fixed HTTP model validation to use per-connection catalogs for send blocking, active model resolution, provider/model switching, and composer model lists instead of the legacy global `providerModelCatalogs.http` slot.
+- **Settings → Providers layout.** Added spacing and a divider above **Selected connection**, and moved **Remove** onto each provider row in the connection list with a confirmation dialog before deletion.
+- **Settings dialog as floating window.** Reworked `SettingsDialog` from a centered modal with backdrop dismiss into a draggable, resizable floating panel: no dimmed overlay, clicks pass through to the app behind it, position and size persist for the session, and Escape / the close button still dismiss it. Added `settingsDialogGeometry` helpers for viewport clamping.
+
 ## 2026-06-06
 
 - **2026-06-07 09:58 (UTC+3) — M4 task 7 completed (tests, validation, docs, milestone closeout).** Added focused resolver/configuration unit coverage for HTTP multi-connection helpers (`resolveHttpConnection`, configured-connection filtering, and legacy key fallback), verified full suite with `npm test` and `npm run check`, and marked phase-2 M4 execution/task checklists complete in `execution-plan-m4-multiple-providers.md` and `phase-2.md`.

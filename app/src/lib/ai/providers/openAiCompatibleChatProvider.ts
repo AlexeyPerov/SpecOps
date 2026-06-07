@@ -16,6 +16,12 @@ import {
   normalizeHttpConnectionSettings,
 } from "./httpConnectionSettings";
 import { mapProviderModelRuntimeError, shouldMapProviderModelRejection } from "./modelValidation";
+import {
+  logChatHttpError,
+  logChatHttpRequest,
+  logChatHttpResponse,
+  logChatHttpStreamEnd,
+} from "../chatDiagnostics";
 import { buildOpenAiChatMessages } from "./openAiChatMessages";
 import { parseOpenAiSseStream } from "./openAiSseParser";
 import type {
@@ -105,6 +111,15 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     const modelId = resolveRuntimeModelId(request.modelId);
     const messages = buildOpenAiChatMessages(request.payload);
     const url = resolveHttpChatCompletionsUrl(normalized.baseUrl);
+    const startedAt = Date.now();
+
+    logChatHttpRequest({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      url,
+      modelId,
+      stream: false,
+    });
 
     let response: Response;
     try {
@@ -122,8 +137,26 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
         }),
       });
     } catch (error) {
+      logChatHttpError({
+        turnId: request.turnKey,
+        connectionId: request.connectionId,
+        modelId,
+        stream: false,
+        message: error instanceof Error ? error.message : "Network request failed",
+        durationMs: Date.now() - startedAt,
+      });
       throw mapHttpNetworkError(error);
     }
+
+    logChatHttpResponse({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      url,
+      modelId,
+      stream: false,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+    });
 
     const rawBody = await response.text();
     if (!response.ok) {
@@ -166,6 +199,15 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     const modelId = resolveRuntimeModelId(request.modelId);
     const messages = buildOpenAiChatMessages(request.payload);
     const url = resolveHttpChatCompletionsUrl(normalized.baseUrl);
+    const startedAt = Date.now();
+
+    logChatHttpRequest({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      url,
+      modelId,
+      stream: true,
+    });
 
     let response: Response;
     try {
@@ -184,8 +226,26 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
         }),
       });
     } catch (error) {
+      logChatHttpError({
+        turnId: request.turnKey,
+        connectionId: request.connectionId,
+        modelId,
+        stream: true,
+        message: error instanceof Error ? error.message : "Network request failed",
+        durationMs: Date.now() - startedAt,
+      });
       throw mapHttpNetworkError(error);
     }
+
+    logChatHttpResponse({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      url,
+      modelId,
+      stream: true,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+    });
 
     if (!response.ok) {
       throw mapHttpError(response.status, await response.text(), modelId);
@@ -198,9 +258,31 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
       );
     }
 
-    for await (const delta of parseOpenAiSseStream(response.body)) {
-      yield { delta };
+    let deltaCount = 0;
+    try {
+      for await (const delta of parseOpenAiSseStream(response.body)) {
+        deltaCount += 1;
+        yield { delta };
+      }
+    } catch (error) {
+      logChatHttpError({
+        turnId: request.turnKey,
+        connectionId: request.connectionId,
+        modelId,
+        stream: true,
+        message: error instanceof Error ? error.message : String(error),
+        durationMs: Date.now() - startedAt,
+      });
+      throw error;
     }
+
+    logChatHttpStreamEnd({
+      turnId: request.turnKey,
+      connectionId: request.connectionId,
+      modelId,
+      durationMs: Date.now() - startedAt,
+      deltaCount,
+    });
   }
 
   private assertConfigured(settings: HttpConnectionSettings, apiKey: string): void {

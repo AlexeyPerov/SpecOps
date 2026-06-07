@@ -22,7 +22,7 @@ import {
 } from "../ai/providers/debugProviderTestHelpers";
 import { appState } from "./appState";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
-import { defaultHttpConnectionSettings } from "../ai/providers/httpConnectionSettings";
+import { defaultHttpConnectionSettings, DEFAULT_HTTP_CONNECTION_ID } from "../ai/providers/httpConnectionSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import {
   registerChatProvider,
@@ -303,6 +303,24 @@ describe("chatStore", () => {
     expect(chatStore.isEmpty()).toBe(true);
     expect(chatStore.getMessages()).toEqual([]);
     expect(chatStore.getMetadata()).toBeNull();
+  });
+
+  it("preserves in-memory session draft agents when disk index is empty", async () => {
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      agents: [],
+    });
+
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    const draftId = chatStore.createDraftAgent();
+    expect(draftId).toBeTruthy();
+
+    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+
+    expect(chatStore.getActiveAgentId()).toBe(draftId);
+    expect(chatStore.getAgentIndex().some((entry) => entry.id === draftId && entry.isDraft)).toBe(
+      true,
+    );
   });
 
   it("scopes chat-http agents separately from workspace agents", async () => {
@@ -912,7 +930,12 @@ describe("chatStore model switching", () => {
         defaultModelId: "gpt-4o-mini",
       },
     };
+    appState.updateHttpConnection(DEFAULT_HTTP_CONNECTION_ID, {
+      modelCatalog: catalogs.http,
+    });
+    chatStore.updateThreadMetadata({ connectionId: DEFAULT_HTTP_CONNECTION_ID });
     const result = await chatStore.switchThreadModel("gpt-4.1", {
+      providerSettings: appState.getSnapshot().settings.providerSettings,
       providerModelCatalogs: catalogs,
     });
 
@@ -940,11 +963,60 @@ describe("chatStore model switching", () => {
     };
 
     const result = await chatStore.switchThreadModel("gpt-4.1", {
+      providerSettings: appState.getSnapshot().settings.providerSettings,
       providerModelCatalogs: catalogs,
     });
 
     expect(result.switched).toBe(false);
     expect(chatStore.getMetadata()?.selectedModelId).toBeUndefined();
+  });
+
+  it("creates a draft agent when switching models without an active agent", async () => {
+    chatStore.reset();
+    resetChatProviderRegistryForTests();
+    chatStore.setCapabilityChecker(createTestCapabilityChecker());
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+
+    const catalogs = {
+      ...defaultProviderModelCatalogs,
+      http: {
+        modelIds: ["GLM-4.5-Air"],
+        defaultModelId: "GLM-4.5-Air",
+      },
+    };
+    appState.updateHttpConnection(DEFAULT_HTTP_CONNECTION_ID, {
+      modelCatalog: catalogs.http,
+    });
+
+    expect(chatStore.getActiveAgentId()).toBeNull();
+
+    const result = await chatStore.switchThreadModel("GLM-4.5-Air", {
+      providerSettings: appState.getSnapshot().settings.providerSettings,
+      providerModelCatalogs: catalogs,
+    });
+
+    expect(result.switched).toBe(true);
+    expect(chatStore.getActiveAgentId()).not.toBeNull();
+    expect(chatStore.getMetadata()?.selectedModelId).toBe("GLM-4.5-Air");
+  });
+
+  it("uses connection catalog default in getActiveChatModel before a thread exists", () => {
+    chatStore.reset();
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    chatStore.createDraftAgent();
+    appState.updateHttpConnection(DEFAULT_HTTP_CONNECTION_ID, {
+      modelCatalog: {
+        modelIds: ["GLM-4.5-Air"],
+        defaultModelId: "GLM-4.5-Air",
+      },
+    });
+
+    expect(
+      chatStore.getActiveChatModel(
+        defaultProviderModelCatalogs,
+        appState.getSnapshot().settings.providerSettings,
+      ),
+    ).toBe("GLM-4.5-Air");
   });
 
   it("falls back to target provider default when switching providers", async () => {

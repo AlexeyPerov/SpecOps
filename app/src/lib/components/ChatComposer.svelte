@@ -15,6 +15,7 @@
     ProviderModelCatalogs,
   } from "../domain/contracts";
   import { chatStore } from "../state/chatStore";
+  import { resolveComposerModelId } from "../ai/providers/threadModelCatalog";
   import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 
   interface ComposerError {
@@ -164,6 +165,38 @@
     }
   });
 
+  $effect(() => {
+    activeModel;
+    availableModels;
+    activeProvider;
+    activeConnectionId;
+    providerSettings;
+    providerModelCatalogs;
+    if (isModelSelectionDisabled) {
+      return;
+    }
+    const agentId = chatStore.getActiveAgentId();
+    if (!agentId) {
+      return;
+    }
+    if (activeModel && availableModels.includes(activeModel)) {
+      return;
+    }
+    const thread = chatStore.getActiveThreadSnapshot(agentId);
+    const fallbackModel =
+      resolveComposerModelId({
+        thread,
+        providerId: activeProvider,
+        providerSettings,
+        providerModelCatalogs,
+        connectionId: activeConnectionId,
+      }) || availableModels[0];
+    if (!fallbackModel || !availableModels.includes(fallbackModel) || fallbackModel === activeModel) {
+      return;
+    }
+    chatStore.updateThreadMetadata({ selectedModelId: fallbackModel }, undefined, agentId);
+  });
+
   function persistActiveThreadSnapshot(): void {
     const root = chatStore.getActiveChatScopeKey();
     const agentId = chatStore.getActiveAgentId();
@@ -194,13 +227,16 @@
 
     sending = true;
     onInlineError("");
-    const result = await sendChatMessage(content, undefined, { chatContextKind });
-    if (result.ok) {
-      draft = "";
-    } else {
-      onInlineError(result.message);
+    try {
+      const result = await sendChatMessage(content, undefined, { chatContextKind });
+      if (result.ok) {
+        draft = "";
+      } else {
+        onInlineError(result.message);
+      }
+    } finally {
+      sending = false;
     }
-    sending = false;
   }
 
   async function retryLastTurn(): Promise<void> {
@@ -287,6 +323,7 @@
     }
 
     const result = await chatStore.switchThreadModel(nextModelId, {
+      providerSettings,
       providerModelCatalogs,
     });
     if (result.switched) {

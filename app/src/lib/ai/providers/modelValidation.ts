@@ -8,11 +8,14 @@ import {
 } from "../chatErrorCopy";
 import { ChatProviderError } from "./errors";
 import { formatChatProviderLabel } from "./selection";
+import { normalizeProviderModelCatalogs } from "./providerModelCatalog";
 import {
-  getProviderDefaultModelId,
-  isModelInProviderCatalog,
-  normalizeProviderModelCatalogs,
-} from "./providerModelCatalog";
+  isModelInThreadCatalog,
+  resolveThreadCatalogDefaultModelId,
+  type ThreadModelCatalogContext,
+} from "./threadModelCatalog";
+
+export type { ThreadModelCatalogContext };
 
 export type LocalModelValidationResult =
   | { ok: true; modelId: string }
@@ -22,21 +25,27 @@ export type LocalModelValidationResult =
 export function resolveEffectiveThreadModelId(
   thread: ChatThreadSnapshot,
   catalogs: ProviderModelCatalogs,
+  context?: ThreadModelCatalogContext,
 ): string {
   const normalizedCatalogs = normalizeProviderModelCatalogs(catalogs);
   const providerId = thread.metadata.provider;
+  const catalogContext: ThreadModelCatalogContext = {
+    providerSettings: context?.providerSettings,
+    connectionId: context?.connectionId ?? thread.metadata.connectionId,
+  };
   const selected = thread.metadata.selectedModelId?.trim();
   if (selected) {
     return selected;
   }
-  return getProviderDefaultModelId(normalizedCatalogs, providerId);
+  return resolveThreadCatalogDefaultModelId(normalizedCatalogs, providerId, catalogContext);
 }
 
-/** Validates that a model id is present in the settings-managed provider catalog. */
+/** Validates that a model id is present in the thread's resolved provider catalog. */
 export function validateLocalModelSelection(
   catalogs: ProviderModelCatalogs,
   providerId: ChatProviderId,
   modelId: string,
+  context?: ThreadModelCatalogContext,
 ): LocalModelValidationResult {
   const normalizedCatalogs = normalizeProviderModelCatalogs(catalogs);
   const trimmed = modelId.trim();
@@ -48,7 +57,7 @@ export function validateLocalModelSelection(
     };
   }
 
-  if (isModelInProviderCatalog(normalizedCatalogs, providerId, trimmed)) {
+  if (isModelInThreadCatalog(normalizedCatalogs, providerId, trimmed, context)) {
     return { ok: true, modelId: trimmed };
   }
 

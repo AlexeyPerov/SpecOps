@@ -66,6 +66,11 @@
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
   import { DEFAULT_UNTITLED_TITLE } from "../lib/services/untitledTitle";
   import { canFitMarkdownSplit as canFitMarkdownSplitForWidth, computeResponsiveLayoutFlags, formatStatusPath } from "../lib/services/appShellHelpers";
+  import {
+    computeWorkspaceReorderTarget,
+    findWorkspaceIndex,
+    resolveCloseWorkspaceAction as resolveCloseWorkspaceActionFromPrompts,
+  } from "../lib/services/workspaceContextMenuController";
   import "../lib/styles/app-shell.css";
 
   let themePaneOpen = $state(false);
@@ -648,15 +653,14 @@
   }
 
   function resolveCloseWorkspaceAction(dirtyDocuments: DocumentState[]): "save-all" | "discard-all" | "cancel" {
-    const count = dirtyDocuments.length;
-    const saveAll = window.confirm(
-      `This workspace has ${count} unsaved file(s). Press OK to Save All, or Cancel for more options.`,
-    );
-    if (saveAll) {
-      return "save-all";
-    }
-    const discard = window.confirm("Discard all unsaved changes and close this workspace?");
-    return discard ? "discard-all" : "cancel";
+    return resolveCloseWorkspaceActionFromPrompts(dirtyDocuments.length, {
+      confirmSaveAll: (count) =>
+        window.confirm(
+          `This workspace has ${count} unsaved file(s). Press OK to Save All, or Cancel for more options.`,
+        ),
+      confirmDiscardAll: () =>
+        window.confirm("Discard all unsaved changes and close this workspace?"),
+    });
   }
 
   function workspaceContextMenuIndex(): number {
@@ -664,7 +668,10 @@
     if (!menu) {
       return -1;
     }
-    return workspaces.findIndex((workspace) => workspace.id === menu.workspaceId);
+    return findWorkspaceIndex(
+      workspaces.map((workspace) => workspace.id),
+      menu.workspaceId,
+    );
   }
 
   function moveWorkspaceFromContextMenu(direction: "up" | "down"): void {
@@ -672,11 +679,8 @@
       return;
     }
     const index = workspaceContextMenuIndex();
-    if (index < 0) {
-      return;
-    }
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= workspaces.length) {
+    const targetIndex = computeWorkspaceReorderTarget(index, direction, workspaces.length);
+    if (targetIndex === null) {
       return;
     }
     appState.reorderWorkspaces(index, targetIndex);

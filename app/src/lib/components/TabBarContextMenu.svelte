@@ -251,7 +251,9 @@
     contextMenu ? (openTabs.find((tab) => tab.id === contextMenu?.tabId) ?? null) : null,
   );
 
-  const contextMenuTabDoc = $derived(contextMenuTab ? tabDocument(contextMenuTab) : null);
+  const contextMenuTabDoc = $derived(
+    contextMenuTab ? (tabDocument(contextMenuTab) ?? null) : null,
+  );
 
   const contextMenuCanReveal = $derived(canRevealTabInFileManager(contextMenuTab, documents));
 

@@ -29,8 +29,17 @@
   import { appState } from "../state/appState";
   import { chatStore } from "../state/chatStore";
   import { listBuiltinResolvedChatModes } from "../ai/modes/resolve";
-  import { normalizeMaxBinaryOpenAsTextBytes } from "../services/binaryFileOpen";
-  import { normalizeMaxOpenWithoutConfirmBytes } from "../services/largeFileOpen";
+  import {
+    addRequiredSection as addRequiredSectionToList,
+    nextSelectedIdAfterRemoval,
+    normalizeMaxBinaryOpenAsTextFromKb,
+    normalizeMaxOpenWithoutConfirmFromKb,
+    removeRequiredSection as removeRequiredSectionFromList,
+    reorderRequiredSections,
+    resolveSelectedListItem,
+    resolveSelectedListItemId,
+    updateRequiredSection as updateRequiredSectionInList,
+  } from "./settings/settingsPanelActions";
   import {
     centerDialogPosition,
     clampDialogPosition,
@@ -82,25 +91,19 @@
   }
 
   function updateMaxBinaryOpenAsTextKb(rawValue: string): void {
-    const parsedKb = Number.parseInt(rawValue, 10);
-    if (!Number.isFinite(parsedKb)) {
+    const normalizedBytes = normalizeMaxBinaryOpenAsTextFromKb(rawValue);
+    if (normalizedBytes === null) {
       return;
     }
-    updateExternalFilesSetting(
-      "maxBinaryOpenAsTextBytes",
-      normalizeMaxBinaryOpenAsTextBytes(parsedKb * 1024),
-    );
+    updateExternalFilesSetting("maxBinaryOpenAsTextBytes", normalizedBytes);
   }
 
   function updateMaxOpenWithoutConfirmKb(rawValue: string): void {
-    const parsedKb = Number.parseInt(rawValue, 10);
-    if (!Number.isFinite(parsedKb)) {
+    const normalizedBytes = normalizeMaxOpenWithoutConfirmFromKb(rawValue);
+    if (normalizedBytes === null) {
       return;
     }
-    updateExternalFilesSetting(
-      "maxOpenWithoutConfirmBytes",
-      normalizeMaxOpenWithoutConfirmBytes(parsedKb * 1024),
-    );
+    updateExternalFilesSetting("maxOpenWithoutConfirmBytes", normalizedBytes);
   }
 
   type DebugSettingsScope = "debugChat" | "debugWorkspace";
@@ -151,11 +154,11 @@
 
   function activeHttpConnection(): HttpConnection {
     const connections = httpConnections();
-    const selected = selectedConnectionId
-      ? connections.find((connection) => connection.id === selectedConnectionId)
-      : null;
     const fallback = connections[0] ?? { ...defaultHttpConnection, id: DEFAULT_HTTP_CONNECTION_ID };
-    return selected ?? fallback;
+    return (
+      resolveSelectedListItem(selectedConnectionId, connections) ??
+      fallback
+    );
   }
 
   function updateHttpConnectionSetting(
@@ -302,10 +305,7 @@
   }
 
   function selectedCustomMode(): CustomChatModeDefinition | null {
-    if (!selectedCustomModeId) {
-      return customModes()[0] ?? null;
-    }
-    return customModes().find((mode) => mode.id === selectedCustomModeId) ?? customModes()[0] ?? null;
+    return resolveSelectedListItem(selectedCustomModeId, customModes());
   }
 
   function addCustomMode(): void {
@@ -315,10 +315,11 @@
 
   function removeCustomMode(modeId: string): void {
     appState.removeCustomChatMode(modeId);
-    if (selectedCustomModeId === modeId) {
-      const next = customModes().find((entry) => entry.id !== modeId);
-      selectedCustomModeId = next?.id ?? null;
-    }
+    selectedCustomModeId = nextSelectedIdAfterRemoval(
+      modeId,
+      selectedCustomModeId,
+      customModes().map((mode) => mode.id),
+    );
   }
 
   function moveRequiredSection(sectionIndex: number, offset: -1 | 1): void {
@@ -326,16 +327,10 @@
     if (!mode) {
       return;
     }
-    const targetIndex = sectionIndex + offset;
-    if (targetIndex < 0 || targetIndex >= mode.requiredSections.length) {
+    const reordered = reorderRequiredSections(mode.requiredSections, sectionIndex, offset);
+    if (!reordered) {
       return;
     }
-    const reordered = [...mode.requiredSections];
-    const [section] = reordered.splice(sectionIndex, 1);
-    if (!section) {
-      return;
-    }
-    reordered.splice(targetIndex, 0, section);
     appState.updateCustomChatMode(mode.id, { requiredSections: reordered });
   }
 
@@ -345,7 +340,7 @@
       return;
     }
     appState.updateCustomChatMode(mode.id, {
-      requiredSections: [...mode.requiredSections, `Section ${mode.requiredSections.length + 1}`],
+      requiredSections: addRequiredSectionToList(mode.requiredSections),
     });
   }
 
@@ -354,11 +349,8 @@
     if (!mode) {
       return;
     }
-    const nextSections = mode.requiredSections.map((section, index) =>
-      index === sectionIndex ? value : section,
-    );
     appState.updateCustomChatMode(mode.id, {
-      requiredSections: nextSections,
+      requiredSections: updateRequiredSectionInList(mode.requiredSections, sectionIndex, value),
     });
   }
 
@@ -367,9 +359,8 @@
     if (!mode) {
       return;
     }
-    const nextSections = mode.requiredSections.filter((_, index) => index !== sectionIndex);
     appState.updateCustomChatMode(mode.id, {
-      requiredSections: nextSections,
+      requiredSections: removeRequiredSectionFromList(mode.requiredSections, sectionIndex),
     });
   }
 
@@ -553,21 +544,18 @@
   });
 
   $effect(() => {
-    const ids = new Set(httpConnections().map((connection) => connection.id));
-    if (!selectedConnectionId || !ids.has(selectedConnectionId)) {
-      selectedConnectionId =
-        snapshot.settings.providerSettings.defaultConnectionId ??
-        httpConnections()[0]?.id ??
-        null;
-    }
+    selectedConnectionId = resolveSelectedListItemId(
+      selectedConnectionId,
+      httpConnections().map((connection) => connection.id),
+      snapshot.settings.providerSettings.defaultConnectionId,
+    );
   });
 
   $effect(() => {
-    const modes = customModes();
-    const ids = new Set(modes.map((mode) => mode.id));
-    if (!selectedCustomModeId || !ids.has(selectedCustomModeId)) {
-      selectedCustomModeId = modes[0]?.id ?? null;
-    }
+    selectedCustomModeId = resolveSelectedListItemId(
+      selectedCustomModeId,
+      customModes().map((mode) => mode.id),
+    );
   });
 
   $effect(() => {

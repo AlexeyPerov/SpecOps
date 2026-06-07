@@ -42,8 +42,8 @@ describe("appState settingsSlice CRUD", () => {
       });
 
       const settings = providerSettings();
-      expect(settings.httpConnections).toHaveLength(2);
-      expect(settings.httpConnections[1]).toMatchObject({
+      expect(settings.httpConnections!).toHaveLength(2);
+      expect(settings.httpConnections![1]).toMatchObject({
         id: "remote",
         label: "Remote",
         enabled: true,
@@ -56,7 +56,7 @@ describe("appState settingsSlice CRUD", () => {
       appState.addHttpConnection({ id: "remote", label: "First", baseUrl: "http://first/v1" });
       appState.addHttpConnection({ id: "remote", label: "Second", baseUrl: "http://second/v1" });
 
-      const connections = providerSettings().httpConnections;
+      const connections = providerSettings().httpConnections!;
       expect(connections.filter((entry) => entry.id === "remote")).toHaveLength(1);
       expect(connections.find((entry) => entry.id === "remote")).toMatchObject({
         label: "Second",
@@ -69,7 +69,7 @@ describe("appState settingsSlice CRUD", () => {
       appState.updateHttpConnection("remote", { label: "  Updated  ", enabled: true });
       appState.updateHttpConnection("   ", { label: "Ignored" });
 
-      expect(providerSettings().httpConnections.find((entry) => entry.id === "remote")).toMatchObject({
+      expect(providerSettings().httpConnections!.find((entry) => entry.id === "remote")).toMatchObject({
         label: "Updated",
         enabled: true,
       });
@@ -85,7 +85,7 @@ describe("appState settingsSlice CRUD", () => {
       appState.removeHttpConnection("beta");
 
       const settings = providerSettings();
-      expect(settings.httpConnections.map((entry) => entry.id)).toEqual(["default", "alpha"]);
+      expect(settings.httpConnections!.map((entry) => entry.id)).toEqual(["default", "alpha"]);
       expect(settings.defaultConnectionId).toBe(DEFAULT_HTTP_CONNECTION_ID);
       expect(appState.getSnapshot().settings.providerApiKeys).not.toHaveProperty("beta");
       expect(appState.getSnapshot().settings.providerApiKeys.alpha).toBe("other");

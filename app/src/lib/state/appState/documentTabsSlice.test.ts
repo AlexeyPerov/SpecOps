@@ -55,7 +55,7 @@ describe("appState documentTabsSlice", () => {
       appState.switchContext("notepad");
       appState.openFileInTab("/tmp/ws/existing.txt", "notepad copy");
       const notepadDocId = notepadSnapshot().documents.find((doc) => doc.filePath === "/tmp/ws/existing.txt")?.id;
-      const workspaceTabCountBefore = workspaceSnapshot()?.session.openTabs.length;
+      const workspaceTabCountBefore = workspaceSnapshot()!.session.openTabs.length;
 
       const migratedDocumentId = appState.migrateNotepadFileTabToWorkspace("/tmp/ws/existing.txt", "ws-1");
 
@@ -83,7 +83,7 @@ describe("appState documentTabsSlice", () => {
 
       expect(appState.migrateNotepadFileTabToWorkspace("/tmp/outside.txt", "ws-1")).toBeNull();
       expect(appState.migrateNotepadFileTabToWorkspace("/tmp/ws/missing.txt", "ws-1")).toBeNull();
-      expect(appState.migrateNotepadFileTabToWorkspace("/tmp/ws/missing.txt", "ws-missing")).toBeNull();
+      expect(appState.migrateNotepadFileTabToWorkspace("/tmp/ws/missing.txt", "ws-999")).toBeNull();
     });
   });
 

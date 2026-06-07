@@ -7,11 +7,15 @@ import {
   DEFAULT_HTTP_CONNECTION_ID,
 } from "./httpConnectionSettings";
 import {
+  listSelectableChatConnections,
   canSelectChatProvider,
   formatModelSwitchNotice,
   formatProviderSwitchNotice,
   isHttpProviderConfigured,
+  parseChatConnectionSelection,
+  resolveActiveChatConnectionSelection,
   listSelectableChatProviders,
+  listSelectableModelsForConnection,
   listSelectableModelsForProvider,
   resolveDefaultChatProvider,
   resolveProviderSwitchModelId,
@@ -169,6 +173,94 @@ describe("chat provider selection", () => {
     expect(listSelectableModelsForProvider(defaultProviderModelCatalogs, "http")).toEqual([
       "gpt-4o-mini",
     ]);
+  });
+
+  it("lists connection options with labels and scoped debug entry", () => {
+    const settings = {
+      ...providerSettingsWithDebugEnabled(true),
+      httpConnections: [
+        {
+          ...defaultHttpConnection,
+          id: "conn-a",
+          label: "OpenRouter",
+          enabled: true,
+          modelCatalog: { modelIds: ["openai/gpt-4.1-mini"], defaultModelId: "openai/gpt-4.1-mini" },
+        },
+        {
+          ...defaultHttpConnection,
+          id: "conn-b",
+          label: "Gateway",
+          enabled: true,
+          modelCatalog: { modelIds: ["gpt-4o-mini"], defaultModelId: "gpt-4o-mini" },
+        },
+      ],
+      defaultConnectionId: "conn-a",
+    };
+    const apiKeys = { "conn-a": "key-a", "conn-b": "key-b" };
+
+    expect(listSelectableChatConnections(settings, apiKeys, "workspace")).toEqual([
+      { value: "http:conn-a", label: "OpenRouter", providerId: "http", connectionId: "conn-a" },
+      { value: "http:conn-b", label: "Gateway", providerId: "http", connectionId: "conn-b" },
+      { value: "debug-workspace", label: "Debug Provider", providerId: "debug-workspace" },
+    ]);
+  });
+
+  it("resolves active connection selection with fallback for stale ids", () => {
+    const settings = {
+      ...providerSettingsWithDebugEnabled(true),
+      httpConnections: [
+        {
+          ...defaultHttpConnection,
+          id: "conn-a",
+          label: "OpenRouter",
+          enabled: true,
+          modelCatalog: { modelIds: ["openai/gpt-4.1-mini"], defaultModelId: "openai/gpt-4.1-mini" },
+        },
+      ],
+      defaultConnectionId: "conn-a",
+    };
+    const apiKeys = { "conn-a": "key-a" };
+
+    expect(
+      resolveActiveChatConnectionSelection("http", "missing", settings, apiKeys, "workspace"),
+    ).toBe("http:conn-a");
+    expect(
+      resolveActiveChatConnectionSelection(
+        "debug-workspace",
+        undefined,
+        settings,
+        apiKeys,
+        "workspace",
+      ),
+    ).toBe("debug-workspace");
+  });
+
+  it("parses connection selection values", () => {
+    expect(parseChatConnectionSelection("http:conn-a")).toEqual({
+      providerId: "http",
+      connectionId: "conn-a",
+    });
+    expect(parseChatConnectionSelection("debug-chat")).toEqual({ providerId: "debug-chat" });
+    expect(parseChatConnectionSelection("bad")).toBeNull();
+  });
+
+  it("lists models for the selected HTTP connection catalog", () => {
+    const settings = {
+      ...providerSettingsWithDebugEnabled(false),
+      httpConnections: [
+        {
+          ...defaultHttpConnection,
+          id: "conn-a",
+          label: "OpenRouter",
+          enabled: true,
+          modelCatalog: { modelIds: ["openai/gpt-4.1-mini"], defaultModelId: "openai/gpt-4.1-mini" },
+        },
+      ],
+      defaultConnectionId: "conn-a",
+    };
+    expect(
+      listSelectableModelsForConnection(defaultProviderModelCatalogs, settings, "http", "conn-a"),
+    ).toEqual(["openai/gpt-4.1-mini"]);
   });
 
   it("formats model switch notices for history rendering", () => {

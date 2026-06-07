@@ -12,8 +12,9 @@
     isDebugProviderSendBlocked,
   } from "../ai/providers/debugProviderSettings";
   import {
-    defaultHttpConnectionSettings,
+    isHttpConnectionConfigured,
     isHttpProviderSendBlocked,
+    resolveHttpConnection,
   } from "../ai/providers/httpConnectionSettings";
   import {
     formatChatProviderLabel,
@@ -53,11 +54,18 @@
   const canRetryLastTurn = $derived($chatCanRetryLastTurn);
   const lastError = $derived($chatLastError);
   const providerSettings = $derived($appState.settings.providerSettings);
-  const httpProviderSettings = $derived(
-    $appState.settings.providerSettings.http ?? defaultHttpConnectionSettings,
-  );
-  const httpApiKey = $derived($appState.settings.providerApiKeys.http ?? "");
   const providerApiKeys = $derived($appState.settings.providerApiKeys);
+  const activeConnectionId = $derived(metadata?.connectionId);
+  const resolvedHttpConnection = $derived.by(() => {
+    providerSettings;
+    providerApiKeys;
+    activeConnectionId;
+    return resolveHttpConnection(providerSettings, providerApiKeys, activeConnectionId);
+  });
+  const httpProviderSettings = $derived(
+    resolvedHttpConnection?.connection ?? providerSettings.http,
+  );
+  const httpApiKey = $derived(resolvedHttpConnection?.apiKey ?? "");
   const providerModelCatalogs = $derived($appState.settings.providerModelCatalogs);
   const activeMode = $derived(metadata?.mode ?? "ask");
   const activeProvider = $derived.by(() => {
@@ -107,7 +115,27 @@
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
   });
-  const httpBlockedCopy = $derived(getHttpMissingConfigCopy());
+  const httpBlockedCopy = $derived.by(() => {
+    const copy = getHttpMissingConfigCopy();
+    if (activeProvider !== "http") {
+      return copy;
+    }
+    if (!resolvedHttpConnection) {
+      return {
+        ...copy,
+        message: "No configured HTTP connection is available. Add one in Providers settings.",
+      };
+    }
+    if (
+      !isHttpConnectionConfigured(resolvedHttpConnection.connection, resolvedHttpConnection.apiKey)
+    ) {
+      return {
+        ...copy,
+        message: `Connection "${resolvedHttpConnection.connection.label}" is not fully configured.`,
+      };
+    }
+    return copy;
+  });
   const debugBlockedCopy = $derived(getDebugProviderDisabledCopy(activeProvider));
   const accessBlockedCopy = $derived(
     getAccessBlockedCopy(accessState.reason, { activeProvider }),
@@ -241,6 +269,7 @@
       {providerSettings}
       {httpProviderSettings}
       {httpApiKey}
+      {activeConnectionId}
       {providerApiKeys}
       {providerModelCatalogs}
       {composerError}

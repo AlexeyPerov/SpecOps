@@ -92,13 +92,13 @@ export const STREAM_TRUNCATED_FAILURE_RECOVERY =
   "The stream ended before completion. Retry now; if this repeats, check provider/proxy stability.";
 
 export const HTTP_UNAUTHORIZED_FAILURE_MESSAGE =
-  "Invalid API key for the configured HTTP provider. Check Settings → Connections.";
+  "Invalid API key for the configured HTTP provider. Check Settings → Providers.";
 
 export const HTTP_RATE_LIMIT_FAILURE_MESSAGE =
   "HTTP provider rate limit reached. Wait a moment and try again.";
 
 export const HTTP_UNAUTHORIZED_FAILURE_RECOVERY =
-  "Open Settings → Connections, update the API key, and retry.";
+  "Open Settings → Providers, update the API key, and retry.";
 
 export const HTTP_RATE_LIMIT_FAILURE_RECOVERY =
   "Wait a short time and retry. If this happens often, lower request volume or change provider limits.";

@@ -154,7 +154,6 @@
     isChatHttpRailVisible(
       snapshot.settings.providerSettings,
       snapshot.settings.providerApiKeys,
-      snapshot.settings.providerModelCatalogs,
       snapshot.settings.providerSettings.debugChat,
     ),
   );

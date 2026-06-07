@@ -186,7 +186,7 @@ Dependencies: Task 2.
 
 ---
 
-#### Task 5: Composer and provider selection — connection picker (P2-8) [Score:8] [Agent:medium]
+#### Task 5: Composer and provider selection — connection picker (P2-8) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -212,7 +212,7 @@ Dependencies: Task 3, Task 4.
 
 ---
 
-#### Task 6: Rail gating, restore, and blocked states (P2-8) [Score:6] [Agent:easy]
+#### Task 6: Rail gating, restore, and blocked states (P2-8) [Score:6] [Agent:easy] [DONE]
 
 **Required context**
 

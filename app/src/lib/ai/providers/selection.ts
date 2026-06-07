@@ -6,7 +6,7 @@ import type {
 } from "../../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID, PRODUCT_CHAT_PROVIDER_IDS } from "../../domain/contracts";
 import { isDebugProviderEnabled } from "./debugProviderSettings";
-import { listConfiguredHttpConnections } from "./httpConnectionSettings";
+import { listConfiguredHttpConnections, resolveHttpConnection } from "./httpConnectionSettings";
 import {
   getProviderDefaultModelId,
   getProviderModelCatalog,
@@ -23,6 +23,15 @@ export interface ChatProviderSelectionOptions {
   chatContextKind?: "workspace" | "chat-http";
   httpConfigured?: boolean;
 }
+
+export interface ChatConnectionOption {
+  value: string;
+  label: string;
+  providerId: ChatProviderId;
+  connectionId?: string;
+}
+
+const HTTP_CONNECTION_VALUE_PREFIX = "http:";
 
 const PROVIDER_LABELS: Record<ChatProviderId, string> = {
   http: "HTTP",
@@ -81,6 +90,96 @@ export function listSelectableChatProviders(
   return selectable;
 }
 
+function isDebugProviderOption(
+  providerId: ChatProviderId,
+  providerSettings: AppProviderSettings,
+  chatContextKind: "workspace" | "chat-http",
+): boolean {
+  if (providerId === "debug-chat") {
+    return chatContextKind === "chat-http" && isDebugProviderEnabled("debug-chat", providerSettings);
+  }
+  if (providerId === "debug-workspace") {
+    return chatContextKind === "workspace" && isDebugProviderEnabled("debug-workspace", providerSettings);
+  }
+  return false;
+}
+
+function toConnectionOptionValue(connectionId: string): string {
+  return `${HTTP_CONNECTION_VALUE_PREFIX}${connectionId}`;
+}
+
+export function parseChatConnectionSelection(
+  value: string,
+): { providerId: ChatProviderId; connectionId?: string } | null {
+  if (value.startsWith(HTTP_CONNECTION_VALUE_PREFIX)) {
+    const connectionId = value.slice(HTTP_CONNECTION_VALUE_PREFIX.length).trim();
+    if (!connectionId) {
+      return null;
+    }
+    return { providerId: "http", connectionId };
+  }
+  if (value === "debug-chat" || value === "debug-workspace") {
+    return { providerId: value };
+  }
+  return null;
+}
+
+export function listSelectableChatConnections(
+  providerSettings: AppProviderSettings,
+  apiKeys: Partial<Record<string, string>>,
+  chatContextKind: "workspace" | "chat-http",
+): ChatConnectionOption[] {
+  const configuredConnections: ChatConnectionOption[] = listConfiguredHttpConnections(
+    providerSettings,
+    apiKeys,
+  ).map(
+    (connection) => ({
+      value: toConnectionOptionValue(connection.id),
+      label: connection.label,
+      providerId: "http" as const,
+      connectionId: connection.id,
+    }),
+  );
+  const debugProviderId = chatContextKind === "chat-http" ? "debug-chat" : "debug-workspace";
+  if (isDebugProviderOption(debugProviderId, providerSettings, chatContextKind)) {
+    configuredConnections.push({
+      value: debugProviderId,
+      label: PROVIDER_LABELS[debugProviderId],
+      providerId: debugProviderId,
+    });
+  }
+  return configuredConnections;
+}
+
+export function resolveActiveChatConnectionSelection(
+  activeProvider: ChatProviderId,
+  activeConnectionId: string | undefined,
+  providerSettings: AppProviderSettings,
+  apiKeys: Partial<Record<string, string>>,
+  chatContextKind: "workspace" | "chat-http",
+): string | null {
+  const selectable = listSelectableChatConnections(providerSettings, apiKeys, chatContextKind);
+  if (activeProvider === "http") {
+    const configured = listConfiguredHttpConnections(providerSettings, apiKeys);
+    if (configured.length === 0) {
+      return selectable[0]?.value ?? null;
+    }
+    const requested = activeConnectionId?.trim();
+    if (requested && configured.some((connection) => connection.id === requested)) {
+      return toConnectionOptionValue(requested);
+    }
+    const resolved = resolveHttpConnection(providerSettings, apiKeys, activeConnectionId);
+    if (resolved && configured.some((connection) => connection.id === resolved.connection.id)) {
+      return toConnectionOptionValue(resolved.connection.id);
+    }
+    return toConnectionOptionValue(configured[0]!.id);
+  }
+  if (isDebugProviderOption(activeProvider, providerSettings, chatContextKind)) {
+    return activeProvider;
+  }
+  return selectable[0]?.value ?? null;
+}
+
 export function formatChatProviderLabel(provider: ChatProviderId): string {
   return PROVIDER_LABELS[provider];
 }
@@ -109,6 +208,22 @@ export function listSelectableModelsForProvider(
   providerId: ChatProviderId,
 ): string[] {
   return getProviderModelCatalog(normalizeProviderModelCatalogs(catalogs), providerId).modelIds;
+}
+
+export function listSelectableModelsForConnection(
+  catalogs: ProviderModelCatalogs,
+  providerSettings: AppProviderSettings,
+  providerId: ChatProviderId,
+  connectionId?: string,
+): string[] {
+  if (providerId !== "http") {
+    return listSelectableModelsForProvider(catalogs, providerId);
+  }
+  const resolved = resolveHttpConnection(providerSettings, {}, connectionId);
+  if (!resolved) {
+    return getProviderModelCatalog(normalizeProviderModelCatalogs(catalogs), "http").modelIds;
+  }
+  return resolved.connection.modelCatalog.modelIds;
 }
 
 /**

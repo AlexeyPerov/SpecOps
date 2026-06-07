@@ -1,10 +1,10 @@
 <script lang="ts">
   import { sendChatMessage, retryLastChatTurn } from "../ai/sendChatMessage";
   import {
-    canSelectChatProvider,
-    isHttpProviderConfigured,
-    listSelectableChatProviders,
-    listSelectableModelsForProvider,
+    listSelectableChatConnections,
+    listSelectableModelsForConnection,
+    parseChatConnectionSelection,
+    resolveActiveChatConnectionSelection,
   } from "../ai/providers/selection";
   import { listModesForProvider } from "../ai/modes/builtins";
   import type {
@@ -37,6 +37,7 @@
     providerSettings: AppProviderSettings;
     httpProviderSettings: HttpConnectionSettings;
     httpApiKey: string;
+    activeConnectionId?: string;
     providerApiKeys: Partial<Record<string, string>>;
     providerModelCatalogs: ProviderModelCatalogs;
     composerError: ComposerError | null;
@@ -58,6 +59,7 @@
     providerSettings,
     httpProviderSettings,
     httpApiKey,
+    activeConnectionId = undefined,
     providerApiKeys,
     providerModelCatalogs,
     composerError,
@@ -68,17 +70,27 @@
   let sending = $state(false);
   let retrying = $state(false);
 
-  const availableProviders = $derived.by(() => {
+  const availableConnections = $derived.by(() => {
     providerSettings;
     chatContextKind;
     httpProviderSettings.enabled;
     httpProviderSettings.baseUrl;
     httpApiKey;
-    const httpConfigured = isHttpProviderConfigured(providerSettings, providerApiKeys);
-    return listSelectableChatProviders(providerSettings, {
+    return listSelectableChatConnections(providerSettings, providerApiKeys, chatContextKind);
+  });
+  const activeConnectionSelection = $derived.by(() => {
+    activeProvider;
+    activeConnectionId;
+    providerSettings;
+    providerApiKeys;
+    chatContextKind;
+    return resolveActiveChatConnectionSelection(
+      activeProvider,
+      activeConnectionId,
+      providerSettings,
+      providerApiKeys,
       chatContextKind,
-      httpConfigured,
-    });
+    );
   });
   const availableModes = $derived.by(() => {
     const providerModes = listModesForProvider(supportedModes);
@@ -87,9 +99,18 @@
     }
     return providerModes;
   });
-  const availableModels = $derived(
-    listSelectableModelsForProvider(providerModelCatalogs, activeProvider),
-  );
+  const availableModels = $derived.by(() => {
+    providerModelCatalogs;
+    providerSettings;
+    activeProvider;
+    activeConnectionId;
+    return listSelectableModelsForConnection(
+      providerModelCatalogs,
+      providerSettings,
+      activeProvider,
+      activeConnectionId,
+    );
+  });
   const isModeSelectionDisabled = $derived(isGenerating || sending || retrying);
   const isProviderSelectionDisabled = $derived(isGenerating || sending || retrying);
   const isModelSelectionDisabled = $derived(isGenerating || sending || retrying);
@@ -128,17 +149,18 @@
   );
 
   $effect(() => {
-    activeProvider;
-    availableProviders;
+    activeConnectionSelection;
+    availableConnections;
     if (
-      availableProviders.some((provider) => provider.id === activeProvider) ||
+      (activeConnectionSelection &&
+        availableConnections.some((connection) => connection.value === activeConnectionSelection)) ||
       isProviderSelectionDisabled
     ) {
       return;
     }
-    const fallback = availableProviders[0];
+    const fallback = availableConnections[0];
     if (fallback) {
-      void selectProvider(fallback.id);
+      void selectConnection(fallback.value);
     }
   });
 
@@ -209,19 +231,47 @@
     }
   }
 
-  async function selectProvider(nextProvider: ChatProviderId): Promise<void> {
-    if (
-      nextProvider === activeProvider ||
-      isProviderSelectionDisabled ||
-      !canSelectChatProvider(nextProvider, providerSettings, {
-        chatContextKind,
-        httpConfigured: isHttpProviderConfigured(providerSettings, providerApiKeys),
-      })
-    ) {
+  async function selectConnection(nextValue: string): Promise<void> {
+    if (isProviderSelectionDisabled) {
       return;
     }
-
-    const result = await chatStore.switchThreadProvider(nextProvider, {
+    const parsed = parseChatConnectionSelection(nextValue);
+    if (!parsed) {
+      return;
+    }
+    const currentSelection = resolveActiveChatConnectionSelection(
+      activeProvider,
+      activeConnectionId,
+      providerSettings,
+      providerApiKeys,
+      chatContextKind,
+    );
+    if (currentSelection === nextValue) {
+      return;
+    }
+    if (parsed.providerId === "http" && parsed.connectionId) {
+      if (activeProvider !== "http") {
+        const switchProviderResult = await chatStore.switchThreadProvider("http", {
+          providerSettings,
+          providerModelCatalogs,
+        });
+        if (!switchProviderResult.switched) {
+          return;
+        }
+      }
+      const switchConnectionResult = chatStore.switchThreadConnection(parsed.connectionId, {
+        providerSettings,
+        providerModelCatalogs,
+      });
+      if (switchConnectionResult.switched) {
+        persistActiveThreadSnapshot();
+        void chatStore.runAccessPreflight();
+      } else if (switchConnectionResult.message) {
+        onInlineError(switchConnectionResult.message);
+      }
+      return;
+    }
+    const result = await chatStore.switchThreadProvider(parsed.providerId, {
       providerSettings,
       providerModelCatalogs,
     });
@@ -292,19 +342,19 @@
       {isGenerating ? "Generating…" : "Send"}
     </button>
     <label class="chat-provider-field">
-      <span class="chat-mode-label">Provider</span>
+      <span class="chat-mode-label">Connection</span>
       <select
         class="chat-provider-select"
-        aria-label="Select chat provider"
-        value={activeProvider}
+        aria-label="Select chat connection"
+        value={activeConnectionSelection ?? ""}
         disabled={isProviderSelectionDisabled}
         onchange={(event) => {
-          const next = (event.currentTarget as HTMLSelectElement).value as ChatProviderId;
-          void selectProvider(next);
+          const next = (event.currentTarget as HTMLSelectElement).value;
+          void selectConnection(next);
         }}
       >
-        {#each availableProviders as provider (provider.id)}
-          <option value={provider.id}>{provider.label}</option>
+        {#each availableConnections as connection (connection.value)}
+          <option value={connection.value}>{connection.label}</option>
         {/each}
       </select>
     </label>

@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AppProviderSettings, ProviderModelCatalogs } from "../../domain/contracts";
+import type { AppProviderSettings } from "../../domain/contracts";
 import { defaultDebugProviderSettings } from "./debugProviderSettings";
 import {
   defaultHttpConnectionSettings,
+  defaultHttpConnection,
   DEFAULT_HTTP_CONNECTION_ID,
 } from "./httpConnectionSettings";
 import { isChatHttpRailVisible } from "./chatHttpRailGating";
-import * as providerModelCatalog from "./providerModelCatalog";
-import { defaultProviderModelCatalogs } from "./providerModelCatalog";
 import { defaultAppProviderSettings } from "./appProviderSettings";
 
 describe("isChatHttpRailVisible", () => {
@@ -30,10 +29,9 @@ describe("isChatHttpRailVisible", () => {
       http: settings,
       httpConnections: [
         {
-          id: DEFAULT_HTTP_CONNECTION_ID,
-          label: "HTTP",
+          ...defaultHttpConnection,
           ...settings,
-          modelCatalog: defaultProviderModelCatalogs.http!,
+          id: DEFAULT_HTTP_CONNECTION_ID,
         },
       ],
       defaultConnectionId: DEFAULT_HTTP_CONNECTION_ID,
@@ -45,7 +43,6 @@ describe("isChatHttpRailVisible", () => {
       isChatHttpRailVisible(
         withHttpConnection(configuredSettings),
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
-        defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(true);
@@ -56,7 +53,6 @@ describe("isChatHttpRailVisible", () => {
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, enabled: false }),
         {},
-        defaultProviderModelCatalogs,
         debugChatEnabled,
       ),
     ).toBe(true);
@@ -67,7 +63,6 @@ describe("isChatHttpRailVisible", () => {
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, enabled: false }),
         {},
-        defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(false);
@@ -78,7 +73,6 @@ describe("isChatHttpRailVisible", () => {
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, enabled: false }),
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
-        defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(false);
@@ -89,7 +83,6 @@ describe("isChatHttpRailVisible", () => {
       isChatHttpRailVisible(
         withHttpConnection(configuredSettings),
         {},
-        defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(false);
@@ -97,7 +90,6 @@ describe("isChatHttpRailVisible", () => {
       isChatHttpRailVisible(
         withHttpConnection(configuredSettings),
         { [DEFAULT_HTTP_CONNECTION_ID]: "   " },
-        defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(false);
@@ -108,7 +100,6 @@ describe("isChatHttpRailVisible", () => {
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, baseUrl: "" }),
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
-        defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(false);
@@ -116,37 +107,51 @@ describe("isChatHttpRailVisible", () => {
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, baseUrl: "   " }),
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
-        defaultProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(false);
   });
 
-  it("returns false when the HTTP default model is not resolvable", () => {
-    vi.spyOn(providerModelCatalog, "getProviderDefaultModelId").mockReturnValue("");
+  it("returns false when the configured connection default model is missing", () => {
+    const settings = withHttpConnection(configuredSettings);
+    const baseConnection = settings.httpConnections?.[0] ?? defaultHttpConnection;
+    settings.httpConnections = [
+      {
+        ...baseConnection,
+        modelCatalog: { modelIds: ["gpt-4o-mini"], defaultModelId: "" },
+      },
+    ];
 
     expect(
       isChatHttpRailVisible(
-        withHttpConnection(configuredSettings),
+        settings,
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
-        {
-          http: { modelIds: [], defaultModelId: "" },
-          "debug-chat": defaultProviderModelCatalogs["debug-chat"],
-        } satisfies ProviderModelCatalogs,
         debugChatDisabled,
       ),
     ).toBe(false);
   });
 
-  it("does not apply chat-cloud gating", () => {
+  it("returns true when any configured connection has a resolvable default model", () => {
+    const settings = withHttpConnection(configuredSettings);
+    const baseConnection = settings.httpConnections?.[0] ?? defaultHttpConnection;
+    settings.httpConnections = [
+      {
+        ...baseConnection,
+        id: "broken",
+        modelCatalog: { modelIds: ["gpt-4o-mini"], defaultModelId: "" },
+      },
+      {
+        ...baseConnection,
+        id: "healthy",
+        label: "Healthy",
+        modelCatalog: { modelIds: ["gpt-4.1-mini"], defaultModelId: "gpt-4.1-mini" },
+      },
+    ];
+
     expect(
       isChatHttpRailVisible(
-        withHttpConnection(configuredSettings),
-        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
-        {
-          ...defaultProviderModelCatalogs,
-          "debug-chat": { modelIds: [], defaultModelId: "" },
-        },
+        settings,
+        { broken: configuredApiKey, healthy: configuredApiKey },
         debugChatDisabled,
       ),
     ).toBe(true);

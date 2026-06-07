@@ -60,7 +60,6 @@ function canRestoreChatHttpAsActive(settings: AppDomainState["settings"]): boole
   return isChatHttpRailVisible(
     settings.providerSettings,
     settings.providerApiKeys,
-    settings.providerModelCatalogs,
     settings.providerSettings.debugChat,
   );
 }

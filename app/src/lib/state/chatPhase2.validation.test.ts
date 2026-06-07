@@ -19,7 +19,6 @@ import { sendChatMessage } from "../ai/sendChatMessage";
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { registerTestDebugWorkspaceProvider, createTestCapabilityChecker } from "../ai/providers/debugProviderTestHelpers";
 import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSettings";
-import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { DEFAULT_HTTP_CONNECTION_ID } from "../ai/providers/httpConnectionSettings";
 import { createOpenAiCompatibleChatProvider } from "../ai/providers/openAiCompatibleChatProvider";
 import {
@@ -129,7 +128,6 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
       isChatHttpRailVisible(
         appState.getSnapshot().settings.providerSettings,
         { [DEFAULT_HTTP_CONNECTION_ID]: "http-test-key" },
-        defaultProviderModelCatalogs,
         appState.getSnapshot().settings.providerSettings.debugChat,
       ),
     ).toBe(true);

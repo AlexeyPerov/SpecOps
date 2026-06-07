@@ -98,3 +98,49 @@ export function removeRequiredSection(
 ): string[] {
   return sections.filter((_, index) => index !== sectionIndex);
 }
+
+export const NEW_CONNECTION_PREFIX = "conn";
+
+export function makeHttpConnectionId(label: string, existingIds: readonly string[]): string {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const base = `${NEW_CONNECTION_PREFIX}-${slug || "http"}`;
+  const ids = new Set(existingIds);
+  if (!ids.has(base)) {
+    return base;
+  }
+  let index = 2;
+  while (ids.has(`${base}-${index}`)) {
+    index += 1;
+  }
+  return `${base}-${index}`;
+}
+
+export type DebugSettingsScope = "debugChat" | "debugWorkspace";
+
+export type DebugProviderNumberKey =
+  | "delayMsMin"
+  | "delayMsMax"
+  | "chunkCharsMin"
+  | "chunkCharsMax"
+  | "failureProbability";
+
+export function parseDebugProviderNumberSetting(
+  key: DebugProviderNumberKey,
+  rawValue: string,
+): number {
+  const parsed =
+    key === "failureProbability" ? Number.parseFloat(rawValue) : Number.parseInt(rawValue, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function parseDebugProviderSeed(rawValue: string): number | null {
+  const trimmed = rawValue.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return Number.parseInt(trimmed, 10);
+}

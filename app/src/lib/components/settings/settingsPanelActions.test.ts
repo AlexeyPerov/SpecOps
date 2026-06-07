@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   addRequiredSection,
+  makeHttpConnectionId,
   nextSelectedIdAfterRemoval,
   normalizeMaxBinaryOpenAsTextFromKb,
   normalizeMaxOpenWithoutConfirmFromKb,
+  parseDebugProviderNumberSetting,
+  parseDebugProviderSeed,
   parseExternalFilesKbInput,
   removeRequiredSection,
   reorderRequiredSections,
@@ -103,6 +106,45 @@ describe("nextSelectedIdAfterRemoval", () => {
 
   it("clears selection when the removed item was last", () => {
     expect(nextSelectedIdAfterRemoval("mode-a", "mode-a", [])).toBeNull();
+  });
+});
+
+describe("makeHttpConnectionId", () => {
+  it("slugifies the label into a unique id", () => {
+    expect(makeHttpConnectionId("Provider 1", [])).toBe("conn-provider-1");
+  });
+
+  it("appends a numeric suffix when the base id already exists", () => {
+    expect(makeHttpConnectionId("Provider 1", ["conn-provider-1"])).toBe("conn-provider-1-2");
+  });
+
+  it("falls back to http when the label is empty", () => {
+    expect(makeHttpConnectionId("   ", [])).toBe("conn-http");
+  });
+});
+
+describe("parseDebugProviderNumberSetting", () => {
+  it("parses integer settings", () => {
+    expect(parseDebugProviderNumberSetting("delayMsMin", "120")).toBe(120);
+  });
+
+  it("parses failure probability as a float", () => {
+    expect(parseDebugProviderNumberSetting("failureProbability", "0.25")).toBe(0.25);
+  });
+
+  it("returns zero for invalid input", () => {
+    expect(parseDebugProviderNumberSetting("chunkCharsMax", "abc")).toBe(0);
+  });
+});
+
+describe("parseDebugProviderSeed", () => {
+  it("returns null for empty input", () => {
+    expect(parseDebugProviderSeed("")).toBeNull();
+    expect(parseDebugProviderSeed("   ")).toBeNull();
+  });
+
+  it("parses integer seeds", () => {
+    expect(parseDebugProviderSeed("42")).toBe(42);
   });
 });
 

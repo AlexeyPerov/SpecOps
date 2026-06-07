@@ -16,6 +16,15 @@ import { cloneThread } from "./threadHelpers";
 
 let agentIdCounter = 0;
 
+function parseAgentCounterFromId(agentId: string): number | null {
+  const match = /^agent-(\d+)$/.exec(agentId);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /** Clears agent id counter between unit tests. */
 export function resetAgentIdCounterForTests(): void {
   agentIdCounter = 0;
@@ -119,6 +128,17 @@ export function createAgentsSlice(deps: {
     thread: import("../../domain/contracts").ChatThreadSnapshot | null,
   ): import("../../domain/contracts").ChatThreadSnapshot | null {
     return normalizeThreadSnapshotForScope(thread, scopeKey);
+  }
+
+  function syncAgentIdCounterFromWorkspace(workspace: WorkspaceAgentsState): void {
+    let maxCounter = agentIdCounter;
+    for (const entry of workspace.agentIndex) {
+      const parsed = parseAgentCounterFromId(entry.id);
+      if (parsed !== null && parsed > maxCounter) {
+        maxCounter = parsed;
+      }
+    }
+    agentIdCounter = maxCounter;
   }
 
   return {
@@ -240,6 +260,12 @@ export function createAgentsSlice(deps: {
           existing?.activeAgentId && mergedIds.has(existing.activeAgentId)
             ? existing.activeAgentId
             : null;
+        syncAgentIdCounterFromWorkspace({
+          activeAgentId: activeAgentIdValue,
+          agentIndex: mergedIndex,
+          threadsByAgentId: mergedThreadsByAgentId,
+          runtimeByAgentId: mergedRuntimeByAgentId,
+        });
 
         return {
           ...state,
@@ -274,6 +300,10 @@ export function createAgentsSlice(deps: {
         if (additions.length === 0) {
           return nextState;
         }
+        syncAgentIdCounterFromWorkspace({
+          ...workspace,
+          agentIndex: [...workspace.agentIndex, ...additions],
+        });
         return patchWorkspaceState(nextState, normalizedRootPath, {
           ...workspace,
           agentIndex: [...workspace.agentIndex, ...additions],

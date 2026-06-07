@@ -125,9 +125,7 @@
   const workspaces = $derived(snapshot.contexts.workspaces);
   const activeWorkspaceRoot = $derived(appState.getWorkspaceRoot(activeContextId));
   const workspaceLayout = $derived(
-    activeWorkspaceRoot
-      ? normalizeWorkspaceLayout(session.layout)
-      : normalizeWorkspaceLayout(),
+    normalizeWorkspaceLayout(session.layout),
   );
   const showProjectPanel = $derived(
     !isChatHttpActive &&
@@ -136,11 +134,8 @@
       !autoProjectPanelCollapsed,
   );
   const showAgentsSidebar = $derived(
-    isChatHttpActive
-      ? !autoAgentsSidebarCollapsed
-      : Boolean(activeWorkspaceRoot) &&
-          !workspaceLayout.agentsSidebarCollapsed &&
-          !autoAgentsSidebarCollapsed,
+    (isChatHttpActive || Boolean(activeWorkspaceRoot)) &&
+      !workspaceLayout.agentsSidebarCollapsed,
   );
   const workspaceAgents = $derived($chatAgentIndex);
   const selectedAgentId = $derived($chatActiveAgentId);

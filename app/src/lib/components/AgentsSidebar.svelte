@@ -99,6 +99,35 @@
     window.addEventListener("pointercancel", onPointerEnd);
   }
 
+  function handleToggleClick(): void {
+    onToggleCollapsed(!collapsed);
+  }
+
+  function handleTogglePointerDown(event: PointerEvent): void {
+    event.preventDefault();
+    handleToggleClick();
+  }
+
+  function handleToggleButtonClick(event: MouseEvent): void {
+    // Pointer/touch action is handled in pointerdown to avoid lost click dispatch.
+    if (event.detail !== 0) {
+      return;
+    }
+    handleToggleClick();
+  }
+
+  function handleNewAgentPointerDown(event: PointerEvent): void {
+    event.preventDefault();
+    onNewAgent();
+  }
+
+  function handleNewAgentClick(event: MouseEvent): void {
+    if (event.detail !== 0) {
+      return;
+    }
+    onNewAgent();
+  }
+
   function openContextMenu(event: MouseEvent, agentId: string): void {
     event.preventDefault();
     event.stopPropagation();
@@ -161,14 +190,20 @@
   <header class="agents-sidebar-header">
     {#if !collapsed}
       <div class="agents-sidebar-title">{sidebarTitle}</div>
-      <button class="agents-sidebar-button agents-sidebar-new" type="button" onclick={onNewAgent}>
+      <button
+        class="agents-sidebar-button agents-sidebar-new"
+        type="button"
+        onpointerdown={handleNewAgentPointerDown}
+        onclick={handleNewAgentClick}
+      >
         {newEntryLabel}
       </button>
     {/if}
     <button
       class="agents-sidebar-button"
       type="button"
-      onclick={() => onToggleCollapsed(!collapsed)}
+      onpointerup={handleTogglePointerDown}
+      onclick={handleToggleButtonClick}
       title={collapsed ? `Expand ${entryPluralLabel} sidebar` : `Collapse ${entryPluralLabel} sidebar`}
     >
       {collapsed ? "⟫" : "⟪"}
@@ -254,6 +289,20 @@
   .agents-sidebar-collapsed {
     width: 36px;
     grid-template-rows: auto;
+    overflow: hidden;
+  }
+
+  .agents-sidebar-collapsed .agents-sidebar-header {
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+
+  .agents-sidebar-collapsed .agents-sidebar-button {
+    width: 36px;
+    height: var(--tab-header-height);
+    border-radius: 0;
+    padding: 0;
   }
 
   .agents-sidebar-resizing {

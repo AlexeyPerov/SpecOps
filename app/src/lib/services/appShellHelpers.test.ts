@@ -218,6 +218,18 @@ describe("computeResponsiveLayoutFlags", () => {
     ).toBe(true);
   });
 
+  it("does not auto-collapse agents sidebar outside workspace context", () => {
+    expect(
+      computeResponsiveLayoutFlags({
+        shellMainRowWidth: 800,
+        workspaceActive: false,
+        isAgentTabActive: true,
+        workspaceLayout: baseLayout,
+        consoleOpen: true,
+      }).autoAgentsSidebarCollapsed,
+    ).toBe(false);
+  });
+
   it("closes console when project panel is collapsed and width is under 900", () => {
     expect(
       computeResponsiveLayoutFlags({

@@ -2,8 +2,8 @@
 
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md)  
-**Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md)  
-**Status:** tier 1 done; **M4** (multiple providers) done  
+**Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md) → [m5 custom modes](./execution-plan-m5-custom-modes.md)  
+**Status:** tier 1 done; **M4** (multiple providers) done; **M5** (custom modes) planned  
 **Estimate:** tier 1 ~2–3 weeks after phase 1; M4 ~1 week incremental
 
 ## Goal
@@ -96,6 +96,20 @@ Named **HTTP (OpenAI-compatible) connections** in Settings → Providers; compos
 | [x] | Composer connection picker in Chats and workspace HTTP chat |
 | [x] | Rail gating: ≥1 configured connection (or Debug Provider in Chats) |
 
+## Milestone 5 — Custom chat modes (extension)
+
+See [execution-plan-m5-custom-modes.md](./execution-plan-m5-custom-modes.md).
+
+User-defined chat modes in Settings → **Chat modes**; built-in **Raw**; placeholders `{{workspace}}` / `{{summary}}`; required sections for structured UI; all enabled modes (including **Review**) in Chats and workspace. Supersedes **C2A** ask-only for chat-http.
+
+| Exit (M5) | |
+|-----------|--|
+| [ ] | Chat modes settings tab (built-ins read-only + custom CRUD) |
+| [ ] | Raw built-in (disabled by default) |
+| [ ] | Presets: Ideation, Critical analysis, Technical specification, Executive summary |
+| [ ] | Review + custom structured modes in Chats composer |
+| [ ] | Missing/disabled custom mode → Ask fallback |
+
 ## Key files (expected touch)
 
 - `ActivityRail.svelte`, `+page.svelte` (context switch, layout)
@@ -116,11 +130,13 @@ Named **HTTP (OpenAI-compatible) connections** in Settings → Providers; compos
 | P2-6 | Chats label, ask-only modes, Debug in Chat |
 | P2-7 | Tests + validation suite updates |
 | P2-8 | Multiple HTTP providers (M4) — [execution-plan-m4](./execution-plan-m4-multiple-providers.md) |
+| P2-9 | Custom chat modes (M5) — [execution-plan-m5-custom-modes](./execution-plan-m5-custom-modes.md) |
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-07 | Added M5 execution plan — custom chat modes (Raw built-in, chat-http scope unification) |
 | 2026-06-06 | Added M4 execution plan — multiple HTTP providers (connections list) |
 | 2026-06-05 | Added milestone execution plans (m1–m3) |
 | 2026-06-04 | Initial phase 2 spec |

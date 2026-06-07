@@ -19,6 +19,18 @@
   import type { EditorLanguageId } from "../editor/editorLanguage";
   import { createPlaintextSymbolDecorations } from "../editor/plaintextDecorations";
   import {
+    duplicateLineText,
+    joinLinesText,
+    moveLineDown,
+    moveLineUp,
+  } from "../editor/editorLineOps";
+  import {
+    buildReplaceAllChanges,
+    findNextMatchIndex,
+    findPreviousMatchIndex,
+    selectionMatchesQuery,
+  } from "../editor/editorSearchOps";
+  import {
     createSearchHighlightExtension,
     findAllMatches,
     searchHighlightCompartment,
@@ -93,84 +105,18 @@
     }
   }
 
-  function lineRange(text: string, from: number, to: number): { start: number; end: number } {
-    const lineStart = text.lastIndexOf("\n", Math.max(0, from - 1)) + 1;
-    const afterTo = to === text.length ? text.length : to + 1;
-    const nextBreak = text.indexOf("\n", afterTo);
-    const lineEnd = nextBreak === -1 ? text.length : nextBreak;
-    return { start: lineStart, end: lineEnd };
-  }
-
   function moveLine(direction: "up" | "down"): void {
-    withEditorSelection((text, from, to) => {
-      const current = lineRange(text, from, to);
-      const currentLine = text.slice(current.start, current.end);
-      if (direction === "up") {
-        if (current.start === 0) {
-          return { text, from, to, message: "Already at first line" };
-        }
-        const prevEnd = current.start - 1;
-        const prevStart = text.lastIndexOf("\n", Math.max(0, prevEnd - 1)) + 1;
-        const previous = text.slice(prevStart, prevEnd);
-        const rebuilt = `${text.slice(0, prevStart)}${currentLine}\n${previous}${text.slice(current.end)}`;
-        const delta = currentLine.length - previous.length;
-        return {
-          text: rebuilt,
-          from: from - (previous.length + 1),
-          to: to - (previous.length + 1),
-          message: "Moved line up",
-        };
-      }
-
-      if (current.end === text.length) {
-        return { text, from, to, message: "Already at last line" };
-      }
-
-      const nextStart = current.end + 1;
-      const nextEndRaw = text.indexOf("\n", nextStart);
-      const nextEnd = nextEndRaw === -1 ? text.length : nextEndRaw;
-      const nextLine = text.slice(nextStart, nextEnd);
-      const rebuilt = `${text.slice(0, current.start)}${nextLine}\n${currentLine}${text.slice(nextEnd)}`;
-      return {
-        text: rebuilt,
-        from: from + (nextLine.length + 1),
-        to: to + (nextLine.length + 1),
-        message: "Moved line down",
-      };
-    });
+    withEditorSelection((text, from, to) =>
+      direction === "up" ? moveLineUp(text, from, to) : moveLineDown(text, from, to),
+    );
   }
 
   function duplicateLine(): void {
-    withEditorSelection((text, from, to) => {
-      const current = lineRange(text, from, to);
-      const currentLine = text.slice(current.start, current.end);
-      const insertAt = current.end;
-      const separator = insertAt === text.length ? "\n" : "";
-      const rebuilt = `${text.slice(0, insertAt)}\n${currentLine}${separator}${text.slice(insertAt)}`;
-      return {
-        text: rebuilt,
-        from,
-        to,
-        message: "Duplicated line",
-      };
-    });
+    withEditorSelection((text, from, to) => duplicateLineText(text, from, to));
   }
 
   function joinLines(): void {
-    withEditorSelection((text, from, to) => {
-      const current = lineRange(text, from, to);
-      const nextBreak = text.indexOf("\n", current.end + 1);
-      if (current.end >= text.length || nextBreak === -1) {
-        return { text, from, to, message: "Nothing to join" };
-      }
-      const rebuilt = `${text.slice(0, current.end)} ${text.slice(current.end + 1)}`;
-      return {
-        text: rebuilt,
-        from,
-        to,
-        message: "Joined lines",
-      };
-    });
+    withEditorSelection((text, from, to) => joinLinesText(text, from, to));
   }
 
   function updateCursor(): void {
@@ -267,23 +213,13 @@
     });
   }
 
-  function normalizeForSearch(value: string, caseSensitive: boolean): string {
-    return caseSensitive ? value : value.toLowerCase();
-  }
-
   function findNext(query: string, caseSensitive: boolean): boolean {
     if (!view || query.length === 0) {
       return false;
     }
     const doc = view.state.doc.toString();
-    const haystack = normalizeForSearch(doc, caseSensitive);
-    const needle = normalizeForSearch(query, caseSensitive);
-    const from = view.state.selection.main.to;
-    let idx = haystack.indexOf(needle, from);
-    if (idx === -1) {
-      idx = haystack.indexOf(needle, 0);
-    }
-    if (idx === -1) {
+    const idx = findNextMatchIndex(doc, query, caseSensitive, view.state.selection.main.to);
+    if (idx === null) {
       return false;
     }
     view.dispatch({
@@ -304,10 +240,7 @@
     }
     const sel = view.state.selection.main;
     const selectedText = view.state.sliceDoc(sel.from, sel.to);
-    if (
-      normalizeForSearch(selectedText, caseSensitive) !==
-      normalizeForSearch(query, caseSensitive)
-    ) {
+    if (!selectionMatchesQuery(selectedText, query, caseSensitive)) {
       return false;
     }
     view.dispatch({
@@ -327,18 +260,12 @@
       return 0;
     }
     const source = view.state.doc.toString();
-    const haystack = normalizeForSearch(source, caseSensitive);
-    const needle = normalizeForSearch(query, caseSensitive);
-    let index = 0;
-    let count = 0;
-    const changes: { from: number; to: number; insert: string }[] = [];
-    while (index < haystack.length) {
-      const found = haystack.indexOf(needle, index);
-      if (found === -1) break;
-      changes.push({ from: found, to: found + query.length, insert: replacement });
-      count += 1;
-      index = found + Math.max(1, query.length);
-    }
+    const { changes, count } = buildReplaceAllChanges(
+      source,
+      query,
+      replacement,
+      caseSensitive,
+    );
     if (changes.length > 0) {
       view.dispatch({ changes, userEvent: "input" });
       updateCursor();
@@ -351,15 +278,13 @@
       return false;
     }
     const doc = view.state.doc.toString();
-    const haystack = normalizeForSearch(doc, caseSensitive);
-    const needle = normalizeForSearch(query, caseSensitive);
-    const from = view.state.selection.main.from;
-
-    let idx = from > 0 ? haystack.lastIndexOf(needle, from - 1) : -1;
-    if (idx === -1) {
-      idx = haystack.lastIndexOf(needle);
-    }
-    if (idx === -1) {
+    const idx = findPreviousMatchIndex(
+      doc,
+      query,
+      caseSensitive,
+      view.state.selection.main.from,
+    );
+    if (idx === null) {
       return false;
     }
     view.dispatch({
@@ -380,10 +305,7 @@
     }
     const sel = view.state.selection.main;
     const selectedText = view.state.sliceDoc(sel.from, sel.to);
-    if (
-      normalizeForSearch(selectedText, caseSensitive) ===
-      normalizeForSearch(query, caseSensitive)
-    ) {
+    if (selectionMatchesQuery(selectedText, query, caseSensitive)) {
       view.dispatch({
         changes: { from: sel.from, to: sel.to, insert: replacement },
         selection: EditorSelection.range(sel.from, sel.from + replacement.length),

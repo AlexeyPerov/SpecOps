@@ -13,6 +13,18 @@
     closeTabWithUnsavedPrompt,
     closeTabsToRightWithUnsavedPrompt,
   } from "../services/closeTabFlow";
+  import {
+    canCloseMissingFileTabs,
+    canCloseOtherTabs,
+    canCloseTabsToRight,
+    canCopyRelativePath,
+    canCopyTabPath,
+    canOpenNearbyFiles,
+    canRenameTab,
+    canRevealTabInFileManager,
+    collectTabOpenPaths,
+    tabDocumentForTab,
+  } from "../services/tabContextMenuActions";
 
   const revealLabel = revealInFileManagerLabel();
 
@@ -38,10 +50,7 @@
   let nearbyRequestId = 0;
 
   function tabDocument(tab: TabState): DocumentState | undefined {
-    if (!isFileTab(tab)) {
-      return undefined;
-    }
-    return documents.find((doc) => doc.id === tab.documentId);
+    return tabDocumentForTab(tab, documents);
   }
 
   export function openContextMenu(event: MouseEvent, tab: TabState): void {
@@ -147,14 +156,7 @@
   }
 
   function tabOpenPaths(): string[] {
-    const openPaths = new Set<string>();
-    for (const tab of openTabs) {
-      const doc = tabDocument(tab);
-      if (doc?.filePath) {
-        openPaths.add(doc.filePath);
-      }
-    }
-    return [...openPaths];
+    return collectTabOpenPaths(openTabs, documents);
   }
 
   async function prefetchNearbyFiles(tab: TabState): Promise<void> {
@@ -251,55 +253,25 @@
 
   const contextMenuTabDoc = $derived(contextMenuTab ? tabDocument(contextMenuTab) : null);
 
-  const contextMenuCanReveal = $derived(Boolean(contextMenuTab && tabDocument(contextMenuTab)?.filePath));
+  const contextMenuCanReveal = $derived(canRevealTabInFileManager(contextMenuTab, documents));
 
-  const contextMenuCanRename = $derived(
-    Boolean(
-      contextMenuTab &&
-        isFileTab(contextMenuTab) &&
-        contextMenuTabDoc?.filePath &&
-        !contextMenuTabDoc.fileMissing,
-    ),
-  );
-
-  const contextMenuTabIndex = $derived(
-    contextMenuTab ? openTabs.findIndex((tab) => tab.id === contextMenuTab.id) : -1,
-  );
+  const contextMenuCanRename = $derived(canRenameTab(contextMenuTab, contextMenuTabDoc));
 
   const contextMenuWorkspaceRoot = $derived(appState.getWorkspaceRoot());
 
-  const contextMenuRelativePath = $derived(
-    contextMenuTabDoc?.filePath && contextMenuWorkspaceRoot
-      ? workspaceRelativePath(contextMenuTabDoc.filePath, contextMenuWorkspaceRoot)
-      : null,
+  const contextMenuCanCloseOtherTabs = $derived(canCloseOtherTabs(openTabs, contextMenuTab));
+
+  const contextMenuCanCloseTabsToRight = $derived(canCloseTabsToRight(openTabs, contextMenuTab));
+
+  const contextMenuCanCloseMissingFileTabs = $derived(canCloseMissingFileTabs(openTabs, documents));
+
+  const contextMenuCanOpenNearby = $derived(canOpenNearbyFiles(contextMenuTabDoc));
+
+  const contextMenuCanCopyPath = $derived(canCopyTabPath(contextMenuTabDoc));
+
+  const contextMenuCanCopyRelativePath = $derived(
+    canCopyRelativePath(contextMenuTabDoc?.filePath, contextMenuWorkspaceRoot),
   );
-
-  const contextMenuCanCloseOtherTabs = $derived(
-    Boolean(
-      contextMenuTab &&
-        openTabs.some((tab) => tab.id !== contextMenuTab.id && !tab.pinned),
-    ),
-  );
-
-  const contextMenuCanCloseTabsToRight = $derived(
-    contextMenuTabIndex >= 0 &&
-      openTabs.slice(contextMenuTabIndex + 1).some((tab) => !tab.pinned),
-  );
-
-  const contextMenuCanCloseMissingFileTabs = $derived(
-    openTabs.some((tab) => {
-      if (tab.pinned) {
-        return false;
-      }
-      return Boolean(tabDocument(tab)?.fileMissing);
-    }),
-  );
-
-  const contextMenuCanOpenNearby = $derived(Boolean(contextMenuTabDoc?.filePath));
-
-  const contextMenuCanCopyPath = $derived(Boolean(contextMenuTabDoc?.filePath));
-
-  const contextMenuCanCopyRelativePath = $derived(contextMenuRelativePath !== null);
 
   const contextMenuHasNearbyFiles = $derived(nearbyFiles.length > 0);
 </script>

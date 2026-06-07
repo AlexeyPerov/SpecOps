@@ -112,12 +112,13 @@ User-defined chat modes in Settings → **Chat modes**; built-in **Raw**; placeh
 
 ## Milestone 6 — Codebase refactoring (extension)
 
-See [execution-plan-m6-refactoring.md](./execution-plan-m6-refactoring.md) (sub-plans: [UI](./execution-plan-m6-ui-refactoring.md), [state](./execution-plan-m6-state-refactoring.md), [platform](./execution-plan-m6-platform-refactoring.md)).
+See [execution-plan-m6-refactoring.md](./execution-plan-m6-refactoring.md) (sub-milestones: [M6.1 tests](./execution-plan-m6-1-test-coverage.md), [M6.2 UI](./execution-plan-m6-2-ui-refactoring.md), [M6.3 state](./execution-plan-m6-3-state-refactoring.md), [M6.4 platform](./execution-plan-m6-4-platform-refactoring.md)).
 
-Behavior-preserving splits of oversized modules (settings dialog, app shell, state slices, command registry, services, tests). No new user-facing features.
+Pre-refactor test coverage (M6.1), then behavior-preserving splits of oversized modules. No new user-facing features.
 
 | Exit (M6) | |
 |-----------|--|
+| [ ] | M6.1 pre-refactor test gaps closed |
 | [ ] | Settings dialog and `+page.svelte` ≤600 lines each |
 | [ ] | State slices and `contracts.ts` split by domain |
 | [ ] | Command registry, chatPersistence, sendChatMessage split |
@@ -152,6 +153,7 @@ Behavior-preserving splits of oversized modules (settings dialog, app shell, sta
 
 | Date | Change |
 |------|--------|
+| 2026-06-07 | Added M6.1 test-coverage sub-milestone; renamed sub-plans to M6.1–M6.4 |
 | 2026-06-07 | Added M6 execution plan — codebase refactoring (M6-UI, M6-State, M6-Platform sub-plans) |
 | 2026-06-07 | Added M5 execution plan — custom chat modes (Raw built-in, chat-http scope unification) |
 | 2026-06-06 | Added M4 execution plan — multiple HTTP providers (connections list) |

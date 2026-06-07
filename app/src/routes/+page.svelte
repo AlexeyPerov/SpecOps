@@ -1,21 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import DocumentEditor from "../lib/components/DocumentEditor.svelte";
-  import MarkdownEditorPane from "../lib/components/MarkdownEditorPane.svelte";
-  import DiffPreviewPane from "../lib/components/DiffPreviewPane.svelte";
-  import ImagePreviewPane from "../lib/components/ImagePreviewPane.svelte";
-  import BinaryFilePane from "../lib/components/BinaryFilePane.svelte";
-  import LargeFileConfirmPane from "../lib/components/LargeFileConfirmPane.svelte";
-  import ConsolePanel from "../lib/components/ConsolePanel.svelte";
-  import SettingsDialog from "../lib/components/SettingsDialog.svelte";
-  import EntryNamePrompt from "../lib/components/EntryNamePrompt.svelte";
-  import ThemePane from "../lib/components/ThemePane.svelte";
-  import FindReplacePanel from "../lib/components/FindReplacePanel.svelte";
-  import TabBar from "../lib/components/TabBar.svelte";
-  import ActivityRail from "../lib/components/ActivityRail.svelte";
-  import ProjectPanel from "../lib/components/ProjectPanel.svelte";
-  import AgentsSidebar from "../lib/components/AgentsSidebar.svelte";
-  import ChatPanel from "../lib/components/ChatPanel.svelte";
+  import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
   import { nextSidebarAgentId, openAgentTabIds, resolveRestoredActiveAgent, selectedTabAfterMissingLastAgent } from "../lib/services/workspaceAgentSession";
@@ -71,8 +56,6 @@
     findWorkspaceIndex,
     resolveCloseWorkspaceAction as resolveCloseWorkspaceActionFromPrompts,
   } from "../lib/services/workspaceContextMenuController";
-  import "../lib/styles/app-shell.css";
-
   let themePaneOpen = $state(false);
   let settingsDialogOpen = $state(false);
   let settingsDialogInitialTab = $state<SettingsDialogTab>("editor");
@@ -1087,301 +1070,117 @@
   });
 </script>
 
-<main class="shell">
-  <div class="shell-main-row" bind:this={shellMainRowEl}>
-    {#if showActivityRail}
-      <ActivityRail
-        workspaces={workspaces}
-        activeContextId={activeContextId}
-        showChatHttp={chatHttpRailVisible}
-        onSelectContext={handleSelectContext}
-        onAddWorkspace={handleAddWorkspace}
-        onRequestCloseWorkspace={handleOpenWorkspaceContextMenu}
-        onReorderWorkspaces={(fromIndex, toIndex) => appState.reorderWorkspaces(fromIndex, toIndex)}
-      />
-    {/if}
-    {#if activeWorkspaceRoot || isChatHttpActive}
-      <AgentsSidebar
-        agents={workspaceAgents}
-        activeAgentId={selectedAgentId}
-        sidebarTitle={isChatHttpActive ? "Chats" : "Agents"}
-        collapsed={!showAgentsSidebar}
-        panelWidthPx={workspaceLayout.agentsSidebarWidthPx}
-        onToggleCollapsed={toggleAgentsSidebarCollapsed}
-        onPanelWidthChange={handleAgentsSidebarWidthChange}
-        onSelectAgent={handleSelectAgent}
-        onNewAgent={handleNewAgent}
-        onDeleteAgent={(agentId) => void handleDeleteAgent(agentId)}
-      />
-    {/if}
-    <section class="editor-shell" bind:this={editorShellEl} style="--console-height: {consoleHeightPx}px;">
-      <header class="tab-header">
-    <div class="header-left">
-      <TabBar
-        openTabs={session.openTabs}
-        documents={documents}
-        selectedTabId={session.selectedTabId}
-        useChatTerminology={isChatHttpActive}
-        windowId={currentWindowId}
-        notify={notify}
-        onCloseTab={handleCloseTab}
-      />
-      {#if !isChatHttpActive}
-        <button
-          class="toolbar-button add-file-button"
-          type="button"
-          aria-label="Create new untitled file"
-          title="New Untitled File"
-          onclick={() => runCommand("file.new")}
-        >
-          +
-        </button>
-      {/if}
-    </div>
-    <div class="header-right">
-      <button class="toolbar-button" type="button" onclick={() => runCommand("app.toggleThemePane")}>
-        Theme
-      </button>
-    </div>
-      </header>
-
-      <section class="editor-pane" class:editor-pane-agent={isAgentTabActive} bind:this={editorPaneEl}>
-    {#if isChatHttpActive || isAgentTabActive}
-      <ChatPanel
-        chatContextKind={isChatHttpActive ? "chat-http" : "workspace"}
-        onDeleteAgent={handleDeleteAgentFromChat}
-      />
-    {:else if snapshot.editor.previewMode === "diff"}
-      <DiffPreviewPane
-        savedContent={activeDocument?.savedContent ?? ""}
-        currentContent={activeDocument?.content ?? ""}
-      />
-    {:else if isImageDocument}
-      <ImagePreviewPane
-        filePath={activeDocument?.filePath ?? null}
-        title={activeDocument?.title ?? "Image"}
-        sizeBytes={previewFileSizeBytes}
-      />
-    {:else if isBinaryDocument}
-      <BinaryFilePane
-        filePath={activeDocument?.filePath ?? null}
-        title={activeDocument?.title ?? "Binary file"}
-        sizeBytes={previewFileSizeBytes}
-        maxOpenAsTextBytes={snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes}
-      />
-    {:else if isLargePendingDocument}
-      <LargeFileConfirmPane
-        filePath={activeDocument?.filePath ?? null}
-        title={activeDocument?.title ?? "Large file"}
-        sizeBytes={previewFileSizeBytes}
-        maxOpenWithoutConfirmBytes={snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes}
-        confirming={largeFileConfirming}
-        onConfirm={handleConfirmLargeFile}
-      />
-    {:else}
-      {#if isMarkdownDocument}
-        <MarkdownEditorPane
-          content={activeDocument?.content ?? ""}
-          documentId={activeDocument?.id ?? null}
-          documentFilePath={activeDocument?.filePath ?? null}
-          scrollTop={activeDocument?.scrollTop ?? 0}
-          language={activeDocument?.language ?? "markdown"}
-          wrapLines={snapshot.editor.wrapLines}
-          zoomPercent={snapshot.editor.zoomPercent}
-          decoratePlaintextSymbols={snapshot.settings.decoratePlaintextSymbols}
-          {markdownHtml}
-          storedMarkdownViewMode={activeDocument?.markdownViewMode ?? "edit"}
-          canFitSplit={canFitMarkdownSplit()}
-          windowId={currentWindowId}
-          onStatusMessage={notify}
-          onMarkdownViewModeChange={setMarkdownViewMode}
-          onUntitledTitleRefresh={scheduleUntitledTitleRefresh}
-          onScrollTopChange={handleDocumentScrollTop}
-          registerEditorCommandRunner={(runner) => {
-            editorRunner = runner;
-          }}
-        />
-      {:else}
-        <DocumentEditor
-          content={activeDocument?.content ?? ""}
-          documentId={activeDocument?.id ?? null}
-          scrollTop={activeDocument?.scrollTop ?? 0}
-          wrapLines={snapshot.editor.wrapLines}
-          zoomPercent={snapshot.editor.zoomPercent}
-          language={activeDocument?.language ?? "plaintext"}
-          decoratePlaintextSymbols={snapshot.settings.decoratePlaintextSymbols}
-          onStatusMessage={notify}
-          onUntitledTitleRefresh={scheduleUntitledTitleRefresh}
-          onScrollTopChange={handleDocumentScrollTop}
-          registerEditorCommandRunner={(runner) => {
-            editorRunner = runner;
-          }}
-        />
-      {/if}
-    {/if}
-
-    {#if isTextEditorDocument && !isAgentTabActive && !isChatHttpActive && snapshot.editor.findReplaceOpen}
-      <FindReplacePanel
-        bind:findQuery
-        bind:replaceValue
-        bind:findCaseSensitive
-        {editorRunner}
-        {notify}
-        documentId={activeDocument?.id ?? null}
-      />
-    {/if}
-
-    {#if isTextEditorDocument && !isAgentTabActive && !isChatHttpActive && snapshot.editor.goToOpen}
-      <div class="floating-tool goto-tool">
-        <h3>Go To Line</h3>
-        <input placeholder="Line number..." bind:value={goToLineValue} />
-        <div class="tool-actions">
-          <button type="button" class="toolbar-button" onclick={runGoToLine}>Go</button>
-          <button type="button" class="toolbar-button" onclick={() => appState.setGoToOpen(false)}>
-            Close
-          </button>
-        </div>
-      </div>
-    {/if}
-        <ThemePane open={themePaneOpen} />
-      </section>
-
-      <div class="bottom-panel">
-        {#if consoleOpen}
-          <ConsolePanel
-            bind:heightPx={consoleHeightPx}
-            onHeightCommit={persistConsoleHeightNow}
-          />
-        {/if}
-
-        <footer class="status-bar" class:status-bar-console-open={consoleOpen}>
-          <button
-            type="button"
-            class="status-bar-button"
-            title={consoleOpen ? "Hide console" : "Show console"}
-            onclick={toggleConsole}
-          >
-            <span class="status-segment optional-segment optional-cursor">
-              Ln {snapshot.editor.cursorLine}, Col {snapshot.editor.cursorColumn}
-            </span>
-            <span class="status-segment optional-segment optional-encoding">
-              {#if isImageDocument}
-                Image
-              {:else if isBinaryDocument}
-                Binary
-              {:else if isLargePendingDocument}
-                Large file
-              {:else}
-                {activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
-              {/if}
-            </span>
-            <span class="status-segment optional-segment optional-line-ending">
-              {activeDocument?.lineEnding.toUpperCase() ?? "LF"}
-            </span>
-            <span class="status-segment optional-segment optional-zoom">
-              {snapshot.editor.zoomPercent}%
-            </span>
-            <span class="status-segment optional-segment optional-wrap">
-              {snapshot.editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
-            </span>
-            <span class="status-segment">{activeDocument?.isDirty ? "Modified" : "Saved"}</span>
-            {#if activeDocument?.fileMissing}
-              <span class="status-segment status-missing" title="File no longer exists on disk">
-                File missing
-              </span>
-            {/if}
-            <span class="status-segment status-message optional-segment optional-message">{statusMessage}</span>
-            <span class="status-segment path-segment" title={activeDocument?.filePath ?? statusPath}>
-              {statusPath}
-            </span>
-          </button>
-        </footer>
-      </div>
-    </section>
-    {#if activeWorkspaceRoot}
-      <ProjectPanel
-        workspaceRoot={activeWorkspaceRoot}
-        rootNodes={projectTreeControllerState.rootNodes}
-        expandedPaths={projectTreeControllerState.expandedPaths}
-        childrenByPath={projectTreeControllerState.childrenByPath}
-        loadingPaths={projectTreeControllerState.loadingPaths}
-        activeFilePath={activeDocumentPath}
-        showHidden={projectTreeControllerState.showHidden}
-        collapsed={!showProjectPanel}
-        panelWidthPx={workspaceLayout.projectPanelWidthPx}
-        onRefresh={refreshProjectTree}
-        onToggleHidden={toggleProjectTreeHidden}
-        onToggleCollapsed={toggleProjectPanelCollapsed}
-        onPanelWidthChange={handleProjectPanelWidthChange}
-        onToggleDirectory={handleToggleProjectTreeDirectory}
-        onOpenFile={handleOpenProjectTreeFile}
-        onMoveEntry={handleMoveProjectTreeEntry}
-        onNewFile={(parent) => void handleNewProjectFile(parent)}
-        onNewFolder={(parent) => void handleNewProjectFolder(parent)}
-        onRenameEntry={(path, kind) => void handleRenameProjectEntry(path, kind)}
-        onDeleteEntry={(path, kind) => void handleDeleteProjectEntry(path, kind)}
-        {notify}
-      />
-    {/if}
-  </div>
-
-</main>
-
-<SettingsDialog
-  open={settingsDialogOpen}
-  initialTab={settingsDialogInitialTab}
-  onClose={() => (settingsDialogOpen = false)}
+<AppShell
+  bind:shellMainRowEl
+  bind:editorShellEl
+  bind:editorPaneEl
+  bind:workspaceContextMenuEl
+  bind:consoleHeightPx
+  bind:editorRunner
+  bind:findQuery
+  bind:replaceValue
+  bind:findCaseSensitive
+  bind:goToLineValue
+  {consoleOpen}
+  onConsoleHeightCommit={persistConsoleHeightNow}
+  activityRail={{
+    show: showActivityRail,
+    workspaces,
+    activeContextId,
+    chatHttpRailVisible,
+    onSelectContext: handleSelectContext,
+    onAddWorkspace: handleAddWorkspace,
+    onRequestCloseWorkspace: handleOpenWorkspaceContextMenu,
+    onReorderWorkspaces: (fromIndex, toIndex) => appState.reorderWorkspaces(fromIndex, toIndex),
+  }}
+  agentsSidebar={{
+    show: Boolean(activeWorkspaceRoot) || isChatHttpActive,
+    agents: workspaceAgents,
+    activeAgentId: selectedAgentId,
+    sidebarTitle: isChatHttpActive ? "Chats" : "Agents",
+    collapsed: !showAgentsSidebar,
+    panelWidthPx: workspaceLayout.agentsSidebarWidthPx,
+    onToggleCollapsed: toggleAgentsSidebarCollapsed,
+    onPanelWidthChange: handleAgentsSidebarWidthChange,
+    onSelectAgent: handleSelectAgent,
+    onNewAgent: handleNewAgent,
+    onDeleteAgent: handleDeleteAgent,
+  }}
+  projectTree={{
+    workspaceRoot: activeWorkspaceRoot,
+    state: projectTreeControllerState,
+    activeFilePath: activeDocumentPath,
+    collapsed: !showProjectPanel,
+    panelWidthPx: workspaceLayout.projectPanelWidthPx,
+    onRefresh: refreshProjectTree,
+    onToggleHidden: toggleProjectTreeHidden,
+    onToggleCollapsed: toggleProjectPanelCollapsed,
+    onPanelWidthChange: handleProjectPanelWidthChange,
+    onToggleDirectory: handleToggleProjectTreeDirectory,
+    onOpenFile: handleOpenProjectTreeFile,
+    onMoveEntry: handleMoveProjectTreeEntry,
+    onNewFile: handleNewProjectFile,
+    onNewFolder: handleNewProjectFolder,
+    onRenameEntry: handleRenameProjectEntry,
+    onDeleteEntry: handleDeleteProjectEntry,
+    notify,
+  }}
+  editor={{
+    session,
+    documents,
+    activeDocument,
+    isChatHttpActive,
+    isAgentTabActive,
+    isImageDocument,
+    isBinaryDocument,
+    isLargePendingDocument,
+    isTextEditorDocument,
+    isMarkdownDocument,
+    previewFileSizeBytes,
+    markdownHtml,
+    previewMode: snapshot.editor.previewMode,
+    findReplaceOpen: snapshot.editor.findReplaceOpen,
+    goToOpen: snapshot.editor.goToOpen,
+    wrapLines: snapshot.editor.wrapLines,
+    zoomPercent: snapshot.editor.zoomPercent,
+    cursorLine: snapshot.editor.cursorLine,
+    cursorColumn: snapshot.editor.cursorColumn,
+    decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
+    maxBinaryOpenAsTextBytes: snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes,
+    maxOpenWithoutConfirmBytes: snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes,
+    largeFileConfirming,
+    canFitMarkdownSplit: canFitMarkdownSplit(),
+    currentWindowId,
+    onCloseTab: handleCloseTab,
+    onRunCommand: runCommand,
+    onConfirmLargeFile: handleConfirmLargeFile,
+    onMarkdownViewModeChange: setMarkdownViewMode,
+    onUntitledTitleRefresh: scheduleUntitledTitleRefresh,
+    onScrollTopChange: handleDocumentScrollTop,
+    onDeleteAgentFromChat: handleDeleteAgentFromChat,
+    onGoToLine: runGoToLine,
+    onCloseGoTo: () => appState.setGoToOpen(false),
+    notify,
+  }}
+  statusBar={{
+    statusPath,
+    statusMessage,
+    consoleOpen,
+    onToggleConsole: toggleConsole,
+  }}
+  workspaceContextMenu={{
+    menu: workspaceContextMenu,
+    menuIndex: workspaceContextMenuIndex(),
+    workspaceCount: workspaces.length,
+    onMoveUp: () => moveWorkspaceFromContextMenu("up"),
+    onMoveDown: () => moveWorkspaceFromContextMenu("down"),
+    onCloseWorkspace: closeWorkspaceFromContextMenu,
+  }}
+  overlays={{
+    themePaneOpen,
+    settingsDialogOpen,
+    settingsDialogInitialTab,
+    onSettingsDialogClose: () => (settingsDialogOpen = false),
+    notify,
+  }}
 />
-
-<EntryNamePrompt onNotify={notify} />
-
-{#if workspaceContextMenu}
-  {@const menuIndex = workspaceContextMenuIndex()}
-  <div
-    bind:this={workspaceContextMenuEl}
-    class="workspace-context-menu"
-    style={`left:${workspaceContextMenu.x}px; top:${workspaceContextMenu.y}px;`}
-    role="menu"
-    tabindex="-1"
-    onpointerdown={(event) => event.stopPropagation()}
-  >
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      disabled={menuIndex <= 0 || workspaces.length <= 1}
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        moveWorkspaceFromContextMenu("up");
-      }}
-    >
-      Move Up
-    </button>
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      disabled={menuIndex < 0 || menuIndex >= workspaces.length - 1 || workspaces.length <= 1}
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        moveWorkspaceFromContextMenu("down");
-      }}
-    >
-      Move Down
-    </button>
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        if (!workspaceContextMenu) {
-          return;
-        }
-        closeWorkspaceFromContextMenu(workspaceContextMenu.workspaceId);
-      }}
-    >
-      Close Workspace
-    </button>
-  </div>
-{/if}

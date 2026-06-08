@@ -1,3 +1,11 @@
+.settings-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1299;
+  background: var(--color-surface-overlay);
+  touch-action: none;
+}
+
 .settings-dialog-measure {
   position: fixed;
   left: -10000px;
@@ -5,16 +13,16 @@
   visibility: hidden;
   pointer-events: none;
   width: max-content;
-  max-width: 520px;
+  max-width: 780px;
 }
 
 .settings-dialog-header-measure {
-  width: 520px;
+  width: 780px;
   box-sizing: border-box;
 }
 
 .settings-dialog-body-measure {
-  width: 404px;
+  width: 606px;
   box-sizing: border-box;
   overflow: visible;
   padding: var(--space-8) var(--space-12) var(--space-12);

@@ -1,344 +1,197 @@
 <script lang="ts">
-  import type { BuiltinChatModeId, CustomChatModeDefinition } from "../../domain/contracts";
+  import type { BuiltinChatModeId } from "../../domain/contracts";
   import type { ResolvedChatMode } from "../../ai/modes/resolve";
   import { listBuiltinResolvedChatModes } from "../../ai/modes/resolve";
+  import { isBuiltinChatModeId } from "../../ai/modes/chatModesSettings";
   import { appState } from "../../state/appState";
-  import SettingsFoldout from "./SettingsFoldout.svelte";
-  import {
-    addRequiredSection as addRequiredSectionToList,
-    nextSelectedIdAfterRemoval,
-    removeRequiredSection as removeRequiredSectionFromList,
-    reorderRequiredSections,
-    resolveSelectedListItem,
-    resolveSelectedListItemId,
-    updateRequiredSection as updateRequiredSectionInList,
-  } from "./settingsPanelActions";
+  import ChatModeEditorDialog from "./ChatModeEditorDialog.svelte";
 
   const BUILTIN_CHAT_MODE_ORDER: readonly BuiltinChatModeId[] = ["ask", "review", "raw"];
 
   const snapshot = $derived($appState);
-  let selectedCustomModeId = $state<string | null>(null);
+  let editorOpen = $state(false);
+  let editingMode = $state<ResolvedChatMode | null>(null);
+  let editingBuiltinId = $state<BuiltinChatModeId | null>(null);
 
-  function builtinChatModes() {
-    return listBuiltinResolvedChatModes(snapshot.settings);
+  function allModes(): ResolvedChatMode[] {
+    const builtins = listBuiltinResolvedChatModes(snapshot.settings);
+    const orderedBuiltins = BUILTIN_CHAT_MODE_ORDER.map((id) =>
+      builtins.find((mode) => mode.id === id),
+    ).filter((mode): mode is ResolvedChatMode => mode !== undefined);
+    const customs = snapshot.settings.chatModes.customModes.map(
+      (custom): ResolvedChatMode => ({
+        id: custom.id,
+        name: custom.name,
+        source: "custom",
+        editable: true,
+        enabled: custom.enabled,
+        promptTemplate: custom.prompt,
+        includeWorkspace: custom.includeWorkspace,
+        includeSummary: custom.includeSummary,
+        requiredSections: custom.requiredSections,
+        sectionGuidance: custom.sectionGuidance,
+      }),
+    );
+    return [...orderedBuiltins, ...customs];
   }
 
-  function customModes() {
-    return snapshot.settings.chatModes.customModes;
+  function openModeEditor(mode: ResolvedChatMode): void {
+    editingMode = mode;
+    editingBuiltinId = isBuiltinChatModeId(mode.id) ? mode.id : null;
+    editorOpen = true;
   }
 
-  function selectedCustomMode(): CustomChatModeDefinition | null {
-    return resolveSelectedListItem(selectedCustomModeId, customModes());
+  function closeModeEditor(): void {
+    editorOpen = false;
+    editingMode = null;
+    editingBuiltinId = null;
   }
 
   function addCustomMode(): void {
     const id = appState.createCustomChatModeDraft();
-    selectedCustomModeId = id;
-  }
-
-  function removeCustomMode(modeId: string): void {
-    appState.removeCustomChatMode(modeId);
-    selectedCustomModeId = nextSelectedIdAfterRemoval(
-      modeId,
-      selectedCustomModeId,
-      customModes().map((mode) => mode.id),
-    );
-  }
-
-  function moveRequiredSection(sectionIndex: number, offset: -1 | 1): void {
-    const mode = selectedCustomMode();
-    if (!mode) {
+    const created = appState
+      .getSnapshot()
+      .settings.chatModes.customModes.find((mode) => mode.id === id);
+    if (!created) {
       return;
     }
-    const reordered = reorderRequiredSections(mode.requiredSections, sectionIndex, offset);
-    if (!reordered) {
-      return;
-    }
-    appState.updateCustomChatMode(mode.id, { requiredSections: reordered });
-  }
-
-  function addRequiredSection(): void {
-    const mode = selectedCustomMode();
-    if (!mode) {
-      return;
-    }
-    appState.updateCustomChatMode(mode.id, {
-      requiredSections: addRequiredSectionToList(mode.requiredSections),
+    openModeEditor({
+      id: created.id,
+      name: created.name,
+      source: "custom",
+      editable: true,
+      enabled: created.enabled,
+      promptTemplate: created.prompt,
+      includeWorkspace: created.includeWorkspace,
+      includeSummary: created.includeSummary,
+      requiredSections: created.requiredSections,
+      sectionGuidance: created.sectionGuidance,
     });
   }
 
-  function updateRequiredSection(sectionIndex: number, value: string): void {
-    const mode = selectedCustomMode();
-    if (!mode) {
+  function deleteEditingMode(): void {
+    if (!editingMode || editingMode.source !== "custom") {
       return;
     }
-    appState.updateCustomChatMode(mode.id, {
-      requiredSections: updateRequiredSectionInList(mode.requiredSections, sectionIndex, value),
-    });
+    appState.removeCustomChatMode(editingMode.id);
+    closeModeEditor();
   }
-
-  function removeRequiredSection(sectionIndex: number): void {
-    const mode = selectedCustomMode();
-    if (!mode) {
-      return;
-    }
-    appState.updateCustomChatMode(mode.id, {
-      requiredSections: removeRequiredSectionFromList(mode.requiredSections, sectionIndex),
-    });
-  }
-
-  $effect(() => {
-    selectedCustomModeId = resolveSelectedListItemId(
-      selectedCustomModeId,
-      customModes().map((mode) => mode.id),
-    );
-  });
 </script>
 
-{#snippet builtinModeFields(mode: ResolvedChatMode, builtinId: BuiltinChatModeId)}
-  {#if builtinId === "raw"}
-    <label class="settings-toggle">
-      <input
-        type="checkbox"
-        checked={snapshot.settings.chatModes.rawEnabled}
-        onchange={(event) =>
-          appState.setRawEnabled((event.currentTarget as HTMLInputElement).checked)}
-      />
-      Enabled
-    </label>
-  {/if}
-  <label class="settings-toggle">
-    <input
-      type="checkbox"
-      checked={snapshot.settings.chatModes.builtinToggles[builtinId].includeWorkspace}
-      onchange={(event) =>
-        appState.updateBuiltinModeToggles(builtinId, {
-          includeWorkspace: (event.currentTarget as HTMLInputElement).checked,
-        })}
-    />
-    Include workspace context
-  </label>
-  <label class="settings-toggle">
-    <input
-      type="checkbox"
-      checked={snapshot.settings.chatModes.builtinToggles[builtinId].includeSummary}
-      onchange={(event) =>
-        appState.updateBuiltinModeToggles(builtinId, {
-          includeSummary: (event.currentTarget as HTMLInputElement).checked,
-        })}
-    />
-    Include conversation summary
-  </label>
-  <label class="settings-field">
-    <span>Prompt</span>
-    <textarea rows={Math.max(3, mode.promptTemplate.split("\n").length + 1)} readonly
-      >{mode.promptTemplate}</textarea
-    >
-  </label>
-  {#if mode.requiredSections.length > 0}
-    <p class="settings-section-note">
-      Required sections: {mode.requiredSections.join(", ")}
-    </p>
-  {/if}
-{/snippet}
-
 <section class="settings-section">
-  <SettingsFoldout title="Built-in modes">
-    <p class="settings-section-note">
-      Built-in prompts are read-only. Toggle workspace and summary context per mode.
-    </p>
-    {#each BUILTIN_CHAT_MODE_ORDER as builtinId (builtinId)}
-      {@const mode = builtinChatModes().find((entry) => entry.id === builtinId)}
-      {#if mode}
-        {#if builtinId === "ask" || builtinId === "review"}
-          <SettingsFoldout title={mode.name} nested>
-            {@render builtinModeFields(mode, builtinId)}
-          </SettingsFoldout>
-        {:else}
-          <div class="settings-subsection settings-subsection-separated">
-            <h4>{mode.name}</h4>
-            {@render builtinModeFields(mode, builtinId)}
-          </div>
-        {/if}
-      {/if}
-    {/each}
-  </SettingsFoldout>
-</section>
-
-<section class="settings-section">
-  <h3>Custom modes</h3>
+  <h3>Chat modes</h3>
   <p class="settings-section-note">
-    Use <code>{"{{workspace}}"}</code> and <code>{"{{summary}}"}</code> placeholders in prompts.
+    Click a mode to edit. Use <code>{"{{workspace}}"}</code> and <code>{"{{summary}}"}</code>
+    placeholders in custom prompts.
   </p>
-  <div class="settings-subsection">
-    <h4>Mode list</h4>
-    <button type="button" class="settings-action" onclick={addCustomMode}>Add mode</button>
-    {#if customModes().length === 0}
-      <p class="settings-section-note">No custom modes yet. Add one to start.</p>
-    {:else}
-      <div class="connection-list" role="listbox" aria-label="Custom chat modes">
-        {#each customModes() as mode (mode.id)}
-          <div
-            class="connection-row"
-            class:connection-row-active={mode.id === selectedCustomMode()?.id}
-            role="option"
-            aria-selected={mode.id === selectedCustomMode()?.id}
-          >
-            <button
-              type="button"
-              class="connection-row-select"
-              onclick={() => {
-                selectedCustomModeId = mode.id;
-              }}
-            >
-              <span>{mode.name}</span>
-              <small>{mode.enabled ? "Enabled" : "Disabled"}</small>
-            </button>
-            <button
-              type="button"
-              class="connection-row-remove settings-action settings-action-danger"
-              aria-label={`Remove ${mode.name}`}
-              onclick={() => removeCustomMode(mode.id)}
-            >
-              Remove
-            </button>
-          </div>
-        {/each}
-      </div>
-    {/if}
+
+  <div class="chat-modes-grid" role="list" aria-label="Chat modes">
+    {#each allModes() as mode (mode.id)}
+      <button
+        type="button"
+        class="chat-mode-tile"
+        class:chat-mode-tile-disabled={!mode.enabled}
+        role="listitem"
+        aria-label={`Edit ${mode.name}`}
+        onclick={() => openModeEditor(mode)}
+      >
+        <span class="chat-mode-tile-title">{mode.name}</span>
+        {#if mode.source === "custom" && !mode.enabled}
+          <span class="chat-mode-tile-badge">Disabled</span>
+        {/if}
+      </button>
+    {/each}
+    <button
+      type="button"
+      class="chat-mode-tile chat-mode-tile-add"
+      aria-label="Add custom mode"
+      onclick={addCustomMode}
+    >
+      <span class="chat-mode-tile-add-icon" aria-hidden="true">+</span>
+    </button>
   </div>
-  {#if selectedCustomMode()}
-    {@const mode = selectedCustomMode()!}
-    <div class="settings-subsection settings-subsection-separated">
-      <h4>Editor</h4>
-      <label class="settings-toggle">
-        <input
-          type="checkbox"
-          checked={mode.enabled}
-          onchange={(event) =>
-            appState.updateCustomChatMode(mode.id, {
-              enabled: (event.currentTarget as HTMLInputElement).checked,
-            })}
-        />
-        Enabled
-      </label>
-      <label class="settings-field">
-        <span>Name</span>
-        <input
-          type="text"
-          value={mode.name}
-          onchange={(event) =>
-            appState.updateCustomChatMode(mode.id, {
-              name: (event.currentTarget as HTMLInputElement).value,
-            })}
-        />
-      </label>
-      <label class="settings-field">
-        <span>Prompt</span>
-        <textarea
-          rows={Math.max(4, mode.prompt.split("\n").length + 1)}
-          spellcheck="false"
-          placeholder={"You can use {{workspace}} and {{summary}} placeholders."}
-          value={mode.prompt}
-          onchange={(event) =>
-            appState.updateCustomChatMode(mode.id, {
-              prompt: (event.currentTarget as HTMLTextAreaElement).value,
-            })}
-        ></textarea>
-      </label>
-      <label class="settings-toggle">
-        <input
-          type="checkbox"
-          checked={mode.includeWorkspace}
-          onchange={(event) =>
-            appState.updateCustomChatMode(mode.id, {
-              includeWorkspace: (event.currentTarget as HTMLInputElement).checked,
-            })}
-        />
-        Include workspace context
-      </label>
-      <label class="settings-toggle">
-        <input
-          type="checkbox"
-          checked={mode.includeSummary}
-          onchange={(event) =>
-            appState.updateCustomChatMode(mode.id, {
-              includeSummary: (event.currentTarget as HTMLInputElement).checked,
-            })}
-        />
-        Include conversation summary
-      </label>
-    </div>
-    <div class="settings-subsection">
-      <h4>Required sections</h4>
-      <button type="button" class="settings-action" onclick={addRequiredSection}>Add section</button>
-      {#if mode.requiredSections.length === 0}
-        <p class="settings-section-note">
-          No required sections. Responses are rendered as conversational markdown.
-        </p>
-      {:else}
-        <div class="connection-list">
-          {#each mode.requiredSections as section, sectionIndex (`${mode.id}-${sectionIndex}`)}
-            <div class="connection-row">
-              <input
-                class="required-section-input"
-                type="text"
-                value={section}
-                onchange={(event) =>
-                  updateRequiredSection(sectionIndex, (event.currentTarget as HTMLInputElement).value)}
-              />
-              <div class="required-section-actions">
-                <button
-                  type="button"
-                  class="settings-action"
-                  disabled={sectionIndex === 0}
-                  onclick={() => moveRequiredSection(sectionIndex, -1)}
-                >
-                  Up
-                </button>
-                <button
-                  type="button"
-                  class="settings-action"
-                  disabled={sectionIndex === mode.requiredSections.length - 1}
-                  onclick={() => moveRequiredSection(sectionIndex, 1)}
-                >
-                  Down
-                </button>
-                <button
-                  type="button"
-                  class="settings-action settings-action-danger"
-                  onclick={() => removeRequiredSection(sectionIndex)}
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
-    <div class="settings-subsection">
-      <h4>Section guidance (optional)</h4>
-      <label class="settings-field">
-        <span>Guidance</span>
-        <textarea
-          rows="3"
-          spellcheck="false"
-          placeholder="Extra instructions for how sections should be written."
-          value={mode.sectionGuidance ?? ""}
-          onchange={(event) =>
-            appState.updateCustomChatMode(mode.id, {
-              sectionGuidance: (event.currentTarget as HTMLTextAreaElement).value,
-            })}
-        ></textarea>
-      </label>
-    </div>
-  {/if}
 </section>
+
+<ChatModeEditorDialog
+  open={editorOpen}
+  mode={editingMode}
+  builtinId={editingBuiltinId}
+  onClose={closeModeEditor}
+  onDelete={deleteEditingMode}
+/>
 
 <style>
   @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsFormMultiline.css";
   @import "../../styles/settingsDialogForm.css";
-  @import "../../styles/settingsPanelLists.css";
+
+  .chat-modes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: var(--space-6);
+    margin-top: var(--space-4);
+  }
+
+  .chat-mode-tile {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    font: inherit;
+    cursor: pointer;
+    text-align: center;
+    transition:
+      border-color 120ms ease,
+      background 120ms ease;
+  }
+
+  .chat-mode-tile:hover {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-1));
+  }
+
+  .chat-mode-tile:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+
+  .chat-mode-tile-disabled {
+    opacity: 0.55;
+  }
+
+  .chat-mode-tile-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .chat-mode-tile-badge {
+    font-size: 0.625rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .chat-mode-tile-add {
+    border-style: dashed;
+    color: var(--color-text-secondary);
+  }
+
+  .chat-mode-tile-add:hover {
+    color: var(--color-text-primary);
+  }
+
+  .chat-mode-tile-add-icon {
+    font-size: 1.75rem;
+    font-weight: 300;
+    line-height: 1;
+  }
 </style>

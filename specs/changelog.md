@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-08 12:00
+
+- **Settings UI:** Settings window is 50% wider by default. Opening settings shows a full-window backdrop that blocks interaction with the main app; keyboard shortcuts are suppressed except toggling settings closed.
+- **Settings UI:** Fixed Remove button vertical alignment in list rows (connections, required sections) with horizontal inset.
+- **Settings chat modes:** Replaced foldout/list layout with a grid of rounded square tiles for built-in and custom modes; clicking a tile opens an editor popup; a `+` tile adds a custom mode.
+
 ## 2026-06-08 11:00
 
 - **Global UI:** Bottom panel (console + status bar) now spans the full window width instead of only the editor column. Removed the activity-rail separator between Notepad and Chat/workspace modes.

@@ -43,6 +43,9 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
 
   function handleKeydown(event: KeyboardEvent): void {
     const command = keymapCommandForEvent(event);
+    if (deps.getSettingsDialogOpen() && command && command !== "app.toggleSettings") {
+      return;
+    }
     if (command === "app.toggleFindReplace") {
       event.preventDefault();
       runCommand(command);

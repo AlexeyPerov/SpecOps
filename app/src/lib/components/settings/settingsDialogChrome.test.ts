@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clampDialogSize,
   centerDialogInViewport,
+  SETTINGS_DIALOG_WIDTH_SCALE,
   syncDialogBoundsToViewport,
 } from "./settingsDialogChrome";
 
@@ -26,6 +27,10 @@ describe("settingsDialogChrome", () => {
       expect(result.left).toBe(320);
       expect(result.top).toBe(130);
     });
+  });
+
+  it("applies width scale for wider default dialog", () => {
+    expect(SETTINGS_DIALOG_WIDTH_SCALE).toBe(1.5);
   });
 
   describe("syncDialogBoundsToViewport", () => {

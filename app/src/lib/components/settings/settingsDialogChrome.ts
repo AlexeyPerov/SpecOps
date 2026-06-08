@@ -8,6 +8,9 @@ import type { SettingsDialogTab } from "../../services/settingsDialogUi";
 export const SETTINGS_TAB_SIDEBAR_WIDTH_PX = 132;
 export const SETTINGS_BODY_PADDING_X_PX = 24;
 export const SETTINGS_DIALOG_CHROME_BUFFER_PX = 8;
+export const SETTINGS_DIALOG_WIDTH_SCALE = 1.5;
+export const SETTINGS_DIALOG_DEFAULT_WIDTH_PX = 840;
+export const SETTINGS_DIALOG_DEFAULT_HEIGHT_PX = 640;
 
 const VIEWPORT_SIZE_FRACTION = 0.96;
 
@@ -115,11 +118,13 @@ export async function measureSettingsDialogInitialSize(
   const bodyHeight = Math.max(...tabHeights, 0);
   const bodyWidth = Math.max(...tabWidths, 0);
 
-  const measuredWidth =
-    SETTINGS_TAB_SIDEBAR_WIDTH_PX +
-    bodyWidth +
-    SETTINGS_BODY_PADDING_X_PX +
-    SETTINGS_DIALOG_CHROME_BUFFER_PX;
+  const measuredWidth = Math.floor(
+    (SETTINGS_TAB_SIDEBAR_WIDTH_PX +
+      bodyWidth +
+      SETTINGS_BODY_PADDING_X_PX +
+      SETTINGS_DIALOG_CHROME_BUFFER_PX) *
+      SETTINGS_DIALOG_WIDTH_SCALE,
+  );
   const measuredHeight = headerHeight + bodyHeight + SETTINGS_DIALOG_CHROME_BUFFER_PX;
 
   const maxWidth = Math.floor(viewportWidth * VIEWPORT_SIZE_FRACTION);

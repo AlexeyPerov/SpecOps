@@ -18,6 +18,8 @@
     handleSettingsDialogDragStart,
     handleSettingsDialogResizeStart,
     measureSettingsDialogInitialSize,
+    SETTINGS_DIALOG_DEFAULT_HEIGHT_PX,
+    SETTINGS_DIALOG_DEFAULT_WIDTH_PX,
     SETTINGS_TAB_SIDEBAR_WIDTH_PX,
     syncDialogBoundsToViewport,
   } from "./settings/settingsDialogChrome";
@@ -39,10 +41,10 @@
   let isResizing = $state(false);
   let isDragging = $state(false);
 
-  let initialWidthPx = $state(560);
-  let initialHeightPx = $state(640);
-  let dialogWidthPx = $state(560);
-  let dialogHeightPx = $state(640);
+  let initialWidthPx = $state(SETTINGS_DIALOG_DEFAULT_WIDTH_PX);
+  let initialHeightPx = $state(SETTINGS_DIALOG_DEFAULT_HEIGHT_PX);
+  let dialogWidthPx = $state(SETTINGS_DIALOG_DEFAULT_WIDTH_PX);
+  let dialogHeightPx = $state(SETTINGS_DIALOG_DEFAULT_HEIGHT_PX);
   let dialogLeftPx = $state(SETTINGS_DIALOG_VIEWPORT_MARGIN_PX);
   let dialogTopPx = $state(SETTINGS_DIALOG_VIEWPORT_MARGIN_PX);
   let sizeInitialized = $state(false);
@@ -200,6 +202,8 @@
 {/snippet}
 
 {#if open}
+  <div class="settings-dialog-backdrop" role="presentation" aria-hidden="true"></div>
+
   {#if !sizeInitialized}
     <SettingsDialogMeasure bind:headerEl bind:tabMeasureEls {settingsPanel} />
   {/if}
@@ -211,7 +215,7 @@
     class:settings-dialog-dragging={isDragging}
     class:settings-dialog-sizing={!sizeInitialized}
     role="dialog"
-    aria-modal="false"
+    aria-modal="true"
     aria-labelledby="settings-dialog-title"
     tabindex="-1"
     style={`left:${dialogLeftPx}px; top:${dialogTopPx}px; width:${dialogWidthPx}px; height:${dialogHeightPx}px; min-width:${initialWidthPx}px; min-height:${initialHeightPx}px;`}

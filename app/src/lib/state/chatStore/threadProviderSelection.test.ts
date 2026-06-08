@@ -1,8 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { chatStore, resetAgentIdCounterForTests } from "../chatStore";
+import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
+import { chatStore, formatCompactionNotice, resetAgentIdCounterForTests } from "../chatStore";
+import { DRAFT_AGENT_TITLE } from "../../services/chatAgents";
+import type { ChatThreadSnapshot } from "../../domain/contracts";
+import { WorkspaceAccessReason, type CapabilityChecker } from "../../ai/capabilities";
+import {
+  WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
+  WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
+} from "../../ai/chatErrorCopy";
+import {
+  deleteAgentPersistence,
+  readAgentThreadFileSnapshot,
+  readWorkspaceAgentsIndexSnapshot,
+} from "../../services/chatPersistence";
+import { setChatRetentionMaxTurnsForTests } from "../../services/chatRetention";
+import { ensureWorkspaceReadAccess } from "../../services/fileSystem";
+import { defaultAppProviderSettings } from "../../ai/providers/appProviderSettings";
+import {
+  createTestCapabilityChecker,
+  registerTestDebugWorkspaceProvider,
+} from "../../ai/providers/debugProviderTestHelpers";
 import { appState } from "../appState";
-import { DEFAULT_HTTP_CONNECTION_ID } from "../../ai/providers/httpConnectionSettings";
+import { defaultDebugProviderSettings } from "../../ai/providers/debugProviderSettings";
+import { defaultHttpConnectionSettings, DEFAULT_HTTP_CONNECTION_ID } from "../../ai/providers/httpConnectionSettings";
 import { defaultProviderModelCatalogs } from "../../ai/providers/providerModelCatalog";
+import {
+  registerChatProvider,
+  resetChatProviderRegistryForTests,
+} from "../../ai/providers/registry";
 
 vi.mock("../../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/chatPersistence")>();
@@ -18,6 +43,11 @@ vi.mock("../../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
+const readAgentThreadFileSnapshotMock = vi.mocked(readAgentThreadFileSnapshot);
+const readWorkspaceAgentsIndexSnapshotMock = vi.mocked(readWorkspaceAgentsIndexSnapshot);
+const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
+const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
+
 function providerSwitchOptions() {
   return {
     providerSettings: appState.getSnapshot().settings.providerSettings,
@@ -25,79 +55,37 @@ function providerSwitchOptions() {
   };
 }
 
-describe("chatStore switchThreadConnection", () => {
+describe("chatStore active provider resolution", () => {
   beforeEach(() => {
     chatStore.reset();
-    appState.resetAppState();
-    resetAgentIdCounterForTests();
+    resetChatProviderRegistryForTests();
+    ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
+    registerTestDebugWorkspaceProvider(() => ({
+      ...defaultDebugProviderSettings,
+      enabled: true,
+    }));
+    chatStore.setCapabilityChecker(createTestCapabilityChecker());
+    chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.updateThreadMetadata({
-      provider: "http",
-      mode: "ask",
-      connectionId: DEFAULT_HTTP_CONNECTION_ID,
-    });
   });
 
-  it("updates connectionId and model for a valid HTTP connection", () => {
-    appState.addHttpConnection({
-      id: "remote",
-      label: "Remote",
-      baseUrl: "http://remote/v1",
-      modelCatalog: {
-        modelIds: ["remote-model"],
-        defaultModelId: "remote-model",
-      },
-    });
-
-    const result = chatStore.switchThreadConnection("remote", providerSwitchOptions());
-
-    expect(result).toEqual({ switched: true });
-    expect(chatStore.getMetadata()?.connectionId).toBe("remote");
-    expect(chatStore.getMetadata()?.selectedModelId).toBe("remote-model");
+  it("uses default provider resolver when thread metadata is missing", () => {
+    expect(chatStore.getMetadata()).toBeNull();
+    expect(chatStore.getActiveChatProvider()).toBe("debug-workspace");
   });
 
-  it("rejects unknown connections", () => {
-    const result = chatStore.switchThreadConnection("missing-connection", providerSwitchOptions());
+  it("preflights Debug when no thread exists yet", async () => {
+    const result = await chatStore.runAccessPreflight();
 
-    expect(result).toEqual({
-      switched: false,
-      message: "That connection is no longer available.",
-    });
-    expect(chatStore.getMetadata()?.connectionId).toBe(DEFAULT_HTTP_CONNECTION_ID);
+    expect(result.status).toBe("ready");
+    expect(result.message).toContain("Debug Agent provider is ready");
   });
 
-  it("blocks connection changes while generating", () => {
-    appState.addHttpConnection({
-      id: "remote",
-      label: "Remote",
-      baseUrl: "http://remote/v1",
-    });
-    chatStore.beginTurn("turn-1");
+  it("checks capabilities for Debug without persisted thread metadata", async () => {
+    const result = await chatStore.checkActiveWorkspaceCapabilities();
 
-    const result = chatStore.switchThreadConnection("remote", providerSwitchOptions());
-
-    expect(result).toEqual({
-      switched: false,
-      message: "Connection cannot be changed while a response is generating.",
-    });
-    expect(chatStore.getMetadata()?.connectionId).toBe(DEFAULT_HTTP_CONNECTION_ID);
-  });
-
-  it("rejects connection switching for non-HTTP providers", () => {
-    chatStore.updateThreadMetadata({ provider: "debug-workspace" });
-
-    const result = chatStore.switchThreadConnection("remote", providerSwitchOptions());
-
-    expect(result).toEqual({
-      switched: false,
-      message: "Connection switching is available only for HTTP chats.",
-    });
-  });
-
-  it("no-ops when switching to the active connection", () => {
-    const result = chatStore.switchThreadConnection(DEFAULT_HTTP_CONNECTION_ID, providerSwitchOptions());
-
-    expect(result).toEqual({ switched: false });
-    expect(chatStore.getMetadata()?.connectionId).toBe(DEFAULT_HTTP_CONNECTION_ID);
+    expect(result.status).toBe("ready");
+    expect(result.capabilities?.supportedModes).toContain("ask");
+    expect(result.capabilities?.supportedModes).toContain("review");
   });
 });

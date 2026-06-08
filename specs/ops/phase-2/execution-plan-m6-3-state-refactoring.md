@@ -130,7 +130,7 @@ Tasks 2, 3, 4 can run in parallel after Task 1.
 ## M6.3 exit criteria
 
 - [x] All tasks marked `[DONE]`.
-- [ ] `contracts.ts` is a barrel; domain modules under `domain/`.
+- [x] `contracts.ts` is a barrel; domain modules under `domain/`.
 - [x] `documentTabsSlice` split complete; largest slice file ≤450 lines.
 - [x] `settingsSlice` split complete; largest settings slice file ≤350 lines.
 - [x] `chatStore/threads` split complete.

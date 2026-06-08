@@ -1,256 +1,227 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { appState } from "../appState";
-import { defaultSettings } from "./settingsSlice";
-import {
-  defaultHttpConnection,
-  DEFAULT_HTTP_CONNECTION_ID,
-  defaultHttpConnectionSettings,
-} from "../../ai/providers/httpConnectionSettings";
-import {
-  defaultChatModesSettings,
-  PRESET_CUSTOM_MODE_IDS,
-} from "../../ai/modes/chatModesSettings";
-import {
-  defaultDebugProviderSettings,
-  normalizeDebugProviderSettings,
-} from "../../ai/providers/debugProviderSettings";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createAgentTab, createFileTab, isAgentTab, tabDocumentId } from "../../domain/contracts";
+import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
+import { saveThemeFile } from "../../services/themeStore";
 import {
   defaultProviderModelCatalogs,
   getProviderDefaultModelId,
 } from "../../ai/providers/providerModelCatalog";
 
-function providerSettings() {
-  return appState.getSnapshot().settings.providerSettings;
-}
+vi.mock("../../services/themeStore", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/themeStore")>();
+  return {
+    ...actual,
+    loadThemeFile: vi.fn().mockResolvedValue(actual.defaultThemeFile),
+    saveThemeFile: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
-function chatModes() {
-  return appState.getSnapshot().settings.chatModes;
-}
+const saveThemeFileMock = vi.mocked(saveThemeFile);
 
-describe("appState settingsSlice CRUD", () => {
+describe("appState settings and editor chrome", () => {
   beforeEach(() => {
     appState.resetAppState();
+    resetThemePersistenceForTests();
+    saveThemeFileMock.mockClear();
   });
 
-  describe("HTTP connections", () => {
-    it("addHttpConnection appends a normalized connection and preserves default when set", () => {
-      appState.addHttpConnection({
-        id: "remote",
-        label: "  Remote  ",
-        enabled: true,
-        baseUrl: "https://api.example.com/v1",
-      });
-
-      const settings = providerSettings();
-      expect(settings.httpConnections!).toHaveLength(2);
-      expect(settings.httpConnections![1]).toMatchObject({
-        id: "remote",
-        label: "Remote",
-        enabled: true,
-        baseUrl: "https://api.example.com/v1",
-      });
-      expect(settings.defaultConnectionId).toBe(DEFAULT_HTTP_CONNECTION_ID);
+  it("setActiveTheme updates the active built-in theme", () => {
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "dark-amber",
     });
-
-    it("addHttpConnection replaces an existing connection with the same id", () => {
-      appState.addHttpConnection({ id: "remote", label: "First", baseUrl: "http://first/v1" });
-      appState.addHttpConnection({ id: "remote", label: "Second", baseUrl: "http://second/v1" });
-
-      const connections = providerSettings().httpConnections!;
-      expect(connections.filter((entry) => entry.id === "remote")).toHaveLength(1);
-      expect(connections.find((entry) => entry.id === "remote")).toMatchObject({
-        label: "Second",
-        baseUrl: "http://second/v1",
-      });
+    appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
     });
+    expect(saveThemeFileMock).toHaveBeenCalled();
+  });
 
-    it("updateHttpConnection patches a connection by id and ignores empty ids", () => {
-      appState.addHttpConnection({ id: "remote", label: "Remote", baseUrl: "http://remote/v1" });
-      appState.updateHttpConnection("remote", { label: "  Updated  ", enabled: true });
-      appState.updateHttpConnection("   ", { label: "Ignored" });
-
-      expect(providerSettings().httpConnections!.find((entry) => entry.id === "remote")).toMatchObject({
-        label: "Updated",
-        enabled: true,
-      });
+  it("cycleTheme toggles between the two built-in themes", () => {
+    expect(appState.getSnapshot().theme.activeTheme.id).toBe("dark-amber");
+    appState.cycleTheme();
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
     });
-
-    it("removeHttpConnection falls back defaultConnectionId to the first remaining connection", () => {
-      appState.addHttpConnection({ id: "alpha", label: "Alpha", baseUrl: "http://alpha/v1" });
-      appState.addHttpConnection({ id: "beta", label: "Beta", baseUrl: "http://beta/v1" });
-      appState.setDefaultConnectionId("beta");
-      appState.setConnectionApiKey("beta", "secret");
-      appState.setConnectionApiKey("alpha", "other");
-
-      appState.removeHttpConnection("beta");
-
-      const settings = providerSettings();
-      expect(settings.httpConnections!.map((entry) => entry.id)).toEqual(["default", "alpha"]);
-      expect(settings.defaultConnectionId).toBe(DEFAULT_HTTP_CONNECTION_ID);
-      expect(appState.getSnapshot().settings.providerApiKeys).not.toHaveProperty("beta");
-      expect(appState.getSnapshot().settings.providerApiKeys.alpha).toBe("other");
-    });
-
-    it("removeHttpConnection clears connections and resets legacy http mirror when the last one is removed", () => {
-      appState.removeHttpConnection(DEFAULT_HTTP_CONNECTION_ID);
-
-      const settings = providerSettings();
-      expect(settings.httpConnections).toEqual([]);
-      expect(settings.defaultConnectionId).toBeUndefined();
-      expect(settings.http).toEqual(defaultHttpConnectionSettings);
-    });
-
-    it("setDefaultConnectionId selects an existing connection and ignores unknown ids", () => {
-      appState.addHttpConnection({ id: "remote", label: "Remote", baseUrl: "http://remote/v1" });
-      appState.setDefaultConnectionId("remote");
-      expect(providerSettings().defaultConnectionId).toBe("remote");
-
-      appState.setDefaultConnectionId("missing");
-      expect(providerSettings().defaultConnectionId).toBe(DEFAULT_HTTP_CONNECTION_ID);
+    appState.cycleTheme();
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "dark-amber",
     });
   });
 
-  describe("chat modes", () => {
-    it("setRawEnabled toggles raw mode availability", () => {
-      expect(chatModes().rawEnabled).toBe(false);
-      appState.setRawEnabled(true);
-      expect(chatModes().rawEnabled).toBe(true);
+  it("cycleTheme from active custom switches to opposite built-in", () => {
+    appState.createCustomTheme();
+    expect(appState.getSnapshot().theme.activeTheme.kind).toBe("custom");
+    appState.cycleTheme();
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
     });
-
-    it("updateBuiltinModeToggles patches context toggles for a built-in mode", () => {
-      appState.updateBuiltinModeToggles("ask", { includeWorkspace: false, includeSummary: false });
-      expect(chatModes().builtinToggles.ask).toEqual({
-        includeWorkspace: false,
-        includeSummary: false,
-      });
-      expect(chatModes().builtinToggles.review).toEqual(defaultChatModesSettings.builtinToggles.review);
-    });
-
-    it("addCustomChatMode appends a normalized custom mode", () => {
-      appState.addCustomChatMode({
-        id: "custom-test-mode",
-        name: "  Test mode  ",
-        prompt: "Do the thing.",
-        enabled: false,
-        requiredSections: ["  Summary  ", ""],
-      });
-
-      const mode = chatModes().customModes.find((entry) => entry.id === "custom-test-mode");
-      expect(mode).toMatchObject({
-        name: "Test mode",
-        prompt: "Do the thing.",
-        enabled: false,
-        requiredSections: ["Summary"],
-      });
-    });
-
-    it("updateCustomChatMode updates an existing mode and ignores unknown ids", () => {
-      const presetId = PRESET_CUSTOM_MODE_IDS.ideation;
-      appState.updateCustomChatMode(presetId, { name: "Renamed ideation", enabled: false });
-      appState.updateCustomChatMode("custom-missing", { name: "Missing" });
-
-      const mode = chatModes().customModes.find((entry) => entry.id === presetId);
-      expect(mode?.name).toBe("Renamed ideation");
-      expect(mode?.enabled).toBe(false);
-      expect(chatModes().customModes).toHaveLength(defaultChatModesSettings.customModes.length);
-    });
-
-    it("removeCustomChatMode drops a mode without breaking default presets after reset", () => {
-      const presetId = PRESET_CUSTOM_MODE_IDS.ideation;
-      appState.removeCustomChatMode(presetId);
-      expect(chatModes().customModes.some((entry) => entry.id === presetId)).toBe(false);
-
-      appState.resetAppState();
-      expect(appState.getSnapshot().settings.chatModes).toEqual(defaultSettings.chatModes);
+    appState.createCustomTheme();
+    appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
+    appState.createCustomTheme();
+    appState.cycleTheme();
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "dark-amber",
     });
   });
 
-  describe("debug provider settings", () => {
-    it("setDebugChatProviderSettings replaces debug chat settings with normalized values", () => {
-      appState.setDebugChatProviderSettings({
-        ...defaultDebugProviderSettings,
-        enabled: false,
-        delayMsMin: 50,
-        delayMsMax: 10,
-        failureProbability: 2,
-        failureMessage: "   ",
-      });
+  it("createCustomTheme adds a custom theme and selects it", () => {
+    appState.createCustomTheme();
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.activeTheme.kind).toBe("custom");
+    expect(snapshot.theme.customThemes).toHaveLength(1);
+    expect(snapshot.theme.customThemes[0]?.name).toBe("Custom 1");
+    expect(saveThemeFileMock).toHaveBeenCalled();
+  });
 
-      expect(providerSettings().debugChat).toEqual(
-        normalizeDebugProviderSettings({
-          enabled: false,
-          delayMsMin: 50,
-          delayMsMax: 10,
-          failureProbability: 2,
-          failureMessage: "   ",
-        }),
-      );
-    });
+  it("renameCustomTheme trims and persists the new name", () => {
+    appState.createCustomTheme();
+    const customId = appState.getSnapshot().theme.customThemes[0]!.id;
+    appState.renameCustomTheme(customId, "  My Theme  ");
+    expect(appState.getSnapshot().theme.customThemes[0]?.name).toBe("My Theme");
+    appState.renameCustomTheme(customId, "   ");
+    expect(appState.getSnapshot().theme.customThemes[0]?.name).toBe("My Theme");
+  });
 
-    it("updateDebugChatProviderSettings patches debug chat settings", () => {
-      appState.updateDebugChatProviderSettings({ enabled: false, includeDiagnostics: false });
-      expect(providerSettings().debugChat.enabled).toBe(false);
-      expect(providerSettings().debugChat.includeDiagnostics).toBe(false);
-      expect(providerSettings().debugChat.delayMsMin).toBe(defaultDebugProviderSettings.delayMsMin);
-    });
-
-    it("setDebugWorkspaceProviderSettings replaces debug workspace settings", () => {
-      appState.setDebugWorkspaceProviderSettings({
-        ...defaultDebugProviderSettings,
-        enabled: false,
-        chunkCharsMin: 4,
-        chunkCharsMax: 2,
-      });
-
-      expect(providerSettings().debugWorkspace).toEqual(
-        normalizeDebugProviderSettings({
-          enabled: false,
-          chunkCharsMin: 4,
-          chunkCharsMax: 2,
-        }),
-      );
-    });
-
-    it("updateDebugWorkspaceProviderSettings patches debug workspace settings", () => {
-      appState.updateDebugWorkspaceProviderSettings({ simulationSeed: 42 });
-      expect(providerSettings().debugWorkspace.simulationSeed).toBe(42);
+  it("deleteCustomTheme falls back to dark-amber when active custom is deleted", () => {
+    appState.createCustomTheme();
+    const customId = appState.getSnapshot().theme.customThemes[0]!.id;
+    appState.deleteCustomTheme(customId);
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.customThemes).toHaveLength(0);
+    expect(snapshot.theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "dark-amber",
     });
   });
 
-  describe("provider catalogs and API keys", () => {
-    it("updateProviderModelCatalog patches a provider catalog", () => {
-      appState.updateProviderModelCatalog("http", {
-        modelIds: ["alpha", "beta", "alpha"],
-        defaultModelId: "beta",
-      });
+  it("updateCustomThemeToken debounces save and keeps in-memory state on write failure", async () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    setThemeSaveErrorNotifier(notify);
+    saveThemeFileMock.mockRejectedValueOnce(new Error("disk full"));
 
-      const catalog = appState.getSnapshot().settings.providerModelCatalogs.http;
-      expect(catalog?.modelIds).toEqual(["alpha", "beta"]);
-      expect(catalog?.defaultModelId).toBe("beta");
-    });
+    appState.createCustomTheme();
+    const customId = appState.getSnapshot().theme.customThemes[0]!.id;
+    saveThemeFileMock.mockClear();
 
-    it("setProviderApiKey stores and clears connection-scoped API keys", () => {
-      appState.setProviderApiKey("default", "  secret-key  ");
-      expect(appState.getSnapshot().settings.providerApiKeys.default).toBe("secret-key");
+    appState.updateCustomThemeToken(customId, "accent-color", "#112233");
+    expect(appState.getSnapshot().theme.customThemes[0]?.tokens["accent-color"]).toBe("#112233");
 
-      appState.setProviderApiKey("default", "   ");
-      expect(appState.getSnapshot().settings.providerApiKeys).not.toHaveProperty("default");
-    });
-
-    it("setConnectionApiKey updates keys for non-default connections", () => {
-      appState.addHttpConnection({ id: "remote", label: "Remote", baseUrl: "http://remote/v1" });
-      appState.setConnectionApiKey("remote", "remote-key");
-      expect(appState.getSnapshot().settings.providerApiKeys.remote).toBe("remote-key");
-    });
-  });
-
-  it("starts from normalized default settings", () => {
-    const snapshot = appState.getSnapshot().settings;
-    expect(snapshot.providerSettings.httpConnections).toEqual([defaultHttpConnection]);
-    expect(snapshot.providerSettings.defaultConnectionId).toBe(DEFAULT_HTTP_CONNECTION_ID);
-    expect(snapshot.chatModes).toEqual(defaultSettings.chatModes);
-    expect(getProviderDefaultModelId(snapshot.providerModelCatalogs, "http")).toBe(
-      defaultProviderModelCatalogs.http!.defaultModelId,
+    await vi.advanceTimersByTimeAsync(300);
+    expect(notify).toHaveBeenCalledWith(
+      "Failed to save theme. Changes kept in memory; will retry on next change.",
     );
+    expect(appState.getSnapshot().theme.customThemes[0]?.tokens["accent-color"]).toBe("#112233");
+
+    saveThemeFileMock.mockResolvedValueOnce(undefined);
+    appState.updateCustomThemeToken(customId, "accent-color", "#445566");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(saveThemeFileMock).toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  it("applyPersistedSettings updates only provided fields", () => {
+    appState.applyPersistedSettings({ zoomPercent: 130, wrapLines: false });
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.editor.zoomPercent).toBe(130);
+    expect(snapshot.editor.wrapLines).toBe(false);
+    expect(snapshot.theme.activeTheme.id).toBe("dark-amber");
+  });
+
+  it("applyWindowSession preserves the active theme", () => {
+    appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
+    appState.applyWindowSession({
+      activeContextId: "notepad",
+      notepad: {
+        documents: [
+          {
+            id: "doc-1",
+            filePath: null,
+            title: "Untitled",
+            content: "",
+            savedContent: "",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+        ],
+        session: {
+          selectedTabId: "tab-1",
+          openTabs: [createFileTab("tab-1", "doc-1")],
+          lastActiveWindowId: "main",
+          windowBounds: null,
+        },
+      },
+      chatHttp: {
+        documents: [
+          {
+            id: "doc-chat",
+            filePath: null,
+            title: "Untitled",
+            content: "",
+            savedContent: "",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+        ],
+        session: {
+          selectedTabId: "tab-chat",
+          openTabs: [createFileTab("tab-chat", "doc-chat")],
+          lastActiveWindowId: "main",
+          windowBounds: null,
+        },
+      },
+      workspaces: [],
+      editorPreferences: {
+        zoomPercent: 100,
+        wrapLines: true,
+      },
+    });
+    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
+    });
+  });
+
+  it("setPreviewMode, zoom, wrap, and workspace layout update editor state", () => {
+    appState.addWorkspace("/tmp/ws-layout");
+    appState.setPreviewMode("diff");
+    appState.setZoomPercent(110);
+    appState.toggleWrap();
+    appState.setProjectPanelCollapsed(true);
+
+    const editor = appState.getSnapshot().editor;
+    expect(editor.previewMode).toBe("diff");
+    expect(editor.zoomPercent).toBe(110);
+    expect(editor.wrapLines).toBe(false);
+    expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
+  });
+
+  it("setPreviewMode normalizes legacy markdown preview to editor", () => {
+    appState.setPreviewMode("markdown");
+    expect(appState.getSnapshot().editor.previewMode).toBe("editor");
   });
 });
+

@@ -3,7 +3,7 @@
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md)  
 **Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md) → [m5 custom modes](./execution-plan-m5-custom-modes.md) → [m6 refactoring](./execution-plan-m6-refactoring.md)  
-**Status:** tier 1 done; **M4** (multiple providers) done; **M5** (custom modes) done; **M6** (refactoring) planned  
+**Status:** tier 1 done; **M4** (multiple providers) done; **M5** (custom modes) done; **M6** (refactoring) done  
 **Estimate:** tier 1 ~2–3 weeks after phase 1; M4 ~1 week incremental
 
 ## Goal
@@ -118,13 +118,13 @@ Pre-refactor test coverage (M6.1), then behavior-preserving splits of oversized 
 
 | Exit (M6) | |
 |-----------|--|
-| [ ] | M6.1 pre-refactor test gaps closed |
-| [ ] | Settings dialog and `+page.svelte` ≤600 lines each |
-| [ ] | State slices and `contracts.ts` split by domain |
-| [ ] | Command registry, chatPersistence, sendChatMessage split |
-| [ ] | Tier 2–3 components and services split |
-| [ ] | Large test files mirror production modules |
-| [ ] | `npm test` / `npm run check` pass |
+| [x] | M6.1 pre-refactor test gaps closed (888 tests) |
+| [x] | Settings dialog (288 lines) and `+page.svelte` (572 lines) ≤600 |
+| [x] | State slices and `contracts.ts` (78-line barrel) split by domain |
+| [x] | Command registry (113 lines), chatPersistence, sendChatMessage split |
+| [x] | Tier 2–3 components and services split |
+| [x] | Large test files mirror production modules (max 600 lines) |
+| [x] | `npm test` / `npm run check` pass |
 
 ## Key files (expected touch)
 
@@ -153,6 +153,7 @@ Pre-refactor test coverage (M6.1), then behavior-preserving splits of oversized 
 
 | Date | Change |
 |------|--------|
+| 2026-06-08 | M6 refactoring milestone complete — all exit criteria checked |
 | 2026-06-07 | Added M6.1 test-coverage sub-milestone; renamed sub-plans to M6.1–M6.4 |
 | 2026-06-07 | Added M6 execution plan — codebase refactoring (M6-UI, M6-State, M6-Platform sub-plans) |
 | 2026-06-07 | Added M5 execution plan — custom chat modes (Raw built-in, chat-http scope unification) |

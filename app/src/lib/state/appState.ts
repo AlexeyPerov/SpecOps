@@ -13,7 +13,7 @@ import {
 } from "./appState/contextHelpers";
 import { buildEmptyUnsavedDocument } from "./appState/documentHelpers";
 import { createDocumentTabsSlice } from "./appState/documentTabsSlice";
-import { resetCommandBindingOverrides } from "../commands/registry";
+import { resetCommandBindingOverrides } from "../commands/commandBindingRuntime";
 import { createSettingsSlice, defaultSettings } from "./appState/settingsSlice";
 import {
   applyThemeState,

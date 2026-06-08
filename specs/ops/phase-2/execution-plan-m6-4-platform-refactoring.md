@@ -119,7 +119,7 @@ Dependencies: Task 1 (command definitions location).
 
 ---
 
-#### Task 5: Split sessionManager and themeTokens (P2-10) [Score:4] [Agent:easy]
+#### Task 5: Split sessionManager and themeTokens (P2-10) [Score:4] [Agent:easy] [DONE]
 
 **Required context**
 
@@ -148,7 +148,7 @@ Dependencies: none.
 
 ---
 
-#### Task 6: Reorganize large test files (P2-10) [Score:6] [Agent:medium]
+#### Task 6: Reorganize large test files (P2-10) [Score:6] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -177,7 +177,7 @@ Dependencies: Tasks 1–5; M6.1 complete.
 
 ---
 
-#### Task 7: M6 validation, docs, and milestone close (P2-10) [Score:5] [Agent:easy]
+#### Task 7: M6 validation, docs, and milestone close (P2-10) [Score:5] [Agent:easy] [DONE]
 
 **Required context**
 
@@ -215,14 +215,15 @@ Task 5 → Task 6 ↗
 
 ## M6.4 exit criteria
 
-- [ ] All tasks marked `[DONE]`.
-- [ ] Commands, persistence, send, appMenu, externalFileChanges, sessionManager, themeTokens splits complete.
-- [ ] Large test files reorganized; none >600 lines.
-- [ ] M6 validation task complete.
+- [x] All tasks marked `[DONE]`.
+- [x] Commands, persistence, send, appMenu, externalFileChanges, sessionManager, themeTokens splits complete.
+- [x] Large test files reorganized; none >600 lines.
+- [x] M6 validation task complete.
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-08 | M6.4 complete — Tasks 5–7: test reorganization, validation, docs; 888 tests pass |
 | 2026-06-07 | Renamed from M6-Platform; M6.1 prerequisite clarified; Task 6 scoped to post-refactor reorganization |
 | 2026-06-07 | Initial M6-Platform sub-plan — commands, services, tests, validation |

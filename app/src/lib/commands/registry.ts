@@ -5,12 +5,7 @@ import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import { logDiagnostic } from "../services/logging";
 import { sanitizeErrorDetails, serializeUnknownError, summarizeError } from "./commandErrors";
-import {
-  expandPlatformKeymaps,
-  mergeCommandDefinitionsWithOverrides,
-  type CommandBindingOverrides,
-} from "./commandBindings";
-import { commandDefinitions } from "./definitions";
+import { getKeyBindingsByPlatform } from "./commandBindingRuntime";
 import { appHandlers } from "./handlers/app";
 import { editHandlers } from "./handlers/edit";
 import { fileHandlers } from "./handlers/file";
@@ -24,18 +19,7 @@ function getSnapshot() {
 
 export { expandPlatformKeymaps } from "./commandBindings";
 export { commandDefinitions } from "./definitions";
-
-let keyBindingsByPlatform = expandPlatformKeymaps(commandDefinitions);
-
-export function setCommandBindingOverrides(overrides: CommandBindingOverrides): void {
-  keyBindingsByPlatform = expandPlatformKeymaps(
-    mergeCommandDefinitionsWithOverrides(commandDefinitions, overrides),
-  );
-}
-
-export function resetCommandBindingOverrides(): void {
-  setCommandBindingOverrides({});
-}
+export { resetCommandBindingOverrides, setCommandBindingOverrides } from "./commandBindingRuntime";
 
 const handlers: CommandHandlerMap = {
   ...appHandlers,
@@ -111,7 +95,7 @@ export function keymapCommandForEvent(event: KeyboardEvent): AppCommandId | null
     .filter(Boolean)
     .join("+");
 
-  return (keyBindingsByPlatform[token] as AppCommandId | undefined) ?? null;
+  return getKeyBindingsByPlatform()[token] ?? null;
 }
 
 export function getActiveDocumentContent(): string {

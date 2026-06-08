@@ -1,164 +1,380 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { createFileTab } from "../../domain/contracts";
-import { appState } from "../appState";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createAgentTab, createFileTab, isAgentTab, tabDocumentId } from "../../domain/contracts";
+import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
+import { saveThemeFile } from "../../services/themeStore";
+import {
+  defaultProviderModelCatalogs,
+  getProviderDefaultModelId,
+} from "../../ai/providers/providerModelCatalog";
 
-function notepadSnapshot() {
-  return appState.getSnapshot().contexts.notepad;
-}
+vi.mock("../../services/themeStore", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/themeStore")>();
+  return {
+    ...actual,
+    loadThemeFile: vi.fn().mockResolvedValue(actual.defaultThemeFile),
+    saveThemeFile: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
-function workspaceSnapshot(workspaceId = "ws-1") {
-  return appState.getSnapshot().contexts.workspaces.find((entry) => entry.id === workspaceId)?.snapshot;
-}
+const saveThemeFileMock = vi.mocked(saveThemeFile);
 
-describe("appState documentTabsSlice", () => {
+describe("appState tabs and selection", () => {
   beforeEach(() => {
     appState.resetAppState();
   });
 
-  describe("migrateNotepadFileTabToWorkspace", () => {
-    it("moves a notepad file tab into the active workspace with the same document", () => {
-      appState.addWorkspace("/tmp/ws");
-      appState.switchContext("notepad");
-      appState.openFileInTab("/tmp/ws/migrate-me.txt", "local edits");
-      const notepadDocId = notepadSnapshot().documents.find((doc) => doc.filePath === "/tmp/ws/migrate-me.txt")?.id;
-      const notepadTabId = notepadSnapshot().session.selectedTabId;
-      appState.setDocumentContent(notepadDocId!, "local edits changed");
-
-      const migratedDocumentId = appState.migrateNotepadFileTabToWorkspace("/tmp/ws/migrate-me.txt", "ws-1");
-
-      expect(migratedDocumentId).toBe(notepadDocId);
-      expect(appState.getSnapshot().contexts.activeContextId).toBe("ws-1");
-      const workspaceDoc = workspaceSnapshot()?.documents.find((doc) => doc.id === notepadDocId);
-      expect(workspaceDoc).toMatchObject({
-        filePath: "/tmp/ws/migrate-me.txt",
-        content: "local edits changed",
-        isDirty: true,
-      });
-      expect(workspaceSnapshot()?.session.openTabs.some((tab) => tab.kind === "file" && tab.documentId === notepadDocId)).toBe(
-        true,
-      );
-      expect(
-        notepadSnapshot().session.openTabs.some((tab) => tab.kind === "file" && tab.documentId === notepadDocId),
-      ).toBe(false);
-      expect(notepadSnapshot().session.openTabs.some((tab) => tab.id === notepadTabId)).toBe(false);
-      expect(appState.getSnapshot().editor.findReplaceOpen).toBe(false);
-      expect(appState.getSnapshot().editor.goToOpen).toBe(false);
-      expect(appState.getSnapshot().editor.previewMode).toBe("editor");
-    });
-
-    it("focuses an existing workspace tab when the path is already open there", () => {
-      appState.addWorkspace("/tmp/ws");
-      appState.openFileInTab("/tmp/ws/existing.txt", "workspace copy");
-      const workspaceDocId = workspaceSnapshot()?.documents.find((doc) => doc.filePath === "/tmp/ws/existing.txt")?.id;
-      const workspaceTabId = workspaceSnapshot()?.session.selectedTabId;
-
-      appState.switchContext("notepad");
-      appState.openFileInTab("/tmp/ws/existing.txt", "notepad copy");
-      const notepadDocId = notepadSnapshot().documents.find((doc) => doc.filePath === "/tmp/ws/existing.txt")?.id;
-      const workspaceTabCountBefore = workspaceSnapshot()!.session.openTabs.length;
-
-      const migratedDocumentId = appState.migrateNotepadFileTabToWorkspace("/tmp/ws/existing.txt", "ws-1");
-
-      expect(migratedDocumentId).toBe(workspaceDocId);
-      expect(notepadDocId).not.toBe(workspaceDocId);
-      expect(appState.getSnapshot().contexts.activeContextId).toBe("ws-1");
-      expect(workspaceSnapshot()?.session.selectedTabId).toBe(workspaceTabId);
-      expect(workspaceSnapshot()?.session.openTabs).toHaveLength(workspaceTabCountBefore);
-      expect(
-        workspaceSnapshot()?.session.openTabs.filter(
-          (tab) => tab.kind === "file" && tab.documentId === workspaceDocId,
-        ),
-      ).toHaveLength(1);
-      expect(
-        notepadSnapshot().session.openTabs.some(
-          (tab) => tab.kind === "file" && tab.documentId === notepadDocId,
-        ),
-      ).toBe(true);
-    });
-
-    it("returns null when the path is outside the workspace root or no notepad tab exists", () => {
-      appState.addWorkspace("/tmp/ws");
-      appState.switchContext("notepad");
-      appState.openFileInTab("/tmp/outside.txt", "outside");
-
-      expect(appState.migrateNotepadFileTabToWorkspace("/tmp/outside.txt", "ws-1")).toBeNull();
-      expect(appState.migrateNotepadFileTabToWorkspace("/tmp/ws/missing.txt", "ws-1")).toBeNull();
-      expect(appState.migrateNotepadFileTabToWorkspace("/tmp/ws/missing.txt", "ws-999")).toBeNull();
-    });
+  it("createTab adds a document and selects it", () => {
+    appState.createTab();
+    const snapshot = appState.getSnapshot();
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(appState.getActiveDocuments()).toHaveLength(2);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
-  describe("renameDocument", () => {
-    it("updates file path, title, language, and recent files in the active context", () => {
-      appState.openFileInTab("/tmp/old-name.ts", "export const value = 1;");
-      const documentId = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/old-name.ts")?.id;
-      expect(documentId).toBeDefined();
+  it("selectTab ignores unknown tab ids", () => {
+    appState.selectTab("tab-missing");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-1");
+  });
 
-      appState.renameDocument(documentId!, "/tmp/new-name.tsx", "new-name.tsx");
+  it("openOrFocusAgentTab opens a new agent tab and focuses an existing one", () => {
+    appState.openOrFocusAgentTab("agent-a");
+    let snapshot = appState.getSnapshot();
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    const firstAgentTab = appState.getActiveSession().openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a");
+    expect(firstAgentTab?.id).toBe("tab-2");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
 
-      const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
-      expect(document).toMatchObject({
-        filePath: "/tmp/new-name.tsx",
-        title: "new-name.tsx",
-        language: "typescript",
-      });
-      expect(appState.getSnapshot().recentFiles[0]).toBe("/tmp/new-name.tsx");
-      expect(appState.getSnapshot().recentFiles).toContain("/tmp/old-name.ts");
-    });
+    appState.selectTab("tab-1");
+    appState.openOrFocusAgentTab("agent-a");
+    snapshot = appState.getSnapshot();
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+  });
 
-    it("renames only the targeted document in a multi-tab session", () => {
-      appState.openFileInTab("/tmp/keep.txt", "keep");
-      appState.openFileInTab("/tmp/rename.txt", "rename");
-      const renameDocId = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/rename.txt")?.id;
+  it("closeTabsForAgent removes all tabs for that agent", () => {
+    appState.openOrFocusAgentTab("agent-a");
+    appState.openOrFocusAgentTab("agent-b");
+    appState.closeTabsForAgent("agent-a");
 
-      appState.renameDocument(renameDocId!, "/tmp/renamed.txt", "renamed.txt");
+    const snapshot = appState.getSnapshot();
+    expect(appState.getActiveSession().openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-a")).toBe(false);
+    expect(appState.getActiveSession().openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-b")).toBe(true);
+  });
 
-      expect(appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/keep.txt")?.title).toBe("keep.txt");
-      expect(appState.getActiveDocuments().find((doc) => doc.id === renameDocId)?.filePath).toBe("/tmp/renamed.txt");
-    });
+  it("closeTabForce focuses the next open agent tab in tab-bar order", () => {
+    appState.openOrFocusAgentTab("agent-a");
+    appState.openOrFocusAgentTab("agent-b");
+    const agentATabId = appState
+      .getActiveSession()
+      .openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a")?.id;
+    expect(agentATabId).toBeDefined();
+    appState.selectTab(agentATabId!);
 
-    it("renames workspace documents without affecting notepad state", () => {
-      appState.addWorkspace("/tmp/ws");
-      appState.openFileInTab("/tmp/ws/file.ts", "workspace");
-      const workspaceDocId = workspaceSnapshot()?.documents.find((doc) => doc.filePath === "/tmp/ws/file.ts")?.id;
+    appState.closeTabForce(agentATabId!);
 
-      appState.switchContext("notepad");
-      appState.applyWindowSession({
-        ...appState.getWindowSessionSnapshot(),
-        notepad: {
-          documents: [
-            {
-              id: "doc-notepad",
-              filePath: "/tmp/notepad.ts",
-              title: "notepad.ts",
-              content: "notepad",
-              savedContent: "notepad",
-              isDirty: false,
-              contentKind: "text",
-              language: "typescript",
-              encoding: "utf-8",
-              lineEnding: "lf",
-              diskFingerprint: null,
-              dismissedFingerprint: null,
-              fileMissing: false,
-              scrollTop: 0,
-              markdownViewMode: "edit",
-            },
+    const snapshot = appState.getSnapshot();
+    const selected = appState.getActiveSession().openTabs.find((tab) => tab.id === appState.getActiveSession().selectedTabId);
+    expect(selected && isAgentTab(selected) ? selected.agentId : null).toBe("agent-b");
+  });
+
+  it("persists lastActiveAgentId in session state", () => {
+    appState.setLastActiveAgentId("agent-a");
+    expect(appState.getActiveSession().lastActiveAgentId).toBe("agent-a");
+    appState.setLastActiveAgentId(null);
+    expect(appState.getActiveSession().lastActiveAgentId).toBeNull();
+  });
+
+  it("selectOrReopenTabForDocument selects an open tab", () => {
+    appState.createTab();
+    appState.selectTab("tab-1");
+    appState.selectOrReopenTabForDocument("doc-2");
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+  });
+
+  it("selectOrReopenTabForDocument reopens a closed document in a new tab", () => {
+    appState.openFileInTab("/tmp/notes.txt", "notes");
+    const documentId = appState.findDocumentIdByPath("/tmp/notes.txt");
+    expect(documentId).not.toBeNull();
+    appState.closeTabForce("tab-2");
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+
+    appState.selectOrReopenTabForDocument(documentId!);
+    const snapshot = appState.getSnapshot();
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-3");
+  });
+
+  it("closeTab cannot remove the last remaining tab", () => {
+    appState.closeTab("tab-1");
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+  });
+
+  it("closeTab removes a tab when more than one is open", () => {
+    appState.createTab();
+    appState.closeTab("tab-2");
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-1");
+  });
+
+  it("closeTabForce creates a new untitled tab when the last tab closes", () => {
+    appState.closeTabForce("tab-1");
+    const snapshot = appState.getSnapshot();
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    expect(appState.getActiveDocuments()[0]?.title).toBe("Untitled");
+  });
+
+  it("closeTabWithPrompt closes a non-selected dirty tab when confirmed", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.setDocumentContent("doc-2", "a dirty");
+    const confirm = vi.fn(() => true);
+
+    const closed = appState.closeTabWithPrompt("tab-2", confirm);
+
+    expect(closed).toBe(true);
+    expect(confirm).toHaveBeenCalledWith("Close a.txt without saving?");
+    expect(appState.getActiveSession().openTabs.some((tab) => tab.id === "tab-2")).toBe(false);
+  });
+
+  it("closeOtherTabs keeps context tab and skips pinned tabs", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.openFileInTab("/tmp/c.txt", "c");
+
+    appState.applyWindowSession({
+      ...appState.getWindowSessionSnapshot(),
+      notepad: {
+        ...appState.getWindowSessionSnapshot().notepad,
+        session: {
+          ...appState.getWindowSessionSnapshot().notepad.session,
+          openTabs: [
+            createFileTab("tab-1", "doc-1"),
+            createFileTab("tab-2", "doc-2"),
+            createFileTab("tab-3", "doc-3", true),
+            createFileTab("tab-4", "doc-4"),
           ],
-          session: {
-            selectedTabId: "tab-notepad",
-            openTabs: [createFileTab("tab-notepad", "doc-notepad")],
-            lastActiveWindowId: "main",
-            windowBounds: null,
-          },
+          selectedTabId: "tab-4",
         },
-      });
-
-      appState.switchContext("ws-1");
-      appState.renameDocument(workspaceDocId!, "/tmp/ws/renamed.ts", "renamed.ts");
-
-      const workspaceDoc = workspaceSnapshot()?.documents.find((doc) => doc.id === workspaceDocId);
-      expect(workspaceDoc?.filePath).toBe("/tmp/ws/renamed.ts");
-      expect(notepadSnapshot().documents.find((doc) => doc.id === "doc-notepad")?.filePath).toBe("/tmp/notepad.ts");
+      },
     });
+
+    const closed = appState.closeOtherTabs("tab-2", () => true);
+
+    expect(closed).toBe(true);
+    const snapshot = appState.getSnapshot();
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual(["tab-2", "tab-3"]);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+  });
+
+  it("closeOtherTabs aborts when a dirty tab is rejected", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.setDocumentContent("doc-3", "dirty");
+    const before = appState.getActiveSession().openTabs.map((tab) => tab.id);
+
+    const closed = appState.closeOtherTabs("tab-2", () => false);
+
+    expect(closed).toBe(false);
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual(before);
+  });
+
+  it("closeTabsToRight closes only right-side unpinned tabs", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.openFileInTab("/tmp/c.txt", "c");
+    appState.openFileInTab("/tmp/d.txt", "d");
+
+    appState.applyWindowSession({
+      ...appState.getWindowSessionSnapshot(),
+      notepad: {
+        ...appState.getWindowSessionSnapshot().notepad,
+        session: {
+          ...appState.getWindowSessionSnapshot().notepad.session,
+          openTabs: [
+            createFileTab("tab-1", "doc-1"),
+            createFileTab("tab-2", "doc-2"),
+            createFileTab("tab-3", "doc-3"),
+            createFileTab("tab-4", "doc-4", true),
+            createFileTab("tab-5", "doc-5"),
+          ],
+          selectedTabId: "tab-3",
+        },
+      },
+    });
+
+    const closed = appState.closeTabsToRight("tab-2", () => true);
+
+    expect(closed).toBe(true);
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual([
+      "tab-1",
+      "tab-2",
+      "tab-4",
+    ]);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+  });
+
+  it("closeMissingFileTabs closes missing tabs without prompt and keeps pinned missing", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+
+    const currentSnapshot = appState.getWindowSessionSnapshot();
+    appState.applyWindowSession({
+      ...currentSnapshot,
+      notepad: {
+        ...currentSnapshot.notepad,
+        documents: currentSnapshot.notepad.documents.map((doc) =>
+          doc.id === "doc-2" || doc.id === "doc-3"
+            ? { ...doc, fileMissing: true }
+            : doc,
+        ),
+        session: {
+          ...currentSnapshot.notepad.session,
+          openTabs: [
+            createFileTab("tab-1", "doc-1"),
+            createFileTab("tab-2", "doc-2"),
+            createFileTab("tab-3", "doc-3", true),
+          ],
+          selectedTabId: "tab-2",
+        },
+      },
+    });
+
+    const closed = appState.closeMissingFileTabs();
+
+    expect(closed).toBe(true);
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual(["tab-1", "tab-3"]);
+  });
+
+  it("closeMissingFileTabs keeps one Untitled tab when all tabs close", () => {
+    const currentSnapshot = appState.getWindowSessionSnapshot();
+    appState.applyWindowSession({
+      ...currentSnapshot,
+      notepad: {
+        ...currentSnapshot.notepad,
+        documents: currentSnapshot.notepad.documents.map((doc) => ({ ...doc, fileMissing: true })),
+      },
+    });
+
+    const closed = appState.closeMissingFileTabs();
+    const snapshot = appState.getSnapshot();
+
+    expect(closed).toBe(true);
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    const selectedTab = appState.getActiveSession().openTabs[0];
+    expect(selectedTab).toBeDefined();
+    expect(appState.getActiveDocuments().find((doc) => doc.id === tabDocumentId(selectedTab))?.title).toBe("Untitled");
+  });
+
+  it("reorderTabs moves tabs and ignores invalid indices", () => {
+    appState.createTab();
+    appState.reorderTabs(1, 0);
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual([
+      "tab-2",
+      "tab-1",
+    ]);
+
+    appState.reorderTabs(-1, 0);
+    expect(appState.getActiveSession().openTabs.map((tab) => tab.id)).toEqual([
+      "tab-2",
+      "tab-1",
+    ]);
+  });
+
+  it("reorderWorkspaces moves workspaces and ignores invalid indices", () => {
+    appState.addWorkspace("/tmp/ws-a");
+    const wsAId = appState.getSnapshot().contexts.workspaces[0]?.id;
+    appState.addWorkspace("/tmp/ws-b");
+    const wsBId = appState.getSnapshot().contexts.workspaces[1]?.id;
+    const activeBefore = appState.getSnapshot().contexts.activeContextId;
+
+    appState.reorderWorkspaces(1, 0);
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.rootPath)).toEqual([
+      "/tmp/ws-b",
+      "/tmp/ws-a",
+    ]);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(activeBefore);
+
+    appState.reorderWorkspaces(-1, 0);
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.rootPath)).toEqual([
+      "/tmp/ws-b",
+      "/tmp/ws-a",
+    ]);
+
+    appState.switchContext(wsAId!);
+    appState.reorderWorkspaces(0, 1);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(wsAId);
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.id)).toEqual([
+      wsAId,
+      wsBId,
+    ]);
+  });
+
+  it("addWorkspace appends to end after manual reorder", () => {
+    appState.addWorkspace("/tmp/ws-first");
+    appState.addWorkspace("/tmp/ws-second");
+    appState.reorderWorkspaces(1, 0);
+    appState.addWorkspace("/tmp/ws-third");
+
+    expect(appState.getSnapshot().contexts.workspaces.map((workspace) => workspace.rootPath)).toEqual([
+      "/tmp/ws-second",
+      "/tmp/ws-first",
+      "/tmp/ws-third",
+    ]);
+  });
+
+  it("buildTabTransferPayload reads tab data without closing", () => {
+    appState.openFileInTab("/tmp/move-me.txt", "payload");
+    const tabId = appState.getActiveSession().selectedTabId!;
+    expect(appState.buildTabTransferPayload(tabId)).toEqual({
+      filePath: "/tmp/move-me.txt",
+      content: "payload",
+      title: "move-me.txt",
+    });
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+  });
+
+  it("removeTransferredTab closes the requested tab", () => {
+    appState.openFileInTab("/tmp/move-me.txt", "payload");
+    const tabId = appState.getActiveSession().selectedTabId!;
+    appState.removeTransferredTab(tabId);
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+  });
+
+  it("removeTransferredTab leaves no tabs when the last tab is transferred out", () => {
+    appState.resetAppState();
+    appState.removeTransferredTab("tab-1");
+    expect(appState.getActiveSession().openTabs).toHaveLength(0);
+    expect(appState.getActiveSession().selectedTabId).toBeNull();
+  });
+
+  it("openTransferredTab replaces bootstrap untitled in a fresh window", () => {
+    appState.resetAppState();
+    const documentId = appState.openTransferredTab({
+      filePath: "/tmp/move-me.txt",
+      content: "payload",
+      title: "move-me.txt",
+    });
+    expect(documentId).toBe("doc-2");
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+    expect(appState.getActiveDocuments()).toHaveLength(1);
+    expect(appState.getActiveDocuments()[0]?.filePath).toBe("/tmp/move-me.txt");
+  });
+
+  it("transferActiveTabOut and openTransferredTab round-trip tab payload", () => {
+    appState.openFileInTab("/tmp/move-me.txt", "payload");
+    const transfer = appState.transferActiveTabOut();
+    expect(transfer).toEqual({
+      filePath: "/tmp/move-me.txt",
+      content: "payload",
+      title: "move-me.txt",
+    });
+    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+
+    const documentId = appState.openTransferredTab(transfer!);
+    expect(documentId).toBe("doc-2");
+    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(appState.getActiveSession().selectedTabId).toBe("tab-3");
   });
 });
+

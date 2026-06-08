@@ -1,6 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { chatStore, resetAgentIdCounterForTests } from "../chatStore";
+import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
+import { chatStore, formatCompactionNotice, resetAgentIdCounterForTests } from "../chatStore";
+import { DRAFT_AGENT_TITLE } from "../../services/chatAgents";
+import type { ChatThreadSnapshot } from "../../domain/contracts";
+import { WorkspaceAccessReason, type CapabilityChecker } from "../../ai/capabilities";
+import {
+  WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
+  WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
+} from "../../ai/chatErrorCopy";
+import {
+  deleteAgentPersistence,
+  readAgentThreadFileSnapshot,
+  readWorkspaceAgentsIndexSnapshot,
+} from "../../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../../services/chatRetention";
+import { ensureWorkspaceReadAccess } from "../../services/fileSystem";
+import { defaultAppProviderSettings } from "../../ai/providers/appProviderSettings";
+import {
+  createTestCapabilityChecker,
+  registerTestDebugWorkspaceProvider,
+} from "../../ai/providers/debugProviderTestHelpers";
+import { appState } from "../appState";
+import { defaultDebugProviderSettings } from "../../ai/providers/debugProviderSettings";
+import { defaultHttpConnectionSettings, DEFAULT_HTTP_CONNECTION_ID } from "../../ai/providers/httpConnectionSettings";
+import { defaultProviderModelCatalogs } from "../../ai/providers/providerModelCatalog";
+import {
+  registerChatProvider,
+  resetChatProviderRegistryForTests,
+} from "../../ai/providers/registry";
 
 vi.mock("../../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/chatPersistence")>();
@@ -16,109 +43,440 @@ vi.mock("../../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-describe("chatStore thread message mutators", () => {
+const readAgentThreadFileSnapshotMock = vi.mocked(readAgentThreadFileSnapshot);
+const readWorkspaceAgentsIndexSnapshotMock = vi.mocked(readWorkspaceAgentsIndexSnapshot);
+const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
+const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
+
+function providerSwitchOptions() {
+  return {
+    providerSettings: appState.getSnapshot().settings.providerSettings,
+    providerModelCatalogs: defaultProviderModelCatalogs,
+  };
+}
+
+describe("chatStore", () => {
   beforeEach(() => {
     chatStore.reset();
-    resetAgentIdCounterForTests();
+    chatStore.setCapabilityChecker(null);
     setChatRetentionMaxTurnsForTests(undefined);
+    resetAgentIdCounterForTests();
+    readAgentThreadFileSnapshotMock.mockReset();
+    readWorkspaceAgentsIndexSnapshotMock.mockReset();
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({ version: 1, agents: [] });
+    deleteAgentPersistenceMock.mockReset();
+    deleteAgentPersistenceMock.mockResolvedValue(undefined);
+    ensureWorkspaceReadAccessMock.mockReset();
   });
 
-  function seedThreadWithMessages() {
+  it("creates thread lazily on first user message", () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.appendMessage({
-      id: "u-1",
+    const created = chatStore.appendMessage({
+      id: "m-1",
       role: "user",
       content: "hello",
-      createdAt: "2026-06-07T00:00:00.000Z",
+      createdAt: "2026-05-25T00:00:00.000Z",
     });
+
+    expect(created).toBe(true);
+    expect(chatStore.hasThread()).toBe(true);
+    expect(chatStore.isEmpty()).toBe(false);
+    expect(chatStore.getMetadata()).toMatchObject({
+      agentId: "agent-1",
+      threadId: "agent-1",
+      mode: "ask",
+      provider: "http",
+      createdAt: "2026-05-25T00:00:00.000Z",
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    });
+    expect(chatStore.getMessages()).toHaveLength(1);
+  });
+
+  it("appends message and updates metadata values", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.appendMessage({
-      id: "a-1",
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-25T00:00:00.000Z",
+    });
+    const appended = chatStore.appendMessage({
+      id: "m-2",
       role: "assistant",
-      content: "original reply",
-      createdAt: "2026-06-07T00:00:01.000Z",
-    });
-  }
-
-  describe("updateMessageContent", () => {
-    it("updates an assistant message in place", () => {
-      seedThreadWithMessages();
-
-      const updated = chatStore.updateMessageContent("a-1", "revised reply");
-
-      expect(updated).toBe(true);
-      expect(chatStore.getMessages().find((message) => message.id === "a-1")?.content).toBe(
-        "revised reply",
-      );
-      expect(chatStore.getMetadata()?.updatedAt).toBeDefined();
+      content: "hi",
+      createdAt: "2026-05-25T00:00:01.000Z",
     });
 
-    it("returns false when the message id is missing", () => {
-      seedThreadWithMessages();
+    const metadataUpdated = chatStore.updateThreadMetadata(
+      { mode: "review", provider: "debug-workspace", summary: "brief summary" },
+      "2026-05-25T00:00:02.000Z",
+    );
 
-      expect(chatStore.updateMessageContent("missing-id", "ignored")).toBe(false);
-      expect(chatStore.getMessages()).toHaveLength(2);
+    expect(appended).toBe(true);
+    expect(metadataUpdated).toBe(true);
+    expect(chatStore.getMessages().map((message) => message.id)).toEqual(["m-1", "m-2"]);
+    expect(chatStore.getMetadata()).toEqual({
+      agentId: "agent-1",
+      threadId: "agent-1",
+      mode: "review",
+      provider: "debug-workspace",
+      createdAt: "2026-05-25T00:00:00.000Z",
+      updatedAt: "2026-05-25T00:00:02.000Z",
+      summary: "brief summary",
     });
   });
 
-  describe("removeMessage", () => {
-    it("removes a message by id", () => {
-      seedThreadWithMessages();
+  it("creates an empty thread when mode is selected before the first message", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
 
-      const removed = chatStore.removeMessage("a-1");
+    const updated = chatStore.updateThreadMetadata({ mode: "review" }, "2026-05-26T00:00:00.000Z");
 
-      expect(removed).toBe(true);
-      expect(chatStore.getMessages().map((message) => message.id)).toEqual(["u-1"]);
-    });
-
-    it("returns false when the message id is missing", () => {
-      seedThreadWithMessages();
-
-      expect(chatStore.removeMessage("missing-id")).toBe(false);
-      expect(chatStore.getMessages()).toHaveLength(2);
+    expect(updated).toBe(true);
+    expect(chatStore.getMessages()).toEqual([]);
+    expect(chatStore.getMetadata()).toEqual({
+      agentId: "agent-1",
+      threadId: "agent-1",
+      mode: "review",
+      provider: "http",
+      createdAt: "2026-05-26T00:00:00.000Z",
+      updatedAt: "2026-05-26T00:00:00.000Z",
     });
   });
 
-  describe("compactActiveThread", () => {
-    it("compacts the active thread when it exceeds the retention threshold", () => {
-      setChatRetentionMaxTurnsForTests(2);
-      chatStore.setActiveWorkspaceRoot("/work/a");
+  it("compacts oldest turns when append exceeds retention cap", () => {
+    setChatRetentionMaxTurnsForTests(2);
+    chatStore.setActiveWorkspaceRoot("/work/a");
 
-      for (let index = 1; index <= 3; index += 1) {
-        chatStore.appendMessage(
-          {
-            id: `u-${index}`,
-            role: "user",
-            content: `turn-${index}`,
-            createdAt: `2026-06-07T00:00:0${index}.000Z`,
-          },
-          { skipCompaction: true },
-        );
-        chatStore.appendMessage(
-          {
-            id: `a-${index}`,
-            role: "assistant",
-            content: `reply-${index}`,
-            createdAt: `2026-06-07T00:00:1${index}.000Z`,
-          },
-          { skipCompaction: true },
-        );
-      }
-
-      expect(chatStore.getMessages()).toHaveLength(6);
-
-      const compacted = chatStore.compactActiveThread();
-
-      expect(compacted).toBe(true);
-      expect(chatStore.getMessages().map((message) => message.id)).toEqual([
-        "u-2",
-        "a-2",
-        "u-3",
-        "a-3",
-      ]);
-      expect(chatStore.getMetadata()).toMatchObject({
-        compactionCount: 1,
-        compactedMessageCount: 2,
+    for (let index = 1; index <= 3; index += 1) {
+      chatStore.appendMessage({
+        id: `u-${index}`,
+        role: "user",
+        content: `turn-${index}`,
+        createdAt: `2026-05-26T00:00:0${index}.000Z`,
       });
+      chatStore.appendMessage({
+        id: `a-${index}`,
+        role: "assistant",
+        content: `reply-${index}`,
+        createdAt: `2026-05-26T00:00:1${index}.000Z`,
+      });
+    }
+
+    expect(chatStore.getMessages().map((message) => message.id)).toEqual([
+      "u-2",
+      "a-2",
+      "u-3",
+      "a-3",
+    ]);
+
+    chatStore.appendMessage({
+      id: "u-4",
+      role: "user",
+      content: "turn-4",
+      createdAt: "2026-05-26T00:00:40.000Z",
     });
+
+    expect(chatStore.getMessages().map((message) => message.id)).toEqual([
+      "u-3",
+      "a-3",
+      "u-4",
+    ]);
+    expect(chatStore.getMetadata()).toMatchObject({
+      mode: "ask",
+      provider: "http",
+      createdAt: "2026-05-26T00:00:01.000Z",
+      compactionCount: 2,
+      compactedMessageCount: 4,
+    });
+    expect(chatStore.getMetadata()?.lastCompactedAt).toBeDefined();
+  });
+
+  it("switches active thread state when changing active agent", () => {
+    const threadA: ChatThreadSnapshot = {
+      metadata: {
+        agentId: "agent-a",
+        threadId: "agent-a",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+      },
+      messages: [
+        {
+          id: "a-1",
+          role: "user",
+          content: "A",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        },
+      ],
+    };
+
+    const threadB: ChatThreadSnapshot = {
+      metadata: {
+        agentId: "agent-b",
+        threadId: "agent-b",
+        mode: "review",
+        provider: "debug-workspace",
+        createdAt: "2026-05-25T00:00:03.000Z",
+        updatedAt: "2026-05-25T00:00:03.000Z",
+      },
+      messages: [
+        {
+          id: "b-1",
+          role: "user",
+          content: "B",
+          createdAt: "2026-05-25T00:00:03.000Z",
+        },
+      ],
+    };
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.setAgentThread("agent-a", threadA);
+    chatStore.setAgentThread("agent-b", threadB);
+    chatStore.setActiveAgentId("agent-a");
+    expect(chatStore.getMessages().map((message) => message.id)).toEqual(["a-1"]);
+    expect(chatStore.getMetadata()?.mode).toBe("ask");
+
+    chatStore.setActiveAgentId("agent-b");
+    expect(chatStore.getMessages().map((message) => message.id)).toEqual(["b-1"]);
+    expect(chatStore.getMetadata()?.mode).toBe("review");
+    expect(chatStore.getMetadata()?.provider).toBe("debug-workspace");
+  });
+
+  it("loads workspace agents from index and thread files", async () => {
+    const threadA: ChatThreadSnapshot = {
+      metadata: {
+        agentId: "agent-a",
+        threadId: "agent-a",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+      },
+      messages: [
+        {
+          id: "a-1",
+          role: "user",
+          content: "A",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        },
+      ],
+    };
+
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      agents: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+    });
+    readAgentThreadFileSnapshotMock.mockResolvedValue(threadA);
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    await chatStore.loadWorkspaceAgents("/work/a");
+
+    expect(chatStore.getActiveAgentId()).toBeNull();
+    chatStore.setActiveAgentId("agent-a");
+    expect(chatStore.getMessages()).toEqual(threadA.messages);
+  });
+
+  it("mergeSessionDraftAgents adds draft entries for open tab ids missing from disk index", async () => {
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      agents: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+    });
+    readAgentThreadFileSnapshotMock.mockResolvedValue(null);
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    await chatStore.loadWorkspaceAgents("/work/a");
+    chatStore.mergeSessionDraftAgents("/work/a", ["agent-draft-tab"]);
+
+    const index = chatStore.getAgentIndex();
+    expect(index.some((entry) => entry.id === "agent-draft-tab" && entry.isDraft)).toBe(true);
+    expect(index.some((entry) => entry.id === "agent-a")).toBe(true);
+  });
+
+  it("shows empty state when workspace has no persisted thread", async () => {
+    readAgentThreadFileSnapshotMock.mockResolvedValue(null);
+
+    chatStore.setActiveWorkspaceRoot("/work/empty");
+    await chatStore.loadWorkspaceThread("/work/empty");
+
+    expect(chatStore.hasThread()).toBe(false);
+    expect(chatStore.isEmpty()).toBe(true);
+    expect(chatStore.getMessages()).toEqual([]);
+    expect(chatStore.getMetadata()).toBeNull();
+  });
+
+  it("preserves in-memory session draft agents when disk index is empty", async () => {
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      agents: [],
+    });
+
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    const draftId = chatStore.createDraftAgent();
+    expect(draftId).toBeTruthy();
+
+    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+
+    expect(chatStore.getActiveAgentId()).toBe(draftId);
+    expect(chatStore.getAgentIndex().some((entry) => entry.id === draftId && entry.isDraft)).toBe(
+      true,
+    );
+  });
+
+  it("scopes chat-http agents separately from workspace agents", async () => {
+    const workspaceIndex = {
+      version: 1 as const,
+      agents: [{ id: "ws-agent", title: "Workspace", lastUsedAt: "2026-06-05T00:00:00.000Z" }],
+    };
+    const chatHttpIndex = {
+      version: 1 as const,
+      agents: [{ id: "http-agent", title: "Chat HTTP", lastUsedAt: "2026-06-05T00:00:01.000Z" }],
+    };
+
+    readWorkspaceAgentsIndexSnapshotMock.mockImplementation(async (scopeKey: string) => {
+      if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
+        return chatHttpIndex;
+      }
+      return workspaceIndex;
+    });
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    await chatStore.loadWorkspaceAgents("/work/a");
+    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
+
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+    expect(chatStore.getActiveChatScopeKey()).toBe(CHAT_HTTP_CONTEXT_ID);
+    expect(chatStore.getActiveWorkspaceRoot()).toBeNull();
+    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["http-agent"]);
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
+  });
+
+  it("keeps persisted chat-http review mode threads unchanged on load", async () => {
+    const chatHttpThread: ChatThreadSnapshot = {
+      metadata: {
+        agentId: "http-agent",
+        threadId: "http-agent",
+        mode: "review",
+        provider: "http",
+        createdAt: "2026-06-05T00:00:00.000Z",
+        updatedAt: "2026-06-05T00:00:01.000Z",
+      },
+      messages: [
+        {
+          id: "m-1",
+          role: "user",
+          content: "legacy review",
+          createdAt: "2026-06-05T00:00:00.000Z",
+        },
+      ],
+    };
+
+    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      agents: [{ id: "http-agent", title: "Chat HTTP", lastUsedAt: "2026-06-05T00:00:01.000Z" }],
+    });
+    readAgentThreadFileSnapshotMock.mockResolvedValue(chatHttpThread);
+
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+    chatStore.setActiveAgentId("http-agent");
+
+    expect(chatStore.getMetadata()?.mode).toBe("review");
+  });
+
+  it("clears active chat binding in notepad mode", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-25T00:00:00.000Z",
+    });
+    expect(chatStore.hasThread()).toBe(true);
+
+    chatStore.setActiveWorkspaceRoot(null);
+
+    expect(chatStore.hasThread()).toBe(false);
+    expect(chatStore.isEmpty()).toBe(true);
+    expect(chatStore.getMessages()).toEqual([]);
+    expect(chatStore.getMetadata()).toBeNull();
+  });
+
+  it("returns unknown capability status when checker is not configured", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+
+    const result = await chatStore.checkActiveWorkspaceCapabilities();
+
+    expect(result).toMatchObject({
+      status: "blocked",
+      reason: WorkspaceAccessReason.ProviderUnsupported,
+    });
+  });
+
+  it("checks active workspace capabilities through configured checker", async () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-26T00:00:00.000Z",
+    });
+
+    const checker: CapabilityChecker = {
+      checkCapabilities: vi.fn().mockResolvedValue({
+        status: "blocked",
+        reason: WorkspaceAccessReason.ProviderUnsupported,
+        capabilities: {
+          canReadWorkspaceFiles: false,
+          supportedModes: ["ask"],
+        },
+        message: "Provider does not support workspace reads.",
+        recoveryHint: "Switch provider.",
+      }),
+    };
+    chatStore.setCapabilityChecker(checker);
+
+    const result = await chatStore.checkActiveWorkspaceCapabilities();
+
+    expect(checker.checkCapabilities).toHaveBeenCalledWith({
+      provider: "http",
+      mode: "ask",
+      workspaceRootPath: "/work/a",
+    });
+    expect(result).toEqual({
+      status: "blocked",
+      reason: WorkspaceAccessReason.ProviderUnsupported,
+      capabilities: {
+        canReadWorkspaceFiles: false,
+        supportedModes: ["ask"],
+      },
+      message: "Provider does not support workspace reads.",
+      recoveryHint: "Switch provider.",
+    });
+  });
+
+  it("blocks preflight when workspace path is inaccessible", async () => {
+    ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
+    chatStore.setActiveWorkspaceRoot("/work/blocked");
+
+    const result = await chatStore.runAccessPreflight();
+
+    expect(result).toEqual({
+      status: "blocked",
+      reason: WorkspaceAccessReason.WorkspacePathInaccessible,
+      message: WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
+      recoveryHint: WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
+      checkedAt: result.checkedAt,
+    });
+    expect(chatStore.getChatAccessState()).toEqual(result);
   });
 });

@@ -8,7 +8,7 @@ SpecOps is a desktop workspace app for specs, notes, and project files. The UI i
 | --- | --- |
 | `app/` | Frontend (Svelte 5, Vite) and Tauri project root (`package.json`, `src-tauri/`) |
 | `app/src/routes/` | SvelteKit routes; `+page.svelte` is the main application shell |
-| `app/src/lib/domain/` | Shared types and pure helpers (`contracts.ts`) |
+| `app/src/lib/domain/` | Shared types and pure helpers (`contracts.ts` barrel over `document.ts`, `workspace.ts`, `settings.ts`, `chat.ts`, `commands.ts`, `persistence.ts`) |
 | `app/src/lib/state/` | Writable stores and domain orchestration (`appState`, `chatStore`) |
 | `app/src/lib/services/` | I/O, persistence, platform, file watching, session |
 | `app/src/lib/ai/` | Chat providers, modes, send pipeline |
@@ -19,6 +19,24 @@ SpecOps is a desktop workspace app for specs, notes, and project files. The UI i
 | `docs/` | Architecture and integration docs (this folder) |
 
 Unit tests are colocated as `*.test.ts` next to source. Run them from `app/` with `npm test`.
+
+### Module size conventions (M6)
+
+Production modules should stay **≤500 lines** where practical; **≤600** is acceptable for cohesive UI shells (`+page.svelte`, `SettingsDialog.svelte`). Test files should stay **≤600 lines** and mirror the production module they cover.
+
+When a file grows past those limits, split along existing domain boundaries and colocate new files next to the parent module:
+
+| Area | Split pattern |
+| --- | --- |
+| Settings UI | One panel per file under `components/settings/` |
+| App shell | `AppShell.svelte`, `appShellEffects.ts`, handler modules under `services/` |
+| State slices | `*Slice.ts` per concern (`documentTabsSlice`, `documentContentSlice`, `providerSettingsSlice`, …) |
+| `chatStore` | `threadMessages.ts`, `threadMetadata.ts`, `threadProviderSelection.ts`, `agents.ts` |
+| Commands | `definitions.ts` + `handlers/{app,file,workspace,edit,view}.ts`; `registry.ts` dispatches only |
+| Services | Codecs/paths/policy in sibling modules (`chatPersistenceCodec.ts`, `sessionSnapshotCodec.ts`, `externalFileReloadPolicy.ts`, …) |
+| Tests | Match production folders (`appState/*.test.ts`, `chatStore/*.test.ts`, `commands/handlers/*.test.ts`); avoid import-only aggregator test files that duplicate `vi.mock` scopes |
+
+Re-export from the original entry point when splitting to limit import churn (`contracts.ts`, `registry.ts`, `sendChatMessage.ts`, `sessionManager.ts`).
 
 ## Runtime stack
 
@@ -102,8 +120,8 @@ Implementation is split into colocated modules under `app/src/lib/state/appState
 | `documentHelpers.ts` | Build/normalize document helpers |
 | `tabHelpers.ts` | Tab reorder and bulk-close helpers |
 | `themeController.ts` | Theme persistence, DOM application, custom-theme transforms |
-| `settingsSlice.ts` | Settings defaults and provider/catalog mutators |
-| `documentTabsSlice.ts` | Tab CRUD, agent tabs, file open/transfer, document mutators |
+| `settingsSlice.ts` | Settings composer; composes `providerSettingsSlice`, `chatModesSettingsSlice`, `logSettingsSlice` |
+| `documentTabsSlice.ts` | Tab lifecycle; composes `documentContentSlice`, `tabTransferSlice` |
 | `workspaceContextsSlice.ts` | Context switch, workspace open/close, session restore/snapshot |
 
 ### `chatStore` (`app/src/lib/state/chatStore.ts`)
@@ -119,7 +137,7 @@ Implementation is split into colocated modules under `app/src/lib/state/chatStor
 | Module | Role |
 | --- | --- |
 | `agents.ts` | Agent index, drafts, titles, agent CRUD helpers |
-| `threads.ts` | Thread clone/patch, messages, metadata, system events, compaction |
+| `threads.ts` | Slice composer; delegates to `threadMessages.ts`, `threadMetadata.ts`, `threadProviderSelection.ts` |
 | `runtime.ts` | Generation state, placeholders, retry, cancel |
 | `access.ts` | Preflight, access loss messages, capability checker wiring |
 | `workspace.ts` | Per-root workspace state patch helpers |
@@ -140,7 +158,9 @@ Shared prompt shape is defined in `app/src/lib/ai/providers/types.ts` so Debug a
 ## Commands and menus
 
 - **`AppCommandId`** — stable command ids in `contracts.ts`.
-- **`commands/registry.ts`** — command definitions with per-platform `binding.mac` / `binding.windows`; `expandPlatformKeymaps()` builds platform keymaps from those bindings (no duplicated Meta/Ctrl maps). Menu initialization and dispatch run from `+page.svelte` and the native menu.
+- **`commands/definitions.ts`** — static command metadata and bindings.
+- **`commands/handlers/`** — grouped handler maps (`app`, `file`, `workspace`, `edit`, `view`).
+- **`commands/registry.ts`** — merges handlers, `dispatchCommand`, keymap lookup via `commandBindingRuntime.ts`. Menu initialization and dispatch run from `+page.svelte` and the native menu.
 
 Prefer adding behavior through a command id when it is user-facing and needs shortcuts or menu entries.
 

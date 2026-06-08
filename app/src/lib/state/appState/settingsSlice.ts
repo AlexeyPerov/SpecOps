@@ -19,7 +19,7 @@ import {
 import {
   normalizeCommandBindingOverrides,
 } from "../../commands/commandBindings";
-import { setCommandBindingOverrides } from "../../commands/registry";
+import { setCommandBindingOverrides } from "../../commands/commandBindingRuntime";
 import { DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES } from "../../services/binaryFileOpen";
 import { DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES } from "../../services/largeFileOpen";
 import { defaultLogSettings, normalizeLogSettings } from "../../services/logSettings";

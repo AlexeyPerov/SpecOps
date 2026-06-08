@@ -194,5 +194,3 @@ export async function updateLastActiveWindow(windowId: string): Promise<void> {
   current.updatedAt = new Date().toISOString();
   await writeSessionSnapshot(current);
 }
-
-export { nextNumericId, sanitizeWindowSnapshot } from "./sessionSnapshotSanitizer";

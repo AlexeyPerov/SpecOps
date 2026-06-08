@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { BuiltinChatModeId, CustomChatModeDefinition } from "../../domain/contracts";
+  import type { ResolvedChatMode } from "../../ai/modes/resolve";
   import { listBuiltinResolvedChatModes } from "../../ai/modes/resolve";
   import { appState } from "../../state/appState";
+  import SettingsFoldout from "./SettingsFoldout.svelte";
   import {
     addRequiredSection as addRequiredSectionToList,
     nextSelectedIdAfterRemoval,
@@ -93,63 +95,74 @@
   });
 </script>
 
+{#snippet builtinModeFields(mode: ResolvedChatMode, builtinId: BuiltinChatModeId)}
+  {#if builtinId === "raw"}
+    <label class="settings-toggle">
+      <input
+        type="checkbox"
+        checked={snapshot.settings.chatModes.rawEnabled}
+        onchange={(event) =>
+          appState.setRawEnabled((event.currentTarget as HTMLInputElement).checked)}
+      />
+      Enabled
+    </label>
+  {/if}
+  <label class="settings-toggle">
+    <input
+      type="checkbox"
+      checked={snapshot.settings.chatModes.builtinToggles[builtinId].includeWorkspace}
+      onchange={(event) =>
+        appState.updateBuiltinModeToggles(builtinId, {
+          includeWorkspace: (event.currentTarget as HTMLInputElement).checked,
+        })}
+    />
+    Include workspace context
+  </label>
+  <label class="settings-toggle">
+    <input
+      type="checkbox"
+      checked={snapshot.settings.chatModes.builtinToggles[builtinId].includeSummary}
+      onchange={(event) =>
+        appState.updateBuiltinModeToggles(builtinId, {
+          includeSummary: (event.currentTarget as HTMLInputElement).checked,
+        })}
+    />
+    Include conversation summary
+  </label>
+  <label class="settings-field">
+    <span>Prompt</span>
+    <textarea rows={Math.max(3, mode.promptTemplate.split("\n").length + 1)} readonly
+      >{mode.promptTemplate}</textarea
+    >
+  </label>
+  {#if mode.requiredSections.length > 0}
+    <p class="settings-section-note">
+      Required sections: {mode.requiredSections.join(", ")}
+    </p>
+  {/if}
+{/snippet}
+
 <section class="settings-section">
-  <h3>Built-in modes</h3>
-  <p class="settings-section-note">
-    Built-in prompts are read-only. Toggle workspace and summary context per mode.
-  </p>
-  {#each BUILTIN_CHAT_MODE_ORDER as builtinId (builtinId)}
-    {@const mode = builtinChatModes().find((entry) => entry.id === builtinId)}
-    {#if mode}
-      <div class="settings-subsection settings-subsection-separated">
-        <h4>{mode.name}</h4>
-        {#if builtinId === "raw"}
-          <label class="settings-toggle">
-            <input
-              type="checkbox"
-              checked={snapshot.settings.chatModes.rawEnabled}
-              onchange={(event) =>
-                appState.setRawEnabled((event.currentTarget as HTMLInputElement).checked)}
-            />
-            Enabled
-          </label>
+  <SettingsFoldout title="Built-in modes">
+    <p class="settings-section-note">
+      Built-in prompts are read-only. Toggle workspace and summary context per mode.
+    </p>
+    {#each BUILTIN_CHAT_MODE_ORDER as builtinId (builtinId)}
+      {@const mode = builtinChatModes().find((entry) => entry.id === builtinId)}
+      {#if mode}
+        {#if builtinId === "ask" || builtinId === "review"}
+          <SettingsFoldout title={mode.name} nested>
+            {@render builtinModeFields(mode, builtinId)}
+          </SettingsFoldout>
+        {:else}
+          <div class="settings-subsection settings-subsection-separated">
+            <h4>{mode.name}</h4>
+            {@render builtinModeFields(mode, builtinId)}
+          </div>
         {/if}
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={snapshot.settings.chatModes.builtinToggles[builtinId].includeWorkspace}
-            onchange={(event) =>
-              appState.updateBuiltinModeToggles(builtinId, {
-                includeWorkspace: (event.currentTarget as HTMLInputElement).checked,
-              })}
-          />
-          Include workspace context
-        </label>
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={snapshot.settings.chatModes.builtinToggles[builtinId].includeSummary}
-            onchange={(event) =>
-              appState.updateBuiltinModeToggles(builtinId, {
-                includeSummary: (event.currentTarget as HTMLInputElement).checked,
-              })}
-          />
-          Include conversation summary
-        </label>
-        <label class="settings-field">
-          <span>Prompt</span>
-          <textarea rows={Math.max(3, mode.promptTemplate.split("\n").length + 1)} readonly
-            >{mode.promptTemplate}</textarea
-          >
-        </label>
-        {#if mode.requiredSections.length > 0}
-          <p class="settings-section-note">
-            Required sections: {mode.requiredSections.join(", ")}
-          </p>
-        {/if}
-      </div>
-    {/if}
-  {/each}
+      {/if}
+    {/each}
+  </SettingsFoldout>
 </section>
 
 <section class="settings-section">

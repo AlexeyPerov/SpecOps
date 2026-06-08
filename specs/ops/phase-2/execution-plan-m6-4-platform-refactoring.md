@@ -66,7 +66,7 @@ Dependencies: none.
 
 ---
 
-#### Task 3: Split sendChatMessage pipeline (P2-10) [Score:5] [Agent:medium]
+#### Task 3: Split sendChatMessage pipeline (P2-10) [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -90,7 +90,7 @@ Dependencies: M6.3 Task 4 optional.
 
 ---
 
-#### Task 4: Split appMenu and externalFileChanges (P2-10) [Score:5] [Agent:medium]
+#### Task 4: Split appMenu and externalFileChanges (P2-10) [Score:5] [Agent:medium] [DONE]
 
 **Required context**
 

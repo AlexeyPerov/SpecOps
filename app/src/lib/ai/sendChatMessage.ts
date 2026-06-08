@@ -1,508 +1,20 @@
-import type { ChatMessage } from "../domain/contracts";
-import { buildThreadProviderRequest } from "./modes/prompt";
+import { chatStore } from "../state/chatStore";
 import {
-  formatRetryFailureNote,
-  PROVIDER_UNAVAILABLE_MESSAGE,
-  sanitizeUnexpectedProviderError,
-} from "./chatErrorCopy";
-import {
-  getDebugProviderSendBlockHint,
-  isDebugProviderSendBlocked,
-} from "./providers/debugProviderSettings";
-import {
-  getHttpProviderMissingConfigMessage,
-  resolveHttpConnection,
-  isHttpProviderSendBlocked,
-} from "./providers/httpConnectionSettings";
-import {
-  validateLocalModelSelection,
-} from "./providers/capabilityChecker";
-import { resolveComposerModelId } from "./providers/threadModelCatalog";
-import { getChatProvider } from "./providers/registry";
-import type { ChatProvider, ProviderSendRequest } from "./providers/types";
-import { appState } from "../state/appState";
-import { chatStore, type ChatTurnError } from "../state/chatStore";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
-import {
-  logChatProviderPayload,
-  logChatSendComplete,
-  logChatSendFailed,
-  logChatSendStart,
-} from "./chatDiagnostics";
-import { isChatProviderError, streamProviderMessage } from "./chatSend";
-import type { WorkspaceAccessStatus } from "../ai/capabilities";
-import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
+  abortTurn,
+  beginTurn,
+  createUserMessage,
+  executeProviderTurn,
+  persistAgentThreadOnce,
+  resolveSendTarget,
+  validateProviderSend,
+  type ChatSendContextOptions,
+  type SendChatMessageResult,
+} from "./chatSendPipeline";
+import { retryLastChatTurn, type RetryLastChatTurnFailureReason, type RetryLastChatTurnResult } from "./retryChatTurn";
+import type { ChatTurnSuccessResult } from "./chatSendPipeline";
 
-class TurnCancelledError extends Error {
-  constructor() {
-    super("Turn cancelled");
-    this.name = "TurnCancelledError";
-  }
-}
-
-function isTurnCancelledError(error: unknown): error is TurnCancelledError {
-  return error instanceof TurnCancelledError;
-}
-
-export type SendChatMessageFailureReason =
-  | "empty"
-  | "no_workspace"
-  | "no_agent"
-  | "generating"
-  | "preflight"
-  | "debug_disabled"
-  | "http_not_configured"
-  | "invalid_model"
-  | "provider_unavailable"
-  | "append_failed"
-  | "provider_error";
-
-export type RetryLastChatTurnFailureReason =
-  | SendChatMessageFailureReason
-  | "no_failed_turn"
-  | "no_user_message";
-
-export type ChatTurnSuccessResult = {
-  ok: true;
-  turnId: string;
-  assistantMessageId: string;
-  agentId: string;
-};
-
-export type SendChatMessageResult =
-  | ChatTurnSuccessResult
-  | { ok: false; reason: SendChatMessageFailureReason; message: string };
-
-export type RetryLastChatTurnResult =
-  | ChatTurnSuccessResult
-  | { ok: false; reason: RetryLastChatTurnFailureReason; message: string };
-
-function createUserMessage(content: string): ChatMessage {
-  const createdAt = new Date().toISOString();
-  return {
-    id: `msg-${createdAt}-${Math.floor(Math.random() * 1000)}`,
-    role: "user",
-    content,
-    createdAt,
-  };
-}
-
-function createAssistantPlaceholder(turnId: string): ChatMessage {
-  const createdAt = new Date().toISOString();
-  return {
-    id: `assistant-${turnId}`,
-    role: "assistant",
-    content: "",
-    createdAt,
-  };
-}
-
-function persistAgentThreadOnce(scopeKey: string, agentId: string): void {
-  const thread = chatStore.getWorkspaceAgentsState(scopeKey)?.threadsByAgentId[agentId] ?? null;
-  if (!thread || !thread.messages.some((message) => message.role === "user")) {
-    return;
-  }
-  scheduleAgentThreadFilePersistence(scopeKey, agentId, {
-    version: 1,
-    thread,
-  });
-}
-
-function abortTurn(agentId: string, workspaceRoot?: string | null): void {
-  chatStore.completeTurn(agentId, workspaceRoot);
-}
-
-function assertTurnStillActive(root: string, agentId: string, turnId: string): void {
-  if (!chatStore.isGenerationTurnActive(root, agentId, turnId)) {
-    throw new TurnCancelledError();
-  }
-}
-
-function findLastUserMessage(messages: ChatMessage[]): ChatMessage | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === "user") {
-      return message;
-    }
-  }
-  return null;
-}
-
-function createRetryFailureNote(turnId: string, previousError: ChatTurnError): ChatMessage {
-  const createdAt = new Date().toISOString();
-  return {
-    id: `retry-note-${turnId}`,
-    role: "system",
-    content: formatRetryFailureNote(previousError.message),
-    createdAt,
-  };
-}
-
-type ProviderSendValidationFailure = {
-  ok: false;
-  reason: SendChatMessageFailureReason;
-  message: string;
-};
-
-type ProviderSendValidationSuccess = {
-  ok: true;
-  provider: ChatProvider;
-  accessStatus: WorkspaceAccessStatus;
-  modelId: string;
-  connectionId?: string;
-};
-
-type ChatContextKind = "workspace" | "chat-http";
-
-interface ChatSendContextOptions {
-  chatContextKind?: ChatContextKind;
-}
-
-function noChatScopeMessage(action: "send" | "retry"): string {
-  const contextId = appState.getSnapshot().contexts.activeContextId;
-  const isChatHttpContext = contextId === CHAT_HTTP_CONTEXT_ID;
-  if (action === "retry") {
-    return isChatHttpContext
-      ? "Open Chat and select a chat thread to retry messages."
-      : "Open a workspace to retry chat messages.";
-  }
-  return isChatHttpContext
-    ? "Open Chat and select a chat thread to send messages."
-    : "Open a workspace to send chat messages.";
-}
-
-function resolveChatContextKind(root: string, options?: ChatSendContextOptions): ChatContextKind {
-  if (options?.chatContextKind) {
-    return options.chatContextKind;
-  }
-  return root === CHAT_HTTP_CONTEXT_ID ? "chat-http" : "workspace";
-}
-
-function noActiveChatTargetMessage(chatContextKind: ChatContextKind): string {
-  return chatContextKind === "chat-http"
-    ? "Select or create a chat to send messages."
-    : "Could not resolve an active agent.";
-}
-
-function resolveActiveAgentIdForSend(
-  agentId: string | undefined,
-  chatContextKind: ChatContextKind,
-): string | null {
-  const resolved = agentId ?? chatStore.getActiveAgentId();
-  if (resolved) {
-    return resolved;
-  }
-  if (chatContextKind !== "chat-http") {
-    return null;
-  }
-  return chatStore.createDraftAgent();
-}
-
-async function validateProviderSend(
-  activeAgentId: string,
-  options?: ChatSendContextOptions,
-): Promise<ProviderSendValidationFailure | ProviderSendValidationSuccess> {
-  const root = chatStore.getActiveChatScopeKey();
-  if (!root) {
-    return {
-      ok: false,
-      reason: "no_workspace",
-      message: noChatScopeMessage("send"),
-    };
-  }
-  const chatContextKind = resolveChatContextKind(root, options);
-  const providerId = chatStore.getActiveChatProvider(activeAgentId);
-  const appSettings = appState.getSnapshot().settings;
-  const resolvedConnection =
-    providerId === "http"
-      ? resolveHttpConnection(
-          appSettings.providerSettings,
-          appSettings.providerApiKeys,
-          chatStore.getMetadata(activeAgentId)?.connectionId,
-        )
-      : null;
-  if (providerId === "http" && !chatStore.getMetadata(activeAgentId)?.connectionId) {
-    const defaultConnectionId = resolvedConnection?.connection.id;
-    if (defaultConnectionId) {
-      chatStore.updateThreadMetadata({ connectionId: defaultConnectionId }, undefined, activeAgentId);
-    }
-  }
-  if (isDebugProviderSendBlocked(providerId, appSettings.providerSettings)) {
-    return {
-      ok: false,
-      reason: "debug_disabled",
-      message: getDebugProviderSendBlockHint(providerId),
-    };
-  }
-
-  if (
-    isHttpProviderSendBlocked(
-      providerId,
-      resolvedConnection?.connection ?? appSettings.providerSettings.http,
-      resolvedConnection?.apiKey ?? "",
-    )
-  ) {
-    return {
-      ok: false,
-      reason: "http_not_configured",
-      message: getHttpProviderMissingConfigMessage(),
-    };
-  }
-
-  const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
-  const catalogContext = {
-    providerSettings: appSettings.providerSettings,
-    connectionId: resolvedConnection?.connection.id ?? chatStore.getMetadata(activeAgentId)?.connectionId,
-  };
-  const modelId = resolveComposerModelId({
-    thread,
-    providerId,
-    providerSettings: appSettings.providerSettings,
-    providerModelCatalogs: appSettings.providerModelCatalogs,
-    connectionId: catalogContext.connectionId,
-  });
-  const localModelValidation = validateLocalModelSelection(
-    appSettings.providerModelCatalogs,
-    providerId,
-    modelId,
-    catalogContext,
-  );
-  if (!localModelValidation.ok) {
-    return {
-      ok: false,
-      reason: "invalid_model",
-      message: `${localModelValidation.message} ${localModelValidation.recoveryHint}`,
-    };
-  }
-
-  let accessStatus: WorkspaceAccessStatus = "unknown";
-  if (chatContextKind === "workspace") {
-    const accessState = await chatStore.runAccessPreflight();
-    if (accessState.status !== "ready") {
-      return {
-        ok: false,
-        reason: "preflight",
-        message: accessState.message,
-      };
-    }
-    accessStatus = accessState.status;
-  }
-
-  const provider = getChatProvider(providerId);
-  if (!provider) {
-    return {
-      ok: false,
-      reason: "provider_unavailable",
-      message: PROVIDER_UNAVAILABLE_MESSAGE,
-    };
-  }
-
-  return {
-    ok: true,
-    provider,
-    accessStatus,
-    modelId: localModelValidation.modelId,
-    connectionId: resolvedConnection?.connection.id,
-  };
-}
-
-async function executeProviderTurn(params: {
-  root: string;
-  chatContextKind: ChatContextKind;
-  activeAgentId: string;
-  turnId: string;
-  provider: ChatProvider;
-  accessStatus: WorkspaceAccessStatus;
-  modelId: string;
-  connectionId?: string;
-  previousError?: ChatTurnError | null;
-}): Promise<SendChatMessageResult> {
-  const { root, chatContextKind, activeAgentId, turnId, provider, accessStatus, modelId, connectionId, previousError } =
-    params;
-  const abortController = new AbortController();
-
-  const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
-  if (!thread) {
-    abortTurn(activeAgentId, root);
-    return {
-      ok: false,
-      reason: "append_failed",
-      message: "Could not prepare the active thread for generation.",
-    };
-  }
-
-  if (previousError) {
-    chatStore.appendMessage(createRetryFailureNote(turnId, previousError), {
-      agentId: activeAgentId,
-      skipCompaction: true,
-    });
-  }
-
-  const request: ProviderSendRequest = {
-    payload: buildThreadProviderRequest(
-      thread,
-      root,
-      appState.getSnapshot().settings,
-      chatContextKind,
-    ),
-    modelId,
-    connectionId,
-    turnKey: turnId,
-    accessStatus,
-    signal: abortController.signal,
-  };
-
-  logChatProviderPayload({
-    turnId,
-    providerId: chatStore.getActiveChatProvider(activeAgentId),
-    connectionId,
-    modelId,
-    payload: request.payload,
-  });
-
-  const assistantMessage = createAssistantPlaceholder(turnId);
-  chatStore.appendMessage(assistantMessage, { agentId: activeAgentId, skipCompaction: true });
-  const usesStreamingProvider = Boolean(provider.streamMessage);
-  let hasScheduledStreamingPersistence = false;
-  const startedAt = Date.now();
-  const providerId = chatStore.getActiveChatProvider(activeAgentId);
-
-  logChatSendStart({
-    agentId: activeAgentId,
-    turnId,
-    providerId,
-    connectionId,
-    modelId,
-    mode: thread.metadata.mode,
-    retry: Boolean(previousError),
-  });
-
-  try {
-    const finalContent = await streamProviderMessage(provider, request, (_delta, accumulated) => {
-      if (!chatStore.isGenerationTurnActive(root, activeAgentId, turnId)) {
-        abortController.abort();
-        throw new TurnCancelledError();
-      }
-      chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
-      if (usesStreamingProvider && !hasScheduledStreamingPersistence) {
-        hasScheduledStreamingPersistence = true;
-        persistAgentThreadOnce(root, activeAgentId);
-      }
-    });
-    assertTurnStillActive(root, activeAgentId, turnId);
-    chatStore.updateMessageContent(assistantMessage.id, finalContent, activeAgentId, root);
-    chatStore.compactActiveThread(activeAgentId);
-    chatStore.completeTurn(activeAgentId, root);
-    persistAgentThreadOnce(root, activeAgentId);
-    logChatSendComplete({
-      agentId: activeAgentId,
-      turnId,
-      providerId,
-      connectionId,
-      modelId,
-      durationMs: Date.now() - startedAt,
-      contentLength: finalContent.length,
-    });
-    return { ok: true, turnId, assistantMessageId: assistantMessage.id, agentId: activeAgentId };
-  } catch (error) {
-    if (isTurnCancelledError(error)) {
-      logChatSendFailed({
-        agentId: activeAgentId,
-        turnId,
-        providerId,
-        connectionId,
-        modelId,
-        durationMs: Date.now() - startedAt,
-        reason: "turn cancelled",
-        cancelled: true,
-      });
-      return {
-        ok: false,
-        reason: "generating",
-        message: "Response was cancelled.",
-      };
-    }
-    chatStore.removeMessage(assistantMessage.id, activeAgentId, root);
-    if (previousError) {
-      chatStore.removeMessage(`retry-note-${turnId}`, activeAgentId, root);
-    }
-    const message = isChatProviderError(error)
-      ? error.userMessage
-      : sanitizeUnexpectedProviderError(error);
-    chatStore.failTurn({ message, code: "provider_error" }, turnId, activeAgentId, root);
-    persistAgentThreadOnce(root, activeAgentId);
-    logChatSendFailed({
-      agentId: activeAgentId,
-      turnId,
-      providerId,
-      connectionId,
-      modelId,
-      durationMs: Date.now() - startedAt,
-      reason: message,
-    });
-    return { ok: false, reason: "provider_error", message };
-  }
-}
-
-export async function retryLastChatTurn(
-  agentId?: string,
-  options?: ChatSendContextOptions,
-): Promise<RetryLastChatTurnResult> {
-  const root = chatStore.getActiveChatScopeKey();
-  if (!root) {
-    return { ok: false, reason: "no_workspace", message: noChatScopeMessage("retry") };
-  }
-
-  const chatContextKind = resolveChatContextKind(root, options);
-  const activeAgentId = resolveActiveAgentIdForSend(agentId, chatContextKind);
-  if (!activeAgentId) {
-    return { ok: false, reason: "no_agent", message: noActiveChatTargetMessage(chatContextKind) };
-  }
-
-  if (!chatStore.canRetryLastTurn(activeAgentId)) {
-    return {
-      ok: false,
-      reason: "no_failed_turn",
-      message: "There is no failed response to retry.",
-    };
-  }
-
-  const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
-  if (!findLastUserMessage(thread?.messages ?? [])) {
-    return {
-      ok: false,
-      reason: "no_user_message",
-      message: "Could not find the last user message to retry.",
-    };
-  }
-
-  const validation = await validateProviderSend(activeAgentId, options);
-  if (!validation.ok) {
-    return validation;
-  }
-
-  const previousError = chatStore.getRuntimeState(activeAgentId).lastError;
-  const turnId = `turn-${Date.now()}`;
-  if (!chatStore.beginTurn(turnId, activeAgentId)) {
-    return {
-      ok: false,
-      reason: "generating",
-      message: "Another response is already in progress.",
-    };
-  }
-
-  return executeProviderTurn({
-    root,
-    chatContextKind,
-    activeAgentId,
-    turnId,
-    provider: validation.provider,
-    accessStatus: validation.accessStatus,
-    modelId: validation.modelId,
-    connectionId: validation.connectionId,
-    previousError,
-  });
-}
+export { retryLastChatTurn };
+export type { ChatTurnSuccessResult, RetryLastChatTurnResult, RetryLastChatTurnFailureReason };
 
 export async function sendChatMessage(
   content: string,
@@ -514,19 +26,13 @@ export async function sendChatMessage(
     return { ok: false, reason: "empty", message: "Message cannot be empty." };
   }
 
-  const root = chatStore.getActiveChatScopeKey();
-  if (!root) {
-    return { ok: false, reason: "no_workspace", message: noChatScopeMessage("send") };
+  const target = resolveSendTarget("send", agentId, options);
+  if (!target.ok) {
+    return target;
   }
 
-  const chatContextKind = resolveChatContextKind(root, options);
-  const activeAgentId = resolveActiveAgentIdForSend(agentId, chatContextKind);
-  if (!activeAgentId) {
-    return { ok: false, reason: "no_agent", message: noActiveChatTargetMessage(chatContextKind) };
-  }
-
-  const turnId = `turn-${Date.now()}`;
-  if (!chatStore.beginTurn(turnId, activeAgentId)) {
+  const turnId = beginTurn(target.activeAgentId);
+  if (!turnId) {
     return {
       ok: false,
       reason: "generating",
@@ -535,27 +41,27 @@ export async function sendChatMessage(
   }
 
   const userMessage = createUserMessage(trimmed);
-  if (!chatStore.appendMessage(userMessage, { agentId: activeAgentId })) {
-    abortTurn(activeAgentId, root);
+  if (!chatStore.appendMessage(userMessage, { agentId: target.activeAgentId })) {
+    abortTurn(target.activeAgentId, target.root);
     return {
       ok: false,
       reason: "append_failed",
       message: "Could not append your message to the active thread.",
     };
   }
-  persistAgentThreadOnce(root, activeAgentId);
+  persistAgentThreadOnce(target.root, target.activeAgentId);
 
-  const validation = await validateProviderSend(activeAgentId, options);
+  const validation = await validateProviderSend(target.activeAgentId, options);
   if (!validation.ok) {
-    chatStore.removeMessage(userMessage.id, activeAgentId, root);
-    abortTurn(activeAgentId, root);
+    chatStore.removeMessage(userMessage.id, target.activeAgentId, target.root);
+    abortTurn(target.activeAgentId, target.root);
     return validation;
   }
 
   return executeProviderTurn({
-    root,
-    chatContextKind,
-    activeAgentId,
+    root: target.root,
+    chatContextKind: target.chatContextKind,
+    activeAgentId: target.activeAgentId,
     turnId,
     provider: validation.provider,
     accessStatus: validation.accessStatus,

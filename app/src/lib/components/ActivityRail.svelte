@@ -101,8 +101,6 @@
     </button>
   </HoverTooltip>
 
-  <div class="rail-separator" aria-hidden="true"></div>
-
   {#if showChatHttp}
     <HoverTooltip label="Chat">
       <button
@@ -211,13 +209,6 @@
 
   .activity-rail-dragging {
     user-select: none;
-  }
-
-  .rail-separator {
-    width: 100%;
-    height: 1px;
-    background: var(--color-border-subtle);
-    flex-shrink: 0;
   }
 
   .rail-workspaces {

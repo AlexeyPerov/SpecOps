@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-08 11:00
+
+- **Global UI:** Bottom panel (console + status bar) now spans the full window width instead of only the editor column. Removed the activity-rail separator between Notepad and Chat/workspace modes.
+- **Chat UI:** Removed borders and card background from assistant (AI) message blocks; user and system messages keep bordered styling.
+
 ## 2026-06-08 10:15
 
 - **Chats/Agents sidebar UI:** Sidebar list titles truncate at 32 characters with ellipsis; rows show a smaller gray subtitle from the first AI answer. Fixed sidebar overflow (right inset, collapse button moved left of New chat/agent, `overflow: hidden`). New chat/agent button now has a visible border and background. Removed accent highlight styling from agent/chat tabs in the tab bar.

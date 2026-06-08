@@ -1,7 +1,7 @@
 .shell {
   height: 100vh;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   background: var(--color-bg-root);
   color: var(--color-text-primary);
 }
@@ -23,7 +23,7 @@
   min-height: 0;
   overflow: hidden;
   display: grid;
-  grid-template-rows: var(--tab-header-height) minmax(0, 1fr) auto;
+  grid-template-rows: var(--tab-header-height) minmax(0, 1fr);
   --editor-content-padding-x: var(--space-8);
 }
 
@@ -39,7 +39,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  grid-row: 3;
+  min-width: 0;
 }
 
 .tab-header {

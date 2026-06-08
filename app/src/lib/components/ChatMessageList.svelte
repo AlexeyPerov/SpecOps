@@ -200,10 +200,13 @@
   }
 
   .chat-message {
-    border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-sm);
     padding: var(--space-6);
     background: var(--color-surface-1);
+  }
+
+  .chat-message:not(.chat-message-assistant) {
+    border: 1px solid var(--color-border-subtle);
   }
 
   .chat-message-user {
@@ -212,8 +215,9 @@
   }
 
   .chat-message-assistant {
-    border-color: var(--color-border-subtle);
-    background: var(--color-surface-1);
+    background: transparent;
+    padding-left: 0;
+    padding-right: 0;
   }
 
   .chat-message-system {
@@ -284,7 +288,7 @@
     color: var(--color-text-secondary);
   }
 
-  .chat-message-streaming {
+  .chat-message-streaming:not(.chat-message-assistant) {
     border-style: dashed;
   }
 

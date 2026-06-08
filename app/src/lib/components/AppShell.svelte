@@ -206,11 +206,7 @@
         onDeleteAgent={(agentId) => void agentsSidebar.onDeleteAgent(agentId)}
       />
     {/if}
-    <section
-      class="editor-shell"
-      bind:this={editorShellEl}
-      style="--console-height: {consoleHeightPx}px;"
-    >
+    <section class="editor-shell" bind:this={editorShellEl}>
       <header class="tab-header">
         <div class="header-left">
           <TabBar
@@ -349,62 +345,6 @@
         {/if}
         <ThemePane open={overlays.themePaneOpen} />
       </section>
-
-      <div class="bottom-panel">
-        {#if consoleOpen}
-          <ConsolePanel bind:heightPx={consoleHeightPx} onHeightCommit={onConsoleHeightCommit} />
-        {/if}
-
-        <footer class="status-bar" class:status-bar-console-open={consoleOpen}>
-          <button
-            type="button"
-            class="status-bar-button"
-            title={consoleOpen ? "Hide console" : "Show console"}
-            onclick={statusBar.onToggleConsole}
-          >
-            <span class="status-segment optional-segment optional-cursor">
-              Ln {editor.cursorLine}, Col {editor.cursorColumn}
-            </span>
-            <span class="status-segment optional-segment optional-encoding">
-              {#if editor.isImageDocument}
-                Image
-              {:else if editor.isBinaryDocument}
-                Binary
-              {:else if editor.isLargePendingDocument}
-                Large file
-              {:else}
-                {editor.activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
-              {/if}
-            </span>
-            <span class="status-segment optional-segment optional-line-ending">
-              {editor.activeDocument?.lineEnding.toUpperCase() ?? "LF"}
-            </span>
-            <span class="status-segment optional-segment optional-zoom">
-              {editor.zoomPercent}%
-            </span>
-            <span class="status-segment optional-segment optional-wrap">
-              {editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
-            </span>
-            <span class="status-segment">
-              {editor.activeDocument?.isDirty ? "Modified" : "Saved"}
-            </span>
-            {#if editor.activeDocument?.fileMissing}
-              <span class="status-segment status-missing" title="File no longer exists on disk">
-                File missing
-              </span>
-            {/if}
-            <span class="status-segment status-message optional-segment optional-message">
-              {statusBar.statusMessage}
-            </span>
-            <span
-              class="status-segment path-segment"
-              title={editor.activeDocument?.filePath ?? statusBar.statusPath}
-            >
-              {statusBar.statusPath}
-            </span>
-          </button>
-        </footer>
-      </div>
     </section>
     {#if projectTree.workspaceRoot}
       <ProjectPanel
@@ -431,6 +371,62 @@
         notify={projectTree.notify}
       />
     {/if}
+  </div>
+
+  <div class="bottom-panel">
+    {#if consoleOpen}
+      <ConsolePanel bind:heightPx={consoleHeightPx} onHeightCommit={onConsoleHeightCommit} />
+    {/if}
+
+    <footer class="status-bar" class:status-bar-console-open={consoleOpen}>
+      <button
+        type="button"
+        class="status-bar-button"
+        title={consoleOpen ? "Hide console" : "Show console"}
+        onclick={statusBar.onToggleConsole}
+      >
+        <span class="status-segment optional-segment optional-cursor">
+          Ln {editor.cursorLine}, Col {editor.cursorColumn}
+        </span>
+        <span class="status-segment optional-segment optional-encoding">
+          {#if editor.isImageDocument}
+            Image
+          {:else if editor.isBinaryDocument}
+            Binary
+          {:else if editor.isLargePendingDocument}
+            Large file
+          {:else}
+            {editor.activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+          {/if}
+        </span>
+        <span class="status-segment optional-segment optional-line-ending">
+          {editor.activeDocument?.lineEnding.toUpperCase() ?? "LF"}
+        </span>
+        <span class="status-segment optional-segment optional-zoom">
+          {editor.zoomPercent}%
+        </span>
+        <span class="status-segment optional-segment optional-wrap">
+          {editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
+        </span>
+        <span class="status-segment">
+          {editor.activeDocument?.isDirty ? "Modified" : "Saved"}
+        </span>
+        {#if editor.activeDocument?.fileMissing}
+          <span class="status-segment status-missing" title="File no longer exists on disk">
+            File missing
+          </span>
+        {/if}
+        <span class="status-segment status-message optional-segment optional-message">
+          {statusBar.statusMessage}
+        </span>
+        <span
+          class="status-segment path-segment"
+          title={editor.activeDocument?.filePath ?? statusBar.statusPath}
+        >
+          {statusBar.statusPath}
+        </span>
+      </button>
+    </footer>
   </div>
 </main>
 

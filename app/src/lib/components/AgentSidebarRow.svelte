@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { AgentIndexEntry } from "../domain/contracts";
+  import { formatSidebarListTitle } from "../services/chatAgents";
+  import { chatAgentSubtitleById } from "../state/chatStore";
 
   interface Props {
     agent: AgentIndexEntry;
@@ -14,6 +16,9 @@
     onSelect = () => {},
     onContextMenu = () => {},
   }: Props = $props();
+
+  const subtitleById = $derived($chatAgentSubtitleById);
+  const subtitle = $derived(subtitleById.get(agent.id) ?? null);
 </script>
 
 <button
@@ -23,7 +28,10 @@
   onclick={() => onSelect(agent.id)}
   oncontextmenu={(event) => onContextMenu(event, agent.id)}
 >
-  <span class="agents-row-title">{agent.title}</span>
+  <span class="agents-row-title">{formatSidebarListTitle(agent.title)}</span>
+  {#if subtitle}
+    <span class="agents-row-subtitle" title={subtitle.full}>{subtitle.display}</span>
+  {/if}
 </button>
 
 <style>
@@ -37,6 +45,10 @@
     text-align: left;
     padding: var(--space-4) var(--space-6);
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    align-items: stretch;
   }
 
   .agents-row:hover {
@@ -51,8 +63,20 @@
 
   .agents-row-title {
     display: block;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .agents-row-subtitle {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--color-text-secondary);
   }
 </style>

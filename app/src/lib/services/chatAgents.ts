@@ -7,6 +7,7 @@ export function draftEntryTitleForScope(scopeKey: string | null | undefined): st
   return scopeKey === "chat-http" ? DRAFT_CHAT_TITLE : DRAFT_AGENT_TITLE;
 }
 export const AGENT_TITLE_MAX_LENGTH = 64;
+export const SIDEBAR_LIST_TEXT_MAX_LENGTH = 32;
 
 export type AgentDateGroup = "today" | "yesterday" | "last-7-days" | "older";
 
@@ -35,6 +36,43 @@ export function truncateAgentTitle(title: string, maxLength = AGENT_TITLE_MAX_LE
     return title;
   }
   return title.slice(0, maxLength);
+}
+
+export function truncateWithEllipsis(
+  text: string,
+  maxLength = SIDEBAR_LIST_TEXT_MAX_LENGTH,
+): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, maxLength)}...`;
+}
+
+export function formatSidebarListTitle(title: string): string {
+  return truncateWithEllipsis(title);
+}
+
+export function firstAssistantMessageContent(messages: readonly ChatMessage[]): string | null {
+  const firstAssistant = messages.find((message) => message.role === "assistant");
+  const content = firstAssistant?.content.trim() ?? "";
+  return content || null;
+}
+
+export function deriveAgentSubtitleFromMessages(
+  messages: readonly ChatMessage[],
+): string | null {
+  const content = firstAssistantMessageContent(messages);
+  if (!content) {
+    return null;
+  }
+  return truncateWithEllipsis(content);
+}
+
+export function deriveAgentSubtitleFromThread(thread: ChatThreadSnapshot | null): string | null {
+  if (!thread || thread.messages.length === 0) {
+    return null;
+  }
+  return deriveAgentSubtitleFromMessages(thread.messages);
 }
 
 export function firstLineOfText(text: string): string {

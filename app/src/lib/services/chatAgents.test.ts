@@ -4,13 +4,18 @@ import {
   AGENT_DATE_GROUP_ORDER,
   AGENT_TITLE_MAX_LENGTH,
   classifyAgentDateGroup,
+  deriveAgentSubtitleFromMessages,
+  deriveAgentSubtitleFromThread,
   deriveAgentTitle,
   deriveAgentTitleFromMessages,
   deriveAgentTitleFromThread,
   DRAFT_AGENT_TITLE,
   filterAgentsByTitle,
+  formatSidebarListTitle,
   groupAgentsByLastUsedDate,
+  SIDEBAR_LIST_TEXT_MAX_LENGTH,
   truncateAgentTitle,
+  truncateWithEllipsis,
 } from "./chatAgents";
 
 function userMessage(content: string, id = "m-1"): ChatMessage {
@@ -19,6 +24,15 @@ function userMessage(content: string, id = "m-1"): ChatMessage {
     role: "user",
     content,
     createdAt: "2026-05-28T12:00:00.000Z",
+  };
+}
+
+function assistantMessage(content: string, id = "m-2"): ChatMessage {
+  return {
+    id,
+    role: "assistant",
+    content,
+    createdAt: "2026-05-28T12:00:01.000Z",
   };
 }
 
@@ -55,6 +69,47 @@ describe("agent title helpers", () => {
     expect(deriveAgentTitleFromThread(thread)).toBe("Review auth flow");
     expect(deriveAgentTitleFromThread(null)).toBe(DRAFT_AGENT_TITLE);
     expect(deriveAgentTitleFromMessages([])).toBe(DRAFT_AGENT_TITLE);
+  });
+});
+
+describe("sidebar list text helpers", () => {
+  it("leaves text at or below max length unchanged", () => {
+    const exact = "x".repeat(SIDEBAR_LIST_TEXT_MAX_LENGTH);
+    expect(truncateWithEllipsis(exact)).toBe(exact);
+    expect(formatSidebarListTitle(exact)).toBe(exact);
+  });
+
+  it("appends ellipsis when text exceeds max length", () => {
+    const long = "x".repeat(SIDEBAR_LIST_TEXT_MAX_LENGTH + 1);
+    expect(truncateWithEllipsis(long)).toBe(`${"x".repeat(SIDEBAR_LIST_TEXT_MAX_LENGTH)}...`);
+    expect(formatSidebarListTitle(long)).toBe(`${"x".repeat(SIDEBAR_LIST_TEXT_MAX_LENGTH)}...`);
+  });
+
+  it("derives subtitle from first assistant message", () => {
+    const longReply = "a".repeat(SIDEBAR_LIST_TEXT_MAX_LENGTH + 5);
+    const messages = [userMessage("Hello"), assistantMessage(longReply)];
+    expect(deriveAgentSubtitleFromMessages(messages)).toBe(
+      `${"a".repeat(SIDEBAR_LIST_TEXT_MAX_LENGTH)}...`,
+    );
+    expect(deriveAgentSubtitleFromMessages([userMessage("Only user")])).toBeNull();
+    expect(deriveAgentSubtitleFromMessages([assistantMessage("   ")])).toBeNull();
+  });
+
+  it("derives subtitle from thread messages", () => {
+    const thread = {
+      metadata: {
+        agentId: "agent-1",
+        threadId: "agent-1",
+        mode: "ask" as const,
+        provider: "http" as const,
+        createdAt: "2026-05-28T12:00:00.000Z",
+        updatedAt: "2026-05-28T12:00:00.000Z",
+      },
+      messages: [userMessage("Question"), assistantMessage("Short reply")],
+    };
+
+    expect(deriveAgentSubtitleFromThread(thread)).toBe("Short reply");
+    expect(deriveAgentSubtitleFromThread(null)).toBeNull();
   });
 });
 

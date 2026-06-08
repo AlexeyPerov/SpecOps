@@ -27,6 +27,10 @@ import type {
   WorkspaceAgentsState,
 } from "./chatStore/types";
 import { normalizeWorkspaceThreadsForScope } from "../ai/providers/threadScopeNormalization";
+import {
+  deriveAgentSubtitleFromThread,
+  firstAssistantMessageContent,
+} from "../services/chatAgents";
 import { chatScopeKeyForContextId, isChatContextScopeKey } from "./chatStore/types";
 
 export type {
@@ -174,6 +178,33 @@ export const chatAgentIndex = derived(chatStore, ($chatStore) => {
     return [];
   }
   return [...($chatStore.workspaces[scopeKey]?.agentIndex ?? [])];
+});
+
+export type ChatAgentSubtitle = {
+  display: string;
+  full: string;
+};
+
+export const chatAgentSubtitleById = derived(chatStore, ($chatStore) => {
+  const scopeKey = $chatStore.activeChatScopeKey;
+  if (!scopeKey) {
+    return new Map<string, ChatAgentSubtitle>();
+  }
+
+  const workspace = $chatStore.workspaces[scopeKey];
+  if (!workspace) {
+    return new Map<string, ChatAgentSubtitle>();
+  }
+
+  const subtitles = new Map<string, ChatAgentSubtitle>();
+  for (const [agentId, thread] of Object.entries(workspace.threadsByAgentId)) {
+    const display = deriveAgentSubtitleFromThread(thread);
+    const full = thread ? firstAssistantMessageContent(thread.messages) : null;
+    if (display && full) {
+      subtitles.set(agentId, { display, full });
+    }
+  }
+  return subtitles;
 });
 
 export const chatActiveAgentId = derived(chatStore, ($chatStore) => activeAgentId($chatStore));

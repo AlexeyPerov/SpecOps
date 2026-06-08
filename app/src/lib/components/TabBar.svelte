@@ -133,9 +133,9 @@
     {#if dragState.didDrag && tab.id === dragState.dragTabId}
       <span class="tab-placeholder" style={`width:${dragState.dragTabRect?.width ?? 0}px`}></span>
     {:else}
-      <div class={`tab-shell ${isAgentTab(tab) ? "tab-shell-agent" : ""}`}>
+      <div class="tab-shell">
         <button
-          class={`tab ${isAgentTab(tab) ? "tab-agent" : ""} ${tab.id === selectedTabId ? "tab-active" : ""}`}
+          class={`tab ${tab.id === selectedTabId ? "tab-active" : ""}`}
           data-tab-id={tab.id}
           type="button"
           title={tabTooltip(tab)}
@@ -176,7 +176,7 @@
 
 {#if dragState.didDrag && dragState.dragTabId}
   <button
-    class={`tab tab-dragging ${draggedTab && isAgentTab(draggedTab) ? "tab-agent" : ""} ${dragState.dragTabId === selectedTabId ? "tab-active" : ""}`}
+    class={`tab tab-dragging ${dragState.dragTabId === selectedTabId ? "tab-active" : ""}`}
     type="button"
     style={`left:${dragState.dragPointerX - dragState.dragOffsetX}px; top:${dragState.dragPointerY - dragState.dragOffsetY}px; width:${dragState.dragTabRect?.width ?? 0}px; height:${dragState.dragTabRect?.height ?? 0}px;`}
   >
@@ -260,16 +260,6 @@
     transition:
       background-color var(--motion-fast) var(--easing-standard),
       border-color var(--motion-fast) var(--easing-standard);
-  }
-
-  .tab-agent {
-    border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border-subtle));
-    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  }
-
-  .tab-agent.tab-active {
-    background: color-mix(in srgb, var(--color-accent) 20%, var(--color-hover));
-    border-color: color-mix(in srgb, var(--color-accent) 62%, var(--color-border-subtle));
   }
 
   .tab-active {

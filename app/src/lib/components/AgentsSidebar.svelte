@@ -141,6 +141,15 @@
     {#if !collapsed}
       <div class="agents-sidebar-title">{sidebarTitle}</div>
       <button
+        class="agents-sidebar-button agents-sidebar-toggle"
+        type="button"
+        onpointerup={sidebarController.handleTogglePointerDown}
+        onclick={sidebarController.handleToggleButtonClick}
+        title={`Collapse ${entryPluralLabel} sidebar`}
+      >
+        ⟪
+      </button>
+      <button
         class="agents-sidebar-button agents-sidebar-new"
         type="button"
         onpointerdown={sidebarController.handleNewAgentPointerDown}
@@ -148,16 +157,17 @@
       >
         {newEntryLabel}
       </button>
+    {:else}
+      <button
+        class="agents-sidebar-button agents-sidebar-toggle"
+        type="button"
+        onpointerup={sidebarController.handleTogglePointerDown}
+        onclick={sidebarController.handleToggleButtonClick}
+        title={`Expand ${entryPluralLabel} sidebar`}
+      >
+        ⟫
+      </button>
     {/if}
-    <button
-      class="agents-sidebar-button"
-      type="button"
-      onpointerup={sidebarController.handleTogglePointerDown}
-      onclick={sidebarController.handleToggleButtonClick}
-      title={collapsed ? `Expand ${entryPluralLabel} sidebar` : `Collapse ${entryPluralLabel} sidebar`}
-    >
-      {collapsed ? "⟫" : "⟪"}
-    </button>
   </header>
 
   {#if !collapsed}

@@ -107,7 +107,7 @@ Dependencies: Task 1 (for sidecar mode path); URL mode can be developed in paral
 
 ---
 
-#### Task 3: Implement `WorkspaceAgentBackend` OpenCode adapter (P3-2) [Score:9] [Agent:heavy]
+#### Task 3: Implement `WorkspaceAgentBackend` OpenCode adapter (P3-2) [Score:9] [Agent:heavy] [DONE]
 
 **Required context**
 
@@ -217,7 +217,7 @@ Task 2 runs mostly in parallel with Task 1 and is required before Task 3 complet
 
 - [x] OpenCode sidecar lifecycle works (start/health/stop/restart).
 - [x] Settings support sidecar vs URL mode with health feedback.
-- [ ] `WorkspaceAgentBackend("opencode")` supports session CRUD + streaming adapter.
+- [x] `WorkspaceAgentBackend("opencode")` supports session CRUD + streaming adapter.
 - [ ] Agent-tab to OpenCode-session mapping persists and restores safely.
 - [ ] `npm test` / `npm run check` pass.
 

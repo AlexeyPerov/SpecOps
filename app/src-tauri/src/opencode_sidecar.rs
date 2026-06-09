@@ -531,4 +531,50 @@ mod tests {
         let error = normalize_directory("relative/path").unwrap_err();
         assert!(matches!(error, OpencodeSidecarError::Internal { .. }));
     }
+
+    fn test_inner() -> OpencodeSidecarInner {
+        OpencodeSidecarInner {
+            child: None,
+            directory: Some("/tmp/ws".to_string()),
+            port: DEFAULT_SIDECAR_PORT,
+            hostname: DEFAULT_SIDECAR_HOSTNAME.to_string(),
+            health: SidecarHealthStatus::Healthy,
+            last_error: None,
+        }
+    }
+
+    #[test]
+    fn stop_child_clears_directory_and_health_when_not_running() {
+        let mut inner = test_inner();
+
+        stop_child(&mut inner).expect("stop should succeed");
+
+        assert!(inner.child.is_none());
+        assert!(inner.directory.is_none());
+        assert_eq!(inner.health, SidecarHealthStatus::Unknown);
+    }
+
+    #[test]
+    fn stop_child_is_idempotent() {
+        let mut inner = test_inner();
+
+        stop_child(&mut inner).expect("first stop should succeed");
+        stop_child(&mut inner).expect("second stop should succeed");
+
+        let status = current_status(&inner);
+        assert!(!status.running);
+        assert!(status.directory.is_none());
+        assert!(status.pid.is_none());
+    }
+
+    #[test]
+    fn current_status_reports_not_running_after_stop() {
+        let mut inner = test_inner();
+        stop_child(&mut inner).expect("stop should succeed");
+
+        let status = current_status(&inner);
+        assert!(!status.running);
+        assert!(status.base_url.is_none());
+        assert!(status.port.is_none());
+    }
 }

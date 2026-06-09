@@ -32,6 +32,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/opencode"],
     "fileAssociations": [
       {
         "name": "Any File",

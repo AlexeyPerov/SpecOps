@@ -385,36 +385,38 @@
         title={consoleOpen ? "Hide console" : "Show console"}
         onclick={statusBar.onToggleConsole}
       >
-        <span class="status-segment optional-segment optional-cursor">
-          Ln {editor.cursorLine}, Col {editor.cursorColumn}
-        </span>
-        <span class="status-segment optional-segment optional-encoding">
-          {#if editor.isImageDocument}
-            Image
-          {:else if editor.isBinaryDocument}
-            Binary
-          {:else if editor.isLargePendingDocument}
-            Large file
-          {:else}
-            {editor.activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
-          {/if}
-        </span>
-        <span class="status-segment optional-segment optional-line-ending">
-          {editor.activeDocument?.lineEnding.toUpperCase() ?? "LF"}
-        </span>
-        <span class="status-segment optional-segment optional-zoom">
-          {editor.zoomPercent}%
-        </span>
-        <span class="status-segment optional-segment optional-wrap">
-          {editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
-        </span>
-        <span class="status-segment">
-          {editor.activeDocument?.isDirty ? "Modified" : "Saved"}
-        </span>
-        {#if editor.activeDocument?.fileMissing}
-          <span class="status-segment status-missing" title="File no longer exists on disk">
-            File missing
+        {#if !editor.isAgentTabActive && !editor.isChatHttpActive}
+          <span class="status-segment optional-segment optional-cursor">
+            Ln {editor.cursorLine}, Col {editor.cursorColumn}
           </span>
+          <span class="status-segment optional-segment optional-encoding">
+            {#if editor.isImageDocument}
+              Image
+            {:else if editor.isBinaryDocument}
+              Binary
+            {:else if editor.isLargePendingDocument}
+              Large file
+            {:else}
+              {editor.activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+            {/if}
+          </span>
+          <span class="status-segment optional-segment optional-line-ending">
+            {editor.activeDocument?.lineEnding.toUpperCase() ?? "LF"}
+          </span>
+          <span class="status-segment optional-segment optional-zoom">
+            {editor.zoomPercent}%
+          </span>
+          <span class="status-segment optional-segment optional-wrap">
+            {editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
+          </span>
+          <span class="status-segment">
+            {editor.activeDocument?.isDirty ? "Modified" : "Saved"}
+          </span>
+          {#if editor.activeDocument?.fileMissing}
+            <span class="status-segment status-missing" title="File no longer exists on disk">
+              File missing
+            </span>
+          {/if}
         {/if}
         <span class="status-segment status-message optional-segment optional-message">
           {statusBar.statusMessage}

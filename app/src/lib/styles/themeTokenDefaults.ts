@@ -84,7 +84,7 @@ export const PROJECT_PANE_TOKENS: Record<
 
 export const SYNTAX_PALETTE_FIXED: Record<
   "dark" | "light",
-  Omit<ThemeSyntaxPalette, "keyword" | "type" | "link">
+  Omit<ThemeSyntaxPalette, "keyword" | "type" | "link" | "plaintext-symbol">
 > = {
   dark: {
     string: "#98c379",

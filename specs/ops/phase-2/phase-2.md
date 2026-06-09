@@ -21,7 +21,7 @@ Ship **`chat-http`** as a dedicated activity-rail context: chat-first UI (no pro
 | C1 | B | Sidebar title **Chats** (not Agents) |
 | C2 | A | **ask** mode only |
 | C3 | A | Debug available when enabled in settings |
-| B2 | A | Workspace still uses HTTP agents until phase 4 |
+| B2 | A | Workspace still uses HTTP agents until phase 3 |
 
 ## Gating (Chat rail button)
 
@@ -80,7 +80,7 @@ Otherwise hide button (or show disabled with link to Settings → Connections).
 
 ## Non-goals (tier 1 — M1–M3)
 
-- `chat-cloud` context (phase 3).
+- `chat-cloud` context (phase 4).
 - OpenCode workspace agents.
 
 ## Milestone 4 — Multiple providers (extension)

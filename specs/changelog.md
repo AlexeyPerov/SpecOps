@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-06-09 18:22
+
+- **Docs (phase 3 execution):** Added milestone execution plans for OpenCode workspace rollout: [execution-plan-m1.md](./ops/phase-3/execution-plan-m1.md) (sidecar/client/session foundation), [execution-plan-m2.md](./ops/phase-3/execution-plan-m2.md) (stream/tool/permission/question MVP UI), and [execution-plan-m3.md](./ops/phase-3/execution-plan-m3.md) (workspace HTTP cutover, cleanup, and closure). Linked plans from [phase-3.md](./ops/phase-3/phase-3.md).
+
+## 2026-06-09 18:05
+
+- **Docs (roadmap):** Swapped phases 3 and 4 — OpenCode workspace UI is now [phase-3](./ops/phase-3/phase-3.md); Cloud context (`chat-cloud`) is now [phase-4](./ops/phase-4/phase-4.md). Renamed `specs/ops/phase-3/` ↔ `specs/ops/phase-4/` folders and updated cross-references in roadmap, phase-1..7 specs, execution plans, and `workspaceAgentBackend` stub message.
+
+## 2026-06-09 14:45
+
+- **Status bar (Chats/Agents):** In chat/agent tabs, the bottom status bar now shows only console toggle context, status message, and path. Editor-only metadata (Ln/Col, encoding, EOL, zoom, wrap, modified/missing flags) remains visible for file editor tabs.
+- **Theme editor + tokens:** Added dedicated text-accent theme tokens for `keyword`, `type`, `link`, and `plaintext-symbol` (`syntax-keyword`, `syntax-type`, `syntax-link`, `syntax-plaintext-symbol`) and grouped them under a new **Text accents** section in theme token schema. Existing accent controls are preserved.
+- **Plaintext symbol coloring:** Fixed non-English plaintext handling so Unicode letters/numbers are no longer treated as symbols for accent decoration. Only punctuation/symbol characters are decorated in plaintext mode.
+- **Session restore behavior:** Window session restore now falls back to the snapshot of the last active window if the current window has no stored snapshot, while preserving intentional app-level fallback behavior to notepad when active context cannot be restored.
+- **macOS dock open/drop:** Updated Tauri bundle file association configuration to a wildcard association (`*/*` / `*`) so opening/dropping extensionless and uncommon files through the dock/app icon is accepted, while existing preview/read-only open behavior remains unchanged.
+- **Tests:** Added coverage for Unicode symbol-decoration logic and last-active-window restore fallback; updated theme/token tests to assert the expanded token surface.
+
 ## 2026-06-09 12:55
 
 - **Chat UI (context window budgeting):** Added realtime debounced token budget estimate in composer, shown to the left of `Send` as `~used / limit` when a model limit is known (or `~used tokens` otherwise). Estimate includes resolved system prompt + retained history + current draft and updates on draft/thread/model/mode/provider changes.

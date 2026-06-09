@@ -13,7 +13,7 @@ How to use this plan: each task lists **Required context** — read only those d
 - Sidebar title is **Chats** (C1B), not Agents.
 - **ask** mode only in `chat-http` (C2A); no workspace **review** file reads.
 - Debug provider available in Chat when enabled in settings (C3A).
-- Workspace contexts (`ws-*`) retain existing Agents sidebar, ask/review modes, and HTTP chat (B2A) until phase 4.
+- Workspace contexts (`ws-*`) retain existing Agents sidebar, ask/review modes, and HTTP chat (B2A) until phase 3.
 - Buffered HTTP send (`stream: false`) remains acceptable in workspace; streaming is Milestone 3.
 - Notepad has no AI entry points (unchanged).
 

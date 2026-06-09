@@ -79,6 +79,7 @@ export function getThemeSyntaxPalette(id: BuiltinThemeId): ThemeSyntaxPalette {
       keyword: accent,
       type: mixHex(accent, "#ffffff", 0.28),
       link: mixHex(accent, "#ffffff", 0.14),
+      "plaintext-symbol": accent,
     };
   }
 
@@ -87,6 +88,7 @@ export function getThemeSyntaxPalette(id: BuiltinThemeId): ThemeSyntaxPalette {
     keyword: accent,
     type: mixHex(accent, "#ffffff", 0.38),
     link: accent,
+    "plaintext-symbol": accent,
   };
 }
 

@@ -34,22 +34,11 @@
     "targets": "all",
     "fileAssociations": [
       {
-        "name": "Text Document",
-        "description": "Text-based document",
+        "name": "Any File",
+        "description": "Allows opening files dropped onto the app icon",
         "role": "Editor",
-        "mimeType": "text/plain",
-        "ext": [
-          "txt",
-          "md",
-          "markdown",
-          "text",
-          "log",
-          "json",
-          "yaml",
-          "yml",
-          "toml",
-          "csv"
-        ]
+        "mimeType": "*/*",
+        "ext": ["*"]
       }
     ],
     "icon": [

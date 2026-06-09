@@ -59,6 +59,7 @@
   --syntax-type: #c18401;
   --syntax-heading: #e45649;
   --syntax-link: #4078f2;
+  --syntax-plaintext-symbol: var(--syntax-keyword);
   --syntax-markup: #0184bc;
   --syntax-punctuation: #383a42;
   --color-search-match: rgba(255, 200, 0, 0.45);
@@ -91,6 +92,7 @@
   --syntax-type: #e5c07b;
   --syntax-heading: #e06c75;
   --syntax-link: #61afef;
+  --syntax-plaintext-symbol: var(--syntax-keyword);
   --syntax-markup: #56b6c2;
   --syntax-punctuation: #abb2bf;
   --color-search-match: rgba(255, 200, 0, 0.28);

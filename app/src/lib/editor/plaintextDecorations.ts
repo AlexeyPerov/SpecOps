@@ -3,6 +3,14 @@ import { RangeSetBuilder } from "@codemirror/state";
 
 const symbolDeco = Decoration.mark({ class: "cm-plaintext-symbol" });
 
+export function shouldDecorateAsSymbol(ch: string): boolean {
+  if (!ch.trim()) {
+    return false;
+  }
+  // Treat letters/numbers from all languages as normal text; decorate punctuation/symbols only.
+  return !/[\p{L}\p{N}]/u.test(ch);
+}
+
 export function createPlaintextSymbolDecorations() {
   return ViewPlugin.fromClass(
     class {
@@ -28,7 +36,7 @@ export function createPlaintextSymbolDecorations() {
           pos = from;
           while (pos < to) {
             const ch = doc.sliceString(pos, pos + 1);
-            if (ch && !/[a-zA-Z0-9\s]/.test(ch)) {
+            if (ch && shouldDecorateAsSymbol(ch)) {
               builder.add(pos, pos + 1, symbolDeco);
             }
             pos += 1;

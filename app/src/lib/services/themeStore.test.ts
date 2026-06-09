@@ -84,6 +84,19 @@ describe("normalizeThemeTokens", () => {
     expect(tokens["accent-color"]).toBe("#ff00ff");
     expect(tokens["color-accent"]).toBe("#ff00ff");
   });
+
+  it("keeps dedicated syntax/text accent overrides", () => {
+    const tokens = normalizeThemeTokens("dark", {
+      "syntax-keyword": "#112233",
+      "syntax-type": "#223344",
+      "syntax-link": "#334455",
+      "syntax-plaintext-symbol": "#445566",
+    });
+    expect(tokens["syntax-keyword"]).toBe("#112233");
+    expect(tokens["syntax-type"]).toBe("#223344");
+    expect(tokens["syntax-link"]).toBe("#334455");
+    expect(tokens["syntax-plaintext-symbol"]).toBe("#445566");
+  });
 });
 
 describe("loadThemeFile", () => {

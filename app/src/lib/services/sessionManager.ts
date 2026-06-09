@@ -123,7 +123,14 @@ export async function restoreWindowSession(
     if (!parsed) {
       return null;
     }
-    return restoreWindowSessionFromSnapshot(windowId, parsed);
+    const direct = await restoreWindowSessionFromSnapshot(windowId, parsed);
+    if (direct) {
+      return direct;
+    }
+    if (parsed.lastActiveWindowId && parsed.lastActiveWindowId !== windowId) {
+      return restoreWindowSessionFromSnapshot(parsed.lastActiveWindowId, parsed);
+    }
+    return null;
   } catch (error: unknown) {
     const message = getErrorMessage(error);
     await logDiagnostic({
@@ -148,7 +155,14 @@ export async function restoreWindowSession(
       message: "session restored from backup",
       metadata: { windowId },
     });
-    return restoreWindowSessionFromSnapshot(windowId, parsed);
+    const direct = await restoreWindowSessionFromSnapshot(windowId, parsed);
+    if (direct) {
+      return direct;
+    }
+    if (parsed.lastActiveWindowId && parsed.lastActiveWindowId !== windowId) {
+      return restoreWindowSessionFromSnapshot(parsed.lastActiveWindowId, parsed);
+    }
+    return null;
   } catch (error: unknown) {
     const message = getErrorMessage(error);
     await logDiagnostic({

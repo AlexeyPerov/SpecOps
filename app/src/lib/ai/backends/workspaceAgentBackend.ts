@@ -13,7 +13,7 @@ export interface WorkspaceAgentBackend {
 export class WorkspaceAgentBackendNotImplementedError extends Error {
   constructor(backendId: WorkspaceAgentBackendId) {
     super(
-      `Workspace agent backend "${backendId}" is not implemented yet. Planned for phase 4.`,
+      `Workspace agent backend "${backendId}" is not implemented yet. Planned for phase 3.`,
     );
     this.name = "WorkspaceAgentBackendNotImplementedError";
   }

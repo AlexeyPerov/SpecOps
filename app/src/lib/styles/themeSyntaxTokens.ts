@@ -6,6 +6,7 @@ export interface ThemeSyntaxPalette {
   type: string;
   heading: string;
   link: string;
+  "plaintext-symbol": string;
   markup: string;
   punctuation: string;
 }
@@ -18,6 +19,7 @@ export const SYNTAX_PALETTE_CSS_VARS = [
   "type",
   "heading",
   "link",
+  "plaintext-symbol",
   "markup",
   "punctuation",
 ] as const satisfies ReadonlyArray<keyof ThemeSyntaxPalette>;

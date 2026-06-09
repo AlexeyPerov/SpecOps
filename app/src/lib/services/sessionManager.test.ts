@@ -224,6 +224,16 @@ describe("restoreWindowSession", () => {
     expect(restored?.recentFiles).toEqual(["/tmp/restored.txt"]);
   });
 
+  it("falls back to last active window snapshot when current window snapshot is missing", async () => {
+    const snapshot = windowSnapshot();
+    sessionMock.setSessionStore(sessionWithWindow("win-z", snapshot));
+    sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
+
+    const restored = await sessionManager.restoreWindowSession("main");
+    expect(restored?.snapshot.notepad.documents[0]?.content).toBe("saved");
+    expect(restored?.snapshot.activeContextId).toBe("notepad");
+  });
+
   it("preserves chat-http active context during restore sanitization", async () => {
     const snapshot = windowSnapshot({ activeContextId: "chat-http" });
     sessionMock.setSessionStore(sessionWithWindow("win-a", snapshot));

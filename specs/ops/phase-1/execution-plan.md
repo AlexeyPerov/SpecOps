@@ -9,7 +9,7 @@ How to use this plan: each task lists **Required context** — read only those d
 
 - Implementation is agent-only; human role is approval/review.
 - Approach is **generalize-first** (B1A): keep the chat stack working while replacing GLM with an OpenAI-compatible HTTP provider; delete `glm*.ts` only after P1-1 tests pass.
-- No new activity-rail modes (Chat/Cloud UI) in phase 1; workspace HTTP chat remains until [phase-4](../phase-4/phase-4.md).
+- No new activity-rail modes (Chat/Cloud UI) in phase 1; workspace HTTP chat remains until [phase-3](../phase-3/phase-3.md).
 - Buffered HTTP send only (`stream: false`); SSE streaming is [phase-2](../phase-2/phase-2.md).
 - Single HTTP **connection** in settings (B5C); multi-connection deferred to [phase-7](../phase-7/phase-7.md).
 - Breaking changes to `settings.json` / provider ids are acceptable (no data migration shims).
@@ -201,10 +201,10 @@ Dependencies: Task 1 (can run in parallel with Tasks 2–6 after Task 1 starts).
 **Required context**
 
 1. [phase-1.md](./phase-1.md) — workstream 5
-2. [phase-4](../phase-4/phase-4.md) — future OpenCode adapter (reference only)
+2. [phase-3](../phase-3/phase-3.md) — future OpenCode adapter (reference only)
 
 - Add `app/src/lib/ai/backends/workspaceAgentBackend.ts` with `WorkspaceAgentBackendId`, `WorkspaceAgentBackend` interface, and stub factory.
-- Stub returns “not implemented” for workspace agent send until phase 4.
+- Stub returns “not implemented” for workspace agent send until phase 3.
 
 **Acceptance checklist**
 

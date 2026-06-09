@@ -29,6 +29,7 @@ export const THEME_TOKEN_KEYS = [
   "syntax-type",
   "syntax-heading",
   "syntax-link",
+  "syntax-plaintext-symbol",
   "syntax-markup",
   "syntax-punctuation",
   "project-pane-color-hidden",
@@ -42,6 +43,7 @@ export type ThemeTokenGroupId =
   | "background"
   | "text"
   | "accent"
+  | "text-accent"
   | "syntax"
   | "search"
   | "project-pane";
@@ -83,16 +85,18 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
     ],
   },
   {
+    id: "text-accent",
+    label: "Text accents",
+    keys: ["syntax-keyword", "syntax-type", "syntax-link", "syntax-plaintext-symbol"],
+  },
+  {
     id: "syntax",
     label: "Syntax",
     keys: [
-      "syntax-keyword",
       "syntax-string",
       "syntax-comment",
       "syntax-number",
-      "syntax-type",
       "syntax-heading",
-      "syntax-link",
       "syntax-markup",
       "syntax-punctuation",
     ],
@@ -134,6 +138,7 @@ export const THEME_TOKEN_LABELS: Record<ThemeTokenKey, string> = {
   "syntax-type": "Type",
   "syntax-heading": "Heading",
   "syntax-link": "Link",
+  "syntax-plaintext-symbol": "Plaintext symbol",
   "syntax-markup": "Markup",
   "syntax-punctuation": "Punctuation",
   "project-pane-color-hidden": "Hidden (dot-prefixed)",

@@ -288,6 +288,14 @@
       {activeConnectionId}
       {providerApiKeys}
       {providerModelCatalogs}
+      threadMessages={messages}
+      threadSummary={metadata?.summary}
+      threadId={metadata?.threadId}
+      activeAgentId={activeAgentId}
+      workspaceRootPath={
+        chatContextKind === "chat-http" ? CHAT_HTTP_CONTEXT_ID : (chatStore.getActiveWorkspaceRoot() ?? "")
+      }
+      appSettings={$appState.settings}
       {composerError}
       onInlineError={(message) => {
         inlineError = message;

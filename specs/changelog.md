@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-09 12:55
+
+- **Chat UI (context window budgeting):** Added realtime debounced token budget estimate in composer, shown to the left of `Send` as `~used / limit` when a model limit is known (or `~used tokens` otherwise). Estimate includes resolved system prompt + retained history + current draft and updates on draft/thread/model/mode/provider changes.
+- **AI internals:** Added shared estimation utility (`app/src/lib/ai/contextWindowBudget.ts`) with lightweight context-limit heuristics for common model ids and initial unit coverage in `contextWindowBudget.test.ts`.
+- **Docs:** Updated `phase-2.5-token-ideas.md` marking Context window budgeting as **DONE (UI estimate slice)** with implementation notes; added `specs/backlog.md` to track follow-up ideas/tech debt.
+
 ## 2026-06-09 10:00
 
 - **Chat UI:** Composer toolbar simplified — removed Connection, Model, and Mode text labels; mode picker is now a dropdown on the left; connection/model selects sit beside it; Send (and Retry) moved to the right. Applies to both agent and chat-http composers.

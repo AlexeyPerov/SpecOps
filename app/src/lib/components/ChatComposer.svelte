@@ -6,7 +6,10 @@
   } from "../ai/providers/selection";
   import { listSelectableChatModes } from "../ai/modes/resolve";
   import type {
+    AppSettingsState,
     AppProviderSettings,
+    ChatMessage,
+    ChatThreadSnapshot,
     ChatModeId,
     ChatProviderId,
     HttpConnectionSettings,
@@ -20,6 +23,7 @@
     syncComposerModeFallback,
     syncComposerModelFallback,
   } from "../ai/composerSelectionEffects";
+  import { estimateContextWindowBudget } from "../ai/contextWindowBudget";
   import ChatConnectionPicker from "./ChatConnectionPicker.svelte";
   import ChatModePicker from "./ChatModePicker.svelte";
   import "../styles/chat-composer.css";
@@ -47,6 +51,12 @@
     activeConnectionId?: string;
     providerApiKeys: Partial<Record<string, string>>;
     providerModelCatalogs: ProviderModelCatalogs;
+    threadMessages: ChatMessage[];
+    threadSummary?: string;
+    threadId?: string;
+    activeAgentId?: string | null;
+    workspaceRootPath: string;
+    appSettings: AppSettingsState;
     composerError: ComposerError | null;
     onInlineError?: (message: string) => void;
   }
@@ -69,6 +79,12 @@
     activeConnectionId = undefined,
     providerApiKeys,
     providerModelCatalogs,
+    threadMessages,
+    threadSummary = undefined,
+    threadId = undefined,
+    activeAgentId = null,
+    workspaceRootPath,
+    appSettings,
     composerError,
     onInlineError = () => {},
   }: Props = $props();
@@ -76,6 +92,10 @@
   let draft = $state("");
   let submitInFlight = $state(false);
   let retrying = $state(false);
+  let budgetEstimate = $state<{ estimatedTokens: number; estimatedLimitTokens?: number } | null>(
+    null,
+  );
+  let budgetEstimateTimer: ReturnType<typeof setTimeout> | null = null;
 
   const availableConnections = $derived.by(() => {
     providerSettings;
@@ -150,6 +170,29 @@
   const composerPlaceholder = $derived(
     chatContextKind === "chat-http" ? "Message chat" : "Message agent",
   );
+  const budgetDisplayText = $derived.by(() => {
+    if (!budgetEstimate) {
+      return "Estimating…";
+    }
+    const used = formatTokenCount(budgetEstimate.estimatedTokens);
+    if (!budgetEstimate.estimatedLimitTokens) {
+      return `~${used} tokens`;
+    }
+    return `~${used} / ${formatTokenCount(budgetEstimate.estimatedLimitTokens)}`;
+  });
+  const budgetStateClass = $derived.by(() => {
+    if (!budgetEstimate?.estimatedLimitTokens) {
+      return "";
+    }
+    const ratio = budgetEstimate.estimatedTokens / budgetEstimate.estimatedLimitTokens;
+    if (ratio >= 1) {
+      return "chat-context-budget--over";
+    }
+    if (ratio >= 0.85) {
+      return "chat-context-budget--near";
+    }
+    return "";
+  });
 
   const selectionActions = createComposerSelectionActions({
     getActiveMode: () => activeMode,
@@ -229,11 +272,66 @@
     });
   });
 
+  $effect(() => {
+    draft;
+    threadMessages;
+    threadSummary;
+    threadId;
+    activeAgentId;
+    activeMode;
+    activeProvider;
+    activeModel;
+    activeConnectionId;
+    chatContextKind;
+    appSettings;
+    workspaceRootPath;
+
+    if (budgetEstimateTimer) {
+      clearTimeout(budgetEstimateTimer);
+    }
+
+    budgetEstimateTimer = setTimeout(() => {
+      budgetEstimate = estimateContextWindowBudget({
+        thread: {
+          metadata: {
+            agentId: activeAgentId ?? "preview-agent",
+            threadId: threadId ?? "preview-thread",
+            mode: activeMode,
+            provider: activeProvider,
+            createdAt: "",
+            updatedAt: "",
+            summary: threadSummary,
+            selectedModelId: activeModel,
+            connectionId: activeConnectionId,
+          },
+          messages: threadMessages,
+        } satisfies ChatThreadSnapshot,
+        workspaceRootPath,
+        settings: appSettings,
+        scopeKind: chatContextKind,
+        draft,
+      });
+    }, 220);
+
+    return () => {
+      if (budgetEstimateTimer) {
+        clearTimeout(budgetEstimateTimer);
+      }
+    };
+  });
+
   function handleComposerKeydown(event: KeyboardEvent): void {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void submitMessage();
     }
+  }
+
+  function formatTokenCount(value: number): string {
+    return new Intl.NumberFormat("en-US", {
+      notation: value >= 1000 ? "compact" : "standard",
+      maximumFractionDigits: value >= 1000 ? 1 : 0,
+    }).format(value);
   }
 </script>
 
@@ -285,6 +383,14 @@
           {retrying ? "Retrying…" : "Retry"}
         </button>
       {/if}
+      <span
+        class={`chat-context-budget ${budgetStateClass}`.trim()}
+        role="status"
+        aria-live="polite"
+        title="Estimated input tokens (system prompt + retained history + draft)"
+      >
+        {budgetDisplayText}
+      </span>
       <button
         type="button"
         class="chat-send-button"

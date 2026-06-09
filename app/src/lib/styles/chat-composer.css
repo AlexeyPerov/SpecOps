@@ -74,6 +74,21 @@
   margin-left: auto;
 }
 
+.chat-context-budget {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.chat-context-budget--near {
+  color: color-mix(in srgb, #f0b35b 68%, var(--color-text-secondary));
+}
+
+.chat-context-budget--over {
+  color: color-mix(in srgb, #e06c75 78%, var(--color-text-secondary));
+}
+
 .chat-composer-actions .chat-assistant-status {
   flex: 1 1 100%;
 }

@@ -242,11 +242,23 @@ function parseAgentIndexEntry(value: unknown): AgentIndexEntry | null {
   if (value.isDraft !== undefined && typeof value.isDraft !== "boolean") {
     return null;
   }
+  if (value.opencodeSessionId !== undefined && typeof value.opencodeSessionId !== "string") {
+    return null;
+  }
+  if (value.opencodeModelId !== undefined && typeof value.opencodeModelId !== "string") {
+    return null;
+  }
+  if (value.opencodeProviderId !== undefined && typeof value.opencodeProviderId !== "string") {
+    return null;
+  }
   return {
     id: value.id,
     title: value.title,
     lastUsedAt: value.lastUsedAt,
     isDraft: value.isDraft,
+    opencodeSessionId: value.opencodeSessionId,
+    opencodeModelId: value.opencodeModelId,
+    opencodeProviderId: value.opencodeProviderId,
   };
 }
 

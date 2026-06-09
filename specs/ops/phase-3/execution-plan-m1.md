@@ -137,7 +137,7 @@ Dependencies: Tasks 1, 2.
 
 ---
 
-#### Task 4: Session mapping `agentId` ↔ OpenCode session (P3-3) [Score:8] [Agent:medium]
+#### Task 4: Session mapping `agentId` ↔ OpenCode session (P3-3) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -218,7 +218,7 @@ Task 2 runs mostly in parallel with Task 1 and is required before Task 3 complet
 - [x] OpenCode sidecar lifecycle works (start/health/stop/restart).
 - [x] Settings support sidecar vs URL mode with health feedback.
 - [x] `WorkspaceAgentBackend("opencode")` supports session CRUD + streaming adapter.
-- [ ] Agent-tab to OpenCode-session mapping persists and restores safely.
+- [x] Agent-tab to OpenCode-session mapping persists and restores safely.
 - [ ] `npm test` / `npm run check` pass.
 
 **Next:** [execution-plan-m2.md](./execution-plan-m2.md)

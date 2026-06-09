@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-09 23:03
+
+- **Workspace agent session mapping (P3-3 / Task 4):** Added persisted per-agent OpenCode session mapping metadata to workspace agent index entries (`opencodeSessionId`, plus optional model/provider restore hints), including codec validation and round-trip coverage in chat persistence tests. Extended chat store agent APIs with workspace-scoped session link set/get/clear helpers and added unit coverage for mapping updates and workspace isolation. Added mapping reconciliation helpers/tests in `workspaceAgentSession` for deterministic recovery when a previously linked remote session is missing.
+
 ## 2026-06-09 22:45
 
 - **Workspace backend (OpenCode adapter, P3-2):** Replaced `workspaceAgentBackend` phase-1 stub for `id: "opencode"` with a functional adapter that resolves sidecar/URL client mode, binds every request to workspace `rootPath` as `directory`, and adds backend API for session CRUD, run send, and normalized stream events. Added frontend-safe event normalization boundary (message/tool/permission/question/run events), robust backend error typing and mapping (`authFailure`, `serverUnavailable`, `transportError`, `invalidDirectory`, `invalidResponse`, `notFound`), and preserved `cursor-local` as a phase-5 stub path. Added unit coverage in `workspaceAgentBackend.test.ts` for functional creation, directory validation, stream normalization, and payload validation failures.

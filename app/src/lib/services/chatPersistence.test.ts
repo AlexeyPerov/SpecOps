@@ -240,12 +240,30 @@ describe("workspace agents index codec", () => {
           id: AGENT_ID,
           title: "hello",
           lastUsedAt: "2026-05-25T00:00:01.000Z",
+          opencodeSessionId: "sess-1",
+          opencodeModelId: "gpt-4o-mini",
+          opencodeProviderId: "opencode",
         },
       ],
     };
 
     const encoded = encodeWorkspaceAgentsIndexSnapshot(snapshot);
     expect(decodeWorkspaceAgentsIndexSnapshot(encoded)).toEqual(snapshot);
+  });
+
+  it("drops invalid opencode mapping metadata from corrupted entries", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      agents: [
+        {
+          id: AGENT_ID,
+          title: "hello",
+          lastUsedAt: "2026-05-25T00:00:01.000Z",
+          opencodeSessionId: 123,
+        },
+      ],
+    });
+    expect(decodeWorkspaceAgentsIndexSnapshot(raw)).toEqual({ version: 1, agents: [] });
   });
 
   it("upserts index entries by agent id", () => {

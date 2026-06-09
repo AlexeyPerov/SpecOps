@@ -5,7 +5,10 @@ import {
   agentExistsInIndex,
   findNextOpenAgentTabAfterClose,
   flattenSidebarAgents,
+  isAgentSessionMappingValid,
+  mappedSessionForAgent,
   nextSidebarAgentId,
+  reconcileAgentSessionMapping,
   openAgentTabIds,
   resolveRestoredActiveAgent,
   selectedTabAfterMissingLastAgent,
@@ -107,5 +110,66 @@ describe("workspaceAgentSession", () => {
     const index = [agent("agent-a", "2026-05-28T12:00:00.000Z")];
     expect(agentExistsInIndex(index, "agent-a")).toBe(true);
     expect(agentExistsInIndex(index, "agent-b")).toBe(false);
+  });
+
+  it("returns mapped opencode session metadata for an agent", () => {
+    const index: AgentIndexEntry[] = [
+      {
+        id: "agent-a",
+        title: "A",
+        lastUsedAt: "2026-05-28T12:00:00.000Z",
+        opencodeSessionId: "sess-1",
+        opencodeModelId: "gpt-4o-mini",
+        opencodeProviderId: "opencode",
+      },
+    ];
+    expect(mappedSessionForAgent(index, "agent-a")).toEqual({
+      agentId: "agent-a",
+      sessionId: "sess-1",
+      modelId: "gpt-4o-mini",
+      providerId: "opencode",
+    });
+    expect(mappedSessionForAgent(index, "missing")).toBeNull();
+  });
+
+  it("validates mapping presence against known session ids", () => {
+    const known = new Set(["sess-1"]);
+    expect(
+      isAgentSessionMappingValid(
+        { agentId: "agent-a", sessionId: "sess-1" },
+        known,
+      ),
+    ).toBe(true);
+    expect(
+      isAgentSessionMappingValid(
+        { agentId: "agent-a", sessionId: "sess-2" },
+        known,
+      ),
+    ).toBe(false);
+    expect(isAgentSessionMappingValid(null, known)).toBe(false);
+  });
+
+  it("reconciles missing mapping to deterministic replacement session", () => {
+    const known = new Set(["sess-1"]);
+    expect(
+      reconcileAgentSessionMapping({
+        mapping: { agentId: "agent-a", sessionId: "sess-1" },
+        existingSessionIds: known,
+        createdSessionId: "sess-created",
+      }),
+    ).toEqual({
+      sessionId: "sess-1",
+      shouldReplaceMapping: false,
+    });
+    expect(
+      reconcileAgentSessionMapping({
+        mapping: { agentId: "agent-a", sessionId: "sess-missing" },
+        existingSessionIds: known,
+        createdSessionId: "sess-created",
+      }),
+    ).toEqual({
+      sessionId: "sess-created",
+      shouldReplaceMapping: true,
+    });
   });
 });

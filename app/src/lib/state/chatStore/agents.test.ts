@@ -431,4 +431,54 @@ describe("chatStore", () => {
     expect(entry?.isDraft).toBeUndefined();
     expect(entry?.lastUsedAt).toBe("2026-05-28T12:00:00.000Z");
   });
+
+  it("stores and clears opencode session mapping per workspace agent", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+    expect(agentId).toBe("agent-1");
+
+    expect(chatStore.setAgentSessionLink(agentId!, { opencodeSessionId: "sess-1" })).toBe(true);
+    expect(chatStore.getAgentSessionLink(agentId!)).toEqual({
+      opencodeSessionId: "sess-1",
+      opencodeModelId: undefined,
+      opencodeProviderId: undefined,
+    });
+
+    expect(
+      chatStore.setAgentSessionLink(agentId!, {
+        opencodeSessionId: "sess-1",
+        opencodeModelId: "gpt-4o-mini",
+        opencodeProviderId: "opencode",
+      }),
+    ).toBe(true);
+    expect(chatStore.getAgentSessionLink(agentId!)).toEqual({
+      opencodeSessionId: "sess-1",
+      opencodeModelId: "gpt-4o-mini",
+      opencodeProviderId: "opencode",
+    });
+
+    expect(chatStore.clearAgentSessionLink(agentId!)).toBe(true);
+    expect(chatStore.getAgentSessionLink(agentId!)).toBeNull();
+  });
+
+  it("keeps opencode session mapping isolated per workspace root", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentA = chatStore.createDraftAgent();
+    chatStore.setAgentSessionLink(agentA!, { opencodeSessionId: "sess-a" });
+
+    chatStore.setActiveWorkspaceRoot("/work/b");
+    const agentB = chatStore.createDraftAgent();
+    chatStore.setAgentSessionLink(agentB!, { opencodeSessionId: "sess-b" });
+
+    expect(chatStore.getAgentSessionLink(agentB!)).toEqual({
+      opencodeSessionId: "sess-b",
+      opencodeModelId: undefined,
+      opencodeProviderId: undefined,
+    });
+    expect(chatStore.getAgentSessionLink(agentA!, "/work/a")).toEqual({
+      opencodeSessionId: "sess-a",
+      opencodeModelId: undefined,
+      opencodeProviderId: undefined,
+    });
+  });
 });

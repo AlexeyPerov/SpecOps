@@ -99,6 +99,12 @@ export interface AgentIndexEntry {
   lastUsedAt: string;
   /** Session-only drafts are not written to disk until first user message. */
   isDraft?: boolean;
+  /** Linked OpenCode session for this agent tab (phase 3 workspace runtime). */
+  opencodeSessionId?: string;
+  /** Last model used with the linked OpenCode session (restore hint). */
+  opencodeModelId?: string;
+  /** Last provider/runtime hint paired with the linked OpenCode session. */
+  opencodeProviderId?: string;
 }
 
 /** Per-workspace agent list only — no conversation payload. */

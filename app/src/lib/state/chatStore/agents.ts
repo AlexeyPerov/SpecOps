@@ -79,6 +79,44 @@ export function patchAgentIndexEntry(
   return agentIndex.map((entry) => (entry.id === agentId ? nextEntry : entry));
 }
 
+export interface AgentSessionLinkPatch {
+  opencodeSessionId?: string;
+  opencodeModelId?: string;
+  opencodeProviderId?: string;
+}
+
+function applyAgentSessionLinkPatch(
+  entry: AgentIndexEntry,
+  patch: AgentSessionLinkPatch,
+): AgentIndexEntry {
+  const next: AgentIndexEntry = {
+    ...entry,
+    ...patch,
+  };
+  if (!next.opencodeSessionId) {
+    delete next.opencodeSessionId;
+    delete next.opencodeModelId;
+    delete next.opencodeProviderId;
+    return next;
+  }
+  if (!next.opencodeModelId) {
+    delete next.opencodeModelId;
+  }
+  if (!next.opencodeProviderId) {
+    delete next.opencodeProviderId;
+  }
+  return next;
+}
+
+function didSessionLinkChange(entry: AgentIndexEntry, patch: AgentSessionLinkPatch): boolean {
+  const next = applyAgentSessionLinkPatch(entry, patch);
+  return (
+    next.opencodeSessionId !== entry.opencodeSessionId ||
+    next.opencodeModelId !== entry.opencodeModelId ||
+    next.opencodeProviderId !== entry.opencodeProviderId
+  );
+}
+
 export function resolveTargetAgentId(state: ChatStoreState, agentId?: string): string | null {
   if (agentId) {
     return agentId;
@@ -210,6 +248,70 @@ export function createAgentsSlice(deps: {
         return [];
       }
       return [...(getSnapshot().workspaces[root]?.agentIndex ?? [])];
+    },
+    getAgentSessionLink(
+      agentId: string,
+      rootOverride?: string | null,
+    ): AgentSessionLinkPatch | null {
+      const root = rootOverride ?? getActiveChatScopeKey();
+      if (!root) {
+        return null;
+      }
+      const workspace = getSnapshot().workspaces[root];
+      if (!workspace) {
+        return null;
+      }
+      const entry = findAgentIndexEntry(workspace, agentId);
+      if (!entry || !entry.opencodeSessionId) {
+        return null;
+      }
+      return {
+        opencodeSessionId: entry.opencodeSessionId,
+        opencodeModelId: entry.opencodeModelId,
+        opencodeProviderId: entry.opencodeProviderId,
+      };
+    },
+    setAgentSessionLink(
+      agentId: string,
+      patch: AgentSessionLinkPatch,
+      rootOverride?: string | null,
+    ): boolean {
+      const root = rootOverride ?? getActiveChatScopeKey();
+      if (!root) {
+        return false;
+      }
+      let changed = false;
+      update((state) => {
+        const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
+        const entry = findAgentIndexEntry(workspace, agentId);
+        if (!entry) {
+          return nextState;
+        }
+        if (!didSessionLinkChange(entry, patch)) {
+          return nextState;
+        }
+        changed = true;
+        return patchWorkspaceState(nextState, root, {
+          ...workspace,
+          agentIndex: patchAgentIndexEntry(
+            workspace.agentIndex,
+            agentId,
+            applyAgentSessionLinkPatch(entry, patch),
+          ),
+        });
+      });
+      return changed;
+    },
+    clearAgentSessionLink(agentId: string, rootOverride?: string | null): boolean {
+      return this.setAgentSessionLink(
+        agentId,
+        {
+          opencodeSessionId: "",
+          opencodeModelId: "",
+          opencodeProviderId: "",
+        },
+        rootOverride,
+      );
     },
     getWorkspaceAgentsState(root: string): WorkspaceAgentsState | null {
       const workspace = getSnapshot().workspaces[root];

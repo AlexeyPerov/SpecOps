@@ -81,6 +81,48 @@ export function resolveRestoredActiveAgent(
   return { activeAgentId: null, shouldFocusAgentTab: false };
 }
 
+export interface AgentSessionMapping {
+  agentId: string;
+  sessionId: string;
+  modelId?: string;
+  providerId?: string;
+}
+
+export function mappedSessionForAgent(
+  agents: readonly AgentIndexEntry[],
+  agentId: string,
+): AgentSessionMapping | null {
+  const entry = agents.find((candidate) => candidate.id === agentId);
+  if (!entry?.opencodeSessionId) {
+    return null;
+  }
+  return {
+    agentId,
+    sessionId: entry.opencodeSessionId,
+    modelId: entry.opencodeModelId,
+    providerId: entry.opencodeProviderId,
+  };
+}
+
+export function isAgentSessionMappingValid(
+  mapping: AgentSessionMapping | null,
+  existingSessionIds: ReadonlySet<string>,
+): boolean {
+  return mapping !== null && existingSessionIds.has(mapping.sessionId);
+}
+
+export function reconcileAgentSessionMapping(input: {
+  mapping: AgentSessionMapping | null;
+  existingSessionIds: ReadonlySet<string>;
+  createdSessionId: string;
+}): { sessionId: string; shouldReplaceMapping: boolean } {
+  const { mapping, existingSessionIds, createdSessionId } = input;
+  if (mapping && existingSessionIds.has(mapping.sessionId)) {
+    return { sessionId: mapping.sessionId, shouldReplaceMapping: false };
+  }
+  return { sessionId: createdSessionId, shouldReplaceMapping: true };
+}
+
 /** When last-active agent is gone, avoid leaving an agent tab selected in the tab bar. */
 export function selectedTabAfterMissingLastAgent(
   openTabs: readonly TabState[],

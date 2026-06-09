@@ -6,6 +6,8 @@ import {
   executeProviderTurn,
   persistAgentThreadOnce,
   resolveSendTarget,
+  shouldUseWorkspaceAgentBackend,
+  validateWorkspaceAgentBackendSend,
   validateProviderSend,
   type ChatSendContextOptions,
   type SendChatMessageResult,
@@ -51,11 +53,27 @@ export async function sendChatMessage(
   }
   persistAgentThreadOnce(target.root, target.activeAgentId);
 
-  const validation = await validateProviderSend(target.activeAgentId, options);
-  if (!validation.ok) {
+  const useWorkspaceBackend = shouldUseWorkspaceAgentBackend({
+    root: target.root,
+    chatContextKind: target.chatContextKind,
+  });
+  if (useWorkspaceBackend) {
+    const workspaceValidation = await validateWorkspaceAgentBackendSend(
+      target.root,
+      target.chatContextKind,
+    );
+    if (!workspaceValidation.ok) {
+      chatStore.removeMessage(userMessage.id, target.activeAgentId, target.root);
+      abortTurn(target.activeAgentId, target.root);
+      return workspaceValidation;
+    }
+  }
+
+  const providerValidation = await validateProviderSend(target.activeAgentId, options);
+  if (!providerValidation.ok) {
     chatStore.removeMessage(userMessage.id, target.activeAgentId, target.root);
     abortTurn(target.activeAgentId, target.root);
-    return validation;
+    return providerValidation;
   }
 
   return executeProviderTurn({
@@ -63,9 +81,9 @@ export async function sendChatMessage(
     chatContextKind: target.chatContextKind,
     activeAgentId: target.activeAgentId,
     turnId,
-    provider: validation.provider,
-    accessStatus: validation.accessStatus,
-    modelId: validation.modelId,
-    connectionId: validation.connectionId,
+    provider: providerValidation.provider,
+    accessStatus: providerValidation.accessStatus,
+    modelId: providerValidation.modelId,
+    connectionId: providerValidation.connectionId,
   });
 }

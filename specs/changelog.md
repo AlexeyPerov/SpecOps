@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-09 23:24
+
+- **Workspace composer OpenCode stream routing (P3-4 / Task 1):** Added workspace-only (`ws-*`) send path in chat pipeline to execute turns through `WorkspaceAgentBackend("opencode")` while preserving existing `chat-http` provider pipeline. Workspace turns now create/reuse per-agent OpenCode sessions, stream assistant deltas into the active assistant message in real time, and preserve generation lifecycle semantics for success/cancel/error without changing chat-only contexts. Added coverage in `sendChatMessage.test.ts` for ws-context backend routing, stream cancellation behavior, and non-workspace isolation.
+
 ## 2026-06-09 23:08
 
 - **Milestone 1 verification (P3-8 partial / Task 5):** Expanded OpenCode runtime coverage across sidecar health transitions and URL checks (`appShellEffects.opencodeSidecar.test.ts`), backend HTTP error mapping and additional stream-event normalization (`workspaceAgentBackend.test.ts`), and sidecar health mapping fallback (`opencodeSidecar.test.ts`). Added manual connectivity smoke checklist for sidecar and URL modes in `specs/ops/phase-3/m1-task5-smoke.md`, and marked Task 5 `[DONE]` plus M1 quality-gate exit criterion complete in `execution-plan-m1.md` after passing `npm test` and `npm run check`.

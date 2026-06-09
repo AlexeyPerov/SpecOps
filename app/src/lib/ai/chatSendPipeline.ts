@@ -3,6 +3,10 @@ import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
 import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import {
+  WorkspaceAgentBackendError,
+  createWorkspaceAgentBackend,
+} from "./backends/workspaceAgentBackend";
 import { buildThreadProviderRequest } from "./modes/prompt";
 import {
   formatRetryFailureNote,
@@ -180,6 +184,21 @@ export function resolveChatContextKind(root: string, options?: ChatSendContextOp
   return root === CHAT_HTTP_CONTEXT_ID ? "chat-http" : "workspace";
 }
 
+function isWorkspaceContextId(contextId: string): boolean {
+  return contextId.startsWith("ws-");
+}
+
+export function shouldUseWorkspaceAgentBackend(input: {
+  root: string;
+  chatContextKind: ChatContextKind;
+}): boolean {
+  if (input.chatContextKind !== "workspace" || input.root === CHAT_HTTP_CONTEXT_ID) {
+    return false;
+  }
+  const activeContextId = appState.getSnapshot().contexts.activeContextId;
+  return isWorkspaceContextId(activeContextId);
+}
+
 function noActiveChatTargetMessage(chatContextKind: ChatContextKind): string {
   return chatContextKind === "chat-http"
     ? "Select or create a chat to send messages."
@@ -231,6 +250,24 @@ export function beginTurn(activeAgentId: string): string | null {
     return null;
   }
   return turnId;
+}
+
+export async function validateWorkspaceAgentBackendSend(
+  root: string,
+  chatContextKind: ChatContextKind,
+): Promise<{ ok: true } | ProviderSendValidationFailure> {
+  if (chatContextKind !== "workspace" || root === CHAT_HTTP_CONTEXT_ID) {
+    return { ok: true };
+  }
+  const accessState = await chatStore.runAccessPreflight();
+  if (accessState.status !== "ready") {
+    return {
+      ok: false,
+      reason: "preflight",
+      message: accessState.message,
+    };
+  }
+  return { ok: true };
 }
 
 export function getLastRetryError(activeAgentId: string): ChatTurnError | null {
@@ -357,6 +394,9 @@ export async function executeProviderTurn(params: {
 }): Promise<SendChatMessageResult> {
   const { root, chatContextKind, activeAgentId, turnId, provider, accessStatus, modelId, connectionId, previousError } =
     params;
+  if (shouldUseWorkspaceAgentBackend({ root, chatContextKind })) {
+    return executeWorkspaceAgentBackendTurn(params);
+  }
   const abortController = new AbortController();
   const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
   if (!thread) {
@@ -467,6 +507,183 @@ export async function executeProviderTurn(params: {
       durationMs: Date.now() - startedAt,
       reason: message,
     });
+    return { ok: false, reason: "provider_error", message };
+  }
+}
+
+function toWorkspaceBackendErrorMessage(error: unknown): string {
+  if (error instanceof WorkspaceAgentBackendError) {
+    if (error.code === "authFailure") {
+      return "OpenCode authentication failed. Check OpenCode settings and retry.";
+    }
+    if (error.code === "invalidDirectory") {
+      return "OpenCode rejected this workspace directory. Reopen the workspace and retry.";
+    }
+    if (error.code === "serverUnavailable") {
+      return "OpenCode server is unavailable. Check sidecar/server health and retry.";
+    }
+    if (error.code === "notFound") {
+      return "OpenCode session was not found. Retry to start a new session.";
+    }
+    return error.message.trim() || "OpenCode request failed.";
+  }
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message.trim();
+  }
+  return "OpenCode request failed.";
+}
+
+async function ensureWorkspaceAgentSessionId(input: {
+  root: string;
+  activeAgentId: string;
+  modelId: string;
+}): Promise<{ backend: ReturnType<typeof createWorkspaceAgentBackend>; sessionId: string }> {
+  const backend = createWorkspaceAgentBackend("opencode", {
+    resolveRuntimeConfig: async () => {
+      const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
+      return { mode, baseUrl };
+    },
+  });
+  const existingLink = chatStore.getAgentSessionLink(input.activeAgentId, input.root);
+  let sessionId = existingLink?.opencodeSessionId?.trim() ?? "";
+  if (sessionId) {
+    const existingSession = await backend.getSession({
+      workspaceRootPath: input.root,
+      sessionId,
+    });
+    if (!existingSession) {
+      sessionId = "";
+    }
+  }
+  if (!sessionId) {
+    const title = chatStore.getAgentTitle(input.activeAgentId) ?? undefined;
+    const createdSession = await backend.createSession({
+      workspaceRootPath: input.root,
+      title,
+    });
+    sessionId = createdSession.id;
+  }
+  chatStore.setAgentSessionLink(
+    input.activeAgentId,
+    {
+      opencodeSessionId: sessionId,
+      opencodeModelId: input.modelId.trim() ? input.modelId : undefined,
+      opencodeProviderId: "opencode",
+    },
+    input.root,
+  );
+  return { backend, sessionId };
+}
+
+async function executeWorkspaceAgentBackendTurn(params: {
+  root: string;
+  chatContextKind: ChatContextKind;
+  activeAgentId: string;
+  turnId: string;
+  provider: ChatProvider;
+  accessStatus: WorkspaceAccessStatus;
+  modelId: string;
+  connectionId?: string;
+  previousError?: ChatTurnError | null;
+}): Promise<SendChatMessageResult> {
+  const { root, activeAgentId, turnId, previousError } = params;
+  const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
+  if (!thread) {
+    abortTurn(activeAgentId, root);
+    return {
+      ok: false,
+      reason: "append_failed",
+      message: "Could not prepare the active thread for generation.",
+    };
+  }
+
+  if (previousError) {
+    chatStore.appendMessage(createRetryFailureNote(turnId, previousError), {
+      agentId: activeAgentId,
+      skipCompaction: true,
+    });
+  }
+
+  const userMessage = findLastUserMessage(thread.messages);
+  if (!userMessage) {
+    abortTurn(activeAgentId, root);
+    if (previousError) {
+      chatStore.removeMessage(`retry-note-${turnId}`, activeAgentId, root);
+    }
+    return {
+      ok: false,
+      reason: "append_failed",
+      message: "Could not find a user message to send.",
+    };
+  }
+
+  const assistantMessage = createAssistantPlaceholder(turnId);
+  chatStore.appendMessage(assistantMessage, { agentId: activeAgentId, skipCompaction: true });
+  let hasScheduledStreamingPersistence = false;
+
+  try {
+    const modelFromThread = chatStore.getMetadata(activeAgentId)?.selectedModelId?.trim() ?? "";
+    const modelId = modelFromThread || params.modelId;
+    const { backend, sessionId } = await ensureWorkspaceAgentSessionId({
+      root,
+      activeAgentId,
+      modelId,
+    });
+    const run = await backend.send({
+      prompt: userMessage.content,
+      workspaceRootPath: root,
+      sessionId,
+      model: modelId || undefined,
+    });
+    if (!run.runId) {
+      throw new Error("OpenCode run did not return a run id.");
+    }
+
+    let accumulated = "";
+    for await (const event of backend.streamEvents({
+      workspaceRootPath: root,
+      sessionId: run.sessionId,
+      runId: run.runId,
+    })) {
+      if (!chatStore.isGenerationTurnActive(root, activeAgentId, turnId)) {
+        throw new TurnCancelledError();
+      }
+      if (event.type === "message.delta") {
+        accumulated += event.delta;
+        chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
+        if (!hasScheduledStreamingPersistence) {
+          hasScheduledStreamingPersistence = true;
+          persistAgentThreadOnce(root, activeAgentId);
+        }
+        continue;
+      }
+      if (event.type === "message.completed") {
+        accumulated = event.message || accumulated;
+        chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
+        continue;
+      }
+      if (event.type === "run.failed") {
+        throw new Error(event.message);
+      }
+    }
+
+    assertTurnStillActive(root, activeAgentId, turnId);
+    chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
+    chatStore.compactActiveThread(activeAgentId);
+    chatStore.completeTurn(activeAgentId, root);
+    persistAgentThreadOnce(root, activeAgentId);
+    return { ok: true, turnId, assistantMessageId: assistantMessage.id, agentId: activeAgentId };
+  } catch (error) {
+    if (isTurnCancelledError(error)) {
+      return { ok: false, reason: "generating", message: "Response was cancelled." };
+    }
+    chatStore.removeMessage(assistantMessage.id, activeAgentId, root);
+    if (previousError) {
+      chatStore.removeMessage(`retry-note-${turnId}`, activeAgentId, root);
+    }
+    const message = toWorkspaceBackendErrorMessage(error);
+    chatStore.failTurn({ message, code: "provider_error" }, turnId, activeAgentId, root);
+    persistAgentThreadOnce(root, activeAgentId);
     return { ok: false, reason: "provider_error", message };
   }
 }

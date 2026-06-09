@@ -22,6 +22,7 @@ import { resetChatProvidersForTests } from "./providers/bootstrap";
 import { sendChatMessage, retryLastChatTurn } from "./sendChatMessage";
 import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
+import { createWorkspaceAgentBackend } from "./backends/workspaceAgentBackend";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
@@ -35,8 +36,17 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
+vi.mock("./backends/workspaceAgentBackend", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./backends/workspaceAgentBackend")>();
+  return {
+    ...actual,
+    createWorkspaceAgentBackend: vi.fn(),
+  };
+});
+
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
+const createWorkspaceAgentBackendMock = vi.mocked(createWorkspaceAgentBackend);
 
 function httpFetchStreamSuccess(content: string): typeof fetch {
   return vi.fn().mockResolvedValue(
@@ -62,6 +72,7 @@ describe("sendChatMessage", () => {
     resetChatProvidersForTests();
     schedulePersistMock.mockReset();
     ensureWorkspaceReadAccessMock.mockReset();
+    createWorkspaceAgentBackendMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
     const debugSettings = {
       ...defaultDebugProviderSettings,
@@ -477,6 +488,96 @@ describe("sendChatMessage", () => {
     expect(result.ok).toBe(true);
     expect(schedulePersistMock).toHaveBeenCalled();
     expect(schedulePersistMock.mock.calls.at(-1)?.[0]).toBe(CHAT_HTTP_CONTEXT_ID);
+  });
+
+  it("routes ws-* workspace sends through OpenCode backend streaming", async () => {
+    appState.addWorkspace("/work/a");
+    const getSession = vi.fn().mockResolvedValue(null);
+    const createSession = vi.fn().mockResolvedValue({ id: "sess-1" });
+    const send = vi.fn().mockResolvedValue({ sessionId: "sess-1", runId: "run-1" });
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield { type: "message.delta", delta: "OpenCode " };
+      yield { type: "message.delta", delta: "stream" };
+      yield { type: "run.completed", runId: "run-1" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession,
+      getSession,
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send,
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+
+    const result = await sendChatMessage("Route through OpenCode");
+
+    expect(result.ok).toBe(true);
+    expect(createWorkspaceAgentBackendMock).toHaveBeenCalledWith("opencode", expect.any(Object));
+    expect(getSession).not.toHaveBeenCalled();
+    expect(createSession).toHaveBeenCalledWith({
+      workspaceRootPath: "/work/a",
+      title: expect.any(String),
+    });
+    expect(send).toHaveBeenCalledWith({
+      prompt: "Route through OpenCode",
+      workspaceRootPath: "/work/a",
+      sessionId: "sess-1",
+      model: "debug-simulator",
+    });
+    expect(
+      chatStore.getMessages().find((message) => message.role === "assistant")?.content,
+    ).toBe("OpenCode stream");
+  });
+
+  it("returns cancelled state for ws-* stream cancellation", async () => {
+    appState.addWorkspace("/work/a");
+    const getSession = vi.fn().mockResolvedValue({ id: "sess-1" });
+    const send = vi.fn().mockResolvedValue({ sessionId: "sess-1", runId: "run-1" });
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield { type: "message.delta", delta: "partial " };
+      await Promise.resolve();
+      yield { type: "message.delta", delta: "tail" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession,
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send,
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    chatStore.setAgentSessionLink(chatStore.getActiveAgentId()!, { opencodeSessionId: "sess-1" }, "/work/a");
+
+    const sendPromise = sendChatMessage("Cancel OpenCode stream");
+    await Promise.resolve();
+    const cancelled = chatStore.cancelAgentGeneration("/work/a", chatStore.getActiveAgentId()!);
+    expect(cancelled).toBe(true);
+
+    const result = await sendPromise;
+    expect(result).toEqual({
+      ok: false,
+      reason: "generating",
+      message: "Response was cancelled.",
+    });
+    expect(chatStore.getRuntimeState().isGenerating).toBe(false);
+  });
+
+  it("does not use workspace backend for chat-http sends", async () => {
+    appState.switchContext("chat-http");
+    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+    chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
+
+    const resultPromise = sendChatMessage("chat-http should stay provider", undefined, {
+      chatContextKind: "chat-http",
+    });
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(true);
+    expect(createWorkspaceAgentBackendMock).not.toHaveBeenCalled();
   });
 
 });

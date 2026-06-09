@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { attachOpencodeSidecarWorkspace } from "./opencodeSidecar";
-import { syncOpencodeSidecarEffect } from "./appShellEffects";
+import {
+  attachOpencodeSidecarWorkspace,
+  getOpencodeSidecarStatus,
+  healthFromSidecarStatus,
+  isOpencodeSidecarError,
+} from "./opencodeSidecar";
+import { requestOpencodeHealthRefresh, syncOpencodeSidecarEffect } from "./appShellEffects";
 
 vi.mock("./opencodeSidecar", () => ({
   attachOpencodeSidecarWorkspace: vi.fn().mockResolvedValue({
@@ -18,10 +23,24 @@ vi.mock("./opencodeSidecar", () => ({
 }));
 
 const attachMock = vi.mocked(attachOpencodeSidecarWorkspace);
+const getStatusMock = vi.mocked(getOpencodeSidecarStatus);
+const mapHealthMock = vi.mocked(healthFromSidecarStatus);
+const isSidecarErrorMock = vi.mocked(isOpencodeSidecarError);
+
+async function flushAsyncWork(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 describe("syncOpencodeSidecarEffect", () => {
   beforeEach(() => {
     attachMock.mockClear();
+    getStatusMock.mockReset();
+    mapHealthMock.mockReset();
+    isSidecarErrorMock.mockReset();
+    mapHealthMock.mockReturnValue("healthy");
+    isSidecarErrorMock.mockReturnValue(false);
+    vi.unstubAllGlobals();
   });
 
   it("attaches sidecar when workspace runtime is ready", () => {
@@ -35,6 +54,65 @@ describe("syncOpencodeSidecarEffect", () => {
     });
 
     expect(attachMock).toHaveBeenCalledWith("/tmp/workspace");
+  });
+
+  it("publishes checking then mapped sidecar health on successful attach", async () => {
+    mapHealthMock.mockReturnValue("degraded");
+    const setOpencodeHealth = vi.fn();
+    syncOpencodeSidecarEffect({
+      runtimeReady: true,
+      activeWorkspaceRoot: "/tmp/workspace",
+      isChatHttpActive: false,
+      opencodeMode: "sidecar",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth,
+    });
+
+    await flushAsyncWork();
+
+    expect(setOpencodeHealth).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        status: "checking",
+        source: "sidecar",
+        lastErrorMessage: null,
+      }),
+    );
+    expect(setOpencodeHealth).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: "degraded",
+        source: "sidecar",
+        lastErrorMessage: null,
+      }),
+    );
+  });
+
+  it("sets error health when sidecar attach fails with typed error", async () => {
+    attachMock.mockRejectedValueOnce({
+      kind: "launchFailure",
+      message: "Unable to spawn sidecar",
+    });
+    isSidecarErrorMock.mockReturnValue(true);
+    const setOpencodeHealth = vi.fn();
+
+    syncOpencodeSidecarEffect({
+      runtimeReady: true,
+      activeWorkspaceRoot: "/tmp/workspace",
+      isChatHttpActive: false,
+      opencodeMode: "sidecar",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth,
+    });
+
+    await flushAsyncWork();
+
+    expect(setOpencodeHealth).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: "error",
+        source: "sidecar",
+        lastErrorMessage: "Unable to spawn sidecar",
+      }),
+    );
   });
 
   it("skips attach when chat-http is active", () => {
@@ -61,5 +139,118 @@ describe("syncOpencodeSidecarEffect", () => {
     });
 
     expect(attachMock).not.toHaveBeenCalled();
+  });
+
+  it("validates URL mode and marks invalid URL as error", () => {
+    const setOpencodeHealth = vi.fn();
+    syncOpencodeSidecarEffect({
+      runtimeReady: true,
+      activeWorkspaceRoot: "/tmp/workspace",
+      isChatHttpActive: false,
+      opencodeMode: "url",
+      opencodeBaseUrl: "://bad-url",
+      setOpencodeHealth,
+    });
+
+    expect(setOpencodeHealth).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: "error",
+        source: "url",
+      }),
+    );
+  });
+
+  it("marks URL mode degraded on non-200 response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+      }),
+    );
+    const setOpencodeHealth = vi.fn();
+    syncOpencodeSidecarEffect({
+      runtimeReady: true,
+      activeWorkspaceRoot: "/tmp/workspace",
+      isChatHttpActive: false,
+      opencodeMode: "url",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth,
+    });
+
+    await flushAsyncWork();
+
+    expect(setOpencodeHealth).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: "degraded",
+        source: "url",
+      }),
+    );
+  });
+});
+
+describe("requestOpencodeHealthRefresh", () => {
+  beforeEach(() => {
+    getStatusMock.mockReset();
+    mapHealthMock.mockReset();
+    mapHealthMock.mockReturnValue("healthy");
+    isSidecarErrorMock.mockReset();
+    isSidecarErrorMock.mockReturnValue(false);
+    vi.unstubAllGlobals();
+  });
+
+  it("reads sidecar status and maps it into app health", async () => {
+    getStatusMock.mockResolvedValueOnce({
+      running: true,
+      baseUrl: "http://127.0.0.1:4096",
+      health: "healthy",
+      directory: "/tmp/workspace",
+      port: 4096,
+      pid: 42,
+      lastError: null,
+    });
+    mapHealthMock.mockReturnValueOnce("healthy");
+    const setOpencodeHealth = vi.fn();
+
+    requestOpencodeHealthRefresh({
+      opencodeMode: "sidecar",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth,
+    });
+    await flushAsyncWork();
+
+    expect(getStatusMock).toHaveBeenCalledTimes(1);
+    expect(setOpencodeHealth).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: "healthy",
+        source: "sidecar",
+      }),
+    );
+  });
+
+  it("marks URL refresh as healthy on 200 response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+      }),
+    );
+    const setOpencodeHealth = vi.fn();
+
+    requestOpencodeHealthRefresh({
+      opencodeMode: "url",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth,
+    });
+    await flushAsyncWork();
+
+    expect(setOpencodeHealth).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: "healthy",
+        source: "url",
+        lastErrorMessage: null,
+      }),
+    );
   });
 });

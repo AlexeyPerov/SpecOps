@@ -168,7 +168,7 @@ Dependencies: Task 3.
 
 ---
 
-#### Task 5: Milestone 1 tests and verification (P3-8 partial) [Score:7] [Agent:medium]
+#### Task 5: Milestone 1 tests and verification (P3-8 partial) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -219,6 +219,6 @@ Task 2 runs mostly in parallel with Task 1 and is required before Task 3 complet
 - [x] Settings support sidecar vs URL mode with health feedback.
 - [x] `WorkspaceAgentBackend("opencode")` supports session CRUD + streaming adapter.
 - [x] Agent-tab to OpenCode-session mapping persists and restores safely.
-- [ ] `npm test` / `npm run check` pass.
+- [x] `npm test` / `npm run check` pass.
 
 **Next:** [execution-plan-m2.md](./execution-plan-m2.md)

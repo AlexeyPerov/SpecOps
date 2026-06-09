@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WorkspaceAgentBackendError,
   WorkspaceAgentBackendNotImplementedError,
   createWorkspaceAgentBackend,
+  type WorkspaceAgentBackendErrorCode,
   type WorkspaceAgentStreamEvent,
 } from "./workspaceAgentBackend";
 
@@ -87,6 +88,10 @@ function createOpencodeBackendForTests(params?: {
 }
 
 describe("workspaceAgentBackend", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("keeps cursor-local as phase 5 stub", async () => {
     const backend = createWorkspaceAgentBackend("cursor-local");
     await expect(
@@ -121,6 +126,38 @@ describe("workspaceAgentBackend", () => {
       code: "invalidDirectory",
     });
   });
+
+  it.each([
+    [401, "authFailure"],
+    [404, "notFound"],
+    [400, "invalidDirectory"],
+    [503, "serverUnavailable"],
+    [500, "transportError"],
+  ] as const)(
+    "maps HTTP %s into backend error code %s",
+    async (status, expectedCode) => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status,
+        text: async () => (status === 400 ? "directory is invalid" : "request failed"),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({
+          mode: "url",
+          baseUrl: "http://opencode.local",
+        }),
+      });
+
+      await expect(
+        backend.listSessions({
+          workspaceRootPath: "/tmp/workspace",
+        }),
+      ).rejects.toMatchObject({
+        code: expectedCode as WorkspaceAgentBackendErrorCode,
+      });
+    },
+  );
 
   it("normalizes stream events without exposing raw SDK shapes", async () => {
     const { backend } = createOpencodeBackendForTests();
@@ -163,5 +200,60 @@ describe("workspaceAgentBackend", () => {
         workspaceRootPath: "/tmp/workspace",
       }),
     ).rejects.toBeInstanceOf(WorkspaceAgentBackendError);
+  });
+
+  it("normalizes permission/question/run failed stream events", async () => {
+    const { backend } = createOpencodeBackendForTests({
+      streamEvents: [
+        {
+          type: "permission.requested",
+          permissionId: "perm-1",
+          label: "Read file",
+          payload: { path: "a.txt" },
+        },
+        {
+          type: "question.requested",
+          questionId: "q-1",
+          prompt: "Continue?",
+          choices: ["yes", "no"],
+          payload: { step: 1 },
+        },
+        {
+          type: "runError",
+          runId: "run-1",
+          message: "boom",
+        },
+      ],
+    });
+
+    const seen: WorkspaceAgentStreamEvent[] = [];
+    for await (const event of backend.streamEvents({
+      workspaceRootPath: "/tmp/workspace",
+      sessionId: "sess-1",
+      runId: "run-1",
+    })) {
+      seen.push(event);
+    }
+
+    expect(seen).toEqual([
+      {
+        type: "permission.requested",
+        permissionId: "perm-1",
+        label: "Read file",
+        payload: { path: "a.txt" },
+      },
+      {
+        type: "question.requested",
+        questionId: "q-1",
+        prompt: "Continue?",
+        choices: ["yes", "no"],
+        payload: { step: 1 },
+      },
+      {
+        type: "run.failed",
+        runId: "run-1",
+        message: "boom",
+      },
+    ]);
   });
 });

@@ -83,4 +83,9 @@ describe("opencodeSidecar", () => {
     const { healthFromSidecarStatus } = await import("./opencodeSidecar");
     expect(healthFromSidecarStatus("degraded")).toBe("degraded");
   });
+
+  it("maps unknown sidecar health to app unknown status", async () => {
+    const { healthFromSidecarStatus } = await import("./opencodeSidecar");
+    expect(healthFromSidecarStatus("unknown")).toBe("unknown");
+  });
 });

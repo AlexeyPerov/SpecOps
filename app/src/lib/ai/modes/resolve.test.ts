@@ -57,7 +57,7 @@ describe("resolveChatMode", () => {
     const settings = settingsWith({ rawEnabled: true });
     const resolved = resolveChatMode("raw", settings);
     expect(resolved.id).toBe("raw");
-    expect(resolved.promptTemplate).toBe("");
+    expect(resolved.promptTemplate).toBe("{{workspace}}\n{{summary}}");
   });
 });
 

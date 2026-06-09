@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-09 21:35
+
+- **OpenCode sidecar (phase 3 / P3-1):** Added Tauri `opencode_sidecar` manager with start/stop/restart/attach/status commands, typed lifecycle errors (`portInUse`, `missingBinary`, `launchFailure`, `healthTimeout`, `staleProcess`), health probing against `/global/health`, hybrid reuse-or-restart attach per workspace `rootPath`, and deterministic teardown on app exit. Frontend bridge in `opencodeSidecar.ts`; workspace attach effect and app-shell cleanup wiring. Tests for Rust attach logic and TS invoke wrappers.
+
 ## 2026-06-09 18:22
 
 - **Docs (phase 3 execution):** Added milestone execution plans for OpenCode workspace rollout: [execution-plan-m1.md](./ops/phase-3/execution-plan-m1.md) (sidecar/client/session foundation), [execution-plan-m2.md](./ops/phase-3/execution-plan-m2.md) (stream/tool/permission/question MVP UI), and [execution-plan-m3.md](./ops/phase-3/execution-plan-m3.md) (workspace HTTP cutover, cleanup, and closure). Linked plans from [phase-3.md](./ops/phase-3/phase-3.md).

@@ -1,9 +1,11 @@
 mod file_watcher;
+mod opencode_sidecar;
 
 #[cfg(target_os = "macos")]
 mod dock_menu;
 
 use file_watcher::FileWatcherState;
+use opencode_sidecar::OpencodeSidecarState;
 use serde::Serialize;
 use std::sync::{Mutex, OnceLock};
 use tauri::{Emitter, Manager, RunEvent};
@@ -43,6 +45,7 @@ fn take_pending_opened_paths() -> Vec<String> {
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(FileWatcherState::new())
+        .manage(OpencodeSidecarState::new())
         .setup(|app| {
             if let Some(watcher_state) = app.try_state::<FileWatcherState>() {
                 watcher_state.set_app_handle(app.handle().clone());
@@ -55,6 +58,11 @@ pub fn run() {
             take_pending_opened_paths,
             file_watcher::sync_file_watcher_paths,
             file_watcher::sync_project_tree_watcher,
+            opencode_sidecar::opencode_sidecar_attach_workspace,
+            opencode_sidecar::opencode_sidecar_start,
+            opencode_sidecar::opencode_sidecar_stop,
+            opencode_sidecar::opencode_sidecar_restart,
+            opencode_sidecar::opencode_sidecar_status,
             #[cfg(target_os = "macos")]
             dock_menu::refresh_dock_menu,
         ])
@@ -78,6 +86,12 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
+        if let RunEvent::ExitRequested { .. } = &event {
+            if let Some(sidecar_state) = app_handle.try_state::<OpencodeSidecarState>() {
+                sidecar_state.stop_sync();
+            }
+        }
+
         #[cfg(target_os = "macos")]
         if let RunEvent::Opened { urls } = event {
             let paths: Vec<String> = urls

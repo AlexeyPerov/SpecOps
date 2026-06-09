@@ -34,6 +34,7 @@
     syncAgentTabEffect,
     syncChatAccessMonitorEffect,
     syncExternalFileWatcherEffect,
+    syncOpencodeSidecarEffect,
     syncProjectTreeWatcherEffect,
     syncResponsiveLayoutEffect,
     syncSessionPersistenceEffect,
@@ -410,6 +411,11 @@
     activeWorkspaceRoot;
     isChatHttpActive;
     documentView.activeDocumentPath;
+    syncOpencodeSidecarEffect({
+      runtimeReady,
+      activeWorkspaceRoot,
+      isChatHttpActive,
+    });
     syncProjectTreeWatcherEffect({
       runtimeReady,
       activeWorkspaceRoot,

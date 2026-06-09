@@ -45,6 +45,7 @@ import {
   syncFileWatcherPaths,
   syncProjectTreeWatcher,
 } from "./fileWatcher";
+import { stopOpencodeSidecar } from "./opencodeSidecar";
 import { selectTabForNormalizedPath } from "./openFileGate";
 import { initializeChatProviders } from "../ai/providers/bootstrap";
 import { normalizePathSync } from "./diskFingerprint";
@@ -353,6 +354,7 @@ export async function startAppShellRuntime(
         windowBoundsTimer = null;
       }
       void clearFileWatcherPaths();
+      void stopOpencodeSidecar();
     },
   };
 }

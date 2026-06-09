@@ -25,6 +25,7 @@ import { chatStore } from "../state/chatStore";
 import { syncChatAccessMonitor } from "./chatAccessMonitor";
 import { normalizePathSync } from "./diskFingerprint";
 import { syncProjectTreeWatcher } from "./fileWatcher";
+import { attachOpencodeSidecarWorkspace } from "./opencodeSidecar";
 import type { createProjectTreeController } from "./projectTreeController";
 
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
@@ -201,6 +202,24 @@ export interface SyncProjectTreeWatcherEffectInput {
   isChatHttpActive: boolean;
   projectTreeController: ProjectTreeController;
   loadProjectTreeRoot: () => Promise<void>;
+}
+
+export interface SyncOpencodeSidecarEffectInput {
+  runtimeReady: boolean;
+  activeWorkspaceRoot: string | null;
+  isChatHttpActive: boolean;
+}
+
+export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput): void {
+  const { runtimeReady, activeWorkspaceRoot, isChatHttpActive } = input;
+
+  if (!runtimeReady || !activeWorkspaceRoot || isChatHttpActive) {
+    return;
+  }
+
+  void attachOpencodeSidecarWorkspace(activeWorkspaceRoot).catch(() => {
+    // Task 2 will surface health/errors in settings UI.
+  });
 }
 
 export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffectInput): void {

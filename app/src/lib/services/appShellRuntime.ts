@@ -182,6 +182,7 @@ export async function startAppShellRuntime(
       externalFiles: toExternalFilesSettings(persistedSettings),
       decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
       hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
+      opencode: persistedSettings.opencode,
       providerSettings: persistedSettings.providerSettings,
       providerModelCatalogs: persistedSettings.providerModelCatalogs,
       commandBindingOverrides: persistedSettings.commandBindingOverrides,

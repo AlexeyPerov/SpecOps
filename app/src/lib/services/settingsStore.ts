@@ -14,6 +14,7 @@ import type {
   CommandBindingOverrides,
   ExternalFilesSettings,
   LogSettings,
+  OpencodeSettings,
   ProviderModelCatalogs,
 } from "../domain/contracts";
 import { normalizeChatModesSettings } from "../ai/modes/chatModesSettings";
@@ -29,6 +30,10 @@ import {
 } from "./largeFileOpen";
 import { defaultLogSettings, normalizeLogSettings } from "./logSettings";
 import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
+import {
+  defaultOpencodeSettings,
+  normalizeOpencodeSettings,
+} from "./opencodeSettings";
 
 export interface PersistedSettings {
   wrapLines: boolean;
@@ -41,6 +46,7 @@ export interface PersistedSettings {
   maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  opencode: OpencodeSettings;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
@@ -63,6 +69,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
+  opencode: defaultOpencodeSettings,
   logSettings: defaultLogSettings,
   chatModes: defaultChatModesSettings,
   providerSettings: defaultAppProviderSettings,
@@ -129,6 +136,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         hideActivityRailWhenNotepadOnly: isBoolean(parsed.hideActivityRailWhenNotepadOnly)
           ? parsed.hideActivityRailWhenNotepadOnly
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
+        opencode: normalizeOpencodeSettings(parsed.opencode),
         logSettings: normalizeLogSettings(parsed.logSettings),
         chatModes: normalizeChatModesSettings(parsed.chatModes),
         providerSettings,
@@ -170,6 +178,7 @@ export function toPersistedSettings(input: {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  opencode: OpencodeSettings;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
@@ -183,6 +192,7 @@ export function toPersistedSettings(input: {
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
+    opencode: normalizeOpencodeSettings(input.opencode),
     logSettings: normalizeLogSettings(input.logSettings),
     chatModes: normalizeChatModesSettings(input.chatModes),
     providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),

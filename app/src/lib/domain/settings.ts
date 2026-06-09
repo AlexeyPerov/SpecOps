@@ -76,11 +76,32 @@ export interface LogSettings {
   verboseProviderLogging: boolean;
 }
 
+export type OpencodeTransportMode = "sidecar" | "url";
+
+export interface OpencodeSettings {
+  mode: OpencodeTransportMode;
+  /** Remote OpenCode server base URL used when mode is `url`. */
+  baseUrl: string;
+}
+
+export type OpencodeHealthStatus = "unknown" | "checking" | "healthy" | "degraded" | "error";
+
+export type OpencodeHealthSource = "sidecar" | "url" | null;
+
+export interface OpencodeHealthState {
+  status: OpencodeHealthStatus;
+  source: OpencodeHealthSource;
+  checkedAt: string | null;
+  lastErrorMessage: string | null;
+}
+
 export interface AppSettingsState {
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
+  opencode: OpencodeSettings;
+  opencodeHealth: OpencodeHealthState;
   commandBindingOverrides: CommandBindingOverrides;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;

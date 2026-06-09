@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-09 22:22
+
+- **Settings + runtime (OpenCode transport + health, P3-6 partial):** Added OpenCode workspace settings schema (`mode`, URL) and runtime health model (`unknown/checking/healthy/degraded/error`, source, last error) with persisted storage and app-state wiring. Implemented Settings UI controls in `ConnectionsSettingsPanel.svelte` for sidecar vs URL mode, URL validation, OpenCode server password secret, health indicator, and manual check action. Wired runtime reconnect/health refresh on mode changes without restart via app shell effects, plus sidecar health normalization and URL health probe. Added OpenCode server password secrets APIs in `providerSecretsStore.ts`.
+
 ## 2026-06-09 22:12
 
 - **OpenCode sidecar packaging (P3-1 follow-up):** Added `externalBin` config in `tauri.conf.json`, dev proxy binary at `src-tauri/binaries/opencode-aarch64-apple-darwin`, and leak-prevention unit tests for idempotent stop/teardown state.

@@ -16,6 +16,7 @@ import {
 } from "./settingsStore";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
+import { defaultOpencodeSettings } from "./opencodeSettings";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
@@ -48,6 +49,7 @@ describe("settings mapping", () => {
       },
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
+      opencode: defaultOpencodeSettings,
       logSettings: { verboseProviderLogging: false },
       chatModes: defaultChatModesSettings,
       providerSettings: {
@@ -140,6 +142,7 @@ describe("loadPersistedSettings", () => {
     const result = await loadPersistedSettings();
     expect(result?.providerSettings).toEqual(defaultAppProviderSettings);
     expect(result?.providerModelCatalogs).toEqual(defaultProviderModelCatalogs);
+    expect(result?.opencode).toEqual(defaultOpencodeSettings);
   });
 
       it("retains default catalogs when provider catalogs are missing", async () => {

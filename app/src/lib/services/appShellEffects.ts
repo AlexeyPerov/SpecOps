@@ -25,7 +25,12 @@ import { chatStore } from "../state/chatStore";
 import { syncChatAccessMonitor } from "./chatAccessMonitor";
 import { normalizePathSync } from "./diskFingerprint";
 import { syncProjectTreeWatcher } from "./fileWatcher";
-import { attachOpencodeSidecarWorkspace } from "./opencodeSidecar";
+import {
+  attachOpencodeSidecarWorkspace,
+  getOpencodeSidecarStatus,
+  healthFromSidecarStatus,
+  isOpencodeSidecarError,
+} from "./opencodeSidecar";
 import type { createProjectTreeController } from "./projectTreeController";
 
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
@@ -187,6 +192,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       externalFiles: snapshot.settings.externalFiles,
       decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
       hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
+      opencode: snapshot.settings.opencode,
       logSettings: snapshot.settings.logSettings,
       chatModes: snapshot.settings.chatModes,
       providerSettings: snapshot.settings.providerSettings,
@@ -208,18 +214,182 @@ export interface SyncOpencodeSidecarEffectInput {
   runtimeReady: boolean;
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
+  opencodeMode: import("../domain/contracts").OpencodeTransportMode;
+  opencodeBaseUrl: string;
+  setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
 }
 
 export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput): void {
-  const { runtimeReady, activeWorkspaceRoot, isChatHttpActive } = input;
+  const {
+    runtimeReady,
+    activeWorkspaceRoot,
+    isChatHttpActive,
+    opencodeMode,
+    opencodeBaseUrl,
+    setOpencodeHealth,
+  } = input;
 
   if (!runtimeReady || !activeWorkspaceRoot || isChatHttpActive) {
     return;
   }
 
-  void attachOpencodeSidecarWorkspace(activeWorkspaceRoot).catch(() => {
-    // Task 2 will surface health/errors in settings UI.
+  setOpencodeHealth({
+    status: "checking",
+    source: opencodeMode,
+    checkedAt: new Date().toISOString(),
+    lastErrorMessage: null,
   });
+
+  if (opencodeMode === "url") {
+    let endpoint: URL;
+    try {
+      endpoint = new URL(opencodeBaseUrl);
+    } catch {
+      setOpencodeHealth({
+        status: "error",
+        source: "url",
+        checkedAt: new Date().toISOString(),
+        lastErrorMessage: "OpenCode URL is invalid. Update Settings -> Workspaces -> OpenCode.",
+      });
+      return;
+    }
+    const healthUrl = new URL("/global/health", endpoint);
+    void fetch(healthUrl.toString(), { method: "GET" })
+      .then(async (response) => {
+        if (!response.ok) {
+          setOpencodeHealth({
+            status: "degraded",
+            source: "url",
+            checkedAt: new Date().toISOString(),
+            lastErrorMessage: `OpenCode server responded with HTTP ${response.status}.`,
+          });
+          return;
+        }
+        setOpencodeHealth({
+          status: "healthy",
+          source: "url",
+          checkedAt: new Date().toISOString(),
+          lastErrorMessage: null,
+        });
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "OpenCode URL is unreachable.";
+        setOpencodeHealth({
+          status: "error",
+          source: "url",
+          checkedAt: new Date().toISOString(),
+          lastErrorMessage: message,
+        });
+      });
+    return;
+  }
+
+  void attachOpencodeSidecarWorkspace(activeWorkspaceRoot)
+    .then((status) => {
+      setOpencodeHealth({
+        status: healthFromSidecarStatus(status.health),
+        source: "sidecar",
+        checkedAt: new Date().toISOString(),
+        lastErrorMessage: status.lastError?.message ?? null,
+      });
+    })
+    .catch((error: unknown) => {
+      const message =
+        isOpencodeSidecarError(error) && error.message.trim().length > 0
+          ? error.message
+          : "Failed to start or attach OpenCode sidecar.";
+      setOpencodeHealth({
+        status: "error",
+        source: "sidecar",
+        checkedAt: new Date().toISOString(),
+        lastErrorMessage: message,
+      });
+    });
+}
+
+export function requestOpencodeHealthRefresh(input: {
+  opencodeMode: import("../domain/contracts").OpencodeTransportMode;
+  opencodeBaseUrl: string;
+  setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
+}): void {
+  const { opencodeMode, opencodeBaseUrl, setOpencodeHealth } = input;
+  if (opencodeMode === "sidecar") {
+    setOpencodeHealth({
+      status: "checking",
+      source: "sidecar",
+      checkedAt: new Date().toISOString(),
+      lastErrorMessage: null,
+    });
+    void getOpencodeSidecarStatus()
+      .then((status) => {
+        setOpencodeHealth({
+          status: healthFromSidecarStatus(status.health),
+          source: "sidecar",
+          checkedAt: new Date().toISOString(),
+          lastErrorMessage: status.lastError?.message ?? null,
+        });
+      })
+      .catch((error: unknown) => {
+        const message =
+          isOpencodeSidecarError(error) && error.message.trim().length > 0
+            ? error.message
+            : "Failed to read OpenCode sidecar status.";
+        setOpencodeHealth({
+          status: "error",
+          source: "sidecar",
+          checkedAt: new Date().toISOString(),
+          lastErrorMessage: message,
+        });
+      });
+    return;
+  }
+
+  setOpencodeHealth({
+    status: "checking",
+    source: "url",
+    checkedAt: new Date().toISOString(),
+    lastErrorMessage: null,
+  });
+  let endpoint: URL;
+  try {
+    endpoint = new URL(opencodeBaseUrl);
+  } catch {
+    setOpencodeHealth({
+      status: "error",
+      source: "url",
+      checkedAt: new Date().toISOString(),
+      lastErrorMessage: "OpenCode URL is invalid.",
+    });
+    return;
+  }
+  const healthUrl = new URL("/global/health", endpoint);
+  void fetch(healthUrl.toString(), { method: "GET" })
+    .then((response) => {
+      if (!response.ok) {
+        setOpencodeHealth({
+          status: "degraded",
+          source: "url",
+          checkedAt: new Date().toISOString(),
+          lastErrorMessage: `OpenCode server responded with HTTP ${response.status}.`,
+        });
+        return;
+      }
+      setOpencodeHealth({
+        status: "healthy",
+        source: "url",
+        checkedAt: new Date().toISOString(),
+        lastErrorMessage: null,
+      });
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "OpenCode URL is unreachable.";
+      setOpencodeHealth({
+        status: "error",
+        source: "url",
+        checkedAt: new Date().toISOString(),
+        lastErrorMessage: message,
+      });
+    });
 }
 
 export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffectInput): void {

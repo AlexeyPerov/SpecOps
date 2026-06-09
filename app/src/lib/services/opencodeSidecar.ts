@@ -4,7 +4,7 @@ export type SidecarHealthStatus =
   | "unknown"
   | "checking"
   | "healthy"
-  | "unhealthy"
+  | "degraded"
   | "error";
 
 export type OpencodeSidecarErrorKind =
@@ -110,4 +110,19 @@ export async function restartOpencodeSidecar(
 
 export async function getOpencodeSidecarStatus(): Promise<OpencodeSidecarStatus> {
   return invoke<OpencodeSidecarStatus>("opencode_sidecar_status");
+}
+
+export function healthFromSidecarStatus(status: SidecarHealthStatus): import("../domain/contracts").OpencodeHealthStatus {
+  switch (status) {
+    case "healthy":
+      return "healthy";
+    case "degraded":
+      return "degraded";
+    case "error":
+      return "error";
+    case "checking":
+      return "checking";
+    default:
+      return "unknown";
+  }
 }

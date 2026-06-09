@@ -12,6 +12,9 @@ vi.mock("./opencodeSidecar", () => ({
     pid: 42,
     lastError: null,
   }),
+  getOpencodeSidecarStatus: vi.fn(),
+  isOpencodeSidecarError: vi.fn().mockReturnValue(false),
+  healthFromSidecarStatus: vi.fn().mockReturnValue("healthy"),
 }));
 
 const attachMock = vi.mocked(attachOpencodeSidecarWorkspace);
@@ -26,6 +29,9 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      opencodeMode: "sidecar",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth: vi.fn(),
     });
 
     expect(attachMock).toHaveBeenCalledWith("/tmp/workspace");
@@ -36,6 +42,9 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: true,
+      opencodeMode: "sidecar",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth: vi.fn(),
     });
 
     expect(attachMock).not.toHaveBeenCalled();
@@ -46,6 +55,9 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: false,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      opencodeMode: "sidecar",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth: vi.fn(),
     });
 
     expect(attachMock).not.toHaveBeenCalled();

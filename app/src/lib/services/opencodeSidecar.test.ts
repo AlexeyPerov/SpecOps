@@ -78,4 +78,9 @@ describe("opencodeSidecar", () => {
     ).toBe(true);
     expect(isOpencodeSidecarError("launch failure")).toBe(false);
   });
+
+  it("maps sidecar degraded health to app degraded status", async () => {
+    const { healthFromSidecarStatus } = await import("./opencodeSidecar");
+    expect(healthFromSidecarStatus("degraded")).toBe("degraded");
+  });
 });

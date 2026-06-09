@@ -10,6 +10,8 @@ interface ProviderSecretsFileV1 {
   keys: Record<string, string>;
 }
 
+export const OPENCODE_SERVER_PASSWORD_KEY = "opencode.serverPassword";
+
 async function getSecretsPath(): Promise<string> {
   const base = await ensureSpecOpsDataDir();
   return join(base, FILE_NAME);
@@ -95,6 +97,44 @@ export async function saveConnectionApiKey(connectionId: string, apiKey: string)
 /** Deletes one connection API key from dedicated secrets storage. */
 export async function deleteConnectionApiKey(connectionId: string): Promise<void> {
   await saveConnectionApiKey(connectionId, "");
+}
+
+/** Loads OpenCode server password from dedicated secrets storage. */
+export async function loadOpencodeServerPassword(): Promise<string> {
+  try {
+    const path = await getSecretsPath();
+    const raw = await readTextFile(path);
+    const parsed = normalizeSecretsFile(JSON.parse(raw));
+    return normalizeApiKey(parsed.keys[OPENCODE_SERVER_PASSWORD_KEY]);
+  } catch {
+    return "";
+  }
+}
+
+/** Persists OpenCode server password to dedicated secrets storage. */
+export async function saveOpencodeServerPassword(password: string): Promise<void> {
+  const path = await getSecretsPath();
+  let existing: ProviderSecretsFileV1 = { version: 1, keys: {} };
+  try {
+    const raw = await readTextFile(path);
+    existing = normalizeSecretsFile(JSON.parse(raw));
+  } catch {
+    // Start fresh when the secrets file is missing or invalid.
+  }
+
+  const keys = { ...existing.keys };
+  const trimmed = password.trim();
+  if (trimmed.length === 0) {
+    delete keys[OPENCODE_SERVER_PASSWORD_KEY];
+  } else {
+    keys[OPENCODE_SERVER_PASSWORD_KEY] = trimmed;
+  }
+
+  const payload: ProviderSecretsFileV1 = {
+    version: 1,
+    keys,
+  };
+  await writeTextFile(path, JSON.stringify(payload, null, 2));
 }
 
 /** @deprecated Use `loadConnectionApiKey`. */

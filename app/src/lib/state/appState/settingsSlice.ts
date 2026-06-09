@@ -5,6 +5,8 @@ import type {
   CommandBindingOverrides,
   ExternalFilesSettings,
   LogSettings,
+  OpencodeHealthState,
+  OpencodeSettings,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
 import {
@@ -26,6 +28,7 @@ import { defaultLogSettings, normalizeLogSettings } from "../../services/logSett
 import { createChatModesSettingsSlice } from "./chatModesSettingsSlice";
 import { createLogSettingsSlice, type SettingsUpdate } from "./logSettingsSlice";
 import { createProviderSettingsSlice } from "./providerSettingsSlice";
+import { defaultOpencodeSettings, normalizeOpencodeSettings } from "../../services/opencodeSettings";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -41,6 +44,13 @@ export const defaultSettings: AppSettingsState = {
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
+  opencode: defaultOpencodeSettings,
+  opencodeHealth: {
+    status: "unknown",
+    source: null,
+    checkedAt: null,
+    lastErrorMessage: null,
+  },
   commandBindingOverrides: {},
   logSettings: defaultLogSettings,
   chatModes: defaultChatModesSettings,
@@ -100,6 +110,8 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
       hideActivityRailWhenNotepadOnly?: boolean;
+      opencode?: Partial<OpencodeSettings>;
+      opencodeHealth?: Partial<OpencodeHealthState>;
       logSettings?: Partial<LogSettings>;
       chatModes?: Partial<AppSettingsState["chatModes"]>;
       providerSettings?: Partial<AppProviderSettings>;
@@ -144,6 +156,30 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             settings: {
               ...next.settings,
               hideActivityRailWhenNotepadOnly: partial.hideActivityRailWhenNotepadOnly,
+            },
+          };
+        }
+        if (partial.opencode) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              opencode: normalizeOpencodeSettings({
+                ...next.settings.opencode,
+                ...partial.opencode,
+              }),
+            },
+          };
+        }
+        if (partial.opencodeHealth) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              opencodeHealth: {
+                ...next.settings.opencodeHealth,
+                ...partial.opencodeHealth,
+              },
             },
           };
         }

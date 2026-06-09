@@ -30,6 +30,7 @@
   import { deriveAppShellDocumentView } from "../lib/services/appShellDocumentView";
   import { createWorkspaceContextMenuActions } from "../lib/services/workspaceContextMenuController";
   import {
+    requestOpencodeHealthRefresh,
     syncActiveFileTreeExpandEffect,
     syncAgentTabEffect,
     syncChatAccessMonitorEffect,
@@ -112,6 +113,8 @@
   );
   const workspaceAgents = $derived($chatAgentIndex);
   const selectedAgentId = $derived($chatActiveAgentId);
+  const opencodeMode = $derived(snapshot.settings.opencode.mode);
+  const opencodeBaseUrl = $derived(snapshot.settings.opencode.baseUrl);
   const showActivityRail = $derived(
     !(
       snapshot.settings.hideActivityRailWhenNotepadOnly &&
@@ -415,6 +418,9 @@
       runtimeReady,
       activeWorkspaceRoot,
       isChatHttpActive,
+      opencodeMode,
+      opencodeBaseUrl,
+      setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
     });
     syncProjectTreeWatcherEffect({
       runtimeReady,
@@ -428,6 +434,20 @@
       isChatHttpActive,
       activeWorkspaceRoot,
       projectTreeController,
+    });
+  });
+
+  $effect(() => {
+    runtimeReady;
+    opencodeMode;
+    opencodeBaseUrl;
+    if (!runtimeReady) {
+      return;
+    }
+    requestOpencodeHealthRefresh({
+      opencodeMode,
+      opencodeBaseUrl,
+      setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
     });
   });
 

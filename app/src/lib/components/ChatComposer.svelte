@@ -256,40 +256,44 @@
     disabled={composerDisabled}
   ></textarea>
   <div class="chat-composer-actions">
-    {#if canRetryLastTurn}
+    <div class="chat-composer-toolbar">
+      <ChatModePicker
+        {availableModes}
+        {activeMode}
+        disabled={isModeSelectionDisabled}
+        onSelectMode={selectMode}
+      />
+      <ChatConnectionPicker
+        {availableConnections}
+        {activeConnectionSelection}
+        {availableModels}
+        {activeModel}
+        connectionDisabled={isProviderSelectionDisabled}
+        modelDisabled={isModelSelectionDisabled}
+        onSelectConnection={(value) => void selectConnection(value)}
+        onSelectModel={(value) => void selectModel(value)}
+      />
+    </div>
+    <div class="chat-composer-controls">
+      {#if canRetryLastTurn}
+        <button
+          type="button"
+          class="chat-retry-button"
+          onclick={() => void retryLastTurn()}
+          disabled={isRetryDisabled}
+        >
+          {retrying ? "Retrying…" : "Retry"}
+        </button>
+      {/if}
       <button
         type="button"
-        class="chat-retry-button"
-        onclick={() => void retryLastTurn()}
-        disabled={isRetryDisabled}
+        class="chat-send-button"
+        onclick={() => void submitMessage()}
+        disabled={isSendDisabled}
       >
-        {retrying ? "Retrying…" : "Retry"}
+        {isGenerating ? "Generating…" : "Send"}
       </button>
-    {/if}
-    <button
-      type="button"
-      class="chat-send-button"
-      onclick={() => void submitMessage()}
-      disabled={isSendDisabled}
-    >
-      {isGenerating ? "Generating…" : "Send"}
-    </button>
-    <ChatConnectionPicker
-      {availableConnections}
-      {activeConnectionSelection}
-      {availableModels}
-      {activeModel}
-      connectionDisabled={isProviderSelectionDisabled}
-      modelDisabled={isModelSelectionDisabled}
-      onSelectConnection={(value) => void selectConnection(value)}
-      onSelectModel={(value) => void selectModel(value)}
-    />
-    <ChatModePicker
-      {availableModes}
-      {activeMode}
-      disabled={isModeSelectionDisabled}
-      onSelectMode={selectMode}
-    />
+    </div>
     {#if generationStatus}
       <span class="chat-assistant-status" role="status">{generationStatus}</span>
     {/if}

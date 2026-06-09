@@ -57,11 +57,25 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--space-6);
+}
+
+.chat-composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.chat-composer-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-left: auto;
 }
 
 .chat-composer-actions .chat-assistant-status {
-  margin-left: auto;
+  flex: 1 1 100%;
 }
 
 .chat-send-button {
@@ -117,8 +131,13 @@
     gap: var(--space-4);
   }
 
-  .chat-composer-actions .chat-assistant-status {
+  .chat-composer-toolbar {
+    flex: 1 1 100%;
+  }
+
+  .chat-composer-controls {
     margin-left: 0;
     flex: 1 1 100%;
+    justify-content: flex-end;
   }
 }

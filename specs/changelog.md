@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-06-09 10:00
+
+- **Chat UI:** Composer toolbar simplified — removed Connection, Model, and Mode text labels; mode picker is now a dropdown on the left; connection/model selects sit beside it; Send (and Retry) moved to the right. Applies to both agent and chat-http composers.
+
+## 2026-06-08 15:00
+
+- **Chat modes (token optimization):** Removed duplicated Review section headings from `REVIEW_MODE_SYSTEM_PROMPT`; `sectionInstructions()` via `requiredSections` is now the single source. Added `{{workspace}}` and `{{summary}}` placeholders to Ask, Review, and Raw built-in prompt templates so context toggles affect outgoing system prompts.
+
+## 2026-06-08 14:30
+
+- **Docs:** `phase-2.5-token-ideas.md` — Open questions expanded with answer options and recommended choices.
+
+## 2026-06-08 14:00
+
+- **Docs:** `phase-2.5-token-ideas.md` — added **What to implement** under each gap in “What is missing or weak”; aligned prioritized table Idea column with those section names.
+
+## 2026-06-08 13:00
+
+- **Docs:** Split phase-2.5 backlog into `phase-2.5-token-ideas.md` (detailed token optimization notes) and `phase-2.5-ux-ideas.md` (UX ideas updated for tile grid + editor dialog settings). `phase-2.5-ideas.md` is now an index.
+
+## 2026-06-08 12:30
+
+- **Docs:** Added `specs/ops/phase-2.5/phase-2.5-ideas.md` — backlog of chat-mode token-efficiency gaps and UI/UX improvements (post-M5 review).
+
 ## 2026-06-08 12:00
 
 - **Settings UI:** Settings window is 50% wider by default. Opening settings shows a full-window backdrop that blocks interaction with the main app; keyboard shortcuts are suppressed except toggling settings closed.

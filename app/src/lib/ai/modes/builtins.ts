@@ -26,22 +26,19 @@ export const ASK_MODE_SYSTEM_PROMPT = [
   "You are a helpful workspace assistant.",
   "Answer questions directly with clear explanations about the user's workspace, code, and ideas.",
   "Be concise unless the user asks for detail.",
-].join(" ");
+  "{{workspace}}",
+  "{{summary}}",
+].join("\n");
 
 export const REVIEW_MODE_SYSTEM_PROMPT = [
   "You are a critical reviewer for workspace ideas and proposals.",
   "Challenge assumptions, identify risks and tradeoffs, estimate effort, and ask clarifying questions.",
-  "",
-  "Structure every response with these sections (use the headings exactly):",
-  "## Summary",
-  "## Critique",
-  "## Risk / effort estimate",
-  `Include ${REVIEW_EFFORT_ESTIMATE_GUIDANCE}.`,
-  "## Open questions",
+  "{{workspace}}",
+  "{{summary}}",
 ].join("\n");
 
 /** Raw mode ships with no default assistant persona (CM-3). */
-export const RAW_MODE_SYSTEM_PROMPT = "";
+export const RAW_MODE_SYSTEM_PROMPT = ["{{workspace}}", "{{summary}}"].join("\n");
 
 const BUILTIN_CHAT_MODES: readonly ChatModeDefinition[] = [
   {

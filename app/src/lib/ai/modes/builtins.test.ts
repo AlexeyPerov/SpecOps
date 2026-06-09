@@ -90,15 +90,26 @@ describe("builtin chat modes", () => {
     ]);
   });
 
-  it("requires review sections and T-shirt/confidence wording in the system prompt", () => {
+  it("does not duplicate review sections in the built-in template", () => {
+    expect(REVIEW_MODE_SYSTEM_PROMPT).not.toContain("## Summary");
+    expect(REVIEW_MODE_SYSTEM_PROMPT).not.toContain("Structure every response");
+  });
+
+  it("requires review sections and T-shirt/confidence wording in resolved system text", () => {
+    const prompt = resolveModeSystemText(resolveChatMode("review", defaultSettings), {
+      workspaceRootPath: "/work/spec-ops",
+      workspaceName: "spec-ops",
+      scopeKind: "workspace",
+    });
+
     for (const section of REVIEW_REQUIRED_SECTIONS) {
-      expect(REVIEW_MODE_SYSTEM_PROMPT).toContain(section);
+      expect(prompt).toContain(section);
     }
-    expect(REVIEW_MODE_SYSTEM_PROMPT).toContain("## Summary");
-    expect(REVIEW_MODE_SYSTEM_PROMPT).toContain("## Critique");
-    expect(REVIEW_MODE_SYSTEM_PROMPT).toContain("## Risk / effort estimate");
-    expect(REVIEW_MODE_SYSTEM_PROMPT).toContain("## Open questions");
-    expect(REVIEW_MODE_SYSTEM_PROMPT).toContain(REVIEW_EFFORT_ESTIMATE_GUIDANCE);
+    expect(prompt).toContain("## Summary");
+    expect(prompt).toContain("## Critique");
+    expect(prompt).toContain("## Risk / effort estimate");
+    expect(prompt).toContain("## Open questions");
+    expect(prompt).toContain(REVIEW_EFFORT_ESTIMATE_GUIDANCE);
     expect(REVIEW_EFFORT_ESTIMATE_GUIDANCE).toMatch(/T-shirt size/i);
     expect(REVIEW_EFFORT_ESTIMATE_GUIDANCE).toMatch(/confidence level/i);
   });
@@ -138,7 +149,9 @@ describe("mode-aware prompt assembly", () => {
     const payload = buildThreadProviderRequest(threadSnapshot("ask"), "/work/a", defaultSettings, "workspace");
 
     expect(payload.mode).toBe("ask");
-    expect(payload.systemPrompt).toContain(ASK_MODE_SYSTEM_PROMPT);
+    expect(payload.systemPrompt).toContain("helpful workspace assistant");
+    expect(payload.systemPrompt).toContain("Workspace: a (/work/a)");
+    expect(payload.systemPrompt).toContain("Earlier conversation summary:\nEarlier context");
   });
 
   it("matches buildProviderRequestWithMode for direct inputs", () => {
@@ -182,9 +195,25 @@ describe("mode-aware prompt assembly", () => {
       scopeKind: "workspace",
     });
 
-    expect(prompt).toBe(ASK_MODE_SYSTEM_PROMPT);
+    expect(prompt).toContain("helpful workspace assistant");
     expect(prompt).not.toContain("Workspace:");
     expect(prompt).not.toContain("Earlier conversation summary:");
+    expect(prompt).not.toContain("{{workspace}}");
+    expect(prompt).not.toContain("{{summary}}");
+  });
+
+  it("substitutes built-in workspace and summary placeholders when toggles are on", () => {
+    const prompt = resolveModeSystemText(resolveChatMode("ask", defaultSettings), {
+      workspaceRootPath: "/work/spec-ops",
+      workspaceName: "spec-ops",
+      summary: "Compacted context",
+      scopeKind: "workspace",
+    });
+
+    expect(prompt).toContain("Workspace: spec-ops (/work/spec-ops)");
+    expect(prompt).toContain("Earlier conversation summary:\nCompacted context");
+    expect(prompt).not.toContain("{{workspace}}");
+    expect(prompt).not.toContain("{{summary}}");
   });
 
   it("substitutes custom placeholders from mode toggles", () => {

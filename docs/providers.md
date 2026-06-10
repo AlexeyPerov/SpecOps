@@ -1,6 +1,8 @@
 # Chat providers — HTTP connection integration
 
-SpecOps routes workspace AI chat through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings -> Connections**. **Debug** is a settings-gated local simulator for development.
+SpecOps routes **Chat context** (`chat-http`) AI through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings -> Connections**. **Debug** is a settings-gated local simulator for development.
+
+**Workspace contexts** (`ws-*`) use the **OpenCode** backend exclusively — they do not route through the HTTP provider registry. See [phase-3 spec](../specs/ops/phase-3/phase-3.md) for OpenCode integration details.
 
 ## Provider abstraction
 
@@ -207,7 +209,7 @@ These are common on OpenAI-compatible platforms but **absent from the codebase**
 
 | Id | Status |
 | --- | --- |
-| `http` | Implemented (`openAiCompatibleChatProvider.ts`) |
+| `http` | Implemented (`openAiCompatibleChatProvider.ts`); **Chat context only** |
 | `debug` | Implemented (`debugChatProvider.ts`); dev-only |
 
 ## Error and validation flow

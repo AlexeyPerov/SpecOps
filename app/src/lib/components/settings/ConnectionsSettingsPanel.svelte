@@ -272,14 +272,14 @@
 <section class="settings-section">
   <h3>Providers</h3>
   <p class="settings-section-note">
-    HTTP (OpenAI-compatible) connections. API keys are stored in a separate secrets file and are
-    never written to chat history or diagnostics.
+    HTTP (OpenAI-compatible) connections for Chat context. API keys are stored in a separate secrets
+    file and are never written to chat history or diagnostics.
   </p>
   <div class="settings-subsection">
     <h4>Connection list</h4>
     <button type="button" class="settings-action" onclick={addHttpConnection}>Add connection</button>
     {#if httpConnections().length === 0}
-      <p class="settings-section-note">No providers configured yet. Add one to enable HTTP chat.</p>
+      <p class="settings-section-note">No providers configured yet. Add one to enable Chat context.</p>
     {:else}
       <div class="connection-list" role="listbox" aria-label="HTTP connections">
         {#each httpConnections() as connection (connection.id)}
@@ -411,7 +411,7 @@
 <section class="settings-section">
   <h3>Workspaces / OpenCode</h3>
   <p class="settings-section-note">
-    Configure workspace transport for OpenCode sidecar or remote URL mode.
+    Workspace agents use the OpenCode backend. Configure transport mode and server health here.
   </p>
   <div class="settings-subsection">
     <h4>Transport</h4>

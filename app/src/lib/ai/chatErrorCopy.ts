@@ -55,18 +55,18 @@ export const DEBUG_PROVIDER_DISABLED_RECOVERY = DEBUG_AI_PROVIDER_DISABLED_RECOV
 export const PROVIDER_UNAVAILABLE_MESSAGE = "The selected provider is not available.";
 
 export const PROVIDER_UNAVAILABLE_RECOVERY =
-  "Choose HTTP or enable the scoped debug provider in Settings.";
+  "Enable a configured provider in Settings or switch to a supported provider.";
 
 export const PROVIDER_UNSUPPORTED_ACCESS_MESSAGE =
   "The selected provider cannot read files in this workspace.";
 
 export const PROVIDER_UNSUPPORTED_ACCESS_RECOVERY =
-  "Choose HTTP or enable Debug Provider in Settings → Workspaces → Debug Provider.";
+  "Switch to a provider that supports workspace file access, or enable Debug Provider in Settings → Workspaces → Debug Provider.";
 
-export const PROVIDER_NOT_REGISTERED_MESSAGE = "The debug provider is not ready yet.";
+export const PROVIDER_NOT_REGISTERED_MESSAGE = "The selected provider is not ready yet.";
 
 export const PROVIDER_NOT_REGISTERED_RECOVERY =
-  "Restart the app. If the problem continues, choose HTTP instead.";
+  "Restart the app. If the problem continues, check your provider settings.";
 
 export const PROVIDER_REQUEST_FAILURE_MESSAGE = "The assistant could not finish this response.";
 

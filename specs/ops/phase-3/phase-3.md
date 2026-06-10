@@ -86,7 +86,7 @@ Required before removing workspace `ChatProvider` HTTP:
 ### Remove workspace HTTP
 
 - `sendChatMessage` / `ChatProvider` not used for `ws-*` contexts.
-- Document breaking change: old workspace threads not migrated (E2A).
+- **Breaking change (E2A):** legacy workspace thread JSON (from pre-phase-3 HTTP chat) is **not imported or migrated** to OpenCode sessions. Existing workspace chat history from the HTTP provider era will not appear in workspace agent tabs after the cutover. This is intentional — no backward-compat migration shims are added.
 
 ### Settings
 
@@ -138,6 +138,7 @@ See [roadmap.md](../roadmap.md#end-user--opencode-workspace-e1c).
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | Added breaking-change note for E2A: legacy workspace HTTP threads not migrated to OpenCode sessions |
 | 2026-06-09 | Added M1.5 contract-alignment bridge and OpenCode integration docs |
 | 2026-06-09 | Swapped with former phase 4 (OpenCode now phase 3) |
 | 2026-06-04 | Initial phase 4 spec |

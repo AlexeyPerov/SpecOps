@@ -129,7 +129,7 @@ Implementation is split into colocated modules under `app/src/lib/state/appState
 Workspace-scoped chat:
 
 - Agent index, per-agent `ChatThreadSnapshot`, runtime (generating, last error)
-- Access preflight (`runAccessPreflight`) — provider capabilities + workspace path readability
+- Access preflight (`runAccessPreflight`) — for Chat context: provider capabilities; for Workspace context: OpenCode backend readiness + workspace path readability
 - Provider/model switches append **`ChatSystemEvent`** messages to the thread
 
 Implementation is split into colocated modules under `app/src/lib/state/chatStore/`:
@@ -148,7 +148,7 @@ Chat providers are registered at startup via `initializeChatProviders()` in `app
 ## Send pipeline (high level)
 
 1. UI calls `sendChatMessage` / `retryLastChatTurn` (`app/src/lib/ai/sendChatMessage.ts`).
-2. Validates provider (debug enabled, HTTP configured), model catalog, access preflight.
+2. **Chat context:** validates provider (debug enabled, HTTP configured), model catalog, access preflight. **Workspace context:** validates OpenCode backend readiness and model availability via OpenCode catalog.
 3. Appends user message; begins turn; builds **`ProviderRequestPayload`** via `buildThreadProviderRequest`.
 4. **`streamProviderMessage`** (`chatSend.ts`) — uses `streamMessage` when available (Debug + HTTP SSE), else buffered `sendMessage`.
 5. Updates assistant placeholder; compacts thread if needed; debounced persist.

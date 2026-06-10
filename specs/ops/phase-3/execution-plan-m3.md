@@ -103,7 +103,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 3: Breaking-change docs and user-facing notes (P3-7, E2A) [Score:6] [Agent:easy]
+#### Task 3: Breaking-change docs and user-facing notes (P3-7, E2A) [Score:6] [Agent:easy] [DONE]
 
 **Required context**
 
@@ -201,7 +201,7 @@ Task 1 → Task 2 → Task 3 → Task 4 → Task 5
 
 - [ ] Open workspace -> agent turn runs via OpenCode with tools on disk.
 - [ ] Permission prompt blocks and resolves in UI.
-- [ ] Workspace composer does not call HTTP `ChatProvider`.
+- [x] Workspace composer does not call HTTP `ChatProvider`.
 - [ ] Chat and Cloud contexts still work.
 - [ ] `npm test` / `npm run check`; manual smoke on real folder.
 

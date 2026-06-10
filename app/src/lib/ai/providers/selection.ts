@@ -45,10 +45,13 @@ const PROVIDER_LABELS: Record<ChatProviderId, string> = {
 };
 
 /**
- * Default provider precedence for new threads:
+ * Default provider precedence for new Chat context (`chat-http`) threads:
  * 1. HTTP when configured (settings + API key)
  * 2. Scoped debug provider when enabled in settings
  * 3. HTTP as product default fallback
+ *
+ * Workspace (`ws-*`) contexts route through the OpenCode backend and do not
+ * use this provider selection logic for sending.
  */
 export function isHttpProviderConfigured(
   providerSettings: AppProviderSettings,

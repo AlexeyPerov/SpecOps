@@ -9,6 +9,7 @@ import { activeAgentId } from "./workspace";
 export function defaultRuntimeState(): ChatThreadRuntimeState {
   return {
     isGenerating: false,
+    isWaitingForPermission: false,
     lastFailedTurnId: null,
     lastError: null,
     activeTurnId: null,
@@ -164,6 +165,7 @@ export function createRuntimeSlice(deps: {
       }
       return updateAgentRuntime(targetAgentId, () => ({
         isGenerating: true,
+        isWaitingForPermission: false,
         activeTurnId: turnId,
         lastFailedTurnId: null,
         lastError: null,
@@ -203,6 +205,7 @@ export function createRuntimeSlice(deps: {
         targetAgentId,
         () => ({
           isGenerating: false,
+          isWaitingForPermission: false,
           activeTurnId: null,
           lastFailedTurnId: failedTurnId,
           lastError: { ...error },
@@ -213,6 +216,12 @@ export function createRuntimeSlice(deps: {
     canRetryLastTurn(agentId?: string): boolean {
       const runtime = this.getRuntimeState(agentId);
       return runtime.lastFailedTurnId !== null && !runtime.isGenerating;
+    },
+    setWaitingForPermission(agentId: string, waiting: boolean, workspaceRoot?: string | null): boolean {
+      return updateAgentRuntime(agentId, (current) => ({
+        ...current,
+        isWaitingForPermission: waiting,
+      }), workspaceRoot);
     },
   };
 }

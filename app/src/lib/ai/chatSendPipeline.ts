@@ -32,6 +32,8 @@ import {
   applyToolProgress,
   applyToolStarted,
 } from "./toolCallReducer";
+import { promptPermission } from "../services/permissionPrompt";
+import type { WorkspacePermissionReply } from "./backends/workspaceAgentBackend";
 import type { WorkspaceAccessStatus } from "./capabilities";
 import {
   logChatProviderPayload,
@@ -708,6 +710,34 @@ async function executeWorkspaceAgentBackendTurn(params: {
       }
       if (event.type === "run.failed") {
         throw new Error(event.message);
+      }
+      if (event.type === "permission.requested") {
+        assertTurnStillActive(root, activeAgentId, turnId);
+        chatStore.setWaitingForPermission(activeAgentId, true, root);
+        const result = await promptPermission({
+          permissionId: event.permissionId,
+          label: event.label,
+          payload: event.payload,
+        });
+        chatStore.setWaitingForPermission(activeAgentId, false, root);
+        assertTurnStillActive(root, activeAgentId, turnId);
+        try {
+          await backend.replyPermission({
+            workspaceRootPath: root,
+            sessionId: run.sessionId,
+            requestId: event.permissionId,
+            reply: result.reply as WorkspacePermissionReply,
+          });
+        } catch (replyError: unknown) {
+          if (
+            replyError instanceof WorkspaceAgentBackendError &&
+            replyError.code === "notFound"
+          ) {
+            break;
+          }
+          throw replyError;
+        }
+        continue;
       }
     }
 

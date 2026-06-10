@@ -50,6 +50,7 @@ export interface ChatTurnError {
 /** Ephemeral per-agent chat runtime; not persisted to disk. */
 export interface ChatThreadRuntimeState {
   isGenerating: boolean;
+  isWaitingForPermission: boolean;
   lastFailedTurnId: string | null;
   lastError: ChatTurnError | null;
   activeTurnId: string | null;

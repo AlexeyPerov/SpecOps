@@ -108,7 +108,7 @@ Dependencies: Task 1 re-verified after M1.5.
 
 ---
 
-#### Task 3: Permission request modal + reply plumbing (P3-5 partial) [Score:9] [Agent:heavy]
+#### Task 3: Permission request modal + reply plumbing (P3-5 partial) [Score:9] [Agent:heavy] [DONE]
 
 **Required context**
 

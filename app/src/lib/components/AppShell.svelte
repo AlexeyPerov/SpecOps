@@ -8,6 +8,7 @@
   import ConsolePanel from "./ConsolePanel.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
+  import PermissionPrompt from "./PermissionPrompt.svelte";
   import ThemePane from "./ThemePane.svelte";
   import FindReplacePanel from "./FindReplacePanel.svelte";
   import TabBar from "./TabBar.svelte";
@@ -439,6 +440,7 @@
 />
 
 <EntryNamePrompt onNotify={overlays.notify} />
+<PermissionPrompt />
 
 {#if workspaceContextMenu.menu}
   <div

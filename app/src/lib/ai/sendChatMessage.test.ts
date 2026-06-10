@@ -23,6 +23,7 @@ import { sendChatMessage, retryLastChatTurn } from "./sendChatMessage";
 import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { createWorkspaceAgentBackend } from "./backends/workspaceAgentBackend";
+import { promptPermission } from "../services/permissionPrompt";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
@@ -44,9 +45,25 @@ vi.mock("./backends/workspaceAgentBackend", async (importOriginal) => {
   };
 });
 
+vi.mock("../services/permissionPrompt", () => ({
+  promptPermission: vi.fn(),
+}));
+
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 const createWorkspaceAgentBackendMock = vi.mocked(createWorkspaceAgentBackend);
+const promptPermissionMock = vi.mocked(promptPermission);
+
+function ensureWorkspaceContext(root: string): void {
+  const snapshot = appState.getSnapshot();
+  const existing = snapshot.contexts.workspaces.find((w) => w.rootPath === root);
+  if (existing) {
+    appState.switchContext(existing.id);
+  } else {
+    const created = appState.addWorkspace(root);
+    if (created) appState.switchContext(created);
+  }
+}
 
 function httpFetchStreamSuccess(content: string): typeof fetch {
   return vi.fn().mockResolvedValue(
@@ -73,6 +90,7 @@ describe("sendChatMessage", () => {
     schedulePersistMock.mockReset();
     ensureWorkspaceReadAccessMock.mockReset();
     createWorkspaceAgentBackendMock.mockReset();
+    promptPermissionMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
     const debugSettings = {
       ...defaultDebugProviderSettings,
@@ -591,6 +609,257 @@ describe("sendChatMessage", () => {
 
     expect(result.ok).toBe(true);
     expect(createWorkspaceAgentBackendMock).not.toHaveBeenCalled();
+  });
+
+  it("handles permission.requested event and sends reply to backend", async () => {
+    ensureWorkspaceContext("/work/a");
+    const replyPermission = vi.fn().mockResolvedValue(undefined);
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield { type: "message.delta", delta: "Starting " };
+      yield {
+        type: "permission.requested",
+        permissionId: "perm-1",
+        label: "Run shell: ls",
+        payload: { tool: "shell", command: "ls" },
+      };
+      yield { type: "message.delta", delta: "done" };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission,
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptPermissionMock.mockResolvedValue({ reply: "once" });
+
+    const result = await sendChatMessage("Needs permission");
+
+    expect(result.ok).toBe(true);
+    expect(promptPermissionMock).toHaveBeenCalledWith({
+      permissionId: "perm-1",
+      label: "Run shell: ls",
+      payload: { tool: "shell", command: "ls" },
+    });
+    expect(replyPermission).toHaveBeenCalledWith({
+      workspaceRootPath: "/work/a",
+      sessionId: "sess-1",
+      requestId: "perm-1",
+      reply: "once",
+    });
+    expect(
+      chatStore.getMessages().find((message) => message.role === "assistant")?.content,
+    ).toBe("Starting done");
+  });
+
+  it("sends reject when permission prompt is denied", async () => {
+    ensureWorkspaceContext("/work/a");
+    const replyPermission = vi.fn().mockResolvedValue(undefined);
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "permission.requested",
+        permissionId: "perm-2",
+        label: "Delete file",
+        payload: null,
+      };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission,
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptPermissionMock.mockResolvedValue({ reply: "reject" });
+
+    const result = await sendChatMessage("Deny this");
+
+    expect(result.ok).toBe(true);
+    expect(replyPermission).toHaveBeenCalledWith({
+      workspaceRootPath: "/work/a",
+      sessionId: "sess-1",
+      requestId: "perm-2",
+      reply: "reject",
+    });
+  });
+
+  it("sends always-allow reply and continues streaming", async () => {
+    ensureWorkspaceContext("/work/a");
+    const replyPermission = vi.fn().mockResolvedValue(undefined);
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "permission.requested",
+        permissionId: "perm-3",
+        label: "Read file",
+        payload: null,
+      };
+      yield { type: "message.delta", delta: "allowed" };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission,
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptPermissionMock.mockResolvedValue({ reply: "always" });
+
+    const result = await sendChatMessage("Always allow");
+
+    expect(result.ok).toBe(true);
+    expect(replyPermission).toHaveBeenCalledWith({
+      workspaceRootPath: "/work/a",
+      sessionId: "sess-1",
+      requestId: "perm-3",
+      reply: "always",
+    });
+    expect(
+      chatStore.getMessages().find((message) => message.role === "assistant")?.content,
+    ).toBe("allowed");
+  });
+
+  it("handles multiple permission requests in sequence (FIFO)", async () => {
+    ensureWorkspaceContext("/work/a");
+    const replyPermission = vi.fn().mockResolvedValue(undefined);
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "permission.requested",
+        permissionId: "perm-a",
+        label: "First action",
+        payload: null,
+      };
+      yield {
+        type: "permission.requested",
+        permissionId: "perm-b",
+        label: "Second action",
+        payload: null,
+      };
+      yield { type: "message.delta", delta: "both approved" };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission,
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptPermissionMock.mockResolvedValue({ reply: "once" });
+
+    const result = await sendChatMessage("Multiple permissions");
+
+    expect(result.ok).toBe(true);
+    expect(promptPermissionMock).toHaveBeenCalledTimes(2);
+    expect(promptPermissionMock).toHaveBeenNthCalledWith(1, {
+      permissionId: "perm-a",
+      label: "First action",
+      payload: null,
+    });
+    expect(promptPermissionMock).toHaveBeenNthCalledWith(2, {
+      permissionId: "perm-b",
+      label: "Second action",
+      payload: null,
+    });
+    expect(replyPermission).toHaveBeenCalledTimes(2);
+  });
+
+  it("continues stream when permission reply hits notFound", async () => {
+    ensureWorkspaceContext("/work/a");
+    const { WorkspaceAgentBackendError } = await import("./backends/workspaceAgentBackend");
+    const replyPermission = vi.fn().mockRejectedValue(
+      new WorkspaceAgentBackendError({ code: "notFound", message: "gone" }),
+    );
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "permission.requested",
+        permissionId: "perm-gone",
+        label: "Stale",
+        payload: null,
+      };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission,
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptPermissionMock.mockResolvedValue({ reply: "once" });
+
+    const result = await sendChatMessage("Stale permission");
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("sets isWaitingForPermission during permission prompt", async () => {
+    ensureWorkspaceContext("/work/a");
+    let wasWaitingDuringPrompt = false;
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "permission.requested",
+        permissionId: "perm-w",
+        label: "Check wait state",
+        payload: null,
+      };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn().mockResolvedValue(undefined),
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptPermissionMock.mockImplementation(async () => {
+      wasWaitingDuringPrompt = chatStore.getRuntimeState().isWaitingForPermission;
+      return { reply: "once" };
+    });
+
+    const result = await sendChatMessage("Wait state check");
+
+    expect(result.ok).toBe(true);
+    expect(wasWaitingDuringPrompt).toBe(true);
+    expect(chatStore.getRuntimeState().isWaitingForPermission).toBe(false);
   });
 
 });

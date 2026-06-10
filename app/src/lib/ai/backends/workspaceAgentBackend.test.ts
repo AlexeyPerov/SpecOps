@@ -185,7 +185,6 @@ describe("workspaceAgentBackend", () => {
       },
       {
         type: "run.completed",
-        runId: null,
       },
     ]);
   });
@@ -262,8 +261,65 @@ describe("workspaceAgentBackend", () => {
       },
       {
         type: "run.failed",
-        runId: null,
         message: "boom",
+      },
+    ]);
+  });
+
+  it("deduplicates repeated stream ids and supports out-of-order tool completion", async () => {
+    const { backend } = createOpencodeBackendForTests({
+      streamEvents: [
+        {
+          id: "evt-1",
+          type: "session.next.text.delta",
+          data: { delta: "A" },
+        },
+        {
+          id: "evt-1",
+          type: "session.next.text.delta",
+          data: { delta: "A" },
+        },
+        {
+          id: "evt-2",
+          type: "session.next.tool.success",
+          data: { tool: "read_file", callID: "call-9", result: { ok: true } },
+        },
+        {
+          id: "evt-3",
+          type: "session.next.tool.progress",
+          data: { tool: "read_file", callID: "call-9", progress: { pct: 50 } },
+        },
+      ],
+    });
+
+    const seen: WorkspaceAgentStreamEvent[] = [];
+    for await (const event of backend.streamEvents({
+      workspaceRootPath: "/tmp/workspace",
+      sessionId: "sess-1",
+    })) {
+      seen.push(event);
+    }
+
+    expect(seen).toEqual([
+      { type: "message.delta", delta: "A" },
+      {
+        type: "tool.started",
+        toolName: "read_file",
+        callId: "call-9",
+        input: null,
+      },
+      {
+        type: "tool.completed",
+        toolName: "read_file",
+        callId: "call-9",
+        output: { ok: true },
+        isError: false,
+      },
+      {
+        type: "tool.progress",
+        toolName: "read_file",
+        callId: "call-9",
+        output: { pct: 50 },
       },
     ]);
   });

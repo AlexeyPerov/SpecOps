@@ -93,7 +93,7 @@ Dependencies: Task 1.
 
 ---
 
-#### Task 3: Exact event normalization rewrite (P3-4 foundation) [Score:9] [Agent:heavy]
+#### Task 3: Exact event normalization rewrite (P3-4 foundation) [Score:9] [Agent:heavy] [DONE]
 
 **Required context**
 

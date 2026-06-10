@@ -498,7 +498,7 @@ describe("sendChatMessage", () => {
     const streamEvents = vi.fn().mockImplementation(async function* () {
       yield { type: "message.delta", delta: "OpenCode " };
       yield { type: "message.delta", delta: "stream" };
-      yield { type: "run.completed", runId: null };
+      yield { type: "run.completed" };
     });
     createWorkspaceAgentBackendMock.mockReturnValue({
       id: "opencode",

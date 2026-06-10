@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-10 11:49
+
+- **Exact event normalization rewrite (phase 3 M1.5 task 3):** Reworked OpenCode stream normalization in `workspaceAgentBackend` to follow the phase-3 spec exactly: strict `data`/`properties` envelope parsing, v2-only permission/question mapping, optional `tool.progress`, deterministic dedup by frame id with composite fallback (`type + sessionID + callID + timestamp`), and out-of-order tool lifecycle recovery by emitting synthetic `tool.started` before terminal tool events. Added diagnostic logging for unknown and malformed frames without failing stream consumption, removed `runId` assumptions from normalized `run.completed`/`run.failed` events, updated workspace streaming tests (including duplicate and out-of-order cases), and marked M1.5 Task 3 as `[DONE]` in `execution-plan-m1-5.md`.
+
 ## 2026-06-10 11:48
 
 - **Workspace backend contract correction (phase 3 M1.5 task 2):** Reworked `workspaceAgentBackend` and workspace send pipeline to remove run-endpoint assumptions and align with OpenCode canonical contract: session CRUD now uses `/session` + `/api/session`, prompt send uses `/api/session/{sessionID}/prompt`, and streaming uses canonical `/api/event` envelope with bridged `/event` fallback. Updated event normalization to v2 stream types (`session.next.*`, `permission.v2.asked`, `question.v2.asked`, `session.status/session.idle`, `session.error`) and removed `runId` dependency from workspace chat send flow. Refreshed backend/send tests for the new prompt+session-stream semantics and marked M1.5 Task 2 as `[DONE]` in `execution-plan-m1-5.md`.

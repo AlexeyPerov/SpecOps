@@ -1,5 +1,6 @@
 import { attachOpencodeSidecarWorkspace } from "../../services/opencodeSidecar";
 import type { OpencodeTransportMode } from "../../domain/contracts";
+import { logDiagnostic } from "../../services/logging";
 
 export type WorkspaceAgentBackendId = "opencode" | "cursor-local";
 
@@ -44,6 +45,12 @@ export type WorkspaceAgentStreamEvent =
       isError: boolean;
     }
   | {
+      type: "tool.progress";
+      toolName: string;
+      callId: string | null;
+      output: unknown;
+    }
+  | {
       type: "permission.requested";
       permissionId: string;
       label: string;
@@ -58,11 +65,9 @@ export type WorkspaceAgentStreamEvent =
     }
   | {
       type: "run.completed";
-      runId: string | null;
     }
   | {
       type: "run.failed";
-      runId: string | null;
       message: string;
     };
 
@@ -218,114 +223,267 @@ function mapRunResult(raw: unknown, sessionId: string): WorkspaceAgentRunResult 
   };
 }
 
-function mapStreamEvent(raw: unknown): WorkspaceAgentStreamEvent | null {
+interface StreamNormalizationState {
+  seenEventKeys: Set<string>;
+  startedToolCallKeys: Set<string>;
+}
+
+function emitStreamNormalizationDiagnostic(input: {
+  reason: string;
+  level?: "debug" | "warn";
+  frame?: unknown;
+  payload?: unknown;
+  type?: string;
+}): void {
+  void logDiagnostic({
+    level: input.level ?? "debug",
+    source: "frontend",
+    timestamp: new Date().toISOString(),
+    message: "workspace agent stream normalization",
+    metadata: {
+      kind: "workspace.agent.stream.normalization",
+      reason: input.reason,
+      type: input.type,
+      frame: input.frame,
+      payload: input.payload,
+    },
+  });
+}
+
+function readStreamPayload(frame: Record<string, unknown>): Record<string, unknown> | null {
+  return readObject(frame.data) ?? readObject(frame.properties);
+}
+
+function readFrameSessionId(
+  frame: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): string | null {
+  return (
+    readString(payload.sessionID) ??
+    readString(payload.sessionId) ??
+    readString(frame.sessionID) ??
+    readString(frame.sessionId)
+  );
+}
+
+function readFrameCallId(payload: Record<string, unknown>): string | null {
+  return readString(payload.callID) ?? readString(payload.callId);
+}
+
+function readFrameTimestamp(
+  frame: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): string | null {
+  if (typeof payload.timestamp === "number") {
+    return String(payload.timestamp);
+  }
+  if (typeof frame.timestamp === "number") {
+    return String(frame.timestamp);
+  }
+  return readString(payload.timestamp) ?? readString(frame.timestamp);
+}
+
+function computeFrameDedupKey(input: {
+  frame: Record<string, unknown>;
+  payload: Record<string, unknown>;
+  type: string;
+}): string | null {
+  const frameId = readString(input.frame.id);
+  if (frameId) {
+    return `id:${frameId}`;
+  }
+  const sessionId = readFrameSessionId(input.frame, input.payload);
+  const callId = readFrameCallId(input.payload);
+  const timestamp = readFrameTimestamp(input.frame, input.payload);
+  if (!sessionId || !callId || !timestamp) {
+    return null;
+  }
+  return `composite:${input.type}:${sessionId}:${callId}:${timestamp}`;
+}
+
+function toolCallKey(toolName: string, callId: string | null): string | null {
+  if (!callId) {
+    return null;
+  }
+  return `${toolName}:${callId}`;
+}
+
+function mapStreamFrame(
+  raw: unknown,
+  state: StreamNormalizationState,
+): WorkspaceAgentStreamEvent[] {
   const parsedFrame = readObject(raw);
   if (!parsedFrame) {
-    return null;
+    emitStreamNormalizationDiagnostic({
+      reason: "malformed-frame",
+      frame: raw,
+    });
+    return [];
   }
   const type = readString(parsedFrame.type);
   if (!type) {
-    return null;
+    emitStreamNormalizationDiagnostic({
+      reason: "missing-type",
+      frame: raw,
+    });
+    return [];
   }
-  const payload =
-    readObject(parsedFrame.data) ?? readObject(parsedFrame.properties) ?? readObject(parsedFrame.payload) ?? parsedFrame;
+  const payload = readStreamPayload(parsedFrame);
+  if (!payload) {
+    emitStreamNormalizationDiagnostic({
+      reason: "missing-payload",
+      type,
+      frame: raw,
+    });
+    return [];
+  }
+  const dedupKey = computeFrameDedupKey({ frame: parsedFrame, payload, type });
+  if (dedupKey) {
+    if (state.seenEventKeys.has(dedupKey)) {
+      return [];
+    }
+    state.seenEventKeys.add(dedupKey);
+  }
   if (type === "session.next.text.delta") {
     const delta = readString(payload.delta);
     if (!delta) {
-      return null;
+      emitStreamNormalizationDiagnostic({
+        reason: "malformed-text-delta",
+        type,
+        payload,
+      });
+      return [];
     }
-    return { type: "message.delta", delta };
+    return [{ type: "message.delta", delta }];
   }
   if (type === "session.next.text.ended") {
     const message = readString(payload.text) ?? "";
-    return { type: "message.completed", message };
+    return [{ type: "message.completed", message }];
   }
   if (type === "session.next.tool.called") {
     const toolName = readString(payload.tool) ?? readString(payload.toolName) ?? "unknown-tool";
-    return {
-      type: "tool.started",
-      toolName,
-      callId: readString(payload.callID) ?? readString(payload.callId),
-      input: payload.input ?? null,
-    };
+    const callId = readFrameCallId(payload);
+    const callKey = toolCallKey(toolName, callId);
+    if (callKey) {
+      state.startedToolCallKeys.add(callKey);
+    }
+    return [
+      {
+        type: "tool.started",
+        toolName,
+        callId,
+        input: payload.input ?? null,
+      },
+    ];
   }
-  if (type === "session.next.tool.success") {
+  if (type === "session.next.tool.progress") {
     const toolName = readString(payload.tool) ?? readString(payload.toolName) ?? "unknown-tool";
-    return {
+    return [
+      {
+        type: "tool.progress",
+        toolName,
+        callId: readFrameCallId(payload),
+        output: payload.progress ?? payload.output ?? payload.result ?? payload.content ?? payload,
+      },
+    ];
+  }
+  if (type === "session.next.tool.success" || type === "session.next.tool.failed") {
+    const isError = type === "session.next.tool.failed";
+    const toolName = readString(payload.tool) ?? readString(payload.toolName) ?? "unknown-tool";
+    const callId = readFrameCallId(payload);
+    const callKey = toolCallKey(toolName, callId);
+    const events: WorkspaceAgentStreamEvent[] = [];
+    if (callKey && !state.startedToolCallKeys.has(callKey)) {
+      events.push({
+        type: "tool.started",
+        toolName,
+        callId,
+        input: null,
+      });
+      state.startedToolCallKeys.add(callKey);
+    }
+    events.push({
       type: "tool.completed",
       toolName,
-      callId: readString(payload.callID) ?? readString(payload.callId),
-      output: payload.result ?? payload.content ?? null,
-      isError: false,
-    };
-  }
-  if (type === "session.next.tool.failed") {
-    const toolName = readString(payload.tool) ?? readString(payload.toolName) ?? "unknown-tool";
-    return {
-      type: "tool.completed",
-      toolName,
-      callId: readString(payload.callID) ?? readString(payload.callId),
-      output: payload.error ?? payload.result ?? null,
-      isError: true,
-    };
+      callId,
+      output: isError ? payload.error ?? payload.result ?? null : payload.result ?? payload.content ?? null,
+      isError,
+    });
+    return events;
   }
   if (type === "permission.v2.asked") {
     const permissionId = readString(payload.id);
     const label = readString(payload.action) ?? readString(payload.permission);
     if (!permissionId || !label) {
-      return null;
+      emitStreamNormalizationDiagnostic({
+        reason: "malformed-permission-request",
+        type,
+        payload,
+      });
+      return [];
     }
-    return {
-      type: "permission.requested",
-      permissionId,
-      label,
-      payload: payload,
-    };
+    return [
+      {
+        type: "permission.requested",
+        permissionId,
+        label,
+        payload,
+      },
+    ];
   }
   if (type === "question.v2.asked") {
     const questionId = readString(payload.id);
     const prompt = readQuestionPrompt(payload);
     if (!questionId || !prompt) {
-      return null;
+      emitStreamNormalizationDiagnostic({
+        reason: "malformed-question-request",
+        type,
+        payload,
+      });
+      return [];
     }
     const choices = readQuestionChoices(payload);
-    return {
-      type: "question.requested",
-      questionId,
-      prompt,
-      choices,
-      payload: payload,
-    };
+    return [
+      {
+        type: "question.requested",
+        questionId,
+        prompt,
+        choices,
+        payload,
+      },
+    ];
   }
   if (type === "session.idle") {
-    return {
-      type: "run.completed",
-      runId: null,
-    };
+    return [{ type: "run.completed" }];
   }
   if (type === "session.status") {
     const status = readObject(payload.status);
     const statusType = readString(status?.type) ?? readString(payload.type);
     if (statusType === "idle") {
-      return {
-        type: "run.completed",
-        runId: null,
-      };
+      return [{ type: "run.completed" }];
     }
-    return null;
+    return [];
   }
   if (type === "session.error" || type === "session.next.step.failed") {
-    return {
-      type: "run.failed",
-      runId: null,
-      message:
-        readString(payload.error) ??
-        readString(payload.message) ??
-        readString(payload.text) ??
-        "OpenCode session failed.",
-    };
+    const message =
+      readString(payload.error) ??
+      readString(payload.message) ??
+      readString(payload.text) ??
+      "OpenCode session failed.";
+    emitStreamNormalizationDiagnostic({
+      reason: "session-failed",
+      level: "warn",
+      type,
+      payload,
+    });
+    return [{ type: "run.failed", message }];
   }
-  return null;
+  emitStreamNormalizationDiagnostic({
+    reason: "unknown-event-type",
+    type,
+    payload,
+  });
+  return [];
 }
 
 function mapHttpError(status: number, detail: string): WorkspaceAgentBackendError {
@@ -713,12 +871,16 @@ function createOpencodeBackend(
     },
     async *streamEvents(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
+      const state: StreamNormalizationState = {
+        seenEventKeys: new Set<string>(),
+        startedToolCallKeys: new Set<string>(),
+      };
       for await (const event of client.streamEvents({
         sessionId: input.sessionId,
       })) {
-        const normalized = mapStreamEvent(event);
-        if (normalized) {
-          yield normalized;
+        const normalized = mapStreamFrame(event, state);
+        for (const normalizedEvent of normalized) {
+          yield normalizedEvent;
         }
       }
     },

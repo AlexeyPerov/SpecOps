@@ -24,6 +24,7 @@
     resolveSelectedListItem,
     resolveSelectedListItemId,
   } from "./settingsPanelActions";
+  import { refreshOpencodeCatalog } from "../../ai/opencodeCatalog";
 
   let { dialogOpen = false }: { dialogOpen?: boolean } = $props();
 
@@ -148,6 +149,13 @@
       },
     });
     void chatStore.runAccessPreflight();
+  }
+
+  function refreshOpencodeModels(): void {
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+    if (workspaceRoot) {
+      void refreshOpencodeCatalog(workspaceRoot);
+    }
   }
 
   const opencodeUrlValidationMessage = $derived(
@@ -470,6 +478,15 @@
     {/if}
     <button type="button" class="settings-action" onclick={checkOpencodeConnection}>
       Check connection
+    </button>
+  </div>
+  <div class="settings-subsection">
+    <h4>Models</h4>
+    <p class="settings-section-note">
+      Workspace model selection is populated from the OpenCode server catalog.
+    </p>
+    <button type="button" class="settings-action" onclick={refreshOpencodeModels}>
+      Refresh model list
     </button>
   </div>
 </section>

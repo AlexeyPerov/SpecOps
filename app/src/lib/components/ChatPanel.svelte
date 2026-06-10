@@ -35,6 +35,7 @@
     formatCompactionNotice,
   } from "../state/chatStore";
   import { draftEntryTitleForScope } from "../services/chatAgents";
+  import { getOpencodeCatalog, refreshOpencodeCatalog } from "../ai/opencodeCatalog";
   import ChatBlockedState from "./ChatBlockedState.svelte";
   import ChatComposer from "./ChatComposer.svelte";
   import ChatMessageList from "./ChatMessageList.svelte";
@@ -125,6 +126,17 @@
     );
   });
   const canDeleteAgent = $derived(activeAgentId !== null);
+  const workspaceRootPath = $derived.by(() =>
+    chatContextKind === "chat-http"
+      ? CHAT_HTTP_CONTEXT_ID
+      : chatStore.getActiveWorkspaceRoot() ?? ""
+  );
+  const opencodeCatalog = $derived.by(() => {
+    if (chatContextKind !== "workspace") {
+      return null;
+    }
+    return getOpencodeCatalog(workspaceRootPath);
+  });
   const compactionNotice = $derived.by(() => {
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
@@ -192,6 +204,18 @@
       const allowed = new Set(providerSupportedModes);
       supportedModes = selectableModeIds.filter((modeId) => allowed.has(modeId));
     });
+  });
+
+  $effect(() => {
+    workspaceRootPath;
+    chatContextKind;
+    if (chatContextKind !== "workspace" || !workspaceRootPath) {
+      return;
+    }
+    const catalog = getOpencodeCatalog(workspaceRootPath);
+    if (catalog.status === "idle" || catalog.status === "error") {
+      void refreshOpencodeCatalog(workspaceRootPath);
+    }
   });
 
   function composerErrorRecoveryHint(message: string): string {
@@ -292,11 +316,10 @@
       threadSummary={metadata?.summary}
       threadId={metadata?.threadId}
       activeAgentId={activeAgentId}
-      workspaceRootPath={
-        chatContextKind === "chat-http" ? CHAT_HTTP_CONTEXT_ID : (chatStore.getActiveWorkspaceRoot() ?? "")
-      }
+      workspaceRootPath={workspaceRootPath}
       appSettings={$appState.settings}
       {composerError}
+      {opencodeCatalog}
       onInlineError={(message) => {
         inlineError = message;
       }}

@@ -46,6 +46,22 @@ export interface WorkspaceQuestionRejectRequest {
   message?: string;
 }
 
+export interface OpencodeModelEntry {
+  id: string;
+  name: string;
+  providerId?: string;
+}
+
+export interface OpencodeProviderEntry {
+  id: string;
+  name: string;
+}
+
+export interface OpencodeAgentEntry {
+  id: string;
+  name: string;
+}
+
 export type WorkspaceAgentStreamEvent =
   | {
       type: "message.delta";
@@ -148,6 +164,9 @@ export interface WorkspaceAgentBackend {
     workspaceRootPath: string;
     sessionId: string;
   }): AsyncIterable<WorkspaceAgentStreamEvent>;
+  listModels(input: { workspaceRootPath: string }): Promise<OpencodeModelEntry[]>;
+  listProviders(input: { workspaceRootPath: string }): Promise<OpencodeProviderEntry[]>;
+  listAgents(input: { workspaceRootPath: string }): Promise<OpencodeAgentEntry[]>;
 }
 
 export class WorkspaceAgentBackendNotImplementedError extends Error {
@@ -180,6 +199,9 @@ interface RawOpencodeClient {
   rejectQuestion(input: { sessionId: string; requestId: string; message?: string }): Promise<unknown>;
   abortSession(input: { sessionId: string }): Promise<unknown>;
   streamEvents(input: { sessionId: string }): AsyncIterable<unknown>;
+  listModels(): Promise<unknown>;
+  listProviders(): Promise<unknown>;
+  listAgents(): Promise<unknown>;
 }
 
 interface WorkspaceAgentBackendDependencies {
@@ -620,6 +642,63 @@ function readQuestionPrompt(payload: Record<string, unknown>): string | null {
   return null;
 }
 
+function unwrapList(raw: unknown): unknown[] | null {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  const parsed = readObject(unwrapDataPayload(raw));
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+  return null;
+}
+
+function mapModelEntry(raw: unknown): OpencodeModelEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const id = readString(parsed.id);
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    name: readString(parsed.name) ?? id,
+    providerId: readString(parsed.providerId) ?? readString(parsed.provider) ?? undefined,
+  };
+}
+
+function mapProviderEntry(raw: unknown): OpencodeProviderEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const id = readString(parsed.id);
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    name: readString(parsed.name) ?? id,
+  };
+}
+
+function mapAgentEntry(raw: unknown): OpencodeAgentEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const id = readString(parsed.id);
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    name: readString(parsed.name) ?? readString(parsed.label) ?? id,
+  };
+}
+
 function readQuestionChoices(payload: Record<string, unknown>): string[] {
   const directChoices = Array.isArray(payload.choices) ? payload.choices : [];
   if (directChoices.length > 0) {
@@ -864,6 +943,15 @@ function createHttpOpencodeClient(input: {
       }
       yield* parseSse(response);
     },
+    async listModels() {
+      return request("/api/model");
+    },
+    async listProviders() {
+      return request("/api/provider");
+    },
+    async listAgents() {
+      return request("/api/agent");
+    },
   };
 }
 
@@ -902,6 +990,15 @@ function createCursorLocalBackend(): WorkspaceAgentBackend {
       return fail();
     },
     async *streamEvents() {
+      return fail();
+    },
+    async listModels() {
+      return fail();
+    },
+    async listProviders() {
+      return fail();
+    },
+    async listAgents() {
       return fail();
     },
   };
@@ -1039,6 +1136,33 @@ function createOpencodeBackend(
           yield normalizedEvent;
         }
       }
+    },
+    async listModels(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.listModels();
+      const entries = unwrapList(raw);
+      if (!entries) {
+        return [];
+      }
+      return entries.map(mapModelEntry).filter((entry): entry is OpencodeModelEntry => entry !== null);
+    },
+    async listProviders(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.listProviders();
+      const entries = unwrapList(raw);
+      if (!entries) {
+        return [];
+      }
+      return entries.map(mapProviderEntry).filter((entry): entry is OpencodeProviderEntry => entry !== null);
+    },
+    async listAgents(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.listAgents();
+      const entries = unwrapList(raw);
+      if (!entries) {
+        return [];
+      }
+      return entries.map(mapAgentEntry).filter((entry): entry is OpencodeAgentEntry => entry !== null);
     },
   };
 }

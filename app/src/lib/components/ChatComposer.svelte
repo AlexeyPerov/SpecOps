@@ -2,6 +2,7 @@
   import {
     listSelectableChatConnections,
     listSelectableModelsForConnection,
+    listSelectableWorkspaceModels,
     resolveActiveChatConnectionSelection,
   } from "../ai/providers/selection";
   import { listSelectableChatModes } from "../ai/modes/resolve";
@@ -24,6 +25,7 @@
     syncComposerModelFallback,
   } from "../ai/composerSelectionEffects";
   import { estimateContextWindowBudget } from "../ai/contextWindowBudget";
+  import type { OpencodeCatalogState } from "../ai/opencodeCatalog";
   import ChatConnectionPicker from "./ChatConnectionPicker.svelte";
   import ChatModePicker from "./ChatModePicker.svelte";
   import "../styles/chat-composer.css";
@@ -58,6 +60,7 @@
     workspaceRootPath: string;
     appSettings: AppSettingsState;
     composerError: ComposerError | null;
+    opencodeCatalog?: OpencodeCatalogState | null;
     onInlineError?: (message: string) => void;
   }
 
@@ -86,6 +89,7 @@
     workspaceRootPath,
     appSettings,
     composerError,
+    opencodeCatalog = null,
     onInlineError = () => {},
   }: Props = $props();
 
@@ -124,6 +128,9 @@
     return listSelectableChatModes($appState.settings).filter((mode) => supportedModes.includes(mode.id));
   });
   const availableModels = $derived.by(() => {
+    if (chatContextKind === "workspace" && opencodeCatalog?.status === "loaded" && opencodeCatalog.models.length > 0) {
+      return listSelectableWorkspaceModels(opencodeCatalog.models);
+    }
     providerModelCatalogs;
     providerSettings;
     activeProvider;

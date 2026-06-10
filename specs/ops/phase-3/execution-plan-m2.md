@@ -163,7 +163,7 @@ Dependencies: Task 3 (shared modal plumbing).
 
 ---
 
-#### Task 5: Models/agents list alignment with OpenCode config (P3-6 partial) [Score:7] [Agent:medium]
+#### Task 5: Models/agents list alignment with OpenCode config (P3-6 partial) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

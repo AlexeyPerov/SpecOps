@@ -17,6 +17,7 @@ import {
   resolveThreadCatalogDefaultModelId,
   type ThreadModelCatalogContext,
 } from "./threadModelCatalog";
+import type { OpencodeModelEntry } from "../backends/workspaceAgentBackend";
 
 export interface ChatProviderOption {
   id: ChatProviderId;
@@ -268,4 +269,24 @@ export function canSelectChatProvider(
 
 export function resolveChatContextKind(scopeKey: string): "workspace" | "chat-http" {
   return scopeKey === CHAT_HTTP_CONTEXT_ID ? "chat-http" : "workspace";
+}
+
+export function listSelectableWorkspaceModels(
+  opencodeModels: OpencodeModelEntry[],
+): string[] {
+  return opencodeModels.map((entry) => entry.id);
+}
+
+export function resolveWorkspaceModelId(
+  opencodeModels: OpencodeModelEntry[],
+  preferredModelId?: string | null,
+): string | null {
+  if (opencodeModels.length === 0) {
+    return null;
+  }
+  const trimmed = preferredModelId?.trim();
+  if (trimmed && opencodeModels.some((model) => model.id === trimmed)) {
+    return trimmed;
+  }
+  return opencodeModels[0]!.id;
 }

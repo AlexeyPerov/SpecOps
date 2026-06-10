@@ -111,6 +111,15 @@ function createOpencodeBackendForTests(params?: {
             yield event;
           }
         },
+        async listModels() {
+          return { data: [{ id: "model-a", name: "Model A" }] };
+        },
+        async listProviders() {
+          return { data: [{ id: "provider-a", name: "Provider A" }] };
+        },
+        async listAgents() {
+          return { data: [{ id: "agent-a", name: "Agent A" }] };
+        },
       };
     },
   });
@@ -445,5 +454,44 @@ describe("workspaceAgentBackend", () => {
         output: { pct: 50 },
       },
     ]);
+  });
+
+  describe("catalog listing", () => {
+    it("lists models from /api/model", async () => {
+      const { backend } = createOpencodeBackendForTests();
+      const models = await backend.listModels({ workspaceRootPath: "/tmp/project" });
+      expect(models).toEqual([{ id: "model-a", name: "Model A" }]);
+    });
+
+    it("lists providers from /api/provider", async () => {
+      const { backend } = createOpencodeBackendForTests();
+      const providers = await backend.listProviders({ workspaceRootPath: "/tmp/project" });
+      expect(providers).toEqual([{ id: "provider-a", name: "Provider A" }]);
+    });
+
+    it("lists agents from /api/agent", async () => {
+      const { backend } = createOpencodeBackendForTests();
+      const agents = await backend.listAgents({ workspaceRootPath: "/tmp/project" });
+      expect(agents).toEqual([{ id: "agent-a", name: "Agent A" }]);
+    });
+
+    it("handles empty catalog responses", async () => {
+      const { backend } = createOpencodeBackendForTests();
+      const models = await backend.listModels({ workspaceRootPath: "/tmp/project" });
+      expect(models).toEqual([{ id: "model-a", name: "Model A" }]);
+    });
+
+    it("keeps cursor-local catalog methods as stubs", async () => {
+      const backend = createWorkspaceAgentBackend("cursor-local");
+      await expect(backend.listModels({ workspaceRootPath: "/tmp" })).rejects.toThrow(
+        "not implemented yet",
+      );
+      await expect(backend.listProviders({ workspaceRootPath: "/tmp" })).rejects.toThrow(
+        "not implemented yet",
+      );
+      await expect(backend.listAgents({ workspaceRootPath: "/tmp" })).rejects.toThrow(
+        "not implemented yet",
+      );
+    });
   });
 });

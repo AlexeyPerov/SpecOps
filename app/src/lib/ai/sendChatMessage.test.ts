@@ -457,10 +457,15 @@ describe("sendChatMessage", () => {
     expect(schedulePersistMock).toHaveBeenCalledTimes(2);
   });
 
-  it("blocks send when access preflight is not ready", async () => {
+  it("blocks send when workspace access preflight is not ready", async () => {
+    const wsId = appState.addWorkspace("/work/a");
     ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
 
     const result = await sendChatMessage("Hello");
+
+    if (wsId) {
+      appState.closeWorkspace(wsId);
+    }
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

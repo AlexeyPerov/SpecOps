@@ -276,17 +276,6 @@ export function logChatHttpResponseBody(params: {
   });
 }
 
-export function logWorkspaceHttpProviderGuard(params: {
-  agentId: string;
-  turnId: string;
-}): void {
-  emit("error", "workspace send routed to HTTP provider path", {
-    kind: "workspace.http-provider.guard",
-    agentId: params.agentId,
-    turnId: params.turnId,
-  });
-}
-
 export function logChatProviderResponseBody(params: {
   turnId?: string;
   providerId: ChatProviderId;

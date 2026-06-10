@@ -76,7 +76,7 @@ Dependencies: Milestones 1.5 and 2 complete.
 
 ---
 
-#### Task 2: Remove stale workspace HTTP branches and dead code (P3-7) [Score:7] [Agent:medium]
+#### Task 2: Remove stale workspace HTTP branches and dead code (P3-7) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

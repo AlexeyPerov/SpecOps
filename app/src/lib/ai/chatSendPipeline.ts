@@ -42,7 +42,6 @@ import {
   logChatSendComplete,
   logChatSendFailed,
   logChatSendStart,
-  logWorkspaceHttpProviderGuard,
 } from "./chatDiagnostics";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { resolveOpencodeModelFallback } from "./opencodeCatalog";
@@ -292,24 +291,6 @@ export function beginTurn(activeAgentId: string): string | null {
   return turnId;
 }
 
-export async function validateWorkspaceAgentBackendSend(
-  root: string,
-  chatContextKind: ChatContextKind,
-): Promise<{ ok: true } | ProviderSendValidationFailure> {
-  if (chatContextKind !== "workspace" || root === CHAT_HTTP_CONTEXT_ID) {
-    return { ok: true };
-  }
-  const accessState = await chatStore.runAccessPreflight();
-  if (accessState.status !== "ready") {
-    return {
-      ok: false,
-      reason: "preflight",
-      message: accessState.message,
-    };
-  }
-  return { ok: true };
-}
-
 export async function validateOpencodeBackendSend(
   root: string,
   activeAgentId: string,
@@ -408,19 +389,6 @@ export async function validateProviderSend(
     };
   }
 
-  let accessStatus: WorkspaceAccessStatus = "unknown";
-  if (chatContextKind === "workspace") {
-    const accessState = await chatStore.runAccessPreflight();
-    if (accessState.status !== "ready") {
-      return {
-        ok: false,
-        reason: "preflight",
-        message: accessState.message,
-      };
-    }
-    accessStatus = accessState.status;
-  }
-
   const provider = getChatProvider(providerId);
   if (!provider) {
     return {
@@ -433,7 +401,7 @@ export async function validateProviderSend(
   return {
     ok: true,
     provider,
-    accessStatus,
+    accessStatus: "unknown" as WorkspaceAccessStatus,
     modelId: localModelValidation.modelId,
     connectionId: resolvedConnection?.connection.id,
   };
@@ -454,16 +422,6 @@ export async function executeProviderTurn(params: {
     params;
   if (shouldUseWorkspaceAgentBackend({ root, chatContextKind })) {
     return executeWorkspaceAgentBackendTurn(params);
-  }
-  const activeContextId = appState.getSnapshot().contexts.activeContextId;
-  if (chatContextKind === "workspace" && isWorkspaceContextId(activeContextId)) {
-    logWorkspaceHttpProviderGuard({ agentId: activeAgentId, turnId });
-    abortTurn(activeAgentId, root);
-    return {
-      ok: false,
-      reason: "provider_error",
-      message: "Workspace send must use OpenCode backend.",
-    };
   }
   const provider = params.provider;
   const accessStatus = params.accessStatus ?? "unknown";

@@ -25,7 +25,7 @@
     isGenerating,
     activeModeRequiredSections = [],
     compactionNotice = "",
-    emptyHint = "Ask or review ideas for this workspace. Pick a provider and mode, then send a message.",
+    emptyHint = "Send a message to start.",
   }: Props = $props();
 
   function isProviderSwitchMessage(message: ChatMessage): boolean {

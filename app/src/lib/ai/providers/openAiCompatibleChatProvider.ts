@@ -121,7 +121,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
         canReadWorkspaceFiles: true,
         supportedModes: [...supportedModes],
       },
-      message: "HTTP provider is ready for workspace chat.",
+      message: "HTTP provider is ready for chat.",
     };
   }
 

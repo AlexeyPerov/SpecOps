@@ -290,7 +290,7 @@
       emptyHint={
         isChatHttpScope
           ? "Send messages with your configured connection. Pick a provider, mode, and model, then send."
-          : "Ask or review ideas for this workspace. Pick a provider and mode, then send a message."
+          : "Ask or review ideas for this workspace. Select a model, then send a message."
       }
     />
 

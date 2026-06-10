@@ -360,6 +360,7 @@ describe("M5.3 milestone validation", () => {
 
   it("blocks send when workspace access preflight fails", async () => {
     ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
+    appState.addWorkspace("/work/a");
     const agentId = chatStore.createDraftAgent();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 

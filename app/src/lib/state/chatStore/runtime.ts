@@ -2,7 +2,7 @@ import type { ChatStoreState, ChatThreadRuntimeState, ChatTurnError } from "./ty
 import {
   getOrCreateWorkspaceState,
   patchWorkspaceState,
-  resolveWorkspaceRoot,
+  resolveChatScopeKey,
 } from "./workspace";
 import { resolveTargetAgentId } from "./agents";
 import { activeAgentId } from "./workspace";
@@ -56,7 +56,7 @@ export function createRuntimeSlice(deps: {
   ): boolean {
     let updated = false;
     update((state) => {
-      const root = resolveWorkspaceRoot(state, workspaceRoot);
+      const root = resolveChatScopeKey(state, workspaceRoot);
       if (!root) {
         return state;
       }
@@ -77,7 +77,7 @@ export function createRuntimeSlice(deps: {
   return {
     getRuntimeState(agentId?: string, workspaceRoot?: string | null): ChatThreadRuntimeState {
       const snapshot = getSnapshot();
-      const root = resolveWorkspaceRoot(snapshot, workspaceRoot);
+      const root = resolveChatScopeKey(snapshot, workspaceRoot);
       const targetAgentId =
         agentId ?? (root ? (snapshot.workspaces[root]?.activeAgentId ?? null) : null);
       return { ...runtimeForAgentInWorkspace(snapshot, root, targetAgentId) };
@@ -175,7 +175,7 @@ export function createRuntimeSlice(deps: {
     },
     completeTurn(agentId?: string, workspaceRoot?: string | null): boolean {
       const snapshot = getSnapshot();
-      const root = resolveWorkspaceRoot(snapshot, workspaceRoot);
+      const root = resolveChatScopeKey(snapshot, workspaceRoot);
       const targetAgentId = resolveTargetAgentId(snapshot, agentId);
       if (!root || !targetAgentId) {
         return false;
@@ -193,7 +193,7 @@ export function createRuntimeSlice(deps: {
       workspaceRoot?: string | null,
     ): boolean {
       const snapshot = getSnapshot();
-      const root = resolveWorkspaceRoot(snapshot, workspaceRoot);
+      const root = resolveChatScopeKey(snapshot, workspaceRoot);
       const targetAgentId = resolveTargetAgentId(snapshot, agentId);
       if (!root || !targetAgentId) {
         return false;

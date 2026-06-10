@@ -11,7 +11,7 @@ import {
   promoteDraftAgentIndexEntry,
   resolveTargetAgentId,
 } from "./agents";
-import { patchWorkspaceState, resolveWorkspaceRoot, threadForAgent } from "./workspace";
+import { patchWorkspaceState, resolveChatScopeKey, threadForAgent } from "./workspace";
 
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
@@ -114,7 +114,7 @@ export function createThreadMessagesSlice(deps: {
     ): boolean {
       let updated = false;
       update((state) => {
-        const root = resolveWorkspaceRoot(state, workspaceRoot);
+        const root = resolveChatScopeKey(state, workspaceRoot);
         const targetAgentId = resolveTargetAgentId(state, agentId);
         if (!root || !targetAgentId) {
           return state;
@@ -159,7 +159,7 @@ export function createThreadMessagesSlice(deps: {
     removeMessage(messageId: string, agentId?: string, workspaceRoot?: string | null): boolean {
       let removed = false;
       update((state) => {
-        const root = resolveWorkspaceRoot(state, workspaceRoot);
+        const root = resolveChatScopeKey(state, workspaceRoot);
         const targetAgentId = resolveTargetAgentId(state, agentId);
         if (!root || !targetAgentId) {
           return state;
@@ -233,7 +233,7 @@ export function createThreadMessagesSlice(deps: {
     ): boolean {
       let updated = false;
       update((state) => {
-        const root = resolveWorkspaceRoot(state, workspaceRoot);
+        const root = resolveChatScopeKey(state, workspaceRoot);
         const targetAgentId = resolveTargetAgentId(state, agentId);
         if (!root || !targetAgentId) {
           return state;

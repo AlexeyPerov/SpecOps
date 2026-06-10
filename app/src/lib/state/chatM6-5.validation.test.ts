@@ -282,8 +282,8 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
     expect(blockedRetry).toEqual({
       ok: false,
-      reason: "generating",
-      message: "Another response is already in progress.",
+      reason: "no_failed_turn",
+      message: "There is no failed response to retry.",
     });
   });
 

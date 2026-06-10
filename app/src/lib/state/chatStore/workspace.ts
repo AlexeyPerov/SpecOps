@@ -78,11 +78,3 @@ export function resolveChatScopeKey(
 ): string | null {
   return scopeKey ?? state.activeChatScopeKey;
 }
-
-/** @deprecated Use resolveChatScopeKey. */
-export function resolveWorkspaceRoot(
-  state: ChatStoreState,
-  workspaceRoot?: string | null,
-): string | null {
-  return resolveChatScopeKey(state, workspaceRoot);
-}

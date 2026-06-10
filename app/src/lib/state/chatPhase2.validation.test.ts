@@ -5,14 +5,13 @@
  * - Chat rail gating state can expose chat-http when HTTP settings, API key, and model catalog are valid.
  * - chat-http sends are scoped to `chat-http`, skip workspace file access preflight, and preserve selected mode.
  * - HTTP provider uses OpenAI-compatible SSE streaming with token deltas rendered into one assistant message.
- * - Workspace HTTP chat still works through the shared streaming send path.
  *
  * Manual smoke (workspace UI; not covered here):
  * - Complete Settings -> Connections setup and verify Chat appears on the rail.
  * - Open Chat, create a chat, send an ask message, and watch assistant text stream chunk by chunk.
  * - Enable Debug provider and verify Debug can send from Chat.
  * - Switch to Notepad and verify no AI/chat entry points appear.
- * - Switch to a workspace agent tab and verify HTTP ask/review still sends.
+ * - Switch to a workspace agent tab and verify OpenCode ask/review still sends.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendChatMessage } from "../ai/sendChatMessage";
@@ -178,23 +177,4 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
     });
   });
 
-  it("keeps workspace HTTP chat working through the shared streaming path", async () => {
-    const fetchFn = vi.fn().mockResolvedValue(
-      sseStreamResponse([sseDelta("Workspace "), sseDelta("HTTP works."), "data: [DONE]\n\n"]),
-    );
-    registerPhase2Providers(fetchFn as typeof fetch);
-    chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.createDraftAgent();
-    chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
-
-    const result = await sendChatMessage("workspace http still sends");
-
-    expect(result.ok).toBe(true);
-    expect(ensureWorkspaceReadAccessMock).toHaveBeenCalledWith("/work/a");
-    expect(chatStore.getMessages().at(-1)?.content).toBe("Workspace HTTP works.");
-    expect(schedulePersistMock.mock.calls.at(-1)?.[0]).toBe("/work/a");
-    expect(JSON.parse((fetchFn.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
-      stream: true,
-    });
-  });
 });

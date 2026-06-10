@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-10 13:19
+
+- **Tool event timeline and cards (phase 3 M2 task 2):** Added `ToolCallRecord`/`ToolCallStatus` domain types and extended `ChatMessage` with optional `toolCalls` array. Created idempotent `toolCallReducer` (`applyToolStarted`/`applyToolCompleted`/`applyToolProgress`) with out-of-order synthetic placeholder handling per event normalization spec. Wired `tool.started`/`tool.completed`/`tool.progress` events in workspace backend stream loop (`chatSendPipeline.ts`), updating assistant message tool call state in real time. Added `updateMessageToolCalls` to thread messages slice. Created `ToolCard.svelte` component (collapsed summary with expandable input/progress/output details, status indicators). Rendered tool cards inline in `ChatMessageList.svelte` below assistant text. Updated persistence codec to serialize/deserialize `toolCalls` on messages. Added 16 reducer tests covering idempotent updates, out-of-order events, multiple concurrent calls, and full lifecycle flows. All 970 tests pass, 0 typecheck errors.
+
 ## 2026-06-10 12:39
 
 - **M1.5 Task 6 verification gate + M2 handoff:** Completed phase-3 M1.5 verification by extending contract-aligned backend coverage in `workspaceAgentBackend.test.ts` (explicit prompt send contract assertion) and fixing `appShellAgentHandlers.test.ts` preflight mock typing for current `ChatAccessState`. Updated `specs/ops/phase-3/m1-task5-smoke.md` into an M1.5 Task 6 checklist to cover prompt/tool/permission/question/reject/cancel and restore-reconcile flows in sidecar and URL modes, and added explicit handoff guidance to resume Milestone 2 from `execution-plan-m2.md` Task 2. Marked Task 6 `[DONE]` and completed M1.5 exit criteria in `execution-plan-m1-5.md` after passing `npm test` and `npm run check` (warnings only).

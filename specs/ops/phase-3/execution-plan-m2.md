@@ -78,7 +78,7 @@ Dependencies: Milestones 1 and 1.5 complete.
 
 ---
 
-#### Task 2: Tool event timeline and cards (P3-4 partial) [Score:8] [Agent:medium]
+#### Task 2: Tool event timeline and cards (P3-4 partial) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 

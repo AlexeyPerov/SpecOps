@@ -63,6 +63,8 @@ export type {
   ChatThreadMetadata,
   ChatThreadSnapshot,
   CustomChatModeDefinition,
+  ToolCallRecord,
+  ToolCallStatus,
   WorkspaceAgentsIndexSnapshot,
 } from "./chat";
 export { DEBUG_CHAT_PROVIDER_IDS, isDebugChatProviderId, PRODUCT_CHAT_PROVIDER_IDS } from "./chat";

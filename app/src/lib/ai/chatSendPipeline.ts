@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../domain/contracts";
+import type { ChatMessage, ToolCallRecord } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
@@ -27,6 +27,11 @@ import { resolveComposerModelId } from "./providers/threadModelCatalog";
 import { getChatProvider } from "./providers/registry";
 import type { ChatProvider, ProviderSendRequest } from "./providers/types";
 import { isChatProviderError, streamProviderMessage } from "./chatSend";
+import {
+  applyToolCompleted,
+  applyToolProgress,
+  applyToolStarted,
+} from "./toolCallReducer";
 import type { WorkspaceAccessStatus } from "./capabilities";
 import {
   logChatProviderPayload,
@@ -664,6 +669,7 @@ async function executeWorkspaceAgentBackendTurn(params: {
     });
 
     let accumulated = "";
+    let toolCalls: ToolCallRecord[] = [];
     for await (const event of backend.streamEvents({
       workspaceRootPath: root,
       sessionId: run.sessionId,
@@ -683,6 +689,21 @@ async function executeWorkspaceAgentBackendTurn(params: {
       if (event.type === "message.completed") {
         accumulated = event.message || accumulated;
         chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
+        continue;
+      }
+      if (event.type === "tool.started") {
+        toolCalls = applyToolStarted(toolCalls, event);
+        chatStore.updateMessageToolCalls(assistantMessage.id, toolCalls, activeAgentId, root);
+        continue;
+      }
+      if (event.type === "tool.completed") {
+        toolCalls = applyToolCompleted(toolCalls, event);
+        chatStore.updateMessageToolCalls(assistantMessage.id, toolCalls, activeAgentId, root);
+        continue;
+      }
+      if (event.type === "tool.progress") {
+        toolCalls = applyToolProgress(toolCalls, event);
+        chatStore.updateMessageToolCalls(assistantMessage.id, toolCalls, activeAgentId, root);
         continue;
       }
       if (event.type === "run.failed") {

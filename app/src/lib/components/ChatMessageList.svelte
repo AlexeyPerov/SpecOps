@@ -8,6 +8,7 @@
     type StructuredMessageSection,
   } from "../ai/chatReviewContent";
   import type { ChatMessage } from "../domain/contracts";
+  import ToolCard from "./ToolCard.svelte";
 
   interface Props {
     messages: ChatMessage[];
@@ -81,6 +82,10 @@
     }
     return "You";
   }
+
+  function hasToolCards(message: ChatMessage): boolean {
+    return Boolean(message.toolCalls && message.toolCalls.length > 0);
+  }
 </script>
 
 {#if compactionNotice}
@@ -128,6 +133,13 @@
                   {/if}
                 {/if}
               </p>
+            {/if}
+            {#if hasToolCards(message)}
+              <div class="chat-tool-cards">
+                {#each message.toolCalls ?? [] as toolCall (toolCall.callId)}
+                  <ToolCard {toolCall} />
+                {/each}
+              </div>
             {/if}
           </li>
         {/each}
@@ -335,5 +347,12 @@
     margin: 0;
     font-size: 12px;
     line-height: 1.5;
+  }
+
+  .chat-tool-cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
   }
 </style>

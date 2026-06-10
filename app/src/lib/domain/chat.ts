@@ -59,12 +59,24 @@ export type ChatSystemEvent =
       toModel: string;
     };
 
+export type ToolCallStatus = "pending" | "success" | "failure";
+
+export interface ToolCallRecord {
+  callId: string;
+  toolName: string;
+  status: ToolCallStatus;
+  input?: unknown;
+  output?: unknown;
+  progress?: unknown;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatMessageRole;
   content: string;
   createdAt: string;
   systemEvent?: ChatSystemEvent;
+  toolCalls?: ToolCallRecord[];
 }
 
 export interface ChatThreadMetadata {

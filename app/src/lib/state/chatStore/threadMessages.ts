@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../../domain/contracts";
+import type { ChatMessage, ToolCallRecord } from "../../domain/contracts";
 import { compactChatThread } from "../../services/chatRetention";
 import { createThreadMetadata, cloneThread } from "./threadHelpers";
 import type { ChatStoreState } from "./types";
@@ -224,6 +224,56 @@ export function createThreadMessagesSlice(deps: {
         });
       });
       return compacted;
+    },
+    updateMessageToolCalls(
+      messageId: string,
+      toolCalls: ToolCallRecord[],
+      agentId?: string,
+      workspaceRoot?: string | null,
+    ): boolean {
+      let updated = false;
+      update((state) => {
+        const root = resolveWorkspaceRoot(state, workspaceRoot);
+        const targetAgentId = resolveTargetAgentId(state, agentId);
+        if (!root || !targetAgentId) {
+          return state;
+        }
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const thread = workspace.threadsByAgentId[targetAgentId];
+        if (!thread) {
+          return state;
+        }
+
+        const messageIndex = thread.messages.findIndex((entry) => entry.id === messageId);
+        if (messageIndex === -1) {
+          return state;
+        }
+
+        const nextThread = cloneThread(thread);
+        if (!nextThread) {
+          return state;
+        }
+        const updatedAt = new Date().toISOString();
+        nextThread.messages = nextThread.messages.map((entry, index) =>
+          index === messageIndex ? { ...entry, toolCalls } : entry,
+        );
+        nextThread.metadata = {
+          ...nextThread.metadata,
+          updatedAt,
+        };
+        updated = true;
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: nextThread,
+          },
+        });
+      });
+      return updated;
     },
     getMessages(agentId?: string): ChatMessage[] {
       const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);

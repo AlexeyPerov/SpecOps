@@ -7,6 +7,7 @@ import type {
   ChatProviderId,
   ChatThreadMetadata,
   ChatThreadSnapshot,
+  ToolCallRecord,
   WorkspaceAgentsIndexSnapshot,
 } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
@@ -182,6 +183,45 @@ function parseSystemEvent(value: unknown, scopeKey: string): ChatMessage["system
   return undefined;
 }
 
+function isToolCallStatus(value: unknown): value is ToolCallRecord["status"] {
+  return value === "pending" || value === "success" || value === "failure";
+}
+
+function parseToolCallRecord(value: unknown): ToolCallRecord | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  if (typeof value.callId !== "string" || typeof value.toolName !== "string" || !isToolCallStatus(value.status)) {
+    return null;
+  }
+  return {
+    callId: value.callId,
+    toolName: value.toolName,
+    status: value.status,
+    input: value.input,
+    output: value.output,
+    progress: value.progress,
+  };
+}
+
+function parseToolCalls(value: unknown): ToolCallRecord[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const records: ToolCallRecord[] = [];
+  for (const entry of value) {
+    const record = parseToolCallRecord(entry);
+    if (!record) {
+      return undefined;
+    }
+    records.push(record);
+  }
+  return records;
+}
+
 function parseMessage(value: unknown, scopeKey: string): ChatMessage | null {
   if (!isRecord(value)) {
     return null;
@@ -200,6 +240,7 @@ function parseMessage(value: unknown, scopeKey: string): ChatMessage | null {
     content: value.content,
     createdAt: value.createdAt,
     systemEvent: parseSystemEvent(value.systemEvent, scopeKey),
+    toolCalls: parseToolCalls(value.toolCalls),
   };
 }
 

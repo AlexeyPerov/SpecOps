@@ -3,7 +3,7 @@
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md) (`WorkspaceAgentBackend` stub); phases 2 and 4 may ship in parallel but not required  
 **Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m1-5](./execution-plan-m1-5.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md)  
-**Status:** planning  
+**Status:** complete  
 **Estimate:** ~2–3 months for MVP  
 **OpenCode integration checklist (in this phase):** S1–S5 below; plan/build S6 stretch → [phase-6.md](../phase-6/phase-6.md) if using own platform later
 
@@ -95,11 +95,11 @@ Required before removing workspace `ChatProvider` HTTP:
 
 ## Exit criteria
 
-- [ ] Open workspace → agent turn runs via OpenCode with tools on disk.
-- [ ] Permission prompt blocks and resolves in UI.
-- [ ] Workspace composer does not call HTTP `ChatProvider`.
-- [ ] Chat and Cloud contexts still work.
-- [ ] `npm test` / `npm run check`; manual smoke on real folder.
+- [x] Open workspace → agent turn runs via OpenCode with tools on disk.
+- [x] Permission prompt blocks and resolves in UI.
+- [x] Workspace composer does not call HTTP `ChatProvider`.
+- [x] Chat and Cloud contexts still work.
+- [x] `npm test` / `npm run check`; manual smoke on real folder.
 
 ## Non-goals (phase 3 MVP)
 
@@ -138,6 +138,7 @@ See [roadmap.md](../roadmap.md#end-user--opencode-workspace-e1c).
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | Phase 3 MVP complete: all exit criteria met, workspace HTTP removed, validation gate passing |
 | 2026-06-10 | Added breaking-change note for E2A: legacy workspace HTTP threads not migrated to OpenCode sessions |
 | 2026-06-09 | Added M1.5 contract-alignment bridge and OpenCode integration docs |
 | 2026-06-09 | Swapped with former phase 4 (OpenCode now phase 3) |

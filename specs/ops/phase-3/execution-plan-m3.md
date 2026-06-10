@@ -129,7 +129,7 @@ Dependencies: Tasks 1, 2.
 
 ---
 
-#### Task 4: Regression and validation sweep (P3-8) [Score:8] [Agent:heavy]
+#### Task 4: Regression and validation sweep (P3-8) [Score:8] [Agent:heavy] [DONE]
 
 **Required context**
 
@@ -160,7 +160,7 @@ Dependencies: Task 3.
 
 ---
 
-#### Task 5: Phase-3 closure updates (P3-8) [Score:5] [Agent:easy]
+#### Task 5: Phase-3 closure updates (P3-8) [Score:5] [Agent:easy] [DONE]
 
 **Required context**
 
@@ -199,9 +199,17 @@ Task 1 → Task 2 → Task 3 → Task 4 → Task 5
 
 ## Phase 3 exit criteria (full)
 
-- [ ] Open workspace -> agent turn runs via OpenCode with tools on disk.
-- [ ] Permission prompt blocks and resolves in UI.
+- [x] Open workspace -> agent turn runs via OpenCode with tools on disk.
+- [x] Permission prompt blocks and resolves in UI.
 - [x] Workspace composer does not call HTTP `ChatProvider`.
-- [ ] Chat and Cloud contexts still work.
-- [ ] `npm test` / `npm run check`; manual smoke on real folder.
+- [x] Chat and Cloud contexts still work.
+- [x] `npm test` / `npm run check`; manual smoke on real folder.
+
+## Phase 5 handoff notes
+
+- `WorkspaceAgentBackend("cursor-local")` exists as a stub that throws `WorkspaceAgentBackendNotImplementedError` for all operations. Phase 5 should implement the cursor-local backend adapter using the same `WorkspaceAgentBackend` interface.
+- The `shouldUseWorkspaceAgentBackend` routing function in `chatSendPipeline.ts` currently only activates for `opencode` backend via `isWorkspaceContextId` check. Phase 5 will need to extend or modify this routing when cursor-local becomes available.
+- Session mapping is stored per-agent via `setAgentSessionLink` with `opencodeSessionId`, `opencodeModelId`, and `opencodeProviderId` fields. Cursor-local sessions should use the same mapping structure.
+- The M1.5 contract freeze (`opencode-contract-freeze-m1-5.md`) is OpenCode-specific. Cursor-local may need its own contract doc if event semantics differ.
+- M1.5 bridge and M2 resume-order notes are preserved in `execution-plan-m1-5.md` and `execution-plan-m2.md`.
 

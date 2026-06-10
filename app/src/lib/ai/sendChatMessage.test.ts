@@ -494,11 +494,11 @@ describe("sendChatMessage", () => {
     appState.addWorkspace("/work/a");
     const getSession = vi.fn().mockResolvedValue(null);
     const createSession = vi.fn().mockResolvedValue({ id: "sess-1" });
-    const send = vi.fn().mockResolvedValue({ sessionId: "sess-1", runId: "run-1" });
+    const send = vi.fn().mockResolvedValue({ sessionId: "sess-1" });
     const streamEvents = vi.fn().mockImplementation(async function* () {
       yield { type: "message.delta", delta: "OpenCode " };
       yield { type: "message.delta", delta: "stream" };
-      yield { type: "run.completed", runId: "run-1" };
+      yield { type: "run.completed", runId: null };
     });
     createWorkspaceAgentBackendMock.mockReturnValue({
       id: "opencode",
@@ -533,7 +533,7 @@ describe("sendChatMessage", () => {
   it("returns cancelled state for ws-* stream cancellation", async () => {
     appState.addWorkspace("/work/a");
     const getSession = vi.fn().mockResolvedValue({ id: "sess-1" });
-    const send = vi.fn().mockResolvedValue({ sessionId: "sess-1", runId: "run-1" });
+    const send = vi.fn().mockResolvedValue({ sessionId: "sess-1" });
     const streamEvents = vi.fn().mockImplementation(async function* () {
       yield { type: "message.delta", delta: "partial " };
       await Promise.resolve();

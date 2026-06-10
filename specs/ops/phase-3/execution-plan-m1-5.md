@@ -69,7 +69,7 @@ Dependencies: none.
 
 ---
 
-#### Task 2: Backend transport contract correction (P3-2) [Score:9] [Agent:heavy]
+#### Task 2: Backend transport contract correction (P3-2) [Score:9] [Agent:heavy] [DONE]
 
 **Required context**
 

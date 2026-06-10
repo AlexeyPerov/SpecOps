@@ -14,7 +14,7 @@ function createOpencodeBackendForTests(params?: {
   getSessionResult?: unknown;
   listSessionsResult?: unknown;
   deleteSessionError?: unknown;
-  createRunResult?: unknown;
+  sendPromptResult?: unknown;
   streamEvents?: unknown[];
 }) {
   const calls: Array<{ baseUrl: string; workspaceRootPath: string }> = [];
@@ -59,23 +59,23 @@ function createOpencodeBackendForTests(params?: {
           }
           return null;
         },
-        async createRun() {
-          return params?.createRunResult ?? {
-            runId: "run-1",
+        async sendPrompt() {
+          return params?.sendPromptResult ?? {
+            sessionID: "sess-1",
           };
         },
-        async *streamRunEvents() {
+        async *streamEvents() {
           const events = params?.streamEvents ?? [
-            { type: "messageDelta", content: "Hello" },
-            { type: "tool.call.started", toolName: "read_file", callId: "call-1", input: { path: "a" } },
+            { type: "session.next.text.delta", data: { delta: "Hello" } },
             {
-              type: "tool.call.completed",
-              toolName: "read_file",
-              callId: "call-1",
-              output: { ok: true },
-              isError: false,
+              type: "session.next.tool.called",
+              data: { tool: "read_file", callID: "call-1", input: { path: "a" } },
             },
-            { type: "runComplete", runId: "run-1" },
+            {
+              type: "session.next.tool.success",
+              data: { tool: "read_file", callID: "call-1", result: { ok: true } },
+            },
+            { type: "session.status", data: { status: { type: "idle" } } },
           ];
           for (const event of events) {
             yield event;
@@ -165,7 +165,6 @@ describe("workspaceAgentBackend", () => {
     for await (const event of backend.streamEvents({
       workspaceRootPath: "/tmp/workspace",
       sessionId: "sess-1",
-      runId: "run-1",
     })) {
       seen.push(event);
     }
@@ -186,7 +185,7 @@ describe("workspaceAgentBackend", () => {
       },
       {
         type: "run.completed",
-        runId: "run-1",
+        runId: null,
       },
     ]);
   });
@@ -206,22 +205,31 @@ describe("workspaceAgentBackend", () => {
     const { backend } = createOpencodeBackendForTests({
       streamEvents: [
         {
-          type: "permission.requested",
-          permissionId: "perm-1",
-          label: "Read file",
-          payload: { path: "a.txt" },
+          type: "permission.v2.asked",
+          data: {
+            id: "perm-1",
+            action: "Read file",
+            path: "a.txt",
+          },
         },
         {
-          type: "question.requested",
-          questionId: "q-1",
-          prompt: "Continue?",
-          choices: ["yes", "no"],
-          payload: { step: 1 },
+          type: "question.v2.asked",
+          data: {
+            id: "q-1",
+            questions: [
+              {
+                header: "Continue?",
+                options: [{ label: "yes" }, { label: "no" }],
+              },
+            ],
+            step: 1,
+          },
         },
         {
-          type: "runError",
-          runId: "run-1",
-          message: "boom",
+          type: "session.error",
+          data: {
+            message: "boom",
+          },
         },
       ],
     });
@@ -230,7 +238,6 @@ describe("workspaceAgentBackend", () => {
     for await (const event of backend.streamEvents({
       workspaceRootPath: "/tmp/workspace",
       sessionId: "sess-1",
-      runId: "run-1",
     })) {
       seen.push(event);
     }
@@ -240,18 +247,22 @@ describe("workspaceAgentBackend", () => {
         type: "permission.requested",
         permissionId: "perm-1",
         label: "Read file",
-        payload: { path: "a.txt" },
+        payload: { id: "perm-1", action: "Read file", path: "a.txt" },
       },
       {
         type: "question.requested",
         questionId: "q-1",
         prompt: "Continue?",
         choices: ["yes", "no"],
-        payload: { step: 1 },
+        payload: {
+          id: "q-1",
+          questions: [{ header: "Continue?", options: [{ label: "yes" }, { label: "no" }] }],
+          step: 1,
+        },
       },
       {
         type: "run.failed",
-        runId: "run-1",
+        runId: null,
         message: "boom",
       },
     ]);

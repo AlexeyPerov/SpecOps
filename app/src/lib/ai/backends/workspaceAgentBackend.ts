@@ -19,7 +19,6 @@ export interface WorkspaceAgentSession {
 
 export interface WorkspaceAgentRunResult {
   sessionId: string;
-  runId: string | null;
 }
 
 export type WorkspaceAgentStreamEvent =
@@ -115,7 +114,6 @@ export interface WorkspaceAgentBackend {
   streamEvents(input: {
     workspaceRootPath: string;
     sessionId: string;
-    runId: string;
   }): AsyncIterable<WorkspaceAgentStreamEvent>;
 }
 
@@ -138,8 +136,8 @@ interface RawOpencodeClient {
   getSession(input: { sessionId: string }): Promise<unknown>;
   listSessions(): Promise<unknown>;
   deleteSession(input: { sessionId: string }): Promise<unknown>;
-  createRun(input: { sessionId: string; prompt: string; model?: string }): Promise<unknown>;
-  streamRunEvents(input: { sessionId: string; runId: string }): AsyncIterable<unknown>;
+  sendPrompt(input: { sessionId: string; prompt: string; model?: string }): Promise<unknown>;
+  streamEvents(input: { sessionId: string }): AsyncIterable<unknown>;
 }
 
 interface WorkspaceAgentBackendDependencies {
@@ -179,7 +177,8 @@ function readBoolean(value: unknown): boolean | null {
 }
 
 function mapSession(raw: unknown): WorkspaceAgentSession {
-  const parsed = readObject(raw);
+  const payload = unwrapDataPayload(raw);
+  const parsed = readObject(payload);
   if (!parsed) {
     throw new WorkspaceAgentBackendError({
       code: "invalidResponse",
@@ -204,62 +203,75 @@ function mapSession(raw: unknown): WorkspaceAgentSession {
 }
 
 function mapRunResult(raw: unknown, sessionId: string): WorkspaceAgentRunResult {
-  const parsed = readObject(raw);
+  const parsed = readObject(unwrapDataPayload(raw));
   if (!parsed) {
     throw new WorkspaceAgentBackendError({
       code: "invalidResponse",
-      message: "OpenCode returned an invalid run payload.",
+      message: "OpenCode returned an invalid prompt response payload.",
       cause: raw,
     });
   }
+  const resolvedSessionId =
+    readString(parsed.sessionID) ?? readString(parsed.sessionId) ?? readString(parsed.id) ?? sessionId;
   return {
-    sessionId,
-    runId: readString(parsed.runId),
+    sessionId: resolvedSessionId,
   };
 }
 
 function mapStreamEvent(raw: unknown): WorkspaceAgentStreamEvent | null {
-  const parsed = readObject(raw);
-  if (!parsed) {
+  const parsedFrame = readObject(raw);
+  if (!parsedFrame) {
     return null;
   }
-  const type = readString(parsed.type);
+  const type = readString(parsedFrame.type);
   if (!type) {
     return null;
   }
-  if (type === "message.delta" || type === "messageDelta") {
-    const delta = readString(parsed.delta) ?? readString(parsed.content);
+  const payload =
+    readObject(parsedFrame.data) ?? readObject(parsedFrame.properties) ?? readObject(parsedFrame.payload) ?? parsedFrame;
+  if (type === "session.next.text.delta") {
+    const delta = readString(payload.delta);
     if (!delta) {
       return null;
     }
     return { type: "message.delta", delta };
   }
-  if (type === "message.completed" || type === "messageComplete") {
-    const message = readString(parsed.message) ?? readString(parsed.content) ?? "";
+  if (type === "session.next.text.ended") {
+    const message = readString(payload.text) ?? "";
     return { type: "message.completed", message };
   }
-  if (type === "tool.started" || type === "tool.call.started") {
-    const toolName = readString(parsed.toolName) ?? readString(parsed.name) ?? "unknown-tool";
+  if (type === "session.next.tool.called") {
+    const toolName = readString(payload.tool) ?? readString(payload.toolName) ?? "unknown-tool";
     return {
       type: "tool.started",
       toolName,
-      callId: readString(parsed.callId),
-      input: parsed.input ?? null,
+      callId: readString(payload.callID) ?? readString(payload.callId),
+      input: payload.input ?? null,
     };
   }
-  if (type === "tool.completed" || type === "tool.call.completed") {
-    const toolName = readString(parsed.toolName) ?? readString(parsed.name) ?? "unknown-tool";
+  if (type === "session.next.tool.success") {
+    const toolName = readString(payload.tool) ?? readString(payload.toolName) ?? "unknown-tool";
     return {
       type: "tool.completed",
       toolName,
-      callId: readString(parsed.callId),
-      output: parsed.output ?? null,
-      isError: readBoolean(parsed.isError) ?? false,
+      callId: readString(payload.callID) ?? readString(payload.callId),
+      output: payload.result ?? payload.content ?? null,
+      isError: false,
     };
   }
-  if (type === "permission.requested") {
-    const permissionId = readString(parsed.permissionId);
-    const label = readString(parsed.label);
+  if (type === "session.next.tool.failed") {
+    const toolName = readString(payload.tool) ?? readString(payload.toolName) ?? "unknown-tool";
+    return {
+      type: "tool.completed",
+      toolName,
+      callId: readString(payload.callID) ?? readString(payload.callId),
+      output: payload.error ?? payload.result ?? null,
+      isError: true,
+    };
+  }
+  if (type === "permission.v2.asked") {
+    const permissionId = readString(payload.id);
+    const label = readString(payload.action) ?? readString(payload.permission);
     if (!permissionId || !label) {
       return null;
     }
@@ -267,36 +279,50 @@ function mapStreamEvent(raw: unknown): WorkspaceAgentStreamEvent | null {
       type: "permission.requested",
       permissionId,
       label,
-      payload: parsed.payload ?? null,
+      payload: payload,
     };
   }
-  if (type === "question.requested") {
-    const questionId = readString(parsed.questionId);
-    const prompt = readString(parsed.prompt);
+  if (type === "question.v2.asked") {
+    const questionId = readString(payload.id);
+    const prompt = readQuestionPrompt(payload);
     if (!questionId || !prompt) {
       return null;
     }
-    const rawChoices = Array.isArray(parsed.choices) ? parsed.choices : [];
-    const choices = rawChoices.map((entry) => readString(entry)).filter((entry): entry is string => Boolean(entry));
+    const choices = readQuestionChoices(payload);
     return {
       type: "question.requested",
       questionId,
       prompt,
       choices,
-      payload: parsed.payload ?? null,
+      payload: payload,
     };
   }
-  if (type === "run.completed" || type === "runComplete") {
+  if (type === "session.idle") {
     return {
       type: "run.completed",
-      runId: readString(parsed.runId),
+      runId: null,
     };
   }
-  if (type === "run.failed" || type === "runError") {
+  if (type === "session.status") {
+    const status = readObject(payload.status);
+    const statusType = readString(status?.type) ?? readString(payload.type);
+    if (statusType === "idle") {
+      return {
+        type: "run.completed",
+        runId: null,
+      };
+    }
+    return null;
+  }
+  if (type === "session.error" || type === "session.next.step.failed") {
     return {
       type: "run.failed",
-      runId: readString(parsed.runId),
-      message: readString(parsed.message) ?? "OpenCode run failed.",
+      runId: null,
+      message:
+        readString(payload.error) ??
+        readString(payload.message) ??
+        readString(payload.text) ??
+        "OpenCode session failed.",
     };
   }
   return null;
@@ -343,9 +369,102 @@ async function toHttpError(response: Response): Promise<WorkspaceAgentBackendErr
   return mapHttpError(response.status, detail);
 }
 
-function addDirectoryParam(path: string, directory: string): string {
+function addQueryParams(path: string, params: Record<string, string | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value && value.trim().length > 0) {
+      query.set(key, value);
+    }
+  }
+  const serialized = query.toString();
+  if (serialized.length === 0) {
+    return path;
+  }
   const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}directory=${encodeURIComponent(directory)}`;
+  return `${path}${separator}${serialized}`;
+}
+
+function unwrapDataPayload(raw: unknown): unknown {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return raw;
+  }
+  if (Object.prototype.hasOwnProperty.call(parsed, "data")) {
+    return parsed.data;
+  }
+  return raw;
+}
+
+function unwrapSessionList(raw: unknown): unknown[] | null {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  if (Array.isArray(parsed.data)) {
+    return parsed.data;
+  }
+  return null;
+}
+
+function readQuestionPrompt(payload: Record<string, unknown>): string | null {
+  const directPrompt = readString(payload.header) ?? readString(payload.text) ?? readString(payload.prompt);
+  if (directPrompt) {
+    return directPrompt;
+  }
+  const questions = Array.isArray(payload.questions) ? payload.questions : [];
+  for (const entry of questions) {
+    const parsed = readObject(entry);
+    const prompt = parsed ? readString(parsed.header) ?? readString(parsed.text) : null;
+    if (prompt) {
+      return prompt;
+    }
+  }
+  return null;
+}
+
+function readQuestionChoices(payload: Record<string, unknown>): string[] {
+  const directChoices = Array.isArray(payload.choices) ? payload.choices : [];
+  if (directChoices.length > 0) {
+    return directChoices
+      .map((entry) => {
+        if (typeof entry === "string") {
+          return readString(entry);
+        }
+        const parsed = readObject(entry);
+        return parsed ? readString(parsed.label) ?? readString(parsed.text) ?? readString(parsed.value) : null;
+      })
+      .filter((entry): entry is string => Boolean(entry));
+  }
+
+  const questions = Array.isArray(payload.questions) ? payload.questions : [];
+  const flattened: string[] = [];
+  for (const entry of questions) {
+    const question = readObject(entry);
+    if (!question) {
+      continue;
+    }
+    const options = Array.isArray(question.options) ? question.options : [];
+    for (const option of options) {
+      if (typeof option === "string") {
+        const label = readString(option);
+        if (label) {
+          flattened.push(label);
+        }
+        continue;
+      }
+      const parsedOption = readObject(option);
+      const label = parsedOption
+        ? readString(parsedOption.label) ?? readString(parsedOption.text) ?? readString(parsedOption.value)
+        : null;
+      if (label) {
+        flattened.push(label);
+      }
+    }
+  }
+  return flattened;
 }
 
 function createHttpOpencodeClient(input: {
@@ -356,7 +475,7 @@ function createHttpOpencodeClient(input: {
   const baseUrl = input.baseUrl.replace(/\/+$/, "");
 
   async function request(path: string, init?: RequestInit): Promise<unknown> {
-    const response = await fetch(`${baseUrl}${addDirectoryParam(path, workspaceRootPath)}`, {
+    const response = await fetch(`${baseUrl}${addQueryParams(path, { directory: workspaceRootPath })}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -417,24 +536,24 @@ function createHttpOpencodeClient(input: {
 
   return {
     async createSession(payload) {
-      return request("/sessions", {
+      return request("/session", {
         method: "POST",
         body: JSON.stringify(payload),
       });
     },
     async getSession(payload) {
-      return request(`/sessions/${encodeURIComponent(payload.sessionId)}`);
+      return request(`/session/${encodeURIComponent(payload.sessionId)}`);
     },
     async listSessions() {
-      return request("/sessions");
+      return request("/api/session");
     },
     async deleteSession(payload) {
-      return request(`/sessions/${encodeURIComponent(payload.sessionId)}`, {
+      return request(`/session/${encodeURIComponent(payload.sessionId)}`, {
         method: "DELETE",
       });
     },
-    async createRun(payload) {
-      return request(`/sessions/${encodeURIComponent(payload.sessionId)}/runs`, {
+    async sendPrompt(payload) {
+      return request(`/api/session/${encodeURIComponent(payload.sessionId)}/prompt`, {
         method: "POST",
         body: JSON.stringify({
           prompt: payload.prompt,
@@ -442,25 +561,33 @@ function createHttpOpencodeClient(input: {
         }),
       });
     },
-    async *streamRunEvents(payload) {
-      const response = await fetch(
-        `${baseUrl}${addDirectoryParam(
-          `/sessions/${encodeURIComponent(payload.sessionId)}/runs/${encodeURIComponent(payload.runId)}/events`,
-          workspaceRootPath,
-        )}`,
-        {
-          method: "GET",
-          headers: {
-            Accept: "text/event-stream",
+    async *streamEvents(payload) {
+      async function openStream(path: string): Promise<Response> {
+        return fetch(
+          `${baseUrl}${addQueryParams(path, {
+            directory: workspaceRootPath,
+            sessionID: payload.sessionId,
+            sessionId: payload.sessionId,
+          })}`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "text/event-stream",
+            },
           },
-        },
-      ).catch((error: unknown) => {
-        throw new WorkspaceAgentBackendError({
-          code: "serverUnavailable",
-          message: "OpenCode server is unavailable.",
-          cause: error,
+        ).catch((error: unknown) => {
+          throw new WorkspaceAgentBackendError({
+            code: "serverUnavailable",
+            message: "OpenCode server is unavailable.",
+            cause: error,
+          });
         });
-      });
+      }
+
+      let response = await openStream("/api/event");
+      if (!response.ok && (response.status === 404 || response.status === 405)) {
+        response = await openStream("/event");
+      }
       if (!response.ok) {
         throw await toHttpError(response);
       }
@@ -553,14 +680,15 @@ function createOpencodeBackend(
     async listSessions(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
       const raw = await client.listSessions();
-      if (!Array.isArray(raw)) {
+      const entries = unwrapSessionList(raw);
+      if (!entries) {
         throw new WorkspaceAgentBackendError({
           code: "invalidResponse",
           message: "OpenCode sessions response must be an array.",
           cause: raw,
         });
       }
-      return raw.map((entry) => mapSession(entry));
+      return entries.map((entry) => mapSession(entry));
     },
     async deleteSession(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
@@ -576,7 +704,7 @@ function createOpencodeBackend(
     },
     async send(request) {
       const client = await createClientForWorkspace(request.workspaceRootPath);
-      const raw = await client.createRun({
+      const raw = await client.sendPrompt({
         sessionId: request.sessionId,
         prompt: request.prompt,
         model: request.model,
@@ -585,9 +713,8 @@ function createOpencodeBackend(
     },
     async *streamEvents(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
-      for await (const event of client.streamRunEvents({
+      for await (const event of client.streamEvents({
         sessionId: input.sessionId,
-        runId: input.runId,
       })) {
         const normalized = mapStreamEvent(event);
         if (normalized) {

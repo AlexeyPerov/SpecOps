@@ -635,15 +635,11 @@ async function executeWorkspaceAgentBackendTurn(params: {
       sessionId,
       model: modelId || undefined,
     });
-    if (!run.runId) {
-      throw new Error("OpenCode run did not return a run id.");
-    }
 
     let accumulated = "";
     for await (const event of backend.streamEvents({
       workspaceRootPath: root,
       sessionId: run.sessionId,
-      runId: run.runId,
     })) {
       if (!chatStore.isGenerationTurnActive(root, activeAgentId, turnId)) {
         throw new TurnCancelledError();

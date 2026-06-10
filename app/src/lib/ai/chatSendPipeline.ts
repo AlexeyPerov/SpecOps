@@ -138,6 +138,29 @@ export function abortTurn(agentId: string, workspaceRoot?: string | null): void 
   chatStore.completeTurn(agentId, workspaceRoot);
 }
 
+async function abortWorkspaceBackendSession(input: {
+  root: string;
+  activeAgentId: string;
+  backend: ReturnType<typeof createWorkspaceAgentBackend>;
+}): Promise<void> {
+  const link = chatStore.getAgentSessionLink(input.activeAgentId, input.root);
+  const sessionId = link?.opencodeSessionId?.trim() ?? "";
+  if (!sessionId) {
+    return;
+  }
+  try {
+    await input.backend.abortSession({
+      workspaceRootPath: input.root,
+      sessionId,
+    });
+  } catch (error: unknown) {
+    if (error instanceof WorkspaceAgentBackendError && error.code === "notFound") {
+      return;
+    }
+    throw error;
+  }
+}
+
 function assertTurnStillActive(root: string, agentId: string, turnId: string): void {
   if (!chatStore.isGenerationTurnActive(root, agentId, turnId)) {
     throw new TurnCancelledError();
@@ -620,15 +643,19 @@ async function executeWorkspaceAgentBackendTurn(params: {
   const assistantMessage = createAssistantPlaceholder(turnId);
   chatStore.appendMessage(assistantMessage, { agentId: activeAgentId, skipCompaction: true });
   let hasScheduledStreamingPersistence = false;
+  let backend: ReturnType<typeof createWorkspaceAgentBackend> | null = null;
+  let sessionId: string | null = null;
 
   try {
     const modelFromThread = chatStore.getMetadata(activeAgentId)?.selectedModelId?.trim() ?? "";
     const modelId = modelFromThread || params.modelId;
-    const { backend, sessionId } = await ensureWorkspaceAgentSessionId({
+    const resolved = await ensureWorkspaceAgentSessionId({
       root,
       activeAgentId,
       modelId,
     });
+    backend = resolved.backend;
+    sessionId = resolved.sessionId;
     const run = await backend.send({
       prompt: userMessage.content,
       workspaceRootPath: root,
@@ -671,6 +698,13 @@ async function executeWorkspaceAgentBackendTurn(params: {
     return { ok: true, turnId, assistantMessageId: assistantMessage.id, agentId: activeAgentId };
   } catch (error) {
     if (isTurnCancelledError(error)) {
+      if (backend && sessionId) {
+        await abortWorkspaceBackendSession({
+          root,
+          activeAgentId,
+          backend,
+        });
+      }
       return { ok: false, reason: "generating", message: "Response was cancelled." };
     }
     chatStore.removeMessage(assistantMessage.id, activeAgentId, root);

@@ -507,6 +507,10 @@ describe("sendChatMessage", () => {
       listSessions: vi.fn(),
       deleteSession: vi.fn(),
       send,
+      replyPermission: vi.fn(),
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
       streamEvents,
     } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
 
@@ -534,6 +538,7 @@ describe("sendChatMessage", () => {
     appState.addWorkspace("/work/a");
     const getSession = vi.fn().mockResolvedValue({ id: "sess-1" });
     const send = vi.fn().mockResolvedValue({ sessionId: "sess-1" });
+    const abortSession = vi.fn().mockResolvedValue(undefined);
     const streamEvents = vi.fn().mockImplementation(async function* () {
       yield { type: "message.delta", delta: "partial " };
       await Promise.resolve();
@@ -546,6 +551,10 @@ describe("sendChatMessage", () => {
       listSessions: vi.fn(),
       deleteSession: vi.fn(),
       send,
+      replyPermission: vi.fn(),
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession,
       streamEvents,
     } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
     chatStore.setAgentSessionLink(chatStore.getActiveAgentId()!, { opencodeSessionId: "sess-1" }, "/work/a");
@@ -560,6 +569,10 @@ describe("sendChatMessage", () => {
       ok: false,
       reason: "generating",
       message: "Response was cancelled.",
+    });
+    expect(abortSession).toHaveBeenCalledWith({
+      workspaceRootPath: "/work/a",
+      sessionId: "sess-1",
     });
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
   });

@@ -116,7 +116,7 @@ Dependencies: Task 2.
 
 ---
 
-#### Task 4: Permission/question reply + abort backend commands (P3-5 foundation) [Score:8] [Agent:medium]
+#### Task 4: Permission/question reply + abort backend commands (P3-5 foundation) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 

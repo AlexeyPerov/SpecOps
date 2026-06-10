@@ -15,6 +15,10 @@ function createOpencodeBackendForTests(params?: {
   listSessionsResult?: unknown;
   deleteSessionError?: unknown;
   sendPromptResult?: unknown;
+  replyPermissionError?: unknown;
+  replyQuestionError?: unknown;
+  rejectQuestionError?: unknown;
+  abortSessionError?: unknown;
   streamEvents?: unknown[];
 }) {
   const calls: Array<{ baseUrl: string; workspaceRootPath: string }> = [];
@@ -63,6 +67,30 @@ function createOpencodeBackendForTests(params?: {
           return params?.sendPromptResult ?? {
             sessionID: "sess-1",
           };
+        },
+        async replyPermission() {
+          if (params?.replyPermissionError) {
+            throw params.replyPermissionError;
+          }
+          return null;
+        },
+        async replyQuestion() {
+          if (params?.replyQuestionError) {
+            throw params.replyQuestionError;
+          }
+          return null;
+        },
+        async rejectQuestion() {
+          if (params?.rejectQuestionError) {
+            throw params.rejectQuestionError;
+          }
+          return null;
+        },
+        async abortSession() {
+          if (params?.abortSessionError) {
+            throw params.abortSessionError;
+          }
+          return null;
         },
         async *streamEvents() {
           const events = params?.streamEvents ?? [
@@ -198,6 +226,78 @@ describe("workspaceAgentBackend", () => {
         workspaceRootPath: "/tmp/workspace",
       }),
     ).rejects.toBeInstanceOf(WorkspaceAgentBackendError);
+  });
+
+  it("supports permission and question reply commands", async () => {
+    const { backend } = createOpencodeBackendForTests();
+    await expect(
+      backend.replyPermission({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+        requestId: "perm-1",
+        reply: "once",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      backend.replyQuestion({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+        requestId: "q-1",
+        answers: [["yes"]],
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      backend.rejectQuestion({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+        requestId: "q-1",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("supports aborting the active session", async () => {
+    const { backend } = createOpencodeBackendForTests();
+    await expect(
+      backend.abortSession({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("maps reply and abort command errors via backend error rules", async () => {
+    const notFoundError = new WorkspaceAgentBackendError({
+      code: "notFound",
+      status: 404,
+      message: "not found",
+    });
+    const transportError = new WorkspaceAgentBackendError({
+      code: "transportError",
+      status: 500,
+      message: "transport",
+    });
+
+    const permissionBackend = createOpencodeBackendForTests({
+      replyPermissionError: notFoundError,
+    }).backend;
+    await expect(
+      permissionBackend.replyPermission({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+        requestId: "perm-1",
+        reply: "reject",
+      }),
+    ).rejects.toBe(notFoundError);
+
+    const abortBackend = createOpencodeBackendForTests({
+      abortSessionError: transportError,
+    }).backend;
+    await expect(
+      abortBackend.abortSession({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      }),
+    ).rejects.toBe(transportError);
   });
 
   it("normalizes permission/question/run failed stream events", async () => {

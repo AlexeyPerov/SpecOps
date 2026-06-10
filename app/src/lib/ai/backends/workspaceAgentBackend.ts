@@ -22,6 +22,30 @@ export interface WorkspaceAgentRunResult {
   sessionId: string;
 }
 
+export type WorkspacePermissionReply = "once" | "always" | "reject";
+
+export interface WorkspacePermissionReplyRequest {
+  workspaceRootPath: string;
+  sessionId: string;
+  requestId: string;
+  reply: WorkspacePermissionReply;
+  message?: string;
+}
+
+export interface WorkspaceQuestionReplyRequest {
+  workspaceRootPath: string;
+  sessionId: string;
+  requestId: string;
+  answers: string[][];
+}
+
+export interface WorkspaceQuestionRejectRequest {
+  workspaceRootPath: string;
+  sessionId: string;
+  requestId: string;
+  message?: string;
+}
+
 export type WorkspaceAgentStreamEvent =
   | {
       type: "message.delta";
@@ -116,6 +140,10 @@ export interface WorkspaceAgentBackend {
     sessionId: string;
   }): Promise<boolean>;
   send(request: WorkspaceAgentSendRequest): Promise<WorkspaceAgentRunResult>;
+  replyPermission(input: WorkspacePermissionReplyRequest): Promise<void>;
+  replyQuestion(input: WorkspaceQuestionReplyRequest): Promise<void>;
+  rejectQuestion(input: WorkspaceQuestionRejectRequest): Promise<void>;
+  abortSession(input: { workspaceRootPath: string; sessionId: string }): Promise<void>;
   streamEvents(input: {
     workspaceRootPath: string;
     sessionId: string;
@@ -142,6 +170,15 @@ interface RawOpencodeClient {
   listSessions(): Promise<unknown>;
   deleteSession(input: { sessionId: string }): Promise<unknown>;
   sendPrompt(input: { sessionId: string; prompt: string; model?: string }): Promise<unknown>;
+  replyPermission(input: {
+    sessionId: string;
+    requestId: string;
+    reply: WorkspacePermissionReply;
+    message?: string;
+  }): Promise<unknown>;
+  replyQuestion(input: { sessionId: string; requestId: string; answers: string[][] }): Promise<unknown>;
+  rejectQuestion(input: { sessionId: string; requestId: string; message?: string }): Promise<unknown>;
+  abortSession(input: { sessionId: string }): Promise<unknown>;
   streamEvents(input: { sessionId: string }): AsyncIterable<unknown>;
 }
 
@@ -652,6 +689,33 @@ function createHttpOpencodeClient(input: {
     return response.status === 204 ? null : response.json();
   }
 
+  async function requestWithFallback(paths: string[], init?: RequestInit): Promise<unknown> {
+    let lastError: WorkspaceAgentBackendError | null = null;
+    for (let index = 0; index < paths.length; index += 1) {
+      const path = paths[index];
+      try {
+        return await request(path, init);
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.status === 404 || error.status === 405) &&
+          index < paths.length - 1
+        ) {
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+    if (lastError) {
+      throw lastError;
+    }
+    throw new WorkspaceAgentBackendError({
+      code: "transportError",
+      message: "OpenCode fallback request failed.",
+    });
+  }
+
   async function* parseSse(response: Response): AsyncIterable<unknown> {
     if (!response.body) {
       throw new WorkspaceAgentBackendError({
@@ -719,6 +783,55 @@ function createHttpOpencodeClient(input: {
         }),
       });
     },
+    async replyPermission(payload) {
+      return request(
+        `/api/session/${encodeURIComponent(payload.sessionId)}/permission/request/${encodeURIComponent(payload.requestId)}/reply`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reply: payload.reply,
+            message: payload.message,
+          }),
+        },
+      );
+    },
+    async replyQuestion(payload) {
+      return request(
+        `/api/session/${encodeURIComponent(payload.sessionId)}/question/request/${encodeURIComponent(payload.requestId)}/reply`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            answers: payload.answers,
+          }),
+        },
+      );
+    },
+    async rejectQuestion(payload) {
+      return request(
+        `/api/session/${encodeURIComponent(payload.sessionId)}/question/request/${encodeURIComponent(payload.requestId)}/reject`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            message: payload.message,
+          }),
+        },
+      );
+    },
+    async abortSession(payload) {
+      const sessionId = encodeURIComponent(payload.sessionId);
+      return requestWithFallback(
+        [
+          `/api/session/${sessionId}/abort`,
+          `/api/session/${sessionId}/stop`,
+          `/session/${sessionId}/abort`,
+          `/session/${sessionId}/stop`,
+        ],
+        {
+          method: "POST",
+          body: JSON.stringify({}),
+        },
+      );
+    },
     async *streamEvents(payload) {
       async function openStream(path: string): Promise<Response> {
         return fetch(
@@ -774,6 +887,18 @@ function createCursorLocalBackend(): WorkspaceAgentBackend {
       return fail();
     },
     async send() {
+      return fail();
+    },
+    async replyPermission() {
+      return fail();
+    },
+    async replyQuestion() {
+      return fail();
+    },
+    async rejectQuestion() {
+      return fail();
+    },
+    async abortSession() {
       return fail();
     },
     async *streamEvents() {
@@ -868,6 +993,37 @@ function createOpencodeBackend(
         model: request.model,
       });
       return mapRunResult(raw, request.sessionId);
+    },
+    async replyPermission(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      await client.replyPermission({
+        sessionId: input.sessionId,
+        requestId: input.requestId,
+        reply: input.reply,
+        message: input.message,
+      });
+    },
+    async replyQuestion(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      await client.replyQuestion({
+        sessionId: input.sessionId,
+        requestId: input.requestId,
+        answers: input.answers,
+      });
+    },
+    async rejectQuestion(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      await client.rejectQuestion({
+        sessionId: input.sessionId,
+        requestId: input.requestId,
+        message: input.message,
+      });
+    },
+    async abortSession(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      await client.abortSession({
+        sessionId: input.sessionId,
+      });
     },
     async *streamEvents(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);

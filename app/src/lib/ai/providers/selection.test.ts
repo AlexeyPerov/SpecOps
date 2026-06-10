@@ -19,6 +19,8 @@ import {
   listSelectableModelsForProvider,
   resolveDefaultChatProvider,
   resolveProviderSwitchModelId,
+  resolveWorkspaceModelId,
+  listSelectableWorkspaceModels,
 } from "./selection";
 import { defaultProviderModelCatalogs } from "./providerModelCatalog";
 
@@ -316,5 +318,56 @@ describe("chat provider selection", () => {
         { providerSettings: settings, connectionId: "conn-glm" },
       ),
     ).toBe("GLM-4.7");
+  });
+
+  describe("resolveWorkspaceModelId", () => {
+    it("returns preferred model when it exists in the catalog", () => {
+      const models = [
+        { id: "gpt-4.1", name: "GPT 4.1" },
+        { id: "gpt-4.1-mini", name: "GPT 4.1 Mini" },
+      ];
+      expect(resolveWorkspaceModelId(models, "gpt-4.1")).toBe("gpt-4.1");
+    });
+
+    it("falls back to first model when preferred model is stale", () => {
+      const models = [
+        { id: "gpt-4.1", name: "GPT 4.1" },
+        { id: "gpt-4.1-mini", name: "GPT 4.1 Mini" },
+      ];
+      expect(resolveWorkspaceModelId(models, "gpt-4o-mini")).toBe("gpt-4.1");
+    });
+
+    it("falls back to first model when preferred is null", () => {
+      const models = [
+        { id: "gpt-4.1", name: "GPT 4.1" },
+      ];
+      expect(resolveWorkspaceModelId(models, null)).toBe("gpt-4.1");
+    });
+
+    it("returns null for empty catalog", () => {
+      expect(resolveWorkspaceModelId([], "gpt-4.1")).toBeNull();
+      expect(resolveWorkspaceModelId([], null)).toBeNull();
+    });
+
+    it("trims whitespace from preferred model id", () => {
+      const models = [
+        { id: "gpt-4.1", name: "GPT 4.1" },
+      ];
+      expect(resolveWorkspaceModelId(models, "  gpt-4.1  ")).toBe("gpt-4.1");
+    });
+  });
+
+  describe("listSelectableWorkspaceModels", () => {
+    it("lists model ids from OpenCode catalog entries", () => {
+      const models = [
+        { id: "gpt-4.1", name: "GPT 4.1" },
+        { id: "gpt-4.1-mini", name: "GPT 4.1 Mini" },
+      ];
+      expect(listSelectableWorkspaceModels(models)).toEqual(["gpt-4.1", "gpt-4.1-mini"]);
+    });
+
+    it("returns empty array for empty catalog", () => {
+      expect(listSelectableWorkspaceModels([])).toEqual([]);
+    });
   });
 });

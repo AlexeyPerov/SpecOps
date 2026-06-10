@@ -188,7 +188,7 @@ Dependencies: Task 2 and M1.5 catalog alignment outputs.
 
 ---
 
-#### Task 6: Milestone 2 tests and verification (P3-8 partial) [Score:7] [Agent:medium]
+#### Task 6: Milestone 2 tests and verification (P3-8 partial) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

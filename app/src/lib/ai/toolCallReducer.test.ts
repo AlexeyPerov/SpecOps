@@ -342,5 +342,134 @@ describe("toolCallReducer", () => {
       expect(calls[0].status).toBe("success");
       expect(calls[1].status).toBe("success");
     });
+
+    it("handles start-progress-complete-failure flow", () => {
+      let calls: ToolCallRecord[] = [];
+      calls = applyToolStarted(calls, {
+        toolName: "bash",
+        callId: "call-f",
+        input: "exit 1",
+      });
+      calls = applyToolProgress(calls, {
+        toolName: "bash",
+        callId: "call-f",
+        output: { line: "FAIL" },
+      });
+      calls = applyToolCompleted(calls, {
+        toolName: "bash",
+        callId: "call-f",
+        output: "command failed",
+        isError: true,
+      });
+      expect(calls[0].status).toBe("failure");
+      expect(calls[0].output).toBe("command failed");
+      expect(calls[0].progress).toEqual({ line: "FAIL" });
+    });
+
+    it("handles progress update on a completed tool call", () => {
+      let calls: ToolCallRecord[] = [];
+      calls = applyToolStarted(calls, {
+        toolName: "bash",
+        callId: "call-late",
+        input: "npm test",
+      });
+      calls = applyToolCompleted(calls, {
+        toolName: "bash",
+        callId: "call-late",
+        output: "done",
+        isError: false,
+      });
+      expect(calls[0].status).toBe("success");
+
+      calls = applyToolProgress(calls, {
+        toolName: "bash",
+        callId: "call-late",
+        output: { late: true },
+      });
+      expect(calls[0].status).toBe("success");
+      expect(calls[0].progress).toEqual({ late: true });
+    });
+
+    it("handles multiple rapid progress updates", () => {
+      let calls: ToolCallRecord[] = [];
+      calls = applyToolStarted(calls, {
+        toolName: "bash",
+        callId: "call-multi",
+        input: "watch",
+      });
+
+      for (let i = 0; i < 5; i++) {
+        calls = applyToolProgress(calls, {
+          toolName: "bash",
+          callId: "call-multi",
+          output: { pct: (i + 1) * 20 },
+        });
+      }
+      expect(calls).toHaveLength(1);
+      expect(calls[0].status).toBe("pending");
+      expect(calls[0].progress).toEqual({ pct: 100 });
+    });
+
+    it("idempotently handles triple duplicate started events", () => {
+      let calls: ToolCallRecord[] = [];
+      for (let i = 0; i < 3; i++) {
+        calls = applyToolStarted(calls, {
+          toolName: "read_file",
+          callId: "call-dup",
+          input: { path: "a.ts" },
+        });
+      }
+      expect(calls).toHaveLength(1);
+      expect(calls[0].status).toBe("pending");
+    });
+
+    it("handles out-of-order progress before started creating synthetic placeholder", () => {
+      let calls: ToolCallRecord[] = [];
+      calls = applyToolProgress(calls, {
+        toolName: "bash",
+        callId: "call-oop",
+        output: { early: true },
+      });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].status).toBe("pending");
+      expect(calls[0].progress).toEqual({ early: true });
+
+      calls = applyToolStarted(calls, {
+        toolName: "bash",
+        callId: "call-oop",
+        input: "actual command",
+      });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].status).toBe("pending");
+      expect(calls[0].input).toBe("actual command");
+    });
+
+    it("handles null callId consistently across all three functions", () => {
+      let calls: ToolCallRecord[] = [];
+      calls = applyToolStarted(calls, {
+        toolName: "bash",
+        callId: null,
+        input: "cmd",
+      });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].callId).toBe("");
+
+      calls = applyToolProgress(calls, {
+        toolName: "bash",
+        callId: null,
+        output: { pct: 50 },
+      });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].progress).toEqual({ pct: 50 });
+
+      calls = applyToolCompleted(calls, {
+        toolName: "bash",
+        callId: null,
+        output: "done",
+        isError: false,
+      });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].status).toBe("success");
+    });
   });
 });

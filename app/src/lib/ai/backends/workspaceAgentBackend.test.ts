@@ -456,6 +456,189 @@ describe("workspaceAgentBackend", () => {
     ]);
   });
 
+  it("normalizes tool failure events from SDK", async () => {
+    const { backend } = createOpencodeBackendForTests({
+      streamEvents: [
+        {
+          type: "session.next.tool.called",
+          data: { tool: "write_file", callID: "call-err", input: { path: "/readonly" } },
+        },
+        {
+          type: "session.next.tool.failed",
+          data: { tool: "write_file", callID: "call-err", error: "permission denied" },
+        },
+        { type: "session.status", data: { status: { type: "idle" } } },
+      ],
+    });
+
+    const seen: WorkspaceAgentStreamEvent[] = [];
+    for await (const event of backend.streamEvents({
+      workspaceRootPath: "/tmp/workspace",
+      sessionId: "sess-1",
+    })) {
+      seen.push(event);
+    }
+
+    expect(seen).toEqual([
+      {
+        type: "tool.started",
+        toolName: "write_file",
+        callId: "call-err",
+        input: { path: "/readonly" },
+      },
+      {
+        type: "tool.completed",
+        toolName: "write_file",
+        callId: "call-err",
+        output: "permission denied",
+        isError: true,
+      },
+      { type: "run.completed" },
+    ]);
+  });
+
+  it("normalizes message.completed from text.ended SDK event", async () => {
+    const { backend } = createOpencodeBackendForTests({
+      streamEvents: [
+        { type: "session.next.text.delta", data: { delta: "Hello " } },
+        { type: "session.next.text.ended", data: { text: "Hello world" } },
+        { type: "session.status", data: { status: { type: "idle" } } },
+      ],
+    });
+
+    const seen: WorkspaceAgentStreamEvent[] = [];
+    for await (const event of backend.streamEvents({
+      workspaceRootPath: "/tmp/workspace",
+      sessionId: "sess-1",
+    })) {
+      seen.push(event);
+    }
+
+    expect(seen).toEqual([
+      { type: "message.delta", delta: "Hello " },
+      { type: "message.completed", message: "Hello world" },
+      { type: "run.completed" },
+    ]);
+  });
+
+  it("skips malformed frames with missing type", async () => {
+    const { backend } = createOpencodeBackendForTests({
+      streamEvents: [
+        { data: { delta: "orphan" } },
+        { type: "session.next.text.delta", data: { delta: "valid" } },
+        { type: "session.status", data: { status: { type: "idle" } } },
+      ],
+    });
+
+    const seen: WorkspaceAgentStreamEvent[] = [];
+    for await (const event of backend.streamEvents({
+      workspaceRootPath: "/tmp/workspace",
+      sessionId: "sess-1",
+    })) {
+      seen.push(event);
+    }
+
+    expect(seen).toEqual([
+      { type: "message.delta", delta: "valid" },
+      { type: "run.completed" },
+    ]);
+  });
+
+  it("skips delta events with empty delta strings", async () => {
+    const { backend } = createOpencodeBackendForTests({
+      streamEvents: [
+        { type: "session.next.text.delta", data: { delta: "" } },
+        { type: "session.next.text.delta", data: { delta: "real content" } },
+        { type: "session.next.text.delta", data: {} },
+        { type: "session.status", data: { status: { type: "idle" } } },
+      ],
+    });
+
+    const seen: WorkspaceAgentStreamEvent[] = [];
+    for await (const event of backend.streamEvents({
+      workspaceRootPath: "/tmp/workspace",
+      sessionId: "sess-1",
+    })) {
+      seen.push(event);
+    }
+
+    expect(seen).toEqual([
+      { type: "message.delta", delta: "real content" },
+      { type: "run.completed" },
+    ]);
+  });
+
+  it("handles multiple concurrent tool calls with interleaved dedup", async () => {
+    const { backend } = createOpencodeBackendForTests({
+      streamEvents: [
+        {
+          id: "e1",
+          type: "session.next.tool.called",
+          data: { tool: "read_file", callID: "c1", input: { path: "a" } },
+        },
+        {
+          id: "e2",
+          type: "session.next.tool.called",
+          data: { tool: "read_file", callID: "c2", input: { path: "b" } },
+        },
+        {
+          id: "e1",
+          type: "session.next.tool.called",
+          data: { tool: "read_file", callID: "c1", input: { path: "a" } },
+        },
+        {
+          id: "e3",
+          type: "session.next.tool.success",
+          data: { tool: "read_file", callID: "c1", result: "a-content" },
+        },
+        {
+          id: "e4",
+          type: "session.next.tool.success",
+          data: { tool: "read_file", callID: "c2", result: "b-content" },
+        },
+        { type: "session.status", data: { status: { type: "idle" } } },
+      ],
+    });
+
+    const seen: WorkspaceAgentStreamEvent[] = [];
+    for await (const event of backend.streamEvents({
+      workspaceRootPath: "/tmp/workspace",
+      sessionId: "sess-1",
+    })) {
+      seen.push(event);
+    }
+
+    expect(seen).toEqual([
+      {
+        type: "tool.started",
+        toolName: "read_file",
+        callId: "c1",
+        input: { path: "a" },
+      },
+      {
+        type: "tool.started",
+        toolName: "read_file",
+        callId: "c2",
+        input: { path: "b" },
+      },
+      {
+        type: "tool.completed",
+        toolName: "read_file",
+        callId: "c1",
+        output: "a-content",
+        isError: false,
+      },
+      {
+        type: "tool.completed",
+        toolName: "read_file",
+        callId: "c2",
+        output: "b-content",
+        isError: false,
+      },
+      { type: "run.completed" },
+    ]);
+  });
+
   describe("catalog listing", () => {
     it("lists models from /api/model", async () => {
       const { backend } = createOpencodeBackendForTests();

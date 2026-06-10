@@ -552,7 +552,7 @@ describe("sendChatMessage", () => {
       prompt: "Route through OpenCode",
       workspaceRootPath: "/work/a",
       sessionId: "sess-1",
-      model: "debug-simulator",
+      model: undefined,
     });
     expect(
       chatStore.getMessages().find((message) => message.role === "assistant")?.content,
@@ -616,6 +616,36 @@ describe("sendChatMessage", () => {
 
     expect(result.ok).toBe(true);
     expect(createWorkspaceAgentBackendMock).not.toHaveBeenCalled();
+  });
+
+  it("skips HTTP provider validation for workspace sends via OpenCode backend", async () => {
+    ensureWorkspaceContext("/work/a");
+    appState.updateHttpConnectionSettings({ enabled: true });
+    appState.setProviderApiKey("http", "");
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield { type: "message.delta", delta: "OpenCode response" };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn(),
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+
+    const result = await sendChatMessage("No HTTP validation needed");
+
+    expect(result.ok).toBe(true);
+    expect(
+      chatStore.getMessages().find((m) => m.role === "assistant")?.content,
+    ).toBe("OpenCode response");
   });
 
   it("handles permission.requested event and sends reply to backend", async () => {

@@ -7,7 +7,7 @@ import {
   persistAgentThreadOnce,
   resolveSendTarget,
   shouldUseWorkspaceAgentBackend,
-  validateWorkspaceAgentBackendSend,
+  validateOpencodeBackendSend,
   validateProviderSend,
   type ChatSendContextOptions,
   type SendChatMessageResult,
@@ -58,15 +58,22 @@ export async function sendChatMessage(
     chatContextKind: target.chatContextKind,
   });
   if (useWorkspaceBackend) {
-    const workspaceValidation = await validateWorkspaceAgentBackendSend(
+    const opencodeValidation = await validateOpencodeBackendSend(
       target.root,
-      target.chatContextKind,
+      target.activeAgentId,
     );
-    if (!workspaceValidation.ok) {
+    if (!opencodeValidation.ok) {
       chatStore.removeMessage(userMessage.id, target.activeAgentId, target.root);
       abortTurn(target.activeAgentId, target.root);
-      return workspaceValidation;
+      return opencodeValidation;
     }
+    return executeProviderTurn({
+      root: target.root,
+      chatContextKind: target.chatContextKind,
+      activeAgentId: target.activeAgentId,
+      turnId,
+      modelId: opencodeValidation.modelId,
+    });
   }
 
   const providerValidation = await validateProviderSend(target.activeAgentId, options);

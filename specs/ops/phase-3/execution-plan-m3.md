@@ -49,7 +49,7 @@ Residual uncertainties:
 
 ## Task Breakdown
 
-#### Task 1: Workspace context send-path cutover to OpenCode only (P3-7) [Score:8] [Agent:medium]
+#### Task 1: Workspace context send-path cutover to OpenCode only (P3-7) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 

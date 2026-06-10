@@ -5,10 +5,12 @@ import {
   findLastUserMessage,
   getLastRetryError,
   resolveSendTarget,
+  shouldUseWorkspaceAgentBackend,
+  validateOpencodeBackendSend,
+  validateProviderSend,
   type ChatSendContextOptions,
   type ChatTurnSuccessResult,
   type SendChatMessageFailureReason,
-  validateProviderSend,
 } from "./chatSendPipeline";
 
 export type RetryLastChatTurnFailureReason =
@@ -44,6 +46,35 @@ export async function retryLastChatTurn(
       reason: "no_user_message",
       message: "Could not find the last user message to retry.",
     };
+  }
+
+  const useWorkspaceBackend = shouldUseWorkspaceAgentBackend({
+    root: target.root,
+    chatContextKind: target.chatContextKind,
+  });
+
+  if (useWorkspaceBackend) {
+    const opencodeValidation = await validateOpencodeBackendSend(target.root, target.activeAgentId);
+    if (!opencodeValidation.ok) {
+      return opencodeValidation;
+    }
+    const previousError = getLastRetryError(target.activeAgentId);
+    const turnId = beginTurn(target.activeAgentId);
+    if (!turnId) {
+      return {
+        ok: false,
+        reason: "generating",
+        message: "Another response is already in progress.",
+      };
+    }
+    return executeProviderTurn({
+      root: target.root,
+      chatContextKind: target.chatContextKind,
+      activeAgentId: target.activeAgentId,
+      turnId,
+      modelId: opencodeValidation.modelId,
+      previousError,
+    });
   }
 
   const validation = await validateProviderSend(target.activeAgentId, options);

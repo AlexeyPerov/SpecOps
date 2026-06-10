@@ -12,6 +12,7 @@ import {
   formatRetryFailureNote,
   PROVIDER_UNAVAILABLE_MESSAGE,
   sanitizeUnexpectedProviderError,
+  WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
 } from "./chatErrorCopy";
 import {
   getDebugProviderSendBlockHint,
@@ -41,7 +42,10 @@ import {
   logChatSendComplete,
   logChatSendFailed,
   logChatSendStart,
+  logWorkspaceHttpProviderGuard,
 } from "./chatDiagnostics";
+import { ensureWorkspaceReadAccess } from "../services/fileSystem";
+import { resolveOpencodeModelFallback } from "./opencodeCatalog";
 
 export type SendChatMessageFailureReason =
   | "empty"
@@ -79,6 +83,11 @@ type ProviderSendValidationSuccess = {
   accessStatus: WorkspaceAccessStatus;
   modelId: string;
   connectionId?: string;
+};
+
+type OpencodeBackendSendValidation = {
+  ok: true;
+  modelId: string;
 };
 
 type ChatSendTargetFailure = {
@@ -301,6 +310,24 @@ export async function validateWorkspaceAgentBackendSend(
   return { ok: true };
 }
 
+export async function validateOpencodeBackendSend(
+  root: string,
+  activeAgentId: string,
+): Promise<OpencodeBackendSendValidation | ProviderSendValidationFailure> {
+  const workspaceAccess = await ensureWorkspaceReadAccess(root);
+  if (workspaceAccess !== "ready") {
+    return {
+      ok: false,
+      reason: "preflight",
+      message: WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
+    };
+  }
+  const preferredModelId = chatStore.getMetadata(activeAgentId)?.selectedModelId?.trim() ?? null;
+  const catalogModelId = resolveOpencodeModelFallback(root, preferredModelId);
+  const modelId = catalogModelId ?? preferredModelId ?? "";
+  return { ok: true, modelId };
+}
+
 export function getLastRetryError(activeAgentId: string): ChatTurnError | null {
   return chatStore.getRuntimeState(activeAgentId).lastError;
 }
@@ -417,16 +444,36 @@ export async function executeProviderTurn(params: {
   chatContextKind: ChatContextKind;
   activeAgentId: string;
   turnId: string;
-  provider: ChatProvider;
-  accessStatus: WorkspaceAccessStatus;
+  provider?: ChatProvider;
+  accessStatus?: WorkspaceAccessStatus;
   modelId: string;
   connectionId?: string;
   previousError?: ChatTurnError | null;
 }): Promise<SendChatMessageResult> {
-  const { root, chatContextKind, activeAgentId, turnId, provider, accessStatus, modelId, connectionId, previousError } =
+  const { root, chatContextKind, activeAgentId, turnId, modelId, connectionId, previousError } =
     params;
   if (shouldUseWorkspaceAgentBackend({ root, chatContextKind })) {
     return executeWorkspaceAgentBackendTurn(params);
+  }
+  const activeContextId = appState.getSnapshot().contexts.activeContextId;
+  if (chatContextKind === "workspace" && isWorkspaceContextId(activeContextId)) {
+    logWorkspaceHttpProviderGuard({ agentId: activeAgentId, turnId });
+    abortTurn(activeAgentId, root);
+    return {
+      ok: false,
+      reason: "provider_error",
+      message: "Workspace send must use OpenCode backend.",
+    };
+  }
+  const provider = params.provider;
+  const accessStatus = params.accessStatus ?? "unknown";
+  if (!provider) {
+    abortTurn(activeAgentId, root);
+    return {
+      ok: false,
+      reason: "provider_unavailable",
+      message: PROVIDER_UNAVAILABLE_MESSAGE,
+    };
   }
   const abortController = new AbortController();
   const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
@@ -611,8 +658,8 @@ async function executeWorkspaceAgentBackendTurn(params: {
   chatContextKind: ChatContextKind;
   activeAgentId: string;
   turnId: string;
-  provider: ChatProvider;
-  accessStatus: WorkspaceAccessStatus;
+  provider?: ChatProvider;
+  accessStatus?: WorkspaceAccessStatus;
   modelId: string;
   connectionId?: string;
   previousError?: ChatTurnError | null;

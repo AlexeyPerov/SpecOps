@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-10 12:34
+
+- **Session mapping restore/reconcile hardening (phase 3 M1.5 task 5):** Integrated workspace-scoped OpenCode session mapping reconciliation into runtime workspace restore flow via `appShellAgentHandlers`: after loading workspace agents and merging session drafts, restore now validates persisted agent->session links against backend session list and deterministically clears stale mappings when remote sessions are missing/deleted, while preserving restore behavior when backend listing is temporarily unavailable (`serverUnavailable`/`transportError`/`authFailure`). Added focused tests in `appShellAgentHandlers.test.ts` for stale-mapping cleanup and unavailable-backend fallback; marked M1.5 Task 5 as `[DONE]` in `execution-plan-m1-5.md`.
+
 ## 2026-06-10 11:58
 
 - **Permission/question reply and abort backend commands (phase 3 M1.5 task 4):** Extended `workspaceAgentBackend` with explicit command APIs for permission replies (`reply: once|always|reject`), question replies (`answers: string[][]`), question reject, and session abort semantics for cancel UX. Wired HTTP client routes for OpenCode v2 permission/question reply/reject endpoints and added abort fallback routing (`/api/session/{id}/abort|stop`, then `/session/{id}/abort|stop`) with consistent `WorkspaceAgentBackendError` propagation. Updated workspace send cancellation flow to call backend session abort on turn cancellation and covered the behavior with backend/send tests. Marked M1.5 Task 4 as `[DONE]` in `execution-plan-m1-5.md`.

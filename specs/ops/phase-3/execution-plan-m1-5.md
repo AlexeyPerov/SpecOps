@@ -139,7 +139,7 @@ Dependencies: Task 3.
 
 ---
 
-#### Task 5: Session mapping restore/reconcile hardening (P3-3 follow-up) [Score:7] [Agent:medium]
+#### Task 5: Session mapping restore/reconcile hardening (P3-3 follow-up) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

@@ -7,6 +7,12 @@ import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { closeTabWithUnsavedPrompt } from "./closeTabFlow";
 import {
+  WorkspaceAgentBackendError,
+  createWorkspaceAgentBackend,
+} from "../ai/backends/workspaceAgentBackend";
+import {
+  isAgentSessionMappingValid,
+  mappedSessionForAgent,
   nextSidebarAgentId,
   openAgentTabIds,
   resolveRestoredActiveAgent,
@@ -21,6 +27,45 @@ export interface AppShellAgentHandlersDeps {
 
 export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   const { getIsChatHttpActive, getCurrentWindowId, notify } = deps;
+
+  async function reconcileWorkspaceSessionMappings(normalizedRoot: string): Promise<void> {
+    const backend = createWorkspaceAgentBackend("opencode", {
+      resolveRuntimeConfig: async () => {
+        const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
+        return { mode, baseUrl };
+      },
+    });
+    let existingSessionIds: ReadonlySet<string>;
+    try {
+      existingSessionIds = new Set(
+        (await backend.listSessions({ workspaceRootPath: normalizedRoot })).map(
+          (session) => session.id,
+        ),
+      );
+    } catch (error: unknown) {
+      if (
+        error instanceof WorkspaceAgentBackendError &&
+        (error.code === "serverUnavailable" ||
+          error.code === "transportError" ||
+          error.code === "authFailure")
+      ) {
+        return;
+      }
+      throw error;
+    }
+
+    const index = chatStore.getAgentIndex();
+    for (const entry of index) {
+      const mapping = mappedSessionForAgent(index, entry.id);
+      if (isAgentSessionMappingValid(mapping, existingSessionIds)) {
+        continue;
+      }
+      if (!mapping) {
+        continue;
+      }
+      chatStore.clearAgentSessionLink(entry.id, normalizedRoot);
+    }
+  }
 
   function handleNewAgent(): void {
     const agentId = chatStore.createDraftAgent();
@@ -97,6 +142,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     const session = appState.getActiveSession();
     await chatStore.loadWorkspaceAgents(normalizedRoot);
     chatStore.mergeSessionDraftAgents(normalizedRoot, openAgentTabIds(session.openTabs));
+    await reconcileWorkspaceSessionMappings(normalizedRoot);
     const agentIndex = chatStore.getAgentIndex();
     const restored = resolveRestoredActiveAgent(session, agentIndex);
     if (restored.shouldFocusAgentTab && restored.activeAgentId) {

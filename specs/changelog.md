@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-06-10 11:40
+
+- **Docs (phase 3 M1.5 task 1 contract freeze):** Added `specs/ops/phase-3/opencode-contract-freeze-m1-5.md` as a single baseline for frozen OpenCode session/prompt/stream contract assumptions, explicit invalid legacy run-endpoint assumptions to remove, and implementation guardrails for Tasks 2-6. Linked the contract-freeze baseline from `phase-3.md`, milestone plans (`execution-plan-m2.md`, `execution-plan-m3.md`), and marked M1.5 Task 1 as `[DONE]` in `execution-plan-m1-5.md`.
+
+## 2026-06-10 11:34
+
+- **Docs (phase 3 decisions applied):** Resolved Phase 3 OpenCode contract uncertainties with explicit decisions in docs/plans: canonical stream envelope is native `/api/event`; permission/question handling is v2-only (no backward compatibility path); prompt queue policy is single-active-per-session with FIFO; tool-card lifecycle uses idempotent updates plus synthetic placeholders for out-of-order/partial events; model/provider catalog strategy is auto-refresh on open plus manual refresh action; M3 requires full workspace-lane audit (runtime + copy + docs + tests) before closure.
+
+## 2026-06-09 23:55
+
+- **Docs (phase 3 contract alignment package):** Added OpenCode contract references for Phase 3 implementation planning: `specs/ops/phase-3/opencode-api-mapping.md` (SpecOps -> OpenCode endpoint/SDK mapping), `specs/ops/phase-3/opencode-event-normalization-spec.md` (exact stream normalization and idempotency rules), `specs/ops/phase-3/opencode-permission-question-flow.md` (modal/reply behavior), `specs/ops/phase-3/opencode-error-mapping.md` (backend error translation), and `specs/ops/phase-3/opencode-m1-gap-analysis.md` (M1 gap summary).
+- **Docs (phase 3 milestone bridge):** Added `specs/ops/phase-3/execution-plan-m1-5.md` to bridge M1 -> M2 with ordered refactor/fix tasks for OpenCode contract alignment before continuing M2 Task 2.
+- **Docs (phase 3 execution order update):** Updated `phase-3.md` execution chain to include `m1-5`, linked new contract docs in deliverables, and added changelog row for M1.5 alignment bridge.
+- **Docs (milestone plans):** Updated `execution-plan-m2.md` to require M1.5 completion, added Task 1 re-verification note, and adjusted Task 2-6 dependencies/required context to start M2 from Task 2 after M1.5. Updated `execution-plan-m3.md` prerequisites and task details to enforce M1.5 -> M2 -> M3 ordering and to remove remaining workspace HTTP coupling using contract-aligned semantics.
+
 ## 2026-06-09 23:24
 
 - **Workspace composer OpenCode stream routing (P3-4 / Task 1):** Added workspace-only (`ws-*`) send path in chat pipeline to execute turns through `WorkspaceAgentBackend("opencode")` while preserving existing `chat-http` provider pipeline. Workspace turns now create/reuse per-agent OpenCode sessions, stream assistant deltas into the active assistant message in real time, and preserve generation lifecycle semantics for success/cancel/error without changing chat-only contexts. Added coverage in `sendChatMessage.test.ts` for ws-context backend routing, stream cancellation behavior, and non-workspace isolation.

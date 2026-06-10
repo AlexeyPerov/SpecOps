@@ -22,6 +22,7 @@ function createOpencodeBackendForTests(params?: {
   streamEvents?: unknown[];
 }) {
   const calls: Array<{ baseUrl: string; workspaceRootPath: string }> = [];
+  const sendPromptCalls: Array<{ sessionId: string; prompt: string; model?: string }> = [];
   const backend = createWorkspaceAgentBackend("opencode", {
     resolveRuntimeConfig: async () => ({
       mode: params?.mode ?? "url",
@@ -63,7 +64,8 @@ function createOpencodeBackendForTests(params?: {
           }
           return null;
         },
-        async sendPrompt() {
+        async sendPrompt(input) {
+          sendPromptCalls.push(input);
           return params?.sendPromptResult ?? {
             sessionID: "sess-1",
           };
@@ -112,7 +114,7 @@ function createOpencodeBackendForTests(params?: {
       };
     },
   });
-  return { backend, calls };
+  return { backend, calls, sendPromptCalls };
 }
 
 describe("workspaceAgentBackend", () => {
@@ -213,6 +215,27 @@ describe("workspaceAgentBackend", () => {
       },
       {
         type: "run.completed",
+      },
+    ]);
+  });
+
+  it("sends prompt through canonical session prompt contract", async () => {
+    const { backend, sendPromptCalls } = createOpencodeBackendForTests({
+      sendPromptResult: { sessionID: "sess-updated" },
+    });
+    await expect(
+      backend.send({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+        prompt: "hello",
+        model: "gpt-4.1",
+      }),
+    ).resolves.toEqual({ sessionId: "sess-updated" });
+    expect(sendPromptCalls).toEqual([
+      {
+        sessionId: "sess-1",
+        prompt: "hello",
+        model: "gpt-4.1",
       },
     ]);
   });

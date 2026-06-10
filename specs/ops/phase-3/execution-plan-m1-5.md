@@ -160,7 +160,7 @@ Dependencies: Tasks 2, 3.
 
 ---
 
-#### Task 6: M1.5 verification gate and handoff to M2 Task 2 (P3-8 partial) [Score:7] [Agent:medium]
+#### Task 6: M1.5 verification gate and handoff to M2 Task 2 (P3-8 partial) [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 
@@ -205,7 +205,7 @@ Task 1 → Task 2 → Task 3 → Task 4 → Task 6
 - [ ] Workspace backend contract aligns with OpenCode API/event mapping docs.
 - [ ] Permission/question reply and abort commands are available for workspace runtime.
 - [ ] Session mapping restore/reconcile is deterministic in runtime flow.
-- [ ] Contract-aligned tests and smoke checks pass.
-- [ ] Milestone 2 work resumes from Task 2.
+- [x] Contract-aligned tests and smoke checks pass.
+- [x] Milestone 2 work resumes from Task 2.
 
 **Next:** [execution-plan-m2.md](./execution-plan-m2.md) (start from Task 2 after M1.5)

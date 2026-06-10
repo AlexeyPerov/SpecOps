@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-10 12:39
+
+- **M1.5 Task 6 verification gate + M2 handoff:** Completed phase-3 M1.5 verification by extending contract-aligned backend coverage in `workspaceAgentBackend.test.ts` (explicit prompt send contract assertion) and fixing `appShellAgentHandlers.test.ts` preflight mock typing for current `ChatAccessState`. Updated `specs/ops/phase-3/m1-task5-smoke.md` into an M1.5 Task 6 checklist to cover prompt/tool/permission/question/reject/cancel and restore-reconcile flows in sidecar and URL modes, and added explicit handoff guidance to resume Milestone 2 from `execution-plan-m2.md` Task 2. Marked Task 6 `[DONE]` and completed M1.5 exit criteria in `execution-plan-m1-5.md` after passing `npm test` and `npm run check` (warnings only).
+
 ## 2026-06-10 12:34
 
 - **Session mapping restore/reconcile hardening (phase 3 M1.5 task 5):** Integrated workspace-scoped OpenCode session mapping reconciliation into runtime workspace restore flow via `appShellAgentHandlers`: after loading workspace agents and merging session drafts, restore now validates persisted agent->session links against backend session list and deterministically clears stale mappings when remote sessions are missing/deleted, while preserving restore behavior when backend listing is temporarily unavailable (`serverUnavailable`/`transportError`/`authFailure`). Added focused tests in `appShellAgentHandlers.test.ts` for stale-mapping cleanup and unavailable-backend fallback; marked M1.5 Task 5 as `[DONE]` in `execution-plan-m1-5.md`.

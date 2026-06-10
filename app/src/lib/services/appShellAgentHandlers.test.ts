@@ -4,6 +4,7 @@ import { createAppShellAgentHandlers } from "./appShellAgentHandlers";
 import { WorkspaceAgentBackendError } from "../ai/backends/workspaceAgentBackend";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
+import { WorkspaceAccessReason } from "../ai/capabilities";
 
 vi.mock("../state/appState", () => ({
   appState: {
@@ -69,7 +70,9 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
     chatStoreMock.setActiveAgentId.mockImplementation(() => {});
     chatStoreMock.runAccessPreflight.mockResolvedValue({
       status: "ready",
+      reason: WorkspaceAccessReason.Unknown,
       message: "ok",
+      checkedAt: "2026-06-10T09:00:00.000Z",
     });
     chatStoreMock.clearAgentSessionLink.mockImplementation(() => false);
   });

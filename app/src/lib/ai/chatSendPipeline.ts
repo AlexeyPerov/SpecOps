@@ -33,6 +33,7 @@ import {
   applyToolStarted,
 } from "./toolCallReducer";
 import { promptPermission } from "../services/permissionPrompt";
+import { promptQuestion } from "../services/questionPrompt";
 import type { WorkspacePermissionReply } from "./backends/workspaceAgentBackend";
 import type { WorkspaceAccessStatus } from "./capabilities";
 import {
@@ -728,6 +729,43 @@ async function executeWorkspaceAgentBackendTurn(params: {
             requestId: event.permissionId,
             reply: result.reply as WorkspacePermissionReply,
           });
+        } catch (replyError: unknown) {
+          if (
+            replyError instanceof WorkspaceAgentBackendError &&
+            replyError.code === "notFound"
+          ) {
+            break;
+          }
+          throw replyError;
+        }
+        continue;
+      }
+      if (event.type === "question.requested") {
+        assertTurnStillActive(root, activeAgentId, turnId);
+        chatStore.setWaitingForQuestion(activeAgentId, true, root);
+        const result = await promptQuestion({
+          questionId: event.questionId,
+          prompt: event.prompt,
+          choices: event.choices,
+          payload: event.payload,
+        });
+        chatStore.setWaitingForQuestion(activeAgentId, false, root);
+        assertTurnStillActive(root, activeAgentId, turnId);
+        try {
+          if (result.type === "reply") {
+            await backend.replyQuestion({
+              workspaceRootPath: root,
+              sessionId: run.sessionId,
+              requestId: event.questionId,
+              answers: result.answers,
+            });
+          } else {
+            await backend.rejectQuestion({
+              workspaceRootPath: root,
+              sessionId: run.sessionId,
+              requestId: event.questionId,
+            });
+          }
         } catch (replyError: unknown) {
           if (
             replyError instanceof WorkspaceAgentBackendError &&

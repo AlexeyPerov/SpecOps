@@ -24,6 +24,7 @@ import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence"
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { createWorkspaceAgentBackend } from "./backends/workspaceAgentBackend";
 import { promptPermission } from "../services/permissionPrompt";
+import { promptQuestion } from "../services/questionPrompt";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
@@ -49,10 +50,15 @@ vi.mock("../services/permissionPrompt", () => ({
   promptPermission: vi.fn(),
 }));
 
+vi.mock("../services/questionPrompt", () => ({
+  promptQuestion: vi.fn(),
+}));
+
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 const createWorkspaceAgentBackendMock = vi.mocked(createWorkspaceAgentBackend);
 const promptPermissionMock = vi.mocked(promptPermission);
+const promptQuestionMock = vi.mocked(promptQuestion);
 
 function ensureWorkspaceContext(root: string): void {
   const snapshot = appState.getSnapshot();
@@ -91,6 +97,7 @@ describe("sendChatMessage", () => {
     ensureWorkspaceReadAccessMock.mockReset();
     createWorkspaceAgentBackendMock.mockReset();
     promptPermissionMock.mockReset();
+    promptQuestionMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
     const debugSettings = {
       ...defaultDebugProviderSettings,
@@ -860,6 +867,227 @@ describe("sendChatMessage", () => {
     expect(result.ok).toBe(true);
     expect(wasWaitingDuringPrompt).toBe(true);
     expect(chatStore.getRuntimeState().isWaitingForPermission).toBe(false);
+  });
+
+  it("handles question.requested event and sends reply to backend", async () => {
+    ensureWorkspaceContext("/work/a");
+    const replyQuestion = vi.fn().mockResolvedValue(undefined);
+    const rejectQuestion = vi.fn().mockResolvedValue(undefined);
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield { type: "message.delta", delta: "Thinking " };
+      yield {
+        type: "question.requested",
+        questionId: "q-1",
+        prompt: "Which framework?",
+        choices: ["React", "Vue", "Svelte"],
+        payload: null,
+      };
+      yield { type: "message.delta", delta: "done" };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn(),
+      replyQuestion,
+      rejectQuestion,
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptQuestionMock.mockResolvedValue({ type: "reply", answers: [["React"]] });
+
+    const result = await sendChatMessage("Pick a framework");
+
+    expect(result.ok).toBe(true);
+    expect(promptQuestionMock).toHaveBeenCalledWith({
+      questionId: "q-1",
+      prompt: "Which framework?",
+      choices: ["React", "Vue", "Svelte"],
+      payload: null,
+    });
+    expect(replyQuestion).toHaveBeenCalledWith({
+      workspaceRootPath: "/work/a",
+      sessionId: "sess-1",
+      requestId: "q-1",
+      answers: [["React"]],
+    });
+    expect(rejectQuestion).not.toHaveBeenCalled();
+    expect(
+      chatStore.getMessages().find((message) => message.role === "assistant")?.content,
+    ).toBe("Thinking done");
+  });
+
+  it("sends reject when question prompt is cancelled", async () => {
+    ensureWorkspaceContext("/work/a");
+    const replyQuestion = vi.fn().mockResolvedValue(undefined);
+    const rejectQuestion = vi.fn().mockResolvedValue(undefined);
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "question.requested",
+        questionId: "q-2",
+        prompt: "Continue?",
+        choices: ["Yes", "No"],
+        payload: null,
+      };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn(),
+      replyQuestion,
+      rejectQuestion,
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptQuestionMock.mockResolvedValue({ type: "reject" });
+
+    const result = await sendChatMessage("Cancel question");
+
+    expect(result.ok).toBe(true);
+    expect(rejectQuestion).toHaveBeenCalledWith({
+      workspaceRootPath: "/work/a",
+      sessionId: "sess-1",
+      requestId: "q-2",
+    });
+    expect(replyQuestion).not.toHaveBeenCalled();
+  });
+
+  it("handles multiple question requests in sequence (FIFO)", async () => {
+    ensureWorkspaceContext("/work/a");
+    const replyQuestion = vi.fn().mockResolvedValue(undefined);
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "question.requested",
+        questionId: "q-a",
+        prompt: "First question?",
+        choices: ["A"],
+        payload: null,
+      };
+      yield {
+        type: "question.requested",
+        questionId: "q-b",
+        prompt: "Second question?",
+        choices: ["B"],
+        payload: null,
+      };
+      yield { type: "message.delta", delta: "answered" };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn(),
+      replyQuestion,
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptQuestionMock.mockResolvedValue({ type: "reply", answers: [["A"]] });
+
+    const result = await sendChatMessage("Multiple questions");
+
+    expect(result.ok).toBe(true);
+    expect(promptQuestionMock).toHaveBeenCalledTimes(2);
+    expect(promptQuestionMock).toHaveBeenNthCalledWith(1, {
+      questionId: "q-a",
+      prompt: "First question?",
+      choices: ["A"],
+      payload: null,
+    });
+    expect(promptQuestionMock).toHaveBeenNthCalledWith(2, {
+      questionId: "q-b",
+      prompt: "Second question?",
+      choices: ["B"],
+      payload: null,
+    });
+    expect(replyQuestion).toHaveBeenCalledTimes(2);
+  });
+
+  it("continues stream when question reply hits notFound", async () => {
+    ensureWorkspaceContext("/work/a");
+    const { WorkspaceAgentBackendError } = await import("./backends/workspaceAgentBackend");
+    const replyQuestion = vi.fn().mockRejectedValue(
+      new WorkspaceAgentBackendError({ code: "notFound", message: "gone" }),
+    );
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "question.requested",
+        questionId: "q-gone",
+        prompt: "Stale?",
+        choices: [],
+        payload: null,
+      };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn(),
+      replyQuestion,
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptQuestionMock.mockResolvedValue({ type: "reply", answers: [["ok"]] });
+
+    const result = await sendChatMessage("Stale question");
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("sets isWaitingForQuestion during question prompt", async () => {
+    ensureWorkspaceContext("/work/a");
+    let wasWaitingDuringPrompt = false;
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield {
+        type: "question.requested",
+        questionId: "q-w",
+        prompt: "Check wait state",
+        choices: ["Ok"],
+        payload: null,
+      };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn(),
+      replyQuestion: vi.fn().mockResolvedValue(undefined),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+    promptQuestionMock.mockImplementation(async () => {
+      wasWaitingDuringPrompt = chatStore.getRuntimeState().isWaitingForQuestion;
+      return { type: "reply", answers: [["Ok"]] };
+    });
+
+    const result = await sendChatMessage("Wait state check");
+
+    expect(result.ok).toBe(true);
+    expect(wasWaitingDuringPrompt).toBe(true);
+    expect(chatStore.getRuntimeState().isWaitingForQuestion).toBe(false);
   });
 
 });

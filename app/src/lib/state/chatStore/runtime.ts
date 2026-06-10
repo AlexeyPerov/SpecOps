@@ -10,6 +10,7 @@ export function defaultRuntimeState(): ChatThreadRuntimeState {
   return {
     isGenerating: false,
     isWaitingForPermission: false,
+    isWaitingForQuestion: false,
     lastFailedTurnId: null,
     lastError: null,
     activeTurnId: null,
@@ -166,6 +167,7 @@ export function createRuntimeSlice(deps: {
       return updateAgentRuntime(targetAgentId, () => ({
         isGenerating: true,
         isWaitingForPermission: false,
+        isWaitingForQuestion: false,
         activeTurnId: turnId,
         lastFailedTurnId: null,
         lastError: null,
@@ -206,6 +208,7 @@ export function createRuntimeSlice(deps: {
         () => ({
           isGenerating: false,
           isWaitingForPermission: false,
+          isWaitingForQuestion: false,
           activeTurnId: null,
           lastFailedTurnId: failedTurnId,
           lastError: { ...error },
@@ -221,6 +224,12 @@ export function createRuntimeSlice(deps: {
       return updateAgentRuntime(agentId, (current) => ({
         ...current,
         isWaitingForPermission: waiting,
+      }), workspaceRoot);
+    },
+    setWaitingForQuestion(agentId: string, waiting: boolean, workspaceRoot?: string | null): boolean {
+      return updateAgentRuntime(agentId, (current) => ({
+        ...current,
+        isWaitingForQuestion: waiting,
       }), workspaceRoot);
     },
   };

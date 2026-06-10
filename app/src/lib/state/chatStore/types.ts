@@ -51,6 +51,7 @@ export interface ChatTurnError {
 export interface ChatThreadRuntimeState {
   isGenerating: boolean;
   isWaitingForPermission: boolean;
+  isWaitingForQuestion: boolean;
   lastFailedTurnId: string | null;
   lastError: ChatTurnError | null;
   activeTurnId: string | null;

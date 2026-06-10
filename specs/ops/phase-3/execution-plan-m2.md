@@ -137,7 +137,7 @@ Dependencies: Task 2.
 
 ---
 
-#### Task 4: Question prompt modal + reply plumbing (P3-5 partial) [Score:8] [Agent:medium]
+#### Task 4: Question prompt modal + reply plumbing (P3-5 partial) [Score:8] [Agent:medium] [DONE]
 
 **Required context**
 

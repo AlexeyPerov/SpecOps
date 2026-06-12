@@ -20,6 +20,7 @@
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { SettingsDialogTab } from "../services/settingsDialogUi";
+  import TitleBar from "./TitleBar.svelte";
   import type { EditorCommandRunner } from "../types/editor";
   import type {
     AgentIndexEntry,
@@ -118,6 +119,7 @@
     statusPath: string;
     statusMessage: string;
     consoleOpen: boolean;
+    canOpenLogsPanel: boolean;
     onToggleConsole: () => void;
   }
 
@@ -182,6 +184,7 @@
 </script>
 
 <main class="shell">
+  <TitleBar />
   <div class="shell-main-row" bind:this={shellMainRowEl}>
     {#if activityRail.show}
       <ActivityRail
@@ -384,7 +387,13 @@
       <button
         type="button"
         class="status-bar-button"
-        title={consoleOpen ? "Hide console" : "Show console"}
+        class:status-bar-button-static={!statusBar.canOpenLogsPanel}
+        disabled={!statusBar.canOpenLogsPanel}
+        title={statusBar.canOpenLogsPanel
+          ? consoleOpen
+            ? "Hide console"
+            : "Show console"
+          : undefined}
         onclick={statusBar.onToggleConsole}
       >
         {#if !editor.isAgentTabActive && !editor.isChatHttpActive}

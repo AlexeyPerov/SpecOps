@@ -26,7 +26,7 @@ vi.mock("../state/appState", () => ({
   appState: {
     getSnapshot: vi.fn(() => ({
       settings: {
-        opencode: { mode: "url", baseUrl: "http://localhost:4096" },
+        opencode: { enabled: true, mode: "url", baseUrl: "http://localhost:4096" },
       },
     })),
   },

@@ -16,6 +16,7 @@ import { createWorkspaceAgentBackend } from "./backends/workspaceAgentBackend";
 import {
   createUserMessage,
   findLastUserMessage,
+  isWorkspaceSendBlockedWhenOpencodeDisabled,
   resolveChatContextKind,
   shouldUseWorkspaceAgentBackend,
   type ChatContextKind,
@@ -381,5 +382,70 @@ describe("chatSendPipeline workspace backend streaming", () => {
     const result = await sendPromise;
     expect(result.ok).toBe(false);
     expect(chatStore.getRuntimeState().isGenerating).toBe(false);
+  });
+});
+
+describe("OpenCode opt-in gating", () => {
+  beforeEach(() => {
+    chatStore.reset();
+    appState.addWorkspace("/work/a");
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    appState.applyPersistedSettings({
+      opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
+    });
+  });
+
+  it("shouldUseWorkspaceAgentBackend returns true when enabled", () => {
+    appState.applyPersistedSettings({
+      opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
+    });
+    expect(
+      shouldUseWorkspaceAgentBackend({ root: "/work/a", chatContextKind: "workspace" }),
+    ).toBe(true);
+  });
+
+  it("shouldUseWorkspaceAgentBackend returns false when disabled", () => {
+    appState.applyPersistedSettings({
+      opencode: { enabled: false, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
+    });
+    expect(
+      shouldUseWorkspaceAgentBackend({ root: "/work/a", chatContextKind: "workspace" }),
+    ).toBe(false);
+  });
+
+  it("isWorkspaceSendBlockedWhenOpencodeDisabled returns true when disabled", () => {
+    appState.applyPersistedSettings({
+      opencode: { enabled: false, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
+    });
+    expect(
+      isWorkspaceSendBlockedWhenOpencodeDisabled({ root: "/work/a", chatContextKind: "workspace" }),
+    ).toBe(true);
+  });
+
+  it("isWorkspaceSendBlockedWhenOpencodeDisabled returns false when enabled", () => {
+    appState.applyPersistedSettings({
+      opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
+    });
+    expect(
+      isWorkspaceSendBlockedWhenOpencodeDisabled({ root: "/work/a", chatContextKind: "workspace" }),
+    ).toBe(false);
+  });
+
+  it("isWorkspaceSendBlockedWhenOpencodeDisabled returns false for chat-http", () => {
+    appState.applyPersistedSettings({
+      opencode: { enabled: false, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
+    });
+    expect(
+      isWorkspaceSendBlockedWhenOpencodeDisabled({ root: CHAT_HTTP_CONTEXT_ID, chatContextKind: "chat-http" }),
+    ).toBe(false);
+  });
+
+  it("chat-http backend routing ignores opencode enabled flag", () => {
+    appState.applyPersistedSettings({
+      opencode: { enabled: false, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
+    });
+    expect(
+      shouldUseWorkspaceAgentBackend({ root: CHAT_HTTP_CONTEXT_ID, chatContextKind: "chat-http" }),
+    ).toBe(false);
   });
 });

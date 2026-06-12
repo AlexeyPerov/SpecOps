@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Select from "../Select.svelte";
   import type { ChatProviderId } from "../../domain/contracts";
   import {
     formatModelListForInput,
@@ -19,6 +20,9 @@
   const snapshot = $derived($appState);
   const catalog = $derived(
     getProviderModelCatalog(snapshot.settings.providerModelCatalogs, providerId),
+  );
+  const modelOptions = $derived(
+    catalog.modelIds.map((id) => ({ value: id, label: id })),
   );
 
   function updateProviderModelList(rawValue: string): void {
@@ -61,15 +65,12 @@
   </label>
   <label class="settings-field">
     <span>Default model</span>
-    <select
+    <Select
+      options={modelOptions}
       value={catalog.defaultModelId}
-      onchange={(event) =>
-        updateProviderDefaultModel((event.currentTarget as HTMLSelectElement).value)}
-    >
-      {#each catalog.modelIds as modelId (modelId)}
-        <option value={modelId}>{modelId}</option>
-      {/each}
-    </select>
+      onchange={updateProviderDefaultModel}
+      ariaLabel="Select default model"
+    />
   </label>
 </div>
 

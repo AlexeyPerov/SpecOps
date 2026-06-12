@@ -15,7 +15,11 @@
         "title": "SpecOps",
         "width": 800,
         "height": 1020,
-        "dragDropEnabled": true
+        "dragDropEnabled": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 16, "y": 18 }
       }
     ],
     "security": {
@@ -38,8 +42,15 @@
         "name": "Any File",
         "description": "Allows opening files dropped onto the app icon",
         "role": "Editor",
-        "mimeType": "*/*",
-        "ext": ["*"]
+        "rank": "Alternate",
+        "contentTypes": [
+          "public.item",
+          "public.content",
+          "public.data",
+          "public.plain-text",
+          "public.text",
+          "public.source-code"
+        ]
       }
     ],
     "icon": [

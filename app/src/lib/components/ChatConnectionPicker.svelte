@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Select from "./Select.svelte";
+
   interface ConnectionOption {
     value: string;
     label: string;
@@ -25,41 +27,32 @@
     onSelectConnection,
     onSelectModel,
   }: Props = $props();
+
+  const connectionOptions = $derived(
+    availableConnections.map((c) => ({ value: c.value, label: c.label })),
+  );
+  const modelOptions = $derived(
+    availableModels.map((m) => ({ value: m, label: m })),
+  );
 </script>
 
 <div class="chat-provider-picker">
-  <label class="chat-provider-field">
-    <select
-      class="chat-provider-select"
-      aria-label="Select chat connection"
-      value={activeConnectionSelection ?? ""}
-      disabled={connectionDisabled}
-      onchange={(event) => {
-        const next = (event.currentTarget as HTMLSelectElement).value;
-        onSelectConnection(next);
-      }}
-    >
-      {#each availableConnections as connection (connection.value)}
-        <option value={connection.value}>{connection.label}</option>
-      {/each}
-    </select>
-  </label>
-  <label class="chat-provider-field">
-    <select
-      class="chat-provider-select"
-      aria-label="Select chat model"
-      value={activeModel}
-      disabled={modelDisabled}
-      onchange={(event) => {
-        const next = (event.currentTarget as HTMLSelectElement).value;
-        onSelectModel(next);
-      }}
-    >
-      {#each availableModels as modelId (modelId)}
-        <option value={modelId}>{modelId}</option>
-      {/each}
-    </select>
-  </label>
+  <Select
+    options={connectionOptions}
+    value={activeConnectionSelection ?? ""}
+    disabled={connectionDisabled}
+    onchange={onSelectConnection}
+    ariaLabel="Select chat connection"
+    class="chat-provider-select"
+  />
+  <Select
+    options={modelOptions}
+    value={activeModel}
+    disabled={modelDisabled}
+    onchange={onSelectModel}
+    ariaLabel="Select chat model"
+    class="chat-provider-select"
+  />
 </div>
 
 <style>
@@ -70,34 +63,13 @@
     min-width: 0;
   }
 
-  .chat-provider-field {
-    display: inline-flex;
-    align-items: center;
-    min-width: 0;
-  }
-
-  .chat-provider-select {
-    min-height: 24px;
+  :global(.chat-provider-select) {
     min-width: 120px;
     max-width: 180px;
-    padding: 0 var(--space-6);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    font: inherit;
+  }
+
+  :global(.chat-provider-select .select-trigger) {
     font-size: 11px;
-    line-height: 1;
-  }
-
-  .chat-provider-select:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 1px;
-  }
-
-  .chat-provider-select:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   @container (max-width: 520px) {
@@ -105,13 +77,9 @@
       flex: 1 1 100%;
     }
 
-    .chat-provider-field {
+    :global(.chat-provider-select) {
       flex: 1;
       min-width: 0;
-    }
-
-    .chat-provider-select {
-      width: 100%;
       max-width: none;
     }
   }

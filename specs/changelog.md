@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-06-12 15:00
+
+- **macOS integrated title bar (Task 3):** Configured Tauri window with `titleBarStyle: Overlay`, `hiddenTitle: true`, and `trafficLightPosition` for native macOS traffic-light controls (close/minimize/zoom) embedded in a theme-matched top strip. Added `core:window:allow-start-dragging` capability. Created `TitleBar.svelte` (macOS-only, 32px drag region) and integrated it into `AppShell.svelte` as the first grid row. Shell grid updated from 2-row to 3-row layout. Windows/Linux builds unaffected.
+- **Custom Select component (Task 4):** Added `Select.svelte` — a custom dropdown (not a styled native `<select>`) with trigger button matching existing toolbar styles, popover panel styled like context menus, full keyboard navigation (ArrowUp/Down, Enter, Escape), and ARIA attributes (`aria-expanded`, `role="listbox"`/`role="option"`). Migrated all native `<select>` usages: `ChatModePicker`, `ChatConnectionPicker` (connection and model pickers), `ConnectionsSettingsPanel` (default model), and `ProviderModelCatalogPanel` (default model). Removed dead CSS for migrated native selects.
+
+## 2026-06-11 14:30
+
+- **Logs panel settings gate:** Added `logSettings.canOpenLogsPanel` (default `false`) in Settings → Logs. When disabled, the status bar no longer toggles the bottom logs panel (non-interactive, no hover), and an open panel is force-closed when the setting is turned off.
+
+## 2026-06-11 12:00
+
+- **macOS dock drop for hidden files:** Updated `tauri.conf.json` `fileAssociations` to declare broad `LSItemContentTypes` (`public.item`, `public.content`, `public.data`, etc.) instead of ineffective `ext: ["*"]` / `mimeType: "*/*"`. Dock icon drops for dotfiles (e.g. `.gitignore`) now reach `RunEvent::Opened`; window drag-and-drop was already unaffected.
+
+## 2026-06-10 23:55
+
+- **OpenCode opt-in gating (phase 3 M3.5):** Implemented `opencode.enabled` boolean setting (default `true`) allowing users to disable OpenCode for workspace agents and use workspace folders as plain editors. Added `enabled` field to `OpencodeSettings` in `domain/settings.ts` with normalization (missing/invalid → `true`) in `opencodeSettings.ts`. Exported `isOpencodeEnabled()` helper. Gated `syncOpencodeSidecarEffect`, `requestOpencodeHealthRefresh`, `syncOpencodeToggleEffect` (new — calls `stopOpencodeSidecar` on toggle off), `refreshOpencodeCatalog`, and `restoreWorkspaceAgentSession` to early-return/reset when disabled. Added `isWorkspaceSendBlockedWhenOpencodeDisabled` to block workspace sends with clear recovery message (`OPENCODE_DISABLED_MESSAGE`) in `sendChatMessage.ts` and `retryChatTurn.ts`. Hidden agents sidebar for workspace contexts when disabled in `+page.svelte`; skipped catalog `$effect` in `ChatPanel.svelte`. Added "Use OpenCode for workspace agents" toggle in `ConnectionsSettingsPanel.svelte` with collapsed transport/health/controls when off. Updated README to note sidecar only starts when enabled. Added 6 send-pipeline gating tests, 7 sidecar effect tests (disabled/stop/health reset), updated existing tests. All 1088 tests pass, 0 typecheck errors. Marked all tasks `[DONE]` in `execution-plan-m3-5.md`.
+
+## 2026-06-10 17:30
+
+- **OpenCode opt-in gating plan (phase 3 M3.5):** Added `specs/ops/phase-3/execution-plan-m3-5.md` — post-MVP follow-up to add `opencode.enabled` (“Use OpenCode for workspace agents”), gate sidecar/catalog/session lifecycle, block workspace sends when off, hide workspace agent affordances when disabled, settings UI toggle, and tests/docs. Linked from `phase-3.md` execution chain and non-goals.
+
+## 2026-06-10 17:00
+
+- **README:** Added “Workspace agents (OpenCode)” section — sidecar vs URL mode, quick start, OpenRouter and GLM Coding Plan (Z.AI) provider setup via OpenCode, troubleshooting, and distinction from Chat HTTP connections. Updated “What works today” and AI roadmap status for phase 3 completion.
+
 ## 2026-06-10 16:15
 
 - **Regression and validation sweep + phase-3 closure (phase 3 M3 tasks 4–5):** Created `phase3M3.validation.test.ts` with 33 tests covering workspace HTTP cutover regression gate: workspace sends route exclusively through OpenCode backend (never HTTP ChatProvider), chat-http sends never invoke workspace backend, `shouldUseWorkspaceAgentBackend` routing invariants, event normalization contract alignment (v2 SDK events → contract names: `message.delta`, `tool.started`/`tool.completed`, `permission.requested`, `question.requested`, `run.failed`), session restore reconciliation (stale mapping detection, valid mapping preservation, session-scoped mapping without HTTP run-id fields), permission/question/tool flows end-to-end, workspace cancellation with `abortSession`, backend error mapping (auth failure, server unavailable). Chat-http non-regression coverage: SSE streaming, cancellation with abort signal, retry after failure. All 1071 tests pass, 0 typecheck errors. Marked phase-3 exit criteria complete in `phase-3.md` (status: complete). Marked tasks 4–5 `[DONE]` in `execution-plan-m3.md`. Added phase-5 handoff notes covering cursor-local backend stub, routing extension point, session mapping reuse, and contract freeze scoping.

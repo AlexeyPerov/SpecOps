@@ -1,7 +1,7 @@
 .shell {
   height: 100vh;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: var(--color-bg-root);
   color: var(--color-text-primary);
 }
@@ -193,6 +193,17 @@
 
 .status-bar-button:hover {
   background: var(--color-hover);
+}
+
+.status-bar-button-static,
+.status-bar-button:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+.status-bar-button-static:hover,
+.status-bar-button:disabled:hover {
+  background: transparent;
 }
 
 .status-bar-button:focus-visible {

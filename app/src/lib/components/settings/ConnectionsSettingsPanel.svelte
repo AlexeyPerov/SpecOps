@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Select from "../Select.svelte";
   import type {
     HttpConnection,
     HttpConnectionSettings,
@@ -102,6 +103,26 @@
         checkedAt: new Date().toISOString(),
         lastErrorMessage: null,
       },
+    });
+    void chatStore.runAccessPreflight();
+  }
+
+  function updateOpencodeEnabled(enabled: boolean): void {
+    appState.applyPersistedSettings({
+      opencode: { enabled },
+      opencodeHealth: enabled
+        ? {
+            status: "checking",
+            source: snapshot.settings.opencode.mode,
+            checkedAt: new Date().toISOString(),
+            lastErrorMessage: null,
+          }
+        : {
+            status: "unknown",
+            source: null,
+            checkedAt: new Date().toISOString(),
+            lastErrorMessage: null,
+          },
     });
     void chatStore.runAccessPreflight();
   }
@@ -391,18 +412,12 @@
       </label>
       <label class="settings-field">
         <span>Default model</span>
-        <select
+        <Select
+          options={activeConnection.modelCatalog.modelIds.map((id: string) => ({ value: id, label: id }))}
           value={activeConnection.modelCatalog.defaultModelId}
-          onchange={(event) =>
-            updateConnectionDefaultModel(
-              activeConnection.id,
-              (event.currentTarget as HTMLSelectElement).value,
-            )}
-        >
-          {#each activeConnection.modelCatalog.modelIds as modelId (modelId)}
-            <option value={modelId}>{modelId}</option>
-          {/each}
-        </select>
+          onchange={(value) => updateConnectionDefaultModel(activeConnection.id, value)}
+          ariaLabel="Select default model"
+        />
       </label>
     </div>
   {/if}
@@ -413,6 +428,23 @@
   <p class="settings-section-note">
     Workspace agents use the OpenCode backend. Configure transport mode and server health here.
   </p>
+  <div class="settings-subsection">
+    <label class="settings-toggle">
+      <input
+        type="checkbox"
+        checked={snapshot.settings.opencode.enabled}
+        onchange={(event) =>
+          updateOpencodeEnabled((event.currentTarget as HTMLInputElement).checked)}
+      />
+      Use OpenCode for workspace agents
+    </label>
+    {#if !snapshot.settings.opencode.enabled}
+      <p class="settings-section-note">
+        OpenCode is off. Workspace folders open as editors without agents. Enable above to use workspace agents.
+      </p>
+    {/if}
+  </div>
+  {#if snapshot.settings.opencode.enabled}
   <div class="settings-subsection">
     <h4>Transport</h4>
     <label class="settings-toggle">
@@ -489,6 +521,7 @@
       Refresh model list
     </button>
   </div>
+  {/if}
 </section>
 
 <style>

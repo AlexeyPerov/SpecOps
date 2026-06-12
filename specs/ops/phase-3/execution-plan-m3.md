@@ -213,3 +213,7 @@ Task 1 → Task 2 → Task 3 → Task 4 → Task 5
 - The M1.5 contract freeze (`opencode-contract-freeze-m1-5.md`) is OpenCode-specific. Cursor-local may need its own contract doc if event semantics differ.
 - M1.5 bridge and M2 resume-order notes are preserved in `execution-plan-m1-5.md` and `execution-plan-m2.md`.
 
+## Post-MVP follow-up
+
+- [execution-plan-m3-5.md](./execution-plan-m3-5.md) — OpenCode opt-in gating (`opencode.enabled`); hide workspace agent affordances when disabled; do not start sidecar unless enabled.
+

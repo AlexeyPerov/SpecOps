@@ -4,8 +4,9 @@ import {
   getOpencodeSidecarStatus,
   healthFromSidecarStatus,
   isOpencodeSidecarError,
+  stopOpencodeSidecar,
 } from "./opencodeSidecar";
-import { requestOpencodeHealthRefresh, syncOpencodeSidecarEffect } from "./appShellEffects";
+import { requestOpencodeHealthRefresh, syncOpencodeSidecarEffect, syncOpencodeToggleEffect } from "./appShellEffects";
 
 vi.mock("./opencodeSidecar", () => ({
   attachOpencodeSidecarWorkspace: vi.fn().mockResolvedValue({
@@ -20,12 +21,22 @@ vi.mock("./opencodeSidecar", () => ({
   getOpencodeSidecarStatus: vi.fn(),
   isOpencodeSidecarError: vi.fn().mockReturnValue(false),
   healthFromSidecarStatus: vi.fn().mockReturnValue("healthy"),
+  stopOpencodeSidecar: vi.fn().mockResolvedValue({
+    running: false,
+    baseUrl: null,
+    health: "unknown",
+    directory: null,
+    port: null,
+    pid: null,
+    lastError: null,
+  }),
 }));
 
 const attachMock = vi.mocked(attachOpencodeSidecarWorkspace);
 const getStatusMock = vi.mocked(getOpencodeSidecarStatus);
 const mapHealthMock = vi.mocked(healthFromSidecarStatus);
 const isSidecarErrorMock = vi.mocked(isOpencodeSidecarError);
+const stopSidecarMock = vi.mocked(stopOpencodeSidecar);
 
 async function flushAsyncWork(): Promise<void> {
   await Promise.resolve();
@@ -38,6 +49,7 @@ describe("syncOpencodeSidecarEffect", () => {
     getStatusMock.mockReset();
     mapHealthMock.mockReset();
     isSidecarErrorMock.mockReset();
+    stopSidecarMock.mockReset();
     mapHealthMock.mockReturnValue("healthy");
     isSidecarErrorMock.mockReturnValue(false);
     vi.unstubAllGlobals();
@@ -48,6 +60,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth: vi.fn(),
@@ -63,6 +76,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth,
@@ -99,6 +113,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth,
@@ -120,6 +135,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: true,
+      opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth: vi.fn(),
@@ -133,6 +149,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: false,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth: vi.fn(),
@@ -141,12 +158,34 @@ describe("syncOpencodeSidecarEffect", () => {
     expect(attachMock).not.toHaveBeenCalled();
   });
 
+  it("skips attach and resets health when opencode is disabled", () => {
+    const setOpencodeHealth = vi.fn();
+    syncOpencodeSidecarEffect({
+      runtimeReady: true,
+      activeWorkspaceRoot: "/tmp/workspace",
+      isChatHttpActive: false,
+      opencodeEnabled: false,
+      opencodeMode: "sidecar",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth,
+    });
+
+    expect(attachMock).not.toHaveBeenCalled();
+    expect(setOpencodeHealth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "unknown",
+        source: null,
+      }),
+    );
+  });
+
   it("validates URL mode and marks invalid URL as error", () => {
     const setOpencodeHealth = vi.fn();
     syncOpencodeSidecarEffect({
       runtimeReady: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "://bad-url",
       setOpencodeHealth,
@@ -173,6 +212,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth,
@@ -213,6 +253,7 @@ describe("requestOpencodeHealthRefresh", () => {
     const setOpencodeHealth = vi.fn();
 
     requestOpencodeHealthRefresh({
+      opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth,
@@ -239,6 +280,7 @@ describe("requestOpencodeHealthRefresh", () => {
     const setOpencodeHealth = vi.fn();
 
     requestOpencodeHealthRefresh({
+      opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth,
@@ -252,5 +294,75 @@ describe("requestOpencodeHealthRefresh", () => {
         lastErrorMessage: null,
       }),
     );
+  });
+
+  it("resets health when opencode is disabled", () => {
+    const setOpencodeHealth = vi.fn();
+
+    requestOpencodeHealthRefresh({
+      opencodeEnabled: false,
+      opencodeMode: "sidecar",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth,
+    });
+
+    expect(getStatusMock).not.toHaveBeenCalled();
+    expect(setOpencodeHealth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "unknown",
+        source: null,
+      }),
+    );
+  });
+});
+
+describe("syncOpencodeToggleEffect", () => {
+  beforeEach(() => {
+    stopSidecarMock.mockClear();
+    stopSidecarMock.mockResolvedValue({
+      running: false,
+      baseUrl: null,
+      health: "unknown",
+      directory: null,
+      port: null,
+      pid: null,
+      lastError: null,
+    });
+  });
+
+  it("stops sidecar when opencode is disabled in sidecar mode", () => {
+    syncOpencodeToggleEffect({
+      runtimeReady: true,
+      opencodeEnabled: false,
+      opencodeMode: "sidecar",
+    });
+    expect(stopSidecarMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not stop sidecar when opencode is enabled", () => {
+    syncOpencodeToggleEffect({
+      runtimeReady: true,
+      opencodeEnabled: true,
+      opencodeMode: "sidecar",
+    });
+    expect(stopSidecarMock).not.toHaveBeenCalled();
+  });
+
+  it("does not stop sidecar when runtime is not ready", () => {
+    syncOpencodeToggleEffect({
+      runtimeReady: false,
+      opencodeEnabled: false,
+      opencodeMode: "sidecar",
+    });
+    expect(stopSidecarMock).not.toHaveBeenCalled();
+  });
+
+  it("does not stop sidecar in url mode when disabled", () => {
+    syncOpencodeToggleEffect({
+      runtimeReady: true,
+      opencodeEnabled: false,
+      opencodeMode: "url",
+    });
+    expect(stopSidecarMock).not.toHaveBeenCalled();
   });
 });

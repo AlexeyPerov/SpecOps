@@ -18,6 +18,7 @@ import {
   resolveRestoredActiveAgent,
   selectedTabAfterMissingLastAgent,
 } from "./workspaceAgentSession";
+import { isOpencodeEnabled } from "./opencodeSettings";
 
 export interface AppShellAgentHandlersDeps {
   getIsChatHttpActive: () => boolean;
@@ -29,6 +30,10 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   const { getIsChatHttpActive, getCurrentWindowId, notify } = deps;
 
   async function reconcileWorkspaceSessionMappings(normalizedRoot: string): Promise<void> {
+    const snapshot = appState.getSnapshot();
+    if (!isOpencodeEnabled(snapshot.settings.opencode)) {
+      return;
+    }
     const backend = createWorkspaceAgentBackend("opencode", {
       resolveRuntimeConfig: async () => {
         const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
@@ -139,6 +144,12 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   }
 
   async function restoreWorkspaceAgentSession(normalizedRoot: string): Promise<void> {
+    const snapshot = appState.getSnapshot();
+    if (!isOpencodeEnabled(snapshot.settings.opencode)) {
+      chatStore.setActiveAgentId(null);
+      appState.setLastActiveAgentId(null);
+      return;
+    }
     const session = appState.getActiveSession();
     await chatStore.loadWorkspaceAgents(normalizedRoot);
     chatStore.mergeSessionDraftAgents(normalizedRoot, openAgentTabIds(session.openTabs));

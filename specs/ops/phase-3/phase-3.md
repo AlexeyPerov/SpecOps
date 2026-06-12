@@ -2,7 +2,7 @@
 
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md) (`WorkspaceAgentBackend` stub); phases 2 and 4 may ship in parallel but not required  
-**Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m1-5](./execution-plan-m1-5.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md)  
+**Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m1-5](./execution-plan-m1-5.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m3-5](./execution-plan-m3-5.md) (post-MVP)  
 **Status:** complete  
 **Estimate:** ~2–3 months for MVP  
 **OpenCode integration checklist (in this phase):** S1–S5 below; plan/build S6 stretch → [phase-6.md](../phase-6/phase-6.md) if using own platform later
@@ -105,6 +105,7 @@ Required before removing workspace `ChatProvider` HTTP:
 
 - Cursor local backend (phase 5).
 - Own agent platform ([phase-6.md](../phase-6/phase-6.md) — G2A after phase 5).
+- OpenCode opt-in gating — post-MVP follow-up in [execution-plan-m3-5.md](./execution-plan-m3-5.md) (`opencode.enabled`, hide workspace agent affordances when off).
 
 ## OpenCode integration checklist (S-phases)
 

@@ -6,9 +6,18 @@ describe("logSettings", () => {
     expect(defaultLogSettings.verboseProviderLogging).toBe(true);
   });
 
+  it("defaults logs panel opening to disabled", () => {
+    expect(defaultLogSettings.canOpenLogsPanel).toBe(false);
+  });
+
   it("normalizes partial persisted values", () => {
     expect(normalizeLogSettings({ verboseProviderLogging: false })).toEqual({
       verboseProviderLogging: false,
+      canOpenLogsPanel: false,
+    });
+    expect(normalizeLogSettings({ canOpenLogsPanel: true })).toEqual({
+      verboseProviderLogging: true,
+      canOpenLogsPanel: true,
     });
   });
 

@@ -45,6 +45,10 @@ import {
 } from "./chatDiagnostics";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { resolveOpencodeModelFallback } from "./opencodeCatalog";
+import { isOpencodeEnabled } from "../services/opencodeSettings";
+import {
+  OPENCODE_DISABLED_MESSAGE,
+} from "./chatErrorCopy";
 
 export type SendChatMessageFailureReason =
   | "empty"
@@ -183,6 +187,40 @@ function assertTurnStillActive(root: string, agentId: string, turnId: string): v
   }
 }
 
+async function awaitWithTurnCancellation<T>(
+  input: {
+    root: string;
+    agentId: string;
+    turnId: string;
+    pending: Promise<T>;
+  },
+): Promise<T> {
+  const { root, agentId, turnId, pending } = input;
+  if (!chatStore.isGenerationTurnActive(root, agentId, turnId)) {
+    throw new TurnCancelledError();
+  }
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      unsubscribe();
+      callback();
+    };
+    const unsubscribe = chatStore.subscribe(() => {
+      if (!chatStore.isGenerationTurnActive(root, agentId, turnId)) {
+        finish(() => reject(new TurnCancelledError()));
+      }
+    });
+    pending.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
 export function findLastUserMessage(messages: ChatMessage[]): ChatMessage | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -227,6 +265,17 @@ function isWorkspaceContextId(contextId: string): boolean {
   return contextId.startsWith("ws-");
 }
 
+export function isWorkspaceSendBlockedWhenOpencodeDisabled(input: {
+  root: string;
+  chatContextKind: ChatContextKind;
+}): boolean {
+  if (input.chatContextKind !== "workspace" || input.root === CHAT_HTTP_CONTEXT_ID) {
+    return false;
+  }
+  const snapshot = appState.getSnapshot();
+  return !isOpencodeEnabled(snapshot.settings.opencode);
+}
+
 export function shouldUseWorkspaceAgentBackend(input: {
   root: string;
   chatContextKind: ChatContextKind;
@@ -234,7 +283,11 @@ export function shouldUseWorkspaceAgentBackend(input: {
   if (input.chatContextKind !== "workspace" || input.root === CHAT_HTTP_CONTEXT_ID) {
     return false;
   }
-  const activeContextId = appState.getSnapshot().contexts.activeContextId;
+  const snapshot = appState.getSnapshot();
+  if (!isOpencodeEnabled(snapshot.settings.opencode)) {
+    return false;
+  }
+  const activeContextId = snapshot.contexts.activeContextId;
   return isWorkspaceContextId(activeContextId);
 }
 
@@ -720,12 +773,18 @@ async function executeWorkspaceAgentBackendTurn(params: {
       if (event.type === "permission.requested") {
         assertTurnStillActive(root, activeAgentId, turnId);
         chatStore.setWaitingForPermission(activeAgentId, true, root);
-        const result = await promptPermission({
-          permissionId: event.permissionId,
-          label: event.label,
-          payload: event.payload,
+        const result = await awaitWithTurnCancellation({
+          root,
+          agentId: activeAgentId,
+          turnId,
+          pending: promptPermission({
+            permissionId: event.permissionId,
+            label: event.label,
+            payload: event.payload,
+          }),
+        }).finally(() => {
+          chatStore.setWaitingForPermission(activeAgentId, false, root);
         });
-        chatStore.setWaitingForPermission(activeAgentId, false, root);
         assertTurnStillActive(root, activeAgentId, turnId);
         try {
           await backend.replyPermission({
@@ -748,13 +807,19 @@ async function executeWorkspaceAgentBackendTurn(params: {
       if (event.type === "question.requested") {
         assertTurnStillActive(root, activeAgentId, turnId);
         chatStore.setWaitingForQuestion(activeAgentId, true, root);
-        const result = await promptQuestion({
-          questionId: event.questionId,
-          prompt: event.prompt,
-          choices: event.choices,
-          payload: event.payload,
+        const result = await awaitWithTurnCancellation({
+          root,
+          agentId: activeAgentId,
+          turnId,
+          pending: promptQuestion({
+            questionId: event.questionId,
+            prompt: event.prompt,
+            choices: event.choices,
+            payload: event.payload,
+          }),
+        }).finally(() => {
+          chatStore.setWaitingForQuestion(activeAgentId, false, root);
         });
-        chatStore.setWaitingForQuestion(activeAgentId, false, root);
         assertTurnStillActive(root, activeAgentId, turnId);
         try {
           if (result.type === "reply") {

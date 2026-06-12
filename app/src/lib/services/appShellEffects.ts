@@ -30,7 +30,9 @@ import {
   getOpencodeSidecarStatus,
   healthFromSidecarStatus,
   isOpencodeSidecarError,
+  stopOpencodeSidecar,
 } from "./opencodeSidecar";
+import { isOpencodeEnabled } from "./opencodeSettings";
 import type { createProjectTreeController } from "./projectTreeController";
 
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
@@ -202,6 +204,22 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
   );
 }
 
+export interface SyncOpencodeToggleEffectInput {
+  runtimeReady: boolean;
+  opencodeEnabled: boolean;
+  opencodeMode: import("../domain/contracts").OpencodeTransportMode;
+}
+
+export function syncOpencodeToggleEffect(input: SyncOpencodeToggleEffectInput): void {
+  const { runtimeReady, opencodeEnabled, opencodeMode } = input;
+  if (!runtimeReady || opencodeEnabled || opencodeMode !== "sidecar") {
+    return;
+  }
+  void stopOpencodeSidecar().catch(() => {
+    // best-effort; ignore errors on stop
+  });
+}
+
 export interface SyncProjectTreeWatcherEffectInput {
   runtimeReady: boolean;
   activeWorkspaceRoot: string | null;
@@ -214,6 +232,7 @@ export interface SyncOpencodeSidecarEffectInput {
   runtimeReady: boolean;
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
+  opencodeEnabled: boolean;
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
   setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
@@ -224,12 +243,23 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     runtimeReady,
     activeWorkspaceRoot,
     isChatHttpActive,
+    opencodeEnabled,
     opencodeMode,
     opencodeBaseUrl,
     setOpencodeHealth,
   } = input;
 
   if (!runtimeReady || !activeWorkspaceRoot || isChatHttpActive) {
+    return;
+  }
+
+  if (!opencodeEnabled) {
+    setOpencodeHealth({
+      status: "unknown",
+      source: null,
+      checkedAt: new Date().toISOString(),
+      lastErrorMessage: null,
+    });
     return;
   }
 
@@ -308,11 +338,21 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
 }
 
 export function requestOpencodeHealthRefresh(input: {
+  opencodeEnabled: boolean;
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
   setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
 }): void {
-  const { opencodeMode, opencodeBaseUrl, setOpencodeHealth } = input;
+  const { opencodeEnabled, opencodeMode, opencodeBaseUrl, setOpencodeHealth } = input;
+  if (!opencodeEnabled) {
+    setOpencodeHealth({
+      status: "unknown",
+      source: null,
+      checkedAt: new Date().toISOString(),
+      lastErrorMessage: null,
+    });
+    return;
+  }
   if (opencodeMode === "sidecar") {
     setOpencodeHealth({
       status: "checking",

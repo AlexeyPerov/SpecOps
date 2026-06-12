@@ -2,6 +2,7 @@ import type { LogSettings } from "../domain/contracts";
 
 export const defaultLogSettings: LogSettings = {
   verboseProviderLogging: true,
+  canOpenLogsPanel: false,
 };
 
 /** Validates and normalizes persisted log settings. */
@@ -16,5 +17,9 @@ export function normalizeLogSettings(value: unknown): LogSettings {
       typeof record.verboseProviderLogging === "boolean"
         ? record.verboseProviderLogging
         : defaultLogSettings.verboseProviderLogging,
+    canOpenLogsPanel:
+      typeof record.canOpenLogsPanel === "boolean"
+        ? record.canOpenLogsPanel
+        : defaultLogSettings.canOpenLogsPanel,
   };
 }

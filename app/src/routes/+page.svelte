@@ -36,6 +36,7 @@
     syncChatAccessMonitorEffect,
     syncExternalFileWatcherEffect,
     syncOpencodeSidecarEffect,
+    syncOpencodeToggleEffect,
     syncProjectTreeWatcherEffect,
     syncResponsiveLayoutEffect,
     syncSessionPersistenceEffect,
@@ -107,14 +108,15 @@
       !workspaceLayout.projectPanelCollapsed &&
       !autoProjectPanelCollapsed,
   );
-  const showAgentsSidebar = $derived(
-    (isChatHttpActive || Boolean(activeWorkspaceRoot)) &&
-      !workspaceLayout.agentsSidebarCollapsed,
-  );
   const workspaceAgents = $derived($chatAgentIndex);
   const selectedAgentId = $derived($chatActiveAgentId);
   const opencodeMode = $derived(snapshot.settings.opencode.mode);
   const opencodeBaseUrl = $derived(snapshot.settings.opencode.baseUrl);
+  const opencodeEnabled = $derived(snapshot.settings.opencode.enabled);
+  const showAgentsSidebar = $derived(
+    (isChatHttpActive || (Boolean(activeWorkspaceRoot) && opencodeEnabled)) &&
+      !workspaceLayout.agentsSidebarCollapsed,
+  );
   const showActivityRail = $derived(
     !(
       snapshot.settings.hideActivityRailWhenNotepadOnly &&
@@ -218,6 +220,19 @@
     setupLayoutObserver,
     disconnectLayoutObserver,
   } = layoutHandlers;
+
+  function handleToggleConsole(): void {
+    if (!snapshot.settings.logSettings.canOpenLogsPanel) {
+      return;
+    }
+    toggleConsole();
+  }
+
+  $effect(() => {
+    if (!snapshot.settings.logSettings.canOpenLogsPanel && consoleOpen) {
+      consoleOpen = false;
+    }
+  });
 
   const {
     handleNewAgent,
@@ -418,9 +433,15 @@
       runtimeReady,
       activeWorkspaceRoot,
       isChatHttpActive,
+      opencodeEnabled,
       opencodeMode,
       opencodeBaseUrl,
       setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
+    });
+    syncOpencodeToggleEffect({
+      runtimeReady,
+      opencodeEnabled,
+      opencodeMode,
     });
     syncProjectTreeWatcherEffect({
       runtimeReady,
@@ -439,12 +460,14 @@
 
   $effect(() => {
     runtimeReady;
+    opencodeEnabled;
     opencodeMode;
     opencodeBaseUrl;
     if (!runtimeReady) {
       return;
     }
     requestOpencodeHealthRefresh({
+      opencodeEnabled,
       opencodeMode,
       opencodeBaseUrl,
       setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
@@ -506,7 +529,7 @@
     onReorderWorkspaces: (fromIndex, toIndex) => appState.reorderWorkspaces(fromIndex, toIndex),
   }}
   agentsSidebar={{
-    show: Boolean(activeWorkspaceRoot) || isChatHttpActive,
+    show: (Boolean(activeWorkspaceRoot) && opencodeEnabled) || isChatHttpActive,
     agents: workspaceAgents,
     activeAgentId: selectedAgentId,
     sidebarTitle: isChatHttpActive ? "Chats" : "Agents",
@@ -578,7 +601,8 @@
     statusPath: documentView.statusPath,
     statusMessage,
     consoleOpen,
-    onToggleConsole: toggleConsole,
+    canOpenLogsPanel: snapshot.settings.logSettings.canOpenLogsPanel,
+    onToggleConsole: handleToggleConsole,
   }}
   workspaceContextMenu={{
     menu: workspaceContextMenu,

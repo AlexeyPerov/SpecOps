@@ -211,7 +211,20 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
 
     it("workspace send does not call HTTP provider fetch", async () => {
       ensureWorkspaceContext("/work/a");
-      const httpFetch = vi.fn();
+      resetChatProviderRegistryForTests();
+      appState.updateHttpConnectionSettings({ enabled: true });
+      appState.setProviderApiKey("http", "http-test-key");
+      const httpFetch = vi.fn().mockResolvedValue(makeSseResponse(["data: [DONE]\n\n"]));
+      registerChatProvider(
+        createOpenAiCompatibleChatProvider(
+          () => ({
+            settings: { ...appState.getSnapshot().settings.providerSettings.http, enabled: true },
+            apiKey: "http-test-key",
+          }),
+          httpFetch as typeof fetch,
+        ),
+      );
+      chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
       setupWorkspaceBackend(async function* () {
         yield { type: "message.delta", delta: "backend" };
         yield { type: "run.completed" };
@@ -1042,6 +1055,57 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
         sessionId: "sess-1",
       });
       expect(chatStore.getRuntimeState().isGenerating).toBe(false);
+    });
+
+    it("cancels immediately while waiting for permission prompt", async () => {
+      ensureWorkspaceContext("/work/a");
+      const abortSession = vi.fn().mockResolvedValue(undefined);
+      const promptNeverResolves = new Promise<{ reply: "once" }>(() => {
+        // Intentionally unresolved to simulate user not answering modal yet.
+      });
+      promptPermissionMock.mockReturnValue(promptNeverResolves);
+      (createWorkspaceAgentBackendMock.mockReturnValue as (v: unknown) => void)({
+        id: "opencode",
+        createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+        getSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+        listSessions: vi.fn(),
+        deleteSession: vi.fn(),
+        send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+        replyPermission: vi.fn(),
+        replyQuestion: vi.fn(),
+        rejectQuestion: vi.fn(),
+        abortSession,
+        streamEvents: vi.fn().mockImplementation(async function* () {
+          yield {
+            type: "permission.requested",
+            permissionId: "p1",
+            label: "Need permission",
+            payload: null,
+          };
+        }),
+      } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+      chatStore.setAgentSessionLink(
+        chatStore.getActiveAgentId()!,
+        { opencodeSessionId: "sess-1" },
+        "/work/a",
+      );
+
+      const sendPromise = sendChatMessage("Cancel pending permission");
+      await Promise.resolve();
+      const cancelled = chatStore.cancelAgentGeneration("/work/a", chatStore.getActiveAgentId()!);
+      expect(cancelled).toBe(true);
+
+      const result = await sendPromise;
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("generating");
+      }
+      expect(abortSession).toHaveBeenCalledWith({
+        workspaceRootPath: "/work/a",
+        sessionId: "sess-1",
+      });
+      expect(chatStore.getRuntimeState().isGenerating).toBe(false);
+      expect(chatStore.getRuntimeState().isWaitingForPermission).toBe(false);
     });
   });
 });

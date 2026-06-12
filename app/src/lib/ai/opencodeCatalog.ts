@@ -2,6 +2,7 @@ import { createWorkspaceAgentBackend, type OpencodeModelEntry, type OpencodeProv
 import { logDiagnostic } from "../services/logging";
 import { appState } from "../state/appState";
 import type { OpencodeTransportMode } from "../domain/contracts";
+import { isOpencodeEnabled } from "../services/opencodeSettings";
 
 export type OpencodeCatalogStatus = "idle" | "loading" | "loaded" | "error";
 
@@ -69,6 +70,20 @@ export async function refreshOpencodeCatalog(workspaceRootPath: string): Promise
   const existing = inflightRequests.get(workspaceRootPath);
   if (existing) {
     return existing;
+  }
+
+  const snapshot = appState.getSnapshot();
+  if (!isOpencodeEnabled(snapshot.settings.opencode)) {
+    const state: OpencodeCatalogState = {
+      status: "idle",
+      models: [],
+      providers: [],
+      agents: [],
+      lastErrorMessage: null,
+      loadedAt: null,
+    };
+    updateCache(workspaceRootPath, state);
+    return state;
   }
 
   updateCache(workspaceRootPath, {

@@ -4,6 +4,7 @@ import {
   executeProviderTurn,
   findLastUserMessage,
   getLastRetryError,
+  isWorkspaceSendBlockedWhenOpencodeDisabled,
   resolveSendTarget,
   shouldUseWorkspaceAgentBackend,
   validateOpencodeBackendSend,
@@ -12,6 +13,7 @@ import {
   type ChatTurnSuccessResult,
   type SendChatMessageFailureReason,
 } from "./chatSendPipeline";
+import { OPENCODE_DISABLED_MESSAGE } from "./chatErrorCopy";
 
 export type RetryLastChatTurnFailureReason =
   | SendChatMessageFailureReason
@@ -52,6 +54,13 @@ export async function retryLastChatTurn(
     root: target.root,
     chatContextKind: target.chatContextKind,
   });
+
+  if (!useWorkspaceBackend && isWorkspaceSendBlockedWhenOpencodeDisabled({
+    root: target.root,
+    chatContextKind: target.chatContextKind,
+  })) {
+    return { ok: false, reason: "provider_unavailable", message: OPENCODE_DISABLED_MESSAGE };
+  }
 
   if (useWorkspaceBackend) {
     const opencodeValidation = await validateOpencodeBackendSend(target.root, target.activeAgentId);

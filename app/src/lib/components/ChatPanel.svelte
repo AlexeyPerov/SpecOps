@@ -36,6 +36,7 @@
   } from "../state/chatStore";
   import { draftEntryTitleForScope } from "../services/chatAgents";
   import { getOpencodeCatalog, refreshOpencodeCatalog } from "../ai/opencodeCatalog";
+  import { isOpencodeEnabled } from "../services/opencodeSettings";
   import ChatBlockedState from "./ChatBlockedState.svelte";
   import ChatComposer from "./ChatComposer.svelte";
   import ChatMessageList from "./ChatMessageList.svelte";
@@ -210,6 +211,10 @@
     workspaceRootPath;
     chatContextKind;
     if (chatContextKind !== "workspace" || !workspaceRootPath) {
+      return;
+    }
+    const settings = appState.getSnapshot().settings;
+    if (!isOpencodeEnabled(settings.opencode)) {
       return;
     }
     const catalog = getOpencodeCatalog(workspaceRootPath);

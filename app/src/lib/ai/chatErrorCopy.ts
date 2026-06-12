@@ -54,6 +54,12 @@ export const DEBUG_PROVIDER_DISABLED_RECOVERY = DEBUG_AI_PROVIDER_DISABLED_RECOV
 
 export const PROVIDER_UNAVAILABLE_MESSAGE = "The selected provider is not available.";
 
+export const OPENCODE_DISABLED_MESSAGE =
+  "OpenCode is disabled for workspace agents. Enable it in Settings → Workspaces / OpenCode to use agents.";
+
+export const OPENCODE_DISABLED_RECOVERY =
+  "Open Settings → Workspaces / OpenCode and turn on Use OpenCode for workspace agents.";
+
 export const PROVIDER_UNAVAILABLE_RECOVERY =
   "Enable a configured provider in Settings or switch to a supported provider.";
 

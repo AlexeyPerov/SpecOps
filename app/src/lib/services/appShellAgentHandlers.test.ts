@@ -12,6 +12,11 @@ vi.mock("../state/appState", () => ({
     setLastActiveAgentId: vi.fn(),
     openOrFocusAgentTab: vi.fn(),
     selectTab: vi.fn(),
+    getSnapshot: vi.fn(() => ({
+      settings: {
+        opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
+      },
+    })),
   },
 }));
 

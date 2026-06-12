@@ -74,11 +74,14 @@ export interface AppThemeState {
 export interface LogSettings {
   /** When enabled, logs full provider request and response payloads. */
   verboseProviderLogging: boolean;
+  /** When enabled, the bottom logs panel can be opened from the status bar. */
+  canOpenLogsPanel: boolean;
 }
 
 export type OpencodeTransportMode = "sidecar" | "url";
 
 export interface OpencodeSettings {
+  enabled: boolean;
   mode: OpencodeTransportMode;
   /** Remote OpenCode server base URL used when mode is `url`. */
   baseUrl: string;

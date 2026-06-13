@@ -27,16 +27,9 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 
 ## What is planned
 
-- Massive **Notepad** UX improvements
+- UI / UX improvements
 - **Git** module
-- **AI Support**
-
-### AI roadmap status
-
-- Current migration and rollout plan is tracked in `specs/ops/roadmap.md`.
-- Phase 1 execution details are documented in `specs/ops/phase-1/phase-1.md` and `specs/ops/phase-1/execution-plan.md`.
-- Phase 2 implementation and validation details are documented in `specs/ops/phase-2/phase-2.md` and milestone plans in `specs/ops/phase-2/`.
-- Phase 3 (OpenCode workspace UI) is complete — see `specs/ops/phase-3/phase-3.md`.
+- Extended **AI Support**
 
 ## Workspace agents (OpenCode)
 

@@ -81,6 +81,21 @@ describe("checkDocumentExternalChanges", () => {
     statMock.mockReset();
   });
 
+  it("removes tab when stat fails with fs scope permission error", async () => {
+    const path = "/tmp/.gitignore";
+    const documentId = prepareSavedFile(path, "ignore", fp1);
+    statMock.mockRejectedValue(
+      new Error(
+        "forbidden path: /tmp/.gitignore, maybe it is not allowed on the scope for `allow-stat` permission",
+      ),
+    );
+
+    await expect(checkDocumentExternalChanges(documentId, "startup")).resolves.toBe("skipped");
+    expect(appState.getActiveSession().openTabs.some((tab) => tab.kind === "file" && tab.documentId === documentId)).toBe(
+      false,
+    );
+  });
+
   it("returns unchanged when disk fingerprint matches", async () => {
     const documentId = prepareSavedFile("/tmp/unchanged.txt", "same", fp1);
     statMock.mockResolvedValue(fp1);

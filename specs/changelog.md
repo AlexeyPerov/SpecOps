@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-06-13 21:00
+
+- **Workspace vs Chat composer separation (phase 3 M4 Tasks 4–5):** Added Tasks 4–5 to `execution-plan-m4.md` — workspace agents get an OpenCode-only composer (agents/plan-build, OpenCode providers, OpenCode models); Chat HTTP keeps its own settings/modes/providers/models; lanes share only internal primitives. Renamed milestone to cover sidecar lifecycle and workspace agent UX; added decision L5.
+
+## 2026-06-13 20:00
+
+- **OpenCode connection reliability (phase 3 M4 Task 3):** Added Task 3 to `execution-plan-m4.md` — fix stuck **Check connection** in URL mode, add health-probe timeout and HTTP basic auth for server password, resolve Tauri CSP/localhost fetch, and handle port-4096 conflicts when another OpenCode server (e.g. VS Code Kilo) is already running.
+
+## 2026-06-13 19:15
+
+- **Safe app launch & session fixes:** Startup phases in `startAppShellRuntime` are isolated with per-phase logging; fs scope errors (e.g. dotfiles like `.gitignore`) remove the inaccessible tab and persist immediately instead of aborting launch. Closed tabs flush session snapshot on close and on `pagehide`/`beforeunload` (fixes restored tabs after quick close). OpenCode sidecar attach is deferred until workspace lifecycle events (not passive session restore on launch); added Task 2 to `execution-plan-m4.md`. Default **Can open logs panel** is now enabled.
+
+## 2026-06-13 18:30
+
+- **OpenCode sidecar lifecycle plan (phase 3 M4):** Added `specs/ops/phase-3/execution-plan-m4.md` — post-MVP follow-up to keep the OpenCode sidecar running across workspace switches (reuse healthy process; scope requests via existing `directory` query param) instead of stop/restart on every active workspace change.
+
 ## 2026-06-13 16:00
 
 - **OpenCode settings location:** Moved OpenCode workspace-agent settings from **Chats → Providers** into a dedicated **Workspaces → OpenCode** settings tab (`OpenCodeSettingsPanel.svelte`). **Chats → Providers** is HTTP-only again. Updated README, `docs/providers.md`, `docs/architecture.md`, and in-app error copy to match the new navigation.

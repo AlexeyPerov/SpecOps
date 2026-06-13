@@ -7,12 +7,14 @@ import {
   diskChanged,
   fingerprintsEqual,
   isFileMissingError,
+  isFsScopePermissionError,
   normalizePathSync,
   shouldSkipAsDismissed,
   statDiskFingerprint,
 } from "./diskFingerprint";
 import { resolveExternalReloadPolicy, shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 import type { ExternalCheckResult, ExternalCheckTrigger } from "./externalFileChangesTypes";
+import { removeInaccessibleDocumentTab } from "./inaccessibleFileTabs";
 
 type RuntimeState = {
   lastWriteFingerprintByPath: Map<string, DiskFingerprint>;
@@ -95,6 +97,11 @@ export async function flushDirtyPrompts(
               fileMissing: true,
             });
           }
+          continue;
+        }
+        if (isFsScopePermissionError(error)) {
+          runtime.pendingDirtyPromptByDocument.delete(documentId);
+          removeInaccessibleDocumentTab(documentId, documentState.filePath, error);
           continue;
         }
         throw error;
@@ -212,6 +219,10 @@ async function checkDocumentExternalChangesInner(
         });
       }
       return "missing";
+    }
+    if (isFsScopePermissionError(error)) {
+      removeInaccessibleDocumentTab(documentId, documentState.filePath, error);
+      return "skipped";
     }
     throw error;
   }

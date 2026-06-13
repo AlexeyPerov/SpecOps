@@ -66,3 +66,10 @@ export function isFileMissingError(error: unknown): boolean {
     lower.includes("cannot find the path")
   );
 }
+
+/** Tauri fs plugin scope denial (e.g. dotfiles without requireLiteralLeadingDot). */
+export function isFsScopePermissionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return lower.includes("forbidden path") || lower.includes("not allowed on the scope");
+}

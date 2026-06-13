@@ -63,7 +63,10 @@ export interface AppShellRuntimeOptions {
   runCommand: (commandId: AppCommandId) => void;
   openAndActivatePath: (path: string) => Promise<void>;
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
-  restoreWorkspaceAgentSession: (normalizedRoot: string) => Promise<void>;
+  restoreWorkspaceAgentSession: (
+    normalizedRoot: string,
+    options?: { skipOpencodeReconcile?: boolean },
+  ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
   onFilesystemChange?: (path: string) => void;
   syncProjectTreeWatcher?: (root: string | null) => Promise<void>;
@@ -171,32 +174,66 @@ export async function startAppShellRuntime(
 
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
 
-  const persistedSettings = await loadPersistedSettings();
-  const connectionApiKeys = await loadConnectionApiKeys();
-  setThemeSaveErrorNotifier(options.notify);
-  await appState.loadTheme();
-  if (persistedSettings) {
-    appState.applyPersistedSettings({
-      wrapLines: persistedSettings.wrapLines,
-      zoomPercent: persistedSettings.zoomPercent,
-      externalFiles: toExternalFilesSettings(persistedSettings),
-      decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
-      hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
-      opencode: persistedSettings.opencode,
-      providerSettings: persistedSettings.providerSettings,
-      providerModelCatalogs: persistedSettings.providerModelCatalogs,
-      commandBindingOverrides: persistedSettings.commandBindingOverrides,
-      logSettings: persistedSettings.logSettings,
-      chatModes: persistedSettings.chatModes,
-    });
-  }
-  for (const [connectionId, apiKey] of Object.entries(connectionApiKeys)) {
-    appState.setConnectionApiKey(connectionId, apiKey);
+  const startupStartedAt = Date.now();
+
+  async function runSafeStartupPhase(phase: string, action: () => Promise<void>): Promise<void> {
+    const phaseStartedAt = Date.now();
+    try {
+      await action();
+      await logDiagnostic({
+        level: "info",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "app shell startup phase complete",
+        metadata: {
+          phase,
+          durationMs: Date.now() - phaseStartedAt,
+          windowId,
+        },
+      });
+    } catch (error: unknown) {
+      await logDiagnostic({
+        level: "warn",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "app shell startup phase failed",
+        metadata: {
+          phase,
+          durationMs: Date.now() - phaseStartedAt,
+          windowId,
+          error: getErrorMessage(error, String(error)),
+        },
+      });
+    }
   }
 
-  initializeChatProviders();
-  options.setConsoleHeightPx(await readConsoleHeightPreference());
-  await initializeLogging();
+  await runSafeStartupPhase("load-settings", async () => {
+    const persistedSettings = await loadPersistedSettings();
+    const connectionApiKeys = await loadConnectionApiKeys();
+    setThemeSaveErrorNotifier(options.notify);
+    await appState.loadTheme();
+    if (persistedSettings) {
+      appState.applyPersistedSettings({
+        wrapLines: persistedSettings.wrapLines,
+        zoomPercent: persistedSettings.zoomPercent,
+        externalFiles: toExternalFilesSettings(persistedSettings),
+        decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
+        hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
+        opencode: persistedSettings.opencode,
+        providerSettings: persistedSettings.providerSettings,
+        providerModelCatalogs: persistedSettings.providerModelCatalogs,
+        commandBindingOverrides: persistedSettings.commandBindingOverrides,
+        logSettings: persistedSettings.logSettings,
+        chatModes: persistedSettings.chatModes,
+      });
+    }
+    for (const [connectionId, apiKey] of Object.entries(connectionApiKeys)) {
+      appState.setConnectionApiKey(connectionId, apiKey);
+    }
+    initializeChatProviders();
+    options.setConsoleHeightPx(await readConsoleHeightPreference());
+    await initializeLogging();
+  });
 
   const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
     if (event.payload.type !== "drop") {
@@ -206,10 +243,15 @@ export async function startAppShellRuntime(
   });
   cleanupCallbacks.push(unlistenDragDrop);
 
-  await markWindowActive(windowId);
+  await runSafeStartupPhase("mark-window-active", async () => {
+    await markWindowActive(windowId);
+  });
 
-  const restoredSession = await restoreWindowSession(windowId);
-  if (restoredSession) {
+  await runSafeStartupPhase("restore-session", async () => {
+    const restoredSession = await restoreWindowSession(windowId);
+    if (!restoredSession) {
+      return;
+    }
     appState.applyWindowSession(restoredSession.snapshot, restoredSession.recentFiles);
     appState.normalizeUntitledTitles();
     await syncOpenFileRegistryForWindow(windowId, appState.getSnapshot());
@@ -223,35 +265,48 @@ export async function startAppShellRuntime(
       }
     }
     options.notify("Session restored.");
-  }
+  });
 
-  const restoredActiveContextId = appState.getSnapshot().contexts.activeContextId;
-  if (restoredActiveContextId === CHAT_HTTP_CONTEXT_ID) {
-    chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
-  } else {
+  await runSafeStartupPhase("restore-chat-scope", async () => {
+    const restoredActiveContextId = appState.getSnapshot().contexts.activeContextId;
+    if (restoredActiveContextId === CHAT_HTTP_CONTEXT_ID) {
+      chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
+      await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+      return;
+    }
     const restoredWorkspaceRoot = appState.getWorkspaceRoot();
     if (restoredWorkspaceRoot) {
       const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
       void ensureWorkspaceReadAccess(normalizedRoot);
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
-      await options.restoreWorkspaceAgentSession(normalizedRoot);
-    } else {
-      chatStore.setActiveWorkspaceRoot(null);
+      await options.restoreWorkspaceAgentSession(normalizedRoot, { skipOpencodeReconcile: true });
+      return;
     }
-  }
+    chatStore.setActiveWorkspaceRoot(null);
+  });
 
-  if (shouldInitializeAppMenu(windowId)) {
+  await runSafeStartupPhase("initialize-app-menu", async () => {
+    if (!shouldInitializeAppMenu(windowId)) {
+      return;
+    }
     const recentFiles = appState.getSnapshot().recentFiles;
     await initializeAppMenu(options.runCommand, recentFiles);
     await refreshDockMenu(recentFiles);
-  }
+  });
 
-  await options.loadProjectTreeRoot();
-  await runStartupExternalChecks();
+  await runSafeStartupPhase("load-project-tree", async () => {
+    await options.loadProjectTreeRoot();
+  });
+
+  await runSafeStartupPhase("startup-external-checks", async () => {
+    await runStartupExternalChecks();
+  });
 
   runtimeReady = true;
-  await syncExternalFileWatcher(appState.getSnapshot());
+
+  await runSafeStartupPhase("sync-file-watcher", async () => {
+    await syncExternalFileWatcher(appState.getSnapshot());
+  });
 
   const unlistenFocusChanged = await currentWindow.onFocusChanged(async ({ payload }) => {
     if (!payload) {
@@ -339,7 +394,10 @@ export async function startAppShellRuntime(
     source: "frontend",
     timestamp: new Date().toISOString(),
     message: "app shell initialized",
-    metadata: { windowId },
+    metadata: {
+      windowId,
+      durationMs: Date.now() - startupStartedAt,
+    },
   });
 
   return {

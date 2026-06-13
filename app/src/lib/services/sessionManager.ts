@@ -26,6 +26,21 @@ const SESSION_FILE = "session.json";
 const SESSION_BACKUP_FILE = "session.backup.json";
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let tabsChangedFlushHandler: ((state: AppDomainState) => void) | null = null;
+
+/** Registers immediate session persist when open tabs change (e.g. tab close). */
+export function registerTabsChangedSessionFlush(handler: (state: AppDomainState) => void): void {
+  tabsChangedFlushHandler = handler;
+}
+
+/** Clears tab-change flush registration (tests). */
+export function resetTabsChangedSessionFlushForTests(): void {
+  tabsChangedFlushHandler = null;
+}
+
+export function notifyTabsChangedForSession(state: AppDomainState): void {
+  tabsChangedFlushHandler?.(state);
+}
 
 /** Clears debounce timer between unit tests. */
 export function resetSessionManagerForTests(): void {
@@ -33,6 +48,7 @@ export function resetSessionManagerForTests(): void {
     clearTimeout(persistTimer);
     persistTimer = null;
   }
+  resetTabsChangedSessionFlushForTests();
 }
 
 async function getSessionPath(fileName: string): Promise<string> {
@@ -184,8 +200,20 @@ export function scheduleSessionPersistence(
     clearTimeout(persistTimer);
   }
   persistTimer = setTimeout(() => {
+    persistTimer = null;
     void persistSessionSnapshot(state, windowId);
   }, 1200);
+}
+
+export async function flushSessionPersistence(
+  state: AppDomainState,
+  windowId: string,
+): Promise<void> {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  await persistSessionSnapshot(state, windowId);
 }
 
 export async function getLastActiveWindowId(): Promise<string | null> {

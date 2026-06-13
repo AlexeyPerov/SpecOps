@@ -243,6 +243,7 @@ export interface AppShellMountDeps {
   getCurrentWebviewWindowLabel: () => string;
   handleKeydown: (event: KeyboardEvent) => void;
   stopChatAccessMonitor: () => void;
+  flushSessionBeforeUnload: () => void;
   cleanup: AppShellMountCleanup;
 }
 
@@ -320,6 +321,13 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("dragover", preventBrowserDragOver);
 
+  function onPageHide(): void {
+    deps.flushSessionBeforeUnload();
+  }
+
+  window.addEventListener("pagehide", onPageHide);
+  window.addEventListener("beforeunload", onPageHide);
+
   return () => {
     deps.registerSettingsDialogOpener(null);
     resizeObserverDisconnected = true;
@@ -331,5 +339,8 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     deps.stopChatAccessMonitor();
     window.removeEventListener("keydown", onKeydown);
     window.removeEventListener("dragover", preventBrowserDragOver);
+    window.removeEventListener("pagehide", onPageHide);
+    window.removeEventListener("beforeunload", onPageHide);
+    deps.flushSessionBeforeUnload();
   };
 }

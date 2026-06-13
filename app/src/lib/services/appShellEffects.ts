@@ -38,6 +38,7 @@ import type { createProjectTreeController } from "./projectTreeController";
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { scheduleSessionPersistence } from "./sessionManager";
+import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { savePersistedSettings, toPersistedSettings } from "./settingsStore";
 
 export interface SyncAgentTabEffectInput {
@@ -118,6 +119,7 @@ export function syncAgentTabEffect(input: SyncAgentTabEffectInput): void {
       chatStore.cancelAllGenerations(lastChatScopeKey);
     }
     setLastChatScopeKey(normalizedWorkspaceRoot);
+    markWorkspaceLifecycleActive();
     void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
     chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
     void restoreWorkspaceAgentSession(normalizedWorkspaceRoot).catch(() => {
@@ -230,6 +232,7 @@ export interface SyncProjectTreeWatcherEffectInput {
 
 export interface SyncOpencodeSidecarEffectInput {
   runtimeReady: boolean;
+  workspaceLifecycleActive: boolean;
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
   opencodeEnabled: boolean;
@@ -241,6 +244,7 @@ export interface SyncOpencodeSidecarEffectInput {
 export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput): void {
   const {
     runtimeReady,
+    workspaceLifecycleActive,
     activeWorkspaceRoot,
     isChatHttpActive,
     opencodeEnabled,
@@ -249,7 +253,7 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     setOpencodeHealth,
   } = input;
 
-  if (!runtimeReady || !activeWorkspaceRoot || isChatHttpActive) {
+  if (!runtimeReady || !workspaceLifecycleActive || !activeWorkspaceRoot || isChatHttpActive) {
     return;
   }
 

@@ -2,7 +2,7 @@ import type { LogSettings } from "../domain/contracts";
 
 export const defaultLogSettings: LogSettings = {
   verboseProviderLogging: true,
-  canOpenLogsPanel: false,
+  canOpenLogsPanel: true,
 };
 
 /** Validates and normalizes persisted log settings. */

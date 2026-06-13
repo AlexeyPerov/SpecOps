@@ -30,6 +30,11 @@
   import { deriveAppShellDocumentView } from "../lib/services/appShellDocumentView";
   import { createWorkspaceContextMenuActions } from "../lib/services/workspaceContextMenuController";
   import {
+    flushSessionPersistence,
+    registerTabsChangedSessionFlush,
+  } from "../lib/services/sessionManager";
+  import { isWorkspaceLifecycleActive } from "../lib/services/workspaceLifecycle";
+  import {
     requestOpencodeHealthRefresh,
     syncActiveFileTreeExpandEffect,
     syncAgentTabEffect,
@@ -328,8 +333,12 @@
     void loadProjectTreeRoot();
   }
 
-  onMount(() =>
-    setupAppShellMount({
+  onMount(() => {
+    registerTabsChangedSessionFlush((state) => {
+      void flushSessionPersistence(state, getCurrentWebviewWindow().label);
+    });
+
+    return setupAppShellMount({
       registerSettingsDialogOpener,
       setSettingsDialogInitialTab: (tab) => {
         settingsDialogInitialTab = tab;
@@ -365,12 +374,15 @@
       getCurrentWebviewWindowLabel: () => getCurrentWebviewWindow().label,
       handleKeydown,
       stopChatAccessMonitor,
+      flushSessionBeforeUnload: () => {
+        void flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label);
+      },
       cleanup: {
         disconnectLayoutObserver,
         clearUntitledTitleDebounceTimer,
       },
-    }),
-  );
+    });
+  });
 
   $effect(() => {
     activeTab;
@@ -426,11 +438,13 @@
 
   $effect(() => {
     runtimeReady;
+    isWorkspaceLifecycleActive();
     activeWorkspaceRoot;
     isChatHttpActive;
     documentView.activeDocumentPath;
     syncOpencodeSidecarEffect({
       runtimeReady,
+      workspaceLifecycleActive: isWorkspaceLifecycleActive(),
       activeWorkspaceRoot,
       isChatHttpActive,
       opencodeEnabled,

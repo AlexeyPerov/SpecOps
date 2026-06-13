@@ -2,6 +2,7 @@ import { appState } from "../../state/appState";
 import type { WorkspaceReorderPayload } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { ensureWorkspaceReadAccess, openFolderDialog } from "../../services/fileSystem";
+import { markWorkspaceLifecycleActive } from "../../services/workspaceLifecycle";
 import type { CommandHandlerMap } from "./types";
 
 function isWorkspaceReorderPayload(payload: unknown): payload is WorkspaceReorderPayload {
@@ -35,6 +36,7 @@ export const workspaceHandlers: CommandHandlerMap = {
       notify("Workspace is already open.");
       return;
     }
+    markWorkspaceLifecycleActive();
     notify("Workspace added.");
   },
   "workspace.close": ({ notify }) => {

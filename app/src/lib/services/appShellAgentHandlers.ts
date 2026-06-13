@@ -143,7 +143,10 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     await handleDeleteAgent(agentId);
   }
 
-  async function restoreWorkspaceAgentSession(normalizedRoot: string): Promise<void> {
+  async function restoreWorkspaceAgentSession(
+    normalizedRoot: string,
+    options?: { skipOpencodeReconcile?: boolean },
+  ): Promise<void> {
     const snapshot = appState.getSnapshot();
     if (!isOpencodeEnabled(snapshot.settings.opencode)) {
       chatStore.setActiveAgentId(null);
@@ -153,7 +156,9 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     const session = appState.getActiveSession();
     await chatStore.loadWorkspaceAgents(normalizedRoot);
     chatStore.mergeSessionDraftAgents(normalizedRoot, openAgentTabIds(session.openTabs));
-    await reconcileWorkspaceSessionMappings(normalizedRoot);
+    if (!options?.skipOpencodeReconcile) {
+      await reconcileWorkspaceSessionMappings(normalizedRoot);
+    }
     const agentIndex = chatStore.getAgentIndex();
     const restored = resolveRestoredActiveAgent(session, agentIndex);
     if (restored.shouldFocusAgentTab && restored.activeAgentId) {

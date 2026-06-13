@@ -2,7 +2,8 @@ import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts
 import { isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
-import { isFileMissingError, normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
+import { isFileMissingError, isFsScopePermissionError, normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
+import { removeInaccessibleDocumentTab } from "./inaccessibleFileTabs";
 import { shouldAttemptDeferredCheck, shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 import type { ExternalCheckResult, ExternalCheckTrigger } from "./externalFileChangesTypes";
 import {
@@ -67,6 +68,10 @@ export async function initializeDocumentDiskState(
         diskFingerprint: null,
         fileMissing: true,
       });
+      return;
+    }
+    if (isFsScopePermissionError(error)) {
+      removeInaccessibleDocumentTab(documentId, filePath, error);
       return;
     }
     throw error;

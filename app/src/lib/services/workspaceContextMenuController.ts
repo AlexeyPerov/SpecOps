@@ -1,5 +1,10 @@
 import { CHAT_HTTP_CONTEXT_ID, type ContextId, type DocumentState } from "../domain/contracts";
 import { appState } from "../state/appState";
+import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
+
+function isWorkspaceContextId(contextId: ContextId): boolean {
+  return contextId.startsWith("ws-");
+}
 
 export type CloseWorkspaceAction = "save-all" | "discard-all" | "cancel";
 
@@ -150,6 +155,9 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     const switched = appState.switchContext(contextId);
     if (!switched) {
       return;
+    }
+    if (isWorkspaceContextId(contextId)) {
+      markWorkspaceLifecycleActive();
     }
     close();
   }

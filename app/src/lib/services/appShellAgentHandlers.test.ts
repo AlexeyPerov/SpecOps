@@ -128,4 +128,21 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
     await expect(handlers.restoreWorkspaceAgentSession("/repo/ws-a")).resolves.toBeUndefined();
     expect(chatStoreMock.clearAgentSessionLink).not.toHaveBeenCalled();
   });
+
+  it("skips opencode reconcile when skipOpencodeReconcile is set", async () => {
+    chatStoreMock.getAgentIndex.mockReturnValue([
+      makeEntry({ id: "agent-a", opencodeSessionId: "sess-stale" }),
+    ]);
+
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+
+    await handlers.restoreWorkspaceAgentSession("/repo/ws-a", { skipOpencodeReconcile: true });
+
+    expect(backendListSessionsMock).not.toHaveBeenCalled();
+    expect(chatStoreMock.clearAgentSessionLink).not.toHaveBeenCalled();
+  });
 });

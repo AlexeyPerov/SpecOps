@@ -4,6 +4,7 @@ export type SettingsDialogTab =
   | "connections"
   | "chatModes"
   | "debugAi"
+  | "opencode"
   | "debugAgent"
   | "logs";
 
@@ -47,6 +48,12 @@ const DEBUG_AI_TAB = {
   panelAriaLabel: "Debug Provider settings for Chats",
 } as const satisfies SettingsTabDefinition;
 
+const OPENCODE_TAB = {
+  id: "opencode",
+  label: "OpenCode",
+  panelAriaLabel: "OpenCode settings for Workspaces",
+} as const satisfies SettingsTabDefinition;
+
 const DEBUG_AGENT_TAB = {
   id: "debugAgent",
   label: "Debug Provider",
@@ -63,7 +70,7 @@ export const SETTINGS_SIDEBAR = [
   { kind: "tab", tab: EDITOR_TAB },
   { kind: "tab", tab: SHORTCUTS_TAB },
   { kind: "section", label: "Chats", tabs: [CONNECTIONS_TAB, CHAT_MODES_TAB, DEBUG_AI_TAB] },
-  { kind: "section", label: "Workspaces", tabs: [DEBUG_AGENT_TAB] },
+  { kind: "section", label: "Workspaces", tabs: [OPENCODE_TAB, DEBUG_AGENT_TAB] },
   { kind: "section", label: "Logging", tabs: [LOGS_TAB] },
 ] as const satisfies readonly SettingsSidebarEntry[];
 
@@ -73,6 +80,7 @@ export const SETTINGS_TABS = [
   CONNECTIONS_TAB,
   CHAT_MODES_TAB,
   DEBUG_AI_TAB,
+  OPENCODE_TAB,
   DEBUG_AGENT_TAB,
   LOGS_TAB,
 ] as const satisfies readonly SettingsTabDefinition[];

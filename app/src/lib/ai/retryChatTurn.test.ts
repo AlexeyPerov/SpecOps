@@ -232,7 +232,7 @@ describe("sendChatMessage", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toBe(
-        "Invalid API key for the configured HTTP provider. Check Settings → Connections.",
+        "Invalid API key for the configured HTTP provider. Check Settings → Chats → Providers.",
       );
     }
     expect(chatStore.getMessages()).toHaveLength(1);
@@ -240,7 +240,7 @@ describe("sendChatMessage", () => {
       isGenerating: false,
       lastFailedTurnId: expect.stringMatching(/^turn-/),
       lastError: {
-        message: "Invalid API key for the configured HTTP provider. Check Settings → Connections.",
+        message: "Invalid API key for the configured HTTP provider. Check Settings → Chats → Providers.",
         code: "provider_error",
       },
     });

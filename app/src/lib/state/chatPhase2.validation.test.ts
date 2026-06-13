@@ -7,7 +7,7 @@
  * - HTTP provider uses OpenAI-compatible SSE streaming with token deltas rendered into one assistant message.
  *
  * Manual smoke (workspace UI; not covered here):
- * - Complete Settings -> Connections setup and verify Chat appears on the rail.
+ * - Complete Settings → Chats → Providers setup and verify Chat appears on the rail.
  * - Open Chat, create a chat, send an ask message, and watch assistant text stream chunk by chunk.
  * - Enable Debug provider and verify Debug can send from Chat.
  * - Switch to Notepad and verify no AI/chat entry points appear.

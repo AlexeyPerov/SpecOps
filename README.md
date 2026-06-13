@@ -38,7 +38,7 @@ Workspace folders use **OpenCode** as the agent runtime. SpecOps is the UI; Open
 | Context | Runtime | Where to configure models/API keys |
 | --- | --- | --- |
 | Workspace agents (`ws-*`) | OpenCode server | OpenCode (`/connect`, `opencode.json`, `auth.json`) |
-| Chat (`chat-http`) | OpenAI-compatible HTTP | SpecOps **Settings → Connections** |
+| Chat (`chat-http`) | OpenAI-compatible HTTP | SpecOps **Settings → Chats → Providers** |
 
 ### Quick start
 
@@ -47,8 +47,8 @@ Workspace folders use **OpenCode** as the agent runtime. SpecOps is the UI; Open
    curl -fsSL https://opencode.ai/install | bash
    ```
 2. **Open a workspace folder** in SpecOps (activity rail → add folder).
-3. By default, SpecOps starts a local **OpenCode sidecar** for that directory (default port `4096`). You can disable this via **Settings → Connections → Workspaces / OpenCode → Use OpenCode for workspace agents** to use the folder as a plain editor without agents.
-4. When enabled, health is shown under **Settings → Connections → Workspaces / OpenCode**.
+3. By default, SpecOps starts a local **OpenCode sidecar** for that directory (default port `4096`). You can disable this via **Settings → Workspaces → OpenCode → Use OpenCode for workspace agents** to use the folder as a plain editor without agents.
+4. When enabled, health is shown under **Settings → Workspaces → OpenCode**.
 4. **Configure a provider** in OpenCode (see below) — workspace agents do not use the HTTP connections in SpecOps settings.
 5. In SpecOps, click **Refresh model list**, then pick a model in the workspace agent composer.
 6. Use the **Agents** sidebar: create an agent tab, send a prompt. Tool calls, permission prompts, and question prompts appear in the chat panel.
@@ -62,7 +62,7 @@ Workspace folders use **OpenCode** as the agent runtime. SpecOps is the UI; Open
 cd /path/to/your/project
 opencode serve
 ```
-Then in SpecOps: **Settings → Connections → Workspaces / OpenCode → URL**, set the base URL (for example `http://127.0.0.1:4096`), and use **Check connection**.
+Then in SpecOps: **Settings → Workspaces → OpenCode → URL**, set the base URL (for example `http://127.0.0.1:4096`), and use **Check connection**.
 
 ### Provider setup (OpenRouter, GLM Coding Plan, …)
 
@@ -126,7 +126,7 @@ Details: [Z.AI + OpenCode](https://docs.z.ai/scenario-example/develop-tools/open
 
 - **Health not “Healthy”** — Confirm `opencode` is installed (`which opencode`) or use URL mode against a running `opencode serve`.
 - **Empty model list** — Connect a provider in OpenCode first, then **Refresh model list** in SpecOps settings.
-- **Auth errors** — Re-run `/connect` or fix `auth.json`; workspace sends never read HTTP keys from SpecOps Connections.
+- **Auth errors** — Re-run `/connect` or fix `auth.json`; workspace sends never read HTTP keys from SpecOps **Chats → Providers**.
 - **Legacy workspace chat** — Threads from the pre–phase-3 HTTP workspace provider are not migrated into OpenCode sessions.
 
 More detail: `docs/providers.md` (Chat HTTP vs workspace), `specs/ops/phase-3/phase-3.md`.

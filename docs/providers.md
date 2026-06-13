@@ -1,6 +1,6 @@
 # Chat providers — HTTP connection integration
 
-SpecOps routes **Chat context** (`chat-http`) AI through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings -> Connections**. **Debug** is a settings-gated local simulator for development.
+SpecOps routes **Chat context** (`chat-http`) AI through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings → Chats → Providers**. **Debug** is a settings-gated local simulator for development.
 
 **Workspace contexts** (`ws-*`) use the **OpenCode** backend exclusively — they do not route through the HTTP provider registry. See [phase-3 spec](../specs/ops/phase-3/phase-3.md) for OpenCode integration details.
 
@@ -98,7 +98,7 @@ API keys per provider — `providerSecretsStore.ts`:
 
 ### “Configured” definition
 
-`isHttpConnectionConfigured(settings, apiKey)` — `enabled` and non-empty trimmed API key. Unconfigured HTTP blocks send and shows inline setup CTA in `ChatPanel.svelte` (Settings -> Connections).
+`isHttpConnectionConfigured(settings, apiKey)` — `enabled` and non-empty trimmed API key. Unconfigured HTTP blocks send and shows inline setup CTA in `ChatPanel.svelte` (Settings → Chats → Providers).
 
 ### Default provider selection
 

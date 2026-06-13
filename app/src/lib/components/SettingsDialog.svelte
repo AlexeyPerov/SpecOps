@@ -11,6 +11,7 @@
   import ChatModesSettingsPanel from "./settings/ChatModesSettingsPanel.svelte";
   import ConnectionsSettingsPanel from "./settings/ConnectionsSettingsPanel.svelte";
   import DebugProviderSettingsPanel from "./settings/DebugProviderSettingsPanel.svelte";
+  import OpenCodeSettingsPanel from "./settings/OpenCodeSettingsPanel.svelte";
   import EditorSettingsPanel from "./settings/EditorSettingsPanel.svelte";
   import LogsSettingsPanel from "./settings/LogsSettingsPanel.svelte";
   import SettingsDialogMeasure from "./settings/SettingsDialogMeasure.svelte";
@@ -188,9 +189,11 @@
       note="Settings for the Chats Debug Provider. Enabled by default for development dogfooding; uncheck Enable to hide it from Chats."
       enableLabel="Show Debug Provider in Chats"
     />
+  {:else if tabId === "opencode"}
+    <OpenCodeSettingsPanel dialogOpen={open} />
   {:else if tabId === "logs"}
     <LogsSettingsPanel />
-  {:else}
+  {:else if tabId === "debugAgent"}
     <DebugProviderSettingsPanel
       settingsScope="debugWorkspace"
       catalogProviderId="debug-workspace"

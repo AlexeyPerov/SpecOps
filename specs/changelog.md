@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-13 16:00
+
+- **OpenCode settings location:** Moved OpenCode workspace-agent settings from **Chats → Providers** into a dedicated **Workspaces → OpenCode** settings tab (`OpenCodeSettingsPanel.svelte`). **Chats → Providers** is HTTP-only again. Updated README, `docs/providers.md`, `docs/architecture.md`, and in-app error copy to match the new navigation.
+
+## 2026-06-13 14:50
+
+- **Tauri fileAssociations schema:** Restored required `ext: ["*"]` in `tauri.conf.json` alongside existing macOS `contentTypes` entries so `tauri dev` / bundle config validation passes (Tauri 2 requires `ext`; broad dock drops still use `LSItemContentTypes`).
+
 ## 2026-06-12 15:00
 
 - **macOS integrated title bar (Task 3):** Configured Tauri window with `titleBarStyle: Overlay`, `hiddenTitle: true`, and `trafficLightPosition` for native macOS traffic-light controls (close/minimize/zoom) embedded in a theme-matched top strip. Added `core:window:allow-start-dragging` capability. Created `TitleBar.svelte` (macOS-only, 32px drag region) and integrated it into `AppShell.svelte` as the first grid row. Shell grid updated from 2-row to 3-row layout. Windows/Linux builds unaffected.

@@ -21,13 +21,14 @@ function createOpencodeBackendForTests(params?: {
   abortSessionError?: unknown;
   streamEvents?: unknown[];
 }) {
-  const calls: Array<{ baseUrl: string; workspaceRootPath: string }> = [];
+  const calls: Array<{ baseUrl: string; workspaceRootPath: string; serverPassword: string }> = [];
   const sendPromptCalls: Array<{ sessionId: string; prompt: string; model?: string }> = [];
   const backend = createWorkspaceAgentBackend("opencode", {
     resolveRuntimeConfig: async () => ({
       mode: params?.mode ?? "url",
       baseUrl: params?.baseUrl ?? "http://opencode.local",
     }),
+    resolveServerPassword: async () => "",
     createOpencodeClient: (input) => {
       calls.push(input);
       return {
@@ -151,6 +152,7 @@ describe("workspaceAgentBackend", () => {
       {
         baseUrl: "http://opencode.local",
         workspaceRootPath: "/tmp/workspace",
+        serverPassword: "",
       },
     ]);
   });
@@ -197,6 +199,44 @@ describe("workspaceAgentBackend", () => {
       });
     },
   );
+
+  it("sends authorization header when server password is configured", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [{ id: "sess-1" }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const backend = createWorkspaceAgentBackend("opencode", {
+      resolveRuntimeConfig: async () => ({
+        mode: "url",
+        baseUrl: "http://opencode.local",
+      }),
+      resolveServerPassword: async () => "s3cr3t",
+    });
+    await backend.listSessions({ workspaceRootPath: "/tmp/workspace" });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers.Authorization).toMatch(/^Basic /);
+  });
+
+  it("omits authorization header when no server password is configured", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [{ id: "sess-1" }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const backend = createWorkspaceAgentBackend("opencode", {
+      resolveRuntimeConfig: async () => ({
+        mode: "url",
+        baseUrl: "http://opencode.local",
+      }),
+      resolveServerPassword: async () => "",
+    });
+    await backend.listSessions({ workspaceRootPath: "/tmp/workspace" });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers.Authorization).toBeUndefined();
+  });
 
   it("normalizes stream events without exposing raw SDK shapes", async () => {
     const { backend } = createOpencodeBackendForTests();

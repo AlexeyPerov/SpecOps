@@ -1,6 +1,7 @@
 import { attachOpencodeSidecarWorkspace } from "../../services/opencodeSidecar";
 import type { OpencodeTransportMode } from "../../domain/contracts";
 import { logDiagnostic } from "../../services/logging";
+import { loadOpencodeServerPassword } from "../../services/providerSecretsStore";
 
 export type WorkspaceAgentBackendId = "opencode" | "cursor-local";
 
@@ -206,9 +207,11 @@ interface RawOpencodeClient {
 
 interface WorkspaceAgentBackendDependencies {
   resolveRuntimeConfig?: () => Promise<OpencodeRuntimeConfig>;
+  resolveServerPassword?: () => Promise<string>;
   createOpencodeClient?: (input: {
     baseUrl: string;
     workspaceRootPath: string;
+    serverPassword: string;
   }) => RawOpencodeClient;
 }
 
@@ -744,15 +747,25 @@ function readQuestionChoices(payload: Record<string, unknown>): string[] {
 function createHttpOpencodeClient(input: {
   baseUrl: string;
   workspaceRootPath: string;
+  serverPassword: string;
 }): RawOpencodeClient {
   const { workspaceRootPath } = input;
   const baseUrl = input.baseUrl.replace(/\/+$/, "");
+  const serverPassword = input.serverPassword?.trim() ?? "";
+
+  function authHeaders(): Record<string, string> {
+    if (serverPassword.length === 0) {
+      return {};
+    }
+    return { Authorization: `Basic ${btoa(`opencode:${serverPassword}`)}` };
+  }
 
   async function request(path: string, init?: RequestInit): Promise<unknown> {
     const response = await fetch(`${baseUrl}${addQueryParams(path, { directory: workspaceRootPath })}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders(),
         ...(init?.headers ?? {}),
       },
     }).catch((error: unknown) => {
@@ -923,6 +936,7 @@ function createHttpOpencodeClient(input: {
             method: "GET",
             headers: {
               Accept: "text/event-stream",
+              ...authHeaders(),
             },
           },
         ).catch((error: unknown) => {
@@ -1013,11 +1027,23 @@ function createOpencodeBackend(
       mode: "sidecar",
       baseUrl: DEFAULT_OPENCODE_BASE_URL,
     }));
+  const resolveServerPassword =
+    deps.resolveServerPassword ??
+    (async (): Promise<string> => {
+      try {
+        return await loadOpencodeServerPassword();
+      } catch {
+        return "";
+      }
+    });
   const createOpencodeClient = deps.createOpencodeClient ?? createHttpOpencodeClient;
 
   async function createClientForWorkspace(workspaceRootPath: string): Promise<RawOpencodeClient> {
     const directory = assertWorkspaceRootPath(workspaceRootPath);
-    const runtime = await resolveRuntimeConfig();
+    const [runtime, serverPassword] = await Promise.all([
+      resolveRuntimeConfig(),
+      resolveServerPassword(),
+    ]);
     let baseUrl = runtime.baseUrl.trim();
     if (runtime.mode === "sidecar") {
       const sidecar = await attachOpencodeSidecarWorkspace(directory).catch((error: unknown) => {
@@ -1035,7 +1061,7 @@ function createOpencodeBackend(
         message: "OpenCode base URL is missing.",
       });
     }
-    return createOpencodeClient({ baseUrl, workspaceRootPath: directory });
+    return createOpencodeClient({ baseUrl, workspaceRootPath: directory, serverPassword });
   }
 
   return {

@@ -8,6 +8,7 @@
   import { appState } from "../../state/appState";
   import { chatStore } from "../../state/chatStore";
   import { refreshOpencodeCatalog } from "../../ai/opencodeCatalog";
+  import { requestOpencodeHealthRefresh } from "../../services/appShellEffects";
 
   let { dialogOpen = false }: { dialogOpen?: boolean } = $props();
 
@@ -112,16 +113,19 @@
 
   function checkOpencodeConnection(): void {
     appState.applyPersistedSettings({
-      opencode: {
-        mode: snapshot.settings.opencode.mode,
-        baseUrl: snapshot.settings.opencode.baseUrl,
-      },
       opencodeHealth: {
         status: "checking",
         source: snapshot.settings.opencode.mode,
         checkedAt: new Date().toISOString(),
         lastErrorMessage: null,
       },
+    });
+    requestOpencodeHealthRefresh({
+      opencodeEnabled: snapshot.settings.opencode.enabled,
+      opencodeMode: snapshot.settings.opencode.mode,
+      opencodeBaseUrl: snapshot.settings.opencode.baseUrl,
+      serverPassword: opencodeServerPassword,
+      setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
     });
     void chatStore.runAccessPreflight();
   }

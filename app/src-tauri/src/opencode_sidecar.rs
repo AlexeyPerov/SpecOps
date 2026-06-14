@@ -217,6 +217,35 @@ fn probe_health(base_url: &str) -> bool {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PortProbeResult {
+    Healthy,
+    AuthRequired,
+    NotResponsive,
+}
+
+fn probe_health_detailed(base_url: &str) -> PortProbeResult {
+    let health_url = format!("{base_url}{HEALTH_PATH}");
+    let agent = ureq::agent();
+    match agent.get(&health_url).call() {
+        Ok(response) => {
+            if response.status() == 200 {
+                PortProbeResult::Healthy
+            } else {
+                PortProbeResult::NotResponsive
+            }
+        }
+        Err(ureq::Error::Status(code, _)) => {
+            if code == 401 || code == 403 {
+                PortProbeResult::AuthRequired
+            } else {
+                PortProbeResult::NotResponsive
+            }
+        }
+        Err(_) => PortProbeResult::NotResponsive,
+    }
+}
+
 fn wait_for_health(base_url: &str) -> Result<u32, OpencodeSidecarError> {
     let started = Instant::now();
     let mut attempts = 0u32;
@@ -255,10 +284,31 @@ fn spawn_sidecar(
     let binary = resolve_opencode_binary(app)?;
 
     if !is_port_available(port) {
-        return Err(OpencodeSidecarError::PortInUse {
-            port,
-            message: format!("Port {port} is already in use by another process"),
-        });
+        let base_url = build_base_url(hostname, port);
+        match probe_health_detailed(&base_url) {
+            PortProbeResult::Healthy => {
+                return Err(OpencodeSidecarError::PortInUse {
+                    port,
+                    message: format!(
+                        "Port {port} is already in use by a healthy OpenCode server. Switch to URL mode in Settings \u{2192} Workspaces \u{2192} OpenCode with {base_url}."
+                    ),
+                });
+            }
+            PortProbeResult::AuthRequired => {
+                return Err(OpencodeSidecarError::PortInUse {
+                    port,
+                    message: format!(
+                        "Port {port} is already in use by an OpenCode server that requires a password. Switch to URL mode and configure Server password."
+                    ),
+                });
+            }
+            PortProbeResult::NotResponsive => {
+                return Err(OpencodeSidecarError::PortInUse {
+                    port,
+                    message: format!("Port {port} is already in use by another process"),
+                });
+            }
+        }
     }
 
     let mut command = Command::new(&binary);
@@ -558,5 +608,31 @@ mod tests {
         assert!(!status.running);
         assert!(status.base_url.is_none());
         assert!(status.port.is_none());
+    }
+
+    #[test]
+    fn probe_health_detailed_returns_not_responsive_for_dead_port() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let base_url = format!("http://127.0.0.1:{port}");
+        let result = probe_health_detailed(&base_url);
+        assert_eq!(result, PortProbeResult::NotResponsive);
+    }
+
+    #[test]
+    fn port_in_use_error_messages_mention_url_mode_when_healthy() {
+        let error = OpencodeSidecarError::PortInUse {
+            port: 4096,
+            message: "Port 4096 is already in use by a healthy OpenCode server. Switch to URL mode in Settings \u{2192} Workspaces \u{2192} OpenCode with http://127.0.0.1:4096.".to_string(),
+        };
+        match error {
+            OpencodeSidecarError::PortInUse { port, message } => {
+                assert_eq!(port, 4096);
+                assert!(message.contains("URL mode"));
+            }
+            _ => panic!("expected PortInUse"),
+        }
     }
 }

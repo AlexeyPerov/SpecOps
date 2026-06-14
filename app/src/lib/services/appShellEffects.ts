@@ -20,6 +20,7 @@
 
 import type { AppDomainState, ContextId, TabState } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID, isAgentTab } from "../domain/contracts";
+import type { OpencodeHealthStatus } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { syncChatAccessMonitor } from "./chatAccessMonitor";
@@ -33,6 +34,7 @@ import {
   stopOpencodeSidecar,
 } from "./opencodeSidecar";
 import { isOpencodeEnabled } from "./opencodeSettings";
+import { loadOpencodeServerPassword } from "./providerSecretsStore";
 import type { createProjectTreeController } from "./projectTreeController";
 
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
@@ -238,7 +240,77 @@ export interface SyncOpencodeSidecarEffectInput {
   opencodeEnabled: boolean;
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
+  serverPassword?: string;
   setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
+}
+
+const URL_HEALTH_TIMEOUT_MS = 10_000;
+
+interface UrlHealthProbeResult {
+  status: OpencodeHealthStatus;
+  message: string | null;
+}
+
+async function resolveServerPassword(provided: string | undefined): Promise<string> {
+  if (provided !== undefined) {
+    return provided;
+  }
+  try {
+    return await loadOpencodeServerPassword();
+  } catch {
+    return "";
+  }
+}
+
+export async function probeUrlHealth(
+  baseUrl: string,
+  serverPassword: string,
+): Promise<UrlHealthProbeResult> {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(baseUrl);
+  } catch {
+    return { status: "error", message: "OpenCode URL is invalid." };
+  }
+  const healthUrl = new URL("/global/health", endpoint);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), URL_HEALTH_TIMEOUT_MS);
+  const headers: Record<string, string> = {};
+  if (serverPassword.trim().length > 0) {
+    headers["Authorization"] = `Basic ${btoa(`opencode:${serverPassword}`)}`;
+  }
+  try {
+    const response = await fetch(healthUrl.toString(), {
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    });
+    if (response.status === 401) {
+      return {
+        status: "degraded",
+        message:
+          "OpenCode server requires authentication. Set Server password in Settings \u2192 Workspaces \u2192 OpenCode.",
+      };
+    }
+    if (!response.ok) {
+      return {
+        status: "degraded",
+        message: `OpenCode server responded with HTTP ${response.status}.`,
+      };
+    }
+    return { status: "healthy", message: null };
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return {
+        status: "error",
+        message: `OpenCode health check timed out after ${URL_HEALTH_TIMEOUT_MS / 1000}s.`,
+      };
+    }
+    const message = error instanceof Error ? error.message : "OpenCode URL is unreachable.";
+    return { status: "error", message };
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput): void {
@@ -287,34 +359,16 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
       });
       return;
     }
-    const healthUrl = new URL("/global/health", endpoint);
-    void fetch(healthUrl.toString(), { method: "GET" })
-      .then(async (response) => {
-        if (!response.ok) {
-          setOpencodeHealth({
-            status: "degraded",
-            source: "url",
-            checkedAt: new Date().toISOString(),
-            lastErrorMessage: `OpenCode server responded with HTTP ${response.status}.`,
-          });
-          return;
-        }
-        setOpencodeHealth({
-          status: "healthy",
-          source: "url",
-          checkedAt: new Date().toISOString(),
-          lastErrorMessage: null,
-        });
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "OpenCode URL is unreachable.";
-        setOpencodeHealth({
-          status: "error",
-          source: "url",
-          checkedAt: new Date().toISOString(),
-          lastErrorMessage: message,
-        });
+    void (async () => {
+      const password = await resolveServerPassword(input.serverPassword);
+      const result = await probeUrlHealth(endpoint.toString(), password);
+      setOpencodeHealth({
+        status: result.status,
+        source: "url",
+        checkedAt: new Date().toISOString(),
+        lastErrorMessage: result.message,
       });
+    })();
     return;
   }
 
@@ -345,6 +399,7 @@ export function requestOpencodeHealthRefresh(input: {
   opencodeEnabled: boolean;
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
+  serverPassword?: string;
   setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
 }): void {
   const { opencodeEnabled, opencodeMode, opencodeBaseUrl, setOpencodeHealth } = input;
@@ -394,46 +449,16 @@ export function requestOpencodeHealthRefresh(input: {
     checkedAt: new Date().toISOString(),
     lastErrorMessage: null,
   });
-  let endpoint: URL;
-  try {
-    endpoint = new URL(opencodeBaseUrl);
-  } catch {
+  void (async () => {
+    const password = await resolveServerPassword(input.serverPassword);
+    const result = await probeUrlHealth(opencodeBaseUrl, password);
     setOpencodeHealth({
-      status: "error",
+      status: result.status,
       source: "url",
       checkedAt: new Date().toISOString(),
-      lastErrorMessage: "OpenCode URL is invalid.",
+      lastErrorMessage: result.message,
     });
-    return;
-  }
-  const healthUrl = new URL("/global/health", endpoint);
-  void fetch(healthUrl.toString(), { method: "GET" })
-    .then((response) => {
-      if (!response.ok) {
-        setOpencodeHealth({
-          status: "degraded",
-          source: "url",
-          checkedAt: new Date().toISOString(),
-          lastErrorMessage: `OpenCode server responded with HTTP ${response.status}.`,
-        });
-        return;
-      }
-      setOpencodeHealth({
-        status: "healthy",
-        source: "url",
-        checkedAt: new Date().toISOString(),
-        lastErrorMessage: null,
-      });
-    })
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "OpenCode URL is unreachable.";
-      setOpencodeHealth({
-        status: "error",
-        source: "url",
-        checkedAt: new Date().toISOString(),
-        lastErrorMessage: message,
-      });
-    });
+  })();
 }
 
 export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffectInput): void {

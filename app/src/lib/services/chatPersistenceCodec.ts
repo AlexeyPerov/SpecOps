@@ -113,6 +113,12 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
   if (value.connectionId !== undefined && typeof value.connectionId !== "string") {
     return null;
   }
+  if (value.opencodeAgentId !== undefined && typeof value.opencodeAgentId !== "string") {
+    return null;
+  }
+  if (value.opencodeProviderId !== undefined && typeof value.opencodeProviderId !== "string") {
+    return null;
+  }
   return {
     agentId: value.agentId,
     threadId: value.threadId,
@@ -126,6 +132,8 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
     compactedMessageCount: value.compactedMessageCount,
     selectedModelId: value.selectedModelId,
     connectionId: value.connectionId,
+    opencodeAgentId: value.opencodeAgentId,
+    opencodeProviderId: value.opencodeProviderId,
   };
 }
 

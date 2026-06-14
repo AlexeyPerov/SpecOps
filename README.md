@@ -50,7 +50,7 @@ Workspace folders use **OpenCode** as the agent runtime. SpecOps is the UI; Open
 3. By default, SpecOps starts a local **OpenCode sidecar** for that directory (default port `4096`). You can disable this via **Settings → Workspaces → OpenCode → Use OpenCode for workspace agents** to use the folder as a plain editor without agents.
 4. When enabled, health is shown under **Settings → Workspaces → OpenCode**.
 4. **Configure a provider** in OpenCode (see below) — workspace agents do not use the HTTP connections in SpecOps settings.
-5. In SpecOps, click **Refresh model list**, then pick a model in the workspace agent composer.
+5. In SpecOps, click **Refresh model list**, then pick an agent, provider, and model from the OpenCode catalog in the workspace agent composer.
 6. Use the **Agents** sidebar: create an agent tab, send a prompt. Tool calls, permission prompts, and question prompts appear in the chat panel.
 
 ### OpenCode server modes

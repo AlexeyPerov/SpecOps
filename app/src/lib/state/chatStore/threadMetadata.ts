@@ -17,11 +17,29 @@ function normalizeThreadForScope(
 
 function normalizeMetadataPatchForScope(
   patch: Partial<
-    Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId" | "connectionId">
+    Pick<
+      ChatThreadMetadata,
+      | "mode"
+      | "provider"
+      | "summary"
+      | "selectedModelId"
+      | "connectionId"
+      | "opencodeAgentId"
+      | "opencodeProviderId"
+    >
   >,
   _scopeKey: string,
 ): Partial<
-  Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId" | "connectionId">
+  Pick<
+    ChatThreadMetadata,
+    | "mode"
+    | "provider"
+    | "summary"
+    | "selectedModelId"
+    | "connectionId"
+    | "opencodeAgentId"
+    | "opencodeProviderId"
+  >
 > {
   return patch;
 }
@@ -86,7 +104,16 @@ export function createThreadMetadataSlice(deps: {
     },
     updateThreadMetadata(
       patch: Partial<
-        Pick<ChatThreadMetadata, "mode" | "provider" | "summary" | "selectedModelId" | "connectionId">
+        Pick<
+          ChatThreadMetadata,
+          | "mode"
+          | "provider"
+          | "summary"
+          | "selectedModelId"
+          | "connectionId"
+          | "opencodeAgentId"
+          | "opencodeProviderId"
+        >
       >,
       updatedAt: string = new Date().toISOString(),
       agentId?: string,

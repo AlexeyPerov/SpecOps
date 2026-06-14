@@ -150,6 +150,24 @@ describe("agent thread snapshot codec", () => {
     expect(decoded).toEqual(snapshot);
   });
 
+  it("round-trips opencodeAgentId and opencodeProviderId metadata", () => {
+    const snapshot: ChatAgentThreadFileSnapshot = {
+      version: 1,
+      thread: {
+        ...sampleThread(),
+        metadata: {
+          ...sampleThread().metadata,
+          opencodeAgentId: "build",
+          opencodeProviderId: "anthropic",
+        },
+      },
+    };
+
+    const encoded = encodeChatAgentThreadFileSnapshot(snapshot);
+    const decoded = decodeChatAgentThreadFileSnapshot(encoded);
+    expect(decoded).toEqual(snapshot);
+  });
+
   it("decodes legacy snapshots without selectedModelId or model-switched events", () => {
     const legacy = encodeChatAgentThreadFileSnapshot({
       version: 1,

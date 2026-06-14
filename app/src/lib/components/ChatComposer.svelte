@@ -17,7 +17,8 @@
     ProviderModelCatalogs,
   } from "../domain/contracts";
   import { appState } from "../state/appState";
-  import { createComposerSendActions } from "../ai/composerSendActions";
+  import { chatStore } from "../state/chatStore";
+  import { createComposerSendActions, persistActiveThreadSnapshot } from "../ai/composerSendActions";
   import { createComposerSelectionActions } from "../ai/composerSelectionActions";
   import {
     syncComposerConnectionFallback,
@@ -28,6 +29,7 @@
   import type { OpencodeCatalogState } from "../ai/opencodeCatalog";
   import ChatConnectionPicker from "./ChatConnectionPicker.svelte";
   import ChatModePicker from "./ChatModePicker.svelte";
+  import WorkspaceCatalogPicker from "./WorkspaceCatalogPicker.svelte";
   import "../styles/chat-composer.css";
 
   interface ComposerError {
@@ -61,6 +63,8 @@
     appSettings: AppSettingsState;
     composerError: ComposerError | null;
     opencodeCatalog?: OpencodeCatalogState | null;
+    activeOpencodeAgentId?: string;
+    activeOpencodeProviderId?: string;
     onInlineError?: (message: string) => void;
   }
 
@@ -90,6 +94,8 @@
     appSettings,
     composerError,
     opencodeCatalog = null,
+    activeOpencodeAgentId = "",
+    activeOpencodeProviderId = "",
     onInlineError = () => {},
   }: Props = $props();
 
@@ -101,7 +107,12 @@
   );
   let budgetEstimateTimer: ReturnType<typeof setTimeout> | null = null;
 
+  const isWorkspace = $derived(chatContextKind === "workspace");
+
   const availableConnections = $derived.by(() => {
+    if (isWorkspace) {
+      return [];
+    }
     providerSettings;
     chatContextKind;
     httpProviderSettings.enabled;
@@ -110,6 +121,9 @@
     return listSelectableChatConnections(providerSettings, providerApiKeys, chatContextKind);
   });
   const activeConnectionSelection = $derived.by(() => {
+    if (isWorkspace) {
+      return null;
+    }
     activeProvider;
     activeConnectionId;
     providerSettings;
@@ -124,6 +138,9 @@
     );
   });
   const availableModes = $derived.by(() => {
+    if (isWorkspace) {
+      return [];
+    }
     supportedModes;
     return listSelectableChatModes($appState.settings).filter((mode) => supportedModes.includes(mode.id));
   });
@@ -218,6 +235,26 @@
 
   const { selectMode, selectConnection, selectModel } = selectionActions;
 
+  function selectOpencodeAgent(agentId: string): void {
+    if (agentId === activeOpencodeAgentId || isModelSelectionDisabled) {
+      return;
+    }
+    const updated = chatStore.updateThreadMetadata({ opencodeAgentId: agentId });
+    if (updated) {
+      persistActiveThreadSnapshot();
+    }
+  }
+
+  function selectOpencodeProvider(providerId: string): void {
+    if (providerId === activeOpencodeProviderId || isModelSelectionDisabled) {
+      return;
+    }
+    const updated = chatStore.updateThreadMetadata({ opencodeProviderId: providerId });
+    if (updated) {
+      persistActiveThreadSnapshot();
+    }
+  }
+
   const { submitMessage, retryLastTurn } = createComposerSendActions({
     getDraft: () => draft,
     setDraft: (value) => {
@@ -242,6 +279,9 @@
   });
 
   $effect(() => {
+    if (isWorkspace) {
+      return;
+    }
     activeConnectionSelection;
     availableConnections;
     isProviderSelectionDisabled;
@@ -254,6 +294,9 @@
   });
 
   $effect(() => {
+    if (isWorkspace) {
+      return;
+    }
     activeMode;
     availableModes;
     isModeSelectionDisabled;
@@ -268,6 +311,18 @@
     providerSettings;
     providerModelCatalogs;
     isModelSelectionDisabled;
+    if (isWorkspace) {
+      if (isModelSelectionDisabled) {
+        return;
+      }
+      if (!activeModel && availableModels.length > 0) {
+        const updated = chatStore.updateThreadMetadata({ selectedModelId: availableModels[0] });
+        if (updated) {
+          persistActiveThreadSnapshot();
+        }
+      }
+      return;
+    }
     syncComposerModelFallback({
       activeModel,
       availableModels,
@@ -362,22 +417,35 @@
   ></textarea>
   <div class="chat-composer-actions">
     <div class="chat-composer-toolbar">
-      <ChatModePicker
-        {availableModes}
-        {activeMode}
-        disabled={isModeSelectionDisabled}
-        onSelectMode={selectMode}
-      />
-      <ChatConnectionPicker
-        {availableConnections}
-        {activeConnectionSelection}
-        {availableModels}
-        {activeModel}
-        connectionDisabled={isProviderSelectionDisabled}
-        modelDisabled={isModelSelectionDisabled}
-        onSelectConnection={(value) => void selectConnection(value)}
-        onSelectModel={(value) => void selectModel(value)}
-      />
+      {#if isWorkspace}
+        <WorkspaceCatalogPicker
+          catalog={opencodeCatalog}
+          activeAgentId={activeOpencodeAgentId}
+          activeProviderId={activeOpencodeProviderId}
+          activeModelId={activeModel}
+          disabled={isModelSelectionDisabled}
+          onSelectAgent={selectOpencodeAgent}
+          onSelectProvider={selectOpencodeProvider}
+          onSelectModel={(value) => void selectModel(value)}
+        />
+      {:else}
+        <ChatModePicker
+          {availableModes}
+          {activeMode}
+          disabled={isModeSelectionDisabled}
+          onSelectMode={selectMode}
+        />
+        <ChatConnectionPicker
+          {availableConnections}
+          {activeConnectionSelection}
+          {availableModels}
+          {activeModel}
+          connectionDisabled={isProviderSelectionDisabled}
+          modelDisabled={isModelSelectionDisabled}
+          onSelectConnection={(value) => void selectConnection(value)}
+          onSelectModel={(value) => void selectModel(value)}
+        />
+      {/if}
     </div>
     <div class="chat-composer-controls">
       {#if canRetryLastTurn}

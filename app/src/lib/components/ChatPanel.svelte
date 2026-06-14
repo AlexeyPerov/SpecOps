@@ -88,6 +88,8 @@
     activeConnectionId;
     return chatStore.getActiveChatModel(providerModelCatalogs, providerSettings);
   });
+  const activeOpencodeAgentId = $derived(metadata?.opencodeAgentId ?? "");
+  const activeOpencodeProviderId = $derived(metadata?.opencodeProviderId ?? "");
   const modelCatalogContext = $derived({
     providerSettings,
     connectionId: activeConnectionId,
@@ -295,7 +297,7 @@
       emptyHint={
         isChatHttpScope
           ? "Send messages with your configured connection. Pick a provider, mode, and model, then send."
-          : "Ask or review ideas for this workspace. Select a model, then send a message."
+          : "Send a prompt to this workspace agent. Select an agent and model from OpenCode, then send."
       }
     />
 
@@ -325,6 +327,8 @@
       appSettings={$appState.settings}
       {composerError}
       {opencodeCatalog}
+      {activeOpencodeAgentId}
+      {activeOpencodeProviderId}
       onInlineError={(message) => {
         inlineError = message;
       }}

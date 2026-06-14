@@ -97,6 +97,10 @@ export interface ChatThreadMetadata {
   selectedModelId?: string;
   /** Selected HTTP connection for `provider === "http"` threads. */
   connectionId?: string;
+  /** Selected OpenCode agent for workspace threads (e.g. plan, build). */
+  opencodeAgentId?: string;
+  /** Selected OpenCode provider for workspace threads. */
+  opencodeProviderId?: string;
 }
 
 /** One persisted agent conversation (messages + per-agent settings). */

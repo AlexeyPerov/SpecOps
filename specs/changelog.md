@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-14 13:35
+
+- **Sidecar reuse across workspace switches (phase 3 M4 Task 1):** Removed directory equality from `should_reuse_sidecar` in `opencode_sidecar.rs` — a healthy running sidecar process is now reused regardless of which workspace folder is active, since `opencode serve` is directory-agnostic and `directory` is passed per HTTP request. When reusing, `start_or_attach` updates `inner.directory` to the requested workspace for diagnostics/status instead of stopping and respawning. Updated Rust unit tests: replaced `should_not_reuse_when_directory_differs` with `should_reuse_when_directory_differs_but_healthy`, added `should_not_reuse_when_child_dead`. All 10 Rust sidecar tests pass.
+- **Sidecar deferred to workspace lifecycle (phase 3 M4 Task 2):** Verified lifecycle gate (`workspaceLifecycle.ts`) prevents sidecar attach on cold launch / passive session restore — `syncOpencodeSidecarEffect` early-returns when `workspaceLifecycleActive` is false; `restoreWorkspaceAgentSession` is called with `skipOpencodeReconcile: true` at startup; `markWorkspaceLifecycleActive()` fires on workspace add and activity-rail context switch. Added dedicated `workspaceLifecycle.test.ts` (4 tests covering inactive default, activation, idempotency, and reset). All 1097 TS tests pass.
+
 ## 2026-06-13 21:00
 
 - **Workspace vs Chat composer separation (phase 3 M4 Tasks 4–5):** Added Tasks 4–5 to `execution-plan-m4.md` — workspace agents get an OpenCode-only composer (agents/plan-build, OpenCode providers, OpenCode models); Chat HTTP keeps its own settings/modes/providers/models; lanes share only internal primitives. Renamed milestone to cover sidecar lifecycle and workspace agent UX; added decision L5.

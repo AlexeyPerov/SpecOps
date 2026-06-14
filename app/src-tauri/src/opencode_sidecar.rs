@@ -122,17 +122,8 @@ fn normalize_directory(directory: &str) -> Result<String, OpencodeSidecarError> 
     Ok(trimmed.to_string())
 }
 
-fn should_reuse_sidecar(
-    current_directory: Option<&str>,
-    requested_directory: &str,
-    child_alive: bool,
-    health_ok: bool,
-) -> bool {
-    child_alive
-        && health_ok
-        && current_directory
-            .map(|directory| directory == requested_directory)
-            .unwrap_or(false)
+fn should_reuse_sidecar(child_alive: bool, health_ok: bool) -> bool {
+    child_alive && health_ok
 }
 
 fn is_port_available(port: u16) -> bool {
@@ -374,7 +365,8 @@ fn start_or_attach(
     let child_alive = inner.child.as_mut().map(child_is_running).unwrap_or(false);
     let health_ok = child_alive && probe_health(&base_url);
 
-    if should_reuse_sidecar(inner.directory.as_deref(), &directory, child_alive, health_ok) {
+    if should_reuse_sidecar(child_alive, health_ok) {
+        inner.directory = Some(directory);
         inner.health = SidecarHealthStatus::Healthy;
         inner.last_error = None;
         return Ok(current_status(inner));
@@ -492,32 +484,22 @@ mod tests {
 
     #[test]
     fn should_reuse_when_directory_matches_and_healthy() {
-        assert!(should_reuse_sidecar(
-            Some("/tmp/ws"),
-            "/tmp/ws",
-            true,
-            true
-        ));
+        assert!(should_reuse_sidecar(true, true));
     }
 
     #[test]
-    fn should_not_reuse_when_directory_differs() {
-        assert!(!should_reuse_sidecar(
-            Some("/tmp/ws-a"),
-            "/tmp/ws-b",
-            true,
-            true
-        ));
+    fn should_reuse_when_directory_differs_but_healthy() {
+        assert!(should_reuse_sidecar(true, true));
     }
 
     #[test]
     fn should_not_reuse_when_unhealthy() {
-        assert!(!should_reuse_sidecar(
-            Some("/tmp/ws"),
-            "/tmp/ws",
-            true,
-            false
-        ));
+        assert!(!should_reuse_sidecar(true, false));
+    }
+
+    #[test]
+    fn should_not_reuse_when_child_dead() {
+        assert!(!should_reuse_sidecar(false, true));
     }
 
     #[test]

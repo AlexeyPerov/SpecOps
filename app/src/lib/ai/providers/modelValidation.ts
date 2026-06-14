@@ -28,7 +28,7 @@ export function resolveEffectiveThreadModelId(
   context?: ThreadModelCatalogContext,
 ): string {
   const normalizedCatalogs = normalizeProviderModelCatalogs(catalogs);
-  const providerId = thread.metadata.provider;
+  const providerId = thread.metadata.provider ?? "http";
   const catalogContext: ThreadModelCatalogContext = {
     providerSettings: context?.providerSettings,
     connectionId: context?.connectionId ?? thread.metadata.connectionId,

@@ -228,7 +228,7 @@ Dependencies: Task 3 recommended (catalog API calls need auth/CSP); UI can land 
 
 ---
 
-#### Task 5: Isolate workspace agent metadata and preflight from Chat HTTP [Score:7] [Agent:medium]
+#### Task 5: Isolate workspace agent metadata and preflight from Chat HTTP [Score:7] [Agent:medium] [DONE]
 
 **Required context**
 

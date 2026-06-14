@@ -85,7 +85,6 @@ describe("chatStore", () => {
       agentId: "agent-1",
       threadId: "agent-1",
       mode: "ask",
-      provider: "http",
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:00.000Z",
     });
@@ -137,7 +136,6 @@ describe("chatStore", () => {
       agentId: "agent-1",
       threadId: "agent-1",
       mode: "review",
-      provider: "http",
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:00.000Z",
     });
@@ -183,7 +181,6 @@ describe("chatStore", () => {
     ]);
     expect(chatStore.getMetadata()).toMatchObject({
       mode: "ask",
-      provider: "http",
       createdAt: "2026-05-26T00:00:01.000Z",
       compactionCount: 2,
       compactedMessageCount: 4,
@@ -413,6 +410,7 @@ describe("chatStore", () => {
       content: "hello",
       createdAt: "2026-05-26T00:00:00.000Z",
     });
+    chatStore.updateThreadMetadata({ provider: "http" });
 
     const result = await chatStore.checkActiveWorkspaceCapabilities();
 
@@ -430,6 +428,7 @@ describe("chatStore", () => {
       content: "hello",
       createdAt: "2026-05-26T00:00:00.000Z",
     });
+    chatStore.updateThreadMetadata({ provider: "http" });
 
     const checker: CapabilityChecker = {
       checkCapabilities: vi.fn().mockResolvedValue({

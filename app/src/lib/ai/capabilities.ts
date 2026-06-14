@@ -32,3 +32,13 @@ export interface CapabilityCheckInput {
 export interface CapabilityChecker {
   checkCapabilities(input: CapabilityCheckInput): Promise<CapabilityCheckResult>;
 }
+
+export interface WorkspaceReadinessResult {
+  ready: boolean;
+  message: string;
+  recoveryHint?: string;
+}
+
+export interface WorkspaceReadinessChecker {
+  checkReadiness(workspaceRootPath: string): WorkspaceReadinessResult;
+}

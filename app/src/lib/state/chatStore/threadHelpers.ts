@@ -6,6 +6,7 @@ import type {
   ChatThreadSnapshot,
   ProviderModelCatalogs,
 } from "../../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 import { normalizeProviderModelCatalogs } from "../../ai/providers/providerModelCatalog";
 import { resolveHttpConnection } from "../../ai/providers/httpConnectionSettings";
 
@@ -44,7 +45,26 @@ export function cloneThread(thread: ChatThreadSnapshot | null): ChatThreadSnapsh
   };
 }
 
-export function createThreadMetadata(agentId: string, createdAt: string): ChatThreadMetadata {
+/**
+ * Creates metadata for a new thread. When `scopeKey` is a workspace root
+ * (not `chat-http`), HTTP-oriented fields (`provider`, `connectionId`) are
+ * omitted — workspace threads store OpenCode-only selection state.
+ */
+export function createThreadMetadata(
+  agentId: string,
+  createdAt: string,
+  scopeKey?: string | null,
+): ChatThreadMetadata {
+  const isWorkspaceScope = scopeKey != null && scopeKey !== CHAT_HTTP_CONTEXT_ID;
+  if (isWorkspaceScope) {
+    return {
+      agentId,
+      threadId: agentId,
+      mode: DEFAULT_CHAT_MODE,
+      createdAt,
+      updatedAt: createdAt,
+    };
+  }
   const provider = defaultChatProviderResolver();
   return {
     agentId,

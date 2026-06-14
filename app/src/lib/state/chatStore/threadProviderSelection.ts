@@ -222,7 +222,7 @@ export function createThreadProviderSelectionSlice(deps: {
           thread ??
           ({
             metadata: applyMetadataPatch(
-              createThreadMetadata(targetAgentId, updatedAt),
+              createThreadMetadata(targetAgentId, updatedAt, root),
               {},
               updatedAt,
             ),
@@ -317,7 +317,7 @@ export function createThreadProviderSelectionSlice(deps: {
           thread ??
           ({
             metadata: applyMetadataPatch(
-              createThreadMetadata(targetAgentId, updatedAt),
+              createThreadMetadata(targetAgentId, updatedAt, root),
               { provider: "http", connectionId: trimmedConnectionId, selectedModelId: nextModelId },
               updatedAt,
             ),
@@ -435,7 +435,7 @@ export function createThreadProviderSelectionSlice(deps: {
           thread ??
           ({
             metadata: applyMetadataPatch(
-              createThreadMetadata(targetAgentId, updatedAt),
+              createThreadMetadata(targetAgentId, updatedAt, root),
               {},
               updatedAt,
             ),

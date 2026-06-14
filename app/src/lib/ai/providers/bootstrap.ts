@@ -11,6 +11,12 @@ import {
 import { listConfiguredHttpConnections, resolveHttpConnection } from "./httpConnectionSettings";
 import { resolveDefaultConnectionForProvider } from "../../state/chatStore/threadHelpers";
 import { listSelectableChatModes } from "../modes/resolve";
+import { isOpencodeEnabled } from "../../services/opencodeSettings";
+import {
+  getOpencodeCatalog,
+  isOpencodeCatalogReady,
+} from "../opencodeCatalog";
+import type { WorkspaceReadinessChecker } from "../capabilities";
 
 let initialized = false;
 
@@ -84,6 +90,12 @@ export function initializeChatProviders(): void {
       }),
     ),
   );
+  chatStore.setWorkspaceReadinessChecker(
+    createWorkspaceReadinessChecker(
+      () => appState.getSnapshot().settings.opencode,
+      () => appState.getSnapshot().settings.opencodeHealth.status,
+    ),
+  );
   chatStore.setDefaultChatProviderResolver(() => {
     const snapshot = appState.getSnapshot().settings;
     const scopeKey = chatStore.getActiveChatScopeKey();
@@ -108,4 +120,58 @@ export function initializeChatProviders(): void {
 /** Resets provider bootstrap state for unit tests. */
 export function resetChatProvidersForTests(): void {
   initialized = false;
+}
+
+function createWorkspaceReadinessChecker(
+  getOpencodeSettings: () => import("../../domain/contracts").OpencodeSettings,
+  getOpencodeHealthStatus: () => import("../../domain/contracts").OpencodeHealthStatus,
+): WorkspaceReadinessChecker {
+  return {
+    checkReadiness(workspaceRootPath: string) {
+      const settings = getOpencodeSettings();
+      if (!isOpencodeEnabled(settings)) {
+        return {
+          ready: false,
+          message: "OpenCode is disabled. Enable it in Settings → Workspaces → OpenCode.",
+          recoveryHint: "Enable OpenCode in Settings → Workspaces → OpenCode.",
+        };
+      }
+      const health = getOpencodeHealthStatus();
+      if (health === "error" || health === "degraded") {
+        return {
+          ready: false,
+          message: "OpenCode server is unavailable. Check server health and retry.",
+          recoveryHint: "Check OpenCode server health in Settings → Workspaces → OpenCode.",
+        };
+      }
+      if (health === "unknown" || health === "checking") {
+        return {
+          ready: false,
+          message: "OpenCode server health is not yet confirmed.",
+          recoveryHint: "Wait for OpenCode health check or click Check connection in Settings.",
+        };
+      }
+      if (!isOpencodeCatalogReady(workspaceRootPath)) {
+        const catalog = getOpencodeCatalog(workspaceRootPath);
+        if (catalog.status === "loading") {
+          return {
+            ready: false,
+            message: "Loading OpenCode model catalog…",
+          };
+        }
+        if (catalog.status === "error") {
+          return {
+            ready: false,
+            message: catalog.lastErrorMessage ?? "Failed to load OpenCode catalog.",
+            recoveryHint: "Refresh the model list in the workspace agent composer.",
+          };
+        }
+        return {
+          ready: false,
+          message: "OpenCode catalog is not loaded yet.",
+        };
+      }
+      return { ready: true, message: "" };
+    },
+  };
 }

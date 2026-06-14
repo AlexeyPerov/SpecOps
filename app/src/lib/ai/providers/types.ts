@@ -121,7 +121,7 @@ export function buildProviderRequestFromThread(
   const { summary, recentMessages } = buildThreadPromptContext(thread);
   return buildProviderRequest({
     mode: thread.metadata.mode,
-    provider: thread.metadata.provider,
+    provider: thread.metadata.provider ?? "http",
     workspaceRootPath,
     summary,
     recentMessages,

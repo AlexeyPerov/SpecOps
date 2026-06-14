@@ -153,7 +153,7 @@ export function createThreadMetadataSlice(deps: {
               ...workspace.threadsByAgentId,
               [targetAgentId]: {
                 metadata: applyMetadataPatch(
-                  createThreadMetadata(targetAgentId, updatedAt),
+                  createThreadMetadata(targetAgentId, updatedAt, root),
                   normalizeMetadataPatchForScope(patch, root),
                   updatedAt,
                 ),

@@ -128,6 +128,7 @@ describe("sendChatMessage", () => {
     const agentId = chatStore.createDraftAgent();
     expect(agentId).toBe("agent-1");
     expect(chatStore.isAgentDraft(agentId!)).toBe(true);
+    chatStore.updateThreadMetadata({ provider: "debug-workspace" });
 
     const resultPromise = sendChatMessage("Sidebar title from first send");
     await vi.runAllTimersAsync();

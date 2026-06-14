@@ -154,6 +154,7 @@ describe("chatStore", () => {
       content: "hello",
       createdAt: "2026-05-26T00:00:00.000Z",
     });
+    chatStore.updateThreadMetadata({ provider: "http" });
 
     const result = await chatStore.runAccessPreflight();
 

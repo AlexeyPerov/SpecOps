@@ -2,6 +2,7 @@ import {
   WorkspaceAccessReason,
   type CapabilityChecker,
   type CapabilityCheckResult,
+  type WorkspaceReadinessChecker,
 } from "../../ai/capabilities";
 import {
   WORKSPACE_ACCESS_LOST_MESSAGE,
@@ -38,6 +39,12 @@ export const stubCapabilityChecker: CapabilityChecker = {
   },
 };
 
+export const stubWorkspaceReadinessChecker: WorkspaceReadinessChecker = {
+  checkReadiness() {
+    return { ready: true, message: "" };
+  },
+};
+
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
 export function createAccessSlice(deps: {
@@ -47,11 +54,23 @@ export function createAccessSlice(deps: {
   getActiveWorkspaceRoot: () => string | null;
   getMetadata: (agentId?: string) => import("../../domain/contracts").ChatThreadMetadata | null;
   capabilityCheckerRef: { current: CapabilityChecker | null };
+  workspaceReadinessCheckerRef: { current: WorkspaceReadinessChecker | null };
 }) {
-  const { update, getSnapshot, getActiveWorkspaceRoot, getMetadata, capabilityCheckerRef } = deps;
+  const {
+    update,
+    getSnapshot,
+    getActiveWorkspaceRoot,
+    getMetadata,
+    capabilityCheckerRef,
+    workspaceReadinessCheckerRef,
+  } = deps;
 
   function resolveCapabilityChecker(): CapabilityChecker {
     return capabilityCheckerRef.current ?? stubCapabilityChecker;
+  }
+
+  function resolveWorkspaceReadinessChecker(): WorkspaceReadinessChecker {
+    return workspaceReadinessCheckerRef.current ?? stubWorkspaceReadinessChecker;
   }
 
   function setWorkspaceAccessState(rootPath: string, next: ChatAccessState): void {
@@ -138,6 +157,9 @@ export function createAccessSlice(deps: {
     setCapabilityChecker(checker: CapabilityChecker | null): void {
       capabilityCheckerRef.current = checker;
     },
+    setWorkspaceReadinessChecker(checker: WorkspaceReadinessChecker | null): void {
+      workspaceReadinessCheckerRef.current = checker;
+    },
     async checkActiveWorkspaceCapabilities(agentId?: string): Promise<CapabilityCheckResult> {
       const rootPath = getActiveWorkspaceRoot();
       const metadata = getMetadata(agentId);
@@ -151,9 +173,31 @@ export function createAccessSlice(deps: {
         };
       }
 
+      if (!metadata?.provider) {
+        const readiness = resolveWorkspaceReadinessChecker().checkReadiness(rootPath);
+        if (!readiness.ready) {
+          return {
+            status: "blocked",
+            reason: WorkspaceAccessReason.MissingProviderConfig,
+            capabilities: null,
+            message: readiness.message,
+            recoveryHint: readiness.recoveryHint,
+          };
+        }
+        return {
+          status: "ready",
+          reason: WorkspaceAccessReason.Unknown,
+          capabilities: {
+            canReadWorkspaceFiles: true,
+            supportedModes: [],
+          },
+          message: "OpenCode workspace agent is ready.",
+        };
+      }
+
       const checker = resolveCapabilityChecker();
       return checker.checkCapabilities({
-        provider: metadata?.provider ?? getDefaultChatProvider(),
+        provider: metadata.provider,
         mode: metadata?.mode ?? "ask",
         workspaceRootPath: rootPath,
         connectionId: metadata?.connectionId,

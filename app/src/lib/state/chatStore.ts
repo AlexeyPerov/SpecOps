@@ -1,5 +1,5 @@
 import { derived, writable } from "svelte/store";
-import type { CapabilityChecker } from "../ai/capabilities";
+import type { CapabilityChecker, WorkspaceReadinessChecker } from "../ai/capabilities";
 import type { ContextId } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { createAccessSlice } from "./chatStore/access";
@@ -63,6 +63,9 @@ const initialState: ChatStoreState = {
 function createChatStore() {
   const { subscribe, set, update } = writable<ChatStoreState>(initialState);
   const capabilityCheckerRef: { current: CapabilityChecker | null } = { current: null };
+  const workspaceReadinessCheckerRef: { current: WorkspaceReadinessChecker | null } = {
+    current: null,
+  };
 
   function getSnapshot(): ChatStoreState {
     let snapshot = initialState;
@@ -100,6 +103,7 @@ function createChatStore() {
     getActiveWorkspaceRoot,
     getMetadata: (agentId) => threadsSlice.getMetadata(agentId),
     capabilityCheckerRef,
+    workspaceReadinessCheckerRef,
   });
   const agentsSlice = createAgentsSlice({ update, getSnapshot, getActiveChatScopeKey });
 

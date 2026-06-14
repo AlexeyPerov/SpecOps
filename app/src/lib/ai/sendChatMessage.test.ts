@@ -164,6 +164,7 @@ describe("sendChatMessage", () => {
     chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
     chatStore.createDraftAgent();
+    chatStore.updateThreadMetadata({ provider: "debug-workspace" });
 
     const resultPromise = sendChatMessage("First message without metadata");
     await vi.runAllTimersAsync();

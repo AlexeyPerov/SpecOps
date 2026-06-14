@@ -74,14 +74,20 @@ describe("chatStore active provider resolution", () => {
     expect(chatStore.getActiveChatProvider()).toBe("debug-workspace");
   });
 
-  it("preflights Debug when no thread exists yet", async () => {
+  it("preflights workspace readiness when no thread exists yet", async () => {
     const result = await chatStore.runAccessPreflight();
 
     expect(result.status).toBe("ready");
-    expect(result.message).toContain("Debug Agent provider is ready");
   });
 
-  it("checks capabilities for Debug without persisted thread metadata", async () => {
+  it("checks workspace readiness without persisted thread metadata", async () => {
+    const result = await chatStore.checkActiveWorkspaceCapabilities();
+
+    expect(result.status).toBe("ready");
+  });
+
+  it("uses HTTP capability checker when thread has explicit provider", async () => {
+    chatStore.updateThreadMetadata({ provider: "debug-workspace" });
     const result = await chatStore.checkActiveWorkspaceCapabilities();
 
     expect(result.status).toBe("ready");

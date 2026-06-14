@@ -77,7 +77,7 @@ export function buildThreadProviderRequest(
   const summary = thread.metadata.summary?.trim();
   return buildProviderRequest({
     mode: resolvedMode.id,
-    provider: thread.metadata.provider,
+    provider: thread.metadata.provider ?? "http",
     workspaceRootPath,
     summary,
     recentMessages: thread.messages,

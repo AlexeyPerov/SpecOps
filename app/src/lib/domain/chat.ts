@@ -83,7 +83,8 @@ export interface ChatThreadMetadata {
   agentId: string;
   threadId: string;
   mode: ChatModeId;
-  provider: ChatProviderId;
+  /** Chat HTTP/debug provider; omitted for workspace (OpenCode) threads. */
+  provider?: ChatProviderId;
   createdAt: string;
   updatedAt: string;
   summary?: string;

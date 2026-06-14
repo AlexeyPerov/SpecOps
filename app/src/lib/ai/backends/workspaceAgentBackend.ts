@@ -10,6 +10,8 @@ export interface WorkspaceAgentSendRequest {
   workspaceRootPath: string;
   sessionId: string;
   model?: string;
+  agent?: string;
+  provider?: string;
 }
 
 export interface WorkspaceAgentSession {
@@ -189,7 +191,7 @@ interface RawOpencodeClient {
   getSession(input: { sessionId: string }): Promise<unknown>;
   listSessions(): Promise<unknown>;
   deleteSession(input: { sessionId: string }): Promise<unknown>;
-  sendPrompt(input: { sessionId: string; prompt: string; model?: string }): Promise<unknown>;
+  sendPrompt(input: { sessionId: string; prompt: string; model?: string; agent?: string; provider?: string }): Promise<unknown>;
   replyPermission(input: {
     sessionId: string;
     requestId: string;
@@ -872,6 +874,8 @@ function createHttpOpencodeClient(input: {
         body: JSON.stringify({
           prompt: payload.prompt,
           model: payload.model,
+          agentID: payload.agent,
+          providerID: payload.provider,
         }),
       });
     },
@@ -1114,6 +1118,8 @@ function createOpencodeBackend(
         sessionId: request.sessionId,
         prompt: request.prompt,
         model: request.model,
+        agent: request.agent,
+        provider: request.provider,
       });
       return mapRunResult(raw, request.sessionId);
     },

@@ -52,14 +52,16 @@ export function normalizeThreadSnapshotForScope(
   let metadata = thread.metadata;
   let changed = false;
 
-  const legacyProvider = metadata.provider as LegacyChatProviderId;
-  const normalizedLegacy = isLegacyChatProviderId(legacyProvider)
-    ? normalizeLegacyChatProviderId(legacyProvider, scopeKey)
-    : metadata.provider;
-  const nextProvider = coerceProviderForScope(normalizedLegacy, scopeKey);
-  if (nextProvider !== metadata.provider) {
-    metadata = { ...metadata, provider: nextProvider };
-    changed = true;
+  if (metadata.provider) {
+    const legacyProvider = metadata.provider as LegacyChatProviderId;
+    const normalizedLegacy = isLegacyChatProviderId(legacyProvider)
+      ? normalizeLegacyChatProviderId(legacyProvider, scopeKey)
+      : metadata.provider;
+    const nextProvider = coerceProviderForScope(normalizedLegacy, scopeKey);
+    if (nextProvider !== metadata.provider) {
+      metadata = { ...metadata, provider: nextProvider };
+      changed = true;
+    }
   }
 
   const messages = thread.messages.map((message) => normalizeMessageForScope(message, scopeKey));

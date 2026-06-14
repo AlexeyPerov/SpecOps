@@ -97,6 +97,14 @@ export function createComposerSelectionActions(deps: ComposerSelectionActionsDep
       return;
     }
 
+    if (deps.getChatContextKind() === "workspace") {
+      const updated = chatStore.updateThreadMetadata({ selectedModelId: nextModelId });
+      if (updated) {
+        persistActiveThreadSnapshot();
+      }
+      return;
+    }
+
     const result = await chatStore.switchThreadModel(nextModelId, {
       providerSettings: deps.getProviderSettings(),
       providerModelCatalogs: deps.getProviderModelCatalogs(),

@@ -626,6 +626,7 @@ async function ensureWorkspaceAgentSessionId(input: {
   root: string;
   activeAgentId: string;
   modelId: string;
+  providerId?: string;
 }): Promise<{ backend: ReturnType<typeof createWorkspaceAgentBackend>; sessionId: string }> {
   const backend = createWorkspaceAgentBackend("opencode", {
     resolveRuntimeConfig: async () => {
@@ -657,7 +658,7 @@ async function ensureWorkspaceAgentSessionId(input: {
     {
       opencodeSessionId: sessionId,
       opencodeModelId: input.modelId.trim() ? input.modelId : undefined,
-      opencodeProviderId: "opencode",
+      opencodeProviderId: input.providerId?.trim() || undefined,
     },
     input.root,
   );
@@ -713,12 +714,16 @@ async function executeWorkspaceAgentBackendTurn(params: {
   let sessionId: string | null = null;
 
   try {
-    const modelFromThread = chatStore.getMetadata(activeAgentId)?.selectedModelId?.trim() ?? "";
+    const threadMetadata = chatStore.getMetadata(activeAgentId);
+    const modelFromThread = threadMetadata?.selectedModelId?.trim() ?? "";
     const modelId = modelFromThread || params.modelId;
+    const providerId = threadMetadata?.opencodeProviderId?.trim() || undefined;
+    const agentId = threadMetadata?.opencodeAgentId?.trim() || undefined;
     const resolved = await ensureWorkspaceAgentSessionId({
       root,
       activeAgentId,
       modelId,
+      providerId,
     });
     backend = resolved.backend;
     sessionId = resolved.sessionId;
@@ -727,6 +732,8 @@ async function executeWorkspaceAgentBackendTurn(params: {
       workspaceRootPath: root,
       sessionId,
       model: modelId || undefined,
+      agent: agentId,
+      provider: providerId,
     });
 
     let accumulated = "";

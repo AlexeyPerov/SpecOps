@@ -94,23 +94,28 @@
     providerSettings,
     connectionId: activeConnectionId,
   });
-  const localModelValidation = $derived(
-    validateLocalModelSelection(
+  const localModelValidation = $derived.by(() => {
+    if (isChatHttpScope === false) {
+      return { ok: true as const, modelId: activeModel };
+    }
+    return validateLocalModelSelection(
       providerModelCatalogs,
       activeProvider,
       activeModel,
       modelCatalogContext,
-    ),
-  );
+    );
+  });
   const isModelSendBlocked = $derived(!localModelValidation.ok);
   const modelBlockedCopy = $derived(
     getLocalInvalidModelBlockedCopy(activeModel, formatChatProviderLabel(activeProvider)),
   );
   const isDebugSendBlocked = $derived(
-    isDebugProviderSendBlocked(activeProvider, providerSettings),
+    !isChatHttpScope ? false : isDebugProviderSendBlocked(activeProvider, providerSettings),
   );
   const isHttpSendBlocked = $derived(
-    isHttpProviderSendBlocked(activeProvider, httpProviderSettings, httpApiKey),
+    isChatHttpScope
+      ? isHttpProviderSendBlocked(activeProvider, httpProviderSettings, httpApiKey)
+      : false,
   );
   const isBlocked = $derived(
     accessState.status === "blocked" &&

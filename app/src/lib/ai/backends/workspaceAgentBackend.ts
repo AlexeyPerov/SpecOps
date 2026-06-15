@@ -79,6 +79,42 @@ export type WorkspaceAgentStreamEvent =
       message: string;
     }
   | {
+      type: "reasoning.delta";
+      reasoningId: string | null;
+      delta: string;
+    }
+  | {
+      type: "reasoning.ended";
+      reasoningId: string | null;
+      text: string;
+    }
+  | {
+      type: "subtask.started";
+      subtaskId: string | null;
+      agent: string;
+      description: string | null;
+      prompt: string | null;
+    }
+  | {
+      type: "step.started";
+      stepId: string | null;
+      agent: string | null;
+      modelId: string | null;
+      providerId: string | null;
+    }
+  | {
+      type: "step.finished";
+      stepId: string | null;
+      reason: string | null;
+      cost: number;
+      tokens: WorkspaceAgentTokenUsage;
+    }
+  | {
+      type: "step.failed";
+      stepId: string | null;
+      message: string;
+    }
+  | {
       type: "tool.started";
       toolName: string;
       callId: string | null;
@@ -117,6 +153,16 @@ export type WorkspaceAgentStreamEvent =
       type: "run.failed";
       message: string;
     };
+
+export interface WorkspaceAgentTokenUsage {
+  input: number;
+  output: number;
+  reasoning: number;
+  cache: {
+    read: number;
+    write: number;
+  };
+}
 
 export type WorkspaceAgentBackendErrorCode =
   | "authFailure"
@@ -376,6 +422,35 @@ function toolCallKey(toolName: string, callId: string | null): string | null {
   return `${toolName}:${callId}`;
 }
 
+function readNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readTokenUsage(value: unknown): WorkspaceAgentTokenUsage | null {
+  const parsed = readObject(value);
+  if (!parsed) {
+    return null;
+  }
+  const input = readNumber(parsed.input);
+  const output = readNumber(parsed.output);
+  const reasoning = readNumber(parsed.reasoning);
+  if (input === null || output === null || reasoning === null) {
+    return null;
+  }
+  const cache = readObject(parsed.cache);
+  const cacheRead = cache ? readNumber(cache.read) : null;
+  const cacheWrite = cache ? readNumber(cache.write) : null;
+  if (cacheRead === null || cacheWrite === null) {
+    return null;
+  }
+  return {
+    input,
+    output,
+    reasoning,
+    cache: { read: cacheRead, write: cacheWrite },
+  };
+}
+
 function mapStreamFrame(
   raw: unknown,
   state: StreamNormalizationState,
@@ -427,6 +502,99 @@ function mapStreamFrame(
   if (type === "session.next.text.ended") {
     const message = readString(payload.text) ?? "";
     return [{ type: "message.completed", message }];
+  }
+  if (type === "session.next.reasoning.delta") {
+    const delta = readString(payload.delta);
+    if (!delta) {
+      emitStreamNormalizationDiagnostic({
+        reason: "malformed-reasoning-delta",
+        type,
+        payload,
+      });
+      return [];
+    }
+    const reasoningId = readString(payload.reasoningID) ?? readString(payload.reasoningId);
+    return [{ type: "reasoning.delta", reasoningId, delta }];
+  }
+  if (type === "session.next.reasoning.ended") {
+    const text = readString(payload.text) ?? "";
+    const reasoningId = readString(payload.reasoningID) ?? readString(payload.reasoningId);
+    return [{ type: "reasoning.ended", reasoningId, text }];
+  }
+  if (type === "session.next.step.started") {
+    return [
+      {
+        type: "step.started",
+        stepId: readString(payload.assistantMessageID) ?? readString(payload.assistantMessageId),
+        agent: readString(payload.agent),
+        modelId: readObject(payload.model) ? readString((payload.model as Record<string, unknown>).id) : null,
+        providerId: readObject(payload.model)
+          ? readString((payload.model as Record<string, unknown>).providerID) ??
+            readString((payload.model as Record<string, unknown>).providerId)
+          : null,
+      },
+    ];
+  }
+  if (type === "session.next.step.ended") {
+    const tokens = readTokenUsage(payload.tokens);
+    if (!tokens) {
+      emitStreamNormalizationDiagnostic({
+        reason: "malformed-step-tokens",
+        type,
+        payload,
+      });
+      return [];
+    }
+    const cost = readNumber(payload.cost) ?? 0;
+    return [
+      {
+        type: "step.finished",
+        stepId: readString(payload.assistantMessageID) ?? readString(payload.assistantMessageId),
+        reason: readString(payload.finish) ?? readString(payload.reason),
+        cost,
+        tokens,
+      },
+    ];
+  }
+  if (type === "session.next.step.failed") {
+    const errorObject = readObject(payload.error);
+    const message =
+      (errorObject ? readString(errorObject.message) : null) ??
+      readString(payload.error) ??
+      readString(payload.message) ??
+      "Step failed.";
+    return [
+      {
+        type: "step.failed",
+        stepId: readString(payload.assistantMessageID) ?? readString(payload.assistantMessageId),
+        message,
+      },
+    ];
+  }
+  if (type === "message.part.updated") {
+    const part = readObject(payload.part);
+    if (!part) {
+      emitStreamNormalizationDiagnostic({
+        reason: "malformed-part-updated",
+        type,
+        payload,
+      });
+      return [];
+    }
+    const partType = readString(part.type);
+    if (partType !== "subtask") {
+      return [];
+    }
+    const agent = readString(part.agent) ?? "subtask";
+    return [
+      {
+        type: "subtask.started",
+        subtaskId: readString(part.id),
+        agent,
+        description: readString(part.description),
+        prompt: readString(part.prompt),
+      },
+    ];
   }
   if (type === "session.next.tool.called") {
     const toolName = readString(payload.tool) ?? readString(payload.toolName) ?? "unknown-tool";
@@ -532,8 +700,10 @@ function mapStreamFrame(
     }
     return [];
   }
-  if (type === "session.error" || type === "session.next.step.failed") {
+  if (type === "session.error") {
+    const errorObject = readObject(payload.error);
     const message =
+      (errorObject ? readString(errorObject.message) : null) ??
       readString(payload.error) ??
       readString(payload.message) ??
       readString(payload.text) ??

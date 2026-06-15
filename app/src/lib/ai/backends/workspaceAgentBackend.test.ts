@@ -679,6 +679,238 @@ describe("workspaceAgentBackend", () => {
     ]);
   });
 
+  describe("reasoning / subtask / step normalization", () => {
+    it("maps reasoning.delta and reasoning.ended events", async () => {
+      const { backend } = createOpencodeBackendForTests({
+        streamEvents: [
+          {
+            type: "session.next.reasoning.delta",
+            data: { reasoningID: "r-1", delta: "Let me think " },
+          },
+          {
+            type: "session.next.reasoning.delta",
+            data: { reasoningID: "r-1", delta: "about this." },
+          },
+          {
+            type: "session.next.reasoning.ended",
+            data: { reasoningID: "r-1", text: "Let me think about this." },
+          },
+          { type: "session.status", data: { status: { type: "idle" } } },
+        ],
+      });
+
+      const seen: WorkspaceAgentStreamEvent[] = [];
+      for await (const event of backend.streamEvents({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      })) {
+        seen.push(event);
+      }
+
+      expect(seen).toEqual([
+        { type: "reasoning.delta", reasoningId: "r-1", delta: "Let me think " },
+        { type: "reasoning.delta", reasoningId: "r-1", delta: "about this." },
+        { type: "reasoning.ended", reasoningId: "r-1", text: "Let me think about this." },
+        { type: "run.completed" },
+      ]);
+    });
+
+    it("skips reasoning deltas with empty delta strings", async () => {
+      const { backend } = createOpencodeBackendForTests({
+        streamEvents: [
+          { type: "session.next.reasoning.delta", data: { reasoningID: "r-1", delta: "" } },
+          { type: "session.next.reasoning.delta", data: { reasoningID: "r-1", delta: "valid" } },
+          { type: "session.status", data: { status: { type: "idle" } } },
+        ],
+      });
+
+      const seen: WorkspaceAgentStreamEvent[] = [];
+      for await (const event of backend.streamEvents({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      })) {
+        seen.push(event);
+      }
+
+      expect(seen).toEqual([
+        { type: "reasoning.delta", reasoningId: "r-1", delta: "valid" },
+        { type: "run.completed" },
+      ]);
+    });
+
+    it("maps step.started event with model info", async () => {
+      const { backend } = createOpencodeBackendForTests({
+        streamEvents: [
+          {
+            type: "session.next.step.started",
+            data: {
+              assistantMessageID: "msg-1",
+              agent: "build",
+              model: { id: "claude-4", providerID: "anthropic" },
+            },
+          },
+          { type: "session.status", data: { status: { type: "idle" } } },
+        ],
+      });
+
+      const seen: WorkspaceAgentStreamEvent[] = [];
+      for await (const event of backend.streamEvents({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      })) {
+        seen.push(event);
+      }
+
+      expect(seen).toEqual([
+        {
+          type: "step.started",
+          stepId: "msg-1",
+          agent: "build",
+          modelId: "claude-4",
+          providerId: "anthropic",
+        },
+        { type: "run.completed" },
+      ]);
+    });
+
+    it("maps step.ended event with cost and token payload", async () => {
+      const { backend } = createOpencodeBackendForTests({
+        streamEvents: [
+          {
+            type: "session.next.step.ended",
+            data: {
+              assistantMessageID: "msg-1",
+              finish: "stop",
+              cost: 0.051,
+              tokens: {
+                input: 1200,
+                output: 300,
+                reasoning: 80,
+                cache: { read: 200, write: 50 },
+              },
+            },
+          },
+          { type: "session.status", data: { status: { type: "idle" } } },
+        ],
+      });
+
+      const seen: WorkspaceAgentStreamEvent[] = [];
+      for await (const event of backend.streamEvents({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      })) {
+        seen.push(event);
+      }
+
+      expect(seen).toEqual([
+        {
+          type: "step.finished",
+          stepId: "msg-1",
+          reason: "stop",
+          cost: 0.051,
+          tokens: {
+            input: 1200,
+            output: 300,
+            reasoning: 80,
+            cache: { read: 200, write: 50 },
+          },
+        },
+        { type: "run.completed" },
+      ]);
+    });
+
+    it("maps step.failed event with error message", async () => {
+      const { backend } = createOpencodeBackendForTests({
+        streamEvents: [
+          {
+            type: "session.next.step.failed",
+            data: {
+              assistantMessageID: "msg-1",
+              error: { message: "rate limited" },
+            },
+          },
+          { type: "session.status", data: { status: { type: "idle" } } },
+        ],
+      });
+
+      const seen: WorkspaceAgentStreamEvent[] = [];
+      for await (const event of backend.streamEvents({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      })) {
+        seen.push(event);
+      }
+
+      expect(seen).toEqual([
+        { type: "step.failed", stepId: "msg-1", message: "rate limited" },
+        { type: "run.completed" },
+      ]);
+    });
+
+    it("maps subtask from message.part.updated events", async () => {
+      const { backend } = createOpencodeBackendForTests({
+        streamEvents: [
+          {
+            type: "message.part.updated",
+            data: {
+              part: {
+                id: "sub-1",
+                type: "subtask",
+                agent: "explore",
+                description: "Search the codebase",
+                prompt: "find all references to X",
+              },
+            },
+          },
+          { type: "session.status", data: { status: { type: "idle" } } },
+        ],
+      });
+
+      const seen: WorkspaceAgentStreamEvent[] = [];
+      for await (const event of backend.streamEvents({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      })) {
+        seen.push(event);
+      }
+
+      expect(seen).toEqual([
+        {
+          type: "subtask.started",
+          subtaskId: "sub-1",
+          agent: "explore",
+          description: "Search the codebase",
+          prompt: "find all references to X",
+        },
+        { type: "run.completed" },
+      ]);
+    });
+
+    it("ignores message.part.updated events for non-subtask parts", async () => {
+      const { backend } = createOpencodeBackendForTests({
+        streamEvents: [
+          {
+            type: "message.part.updated",
+            data: {
+              part: { id: "f-1", type: "file", mime: "image/png", url: "file:///x.png" },
+            },
+          },
+          { type: "session.status", data: { status: { type: "idle" } } },
+        ],
+      });
+
+      const seen: WorkspaceAgentStreamEvent[] = [];
+      for await (const event of backend.streamEvents({
+        workspaceRootPath: "/tmp/workspace",
+        sessionId: "sess-1",
+      })) {
+        seen.push(event);
+      }
+
+      expect(seen).toEqual([{ type: "run.completed" }]);
+    });
+  });
+
   describe("catalog listing", () => {
     it("lists models from /api/model", async () => {
       const { backend } = createOpencodeBackendForTests();

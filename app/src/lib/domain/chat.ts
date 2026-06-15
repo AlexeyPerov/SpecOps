@@ -70,6 +70,94 @@ export interface ToolCallRecord {
   progress?: unknown;
 }
 
+/** Token usage breakdown for cost / step parts. */
+export interface ChatTokenUsage {
+  input: number;
+  output: number;
+  reasoning: number;
+  cache: {
+    read: number;
+    write: number;
+  };
+}
+
+/** Structured message part — a single assistant message may carry many parts. */
+export interface ChatTextPart {
+  type: "text";
+  id?: string;
+  text: string;
+}
+
+export interface ChatReasoningPart {
+  type: "reasoning";
+  id?: string;
+  text: string;
+}
+
+export type ChatSubtaskStatus = "running" | "completed" | "failed";
+
+export interface ChatSubtaskPart {
+  type: "subtask";
+  id?: string;
+  agent: string;
+  description?: string;
+  prompt?: string;
+  status: ChatSubtaskStatus;
+  output?: string;
+  error?: string;
+}
+
+export interface ChatStepPart {
+  type: "step";
+  id?: string;
+  phase: "start" | "finish";
+  index?: number;
+  reason?: string;
+  cost?: number;
+  tokens?: ChatTokenUsage;
+}
+
+export interface ChatFilePart {
+  type: "file";
+  id?: string;
+  mime: string;
+  filename?: string;
+  url: string;
+}
+
+export interface ChatDiffPart {
+  type: "diff";
+  id?: string;
+  snapshot?: string;
+  files?: string[];
+}
+
+export interface ChatCompactionPart {
+  type: "compaction";
+  id?: string;
+  auto?: boolean;
+}
+
+export interface ChatCostPart {
+  type: "cost";
+  id?: string;
+  cost: number;
+  tokens?: ChatTokenUsage;
+}
+
+export type ChatMessagePart =
+  | ChatTextPart
+  | ChatReasoningPart
+  | ChatSubtaskPart
+  | ChatStepPart
+  | ChatFilePart
+  | ChatDiffPart
+  | ChatCompactionPart
+  | ChatCostPart;
+
+/** Discriminator strings for `ChatMessagePart`. */
+export type ChatMessagePartType = ChatMessagePart["type"];
+
 export interface ChatMessage {
   id: string;
   role: ChatMessageRole;
@@ -77,6 +165,8 @@ export interface ChatMessage {
   createdAt: string;
   systemEvent?: ChatSystemEvent;
   toolCalls?: ToolCallRecord[];
+  /** Structured parts (reasoning, subtask, step, file, diff, etc.). */
+  parts?: ChatMessagePart[];
 }
 
 export interface ChatThreadMetadata {

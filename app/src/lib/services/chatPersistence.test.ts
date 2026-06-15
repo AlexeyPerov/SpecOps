@@ -247,6 +247,121 @@ describe("agent thread snapshot codec", () => {
     const legacy = JSON.stringify({ version: 1, thread: null });
     expect(decodeChatAgentThreadFileSnapshot(legacy)).toBeNull();
   });
+
+  it("round-trips structured message parts (reasoning, subtask, step, cost)", () => {
+    const snapshot: ChatAgentThreadFileSnapshot = {
+      version: 1,
+      thread: {
+        ...sampleThread(),
+        messages: [
+          ...sampleThread().messages,
+          {
+            id: "m-3",
+            role: "assistant",
+            content: "Here is my response.",
+            createdAt: "2026-05-25T00:00:02.000Z",
+            parts: [
+              {
+                type: "reasoning",
+                id: "reason-1",
+                text: "I should check the file first.",
+              },
+              {
+                type: "text",
+                text: "Let me look at that.",
+              },
+              {
+                type: "step",
+                id: "step-1",
+                phase: "finish",
+                index: 0,
+                reason: "stop",
+                cost: 0.042,
+                tokens: {
+                  input: 100,
+                  output: 50,
+                  reasoning: 20,
+                  cache: { read: 10, write: 5 },
+                },
+              },
+              {
+                type: "subtask",
+                id: "sub-1",
+                agent: "explore",
+                description: "Search codebase",
+                prompt: "find all usages",
+                status: "completed",
+                output: "found 3 files",
+              },
+              {
+                type: "cost",
+                cost: 0.042,
+                tokens: {
+                  input: 100,
+                  output: 50,
+                  reasoning: 20,
+                  cache: { read: 10, write: 5 },
+                },
+              },
+              {
+                type: "file",
+                mime: "image/png",
+                filename: "screenshot.png",
+                url: "file:///tmp/screenshot.png",
+              },
+              {
+                type: "diff",
+                snapshot: "abc123",
+                files: ["src/index.ts"],
+              },
+              {
+                type: "compaction",
+                auto: true,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const encoded = encodeChatAgentThreadFileSnapshot(snapshot);
+    const decoded = decodeChatAgentThreadFileSnapshot(encoded);
+    expect(decoded).toEqual(snapshot);
+  });
+
+  it("preserves messages without parts (undefined parts)", () => {
+    const snapshot: ChatAgentThreadFileSnapshot = {
+      version: 1,
+      thread: sampleThread(),
+    };
+
+    const decoded = decodeChatAgentThreadFileSnapshot(
+      encodeChatAgentThreadFileSnapshot(snapshot),
+    );
+    expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
+  });
+
+  it("drops malformed parts but preserves the message", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      thread: {
+        metadata: sampleThread().metadata,
+        messages: [
+          {
+            id: "m-1",
+            role: "user",
+            content: "hello",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            parts: [{ type: "unknown-part-type" }],
+          },
+        ],
+      },
+    });
+
+    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
+    expect(decoded?.thread.messages[0]?.content).toBe("hello");
+  });
 });
 
 describe("workspace agents index codec", () => {

@@ -2,11 +2,13 @@ import type {
   AgentIndexEntry,
   ChatAgentThreadFileSnapshot,
   ChatMessage,
+  ChatMessagePart,
   ChatMessageRole,
   ChatModeId,
   ChatProviderId,
   ChatThreadMetadata,
   ChatThreadSnapshot,
+  ChatTokenUsage,
   ToolCallRecord,
   WorkspaceAgentsIndexSnapshot,
 } from "../domain/contracts";
@@ -230,6 +232,157 @@ function parseToolCalls(value: unknown): ToolCallRecord[] | undefined {
   return records;
 }
 
+function parseOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function parseOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function parseTokenUsage(value: unknown): ChatTokenUsage | undefined {
+  const parsed = isRecord(value) ? value : null;
+  if (!parsed) {
+    return undefined;
+  }
+  if (
+    typeof parsed.input !== "number" ||
+    typeof parsed.output !== "number" ||
+    typeof parsed.reasoning !== "number"
+  ) {
+    return undefined;
+  }
+  const cache = isRecord(parsed.cache) ? parsed.cache : null;
+  if (!cache || typeof cache.read !== "number" || typeof cache.write !== "number") {
+    return undefined;
+  }
+  return {
+    input: parsed.input,
+    output: parsed.output,
+    reasoning: parsed.reasoning,
+    cache: { read: cache.read, write: cache.write },
+  };
+}
+
+function parseMessagePart(value: unknown): ChatMessagePart | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = parseOptionalString(value.id);
+  switch (value.type) {
+    case "text": {
+      if (typeof value.text !== "string") {
+        return null;
+      }
+      return { type: "text", ...(id !== undefined ? { id } : {}), text: value.text };
+    }
+    case "reasoning": {
+      if (typeof value.text !== "string") {
+        return null;
+      }
+      return { type: "reasoning", ...(id !== undefined ? { id } : {}), text: value.text };
+    }
+    case "subtask": {
+      if (typeof value.agent !== "string") {
+        return null;
+      }
+      const status =
+        value.status === "running" || value.status === "completed" || value.status === "failed"
+          ? value.status
+          : "running";
+      return {
+        type: "subtask",
+        ...(id !== undefined ? { id } : {}),
+        agent: value.agent,
+        description: parseOptionalString(value.description),
+        prompt: parseOptionalString(value.prompt),
+        status,
+        output: parseOptionalString(value.output),
+        error: parseOptionalString(value.error),
+      };
+    }
+    case "step": {
+      if (value.phase !== "start" && value.phase !== "finish") {
+        return null;
+      }
+      return {
+        type: "step",
+        ...(id !== undefined ? { id } : {}),
+        phase: value.phase,
+        index: parseOptionalNumber(value.index),
+        reason: parseOptionalString(value.reason),
+        cost: parseOptionalNumber(value.cost),
+        tokens: parseTokenUsage(value.tokens),
+      };
+    }
+    case "file": {
+      if (typeof value.mime !== "string" || typeof value.url !== "string") {
+        return null;
+      }
+      return {
+        type: "file",
+        ...(id !== undefined ? { id } : {}),
+        mime: value.mime,
+        filename: parseOptionalString(value.filename),
+        url: value.url,
+      };
+    }
+    case "diff": {
+      const files = Array.isArray(value.files)
+        ? value.files.filter((entry): entry is string => typeof entry === "string")
+        : undefined;
+      return {
+        type: "diff",
+        ...(id !== undefined ? { id } : {}),
+        snapshot: parseOptionalString(value.snapshot),
+        ...(files !== undefined ? { files } : {}),
+      };
+    }
+    case "compaction": {
+      return {
+        type: "compaction",
+        ...(id !== undefined ? { id } : {}),
+        auto: parseOptionalBoolean(value.auto),
+      };
+    }
+    case "cost": {
+      if (typeof value.cost !== "number") {
+        return null;
+      }
+      return {
+        type: "cost",
+        ...(id !== undefined ? { id } : {}),
+        cost: value.cost,
+        tokens: parseTokenUsage(value.tokens),
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+function parseParts(value: unknown): ChatMessagePart[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const parts: ChatMessagePart[] = [];
+  for (const entry of value) {
+    const part = parseMessagePart(entry);
+    if (!part) {
+      return undefined;
+    }
+    parts.push(part);
+  }
+  return parts;
+}
+
 function parseMessage(value: unknown, scopeKey: string): ChatMessage | null {
   if (!isRecord(value)) {
     return null;
@@ -249,6 +402,7 @@ function parseMessage(value: unknown, scopeKey: string): ChatMessage | null {
     createdAt: value.createdAt,
     systemEvent: parseSystemEvent(value.systemEvent, scopeKey),
     toolCalls: parseToolCalls(value.toolCalls),
+    parts: parseParts(value.parts),
   };
 }
 

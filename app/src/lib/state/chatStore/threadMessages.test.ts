@@ -478,4 +478,46 @@ describe("chatStore", () => {
     });
     expect(chatStore.getChatAccessState()).toEqual(result);
   });
+
+  it("updates message parts via updateMessageParts", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-25T00:00:00.000Z",
+    });
+    chatStore.appendMessage({
+      id: "m-2",
+      role: "assistant",
+      content: "",
+      createdAt: "2026-05-25T00:00:01.000Z",
+    });
+
+    const parts = [
+      { type: "reasoning" as const, text: "Thinking..." },
+      { type: "text" as const, text: "Answer." },
+    ];
+    const updated = chatStore.updateMessageParts("m-2", parts);
+
+    expect(updated).toBe(true);
+    const messages = chatStore.getMessages();
+    expect(messages[1]?.parts).toEqual(parts);
+    expect(messages[1]?.content).toBe("");
+  });
+
+  it("returns false when updateMessageParts targets a missing message", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "m-1",
+      role: "user",
+      content: "hello",
+      createdAt: "2026-05-25T00:00:00.000Z",
+    });
+
+    const updated = chatStore.updateMessageParts("nope", [
+      { type: "text", text: "x" },
+    ]);
+    expect(updated).toBe(false);
+  });
 });

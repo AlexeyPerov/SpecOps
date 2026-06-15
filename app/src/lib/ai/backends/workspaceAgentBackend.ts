@@ -2,6 +2,10 @@ import { attachOpencodeSidecarWorkspace } from "../../services/opencodeSidecar";
 import type { OpencodeTransportMode } from "../../domain/contracts";
 import { logDiagnostic } from "../../services/logging";
 import { loadOpencodeServerPassword } from "../../services/providerSecretsStore";
+import {
+  createOpencodeClient as createOpencodeSdkClient,
+  type OpencodeClient as OpencodeSdkClient,
+} from "@opencode-ai/sdk/v2";
 
 export type WorkspaceAgentBackendId = "opencode" | "cursor-local";
 
@@ -586,26 +590,6 @@ function mapHttpError(status: number, detail: string): WorkspaceAgentBackendErro
   });
 }
 
-async function toHttpError(response: Response): Promise<WorkspaceAgentBackendError> {
-  const detail = readString(await response.text()) ?? "";
-  return mapHttpError(response.status, detail);
-}
-
-function addQueryParams(path: string, params: Record<string, string | undefined>): string {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value && value.trim().length > 0) {
-      query.set(key, value);
-    }
-  }
-  const serialized = query.toString();
-  if (serialized.length === 0) {
-    return path;
-  }
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}${serialized}`;
-}
-
 function unwrapDataPayload(raw: unknown): unknown {
   const parsed = readObject(raw);
   if (!parsed) {
@@ -746,229 +730,152 @@ function readQuestionChoices(payload: Record<string, unknown>): string[] {
   return flattened;
 }
 
-function createHttpOpencodeClient(input: {
+function extractSdkErrorDetail(error: unknown): string {
+  const cause = readObject((error as Error | undefined)?.cause);
+  const body = cause ? cause.body : undefined;
+  if (typeof body === "string" && body.trim().length > 0) {
+    return body;
+  }
+  const bodyObject = readObject(body);
+  if (bodyObject) {
+    const messageField = readString(bodyObject.message);
+    if (messageField) {
+      return messageField;
+    }
+    const dataObject = readObject(bodyObject.data);
+    const dataMessage = dataObject ? readString(dataObject.message) : null;
+    if (dataMessage) {
+      return dataMessage;
+    }
+  }
+  const messageField = readString((error as Error | undefined)?.message);
+  return messageField ?? "";
+}
+
+function mapSdkError(error: unknown): WorkspaceAgentBackendError {
+  if (error instanceof WorkspaceAgentBackendError) {
+    return error;
+  }
+  const cause = readObject((error as Error | undefined)?.cause);
+  const status = cause && typeof cause.status === "number" ? cause.status : null;
+  const detail = extractSdkErrorDetail(error);
+  if (status === null) {
+    return new WorkspaceAgentBackendError({
+      code: "serverUnavailable",
+      message: detail || "OpenCode server is unavailable.",
+      cause: error,
+    });
+  }
+  return mapHttpError(status, detail);
+}
+
+function createSdkOpencodeClient(input: {
   baseUrl: string;
   workspaceRootPath: string;
   serverPassword: string;
 }): RawOpencodeClient {
-  const { workspaceRootPath } = input;
   const baseUrl = input.baseUrl.replace(/\/+$/, "");
-  const serverPassword = input.serverPassword?.trim() ?? "";
-
-  function authHeaders(): Record<string, string> {
-    if (serverPassword.length === 0) {
-      return {};
-    }
-    return { Authorization: `Basic ${btoa(`opencode:${serverPassword}`)}` };
+  const password = input.serverPassword?.trim() ?? "";
+  const headers: Record<string, string> = {};
+  if (password.length > 0) {
+    headers.Authorization = `Basic ${btoa(`opencode:${password}`)}`;
   }
 
-  async function request(path: string, init?: RequestInit): Promise<unknown> {
-    const response = await fetch(`${baseUrl}${addQueryParams(path, { directory: workspaceRootPath })}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders(),
-        ...(init?.headers ?? {}),
-      },
-    }).catch((error: unknown) => {
-      throw new WorkspaceAgentBackendError({
-        code: "serverUnavailable",
-        message: "OpenCode server is unavailable.",
-        cause: error,
-      });
-    });
-    if (!response.ok) {
-      throw await toHttpError(response);
+  const sdk: OpencodeSdkClient = createOpencodeSdkClient({
+    baseUrl,
+    directory: input.workspaceRootPath,
+    headers,
+    throwOnError: true,
+  });
+
+  async function call<T>(fn: () => Promise<{ data: T }>): Promise<T> {
+    try {
+      const result = await fn();
+      return result.data;
+    } catch (error: unknown) {
+      throw mapSdkError(error);
     }
-    return response.status === 204 ? null : response.json();
   }
 
-  async function requestWithFallback(paths: string[], init?: RequestInit): Promise<unknown> {
-    let lastError: WorkspaceAgentBackendError | null = null;
-    for (let index = 0; index < paths.length; index += 1) {
-      const path = paths[index];
-      try {
-        return await request(path, init);
-      } catch (error: unknown) {
-        if (
-          error instanceof WorkspaceAgentBackendError &&
-          (error.status === 404 || error.status === 405) &&
-          index < paths.length - 1
-        ) {
-          lastError = error;
-          continue;
-        }
-        throw error;
-      }
+  function buildModelInput(payload: {
+    model?: string;
+    provider?: string;
+  }): { providerID: string; modelID: string } | undefined {
+    const modelId = readString(payload.model);
+    const providerId = readString(payload.provider);
+    if (!modelId || !providerId) {
+      return undefined;
     }
-    if (lastError) {
-      throw lastError;
-    }
-    throw new WorkspaceAgentBackendError({
-      code: "transportError",
-      message: "OpenCode fallback request failed.",
-    });
-  }
-
-  async function* parseSse(response: Response): AsyncIterable<unknown> {
-    if (!response.body) {
-      throw new WorkspaceAgentBackendError({
-        code: "invalidResponse",
-        message: "OpenCode stream response did not include a body.",
-      });
-    }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      let splitIndex = buffer.indexOf("\n\n");
-      while (splitIndex >= 0) {
-        const frame = buffer.slice(0, splitIndex).trim();
-        buffer = buffer.slice(splitIndex + 2);
-        if (frame.startsWith("data:")) {
-          const data = frame
-            .split("\n")
-            .filter((line) => line.startsWith("data:"))
-            .map((line) => line.slice(5).trim())
-            .join("\n");
-          if (data === "[DONE]") {
-            return;
-          }
-          try {
-            yield JSON.parse(data);
-          } catch {
-            // Ignore malformed chunks to keep the stream resilient.
-          }
-        }
-        splitIndex = buffer.indexOf("\n\n");
-      }
-      if (done) {
-        return;
-      }
-    }
+    return { providerID: providerId, modelID: modelId };
   }
 
   return {
     async createSession(payload) {
-      return request("/session", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      return call(() => sdk.session.create({ title: payload.title }));
     },
     async getSession(payload) {
-      return request(`/session/${encodeURIComponent(payload.sessionId)}`);
+      return call(() => sdk.session.get({ sessionID: payload.sessionId }));
     },
     async listSessions() {
-      return request("/api/session");
+      return call(() => sdk.session.list());
     },
     async deleteSession(payload) {
-      return request(`/session/${encodeURIComponent(payload.sessionId)}`, {
-        method: "DELETE",
-      });
+      return call(() => sdk.session.delete({ sessionID: payload.sessionId }));
     },
     async sendPrompt(payload) {
-      return request(`/api/session/${encodeURIComponent(payload.sessionId)}/prompt`, {
-        method: "POST",
-        body: JSON.stringify({
-          prompt: payload.prompt,
-          model: payload.model,
-          agentID: payload.agent,
-          providerID: payload.provider,
+      const model = buildModelInput(payload);
+      return call(() =>
+        sdk.session.prompt({
+          sessionID: payload.sessionId,
+          parts: [{ type: "text", text: payload.prompt }],
+          agent: payload.agent,
+          model,
         }),
-      });
+      );
     },
     async replyPermission(payload) {
-      return request(
-        `/api/session/${encodeURIComponent(payload.sessionId)}/permission/request/${encodeURIComponent(payload.requestId)}/reply`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            reply: payload.reply,
-            message: payload.message,
-          }),
-        },
+      return call(() =>
+        sdk.permission.reply({
+          requestID: payload.requestId,
+          reply: payload.reply,
+          message: payload.message,
+        }),
       );
     },
     async replyQuestion(payload) {
-      return request(
-        `/api/session/${encodeURIComponent(payload.sessionId)}/question/request/${encodeURIComponent(payload.requestId)}/reply`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            answers: payload.answers,
-          }),
-        },
+      return call(() =>
+        sdk.question.reply({
+          requestID: payload.requestId,
+          answers: payload.answers,
+        }),
       );
     },
     async rejectQuestion(payload) {
-      return request(
-        `/api/session/${encodeURIComponent(payload.sessionId)}/question/request/${encodeURIComponent(payload.requestId)}/reject`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            message: payload.message,
-          }),
-        },
+      return call(() =>
+        sdk.question.reject({
+          requestID: payload.requestId,
+        }),
       );
     },
     async abortSession(payload) {
-      const sessionId = encodeURIComponent(payload.sessionId);
-      return requestWithFallback(
-        [
-          `/api/session/${sessionId}/abort`,
-          `/api/session/${sessionId}/stop`,
-          `/session/${sessionId}/abort`,
-          `/session/${sessionId}/stop`,
-        ],
-        {
-          method: "POST",
-          body: JSON.stringify({}),
-        },
-      );
+      return call(() => sdk.session.abort({ sessionID: payload.sessionId }));
     },
     async *streamEvents(payload) {
-      async function openStream(path: string): Promise<Response> {
-        return fetch(
-          `${baseUrl}${addQueryParams(path, {
-            directory: workspaceRootPath,
-            sessionID: payload.sessionId,
-            sessionId: payload.sessionId,
-          })}`,
-          {
-            method: "GET",
-            headers: {
-              Accept: "text/event-stream",
-              ...authHeaders(),
-            },
-          },
-        ).catch((error: unknown) => {
-          throw new WorkspaceAgentBackendError({
-            code: "serverUnavailable",
-            message: "OpenCode server is unavailable.",
-            cause: error,
-          });
-        });
+      const subscription = await sdk.event.subscribe().catch((error: unknown) => {
+        throw mapSdkError(error);
+      });
+      for await (const event of subscription.stream) {
+        yield event;
       }
-
-      let response = await openStream("/api/event");
-      if (!response.ok && (response.status === 404 || response.status === 405)) {
-        response = await openStream("/event");
-      }
-      if (!response.ok) {
-        throw await toHttpError(response);
-      }
-      yield* parseSse(response);
     },
     async listModels() {
-      return request("/api/model");
+      return call(() => sdk.config.providers());
     },
     async listProviders() {
-      return request("/api/provider");
+      return call(() => sdk.provider.list());
     },
     async listAgents() {
-      return request("/api/agent");
+      return call(() => sdk.app.agents());
     },
   };
 }
@@ -1040,7 +947,7 @@ function createOpencodeBackend(
         return "";
       }
     });
-  const createOpencodeClient = deps.createOpencodeClient ?? createHttpOpencodeClient;
+  const createOpencodeClient = deps.createOpencodeClient ?? createSdkOpencodeClient;
 
   async function createClientForWorkspace(workspaceRootPath: string): Promise<RawOpencodeClient> {
     const directory = assertWorkspaceRootPath(workspaceRootPath);

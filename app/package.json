@@ -32,6 +32,7 @@
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.0",
     "@lezer/highlight": "^1.2.3",
+    "@opencode-ai/sdk": "^1.17.7",
     "@replit/codemirror-lang-csharp": "^6.2.0",
     "@replit/codemirror-lang-svelte": "^6.0.0",
     "@tauri-apps/api": "^2",

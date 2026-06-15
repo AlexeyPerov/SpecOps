@@ -177,11 +177,9 @@ describe("workspaceAgentBackend", () => {
   ] as const)(
     "maps HTTP %s into backend error code %s",
     async (status, expectedCode) => {
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: false,
-        status,
-        text: async () => (status === 400 ? "directory is invalid" : "request failed"),
-      });
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(status === 400 ? "directory is invalid" : "request failed", { status }),
+      );
       vi.stubGlobal("fetch", fetchMock);
       const backend = createWorkspaceAgentBackend("opencode", {
         resolveRuntimeConfig: async () => ({
@@ -201,11 +199,12 @@ describe("workspaceAgentBackend", () => {
   );
 
   it("sends authorization header when server password is configured", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ data: [{ id: "sess-1" }] }),
-    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([{ id: "sess-1" }]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const backend = createWorkspaceAgentBackend("opencode", {
       resolveRuntimeConfig: async () => ({
@@ -215,16 +214,17 @@ describe("workspaceAgentBackend", () => {
       resolveServerPassword: async () => "s3cr3t",
     });
     await backend.listSessions({ workspaceRootPath: "/tmp/workspace" });
-    const [, init] = fetchMock.mock.calls[0];
-    expect(init.headers.Authorization).toMatch(/^Basic /);
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.headers.get("Authorization")).toMatch(/^Basic /);
   });
 
   it("omits authorization header when no server password is configured", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ data: [{ id: "sess-1" }] }),
-    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([{ id: "sess-1" }]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const backend = createWorkspaceAgentBackend("opencode", {
       resolveRuntimeConfig: async () => ({
@@ -234,8 +234,8 @@ describe("workspaceAgentBackend", () => {
       resolveServerPassword: async () => "",
     });
     await backend.listSessions({ workspaceRootPath: "/tmp/workspace" });
-    const [, init] = fetchMock.mock.calls[0];
-    expect(init.headers.Authorization).toBeUndefined();
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.headers.get("Authorization")).toBeNull();
   });
 
   it("normalizes stream events without exposing raw SDK shapes", async () => {
@@ -715,6 +715,194 @@ describe("workspaceAgentBackend", () => {
       await expect(backend.listAgents({ workspaceRootPath: "/tmp" })).rejects.toThrow(
         "not implemented yet",
       );
+    });
+  });
+
+  describe("SDK transport", () => {
+    beforeEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function createSdkFetchBackend(serverPassword?: string) {
+      const requests: Request[] = [];
+      const fetchMock = vi.fn(async (req: Request) => {
+        requests.push(req);
+        const url = new URL(req.url);
+        let payload: unknown = [{ id: "sess-1", title: "S" }];
+        if (req.method === "POST" && url.pathname === "/session") {
+          payload = { id: "sess-new", title: "T" };
+        }
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({
+          mode: "url",
+          baseUrl: "http://opencode.local",
+        }),
+        resolveServerPassword: async () => serverPassword ?? "",
+      });
+      return { backend, requests };
+    }
+
+    it("routes requests through the SDK client and unwraps response data", async () => {
+      const { backend } = createSdkFetchBackend();
+      const sessions = await backend.listSessions({ workspaceRootPath: "/tmp/proj" });
+      expect(sessions).toEqual([
+        { id: "sess-1", title: "S", createdAt: null, updatedAt: null },
+      ]);
+    });
+
+    it("sends the workspace directory via the SDK directory header on POSTs", async () => {
+      const { backend, requests } = createSdkFetchBackend();
+      await backend.createSession({ workspaceRootPath: "/tmp/proj", title: "T" });
+      expect(requests).toHaveLength(1);
+      expect(requests[0].method).toBe("POST");
+      expect(requests[0].headers.get("x-opencode-directory")).toBe(
+        encodeURIComponent("/tmp/proj"),
+      );
+    });
+
+    it("maps SDK JSON error bodies using the message field", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ name: "NotFoundError", message: "session gone" }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({
+          mode: "url",
+          baseUrl: "http://opencode.local",
+        }),
+      });
+      await expect(
+        backend.send({
+          workspaceRootPath: "/tmp/proj",
+          sessionId: "sess-1",
+          prompt: "hi",
+        }),
+      ).rejects.toMatchObject({ code: "notFound", message: "session gone", status: 404 });
+    });
+
+    it("maps SDK network failures to serverUnavailable", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("fetch failed")),
+      );
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({
+          mode: "url",
+          baseUrl: "http://opencode.local",
+        }),
+      });
+      await expect(
+        backend.listSessions({ workspaceRootPath: "/tmp/proj" }),
+      ).rejects.toMatchObject({ code: "serverUnavailable" });
+    });
+
+    it("forwards prompted prompts through the SDK prompt API with text parts", async () => {
+      const requests: Request[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (req: Request) => {
+          requests.push(req);
+          return new Response(JSON.stringify({ id: "msg-1", sessionID: "sess-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }),
+      );
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({
+          mode: "url",
+          baseUrl: "http://opencode.local",
+        }),
+      });
+      const result = await backend.send({
+        workspaceRootPath: "/tmp/proj",
+        sessionId: "sess-1",
+        prompt: "hello world",
+        model: "claude-3-5-sonnet",
+        provider: "anthropic",
+      });
+      expect(result).toEqual({ sessionId: "sess-1" });
+      expect(requests).toHaveLength(1);
+      const body = await requests[0].json();
+      expect(body.parts).toEqual([{ type: "text", text: "hello world" }]);
+      expect(body.model).toEqual({ providerID: "anthropic", modelID: "claude-3-5-sonnet" });
+    });
+
+    it("does not attach a model object when provider or model is missing", async () => {
+      const requests: Request[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (req: Request) => {
+          requests.push(req);
+          return new Response(JSON.stringify({ id: "msg-1", sessionID: "sess-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }),
+      );
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({
+          mode: "url",
+          baseUrl: "http://opencode.local",
+        }),
+      });
+      await backend.send({
+        workspaceRootPath: "/tmp/proj",
+        sessionId: "sess-1",
+        prompt: "hi",
+      });
+      const body = await requests[0].json();
+      expect(body.model).toBeUndefined();
+    });
+
+    it("normalizes events streamed through the SDK event subscriber", async () => {
+      const encoder = new TextEncoder();
+      const sseBody = [
+        'data: {"type":"session.next.text.delta","data":{"delta":"hi"}}\n\n',
+        'data: {"type":"session.status","data":{"status":{"type":"idle"}}}\n\n',
+      ].join("");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(encoder.encode(sseBody));
+                  controller.close();
+                },
+              }),
+              { status: 200, headers: { "content-type": "text/event-stream" } },
+            ),
+          ),
+        ),
+      );
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({
+          mode: "url",
+          baseUrl: "http://opencode.local",
+        }),
+      });
+      const seen: WorkspaceAgentStreamEvent[] = [];
+      for await (const event of backend.streamEvents({
+        workspaceRootPath: "/tmp/proj",
+        sessionId: "sess-1",
+      })) {
+        seen.push(event);
+      }
+      expect(seen).toEqual([
+        { type: "message.delta", delta: "hi" },
+        { type: "run.completed" },
+      ]);
     });
   });
 });

@@ -9,10 +9,17 @@
   } from "../ai/chatReviewContent";
   import { extractMessageReasoning, type MessageReasoning } from "../ai/chatReasoning";
   import { extractMessageSubtasks, type MessageSubtask } from "../ai/chatSubtasks";
+  import {
+    extractMessageSteps,
+    extractMessageStepTotals,
+    type MessageStepBoundary,
+    type MessageStepTotals,
+  } from "../ai/chatSteps";
   import type { ChatMessage } from "../domain/contracts";
   import ToolCard from "./ToolCard.svelte";
   import ReasoningBlock from "./ReasoningBlock.svelte";
   import SubtaskCard from "./SubtaskCard.svelte";
+  import StepSeparator from "./StepSeparator.svelte";
 
   interface Props {
     messages: ChatMessage[];
@@ -137,6 +144,47 @@
     };
   }
 
+  /**
+   * Step boundaries for a message. Like subtasks, role filtering is the
+   * component's concern (extractor itself is role-agnostic) — only assistant
+   * messages carry agentic step parts.
+   */
+  function stepsFor(message: ChatMessage): MessageStepBoundary[] {
+    if (message.role !== "assistant") {
+      return [];
+    }
+    return extractMessageSteps(message);
+  }
+
+  /** Cumulative cost / token totals for the message footer; null when none. */
+  function stepTotalsFor(message: ChatMessage): MessageStepTotals | null {
+    if (message.role !== "assistant") {
+      return null;
+    }
+    return extractMessageStepTotals(message);
+  }
+
+  /** Compact token-count formatting for the running-total footer. */
+  function formatFooterTokenCount(value: number): string {
+    if (!Number.isFinite(value) || value <= 0) {
+      return "0";
+    }
+    if (value >= 1_000_000) {
+      return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+    }
+    if (value >= 1_000) {
+      return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+    }
+    return String(Math.round(value));
+  }
+
+  function formatFooterCost(cost: number): string {
+    if (!Number.isFinite(cost) || cost <= 0) {
+      return "$0.00";
+    }
+    return `${cost.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}`;
+  }
+
   function messageRoleLabel(message: ChatMessage): string {
     if (isProviderSwitchMessage(message)) {
       return "Provider switch";
@@ -191,12 +239,21 @@
         {#each messages as message, index (message.id)}
           {@const reasoningBlock = reasoningFor(message, index)}
           {@const subtasks = subtasksFor(message)}
+          {@const steps = stepsFor(message)}
+          {@const stepTotals = stepTotalsFor(message)}
           <li
             class={`chat-message chat-message-${message.role}`}
             class:chat-message-system-event={isSystemEventMessage(message)}
             class:chat-message-streaming={isStreamingAssistantMessage(message, index)}
           >
             <p class="chat-message-role">{messageRoleLabel(message)}</p>
+            {#if steps.length > 0}
+              <div class="chat-step-separators">
+                {#each steps as boundary (boundary.id)}
+                  <StepSeparator {boundary} />
+                {/each}
+              </div>
+            {/if}
             {#if reasoningBlock}
               <ReasoningBlock
                 reasoning={reasoningBlock}
@@ -243,6 +300,22 @@
                   <ToolCard {toolCall} />
                 {/each}
               </div>
+            {/if}
+            {#if stepTotals}
+              <footer class="chat-message-totals">
+                <span class="chat-message-totals-tokens">
+                  <span class="chat-message-totals-field">
+                    <span class="chat-message-totals-key">in</span>{formatFooterTokenCount(stepTotals.tokens.input)}
+                  </span>
+                  <span class="chat-message-totals-field">
+                    <span class="chat-message-totals-key">out</span>{formatFooterTokenCount(stepTotals.tokens.output)}
+                  </span>
+                  <span class="chat-message-totals-field">
+                    <span class="chat-message-totals-key">cache</span>{formatFooterTokenCount(stepTotals.tokens.cache.read + stepTotals.tokens.cache.write)}
+                  </span>
+                </span>
+                <span class="chat-message-totals-cost">{formatFooterCost(stepTotals.cost)}</span>
+              </footer>
             {/if}
           </li>
         {/each}
@@ -500,5 +573,48 @@
   /* When subtask cards precede tool cards, collapse the double gap. */
   .chat-subtask-cards + .chat-tool-cards {
     margin-top: var(--space-3);
+  }
+
+  .chat-step-separators {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
+  .chat-message-totals {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-4);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--color-border-subtle);
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+  }
+
+  .chat-message-totals-tokens {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    font-family: monospace;
+  }
+
+  .chat-message-totals-field {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+
+  .chat-message-totals-key {
+    font-size: 9px;
+    opacity: 0.7;
+  }
+
+  .chat-message-totals-cost {
+    font-family: monospace;
+    opacity: 0.85;
   }
 </style>

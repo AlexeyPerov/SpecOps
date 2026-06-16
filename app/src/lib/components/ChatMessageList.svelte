@@ -7,8 +7,10 @@
     parseStructuredMessageSections,
     type StructuredMessageSection,
   } from "../ai/chatReviewContent";
+  import { extractMessageReasoning, type MessageReasoning } from "../ai/chatReasoning";
   import type { ChatMessage } from "../domain/contracts";
   import ToolCard from "./ToolCard.svelte";
+  import ReasoningBlock from "./ReasoningBlock.svelte";
 
   interface Props {
     messages: ChatMessage[];
@@ -27,6 +29,19 @@
     compactionNotice = "",
     emptyHint = "Send a message to start.",
   }: Props = $props();
+
+  /**
+   * Global show/hide-all-reasoning toggle. When true, every reasoning block is
+   * expanded; when false, each message falls back to its own per-message state.
+   * Default: collapsed — reasoning is available on demand, not by default.
+   */
+  let showAllReasoning = $state(false);
+
+  /**
+   * Per-message expanded state, keyed by reasoning id. A message is expanded
+   * when the global toggle is on OR its entry here is true.
+   */
+  let expandedReasoning = $state<Record<string, boolean>>({});
 
   function isProviderSwitchMessage(message: ChatMessage): boolean {
     return message.systemEvent?.type === "provider-switched";
@@ -67,6 +82,35 @@
     return !isStreamingAssistantMessage(message, index) && Boolean(structuredSectionsForMessage(message));
   }
 
+  function reasoningFor(message: ChatMessage, index: number): MessageReasoning | null {
+    if (message.role !== "assistant") {
+      return null;
+    }
+    return extractMessageReasoning(message);
+  }
+
+  function isReasoningExpanded(reasoning: MessageReasoning): boolean {
+    return showAllReasoning || Boolean(expandedReasoning[reasoning.id]);
+  }
+
+  function toggleReasoning(reasoning: MessageReasoning): void {
+    // When the global toggle is on, flipping a per-message control implicitly
+    // opts that message out by recording an explicit false.
+    expandedReasoning = {
+      ...expandedReasoning,
+      [reasoning.id]: !isReasoningExpanded(reasoning),
+    };
+  }
+
+  function toggleAllReasoning(): void {
+    showAllReasoning = !showAllReasoning;
+  }
+
+  /** True when at least one visible message carries reasoning. */
+  let hasAnyReasoning = $derived(
+    messages.some((message, index) => reasoningFor(message, index) !== null),
+  );
+
   function messageRoleLabel(message: ChatMessage): string {
     if (isProviderSwitchMessage(message)) {
       return "Provider switch";
@@ -105,14 +149,35 @@
     </div>
   {:else}
     <div class="chat-message-scroll">
+      {#if hasAnyReasoning}
+        <div class="chat-reasoning-toolbar">
+          <button
+            type="button"
+            class="chat-reasoning-toggle"
+            onclick={toggleAllReasoning}
+            aria-pressed={showAllReasoning}
+          >
+            {showAllReasoning ? "Hide all reasoning" : "Show all reasoning"}
+          </button>
+        </div>
+      {/if}
       <ol class="chat-message-list" aria-label="Conversation">
         {#each messages as message, index (message.id)}
+          {@const reasoningBlock = reasoningFor(message, index)}
           <li
             class={`chat-message chat-message-${message.role}`}
             class:chat-message-system-event={isSystemEventMessage(message)}
             class:chat-message-streaming={isStreamingAssistantMessage(message, index)}
           >
             <p class="chat-message-role">{messageRoleLabel(message)}</p>
+            {#if reasoningBlock}
+              <ReasoningBlock
+                reasoning={reasoningBlock}
+                expanded={isReasoningExpanded(reasoningBlock)}
+                streaming={isStreamingAssistantMessage(message, index)}
+                onToggle={() => toggleReasoning(reasoningBlock)}
+              />
+            {/if}
             {#if shouldRenderStructuredSections(message, index)}
               <div class="chat-review-sections">
                 {#each structuredSectionsForMessage(message) ?? [] as section (section.heading)}
@@ -209,6 +274,37 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
+  }
+
+  .chat-reasoning-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: calc(var(--space-6) * -1);
+  }
+
+  .chat-reasoning-toggle {
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    padding: var(--space-2) var(--space-4);
+    font-size: 11px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition:
+      background-color var(--motion-fast) var(--easing-standard),
+      color var(--motion-fast) var(--easing-standard);
+  }
+
+  .chat-reasoning-toggle:hover {
+    background: color-mix(in srgb, var(--color-text-secondary) 8%, transparent);
+    color: var(--color-text-primary);
+  }
+
+  .chat-reasoning-toggle[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border-subtle));
+    color: var(--color-text-primary);
   }
 
   .chat-message {

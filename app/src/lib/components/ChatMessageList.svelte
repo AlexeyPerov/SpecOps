@@ -8,9 +8,11 @@
     type StructuredMessageSection,
   } from "../ai/chatReviewContent";
   import { extractMessageReasoning, type MessageReasoning } from "../ai/chatReasoning";
+  import { extractMessageSubtasks, type MessageSubtask } from "../ai/chatSubtasks";
   import type { ChatMessage } from "../domain/contracts";
   import ToolCard from "./ToolCard.svelte";
   import ReasoningBlock from "./ReasoningBlock.svelte";
+  import SubtaskCard from "./SubtaskCard.svelte";
 
   interface Props {
     messages: ChatMessage[];
@@ -111,6 +113,30 @@
     messages.some((message, index) => reasoningFor(message, index) !== null),
   );
 
+  /**
+   * Per-subtask expanded state, keyed by subtask id. Unlike reasoning there is
+   * no global toggle — subtasks are independent and collapse on their own.
+   */
+  let expandedSubtasks = $state<Record<string, boolean>>({});
+
+  function subtasksFor(message: ChatMessage): MessageSubtask[] {
+    if (message.role !== "assistant") {
+      return [];
+    }
+    return extractMessageSubtasks(message);
+  }
+
+  function isSubtaskExpanded(subtask: MessageSubtask): boolean {
+    return Boolean(expandedSubtasks[subtask.id]);
+  }
+
+  function toggleSubtask(subtask: MessageSubtask): void {
+    expandedSubtasks = {
+      ...expandedSubtasks,
+      [subtask.id]: !isSubtaskExpanded(subtask),
+    };
+  }
+
   function messageRoleLabel(message: ChatMessage): string {
     if (isProviderSwitchMessage(message)) {
       return "Provider switch";
@@ -164,6 +190,7 @@
       <ol class="chat-message-list" aria-label="Conversation">
         {#each messages as message, index (message.id)}
           {@const reasoningBlock = reasoningFor(message, index)}
+          {@const subtasks = subtasksFor(message)}
           <li
             class={`chat-message chat-message-${message.role}`}
             class:chat-message-system-event={isSystemEventMessage(message)}
@@ -177,6 +204,17 @@
                 streaming={isStreamingAssistantMessage(message, index)}
                 onToggle={() => toggleReasoning(reasoningBlock)}
               />
+            {/if}
+            {#if subtasks.length > 0}
+              <div class="chat-subtask-cards">
+                {#each subtasks as subtask (subtask.id)}
+                  <SubtaskCard
+                    {subtask}
+                    expanded={isSubtaskExpanded(subtask)}
+                    onToggle={() => toggleSubtask(subtask)}
+                  />
+                {/each}
+              </div>
             {/if}
             {#if shouldRenderStructuredSections(message, index)}
               <div class="chat-review-sections">
@@ -450,5 +488,17 @@
     flex-direction: column;
     gap: var(--space-3);
     margin-top: var(--space-4);
+  }
+
+  .chat-subtask-cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+
+  /* When subtask cards precede tool cards, collapse the double gap. */
+  .chat-subtask-cards + .chat-tool-cards {
+    margin-top: var(--space-3);
   }
 </style>

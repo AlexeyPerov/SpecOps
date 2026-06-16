@@ -46,6 +46,7 @@ import { promptPermission } from "../services/permissionPrompt";
 import { promptQuestion } from "../services/questionPrompt";
 import {
   WorkspaceAgentBackendError,
+  type OpencodeSessionMessageEntry,
   type WorkspaceAgentStreamEvent,
 } from "../ai/backends/workspaceAgentBackend";
 import {
@@ -476,6 +477,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
       rejectQuestion: () => Promise<unknown>;
       abortSession: () => Promise<unknown>;
       streamEvents: () => AsyncIterable<unknown>;
+      listMessages: () => Promise<OpencodeSessionMessageEntry[]>;
       listModels: () => Promise<unknown>;
       listProviders: () => Promise<unknown>;
       listAgents: () => Promise<unknown>;
@@ -510,6 +512,9 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
         },
         async *streamEvents() {
           // overridden per test
+        },
+        async listMessages() {
+          return [];
         },
         async listModels() {
           return { data: [] };

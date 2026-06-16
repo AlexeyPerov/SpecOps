@@ -18,6 +18,7 @@ import {
   resolveRestoredActiveAgent,
   selectedTabAfterMissingLastAgent,
 } from "./workspaceAgentSession";
+import { hydrateWorkspaceAgentMessages } from "./workspaceAgentHydration";
 import { isOpencodeEnabled } from "./opencodeSettings";
 
 export interface AppShellAgentHandlersDeps {
@@ -160,6 +161,20 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       await reconcileWorkspaceSessionMappings(normalizedRoot);
     }
     const agentIndex = chatStore.getAgentIndex();
+    // M1-T3: hydrate the display source of truth from OpenCode session.messages.
+    // Non-fatal — local snapshot remains as offline cache/fallback on failure.
+    await hydrateWorkspaceAgentMessages({
+      backend: createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => {
+          const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
+          return { mode, baseUrl };
+        },
+      }),
+      workspaceRootPath: normalizedRoot,
+      agents: agentIndex,
+    }).catch(() => {
+      // Hydration is best-effort; the local snapshot stays in place.
+    });
     const restored = resolveRestoredActiveAgent(session, agentIndex);
     if (restored.shouldFocusAgentTab && restored.activeAgentId) {
       chatStore.setActiveAgentId(restored.activeAgentId);

@@ -330,5 +330,53 @@ export function createThreadMessagesSlice(deps: {
       const thread = threadForAgent(getSnapshot(), targetAgentId);
       return thread?.messages ?? [];
     },
+    /**
+     * Replaces all messages for an agent's thread with the supplied list.
+     * Used by workspace-agent hydration (M1-T3): the OpenCode `session.messages`
+     * payload becomes the display source of truth; the local snapshot is an
+     * offline cache/fallback. Returns false if no thread exists for the agent.
+     */
+    setThreadMessages(
+      messages: ChatMessage[],
+      agentId?: string,
+      workspaceRoot?: string | null,
+    ): boolean {
+      let updated = false;
+      update((state) => {
+        const root = resolveChatScopeKey(state, workspaceRoot);
+        const targetAgentId = resolveTargetAgentId(state, agentId);
+        if (!root || !targetAgentId) {
+          return state;
+        }
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const existingThread = workspace.threadsByAgentId[targetAgentId];
+        if (!existingThread) {
+          return state;
+        }
+
+        const nextThread = cloneThread(existingThread);
+        if (!nextThread) {
+          return state;
+        }
+        nextThread.messages = messages.map((message) => ({ ...message }));
+        const lastMessage = nextThread.messages[nextThread.messages.length - 1];
+        nextThread.metadata = {
+          ...nextThread.metadata,
+          updatedAt: lastMessage?.createdAt ?? new Date().toISOString(),
+        };
+        updated = true;
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsByAgentId: {
+            ...workspace.threadsByAgentId,
+            [targetAgentId]: nextThread,
+          },
+        });
+      });
+      return updated;
+    },
   };
 }

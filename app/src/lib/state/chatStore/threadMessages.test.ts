@@ -520,4 +520,57 @@ describe("chatStore", () => {
     ]);
     expect(updated).toBe(false);
   });
+
+  it("setThreadMessages replaces the message list (workspace agent hydration)", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.appendMessage({
+      id: "local-1",
+      role: "user",
+      content: "cached prompt",
+      createdAt: "2026-05-25T00:00:00.000Z",
+    });
+
+    const hydrated = chatStore.setThreadMessages(
+      [
+        {
+          id: "oc-u1",
+          role: "user",
+          content: "fresh prompt",
+          createdAt: "2026-05-25T00:00:00.000Z",
+          parts: [{ type: "text", text: "fresh prompt" }],
+        },
+        {
+          id: "oc-a1",
+          role: "assistant",
+          content: "fresh reply",
+          createdAt: "2026-05-25T00:00:01.000Z",
+          parts: [
+            { type: "reasoning", text: "thinking" },
+            { type: "text", text: "fresh reply" },
+          ],
+        },
+      ],
+      "agent-1",
+      "/work/a",
+    );
+
+    expect(hydrated).toBe(true);
+    const messages = chatStore.getMessages();
+    expect(messages.map((message) => message.id)).toEqual(["oc-u1", "oc-a1"]);
+    expect(messages[1]?.parts).toEqual([
+      { type: "reasoning", text: "thinking" },
+      { type: "text", text: "fresh reply" },
+    ]);
+    expect(chatStore.getMetadata()?.updatedAt).toBe("2026-05-25T00:00:01.000Z");
+  });
+
+  it("setThreadMessages returns false when no thread exists for the agent", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const updated = chatStore.setThreadMessages(
+      [{ id: "x", role: "user", content: "hi", createdAt: "2026-05-25T00:00:00.000Z" }],
+      "agent-missing",
+      "/work/a",
+    );
+    expect(updated).toBe(false);
+  });
 });

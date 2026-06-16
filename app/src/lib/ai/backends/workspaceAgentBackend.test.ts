@@ -112,6 +112,9 @@ function createOpencodeBackendForTests(params?: {
             yield event;
           }
         },
+        async listMessages() {
+          return [];
+        },
         async listModels() {
           return { data: [{ id: "model-a", name: "Model A" }] };
         },

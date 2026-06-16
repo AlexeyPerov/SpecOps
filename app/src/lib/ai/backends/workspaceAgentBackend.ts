@@ -29,6 +29,12 @@ export interface WorkspaceAgentRunResult {
   sessionId: string;
 }
 
+/** Raw OpenCode session.messages entry: { info, parts }. */
+export interface OpencodeSessionMessageEntry {
+  info: unknown;
+  parts: unknown;
+}
+
 export type WorkspacePermissionReply = "once" | "always" | "reject";
 
 export interface WorkspacePermissionReplyRequest {
@@ -217,6 +223,10 @@ export interface WorkspaceAgentBackend {
     workspaceRootPath: string;
     sessionId: string;
   }): AsyncIterable<WorkspaceAgentStreamEvent>;
+  listMessages(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+  }): Promise<OpencodeSessionMessageEntry[]>;
   listModels(input: { workspaceRootPath: string }): Promise<OpencodeModelEntry[]>;
   listProviders(input: { workspaceRootPath: string }): Promise<OpencodeProviderEntry[]>;
   listAgents(input: { workspaceRootPath: string }): Promise<OpencodeAgentEntry[]>;
@@ -252,6 +262,7 @@ interface RawOpencodeClient {
   rejectQuestion(input: { sessionId: string; requestId: string; message?: string }): Promise<unknown>;
   abortSession(input: { sessionId: string }): Promise<unknown>;
   streamEvents(input: { sessionId: string }): AsyncIterable<unknown>;
+  listMessages(input: { sessionId: string }): Promise<OpencodeSessionMessageEntry[]>;
   listModels(): Promise<unknown>;
   listProviders(): Promise<unknown>;
   listAgents(): Promise<unknown>;
@@ -1038,6 +1049,13 @@ function createSdkOpencodeClient(input: {
         yield event;
       }
     },
+    async listMessages(payload): Promise<OpencodeSessionMessageEntry[]> {
+      const data = await call(() => sdk.session.messages({ sessionID: payload.sessionId }));
+      if (!Array.isArray(data)) {
+        return [];
+      }
+      return data as OpencodeSessionMessageEntry[];
+    },
     async listModels() {
       return call(() => sdk.config.providers());
     },
@@ -1085,6 +1103,9 @@ function createCursorLocalBackend(): WorkspaceAgentBackend {
       return fail();
     },
     async *streamEvents() {
+      return fail();
+    },
+    async listMessages() {
       return fail();
     },
     async listModels() {
@@ -1244,6 +1265,28 @@ function createOpencodeBackend(
         for (const normalizedEvent of normalized) {
           yield normalizedEvent;
         }
+      }
+    },
+    async listMessages(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.listMessages({ sessionId: input.sessionId });
+        const entries = unwrapList(raw);
+        if (!entries) {
+          return [];
+        }
+        return entries.map((entry) => {
+          const parsed = readObject(entry) ?? {};
+          return {
+            info: parsed.info ?? null,
+            parts: Array.isArray(parsed.parts) ? parsed.parts : [],
+          };
+        });
+      } catch (error: unknown) {
+        if (error instanceof WorkspaceAgentBackendError && error.code === "notFound") {
+          return [];
+        }
+        throw error;
       }
     },
     async listModels(input) {

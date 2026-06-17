@@ -33,6 +33,7 @@
   import FileAttachmentChip from "./FileAttachmentChip.svelte";
   import InlineDiff from "./InlineDiff.svelte";
   import MarkdownRenderer from "./MarkdownRenderer.svelte";
+  import SessionSummary from "./SessionSummary.svelte";
 
   interface Props {
     messages: ChatMessage[];
@@ -41,6 +42,14 @@
     activeModeRequiredSections?: readonly string[];
     compactionNotice?: string;
     emptyHint?: string;
+    /** M2-T6: agent-generated session summary, shown as a collapsible banner. */
+    sessionSummary?: string;
+    /** M2-T3: enables per-message "Fork from here" action. */
+    canForkFromMessage?: boolean;
+    /** M2-T4: enables per-message "Undo to here" action. */
+    canRevertFromMessage?: boolean;
+    onForkFromMessage?: (messageId: string) => void;
+    onRevertFromMessage?: (messageId: string) => void;
   }
 
   let {
@@ -50,6 +59,11 @@
     activeModeRequiredSections = [],
     compactionNotice = "",
     emptyHint = "Send a message to start.",
+    sessionSummary = "",
+    canForkFromMessage = false,
+    canRevertFromMessage = false,
+    onForkFromMessage = () => {},
+    onRevertFromMessage = () => {},
   }: Props = $props();
 
   /**
@@ -233,6 +247,19 @@
     };
   }
 
+  /**
+   * Whether the per-message action toolbar should render. Only for messages
+   * that aren't mid-stream and only when at least one action is wired. The
+   * toolbar is hidden entirely for chat-http / debug contexts (those pass
+   * `canForkFromMessage` / `canRevertFromMessage` as false).
+   */
+  function hasMessageActions(message: ChatMessage, index: number): boolean {
+    if (isStreamingAssistantMessage(message, index)) {
+      return false;
+    }
+    return canForkFromMessage || canRevertFromMessage;
+  }
+
   /** Compact token-count formatting for the running-total footer. */
   function messageRoleLabel(message: ChatMessage): string {
     if (isProviderSwitchMessage(message)) {
@@ -254,6 +281,10 @@
     return Boolean(message.toolCalls && message.toolCalls.length > 0);
   }
 </script>
+
+{#if sessionSummary}
+  <SessionSummary summary={sessionSummary} />
+{/if}
 
 {#if compactionNotice}
   <div class="chat-compaction-notice" role="status">
@@ -297,7 +328,33 @@
             class:chat-message-system-event={isSystemEventMessage(message)}
             class:chat-message-streaming={isStreamingAssistantMessage(message, index)}
           >
-            <p class="chat-message-role">{messageRoleLabel(message)}</p>
+            <div class="chat-message-header">
+              <p class="chat-message-role">{messageRoleLabel(message)}</p>
+              {#if hasMessageActions(message, index)}
+                <div class="chat-message-actions">
+                  {#if canForkFromMessage}
+                    <button
+                      type="button"
+                      class="chat-message-action"
+                      title="Fork this session into a new agent tab from this message"
+                      onclick={() => onForkFromMessage(message.id)}
+                    >
+                      Fork
+                    </button>
+                  {/if}
+                  {#if canRevertFromMessage}
+                    <button
+                      type="button"
+                      class="chat-message-action chat-message-action-danger"
+                      title="Undo this session back to this message"
+                      onclick={() => onRevertFromMessage(message.id)}
+                    >
+                      Undo
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
             {#if steps.length > 0}
               <div class="chat-step-separators">
                 {#each steps as boundary (boundary.id)}
@@ -537,6 +594,54 @@
     color: var(--color-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+
+  .chat-message-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: var(--space-2);
+  }
+
+  .chat-message-header .chat-message-role {
+    margin: 0;
+  }
+
+  .chat-message-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--easing-standard);
+  }
+
+  /* Actions are discoverable on hover but stay keyboard-accessible always. */
+  .chat-message:hover .chat-message-actions,
+  .chat-message-actions:focus-within {
+    opacity: 1;
+  }
+
+  .chat-message-action {
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 10px;
+    line-height: 1.4;
+    cursor: pointer;
+  }
+
+  .chat-message-action:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-border-strong);
+    background: var(--color-hover);
+  }
+
+  .chat-message-action-danger:hover {
+    color: #e06c75;
+    border-color: color-mix(in srgb, #e06c75 55%, var(--color-border-subtle));
   }
 
   .chat-message-content {

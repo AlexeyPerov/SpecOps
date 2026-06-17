@@ -13,6 +13,12 @@ export type AgentsSidebarControllerDeps = {
   onToggleCollapsed: (next: boolean) => void;
   onNewAgent: () => void;
   onDeleteAgent: (agentId: string) => void;
+  /** M2-T1: rename — delegated to the handler (prompts + backend call). */
+  onRenameAgent: (agentId: string) => void | Promise<void>;
+  /** M2-T5: share — delegated to the handler. */
+  onShareAgent: (agentId: string) => void | Promise<void>;
+  /** M2-T7: export — delegated to the handler. */
+  onExportAgent: (agentId: string) => void | Promise<void>;
 };
 
 export function clampAgentsSidebarWidth(next: number): number {
@@ -103,6 +109,21 @@ export function createAgentsSidebarController(deps: AgentsSidebarControllerDeps)
     deps.onDeleteAgent(agentId);
   }
 
+  /** M2-T1 — delegates to the handler which prompts + calls OpenCode. */
+  function renameAgent(agentId: string): void | Promise<void> {
+    return deps.onRenameAgent(agentId);
+  }
+
+  /** M2-T5 — delegates to the handler which shares + copies the URL. */
+  function shareAgent(agentId: string): void | Promise<void> {
+    return deps.onShareAgent(agentId);
+  }
+
+  /** M2-T7 — delegates to the handler which builds + saves the markdown. */
+  function exportAgent(agentId: string): void | Promise<void> {
+    return deps.onExportAgent(agentId);
+  }
+
   return {
     handleResizeStart,
     handleTogglePointerDown,
@@ -110,5 +131,8 @@ export function createAgentsSidebarController(deps: AgentsSidebarControllerDeps)
     handleNewAgentPointerDown,
     handleNewAgentClick,
     confirmDeleteAgent,
+    renameAgent,
+    shareAgent,
+    exportAgent,
   };
 }

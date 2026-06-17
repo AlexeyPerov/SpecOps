@@ -1,4 +1,6 @@
 import type { AgentIndexEntry, ChatMessage, ChatThreadSnapshot } from "../domain/contracts";
+import { extractSessionTotals } from "../ai/chatSteps";
+import { formatCost } from "../ai/chatTokenFormat";
 
 export const DRAFT_AGENT_TITLE = "New agent";
 export const DRAFT_CHAT_TITLE = "New chat";
@@ -62,10 +64,15 @@ export function deriveAgentSubtitleFromMessages(
   messages: readonly ChatMessage[],
 ): string | null {
   const content = firstAssistantMessageContent(messages);
-  if (!content) {
+  // M2-T8: append the cumulative session cost (when present) so each sidebar
+  // row carries a per-agent cost hint alongside the first-response preview.
+  const totals = extractSessionTotals(messages);
+  const costSuffix = totals && totals.cost > 0 ? ` · ${formatCost(totals.cost)}` : "";
+  if (!content && !costSuffix) {
     return null;
   }
-  return truncateWithEllipsis(content);
+  const preview = content ? truncateWithEllipsis(content) : "";
+  return `${preview}${costSuffix}`.trim() || null;
 }
 
 export function deriveAgentSubtitleFromThread(thread: ChatThreadSnapshot | null): string | null {

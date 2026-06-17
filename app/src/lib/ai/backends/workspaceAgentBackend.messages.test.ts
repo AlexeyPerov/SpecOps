@@ -54,6 +54,40 @@ function createBackendWithMessages(
           ? listMessagesResult
           : []) as OpencodeSessionMessageEntry[];
       },
+      async updateSession(input) {
+        return { id: input.sessionId, title: input.title ?? "", time: { created: 1, updated: 2 } };
+      },
+      async forkSession(input) {
+        return {
+          id: "fork",
+          title: "fork",
+          parentID: input.sessionId,
+          time: { created: 3, updated: 3 },
+        };
+      },
+      async revertSession(input) {
+        return { id: input.sessionId, title: "", time: { created: 1, updated: 4 } };
+      },
+      async unrevertSession(input) {
+        return { id: input.sessionId, title: "", time: { created: 1, updated: 5 } };
+      },
+      async shareSession(input) {
+        return {
+          id: input.sessionId,
+          title: "",
+          share: { url: "https://share/s" },
+          time: { created: 1, updated: 6 },
+        };
+      },
+      async unshareSession(input) {
+        return { id: input.sessionId, title: "", time: { created: 1, updated: 7 } };
+      },
+      async summarizeSession() {
+        return true;
+      },
+      async listSessionChildren() {
+        return [];
+      },
       async listModels() {
         return { data: [] };
       },

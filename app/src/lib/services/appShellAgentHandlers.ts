@@ -9,6 +9,7 @@ import { closeTabWithUnsavedPrompt } from "./closeTabFlow";
 import {
   WorkspaceAgentBackendError,
   createWorkspaceAgentBackend,
+  type WorkspaceAgentSessionDetails,
 } from "../ai/backends/workspaceAgentBackend";
 import {
   isAgentSessionMappingValid,
@@ -20,6 +21,13 @@ import {
 } from "./workspaceAgentSession";
 import { hydrateWorkspaceAgentMessages } from "./workspaceAgentHydration";
 import { isOpencodeEnabled } from "./opencodeSettings";
+import { promptEntryName } from "./entryNamePrompt";
+import { promptRevertPreview } from "./revertPreviewPrompt";
+import { saveFileAs } from "./fileSystem";
+import {
+  buildSessionTranscriptMarkdown,
+  suggestExportFileName,
+} from "../ai/backends/opencodeSessionExport";
 
 export interface AppShellAgentHandlersDeps {
   getIsChatHttpActive: () => boolean;
@@ -235,6 +243,401 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     appState.setLastActiveAgentId(null);
   }
 
+  // --- OpenCode session lifecycle handlers (M2) -------------------------------
+  //
+  // Each handler follows the same shape: look up the agent's linked session,
+  // short-circuit when there isn't one (no-op + notify), call the backend,
+  // then mutate the chatStore / appState to reflect the new state. Backend
+  // errors are surfaced via `notify` rather than thrown — these are
+  // user-initiated actions from the UI, not programmatic flows.
+
+  function createOpencodeBackend() {
+    return createWorkspaceAgentBackend("opencode", {
+      resolveRuntimeConfig: async () => {
+        const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
+        return { mode, baseUrl };
+      },
+    });
+  }
+
+  function resolveLinkedSession(agentId: string): {
+    sessionId: string;
+    workspaceRoot: string;
+  } | null {
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+    if (!workspaceRoot) {
+      return null;
+    }
+    const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
+    if (!link?.opencodeSessionId) {
+      return null;
+    }
+    return { sessionId: link.opencodeSessionId, workspaceRoot };
+  }
+
+  function describeBackendError(error: unknown): string {
+    if (error instanceof WorkspaceAgentBackendError) {
+      return error.message;
+    }
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  /**
+   * M2-T1 — rename the active (or specified) agent tab. Prompts for a new
+   * title, calls `session.update({ title })`, then updates the SpecOps index
+   * entry. The OpenCode call happens first so we never show a title the
+   * server rejected.
+   */
+  async function handleRenameAgent(agentId: string): Promise<void> {
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+    if (!workspaceRoot) {
+      return;
+    }
+    const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
+    const currentTitle = chatStore.getAgentTitle(agentId) ?? "";
+    const next = await promptEntryName({
+      title: "Rename agent",
+      defaultValue: currentTitle,
+      confirmLabel: "Rename",
+    });
+    if (!next || next.trim().length === 0 || next.trim() === currentTitle.trim()) {
+      return;
+    }
+    // Draft agents (no linked session yet) only need a local rename.
+    if (!link?.opencodeSessionId) {
+      chatStore.renameAgent(agentId, next, workspaceRoot);
+      notify("Agent renamed.");
+      return;
+    }
+    try {
+      await createOpencodeBackend().updateSessionTitle({
+        workspaceRootPath: workspaceRoot,
+        sessionId: link.opencodeSessionId,
+        title: next,
+      });
+    } catch (error: unknown) {
+      notify(`Rename failed: ${describeBackendError(error)}`);
+      return;
+    }
+    chatStore.renameAgent(agentId, next, workspaceRoot);
+    notify("Agent renamed.");
+  }
+
+  /**
+   * M2-T3 — fork the active agent's session from a message. Calls
+   * `session.fork`, then creates a fresh agent tab linked to the child
+   * session (per Q14: fork → new tab). The parent tab is left untouched.
+   */
+  async function handleForkAgent(
+    agentId: string,
+    messageId?: string,
+  ): Promise<string | null> {
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+    if (!workspaceRoot) {
+      notify("Open a workspace to fork a session.");
+      return null;
+    }
+    const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
+    if (!link?.opencodeSessionId) {
+      notify("This agent has no linked session to fork.");
+      return null;
+    }
+    let child: WorkspaceAgentSessionDetails;
+    try {
+      child = await createOpencodeBackend().forkSession({
+        workspaceRootPath: workspaceRoot,
+        sessionId: link.opencodeSessionId,
+        ...(messageId ? { messageId } : {}),
+      });
+    } catch (error: unknown) {
+      notify(`Fork failed: ${describeBackendError(error)}`);
+      return null;
+    }
+    const newAgentId = chatStore.forkAgent(
+      {
+        opencodeSessionId: child.id,
+        opencodeParentSessionId: link.opencodeSessionId,
+        title: child.title,
+        ...(link.opencodeModelId ? { opencodeModelId: link.opencodeModelId } : {}),
+        ...(link.opencodeProviderId
+          ? { opencodeProviderId: link.opencodeProviderId }
+          : {}),
+      },
+      workspaceRoot,
+    );
+    if (!newAgentId) {
+      notify("Fork completed but the new tab could not be opened.");
+      return null;
+    }
+    appState.setLastActiveAgentId(newAgentId);
+    appState.openOrFocusAgentTab(newAgentId);
+    notify("Forked session into a new agent tab.");
+    return newAgentId;
+  }
+
+  /**
+   * M2-T4 undo — revert the active session to a message in place (per Q14).
+   * Confirms via the revert-preview dialog before applying (the SDK's
+   * `session.revert` is destructive — it's the apply step, not a dry-run).
+   * Returns the resulting session details so the caller can surface the diff.
+   */
+  async function handleRevertSession(
+    agentId: string,
+    messageId?: string,
+  ): Promise<WorkspaceAgentSessionDetails | null> {
+    const resolved = resolveLinkedSession(agentId);
+    if (!resolved) {
+      notify("This agent has no linked session to revert.");
+      return null;
+    }
+    const messageLabel = resolveRevertMessageLabel(agentId, messageId);
+    const confirmed = await promptRevertPreview({
+      messageId: messageId ?? "latest",
+      messageLabel,
+      // We don't have a pre-apply diff from OpenCode; the dialog explains the
+      // effect instead. The post-revert result carries `revert.diff`.
+      diff: null,
+    });
+    if (!confirmed) {
+      return null;
+    }
+    try {
+      const updated = await createOpencodeBackend().revertSession({
+        workspaceRootPath: resolved.workspaceRoot,
+        sessionId: resolved.sessionId,
+        ...(messageId ? { messageId } : {}),
+      });
+      notify("Reverted session to the selected message.");
+      return updated;
+    } catch (error: unknown) {
+      notify(`Undo failed: ${describeBackendError(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Builds a short label for the revert target message — used in the confirm
+   * dialog. Falls back to "the latest message" when no id is given.
+   */
+  function resolveRevertMessageLabel(agentId: string, messageId?: string): string {
+    if (!messageId) {
+      return "the latest message";
+    }
+    const messages = chatStore.getMessages(agentId);
+    const target = messages.find((message) => message.id === messageId);
+    if (!target) {
+      return "the selected message";
+    }
+    const body = target.content.trim();
+    if (body.length === 0) {
+      return `${target.role} message`;
+    }
+    return body.length > 60 ? `${body.slice(0, 60)}…` : body;
+  }
+
+  /** M2-T4 redo — restore a previously-reverted session in place. */
+  async function handleUnrevertSession(
+    agentId: string,
+  ): Promise<WorkspaceAgentSessionDetails | null> {
+    const resolved = resolveLinkedSession(agentId);
+    if (!resolved) {
+      notify("This agent has no linked session to restore.");
+      return null;
+    }
+    try {
+      const updated = await createOpencodeBackend().unrevertSession({
+        workspaceRootPath: resolved.workspaceRoot,
+        sessionId: resolved.sessionId,
+      });
+      notify("Restored reverted messages.");
+      return updated;
+    } catch (error: unknown) {
+      notify(`Redo failed: ${describeBackendError(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * M2-T5 — share / unshare. Shares return a public URL that we persist on
+   * the index entry and copy to the clipboard.
+   */
+  async function handleShareAgent(agentId: string): Promise<string | null> {
+    const resolved = resolveLinkedSession(agentId);
+    if (!resolved) {
+      notify("This agent has no linked session to share.");
+      return null;
+    }
+    try {
+      const updated = await createOpencodeBackend().shareSession({
+        workspaceRootPath: resolved.workspaceRoot,
+        sessionId: resolved.sessionId,
+      });
+      const url = updated.shareUrl;
+      if (!url) {
+        notify("OpenCode did not return a share URL.");
+        return null;
+      }
+      chatStore.setAgentSessionLink(
+        agentId,
+        { opencodeShareUrl: url },
+        resolved.workspaceRoot,
+      );
+      await copyToClipboard(url);
+      notify("Share link copied to clipboard.");
+      return url;
+    } catch (error: unknown) {
+      notify(`Share failed: ${describeBackendError(error)}`);
+      return null;
+    }
+  }
+
+  async function handleUnshareAgent(agentId: string): Promise<void> {
+    const resolved = resolveLinkedSession(agentId);
+    if (!resolved) {
+      return;
+    }
+    try {
+      await createOpencodeBackend().unshareSession({
+        workspaceRootPath: resolved.workspaceRoot,
+        sessionId: resolved.sessionId,
+      });
+      chatStore.setAgentSessionLink(
+        agentId,
+        { opencodeShareUrl: "" },
+        resolved.workspaceRoot,
+      );
+      notify("Session is no longer shared.");
+    } catch (error: unknown) {
+      notify(`Unshare failed: ${describeBackendError(error)}`);
+    }
+  }
+
+  /** M2-T6 — generate / refresh the session summary via OpenCode. */
+  async function handleSummarizeAgent(agentId: string): Promise<boolean> {
+    const resolved = resolveLinkedSession(agentId);
+    if (!resolved) {
+      notify("This agent has no linked session to summarize.");
+      return false;
+    }
+    notify("Summarizing session…");
+    try {
+      const ok = await createOpencodeBackend().summarizeSession({
+        workspaceRootPath: resolved.workspaceRoot,
+        sessionId: resolved.sessionId,
+      });
+      if (!ok) {
+        notify("No summary was produced.");
+        return false;
+      }
+      // Re-hydrate so the freshly-generated summary lands in thread metadata
+      // and the SessionSummary banner picks it up. Best-effort: hydration
+      // failures don't undo the summarize (the summary is stored server-side).
+      await hydrateWorkspaceAgentMessages({
+        backend: createOpencodeBackend(),
+        workspaceRootPath: resolved.workspaceRoot,
+        agents: chatStore.getAgentIndex(),
+      }).catch(() => {
+        // Hydration is best-effort.
+      });
+      notify("Session summary generated.");
+      return true;
+    } catch (error: unknown) {
+      notify(`Summarize failed: ${describeBackendError(error)}`);
+      return false;
+    }
+  }
+
+  /**
+   * M2-T7 — export the active agent's transcript to a Markdown file via the
+   * Tauri save dialog. Hydration is best-effort: we export whatever messages
+   * are currently in the store (already hydrated from `session.messages` for
+   * workspace agents).
+   */
+  async function handleExportAgent(agentId: string): Promise<void> {
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+    if (!workspaceRoot) {
+      notify("Open a workspace to export a transcript.");
+      return;
+    }
+    const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
+    const title = chatStore.getAgentTitle(agentId) ?? "session";
+    const messages = chatStore.getMessages(agentId);
+    const markdown = buildSessionTranscriptMarkdown({
+      title,
+      workspaceRootPath: workspaceRoot,
+      sessionId: link?.opencodeSessionId ?? null,
+      messages,
+    });
+    const defaultFileName = suggestExportFileName(
+      title,
+      link?.opencodeSessionId ?? null,
+    );
+    const saved = await saveFileAs(markdown, defaultFileName);
+    if (saved) {
+      notify(`Exported transcript to ${saved.path}`);
+    }
+  }
+
+  /**
+   * M2-T2 — open an OpenCode session that may not have a SpecOps agent tab
+   * yet (e.g. created from the TUI or another client). Creates a fresh agent
+   * tab linked to it.
+   */
+  async function handleOpenExternalSession(sessionId: string, title?: string): Promise<void> {
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+    if (!workspaceRoot) {
+      notify("Open a workspace first.");
+      return;
+    }
+    // Reuse an existing tab if one is already linked to this session.
+    const index = chatStore.getAgentIndex();
+    const existing = index.find((entry) => entry.opencodeSessionId === sessionId);
+    if (existing) {
+      chatStore.setActiveAgentId(existing.id);
+      appState.setLastActiveAgentId(existing.id);
+      appState.openOrFocusAgentTab(existing.id);
+      return;
+    }
+    const agentId = chatStore.forkAgent(
+      {
+        opencodeSessionId: sessionId,
+        opencodeParentSessionId: "",
+        title: title?.trim() || "Opened session",
+      },
+      workspaceRoot,
+    );
+    if (!agentId) {
+      notify("Could not open the session.");
+      return;
+    }
+    appState.setLastActiveAgentId(agentId);
+    appState.openOrFocusAgentTab(agentId);
+    notify("Opened session in a new agent tab.");
+  }
+
+  /**
+   * M2-T2 — fetch the rich session list for the active workspace. Used by the
+   * SessionListPanel. Errors are swallowed (returns []) so the panel can
+   * degrade to "no sessions" rather than blocking the UI.
+   */
+  async function handleListWorkspaceSessions(
+    options?: { search?: string; limit?: number },
+  ): Promise<WorkspaceAgentSessionDetails[]> {
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+    if (!workspaceRoot) {
+      return [];
+    }
+    try {
+      return await createOpencodeBackend().listSessionDetails({
+        workspaceRootPath: workspaceRoot,
+        ...(options?.search ? { search: options.search } : {}),
+        ...(options?.limit ? { limit: options.limit } : {}),
+      });
+    } catch {
+      return [];
+    }
+  }
+
   return {
     handleNewAgent,
     handleSelectAgent,
@@ -243,5 +646,28 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     handleDeleteAgentFromChat,
     restoreWorkspaceAgentSession,
     handleCloseTab,
+    handleRenameAgent,
+    handleForkAgent,
+    handleRevertSession,
+    handleUnrevertSession,
+    handleShareAgent,
+    handleUnshareAgent,
+    handleSummarizeAgent,
+    handleExportAgent,
+    handleOpenExternalSession,
+    handleListWorkspaceSessions,
   };
+}
+
+/**
+ * Clipboard helper. Uses the web `navigator.clipboard` API (the codebase
+ * convention — see ProjectTreeContextMenu / tabContextMenuActions) and falls
+ * back to a no-op when unavailable (e.g. non-secure context in tests).
+ */
+async function copyToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Non-fatal — the share URL is still persisted on the agent entry.
+  }
 }

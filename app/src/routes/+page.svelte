@@ -15,7 +15,7 @@
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
   import { getActiveContextSnapshot } from "../lib/state/appState/contextHelpers";
-  import { chatActiveAgentId, chatAgentIndex } from "../lib/state/chatStore";
+  import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
@@ -115,7 +115,70 @@
   );
   const workspaceAgents = $derived($chatAgentIndex);
   const selectedAgentId = $derived($chatActiveAgentId);
+  /**
+   * M2 — active agent's OpenCode session link for the chat header badges and
+   * session-action gating. Resolved off the agent index (already reactive)
+   * rather than calling `chatStore.getAgentSessionLink` imperatively.
+   */
+  const activeAgentEntry = $derived(
+    workspaceAgents.find((agent) => agent.id === selectedAgentId) ?? null,
+  );
+  const activeShareUrl = $derived(activeAgentEntry?.opencodeShareUrl ?? null);
+  const activeParentSessionId = $derived(
+    activeAgentEntry?.opencodeParentSessionId ?? null,
+  );
   const opencodeMode = $derived(snapshot.settings.opencode.mode);
+
+  /**
+   * M2-T2 — unified per-workspace session list panel state. Triggered from
+   * the agents sidebar; fetches `listSessionDetails` and lets the user open
+   * any session (including ones not created as SpecOps agent tabs).
+   */
+  let sessionListOpen = $state(false);
+  let sessionListSessions = $state<
+    import("$lib/ai/backends/workspaceAgentBackend").WorkspaceAgentSessionDetails[]
+  >([]);
+  let sessionListLoading = $state(false);
+  let sessionListError = $state<string | null>(null);
+  let sessionListSort = $state<
+    import("$lib/ai/backends/opencodeSessionList").SessionListSort
+  >("updated");
+  let sessionListSearch = $state("");
+  const openSessionIds = $derived(
+    new Set(
+      workspaceAgents
+        .map((agent) => agent.opencodeSessionId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  async function refreshSessionList(): Promise<void> {
+    sessionListLoading = true;
+    sessionListError = null;
+    try {
+      sessionListSessions = await handleListWorkspaceSessions({
+        ...(sessionListSearch.trim() ? { search: sessionListSearch.trim() } : {}),
+      });
+    } catch (error: unknown) {
+      sessionListError = error instanceof Error ? error.message : "Failed to load sessions.";
+    } finally {
+      sessionListLoading = false;
+    }
+  }
+
+  async function openSessionListPanel(): Promise<void> {
+    sessionListOpen = true;
+    await refreshSessionList();
+  }
+
+  function closeSessionListPanel(): void {
+    sessionListOpen = false;
+  }
+
+  async function handleOpenSessionFromList(sessionId: string, title?: string): Promise<void> {
+    await handleOpenExternalSession(sessionId, title);
+    closeSessionListPanel();
+  }
   const opencodeBaseUrl = $derived(snapshot.settings.opencode.baseUrl);
   const opencodeEnabled = $derived(snapshot.settings.opencode.enabled);
   const showAgentsSidebar = $derived(
@@ -247,6 +310,16 @@
     handleDeleteAgentFromChat,
     restoreWorkspaceAgentSession,
     handleCloseTab,
+    handleRenameAgent,
+    handleForkAgent,
+    handleRevertSession,
+    handleUnrevertSession,
+    handleShareAgent,
+    handleUnshareAgent,
+    handleSummarizeAgent,
+    handleExportAgent,
+    handleOpenExternalSession,
+    handleListWorkspaceSessions,
   } = createAppShellAgentHandlers({
     getIsChatHttpActive: () => isChatHttpActive,
     getCurrentWindowId: () => currentWindowId,
@@ -554,6 +627,12 @@
     onSelectAgent: handleSelectAgent,
     onNewAgent: handleNewAgent,
     onDeleteAgent: handleDeleteAgent,
+    onRenameAgent: handleRenameAgent,
+    onShareAgent: (agentId) => {
+      void handleShareAgent(agentId);
+    },
+    onExportAgent: handleExportAgent,
+    onOpenSessions: openSessionListPanel,
   }}
   projectTree={{
     workspaceRoot: activeWorkspaceRoot,
@@ -610,6 +689,50 @@
     onGoToLine: runGoToLine,
     onCloseGoTo: () => appState.setGoToOpen(false),
     notify,
+    onForkAgent: (messageId?: string) => {
+      const agentId = chatStore.getActiveAgentId();
+      if (agentId) {
+        void handleForkAgent(agentId, messageId);
+      }
+    },
+    onRevertSession: (messageId?: string) => {
+      const agentId = chatStore.getActiveAgentId();
+      if (agentId) {
+        void handleRevertSession(agentId, messageId);
+      }
+    },
+    onUnrevertSession: () => {
+      const agentId = chatStore.getActiveAgentId();
+      if (agentId) {
+        void handleUnrevertSession(agentId);
+      }
+    },
+    onShareAgent: () => {
+      const agentId = chatStore.getActiveAgentId();
+      if (agentId) {
+        void handleShareAgent(agentId);
+      }
+    },
+    onUnshareAgent: () => {
+      const agentId = chatStore.getActiveAgentId();
+      if (agentId) {
+        void handleUnshareAgent(agentId);
+      }
+    },
+    onSummarizeAgent: () => {
+      const agentId = chatStore.getActiveAgentId();
+      if (agentId) {
+        void handleSummarizeAgent(agentId);
+      }
+    },
+    onExportAgent: () => {
+      const agentId = chatStore.getActiveAgentId();
+      if (agentId) {
+        void handleExportAgent(agentId);
+      }
+    },
+    activeShareUrl,
+    activeParentSessionId,
   }}
   statusBar={{
     statusPath: documentView.statusPath,
@@ -632,5 +755,29 @@
     settingsDialogInitialTab,
     onSettingsDialogClose: () => (settingsDialogOpen = false),
     notify,
+  }}
+  sessionListPanel={{
+    open: sessionListOpen,
+    sessions: sessionListSessions,
+    openSessionIds,
+    activeSessionId: activeAgentEntry?.opencodeSessionId ?? null,
+    loading: sessionListLoading,
+    errorMessage: sessionListError,
+    sort: sessionListSort,
+    searchQuery: sessionListSearch,
+    onOpenSession: (sessionId, title) => {
+      void handleOpenSessionFromList(sessionId, title);
+    },
+    onClose: closeSessionListPanel,
+    onSearchChange: (query) => {
+      sessionListSearch = query;
+      void refreshSessionList();
+    },
+    onSortChange: (next) => {
+      sessionListSort = next;
+    },
+    onRefresh: () => {
+      void refreshSessionList();
+    },
   }}
 />

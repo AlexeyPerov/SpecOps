@@ -212,6 +212,10 @@ export interface AgentIndexEntry {
   opencodeModelId?: string;
   /** Last provider/runtime hint paired with the linked OpenCode session. */
   opencodeProviderId?: string;
+  /** Public share URL when the linked session has been shared (M2-T5). */
+  opencodeShareUrl?: string;
+  /** OpenCode session this one was forked from, if any (M2-T3). */
+  opencodeParentSessionId?: string;
 }
 
 /** Per-workspace agent list only — no conversation payload. */

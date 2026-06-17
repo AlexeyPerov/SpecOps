@@ -29,6 +29,38 @@ export interface WorkspaceAgentRunResult {
   sessionId: string;
 }
 
+/**
+ * Rich session view — what `session.list` / `session.get` / `session.fork` /
+ * `session.revert` actually return. Carries the OpenCode `Session`-shape fields
+ * the lifecycle UI (M2) needs that the minimal `WorkspaceAgentSession` does not:
+ * share URL, parent / fork lineage, revert preview, cost snapshot, and an
+ * optional title derived from the message summary. `title` is non-null here
+ * because OpenCode always returns a string (may be empty) — callers normalize.
+ */
+export interface WorkspaceAgentSessionDetails {
+  id: string;
+  title: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  /** OpenCode session this one was forked from, if any. */
+  parentId: string | null;
+  /** Public share URL set by `session.share`, if any. */
+  shareUrl: string | null;
+  /** Cumulative cost (USD) snapshot from OpenCode, if any. */
+  cost: number | null;
+  /** Revert preview attached after a `session.revert`, if any. */
+  revert: WorkspaceAgentSessionRevert | null;
+}
+
+export interface WorkspaceAgentSessionRevert {
+  messageId: string;
+  partId: string | null;
+  /** Unified diff of file changes the revert would undo. */
+  diff: string | null;
+  /** Snapshot id the revert restored to, if any. */
+  snapshot: string | null;
+}
+
 /** Raw OpenCode session.messages entry: { info, parts }. */
 export interface OpencodeSessionMessageEntry {
   info: unknown;
@@ -209,7 +241,27 @@ export interface WorkspaceAgentBackend {
     workspaceRootPath: string;
     sessionId: string;
   }): Promise<WorkspaceAgentSession | null>;
+  /**
+   * Full `Session` view for one session (M2). Carries share URL, parent /
+   * fork lineage, revert preview, and cost snapshot that the minimal
+   * `getSession` deliberately drops.
+   */
+  getSessionDetails(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+  }): Promise<WorkspaceAgentSessionDetails | null>;
   listSessions(input: { workspaceRootPath: string }): Promise<WorkspaceAgentSession[]>;
+  /**
+   * Rich session list for the unified per-workspace session panel (M2-T2).
+   * `?directory=` is forwarded so OpenCode filters to this workspace's
+   * sessions (matches `listSessions`, but returns the richer shape that
+   * carries share / fork / cost metadata).
+   */
+  listSessionDetails(input: {
+    workspaceRootPath: string;
+    search?: string;
+    limit?: number;
+  }): Promise<WorkspaceAgentSessionDetails[]>;
   deleteSession(input: {
     workspaceRootPath: string;
     sessionId: string;
@@ -227,6 +279,73 @@ export interface WorkspaceAgentBackend {
     workspaceRootPath: string;
     sessionId: string;
   }): Promise<OpencodeSessionMessageEntry[]>;
+  /**
+   * Rename / archive a session (M2-T1). `session.update` only the title for
+   * now — archive / permission / metadata are out of scope.
+   */
+  updateSessionTitle(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+    title: string;
+  }): Promise<WorkspaceAgentSessionDetails>;
+  /**
+   * Fork a session from a message (M2-T3). Returns the new child session's
+   * details so the UI can open a fresh agent tab linked to it.
+   */
+  forkSession(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+    messageId?: string;
+  }): Promise<WorkspaceAgentSessionDetails>;
+  /**
+   * Revert a session to a message in-place (M2-T4 undo). Returns the updated
+   * session carrying the revert preview (diff / snapshot).
+   */
+  revertSession(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+    messageId?: string;
+  }): Promise<WorkspaceAgentSessionDetails>;
+  /**
+   * Restore a previously-reverted session in-place (M2-T4 redo).
+   */
+  unrevertSession(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+  }): Promise<WorkspaceAgentSessionDetails>;
+  /**
+   * Create a public share URL for a session (M2-T5). Returns the updated
+   * session carrying `shareUrl`.
+   */
+  shareSession(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+  }): Promise<WorkspaceAgentSessionDetails>;
+  /**
+   * Remove a session's share URL (M2-T5).
+   */
+  unshareSession(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+  }): Promise<WorkspaceAgentSessionDetails>;
+  /**
+   * Generate / refresh a session summary (M2-T6). Resolves `true` when
+   * OpenCode produced a summary; the summary text arrives on subsequent
+   * `session.messages` / `session.get` calls.
+   */
+  summarizeSession(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+    modelId?: string;
+    providerId?: string;
+  }): Promise<boolean>;
+  /**
+   * List child sessions forked from a parent (M2-T3 fork-tree navigation).
+   */
+  listSessionChildren(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+  }): Promise<WorkspaceAgentSessionDetails[]>;
   listModels(input: { workspaceRootPath: string }): Promise<OpencodeModelEntry[]>;
   listProviders(input: { workspaceRootPath: string }): Promise<OpencodeProviderEntry[]>;
   listAgents(input: { workspaceRootPath: string }): Promise<OpencodeAgentEntry[]>;
@@ -246,10 +365,10 @@ interface OpencodeRuntimeConfig {
   baseUrl: string;
 }
 
-interface RawOpencodeClient {
+export interface RawOpencodeClient {
   createSession(input: { title?: string }): Promise<unknown>;
   getSession(input: { sessionId: string }): Promise<unknown>;
-  listSessions(): Promise<unknown>;
+  listSessions(input?: { directory?: string; search?: string; limit?: number }): Promise<unknown>;
   deleteSession(input: { sessionId: string }): Promise<unknown>;
   sendPrompt(input: { sessionId: string; prompt: string; model?: string; agent?: string; provider?: string }): Promise<unknown>;
   replyPermission(input: {
@@ -263,6 +382,18 @@ interface RawOpencodeClient {
   abortSession(input: { sessionId: string }): Promise<unknown>;
   streamEvents(input: { sessionId: string }): AsyncIterable<unknown>;
   listMessages(input: { sessionId: string }): Promise<OpencodeSessionMessageEntry[]>;
+  updateSession(input: { sessionId: string; title?: string }): Promise<unknown>;
+  forkSession(input: { sessionId: string; messageId?: string }): Promise<unknown>;
+  revertSession(input: { sessionId: string; messageId?: string }): Promise<unknown>;
+  unrevertSession(input: { sessionId: string }): Promise<unknown>;
+  shareSession(input: { sessionId: string }): Promise<unknown>;
+  unshareSession(input: { sessionId: string }): Promise<unknown>;
+  summarizeSession(input: {
+    sessionId: string;
+    modelId?: string;
+    providerId?: string;
+  }): Promise<unknown>;
+  listSessionChildren(input: { sessionId: string }): Promise<unknown>;
   listModels(): Promise<unknown>;
   listProviders(): Promise<unknown>;
   listAgents(): Promise<unknown>;
@@ -329,6 +460,55 @@ function mapSession(raw: unknown): WorkspaceAgentSession {
     title: readString(parsed.title),
     createdAt: readString(parsed.createdAt),
     updatedAt: readString(parsed.updatedAt),
+  };
+}
+
+/**
+ * Maps the rich `Session` shape returned by `session.get` / `session.list` /
+ * `session.fork` / `session.revert` / `session.share` into SpecOps'
+ * `WorkspaceAgentSessionDetails`. Reads from the unwrapped `.data` payload and
+ * is tolerant of missing optional fields (share / parent / revert / cost).
+ */
+function mapSessionDetails(raw: unknown): WorkspaceAgentSessionDetails {
+  const parsed = readObject(unwrapDataPayload(raw));
+  if (!parsed) {
+    throw new WorkspaceAgentBackendError({
+      code: "invalidResponse",
+      message: "OpenCode returned an invalid session payload.",
+      cause: raw,
+    });
+  }
+  const id = readString(parsed.id);
+  if (!id) {
+    throw new WorkspaceAgentBackendError({
+      code: "invalidResponse",
+      message: "OpenCode session payload is missing id.",
+      cause: raw,
+    });
+  }
+  const time = readObject(parsed.time);
+  const createdAt = time ? readNumber(time.created) : null;
+  const updatedAt = time ? readNumber(time.updated) : null;
+  const share = readObject(parsed.share);
+  const revert = readObject(parsed.revert);
+  const cost = readNumber(parsed.cost);
+  return {
+    id,
+    // OpenCode always returns a string title (may be empty); preserve verbatim.
+    title: typeof parsed.title === "string" ? parsed.title : "",
+    createdAt: createdAt !== null ? new Date(createdAt).toISOString() : null,
+    updatedAt: updatedAt !== null ? new Date(updatedAt).toISOString() : null,
+    parentId: readString(parsed.parentID) ?? readString(parsed.parentId),
+    shareUrl: share ? readString(share.url) : null,
+    cost: cost,
+    revert: revert
+      ? {
+          messageId: readString(revert.messageID) ?? readString(revert.messageId) ?? "",
+          partId: readString(revert.partID) ?? readString(revert.partId),
+          diff: readString(revert.diff),
+          snapshot: readString(revert.snapshot),
+        }
+      : null,
   };
 }
 
@@ -997,8 +1177,13 @@ function createSdkOpencodeClient(input: {
     async getSession(payload) {
       return call(() => sdk.session.get({ sessionID: payload.sessionId }));
     },
-    async listSessions() {
-      return call(() => sdk.session.list());
+    async listSessions(payload) {
+      return call(() =>
+        sdk.session.list({
+          ...(payload?.search ? { search: payload.search } : {}),
+          ...(payload?.limit ? { limit: payload.limit } : {}),
+        }),
+      );
     },
     async deleteSession(payload) {
       return call(() => sdk.session.delete({ sessionID: payload.sessionId }));
@@ -1056,6 +1241,52 @@ function createSdkOpencodeClient(input: {
       }
       return data as OpencodeSessionMessageEntry[];
     },
+    async updateSession(payload) {
+      return call(() =>
+        sdk.session.update({
+          sessionID: payload.sessionId,
+          ...(payload.title !== undefined ? { title: payload.title } : {}),
+        }),
+      );
+    },
+    async forkSession(payload) {
+      return call(() =>
+        sdk.session.fork({
+          sessionID: payload.sessionId,
+          ...(payload.messageId ? { messageID: payload.messageId } : {}),
+        }),
+      );
+    },
+    async revertSession(payload) {
+      return call(() =>
+        sdk.session.revert({
+          sessionID: payload.sessionId,
+          ...(payload.messageId ? { messageID: payload.messageId } : {}),
+        }),
+      );
+    },
+    async unrevertSession(payload) {
+      return call(() => sdk.session.unrevert({ sessionID: payload.sessionId }));
+    },
+    async shareSession(payload) {
+      return call(() => sdk.session.share({ sessionID: payload.sessionId }));
+    },
+    async unshareSession(payload) {
+      return call(() => sdk.session.unshare({ sessionID: payload.sessionId }));
+    },
+    async summarizeSession(payload) {
+      return call(() =>
+        sdk.session.summarize({
+          sessionID: payload.sessionId,
+          ...(payload.providerId && payload.modelId
+            ? { providerID: payload.providerId, modelID: payload.modelId }
+            : {}),
+        }),
+      );
+    },
+    async listSessionChildren(payload) {
+      return call(() => sdk.session.children({ sessionID: payload.sessionId }));
+    },
     async listModels() {
       return call(() => sdk.config.providers());
     },
@@ -1081,7 +1312,13 @@ function createCursorLocalBackend(): WorkspaceAgentBackend {
     async getSession() {
       return fail();
     },
+    async getSessionDetails() {
+      return fail();
+    },
     async listSessions() {
+      return fail();
+    },
+    async listSessionDetails() {
       return fail();
     },
     async deleteSession() {
@@ -1106,6 +1343,30 @@ function createCursorLocalBackend(): WorkspaceAgentBackend {
       return fail();
     },
     async listMessages() {
+      return fail();
+    },
+    async updateSessionTitle() {
+      return fail();
+    },
+    async forkSession() {
+      return fail();
+    },
+    async revertSession() {
+      return fail();
+    },
+    async unrevertSession() {
+      return fail();
+    },
+    async shareSession() {
+      return fail();
+    },
+    async unshareSession() {
+      return fail();
+    },
+    async summarizeSession() {
+      return fail();
+    },
+    async listSessionChildren() {
       return fail();
     },
     async listModels() {
@@ -1185,6 +1446,18 @@ function createOpencodeBackend(
         throw error;
       }
     },
+    async getSessionDetails(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.getSession({ sessionId: input.sessionId });
+        return mapSessionDetails(raw);
+      } catch (error: unknown) {
+        if (error instanceof WorkspaceAgentBackendError && error.code === "notFound") {
+          return null;
+        }
+        throw error;
+      }
+    },
     async listSessions(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
       const raw = await client.listSessions();
@@ -1197,6 +1470,18 @@ function createOpencodeBackend(
         });
       }
       return entries.map((entry) => mapSession(entry));
+    },
+    async listSessionDetails(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.listSessions({
+        ...(input.search ? { search: input.search } : {}),
+        ...(input.limit ? { limit: input.limit } : {}),
+      });
+      const entries = unwrapSessionList(raw);
+      if (!entries) {
+        return [];
+      }
+      return entries.map((entry) => mapSessionDetails(entry));
     },
     async deleteSession(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
@@ -1288,6 +1573,64 @@ function createOpencodeBackend(
         }
         throw error;
       }
+    },
+    async updateSessionTitle(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.updateSession({
+        sessionId: input.sessionId,
+        title: input.title,
+      });
+      return mapSessionDetails(raw);
+    },
+    async forkSession(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.forkSession({
+        sessionId: input.sessionId,
+        ...(input.messageId ? { messageId: input.messageId } : {}),
+      });
+      return mapSessionDetails(raw);
+    },
+    async revertSession(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.revertSession({
+        sessionId: input.sessionId,
+        ...(input.messageId ? { messageId: input.messageId } : {}),
+      });
+      return mapSessionDetails(raw);
+    },
+    async unrevertSession(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.unrevertSession({ sessionId: input.sessionId });
+      return mapSessionDetails(raw);
+    },
+    async shareSession(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.shareSession({ sessionId: input.sessionId });
+      return mapSessionDetails(raw);
+    },
+    async unshareSession(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.unshareSession({ sessionId: input.sessionId });
+      return mapSessionDetails(raw);
+    },
+    async summarizeSession(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.summarizeSession({
+        sessionId: input.sessionId,
+        ...(input.modelId && input.providerId
+          ? { modelId: input.modelId, providerId: input.providerId }
+          : {}),
+      });
+      return raw === true || raw === "true";
+    },
+    async listSessionChildren(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.listSessionChildren({ sessionId: input.sessionId });
+      const entries = unwrapSessionList(raw);
+      if (!entries) {
+        return [];
+      }
+      return entries.map((entry) => mapSessionDetails(entry));
     },
     async listModels(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);

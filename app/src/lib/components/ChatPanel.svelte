@@ -46,9 +46,38 @@
   interface Props {
     chatContextKind?: "workspace" | "chat-http";
     onDeleteAgent?: () => void | Promise<void>;
+    /** M2-T3: fork the active session from a message into a new tab. */
+    onForkAgent?: (messageId?: string) => void | Promise<void>;
+    /** M2-T4 undo: revert the active session to a message in place. */
+    onRevertSession?: (messageId?: string) => void | Promise<void>;
+    /** M2-T4 redo: restore a reverted session in place. */
+    onUnrevertSession?: () => void | Promise<void>;
+    /** M2-T5: share / unshare the active session. */
+    onShareAgent?: () => void | Promise<void>;
+    onUnshareAgent?: () => void | Promise<void>;
+    /** M2-T6: generate / refresh the session summary. */
+    onSummarizeAgent?: () => void | Promise<void>;
+    /** M2-T7: export the active transcript to Markdown. */
+    onExportAgent?: () => void | Promise<void>;
+    /** M2-T5: current share URL for the active session, if any. */
+    activeShareUrl?: string | null;
+    /** M2-T3: parent session id when the active session is a fork. */
+    activeParentSessionId?: string | null;
   }
 
-  let { chatContextKind = "workspace", onDeleteAgent }: Props = $props();
+  let {
+    chatContextKind = "workspace",
+    onDeleteAgent,
+    onForkAgent,
+    onRevertSession,
+    onUnrevertSession,
+    onShareAgent,
+    onUnshareAgent,
+    onSummarizeAgent,
+    onExportAgent,
+    activeShareUrl = null,
+    activeParentSessionId = null,
+  }: Props = $props();
 
   let inlineError = $state("");
   let supportedModes = $state<ChatModeId[]>(["ask", "review"]);
@@ -143,6 +172,67 @@
     );
   });
   const canDeleteAgent = $derived(activeAgentId !== null);
+  /**
+   * M2 session actions are only meaningful for workspace agent tabs with a
+   * linked OpenCode session. Chat-http / debug threads and draft agents have
+   * no server-side session to fork / revert / share / summarize / export, so
+   * the menu is hidden entirely for them.
+   */
+  const isWorkspaceAgent = $derived(chatContextKind === "workspace" && activeAgentId !== null);
+  const hasSessionActions = $derived(
+    isWorkspaceAgent &&
+      Boolean(
+        onForkAgent ||
+          onRevertSession ||
+          onShareAgent ||
+          onSummarizeAgent ||
+          onExportAgent,
+      ),
+  );
+  const isShared = $derived(Boolean(activeShareUrl));
+  const isFork = $derived(Boolean(activeParentSessionId));
+  let sessionActionsOpen = $state(false);
+  let sessionActionsEl = $state<HTMLDivElement | null>(null);
+
+  function toggleSessionActions(): void {
+    sessionActionsOpen = !sessionActionsOpen;
+  }
+
+  function closeSessionActions(): void {
+    sessionActionsOpen = false;
+  }
+
+  function onSessionActionsWindowPointerDown(event: PointerEvent): void {
+    if (sessionActionsEl?.contains(event.target as Node)) {
+      return;
+    }
+    closeSessionActions();
+  }
+
+  function onSessionActionsKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      closeSessionActions();
+    }
+  }
+
+  $effect(() => {
+    if (!sessionActionsOpen) {
+      return;
+    }
+    window.addEventListener("pointerdown", onSessionActionsWindowPointerDown);
+    window.addEventListener("keydown", onSessionActionsKeydown);
+    return () => {
+      window.removeEventListener("pointerdown", onSessionActionsWindowPointerDown);
+      window.removeEventListener("keydown", onSessionActionsKeydown);
+    };
+  });
+
+  function runSessionAction(fn: (() => void | Promise<void>) | undefined): void {
+    closeSessionActions();
+    if (fn) {
+      void fn();
+    }
+  }
   const workspaceRootPath = $derived.by(() =>
     chatContextKind === "chat-http"
       ? CHAT_HTTP_CONTEXT_ID
@@ -276,10 +366,61 @@
 
 <section class="chat-panel" aria-label={isChatHttpScope ? "Chats panel" : "Agent chat"}>
   <div class="chat-panel-header">
-    <p class="chat-panel-title">{activeAgentTitle}</p>
+    <div class="chat-panel-title-group">
+      <p class="chat-panel-title">{activeAgentTitle}</p>
+      {#if isFork}
+        <span class="chat-panel-fork-badge" title={`Forked from ${activeParentSessionId ?? "parent session"}`}>fork</span>
+      {/if}
+      {#if isShared}
+        <span class="chat-panel-share-badge" title={activeShareUrl ?? undefined}>shared</span>
+      {/if}
+    </div>
     <div class="chat-panel-header-actions">
       {#if sessionTotals}
         <SessionTotalBadge totals={sessionTotals} />
+      {/if}
+      {#if hasSessionActions}
+        <div class="chat-session-actions" bind:this={sessionActionsEl}>
+          <button
+            type="button"
+            class="chat-session-actions-toggle"
+            onclick={toggleSessionActions}
+            aria-haspopup="menu"
+            aria-expanded={sessionActionsOpen}
+            disabled={isBlocked || isGenerating}
+          >
+            Session
+          </button>
+          {#if sessionActionsOpen}
+            <div class="chat-session-actions-menu" role="menu">
+              {#if onShareAgent && !isShared}
+                <button type="button" role="menuitem" onclick={() => runSessionAction(onShareAgent)}>
+                  Share…
+                </button>
+              {/if}
+              {#if onUnshareAgent && isShared}
+                <button type="button" role="menuitem" onclick={() => runSessionAction(onUnshareAgent)}>
+                  Unshare
+                </button>
+              {/if}
+              {#if onSummarizeAgent}
+                <button type="button" role="menuitem" onclick={() => runSessionAction(onSummarizeAgent)}>
+                  Summarize
+                </button>
+              {/if}
+              {#if onExportAgent}
+                <button type="button" role="menuitem" onclick={() => runSessionAction(onExportAgent)}>
+                  Export transcript…
+                </button>
+              {/if}
+              {#if onUnrevertSession}
+                <button type="button" role="menuitem" onclick={() => runSessionAction(onUnrevertSession)}>
+                  Redo reverted
+                </button>
+              {/if}
+            </div>
+          {/if}
+        </div>
       {/if}
       {#if canDeleteAgent}
         <button
@@ -313,6 +454,11 @@
       {isGenerating}
       activeModeRequiredSections={activeResolvedMode.requiredSections}
       {compactionNotice}
+      sessionSummary={metadata?.summary ?? ""}
+      canForkFromMessage={isWorkspaceAgent && Boolean(onForkAgent)}
+      canRevertFromMessage={isWorkspaceAgent && Boolean(onRevertSession)}
+      onForkFromMessage={(messageId) => void onForkAgent?.(messageId)}
+      onRevertFromMessage={(messageId) => void onRevertSession?.(messageId)}
       emptyHint={
         isChatHttpScope
           ? "Send messages with your configured connection. Pick a provider, mode, and model, then send."
@@ -384,10 +530,97 @@
     gap: var(--space-6);
   }
 
+  .chat-panel-title-group {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+
+  .chat-panel-fork-badge,
+  .chat-panel-share-badge {
+    display: inline-block;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-secondary);
+    font-size: 9px;
+    line-height: 1.5;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .chat-panel-share-badge {
+    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border-subtle));
+    color: var(--color-accent);
+  }
+
   .chat-panel-header-actions {
     display: inline-flex;
     align-items: center;
     gap: var(--space-4);
+  }
+
+  .chat-session-actions {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .chat-session-actions-toggle {
+    min-height: 24px;
+    padding: 0 var(--space-6);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-1);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .chat-session-actions-toggle:hover:not(:disabled) {
+    color: var(--color-text-primary);
+    border-color: var(--color-border-strong);
+  }
+
+  .chat-session-actions-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .chat-session-actions-menu {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    min-width: 180px;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    box-shadow: var(--shadow-overlay);
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-2);
+    z-index: 50;
+    gap: var(--space-1);
+  }
+
+  .chat-session-actions-menu button {
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1.4;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .chat-session-actions-menu button:hover {
+    background: var(--color-hover);
   }
 
   .chat-panel-title {

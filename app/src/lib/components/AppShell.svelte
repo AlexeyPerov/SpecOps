@@ -8,6 +8,8 @@
   import ConsolePanel from "./ConsolePanel.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
+  import RevertPreviewDialog from "./RevertPreviewDialog.svelte";
+  import SessionListPanel from "./SessionListPanel.svelte";
   import PermissionPrompt from "./PermissionPrompt.svelte";
   import QuestionPrompt from "./QuestionPrompt.svelte";
   import ThemePane from "./ThemePane.svelte";
@@ -55,6 +57,14 @@
     onSelectAgent: (agentId: string) => void;
     onNewAgent: () => void;
     onDeleteAgent: (agentId: string) => void | Promise<void>;
+    /** M2-T1: rename the agent tab + linked session. */
+    onRenameAgent?: (agentId: string) => void | Promise<void>;
+    /** M2-T5: copy a public share URL for the linked session. */
+    onShareAgent?: (agentId: string) => void | Promise<void>;
+    /** M2-T7: export the transcript to a Markdown file. */
+    onExportAgent?: (agentId: string) => void | Promise<void>;
+    /** M2-T2: open the unified per-workspace session list panel. */
+    onOpenSessions?: () => void | Promise<void>;
   }
 
   export interface AppShellProjectTreeProps {
@@ -113,6 +123,23 @@
     onGoToLine: () => void;
     onCloseGoTo: () => void;
     notify: (message: string) => void;
+    /** M2-T3: fork the active session from a message into a new tab. */
+    onForkAgent?: (messageId?: string) => void | Promise<void>;
+    /** M2-T4: revert the active session to a message in place (undo). */
+    onRevertSession?: (messageId?: string) => void | Promise<void>;
+    /** M2-T4: restore a reverted session in place (redo). */
+    onUnrevertSession?: () => void | Promise<void>;
+    /** M2-T5: share / unshare the active session. */
+    onShareAgent?: () => void | Promise<void>;
+    onUnshareAgent?: () => void | Promise<void>;
+    /** M2-T6: generate / refresh the session summary. */
+    onSummarizeAgent?: () => void | Promise<void>;
+    /** M2-T7: export the active transcript to Markdown. */
+    onExportAgent?: () => void | Promise<void>;
+    /** M2-T5: current share URL for the active session, if any. */
+    activeShareUrl?: string | null;
+    /** M2-T3: parent session id, if the active session is a fork. */
+    activeParentSessionId?: string | null;
   }
 
   export interface AppShellStatusBarProps {
@@ -140,6 +167,22 @@
     notify: (message: string) => void;
   }
 
+  export interface AppShellSessionListPanelProps {
+    open: boolean;
+    sessions: readonly import("../ai/backends/workspaceAgentBackend").WorkspaceAgentSessionDetails[];
+    openSessionIds: ReadonlySet<string>;
+    activeSessionId: string | null;
+    loading: boolean;
+    errorMessage: string | null;
+    sort: import("../ai/backends/opencodeSessionList").SessionListSort;
+    searchQuery: string;
+    onOpenSession: (sessionId: string, title?: string) => void;
+    onClose: () => void;
+    onSearchChange: (query: string) => void;
+    onSortChange: (sort: import("../ai/backends/opencodeSessionList").SessionListSort) => void;
+    onRefresh: () => void;
+  }
+
   let {
     activityRail,
     agentsSidebar,
@@ -148,6 +191,7 @@
     statusBar,
     workspaceContextMenu,
     overlays,
+    sessionListPanel,
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
@@ -168,6 +212,7 @@
     statusBar: AppShellStatusBarProps;
     workspaceContextMenu: AppShellWorkspaceContextMenuProps;
     overlays: AppShellOverlayProps;
+    sessionListPanel?: AppShellSessionListPanelProps;
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
@@ -209,6 +254,10 @@
         onSelectAgent={agentsSidebar.onSelectAgent}
         onNewAgent={agentsSidebar.onNewAgent}
         onDeleteAgent={(agentId) => void agentsSidebar.onDeleteAgent(agentId)}
+        onRenameAgent={agentsSidebar.onRenameAgent}
+        onShareAgent={agentsSidebar.onShareAgent}
+        onExportAgent={agentsSidebar.onExportAgent}
+        onOpenSessions={agentsSidebar.onOpenSessions}
       />
     {/if}
     <section class="editor-shell" bind:this={editorShellEl}>
@@ -255,6 +304,15 @@
           <ChatPanel
             chatContextKind={editor.isChatHttpActive ? "chat-http" : "workspace"}
             onDeleteAgent={editor.onDeleteAgentFromChat}
+            onForkAgent={editor.onForkAgent}
+            onRevertSession={editor.onRevertSession}
+            onUnrevertSession={editor.onUnrevertSession}
+            onShareAgent={editor.onShareAgent}
+            onUnshareAgent={editor.onUnshareAgent}
+            onSummarizeAgent={editor.onSummarizeAgent}
+            onExportAgent={editor.onExportAgent}
+            activeShareUrl={editor.activeShareUrl}
+            activeParentSessionId={editor.activeParentSessionId}
           />
         {:else if editor.previewMode === "diff"}
           <DiffPreviewPane
@@ -450,6 +508,24 @@
 />
 
 <EntryNamePrompt onNotify={overlays.notify} />
+<RevertPreviewDialog />
+{#if sessionListPanel}
+  <SessionListPanel
+    open={sessionListPanel.open}
+    sessions={sessionListPanel.sessions}
+    openSessionIds={sessionListPanel.openSessionIds}
+    activeSessionId={sessionListPanel.activeSessionId}
+    loading={sessionListPanel.loading}
+    errorMessage={sessionListPanel.errorMessage}
+    sort={sessionListPanel.sort}
+    searchQuery={sessionListPanel.searchQuery}
+    onOpenSession={sessionListPanel.onOpenSession}
+    onClose={sessionListPanel.onClose}
+    onSearchChange={sessionListPanel.onSearchChange}
+    onSortChange={sessionListPanel.onSortChange}
+    onRefresh={sessionListPanel.onRefresh}
+  />
+{/if}
 <PermissionPrompt />
 <QuestionPrompt />
 

@@ -454,6 +454,15 @@ function parseAgentIndexEntry(value: unknown): AgentIndexEntry | null {
   if (value.opencodeProviderId !== undefined && typeof value.opencodeProviderId !== "string") {
     return null;
   }
+  if (value.opencodeShareUrl !== undefined && typeof value.opencodeShareUrl !== "string") {
+    return null;
+  }
+  if (
+    value.opencodeParentSessionId !== undefined &&
+    typeof value.opencodeParentSessionId !== "string"
+  ) {
+    return null;
+  }
   return {
     id: value.id,
     title: value.title,
@@ -462,6 +471,8 @@ function parseAgentIndexEntry(value: unknown): AgentIndexEntry | null {
     opencodeSessionId: value.opencodeSessionId,
     opencodeModelId: value.opencodeModelId,
     opencodeProviderId: value.opencodeProviderId,
+    opencodeShareUrl: value.opencodeShareUrl,
+    opencodeParentSessionId: value.opencodeParentSessionId,
   };
 }
 

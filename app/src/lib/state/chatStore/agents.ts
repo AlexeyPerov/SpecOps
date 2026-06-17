@@ -83,6 +83,8 @@ export interface AgentSessionLinkPatch {
   opencodeSessionId?: string;
   opencodeModelId?: string;
   opencodeProviderId?: string;
+  opencodeShareUrl?: string;
+  opencodeParentSessionId?: string;
 }
 
 function applyAgentSessionLinkPatch(
@@ -97,6 +99,8 @@ function applyAgentSessionLinkPatch(
     delete next.opencodeSessionId;
     delete next.opencodeModelId;
     delete next.opencodeProviderId;
+    delete next.opencodeShareUrl;
+    delete next.opencodeParentSessionId;
     return next;
   }
   if (!next.opencodeModelId) {
@@ -104,6 +108,12 @@ function applyAgentSessionLinkPatch(
   }
   if (!next.opencodeProviderId) {
     delete next.opencodeProviderId;
+  }
+  if (!next.opencodeShareUrl) {
+    delete next.opencodeShareUrl;
+  }
+  if (!next.opencodeParentSessionId) {
+    delete next.opencodeParentSessionId;
   }
   return next;
 }
@@ -113,7 +123,9 @@ function didSessionLinkChange(entry: AgentIndexEntry, patch: AgentSessionLinkPat
   return (
     next.opencodeSessionId !== entry.opencodeSessionId ||
     next.opencodeModelId !== entry.opencodeModelId ||
-    next.opencodeProviderId !== entry.opencodeProviderId
+    next.opencodeProviderId !== entry.opencodeProviderId ||
+    next.opencodeShareUrl !== entry.opencodeShareUrl ||
+    next.opencodeParentSessionId !== entry.opencodeParentSessionId
   );
 }
 
@@ -269,6 +281,8 @@ export function createAgentsSlice(deps: {
         opencodeSessionId: entry.opencodeSessionId,
         opencodeModelId: entry.opencodeModelId,
         opencodeProviderId: entry.opencodeProviderId,
+        opencodeShareUrl: entry.opencodeShareUrl,
+        opencodeParentSessionId: entry.opencodeParentSessionId,
       };
     },
     setAgentSessionLink(
@@ -309,9 +323,113 @@ export function createAgentsSlice(deps: {
           opencodeSessionId: "",
           opencodeModelId: "",
           opencodeProviderId: "",
+          opencodeShareUrl: "",
+          opencodeParentSessionId: "",
         },
         rootOverride,
       );
+    },
+    /**
+     * Rename an agent tab (M2-T1). Updates `title` and bumps `lastUsedAt` so
+     * the row re-sorts to the top of the sidebar. Returns false when the
+     * agent isn't found or the trimmed title is empty. Does NOT call OpenCode
+     * — the caller (handler) is responsible for `session.update({ title })`
+     * and only invokes this once that succeeds.
+     */
+    renameAgent(agentId: string, title: string, rootOverride?: string | null): boolean {
+      const root = rootOverride ?? getActiveChatScopeKey();
+      if (!root) {
+        return false;
+      }
+      const trimmed = title.trim();
+      if (trimmed.length === 0) {
+        return false;
+      }
+      let renamed = false;
+      update((state) => {
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        const entry = findAgentIndexEntry(workspace, agentId);
+        if (!entry) {
+          return state;
+        }
+        if (entry.title === trimmed) {
+          renamed = true;
+          return state;
+        }
+        renamed = true;
+        const nextEntry: AgentIndexEntry = {
+          ...entry,
+          title: trimmed,
+          lastUsedAt: new Date().toISOString(),
+        };
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          agentIndex: patchAgentIndexEntry(workspace.agentIndex, agentId, nextEntry),
+        });
+      });
+      return renamed;
+    },
+    /**
+     * Create a fresh agent tab linked to a (just-forked) OpenCode session
+     * (M2-T3). The new entry is non-draft and active so the UI opens it. The
+     * caller (handler) is responsible for calling `session.fork` first and
+     * passing the child session id + parent id here. Returns the new agent id.
+     *
+     * `modelId` / `providerId` are inherited from the parent entry when not
+     * supplied, so the forked tab keeps the same model selection.
+     */
+    forkAgent(
+      link: {
+        opencodeSessionId: string;
+        opencodeParentSessionId: string;
+        title?: string;
+        opencodeModelId?: string;
+        opencodeProviderId?: string;
+      },
+      rootOverride?: string | null,
+    ): string | null {
+      const root = rootOverride ?? getActiveChatScopeKey();
+      if (!root) {
+        return null;
+      }
+      const workspace = getSnapshot().workspaces[root];
+      if (!workspace) {
+        return null;
+      }
+      const parentEntry = workspace.agentIndex.find(
+        (entry) => entry.opencodeSessionId === link.opencodeParentSessionId,
+      );
+      const modelId = link.opencodeModelId ?? parentEntry?.opencodeModelId;
+      const providerId = link.opencodeProviderId ?? parentEntry?.opencodeProviderId;
+      const title =
+        link.title?.trim() ||
+        (parentEntry ? `${parentEntry.title} (fork)` : "Forked session");
+      const agentId = createAgentId();
+      const lastUsedAt = new Date().toISOString();
+      const entry: AgentIndexEntry = {
+        id: agentId,
+        title,
+        lastUsedAt,
+        opencodeSessionId: link.opencodeSessionId,
+        opencodeParentSessionId: link.opencodeParentSessionId,
+        ...(modelId ? { opencodeModelId: modelId } : {}),
+        ...(providerId ? { opencodeProviderId: providerId } : {}),
+      };
+      update((state) => {
+        const ws = state.workspaces[root];
+        if (!ws) {
+          return state;
+        }
+        return patchWorkspaceState(state, root, {
+          ...ws,
+          activeAgentId: agentId,
+          agentIndex: [...ws.agentIndex, entry],
+        });
+      });
+      return agentId;
     },
     getWorkspaceAgentsState(root: string): WorkspaceAgentsState | null {
       const workspace = getSnapshot().workspaces[root];

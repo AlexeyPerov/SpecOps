@@ -46,9 +46,9 @@ import { promptPermission } from "../services/permissionPrompt";
 import { promptQuestion } from "../services/questionPrompt";
 import {
   WorkspaceAgentBackendError,
-  type OpencodeSessionMessageEntry,
   type WorkspaceAgentStreamEvent,
 } from "../ai/backends/workspaceAgentBackend";
+import { createRawOpencodeClientStub } from "../test/rawOpencodeClientStub";
 import {
   mappedSessionForAgent,
   isAgentSessionMappingValid,
@@ -466,66 +466,8 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
   });
 
   describe("Event normalization contract alignment", () => {
-    function noOpFactory(): {
-      createSession: () => Promise<unknown>;
-      getSession: () => Promise<unknown>;
-      listSessions: () => Promise<unknown>;
-      deleteSession: () => Promise<unknown>;
-      sendPrompt: () => Promise<unknown>;
-      replyPermission: () => Promise<unknown>;
-      replyQuestion: () => Promise<unknown>;
-      rejectQuestion: () => Promise<unknown>;
-      abortSession: () => Promise<unknown>;
-      streamEvents: () => AsyncIterable<unknown>;
-      listMessages: () => Promise<OpencodeSessionMessageEntry[]>;
-      listModels: () => Promise<unknown>;
-      listProviders: () => Promise<unknown>;
-      listAgents: () => Promise<unknown>;
-    } {
-      return {
-        async createSession() {
-          return { id: "s1", title: "t" };
-        },
-        async getSession() {
-          return { id: "s1" };
-        },
-        async listSessions() {
-          return [];
-        },
-        async deleteSession() {
-          return null;
-        },
-        async sendPrompt() {
-          return { sessionID: "s1" };
-        },
-        async replyPermission() {
-          return null;
-        },
-        async replyQuestion() {
-          return null;
-        },
-        async rejectQuestion() {
-          return null;
-        },
-        async abortSession() {
-          return null;
-        },
-        async *streamEvents() {
-          // overridden per test
-        },
-        async listMessages() {
-          return [];
-        },
-        async listModels() {
-          return { data: [] };
-        },
-        async listProviders() {
-          return { data: [] };
-        },
-        async listAgents() {
-          return { data: [] };
-        },
-      };
+    function noOpFactory() {
+      return createRawOpencodeClientStub();
     }
 
     it("normalizes SDK text delta events to contract message.delta", async () => {

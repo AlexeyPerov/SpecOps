@@ -482,4 +482,119 @@ describe("chatStore", () => {
       opencodeProviderId: undefined,
     });
   });
+
+  it("renameAgent updates the title and bumps lastUsedAt", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+    expect(agentId).toBe("agent-1");
+    const before = chatStore.getAgentIndex().find((entry) => entry.id === agentId);
+
+    expect(chatStore.renameAgent(agentId!, "New title")).toBe(true);
+
+    const after = chatStore.getAgentIndex().find((entry) => entry.id === agentId);
+    expect(after?.title).toBe("New title");
+    // lastUsedAt strictly advances (renames surface the tab at the top).
+    expect(Date.parse(after!.lastUsedAt)).toBeGreaterThanOrEqual(
+      Date.parse(before!.lastUsedAt),
+    );
+  });
+
+  it("renameAgent returns false for an empty / whitespace title", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+    expect(chatStore.renameAgent(agentId!, "   ")).toBe(false);
+    expect(chatStore.getAgentTitle(agentId!)).toBe(DRAFT_AGENT_TITLE);
+  });
+
+  it("renameAgent returns false when the agent id is unknown", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    chatStore.createDraftAgent();
+    expect(chatStore.renameAgent("agent-999", "whatever")).toBe(false);
+  });
+
+  it("renameAgent is a no-op (returns true) when the title is unchanged", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+    chatStore.renameAgent(agentId!, "Same");
+    const before = chatStore.getAgentIndex().find((entry) => entry.id === agentId);
+    expect(chatStore.renameAgent(agentId!, "Same")).toBe(true);
+    const after = chatStore.getAgentIndex().find((entry) => entry.id === agentId);
+    // No change → lastUsedAt untouched.
+    expect(after?.lastUsedAt).toBe(before?.lastUsedAt);
+  });
+
+  it("forkAgent creates a new active agent tab linked to the child session", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const parent = chatStore.createDraftAgent();
+    chatStore.setAgentSessionLink(parent!, {
+      opencodeSessionId: "parent-sess",
+      opencodeModelId: "claude",
+      opencodeProviderId: "anthropic",
+    });
+
+    const child = chatStore.forkAgent({
+      opencodeSessionId: "child-sess",
+      opencodeParentSessionId: "parent-sess",
+      title: "Forked",
+    });
+    expect(child).toBe("agent-2");
+
+    const index = chatStore.getAgentIndex();
+    const childEntry = index.find((entry) => entry.id === child);
+    expect(childEntry).toMatchObject({
+      id: "agent-2",
+      title: "Forked",
+      opencodeSessionId: "child-sess",
+      opencodeParentSessionId: "parent-sess",
+      opencodeModelId: "claude",
+      opencodeProviderId: "anthropic",
+    });
+    // New child becomes the active agent.
+    expect(chatStore.getActiveAgentId()).toBe(child);
+  });
+
+  it("forkAgent derives a title from the parent when none is supplied", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const parent = chatStore.createDraftAgent();
+    chatStore.renameAgent(parent!, "Plan");
+    chatStore.setAgentSessionLink(parent!, { opencodeSessionId: "parent-sess" });
+
+    const child = chatStore.forkAgent({
+      opencodeSessionId: "child-sess",
+      opencodeParentSessionId: "parent-sess",
+    });
+    const childEntry = chatStore
+      .getAgentIndex()
+      .find((entry) => entry.id === child);
+    expect(childEntry?.title).toBe("Plan (fork)");
+  });
+
+  it("forkAgent returns null when there is no active workspace", () => {
+    expect(
+      chatStore.forkAgent({
+        opencodeSessionId: "c",
+        opencodeParentSessionId: "p",
+      }),
+    ).toBeNull();
+  });
+
+  it("setAgentSessionLink persists and clears the share url + parent id", () => {
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const agentId = chatStore.createDraftAgent();
+    chatStore.setAgentSessionLink(agentId!, { opencodeSessionId: "s1" });
+    expect(
+      chatStore.setAgentSessionLink(agentId!, {
+        opencodeShareUrl: "https://share/s1",
+        opencodeParentSessionId: "parent",
+      }),
+    ).toBe(true);
+    expect(chatStore.getAgentSessionLink(agentId!)).toMatchObject({
+      opencodeSessionId: "s1",
+      opencodeShareUrl: "https://share/s1",
+      opencodeParentSessionId: "parent",
+    });
+    // Clearing the session link also drops share + parent lineage.
+    chatStore.clearAgentSessionLink(agentId!);
+    expect(chatStore.getAgentSessionLink(agentId!)).toBeNull();
+  });
 });

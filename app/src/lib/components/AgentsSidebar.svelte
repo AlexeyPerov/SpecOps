@@ -27,6 +27,14 @@
     onSelectAgent?: (agentId: string) => void;
     onNewAgent?: () => void;
     onDeleteAgent?: (agentId: string) => void;
+    /** M2-T1: rename the agent tab + linked session. */
+    onRenameAgent?: (agentId: string) => void | Promise<void>;
+    /** M2-T5: copy a public share URL for the linked session. */
+    onShareAgent?: (agentId: string) => void | Promise<void>;
+    /** M2-T7: export the transcript to a Markdown file. */
+    onExportAgent?: (agentId: string) => void | Promise<void>;
+    /** M2-T2: open the unified per-workspace session list panel. */
+    onOpenSessions?: () => void | Promise<void>;
   }
 
   let {
@@ -40,6 +48,10 @@
     onSelectAgent = () => {},
     onNewAgent = () => {},
     onDeleteAgent = () => {},
+    onRenameAgent = () => {},
+    onShareAgent = () => {},
+    onExportAgent = () => {},
+    onOpenSessions = () => {},
   }: Props = $props();
 
   let searchQuery = $state("");
@@ -61,6 +73,9 @@
     onToggleCollapsed: (next) => onToggleCollapsed(next),
     onNewAgent: () => onNewAgent(),
     onDeleteAgent: (id) => onDeleteAgent(id),
+    onRenameAgent: (id) => onRenameAgent(id),
+    onShareAgent: (id) => onShareAgent(id),
+    onExportAgent: (id) => onExportAgent(id),
   });
 
   $effect(() => {
@@ -121,6 +136,47 @@
     sidebarController.confirmDeleteAgent(contextMenu.agentId, title, entrySingularLabel);
     closeContextMenu();
   }
+
+  function handleRenameFromContextMenu(): void {
+    if (!contextMenu) {
+      return;
+    }
+    const agentId = contextMenu.agentId;
+    closeContextMenu();
+    void sidebarController.renameAgent(agentId);
+  }
+
+  function handleShareFromContextMenu(): void {
+    if (!contextMenu) {
+      return;
+    }
+    const agentId = contextMenu.agentId;
+    closeContextMenu();
+    void sidebarController.shareAgent(agentId);
+  }
+
+  function handleExportFromContextMenu(): void {
+    if (!contextMenu) {
+      return;
+    }
+    const agentId = contextMenu.agentId;
+    closeContextMenu();
+    void sidebarController.exportAgent(agentId);
+  }
+
+  /**
+   * Whether the context-menu target has a linked OpenCode session. Actions
+   * that require a server-side session (share / export) are hidden for draft
+   * agents and chat-http chats that have no link yet. Rename is always shown.
+   */
+  let contextMenuHasSessionLink = $derived.by(() => {
+    if (!contextMenu) {
+      return false;
+    }
+    return Boolean(
+      agents.find((agent) => agent.id === contextMenu?.agentId)?.opencodeSessionId,
+    );
+  });
 </script>
 
 <aside
@@ -157,6 +213,16 @@
       >
         {newEntryLabel}
       </button>
+      {#if onOpenSessions}
+        <button
+          class="agents-sidebar-button agents-sidebar-sessions"
+          type="button"
+          onclick={() => onOpenSessions()}
+          title="Browse all OpenCode sessions for this workspace"
+        >
+          Sessions
+        </button>
+      {/if}
     {:else}
       <button
         class="agents-sidebar-button agents-sidebar-toggle"
@@ -218,6 +284,32 @@
     tabindex="-1"
     onpointerdown={(event) => event.stopPropagation()}
   >
+    <button
+      class="agents-context-item"
+      type="button"
+      role="menuitem"
+      onclick={handleRenameFromContextMenu}
+    >
+      Rename {entrySingularLabel}
+    </button>
+    {#if contextMenuHasSessionLink}
+      <button
+        class="agents-context-item"
+        type="button"
+        role="menuitem"
+        onclick={handleShareFromContextMenu}
+      >
+        Copy share link
+      </button>
+      <button
+        class="agents-context-item"
+        type="button"
+        role="menuitem"
+        onclick={handleExportFromContextMenu}
+      >
+        Export transcript…
+      </button>
+    {/if}
     <button
       class="agents-context-item agents-context-item-danger"
       type="button"

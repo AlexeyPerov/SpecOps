@@ -60,10 +60,10 @@ stream normalization (see [questions.md Q2, Q3](./questions.md)).
   - Files: new `FileAttachmentChip.svelte`, `ImageAttachment.svelte`;
   update `ChatMessageList.svelte`.
 
-- [ ] **M1-T8 — Render diff / snapshot parts.** Mini unified diff viewer inline
+- [x] **M1-T8 — Render diff / snapshot parts.** Mini unified diff viewer inline
   in the message. Full diff viewer is M5-T2; this is the inline preview.
   - Files: new `InlineDiff.svelte` (reuse a diff library like `diff` or
-  `diff2html`); update `ChatMessageList.svelte`. First check whether there is already diff-viewer code in app that can be used here too.
+    `diff2html`); update `ChatMessageList.svelte`. First check whether there is already diff-viewer code in app that can be used here too.
 
 - [ ] **M1-T9 — Render cost / token totals.** Per-message footer: tokens
   (input/output/cache) + cost. Session total in chat header or sidebar.

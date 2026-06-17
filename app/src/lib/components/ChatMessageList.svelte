@@ -19,6 +19,10 @@
     extractMessageAttachments,
     type MessageAttachment,
   } from "../ai/chatAttachments";
+  import {
+    extractMessageDiffs,
+    type MessageDiff,
+  } from "../ai/chatDiffs";
   import type { ChatMessage } from "../domain/contracts";
   import ToolCard from "./ToolCard.svelte";
   import ReasoningBlock from "./ReasoningBlock.svelte";
@@ -26,6 +30,7 @@
   import StepSeparator from "./StepSeparator.svelte";
   import ImageAttachment from "./ImageAttachment.svelte";
   import FileAttachmentChip from "./FileAttachmentChip.svelte";
+  import InlineDiff from "./InlineDiff.svelte";
 
   interface Props {
     messages: ChatMessage[];
@@ -183,6 +188,35 @@
     return extractMessageAttachments(message);
   }
 
+  /**
+   * Diff / snapshot parts for a message. Like subtasks/steps, only assistant
+   * messages carry agentic snapshot/patch parts, so we gate on role here (the
+   * extractor itself is role-agnostic).
+   */
+  function diffsFor(message: ChatMessage): MessageDiff[] {
+    if (message.role !== "assistant") {
+      return [];
+    }
+    return extractMessageDiffs(message);
+  }
+
+  /**
+   * Per-diff expanded state, keyed by diff id. Like subtasks there is no global
+   * toggle — each diff collapses on its own.
+   */
+  let expandedDiffs = $state<Record<string, boolean>>({});
+
+  function isDiffExpanded(diff: MessageDiff): boolean {
+    return Boolean(expandedDiffs[diff.id]);
+  }
+
+  function toggleDiff(diff: MessageDiff): void {
+    expandedDiffs = {
+      ...expandedDiffs,
+      [diff.id]: !isDiffExpanded(diff),
+    };
+  }
+
   /** Compact token-count formatting for the running-total footer. */
   function formatFooterTokenCount(value: number): string {
     if (!Number.isFinite(value) || value <= 0) {
@@ -261,6 +295,7 @@
           {@const steps = stepsFor(message)}
           {@const stepTotals = stepTotalsFor(message)}
           {@const attachments = attachmentsFor(message)}
+          {@const diffs = diffsFor(message)}
           <li
             class={`chat-message chat-message-${message.role}`}
             class:chat-message-system-event={isSystemEventMessage(message)}
@@ -332,6 +367,17 @@
               <div class="chat-attachments chat-attachments-files">
                 {#each attachments.files as file (file.id)}
                   <FileAttachmentChip attachment={file} />
+                {/each}
+              </div>
+            {/if}
+            {#if diffs.length > 0}
+              <div class="chat-inline-diffs">
+                {#each diffs as diff (diff.id)}
+                  <InlineDiff
+                    {diff}
+                    expanded={isDiffExpanded(diff)}
+                    onToggle={() => toggleDiff(diff)}
+                  />
                 {/each}
               </div>
             {/if}
@@ -629,6 +675,20 @@
 
   /* When subtask cards precede tool cards, collapse the double gap. */
   .chat-subtask-cards + .chat-tool-cards {
+    margin-top: var(--space-3);
+  }
+
+  .chat-inline-diffs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+  }
+
+  /* When inline diffs follow tool cards or attachments, keep a single gap. */
+  .chat-tool-cards + .chat-inline-diffs,
+  .chat-attachments + .chat-inline-diffs,
+  .chat-inline-diffs + .chat-inline-diffs {
     margin-top: var(--space-3);
   }
 

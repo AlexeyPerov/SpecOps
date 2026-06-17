@@ -83,5 +83,5 @@ stream normalization (see [questions.md Q2, Q3](./questions.md)).
     needs prototype-chain property descriptors that happy-dom doesn't
     expose).
 
-- [ ] **M1-T11 — Tests.** Unit tests for part mapping, stream normalization,
+- [x] **M1-T11 — Tests.** Unit tests for part mapping, stream normalization,
   codec round-trip. Component tests for each new renderer. Run full suite.

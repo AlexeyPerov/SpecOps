@@ -23,6 +23,7 @@
     extractMessageDiffs,
     type MessageDiff,
   } from "../ai/chatDiffs";
+  import { cacheTotal, formatCost, formatTokenCount } from "../ai/chatTokenFormat";
   import type { ChatMessage } from "../domain/contracts";
   import ToolCard from "./ToolCard.svelte";
   import ReasoningBlock from "./ReasoningBlock.svelte";
@@ -218,26 +219,6 @@
   }
 
   /** Compact token-count formatting for the running-total footer. */
-  function formatFooterTokenCount(value: number): string {
-    if (!Number.isFinite(value) || value <= 0) {
-      return "0";
-    }
-    if (value >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-    }
-    if (value >= 1_000) {
-      return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-    }
-    return String(Math.round(value));
-  }
-
-  function formatFooterCost(cost: number): string {
-    if (!Number.isFinite(cost) || cost <= 0) {
-      return "$0.00";
-    }
-    return `${cost.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}`;
-  }
-
   function messageRoleLabel(message: ChatMessage): string {
     if (isProviderSwitchMessage(message)) {
       return "Provider switch";
@@ -385,16 +366,16 @@
               <footer class="chat-message-totals">
                 <span class="chat-message-totals-tokens">
                   <span class="chat-message-totals-field">
-                    <span class="chat-message-totals-key">in</span>{formatFooterTokenCount(stepTotals.tokens.input)}
+                    <span class="chat-message-totals-key">in</span>{formatTokenCount(stepTotals.tokens.input)}
                   </span>
                   <span class="chat-message-totals-field">
-                    <span class="chat-message-totals-key">out</span>{formatFooterTokenCount(stepTotals.tokens.output)}
+                    <span class="chat-message-totals-key">out</span>{formatTokenCount(stepTotals.tokens.output)}
                   </span>
                   <span class="chat-message-totals-field">
-                    <span class="chat-message-totals-key">cache</span>{formatFooterTokenCount(stepTotals.tokens.cache.read + stepTotals.tokens.cache.write)}
+                    <span class="chat-message-totals-key">cache</span>{formatTokenCount(cacheTotal(stepTotals.tokens))}
                   </span>
                 </span>
-                <span class="chat-message-totals-cost">{formatFooterCost(stepTotals.cost)}</span>
+                <span class="chat-message-totals-cost">{formatCost(stepTotals.cost)}</span>
               </footer>
             {/if}
           </li>

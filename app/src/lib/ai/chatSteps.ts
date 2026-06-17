@@ -34,6 +34,18 @@ export interface MessageStepTotals {
 }
 
 /**
+ * Cumulative cost / token totals across a whole session (sum of per-message
+ * totals). Used for the chat-header / sidebar session running total (M1-T9).
+ * `messageCount` is the number of assistant messages that contributed, so the
+ * renderer can distinguish "no data yet" from "zero cost".
+ */
+export interface ChatSessionTotals {
+  cost: number;
+  tokens: ChatTokenUsage;
+  messageCount: number;
+}
+
+/**
  * Collapses a message's `step` parts into one boundary per step. Returns an
  * empty array when the message has no parts or no step parts. Steps are
  * ordered by their `index` (the OpenCode-assigned 0-based step counter);
@@ -110,11 +122,19 @@ export function extractMessageSteps(message: ChatMessage): MessageStepBoundary[]
 }
 
 /**
- * Sums the cost and token payload across a message's step boundaries (and the
- * trailing `cost` part that session-messages hydration appends from
- * `info.cost` / `info.tokens`, so totals are present even when no step-finish
- * part exists). Returns `null` when the message has no contributing parts so
- * callers render no footer.
+ * Per-message cost / token totals.
+ *
+ * OpenCode's `AssistantMessage.info.cost` / `info.tokens` are *cumulative for
+ * the whole message* — i.e. the sum of all step-finish parts within it. During
+ * session-messages hydration (see `opencodeSessionMessages.ts`) that cumulative
+ * value is emitted as a trailing `cost` part. So to avoid double-counting, when
+ * a `cost` part is present it IS the canonical message total and the individual
+ * step-finish parts are not summed in. When no `cost` part exists (the live
+ * streaming case, where totals arrive one step at a time), we sum the
+ * step-finish parts instead.
+ *
+ * Returns `null` when the message has no contributing parts so callers render
+ * no footer.
  */
 export function extractMessageStepTotals(message: ChatMessage): MessageStepTotals | null {
   const parts = message.parts;
@@ -122,17 +142,57 @@ export function extractMessageStepTotals(message: ChatMessage): MessageStepTotal
     return null;
   }
 
+  // Prefer the canonical cumulative `cost` part when present.
+  const canonical = findCanonicalCostPart(parts);
+  if (canonical) {
+    return canonical;
+  }
+
+  // Otherwise sum across step-finish parts (the live streaming case).
+  const aggregated = sumStepFinishes(parts);
+  if (aggregated === null) {
+    return null;
+  }
+  return aggregated;
+}
+
+/**
+ * The last `cost` part on a message is OpenCode's cumulative `info.cost` /
+ * `info.tokens` snapshot — the canonical per-message total. Returns it shaped
+ * as totals, or `null` when no `cost` part exists. A cost part with neither a
+ * finite cost nor a token payload carries nothing and is ignored (caller then
+ * falls through to step-finish summing).
+ */
+function findCanonicalCostPart(parts: ChatMessagePart[]): MessageStepTotals | null {
+  let found: ChatCostPart | null = null;
+  for (const part of parts) {
+    if (isCostPart(part)) {
+      found = part;
+    }
+  }
+  if (!found) {
+    return null;
+  }
+  const cost = found.cost !== undefined && Number.isFinite(found.cost) ? found.cost : 0;
+  const tokens = found.tokens ?? zeroTokens();
+  if (cost === 0 && found.tokens === undefined) {
+    return null;
+  }
+  return { cost, tokens };
+}
+
+/**
+ * Sums cost / tokens across step-finish parts (the live-streaming case where
+ * no canonical `cost` part exists yet). Returns `null` when no step finish
+ * contributes. A finish with cost but no tokens still counts as a contributor.
+ */
+function sumStepFinishes(parts: ChatMessagePart[]): MessageStepTotals | null {
   let cost = 0;
   let contributed = false;
-  const tokens: ChatTokenUsage = {
-    input: 0,
-    output: 0,
-    reasoning: 0,
-    cache: { read: 0, write: 0 },
-  };
+  const tokens: ChatTokenUsage = zeroTokens();
 
   for (const part of parts) {
-    if (!isStepPart(part) && !isCostPart(part)) {
+    if (!isStepPart(part) || part.phase !== "finish") {
       continue;
     }
     if (part.cost !== undefined && Number.isFinite(part.cost)) {
@@ -145,7 +205,7 @@ export function extractMessageStepTotals(message: ChatMessage): MessageStepTotal
       tokens.cache.read += part.tokens.cache.read;
       tokens.cache.write += part.tokens.cache.write;
       contributed = true;
-    } else if (isStepPart(part) && part.phase === "finish") {
+    } else {
       // A step finish contributed cost (counted above) even without tokens.
       contributed = true;
     }
@@ -155,6 +215,47 @@ export function extractMessageStepTotals(message: ChatMessage): MessageStepTotal
     return null;
   }
   return { cost, tokens };
+}
+
+function zeroTokens(): ChatTokenUsage {
+  return { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } };
+}
+
+/**
+ * Sums per-message cost / token totals across a session. Only assistant
+ * messages contribute (user/system messages carry no cost). Each message is
+ * reduced via `extractMessageStepTotals`, so step-finish / cost-part dedupe is
+ * already handled — we never double-count a message's own step finishes against
+ * its cumulative `cost` part.
+ *
+ * Returns `null` when no message contributes (so the header renders no total).
+ */
+export function extractSessionTotals(messages: readonly ChatMessage[]): ChatSessionTotals | null {
+  const tokens = zeroTokens();
+  let cost = 0;
+  let messageCount = 0;
+
+  for (const message of messages) {
+    if (message.role !== "assistant") {
+      continue;
+    }
+    const totals = extractMessageStepTotals(message);
+    if (!totals) {
+      continue;
+    }
+    cost += totals.cost;
+    tokens.input += totals.tokens.input;
+    tokens.output += totals.tokens.output;
+    tokens.reasoning += totals.tokens.reasoning;
+    tokens.cache.read += totals.tokens.cache.read;
+    tokens.cache.write += totals.tokens.cache.write;
+    messageCount += 1;
+  }
+
+  if (messageCount === 0) {
+    return null;
+  }
+  return { cost, tokens, messageCount };
 }
 
 function resolveStepIndex(part: ChatStepPart, arrival: number): number {

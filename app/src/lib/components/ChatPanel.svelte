@@ -37,9 +37,11 @@
   import { draftEntryTitleForScope } from "../services/chatAgents";
   import { getOpencodeCatalog, refreshOpencodeCatalog } from "../ai/opencodeCatalog";
   import { isOpencodeEnabled } from "../services/opencodeSettings";
+  import { extractSessionTotals } from "../ai/chatSteps";
   import ChatBlockedState from "./ChatBlockedState.svelte";
   import ChatComposer from "./ChatComposer.svelte";
   import ChatMessageList from "./ChatMessageList.svelte";
+  import SessionTotalBadge from "./SessionTotalBadge.svelte";
 
   interface Props {
     chatContextKind?: "workspace" | "chat-http";
@@ -123,6 +125,13 @@
   );
   const isEmpty = $derived(messages.length === 0);
   const isChatHttpScope = $derived(chatContextKind === "chat-http");
+  /**
+   * Cumulative cost / token totals across all assistant messages. Workspace
+   * agent tabs hydrate from `session.messages` so assistant messages carry
+   * cumulative `cost` parts; chat-http/debug threads have no cost payload and
+   * this resolves to null (no badge rendered).
+   */
+  const sessionTotals = $derived(extractSessionTotals(messages));
   const activeAgentId = $derived(chatStore.getActiveAgentId());
   const activeAgentTitle = $derived.by(() => {
     if (!activeAgentId) {
@@ -268,16 +277,21 @@
 <section class="chat-panel" aria-label={isChatHttpScope ? "Chats panel" : "Agent chat"}>
   <div class="chat-panel-header">
     <p class="chat-panel-title">{activeAgentTitle}</p>
-    {#if canDeleteAgent}
-      <button
-        type="button"
-        class="chat-delete-button"
-        onclick={() => void deleteAgent()}
-        disabled={isBlocked || isGenerating}
-      >
-        {isChatHttpScope ? "Delete chat" : "Delete agent"}
-      </button>
-    {/if}
+    <div class="chat-panel-header-actions">
+      {#if sessionTotals}
+        <SessionTotalBadge totals={sessionTotals} />
+      {/if}
+      {#if canDeleteAgent}
+        <button
+          type="button"
+          class="chat-delete-button"
+          onclick={() => void deleteAgent()}
+          disabled={isBlocked || isGenerating}
+        >
+          {isChatHttpScope ? "Delete chat" : "Delete agent"}
+        </button>
+      {/if}
+    </div>
   </div>
 
   <div class="chat-panel-stack">
@@ -368,6 +382,12 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-6);
+  }
+
+  .chat-panel-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
   }
 
   .chat-panel-title {

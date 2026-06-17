@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { ChatTokenUsage } from "../domain/contracts";
   import type { MessageStepBoundary } from "../ai/chatSteps";
+  import { cacheTotal, formatCost, formatTokenCount } from "../ai/chatTokenFormat";
 
   interface Props {
     boundary: MessageStepBoundary;
@@ -8,48 +8,10 @@
 
   let { boundary }: Props = $props();
 
-  /**
-   * Compact token-count formatting. Large counts are shortened to a number +
-   * suffix (k/M) so the separator stays a single thin line even on long runs.
-   */
-  function formatTokenCount(value: number): string {
-    if (!Number.isFinite(value) || value <= 0) {
-      return "0";
-    }
-    if (value >= 1_000_000) {
-      return `${trim(value / 1_000_000)}M`;
-    }
-    if (value >= 1_000) {
-      return `${trim(value / 1_000)}k`;
-    }
-    return String(Math.round(value));
-  }
-
-  function trim(value: number): string {
-    // One decimal place, strip trailing ".0".
-    return value.toFixed(1).replace(/\.0$/, "");
-  }
-
-  function formatCost(cost: number): string {
-    if (!Number.isFinite(cost) || cost <= 0) {
-      return "$0.00";
-    }
-    // Up to 4 decimals for sub-cent micro-steps, trimming trailing zeros.
-    return `$${cost.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}`;
-  }
-
   function statusLabel(status: MessageStepBoundary["status"]): string {
     if (status === "running") return "running";
     if (status === "failed") return "failed";
     return "done";
-  }
-
-  /** Cache read+write summed for the compact display (matches OpenCode Desktop). */
-  function cacheTotal(tokens: ChatTokenUsage | undefined): number {
-    if (!tokens) {
-      return 0;
-    }
-    return tokens.cache.read + tokens.cache.write;
   }
 </script>
 

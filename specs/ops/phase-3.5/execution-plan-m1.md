@@ -65,14 +65,14 @@ stream normalization (see [questions.md Q2, Q3](./questions.md)).
   - Files: new `InlineDiff.svelte` (reuse a diff library like `diff` or
     `diff2html`); update `ChatMessageList.svelte`. First check whether there is already diff-viewer code in app that can be used here too.
 
-- [ ] **M1-T9 — Render cost / token totals.** Per-message footer: tokens
+- [x] **M1-T9 — Render cost / token totals.** Per-message footer: tokens
   (input/output/cache) + cost. Session total in chat header or sidebar.
   - Files: update `ChatMessageList.svelte`, `ChatPanel.svelte`.
 
 - [ ] **M1-T10 — Markdown rendering for text parts.** Replace plain-text
   rendering with a markdown renderer (e.g. `marked` + `DOMPurify`, or
   `markdown-it`). Syntax-highlighted code blocks. Currently workspace agent
-  messages render as plain text.
+  messages render as plain text. First check whether there is already markdown viewer code in app that can be used here too.
   - Files: new `MarkdownRenderer.svelte`; update `ChatMessageList.svelte`.
 
 - [ ] **M1-T11 — Tests.** Unit tests for part mapping, stream normalization,

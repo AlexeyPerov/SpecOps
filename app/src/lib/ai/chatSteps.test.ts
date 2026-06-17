@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractMessageStepTotals, extractMessageSteps } from "./chatSteps";
+import {
+  extractMessageStepTotals,
+  extractMessageSteps,
+  extractSessionTotals,
+} from "./chatSteps";
 import type {
   ChatCostPart,
   ChatMessage,
@@ -16,6 +20,20 @@ function assistantMessage(parts: ChatMessagePart[], content = ""): ChatMessage {
     createdAt: "2026-06-16T00:00:00.000Z",
     parts,
   };
+}
+
+function assistantMessageWithId(id: string, parts: ChatMessagePart[]): ChatMessage {
+  return {
+    id,
+    role: "assistant",
+    content: "",
+    createdAt: "2026-06-16T00:00:00.000Z",
+    parts,
+  };
+}
+
+function userMessage(id: string, content = ""): ChatMessage {
+  return { id, role: "user", content, createdAt: "2026-06-16T00:00:00.000Z" };
 }
 
 function tokens(input: number, output: number, reasoning = 0): ChatTokenUsage {
@@ -200,19 +218,31 @@ describe("extractMessageStepTotals", () => {
     });
   });
 
-  it("folds in a trailing cost part (from session-messages hydration)", () => {
+  it("prefers a trailing cost part as the canonical message total (no double-count)", () => {
     const message = assistantMessage([
       stepStart(0, "s0"),
       stepFinish(0, 0.01, tokens(100, 200)),
       { type: "cost", cost: 0.05, tokens: tokens(150, 250) } satisfies ChatCostPart,
     ]);
-    // Step finish + cost part both contribute — totals are additive (the cost
-    // part is OpenCode's cumulative info.cost; we surface the sum and the
-    // footer is a presence indicator, not a de-duplicated ledger — M1-T9 owns
-    // per-message canonical totals).
+    // The trailing `cost` part is OpenCode's cumulative `info.cost` /
+    // `info.tokens` — i.e. the sum of all step finishes already. Using it
+    // directly avoids double-counting the step finish against the total.
     const totals = extractMessageStepTotals(message);
-    expect(totals?.tokens).toEqual(tokens(250, 450));
-    expect(totals?.cost).toBeCloseTo(0.06, 10);
+    expect(totals?.tokens).toEqual(tokens(150, 250));
+    expect(totals?.cost).toBeCloseTo(0.05, 10);
+  });
+
+  it("prefers the LAST cost part when several are present", () => {
+    // OpenCode appends a fresh cumulative cost part on each session-messages
+    // refresh; the latest is the most up-to-date canonical total.
+    const message = assistantMessage([
+      { type: "cost", cost: 0.05, tokens: tokens(150, 250) } satisfies ChatCostPart,
+      { type: "cost", cost: 0.09, tokens: tokens(300, 500) } satisfies ChatCostPart,
+    ]);
+    expect(extractMessageStepTotals(message)).toEqual({
+      cost: 0.09,
+      tokens: tokens(300, 500),
+    });
   });
 
   it("returns totals from a lone cost part when no step parts exist", () => {
@@ -260,6 +290,113 @@ describe("extractMessageStepTotals", () => {
       output: 2,
       reasoning: 3,
       cache: { read: 4, write: 5 },
+    });
+  });
+});
+
+describe("extractSessionTotals", () => {
+  it("returns null for an empty message list", () => {
+    expect(extractSessionTotals([])).toBeNull();
+  });
+
+  it("returns null when no message contributes (no parts)", () => {
+    expect(extractSessionTotals([userMessage("u1", "hi")])).toBeNull();
+  });
+
+  it("returns null when only user messages are present", () => {
+    expect(
+      extractSessionTotals([
+        userMessage("u1", "hi"),
+        assistantMessageWithId("a1", []),
+      ]),
+    ).toBeNull();
+  });
+
+  it("sums a single assistant message's totals", () => {
+    const message = assistantMessageWithId("a1", [
+      stepStart(0, "s0"),
+      stepFinish(0, 0.01, tokens(100, 200)),
+    ]);
+    expect(extractSessionTotals([userMessage("u1", "hi"), message])).toEqual({
+      cost: 0.01,
+      tokens: tokens(100, 200),
+      messageCount: 1,
+    });
+  });
+
+  it("sums cost and tokens across multiple assistant messages", () => {
+    const a1 = assistantMessageWithId("a1", [
+      stepStart(0, "s0"),
+      stepFinish(0, 0.01, tokens(100, 200)),
+    ]);
+    const a2 = assistantMessageWithId("a2", [
+      stepStart(0, "s0"),
+      stepFinish(0, 0.02, tokens(300, 400)),
+    ]);
+    expect(extractSessionTotals([userMessage("u1"), a1, userMessage("u2"), a2])).toEqual({
+      cost: 0.03,
+      tokens: tokens(400, 600),
+      messageCount: 2,
+    });
+  });
+
+  it("does not double-count a message's cost part against its step finishes", () => {
+    // a1 carries both a step finish AND a trailing cumulative cost part — the
+    // per-message extractor already prefers the canonical cost part, so the
+    // session total reflects only 0.05 / (150, 250), not the sum.
+    const a1 = assistantMessageWithId("a1", [
+      stepStart(0, "s0"),
+      stepFinish(0, 0.01, tokens(100, 200)),
+      { type: "cost", cost: 0.05, tokens: tokens(150, 250) } satisfies ChatCostPart,
+    ]);
+    expect(extractSessionTotals([a1])).toEqual({
+      cost: 0.05,
+      tokens: tokens(150, 250),
+      messageCount: 1,
+    });
+  });
+
+  it("sums cache read / write fields across messages", () => {
+    const a1 = assistantMessageWithId("a1", [
+      {
+        type: "step",
+        phase: "finish",
+        index: 0,
+        id: "s0",
+        cost: 0.01,
+        tokens: { input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 } },
+      },
+    ]);
+    const a2 = assistantMessageWithId("a2", [
+      {
+        type: "step",
+        phase: "finish",
+        index: 0,
+        id: "s0",
+        cost: 0.02,
+        tokens: { input: 10, output: 20, reasoning: 30, cache: { read: 40, write: 50 } },
+      },
+    ]);
+    expect(extractSessionTotals([a1, a2])?.tokens).toEqual({
+      input: 11,
+      output: 22,
+      reasoning: 33,
+      cache: { read: 44, write: 55 },
+    });
+  });
+
+  it("skips assistant messages with no contributing parts but counts the rest", () => {
+    const a1 = assistantMessageWithId("a1", [
+      { type: "text", id: "t1", text: "answer" },
+    ]);
+    const a2 = assistantMessageWithId("a2", [
+      stepStart(0, "s0"),
+      stepFinish(0, 0.01, tokens(100, 200)),
+    ]);
+    expect(extractSessionTotals([a1, a2])).toEqual({
+      cost: 0.01,
+      tokens: tokens(100, 200),
+      messageCount: 1,
     });
   });
 });

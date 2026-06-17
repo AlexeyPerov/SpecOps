@@ -1,6 +1,7 @@
 import type {
   ChatCostPart,
   ChatMessage,
+  ChatMessagePart,
   ChatStepPart,
   ChatTokenUsage,
 } from "../domain/contracts";

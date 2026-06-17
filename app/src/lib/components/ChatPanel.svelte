@@ -96,6 +96,7 @@
     providerSettings,
     connectionId: activeConnectionId,
   });
+  const isChatHttpScope = $derived(chatContextKind === "chat-http");
   const localModelValidation = $derived.by(() => {
     if (isChatHttpScope === false) {
       return { ok: true as const, modelId: activeModel };
@@ -124,7 +125,6 @@
       accessState.reason !== WorkspaceAccessReason.MissingProviderConfig,
   );
   const isEmpty = $derived(messages.length === 0);
-  const isChatHttpScope = $derived(chatContextKind === "chat-http");
   /**
    * Cumulative cost / token totals across all assistant messages. Workspace
    * agent tabs hydrate from `session.messages` so assistant messages carry

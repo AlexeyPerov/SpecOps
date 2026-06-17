@@ -17,6 +17,7 @@ import {
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
 import { defaultOpencodeSettings } from "./opencodeSettings";
+import { defaultLogSettings } from "./logSettings";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
@@ -50,7 +51,7 @@ describe("settings mapping", () => {
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
       opencode: defaultOpencodeSettings,
-      logSettings: { verboseProviderLogging: false },
+      logSettings: { ...defaultLogSettings, verboseProviderLogging: false },
       chatModes: defaultChatModesSettings,
       providerSettings: {
         httpConnections: [

@@ -55,7 +55,7 @@ stream normalization (see [questions.md Q2, Q3](./questions.md)).
   and cost. Running total in message footer.
   - Files: new `StepSeparator.svelte`; update `ChatMessageList.svelte`.
 
-- [ ] **M1-T7 — Render file attachments.** Images inline (with click-to-zoom);
+- [x] **M1-T7 — Render file attachments.** Images inline (with click-to-zoom);
   other files as downloadable chips with filename + size.
   - Files: new `FileAttachmentChip.svelte`, `ImageAttachment.svelte`;
   update `ChatMessageList.svelte`.

@@ -15,11 +15,17 @@
     type MessageStepBoundary,
     type MessageStepTotals,
   } from "../ai/chatSteps";
+  import {
+    extractMessageAttachments,
+    type MessageAttachment,
+  } from "../ai/chatAttachments";
   import type { ChatMessage } from "../domain/contracts";
   import ToolCard from "./ToolCard.svelte";
   import ReasoningBlock from "./ReasoningBlock.svelte";
   import SubtaskCard from "./SubtaskCard.svelte";
   import StepSeparator from "./StepSeparator.svelte";
+  import ImageAttachment from "./ImageAttachment.svelte";
+  import FileAttachmentChip from "./FileAttachmentChip.svelte";
 
   interface Props {
     messages: ChatMessage[];
@@ -164,6 +170,19 @@
     return extractMessageStepTotals(message);
   }
 
+  /**
+   * File attachments for a message, split into inline images and downloadable
+   * file chips. Unlike reasoning/subtask/step (assistant-only), file parts
+   * also arrive on user messages (pasted / uploaded attachments), so we do
+   * not gate on role here.
+   */
+  function attachmentsFor(message: ChatMessage): {
+    images: MessageAttachment[];
+    files: MessageAttachment[];
+  } {
+    return extractMessageAttachments(message);
+  }
+
   /** Compact token-count formatting for the running-total footer. */
   function formatFooterTokenCount(value: number): string {
     if (!Number.isFinite(value) || value <= 0) {
@@ -241,6 +260,7 @@
           {@const subtasks = subtasksFor(message)}
           {@const steps = stepsFor(message)}
           {@const stepTotals = stepTotalsFor(message)}
+          {@const attachments = attachmentsFor(message)}
           <li
             class={`chat-message chat-message-${message.role}`}
             class:chat-message-system-event={isSystemEventMessage(message)}
@@ -298,6 +318,20 @@
               <div class="chat-tool-cards">
                 {#each message.toolCalls ?? [] as toolCall (toolCall.callId)}
                   <ToolCard {toolCall} />
+                {/each}
+              </div>
+            {/if}
+            {#if attachments.images.length > 0}
+              <div class="chat-attachments chat-attachments-images">
+                {#each attachments.images as image (image.id)}
+                  <ImageAttachment attachment={image} />
+                {/each}
+              </div>
+            {/if}
+            {#if attachments.files.length > 0}
+              <div class="chat-attachments chat-attachments-files">
+                {#each attachments.files as file (file.id)}
+                  <FileAttachmentChip attachment={file} />
                 {/each}
               </div>
             {/if}
@@ -561,6 +595,29 @@
     flex-direction: column;
     gap: var(--space-3);
     margin-top: var(--space-4);
+  }
+
+  .chat-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+  }
+
+  .chat-attachments-images {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .chat-attachments-files {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  /* When attachments follow tool cards or other attachments, keep a single gap. */
+  .chat-tool-cards + .chat-attachments,
+  .chat-attachments + .chat-attachments {
+    margin-top: var(--space-3);
   }
 
   .chat-subtask-cards {

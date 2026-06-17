@@ -162,10 +162,16 @@ export function snapshotThemeTokens(
 
   for (const key of THEME_TOKEN_KEYS) {
     const inline = root.style.getPropertyValue(cssVarName(key)).trim();
-    const computed =
-      typeof getComputedStyle === "function"
-        ? getComputedStyle(root).getPropertyValue(cssVarName(key)).trim()
-        : "";
+    // `getComputedStyle` throws on non-Element inputs (e.g. test mocks), so
+    // guard it rather than let a stray mock break the snapshot path.
+    let computed = "";
+    if (typeof getComputedStyle === "function") {
+      try {
+        computed = getComputedStyle(root).getPropertyValue(cssVarName(key)).trim();
+      } catch {
+        computed = "";
+      }
+    }
     snapshot[key] = inline || computed || fallback[key];
   }
 

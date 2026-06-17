@@ -1,0 +1,217 @@
+/**
+ * Chat markdown prose styles.
+ *
+ * Applied to the `.chat-prose` wrapper emitted by MarkdownRenderer.svelte.
+ * Because the rendered HTML is injected via `{@html …}`, Svelte cannot scope
+ * styles to it — everything here is global by necessity.
+ *
+ * Highlight.js token colors reuse the editor's `--syntax-*` palette so prose
+ * code blocks match the surrounding editor chrome in both light and dark
+ * themes.
+ */
+
+.chat-prose {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-primary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.chat-prose > :first-child {
+  margin-top: 0;
+}
+
+.chat-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-prose p {
+  margin: 0 0 var(--space-3);
+}
+
+.chat-prose h1,
+.chat-prose h2,
+.chat-prose h3,
+.chat-prose h4,
+.chat-prose h5,
+.chat-prose h6 {
+  margin: var(--space-5) 0 var(--space-2);
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.chat-prose h1 {
+  font-size: 18px;
+}
+
+.chat-prose h2 {
+  font-size: 16px;
+}
+
+.chat-prose h3 {
+  font-size: 14px;
+}
+
+.chat-prose h4,
+.chat-prose h5,
+.chat-prose h6 {
+  font-size: 13px;
+}
+
+.chat-prose ul,
+.chat-prose ol {
+  margin: 0 0 var(--space-3);
+  padding-left: 22px;
+}
+
+.chat-prose li {
+  margin: 2px 0;
+}
+
+.chat-prose li > input[type="checkbox"] {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.chat-prose blockquote {
+  margin: 0 0 var(--space-3);
+  padding: 2px var(--space-3);
+  border-left: 3px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+}
+
+.chat-prose a {
+  color: var(--syntax-link);
+  text-decoration: none;
+}
+
+.chat-prose a:hover {
+  text-decoration: underline;
+}
+
+.chat-prose hr {
+  margin: var(--space-4) 0;
+  border: none;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.chat-prose img {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+}
+
+.chat-prose table {
+  width: 100%;
+  margin: 0 0 var(--space-3);
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.chat-prose th,
+.chat-prose td {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-subtle);
+  text-align: left;
+}
+
+.chat-prose th {
+  background: color-mix(in srgb, var(--color-text-secondary) 8%, transparent);
+  font-weight: 600;
+}
+
+/* Inline code */
+.chat-prose :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  background: color-mix(in srgb, var(--color-text-secondary) 10%, transparent);
+  color: var(--color-text-primary);
+}
+
+/* Fenced code blocks — rendered by chatMarkdown.ts as <pre class="chat-code"> */
+.chat-prose pre.chat-code {
+  position: relative;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+.chat-prose pre.chat-code code {
+  display: block;
+  font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  background: transparent;
+  padding: 0;
+  color: var(--syntax-punctuation);
+}
+
+.chat-prose .chat-code-lang {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* highlight.js token colors — mirror the editor palette. */
+.chat-prose .hljs-comment,
+.chat-prose .hljs-quote {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.chat-prose .hljs-keyword,
+.chat-prose .hljs-selector-tag,
+.chat-prose .hljs-literal,
+.chat-prose .hljs-section,
+.chat-prose .hljs-link {
+  color: var(--syntax-keyword);
+}
+
+.chat-prose .hljs-string,
+.chat-prose .hljs-attr,
+.chat-prose .hljs-template-tag,
+.chat-prose .hljs-addition {
+  color: var(--syntax-string);
+}
+
+.chat-prose .hljs-number,
+.chat-prose .hljs-meta .hljs-keyword {
+  color: var(--syntax-number);
+}
+
+.chat-prose .hljs-title,
+.chat-prose .hljs-type,
+.chat-prose .hljs-class .hljs-title,
+.chat-prose .hljs-built_in {
+  color: var(--syntax-type);
+}
+
+.chat-prose .hljs-attr,
+.chat-prose .hljs-attribute,
+.chat-prose .hljs-variable,
+.chat-prose .hljs-template-variable {
+  color: var(--syntax-markup);
+}
+
+.chat-prose .hljs-symbol,
+.chat-prose .hljs-bullet,
+.chat-prose .hljs-meta,
+.chat-prose .hljs-deletion {
+  color: var(--syntax-heading);
+}

@@ -32,6 +32,7 @@
   import ImageAttachment from "./ImageAttachment.svelte";
   import FileAttachmentChip from "./FileAttachmentChip.svelte";
   import InlineDiff from "./InlineDiff.svelte";
+  import MarkdownRenderer from "./MarkdownRenderer.svelte";
 
   interface Props {
     messages: ChatMessage[];
@@ -101,6 +102,20 @@
     // Keep streaming output in plain text until generation completes to avoid
     // section layout churn while partial markdown headings arrive.
     return !isStreamingAssistantMessage(message, index) && Boolean(structuredSectionsForMessage(message));
+  }
+
+  /**
+   * Whether the message body should render as markdown prose rather than plain
+   * text. Assistant messages get full markdown rendering once they stop
+   * streaming; user messages stay verbatim so the user always sees exactly
+   * what they typed. System notices and structured-review sections bypass this
+   * path entirely.
+   */
+  function shouldRenderMarkdown(message: ChatMessage, index: number): boolean {
+    if (message.role !== "assistant") return false;
+    if (isStreamingAssistantMessage(message, index)) return false;
+    if (shouldRenderStructuredSections(message, index)) return false;
+    return message.content.trim().length > 0;
   }
 
   function reasoningFor(message: ChatMessage, index: number): MessageReasoning | null {
@@ -318,6 +333,10 @@
                   </section>
                 {/each}
               </div>
+            {:else if shouldRenderMarkdown(message, index)}
+              <div class="chat-message-content chat-message-content-prose">
+                <MarkdownRenderer source={message.content} />
+              </div>
             {:else}
               <p class="chat-message-content">
                 {#if message.role === "assistant" && message.content.length === 0 && isStreamingAssistantMessage(message, index)}
@@ -527,6 +546,12 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow-wrap: anywhere;
+  }
+
+  /* Markdown prose container — `white-space` must be normal so block elements
+     inside collapse whitespace the way marked/DOMPurify produced them. */
+  .chat-message-content-prose {
+    white-space: normal;
   }
 
   .chat-review-sections {

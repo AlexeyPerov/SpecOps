@@ -1,6 +1,7 @@
 export type SettingsDialogTab =
   | "editor"
   | "shortcuts"
+  | "appearance"
   | "connections"
   | "chatModes"
   | "debugAi"
@@ -35,6 +36,12 @@ const SHORTCUTS_TAB = {
   id: "shortcuts",
   label: "Shortcuts",
   panelAriaLabel: "Keyboard shortcuts",
+} as const satisfies SettingsTabDefinition;
+
+const APPEARANCE_TAB = {
+  id: "appearance",
+  label: "Appearance",
+  panelAriaLabel: "Appearance and feedback settings",
 } as const satisfies SettingsTabDefinition;
 
 const CONNECTIONS_TAB = {
@@ -118,6 +125,7 @@ const LOGS_TAB = {
 export const SETTINGS_SIDEBAR = [
   { kind: "tab", tab: EDITOR_TAB },
   { kind: "tab", tab: SHORTCUTS_TAB },
+  { kind: "tab", tab: APPEARANCE_TAB },
   { kind: "section", label: "Chats", tabs: [CONNECTIONS_TAB, CHAT_MODES_TAB, DEBUG_AI_TAB] },
   {
     kind: "section",
@@ -140,6 +148,7 @@ export const SETTINGS_SIDEBAR = [
 export const SETTINGS_TABS = [
   EDITOR_TAB,
   SHORTCUTS_TAB,
+  APPEARANCE_TAB,
   CONNECTIONS_TAB,
   CHAT_MODES_TAB,
   DEBUG_AI_TAB,

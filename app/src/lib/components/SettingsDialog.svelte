@@ -20,6 +20,7 @@
   import CommandManagementPanel from "./settings/CommandManagementPanel.svelte";
   import InstructionsPanel from "./settings/InstructionsPanel.svelte";
   import EditorSettingsPanel from "./settings/EditorSettingsPanel.svelte";
+  import AppearancePanel from "./settings/AppearancePanel.svelte";
   import LogsSettingsPanel from "./settings/LogsSettingsPanel.svelte";
   import SettingsDialogMeasure from "./settings/SettingsDialogMeasure.svelte";
   import {
@@ -184,6 +185,8 @@
     <EditorSettingsPanel />
   {:else if tabId === "shortcuts"}
     <KeyboardShortcutsSettings />
+  {:else if tabId === "appearance"}
+    <AppearancePanel />
   {:else if tabId === "connections"}
     <ConnectionsSettingsPanel dialogOpen={open} />
   {:else if tabId === "chatModes"}

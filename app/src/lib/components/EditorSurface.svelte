@@ -138,7 +138,7 @@
         fontSizeCompartment.of(
           EditorView.theme({
             "&": {
-              fontSize: "13px",
+              fontSize: "var(--font-size-editor, 13px)",
             },
           }),
         ),

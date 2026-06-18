@@ -10,11 +10,21 @@
   --font-size-body: 13px;
   --font-weight-normal: 400;
 
+  --space-1: 2px;
   --space-2: 2px;
+  --space-3: 6px;
   --space-4: 4px;
+  --space-5: 10px;
   --space-6: 6px;
   --space-8: 8px;
+  --space-10: 20px;
   --space-12: 12px;
+
+  /* Font-size tokens; defaults preserve the pre-M6 13px base. Overridden at
+     runtime by fontSettingsSlice from the persisted Appearance settings. */
+  --font-size-ui: var(--font-size-body);
+  --font-size-editor: 13px;
+  --font-size-chat: 13px;
 
   --tab-header-height: 32px;
   --statusbar-height: 25px;
@@ -51,6 +61,13 @@
   --color-statusbar-bg: #ebeff6;
   --color-pressed: rgb(20 71 170 / 18%);
 
+  /* Structural surface/border/selection tokens used by phase-3.5 components. */
+  --color-surface-0: color-mix(in srgb, var(--color-bg-root) 60%, var(--color-surface-1));
+  --color-surface-2: color-mix(in srgb, var(--color-surface-1) 88%, var(--color-text-secondary));
+  --color-border-strong: rgb(4 14 26 / 26%);
+  --color-selection: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  --color-danger: #d92d20;
+
   /* Fallbacks before theme JS runs; overridden by applyThemeSyntaxPalette */
   --syntax-keyword: var(--color-accent);
   --syntax-string: #50a14f;
@@ -84,6 +101,13 @@
   --color-statusbar-bg: #101620;
   --color-pressed: rgb(89 152 243 / 26%);
 
+  /* Structural surface/border/selection tokens used by phase-3.5 components. */
+  --color-surface-0: color-mix(in srgb, var(--color-bg-root) 70%, var(--color-surface-1));
+  --color-surface-2: color-mix(in srgb, var(--color-surface-1) 82%, var(--color-text-secondary));
+  --color-border-strong: rgb(215 227 248 / 34%);
+  --color-selection: color-mix(in srgb, var(--color-accent) 32%, transparent);
+  --color-danger: #f97066;
+
   /* Fallbacks before theme JS runs; overridden by applyThemeSyntaxPalette */
   --syntax-keyword: var(--color-accent);
   --syntax-string: #98c379;
@@ -116,7 +140,7 @@ body {
   width: 100%;
   height: 100%;
   font-family: var(--font-family-ui);
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-ui);
   font-weight: var(--font-weight-normal);
   color: var(--color-text-primary);
   background: var(--color-bg-root);

@@ -22,7 +22,7 @@ describe("settingsDialogUi", () => {
       entry.kind === "section" ? entry.tabs.map((tab) => tab.label) : [],
     );
 
-    expect(topLevelLabels).toEqual(["Editor", "Shortcuts"]);
+    expect(topLevelLabels).toEqual(["Editor", "Shortcuts", "Appearance"]);
     expect(sectionLabels).toEqual(["Chats", "Workspaces", "Logging"]);
     expect(sectionTabLabels).toEqual([
       "Providers",
@@ -42,6 +42,7 @@ describe("settingsDialogUi", () => {
     expect(SETTINGS_TABS.map((tab) => tab.label)).toEqual([
       "Editor",
       "Shortcuts",
+      "Appearance",
       "Providers",
       "Chat modes",
       "Debug Provider",

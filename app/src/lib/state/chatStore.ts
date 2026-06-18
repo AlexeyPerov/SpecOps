@@ -184,6 +184,24 @@ export const chatAgentIndex = derived(chatStore, ($chatStore) => {
   return [...($chatStore.workspaces[scopeKey]?.agentIndex ?? [])];
 });
 
+/**
+ * M6-T4/T5 — active workspace's per-agent runtime map, plus its scope key, so
+ * the notification observer effect can react to agent-state transitions for
+ * every agent (not only the selected one). Returns a fresh object reference on
+ * every chatStore change so `$derived` re-runs downstream.
+ */
+export const chatActiveRuntimeByAgentId = derived(
+  chatStore,
+  ($chatStore) => {
+    const scopeKey = $chatStore.activeChatScopeKey;
+    if (!scopeKey) {
+      return { scopeKey: null, runtimeByAgentId: {} };
+    }
+    const runtimeByAgentId = $chatStore.workspaces[scopeKey]?.runtimeByAgentId ?? {};
+    return { scopeKey, runtimeByAgentId: { ...runtimeByAgentId } };
+  },
+);
+
 export type ChatAgentSubtitle = {
   display: string;
   full: string;

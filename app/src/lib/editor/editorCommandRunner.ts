@@ -71,12 +71,28 @@ function applyWrap(
   });
 }
 
+function resolveEditorBaseFontSizePx(): number {
+  if (typeof document !== "undefined") {
+    const raw = getComputedStyle(document.documentElement)
+      .getPropertyValue("--font-size-editor")
+      .trim();
+    if (raw.length > 0) {
+      const parsed = Number.parseFloat(raw);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+  }
+  return 13;
+}
+
 function applyZoom(
   view: EditorView,
   fontSizeCompartment: Compartment,
   nextZoom: number,
 ): void {
-  const px = Math.round((13 * nextZoom) / 100);
+  const base = resolveEditorBaseFontSizePx();
+  const px = Math.round((base * nextZoom) / 100);
   view.dispatch({
     effects: fontSizeCompartment.reconfigure(
       EditorView.theme({

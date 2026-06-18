@@ -78,6 +78,20 @@ export interface LogSettings {
   canOpenLogsPanel: boolean;
 }
 
+/**
+ * Font-size scales for the three rendered surfaces. Values are percentages of
+ * the 13px base (100 = default). M6-T2 covers size only — font families are
+ * intentionally not configurable (see phase-3.5/questions.md Q9).
+ */
+export interface FontSettings {
+  /** UI chrome font scale (body, panels, status bar). */
+  uiScale: number;
+  /** Code editor font scale (composed with editor zoom). */
+  editorScale: number;
+  /** Chat message / prose font scale. */
+  chatScale: number;
+}
+
 export type OpencodeTransportMode = "sidecar" | "url";
 
 export interface OpencodeSettings {
@@ -98,6 +112,39 @@ export interface OpencodeHealthState {
   lastErrorMessage: string | null;
 }
 
+/**
+ * Agent feedback events that can fire sound and/or OS notifications
+ * (phase-3.5/questions.md Q9). Kept in one place so sound and OS settings share
+ * the same event vocabulary.
+ */
+export type NotificationEventId = "agentDone" | "permission" | "question" | "error";
+
+/** The full set of feedback events, in display order. */
+export const NOTIFICATION_EVENT_IDS: readonly NotificationEventId[] = [
+  "agentDone",
+  "permission",
+  "question",
+  "error",
+];
+
+/** Per-event sound configuration (M6-T4). */
+export interface SoundSettings {
+  /** Master sound enable; when false no sound plays for any event. */
+  enabled: boolean;
+  /** Volume gain 0–100 applied to every tone. */
+  volume: number;
+  /** Per-event enable flags. */
+  events: Record<NotificationEventId, boolean>;
+}
+
+/** Per-event OS notification configuration (M6-T5). */
+export interface OsNotificationSettings {
+  /** Master OS notification enable; when false no system notification fires. */
+  enabled: boolean;
+  /** Per-event enable flags. */
+  events: Record<NotificationEventId, boolean>;
+}
+
 export interface AppSettingsState {
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
@@ -110,6 +157,9 @@ export interface AppSettingsState {
   chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
+  fontSettings: FontSettings;
+  soundSettings: SoundSettings;
+  osNotificationSettings: OsNotificationSettings;
   /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
   providerApiKeys: Partial<Record<string, string>>;
 }

@@ -11,7 +11,7 @@
  */
 
 .chat-prose {
-  font-size: 13px;
+  font-size: var(--font-size-chat);
   line-height: 1.55;
   color: var(--color-text-primary);
   word-break: break-word;

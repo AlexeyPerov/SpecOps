@@ -204,6 +204,9 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       providerSettings: snapshot.settings.providerSettings,
       providerModelCatalogs: snapshot.settings.providerModelCatalogs,
       commandBindingOverrides: snapshot.settings.commandBindingOverrides,
+      fontSettings: snapshot.settings.fontSettings,
+      soundSettings: snapshot.settings.soundSettings,
+      osNotificationSettings: snapshot.settings.osNotificationSettings,
     }),
   );
 }

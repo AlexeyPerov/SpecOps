@@ -15,7 +15,12 @@
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
   import { getActiveContextSnapshot } from "../lib/state/appState/contextHelpers";
-  import { chatActiveAgentId, chatAgentIndex, chatStore } from "../lib/state/chatStore";
+  import {
+    chatActiveAgentId,
+    chatActiveRuntimeByAgentId,
+    chatAgentIndex,
+    chatStore,
+  } from "../lib/state/chatStore";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
@@ -60,6 +65,9 @@
     refreshStatusSummary,
     clearStatusSummary,
   } from "../lib/ai/opencodeStatusSummary";
+  import {
+    createAgentNotificationObserver,
+  } from "../lib/services/agentNotificationObserver";
 
   /**
    * Resolves a workspace-relative path (e.g. from an OpenCode diff payload)
@@ -102,6 +110,13 @@
   let untitledTitleDebounceTimer = $state<ReturnType<typeof setTimeout> | null>(null);
   let lastSelectedTabId = $state<string | null>(null);
   let runtimeReady = $state(false);
+  /**
+   * M6-T4/T5 — observes agent runtime transitions in the active workspace and
+   * fires sound + OS notifications. Created once; updated on every chatStore
+   * change via the effect below.
+   */
+  const agentNotificationObserver = createAgentNotificationObserver();
+  const activeRuntimeByAgentId = $derived($chatActiveRuntimeByAgentId);
   let runtimeSyncExternalFileWatcher = $state<
     ((state: AppDomainState) => Promise<void>) | null
   >(null);
@@ -579,6 +594,29 @@
       },
     });
     syncSettingsPersistenceEffect({ runtimeReady, currentWindowId, snapshot });
+  });
+
+  /**
+   * M6-T4/T5 — fire sound + OS notifications when an agent in the active
+   * workspace finishes, requests permission/question, or errors. Reacts to
+   * chatStore runtime transitions (per agent) and the appearance settings.
+   */
+  $effect(() => {
+    runtimeReady;
+    activeRuntimeByAgentId;
+    snapshot.settings.soundSettings;
+    snapshot.settings.osNotificationSettings;
+    if (!runtimeReady) {
+      return;
+    }
+    agentNotificationObserver.update({
+      activeScopeKey: activeRuntimeByAgentId.scopeKey,
+      runtimeByAgentId: activeRuntimeByAgentId.runtimeByAgentId,
+      settings: {
+        sound: snapshot.settings.soundSettings,
+        osNotifications: snapshot.settings.osNotificationSettings,
+      },
+    });
   });
 
   $effect(() => {

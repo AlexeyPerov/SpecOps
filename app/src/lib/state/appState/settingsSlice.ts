@@ -4,10 +4,13 @@ import type {
   AppSettingsState,
   CommandBindingOverrides,
   ExternalFilesSettings,
+  FontSettings,
   LogSettings,
   OpencodeHealthState,
   OpencodeSettings,
+  OsNotificationSettings,
   ProviderModelCatalogs,
+  SoundSettings,
 } from "../../domain/contracts";
 import {
   defaultAppProviderSettings,
@@ -25,8 +28,20 @@ import { setCommandBindingOverrides } from "../../commands/commandBindingRuntime
 import { DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES } from "../../services/binaryFileOpen";
 import { DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES } from "../../services/largeFileOpen";
 import { defaultLogSettings, normalizeLogSettings } from "../../services/logSettings";
+import {
+  defaultFontSettings,
+  normalizeFontSettings,
+} from "../../services/fontSettings";
+import {
+  defaultOsNotificationSettings,
+  defaultSoundSettings,
+  normalizeOsNotificationSettings,
+  normalizeSoundSettings,
+} from "../../services/notificationSettings";
 import { createChatModesSettingsSlice } from "./chatModesSettingsSlice";
+import { createFontSettingsSlice } from "./fontSettingsSlice";
 import { createLogSettingsSlice, type SettingsUpdate } from "./logSettingsSlice";
+import { createNotificationSettingsSlice } from "./notificationSettingsSlice";
 import { createProviderSettingsSlice } from "./providerSettingsSlice";
 import { defaultOpencodeSettings, normalizeOpencodeSettings } from "../../services/opencodeSettings";
 
@@ -56,6 +71,9 @@ export const defaultSettings: AppSettingsState = {
   chatModes: defaultChatModesSettings,
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
+  fontSettings: { ...defaultFontSettings },
+  soundSettings: { ...defaultSoundSettings },
+  osNotificationSettings: { ...defaultOsNotificationSettings },
   providerApiKeys: {},
 };
 
@@ -117,6 +135,9 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       providerSettings?: Partial<AppProviderSettings>;
       providerModelCatalogs?: ProviderModelCatalogs;
       commandBindingOverrides?: CommandBindingOverrides;
+      fontSettings?: Partial<FontSettings>;
+      soundSettings?: Partial<SoundSettings>;
+      osNotificationSettings?: Partial<OsNotificationSettings>;
     }) {
       update((state) => {
         let next = state;
@@ -247,6 +268,45 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
           setCommandBindingOverrides(commandBindingOverrides);
         }
 
+        if (partial.fontSettings) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              fontSettings: normalizeFontSettings({
+                ...next.settings.fontSettings,
+                ...partial.fontSettings,
+              }),
+            },
+          };
+        }
+
+        if (partial.soundSettings) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              soundSettings: normalizeSoundSettings({
+                ...next.settings.soundSettings,
+                ...partial.soundSettings,
+              }),
+            },
+          };
+        }
+
+        if (partial.osNotificationSettings) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              osNotificationSettings: normalizeOsNotificationSettings({
+                ...next.settings.osNotificationSettings,
+                ...partial.osNotificationSettings,
+              }),
+            },
+          };
+        }
+
         return next;
       });
     },
@@ -259,5 +319,7 @@ export function createSettingsSlice(update: SettingsUpdate) {
     ...createProviderSettingsSlice(update),
     ...createChatModesSettingsSlice(update),
     ...createLogSettingsSlice(update),
+    ...createFontSettingsSlice(update),
+    ...createNotificationSettingsSlice(update),
   };
 }

@@ -13,9 +13,12 @@ import type {
   ChatModesSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
+  FontSettings,
   LogSettings,
   OpencodeSettings,
+  OsNotificationSettings,
   ProviderModelCatalogs,
+  SoundSettings,
 } from "../domain/contracts";
 import { normalizeChatModesSettings } from "../ai/modes/chatModesSettings";
 import { normalizeCommandBindingOverrides } from "../commands/commandBindings";
@@ -34,6 +37,16 @@ import {
   defaultOpencodeSettings,
   normalizeOpencodeSettings,
 } from "./opencodeSettings";
+import {
+  defaultFontSettings,
+  normalizeFontSettings,
+} from "./fontSettings";
+import {
+  defaultOsNotificationSettings,
+  defaultSoundSettings,
+  normalizeOsNotificationSettings,
+  normalizeSoundSettings,
+} from "./notificationSettings";
 
 export interface PersistedSettings {
   wrapLines: boolean;
@@ -52,6 +65,9 @@ export interface PersistedSettings {
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
+  fontSettings: FontSettings;
+  soundSettings: SoundSettings;
+  osNotificationSettings: OsNotificationSettings;
 }
 
 export const defaultExternalFilesSettings: ExternalFilesSettings = {
@@ -75,6 +91,9 @@ export const defaultPersistedSettings: PersistedSettings = {
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
   commandBindingOverrides: {},
+  fontSettings: { ...defaultFontSettings },
+  soundSettings: { ...defaultSoundSettings },
+  osNotificationSettings: { ...defaultOsNotificationSettings },
 };
 
 const FILE_NAME = "settings.json";
@@ -144,6 +163,11 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         commandBindingOverrides: normalizeCommandBindingOverrides(
           parsed.commandBindingOverrides,
         ),
+        fontSettings: normalizeFontSettings(parsed.fontSettings),
+        soundSettings: normalizeSoundSettings(parsed.soundSettings),
+        osNotificationSettings: normalizeOsNotificationSettings(
+          parsed.osNotificationSettings,
+        ),
       };
     }
     return null;
@@ -184,6 +208,9 @@ export function toPersistedSettings(input: {
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
+  fontSettings: FontSettings;
+  soundSettings: SoundSettings;
+  osNotificationSettings: OsNotificationSettings;
 }): PersistedSettings {
   const providerModelCatalogs = normalizeProviderModelCatalogs(input.providerModelCatalogs);
   return {
@@ -198,5 +225,8 @@ export function toPersistedSettings(input: {
     providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),
     providerModelCatalogs,
     commandBindingOverrides: normalizeCommandBindingOverrides(input.commandBindingOverrides),
+    fontSettings: normalizeFontSettings(input.fontSettings),
+    soundSettings: normalizeSoundSettings(input.soundSettings),
+    osNotificationSettings: normalizeOsNotificationSettings(input.osNotificationSettings),
   };
 }

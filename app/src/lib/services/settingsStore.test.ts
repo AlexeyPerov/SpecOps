@@ -18,6 +18,11 @@ import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatal
 import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
 import { defaultOpencodeSettings } from "./opencodeSettings";
 import { defaultLogSettings } from "./logSettings";
+import { defaultFontSettings } from "./fontSettings";
+import {
+  defaultOsNotificationSettings,
+  defaultSoundSettings,
+} from "./notificationSettings";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
@@ -98,6 +103,9 @@ describe("settings mapping", () => {
         },
       },
       commandBindingOverrides: {},
+      fontSettings: { ...defaultFontSettings },
+      soundSettings: { ...defaultSoundSettings },
+      osNotificationSettings: { ...defaultOsNotificationSettings },
     });
 
     expect(toExternalFilesSettings(persisted)).toEqual({
@@ -291,5 +299,107 @@ describe("defaultExternalFilesSettings", () => {
       maxBinaryOpenAsTextBytes: 200 * 1024,
       maxOpenWithoutConfirmBytes: 1024 * 1024,
     });
+  });
+});
+
+/**
+ * M6-T3/T6 — keybind customization is implemented in prior milestones
+ * (commands/commandBindings.ts + commandBindingRuntime.ts). This test pins the
+ * settings.json persistence of user-customized keybinds so the round-trip
+ * stays intact.
+ */
+describe("commandBindingOverrides persistence", () => {
+  it("round-trips customized bindings through toPersistedSettings", () => {
+    const overrides = {
+      "file.save": { mac: "Cmd+Shift+S", windows: undefined },
+      "tab.close": { mac: undefined, windows: "Ctrl+Shift+W" },
+    };
+    const persisted = toPersistedSettings({
+      ...defaultPersistedSettings,
+      externalFiles: toExternalFilesSettings(defaultPersistedSettings),
+      commandBindingOverrides: overrides,
+    });
+    expect(persisted.commandBindingOverrides).toEqual({
+      "file.save": { mac: "Cmd+Shift+S", windows: undefined },
+      "tab.close": { mac: undefined, windows: "Ctrl+Shift+W" },
+    });
+  });
+
+  it("loadPersistedSettings preserves customized bindings", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        ...defaultPersistedSettings,
+        commandBindingOverrides: {
+          "file.save": { mac: "Cmd+Shift+S", windows: "Ctrl+Shift+S" },
+        },
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.commandBindingOverrides).toEqual({
+      "file.save": { mac: "Cmd+Shift+S", windows: "Ctrl+Shift+S" },
+    });
+  });
+
+  it("loadPersistedSettings drops malformed binding entries", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        ...defaultPersistedSettings,
+        commandBindingOverrides: {
+          "file.save": { mac: "Cmd+K" },
+          "bad-no-binding": {},
+          "bad-not-object": "Cmd+X",
+        },
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.commandBindingOverrides).toEqual({
+      "file.save": { mac: "Cmd+K", windows: undefined },
+    });
+  });
+});
+
+/**
+ * M6-T2/T4/T5 — appearance settings (font sizes, sound, OS notifications)
+ * survive the settings.json round-trip.
+ */
+describe("appearance settings persistence", () => {
+  it("round-trips font, sound, and OS notification settings", async () => {
+    const custom = {
+      fontSettings: { uiScale: 120, editorScale: 90, chatScale: 110 },
+      soundSettings: {
+        enabled: false,
+        volume: 42,
+        events: {
+          agentDone: true,
+          permission: false,
+          question: true,
+          error: false,
+        },
+      },
+      osNotificationSettings: {
+        enabled: true,
+        events: {
+          agentDone: false,
+          permission: true,
+          question: true,
+          error: true,
+        },
+      },
+    };
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...defaultPersistedSettings, ...custom }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.fontSettings).toEqual(custom.fontSettings);
+    expect(result?.soundSettings).toEqual(custom.soundSettings);
+    expect(result?.osNotificationSettings).toEqual(custom.osNotificationSettings);
+  });
+
+  it("falls back to defaults when appearance settings are absent", async () => {
+    readTextFileMock.mockResolvedValue(JSON.stringify(defaultPersistedSettings));
+    const result = await loadPersistedSettings();
+    expect(result?.fontSettings).toEqual(defaultFontSettings);
+    expect(result?.soundSettings).toEqual(defaultSoundSettings);
+    expect(result?.osNotificationSettings).toEqual(defaultOsNotificationSettings);
   });
 });

@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
+import { applyFontSettingsToDom } from "../state/appState/fontSettingsSlice";
 import { chatStore } from "../state/chatStore";
 import { initializeLogging, logDiagnostic } from "./logging";
 import { listenForRecentFilesChanges } from "./recentFilesSync";
@@ -225,7 +226,14 @@ export async function startAppShellRuntime(
         commandBindingOverrides: persistedSettings.commandBindingOverrides,
         logSettings: persistedSettings.logSettings,
         chatModes: persistedSettings.chatModes,
+        fontSettings: persistedSettings.fontSettings,
+        soundSettings: persistedSettings.soundSettings,
+        osNotificationSettings: persistedSettings.osNotificationSettings,
       });
+      // Reflect persisted font scales on the DOM immediately so the first
+      // paint uses the user's chosen sizes (applyPersistedSettings does not
+      // touch the DOM; only setFontSettings does at change time).
+      applyFontSettingsToDom(persistedSettings.fontSettings);
     }
     for (const [connectionId, apiKey] of Object.entries(connectionApiKeys)) {
       appState.setConnectionApiKey(connectionId, apiKey);

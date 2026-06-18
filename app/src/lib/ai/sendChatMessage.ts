@@ -85,6 +85,7 @@ export async function sendChatMessage(
       activeAgentId: target.activeAgentId,
       turnId,
       modelId: opencodeValidation.modelId,
+      ...(options?.context ? { context: options.context } : {}),
     });
   }
 

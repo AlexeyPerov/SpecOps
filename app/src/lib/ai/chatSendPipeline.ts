@@ -6,6 +6,7 @@ import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence"
 import {
   WorkspaceAgentBackendError,
   createWorkspaceAgentBackend,
+  type WorkspaceAgentSendContext,
 } from "./backends/workspaceAgentBackend";
 import { buildThreadProviderRequest } from "./modes/prompt";
 import {
@@ -110,7 +111,15 @@ export type ChatContextKind = "workspace" | "chat-http";
 
 export interface ChatSendContextOptions {
   chatContextKind?: ChatContextKind;
+  /** Composer-assembled mentions / attachments (M3-T1..T3). Only forwarded
+   * for workspace-agent sends; ignored by Chat-HTTP providers. */
+  context?: WorkspaceAgentSendContext;
+  /** Delivery mode for prompts sent while a turn is running (M3-T5). */
+  queueMode?: ChatQueueMode;
 }
+
+/** How a prompt sent while a turn is running is handled (M3-T5). */
+export type ChatQueueMode = "queue" | "steer";
 
 class TurnCancelledError extends Error {
   constructor() {
@@ -470,6 +479,7 @@ export async function executeProviderTurn(params: {
   modelId: string;
   connectionId?: string;
   previousError?: ChatTurnError | null;
+  context?: WorkspaceAgentSendContext;
 }): Promise<SendChatMessageResult> {
   const { root, chatContextKind, activeAgentId, turnId, modelId, connectionId, previousError } =
     params;
@@ -675,6 +685,7 @@ async function executeWorkspaceAgentBackendTurn(params: {
   modelId: string;
   connectionId?: string;
   previousError?: ChatTurnError | null;
+  context?: WorkspaceAgentSendContext;
 }): Promise<SendChatMessageResult> {
   const { root, activeAgentId, turnId, previousError } = params;
   const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
@@ -734,6 +745,7 @@ async function executeWorkspaceAgentBackendTurn(params: {
       model: modelId || undefined,
       agent: agentId,
       provider: providerId,
+      ...(params.context ? { context: params.context } : {}),
     });
 
     let accumulated = "";

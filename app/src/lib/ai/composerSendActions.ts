@@ -1,6 +1,7 @@
 import { sendChatMessage, retryLastChatTurn } from "./sendChatMessage";
 import { chatStore } from "../state/chatStore";
 import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import type { WorkspaceAgentSendContext } from "./backends/workspaceAgentBackend";
 
 export function persistActiveThreadSnapshot(): void {
   const root = chatStore.getActiveChatScopeKey();
@@ -32,8 +33,18 @@ export interface ComposerSendActionsDeps {
   onInlineError: (message: string) => void;
 }
 
+/**
+ * Extra options the composer can pass per-send (M3). Mention/attachment
+ * context is forwarded into the workspace-agent backend; `onAfterSend` lets
+ * the composer record the sent prompt in history regardless of send result.
+ */
+export interface ComposerSendOptions {
+  context?: WorkspaceAgentSendContext;
+  onAfterSend?: (prompt: string) => void;
+}
+
 export function createComposerSendActions(deps: ComposerSendActionsDeps) {
-  async function submitMessage(): Promise<void> {
+  async function submitMessage(options?: ComposerSendOptions): Promise<void> {
     const content = deps.getDraft().trim();
     if (
       !content ||
@@ -42,9 +53,13 @@ export function createComposerSendActions(deps: ComposerSendActionsDeps) {
       deps.getIsBlocked() ||
       deps.getIsDebugSendBlocked() ||
       deps.getIsHttpSendBlocked() ||
-      deps.getIsModelSendBlocked() ||
-      deps.getIsGenerating()
+      deps.getIsModelSendBlocked()
     ) {
+      return;
+    }
+    // While a turn is running the composer doesn't reach submitMessage — it
+    // enqueues instead. Defensive guard kept for safety.
+    if (deps.getIsGenerating()) {
       return;
     }
 
@@ -54,9 +69,12 @@ export function createComposerSendActions(deps: ComposerSendActionsDeps) {
     try {
       const result = await sendChatMessage(content, undefined, {
         chatContextKind: deps.getChatContextKind(),
+        ...(options?.context ? { context: options.context } : {}),
       });
       if (!result.ok) {
         deps.onInlineError(result.message);
+      } else {
+        options?.onAfterSend?.(content);
       }
     } finally {
       deps.setSubmitInFlight(false);

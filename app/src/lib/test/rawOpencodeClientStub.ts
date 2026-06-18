@@ -95,6 +95,12 @@ export function createRawOpencodeClientStub(
     async listAgents() {
       return { data: [] };
     },
+    async listCommands() {
+      return { data: [] };
+    },
+    async findFiles() {
+      return { data: [] };
+    },
     ...overrides,
   };
 }

@@ -9,6 +9,24 @@ import {
 
 export type WorkspaceAgentBackendId = "opencode" | "cursor-local";
 
+/** Optional context payload assembled by the composer (M3). Mentions and
+ * attachments are forwarded to OpenCode as `parts` on the prompt; the bare
+ * `prompt` text still goes through as a `text` part. */
+export interface WorkspaceAgentSendAttachment {
+  mime: string;
+  filename?: string;
+  url: string;
+}
+
+export interface WorkspaceAgentSendContext {
+  /** File paths mentioned via `@file:…` — appended as context text. */
+  filePaths?: string[];
+  /** Agent names mentioned via `@agent:…` — forwarded as `agent` parts. */
+  agentNames?: string[];
+  /** File attachments (drag-and-drop / file picker). */
+  attachments?: WorkspaceAgentSendAttachment[];
+}
+
 export interface WorkspaceAgentSendRequest {
   prompt: string;
   workspaceRootPath: string;
@@ -16,6 +34,25 @@ export interface WorkspaceAgentSendRequest {
   model?: string;
   agent?: string;
   provider?: string;
+  /** Composer-assembled context (M3-T1..T3). Optional — bare prompts omit it. */
+  context?: WorkspaceAgentSendContext;
+}
+
+/** Slash command returned by `command.list` (M3-T1). Maps OpenCode's
+ * `CommandV2Info` (and the legacy `Command`) shape; tolerates either. */
+export interface OpencodeCommandEntry {
+  name: string;
+  template: string;
+  description?: string;
+  agent?: string;
+  subtask?: boolean;
+}
+
+/** Filesystem entry returned by `fs.find` (M3-T2). */
+export interface OpencodeFileSearchEntry {
+  path: string;
+  type: "file" | "directory";
+  mime: string;
 }
 
 export interface WorkspaceAgentSession {
@@ -349,6 +386,21 @@ export interface WorkspaceAgentBackend {
   listModels(input: { workspaceRootPath: string }): Promise<OpencodeModelEntry[]>;
   listProviders(input: { workspaceRootPath: string }): Promise<OpencodeProviderEntry[]>;
   listAgents(input: { workspaceRootPath: string }): Promise<OpencodeAgentEntry[]>;
+  /**
+   * List slash commands for the workspace (M3-T1). Forwards to
+   * `command.list`; tolerates both the v1 `/command` and v2 `/api/command`
+   * shapes.
+   */
+  listCommands(input: { workspaceRootPath: string }): Promise<OpencodeCommandEntry[]>;
+  /**
+   * Find files in the workspace for `@` mentions (M3-T2). Forwards `query`
+   * to `fs.find` and returns ranked file entries.
+   */
+  findFiles(input: {
+    workspaceRootPath: string;
+    query: string;
+    limit?: number;
+  }): Promise<OpencodeFileSearchEntry[]>;
 }
 
 export class WorkspaceAgentBackendNotImplementedError extends Error {
@@ -370,7 +422,14 @@ export interface RawOpencodeClient {
   getSession(input: { sessionId: string }): Promise<unknown>;
   listSessions(input?: { directory?: string; search?: string; limit?: number }): Promise<unknown>;
   deleteSession(input: { sessionId: string }): Promise<unknown>;
-  sendPrompt(input: { sessionId: string; prompt: string; model?: string; agent?: string; provider?: string }): Promise<unknown>;
+  sendPrompt(input: {
+    sessionId: string;
+    prompt: string;
+    model?: string;
+    agent?: string;
+    provider?: string;
+    context?: WorkspaceAgentSendContext;
+  }): Promise<unknown>;
   replyPermission(input: {
     sessionId: string;
     requestId: string;
@@ -397,6 +456,8 @@ export interface RawOpencodeClient {
   listModels(): Promise<unknown>;
   listProviders(): Promise<unknown>;
   listAgents(): Promise<unknown>;
+  listCommands(): Promise<unknown>;
+  findFiles(input: { query: string; limit?: number }): Promise<unknown>;
 }
 
 interface WorkspaceAgentBackendDependencies {
@@ -1049,6 +1110,53 @@ function mapAgentEntry(raw: unknown): OpencodeAgentEntry | null {
   };
 }
 
+/**
+ * Maps a slash command from either OpenCode shape:
+ *   - v1 `Command`  : `{ name, template, description?, agent?, subtask? }`
+ *   - v2 `CommandV2Info` : same surface (template is always present)
+ * Drops entries without a non-empty `name` / `template` (nothing to insert).
+ */
+function mapCommandEntry(raw: unknown): OpencodeCommandEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const name = readString(parsed.name);
+  const template = readString(parsed.template);
+  if (!name || !template) {
+    return null;
+  }
+  return {
+    name,
+    template,
+    ...(parsed.description !== undefined
+      ? { description: readString(parsed.description) ?? undefined }
+      : {}),
+    ...(parsed.agent !== undefined ? { agent: readString(parsed.agent) ?? undefined } : {}),
+    ...(parsed.subtask !== undefined ? { subtask: Boolean(parsed.subtask) } : {}),
+  };
+}
+
+/** Maps a `FileSystemEntry` from `fs.find`. */
+function mapFileSearchEntry(raw: unknown): OpencodeFileSearchEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const path = readString(parsed.path);
+  if (!path) {
+    return null;
+  }
+  const rawType = parsed.type;
+  const type: "file" | "directory" =
+    rawType === "file" || rawType === "directory" ? rawType : "file";
+  return {
+    path,
+    type,
+    mime: readString(parsed.mime) ?? (type === "directory" ? "inode/directory" : "application/octet-stream"),
+  };
+}
+
 function readQuestionChoices(payload: Record<string, unknown>): string[] {
   const directChoices = Array.isArray(payload.choices) ? payload.choices : [];
   if (directChoices.length > 0) {
@@ -1170,6 +1278,54 @@ function createSdkOpencodeClient(input: {
     return { providerID: providerId, modelID: modelId };
   }
 
+  /**
+   * Builds the `parts` array for `session.prompt` from the bare prompt text
+   * plus the composer-assembled context (M3). The text prompt always comes
+   * first as a `text` part; file mentions are appended as a `text` part
+   * enumerating the paths (so the model knows which files to read); agent
+   * mentions become `agent` parts; attachments become `file` parts.
+   */
+  function buildPromptParts(payload: {
+    prompt: string;
+    context?: WorkspaceAgentSendContext;
+  }): Array<Record<string, unknown>> {
+    const parts: Array<Record<string, unknown>> = [{ type: "text", text: payload.prompt }];
+    const ctx = payload.context;
+    if (!ctx) {
+      return parts;
+    }
+    const filePaths = (ctx.filePaths ?? []).filter((path) => path.trim().length > 0);
+    if (filePaths.length > 0) {
+      parts.push({
+        type: "text",
+        text: `Files:\n${filePaths.map((path) => `- @${path}`).join("\n")}`,
+      });
+    }
+    for (const agentName of (ctx.agentNames ?? [])) {
+      const trimmed = agentName.trim();
+      if (trimmed.length === 0) {
+        continue;
+      }
+      parts.push({ type: "agent", name: trimmed });
+    }
+    for (const attachment of (ctx.attachments ?? [])) {
+      const url = attachment.url.trim();
+      const mime = attachment.mime.trim();
+      if (url.length === 0 || mime.length === 0) {
+        continue;
+      }
+      parts.push({
+        type: "file",
+        mime,
+        ...(attachment.filename && attachment.filename.trim().length > 0
+          ? { filename: attachment.filename.trim() }
+          : {}),
+        url,
+      });
+    }
+    return parts;
+  }
+
   return {
     async createSession(payload) {
       return call(() => sdk.session.create({ title: payload.title }));
@@ -1190,10 +1346,14 @@ function createSdkOpencodeClient(input: {
     },
     async sendPrompt(payload) {
       const model = buildModelInput(payload);
+      const parts = buildPromptParts({ prompt: payload.prompt, context: payload.context });
       return call(() =>
         sdk.session.prompt({
           sessionID: payload.sessionId,
-          parts: [{ type: "text", text: payload.prompt }],
+          // SDK expects a discriminated union of part shapes; we build them
+          // dynamically from the composer context so cast to satisfy TS.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          parts: parts as any,
           agent: payload.agent,
           model,
         }),
@@ -1296,6 +1456,39 @@ function createSdkOpencodeClient(input: {
     async listAgents() {
       return call(() => sdk.app.agents());
     },
+    async listCommands() {
+      // Prefer the v2 namespace (`/api/command`); fall back to v1 (`/command`).
+      try {
+        return await call(() => sdk.v2.command.list());
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "notFound" || error.status === 404)
+        ) {
+          return call(() => sdk.command.list());
+        }
+        throw error;
+      }
+    },
+    async findFiles(payload) {
+      const data = await call(() =>
+        sdk.v2.fs.find({
+          query: payload.query,
+          type: "file",
+          ...(payload.limit ? { limit: String(payload.limit) } : {}),
+        }),
+      );
+      const parsed = readObject(data);
+      if (!parsed) {
+        return [];
+      }
+      // v2 wraps the entries in `{ location, data: [...] }`; the bare array is
+      // also tolerated.
+      const entries = Array.isArray(parsed) ? parsed : Array.isArray(parsed.data) ? parsed.data : [];
+      return entries
+        .map(mapFileSearchEntry)
+        .filter((entry): entry is OpencodeFileSearchEntry => entry !== null);
+    },
   };
 }
 
@@ -1376,6 +1569,12 @@ function createCursorLocalBackend(): WorkspaceAgentBackend {
       return fail();
     },
     async listAgents() {
+      return fail();
+    },
+    async listCommands() {
+      return fail();
+    },
+    async findFiles() {
       return fail();
     },
   };
@@ -1503,6 +1702,7 @@ function createOpencodeBackend(
         model: request.model,
         agent: request.agent,
         provider: request.provider,
+        ...(request.context ? { context: request.context } : {}),
       });
       return mapRunResult(raw, request.sessionId);
     },
@@ -1658,6 +1858,63 @@ function createOpencodeBackend(
         return [];
       }
       return entries.map(mapAgentEntry).filter((entry): entry is OpencodeAgentEntry => entry !== null);
+    },
+    async listCommands(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.listCommands();
+        const entries = unwrapList(raw);
+        if (!entries) {
+          return [];
+        }
+        return entries
+          .map(mapCommandEntry)
+          .filter((entry): entry is OpencodeCommandEntry => entry !== null);
+      } catch (error: unknown) {
+        // Commands are optional for the composer; degrade to empty list on
+        // transport / auth errors rather than blocking the workspace.
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "serverUnavailable" ||
+            error.code === "transportError" ||
+            error.code === "authFailure" ||
+            error.code === "notFound")
+        ) {
+          return [];
+        }
+        throw error;
+      }
+    },
+    async findFiles(input) {
+      const trimmed = input.query.trim();
+      if (trimmed.length === 0) {
+        return [];
+      }
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.findFiles({
+          query: trimmed,
+          ...(input.limit ? { limit: input.limit } : {}),
+        });
+        // The SDK impl already returns OpencodeFileSearchEntry[], but the
+        // RawOpencodeClient interface is typed as `unknown` — normalize so
+        // the public contract holds regardless of client impl.
+        if (Array.isArray(raw)) {
+          return raw as OpencodeFileSearchEntry[];
+        }
+        return [];
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "serverUnavailable" ||
+            error.code === "transportError" ||
+            error.code === "authFailure" ||
+            error.code === "notFound")
+        ) {
+          return [];
+        }
+        throw error;
+      }
     },
   };
 }

@@ -38,6 +38,7 @@
   import { getOpencodeCatalog, refreshOpencodeCatalog } from "../ai/opencodeCatalog";
   import { isOpencodeEnabled } from "../services/opencodeSettings";
   import { extractSessionTotals } from "../ai/chatSteps";
+  import { abortTurn } from "../ai/chatSendPipeline";
   import ChatBlockedState from "./ChatBlockedState.svelte";
   import ChatComposer from "./ChatComposer.svelte";
   import ChatMessageList from "./ChatMessageList.svelte";
@@ -494,6 +495,11 @@
       {opencodeCatalog}
       {activeOpencodeAgentId}
       {activeOpencodeProviderId}
+      onAbortTurn={() => {
+        if (activeAgentId) {
+          abortTurn(activeAgentId, workspaceRootPath);
+        }
+      }}
       onInlineError={(message) => {
         inlineError = message;
       }}

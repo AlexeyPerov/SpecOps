@@ -22,7 +22,12 @@ function createOpencodeBackendForTests(params?: {
   streamEvents?: unknown[];
 }) {
   const calls: Array<{ baseUrl: string; workspaceRootPath: string; serverPassword: string }> = [];
-  const sendPromptCalls: Array<{ sessionId: string; prompt: string; model?: string }> = [];
+  const sendPromptCalls: Array<{
+    sessionId: string;
+    prompt: string;
+    model?: string;
+    context?: { filePaths?: string[]; agentNames?: string[] };
+  }> = [];
   const backend = createWorkspaceAgentBackend("opencode", {
     resolveRuntimeConfig: async () => ({
       mode: params?.mode ?? "url",
@@ -178,6 +183,12 @@ function createOpencodeBackendForTests(params?: {
         },
         async listAgents() {
           return { data: [{ id: "agent-a", name: "Agent A" }] };
+        },
+        async listCommands() {
+          return { data: [] };
+        },
+        async findFiles() {
+          return { data: [] };
         },
       };
     },
@@ -345,6 +356,34 @@ describe("workspaceAgentBackend", () => {
         model: "gpt-4.1",
       },
     ]);
+  });
+
+  it("forwards composer context (mentions + attachments) to sendPrompt", async () => {
+    const { backend, sendPromptCalls } = createOpencodeBackendForTests();
+    await backend.send({
+      workspaceRootPath: "/tmp/workspace",
+      sessionId: "sess-1",
+      prompt: "summarize this",
+      context: {
+        filePaths: ["src/a.ts", "src/b.ts"],
+        agentNames: ["build"],
+        attachments: [
+          { mime: "application/pdf", filename: "doc.pdf", url: "file:///tmp/doc.pdf" },
+        ],
+      },
+    });
+    expect(sendPromptCalls).toHaveLength(1);
+    expect(sendPromptCalls[0]).toMatchObject({
+      sessionId: "sess-1",
+      prompt: "summarize this",
+      context: {
+        filePaths: ["src/a.ts", "src/b.ts"],
+        agentNames: ["build"],
+        attachments: [
+          { mime: "application/pdf", filename: "doc.pdf", url: "file:///tmp/doc.pdf" },
+        ],
+      },
+    });
   });
 
   it("maps session payload validation failures", async () => {
@@ -1008,6 +1047,348 @@ describe("workspaceAgentBackend", () => {
     });
   });
 
+  describe("M3 composer endpoints (commands / file search)", () => {
+    function createBackendForM3(overrides?: {
+      listCommandsResult?: unknown;
+      findFilesResult?: unknown;
+    }) {
+      const calls: Array<{ query: string; limit?: number }> = [];
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+        resolveServerPassword: async () => "",
+        createOpencodeClient: () => ({
+          async createSession() {
+            return { id: "s1" };
+          },
+          async getSession() {
+            return { id: "s1", title: "t" };
+          },
+          async listSessions() {
+            return [];
+          },
+          async deleteSession() {
+            return null;
+          },
+          async sendPrompt() {
+            return { sessionID: "s1" };
+          },
+          async replyPermission() {
+            return null;
+          },
+          async replyQuestion() {
+            return null;
+          },
+          async rejectQuestion() {
+            return null;
+          },
+          async abortSession() {
+            return null;
+          },
+          async *streamEvents() {
+            // noop
+          },
+          async listMessages() {
+            return [];
+          },
+          async updateSession() {
+            return null;
+          },
+          async forkSession() {
+            return null;
+          },
+          async revertSession() {
+            return null;
+          },
+          async unrevertSession() {
+            return null;
+          },
+          async shareSession() {
+            return null;
+          },
+          async unshareSession() {
+            return null;
+          },
+          async summarizeSession() {
+            return true;
+          },
+          async listSessionChildren() {
+            return [];
+          },
+          async listModels() {
+            return { data: [] };
+          },
+          async listProviders() {
+            return { data: [] };
+          },
+          async listAgents() {
+            return { data: [] };
+          },
+          async listCommands() {
+            return (
+              overrides?.listCommandsResult ?? {
+                data: [
+                  { name: "init", template: "Initialize the project" },
+                  {
+                    name: "review",
+                    template: "Review this code",
+                    description: "Run a code review",
+                    agent: "review",
+                    subtask: true,
+                  },
+                ],
+              }
+            );
+          },
+          async findFiles(input) {
+            calls.push(input);
+            // The real SDK client unwraps `{ data: [...] }` and maps entries
+            // before returning, so the client-level stub returns a bare array.
+            return (
+              overrides?.findFilesResult ?? [
+                { path: "src/a.ts", type: "file", mime: "text/x-typescript" },
+                { path: "README.md", type: "file", mime: "text/markdown" },
+              ]
+            );
+          },
+        }),
+      });
+      return { backend, findFilesCalls: calls };
+    }
+
+    it("listCommands maps command entries (drops those without name/template)", async () => {
+      const { backend } = createBackendForM3({
+        listCommandsResult: {
+          data: [
+            { name: "init", template: "Initialize" },
+            { name: "", template: "no name" },
+            { name: "noTemplate" },
+            { name: "review", template: "Review", description: "Code review" },
+          ],
+        },
+      });
+      const commands = await backend.listCommands({ workspaceRootPath: "/repo" });
+      expect(commands).toEqual([
+        { name: "init", template: "Initialize" },
+        { name: "review", template: "Review", description: "Code review" },
+      ]);
+    });
+
+    it("listCommands preserves optional agent / subtask fields", async () => {
+      const { backend } = createBackendForM3();
+      const commands = await backend.listCommands({ workspaceRootPath: "/repo" });
+      const review = commands.find((c) => c.name === "review");
+      expect(review?.agent).toBe("review");
+      expect(review?.subtask).toBe(true);
+    });
+
+    it("listCommands returns [] on transport / auth / notFound errors", async () => {
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+        resolveServerPassword: async () => "",
+        createOpencodeClient: () => ({
+          async createSession() {
+            return { id: "s1" };
+          },
+          async getSession() {
+            return { id: "s1" };
+          },
+          async listSessions() {
+            return [];
+          },
+          async deleteSession() {
+            return null;
+          },
+          async sendPrompt() {
+            return null;
+          },
+          async replyPermission() {
+            return null;
+          },
+          async replyQuestion() {
+            return null;
+          },
+          async rejectQuestion() {
+            return null;
+          },
+          async abortSession() {
+            return null;
+          },
+          async *streamEvents() {
+            // noop
+          },
+          async listMessages() {
+            return [];
+          },
+          async updateSession() {
+            return null;
+          },
+          async forkSession() {
+            return null;
+          },
+          async revertSession() {
+            return null;
+          },
+          async unrevertSession() {
+            return null;
+          },
+          async shareSession() {
+            return null;
+          },
+          async unshareSession() {
+            return null;
+          },
+          async summarizeSession() {
+            return true;
+          },
+          async listSessionChildren() {
+            return [];
+          },
+          async listModels() {
+            return { data: [] };
+          },
+          async listProviders() {
+            return { data: [] };
+          },
+          async listAgents() {
+            return { data: [] };
+          },
+          async listCommands() {
+            throw new WorkspaceAgentBackendError({
+              code: "serverUnavailable",
+              message: "down",
+            });
+          },
+          async findFiles() {
+            return { data: [] };
+          },
+        }),
+      });
+      const commands = await backend.listCommands({ workspaceRootPath: "/repo" });
+      expect(commands).toEqual([]);
+    });
+
+    it("findFiles returns mapped file entries and forwards the query + limit", async () => {
+      const { backend, findFilesCalls } = createBackendForM3();
+      const files = await backend.findFiles({
+        workspaceRootPath: "/repo",
+        query: "src",
+        limit: 10,
+      });
+      expect(files).toEqual([
+        { path: "src/a.ts", type: "file", mime: "text/x-typescript" },
+        { path: "README.md", type: "file", mime: "text/markdown" },
+      ]);
+      expect(findFilesCalls).toEqual([{ query: "src", limit: 10 }]);
+    });
+
+    it("findFiles returns [] for an empty query (skips the server call)", async () => {
+      const { backend, findFilesCalls } = createBackendForM3();
+      const files = await backend.findFiles({ workspaceRootPath: "/repo", query: "   " });
+      expect(files).toEqual([]);
+      expect(findFilesCalls).toEqual([]);
+    });
+
+    it("findFiles tolerates a bare array (no { data: [...] } wrapper)", async () => {
+      const { backend } = createBackendForM3({
+        findFilesResult: [{ path: "x.ts", type: "file", mime: "text/plain" }],
+      });
+      const files = await backend.findFiles({
+        workspaceRootPath: "/repo",
+        query: "x",
+      });
+      expect(files).toEqual([{ path: "x.ts", type: "file", mime: "text/plain" }]);
+    });
+
+    it("findFiles returns [] on transport errors (degrades to agent-only)", async () => {
+      const backend = createWorkspaceAgentBackend("opencode", {
+        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+        resolveServerPassword: async () => "",
+        createOpencodeClient: () => ({
+          async createSession() {
+            return { id: "s1" };
+          },
+          async getSession() {
+            return { id: "s1" };
+          },
+          async listSessions() {
+            return [];
+          },
+          async deleteSession() {
+            return null;
+          },
+          async sendPrompt() {
+            return null;
+          },
+          async replyPermission() {
+            return null;
+          },
+          async replyQuestion() {
+            return null;
+          },
+          async rejectQuestion() {
+            return null;
+          },
+          async abortSession() {
+            return null;
+          },
+          async *streamEvents() {
+            // noop
+          },
+          async listMessages() {
+            return [];
+          },
+          async updateSession() {
+            return null;
+          },
+          async forkSession() {
+            return null;
+          },
+          async revertSession() {
+            return null;
+          },
+          async unrevertSession() {
+            return null;
+          },
+          async shareSession() {
+            return null;
+          },
+          async unshareSession() {
+            return null;
+          },
+          async summarizeSession() {
+            return true;
+          },
+          async listSessionChildren() {
+            return [];
+          },
+          async listModels() {
+            return { data: [] };
+          },
+          async listProviders() {
+            return { data: [] };
+          },
+          async listAgents() {
+            return { data: [] };
+          },
+          async listCommands() {
+            return { data: [] };
+          },
+          async findFiles() {
+            throw new WorkspaceAgentBackendError({
+              code: "transportError",
+              message: "network down",
+            });
+          },
+        }),
+      });
+      const files = await backend.findFiles({
+        workspaceRootPath: "/repo",
+        query: "src",
+      });
+      expect(files).toEqual([]);
+    });
+  });
+
   describe("SDK transport", () => {
     beforeEach(() => {
       vi.unstubAllGlobals();
@@ -1339,6 +1720,12 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
         async listAgents() {
           return { data: [] };
         },
+        async listCommands() {
+          return { data: [] };
+        },
+        async findFiles() {
+          return { data: [] };
+        },
       }),
     });
     return { backend, calls };
@@ -1550,6 +1937,12 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
         async listAgents() {
           return { data: [] };
         },
+        async listCommands() {
+          return { data: [] };
+        },
+        async findFiles() {
+          return { data: [] };
+        },
       }),
     });
     const result = await backend.getSessionDetails({
@@ -1634,6 +2027,12 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
           return { data: [] };
         },
         async listAgents() {
+          return { data: [] };
+        },
+        async listCommands() {
+          return { data: [] };
+        },
+        async findFiles() {
           return { data: [] };
         },
       }),

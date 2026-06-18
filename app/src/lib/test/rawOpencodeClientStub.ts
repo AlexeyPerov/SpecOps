@@ -101,6 +101,49 @@ export function createRawOpencodeClientStub(
     async findFiles() {
       return { data: [] };
     },
+    // M4 — config / provider / mcp / app endpoints
+    async getConfig() {
+      return { data: {} };
+    },
+    async updateConfig() {
+      return { data: {} };
+    },
+    async listProviderStatuses() {
+      return { data: { all: [], connected: [] } };
+    },
+    async listProviderAuthMethods() {
+      return { data: {} };
+    },
+    async setProviderAuth() {
+      return { data: true };
+    },
+    async removeProviderAuth() {
+      return { data: true };
+    },
+    async startProviderOAuth() {
+      return { data: null };
+    },
+    async completeProviderOAuth() {
+      return true;
+    },
+    async listMcpStatuses() {
+      return { data: {} };
+    },
+    async addMcpServer() {
+      return { data: {} };
+    },
+    async connectMcpServer() {
+      return true;
+    },
+    async disconnectMcpServer() {
+      return true;
+    },
+    async listSkills() {
+      return { data: [] };
+    },
+    async listAgentDetails() {
+      return { data: [] };
+    },
     ...overrides,
   };
 }

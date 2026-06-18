@@ -12,6 +12,13 @@
   import ConnectionsSettingsPanel from "./settings/ConnectionsSettingsPanel.svelte";
   import DebugProviderSettingsPanel from "./settings/DebugProviderSettingsPanel.svelte";
   import OpenCodeSettingsPanel from "./settings/OpenCodeSettingsPanel.svelte";
+  import OpenCodeConfigPanel from "./settings/OpenCodeConfigPanel.svelte";
+  import ProviderManagementPanel from "./settings/ProviderManagementPanel.svelte";
+  import McpManagementPanel from "./settings/McpManagementPanel.svelte";
+  import AgentManagementPanel from "./settings/AgentManagementPanel.svelte";
+  import PermissionRulesPanel from "./settings/PermissionRulesPanel.svelte";
+  import CommandManagementPanel from "./settings/CommandManagementPanel.svelte";
+  import InstructionsPanel from "./settings/InstructionsPanel.svelte";
   import EditorSettingsPanel from "./settings/EditorSettingsPanel.svelte";
   import LogsSettingsPanel from "./settings/LogsSettingsPanel.svelte";
   import SettingsDialogMeasure from "./settings/SettingsDialogMeasure.svelte";
@@ -191,6 +198,20 @@
     />
   {:else if tabId === "opencode"}
     <OpenCodeSettingsPanel dialogOpen={open} />
+  {:else if tabId === "openCodeConfig"}
+    <OpenCodeConfigPanel dialogOpen={open} />
+  {:else if tabId === "providers"}
+    <ProviderManagementPanel dialogOpen={open} />
+  {:else if tabId === "mcp"}
+    <McpManagementPanel dialogOpen={open} />
+  {:else if tabId === "agents"}
+    <AgentManagementPanel dialogOpen={open} />
+  {:else if tabId === "permissions"}
+    <PermissionRulesPanel dialogOpen={open} />
+  {:else if tabId === "commands"}
+    <CommandManagementPanel dialogOpen={open} />
+  {:else if tabId === "instructions"}
+    <InstructionsPanel dialogOpen={open} />
   {:else if tabId === "logs"}
     <LogsSettingsPanel />
   {:else if tabId === "debugAgent"}

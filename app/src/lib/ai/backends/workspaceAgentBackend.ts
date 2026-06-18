@@ -144,6 +144,124 @@ export interface OpencodeAgentEntry {
   name: string;
 }
 
+// ---------------------------------------------------------------------------
+// M4 — Configuration management types.
+//
+// These are deliberately loose (`Record<string, unknown>` for nested config
+// blobs) rather than mirroring the OpenCode `Config` type verbatim. OpenCode's
+// config schema is large and evolves; we read/write the known top-level keys
+// (model, small_model, username, share, etc.) with typed helpers in
+// `opencodeConfig.ts` and treat everything else as an opaque JSON object the
+// raw-JSON tab can still edit. This keeps the backend contract stable across
+// SDK releases.
+// ---------------------------------------------------------------------------
+
+/** Raw OpenCode config document — the body of `config.get` / `config.update`. */
+export type OpencodeConfigDocument = Record<string, unknown>;
+
+/** A configured slash command entry from the `command:` config key (M4-T6). */
+export interface OpencodeCommandConfigEntry {
+  template: string;
+  description?: string;
+  agent?: string;
+  model?: string;
+  variant?: string;
+  subtask?: boolean;
+}
+
+/** Agent definition from the `agent:` config key (M4-T4). */
+export interface OpencodeAgentConfigEntry {
+  model?: string;
+  variant?: string;
+  temperature?: number;
+  topP?: number;
+  prompt?: string;
+  tools?: Record<string, boolean>;
+  disable?: boolean;
+  description?: string;
+  mode?: "subagent" | "primary" | "all";
+  hidden?: boolean;
+  color?: string;
+  steps?: number;
+  maxSteps?: number;
+  permission?: OpencodePermissionConfig;
+}
+
+/** Permission config shape — either a single action or a per-tool map (M4-T5). */
+export type OpencodePermissionConfig =
+  | "allow"
+  | "deny"
+  | "ask"
+  | Record<string, unknown>;
+
+/** Permission rule row for the visual editor (M4-T5). */
+export interface OpencodePermissionRule {
+  permission: string;
+  pattern: string;
+  action: "allow" | "deny" | "ask";
+}
+
+/** Provider entry enriched with auth + model info (M4-T2). */
+export interface OpencodeProviderStatus {
+  id: string;
+  name: string;
+  connected: boolean;
+  /** Number of models the provider exposes (best-effort count). */
+  modelCount: number;
+  source?: string;
+}
+
+/** Provider auth method descriptor (M4-T2). */
+export interface OpencodeProviderAuthMethod {
+  type: "oauth" | "api";
+  label: string;
+}
+
+/** MCP server status entry (M4-T3). */
+export interface OpencodeMcpStatusEntry {
+  name: string;
+  status:
+    | "connected"
+    | "disabled"
+    | "failed"
+    | "needs_auth"
+    | "needs_client_registration";
+  /** Error message present on `failed` / `needs_client_registration` statuses. */
+  error?: string;
+  /** Connection type when discoverable from config; null when unknown. */
+  type?: "local" | "remote";
+  enabled: boolean;
+}
+
+/** Local (stdio) MCP server config (M4-T3). */
+export interface OpencodeMcpLocalConfig {
+  type: "local";
+  command: string[];
+  cwd?: string;
+  environment?: Record<string, string>;
+  enabled?: boolean;
+  timeout?: number;
+}
+
+/** Remote (HTTP/SSE) MCP server config (M4-T3). */
+export interface OpencodeMcpRemoteConfig {
+  type: "remote";
+  url: string;
+  enabled?: boolean;
+  headers?: Record<string, string>;
+  oauth?: Record<string, unknown> | false;
+  timeout?: number;
+}
+
+export type OpencodeMcpConfig = OpencodeMcpLocalConfig | OpencodeMcpRemoteConfig;
+
+/** Discovered skill entry (M4-T7). */
+export interface OpencodeSkillEntry {
+  name: string;
+  description?: string;
+  location: string;
+}
+
 export type WorkspaceAgentStreamEvent =
   | {
       type: "message.delta";
@@ -401,6 +519,126 @@ export interface WorkspaceAgentBackend {
     query: string;
     limit?: number;
   }): Promise<OpencodeFileSearchEntry[]>;
+  // -------------------------------------------------------------------------
+  // M4 — Configuration management. The config lifecycle is read (`config.get`)
+  // → local edit → write (`config.update`). Provider / MCP / agent / skill
+  // helpers wrap their dedicated endpoints; config-backed ones (agents,
+  // commands, permissions, instructions) funnel through `updateConfig`.
+  // -------------------------------------------------------------------------
+  /**
+   * Read the OpenCode config document for the workspace (M4-T1). Forwards to
+   * `config.get` and unwraps the `.data` payload.
+   */
+  getConfig(input: { workspaceRootPath: string }): Promise<OpencodeConfigDocument>;
+  /**
+   * Replace the OpenCode config document (M4-T1). Forwards the full document
+   * to `config.update`. Callers should read → mutate → write to avoid clobbering
+   * keys they don't render form fields for.
+   */
+  updateConfig(input: {
+    workspaceRootPath: string;
+    config: OpencodeConfigDocument;
+  }): Promise<OpencodeConfigDocument>;
+  /**
+   * List providers with connection + model-count info (M4-T2). Merges
+   * `provider.list` (which carries `all` + `connected`) with optional model
+   * counts from `config.providers`.
+   */
+  listProviderStatuses(input: {
+    workspaceRootPath: string;
+  }): Promise<OpencodeProviderStatus[]>;
+  /**
+   * Set a provider's API key (M4-T2). Stores the key in the OpenCode config /
+   * auth store via `auth.set`; SpecOps never persists provider keys itself.
+   */
+  setProviderApiKey(input: {
+    workspaceRootPath: string;
+    providerId: string;
+    apiKey: string;
+  }): Promise<boolean>;
+  /**
+   * Remove a provider's stored credentials (M4-T2).
+   */
+  removeProviderAuth(input: {
+    workspaceRootPath: string;
+    providerId: string;
+  }): Promise<boolean>;
+  /**
+   * Start a provider OAuth flow (M4-T2). Returns the auth URL the caller should
+   * open in a browser; the flow completes via `completeProviderOAuth` with the
+   * code from the callback redirect.
+   */
+  startProviderOAuth(input: {
+    workspaceRootPath: string;
+    providerId: string;
+  }): Promise<string | null>;
+  /**
+   * Complete a provider OAuth flow with the returned code (M4-T2).
+   */
+  completeProviderOAuth(input: {
+    workspaceRootPath: string;
+    providerId: string;
+    code?: string;
+  }): Promise<boolean>;
+  /**
+   * List MCP servers with connection status (M4-T3). Forwards to `mcp.status`.
+   */
+  listMcpStatuses(input: {
+    workspaceRootPath: string;
+  }): Promise<OpencodeMcpStatusEntry[]>;
+  /**
+   * Add an MCP server (M4-T3). Forwards name + config to `mcp.add`.
+   */
+  addMcpServer(input: {
+    workspaceRootPath: string;
+    name: string;
+    config: OpencodeMcpConfig;
+  }): Promise<OpencodeMcpStatusEntry[]>;
+  /**
+   * Connect a configured MCP server (M4-T3).
+   */
+  connectMcpServer(input: {
+    workspaceRootPath: string;
+    name: string;
+  }): Promise<boolean>;
+  /**
+   * Disconnect an MCP server (M4-T3).
+   */
+  disconnectMcpServer(input: {
+    workspaceRootPath: string;
+    name: string;
+  }): Promise<boolean>;
+  /**
+   * List discovered skills for the workspace (M4-T7). Forwards to `app.skills`.
+   */
+  listSkills(input: { workspaceRootPath: string }): Promise<OpencodeSkillEntry[]>;
+  /**
+   * List enriched agents (built-in + custom) for the agent management panel
+   * (M4-T4). Forwards to `app.agents` and maps the richer `Agent` shape.
+   */
+  listAgentDetails(input: {
+    workspaceRootPath: string;
+  }): Promise<OpencodeAgentDetail[]>;
+}
+
+/**
+ * Rich agent descriptor for the agent management panel (M4-T4). Maps the
+ * OpenCode `Agent` shape (from `app.agents`); built-in agents have
+ * `builtin: true` and cannot be deleted.
+ */
+export interface OpencodeAgentDetail {
+  name: string;
+  description?: string;
+  mode: "subagent" | "primary" | "all";
+  builtin: boolean;
+  hidden?: boolean;
+  color?: string;
+  model?: { modelId: string; providerId: string };
+  variant?: string;
+  prompt?: string;
+  steps?: number;
+  /** Permission ruleset summary (count of rules) — full editing via config. */
+  permissionRuleCount: number;
 }
 
 export class WorkspaceAgentBackendNotImplementedError extends Error {
@@ -458,6 +696,21 @@ export interface RawOpencodeClient {
   listAgents(): Promise<unknown>;
   listCommands(): Promise<unknown>;
   findFiles(input: { query: string; limit?: number }): Promise<unknown>;
+  // M4 — config / provider / mcp / app endpoints
+  getConfig(): Promise<unknown>;
+  updateConfig(config: OpencodeConfigDocument): Promise<unknown>;
+  listProviderStatuses(): Promise<unknown>;
+  listProviderAuthMethods(): Promise<unknown>;
+  setProviderAuth(providerId: string, apiKey: string): Promise<unknown>;
+  removeProviderAuth(providerId: string): Promise<unknown>;
+  startProviderOAuth(providerId: string): Promise<unknown>;
+  completeProviderOAuth(providerId: string, code?: string): Promise<unknown>;
+  listMcpStatuses(): Promise<unknown>;
+  addMcpServer(name: string, config: OpencodeMcpConfig): Promise<unknown>;
+  connectMcpServer(name: string): Promise<unknown>;
+  disconnectMcpServer(name: string): Promise<unknown>;
+  listSkills(): Promise<unknown>;
+  listAgentDetails(): Promise<unknown>;
 }
 
 interface WorkspaceAgentBackendDependencies {
@@ -1157,6 +1410,195 @@ function mapFileSearchEntry(raw: unknown): OpencodeFileSearchEntry | null {
   };
 }
 
+// --- M4 config-management mappers -------------------------------------------
+
+/**
+ * Maps the `provider.list` payload (`{ all: Provider[], connected: string[], default }`)
+ * into SpecOps' `OpencodeProviderStatus[]`. Each provider carries a best-effort
+ * model count (length of its `models` map).
+ */
+function mapProviderStatus(raw: unknown): OpencodeProviderStatus[] {
+  const parsed = readObject(unwrapDataPayload(raw)) ?? unwrapDataPayload(raw);
+  const obj = readObject(parsed);
+  if (!obj) {
+    return [];
+  }
+  const all = Array.isArray(obj.all) ? obj.all : [];
+  const connectedList = Array.isArray(obj.connected) ? obj.connected : [];
+  const connectedSet = new Set(
+    connectedList.filter((entry): entry is string => typeof entry === "string"),
+  );
+  return all
+    .map((entry): OpencodeProviderStatus | null => {
+      const provider = readObject(entry);
+      if (!provider) {
+        return null;
+      }
+      const id = readString(provider.id);
+      if (!id) {
+        return null;
+      }
+      const modelsMap = readObject(provider.models);
+      const modelCount = modelsMap ? Object.keys(modelsMap).length : 0;
+      const source = readString(provider.source) ?? undefined;
+      return {
+        id,
+        name: readString(provider.name) ?? id,
+        connected: connectedSet.has(id),
+        modelCount,
+        ...(source ? { source } : {}),
+      };
+    })
+    .filter((entry): entry is OpencodeProviderStatus => entry !== null);
+}
+
+/** Maps an MCP status map (`{ [name]: McpStatus }`) into display entries. */
+function mapMcpStatuses(raw: unknown): OpencodeMcpStatusEntry[] {
+  const parsed = readObject(unwrapDataPayload(raw));
+  if (!parsed) {
+    return [];
+  }
+  return Object.entries(parsed)
+    .map(([name, value]): OpencodeMcpStatusEntry | null => {
+      const statusObj = readObject(value);
+      if (!statusObj) {
+        return null;
+      }
+      const rawStatus = readString(statusObj.status);
+      if (!rawStatus) {
+        return null;
+      }
+      const status = (
+        rawStatus === "connected" ||
+        rawStatus === "disabled" ||
+        rawStatus === "failed" ||
+        rawStatus === "needs_auth" ||
+        rawStatus === "needs_client_registration"
+          ? rawStatus
+          : "failed"
+      ) as OpencodeMcpStatusEntry["status"];
+      const error = readString(statusObj.error) ?? undefined;
+      const enabled = status !== "disabled";
+      const entry: OpencodeMcpStatusEntry = { name, status, enabled };
+      if (error) {
+        entry.error = error;
+      }
+      return entry;
+    })
+    .filter((entry): entry is OpencodeMcpStatusEntry => entry !== null);
+}
+
+/** Maps an `app.skills` entry (`{ name, description?, location, content }`). */
+function mapSkillEntry(raw: unknown): OpencodeSkillEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const name = readString(parsed.name);
+  const location = readString(parsed.location);
+  if (!name || !location) {
+    return null;
+  }
+  return {
+    name,
+    location,
+    ...(parsed.description !== undefined
+      ? { description: readString(parsed.description) ?? undefined }
+      : {}),
+  };
+}
+
+/** Maps an `app.agents` entry (richer `Agent` shape) for the management panel. */
+function mapAgentDetail(raw: unknown): OpencodeAgentDetail | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const name = readString(parsed.name);
+  if (!name) {
+    return null;
+  }
+  const rawMode = readString(parsed.mode);
+  const mode: OpencodeAgentDetail["mode"] =
+    rawMode === "subagent" || rawMode === "primary" || rawMode === "all"
+      ? rawMode
+      : "all";
+  const permissionRules = Array.isArray(parsed.permission) ? parsed.permission : [];
+  const modelObj = readObject(parsed.model);
+  const model = modelObj
+    ? {
+        modelId: readString(modelObj.modelID) ?? readString(modelObj.modelId) ?? "",
+        providerId: readString(modelObj.providerID) ?? readString(modelObj.providerId) ?? "",
+      }
+    : undefined;
+  const detail: OpencodeAgentDetail = {
+    name,
+    mode,
+    builtin: parsed.native === true,
+    permissionRuleCount: permissionRules.length,
+  };
+  if (parsed.description !== undefined) {
+    detail.description = readString(parsed.description) ?? undefined;
+  }
+  if (parsed.hidden !== undefined) {
+    detail.hidden = Boolean(parsed.hidden);
+  }
+  if (parsed.color !== undefined) {
+    detail.color = readString(parsed.color) ?? undefined;
+  }
+  if (model) {
+    detail.model = model;
+  }
+  if (parsed.variant !== undefined) {
+    detail.variant = readString(parsed.variant) ?? undefined;
+  }
+  if (parsed.prompt !== undefined) {
+    detail.prompt = readString(parsed.prompt) ?? undefined;
+  }
+  if (parsed.steps !== undefined) {
+    const steps = readNumber(parsed.steps);
+    if (steps !== null) {
+      detail.steps = steps;
+    }
+  }
+  return detail;
+}
+
+/**
+ * Reads the OAuth authorization URL from a `provider.oauth.authorize` payload.
+ * OpenCode may return either a bare URL string or an object carrying `url`.
+ * Returns null when no usable URL is present.
+ */
+function readOAuthUrl(raw: unknown): string | null {
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    return raw;
+  }
+  // Tolerate a `{ data: "url" }` or `{ data: { url } }` wrapper.
+  const unwrapped = unwrapDataPayload(raw);
+  if (typeof unwrapped === "string" && unwrapped.trim().length > 0) {
+    return unwrapped;
+  }
+  const candidate = readObject(unwrapped) ?? readObject(raw);
+  if (!candidate) {
+    return null;
+  }
+  return (
+    readString(candidate.url) ??
+    readString(candidate.authorization_url) ??
+    readString(candidate.authUrl)
+  );
+}
+
+/** Reads the config document from a `config.get` / `config.update` payload. */
+function mapConfigDocument(raw: unknown): OpencodeConfigDocument {
+  const unwrapped = unwrapDataPayload(raw);
+  const parsed = readObject(unwrapped);
+  if (!parsed) {
+    return {};
+  }
+  return parsed;
+}
+
 function readQuestionChoices(payload: Record<string, unknown>): string[] {
   const directChoices = Array.isArray(payload.choices) ? payload.choices : [];
   if (directChoices.length > 0) {
@@ -1489,6 +1931,59 @@ function createSdkOpencodeClient(input: {
         .map(mapFileSearchEntry)
         .filter((entry): entry is OpencodeFileSearchEntry => entry !== null);
     },
+    // --- M4 config management -------------------------------------------------
+    async getConfig() {
+      return call(() => sdk.config.get());
+    },
+    async updateConfig(config) {
+      return call(() => sdk.config.update({ config }));
+    },
+    async listProviderStatuses() {
+      return call(() => sdk.provider.list());
+    },
+    async listProviderAuthMethods() {
+      return call(() => sdk.provider.auth());
+    },
+    async setProviderAuth(providerId, apiKey) {
+      return call(() =>
+        sdk.auth.set({ providerID: providerId, auth: { type: "api", key: apiKey } }),
+      );
+    },
+    async removeProviderAuth(providerId) {
+      return call(() => sdk.auth.remove({ providerID: providerId }));
+    },
+    async startProviderOAuth(providerId) {
+      const data = await call(() => sdk.provider.oauth.authorize({ providerID: providerId }));
+      // `authorize` returns an auth URL (or an object carrying `url`); surface
+      // the URL string so the UI can open it, or null when already authed.
+      return readOAuthUrl(data);
+    },
+    async completeProviderOAuth(providerId, code) {
+      await call(() =>
+        sdk.provider.oauth.callback({ providerID: providerId, ...(code ? { code } : {}) }),
+      );
+      return true;
+    },
+    async listMcpStatuses() {
+      return call(() => sdk.mcp.status());
+    },
+    async addMcpServer(name, config) {
+      return call(() => sdk.mcp.add({ name, config }));
+    },
+    async connectMcpServer(name) {
+      await call(() => sdk.mcp.connect({ name }));
+      return true;
+    },
+    async disconnectMcpServer(name) {
+      await call(() => sdk.mcp.disconnect({ name }));
+      return true;
+    },
+    async listSkills() {
+      return call(() => sdk.app.skills());
+    },
+    async listAgentDetails() {
+      return call(() => sdk.app.agents());
+    },
   };
 }
 
@@ -1575,6 +2070,46 @@ function createCursorLocalBackend(): WorkspaceAgentBackend {
       return fail();
     },
     async findFiles() {
+      return fail();
+    },
+    // M4 — config management (cursor-local not implemented yet)
+    async getConfig() {
+      return fail();
+    },
+    async updateConfig() {
+      return fail();
+    },
+    async listProviderStatuses() {
+      return fail();
+    },
+    async setProviderApiKey() {
+      return fail();
+    },
+    async removeProviderAuth() {
+      return fail();
+    },
+    async startProviderOAuth() {
+      return fail();
+    },
+    async completeProviderOAuth() {
+      return fail();
+    },
+    async listMcpStatuses() {
+      return fail();
+    },
+    async addMcpServer() {
+      return fail();
+    },
+    async connectMcpServer() {
+      return fail();
+    },
+    async disconnectMcpServer() {
+      return fail();
+    },
+    async listSkills() {
+      return fail();
+    },
+    async listAgentDetails() {
       return fail();
     },
   };
@@ -1915,6 +2450,157 @@ function createOpencodeBackend(
         }
         throw error;
       }
+    },
+    // --- M4 — config management ---------------------------------------------
+    async getConfig(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.getConfig();
+      return mapConfigDocument(raw);
+    },
+    async updateConfig(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.updateConfig(input.config);
+      return mapConfigDocument(raw);
+    },
+    async listProviderStatuses(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.listProviderStatuses();
+      return mapProviderStatus(raw);
+    },
+    async setProviderApiKey(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        await client.setProviderAuth(input.providerId, input.apiKey);
+        return true;
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "authFailure" || error.code === "notFound")
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    },
+    async removeProviderAuth(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        await client.removeProviderAuth(input.providerId);
+        return true;
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "authFailure" || error.code === "notFound")
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    },
+    async startProviderOAuth(input): Promise<string | null> {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.startProviderOAuth(input.providerId);
+        return readOAuthUrl(raw);
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "notFound" || error.code === "authFailure")
+        ) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    async completeProviderOAuth(input): Promise<boolean> {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        return Boolean(await client.completeProviderOAuth(input.providerId, input.code));
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "notFound" || error.code === "authFailure")
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    },
+    async listMcpStatuses(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.listMcpStatuses();
+      return mapMcpStatuses(raw);
+    },
+    async addMcpServer(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.addMcpServer(input.name, input.config);
+      return mapMcpStatuses(raw);
+    },
+    async connectMcpServer(input): Promise<boolean> {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        await client.connectMcpServer(input.name);
+        return true;
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          error.code === "notFound"
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    },
+    async disconnectMcpServer(input): Promise<boolean> {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        await client.disconnectMcpServer(input.name);
+        return true;
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          error.code === "notFound"
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    },
+    async listSkills(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.listSkills();
+        const entries = unwrapList(raw);
+        if (!entries) {
+          return [];
+        }
+        return entries
+          .map(mapSkillEntry)
+          .filter((entry): entry is OpencodeSkillEntry => entry !== null);
+      } catch (error: unknown) {
+        // Skills are optional; degrade to empty list rather than blocking the panel.
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "serverUnavailable" ||
+            error.code === "transportError" ||
+            error.code === "authFailure" ||
+            error.code === "notFound")
+        ) {
+          return [];
+        }
+        throw error;
+      }
+    },
+    async listAgentDetails(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      const raw = await client.listAgentDetails();
+      const entries = unwrapList(raw);
+      if (!entries) {
+        return [];
+      }
+      return entries
+        .map(mapAgentDetail)
+        .filter((entry): entry is OpencodeAgentDetail => entry !== null);
     },
   };
 }

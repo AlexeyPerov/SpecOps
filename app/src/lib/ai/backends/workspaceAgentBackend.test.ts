@@ -6,6 +6,7 @@ import {
   type WorkspaceAgentBackendErrorCode,
   type WorkspaceAgentStreamEvent,
 } from "./workspaceAgentBackend";
+import { createRawOpencodeClientStub } from "../../test/rawOpencodeClientStub";
 
 function createOpencodeBackendForTests(params?: {
   mode?: "sidecar" | "url";
@@ -36,7 +37,7 @@ function createOpencodeBackendForTests(params?: {
     resolveServerPassword: async () => "",
     createOpencodeClient: (input) => {
       calls.push(input);
-      return {
+      return createRawOpencodeClientStub({
         async createSession() {
           return params?.createSessionResult ?? {
             id: "sess-1",
@@ -184,13 +185,7 @@ function createOpencodeBackendForTests(params?: {
         async listAgents() {
           return { data: [{ id: "agent-a", name: "Agent A" }] };
         },
-        async listCommands() {
-          return { data: [] };
-        },
-        async findFiles() {
-          return { data: [] };
-        },
-      };
+      });
     },
   });
   return { backend, calls, sendPromptCalls };
@@ -1056,101 +1051,102 @@ describe("workspaceAgentBackend", () => {
       const backend = createWorkspaceAgentBackend("opencode", {
         resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
         resolveServerPassword: async () => "",
-        createOpencodeClient: () => ({
-          async createSession() {
-            return { id: "s1" };
-          },
-          async getSession() {
-            return { id: "s1", title: "t" };
-          },
-          async listSessions() {
-            return [];
-          },
-          async deleteSession() {
-            return null;
-          },
-          async sendPrompt() {
-            return { sessionID: "s1" };
-          },
-          async replyPermission() {
-            return null;
-          },
-          async replyQuestion() {
-            return null;
-          },
-          async rejectQuestion() {
-            return null;
-          },
-          async abortSession() {
-            return null;
-          },
-          async *streamEvents() {
-            // noop
-          },
-          async listMessages() {
-            return [];
-          },
-          async updateSession() {
-            return null;
-          },
-          async forkSession() {
-            return null;
-          },
-          async revertSession() {
-            return null;
-          },
-          async unrevertSession() {
-            return null;
-          },
-          async shareSession() {
-            return null;
-          },
-          async unshareSession() {
-            return null;
-          },
-          async summarizeSession() {
-            return true;
-          },
-          async listSessionChildren() {
-            return [];
-          },
-          async listModels() {
-            return { data: [] };
-          },
-          async listProviders() {
-            return { data: [] };
-          },
-          async listAgents() {
-            return { data: [] };
-          },
-          async listCommands() {
-            return (
-              overrides?.listCommandsResult ?? {
-                data: [
-                  { name: "init", template: "Initialize the project" },
-                  {
-                    name: "review",
-                    template: "Review this code",
-                    description: "Run a code review",
-                    agent: "review",
-                    subtask: true,
-                  },
-                ],
-              }
-            );
-          },
-          async findFiles(input) {
-            calls.push(input);
-            // The real SDK client unwraps `{ data: [...] }` and maps entries
-            // before returning, so the client-level stub returns a bare array.
-            return (
-              overrides?.findFilesResult ?? [
-                { path: "src/a.ts", type: "file", mime: "text/x-typescript" },
-                { path: "README.md", type: "file", mime: "text/markdown" },
-              ]
-            );
-          },
-        }),
+        createOpencodeClient: () =>
+          createRawOpencodeClientStub({
+            async createSession() {
+              return { id: "s1" };
+            },
+            async getSession() {
+              return { id: "s1", title: "t" };
+            },
+            async listSessions() {
+              return [];
+            },
+            async deleteSession() {
+              return null;
+            },
+            async sendPrompt() {
+              return { sessionID: "s1" };
+            },
+            async replyPermission() {
+              return null;
+            },
+            async replyQuestion() {
+              return null;
+            },
+            async rejectQuestion() {
+              return null;
+            },
+            async abortSession() {
+              return null;
+            },
+            async *streamEvents() {
+              // noop
+            },
+            async listMessages() {
+              return [];
+            },
+            async updateSession() {
+              return null;
+            },
+            async forkSession() {
+              return null;
+            },
+            async revertSession() {
+              return null;
+            },
+            async unrevertSession() {
+              return null;
+            },
+            async shareSession() {
+              return null;
+            },
+            async unshareSession() {
+              return null;
+            },
+            async summarizeSession() {
+              return true;
+            },
+            async listSessionChildren() {
+              return [];
+            },
+            async listModels() {
+              return { data: [] };
+            },
+            async listProviders() {
+              return { data: [] };
+            },
+            async listAgents() {
+              return { data: [] };
+            },
+            async listCommands() {
+              return (
+                overrides?.listCommandsResult ?? {
+                  data: [
+                    { name: "init", template: "Initialize the project" },
+                    {
+                      name: "review",
+                      template: "Review this code",
+                      description: "Run a code review",
+                      agent: "review",
+                      subtask: true,
+                    },
+                  ],
+                }
+              );
+            },
+            async findFiles(input) {
+              calls.push(input);
+              // The real SDK client unwraps `{ data: [...] }` and maps entries
+              // before returning, so the client-level stub returns a bare array.
+              return (
+                overrides?.findFilesResult ?? [
+                  { path: "src/a.ts", type: "file", mime: "text/x-typescript" },
+                  { path: "README.md", type: "file", mime: "text/markdown" },
+                ]
+              );
+            },
+          }),
       });
       return { backend, findFilesCalls: calls };
     }
@@ -1185,83 +1181,81 @@ describe("workspaceAgentBackend", () => {
       const backend = createWorkspaceAgentBackend("opencode", {
         resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
         resolveServerPassword: async () => "",
-        createOpencodeClient: () => ({
-          async createSession() {
-            return { id: "s1" };
-          },
-          async getSession() {
-            return { id: "s1" };
-          },
-          async listSessions() {
-            return [];
-          },
-          async deleteSession() {
-            return null;
-          },
-          async sendPrompt() {
-            return null;
-          },
-          async replyPermission() {
-            return null;
-          },
-          async replyQuestion() {
-            return null;
-          },
-          async rejectQuestion() {
-            return null;
-          },
-          async abortSession() {
-            return null;
-          },
-          async *streamEvents() {
-            // noop
-          },
-          async listMessages() {
-            return [];
-          },
-          async updateSession() {
-            return null;
-          },
-          async forkSession() {
-            return null;
-          },
-          async revertSession() {
-            return null;
-          },
-          async unrevertSession() {
-            return null;
-          },
-          async shareSession() {
-            return null;
-          },
-          async unshareSession() {
-            return null;
-          },
-          async summarizeSession() {
-            return true;
-          },
-          async listSessionChildren() {
-            return [];
-          },
-          async listModels() {
-            return { data: [] };
-          },
-          async listProviders() {
-            return { data: [] };
-          },
-          async listAgents() {
-            return { data: [] };
-          },
-          async listCommands() {
-            throw new WorkspaceAgentBackendError({
-              code: "serverUnavailable",
-              message: "down",
-            });
-          },
-          async findFiles() {
-            return { data: [] };
-          },
-        }),
+        createOpencodeClient: () =>
+          createRawOpencodeClientStub({
+            async createSession() {
+              return { id: "s1" };
+            },
+            async getSession() {
+              return { id: "s1" };
+            },
+            async listSessions() {
+              return [];
+            },
+            async deleteSession() {
+              return null;
+            },
+            async sendPrompt() {
+              return null;
+            },
+            async replyPermission() {
+              return null;
+            },
+            async replyQuestion() {
+              return null;
+            },
+            async rejectQuestion() {
+              return null;
+            },
+            async abortSession() {
+              return null;
+            },
+            async *streamEvents() {
+              // noop
+            },
+            async listMessages() {
+              return [];
+            },
+            async updateSession() {
+              return null;
+            },
+            async forkSession() {
+              return null;
+            },
+            async revertSession() {
+              return null;
+            },
+            async unrevertSession() {
+              return null;
+            },
+            async shareSession() {
+              return null;
+            },
+            async unshareSession() {
+              return null;
+            },
+            async summarizeSession() {
+              return true;
+            },
+            async listSessionChildren() {
+              return [];
+            },
+            async listModels() {
+              return { data: [] };
+            },
+            async listProviders() {
+              return { data: [] };
+            },
+            async listAgents() {
+              return { data: [] };
+            },
+            async listCommands() {
+              throw new WorkspaceAgentBackendError({
+                code: "serverUnavailable",
+                message: "down",
+              });
+            },
+          }),
       });
       const commands = await backend.listCommands({ workspaceRootPath: "/repo" });
       expect(commands).toEqual([]);
@@ -1303,83 +1297,81 @@ describe("workspaceAgentBackend", () => {
       const backend = createWorkspaceAgentBackend("opencode", {
         resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
         resolveServerPassword: async () => "",
-        createOpencodeClient: () => ({
-          async createSession() {
-            return { id: "s1" };
-          },
-          async getSession() {
-            return { id: "s1" };
-          },
-          async listSessions() {
-            return [];
-          },
-          async deleteSession() {
-            return null;
-          },
-          async sendPrompt() {
-            return null;
-          },
-          async replyPermission() {
-            return null;
-          },
-          async replyQuestion() {
-            return null;
-          },
-          async rejectQuestion() {
-            return null;
-          },
-          async abortSession() {
-            return null;
-          },
-          async *streamEvents() {
-            // noop
-          },
-          async listMessages() {
-            return [];
-          },
-          async updateSession() {
-            return null;
-          },
-          async forkSession() {
-            return null;
-          },
-          async revertSession() {
-            return null;
-          },
-          async unrevertSession() {
-            return null;
-          },
-          async shareSession() {
-            return null;
-          },
-          async unshareSession() {
-            return null;
-          },
-          async summarizeSession() {
-            return true;
-          },
-          async listSessionChildren() {
-            return [];
-          },
-          async listModels() {
-            return { data: [] };
-          },
-          async listProviders() {
-            return { data: [] };
-          },
-          async listAgents() {
-            return { data: [] };
-          },
-          async listCommands() {
-            return { data: [] };
-          },
-          async findFiles() {
-            throw new WorkspaceAgentBackendError({
-              code: "transportError",
-              message: "network down",
-            });
-          },
-        }),
+        createOpencodeClient: () =>
+          createRawOpencodeClientStub({
+            async createSession() {
+              return { id: "s1" };
+            },
+            async getSession() {
+              return { id: "s1" };
+            },
+            async listSessions() {
+              return [];
+            },
+            async deleteSession() {
+              return null;
+            },
+            async sendPrompt() {
+              return null;
+            },
+            async replyPermission() {
+              return null;
+            },
+            async replyQuestion() {
+              return null;
+            },
+            async rejectQuestion() {
+              return null;
+            },
+            async abortSession() {
+              return null;
+            },
+            async *streamEvents() {
+              // noop
+            },
+            async listMessages() {
+              return [];
+            },
+            async updateSession() {
+              return null;
+            },
+            async forkSession() {
+              return null;
+            },
+            async revertSession() {
+              return null;
+            },
+            async unrevertSession() {
+              return null;
+            },
+            async shareSession() {
+              return null;
+            },
+            async unshareSession() {
+              return null;
+            },
+            async summarizeSession() {
+              return true;
+            },
+            async listSessionChildren() {
+              return [];
+            },
+            async listModels() {
+              return { data: [] };
+            },
+            async listProviders() {
+              return { data: [] };
+            },
+            async listAgents() {
+              return { data: [] };
+            },
+            async findFiles() {
+              throw new WorkspaceAgentBackendError({
+                code: "transportError",
+                message: "network down",
+              });
+            },
+          }),
       });
       const files = await backend.findFiles({
         workspaceRootPath: "/repo",
@@ -1602,131 +1594,117 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
     const backend = createWorkspaceAgentBackend("opencode", {
       resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
       resolveServerPassword: async () => "",
-      createOpencodeClient: () => ({
-        async createSession() {
-          return { id: "s1" };
-        },
-        async getSession() {
-          return { id: "s1", title: "t" };
-        },
-        async listSessions() {
-          return overrides?.listResult ?? [];
-        },
-        async deleteSession() {
-          return null;
-        },
-        async sendPrompt() {
-          return { sessionID: "s1" };
-        },
-        async replyPermission() {
-          return null;
-        },
-        async replyQuestion() {
-          return null;
-        },
-        async rejectQuestion() {
-          return null;
-        },
-        async abortSession() {
-          return null;
-        },
-        async *streamEvents() {
-          // noop
-        },
-        async listMessages() {
-          return [];
-        },
-        async updateSession(input) {
-          record("updateSession", input);
-          return (
-            overrides?.updateResult ?? {
-              id: input.sessionId,
-              title: input.title ?? "t",
-              time: { created: 1_750_000_000_000, updated: 1_750_000_001_000 },
-            }
-          );
-        },
-        async forkSession(input) {
-          record("forkSession", input);
-          return (
-            overrides?.forkResult ?? {
-              id: "child",
-              title: "child",
-              parentID: input.sessionId,
-              time: { created: 1_750_000_002_000, updated: 1_750_000_002_000 },
-            }
-          );
-        },
-        async revertSession(input) {
-          record("revertSession", input);
-          return (
-            overrides?.revertResult ?? {
-              id: input.sessionId,
-              title: "t",
-              revert: input.messageId
-                ? { messageID: input.messageId, diff: "--- a\n+++ b\n" }
-                : undefined,
-              time: { created: 1_750_000_000_000, updated: 1_750_000_003_000 },
-            }
-          );
-        },
-        async unrevertSession(input) {
-          record("unrevertSession", input);
-          return (
-            overrides?.unrevertResult ?? {
-              id: input.sessionId,
-              title: "t",
-              revert: undefined,
-              time: { created: 1_750_000_000_000, updated: 1_750_000_004_000 },
-            }
-          );
-        },
-        async shareSession(input) {
-          record("shareSession", input);
-          return (
-            overrides?.shareResult ?? {
-              id: input.sessionId,
-              title: "t",
-              share: { url: "https://share.example/s1" },
-              time: { created: 1_750_000_000_000, updated: 1_750_000_005_000 },
-            }
-          );
-        },
-        async unshareSession(input) {
-          record("unshareSession", input);
-          return (
-            overrides?.unshareResult ?? {
-              id: input.sessionId,
-              title: "t",
-              share: undefined,
-              time: { created: 1_750_000_000_000, updated: 1_750_000_006_000 },
-            }
-          );
-        },
-        async summarizeSession(input) {
-          record("summarizeSession", input);
-          return overrides?.summarizeResult ?? true;
-        },
-        async listSessionChildren(input) {
-          record("listSessionChildren", input);
-          return overrides?.childrenResult ?? [];
-        },
-        async listModels() {
-          return { data: [] };
-        },
-        async listProviders() {
-          return { data: [] };
-        },
-        async listAgents() {
-          return { data: [] };
-        },
-        async listCommands() {
-          return { data: [] };
-        },
-        async findFiles() {
-          return { data: [] };
-        },
-      }),
+      createOpencodeClient: () =>
+        createRawOpencodeClientStub({
+          async createSession() {
+            return { id: "s1" };
+          },
+          async getSession() {
+            return { id: "s1", title: "t" };
+          },
+          async listSessions() {
+            return overrides?.listResult ?? [];
+          },
+          async deleteSession() {
+            return null;
+          },
+          async sendPrompt() {
+            return { sessionID: "s1" };
+          },
+          async replyPermission() {
+            return null;
+          },
+          async replyQuestion() {
+            return null;
+          },
+          async rejectQuestion() {
+            return null;
+          },
+          async abortSession() {
+            return null;
+          },
+          async *streamEvents() {
+            // noop
+          },
+          async listMessages() {
+            return [];
+          },
+          async updateSession(input) {
+            record("updateSession", input);
+            return (
+              overrides?.updateResult ?? {
+                id: input.sessionId,
+                title: input.title ?? "t",
+                time: { created: 1_750_000_000_000, updated: 1_750_000_001_000 },
+              }
+            );
+          },
+          async forkSession(input) {
+            record("forkSession", input);
+            return (
+              overrides?.forkResult ?? {
+                id: "child",
+                title: "child",
+                parentID: input.sessionId,
+                time: { created: 1_750_000_002_000, updated: 1_750_000_002_000 },
+              }
+            );
+          },
+          async revertSession(input) {
+            record("revertSession", input);
+            return (
+              overrides?.revertResult ?? {
+                id: input.sessionId,
+                title: "t",
+                revert: input.messageId
+                  ? { messageID: input.messageId, diff: "--- a\n+++ b\n" }
+                  : undefined,
+                time: { created: 1_750_000_000_000, updated: 1_750_000_003_000 },
+              }
+            );
+          },
+          async unrevertSession(input) {
+            record("unrevertSession", input);
+            return (
+              overrides?.unrevertResult ?? {
+                id: input.sessionId,
+                title: "t",
+                revert: undefined,
+                time: { created: 1_750_000_000_000, updated: 1_750_000_004_000 },
+              }
+            );
+          },
+          async shareSession(input) {
+            record("shareSession", input);
+            return (
+              overrides?.shareResult ?? {
+                id: input.sessionId,
+                title: "t",
+                share: { url: "https://share.example/s1" },
+                time: { created: 1_750_000_000_000, updated: 1_750_000_005_000 },
+              }
+            );
+          },
+          async unshareSession(input) {
+            record("unshareSession", input);
+            return (
+              overrides?.unshareResult ?? {
+                id: input.sessionId,
+                title: "t",
+                share: undefined,
+                time: { created: 1_750_000_000_000, updated: 1_750_000_006_000 },
+              }
+            );
+          },
+          async summarizeSession(input) {
+            record("summarizeSession", input);
+            return overrides?.summarizeResult ?? true;
+          },
+          async listSessionChildren(input) {
+            record("listSessionChildren", input);
+            return overrides?.childrenResult ?? [];
+          },
+        }),
     });
     return { backend, calls };
   }
@@ -1863,87 +1841,19 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
     const backend = createWorkspaceAgentBackend("opencode", {
       resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
       resolveServerPassword: async () => "",
-      createOpencodeClient: () => ({
-        async getSession() {
-          return {
-            id: "s1",
-            title: "Rich",
-            time: { created: 1_750_000_000_000, updated: 1_750_000_001_000 },
-            share: { url: "https://share/s1" },
-            cost: 0.42,
-            parentID: "parent",
-          };
-        },
-        async createSession() {
-          return { id: "s1" };
-        },
-        async listSessions() {
-          return [];
-        },
-        async deleteSession() {
-          return null;
-        },
-        async sendPrompt() {
-          return null;
-        },
-        async replyPermission() {
-          return null;
-        },
-        async replyQuestion() {
-          return null;
-        },
-        async rejectQuestion() {
-          return null;
-        },
-        async abortSession() {
-          return null;
-        },
-        async *streamEvents() {
-          // noop
-        },
-        async listMessages() {
-          return [];
-        },
-        async updateSession() {
-          return null;
-        },
-        async forkSession() {
-          return null;
-        },
-        async revertSession() {
-          return null;
-        },
-        async unrevertSession() {
-          return null;
-        },
-        async shareSession() {
-          return null;
-        },
-        async unshareSession() {
-          return null;
-        },
-        async summarizeSession() {
-          return true;
-        },
-        async listSessionChildren() {
-          return [];
-        },
-        async listModels() {
-          return { data: [] };
-        },
-        async listProviders() {
-          return { data: [] };
-        },
-        async listAgents() {
-          return { data: [] };
-        },
-        async listCommands() {
-          return { data: [] };
-        },
-        async findFiles() {
-          return { data: [] };
-        },
-      }),
+      createOpencodeClient: () =>
+        createRawOpencodeClientStub({
+          async getSession() {
+            return {
+              id: "s1",
+              title: "Rich",
+              time: { created: 1_750_000_000_000, updated: 1_750_000_001_000 },
+              share: { url: "https://share/s1" },
+              cost: 0.42,
+              parentID: "parent",
+            };
+          },
+        }),
     });
     const result = await backend.getSessionDetails({
       workspaceRootPath: "/repo",
@@ -1962,80 +1872,12 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
     const backend = createWorkspaceAgentBackend("opencode", {
       resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
       resolveServerPassword: async () => "",
-      createOpencodeClient: () => ({
-        async getSession() {
-          throw new WorkspaceAgentBackendError({ code: "notFound", message: "nope" });
-        },
-        async createSession() {
-          return { id: "s1" };
-        },
-        async listSessions() {
-          return [];
-        },
-        async deleteSession() {
-          return null;
-        },
-        async sendPrompt() {
-          return null;
-        },
-        async replyPermission() {
-          return null;
-        },
-        async replyQuestion() {
-          return null;
-        },
-        async rejectQuestion() {
-          return null;
-        },
-        async abortSession() {
-          return null;
-        },
-        async *streamEvents() {
-          // noop
-        },
-        async listMessages() {
-          return [];
-        },
-        async updateSession() {
-          return null;
-        },
-        async forkSession() {
-          return null;
-        },
-        async revertSession() {
-          return null;
-        },
-        async unrevertSession() {
-          return null;
-        },
-        async shareSession() {
-          return null;
-        },
-        async unshareSession() {
-          return null;
-        },
-        async summarizeSession() {
-          return true;
-        },
-        async listSessionChildren() {
-          return [];
-        },
-        async listModels() {
-          return { data: [] };
-        },
-        async listProviders() {
-          return { data: [] };
-        },
-        async listAgents() {
-          return { data: [] };
-        },
-        async listCommands() {
-          return { data: [] };
-        },
-        async findFiles() {
-          return { data: [] };
-        },
-      }),
+      createOpencodeClient: () =>
+        createRawOpencodeClientStub({
+          async getSession() {
+            throw new WorkspaceAgentBackendError({ code: "notFound", message: "nope" });
+          },
+        }),
     });
     const result = await backend.getSessionDetails({
       workspaceRootPath: "/repo",

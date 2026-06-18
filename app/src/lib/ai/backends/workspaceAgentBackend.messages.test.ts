@@ -4,6 +4,7 @@ import {
   createWorkspaceAgentBackend,
   type OpencodeSessionMessageEntry,
 } from "./workspaceAgentBackend";
+import { createRawOpencodeClientStub } from "../../test/rawOpencodeClientStub";
 
 function createBackendWithMessages(
   listMessagesResult: unknown,
@@ -15,95 +16,17 @@ function createBackendWithMessages(
       baseUrl: "http://opencode.local",
     }),
     resolveServerPassword: async () => "",
-    createOpencodeClient: () => ({
-      async createSession() {
-        return { id: "s1" };
-      },
-      async getSession() {
-        return { id: "s1" };
-      },
-      async listSessions() {
-        return [];
-      },
-      async deleteSession() {
-        return null;
-      },
-      async sendPrompt() {
-        return { sessionID: "s1" };
-      },
-      async replyPermission() {
-        return null;
-      },
-      async replyQuestion() {
-        return null;
-      },
-      async rejectQuestion() {
-        return null;
-      },
-      async abortSession() {
-        return null;
-      },
-      async *streamEvents() {
-        // noop
-      },
-      async listMessages(): Promise<OpencodeSessionMessageEntry[]> {
-        if (options?.listMessagesError) {
-          throw options.listMessagesError;
-        }
-        return (Array.isArray(listMessagesResult)
-          ? listMessagesResult
-          : []) as OpencodeSessionMessageEntry[];
-      },
-      async updateSession(input) {
-        return { id: input.sessionId, title: input.title ?? "", time: { created: 1, updated: 2 } };
-      },
-      async forkSession(input) {
-        return {
-          id: "fork",
-          title: "fork",
-          parentID: input.sessionId,
-          time: { created: 3, updated: 3 },
-        };
-      },
-      async revertSession(input) {
-        return { id: input.sessionId, title: "", time: { created: 1, updated: 4 } };
-      },
-      async unrevertSession(input) {
-        return { id: input.sessionId, title: "", time: { created: 1, updated: 5 } };
-      },
-      async shareSession(input) {
-        return {
-          id: input.sessionId,
-          title: "",
-          share: { url: "https://share/s" },
-          time: { created: 1, updated: 6 },
-        };
-      },
-      async unshareSession(input) {
-        return { id: input.sessionId, title: "", time: { created: 1, updated: 7 } };
-      },
-      async summarizeSession() {
-        return true;
-      },
-      async listSessionChildren() {
-        return [];
-      },
-      async listModels() {
-        return { data: [] };
-      },
-      async listProviders() {
-        return { data: [] };
-      },
-      async listAgents() {
-        return { data: [] };
-      },
-      async listCommands() {
-        return { data: [] };
-      },
-      async findFiles() {
-        return { data: [] };
-      },
-    }),
+    createOpencodeClient: () =>
+      createRawOpencodeClientStub({
+        async listMessages(): Promise<OpencodeSessionMessageEntry[]> {
+          if (options?.listMessagesError) {
+            throw options.listMessagesError;
+          }
+          return (Array.isArray(listMessagesResult)
+            ? listMessagesResult
+            : []) as OpencodeSessionMessageEntry[];
+        },
+      }),
   });
 }
 

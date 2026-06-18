@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { ProjectTreeNode as ProjectTreeNodeModel } from "../services/projectTree";
   import { classifyProjectTreeLabelTone } from "../services/projectTreeLabelTone";
+  import { fileStatusBadgeLabel } from "../services/fileStatusTracker";
+  import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import DirectoryIcon from "./icons/DirectoryIcon.svelte";
   import FileIcon from "./icons/FileIcon.svelte";
 
@@ -13,6 +15,8 @@
     isDropTarget?: boolean;
     isDragging?: boolean;
     rowPath?: string;
+    /** M5-T3 — git change status for this node's path, if tracked. */
+    fileChangeStatus?: OpencodeFileChangeStatus | null;
     onToggleDirectory?: (path: string) => void;
     onOpenFile?: (path: string) => void;
     onContextMenu?: (event: MouseEvent, node: ProjectTreeNodeModel) => void;
@@ -30,6 +34,7 @@
     isDropTarget = false,
     isDragging = false,
     rowPath = "",
+    fileChangeStatus = null,
     onToggleDirectory = () => {},
     onOpenFile = () => {},
     onContextMenu = () => {},
@@ -87,6 +92,13 @@
       <FileIcon />
     {/if}
     <span class="project-tree-label project-tree-label-{labelTone}">{node.name}</span>
+    {#if fileChangeStatus}
+      <span
+        class={`project-tree-status-badge project-tree-status-${fileChangeStatus}`}
+        title={`${fileChangeStatus} (git)`}
+        aria-label={`${fileChangeStatus}`}
+      >{fileStatusBadgeLabel(fileChangeStatus)}</span>
+    {/if}
   </button>
 </li>
 
@@ -150,5 +162,33 @@
 
   .project-tree-label-text {
     color: var(--project-pane-color-text);
+  }
+
+  .project-tree-status-badge {
+    margin-left: auto;
+    flex-shrink: 0;
+    min-width: 14px;
+    padding: 0 2px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  .project-tree-status-modified {
+    color: var(--color-text-secondary);
+    background: color-mix(in srgb, var(--color-text-secondary) 14%, transparent);
+  }
+
+  .project-tree-status-added {
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  }
+
+  .project-tree-status-deleted {
+    color: #e06c75;
+    background: color-mix(in srgb, #e06c75 16%, transparent);
   }
 </style>

@@ -48,6 +48,38 @@
     syncSettingsPersistenceEffect,
     syncWorkspaceContextEffect,
   } from "../lib/services/appShellEffects";
+  import { refreshSessionTodos, clearSessionTodos } from "../lib/ai/opencodeTodoStore";
+  import { refreshSessionDiffs, clearSessionDiffs } from "../lib/ai/opencodeDiffStore";
+  import {
+    getFileStatusTracker,
+    refreshFileStatuses,
+    clearFileStatusTracker,
+  } from "../lib/services/fileStatusTracker";
+  import {
+    getStatusSummary,
+    refreshStatusSummary,
+    clearStatusSummary,
+  } from "../lib/ai/opencodeStatusSummary";
+
+  /**
+   * Resolves a workspace-relative path (e.g. from an OpenCode diff payload)
+   * to an absolute path. Passes absolute paths through unchanged so callers
+   * can mix both shapes safely.
+   */
+  function resolveWorkspaceRelativePath(
+    workspaceRoot: string | null,
+    relativePath: string,
+  ): string {
+    const trimmed = relativePath.trim();
+    if (!workspaceRoot || trimmed.length === 0) {
+      return trimmed;
+    }
+    if (trimmed.startsWith("/")) {
+      return trimmed;
+    }
+    const root = workspaceRoot.replace(/\/+$/, "");
+    return `${root}/${trimmed}`;
+  }
   let themePaneOpen = $state(false);
   let settingsDialogOpen = $state(false);
   let settingsDialogInitialTab = $state<SettingsDialogTab>("editor");
@@ -127,6 +159,10 @@
   const activeParentSessionId = $derived(
     activeAgentEntry?.opencodeParentSessionId ?? null,
   );
+  /** M5-T1 — linked session id for the active agent (scopes session.todo). */
+  const activeOpencodeSessionId = $derived(
+    activeAgentEntry?.opencodeSessionId ?? null,
+  );
   const opencodeMode = $derived(snapshot.settings.opencode.mode);
 
   /**
@@ -144,6 +180,42 @@
     import("$lib/ai/backends/opencodeSessionList").SessionListSort
   >("updated");
   let sessionListSearch = $state("");
+  /**
+   * M5-T1 — TODO panel toggle. Agent-scoped: only rendered when a workspace
+   * agent tab with a linked OpenCode session is active. Auto-refresh of
+   * `session.todo` is driven by the `todowrite` tool-event effect below.
+   */
+  let todoPanelOpen = $state(false);
+  /** M5-T2 — diff viewer panel toggle (agent-scoped, like the TODO panel). */
+  let diffPanelOpen = $state(false);
+  /**
+   * M5-T3 — workspace git status (file.status) for the project-tree badges.
+   * One reactive store per workspace; cleared on workspace switch.
+   */
+  const fileStatusStore = $derived.by(() => {
+    const root = activeWorkspaceRoot;
+    if (!root) {
+      return null;
+    }
+    return getFileStatusTracker(root);
+  });
+  const fileStatusState = $derived(fileStatusStore ? $fileStatusStore : null);
+  const fileStatusByPath = $derived(fileStatusState?.statusByPath ?? null);
+  /**
+   * M5-T4 — status popover state. The button is gated to "workspace open +
+   * OpenCode enabled"; opening it loads the aggregated status summary.
+   */
+  let statusPopoverOpen = $state(false);
+  /**
+   * M5-T5 — session timeline dialog state. Reads the active transcript
+   * (already hydrated); jumping scrolls the message list to the target id.
+   */
+  let timelineOpen = $state(false);
+  let timelineSearch = $state("");
+  const activeMessages = $derived(chatStore.getMessages());
+  const statusButtonVisible = $derived(
+    Boolean(activeWorkspaceRoot) && snapshot.settings.opencode.enabled,
+  );
   const openSessionIds = $derived(
     new Set(
       workspaceAgents
@@ -590,6 +662,116 @@
     });
     syncResponsiveLayoutEffect({ applyResponsiveLayoutRules });
   });
+
+  /**
+   * M5-T1 — TODO panel auto-refresh. Loads `session.todo` when the panel is
+   * open for a linked agent session, re-fetches whenever the active session
+   * changes, and re-fetches after each completed turn (the agent may have
+   * emitted a `todowrite`). Stale per-session cache is cleared when the
+   * active agent session changes so closed sessions don't linger.
+   */
+  let lastTodoScopeKey = $state<string | null>(null);
+  $effect(() => {
+    runtimeReady;
+    activeWorkspaceRoot;
+    activeOpencodeSessionId;
+    todoPanelOpen;
+    session.lastActiveAgentId;
+    const isGenerating = chatStore.getRuntimeState().isGenerating;
+    void isGenerating;
+
+    const root = activeWorkspaceRoot;
+    const sessionId = activeOpencodeSessionId;
+    const scopeKey = root && sessionId ? `${root}|${sessionId}` : null;
+
+    // Clear cache for the previously-active session when the scope changes.
+    if (lastTodoScopeKey && lastTodoScopeKey !== scopeKey) {
+      const [prevRoot, prevSession] = lastTodoScopeKey.split("|");
+      if (prevRoot && prevSession) {
+        clearSessionTodos(prevRoot, prevSession);
+        clearSessionDiffs(prevRoot, prevSession);
+      }
+    }
+    lastTodoScopeKey = scopeKey;
+
+    if (!runtimeReady || !todoPanelOpen || !root || !sessionId) {
+      return;
+    }
+    void refreshSessionTodos({ workspaceRootPath: root, sessionId });
+  });
+
+  /**
+   * M5-T2 — diff viewer auto-refresh. Loads `session.diff` when the panel is
+   * open for a linked agent session, re-fetches on session change and after
+   * each completed turn (file changes land once the agent finishes editing).
+   */
+  $effect(() => {
+    runtimeReady;
+    activeWorkspaceRoot;
+    activeOpencodeSessionId;
+    diffPanelOpen;
+    session.lastActiveAgentId;
+    const isGenerating = chatStore.getRuntimeState().isGenerating;
+    void isGenerating;
+
+    if (!runtimeReady || !diffPanelOpen) {
+      return;
+    }
+    const root = activeWorkspaceRoot;
+    const sessionId = activeOpencodeSessionId;
+    if (!root || !sessionId) {
+      return;
+    }
+    void refreshSessionDiffs({ workspaceRootPath: root, sessionId });
+  });
+
+  /**
+   * M5-T3 — project-tree file-status badges. Refreshes `file.status` when the
+   * workspace changes and after each completed turn (the agent's edits land
+   * on disk once the turn finishes). Stale per-workspace cache is cleared on
+   * switch.
+   */
+  let lastFileStatusWorkspace = $state<string | null>(null);
+  $effect(() => {
+    runtimeReady;
+    activeWorkspaceRoot;
+    session.lastActiveAgentId;
+    const isGenerating = chatStore.getRuntimeState().isGenerating;
+    void isGenerating;
+
+    const root = activeWorkspaceRoot;
+    if (lastFileStatusWorkspace && lastFileStatusWorkspace !== root) {
+      clearFileStatusTracker(lastFileStatusWorkspace);
+    }
+    lastFileStatusWorkspace = root;
+
+    if (!runtimeReady || !root) {
+      return;
+    }
+    void refreshFileStatuses({ workspaceRootPath: root });
+  });
+
+  /**
+   * M5-T4 — status summary. Refreshed when the popover opens and when the
+   * workspace changes; cleared on switch.
+   */
+  let lastStatusWorkspace = $state<string | null>(null);
+  $effect(() => {
+    runtimeReady;
+    activeWorkspaceRoot;
+    statusPopoverOpen;
+
+    const root = activeWorkspaceRoot;
+    if (lastStatusWorkspace && lastStatusWorkspace !== root) {
+      clearStatusSummary(lastStatusWorkspace);
+    }
+    lastStatusWorkspace = root;
+
+    if (!runtimeReady || !root || !statusPopoverOpen) {
+      return;
+    }
+    void refreshStatusSummary({ workspaceRootPath: root });
+  });
 </script>
 
 <AppShell
@@ -638,6 +820,7 @@
     workspaceRoot: activeWorkspaceRoot,
     state: projectTreeControllerState,
     activeFilePath: documentView.activeDocumentPath,
+    statusByPath: fileStatusByPath,
     collapsed: !showProjectPanel,
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
     onRefresh: refreshProjectTree,
@@ -778,6 +961,60 @@
     },
     onRefresh: () => {
       void refreshSessionList();
+    },
+  }}
+  todoPanel={{
+    open: todoPanelOpen && Boolean(activeWorkspaceRoot) && Boolean(activeOpencodeSessionId),
+    workspaceRootPath: activeWorkspaceRoot,
+    sessionId: activeOpencodeSessionId,
+    onToggle: () => {
+      todoPanelOpen = !todoPanelOpen;
+    },
+  }}
+  diffPanel={{
+    open: diffPanelOpen && Boolean(activeWorkspaceRoot) && Boolean(activeOpencodeSessionId),
+    workspaceRootPath: activeWorkspaceRoot,
+    sessionId: activeOpencodeSessionId,
+    onToggle: () => {
+      diffPanelOpen = !diffPanelOpen;
+    },
+    onOpenFile: (filePath) => {
+      // OpenCode diff paths are workspace-relative; resolve to an absolute
+      // path before opening (matches the project-tree path convention).
+      const resolved = resolveWorkspaceRelativePath(activeWorkspaceRoot, filePath);
+      void handleOpenProjectTreeFile(resolved);
+    },
+  }}
+  statusPopover={{
+    statusButtonVisible,
+    statusButtonActive: statusPopoverOpen,
+    workspaceRootPath: activeWorkspaceRoot,
+    onToggleStatus: () => {
+      statusPopoverOpen = !statusPopoverOpen;
+    },
+    onStatusClose: () => {
+      statusPopoverOpen = false;
+    },
+  }}
+  timelineDialog={{
+    open: timelineOpen,
+    messages: activeMessages,
+    searchQuery: timelineSearch,
+    onJumpToMessage: (messageId) => {
+      // Dispatch a custom event the ChatMessageList can listen for to scroll
+      // the target message into view. Best-effort: a no-op when no listener.
+      window.dispatchEvent(
+        new CustomEvent("specops:scroll-to-message", { detail: { messageId } }),
+      );
+    },
+    onToggle: () => {
+      timelineOpen = true;
+    },
+    onClose: () => {
+      timelineOpen = false;
+    },
+    onSearchChange: (query) => {
+      timelineSearch = query;
     },
   }}
 />

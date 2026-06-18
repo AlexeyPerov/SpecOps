@@ -2,6 +2,7 @@
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
+  import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import {
     DEFAULT_PANEL_WIDTH_PX,
     MAX_PANEL_WIDTH_PX,
@@ -15,6 +16,8 @@
   export let childrenByPath = new Map<string, ProjectTreeNode[]>();
   export let loadingPaths = new Set<string>();
   export let activeFilePath: string | null = null;
+  /** M5-T3 — git change status badges (absolute path → status). */
+  export let statusByPath: ReadonlyMap<string, OpencodeFileChangeStatus> | null = null;
   export let showHidden = false;
   export let collapsed = false;
   export let panelWidthPx = DEFAULT_PANEL_WIDTH_PX;
@@ -171,6 +174,7 @@
         {childrenByPath}
         {loadingPaths}
         {activeFilePath}
+        {statusByPath}
         {onToggleDirectory}
         {onOpenFile}
         onContextMenuRoot={handleContextMenuRoot}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ProjectTreeNode as ProjectTreeNodeModel } from "../services/projectTree";
   import type { ProjectTreeDragState } from "./projectTreeDrag";
+  import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import ProjectTreeNode from "./ProjectTreeNode.svelte";
   import Self from "./ProjectTreeList.svelte";
 
@@ -12,6 +13,8 @@
     loadingPaths?: Set<string>;
     activeFilePath?: string | null;
     dragState?: ProjectTreeDragState | null;
+    /** M5-T3 — absolute path → git change status, for badges. */
+    statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
     onToggleDirectory?: (path: string) => void;
     onOpenFile?: (path: string) => void;
     onContextMenu?: (event: MouseEvent, node: ProjectTreeNodeModel) => void;
@@ -28,6 +31,7 @@
     loadingPaths = new Set<string>(),
     activeFilePath = null,
     dragState = null,
+    statusByPath = null,
     onToggleDirectory = () => {},
     onOpenFile = () => {},
     onContextMenu = () => {},
@@ -54,6 +58,7 @@
         node.kind === "directory" &&
         dragState.dropTargetPath === node.path}
       isDragging={dragState?.didDrag === true && dragState.sourcePath === node.path}
+      fileChangeStatus={statusByPath?.get(node.path) ?? null}
       {onToggleDirectory}
       {onOpenFile}
       {onContextMenu}
@@ -75,6 +80,7 @@
           {loadingPaths}
           {activeFilePath}
           {dragState}
+          {statusByPath}
           {onToggleDirectory}
           {onOpenFile}
           {onContextMenu}

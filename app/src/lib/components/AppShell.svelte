@@ -19,6 +19,9 @@
   import ProjectPanel from "./ProjectPanel.svelte";
   import AgentsSidebar from "./AgentsSidebar.svelte";
   import ChatPanel from "./ChatPanel.svelte";
+  import TodoPanel from "./TodoPanel.svelte";
+  import DiffViewerPanel from "./DiffViewerPanel.svelte";
+  import SessionTimelineDialog from "./SessionTimelineDialog.svelte";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { SettingsDialogTab } from "../services/settingsDialogUi";
@@ -71,6 +74,11 @@
     workspaceRoot: string | null;
     state: ProjectTreeControllerState;
     activeFilePath: string | null;
+    /** M5-T3 — git change status badges (absolute path → status). */
+    statusByPath?: ReadonlyMap<
+      string,
+      import("../ai/backends/workspaceAgentBackend").OpencodeFileChangeStatus
+    > | null;
     collapsed: boolean;
     panelWidthPx: number;
     onRefresh: () => void | Promise<void>;
@@ -159,6 +167,33 @@
     onCloseWorkspace: (workspaceId: ContextId) => void;
   }
 
+  /**
+   * M5-T4 — status popover trigger. `statusButtonVisible` gates the title-bar
+   * button (workspace open + OpenCode enabled); `statusButtonActive` toggles
+   * the popover open state.
+   */
+  export interface AppShellStatusPopoverProps {
+    statusButtonVisible: boolean;
+    statusButtonActive: boolean;
+    workspaceRootPath: string | null;
+    onToggleStatus: () => void;
+    onStatusClose: () => void;
+  }
+
+  /**
+   * M5-T5 — session timeline dialog. `messages` come from the active
+   * transcript (already hydrated); `onJumpToMessage` scrolls the transcript.
+   */
+  export interface AppShellTimelineDialogProps {
+    open: boolean;
+    messages: readonly import("../domain/contracts").ChatMessage[];
+    searchQuery: string;
+    onJumpToMessage?: (messageId: string) => void;
+    onToggle?: () => void;
+    onClose?: () => void;
+    onSearchChange?: (query: string) => void;
+  }
+
   export interface AppShellOverlayProps {
     themePaneOpen: boolean;
     settingsDialogOpen: boolean;
@@ -183,6 +218,31 @@
     onRefresh: () => void;
   }
 
+  /**
+   * M5-T1 — agent TODO panel. Shown as a right-side rail when a workspace
+   * agent tab with a linked OpenCode session is active. `open` toggles it;
+   * `workspaceRootPath` + `sessionId` scope the `session.todo` fetch.
+   */
+  export interface AppShellTodoPanelProps {
+    open: boolean;
+    workspaceRootPath: string | null;
+    sessionId: string | null;
+    onToggle?: () => void;
+    onJumpToMessage?: () => void;
+  }
+
+  /**
+   * M5-T2 — agent diff viewer panel. Same scoping rules as the TODO panel;
+   * `onOpenFile` lets a row open the file in the editor.
+   */
+  export interface AppShellDiffPanelProps {
+    open: boolean;
+    workspaceRootPath: string | null;
+    sessionId: string | null;
+    onToggle?: () => void;
+    onOpenFile?: (filePath: string) => void;
+  }
+
   let {
     activityRail,
     agentsSidebar,
@@ -192,6 +252,10 @@
     workspaceContextMenu,
     overlays,
     sessionListPanel,
+    todoPanel,
+    diffPanel,
+    statusPopover,
+    timelineDialog,
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
@@ -213,6 +277,10 @@
     workspaceContextMenu: AppShellWorkspaceContextMenuProps;
     overlays: AppShellOverlayProps;
     sessionListPanel?: AppShellSessionListPanelProps;
+    todoPanel?: AppShellTodoPanelProps;
+    diffPanel?: AppShellDiffPanelProps;
+    statusPopover?: AppShellStatusPopoverProps;
+    timelineDialog?: AppShellTimelineDialogProps;
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
@@ -229,7 +297,13 @@
 </script>
 
 <main class="shell">
-  <TitleBar />
+  <TitleBar
+    statusButtonVisible={Boolean(statusPopover?.statusButtonVisible)}
+    statusButtonActive={Boolean(statusPopover?.statusButtonActive)}
+    statusWorkspaceRoot={statusPopover?.workspaceRootPath ?? null}
+    onToggleStatus={() => statusPopover?.onToggleStatus()}
+    onStatusClose={() => statusPopover?.onStatusClose()}
+  />
   <div class="shell-main-row" bind:this={shellMainRowEl}>
     {#if activityRail.show}
       <ActivityRail
@@ -313,6 +387,13 @@
             onExportAgent={editor.onExportAgent}
             activeShareUrl={editor.activeShareUrl}
             activeParentSessionId={editor.activeParentSessionId}
+            canToggleTodoPanel={Boolean(todoPanel)}
+            todoPanelOpen={Boolean(todoPanel?.open)}
+            onToggleTodoPanel={() => todoPanel?.onToggle?.()}
+            canToggleDiffPanel={Boolean(diffPanel)}
+            diffPanelOpen={Boolean(diffPanel?.open)}
+            onToggleDiffPanel={() => diffPanel?.onToggle?.()}
+            onOpenTimeline={timelineDialog?.onToggle}
           />
         {:else if editor.previewMode === "diff"}
           <DiffPreviewPane
@@ -417,6 +498,7 @@
         childrenByPath={projectTree.state.childrenByPath}
         loadingPaths={projectTree.state.loadingPaths}
         activeFilePath={projectTree.activeFilePath}
+        statusByPath={projectTree.statusByPath ?? null}
         showHidden={projectTree.state.showHidden}
         collapsed={projectTree.collapsed}
         panelWidthPx={projectTree.panelWidthPx}
@@ -432,6 +514,20 @@
         onRenameEntry={(path, kind) => void projectTree.onRenameEntry(path, kind)}
         onDeleteEntry={(path, kind) => void projectTree.onDeleteEntry(path, kind)}
         notify={projectTree.notify}
+      />
+    {/if}
+    {#if diffPanel?.open && diffPanel.workspaceRootPath && diffPanel.sessionId}
+      <DiffViewerPanel
+        workspaceRootPath={diffPanel.workspaceRootPath}
+        sessionId={diffPanel.sessionId}
+        onOpenFile={diffPanel.onOpenFile}
+      />
+    {/if}
+    {#if todoPanel?.open && todoPanel.workspaceRootPath && todoPanel.sessionId}
+      <TodoPanel
+        workspaceRootPath={todoPanel.workspaceRootPath}
+        sessionId={todoPanel.sessionId}
+        onJumpToMessage={todoPanel.onJumpToMessage}
       />
     {/if}
   </div>
@@ -528,6 +624,17 @@
 {/if}
 <PermissionPrompt />
 <QuestionPrompt />
+
+{#if timelineDialog}
+  <SessionTimelineDialog
+    open={timelineDialog.open}
+    messages={timelineDialog.messages}
+    searchQuery={timelineDialog.searchQuery}
+    onJumpToMessage={timelineDialog.onJumpToMessage}
+    onClose={timelineDialog.onClose}
+    onSearchChange={timelineDialog.onSearchChange}
+  />
+{/if}
 
 {#if workspaceContextMenu.menu}
   <div

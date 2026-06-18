@@ -144,6 +144,19 @@ export function createRawOpencodeClientStub(
     async listAgentDetails() {
       return { data: [] };
     },
+    // M5 — workspace UX endpoints
+    async listSessionTodos() {
+      return { data: [] };
+    },
+    async listSessionDiffs() {
+      return { data: [] };
+    },
+    async listFileStatuses() {
+      return { data: [] };
+    },
+    async listLspStatuses() {
+      return { data: [] };
+    },
     ...overrides,
   };
 }

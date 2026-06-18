@@ -64,6 +64,16 @@
     activeShareUrl?: string | null;
     /** M2-T3: parent session id when the active session is a fork. */
     activeParentSessionId?: string | null;
+    /** M5-T1: TODO panel toggle availability + state. */
+    canToggleTodoPanel?: boolean;
+    todoPanelOpen?: boolean;
+    onToggleTodoPanel?: () => void;
+    /** M5-T2: diff viewer panel toggle availability + state. */
+    canToggleDiffPanel?: boolean;
+    diffPanelOpen?: boolean;
+    onToggleDiffPanel?: () => void;
+    /** M5-T5: open the session timeline dialog. */
+    onOpenTimeline?: () => void;
   }
 
   let {
@@ -78,6 +88,13 @@
     onExportAgent,
     activeShareUrl = null,
     activeParentSessionId = null,
+    canToggleTodoPanel = false,
+    todoPanelOpen = false,
+    onToggleTodoPanel,
+    canToggleDiffPanel = false,
+    diffPanelOpen = false,
+    onToggleDiffPanel,
+    onOpenTimeline,
   }: Props = $props();
 
   let inlineError = $state("");
@@ -187,7 +204,8 @@
           onRevertSession ||
           onShareAgent ||
           onSummarizeAgent ||
-          onExportAgent,
+          onExportAgent ||
+          onOpenTimeline,
       ),
   );
   const isShared = $derived(Boolean(activeShareUrl));
@@ -380,6 +398,30 @@
       {#if sessionTotals}
         <SessionTotalBadge totals={sessionTotals} />
       {/if}
+      {#if canToggleTodoPanel}
+        <button
+          type="button"
+          class="chat-session-actions-toggle"
+          class:chat-todo-toggle-active={todoPanelOpen}
+          onclick={() => onToggleTodoPanel?.()}
+          aria-pressed={todoPanelOpen}
+          title={todoPanelOpen ? "Hide todos" : "Show todos"}
+        >
+          Todos
+        </button>
+      {/if}
+      {#if canToggleDiffPanel}
+        <button
+          type="button"
+          class="chat-session-actions-toggle"
+          class:chat-todo-toggle-active={diffPanelOpen}
+          onclick={() => onToggleDiffPanel?.()}
+          aria-pressed={diffPanelOpen}
+          title={diffPanelOpen ? "Hide changes" : "Show file changes"}
+        >
+          Changes
+        </button>
+      {/if}
       {#if hasSessionActions}
         <div class="chat-session-actions" bind:this={sessionActionsEl}>
           <button
@@ -412,6 +454,11 @@
               {#if onExportAgent}
                 <button type="button" role="menuitem" onclick={() => runSessionAction(onExportAgent)}>
                   Export transcript…
+                </button>
+              {/if}
+              {#if onOpenTimeline}
+                <button type="button" role="menuitem" onclick={() => runSessionAction(onOpenTimeline)}>
+                  Timeline…
                 </button>
               {/if}
               {#if onUnrevertSession}
@@ -594,6 +641,11 @@
   .chat-session-actions-toggle:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .chat-todo-toggle-active {
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border-subtle));
   }
 
   .chat-session-actions-menu {

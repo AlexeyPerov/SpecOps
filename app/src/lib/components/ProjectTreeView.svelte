@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
+  import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import ProjectTreeList from "./ProjectTreeList.svelte";
   import {
     createProjectTreeDragController,
@@ -14,6 +15,8 @@
     childrenByPath?: Map<string, ProjectTreeNode[]>;
     loadingPaths?: Set<string>;
     activeFilePath?: string | null;
+    /** M5-T3 — absolute path → git change status, for badges. */
+    statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
     onToggleDirectory?: (path: string) => void;
     onOpenFile?: (path: string) => void;
     onContextMenuRoot?: (event: MouseEvent) => void;
@@ -29,6 +32,7 @@
     childrenByPath = new Map<string, ProjectTreeNode[]>(),
     loadingPaths = new Set<string>(),
     activeFilePath = null,
+    statusByPath = null,
     onToggleDirectory = () => {},
     onOpenFile = () => {},
     onContextMenuRoot = () => {},
@@ -145,6 +149,7 @@
     {childrenByPath}
     {loadingPaths}
     {activeFilePath}
+    {statusByPath}
     {dragState}
     onToggleDirectory={handleToggleDirectory}
     onOpenFile={handleOpenFile}

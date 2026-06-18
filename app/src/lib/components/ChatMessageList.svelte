@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
   import {
     formatModelSwitchNotice,
     formatProviderSwitchNotice,
@@ -72,6 +73,33 @@
    * Default: collapsed — reasoning is available on demand, not by default.
    */
   let showAllReasoning = $state(false);
+
+  /**
+   * M5-T5 — scroll container ref. Listens for the `specops:scroll-to-message`
+   * custom event (dispatched by the session timeline dialog) and scrolls the
+   * matching message into view.
+   */
+  let scrollContainerEl = $state<HTMLDivElement | null>(null);
+
+  function handleScrollToMessage(event: Event): void {
+    const detail = (event as CustomEvent<{ messageId?: string }>).detail;
+    const messageId = detail?.messageId;
+    if (!messageId || !scrollContainerEl) {
+      return;
+    }
+    const target = scrollContainerEl.querySelector<HTMLElement>(
+      `[data-message-id="${CSS.escape(messageId)}"]`,
+    );
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  onMount(() => {
+    window.addEventListener("specops:scroll-to-message", handleScrollToMessage);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener("specops:scroll-to-message", handleScrollToMessage);
+  });
 
   /**
    * Per-message expanded state, keyed by reasoning id. A message is expanded
@@ -302,7 +330,7 @@
       </p>
     </div>
   {:else}
-    <div class="chat-message-scroll">
+    <div class="chat-message-scroll" bind:this={scrollContainerEl}>
       {#if hasAnyReasoning}
         <div class="chat-reasoning-toolbar">
           <button
@@ -327,6 +355,7 @@
             class={`chat-message chat-message-${message.role}`}
             class:chat-message-system-event={isSystemEventMessage(message)}
             class:chat-message-streaming={isStreamingAssistantMessage(message, index)}
+            data-message-id={message.id}
           >
             <div class="chat-message-header">
               <p class="chat-message-role">{messageRoleLabel(message)}</p>

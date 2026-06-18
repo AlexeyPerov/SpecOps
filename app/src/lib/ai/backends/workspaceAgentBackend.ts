@@ -262,6 +262,56 @@ export interface OpencodeSkillEntry {
   location: string;
 }
 
+// ---------------------------------------------------------------------------
+// M5 — Workspace UX types (TODO, diff, file status, LSP).
+//
+// These mirror the OpenCode v2 endpoints `session.todo`, `session.diff`,
+// `file.status`, and `lsp` (`/lsp`). The shapes are deliberately tolerant:
+// OpenCode evolves its payloads between releases, so the mappers coerce
+// optional fields and fall back to safe defaults rather than failing the
+// whole panel when one field is missing.
+// ---------------------------------------------------------------------------
+
+/** A single TODO entry from `session.todo` (the agent's `todowrite` list). */
+export interface OpencodeTodoEntry {
+  content: string;
+  status: OpencodeTodoStatus;
+  priority: OpencodeTodoPriority;
+}
+
+export type OpencodeTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
+
+export type OpencodeTodoPriority = "high" | "medium" | "low";
+
+/** A single changed file from `session.diff` (the `SnapshotFileDiff` shape). */
+export interface OpencodeSessionFileDiff {
+  /** Workspace-relative file path. */
+  file: string;
+  /** Unified-diff patch (may be empty for binary / new files). */
+  patch: string;
+  additions: number;
+  deletions: number;
+  status: OpencodeFileChangeStatus;
+}
+
+export type OpencodeFileChangeStatus = "added" | "deleted" | "modified";
+
+/** File status entry from `file.status` (the `File` shape: git working tree). */
+export interface OpencodeFileStatusEntry {
+  path: string;
+  additions: number;
+  deletions: number;
+  status: OpencodeFileChangeStatus;
+}
+
+/** LSP server entry from `lsp` (`/lsp`). */
+export interface OpencodeLspStatusEntry {
+  id: string;
+  name: string;
+  root: string;
+  status: "connected" | "error";
+}
+
 export type WorkspaceAgentStreamEvent =
   | {
       type: "message.delta";
@@ -619,6 +669,47 @@ export interface WorkspaceAgentBackend {
   listAgentDetails(input: {
     workspaceRootPath: string;
   }): Promise<OpencodeAgentDetail[]>;
+  // -------------------------------------------------------------------------
+  // M5 — Workspace UX. Session-scoped data (todo, diff) require a sessionId;
+  // workspace-scoped data (file.status, lsp) only need the workspace root.
+  // All degrade to `[]` on transport / notFound errors so the panels never
+  // block on a flaky server — they just render "no data".
+  // -------------------------------------------------------------------------
+  /**
+   * Fetch the agent's TODO list for a session (M5-T1). Forwards to
+   * `session.todo`; returns the `Todo[]` payload normalized to
+   * `OpencodeTodoEntry[]`.
+   */
+  listSessionTodos(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+  }): Promise<OpencodeTodoEntry[]>;
+  /**
+   * Fetch the file-change diff for a session (M5-T2). Forwards to
+   * `session.diff`; pass `messageId` to scope to a single message. Returns
+   * the `SnapshotFileDiff[]` payload normalized to
+   * `OpencodeSessionFileDiff[]`.
+   */
+  listSessionDiffs(input: {
+    workspaceRootPath: string;
+    sessionId: string;
+    messageId?: string;
+  }): Promise<OpencodeSessionFileDiff[]>;
+  /**
+   * Fetch the workspace git status (M5-T3). Forwards to `file.status`;
+   * returns the `File[]` payload (added/removed/status) used to badge the
+   * project tree.
+   */
+  listFileStatuses(input: {
+    workspaceRootPath: string;
+  }): Promise<OpencodeFileStatusEntry[]>;
+  /**
+   * Fetch the LSP server status for the workspace (M5-T4). Forwards to
+   * `lsp` (`/lsp`); returns the `LspStatus[]` payload.
+   */
+  listLspStatuses(input: {
+    workspaceRootPath: string;
+  }): Promise<OpencodeLspStatusEntry[]>;
 }
 
 /**
@@ -711,6 +802,11 @@ export interface RawOpencodeClient {
   disconnectMcpServer(name: string): Promise<unknown>;
   listSkills(): Promise<unknown>;
   listAgentDetails(): Promise<unknown>;
+  // M5 — workspace UX endpoints
+  listSessionTodos(input: { sessionId: string }): Promise<unknown>;
+  listSessionDiffs(input: { sessionId: string; messageId?: string }): Promise<unknown>;
+  listFileStatuses(): Promise<unknown>;
+  listLspStatuses(): Promise<unknown>;
 }
 
 interface WorkspaceAgentBackendDependencies {
@@ -1564,6 +1660,118 @@ function mapAgentDetail(raw: unknown): OpencodeAgentDetail | null {
   return detail;
 }
 
+// --- M5 workspace-UX mappers ------------------------------------------------
+
+const TODO_STATUS_VALUES: readonly OpencodeTodoStatus[] = [
+  "pending",
+  "in_progress",
+  "completed",
+  "cancelled",
+];
+
+const TODO_PRIORITY_VALUES: readonly OpencodeTodoPriority[] = ["high", "medium", "low"];
+
+const FILE_STATUS_VALUES: readonly OpencodeFileChangeStatus[] = [
+  "added",
+  "deleted",
+  "modified",
+];
+
+/**
+ * Maps a single `Todo` from `session.todo`. `content` is required; unknown
+ * status / priority strings fall back to `pending` / `medium` so a malformed
+ * entry still renders (rather than being dropped silently).
+ */
+function mapTodoEntry(raw: unknown): OpencodeTodoEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const content = readString(parsed.content);
+  if (!content) {
+    return null;
+  }
+  const rawStatus = typeof parsed.status === "string" ? parsed.status : "";
+  const status: OpencodeTodoStatus = (
+    TODO_STATUS_VALUES as readonly string[]
+  ).includes(rawStatus)
+    ? (rawStatus as OpencodeTodoStatus)
+    : "pending";
+  const rawPriority = typeof parsed.priority === "string" ? parsed.priority : "";
+  const priority: OpencodeTodoPriority = (
+    TODO_PRIORITY_VALUES as readonly string[]
+  ).includes(rawPriority)
+    ? (rawPriority as OpencodeTodoPriority)
+    : "medium";
+  return { content, status, priority };
+}
+
+/**
+ * Maps a single `SnapshotFileDiff` from `session.diff`. `file` falls back to
+ * an empty string (some payloads omit it); `status` defaults to `modified`
+ * when not present; additions / deletions default to 0.
+ */
+function mapSessionFileDiff(raw: unknown): OpencodeSessionFileDiff | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const rawStatus = typeof parsed.status === "string" ? parsed.status : "";
+  const status: OpencodeFileChangeStatus = (
+    FILE_STATUS_VALUES as readonly string[]
+  ).includes(rawStatus)
+    ? (rawStatus as OpencodeFileChangeStatus)
+    : "modified";
+  return {
+    file: readString(parsed.file) ?? "",
+    patch: readString(parsed.patch) ?? "",
+    additions: readNumber(parsed.additions) ?? 0,
+    deletions: readNumber(parsed.deletions) ?? 0,
+    status,
+  };
+}
+
+/** Maps a single `File` entry from `file.status` (git working tree). */
+function mapFileStatusEntry(raw: unknown): OpencodeFileStatusEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const path = readString(parsed.path);
+  if (!path) {
+    return null;
+  }
+  const rawStatus = typeof parsed.status === "string" ? parsed.status : "";
+  const status: OpencodeFileChangeStatus = (
+    FILE_STATUS_VALUES as readonly string[]
+  ).includes(rawStatus)
+    ? (rawStatus as OpencodeFileChangeStatus)
+    : "modified";
+  return {
+    path,
+    additions: readNumber(parsed.additions) ?? readNumber(parsed.added) ?? 0,
+    deletions: readNumber(parsed.deletions) ?? readNumber(parsed.removed) ?? 0,
+    status,
+  };
+}
+
+/** Maps a single `LspStatus` entry from `lsp` (`/lsp`). */
+function mapLspStatusEntry(raw: unknown): OpencodeLspStatusEntry | null {
+  const parsed = readObject(raw);
+  if (!parsed) {
+    return null;
+  }
+  const id = readString(parsed.id);
+  const name = readString(parsed.name);
+  if (!id || !name) {
+    return null;
+  }
+  const root = readString(parsed.root) ?? "";
+  const rawStatus = typeof parsed.status === "string" ? parsed.status : "";
+  const status = rawStatus === "connected" || rawStatus === "error" ? rawStatus : "error";
+  return { id, name, root, status };
+}
+
 /**
  * Reads the OAuth authorization URL from a `provider.oauth.authorize` payload.
  * OpenCode may return either a bare URL string or an object carrying `url`.
@@ -1984,6 +2192,24 @@ function createSdkOpencodeClient(input: {
     async listAgentDetails() {
       return call(() => sdk.app.agents());
     },
+    // --- M5 — workspace UX ----------------------------------------------------
+    async listSessionTodos(payload) {
+      return call(() => sdk.session.todo({ sessionID: payload.sessionId }));
+    },
+    async listSessionDiffs(payload) {
+      return call(() =>
+        sdk.session.diff({
+          sessionID: payload.sessionId,
+          ...(payload.messageId ? { messageID: payload.messageId } : {}),
+        }),
+      );
+    },
+    async listFileStatuses() {
+      return call(() => sdk.file.status());
+    },
+    async listLspStatuses() {
+      return call(() => sdk.lsp.status());
+    },
   };
 }
 
@@ -2110,6 +2336,19 @@ function createCursorLocalBackend(): WorkspaceAgentBackend {
       return fail();
     },
     async listAgentDetails() {
+      return fail();
+    },
+    // M5 — workspace UX (cursor-local not implemented yet)
+    async listSessionTodos() {
+      return fail();
+    },
+    async listSessionDiffs() {
+      return fail();
+    },
+    async listFileStatuses() {
+      return fail();
+    },
+    async listLspStatuses() {
       return fail();
     },
   };
@@ -2601,6 +2840,107 @@ function createOpencodeBackend(
       return entries
         .map(mapAgentDetail)
         .filter((entry): entry is OpencodeAgentDetail => entry !== null);
+    },
+    // --- M5 — workspace UX ----------------------------------------------------
+    async listSessionTodos(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.listSessionTodos({ sessionId: input.sessionId });
+        const entries = unwrapList(raw);
+        if (!entries) {
+          return [];
+        }
+        return entries
+          .map(mapTodoEntry)
+          .filter((entry): entry is OpencodeTodoEntry => entry !== null);
+      } catch (error: unknown) {
+        // Todos are optional; degrade to empty list rather than blocking the panel.
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "serverUnavailable" ||
+            error.code === "transportError" ||
+            error.code === "authFailure" ||
+            error.code === "notFound")
+        ) {
+          return [];
+        }
+        throw error;
+      }
+    },
+    async listSessionDiffs(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.listSessionDiffs({
+          sessionId: input.sessionId,
+          ...(input.messageId ? { messageId: input.messageId } : {}),
+        });
+        const entries = unwrapList(raw);
+        if (!entries) {
+          return [];
+        }
+        return entries
+          .map(mapSessionFileDiff)
+          .filter((entry): entry is OpencodeSessionFileDiff => entry !== null);
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "serverUnavailable" ||
+            error.code === "transportError" ||
+            error.code === "authFailure" ||
+            error.code === "notFound")
+        ) {
+          return [];
+        }
+        throw error;
+      }
+    },
+    async listFileStatuses(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.listFileStatuses();
+        const entries = unwrapList(raw);
+        if (!entries) {
+          return [];
+        }
+        return entries
+          .map(mapFileStatusEntry)
+          .filter((entry): entry is OpencodeFileStatusEntry => entry !== null);
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "serverUnavailable" ||
+            error.code === "transportError" ||
+            error.code === "authFailure" ||
+            error.code === "notFound")
+        ) {
+          return [];
+        }
+        throw error;
+      }
+    },
+    async listLspStatuses(input) {
+      const client = await createClientForWorkspace(input.workspaceRootPath);
+      try {
+        const raw = await client.listLspStatuses();
+        const entries = unwrapList(raw);
+        if (!entries) {
+          return [];
+        }
+        return entries
+          .map(mapLspStatusEntry)
+          .filter((entry): entry is OpencodeLspStatusEntry => entry !== null);
+      } catch (error: unknown) {
+        if (
+          error instanceof WorkspaceAgentBackendError &&
+          (error.code === "serverUnavailable" ||
+            error.code === "transportError" ||
+            error.code === "authFailure" ||
+            error.code === "notFound")
+        ) {
+          return [];
+        }
+        throw error;
+      }
     },
   };
 }

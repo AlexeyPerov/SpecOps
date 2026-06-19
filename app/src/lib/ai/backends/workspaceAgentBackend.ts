@@ -6,6 +6,13 @@ import {
   createOpencodeClient as createOpencodeSdkClient,
   type OpencodeClient as OpencodeSdkClient,
 } from "@opencode-ai/sdk/v2";
+import {
+  readBoolean,
+  readNumber,
+  readObject,
+  readString,
+  readTokenUsage,
+} from "./wireReaders";
 
 export type WorkspaceAgentBackendId = "opencode" | "cursor-local";
 
@@ -832,21 +839,6 @@ function assertWorkspaceRootPath(value: string): string {
   return normalized;
 }
 
-function readObject(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
-
-function readBoolean(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
-}
-
 function mapSession(raw: unknown): WorkspaceAgentSession {
   const payload = unwrapDataPayload(raw);
   const parsed = readObject(payload);
@@ -1021,35 +1013,6 @@ function toolCallKey(toolName: string, callId: string | null): string | null {
     return null;
   }
   return `${toolName}:${callId}`;
-}
-
-function readNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function readTokenUsage(value: unknown): WorkspaceAgentTokenUsage | null {
-  const parsed = readObject(value);
-  if (!parsed) {
-    return null;
-  }
-  const input = readNumber(parsed.input);
-  const output = readNumber(parsed.output);
-  const reasoning = readNumber(parsed.reasoning);
-  if (input === null || output === null || reasoning === null) {
-    return null;
-  }
-  const cache = readObject(parsed.cache);
-  const cacheRead = cache ? readNumber(cache.read) : null;
-  const cacheWrite = cache ? readNumber(cache.write) : null;
-  if (cacheRead === null || cacheWrite === null) {
-    return null;
-  }
-  return {
-    input,
-    output,
-    reasoning,
-    cache: { read: cacheRead, write: cacheWrite },
-  };
 }
 
 function mapStreamFrame(

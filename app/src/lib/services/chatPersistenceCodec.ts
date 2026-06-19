@@ -19,6 +19,7 @@ import {
   type LegacyChatProviderId,
 } from "../ai/providers/debugProviderSettings";
 import { isPersistedChatModeId } from "../ai/modes/chatModesSettings";
+import { readBoolean, readNumber } from "../ai/backends/wireReaders";
 
 export const CHAT_RETENTION_MAX_TURNS = 50;
 export const CHAT_THREAD_VERSION = 1;
@@ -232,18 +233,29 @@ function parseToolCalls(value: unknown): ToolCallRecord[] | undefined {
   return records;
 }
 
+// Note: unlike the shared `readString`, the codec accepts whitespace-only
+// strings for optional fields (disk round-trips them verbatim). Keep this
+// codec-local rather than routing through the shared whitespace-nulling reader.
 function parseOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+// The shared readers null on invalid input; the codec maps that to `undefined`
+// so absent optional fields stay absent on the wire.
 function parseOptionalNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  const parsed = readNumber(value);
+  return parsed === null ? undefined : parsed;
 }
 
 function parseOptionalBoolean(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
+  const parsed = readBoolean(value);
+  return parsed === null ? undefined : parsed;
 }
 
+// Note: the codec validates token usage with a plain `typeof === "number"`
+// check (no `Number.isFinite`), matching what was previously written to disk.
+// Keep this codec-local rather than routing through the shared finite-only
+// `readTokenUsage`, which would change tolerance for already-persisted data.
 function parseTokenUsage(value: unknown): ChatTokenUsage | undefined {
   const parsed = isRecord(value) ? value : null;
   if (!parsed) {

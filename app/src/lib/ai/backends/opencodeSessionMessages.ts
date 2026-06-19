@@ -3,11 +3,19 @@ import type {
   ChatMessagePart,
   ChatMessageRole,
   ChatSubtaskStatus,
-  ChatTokenUsage,
   ToolCallRecord,
   ToolCallStatus,
 } from "../../domain/contracts";
 import type { OpencodeSessionMessageEntry } from "./workspaceAgentBackend";
+import {
+  readBoolean,
+  readNumber,
+  readObject,
+  readOptionalString,
+  readString,
+  readStringList,
+  readTokenUsage,
+} from "./wireReaders";
 
 /**
  * Maps OpenCode `session.messages` entries (`{ info, parts }`) to SpecOps
@@ -17,68 +25,6 @@ import type { OpencodeSessionMessageEntry } from "./workspaceAgentBackend";
  * The mapper is deliberately lenient: malformed entries/parts are dropped
  * rather than failing the whole hydration (matches codec behaviour).
  */
-
-function readObject(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
-
-function readNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function readBoolean(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
-}
-
-function readStringList(value: unknown): string[] | null {
-  if (!Array.isArray(value)) {
-    return null;
-  }
-  const result: string[] = [];
-  for (const entry of value) {
-    if (typeof entry === "string") {
-      result.push(entry);
-    }
-  }
-  return result;
-}
-
-function readOptionalString(value: unknown): string | undefined {
-  const parsed = readString(value);
-  return parsed === null ? undefined : parsed;
-}
-
-function readTokenUsage(value: unknown): ChatTokenUsage | null {
-  const parsed = readObject(value);
-  if (!parsed) {
-    return null;
-  }
-  const input = readNumber(parsed.input);
-  const output = readNumber(parsed.output);
-  const reasoning = readNumber(parsed.reasoning);
-  if (input === null || output === null || reasoning === null) {
-    return null;
-  }
-  const cache = readObject(parsed.cache);
-  const cacheRead = cache ? readNumber(cache.read) : null;
-  const cacheWrite = cache ? readNumber(cache.write) : null;
-  if (cacheRead === null || cacheWrite === null) {
-    return null;
-  }
-  return {
-    input,
-    output,
-    reasoning,
-    cache: { read: cacheRead, write: cacheWrite },
-  };
-}
 
 function mapReasoningPart(raw: Record<string, unknown>): ChatMessagePart | null {
   const text = typeof raw.text === "string" ? raw.text : null;

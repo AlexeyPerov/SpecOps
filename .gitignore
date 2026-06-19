@@ -60,3 +60,6 @@ TODO.md
 
 # Test files
 /test-files/
+
+# svelte
+**/.svelte-kit/**

@@ -4,6 +4,7 @@ import {
   extractMessageSteps,
   extractSessionTotals,
 } from "./chatSteps";
+import { formatCost } from "./chatTokenFormat";
 import type {
   ChatCostPart,
   ChatMessage,
@@ -291,6 +292,51 @@ describe("extractMessageStepTotals", () => {
       reasoning: 3,
       cache: { read: 4, write: 5 },
     });
+  });
+
+  // M12-T4 — the formatCost ambiguity (zero cost vs missing cost both render
+  // "$0.00") is resolved by the null guard, not by the formatter. These tests
+  // pin the invariant end-to-end: a missing-cost message yields null totals so
+  // the per-message footer renders nothing, while a genuine zero-cost message
+  // (free / fully-cached model that still carried a token payload) yields
+  // non-null totals so the footer renders and shows "$0.00" via formatCost.
+  it("M12-T4: a message whose parts carry no cost data returns null (renders no footer)", () => {
+    // Only text + reasoning — no step finishes and no cost part. The footer
+    // gate (`{#if stepTotals}` in ChatMessageList) renders nothing here, so a
+    // missing-cost message is never shown as "$0.00".
+    const message = assistantMessage([
+      { type: "text", id: "t1", text: "answer" },
+      { type: "reasoning", id: "r1", text: "thinking" },
+    ]);
+    expect(extractMessageStepTotals(message)).toBeNull();
+  });
+
+  it("M12-T4: a genuine zero-cost message (free/cached model with a token payload) renders $0.00", () => {
+    // A canonical cost part with cost: 0 but a real token payload is a genuine
+    // zero cost (free / fully-cached model), not a missing one. The extractor
+    // returns non-null so the footer renders, and formatCost renders "$0.00".
+    const message = assistantMessage([
+      stepStart(0, "s0"),
+      stepFinish(0, 0, tokens(100, 200)),
+      { type: "cost", cost: 0, tokens: tokens(100, 200) } satisfies ChatCostPart,
+    ]);
+    const totals = extractMessageStepTotals(message);
+    expect(totals).not.toBeNull();
+    expect(totals?.cost).toBe(0);
+    expect(totals?.tokens).toEqual(tokens(100, 200));
+    // The formatter is what the footer calls — pin the rendered string so the
+    // "genuine zero" path stays distinct from "missing" (which renders nothing).
+    expect(formatCost(totals!.cost)).toBe("$0.00");
+  });
+
+  it("M12-T4: a cost part with neither cost nor tokens (truly empty) returns null", () => {
+    // A canonical cost part carrying no payload at all is treated as missing
+    // (cost === 0 && tokens === undefined → null), so it renders no footer
+    // rather than a misleading "$0.00".
+    const message = assistantMessage([
+      { type: "cost", cost: 0 } satisfies ChatCostPart,
+    ]);
+    expect(extractMessageStepTotals(message)).toBeNull();
   });
 });
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-20 00:30
+
+- **Phase 3.5 M12-T4 — `formatCost` ambiguity re-affirmed.** Closed the fourth and final `[P2]` review observation. `formatCost` (`chatTokenFormat.ts:36-41`) renders a genuine zero cost (free / fully-cached model) and a *missing* cost identically as `"$0.00"`; M11-T3 had accepted this because the surrounding guards already let the session-level path distinguish "no data" from "zero cost". Took the **recommended (re-affirm) approach** rather than the sentinel alternative: verified the documented guard invariant holds end-to-end, then pinned it with a test.
+  - **Invariant verified at all four consumers:**
+    - **Per-message footer** (`ChatMessageList.svelte:480`): `{#if stepTotals}` where `stepTotalsFor(message)` returns `null` for non-assistant messages or when `extractMessageStepTotals` is null — so a missing-cost message renders *no footer*, never a `$0.00` one.
+    - **Session-level badge** (`ChatPanel.svelte:398`): `{#if sessionTotals}` where `sessionTotals` is `extractSessionTotals(messages)`; `messageCount: 0` → `null` → no badge.
+    - **Per-step separator** (`StepSeparator.svelte:43`): `{#if boundary.cost !== undefined}` — only finish-phase steps carrying a cost field render a cost line; running steps / failed steps-without-cost show no cost.
+    - **The extractors** (`extractMessageStepTotals` / `extractSessionTotals` in `ai/chatSteps.ts`): return `null` when no part contributes (no step finishes, no canonical cost part with a payload; a `cost` part with `cost === 0 && tokens === undefined` is treated as empty → null).
+  - **Outcome:** the ambiguity is resolved everywhere it matters — a missing cost renders nothing (the null guard), while a genuine zero-cost message that still carried a token payload (free / fully-cached model) renders a footer showing `$0.00`. Threading a null/"unknown" sentinel through the four consumers was indeed disproportionate for a polish item, as M11-T3 judged; the documented acceptance stands.
+  - **Tests:** +3 in `ai/chatSteps.test.ts` pinning the invariant — (1) a message whose parts carry only text/reasoning (no cost data) yields `null` (renders no footer); (2) a genuine zero-cost message (`cost: 0` with a real token payload) yields non-null totals whose `formatCost` renders `"$0.00"` — the distinct "genuine zero" path; (3) a canonical cost part with neither cost nor tokens (`cost: 0, tokens: undefined`) yields `null` (renders nothing, not a misleading `$0.00`). Decision recorded per the task's "either way, record the outcome" requirement.
+
 ## 2026-06-19 23:58
 
 - **Phase 3.5 M12-T3 — `svelte-check` warnings 185 → 0.** Closed the third `[P2]` review observation. `npm run check` reported 0 errors / 185 warnings; both warning classes are now eliminated.

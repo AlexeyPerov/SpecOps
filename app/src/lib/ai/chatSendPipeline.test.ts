@@ -346,6 +346,114 @@ describe("chatSendPipeline workspace backend streaming", () => {
     expect(assistant?.content).toBe("Final complete message");
   });
 
+  it("accumulates reasoning / subtask / step parts live during the turn", async () => {
+    appState.addWorkspace("/work/a");
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield { type: "reasoning.delta", reasoningId: "r1", delta: "Let me think" };
+      yield {
+        type: "step.started",
+        stepId: "st0",
+        agent: "build",
+        modelId: "m",
+        providerId: "p",
+      };
+      yield { type: "message.delta", delta: "Working " };
+      yield {
+        type: "subtask.started",
+        subtaskId: "s1",
+        agent: "research",
+        description: "look it up",
+        prompt: "find the answer",
+      };
+      yield { type: "message.delta", delta: "on it" };
+      yield {
+        type: "step.finished",
+        stepId: "st0",
+        reason: "stop",
+        cost: 0.012,
+        tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
+      };
+      yield { type: "reasoning.ended", reasoningId: "r1", text: "Let me think it through" };
+      yield { type: "message.completed", message: "Working on it" };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn(),
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+
+    const { sendChatMessage } = await import("./sendChatMessage");
+    const result = await sendChatMessage("Plan it");
+
+    expect(result.ok).toBe(true);
+    const assistant = chatStore.getMessages().find((m) => m.role === "assistant");
+    expect(assistant?.content).toBe("Working on it");
+    // The assistant message carries reasoning, subtask, and step parts that
+    // render via the same extractors as the hydrated (session.messages) view.
+    const reasoningPart = assistant?.parts?.find((p) => p.type === "reasoning");
+    expect(reasoningPart).toMatchObject({ type: "reasoning", id: "r1", text: "Let me think it through" });
+    const subtaskPart = assistant?.parts?.find((p) => p.type === "subtask");
+    expect(subtaskPart).toMatchObject({
+      type: "subtask",
+      id: "s1",
+      agent: "research",
+      status: "running",
+    });
+    const stepParts = assistant?.parts?.filter((p) => p.type === "step") ?? [];
+    expect(stepParts).toHaveLength(2);
+    expect(stepParts[0]).toMatchObject({ phase: "start", index: 0, id: "st0" });
+    expect(stepParts[1]).toMatchObject({
+      phase: "finish",
+      index: 0,
+      id: "st0",
+      cost: 0.012,
+      reason: "stop",
+    });
+  });
+
+  it("surfaces step.failed as a token-less finish part during the turn", async () => {
+    appState.addWorkspace("/work/a");
+    const streamEvents = vi.fn().mockImplementation(async function* () {
+      yield { type: "step.started", stepId: "st0", agent: null, modelId: null, providerId: null };
+      yield { type: "step.failed", stepId: "st0", message: "rate limited" };
+      yield { type: "message.completed", message: "Could not finish." };
+      yield { type: "run.completed" };
+    });
+    createWorkspaceAgentBackendMock.mockReturnValue({
+      id: "opencode",
+      createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      getSession: vi.fn().mockResolvedValue(null),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      send: vi.fn().mockResolvedValue({ sessionId: "sess-1" }),
+      replyPermission: vi.fn(),
+      replyQuestion: vi.fn(),
+      rejectQuestion: vi.fn(),
+      abortSession: vi.fn(),
+      streamEvents,
+    } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
+
+    const { sendChatMessage } = await import("./sendChatMessage");
+    const result = await sendChatMessage("Try it");
+
+    expect(result.ok).toBe(true);
+    const assistant = chatStore.getMessages().find((m) => m.role === "assistant");
+    const finishPart = assistant?.parts?.find(
+      (p) => p.type === "step" && "phase" in p && p.phase === "finish",
+    );
+    expect(finishPart).toMatchObject({ type: "step", phase: "finish", reason: "rate limited" });
+    expect(finishPart).not.toHaveProperty("tokens");
+  });
+
   it("preserves tool call state after cancellation during tool execution", async () => {
     appState.addWorkspace("/work/a");
     const abortSession = vi.fn().mockResolvedValue(undefined);

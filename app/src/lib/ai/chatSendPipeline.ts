@@ -1,4 +1,4 @@
-import type { ChatMessage, ToolCallRecord } from "../domain/contracts";
+import type { ChatMessage, ChatMessagePart, ToolCallRecord } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
@@ -34,6 +34,14 @@ import {
   applyToolProgress,
   applyToolStarted,
 } from "./toolCallReducer";
+import {
+  applyReasoningDelta,
+  applyReasoningEnded,
+  applyStepFailed,
+  applyStepFinished,
+  applyStepStarted,
+  applySubtaskStarted,
+} from "./chatStreamParts";
 import { promptPermission } from "../services/permissionPrompt";
 import { promptQuestion } from "../services/questionPrompt";
 import type { WorkspacePermissionReply } from "./backends/workspaceAgentBackend";
@@ -750,6 +758,18 @@ async function executeWorkspaceAgentBackendTurn(params: {
 
     let accumulated = "";
     let toolCalls: ToolCallRecord[] = [];
+    // Live-stream structured parts (M8-T1): reasoning / subtask / step parts
+    // accumulate on the active assistant message as the corresponding stream
+    // events arrive, so they render during the turn — not only after M1-T3
+    // `session.messages` hydration on tab reopen.
+    let parts: ChatMessagePart[] = [];
+    let hasFlushedParts = false;
+    const flushParts = (): void => {
+      if (parts.length === 0) {
+        return;
+      }
+      chatStore.updateMessageParts(assistantMessage.id, parts, activeAgentId, root);
+    };
     for await (const event of backend.streamEvents({
       workspaceRootPath: root,
       sessionId: run.sessionId,
@@ -769,6 +789,43 @@ async function executeWorkspaceAgentBackendTurn(params: {
       if (event.type === "message.completed") {
         accumulated = event.message || accumulated;
         chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
+        // Flush the accumulated structured parts once on completion so the
+        // final message carries them idempotently (no end-of-turn
+        // `listMessages` re-hydration — the live path is the single source).
+        if (!hasFlushedParts) {
+          hasFlushedParts = true;
+          flushParts();
+        }
+        continue;
+      }
+      if (event.type === "reasoning.delta") {
+        parts = applyReasoningDelta(parts, event);
+        flushParts();
+        continue;
+      }
+      if (event.type === "reasoning.ended") {
+        parts = applyReasoningEnded(parts, event);
+        flushParts();
+        continue;
+      }
+      if (event.type === "subtask.started") {
+        parts = applySubtaskStarted(parts, event);
+        flushParts();
+        continue;
+      }
+      if (event.type === "step.started") {
+        parts = applyStepStarted(parts, event);
+        flushParts();
+        continue;
+      }
+      if (event.type === "step.finished") {
+        parts = applyStepFinished(parts, event);
+        flushParts();
+        continue;
+      }
+      if (event.type === "step.failed") {
+        parts = applyStepFailed(parts, event);
+        flushParts();
         continue;
       }
       if (event.type === "tool.started") {
@@ -870,6 +927,13 @@ async function executeWorkspaceAgentBackendTurn(params: {
 
     assertTurnStillActive(root, activeAgentId, turnId);
     chatStore.updateMessageContent(assistantMessage.id, accumulated, activeAgentId, root);
+    // Final idempotent flush for turns that ended without an explicit
+    // `message.completed` (e.g. `run.completed` after the last delta) but that
+    // still accumulated structured parts mid-stream.
+    if (!hasFlushedParts) {
+      hasFlushedParts = true;
+      flushParts();
+    }
     chatStore.compactActiveThread(activeAgentId);
     chatStore.completeTurn(activeAgentId, root);
     persistAgentThreadOnce(root, activeAgentId);

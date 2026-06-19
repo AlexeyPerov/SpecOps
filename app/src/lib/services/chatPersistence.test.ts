@@ -314,10 +314,6 @@ describe("agent thread snapshot codec", () => {
                 snapshot: "abc123",
                 files: ["src/index.ts"],
               },
-              {
-                type: "compaction",
-                auto: true,
-              },
             ],
           },
         ],

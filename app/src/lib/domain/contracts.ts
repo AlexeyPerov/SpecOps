@@ -58,7 +58,6 @@ export type {
   BuiltinChatModeId,
   BuiltinChatModeToggles,
   ChatAgentThreadFileSnapshot,
-  ChatCompactionPart,
   ChatCostPart,
   ChatDiffPart,
   ChatFilePart,

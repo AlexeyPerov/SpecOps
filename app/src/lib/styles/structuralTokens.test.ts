@@ -9,12 +9,31 @@ import { describe, expect, it } from "vitest";
  * reference structural spacing/surface/border/selection tokens that were
  * historically never defined. This test pins their presence in tokens.css so
  * the gaps don't silently regress.
+ *
+ * M11-T1 — The spacing scale must additionally be monotonic with no duplicate
+ * values (a larger numeric suffix must never resolve to a smaller-or-equal
+ * pixel value). The earlier scale had `--space-1 === --space-2` and
+ * `--space-3 > --space-4`, which invited author mistakes; this pins the
+ * ordering invariant so it can't silently regress.
  */
 
 const TOKENS_CSS = readFileSync(
   join(import.meta.dirname, "tokens.css"),
   "utf8",
 );
+
+/** Expected M11-T1 monotonic scale (numeric suffix → px). */
+const EXPECTED_SPACING_PX: Record<string, number> = {
+  "--space-1": 2,
+  "--space-2": 4,
+  "--space-3": 6,
+  "--space-4": 8,
+  "--space-5": 10,
+  "--space-6": 12,
+  "--space-8": 16,
+  "--space-10": 20,
+  "--space-12": 24,
+};
 
 const STRUCTURAL_SPACING_TOKENS = [
   "--space-1",
@@ -51,6 +70,34 @@ describe("tokens.css structural spacing scale", () => {
 
   it.each(STRUCTURAL_SPACING_TOKENS)("defines %s on :root", (token) => {
     expect(rootBody).toContain(`${token}:`);
+  });
+
+  it("resolves each spacing token to its expected px value", () => {
+    for (const [token, px] of Object.entries(EXPECTED_SPACING_PX)) {
+      const match = new RegExp(`${token}:\\s*([0-9.]+)px`, "m").exec(rootBody ?? "");
+      expect(match, `${token} should be defined with a px value`).not.toBeNull();
+      expect(Number(match?.[1] ?? NaN)).toBe(px);
+    }
+  });
+
+  it("is monotonic — each step is strictly greater than the previous", () => {
+    const ordered = STRUCTURAL_SPACING_TOKENS.map((token) => ({
+      token,
+      px: EXPECTED_SPACING_PX[token]!,
+    }));
+    for (let i = 1; i < ordered.length; i += 1) {
+      const prev = ordered[i - 1]!;
+      const curr = ordered[i]!;
+      expect(
+        curr.px,
+        `${curr.token} (${curr.px}px) must be > ${prev.token} (${prev.px}px)`,
+      ).toBeGreaterThan(prev.px);
+    }
+  });
+
+  it("has no duplicate px values across the spacing scale", () => {
+    const pxValues = STRUCTURAL_SPACING_TOKENS.map((token) => EXPECTED_SPACING_PX[token]!);
+    expect(new Set(pxValues).size).toBe(pxValues.length);
   });
 });
 

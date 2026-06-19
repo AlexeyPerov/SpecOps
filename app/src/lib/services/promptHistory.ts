@@ -198,20 +198,32 @@ export function createPromptHistoryStore(
         return;
       }
       const ts = now().toISOString();
-      const existing = entries.find((entry) => entry.prompt === trimmed);
-      if (existing) {
-        existing.count += 1;
-        existing.lastUsedAt = ts;
-      } else {
-        entries.push({
-          prompt: trimmed,
-          firstSeenAt: ts,
+      const existingIndex = entries.findIndex((entry) => entry.prompt === trimmed);
+      if (existingIndex >= 0) {
+        // Immutable reassign so the array is safe to lift into a Svelte `$state`
+        // proxy later (in-place mutation of the found entry wouldn't trigger
+        // reactivity). Build a fresh array with the updated entry swapped in.
+        const existing = entries[existingIndex]!;
+        const updated: PromptHistoryEntry = {
+          ...existing,
+          count: existing.count + 1,
           lastUsedAt: ts,
-          count: 1,
-        });
+        };
+        entries = entries.map((entry, index) => (index === existingIndex ? updated : entry));
+      } else {
+        entries = [
+          ...entries,
+          {
+            prompt: trimmed,
+            firstSeenAt: ts,
+            lastUsedAt: ts,
+            count: 1,
+          },
+        ];
       }
       // Re-sort + cap (drop least-relevant entries past maxEntries).
       entries = entries
+        .slice()
         .sort((a, b) => frecencyScore(b, now()) - frecencyScore(a, now()))
         .slice(0, maxEntries);
       persist();

@@ -198,7 +198,10 @@
   .tab-strip {
     display: flex;
     align-items: center;
-    gap: var(--space-6);
+    /* Inter-tab gap is load-bearing relative to the tab vertical inset
+       (tab height = --tab-header-height - 8px); keep both as literal px so the
+       M11-T1 spacing-scale change doesn't shrink the tabs. */
+    gap: 6px;
     min-width: 0;
     overflow: hidden;
   }
@@ -209,7 +212,7 @@
 
   .tab-shell {
     position: relative;
-    height: calc(var(--tab-header-height) - var(--space-8));
+    height: calc(var(--tab-header-height) - 8px);
     min-width: 0;
   }
 
@@ -220,8 +223,10 @@
     border-radius: var(--radius-sm);
     background: transparent;
     color: inherit;
-    height: calc(var(--tab-header-height) - var(--space-8));
-    padding: 0 var(--space-8) 0 var(--space-6);
+    height: calc(var(--tab-header-height) - 8px);
+    /* Horizontal tab padding is load-bearing; literal px keeps the tab geometry
+       stable across the M11-T1 spacing-scale change. */
+    padding: 0 8px 0 6px;
     min-width: 0;
     width: 100%;
   }
@@ -292,7 +297,7 @@
 
   .tab-placeholder {
     flex-shrink: 0;
-    height: calc(var(--tab-header-height) - var(--space-8));
+    height: calc(var(--tab-header-height) - 8px);
   }
 
   .tab-dragging {

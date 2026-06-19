@@ -175,13 +175,14 @@ describe("opencodeSessionMessages.mapper", () => {
       ]);
     });
 
-    it("maps file, snapshot, patch, and compaction parts", () => {
+    it("maps file, snapshot, patch parts and drops compaction parts", () => {
       const entry = {
         info: assistantInfo("msg-asst-4"),
         parts: [
           { id: "f-1", type: "file", mime: "image/png", filename: "shot.png", url: "file:///x" },
           { id: "snap-1", type: "snapshot", snapshot: "abc123" },
           { id: "patch-1", type: "patch", hash: "def456", files: ["a.ts", "b.ts"] },
+          // compaction has no UI consumer (M11-T2) — dropped, not mapped.
           { id: "comp-1", type: "compaction", auto: true },
         ],
       };
@@ -191,7 +192,6 @@ describe("opencodeSessionMessages.mapper", () => {
         { type: "file", id: "f-1", mime: "image/png", filename: "shot.png", url: "file:///x" },
         { type: "diff", id: "snap-1", snapshot: "abc123" },
         { type: "diff", id: "patch-1", snapshot: "def456", files: ["a.ts", "b.ts"] },
-        { type: "compaction", id: "comp-1", auto: true },
         // Trailing cost part appended from assistant info tokens/cost
         {
           type: "cost",

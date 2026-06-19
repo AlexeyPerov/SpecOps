@@ -8,7 +8,6 @@ import type {
 } from "../../domain/contracts";
 import type { OpencodeSessionMessageEntry } from "./workspaceAgentBackend";
 import {
-  readBoolean,
   readNumber,
   readObject,
   readOptionalString,
@@ -129,18 +128,16 @@ function mapPatchPart(raw: Record<string, unknown>): ChatMessagePart | null {
   };
 }
 
-function mapCompactionPart(raw: Record<string, unknown>): ChatMessagePart | null {
-  const autoValue = readBoolean(raw.auto);
-  return {
-    type: "compaction",
-    ...(readOptionalString(raw.id) ? { id: readOptionalString(raw.id) } : {}),
-    ...(autoValue === null ? {} : { auto: autoValue }),
-  };
-}
-
 /**
  * Map a single OpenCode part to a SpecOps part. Returns null when the part
- * type is unsupported (tool, agent, retry) or malformed — callers drop them.
+ * type is unsupported (tool, agent, retry, compaction) or malformed — callers
+ * drop them.
+ *
+ * `compaction` is intentionally not mapped: SpecOps renders its own FIFO
+ * compaction banner (see `chatRetention.ts` / `ChatMessageList`'s
+ * `compactionNotice` prop), which is a different concept from OpenCode's
+ * per-message compaction marker, so the part type carries no UI consumer and
+ * is dropped here. See `specs/changelog.md` (M11-T2).
  */
 function mapSessionPart(
   raw: unknown,
@@ -168,7 +165,8 @@ function mapSessionPart(
     case "patch":
       return mapPatchPart(parsed);
     case "compaction":
-      return mapCompactionPart(parsed);
+      // No UI consumer — dropped (see function docstring).
+      return null;
     default:
       // tool / agent / retry — handled elsewhere or out of scope.
       return null;

@@ -23,6 +23,15 @@ export function formatTokenCount(value: number): string {
  * Cost formatting shared across the cost renderers. Up to 4 decimals for
  * sub-cent micro-steps, trimming trailing zeros. A non-positive or non-finite
  * cost renders as "$0.00".
+ *
+ * Ambiguity note (M11-T3, accepted): a genuine zero cost (free/cached model)
+ * and a *missing* cost are both rendered as `"$0.00"` — the number type can't
+ * carry an "unknown" sentinel. Callers that must distinguish the two use the
+ * surrounding guard instead: `extractMessageStepTotals` / `extractSessionTotals`
+ * return `null` (no footer rendered) when no part contributed, and
+ * `ChatSessionTotals.messageCount` lets the session-total badge tell "no data"
+ * from "zero cost". Threading a sentinel through every cost renderer was
+ * deemed disproportionate for a polish item; this documented choice stands.
  */
 export function formatCost(cost: number): string {
   if (!Number.isFinite(cost) || cost <= 0) {

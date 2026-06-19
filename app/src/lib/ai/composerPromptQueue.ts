@@ -88,16 +88,21 @@ export function createComposerPromptQueue(): {
       if (idx < 0) {
         return null;
       }
-      const [item] = items.splice(idx, 1);
-      return item ?? null;
+      const item = items[idx] ?? null;
+      // Immutable reassign so the list stays safe to lift into a Svelte `$state`
+      // proxy (in-place splice would mutate the underlying array without
+      // triggering reactivity).
+      items = items.filter((_, index) => index !== idx);
+      return item;
     },
     takeNextSteer() {
       const idx = items.findIndex((item) => item.mode === "steer");
       if (idx < 0) {
         return null;
       }
-      const [item] = items.splice(idx, 1);
-      return item ?? null;
+      const item = items[idx] ?? null;
+      items = items.filter((_, index) => index !== idx);
+      return item;
     },
   };
 }

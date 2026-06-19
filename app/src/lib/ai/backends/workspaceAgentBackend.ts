@@ -1349,6 +1349,20 @@ function unwrapSessionList(raw: unknown): unknown[] | null {
   return null;
 }
 
+/**
+ * Coerces the OpenCode `session.summarize` response to a success boolean.
+ *
+ * The SDK historically returns `true` or the string `"true"`; both mean "the
+ * summary was generated". We coerce those two shapes explicitly and treat
+ * anything else (including a future `{ ok: true }` object or an unexpected
+ * payload) as failure rather than silently passing a truthy object through as
+ * `true`. If the SDK gains a richer success shape later, extend this helper
+ * rather than widening the call site.
+ */
+function coerceSummarizeOk(raw: unknown): boolean {
+  return raw === true || raw === "true";
+}
+
 function readQuestionPrompt(payload: Record<string, unknown>): string | null {
   const directPrompt = readString(payload.header) ?? readString(payload.text) ?? readString(payload.prompt);
   if (directPrompt) {
@@ -2588,7 +2602,7 @@ function createOpencodeBackend(
           ? { modelId: input.modelId, providerId: input.providerId }
           : {}),
       });
-      return raw === true || raw === "true";
+      return coerceSummarizeOk(raw);
     },
     async listSessionChildren(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);

@@ -10,15 +10,18 @@
   --font-size-body: 13px;
   --font-weight-normal: 400;
 
+  /* M11-T1 — Spacing scale. Monotonic and duplicate-free so the numeric
+     suffix implies ordering (a larger N is always >= the previous step).
+     Steps: 2, 4, 6, 8, 10, 12, 16, 20, 24. */
   --space-1: 2px;
-  --space-2: 2px;
+  --space-2: 4px;
   --space-3: 6px;
-  --space-4: 4px;
+  --space-4: 8px;
   --space-5: 10px;
-  --space-6: 6px;
-  --space-8: 8px;
+  --space-6: 12px;
+  --space-8: 16px;
   --space-10: 20px;
-  --space-12: 12px;
+  --space-12: 24px;
 
   /* Font-size tokens; defaults preserve the pre-M6 13px base. Overridden at
      runtime by fontSettingsSlice from the persisted Appearance settings. */

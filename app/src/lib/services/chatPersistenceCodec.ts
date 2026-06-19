@@ -354,13 +354,6 @@ function parseMessagePart(value: unknown): ChatMessagePart | null {
         ...(files !== undefined ? { files } : {}),
       };
     }
-    case "compaction": {
-      return {
-        type: "compaction",
-        ...(id !== undefined ? { id } : {}),
-        auto: parseOptionalBoolean(value.auto),
-      };
-    }
     case "cost": {
       if (typeof value.cost !== "number") {
         return null;

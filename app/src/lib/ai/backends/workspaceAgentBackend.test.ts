@@ -1787,6 +1787,19 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
     expect(ok).toBe(true);
   });
 
+  it("summarizeSession accepts the legacy \"true\" string", async () => {
+    const { backend } = createLifecycleBackend({ summarizeResult: "true" });
+    const ok = await backend.summarizeSession({ workspaceRootPath: "/repo", sessionId: "s1" });
+    expect(ok).toBe(true);
+  });
+
+  it("summarizeSession reports failure for an unexpected object payload", async () => {
+    // A future `{ ok: true }` shape must not silently pass through as success.
+    const { backend } = createLifecycleBackend({ summarizeResult: { ok: true } });
+    const ok = await backend.summarizeSession({ workspaceRootPath: "/repo", sessionId: "s1" });
+    expect(ok).toBe(false);
+  });
+
   it("summarizeSession forwards optional model/provider when both are present", async () => {
     const { backend, calls } = createLifecycleBackend();
     await backend.summarizeSession({

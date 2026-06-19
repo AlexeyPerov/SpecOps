@@ -132,12 +132,6 @@ export interface ChatDiffPart {
   files?: string[];
 }
 
-export interface ChatCompactionPart {
-  type: "compaction";
-  id?: string;
-  auto?: boolean;
-}
-
 export interface ChatCostPart {
   type: "cost";
   id?: string;
@@ -152,7 +146,6 @@ export type ChatMessagePart =
   | ChatStepPart
   | ChatFilePart
   | ChatDiffPart
-  | ChatCompactionPart
   | ChatCostPart;
 
 /** Discriminator strings for `ChatMessagePart`. */

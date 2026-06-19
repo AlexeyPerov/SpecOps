@@ -13,8 +13,10 @@ import { logDiagnostic } from "../../services/logging";
  * MCP resources and symbols are deferred.
  *
  * The picker shows both lists side-by-side; both are filtered client-side
- * against the user's query. File search is debounced because it hits the
- * OpenCode server each call.
+ * against the user's query. File search (`searchMentionFiles`) hits the
+ * OpenCode server on every call, so callers debounce it at the call site
+ * (e.g. the composer's keyed-off `setTimeout`); this module itself is
+ * un-debounced so unit tests can drive it synchronously.
  */
 
 export interface MentionFileEntry {
@@ -25,8 +27,6 @@ export interface MentionFileEntry {
 export interface MentionAgentEntry {
   id: string;
   name: string;
-  /** True when the agent is a subagent (invokable via `@agent:` parts). */
-  isSubagent?: boolean;
 }
 
 export interface MentionResults {

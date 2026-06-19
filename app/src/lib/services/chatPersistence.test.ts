@@ -358,6 +358,88 @@ describe("agent thread snapshot codec", () => {
     expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
     expect(decoded?.thread.messages[0]?.content).toBe("hello");
   });
+
+  it("keeps valid parts when one part is malformed (M12-T2 tolerance)", () => {
+    const validReasoning = {
+      type: "reasoning",
+      id: "reason-1",
+      text: "I should check the file first.",
+    };
+    const validText = { type: "text", text: "Let me look at that." };
+    const raw = JSON.stringify({
+      version: 1,
+      thread: {
+        metadata: sampleThread().metadata,
+        messages: [
+          {
+            id: "m-1",
+            role: "assistant",
+            content: "Let me look at that.",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            parts: [
+              validReasoning,
+              { type: "unknown-part-type" },
+              validText,
+              { type: "step", phase: "not-a-phase" },
+            ],
+          },
+        ],
+      },
+    });
+
+    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    // Malformed entries are dropped; the two valid parts survive in order.
+    expect(decoded?.thread.messages[0]?.parts).toEqual([validReasoning, validText]);
+    expect(decoded?.thread.messages[0]?.content).toBe("Let me look at that.");
+  });
+
+  it("returns undefined parts when every entry is malformed (full degrade)", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      thread: {
+        metadata: sampleThread().metadata,
+        messages: [
+          {
+            id: "m-1",
+            role: "user",
+            content: "hello",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            parts: [
+              { type: "unknown-part-type" },
+              { type: "step", phase: "not-a-phase" },
+              "not-even-an-object",
+            ],
+          },
+        ],
+      },
+    });
+
+    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    // Every entry failed → degrade to `undefined`, not an empty-parts message.
+    expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
+    expect(decoded?.thread.messages[0]?.content).toBe("hello");
+  });
+
+  it("returns undefined parts for a non-array parts value", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      thread: {
+        metadata: sampleThread().metadata,
+        messages: [
+          {
+            id: "m-1",
+            role: "user",
+            content: "hello",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            parts: "not-an-array",
+          },
+        ],
+      },
+    });
+
+    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
+  });
 });
 
 describe("workspace agents index codec", () => {

@@ -370,6 +370,13 @@ function parseMessagePart(value: unknown): ChatMessagePart | null {
   }
 }
 
+// Tolerant aggregation: a single malformed persisted part (e.g. a future
+// part type unknown to this codec) drops only that entry and keeps the valid
+// ones, matching the wire-boundary lenience in `mapPartsAndIndex`. The message
+// still degrades to `undefined` for a non-array value, or when *every* entry
+// failed to parse — preserving the "no parts → undefined" contract downstream
+// code relies on, so a fully-corrupt array does not yield a parts-less-but-
+// present message that pretends to have structure.
 function parseParts(value: unknown): ChatMessagePart[] | undefined {
   if (value === undefined) {
     return undefined;
@@ -381,9 +388,12 @@ function parseParts(value: unknown): ChatMessagePart[] | undefined {
   for (const entry of value) {
     const part = parseMessagePart(entry);
     if (!part) {
-      return undefined;
+      continue;
     }
     parts.push(part);
+  }
+  if (parts.length === 0 && value.length > 0) {
+    return undefined;
   }
   return parts;
 }

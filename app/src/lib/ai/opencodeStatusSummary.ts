@@ -1,12 +1,6 @@
-import { writable, type Readable, type Writable } from "svelte/store";
-import {
-  createWorkspaceAgentBackend,
-  type OpencodeLspStatusEntry,
-} from "./backends/workspaceAgentBackend";
-import { logDiagnostic } from "../services/logging";
-import { appState } from "../state/appState";
-import type { OpencodeTransportMode } from "../domain/contracts";
-import { isOpencodeEnabled } from "../services/opencodeSettings";
+import type { Readable } from "svelte/store";
+import { type OpencodeLspStatusEntry } from "./backends/workspaceAgentBackend";
+import { createReactiveResourceStore } from "./opencodeResourceStore";
 
 /**
  * M5-T4 — workspace status summary. Aggregates the LSP / MCP / provider /
@@ -16,6 +10,8 @@ import { isOpencodeEnabled } from "../services/opencodeSettings";
  * permission rule count falls back to 0, model info to null.
  *
  * The store is keyed by workspace root (one summary per open workspace).
+ * M10-T1: the cache + inflight + diagnostic skeleton now lives in
+ * `createReactiveResourceStore`.
  */
 
 export type StatusSummaryStoreStatus = "idle" | "loading" | "loaded" | "error";
@@ -52,164 +48,72 @@ const emptyState: StatusSummaryState = {
   loadedAt: null,
 };
 
-interface CachedStore {
-  readable: Readable<StatusSummaryState>;
-  set: (value: StatusSummaryState) => void;
-  value: StatusSummaryState;
+const store = createReactiveResourceStore<StatusSummaryState, string>({
+  diagnosticLabel: "status summary",
+  diagnosticKind: "opencode.status.summary.refresh",
+  reactive: true,
+  keyOf: (workspaceRootPath) => workspaceRootPath,
+  diagnosticExtra: (workspaceRootPath) => ({ workspaceRootPath }),
+  copyEmptyState: () => ({ ...emptyState }),
+  disabledState: () => ({ ...emptyState }),
+  buildLoadingState: (prior) => ({ ...prior, status: "loading" }),
+  buildErrorState: (message) => ({
+    ...emptyState,
+    status: "error",
+    lastErrorMessage: message,
+  }),
+  async fetch(backend, workspaceRootPath) {
+    // Each source is fetched independently and degraded to a safe default
+    // on failure so the popover always has *something* to show.
+    const [lspServers, mcpStatuses, providerStatuses, config] = await Promise.all([
+      backend.listLspStatuses({ workspaceRootPath }).catch(() => [] as OpencodeLspStatusEntry[]),
+      backend.listMcpStatuses({ workspaceRootPath }).catch(() => []),
+      backend.listProviderStatuses({ workspaceRootPath }).catch(() => []),
+      backend.getConfig({ workspaceRootPath }).catch(() => ({} as Record<string, unknown>)),
+    ]);
+
+    const mcpTotal = mcpStatuses.length;
+    const mcpConnected = mcpStatuses.filter((entry) => entry.status === "connected").length;
+    const providersTotal = providerStatuses.length;
+    const providersConnected = providerStatuses.filter((entry) => entry.connected).length;
+    const { permissionRuleCount, defaultModelId, defaultAgentId } = readConfigSummary(config);
+
+    return {
+      status: "loaded",
+      lspServers,
+      mcpConnected,
+      mcpTotal,
+      providersConnected,
+      providersTotal,
+      permissionRuleCount,
+      defaultModelId,
+      defaultAgentId,
+      lastErrorMessage: null,
+      loadedAt: new Date().toISOString(),
+    };
+  },
+});
+
+export function getStatusSummary(workspaceRootPath: string): Readable<StatusSummaryState> {
+  return store.getReadable(workspaceRootPath);
 }
 
-const storeCache = new Map<string, CachedStore>();
-const inflightRequests = new Map<string, Promise<StatusSummaryState>>();
-
-function getOrCreateStore(workspaceRootPath: string): CachedStore {
-  const existing = storeCache.get(workspaceRootPath);
-  if (existing) {
-    return existing;
-  }
-  const store: Writable<StatusSummaryState> = writable<StatusSummaryState>(emptyState);
-  const cached: CachedStore = {
-    readable: { subscribe: store.subscribe },
-    set: store.set,
-    value: emptyState,
-  };
-  storeCache.set(workspaceRootPath, cached);
-  return cached;
-}
-
-function setState(workspaceRootPath: string, next: StatusSummaryState): void {
-  const cached = getOrCreateStore(workspaceRootPath);
-  cached.value = next;
-  cached.set(next);
-}
-
-export function getStatusSummary(
-  workspaceRootPath: string,
-): Readable<StatusSummaryState> {
-  return getOrCreateStore(workspaceRootPath).readable;
-}
-
-export function getStatusSummarySnapshot(
-  workspaceRootPath: string,
-): StatusSummaryState {
-  return getOrCreateStore(workspaceRootPath).value;
+export function getStatusSummarySnapshot(workspaceRootPath: string): StatusSummaryState {
+  return store.getSnapshot(workspaceRootPath);
 }
 
 export function resetStatusSummaryForTests(): void {
-  storeCache.clear();
-  inflightRequests.clear();
-}
-
-function resolveRuntimeConfig() {
-  const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-  return { mode, baseUrl };
-}
-
-function emitDiagnostic(input: {
-  reason: string;
-  workspaceRootPath: string;
-  level?: "debug" | "warn";
-  error?: unknown;
-}): void {
-  void logDiagnostic({
-    level: input.level ?? "debug",
-    source: "frontend",
-    timestamp: new Date().toISOString(),
-    message: "status summary refresh",
-    metadata: {
-      kind: "opencode.status.summary.refresh",
-      reason: input.reason,
-      workspaceRootPath: input.workspaceRootPath,
-      error: input.error instanceof Error ? input.error.message : undefined,
-    },
-  });
+  store.resetForTests();
 }
 
 export async function refreshStatusSummary(input: {
   workspaceRootPath: string;
 }): Promise<StatusSummaryState> {
-  const { workspaceRootPath } = input;
-  getOrCreateStore(workspaceRootPath);
-
-  const existing = inflightRequests.get(workspaceRootPath);
-  if (existing) {
-    return existing;
-  }
-
-  const snapshot = appState.getSnapshot();
-  if (!isOpencodeEnabled(snapshot.settings.opencode)) {
-    const next: StatusSummaryState = { ...emptyState };
-    setState(workspaceRootPath, next);
-    return next;
-  }
-
-  setState(workspaceRootPath, {
-    ...getStatusSummarySnapshot(workspaceRootPath),
-    status: "loading",
-  });
-
-  const promise = (async (): Promise<StatusSummaryState> => {
-    try {
-      const backend = createWorkspaceAgentBackend("opencode", {
-        resolveRuntimeConfig: async (): Promise<{
-          mode: OpencodeTransportMode;
-          baseUrl: string;
-        }> => resolveRuntimeConfig(),
-      });
-
-      // Each source is fetched independently and degraded to a safe default
-      // on failure so the popover always has *something* to show.
-      const [lspServers, mcpStatuses, providerStatuses, config] = await Promise.all([
-        backend.listLspStatuses({ workspaceRootPath }).catch(() => [] as OpencodeLspStatusEntry[]),
-        backend.listMcpStatuses({ workspaceRootPath }).catch(() => []),
-        backend.listProviderStatuses({ workspaceRootPath }).catch(() => []),
-        backend.getConfig({ workspaceRootPath }).catch(() => ({} as Record<string, unknown>)),
-      ]);
-
-      const mcpTotal = mcpStatuses.length;
-      const mcpConnected = mcpStatuses.filter((entry) => entry.status === "connected").length;
-      const providersTotal = providerStatuses.length;
-      const providersConnected = providerStatuses.filter((entry) => entry.connected).length;
-      const { permissionRuleCount, defaultModelId, defaultAgentId } = readConfigSummary(config);
-
-      const next: StatusSummaryState = {
-        status: "loaded",
-        lspServers,
-        mcpConnected,
-        mcpTotal,
-        providersConnected,
-        providersTotal,
-        permissionRuleCount,
-        defaultModelId,
-        defaultAgentId,
-        lastErrorMessage: null,
-        loadedAt: new Date().toISOString(),
-      };
-      setState(workspaceRootPath, next);
-      emitDiagnostic({ reason: "loaded", workspaceRootPath });
-      return next;
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load status summary.";
-      const next: StatusSummaryState = {
-        ...emptyState,
-        status: "error",
-        lastErrorMessage: message,
-      };
-      setState(workspaceRootPath, next);
-      emitDiagnostic({ reason: "error", workspaceRootPath, level: "warn", error });
-      return next;
-    } finally {
-      inflightRequests.delete(workspaceRootPath);
-    }
-  })();
-
-  inflightRequests.set(workspaceRootPath, promise);
-  return promise;
+  return store.refresh(input.workspaceRootPath);
 }
 
 export function clearStatusSummary(workspaceRootPath: string): void {
-  storeCache.delete(workspaceRootPath);
-  inflightRequests.delete(workspaceRootPath);
+  store.clear(workspaceRootPath);
 }
 
 // -- Pure helpers (exposed for tests) -----------------------------------------

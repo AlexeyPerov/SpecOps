@@ -1,13 +1,9 @@
-import { writable, type Readable, type Writable } from "svelte/store";
+import type { Readable } from "svelte/store";
 import {
-  createWorkspaceAgentBackend,
   type OpencodeFileChangeStatus,
   type OpencodeFileStatusEntry,
 } from "../ai/backends/workspaceAgentBackend";
-import { logDiagnostic } from "./logging";
-import { appState } from "../state/appState";
-import type { OpencodeTransportMode } from "../domain/contracts";
-import { isOpencodeEnabled } from "./opencodeSettings";
+import { createReactiveResourceStore } from "../ai/opencodeResourceStore";
 
 /**
  * M5-T3 — workspace file-change tracker. Wraps `file.status` (git working
@@ -17,6 +13,11 @@ import { isOpencodeEnabled } from "./opencodeSettings";
  * Status entries from OpenCode carry workspace-relative paths; callers
  * resolve them to absolute paths (matching the project-tree convention) via
  * `resolveAbsoluteStatusMap`.
+ *
+ * M10-T1: the cache + inflight + diagnostic skeleton now lives in
+ * `createReactiveResourceStore`. The `copyEmptyState` override allocates a
+ * fresh `new Map()` per cache entry so a consumer mutating a pre-refresh
+ * snapshot's `statusByPath` can't corrupt the singleton (M10-T3).
  */
 
 export type FileStatusTrackerStatus = "idle" | "loading" | "loaded" | "error";
@@ -36,146 +37,57 @@ const emptyState: FileStatusTrackerState = {
   loadedAt: null,
 };
 
-interface CachedStore {
-  readable: Readable<FileStatusTrackerState>;
-  set: (value: FileStatusTrackerState) => void;
-  value: FileStatusTrackerState;
+const store = createReactiveResourceStore<FileStatusTrackerState, string>({
+  diagnosticLabel: "file status",
+  diagnosticKind: "opencode.file.status.refresh",
+  reactive: true,
+  keyOf: (workspaceRootPath) => workspaceRootPath,
+  diagnosticExtra: (workspaceRootPath) => ({ workspaceRootPath }),
+  // M10-T3: fresh Map per cache entry — the state holds a mutable Map, so a
+  // shallow spread of `emptyState` would alias the singleton Map across every
+  // workspace. Allocate a new one each time.
+  copyEmptyState: () => ({ ...emptyState, statusByPath: new Map() }),
+  disabledState: () => ({ ...emptyState, statusByPath: new Map() }),
+  buildLoadingState: (prior) => ({ ...prior, status: "loading" }),
+  buildErrorState: (message) => ({
+    ...emptyState,
+    statusByPath: new Map(),
+    status: "error",
+    lastErrorMessage: message,
+    loadedAt: null,
+  }),
+  async fetch(backend, workspaceRootPath) {
+    const entries = await backend.listFileStatuses({ workspaceRootPath });
+    const statusByPath = resolveAbsoluteStatusMap(workspaceRootPath, entries);
+    return {
+      status: "loaded",
+      statusByPath,
+      lastErrorMessage: null,
+      loadedAt: new Date().toISOString(),
+    };
+  },
+});
+
+export function getFileStatusTracker(workspaceRootPath: string): Readable<FileStatusTrackerState> {
+  return store.getReadable(workspaceRootPath);
 }
 
-const storeCache = new Map<string, CachedStore>();
-const inflightRequests = new Map<string, Promise<FileStatusTrackerState>>();
-
-function getOrCreateStore(workspaceRootPath: string): CachedStore {
-  const existing = storeCache.get(workspaceRootPath);
-  if (existing) {
-    return existing;
-  }
-  const store: Writable<FileStatusTrackerState> = writable<FileStatusTrackerState>(emptyState);
-  const cached: CachedStore = {
-    readable: { subscribe: store.subscribe },
-    set: store.set,
-    value: emptyState,
-  };
-  storeCache.set(workspaceRootPath, cached);
-  return cached;
-}
-
-function setState(workspaceRootPath: string, next: FileStatusTrackerState): void {
-  const cached = getOrCreateStore(workspaceRootPath);
-  cached.value = next;
-  cached.set(next);
-}
-
-export function getFileStatusTracker(
-  workspaceRootPath: string,
-): Readable<FileStatusTrackerState> {
-  return getOrCreateStore(workspaceRootPath).readable;
-}
-
-export function getFileStatusSnapshot(
-  workspaceRootPath: string,
-): FileStatusTrackerState {
-  return getOrCreateStore(workspaceRootPath).value;
+export function getFileStatusSnapshot(workspaceRootPath: string): FileStatusTrackerState {
+  return store.getSnapshot(workspaceRootPath);
 }
 
 export function resetFileStatusTrackerForTests(): void {
-  storeCache.clear();
-  inflightRequests.clear();
-}
-
-function resolveRuntimeConfig() {
-  const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-  return { mode, baseUrl };
-}
-
-function emitDiagnostic(input: {
-  reason: string;
-  workspaceRootPath: string;
-  level?: "debug" | "warn";
-  error?: unknown;
-}): void {
-  void logDiagnostic({
-    level: input.level ?? "debug",
-    source: "frontend",
-    timestamp: new Date().toISOString(),
-    message: "file status refresh",
-    metadata: {
-      kind: "opencode.file.status.refresh",
-      reason: input.reason,
-      workspaceRootPath: input.workspaceRootPath,
-      error: input.error instanceof Error ? input.error.message : undefined,
-    },
-  });
+  store.resetForTests();
 }
 
 export async function refreshFileStatuses(input: {
   workspaceRootPath: string;
 }): Promise<FileStatusTrackerState> {
-  const { workspaceRootPath } = input;
-  getOrCreateStore(workspaceRootPath);
-
-  const existing = inflightRequests.get(workspaceRootPath);
-  if (existing) {
-    return existing;
-  }
-
-  const snapshot = appState.getSnapshot();
-  if (!isOpencodeEnabled(snapshot.settings.opencode)) {
-    const next: FileStatusTrackerState = { ...emptyState, statusByPath: new Map() };
-    setState(workspaceRootPath, next);
-    return next;
-  }
-
-  setState(workspaceRootPath, {
-    ...getFileStatusSnapshot(workspaceRootPath),
-    status: "loading",
-  });
-
-  const promise = (async (): Promise<FileStatusTrackerState> => {
-    try {
-      const backend = createWorkspaceAgentBackend("opencode", {
-        resolveRuntimeConfig: async (): Promise<{
-          mode: OpencodeTransportMode;
-          baseUrl: string;
-        }> => resolveRuntimeConfig(),
-      });
-      const entries = await backend.listFileStatuses({
-        workspaceRootPath,
-      });
-      const statusByPath = resolveAbsoluteStatusMap(workspaceRootPath, entries);
-      const next: FileStatusTrackerState = {
-        status: "loaded",
-        statusByPath,
-        lastErrorMessage: null,
-        loadedAt: new Date().toISOString(),
-      };
-      setState(workspaceRootPath, next);
-      emitDiagnostic({ reason: "loaded", workspaceRootPath });
-      return next;
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load file statuses.";
-      const next: FileStatusTrackerState = {
-        status: "error",
-        statusByPath: new Map(),
-        lastErrorMessage: message,
-        loadedAt: null,
-      };
-      setState(workspaceRootPath, next);
-      emitDiagnostic({ reason: "error", workspaceRootPath, level: "warn", error });
-      return next;
-    } finally {
-      inflightRequests.delete(workspaceRootPath);
-    }
-  })();
-
-  inflightRequests.set(workspaceRootPath, promise);
-  return promise;
+  return store.refresh(input.workspaceRootPath);
 }
 
 export function clearFileStatusTracker(workspaceRootPath: string): void {
-  storeCache.delete(workspaceRootPath);
-  inflightRequests.delete(workspaceRootPath);
+  store.clear(workspaceRootPath);
 }
 
 // -- Pure helpers (exposed for tests + the tree view) -------------------------

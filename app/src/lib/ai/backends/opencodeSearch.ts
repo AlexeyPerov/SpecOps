@@ -1,12 +1,9 @@
 import {
-  createWorkspaceAgentBackend,
   type OpencodeAgentEntry,
   type OpencodeFileSearchEntry,
 } from "./workspaceAgentBackend";
+import { createOpencodeBackendFromAppState } from "./opencodeBackendFactory";
 import { logDiagnostic } from "../../services/logging";
-import { appState } from "../../state/appState";
-import type { OpencodeTransportMode } from "../../domain/contracts";
-import { isOpencodeEnabled } from "../../services/opencodeSettings";
 
 /**
  * `@` mention search for the composer (M3-T2).
@@ -80,20 +77,11 @@ export async function searchMentionFiles(input: {
   if (trimmed.length === 0) {
     return { status: "idle", files: [] };
   }
-  const snapshot = appState.getSnapshot();
-  if (!isOpencodeEnabled(snapshot.settings.opencode)) {
+  const backend = createOpencodeBackendFromAppState();
+  if (!backend) {
     return { status: "idle", files: [] };
   }
   try {
-    const backend = createWorkspaceAgentBackend("opencode", {
-      resolveRuntimeConfig: async (): Promise<{
-        mode: OpencodeTransportMode;
-        baseUrl: string;
-      }> => {
-        const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-        return { mode, baseUrl };
-      },
-    });
     const entries = await backend.findFiles({
       workspaceRootPath: input.workspaceRootPath,
       query: trimmed,

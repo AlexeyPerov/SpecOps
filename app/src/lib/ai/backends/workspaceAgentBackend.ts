@@ -2363,6 +2363,36 @@ function createOpencodeBackend(
     return createOpencodeClient({ baseUrl, workspaceRootPath: directory, serverPassword });
   }
 
+  /**
+   * M10-T4 — shared fetch→unwrap→map→filter-null skeleton for the M5
+   * workspace-UX list endpoints. Degrades to `[]` on the transient error codes
+   * (`serverUnavailable` / `transportError` / `authFailure` / `notFound`) so a
+   * flaky server never blocks the panels; any other error rethrows.
+   */
+  async function listAndMap<T>(
+    fetch: () => Promise<unknown>,
+    mapper: (raw: unknown) => T | null,
+  ): Promise<T[]> {
+    try {
+      const entries = unwrapList(await fetch());
+      if (!entries) {
+        return [];
+      }
+      return entries.map(mapper).filter((entry): entry is T => entry !== null);
+    } catch (error: unknown) {
+      if (
+        error instanceof WorkspaceAgentBackendError &&
+        (error.code === "serverUnavailable" ||
+          error.code === "transportError" ||
+          error.code === "authFailure" ||
+          error.code === "notFound")
+      ) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
   return {
     id: "opencode",
     async createSession(input) {
@@ -2805,105 +2835,35 @@ function createOpencodeBackend(
         .filter((entry): entry is OpencodeAgentDetail => entry !== null);
     },
     // --- M5 — workspace UX ----------------------------------------------------
+    //
+    // M10-T4: the four list-and-map methods share an identical skeleton — fetch
+    // raw, unwrap a list, map + filter-null, and degrade to [] on the transient
+    // error codes. `listAndMap` encapsulates it so the methods are one-liners.
     async listSessionTodos(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
-      try {
-        const raw = await client.listSessionTodos({ sessionId: input.sessionId });
-        const entries = unwrapList(raw);
-        if (!entries) {
-          return [];
-        }
-        return entries
-          .map(mapTodoEntry)
-          .filter((entry): entry is OpencodeTodoEntry => entry !== null);
-      } catch (error: unknown) {
-        // Todos are optional; degrade to empty list rather than blocking the panel.
-        if (
-          error instanceof WorkspaceAgentBackendError &&
-          (error.code === "serverUnavailable" ||
-            error.code === "transportError" ||
-            error.code === "authFailure" ||
-            error.code === "notFound")
-        ) {
-          return [];
-        }
-        throw error;
-      }
+      return listAndMap(
+        () => client.listSessionTodos({ sessionId: input.sessionId }),
+        mapTodoEntry,
+      );
     },
     async listSessionDiffs(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
-      try {
-        const raw = await client.listSessionDiffs({
-          sessionId: input.sessionId,
-          ...(input.messageId ? { messageId: input.messageId } : {}),
-        });
-        const entries = unwrapList(raw);
-        if (!entries) {
-          return [];
-        }
-        return entries
-          .map(mapSessionFileDiff)
-          .filter((entry): entry is OpencodeSessionFileDiff => entry !== null);
-      } catch (error: unknown) {
-        if (
-          error instanceof WorkspaceAgentBackendError &&
-          (error.code === "serverUnavailable" ||
-            error.code === "transportError" ||
-            error.code === "authFailure" ||
-            error.code === "notFound")
-        ) {
-          return [];
-        }
-        throw error;
-      }
+      return listAndMap(
+        () =>
+          client.listSessionDiffs({
+            sessionId: input.sessionId,
+            ...(input.messageId ? { messageId: input.messageId } : {}),
+          }),
+        mapSessionFileDiff,
+      );
     },
     async listFileStatuses(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
-      try {
-        const raw = await client.listFileStatuses();
-        const entries = unwrapList(raw);
-        if (!entries) {
-          return [];
-        }
-        return entries
-          .map(mapFileStatusEntry)
-          .filter((entry): entry is OpencodeFileStatusEntry => entry !== null);
-      } catch (error: unknown) {
-        if (
-          error instanceof WorkspaceAgentBackendError &&
-          (error.code === "serverUnavailable" ||
-            error.code === "transportError" ||
-            error.code === "authFailure" ||
-            error.code === "notFound")
-        ) {
-          return [];
-        }
-        throw error;
-      }
+      return listAndMap(() => client.listFileStatuses(), mapFileStatusEntry);
     },
     async listLspStatuses(input) {
       const client = await createClientForWorkspace(input.workspaceRootPath);
-      try {
-        const raw = await client.listLspStatuses();
-        const entries = unwrapList(raw);
-        if (!entries) {
-          return [];
-        }
-        return entries
-          .map(mapLspStatusEntry)
-          .filter((entry): entry is OpencodeLspStatusEntry => entry !== null);
-      } catch (error: unknown) {
-        if (
-          error instanceof WorkspaceAgentBackendError &&
-          (error.code === "serverUnavailable" ||
-            error.code === "transportError" ||
-            error.code === "authFailure" ||
-            error.code === "notFound")
-        ) {
-          return [];
-        }
-        throw error;
-      }
+      return listAndMap(() => client.listLspStatuses(), mapLspStatusEntry);
     },
   };
 }

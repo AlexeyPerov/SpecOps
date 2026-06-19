@@ -1,8 +1,5 @@
-import { createWorkspaceAgentBackend, type OpencodeCommandEntry } from "./workspaceAgentBackend";
-import { logDiagnostic } from "../../services/logging";
-import { appState } from "../../state/appState";
-import type { OpencodeTransportMode } from "../../domain/contracts";
-import { isOpencodeEnabled } from "../../services/opencodeSettings";
+import { type OpencodeCommandEntry } from "./workspaceAgentBackend";
+import { createReactiveResourceStore } from "../opencodeResourceStore";
 
 /**
  * Slash command catalog for the composer popover (M3-T1).
@@ -10,11 +7,15 @@ import { isOpencodeEnabled } from "../../services/opencodeSettings";
  * Commands are workspace-scoped (OpenCode's `command.list` honours the
  * `?directory=` query that the SDK sets from `createOpencodeClient({
  * directory })`). They can be project-specific, so the cache is per-workspace
- * and refreshed on workspace open.
+ * and refreshed on workspace open. Pull-only — the composer reads a snapshot
+ * on each popover open.
  *
  * Behaviour (per [questions.md Q11](../../specs/ops/phase-3.5/questions.md)):
  * selecting a command inserts its `template` into the composer for editing —
  * nothing is executed server-side from here.
+ *
+ * M10-T1: the cache + inflight + diagnostic skeleton now lives in
+ * `createReactiveResourceStore`.
  */
 
 export type OpencodeCommandCatalogStatus = "idle" | "loading" | "loaded" | "error";
@@ -33,108 +34,52 @@ const emptyCatalog: OpencodeCommandCatalogState = {
   loadedAt: null,
 };
 
-const catalogCache = new Map<string, OpencodeCommandCatalogState>();
-const inflightRequests = new Map<string, Promise<OpencodeCommandCatalogState>>();
+const store = createReactiveResourceStore<OpencodeCommandCatalogState, string>({
+  diagnosticLabel: "opencode command catalog",
+  diagnosticKind: "opencode.commands.refresh",
+  reactive: false,
+  keyOf: (workspaceRootPath) => workspaceRootPath,
+  diagnosticExtra: (workspaceRootPath) => ({ workspaceRootPath }),
+  copyEmptyState: () => ({ ...emptyCatalog }),
+  disabledState: () => ({ ...emptyCatalog }),
+  buildLoadingState: (prior) => ({ ...prior, status: "loading" }),
+  buildErrorState: (message) => ({
+    ...emptyCatalog,
+    status: "error",
+    commands: [],
+    lastErrorMessage: message,
+    loadedAt: null,
+  }),
+  async fetch(backend, workspaceRootPath) {
+    const commands = await backend.listCommands({ workspaceRootPath });
+    return {
+      status: "loaded",
+      commands: dedupeCommands(commands),
+      lastErrorMessage: null,
+      loadedAt: new Date().toISOString(),
+    };
+  },
+});
 
 export function getOpencodeCommands(workspaceRootPath: string): OpencodeCommandCatalogState {
-  return catalogCache.get(workspaceRootPath) ?? emptyCatalog;
+  return store.getSnapshot(workspaceRootPath);
 }
 
 export function resetOpencodeCommandsForTests(): void {
-  catalogCache.clear();
-  inflightRequests.clear();
+  store.resetForTests();
 }
 
-function updateCache(workspaceRootPath: string, state: OpencodeCommandCatalogState): void {
-  catalogCache.set(workspaceRootPath, state);
-}
-
-function emitDiagnostic(input: {
-  reason: string;
-  workspaceRootPath: string;
-  level?: "debug" | "warn";
-  error?: unknown;
-}): void {
-  void logDiagnostic({
-    level: input.level ?? "debug",
-    source: "frontend",
-    timestamp: new Date().toISOString(),
-    message: "opencode command catalog refresh",
-    metadata: {
-      kind: "opencode.commands.refresh",
-      reason: input.reason,
-      workspaceRootPath: input.workspaceRootPath,
-      error: input.error instanceof Error ? input.error.message : undefined,
-    },
-  });
+/**
+ * M10-T3 — per-workspace cache invalidation, wired to workspace-switch / close.
+ */
+export function clearOpencodeCommands(workspaceRootPath: string): void {
+  store.clear(workspaceRootPath);
 }
 
 export async function refreshOpencodeCommands(
   workspaceRootPath: string,
 ): Promise<OpencodeCommandCatalogState> {
-  const existing = inflightRequests.get(workspaceRootPath);
-  if (existing) {
-    return existing;
-  }
-
-  const snapshot = appState.getSnapshot();
-  if (!isOpencodeEnabled(snapshot.settings.opencode)) {
-    const state: OpencodeCommandCatalogState = {
-      status: "idle",
-      commands: [],
-      lastErrorMessage: null,
-      loadedAt: null,
-    };
-    updateCache(workspaceRootPath, state);
-    return state;
-  }
-
-  updateCache(workspaceRootPath, {
-    ...getOpencodeCommands(workspaceRootPath),
-    status: "loading",
-  });
-
-  const promise = (async (): Promise<OpencodeCommandCatalogState> => {
-    try {
-      const backend = createWorkspaceAgentBackend("opencode", {
-        resolveRuntimeConfig: async (): Promise<{
-          mode: OpencodeTransportMode;
-          baseUrl: string;
-        }> => {
-          const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-          return { mode, baseUrl };
-        },
-      });
-      const commands = await backend.listCommands({ workspaceRootPath });
-      const deduped = dedupeCommands(commands);
-      const state: OpencodeCommandCatalogState = {
-        status: "loaded",
-        commands: deduped,
-        lastErrorMessage: null,
-        loadedAt: new Date().toISOString(),
-      };
-      updateCache(workspaceRootPath, state);
-      emitDiagnostic({ reason: "loaded", workspaceRootPath });
-      return state;
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load OpenCode commands.";
-      const state: OpencodeCommandCatalogState = {
-        status: "error",
-        commands: [],
-        lastErrorMessage: message,
-        loadedAt: null,
-      };
-      updateCache(workspaceRootPath, state);
-      emitDiagnostic({ reason: "error", workspaceRootPath, level: "warn", error });
-      return state;
-    } finally {
-      inflightRequests.delete(workspaceRootPath);
-    }
-  })();
-
-  inflightRequests.set(workspaceRootPath, promise);
-  return promise;
+  return store.refresh(workspaceRootPath);
 }
 
 /**

@@ -56,6 +56,15 @@
   import { refreshSessionTodos, clearSessionTodos } from "../lib/ai/opencodeTodoStore";
   import { refreshSessionDiffs, clearSessionDiffs } from "../lib/ai/opencodeDiffStore";
   import {
+    clearOpencodeCatalog,
+  } from "../lib/ai/opencodeCatalog";
+  import {
+    clearOpencodeConfigStore,
+  } from "../lib/ai/opencodeConfigStore";
+  import {
+    clearOpencodeCommands,
+  } from "../lib/ai/backends/opencodeCommands";
+  import {
     getFileStatusTracker,
     refreshFileStatuses,
     clearFileStatusTracker,
@@ -809,6 +818,28 @@
       return;
     }
     void refreshStatusSummary({ workspaceRootPath: root });
+  });
+
+  /**
+   * M10-T3 — invalidate the workspace-scoped pull-only stores on workspace
+   * switch so the process-lifetime cache doesn't accumulate an entry per
+   * workspace ever opened (slow leak in a long-running desktop app). The
+   * per-session (todo/diff) and reactive workspace (file-status /
+   * status-summary) stores are cleared by their own effects above; this covers
+   * the remaining catalog / config / commands pull-only stores.
+   */
+  let lastWorkspaceStoreRoot = $state<string | null>(null);
+  $effect(() => {
+    runtimeReady;
+    activeWorkspaceRoot;
+
+    const root = activeWorkspaceRoot;
+    if (lastWorkspaceStoreRoot && lastWorkspaceStoreRoot !== root) {
+      clearOpencodeCatalog(lastWorkspaceStoreRoot);
+      clearOpencodeConfigStore(lastWorkspaceStoreRoot);
+      clearOpencodeCommands(lastWorkspaceStoreRoot);
+    }
+    lastWorkspaceStoreRoot = root;
   });
 </script>
 

@@ -1,4 +1,3 @@
-import { createWorkspaceAgentBackend } from "./backends/workspaceAgentBackend";
 import type {
   OpencodeAgentDetail,
   OpencodeConfigDocument,
@@ -8,16 +7,25 @@ import type {
   OpencodeProviderStatus,
   OpencodeSkillEntry,
 } from "./backends/workspaceAgentBackend";
+import { createOpencodeBackendFromAppState } from "./backends/opencodeBackendFactory";
+import { createReactiveResourceStore } from "./opencodeResourceStore";
 import { logDiagnostic } from "../services/logging";
 import { appState } from "../state/appState";
-import type { OpencodeTransportMode } from "../domain/contracts";
 import { isOpencodeEnabled } from "../services/opencodeSettings";
 
 /**
  * Per-workspace reactive config-management service (M4). Loads the OpenCode
  * config document + provider / MCP / agent / skill lists, and persists edits
- * through `config.update` / the dedicated endpoints. Mirrors the cache +
- * inflight + diagnostic pattern of `opencodeCatalog.ts`.
+ * through `config.update` / the dedicated endpoints. Pull-only — the settings
+ * panels read a snapshot on mount.
+ *
+ * M10-T1: the cache + inflight + diagnostic skeleton now lives in
+ * `createReactiveResourceStore`. The `buildErrorState` override implements the
+ * M7-T3 prior-data-preservation policy (a transient reload failure keeps the
+ * cached slices; a genuine first-load failure still degrades to emptyState).
+ * The mutation helpers (save / provider / MCP) write through the factory's
+ * `setSnapshot` escape hatch since they update a slice outside the refresh
+ * path.
  */
 
 export type OpencodeConfigStoreStatus = "idle" | "loading" | "loaded" | "saving" | "error";
@@ -44,33 +52,93 @@ const emptyState: OpencodeConfigStoreState = {
   loadedAt: null,
 };
 
-const storeCache = new Map<string, OpencodeConfigStoreState>();
-const inflightLoads = new Map<string, Promise<OpencodeConfigStoreState>>();
+const store = createReactiveResourceStore<OpencodeConfigStoreState, string>({
+  diagnosticLabel: "opencode config store",
+  diagnosticKind: "opencode.config.store",
+  reactive: false,
+  keyOf: (workspaceRootPath) => workspaceRootPath,
+  diagnosticExtra: (workspaceRootPath) => ({ workspaceRootPath }),
+  copyEmptyState: () => ({ ...emptyState }),
+  disabledState: () => ({ ...emptyState }),
+  buildLoadingState: (prior) => ({ ...prior, status: "loading" }),
+  buildErrorState: (message, prior) => {
+    // M7-T3: a transient getConfig failure during a re-load must not wipe the
+    // previously-good cached slices (savePermissionConfig depends on
+    // current.config). Preserve the prior data and only flip status → "error"
+    // + lastErrorMessage. A genuinely first-load failure (no prior data) still
+    // degrades to emptyState.
+    const hasPriorData =
+      prior.status === "loaded" ||
+      prior.config !== null ||
+      prior.providers.length > 0 ||
+      prior.mcpServers.length > 0 ||
+      prior.agents.length > 0 ||
+      prior.skills.length > 0;
+    return hasPriorData
+      ? { ...prior, status: "error", lastErrorMessage: message }
+      : { ...emptyState, status: "error", lastErrorMessage: message };
+  },
+  async fetch(backend, workspaceRootPath) {
+    const [config, providers, mcpServers, agents, skills] = await Promise.all([
+      backend.getConfig({ workspaceRootPath }),
+      backend
+        .listProviderStatuses({ workspaceRootPath })
+        .catch((error: unknown) => {
+          emitDiagnostic({
+            reason: "providers-failed",
+            workspaceRootPath,
+            level: "warn",
+            error,
+          });
+          return [] as OpencodeProviderStatus[];
+        }),
+      backend
+        .listMcpStatuses({ workspaceRootPath })
+        .catch((error: unknown) => {
+          emitDiagnostic({
+            reason: "mcp-failed",
+            workspaceRootPath,
+            level: "warn",
+            error,
+          });
+          return [] as OpencodeMcpStatusEntry[];
+        }),
+      backend
+        .listAgentDetails({ workspaceRootPath })
+        .catch((error: unknown) => {
+          emitDiagnostic({
+            reason: "agents-failed",
+            workspaceRootPath,
+            level: "warn",
+            error,
+          });
+          return [] as OpencodeAgentDetail[];
+        }),
+      backend
+        .listSkills({ workspaceRootPath })
+        .catch((error: unknown) => {
+          emitDiagnostic({
+            reason: "skills-failed",
+            workspaceRootPath,
+            level: "warn",
+            error,
+          });
+          return [] as OpencodeSkillEntry[];
+        }),
+    ]);
 
-export function getOpencodeConfigStore(workspaceRootPath: string): OpencodeConfigStoreState {
-  return storeCache.get(workspaceRootPath) ?? emptyState;
-}
-
-export function resetOpencodeConfigStoreForTests(): void {
-  storeCache.clear();
-  inflightLoads.clear();
-}
-
-function updateCache(workspaceRootPath: string, state: OpencodeConfigStoreState): void {
-  storeCache.set(workspaceRootPath, state);
-}
-
-function resolveRuntimeConfig() {
-  const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-  return { mode, baseUrl };
-}
-
-function createBackend() {
-  return createWorkspaceAgentBackend("opencode", {
-    resolveRuntimeConfig: async (): Promise<{ mode: OpencodeTransportMode; baseUrl: string }> =>
-      resolveRuntimeConfig(),
-  });
-}
+    return {
+      status: "loaded",
+      config,
+      providers,
+      mcpServers,
+      agents,
+      skills,
+      lastErrorMessage: null,
+      loadedAt: new Date().toISOString(),
+    };
+  },
+});
 
 function emitDiagnostic(input: {
   reason: string;
@@ -92,6 +160,27 @@ function emitDiagnostic(input: {
   });
 }
 
+function createBackend() {
+  // M10-T2: single source of truth for backend construction. Returns a backend
+  // unconditionally — callers have already gated on `isConfigStoreAvailable`.
+  return createOpencodeBackendFromAppState()!;
+}
+
+export function getOpencodeConfigStore(workspaceRootPath: string): OpencodeConfigStoreState {
+  return store.getSnapshot(workspaceRootPath);
+}
+
+export function resetOpencodeConfigStoreForTests(): void {
+  store.resetForTests();
+}
+
+/**
+ * M10-T3 — per-workspace cache invalidation, wired to workspace-switch / close.
+ */
+export function clearOpencodeConfigStore(workspaceRootPath: string): void {
+  store.clear(workspaceRootPath);
+}
+
 /** True when OpenCode is enabled AND a workspace root is available. */
 export function isConfigStoreAvailable(workspaceRootPath: string | null): boolean {
   if (!workspaceRootPath || workspaceRootPath.trim().length === 0) {
@@ -109,109 +198,7 @@ export function isConfigStoreAvailable(workspaceRootPath: string | null): boolea
 export async function loadOpencodeConfigStore(
   workspaceRootPath: string,
 ): Promise<OpencodeConfigStoreState> {
-  const existing = inflightLoads.get(workspaceRootPath);
-  if (existing) {
-    return existing;
-  }
-
-  updateCache(workspaceRootPath, {
-    ...getOpencodeConfigStore(workspaceRootPath),
-    status: "loading",
-  });
-
-  const promise = (async (): Promise<OpencodeConfigStoreState> => {
-    try {
-      const backend = createBackend();
-      const [config, providers, mcpServers, agents, skills] = await Promise.all([
-        backend.getConfig({ workspaceRootPath }),
-        backend
-          .listProviderStatuses({ workspaceRootPath })
-          .catch((error: unknown) => {
-            emitDiagnostic({
-              reason: "providers-failed",
-              workspaceRootPath,
-              level: "warn",
-              error,
-            });
-            return [] as OpencodeProviderStatus[];
-          }),
-        backend
-          .listMcpStatuses({ workspaceRootPath })
-          .catch((error: unknown) => {
-            emitDiagnostic({
-              reason: "mcp-failed",
-              workspaceRootPath,
-              level: "warn",
-              error,
-            });
-            return [] as OpencodeMcpStatusEntry[];
-          }),
-        backend
-          .listAgentDetails({ workspaceRootPath })
-          .catch((error: unknown) => {
-            emitDiagnostic({
-              reason: "agents-failed",
-              workspaceRootPath,
-              level: "warn",
-              error,
-            });
-            return [] as OpencodeAgentDetail[];
-          }),
-        backend
-          .listSkills({ workspaceRootPath })
-          .catch((error: unknown) => {
-            emitDiagnostic({
-              reason: "skills-failed",
-              workspaceRootPath,
-              level: "warn",
-              error,
-            });
-            return [] as OpencodeSkillEntry[];
-          }),
-      ]);
-
-      const state: OpencodeConfigStoreState = {
-        status: "loaded",
-        config,
-        providers,
-        mcpServers,
-        agents,
-        skills,
-        lastErrorMessage: null,
-        loadedAt: new Date().toISOString(),
-      };
-      updateCache(workspaceRootPath, state);
-      emitDiagnostic({ reason: "loaded", workspaceRootPath });
-      return state;
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load OpenCode config.";
-      // M7-T3: a transient getConfig failure during a re-load must not wipe the
-      // previously-good cached slices (savePermissionConfig depends on
-      // current.config). Preserve the prior data and only flip status →
-      // "error" + lastErrorMessage. A genuinely first-load failure (no prior
-      // data) still degrades to emptyState.
-      const prior = getOpencodeConfigStore(workspaceRootPath);
-      const hasPriorData =
-        prior.status === "loaded" ||
-        prior.config !== null ||
-        prior.providers.length > 0 ||
-        prior.mcpServers.length > 0 ||
-        prior.agents.length > 0 ||
-        prior.skills.length > 0;
-      const state: OpencodeConfigStoreState = hasPriorData
-        ? { ...prior, status: "error", lastErrorMessage: message }
-        : { ...emptyState, status: "error", lastErrorMessage: message };
-      updateCache(workspaceRootPath, state);
-      emitDiagnostic({ reason: "error", workspaceRootPath, level: "warn", error });
-      return state;
-    } finally {
-      inflightLoads.delete(workspaceRootPath);
-    }
-  })();
-
-  inflightLoads.set(workspaceRootPath, promise);
-  return promise;
+  return store.refresh(workspaceRootPath);
 }
 
 /**
@@ -224,7 +211,7 @@ export async function saveOpencodeConfig(
   config: OpencodeConfigDocument,
 ): Promise<OpencodeConfigStoreState> {
   const current = getOpencodeConfigStore(workspaceRootPath);
-  updateCache(workspaceRootPath, { ...current, status: "saving" });
+  store.setSnapshot(workspaceRootPath, { ...current, status: "saving" });
   try {
     const backend = createBackend();
     const updated = await backend.updateConfig({ workspaceRootPath, config });
@@ -235,7 +222,7 @@ export async function saveOpencodeConfig(
       lastErrorMessage: null,
       loadedAt: new Date().toISOString(),
     };
-    updateCache(workspaceRootPath, state);
+    store.setSnapshot(workspaceRootPath, state);
     emitDiagnostic({ reason: "saved", workspaceRootPath });
     return state;
   } catch (error: unknown) {
@@ -246,7 +233,7 @@ export async function saveOpencodeConfig(
       status: "error",
       lastErrorMessage: message,
     };
-    updateCache(workspaceRootPath, state);
+    store.setSnapshot(workspaceRootPath, state);
     emitDiagnostic({ reason: "save-error", workspaceRootPath, level: "warn", error });
     return state;
   }
@@ -336,7 +323,7 @@ async function refreshProviders(workspaceRootPath: string): Promise<void> {
   try {
     const backend = createBackend();
     const providers = await backend.listProviderStatuses({ workspaceRootPath });
-    updateCache(workspaceRootPath, {
+    store.setSnapshot(workspaceRootPath, {
       ...getOpencodeConfigStore(workspaceRootPath),
       providers,
     });
@@ -357,7 +344,7 @@ export async function addMcpServer(
   try {
     const backend = createBackend();
     const statuses = await backend.addMcpServer({ workspaceRootPath, name, config });
-    updateCache(workspaceRootPath, {
+    store.setSnapshot(workspaceRootPath, {
       ...getOpencodeConfigStore(workspaceRootPath),
       mcpServers: statuses,
     });
@@ -406,7 +393,7 @@ async function refreshMcpStatuses(workspaceRootPath: string): Promise<void> {
   try {
     const backend = createBackend();
     const statuses = await backend.listMcpStatuses({ workspaceRootPath });
-    updateCache(workspaceRootPath, {
+    store.setSnapshot(workspaceRootPath, {
       ...getOpencodeConfigStore(workspaceRootPath),
       mcpServers: statuses,
     });

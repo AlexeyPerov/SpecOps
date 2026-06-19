@@ -1,14 +1,10 @@
-import { writable, type Readable, type Writable } from "svelte/store";
+import type { Readable } from "svelte/store";
 import {
-  createWorkspaceAgentBackend,
   type OpencodeTodoEntry,
   type OpencodeTodoPriority,
   type OpencodeTodoStatus,
 } from "./backends/workspaceAgentBackend";
-import { logDiagnostic } from "../services/logging";
-import { appState } from "../state/appState";
-import type { OpencodeTransportMode } from "../domain/contracts";
-import { isOpencodeEnabled } from "../services/opencodeSettings";
+import { createReactiveResourceStore } from "./opencodeResourceStore";
 
 /**
  * M5-T1 — per-session reactive TODO store. Wraps `session.todo` with a small
@@ -19,6 +15,10 @@ import { isOpencodeEnabled } from "../services/opencodeSettings";
  * load and on every `tool.completed` event whose tool name is `todowrite`
  * (see `AppShell` wiring). Manual refresh is also exposed for the panel
  * header button.
+ *
+ * M10-T1: the cache + inflight + diagnostic + never-throws skeleton now lives
+ * in the shared `createReactiveResourceStore` factory; only the per-session
+ * key shape and the `session.todo` fetch are store-specific.
  */
 
 export type OpencodeTodoStoreStatus = "idle" | "loading" | "loaded" | "error";
@@ -37,54 +37,50 @@ const emptyState: OpencodeTodoStoreState = {
   loadedAt: null,
 };
 
-function stateKey(workspaceRootPath: string, sessionId: string): string {
-  return `${workspaceRootPath}|${sessionId}`;
+interface TodoKey {
+  workspaceRootPath: string;
+  sessionId: string;
 }
 
-interface CachedStore {
-  readable: Readable<OpencodeTodoStoreState>;
-  set: (value: OpencodeTodoStoreState) => void;
-  value: OpencodeTodoStoreState;
-}
-
-const storeCache = new Map<string, CachedStore>();
-const inflightRequests = new Map<string, Promise<OpencodeTodoStoreState>>();
-
-function getOrCreateStore(
-  workspaceRootPath: string,
-  sessionId: string,
-): CachedStore {
-  const key = stateKey(workspaceRootPath, sessionId);
-  const existing = storeCache.get(key);
-  if (existing) {
-    return existing;
-  }
-  const store: Writable<OpencodeTodoStoreState> = writable<OpencodeTodoStoreState>(emptyState);
-  const cached: CachedStore = {
-    readable: { subscribe: store.subscribe },
-    set: store.set,
-    value: emptyState,
-  };
-  storeCache.set(key, cached);
-  return cached;
-}
-
-function setState(
-  workspaceRootPath: string,
-  sessionId: string,
-  next: OpencodeTodoStoreState,
-): void {
-  const cached = getOrCreateStore(workspaceRootPath, sessionId);
-  cached.value = next;
-  cached.set(next);
-}
+const store = createReactiveResourceStore<OpencodeTodoStoreState, TodoKey>({
+  diagnosticLabel: "session todo",
+  diagnosticKind: "opencode.session.todo.refresh",
+  reactive: true,
+  keyOf: (key) => `${key.workspaceRootPath}|${key.sessionId}`,
+  diagnosticExtra: (key) => ({
+    workspaceRootPath: key.workspaceRootPath,
+    sessionId: key.sessionId,
+  }),
+  copyEmptyState: () => ({ ...emptyState }),
+  disabledState: () => ({ ...emptyState }),
+  buildLoadingState: (prior) => ({ ...prior, status: "loading" }),
+  buildErrorState: (message) => ({
+    ...emptyState,
+    status: "error",
+    todos: [],
+    lastErrorMessage: message,
+    loadedAt: null,
+  }),
+  async fetch(backend, key) {
+    const todos = await backend.listSessionTodos({
+      workspaceRootPath: key.workspaceRootPath,
+      sessionId: key.sessionId,
+    });
+    return {
+      status: "loaded",
+      todos,
+      lastErrorMessage: null,
+      loadedAt: new Date().toISOString(),
+    };
+  },
+});
 
 /** Public accessor — returns the reactive store for a session (creates on first call). */
 export function getSessionTodos(
   workspaceRootPath: string,
   sessionId: string,
 ): Readable<OpencodeTodoStoreState> {
-  return getOrCreateStore(workspaceRootPath, sessionId).readable;
+  return store.getReadable({ workspaceRootPath, sessionId });
 }
 
 /** Returns a snapshot (non-reactive) of the current todos for a session. */
@@ -92,39 +88,11 @@ export function getSessionTodoSnapshot(
   workspaceRootPath: string,
   sessionId: string,
 ): OpencodeTodoStoreState {
-  return getOrCreateStore(workspaceRootPath, sessionId).value;
+  return store.getSnapshot({ workspaceRootPath, sessionId });
 }
 
 export function resetSessionTodoStoreForTests(): void {
-  storeCache.clear();
-  inflightRequests.clear();
-}
-
-function resolveRuntimeConfig() {
-  const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-  return { mode, baseUrl };
-}
-
-function emitDiagnostic(input: {
-  reason: string;
-  workspaceRootPath: string;
-  sessionId: string;
-  level?: "debug" | "warn";
-  error?: unknown;
-}): void {
-  void logDiagnostic({
-    level: input.level ?? "debug",
-    source: "frontend",
-    timestamp: new Date().toISOString(),
-    message: "session todo refresh",
-    metadata: {
-      kind: "opencode.session.todo.refresh",
-      reason: input.reason,
-      workspaceRootPath: input.workspaceRootPath,
-      sessionId: input.sessionId,
-      error: input.error instanceof Error ? input.error.message : undefined,
-    },
-  });
+  store.resetForTests();
 }
 
 /**
@@ -137,80 +105,12 @@ export async function refreshSessionTodos(input: {
   workspaceRootPath: string;
   sessionId: string;
 }): Promise<OpencodeTodoStoreState> {
-  const { workspaceRootPath, sessionId } = input;
-  const key = stateKey(workspaceRootPath, sessionId);
-  getOrCreateStore(workspaceRootPath, sessionId);
-
-  const existing = inflightRequests.get(key);
-  if (existing) {
-    return existing;
-  }
-
-  const snapshot = appState.getSnapshot();
-  if (!isOpencodeEnabled(snapshot.settings.opencode)) {
-    const next: OpencodeTodoStoreState = { ...emptyState };
-    setState(workspaceRootPath, sessionId, next);
-    return next;
-  }
-
-  setState(workspaceRootPath, sessionId, {
-    ...getSessionTodoSnapshot(workspaceRootPath, sessionId),
-    status: "loading",
-  });
-
-  const promise = (async (): Promise<OpencodeTodoStoreState> => {
-    try {
-      const backend = createWorkspaceAgentBackend("opencode", {
-        resolveRuntimeConfig: async (): Promise<{
-          mode: OpencodeTransportMode;
-          baseUrl: string;
-        }> => resolveRuntimeConfig(),
-      });
-      const todos = await backend.listSessionTodos({
-        workspaceRootPath,
-        sessionId,
-      });
-      const next: OpencodeTodoStoreState = {
-        status: "loaded",
-        todos,
-        lastErrorMessage: null,
-        loadedAt: new Date().toISOString(),
-      };
-      setState(workspaceRootPath, sessionId, next);
-      emitDiagnostic({ reason: "loaded", workspaceRootPath, sessionId });
-      return next;
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load session todos.";
-      const next: OpencodeTodoStoreState = {
-        status: "error",
-        todos: [],
-        lastErrorMessage: message,
-        loadedAt: null,
-      };
-      setState(workspaceRootPath, sessionId, next);
-      emitDiagnostic({
-        reason: "error",
-        workspaceRootPath,
-        sessionId,
-        level: "warn",
-        error,
-      });
-      return next;
-    } finally {
-      inflightRequests.delete(key);
-    }
-  })();
-
-  inflightRequests.set(key, promise);
-  return promise;
+  return store.refresh(input);
 }
 
 /** Drops the cached store for a session (e.g. when its agent tab closes). */
 export function clearSessionTodos(workspaceRootPath: string, sessionId: string): void {
-  const key = stateKey(workspaceRootPath, sessionId);
-  storeCache.delete(key);
-  inflightRequests.delete(key);
+  store.clear({ workspaceRootPath, sessionId });
 }
 
 // -- Pure helpers (exposed for tests + the panel) -----------------------------

@@ -8,9 +8,9 @@ import { chatStore } from "../state/chatStore";
 import { closeTabWithUnsavedPrompt } from "./closeTabFlow";
 import {
   WorkspaceAgentBackendError,
-  createWorkspaceAgentBackend,
   type WorkspaceAgentSessionDetails,
 } from "../ai/backends/workspaceAgentBackend";
+import { createOpencodeBackendFromAppState } from "../ai/backends/opencodeBackendFactory";
 import {
   isAgentSessionMappingValid,
   mappedSessionForAgent,
@@ -44,12 +44,10 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     if (!isOpencodeEnabled(snapshot.settings.opencode)) {
       return;
     }
-    const backend = createWorkspaceAgentBackend("opencode", {
-      resolveRuntimeConfig: async () => {
-        const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-        return { mode, baseUrl };
-      },
-    });
+    const backend = createOpencodeBackendFromAppState();
+    if (!backend) {
+      return;
+    }
     let existingSessionIds: ReadonlySet<string>;
     try {
       existingSessionIds = new Set(
@@ -173,12 +171,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     // M1-T3: hydrate the display source of truth from OpenCode session.messages.
     // Non-fatal — local snapshot remains as offline cache/fallback on failure.
     await hydrateWorkspaceAgentMessages({
-      backend: createWorkspaceAgentBackend("opencode", {
-        resolveRuntimeConfig: async () => {
-          const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-          return { mode, baseUrl };
-        },
-      }),
+      backend: createOpencodeBackendFromAppState()!,
       workspaceRootPath: normalizedRoot,
       agents: agentIndex,
     }).catch(() => {
@@ -253,12 +246,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   // user-initiated actions from the UI, not programmatic flows.
 
   function createOpencodeBackend() {
-    return createWorkspaceAgentBackend("opencode", {
-      resolveRuntimeConfig: async () => {
-        const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-        return { mode, baseUrl };
-      },
-    });
+    return createOpencodeBackendFromAppState()!;
   }
 
   function resolveLinkedSession(agentId: string): {

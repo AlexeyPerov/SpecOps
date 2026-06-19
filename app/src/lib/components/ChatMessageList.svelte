@@ -8,22 +8,14 @@
     parseStructuredMessageSections,
     type StructuredMessageSection,
   } from "../ai/chatReviewContent";
-  import { extractMessageReasoning, type MessageReasoning } from "../ai/chatReasoning";
-  import { extractMessageSubtasks, type MessageSubtask } from "../ai/chatSubtasks";
   import {
-    extractMessageSteps,
+    buildMessageRenderSlots,
+    type MessageRenderSlot,
+  } from "../ai/chatMessageLayout";
+  import {
     extractMessageStepTotals,
-    type MessageStepBoundary,
     type MessageStepTotals,
   } from "../ai/chatSteps";
-  import {
-    extractMessageAttachments,
-    type MessageAttachment,
-  } from "../ai/chatAttachments";
-  import {
-    extractMessageDiffs,
-    type MessageDiff,
-  } from "../ai/chatDiffs";
   import { cacheTotal, formatCost, formatTokenCount } from "../ai/chatTokenFormat";
   import type { ChatMessage } from "../domain/contracts";
   import ToolCard from "./ToolCard.svelte";
@@ -160,23 +152,36 @@
     return message.content.trim().length > 0;
   }
 
-  function reasoningFor(message: ChatMessage, index: number): MessageReasoning | null {
+  /**
+   * M12-T1 — interleaved part rendering. Instead of pulling each part kind out
+   * via per-type extractors and rendering them in a fixed block order, we walk
+   * `message.parts` once (via `buildMessageRenderSlots`) and render each part
+   * at its stored position. Tool cards and the totals footer stay outside the
+   * slot loop — they are not parts.
+   *
+   * Only assistant messages carry reasoning/subtask/step/diff parts on the
+   * wire, so we skip the slot loop for user/system messages entirely (those
+   * render `message.content` plus any file attachments — user file parts would
+   * be included by the slot builder, but user messages reach this component
+   * with content-only, no `parts`, so the loop is naturally empty for them).
+   */
+  function slotsFor(message: ChatMessage): MessageRenderSlot[] {
     if (message.role !== "assistant") {
-      return null;
+      return [];
     }
-    return extractMessageReasoning(message);
+    return buildMessageRenderSlots(message);
   }
 
-  function isReasoningExpanded(reasoning: MessageReasoning): boolean {
-    return showAllReasoning || Boolean(expandedReasoning[reasoning.id]);
+  function isReasoningExpanded(reasoningId: string): boolean {
+    return showAllReasoning || Boolean(expandedReasoning[reasoningId]);
   }
 
-  function toggleReasoning(reasoning: MessageReasoning): void {
+  function toggleReasoning(reasoningId: string): void {
     // When the global toggle is on, flipping a per-message control implicitly
     // opts that message out by recording an explicit false.
     expandedReasoning = {
       ...expandedReasoning,
-      [reasoning.id]: !isReasoningExpanded(reasoning),
+      [reasoningId]: !isReasoningExpanded(reasoningId),
     };
   }
 
@@ -184,9 +189,11 @@
     showAllReasoning = !showAllReasoning;
   }
 
-  /** True when at least one visible message carries reasoning. */
+  /** True when at least one visible message carries a reasoning slot. */
   let hasAnyReasoning = $derived(
-    messages.some((message, index) => reasoningFor(message, index) !== null),
+    messages.some((message) =>
+      slotsFor(message).some((slot) => slot.kind === "reasoning"),
+    ),
   );
 
   /**
@@ -195,34 +202,15 @@
    */
   let expandedSubtasks = $state<Record<string, boolean>>({});
 
-  function subtasksFor(message: ChatMessage): MessageSubtask[] {
-    if (message.role !== "assistant") {
-      return [];
-    }
-    return extractMessageSubtasks(message);
+  function isSubtaskExpanded(subtaskId: string): boolean {
+    return Boolean(expandedSubtasks[subtaskId]);
   }
 
-  function isSubtaskExpanded(subtask: MessageSubtask): boolean {
-    return Boolean(expandedSubtasks[subtask.id]);
-  }
-
-  function toggleSubtask(subtask: MessageSubtask): void {
+  function toggleSubtask(subtaskId: string): void {
     expandedSubtasks = {
       ...expandedSubtasks,
-      [subtask.id]: !isSubtaskExpanded(subtask),
+      [subtaskId]: !isSubtaskExpanded(subtaskId),
     };
-  }
-
-  /**
-   * Step boundaries for a message. Like subtasks, role filtering is the
-   * component's concern (extractor itself is role-agnostic) — only assistant
-   * messages carry agentic step parts.
-   */
-  function stepsFor(message: ChatMessage): MessageStepBoundary[] {
-    if (message.role !== "assistant") {
-      return [];
-    }
-    return extractMessageSteps(message);
   }
 
   /** Cumulative cost / token totals for the message footer; null when none. */
@@ -234,46 +222,58 @@
   }
 
   /**
-   * File attachments for a message, split into inline images and downloadable
-   * file chips. Unlike reasoning/subtask/step (assistant-only), file parts
-   * also arrive on user messages (pasted / uploaded attachments), so we do
-   * not gate on role here.
-   */
-  function attachmentsFor(message: ChatMessage): {
-    images: MessageAttachment[];
-    files: MessageAttachment[];
-  } {
-    return extractMessageAttachments(message);
-  }
-
-  /**
-   * Diff / snapshot parts for a message. Like subtasks/steps, only assistant
-   * messages carry agentic snapshot/patch parts, so we gate on role here (the
-   * extractor itself is role-agnostic).
-   */
-  function diffsFor(message: ChatMessage): MessageDiff[] {
-    if (message.role !== "assistant") {
-      return [];
-    }
-    return extractMessageDiffs(message);
-  }
-
-  /**
    * Per-diff expanded state, keyed by diff id. Like subtasks there is no global
    * toggle — each diff collapses on its own.
    */
   let expandedDiffs = $state<Record<string, boolean>>({});
 
-  function isDiffExpanded(diff: MessageDiff): boolean {
-    return Boolean(expandedDiffs[diff.id]);
+  function isDiffExpanded(diffId: string): boolean {
+    return Boolean(expandedDiffs[diffId]);
   }
 
-  function toggleDiff(diff: MessageDiff): void {
+  function toggleDiff(diffId: string): void {
     expandedDiffs = {
       ...expandedDiffs,
-      [diff.id]: !isDiffExpanded(diff),
+      [diffId]: !isDiffExpanded(diffId),
     };
   }
+
+  /**
+   * Whether the message has any `text` slot in its parts. When false (the
+   * live-streaming case, where text lives on `message.content` rather than in
+   * `parts[]`, or messages with no parts at all) we render `message.content`
+   * as a single content block instead of per-text-part.
+   */
+  function messageHasTextSlots(message: ChatMessage): boolean {
+    return slotsFor(message).some((slot) => slot.kind === "text");
+  }
+
+  /**
+   * The key of the first `text` slot, used to anchor the structured-review
+   * sections block in place of the first text segment (so non-text parts keep
+   * their positions around it). Returns an empty string when there are no text
+   * slots, in which case the structured sections render via the content
+   * fallback path instead.
+   */
+  function firstTextSlotKey(message: ChatMessage): string {
+    for (const slot of slotsFor(message)) {
+      if (slot.kind === "text") {
+        return slot.key;
+      }
+    }
+    return "";
+  }
+
+  /**
+   * Whether a single text segment should render as markdown prose. Mirrors the
+   * whole-message decision: assistant non-streaming text that isn't part of a
+   * structured-review section renders as markdown. Applied per text slot so
+   * interleaved text segments each get markdown treatment once streaming ends.
+   */
+  function shouldRenderTextSlotAsMarkdown(message: ChatMessage, index: number): boolean {
+    return shouldRenderMarkdown(message, index);
+  }
+
 
   /**
    * Whether the per-message action toolbar should render. Only for messages
@@ -345,12 +345,9 @@
       {/if}
       <ol class="chat-message-list" aria-label="Conversation">
         {#each messages as message, index (message.id)}
-          {@const reasoningBlock = reasoningFor(message, index)}
-          {@const subtasks = subtasksFor(message)}
-          {@const steps = stepsFor(message)}
+          {@const slots = slotsFor(message)}
           {@const stepTotals = stepTotalsFor(message)}
-          {@const attachments = attachmentsFor(message)}
-          {@const diffs = diffsFor(message)}
+          {@const hasTextSlots = messageHasTextSlots(message)}
           <li
             class={`chat-message chat-message-${message.role}`}
             class:chat-message-system-event={isSystemEventMessage(message)}
@@ -384,89 +381,102 @@
                 </div>
               {/if}
             </div>
-            {#if steps.length > 0}
-              <div class="chat-step-separators">
-                {#each steps as boundary (boundary.id)}
-                  <StepSeparator {boundary} />
-                {/each}
-              </div>
-            {/if}
-            {#if reasoningBlock}
-              <ReasoningBlock
-                reasoning={reasoningBlock}
-                expanded={isReasoningExpanded(reasoningBlock)}
-                streaming={isStreamingAssistantMessage(message, index)}
-                onToggle={() => toggleReasoning(reasoningBlock)}
-              />
-            {/if}
-            {#if subtasks.length > 0}
-              <div class="chat-subtask-cards">
-                {#each subtasks as subtask (subtask.id)}
-                  <SubtaskCard
-                    {subtask}
-                    expanded={isSubtaskExpanded(subtask)}
-                    onToggle={() => toggleSubtask(subtask)}
-                  />
-                {/each}
-              </div>
-            {/if}
-            {#if shouldRenderStructuredSections(message, index)}
-              <div class="chat-review-sections">
-                {#each structuredSectionsForMessage(message) ?? [] as section (section.heading)}
-                  <section class="chat-review-section">
-                    <h3 class="chat-review-section-heading">{section.heading}</h3>
-                    <p class="chat-review-section-body">{section.body}</p>
-                  </section>
-                {/each}
-              </div>
-            {:else if shouldRenderMarkdown(message, index)}
-              <div class="chat-message-content chat-message-content-prose">
-                <MarkdownRenderer source={message.content} />
-              </div>
-            {:else}
-              <p class="chat-message-content">
-                {#if message.role === "assistant" && message.content.length === 0 && isStreamingAssistantMessage(message, index)}
-                  <span class="chat-streaming-placeholder">Generating…</span>
-                {:else}
-                  {messageDisplayContent(message)}
-                  {#if isStreamingAssistantMessage(message, index)}
-                    <span class="chat-streaming-cursor" aria-hidden="true"></span>
+            <div class="chat-message-body">
+              {#if slots.length > 0}
+                {#each slots as slot (slot.key)}
+                  {#if slot.kind === "step-boundary"}
+                    <StepSeparator boundary={slot.boundary} />
+                  {:else if slot.kind === "reasoning"}
+                    <ReasoningBlock
+                      reasoning={{ id: slot.id, text: slot.text }}
+                      expanded={isReasoningExpanded(slot.id)}
+                      streaming={isStreamingAssistantMessage(message, index)}
+                      onToggle={() => toggleReasoning(slot.id)}
+                    />
+                  {:else if slot.kind === "subtask"}
+                    <SubtaskCard
+                      subtask={slot.subtask}
+                      expanded={isSubtaskExpanded(slot.subtask.id)}
+                      onToggle={() => toggleSubtask(slot.subtask.id)}
+                    />
+                  {:else if slot.kind === "text"}
+                    {#if shouldRenderStructuredSections(message, index)}
+                      <!--
+                        Structured-review sections are a whole-message override that
+                        parses `message.content` as a single document. Render them in
+                        place of the first text slot (the others render nothing) so
+                        non-text parts (reasoning before the review, etc.) keep their
+                        positions and the review prose lands where the text lives.
+                      -->
+                      {#if slot.key === firstTextSlotKey(message)}
+                        <div class="chat-review-sections">
+                          {#each structuredSectionsForMessage(message) ?? [] as section (section.heading)}
+                            <section class="chat-review-section">
+                              <h3 class="chat-review-section-heading">{section.heading}</h3>
+                              <p class="chat-review-section-body">{section.body}</p>
+                            </section>
+                          {/each}
+                        </div>
+                      {/if}
+                    {:else if shouldRenderTextSlotAsMarkdown(message, index)}
+                      <div class="chat-message-content chat-message-content-prose">
+                        <MarkdownRenderer source={slot.text} />
+                      </div>
+                    {:else}
+                      <p class="chat-message-content">{slot.text}</p>
+                    {/if}
+                  {:else if slot.kind === "file-image"}
+                    <div class="chat-message-attachments chat-message-attachments-images">
+                      <ImageAttachment attachment={slot.attachment} />
+                    </div>
+                  {:else if slot.kind === "file-other"}
+                    <div class="chat-message-attachments chat-message-attachments-files">
+                      <FileAttachmentChip attachment={slot.attachment} />
+                    </div>
+                  {:else if slot.kind === "diff"}
+                    <InlineDiff
+                      diff={slot.diff}
+                      expanded={isDiffExpanded(slot.diff.id)}
+                      onToggle={() => toggleDiff(slot.diff.id)}
+                    />
                   {/if}
+                {/each}
+              {/if}
+              {#if !hasTextSlots}
+                {#if shouldRenderStructuredSections(message, index)}
+                  <div class="chat-review-sections">
+                    {#each structuredSectionsForMessage(message) ?? [] as section (section.heading)}
+                      <section class="chat-review-section">
+                        <h3 class="chat-review-section-heading">{section.heading}</h3>
+                        <p class="chat-review-section-body">{section.body}</p>
+                      </section>
+                    {/each}
+                  </div>
+                {:else if shouldRenderMarkdown(message, index)}
+                  <div class="chat-message-content chat-message-content-prose">
+                    <MarkdownRenderer source={message.content} />
+                  </div>
+                {:else}
+                  <p class="chat-message-content">
+                    {#if message.role === "assistant" && message.content.length === 0 && isStreamingAssistantMessage(message, index)}
+                      <span class="chat-streaming-placeholder">Generating…</span>
+                    {:else}
+                      {messageDisplayContent(message)}
+                      {#if isStreamingAssistantMessage(message, index)}
+                        <span class="chat-streaming-cursor" aria-hidden="true"></span>
+                      {/if}
+                    {/if}
+                  </p>
                 {/if}
-              </p>
-            {/if}
-            {#if hasToolCards(message)}
-              <div class="chat-tool-cards">
-                {#each message.toolCalls ?? [] as toolCall (toolCall.callId)}
-                  <ToolCard {toolCall} />
-                {/each}
-              </div>
-            {/if}
-            {#if attachments.images.length > 0}
-              <div class="chat-attachments chat-attachments-images">
-                {#each attachments.images as image (image.id)}
-                  <ImageAttachment attachment={image} />
-                {/each}
-              </div>
-            {/if}
-            {#if attachments.files.length > 0}
-              <div class="chat-attachments chat-attachments-files">
-                {#each attachments.files as file (file.id)}
-                  <FileAttachmentChip attachment={file} />
-                {/each}
-              </div>
-            {/if}
-            {#if diffs.length > 0}
-              <div class="chat-inline-diffs">
-                {#each diffs as diff (diff.id)}
-                  <InlineDiff
-                    {diff}
-                    expanded={isDiffExpanded(diff)}
-                    onToggle={() => toggleDiff(diff)}
-                  />
-                {/each}
-              </div>
-            {/if}
+              {/if}
+              {#if hasToolCards(message)}
+                <div class="chat-tool-cards">
+                  {#each message.toolCalls ?? [] as toolCall (toolCall.callId)}
+                    <ToolCard {toolCall} />
+                  {/each}
+                </div>
+              {/if}
+            </div>
             {#if stepTotals}
               <footer class="chat-message-totals">
                 <span class="chat-message-totals-tokens">
@@ -776,67 +786,40 @@
     line-height: 1.5;
   }
 
+  /*
+   * M12-T1 — the message body is a single flex column holding the interleaved
+   * part slots (steps / reasoning / subtasks / text / attachments / diffs), the
+   * content fallback, and the tool cards, in stored order. The gap spaces every
+   * part uniformly; the previous per-block `margin-top` / adjacency rules
+   * (`chat-step-separators` / `chat-subtask-cards` / `chat-inline-diffs`) are no
+   * longer needed because nothing is grouped into a type-block wrapper.
+   */
+  .chat-message-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
   .chat-tool-cards {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    margin-top: var(--space-4);
   }
 
-  .chat-attachments {
+  .chat-message-attachments {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-3);
-    margin-top: var(--space-4);
   }
 
-  .chat-attachments-images {
+  .chat-message-attachments-images {
     flex-direction: row;
     align-items: flex-start;
   }
 
-  .chat-attachments-files {
+  .chat-message-attachments-files {
     flex-direction: row;
     align-items: center;
-  }
-
-  /* When attachments follow tool cards or other attachments, keep a single gap. */
-  .chat-tool-cards + .chat-attachments,
-  .chat-attachments + .chat-attachments {
-    margin-top: var(--space-3);
-  }
-
-  .chat-subtask-cards {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    margin-top: var(--space-3);
-  }
-
-  /* When subtask cards precede tool cards, collapse the double gap. */
-  .chat-subtask-cards + .chat-tool-cards {
-    margin-top: var(--space-3);
-  }
-
-  .chat-inline-diffs {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    margin-top: var(--space-4);
-  }
-
-  /* When inline diffs follow tool cards or attachments, keep a single gap. */
-  .chat-tool-cards + .chat-inline-diffs,
-  .chat-attachments + .chat-inline-diffs,
-  .chat-inline-diffs + .chat-inline-diffs {
-    margin-top: var(--space-3);
-  }
-
-  .chat-step-separators {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
   }
 
   .chat-message-totals {

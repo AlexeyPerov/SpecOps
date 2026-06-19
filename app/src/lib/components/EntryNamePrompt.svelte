@@ -87,33 +87,35 @@
     role="presentation"
     onpointerdown={handleBackdropPointerDown}
   >
-    <form
+    <div
       class="entry-name-prompt"
       role="dialog"
       aria-modal="true"
       aria-labelledby="entry-name-prompt-title"
-      onsubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
+      tabindex="-1"
       onkeydown={handleDialogKeydown}
-      onclick={(event) => event.stopPropagation()}
-      onpointerdown={(event) => event.stopPropagation()}
     >
-      <h2 id="entry-name-prompt-title" class="entry-name-prompt-title">{title}</h2>
-      <input
-        bind:this={inputEl}
-        class="entry-name-prompt-input"
-        type="text"
-        bind:value
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <div class="entry-name-prompt-actions">
-        <button type="button" class="toolbar-button" onclick={cancel}>Cancel</button>
-        <button type="submit" class="toolbar-button">{confirmLabel}</button>
-      </div>
-    </form>
+      <form
+        onsubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <h2 id="entry-name-prompt-title" class="entry-name-prompt-title">{title}</h2>
+        <input
+          bind:this={inputEl}
+          class="entry-name-prompt-input"
+          type="text"
+          bind:value
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <div class="entry-name-prompt-actions">
+          <button type="button" class="toolbar-button" onclick={cancel}>Cancel</button>
+          <button type="submit" class="toolbar-button">{confirmLabel}</button>
+        </div>
+      </form>
+    </div>
   </div>
 {/if}
 
@@ -134,8 +136,12 @@
     background: var(--color-surface-1);
     box-shadow: var(--shadow-overlay);
     padding: var(--space-10);
+  }
+
+  .entry-name-prompt form {
     display: grid;
     gap: var(--space-8);
+    margin: 0;
   }
 
   .entry-name-prompt-title {

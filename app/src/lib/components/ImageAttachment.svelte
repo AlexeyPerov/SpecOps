@@ -18,6 +18,19 @@
     zoomed = false;
   }
 
+  /**
+   * Overlay click handler: close only when the backdrop itself (not the image
+   * or close button) is clicked. Checking the target avoids the previous
+   * `<img onclick={stopPropagation}>` workaround, which tripped svelte-check's
+   * "non-interactive element with click listener" / "click without keyboard"
+   * a11y warnings.
+   */
+  function handleOverlayClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      closeZoom();
+    }
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -62,7 +75,7 @@
     aria-modal="true"
     aria-label={`${displayName} — full size`}
     tabindex="-1"
-    onclick={closeZoom}
+    onclick={handleOverlayClick}
     onkeydown={handleKeydown}
   >
     <button
@@ -77,7 +90,6 @@
       class="image-attachment-full"
       src={attachment.url}
       alt={displayName}
-      onclick={(event) => event.stopPropagation()}
     />
   </div>
 {/if}

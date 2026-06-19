@@ -73,9 +73,3 @@
     />
   </label>
 </div>
-
-<style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsFormMultiline.css";
-  @import "../../styles/settingsDialogForm.css";
-</style>

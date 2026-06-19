@@ -91,8 +91,7 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="session-list-title"
-      onclick={(event) => event.stopPropagation()}
-      onpointerdown={(event) => event.stopPropagation()}
+      tabindex="-1"
     >
       <header class="session-list-header">
         <h2 id="session-list-title" class="session-list-title">Sessions</h2>

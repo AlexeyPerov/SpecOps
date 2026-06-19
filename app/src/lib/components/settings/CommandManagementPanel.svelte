@@ -249,11 +249,6 @@
 {/if}
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsFormMultiline.css";
-  @import "../../styles/settingsDialogForm.css";
-  @import "../../styles/settingsPanelLists.css";
-
   .command-row-main {
     display: flex;
     align-items: center;

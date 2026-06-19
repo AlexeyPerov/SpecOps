@@ -34,7 +34,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  @import "../../styles/settingsFoldout.css";
-</style>

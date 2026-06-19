@@ -169,10 +169,6 @@
 {/if}
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsDialogForm.css";
-  @import "../../styles/settingsPanelLists.css";
-
   .provider-row {
     flex-direction: column;
     align-items: stretch;

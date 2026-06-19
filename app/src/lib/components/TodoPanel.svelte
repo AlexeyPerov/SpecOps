@@ -29,7 +29,11 @@
     onJumpToMessage,
   }: Props = $props();
 
-  const store = getSessionTodos(workspaceRootPath, sessionId);
+  // Derive the store from the live props (a fresh Readable is returned per
+  // workspace-root + session-id pair) and subscribe in a second `$derived`.
+  // The previous `const store = …` captured the initial prop values and
+  // tripped svelte-check's `state_referenced_locally` warning.
+  const store = $derived(getSessionTodos(workspaceRootPath, sessionId));
   const todoState = $derived($store);
 
   const sorted = $derived(sortSessionTodos(todoState.todos));

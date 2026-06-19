@@ -19,7 +19,11 @@
 
   let popoverEl = $state<HTMLDivElement | null>(null);
 
-  const store = getStatusSummary(workspaceRootPath);
+  // Derive the store from the live prop (a fresh Readable is returned per
+  // workspace root) and subscribe in a second `$derived`. The previous
+  // `const store = …` captured the initial prop value and tripped svelte-check's
+  // `state_referenced_locally` warning.
+  const store = $derived(getStatusSummary(workspaceRootPath));
   const summary = $derived($store);
 
   onMount(() => {

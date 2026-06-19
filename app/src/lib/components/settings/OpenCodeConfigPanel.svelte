@@ -519,10 +519,6 @@
 {/if}
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsFormMultiline.css";
-  @import "../../styles/settingsDialogForm.css";
-
   .opencode-config-header {
     display: flex;
     align-items: center;

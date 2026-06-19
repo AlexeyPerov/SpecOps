@@ -180,10 +180,6 @@
 {/if}
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsDialogForm.css";
-  @import "../../styles/settingsPanelLists.css";
-
   .permission-row {
     display: flex;
     align-items: center;

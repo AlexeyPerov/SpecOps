@@ -97,6 +97,7 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="chat-mode-editor-title"
+      tabindex="-1"
       onkeydown={handleDialogKeydown}
       onpointerdown={(event) => event.stopPropagation()}
     >
@@ -304,11 +305,6 @@
 {/if}
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsFormMultiline.css";
-  @import "../../styles/settingsDialogForm.css";
-  @import "../../styles/settingsPanelLists.css";
-
   .chat-mode-editor-backdrop {
     position: fixed;
     inset: 0;

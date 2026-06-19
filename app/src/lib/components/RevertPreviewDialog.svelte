@@ -92,6 +92,7 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="revert-preview-title"
+      tabindex="-1"
       onkeydown={handleDialogKeydown}
       onclick={(event) => event.stopPropagation()}
       onpointerdown={(event) => event.stopPropagation()}

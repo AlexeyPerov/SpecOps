@@ -85,13 +85,12 @@
     placeholders in custom prompts.
   </p>
 
-  <div class="chat-modes-grid" role="list" aria-label="Chat modes">
+  <div class="chat-modes-grid" aria-label="Chat modes">
     {#each allModes() as mode (mode.id)}
       <button
         type="button"
         class="chat-mode-tile"
         class:chat-mode-tile-disabled={!mode.enabled}
-        role="listitem"
         aria-label={`Edit ${mode.name}`}
         onclick={() => openModeEditor(mode)}
       >
@@ -121,9 +120,6 @@
 />
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsDialogForm.css";
-
   .chat-modes-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));

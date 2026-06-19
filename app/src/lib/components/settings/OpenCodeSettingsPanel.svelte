@@ -256,9 +256,6 @@
 </section>
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsDialogForm.css";
-
   .opencode-validation-note,
   .opencode-health-error {
     color: var(--color-text-danger);

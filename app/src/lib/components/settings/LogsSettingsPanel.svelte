@@ -39,8 +39,3 @@
     Verbose provider logging
   </label>
 </section>
-
-<style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsDialogForm.css";
-</style>

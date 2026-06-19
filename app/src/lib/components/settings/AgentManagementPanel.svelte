@@ -197,10 +197,6 @@
 />
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsDialogForm.css";
-  @import "../../styles/settingsPanelLists.css";
-
   .agent-row {
     flex-direction: column;
     align-items: stretch;

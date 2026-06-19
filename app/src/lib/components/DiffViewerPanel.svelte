@@ -32,7 +32,11 @@
     onOpenFile,
   }: Props = $props();
 
-  const store = getSessionDiffs(workspaceRootPath, sessionId);
+  // Derive the store from the live props (a fresh Readable is returned per
+  // workspace-root + session-id pair) and subscribe in a second `$derived`.
+  // The previous `const store = …` captured the initial prop values and
+  // tripped svelte-check's `state_referenced_locally` warning.
+  const store = $derived(getSessionDiffs(workspaceRootPath, sessionId));
   const diffState = $derived($store);
 
   let statusFilter = $state<DiffStatusFilter>("all");

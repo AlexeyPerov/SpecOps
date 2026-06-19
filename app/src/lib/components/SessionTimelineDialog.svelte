@@ -89,8 +89,7 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="timeline-title"
-      onclick={(event) => event.stopPropagation()}
-      onpointerdown={(event) => event.stopPropagation()}
+      tabindex="-1"
     >
       <header class="timeline-header">
         <h2 id="timeline-title" class="timeline-title">Timeline</h2>

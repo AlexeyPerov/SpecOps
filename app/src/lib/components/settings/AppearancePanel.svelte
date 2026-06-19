@@ -182,9 +182,6 @@
 </section>
 
 <style>
-  @import "../../styles/settingsForm.css";
-  @import "../../styles/settingsDialogForm.css";
-
   .appearance-slider {
     display: grid;
     grid-template-columns: 64px 1fr 48px;

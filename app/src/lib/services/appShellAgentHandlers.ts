@@ -28,6 +28,7 @@ import {
   buildSessionTranscriptMarkdown,
   suggestExportFileName,
 } from "../ai/backends/opencodeSessionExport";
+import { logDiagnostic } from "./logging";
 
 export interface AppShellAgentHandlersDeps {
   getIsChatHttpActive: () => boolean;
@@ -598,11 +599,26 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       appState.openOrFocusAgentTab(existing.id);
       return;
     }
+    // M7-T4: seed the title from getSessionDetails so the tab isn't stuck on
+    // the placeholder. Best-effort — a fetch failure falls back to the caller-
+    // supplied title (e.g. from the list panel) or the placeholder.
+    let resolvedTitle = title?.trim() || "Opened session";
+    try {
+      const details = await createOpencodeBackend().getSessionDetails({
+        workspaceRootPath: workspaceRoot,
+        sessionId,
+      });
+      if (details?.title?.trim()) {
+        resolvedTitle = details.title.trim();
+      }
+    } catch {
+      // Non-fatal — the placeholder title stays; hydration may still refresh it.
+    }
     const agentId = chatStore.forkAgent(
       {
         opencodeSessionId: sessionId,
         opencodeParentSessionId: "",
-        title: title?.trim() || "Opened session",
+        title: resolvedTitle,
       },
       workspaceRoot,
     );
@@ -612,13 +628,24 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
     appState.setLastActiveAgentId(agentId);
     appState.openOrFocusAgentTab(agentId);
+    // M7-T4: hydrate the thread from session.messages (best-effort, matching
+    // the M2 convention) so the tab shows its messages instead of an empty list
+    // until the user reopens it.
+    await hydrateWorkspaceAgentMessages({
+      backend: createOpencodeBackend(),
+      workspaceRootPath: workspaceRoot,
+      agents: chatStore.getAgentIndex(),
+    }).catch(() => {
+      // Hydration is best-effort; the local snapshot stays in place.
+    });
     notify("Opened session in a new agent tab.");
   }
 
   /**
    * M2-T2 — fetch the rich session list for the active workspace. Used by the
-   * SessionListPanel. Errors are swallowed (returns []) so the panel can
-   * degrade to "no sessions" rather than blocking the UI.
+   * SessionListPanel. Errors degrade to `[]` (so the panel can show "no
+   * sessions" rather than blocking) but are now surfaced as a diagnostic
+   * (M7-T5) — previously a bare `catch {}` swallowed them silently.
    */
   async function handleListWorkspaceSessions(
     options?: { search?: string; limit?: number },
@@ -633,7 +660,20 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
         ...(options?.search ? { search: options.search } : {}),
         ...(options?.limit ? { limit: options.limit } : {}),
       });
-    } catch {
+    } catch (error: unknown) {
+      // Keep the degrade-to-[] contract but make the failure observable
+      // (consistent with every sibling handler).
+      void logDiagnostic({
+        level: "warn",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "workspace session list failed",
+        metadata: {
+          kind: "opencode.session.list",
+          workspaceRootPath: workspaceRoot,
+          error: error instanceof Error ? error.message : undefined,
+        },
+      });
       return [];
     }
   }

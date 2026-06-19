@@ -133,9 +133,18 @@ describe("promptHistory.nextHistoryUp / nextHistoryDown", () => {
     expect(nextHistoryDown(entries, 0)).toEqual({ prompt: null, index: -1 });
   });
 
-  it("arrow-down moves back towards the top", () => {
+  it("arrow-down from index 1 visits the index-0 entry (does not skip it)", () => {
+    expect(nextHistoryDown(entries, 1)).toEqual({ prompt: "first", index: 0 });
+  });
+
+  it("arrow-down moves back towards the top, then drops to the empty draft", () => {
     expect(nextHistoryDown(entries, 2)).toEqual({ prompt: "second", index: 1 });
-    expect(nextHistoryDown(entries, 1)).toEqual({ prompt: null, index: -1 });
+    expect(nextHistoryDown(entries, 1)).toEqual({ prompt: "first", index: 0 });
+    expect(nextHistoryDown(entries, 0)).toEqual({ prompt: null, index: -1 });
+  });
+
+  it("arrow-down clamps below the draft (negative index is a no-op)", () => {
+    expect(nextHistoryDown(entries, -1)).toEqual({ prompt: null, index: -1 });
   });
 
   it("arrow-down on an empty list is a no-op", () => {

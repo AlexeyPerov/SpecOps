@@ -286,8 +286,5 @@ export function nextHistoryDown(
     return { prompt: null, index: -1 };
   }
   const next = currentIndex - 1;
-  if (next <= 0) {
-    return { prompt: null, index: -1 };
-  }
   return { prompt: entries[next]!.prompt, index: next };
 }

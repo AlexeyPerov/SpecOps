@@ -186,11 +186,22 @@ export async function loadOpencodeConfigStore(
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to load OpenCode config.";
-      const state: OpencodeConfigStoreState = {
-        ...emptyState,
-        status: "error",
-        lastErrorMessage: message,
-      };
+      // M7-T3: a transient getConfig failure during a re-load must not wipe the
+      // previously-good cached slices (savePermissionConfig depends on
+      // current.config). Preserve the prior data and only flip status →
+      // "error" + lastErrorMessage. A genuinely first-load failure (no prior
+      // data) still degrades to emptyState.
+      const prior = getOpencodeConfigStore(workspaceRootPath);
+      const hasPriorData =
+        prior.status === "loaded" ||
+        prior.config !== null ||
+        prior.providers.length > 0 ||
+        prior.mcpServers.length > 0 ||
+        prior.agents.length > 0 ||
+        prior.skills.length > 0;
+      const state: OpencodeConfigStoreState = hasPriorData
+        ? { ...prior, status: "error", lastErrorMessage: message }
+        : { ...emptyState, status: "error", lastErrorMessage: message };
       updateCache(workspaceRootPath, state);
       emitDiagnostic({ reason: "error", workspaceRootPath, level: "warn", error });
       return state;

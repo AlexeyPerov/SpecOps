@@ -30,8 +30,13 @@ const emptyState: OpencodeDiffStoreState = {
   loadedAt: null,
 };
 
-function stateKey(workspaceRootPath: string, sessionId: string): string {
-  return `${workspaceRootPath}|${sessionId}`;
+function stateKey(workspaceRootPath: string, sessionId: string, messageId?: string): string {
+  // M7-T2: the store is parameterized by `messageId` (a scoped refresh only
+  // returns that message's files), so the cache + inflight maps must be keyed
+  // by it too — otherwise a scoped refresh racing/caching against another
+  // scope returns the wrong message's files. `"all"` mirrors the backend's
+  // "no messageId → whole session" scope.
+  return `${workspaceRootPath}|${sessionId}|${messageId ?? "all"}`;
 }
 
 interface CachedStore {
@@ -43,8 +48,12 @@ interface CachedStore {
 const storeCache = new Map<string, CachedStore>();
 const inflightRequests = new Map<string, Promise<OpencodeDiffStoreState>>();
 
-function getOrCreateStore(workspaceRootPath: string, sessionId: string): CachedStore {
-  const key = stateKey(workspaceRootPath, sessionId);
+function getOrCreateStore(
+  workspaceRootPath: string,
+  sessionId: string,
+  messageId?: string,
+): CachedStore {
+  const key = stateKey(workspaceRootPath, sessionId, messageId);
   const existing = storeCache.get(key);
   if (existing) {
     return existing;
@@ -63,8 +72,9 @@ function setState(
   workspaceRootPath: string,
   sessionId: string,
   next: OpencodeDiffStoreState,
+  messageId?: string,
 ): void {
-  const cached = getOrCreateStore(workspaceRootPath, sessionId);
+  const cached = getOrCreateStore(workspaceRootPath, sessionId, messageId);
   cached.value = next;
   cached.set(next);
 }
@@ -72,15 +82,17 @@ function setState(
 export function getSessionDiffs(
   workspaceRootPath: string,
   sessionId: string,
+  messageId?: string,
 ): Readable<OpencodeDiffStoreState> {
-  return getOrCreateStore(workspaceRootPath, sessionId).readable;
+  return getOrCreateStore(workspaceRootPath, sessionId, messageId).readable;
 }
 
 export function getSessionDiffSnapshot(
   workspaceRootPath: string,
   sessionId: string,
+  messageId?: string,
 ): OpencodeDiffStoreState {
-  return getOrCreateStore(workspaceRootPath, sessionId).value;
+  return getOrCreateStore(workspaceRootPath, sessionId, messageId).value;
 }
 
 export function resetSessionDiffStoreForTests(): void {
@@ -120,9 +132,9 @@ export async function refreshSessionDiffs(input: {
   sessionId: string;
   messageId?: string;
 }): Promise<OpencodeDiffStoreState> {
-  const { workspaceRootPath, sessionId } = input;
-  const key = stateKey(workspaceRootPath, sessionId);
-  getOrCreateStore(workspaceRootPath, sessionId);
+  const { workspaceRootPath, sessionId, messageId } = input;
+  const key = stateKey(workspaceRootPath, sessionId, messageId);
+  getOrCreateStore(workspaceRootPath, sessionId, messageId);
 
   const existing = inflightRequests.get(key);
   if (existing) {
@@ -132,14 +144,19 @@ export async function refreshSessionDiffs(input: {
   const snapshot = appState.getSnapshot();
   if (!isOpencodeEnabled(snapshot.settings.opencode)) {
     const next: OpencodeDiffStoreState = { ...emptyState };
-    setState(workspaceRootPath, sessionId, next);
+    setState(workspaceRootPath, sessionId, next, messageId);
     return next;
   }
 
-  setState(workspaceRootPath, sessionId, {
-    ...getSessionDiffSnapshot(workspaceRootPath, sessionId),
-    status: "loading",
-  });
+  setState(
+    workspaceRootPath,
+    sessionId,
+    {
+      ...getSessionDiffSnapshot(workspaceRootPath, sessionId, messageId),
+      status: "loading",
+    },
+    messageId,
+  );
 
   const promise = (async (): Promise<OpencodeDiffStoreState> => {
     try {
@@ -152,7 +169,7 @@ export async function refreshSessionDiffs(input: {
       const files = await backend.listSessionDiffs({
         workspaceRootPath,
         sessionId,
-        ...(input.messageId ? { messageId: input.messageId } : {}),
+        ...(messageId ? { messageId } : {}),
       });
       const next: OpencodeDiffStoreState = {
         status: "loaded",
@@ -160,7 +177,7 @@ export async function refreshSessionDiffs(input: {
         lastErrorMessage: null,
         loadedAt: new Date().toISOString(),
       };
-      setState(workspaceRootPath, sessionId, next);
+      setState(workspaceRootPath, sessionId, next, messageId);
       emitDiagnostic({ reason: "loaded", workspaceRootPath, sessionId });
       return next;
     } catch (error: unknown) {
@@ -172,7 +189,7 @@ export async function refreshSessionDiffs(input: {
         lastErrorMessage: message,
         loadedAt: null,
       };
-      setState(workspaceRootPath, sessionId, next);
+      setState(workspaceRootPath, sessionId, next, messageId);
       emitDiagnostic({
         reason: "error",
         workspaceRootPath,
@@ -190,8 +207,12 @@ export async function refreshSessionDiffs(input: {
   return promise;
 }
 
-export function clearSessionDiffs(workspaceRootPath: string, sessionId: string): void {
-  const key = stateKey(workspaceRootPath, sessionId);
+export function clearSessionDiffs(
+  workspaceRootPath: string,
+  sessionId: string,
+  messageId?: string,
+): void {
+  const key = stateKey(workspaceRootPath, sessionId, messageId);
   storeCache.delete(key);
   inflightRequests.delete(key);
 }

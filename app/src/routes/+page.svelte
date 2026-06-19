@@ -241,13 +241,13 @@
 
   async function refreshSessionList(): Promise<void> {
     sessionListLoading = true;
-    sessionListError = null;
     try {
+      // handleListWorkspaceSessions degrades to [] and never throws (M7-T5
+      // surfaces failures via diagnostics instead), so there's nothing to
+      // catch here — kept in try/finally purely for the loading toggle.
       sessionListSessions = await handleListWorkspaceSessions({
         ...(sessionListSearch.trim() ? { search: sessionListSearch.trim() } : {}),
       });
-    } catch (error: unknown) {
-      sessionListError = error instanceof Error ? error.message : "Failed to load sessions.";
     } finally {
       sessionListLoading = false;
     }

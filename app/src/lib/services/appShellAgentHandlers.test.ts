@@ -6,6 +6,13 @@ import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { WorkspaceAccessReason } from "../ai/capabilities";
 
+const { logDiagnosticMock } = vi.hoisted(() => ({
+  logDiagnosticMock: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("./logging", () => ({
+  logDiagnostic: logDiagnosticMock,
+}));
+
 vi.mock("../state/appState", () => ({
   appState: {
     getActiveSession: vi.fn(),
@@ -25,6 +32,9 @@ vi.mock("../state/chatStore", () => ({
     loadWorkspaceAgents: vi.fn(),
     mergeSessionDraftAgents: vi.fn(),
     getAgentIndex: vi.fn(),
+    getActiveWorkspaceRoot: vi.fn(),
+    getAgentSessionLink: vi.fn(),
+    forkAgent: vi.fn(),
     setActiveAgentId: vi.fn(),
     runAccessPreflight: vi.fn(),
     clearAgentSessionLink: vi.fn(),
@@ -34,6 +44,8 @@ vi.mock("../state/chatStore", () => ({
 
 const backendListSessionsMock = vi.fn();
 const backendListMessagesMock = vi.fn();
+const backendGetSessionDetailsMock = vi.fn();
+const backendListSessionDetailsMock = vi.fn();
 vi.mock("../ai/backends/workspaceAgentBackend", async () => {
   const actual = await vi.importActual("../ai/backends/workspaceAgentBackend");
   return {
@@ -41,6 +53,8 @@ vi.mock("../ai/backends/workspaceAgentBackend", async () => {
     createWorkspaceAgentBackend: vi.fn(() => ({
       listSessions: backendListSessionsMock,
       listMessages: backendListMessagesMock,
+      getSessionDetails: backendGetSessionDetailsMock,
+      listSessionDetails: backendListSessionDetailsMock,
     })),
   };
 });
@@ -65,6 +79,7 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
     vi.clearAllMocks();
     backendListSessionsMock.mockReset();
     backendListMessagesMock.mockReset();
+    backendGetSessionDetailsMock.mockReset();
 
     appStateMock.getActiveSession.mockReturnValue({
       selectedTabId: "tab-file",
@@ -204,5 +219,196 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
 
     await expect(handlers.restoreWorkspaceAgentSession("/repo/ws-a")).resolves.toBeUndefined();
     expect(chatStoreMock.setThreadMessages).not.toHaveBeenCalled();
+  });
+});
+
+describe("createAppShellAgentHandlers.handleOpenExternalSession", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    backendListSessionsMock.mockReset();
+    backendListMessagesMock.mockReset();
+    backendGetSessionDetailsMock.mockReset();
+
+    appStateMock.getActiveSession.mockReturnValue({
+      selectedTabId: "tab-agent",
+      openTabs: [],
+      lastActiveWindowId: "main",
+      windowBounds: null,
+      lastActiveAgentId: null,
+    });
+    chatStoreMock.getActiveWorkspaceRoot.mockReturnValue("/repo/ws-a");
+    chatStoreMock.getAgentIndex.mockReturnValue([]);
+    chatStoreMock.forkAgent.mockReturnValue("agent-new");
+    chatStoreMock.setThreadMessages.mockImplementation(() => true);
+  });
+
+  it("creates a tab, seeds the title from getSessionDetails, and best-effort hydrates", async () => {
+    backendGetSessionDetailsMock.mockResolvedValue({
+      id: "sess-ext",
+      title: "External chat",
+      createdAt: null,
+      updatedAt: null,
+      parentId: null,
+      shareUrl: null,
+      cost: null,
+      revert: null,
+    });
+    // After forkAgent, the index should contain the new linked agent so
+    // hydration picks it up.
+    chatStoreMock.getAgentIndex
+      .mockReturnValueOnce([]) // pre-fork lookup (no existing tab)
+      .mockReturnValueOnce([
+        makeEntry({ id: "agent-new", opencodeSessionId: "sess-ext" }),
+      ]);
+    backendListMessagesMock.mockResolvedValue([
+      {
+        info: { id: "u1", role: "user", time: { created: 1 } },
+        parts: [{ type: "text", text: "hello from external" }],
+      },
+    ]);
+
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+
+    await handlers.handleOpenExternalSession("sess-ext");
+
+    expect(backendGetSessionDetailsMock).toHaveBeenCalledWith({
+      workspaceRootPath: "/repo/ws-a",
+      sessionId: "sess-ext",
+    });
+    expect(chatStoreMock.forkAgent).toHaveBeenCalledTimes(1);
+    const [forkArg] = chatStoreMock.forkAgent.mock.calls[0]!;
+    expect(forkArg).toMatchObject({
+      opencodeSessionId: "sess-ext",
+      title: "External chat",
+    });
+    // Best-effort hydration ran for the newly-linked session.
+    expect(backendListMessagesMock).toHaveBeenCalledWith({
+      workspaceRootPath: "/repo/ws-a",
+      sessionId: "sess-ext",
+    });
+    expect(chatStoreMock.setThreadMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the caller-supplied title when getSessionDetails fails", async () => {
+    backendGetSessionDetailsMock.mockRejectedValue(
+      new WorkspaceAgentBackendError({
+        code: "serverUnavailable",
+        message: "offline",
+      }),
+    );
+    chatStoreMock.getAgentIndex.mockReturnValue([]);
+
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+
+    await expect(handlers.handleOpenExternalSession("sess-ext", "From list")).resolves.toBeUndefined();
+
+    const [forkArg] = chatStoreMock.forkAgent.mock.calls[0]!;
+    expect(forkArg).toMatchObject({ title: "From list" });
+  });
+
+  it("does not throw when hydration fails (best-effort)", async () => {
+    backendGetSessionDetailsMock.mockResolvedValue({
+      id: "sess-ext",
+      title: "External chat",
+      createdAt: null,
+      updatedAt: null,
+      parentId: null,
+      shareUrl: null,
+      cost: null,
+      revert: null,
+    });
+    chatStoreMock.getAgentIndex.mockReturnValue([
+      makeEntry({ id: "agent-new", opencodeSessionId: "sess-ext" }),
+    ]);
+    backendListMessagesMock.mockRejectedValue(
+      new WorkspaceAgentBackendError({
+        code: "serverUnavailable",
+        message: "offline",
+      }),
+    );
+
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+
+    await expect(handlers.handleOpenExternalSession("sess-ext")).resolves.toBeUndefined();
+    expect(chatStoreMock.setThreadMessages).not.toHaveBeenCalled();
+  });
+});
+
+describe("createAppShellAgentHandlers.handleListWorkspaceSessions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    backendListSessionsMock.mockReset();
+    backendListMessagesMock.mockReset();
+    backendGetSessionDetailsMock.mockReset();
+    backendListSessionDetailsMock.mockReset();
+
+    appStateMock.getActiveSession.mockReturnValue({
+      selectedTabId: "tab-agent",
+      openTabs: [],
+      lastActiveWindowId: "main",
+      windowBounds: null,
+      lastActiveAgentId: null,
+    });
+    chatStoreMock.getActiveWorkspaceRoot.mockReturnValue("/repo/ws-a");
+  });
+
+  it("emits a diagnostic and degrades to [] on backend failure (M7-T5)", async () => {
+    backendListSessionDetailsMock.mockRejectedValue(
+      new WorkspaceAgentBackendError({ code: "serverUnavailable", message: "offline" }),
+    );
+
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+
+    await expect(handlers.handleListWorkspaceSessions()).resolves.toEqual([]);
+
+    expect(logDiagnosticMock).toHaveBeenCalledTimes(1);
+    const event = logDiagnosticMock.mock.calls[0]![0];
+    expect(event.level).toBe("warn");
+    expect(event.metadata).toMatchObject({
+      kind: "opencode.session.list",
+      workspaceRootPath: "/repo/ws-a",
+    });
+  });
+
+  it("returns the session list on success without emitting a diagnostic", async () => {
+    backendListSessionDetailsMock.mockResolvedValue([
+      {
+        id: "sess-a",
+        title: "A",
+        createdAt: null,
+        updatedAt: null,
+        parentId: null,
+        shareUrl: null,
+        cost: null,
+        revert: null,
+      },
+    ]);
+
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+
+    const result = await handlers.handleListWorkspaceSessions();
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("sess-a");
+    expect(logDiagnosticMock).not.toHaveBeenCalled();
   });
 });

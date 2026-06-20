@@ -196,6 +196,7 @@
     background: var(--color-surface-1);
     color: var(--color-text-primary);
     font: inherit;
+    font-weight: 500;
     line-height: 1;
     cursor: pointer;
     user-select: none;
@@ -207,10 +208,12 @@
   }
 
   .select-trigger:hover:not(:disabled) {
-    background: var(--color-hover);
+    border-color: var(--color-accent);
+    color: var(--color-text-primary);
   }
 
   .select-trigger:active:not(:disabled) {
+    border-color: var(--color-accent);
     background: var(--color-pressed);
   }
 
@@ -250,7 +253,7 @@
     margin: 0;
     padding: var(--space-4);
     list-style: none;
-    border: 1px solid var(--color-border-subtle);
+    border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-sm);
     background: var(--color-surface-1);
     color: var(--color-text-primary);
@@ -271,6 +274,7 @@
   }
 
   .select-option-selected {
+    color: var(--color-accent);
     font-weight: 600;
   }
 

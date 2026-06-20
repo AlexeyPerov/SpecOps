@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-20 01:05
+
+- **`Select` drop-down restyle — ported Unity-AI-Hub's look onto the existing component.** Brought the signature drop-down button styling from the Unity-AI-Hub Tauri app (`/Users/alexeyperov/Projects/Unity-AI-Hub/hub/src/lib/components/shell/Select.svelte`) into spec-ops's own `Select.svelte`. CSS-only change to a single file; the script (runes, keyboard nav, outside-click/Escape dismissal), markup, props, and `SelectOption` type are untouched, so all 8 existing `<Select>` usages (composer pickers + settings panels) inherit the new look with zero call-site edits.
+  - **Trigger hover → accent border.** Replaced the previous background-tint hover (`background: var(--color-hover)`) with Hub's accent-border hover (`border-color: var(--color-accent)`), and added the accent border to the `:active` state too so press stays coherent. Added `font-weight: 500` to the base trigger (Hub uses medium weight).
+  - **Selected option → accent color + bold.** Hub's signature trait: the currently-selected listbox option now renders in `var(--color-accent)` + `font-weight: 600`, instead of just bold.
+  - **Listbox border bumped** from `--color-border-subtle` to `--color-border-strong` so the open panel reads with slightly more definition against the trigger (matching Hub's stronger panel vs. trigger border).
+  - **Deliberate adaptations** (not blind copies): kept spec-ops's **content-width** trigger (Hub uses `width: 100%`, which would break the compact composer pickers) and **primary default text** on the trigger (Hub uses dim text; spec-ops shows the current value in toolbars/forms). No `--hub-*` token namespace introduced — everything is mapped onto spec-ops's existing `--color-*` / `--space-*` / `--radius-*` tokens, so it respects spec-ops theming (light/dark, custom accent color).
+  - **Verification:** `npm run check` → **0 errors / 0 warnings** (unchanged from the M12-T3 baseline).
+
 ## 2026-06-20 00:30
 
 - **Phase 3.5 M12-T4 — `formatCost` ambiguity re-affirmed.** Closed the fourth and final `[P2]` review observation. `formatCost` (`chatTokenFormat.ts:36-41`) renders a genuine zero cost (free / fully-cached model) and a *missing* cost identically as `"$0.00"`; M11-T3 had accepted this because the surrounding guards already let the session-level path distinguish "no data" from "zero cost". Took the **recommended (re-affirm) approach** rather than the sentinel alternative: verified the documented guard invariant holds end-to-end, then pinned it with a test.

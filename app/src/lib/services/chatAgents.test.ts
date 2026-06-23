@@ -37,7 +37,7 @@ function assistantMessage(content: string, id = "m-2"): ChatMessage {
 }
 
 describe("agent title helpers", () => {
-  it("uses New agent for drafts", () => {
+  it("uses New session for drafts", () => {
     expect(deriveAgentTitle({ isDraft: true })).toBe(DRAFT_AGENT_TITLE);
   });
 
@@ -154,7 +154,7 @@ describe("agent date grouping", () => {
       { id: "draft-1", title: DRAFT_AGENT_TITLE, lastUsedAt: "2026-05-28T11:00:00.000Z" },
     ];
 
-    expect(filterAgentsByTitle(withDrafts, "new agent").map((entry) => entry.id)).toEqual(["draft-1"]);
+    expect(filterAgentsByTitle(withDrafts, "new session").map((entry) => entry.id)).toEqual(["draft-1"]);
     expect(filterAgentsByTitle(withDrafts, "week").map((entry) => entry.id)).toEqual(["a-week"]);
   });
 });

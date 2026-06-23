@@ -64,7 +64,7 @@
   }
 </script>
 
-<section class="todo-panel" aria-label="Agent todo list">
+<section class="todo-panel" aria-label="Session todo list">
   <header class="todo-header">
     <div class="todo-header-title">
       <h2>Todos</h2>

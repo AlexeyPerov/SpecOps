@@ -285,7 +285,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
     const currentTitle = chatStore.getAgentTitle(agentId) ?? "";
     const next = await promptEntryName({
-      title: "Rename agent",
+      title: "Rename session",
       defaultValue: currentTitle,
       confirmLabel: "Rename",
     });
@@ -295,7 +295,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     // Draft agents (no linked session yet) only need a local rename.
     if (!link?.opencodeSessionId) {
       chatStore.renameAgent(agentId, next, workspaceRoot);
-      notify("Agent renamed.");
+      notify("Session renamed.");
       return;
     }
     try {
@@ -309,7 +309,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       return;
     }
     chatStore.renameAgent(agentId, next, workspaceRoot);
-    notify("Agent renamed.");
+    notify("Session renamed.");
   }
 
   /**
@@ -328,7 +328,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
     const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
     if (!link?.opencodeSessionId) {
-      notify("This agent has no linked session to fork.");
+      notify("This session isn't linked to OpenCode yet.");
       return null;
     }
     let child: WorkspaceAgentSessionDetails;
@@ -360,7 +360,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
     appState.setLastActiveAgentId(newAgentId);
     appState.openOrFocusAgentTab(newAgentId);
-    notify("Forked session into a new agent tab.");
+    notify("Forked into a new session tab.");
     return newAgentId;
   }
 
@@ -376,7 +376,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   ): Promise<WorkspaceAgentSessionDetails | null> {
     const resolved = resolveLinkedSession(agentId);
     if (!resolved) {
-      notify("This agent has no linked session to revert.");
+      notify("This session isn't linked to OpenCode yet.");
       return null;
     }
     const messageLabel = resolveRevertMessageLabel(agentId, messageId);
@@ -430,7 +430,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   ): Promise<WorkspaceAgentSessionDetails | null> {
     const resolved = resolveLinkedSession(agentId);
     if (!resolved) {
-      notify("This agent has no linked session to restore.");
+      notify("This session isn't linked to OpenCode yet.");
       return null;
     }
     try {
@@ -453,7 +453,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   async function handleShareAgent(agentId: string): Promise<string | null> {
     const resolved = resolveLinkedSession(agentId);
     if (!resolved) {
-      notify("This agent has no linked session to share.");
+      notify("This session isn't linked to OpenCode yet.");
       return null;
     }
     try {
@@ -505,7 +505,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   async function handleSummarizeAgent(agentId: string): Promise<boolean> {
     const resolved = resolveLinkedSession(agentId);
     if (!resolved) {
-      notify("This agent has no linked session to summarize.");
+      notify("This session isn't linked to OpenCode yet.");
       return false;
     }
     notify("Summarizing session…");
@@ -626,7 +626,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }).catch(() => {
       // Hydration is best-effort; the local snapshot stays in place.
     });
-    notify("Opened session in a new agent tab.");
+    notify("Opened session in a new tab.");
   }
 
   /**

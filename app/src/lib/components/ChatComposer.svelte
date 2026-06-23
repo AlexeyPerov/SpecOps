@@ -377,7 +377,7 @@
   );
   const generationStatus = $derived(isGenerating ? "Generating response…" : "");
   const composerPlaceholder = $derived(
-    chatContextKind === "chat-http" ? "Message chat" : "Message agent",
+    chatContextKind === "chat-http" ? "Message chat" : "Message session",
   );
   const budgetDisplayText = $derived.by(() => {
     if (!budgetEstimate) {

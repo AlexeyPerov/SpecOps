@@ -182,7 +182,7 @@
   const activeAgentId = $derived(chatStore.getActiveAgentId());
   const activeAgentTitle = $derived.by(() => {
     if (!activeAgentId) {
-      return isChatHttpScope ? "Chat" : "Agent";
+      return isChatHttpScope ? "Chat" : "Session";
     }
     return (
       chatStore.getAgentTitle(activeAgentId) ??
@@ -368,7 +368,7 @@
     if (!canDeleteAgent || !activeAgentId) {
       return;
     }
-    const targetLabel = isChatHttpScope ? "chat" : "agent";
+    const targetLabel = isChatHttpScope ? "chat" : "session";
     const confirmed = window.confirm(
       `Delete ${targetLabel} "${activeAgentTitle}"? This removes the ${targetLabel} and its history. This cannot be undone.`,
     );
@@ -383,7 +383,7 @@
   }
 </script>
 
-<section class="chat-panel" aria-label={isChatHttpScope ? "Chats panel" : "Agent chat"}>
+<section class="chat-panel" aria-label={isChatHttpScope ? "Chats panel" : "Session chat"}>
   <div class="chat-panel-header">
     <div class="chat-panel-title-group">
       <p class="chat-panel-title">{activeAgentTitle}</p>
@@ -508,7 +508,7 @@
           onclick={() => void deleteAgent()}
           disabled={isBlocked || isGenerating}
         >
-          {isChatHttpScope ? "Delete chat" : "Delete agent"}
+          {isChatHttpScope ? "Delete chat" : "Delete session"}
         </button>
       {/if}
     </div>
@@ -542,7 +542,7 @@
       emptyHint={
         isChatHttpScope
           ? "Send messages with your configured connection. Pick a provider, mode, and model, then send."
-          : "Send a prompt to this workspace agent. Select an agent and model from OpenCode, then send."
+          : "Send a prompt to this session. Select an OpenCode agent and model, then send."
       }
     />
 

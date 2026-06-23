@@ -25,7 +25,22 @@ sequenceDiagram
   Store-->>UI: live message updates + workspace UX panels
 ```
 
-## Core concepts: workspaces, agents, sessions
+## User-facing terminology
+
+SpecOps aligns with OpenCode Desktop vocabulary in the UI:
+
+| Term | Meaning |
+| --- | --- |
+| **Session** | A workspace conversation — sidebar row, tab, transcript, and lifecycle actions (fork, share, rename, …). |
+| **Agent** | An OpenCode **persona/config** only — Settings → Agents, composer persona picker, `@agent:` mentions, default agent in config. |
+| **Chat** | The experimental `chat-http` lane (Settings → Dev); unrelated to workspace sessions. |
+
+Internal code may still use **agent** for conversations until [M16](../specs/ops/phase-3.5/execution-plan-m16.md) (`agentId`, `AgentsSidebar`, disk paths). Do not confuse with:
+
+- **OpenCode session** — server-side conversation object linked via `opencodeSessionId`.
+- **Window session** — `SessionState` in `session.json` (editor tabs, last active context); not a chat session.
+
+## Core concepts: workspaces, sessions, agents
 
 ### Workspace
 
@@ -33,26 +48,31 @@ sequenceDiagram
 - OpenCode data is scoped to workspace root path.
 - Session lists, model catalogs, TODOs, diffs, and status summaries are loaded per workspace.
 
-### Agent tab
+### Workspace session (UI)
 
-- An agent tab is SpecOps UI state in `chatStore` + tab/session state in `appState`.
-- Each agent entry may be linked to an OpenCode session via `opencodeSessionId`.
-- Draft agents can exist before a linked OpenCode session exists.
+- A **session** is SpecOps UI state in `chatStore` + tab state in `appState` — what users see in the sidebar and tab bar.
+- Each session entry may be linked to an OpenCode session via `opencodeSessionId`.
+- Draft sessions can exist before a linked OpenCode session exists.
 
-### OpenCode session
+### OpenCode session (server)
 
 - The server-side conversation object in OpenCode.
 - A session can be:
-  - linked to an existing agent tab
-  - opened from external OpenCode history into a new SpecOps agent tab
+  - linked to an existing workspace session tab
+  - opened from external OpenCode history into a new SpecOps session tab
 - Session lifecycle actions (fork/revert/share/summarize/export/rename) are performed against this server-side session.
+
+### Agent (persona)
+
+- OpenCode agent definitions (`build`, `plan`, custom agents) configured under Settings → Agents.
+- Selected in the composer persona picker; referenced in prompts via `@agent:`.
 
 ## Relationship model
 
-- **One workspace -> many agent tabs**
-- **One agent tab -> zero or one linked OpenCode session**
-- **One OpenCode workspace -> many OpenCode sessions**
-- SpecOps can open sessions that were not originally created in SpecOps (session list / external session open).
+- **One workspace → many workspace sessions**
+- **One workspace session tab → zero or one linked OpenCode session**
+- **One OpenCode workspace → many OpenCode sessions**
+- SpecOps can open sessions that were not originally created in SpecOps (**All sessions…** / session list).
 
 ## Key integrated features
 
@@ -65,14 +85,14 @@ sequenceDiagram
 ## Setup OpenCode in SpecOps
 
 1. Open **Settings -> Workspaces -> OpenCode**.
-2. Ensure **Use OpenCode for workspace agents** is enabled.
+2. Ensure **Use OpenCode for workspace sessions** is enabled.
 3. Choose transport mode:
    - **Sidecar (default):** local OpenCode sidecar managed by SpecOps.
    - **URL:** enter your OpenCode server URL (`http://` or `https://`).
 4. If your server requires auth, set **Server password** (stored in `provider-secrets.json`, not in `settings.json`).
 5. Click **Check connection** to verify health.
 6. Click **Refresh model list** to load current server models.
-7. Open a workspace and start or select an agent tab.
+7. Open a workspace and start or select a session.
 
 ## Sidecar notes
 

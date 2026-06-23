@@ -558,13 +558,13 @@ describe("agent persistence reads and writes", () => {
   it("does not create a thread file when only index is written", async () => {
     await writeWorkspaceAgentsIndexSnapshot(WORKSPACE, {
       version: 1,
-      agents: [{ id: AGENT_ID, title: "New agent", lastUsedAt: "2026-05-28T00:00:00.000Z", isDraft: true }],
+      agents: [{ id: AGENT_ID, title: "New session", lastUsedAt: "2026-05-28T00:00:00.000Z", isDraft: true }],
     });
 
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/index.json",
-      expect.stringContaining("New agent"),
+      expect.stringContaining("New session"),
     );
   });
 

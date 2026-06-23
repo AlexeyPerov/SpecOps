@@ -98,7 +98,7 @@
 
   function tabTooltip(tab: TabState): string {
     if (isAgentTab(tab)) {
-      return useChatTerminology ? "Chat" : "Agent chat";
+      return useChatTerminology ? "Chat" : "Session";
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc?.filePath) {

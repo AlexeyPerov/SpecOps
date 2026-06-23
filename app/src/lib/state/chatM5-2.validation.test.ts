@@ -106,7 +106,7 @@ describe("M5.2 milestone validation", () => {
     expect(schedulePersistMock).not.toHaveBeenCalled();
   });
 
-  it("supports multiple concurrent draft agents titled New agent", () => {
+  it("supports multiple concurrent draft sessions titled New session", () => {
     chatStore.createDraftAgent();
     chatStore.createDraftAgent({ activate: true });
 
@@ -164,7 +164,7 @@ describe("M5.2 milestone validation", () => {
 
     expect(AGENT_DATE_GROUP_ORDER.every((bucket) => bucket in grouped)).toBe(true);
     expect(grouped.today.map((entry) => entry.id)).toEqual(["draft-1", "a-today"]);
-    expect(filterAgentsByTitle(agents, "new agent").map((entry) => entry.id)).toEqual(["draft-1"]);
+    expect(filterAgentsByTitle(agents, "new session").map((entry) => entry.id)).toEqual(["draft-1"]);
   });
 
   it("deleteAgent clears store keys and schedules disk removal", async () => {

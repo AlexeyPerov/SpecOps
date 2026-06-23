@@ -184,7 +184,7 @@
     <h3>MCP servers</h3>
     <p class="settings-section-note">
       Add local (stdio) or remote (HTTP/SSE) Model Context Protocol servers. Tools they contribute
-      become available to workspace agents.
+      become available to workspace sessions.
     </p>
     {#if store?.status === "loading"}
       <p class="settings-section-note">Loading MCP servers…</p>

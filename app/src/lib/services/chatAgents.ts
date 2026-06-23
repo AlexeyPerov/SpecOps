@@ -2,7 +2,7 @@ import type { AgentIndexEntry, ChatMessage, ChatThreadSnapshot } from "../domain
 import { extractSessionTotals } from "../ai/chatSteps";
 import { formatCost } from "../ai/chatTokenFormat";
 
-export const DRAFT_AGENT_TITLE = "New agent";
+export const DRAFT_AGENT_TITLE = "New session";
 export const DRAFT_CHAT_TITLE = "New chat";
 
 export function draftEntryTitleForScope(scopeKey: string | null | undefined): string {

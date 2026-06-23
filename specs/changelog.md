@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-23 15:30
+
+- **Phase 3.5 M15 — OpenCode session terminology (user-facing, completed).** Aligns workspace UX with OpenCode Desktop: **Session** = conversation (sidebar, tab, transcript, lifecycle); **Agent** = persona only (Settings → Agents, composer picker, `@agent:`). Copy-only — no internal renames (`agentId`, `AgentsSidebar`, disk paths deferred to M16).
+  - **Sidebar & tabs** — workspace sidebar title **Sessions**; **All sessions…** browser button; draft title **New session**; tab tooltip **Session**; chat panel aria **Session chat**, delete **session**, fallback title **Session**.
+  - **Composer & handlers** — **Message session** placeholder; session lifecycle toasts/prompts (rename, fork, share, open external); fork tooltip **new session tab**.
+  - **Settings & blocked copy** — OpenCode toggle **Use OpenCode for workspace sessions**; MCP blurb **workspace sessions**; `chatErrorCopy` recovery lines; access ready message; model catalog hint.
+  - **Notifications** — OS copy **Session finished** / **Session error**; Appearance event label updated.
+  - **Docs** — `docs/opencode-integration.md` **User-facing terminology** section; setup steps use session vocabulary.
+  - **Plans** — added `execution-plan-m15.md` (complete) and `execution-plan-m16.md` (internal rename, planned); indexed in `execution-plan.md`.
+  - **Tests** — `chatAgents.test.ts`, `chatPersistence.test.ts`, `chatM5-2.validation.test.ts` assertions for **New session**.
+
 ## 2026-06-23 13:15
 
 - **Phase 3.5 M13 — HTTP Chat beta gate & Dev settings (completed).** Treats the experimental `chat-http` lane as opt-in: the Chat rail and the Settings → Chats subtree are hidden by default; the Dev settings section becomes the entry point for the Chat (beta) master toggle and for nested Chats tabs (Providers, Chat modes, Debug Provider) once enabled. Logs are also relocated under Dev. Persisted provider config, API keys, and thread data remain on disk; only UI and rail access are gated.

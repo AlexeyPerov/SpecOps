@@ -871,7 +871,7 @@
     show: (Boolean(activeWorkspaceRoot) && opencodeEnabled) || isChatHttpActive,
     agents: workspaceAgents,
     activeAgentId: selectedAgentId,
-    sidebarTitle: isChatHttpActive ? "Chats" : "Agents",
+    sidebarTitle: isChatHttpActive ? "Chats" : "Sessions",
     collapsed: !showAgentsSidebar,
     panelWidthPx: workspaceLayout.agentsSidebarWidthPx,
     onToggleCollapsed: toggleAgentsSidebarCollapsed,

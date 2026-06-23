@@ -9,16 +9,16 @@ export interface OsNotificationPayload {
 }
 
 const EVENT_DEFAULT_COPY: Record<NotificationEventId, OsNotificationPayload> = {
-  agentDone: { title: "Agent finished", body: "The agent completed its run." },
+  agentDone: { title: "Session finished", body: "The session completed its run." },
   permission: {
     title: "Permission requested",
-    body: "The agent is waiting for your approval.",
+    body: "The session is waiting for your approval.",
   },
   question: {
     title: "Question asked",
-    body: "The agent needs an answer to continue.",
+    body: "The session needs an answer to continue.",
   },
-  error: { title: "Agent error", body: "The agent run failed." },
+  error: { title: "Session error", body: "The session run failed." },
 };
 
 export function defaultCopyForEvent(

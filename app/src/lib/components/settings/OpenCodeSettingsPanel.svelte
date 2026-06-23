@@ -157,22 +157,22 @@
 <section class="settings-section">
   <h3>OpenCode</h3>
   <p class="settings-section-note">
-    Workspace agents use the OpenCode backend. Configure transport mode and server health here.
+    Workspace sessions use the OpenCode backend. Configure transport mode and server health here.
   </p>
   <div class="settings-subsection">
-    <label class="settings-toggle" title="Enable OpenCode for workspace agents">
+    <label class="settings-toggle" title="Enable OpenCode for workspace sessions">
       <input
         type="checkbox"
         checked={snapshot.settings.opencode.enabled}
-        title="Enable OpenCode for workspace agents"
+        title="Enable OpenCode for workspace sessions"
         onchange={(event) =>
           updateOpencodeEnabled((event.currentTarget as HTMLInputElement).checked)}
       />
-      Use OpenCode for workspace agents
+      Use OpenCode for workspace sessions
     </label>
     {#if !snapshot.settings.opencode.enabled}
       <p class="settings-section-note">
-        OpenCode is off. Workspace folders open as editors without agents. Enable above to use workspace agents.
+        OpenCode is off. Workspace folders open as editors without sessions. Enable above to use workspace sessions.
       </p>
     {/if}
   </div>

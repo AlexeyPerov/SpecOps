@@ -191,7 +191,7 @@ export function createAccessSlice(deps: {
             canReadWorkspaceFiles: true,
             supportedModes: [],
           },
-          message: "OpenCode workspace agent is ready.",
+          message: "OpenCode workspace session is ready.",
         };
       }
 

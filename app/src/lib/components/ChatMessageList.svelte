@@ -362,7 +362,7 @@
                     <button
                       type="button"
                       class="chat-message-action"
-                      title="Fork this session into a new agent tab from this message"
+                      title="Fork this session into a new session tab from this message"
                       onclick={() => onForkFromMessage(message.id)}
                     >
                       Fork

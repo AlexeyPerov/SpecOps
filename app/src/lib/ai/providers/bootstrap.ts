@@ -163,7 +163,7 @@ function createWorkspaceReadinessChecker(
           return {
             ready: false,
             message: catalog.lastErrorMessage ?? "Failed to load OpenCode catalog.",
-            recoveryHint: "Refresh the model list in the workspace agent composer.",
+            recoveryHint: "Refresh the model list in the session composer.",
           };
         }
         return {

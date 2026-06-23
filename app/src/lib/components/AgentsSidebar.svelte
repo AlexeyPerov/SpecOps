@@ -40,7 +40,7 @@
   let {
     agents = [],
     activeAgentId = null,
-    sidebarTitle = "Agents",
+    sidebarTitle = "Sessions",
     collapsed = false,
     panelWidthPx = DEFAULT_PANEL_WIDTH_PX,
     onPanelWidthChange = () => {},
@@ -88,8 +88,8 @@
   const filteredAgents = $derived(filterAgentsByTitle(agents, searchQuery));
   const groupedAgents = $derived(groupAgentsByLastUsedDate(filteredAgents));
   const isChatsSidebar = $derived(sidebarTitle.trim().toLowerCase() === "chats");
-  const entryPluralLabel = $derived(isChatsSidebar ? "chats" : "agents");
-  const entrySingularLabel = $derived(isChatsSidebar ? "chat" : "agent");
+  const entryPluralLabel = $derived(isChatsSidebar ? "chats" : "sessions");
+  const entrySingularLabel = $derived(isChatsSidebar ? "chat" : "session");
   const newEntryLabel = $derived(isChatsSidebar ? "New chat" : DRAFT_AGENT_TITLE);
 
   function groupsWithAgents(): AgentDateGroup[] {
@@ -218,9 +218,9 @@
           class="agents-sidebar-button agents-sidebar-sessions"
           type="button"
           onclick={() => onOpenSessions()}
-          title="Browse all OpenCode sessions for this workspace"
+          title="Browse all OpenCode sessions for this workspace, including ones not opened here yet"
         >
-          Sessions
+          All sessions…
         </button>
       {/if}
     {:else}

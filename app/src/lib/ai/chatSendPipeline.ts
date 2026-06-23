@@ -311,7 +311,7 @@ export function shouldUseWorkspaceAgentBackend(input: {
 function noActiveChatTargetMessage(chatContextKind: ChatContextKind): string {
   return chatContextKind === "chat-http"
     ? "Select or create a chat to send messages."
-    : "Could not resolve an active agent.";
+    : "Could not resolve an active session.";
 }
 
 function resolveActiveAgentIdForSend(

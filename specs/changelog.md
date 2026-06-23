@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-23 16:57
+
+- **Added per-message date-time label.** A small `HH:MM` (or `MM/DD HH:MM`, with year for prior years) timestamp now renders at the bottom-right corner of every message bubble — including user, assistant, system, and provider/model-switch events — so the transcript is easier to scan.
+  - **Render** — `<time class="chat-message-timestamp">` element inside each `.chat-message` `<li>`; bubble made `position: relative`; absolutely positioned at `right/bottom` of the bubble.
+  - **Format** — `formatMessageTimestamp()` in `ChatMessageList.svelte` (same-day → `HH:MM`; older same-year → `MM/DD HH:MM`; prior year → `YYYY/MM/DD HH:MM`); `24-hour`, `tabular-nums`. `title`/`datetime` carry the raw ISO value for hover tooltip and a11y.
+  - **Collision** — `.chat-message-totals` gains right-padding so the token/cost footer never overlaps the new label.
+  - **Hide on empty** — `:empty` pseudo hides the label when `createdAt` is missing/invalid (legacy transcripts).
+  - **Verification:** `npm run check` 0/0.
+
 ## 2026-06-23 15:30
 
 - **Phase 3.5 M15 — OpenCode session terminology (user-facing, completed).** Aligns workspace UX with OpenCode Desktop: **Session** = conversation (sidebar, tab, transcript, lifecycle); **Agent** = persona only (Settings → Agents, composer picker, `@agent:`). Copy-only — no internal renames (`agentId`, `AgentsSidebar`, disk paths deferred to M16).

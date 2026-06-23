@@ -151,7 +151,7 @@ describe("sendChatMessage", () => {
     expect(result).toEqual({
       ok: false,
       reason: "no_agent",
-      message: "Could not resolve an active agent.",
+      message: "Could not resolve an active session.",
     });
     expect(schedulePersistMock).not.toHaveBeenCalled();
   });

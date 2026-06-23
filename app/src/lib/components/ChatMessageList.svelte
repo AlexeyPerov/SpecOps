@@ -288,7 +288,44 @@
     return canForkFromMessage || canRevertFromMessage;
   }
 
-  /** Compact token-count formatting for the running-total footer. */
+  /**
+   * Small per-message date+time label rendered at the bottom-right of every
+   * bubble. Same-day messages show `HH:MM`; older messages also show the date
+   * (`MM/DD HH:MM`, with year added when it differs from the current year).
+   * Returns an empty string for invalid/missing timestamps.
+   */
+  function formatMessageTimestamp(value: string | undefined): string {
+    if (!value) {
+      return "";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    const now = new Date();
+    const sameYear = date.getFullYear() === now.getFullYear();
+    const sameDay =
+      sameYear &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+    const time = date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    if (sameDay) {
+      return time;
+    }
+    const datePart = sameYear
+      ? date.toLocaleDateString(undefined, { month: "numeric", day: "numeric" })
+      : date.toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "numeric",
+          day: "numeric",
+        });
+    return `${datePart} ${time}`;
+  }
+
   function messageRoleLabel(message: ChatMessage): string {
     if (isProviderSwitchMessage(message)) {
       return "Provider switch";
@@ -477,6 +514,13 @@
                 </div>
               {/if}
             </div>
+            <time
+              class="chat-message-timestamp"
+              datetime={message.createdAt}
+              title={message.createdAt}
+            >
+              {formatMessageTimestamp(message.createdAt)}
+            </time>
             {#if stepTotals}
               <footer class="chat-message-totals">
                 <span class="chat-message-totals-tokens">
@@ -595,9 +639,27 @@
   }
 
   .chat-message {
+    position: relative;
     border-radius: var(--radius-sm);
     padding: var(--space-6);
     background: var(--color-surface-1);
+  }
+
+  .chat-message-timestamp {
+    position: absolute;
+    right: var(--space-3);
+    bottom: var(--space-2);
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+    opacity: 0.65;
+    pointer-events: auto;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Hide the timestamp label when it has no value (invalid/missing createdAt). */
+  .chat-message-timestamp:empty {
+    display: none;
   }
 
   .chat-message:not(.chat-message-assistant) {
@@ -833,6 +895,8 @@
     font-size: 10px;
     line-height: 1.4;
     color: var(--color-text-secondary);
+    /* Leave room for the absolutely-positioned bottom-right timestamp label. */
+    padding-right: calc(var(--space-3) + 7ch);
   }
 
   .chat-message-totals-tokens {

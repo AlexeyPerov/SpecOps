@@ -210,6 +210,7 @@ describe("appState session restore", () => {
   it("switches between workspace and chat-http contexts without mutating workspace state", () => {
     const defaultHttpModelId = getProviderDefaultModelId(defaultProviderModelCatalogs, "http");
     appState.applyPersistedSettings({
+      chatHttp: { enabled: true },
       providerSettings: {
         ...appState.getSnapshot().settings.providerSettings,
         http: {
@@ -249,6 +250,7 @@ describe("appState session restore", () => {
   it("does not create file tabs in chat-http context", () => {
     const defaultHttpModelId = getProviderDefaultModelId(defaultProviderModelCatalogs, "http");
     appState.applyPersistedSettings({
+      chatHttp: { enabled: true },
       providerSettings: {
         ...appState.getSnapshot().settings.providerSettings,
         http: {
@@ -278,9 +280,10 @@ describe("appState session restore", () => {
     expect(appState.getActiveSession().selectedTabId).toBe("tab-1");
   });
 
-  it("restores chat-http as active when HTTP connection is configured", () => {
+  it("restores chat-http as active when chatHttp beta is enabled and HTTP connection is configured", () => {
     const defaultHttpModelId = getProviderDefaultModelId(defaultProviderModelCatalogs, "http");
     appState.applyPersistedSettings({
+      chatHttp: { enabled: true },
       providerSettings: {
         ...appState.getSnapshot().settings.providerSettings,
         http: {
@@ -304,8 +307,28 @@ describe("appState session restore", () => {
     expect(appState.getSnapshot().contexts.activeContextId).toBe("chat-http");
   });
 
+  it("falls back to notepad when restoring chat-http with chatHttp beta disabled", () => {
+    appState.applyPersistedSettings({
+      chatHttp: { enabled: false },
+      providerSettings: {
+        ...appState.getSnapshot().settings.providerSettings,
+        http: {
+          enabled: true,
+          baseUrl: "http://localhost:11434/v1",
+        },
+      },
+    });
+    appState.setProviderApiKey("http", "configured-key");
+    appState.applyWindowSession({
+      ...appState.getWindowSessionSnapshot(),
+      activeContextId: "chat-http",
+    });
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+  });
+
   it("falls back to notepad when restoring chat-http without configured HTTP connection", () => {
     appState.applyPersistedSettings({
+      chatHttp: { enabled: true },
       providerSettings: {
         ...appState.getSnapshot().settings.providerSettings,
         http: {
@@ -333,8 +356,25 @@ describe("appState session restore", () => {
     expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
   });
 
+  it("does not switch into chat-http when chatHttp beta is disabled", () => {
+    appState.applyPersistedSettings({
+      chatHttp: { enabled: false },
+      providerSettings: {
+        ...appState.getSnapshot().settings.providerSettings,
+        http: {
+          enabled: true,
+          baseUrl: "http://localhost:11434/v1",
+        },
+      },
+    });
+    appState.setProviderApiKey("http", "configured-key");
+    expect(appState.switchContext("chat-http")).toBe(false);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+  });
+
   it("does not switch into chat-http when HTTP connection is not configured", () => {
     appState.applyPersistedSettings({
+      chatHttp: { enabled: true },
       providerSettings: {
         ...appState.getSnapshot().settings.providerSettings,
         http: {

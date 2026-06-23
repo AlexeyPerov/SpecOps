@@ -517,6 +517,7 @@
   <div class="chat-panel-stack">
     <ChatBlockedState
       isAccessBlocked={isBlocked}
+      isChatHttpFeatureBlocked={isChatHttpScope && !$appState.settings.chatHttp.enabled}
       isHttpBlocked={isHttpSendBlocked}
       isDebugBlocked={isDebugSendBlocked}
       isModelBlocked={isModelSendBlocked}

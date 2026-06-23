@@ -96,7 +96,7 @@ describe("OpenAiCompatibleChatProvider", () => {
 
     await expect(collectStream(provider)).rejects.toMatchObject({
       name: "ChatProviderError",
-      userMessage: "Invalid API key for the configured HTTP provider. Check Settings → Chats → Providers.",
+      userMessage: "Invalid API key for the configured HTTP provider. Check Settings → Dev → Providers (Chat beta).",
     });
   });
 

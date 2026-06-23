@@ -10,6 +10,7 @@ import {
 } from "../ai/providers/providerModelCatalog";
 import type {
   AppProviderSettings,
+  ChatHttpSettings,
   ChatModesSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
@@ -38,6 +39,10 @@ import {
   normalizeOpencodeSettings,
 } from "./opencodeSettings";
 import {
+  defaultChatHttpSettings,
+  normalizeChatHttpSettings,
+} from "./chatHttpSettings";
+import {
   defaultFontSettings,
   normalizeFontSettings,
 } from "./fontSettings";
@@ -60,6 +65,7 @@ export interface PersistedSettings {
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   opencode: OpencodeSettings;
+  chatHttp: ChatHttpSettings;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
@@ -86,6 +92,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
   opencode: defaultOpencodeSettings,
+  chatHttp: defaultChatHttpSettings,
   logSettings: defaultLogSettings,
   chatModes: defaultChatModesSettings,
   providerSettings: defaultAppProviderSettings,
@@ -156,6 +163,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
           ? parsed.hideActivityRailWhenNotepadOnly
           : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
         opencode: normalizeOpencodeSettings(parsed.opencode),
+        chatHttp: normalizeChatHttpSettings(parsed.chatHttp),
         logSettings: normalizeLogSettings(parsed.logSettings),
         chatModes: normalizeChatModesSettings(parsed.chatModes),
         providerSettings,
@@ -203,6 +211,7 @@ export function toPersistedSettings(input: {
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   opencode: OpencodeSettings;
+  chatHttp: ChatHttpSettings;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
@@ -220,6 +229,7 @@ export function toPersistedSettings(input: {
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
     hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
     opencode: normalizeOpencodeSettings(input.opencode),
+    chatHttp: normalizeChatHttpSettings(input.chatHttp),
     logSettings: normalizeLogSettings(input.logSettings),
     chatModes: normalizeChatModesSettings(input.chatModes),
     providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),

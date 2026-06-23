@@ -156,6 +156,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
     };
     appState.updateDebugWorkspaceProviderSettings(debugSettings);
     appState.updateDebugChatProviderSettings(debugSettings);
+    appState.setChatHttpEnabled(true);
     registerBothTestDebugProviders();
     chatStore.setCapabilityChecker(
       createRegistryCapabilityChecker(

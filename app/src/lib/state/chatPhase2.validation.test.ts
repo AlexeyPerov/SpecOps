@@ -7,7 +7,7 @@
  * - HTTP provider uses OpenAI-compatible SSE streaming with token deltas rendered into one assistant message.
  *
  * Manual smoke (workspace UI; not covered here):
- * - Complete Settings → Chats → Providers setup and verify Chat appears on the rail.
+ * - Complete Settings → Dev → Providers setup and verify Chat appears on the rail.
  * - Open Chat, create a chat, send an ask message, and watch assistant text stream chunk by chunk.
  * - Enable Debug provider and verify Debug can send from Chat.
  * - Switch to Notepad and verify no AI/chat entry points appear.
@@ -123,13 +123,27 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
   });
 
   it("passes chat-http gating when HTTP connection settings and catalog are valid", () => {
+    appState.setChatHttpEnabled(true);
     expect(
       isChatHttpRailVisible(
         appState.getSnapshot().settings.providerSettings,
         { [DEFAULT_HTTP_CONNECTION_ID]: "http-test-key" },
         appState.getSnapshot().settings.providerSettings.debugChat,
+        appState.getSnapshot().settings.chatHttp,
       ),
     ).toBe(true);
+  });
+
+  it("hides chat-http rail when chatHttp master toggle is disabled", () => {
+    appState.setChatHttpEnabled(false);
+    expect(
+      isChatHttpRailVisible(
+        appState.getSnapshot().settings.providerSettings,
+        { [DEFAULT_HTTP_CONNECTION_ID]: "http-test-key" },
+        appState.getSnapshot().settings.providerSettings.debugChat,
+        appState.getSnapshot().settings.chatHttp,
+      ),
+    ).toBe(false);
   });
 
   it("streams chat-http HTTP SSE deltas without workspace preflight and keeps review mode", async () => {

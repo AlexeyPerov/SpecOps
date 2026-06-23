@@ -101,6 +101,18 @@ export interface OpencodeSettings {
   baseUrl: string;
 }
 
+/**
+ * Master toggle for the experimental `chat-http` context (phase-3.5 M13).
+ *
+ * Disabled by default. When false, the activity-rail Chat button is hidden
+ * and the Settings → Dev → Chats subtree (Providers, Chat modes, Debug
+ * Provider) is removed from the sidebar; persisted provider configuration
+ * is untouched.
+ */
+export interface ChatHttpSettings {
+  enabled: boolean;
+}
+
 export type OpencodeHealthStatus = "unknown" | "checking" | "healthy" | "degraded" | "error";
 
 export type OpencodeHealthSource = "sidecar" | "url" | null;
@@ -151,6 +163,7 @@ export interface AppSettingsState {
   decoratePlaintextSymbols: boolean;
   hideActivityRailWhenNotepadOnly: boolean;
   opencode: OpencodeSettings;
+  chatHttp: ChatHttpSettings;
   opencodeHealth: OpencodeHealthState;
   commandBindingOverrides: CommandBindingOverrides;
   logSettings: LogSettings;

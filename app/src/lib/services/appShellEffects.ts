@@ -199,6 +199,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
       hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
       opencode: snapshot.settings.opencode,
+      chatHttp: snapshot.settings.chatHttp,
       logSettings: snapshot.settings.logSettings,
       chatModes: snapshot.settings.chatModes,
       providerSettings: snapshot.settings.providerSettings,

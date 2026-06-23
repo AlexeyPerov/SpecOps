@@ -2,6 +2,7 @@ import type {
   AppCommandId,
   AppProviderSettings,
   AppSettingsState,
+  ChatHttpSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
   FontSettings,
@@ -44,6 +45,10 @@ import { createLogSettingsSlice, type SettingsUpdate } from "./logSettingsSlice"
 import { createNotificationSettingsSlice } from "./notificationSettingsSlice";
 import { createProviderSettingsSlice } from "./providerSettingsSlice";
 import { defaultOpencodeSettings, normalizeOpencodeSettings } from "../../services/opencodeSettings";
+import {
+  defaultChatHttpSettings,
+  normalizeChatHttpSettings,
+} from "../../services/chatHttpSettings";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -60,6 +65,7 @@ export const defaultSettings: AppSettingsState = {
   decoratePlaintextSymbols: true,
   hideActivityRailWhenNotepadOnly: true,
   opencode: defaultOpencodeSettings,
+  chatHttp: defaultChatHttpSettings,
   opencodeHealth: {
     status: "unknown",
     source: null,
@@ -79,6 +85,18 @@ export const defaultSettings: AppSettingsState = {
 
 function createGeneralSettingsSlice(update: SettingsUpdate) {
   return {
+    setChatHttpEnabled(enabled: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          chatHttp: normalizeChatHttpSettings({
+            ...state.settings.chatHttp,
+            enabled,
+          }),
+        },
+      }));
+    },
     setCommandBindingOverrides(commandBindingOverrides: CommandBindingOverrides) {
       const normalized = normalizeCommandBindingOverrides(commandBindingOverrides);
       update((state) => ({
@@ -129,6 +147,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       decoratePlaintextSymbols?: boolean;
       hideActivityRailWhenNotepadOnly?: boolean;
       opencode?: Partial<OpencodeSettings>;
+      chatHttp?: Partial<ChatHttpSettings>;
       opencodeHealth?: Partial<OpencodeHealthState>;
       logSettings?: Partial<LogSettings>;
       chatModes?: Partial<AppSettingsState["chatModes"]>;
@@ -188,6 +207,18 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
               opencode: normalizeOpencodeSettings({
                 ...next.settings.opencode,
                 ...partial.opencode,
+              }),
+            },
+          };
+        }
+        if (partial.chatHttp) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              chatHttp: normalizeChatHttpSettings({
+                ...next.settings.chatHttp,
+                ...partial.chatHttp,
               }),
             },
           };

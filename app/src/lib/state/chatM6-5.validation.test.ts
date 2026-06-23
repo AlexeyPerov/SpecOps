@@ -15,7 +15,7 @@
  * - Notepad context keeps no chat/AI entry points (manual UI regression check)
  *
  * Optional manual HTTP integration smoke (requires network + credentials):
- * - Enter API key in Settings → Chats → Providers (stored in provider-secrets.json)
+ * - Enter API key in Settings → Dev → Providers (Chat beta, stored in provider-secrets.json)
  * - Defaults: base URL https://open.bigmodel.cn/api/paas/v4, model gpt-4o-mini
  * - Send ask and review messages; verify assistant replies persist after restart
  */

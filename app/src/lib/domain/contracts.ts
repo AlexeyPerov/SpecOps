@@ -33,6 +33,7 @@ export type {
   AppProviderSettings,
   AppSettingsState,
   AppThemeState,
+  ChatHttpSettings,
   DebugProviderSettings,
   ExternalFilesSettings,
   FontSettings,

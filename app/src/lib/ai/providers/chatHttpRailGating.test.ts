@@ -8,6 +8,7 @@ import {
 } from "./httpConnectionSettings";
 import { isChatHttpRailVisible } from "./chatHttpRailGating";
 import { defaultAppProviderSettings } from "./appProviderSettings";
+import { defaultChatHttpSettings } from "../../services/chatHttpSettings";
 
 describe("isChatHttpRailVisible", () => {
   afterEach(() => {
@@ -22,6 +23,8 @@ describe("isChatHttpRailVisible", () => {
   const configuredApiKey = "secret-key";
   const debugChatDisabled = { ...defaultDebugProviderSettings, enabled: false };
   const debugChatEnabled = { ...defaultDebugProviderSettings, enabled: true };
+  const chatHttpDisabled = { enabled: false };
+  const chatHttpEnabled = { enabled: true };
 
   function withHttpConnection(settings: typeof configuredSettings): AppProviderSettings {
     return {
@@ -38,52 +41,79 @@ describe("isChatHttpRailVisible", () => {
     };
   }
 
-  it("returns true when all HTTP gating conditions pass", () => {
+  it("returns false when chatHttp master toggle is disabled even if HTTP is fully configured", () => {
     expect(
       isChatHttpRailVisible(
         withHttpConnection(configuredSettings),
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         debugChatDisabled,
+        chatHttpDisabled,
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it("returns true when Debug AI is enabled without HTTP configuration", () => {
+  it("returns false when chatHttp master toggle is disabled even if Debug AI is enabled", () => {
     expect(
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, enabled: false }),
         {},
         debugChatEnabled,
+        chatHttpDisabled,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true when chatHttp master toggle is enabled and HTTP gating conditions pass", () => {
+    expect(
+      isChatHttpRailVisible(
+        withHttpConnection(configuredSettings),
+        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
+        debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(true);
   });
 
-  it("returns false when HTTP is not configured and Debug AI is disabled", () => {
+  it("returns true when chatHttp master toggle is enabled and Debug AI is enabled without HTTP configuration", () => {
+    expect(
+      isChatHttpRailVisible(
+        withHttpConnection({ ...configuredSettings, enabled: false }),
+        {},
+        debugChatEnabled,
+        chatHttpEnabled,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when chatHttp master toggle is enabled but HTTP is not configured and Debug AI is disabled", () => {
     expect(
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, enabled: false }),
         {},
         debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(false);
   });
 
-  it("returns false when the HTTP connection is disabled and Debug AI is disabled", () => {
+  it("returns false when chatHttp master toggle is enabled but the HTTP connection is disabled and Debug AI is disabled", () => {
     expect(
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, enabled: false }),
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(false);
   });
 
-  it("returns false when the API key is missing or whitespace", () => {
+  it("returns false when chatHttp master toggle is enabled but the API key is missing or whitespace", () => {
     expect(
       isChatHttpRailVisible(
         withHttpConnection(configuredSettings),
         {},
         debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(false);
     expect(
@@ -91,16 +121,18 @@ describe("isChatHttpRailVisible", () => {
         withHttpConnection(configuredSettings),
         { [DEFAULT_HTTP_CONNECTION_ID]: "   " },
         debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(false);
   });
 
-  it("returns false when baseUrl is empty or whitespace", () => {
+  it("returns false when chatHttp master toggle is enabled but baseUrl is empty or whitespace", () => {
     expect(
       isChatHttpRailVisible(
         withHttpConnection({ ...configuredSettings, baseUrl: "" }),
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(false);
     expect(
@@ -108,11 +140,12 @@ describe("isChatHttpRailVisible", () => {
         withHttpConnection({ ...configuredSettings, baseUrl: "   " }),
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(false);
   });
 
-  it("returns false when the configured connection default model is missing", () => {
+  it("returns false when chatHttp master toggle is enabled but the configured connection default model is missing", () => {
     const settings = withHttpConnection(configuredSettings);
     const baseConnection = settings.httpConnections?.[0] ?? defaultHttpConnection;
     settings.httpConnections = [
@@ -127,11 +160,12 @@ describe("isChatHttpRailVisible", () => {
         settings,
         { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
         debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(false);
   });
 
-  it("returns true when any configured connection has a resolvable default model", () => {
+  it("returns true when chatHttp master toggle is enabled and any configured connection has a resolvable default model", () => {
     const settings = withHttpConnection(configuredSettings);
     const baseConnection = settings.httpConnections?.[0] ?? defaultHttpConnection;
     settings.httpConnections = [
@@ -153,7 +187,22 @@ describe("isChatHttpRailVisible", () => {
         settings,
         { broken: configuredApiKey, healthy: configuredApiKey },
         debugChatDisabled,
+        chatHttpEnabled,
       ),
     ).toBe(true);
+  });
+
+  it("treats missing chatHttpSettings as the default (enabled=false)", () => {
+    expect(
+      isChatHttpRailVisible(
+        withHttpConnection(configuredSettings),
+        { [DEFAULT_HTTP_CONNECTION_ID]: configuredApiKey },
+        debugChatDisabled,
+      ),
+    ).toBe(false);
+  });
+
+  it("uses defaultChatHttpSettings (enabled=false) as the documented default", () => {
+    expect(defaultChatHttpSettings).toEqual({ enabled: false });
   });
 });

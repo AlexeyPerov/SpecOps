@@ -208,7 +208,7 @@ class OpenAiCompatibleChatProvider implements ChatProvider {
     } catch {
       throw new ChatProviderError(
         "HTTP provider returned an invalid response.",
-        "HTTP provider returned an unexpected response. Check Settings → Chats → Providers.",
+        "HTTP provider returned an unexpected response. Check Settings → Dev → Providers (Chat beta).",
       );
     }
 
@@ -383,7 +383,7 @@ function mapHttpNetworkError(error: unknown): ChatProviderError {
   const detail = error instanceof Error ? error.message : "Network request failed";
   return new ChatProviderError(
     detail,
-    "Could not reach the HTTP provider. Check your network and base URL in Settings → Chats → Providers.",
+    "Could not reach the HTTP provider. Check your network and base URL in Settings → Dev → Providers (Chat beta).",
   );
 }
 
@@ -402,7 +402,7 @@ function mapHttpError(status: number, rawBody: string, modelId: string): ChatPro
     case 401:
       return new ChatProviderError(
         apiMessage ?? "HTTP provider rejected the request.",
-        "Invalid API key for the configured HTTP provider. Check Settings → Chats → Providers.",
+        "Invalid API key for the configured HTTP provider. Check Settings → Dev → Providers (Chat beta).",
       );
     case 403:
       return new ChatProviderError(
@@ -423,7 +423,7 @@ function mapHttpError(status: number, rawBody: string, modelId: string): ChatPro
       }
       return new ChatProviderError(
         apiMessage ?? `HTTP provider request failed (${status}).`,
-        apiMessage ?? "HTTP provider request failed. Check Settings → Chats → Providers and try again.",
+        apiMessage ?? "HTTP provider request failed. Check Settings → Dev → Providers (Chat beta) and try again.",
       );
   }
 }

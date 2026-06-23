@@ -1,7 +1,12 @@
+import type { ChatHttpSettings } from "../domain/contracts";
+import { isChatHttpEnabled } from "./chatHttpSettings";
+import { appState } from "../state/appState";
+
 export type SettingsDialogTab =
   | "editor"
   | "shortcuts"
   | "appearance"
+  | "dev"
   | "connections"
   | "chatModes"
   | "debugAi"
@@ -42,6 +47,12 @@ const APPEARANCE_TAB = {
   id: "appearance",
   label: "Appearance",
   panelAriaLabel: "Appearance and feedback settings",
+} as const satisfies SettingsTabDefinition;
+
+const DEV_TAB = {
+  id: "dev",
+  label: "Dev",
+  panelAriaLabel: "Developer settings (beta features and logs)",
 } as const satisfies SettingsTabDefinition;
 
 const CONNECTIONS_TAB = {
@@ -122,33 +133,41 @@ const LOGS_TAB = {
   panelAriaLabel: "Logging settings",
 } as const satisfies SettingsTabDefinition;
 
-export const SETTINGS_SIDEBAR = [
-  { kind: "tab", tab: EDITOR_TAB },
-  { kind: "tab", tab: SHORTCUTS_TAB },
-  { kind: "tab", tab: APPEARANCE_TAB },
-  { kind: "section", label: "Chats", tabs: [CONNECTIONS_TAB, CHAT_MODES_TAB, DEBUG_AI_TAB] },
-  {
-    kind: "section",
-    label: "Workspaces",
-    tabs: [
-      OPENCODE_TAB,
-      OPENCODE_CONFIG_TAB,
-      PROVIDERS_TAB,
-      MCP_TAB,
-      AGENTS_TAB,
-      PERMISSIONS_TAB,
-      COMMANDS_TAB,
-      INSTRUCTIONS_TAB,
-      DEBUG_AGENT_TAB,
-    ],
-  },
-  { kind: "section", label: "Logging", tabs: [LOGS_TAB] },
-] as const satisfies readonly SettingsSidebarEntry[];
+/**
+ * Tabs gated behind the chat-http master toggle. When the toggle is off,
+ * these tabs are hidden from the sidebar and unreachable from any panel
+ * switcher / deep link.
+ */
+export const CHAT_HTTP_GATED_TABS = [
+  CONNECTIONS_TAB,
+  CHAT_MODES_TAB,
+  DEBUG_AI_TAB,
+] as const satisfies readonly SettingsTabDefinition[];
 
-export const SETTINGS_TABS = [
+const CHAT_HTTP_GATED_TAB_IDS: ReadonlySet<SettingsDialogTab> = new Set(
+  CHAT_HTTP_GATED_TABS.map((tab) => tab.id),
+);
+
+/**
+ * Whether a given tab id belongs to the chat-http beta subtree and should
+ * only be reachable when the user has opted into the chat-http beta.
+ */
+export function isChatHttpGatedTab(tab: SettingsDialogTab): boolean {
+  return CHAT_HTTP_GATED_TAB_IDS.has(tab);
+}
+
+/**
+ * Fallback tab used when a chat-http gated tab is requested while the beta
+ * is disabled. Defaults to the Dev master panel so users land on the toggle
+ * rather than a missing tab.
+ */
+export const DEV_FALLBACK_TAB: SettingsDialogTab = "dev";
+
+const ALL_TABS = [
   EDITOR_TAB,
   SHORTCUTS_TAB,
   APPEARANCE_TAB,
+  DEV_TAB,
   CONNECTIONS_TAB,
   CHAT_MODES_TAB,
   DEBUG_AI_TAB,
@@ -164,6 +183,60 @@ export const SETTINGS_TABS = [
   LOGS_TAB,
 ] as const satisfies readonly SettingsTabDefinition[];
 
+export const SETTINGS_TABS = ALL_TABS;
+
+/**
+ * Resolve a deep-link tab against the chat-http beta gate. When the gate is
+ * closed, chat-http tabs redirect to the Dev master panel; other tabs pass
+ * through unchanged.
+ */
+export function resolveOpenSettingsDialogTab(
+  requested: SettingsDialogTab,
+  chatHttp: ChatHttpSettings | null | undefined,
+): SettingsDialogTab {
+  if (!isChatHttpGatedTab(requested)) {
+    return requested;
+  }
+  return isChatHttpEnabled(chatHttp) ? requested : DEV_FALLBACK_TAB;
+}
+
+/**
+ * Build the sidebar entries for the settings dialog. The Dev section always
+ * contains its master toggle plus Logs; the chat-http subtree (Providers,
+ * Chat modes, Debug Provider) is appended only when the beta is enabled so
+ * hidden tabs are not reachable from measure/layout code paths.
+ */
+export function buildSettingsSidebar(
+  chatHttp: ChatHttpSettings | null | undefined,
+): readonly SettingsSidebarEntry[] {
+  const devTabs: readonly SettingsTabDefinition[] = isChatHttpEnabled(chatHttp)
+    ? [DEV_TAB, LOGS_TAB, ...CHAT_HTTP_GATED_TABS]
+    : [DEV_TAB, LOGS_TAB];
+  return [
+    { kind: "tab", tab: EDITOR_TAB },
+    { kind: "tab", tab: SHORTCUTS_TAB },
+    { kind: "tab", tab: APPEARANCE_TAB },
+    { kind: "section", label: "Dev", tabs: devTabs },
+    {
+      kind: "section",
+      label: "Workspaces",
+      tabs: [
+        OPENCODE_TAB,
+        OPENCODE_CONFIG_TAB,
+        PROVIDERS_TAB,
+        MCP_TAB,
+        AGENTS_TAB,
+        PERMISSIONS_TAB,
+        COMMANDS_TAB,
+        INSTRUCTIONS_TAB,
+        DEBUG_AGENT_TAB,
+      ],
+    },
+  ] as const satisfies readonly SettingsSidebarEntry[];
+}
+
+export const SETTINGS_SIDEBAR = buildSettingsSidebar({ enabled: false });
+
 type SettingsDialogOpener = (tab: SettingsDialogTab) => void;
 
 let opener: SettingsDialogOpener | null = null;
@@ -173,7 +246,17 @@ export function registerSettingsDialogOpener(next: SettingsDialogOpener | null):
 }
 
 export function openSettingsDialog(tab: SettingsDialogTab = "editor"): void {
-  opener?.(tab);
+  const resolved = resolveAgainstCurrentAppState(tab);
+  opener?.(resolved);
+}
+
+function resolveAgainstCurrentAppState(tab: SettingsDialogTab): SettingsDialogTab {
+  try {
+    const state = appState.getSnapshot();
+    return resolveOpenSettingsDialogTab(tab, state.settings.chatHttp);
+  } catch {
+    return resolveOpenSettingsDialogTab(tab, null);
+  }
 }
 
 export function getSettingsTabDefinition(tab: SettingsDialogTab): SettingsTabDefinition {

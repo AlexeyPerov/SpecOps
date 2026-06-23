@@ -292,6 +292,7 @@
       snapshot.settings.providerSettings,
       snapshot.settings.providerApiKeys,
       snapshot.settings.providerSettings.debugChat,
+      snapshot.settings.chatHttp,
     ),
   );
   const activeTab = $derived(

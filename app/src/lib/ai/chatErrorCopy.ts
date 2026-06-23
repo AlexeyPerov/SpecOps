@@ -13,7 +13,7 @@ export const WORKSPACE_ACCESS_LOST_MESSAGE =
   "Workspace file access was lost. Chat is paused until access is restored.";
 
 export const DEBUG_AI_PROVIDER_SWITCH_BLOCKED_MESSAGE =
-  "Enable Debug Provider in Settings → Chats → Debug Provider first.";
+  "Enable Chat (beta) and the Debug Provider in Settings → Dev first.";
 
 export const DEBUG_AGENT_PROVIDER_SWITCH_BLOCKED_MESSAGE =
   "Enable Debug Provider in Settings → Workspaces → Debug Provider first.";
@@ -24,7 +24,7 @@ export const HTTP_MISSING_CONFIG_MESSAGE =
   "Add your HTTP connection API key in Settings before sending messages.";
 
 export const HTTP_MISSING_CONFIG_RECOVERY =
-  "Open Settings → Chats → Providers, enter your API key, and try again.";
+  "Open Settings → Dev, enable Chat (beta), then enter your API key under Providers.";
 
 export const PROVIDER_MISSING_CONFIG_MESSAGE =
   "Complete provider setup in Settings before sending messages.";
@@ -38,7 +38,7 @@ export const DEBUG_AI_PROVIDER_DISABLED_MESSAGE =
   "Debug Provider is turned off in Settings.";
 
 export const DEBUG_AI_PROVIDER_DISABLED_RECOVERY =
-  "Open Settings → Chats → Debug Provider and enable the Debug Provider.";
+  "Open Settings → Dev, enable Chat (beta), then turn on the Debug Provider under Chats.";
 
 export const DEBUG_AGENT_PROVIDER_DISABLED_MESSAGE =
   "Debug Provider is turned off in Settings.";
@@ -132,7 +132,7 @@ export function getModeUnsupportedMessage(mode: ChatModeId, providerLabel = "Thi
 }
 
 export function getModeUnsupportedRecovery(): string {
-  return "Switch to a supported mode or update Settings → Chats → Chat modes.";
+  return "Switch to a supported mode or update Settings → Dev → Chat modes (enable Chat (beta) first).";
 }
 
 export function getUnknownProviderMessage(provider: ChatProviderId): string {

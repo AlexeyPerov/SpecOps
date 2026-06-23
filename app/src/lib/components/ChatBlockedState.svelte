@@ -10,6 +10,7 @@
 
   interface Props {
     isAccessBlocked?: boolean;
+    isChatHttpFeatureBlocked?: boolean;
     isHttpBlocked?: boolean;
     isDebugBlocked?: boolean;
     isModelBlocked?: boolean;
@@ -22,6 +23,7 @@
 
   let {
     isAccessBlocked = false,
+    isChatHttpFeatureBlocked = false,
     isHttpBlocked = false,
     isDebugBlocked = false,
     isModelBlocked = false,
@@ -38,7 +40,20 @@
   const debugSettingsLabel = $derived("Debug Provider");
 </script>
 
-{#if isAccessBlocked && accessBlockedCopy}
+{#if isChatHttpFeatureBlocked}
+  <div class="chat-blocked-state" role="status" aria-live="polite">
+    <p class="chat-blocked-title">Chat (beta) is off</p>
+    <p class="chat-blocked-message">
+      The HTTP chat context is an experimental beta feature and is disabled by default.
+    </p>
+    <p class="chat-blocked-hint">
+      Enable Chat (beta) in Settings → Dev, then configure HTTP providers or Debug Provider under Chats.
+    </p>
+    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("dev")}>
+      Open Settings → Dev
+    </button>
+  </div>
+{:else if isAccessBlocked && accessBlockedCopy}
   <div class="chat-blocked-state" role="status" aria-live="polite">
     <p class="chat-blocked-title">{accessBlockedCopy.title}</p>
     <p class="chat-blocked-message">{accessBlockedCopy.message}</p>

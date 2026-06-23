@@ -10,7 +10,7 @@
  * - Provider switch event persists in agent thread after restart
  *
  * Optional manual HTTP integration smoke (requires network + credentials):
- * - Enter API key in Settings → Chats → Providers (stored in provider-secrets.json, never in settings.json or thread files)
+ * - Enter API key in Settings → Dev → Providers (Chat beta, stored in provider-secrets.json, never in settings.json or thread files)
  * - Defaults: base URL https://open.bigmodel.cn/api/paas/v4, model gpt-4o-mini
  * - Send ask and review messages; verify assistant replies persist after app restart
  */

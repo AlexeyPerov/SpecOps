@@ -221,6 +221,7 @@ export async function startAppShellRuntime(
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
         hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
         opencode: persistedSettings.opencode,
+        chatHttp: persistedSettings.chatHttp,
         providerSettings: persistedSettings.providerSettings,
         providerModelCatalogs: persistedSettings.providerModelCatalogs,
         commandBindingOverrides: persistedSettings.commandBindingOverrides,

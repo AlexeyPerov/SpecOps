@@ -1,8 +1,10 @@
 <script lang="ts">
   import "../styles/settingsDialogChrome.css";
+  import { appState } from "../state/appState";
   import {
+    buildSettingsSidebar,
     getSettingsTabDefinition,
-    SETTINGS_SIDEBAR,
+    resolveOpenSettingsDialogTab,
     SETTINGS_TABS,
     type SettingsDialogTab,
   } from "../services/settingsDialogUi";
@@ -11,6 +13,7 @@
   import ChatModesSettingsPanel from "./settings/ChatModesSettingsPanel.svelte";
   import ConnectionsSettingsPanel from "./settings/ConnectionsSettingsPanel.svelte";
   import DebugProviderSettingsPanel from "./settings/DebugProviderSettingsPanel.svelte";
+  import DevSettingsPanel from "./settings/DevSettingsPanel.svelte";
   import OpenCodeSettingsPanel from "./settings/OpenCodeSettingsPanel.svelte";
   import OpenCodeConfigPanel from "./settings/OpenCodeConfigPanel.svelte";
   import ProviderManagementPanel from "./settings/ProviderManagementPanel.svelte";
@@ -44,6 +47,16 @@
   } = $props();
 
   let activeTab = $state<SettingsDialogTab>("editor");
+  const settingsSidebar = $derived(
+    buildSettingsSidebar($appState.settings.chatHttp),
+  );
+  const visibleTabIds = $derived(
+    new Set(
+      settingsSidebar.flatMap((entry) =>
+        entry.kind === "tab" ? [entry.tab.id] : entry.tabs.map((tab) => tab.id),
+      ),
+    ),
+  );
   let dialogEl: HTMLDivElement | null = $state(null);
   let headerEl: HTMLElement | null = $state(null);
   let tabMeasureEls = $state<Partial<Record<SettingsDialogTab, HTMLElement>>>({});
@@ -143,7 +156,7 @@
 
   $effect(() => {
     if (open && !wasOpen) {
-      activeTab = initialTab;
+      activeTab = resolveOpenSettingsDialogTab(initialTab, $appState.settings.chatHttp);
       if (!sizeInitialized) {
         void measureAndApplyInitialSize();
       } else if (positionInitialized) {
@@ -151,6 +164,12 @@
       }
     }
     wasOpen = open;
+  });
+
+  $effect(() => {
+    if (!visibleTabIds.has(activeTab)) {
+      activeTab = "dev";
+    }
   });
 
   $effect(() => {
@@ -187,6 +206,8 @@
     <KeyboardShortcutsSettings />
   {:else if tabId === "appearance"}
     <AppearancePanel />
+  {:else if tabId === "dev"}
+    <DevSettingsPanel dialogOpen={open} />
   {:else if tabId === "connections"}
     <ConnectionsSettingsPanel dialogOpen={open} />
   {:else if tabId === "chatModes"}
@@ -270,7 +291,7 @@
         role="tablist"
         aria-label="Settings sections"
       >
-        {#each SETTINGS_SIDEBAR as entry (entry.kind === "tab" ? entry.tab.id : entry.label)}
+        {#each settingsSidebar as entry (entry.kind === "tab" ? entry.tab.id : entry.label)}
           {#if entry.kind === "tab"}
             <button
               type="button"

@@ -102,11 +102,12 @@
   </HoverTooltip>
 
   {#if showChatHttp}
-    <HoverTooltip label="Chat">
+    <HoverTooltip label="Chat (beta)">
       <button
         class={`rail-button rail-button-chat ${activeContextId === CHAT_HTTP_CONTEXT_ID ? "rail-button-active" : ""}`}
         type="button"
-        aria-label="Chat"
+        aria-label="Chat (beta)"
+        title="Chat (beta) — experimental HTTP chat context"
         onclick={() => onSelectContext(CHAT_HTTP_CONTEXT_ID)}
       >
         <svg

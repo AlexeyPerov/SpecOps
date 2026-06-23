@@ -56,6 +56,7 @@ describe("settings mapping", () => {
       decoratePlaintextSymbols: false,
       hideActivityRailWhenNotepadOnly: true,
       opencode: defaultOpencodeSettings,
+      chatHttp: { enabled: false },
       logSettings: { ...defaultLogSettings, verboseProviderLogging: false },
       chatModes: defaultChatModesSettings,
       providerSettings: {
@@ -362,6 +363,60 @@ describe("commandBindingOverrides persistence", () => {
  * M6-T2/T4/T5 — appearance settings (font sizes, sound, OS notifications)
  * survive the settings.json round-trip.
  */
+/**
+ * M13-T1 — chat-http master toggle is opt-in only (defaults to `false`) and
+ * ignores legacy settings.json files that predate the field.
+ */
+describe("chatHttp master toggle persistence", () => {
+  it("defaults chatHttp.enabled to false on a fresh install", async () => {
+    readTextFileMock.mockResolvedValue(JSON.stringify(defaultPersistedSettings));
+    const result = await loadPersistedSettings();
+    expect(result?.chatHttp).toEqual({ enabled: false });
+  });
+
+  it("normalizes legacy settings.json without chatHttp to enabled=false", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.chatHttp).toEqual({ enabled: false });
+  });
+
+  it("preserves chatHttp.enabled=true when persisted", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        ...defaultPersistedSettings,
+        chatHttp: { enabled: true },
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.chatHttp).toEqual({ enabled: true });
+  });
+
+  it("falls back to enabled=false when persisted chatHttp has a non-boolean value", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        ...defaultPersistedSettings,
+        chatHttp: { enabled: "yes" },
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.chatHttp).toEqual({ enabled: false });
+  });
+
+  it("toPersistedSettings round-trips chatHttp", () => {
+    const persisted = toPersistedSettings({
+      ...defaultPersistedSettings,
+      externalFiles: toExternalFilesSettings(defaultPersistedSettings),
+      chatHttp: { enabled: true },
+    });
+    expect(persisted.chatHttp).toEqual({ enabled: true });
+  });
+});
+
 describe("appearance settings persistence", () => {
   it("round-trips font, sound, and OS notification settings", async () => {
     const custom = {

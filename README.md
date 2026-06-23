@@ -13,10 +13,8 @@ Building text and markdown files editor with support of workspace AI. Tech: [Tau
 - **Images** preview
 - **Console** — resizable bottom panel with **Logs**
 - **AI chat**
-  - **Workspace agents** powered by [OpenCode](https://opencode.ai/) (tools, permissions, streaming)
-  - Dedicated **Chat** context (`chat-http`) gated by HTTP connection setup
-  - OpenAI-compatible HTTP provider and Debug provider
-  - Streaming assistant responses (SSE)
+  - **Workspace agents** powered by [OpenCode](https://opencode.ai/) (tools, permissions, streaming) — the recommended AI story
+  - **Chat (beta)** — experimental HTTP chat context, disabled by default; enable in **Settings → Dev → Chat (beta)**. See [`docs/beta/`](./docs/beta/) for setup.
 
 ---
 
@@ -38,7 +36,7 @@ Workspace folders use **OpenCode** as the agent runtime. SpecOps is the UI; Open
 | Context | Runtime | Where to configure models/API keys |
 | --- | --- | --- |
 | Workspace agents (`ws-*`) | OpenCode server | OpenCode (`/connect`, `opencode.json`, `auth.json`) |
-| Chat (`chat-http`) | OpenAI-compatible HTTP | SpecOps **Settings → Chats → Providers** |
+| Chat (beta) — `chat-http` | OpenAI-compatible HTTP (experimental, off by default) | **Settings → Dev → Chat (beta)** → Providers; see [`docs/beta/chat-http-providers.md`](./docs/beta/chat-http-providers.md) |
 
 ### Quick start
 
@@ -126,10 +124,11 @@ Details: [Z.AI + OpenCode](https://docs.z.ai/scenario-example/develop-tools/open
 
 - **Health not “Healthy”** — Confirm `opencode` is installed (`which opencode`) or use URL mode against a running `opencode serve`.
 - **Empty model list** — Connect a provider in OpenCode first, then **Refresh model list** in SpecOps settings.
-- **Auth errors** — Re-run `/connect` or fix `auth.json`; workspace sends never read HTTP keys from SpecOps **Chats → Providers**.
+- **Auth errors** — Re-run `/connect` or fix `auth.json`; workspace sends never read HTTP keys from SpecOps **Dev → Providers**.
 - **Legacy workspace chat** — Threads from the pre–phase-3 HTTP workspace provider are not migrated into OpenCode sessions.
+- **Chat (beta) / HTTP chat context** — Experimental. Disabled by default; see [`docs/beta/chat-http-providers.md`](./docs/beta/chat-http-providers.md). Enable under **Settings → Dev → Chat (beta)**.
 
-More detail: `docs/providers.md` (Chat HTTP vs workspace), `specs/ops/phase-3/phase-3.md`.
+More detail: `docs/opencode-integration.md` (OpenCode), `docs/beta/chat-http-providers.md` (HTTP chat beta), `specs/ops/phase-3/phase-3.md`.
 
 ## Prerequisites
 

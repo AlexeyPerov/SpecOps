@@ -1,8 +1,13 @@
-# Chat providers — HTTP connection integration
+# Chat providers — HTTP connection integration (beta)
 
-SpecOps routes **Chat context** (`chat-http`) AI through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings → Chats → Providers**. **Debug** is a settings-gated local simulator for development.
+> **Beta feature.** The HTTP chat context (`chat-http`) is an experimental
+> beta lane (phase-3.5 M13). It is **disabled by default**. To enable it,
+> open **Settings → Dev** and turn on **Chat (beta)**, then configure HTTP
+> providers or Debug Provider under the **Chats** subtabs.
 
-**Workspace contexts** (`ws-*`) use the **OpenCode** backend exclusively — they do not route through the HTTP provider registry. See [opencode-integration.md](./opencode-integration.md) for integration details and setup, and [phase-3 spec](../specs/ops/phase-3/phase-3.md) for original implementation context.
+SpecOps routes **Chat context** (`chat-http`) AI through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings → Dev → Providers** (after enabling Chat (beta)). **Debug** is a settings-gated local simulator for development.
+
+**Workspace contexts** (`ws-*`) use the **OpenCode** backend exclusively — they do not route through the HTTP provider registry. See [opencode-integration.md](../opencode-integration.md) for integration details and setup, and [phase-3 spec](../../specs/ops/phase-3/phase-3.md) for original implementation context.
 
 ## Provider abstraction
 
@@ -98,7 +103,7 @@ API keys per provider — `providerSecretsStore.ts`:
 
 ### “Configured” definition
 
-`isHttpConnectionConfigured(settings, apiKey)` — `enabled` and non-empty trimmed API key. Unconfigured HTTP blocks send and shows inline setup CTA in `ChatPanel.svelte` (Settings → Chats → Providers).
+`isHttpConnectionConfigured(settings, apiKey)` — `enabled` and non-empty trimmed API key. Unconfigured HTTP blocks send and shows inline setup CTA in `ChatPanel.svelte` (Settings → Dev → Providers, when Chat (beta) is enabled).
 
 ### Default provider selection
 

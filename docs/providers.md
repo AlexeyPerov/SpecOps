@@ -2,7 +2,7 @@
 
 SpecOps routes **Chat context** (`chat-http`) AI through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings → Chats → Providers**. **Debug** is a settings-gated local simulator for development.
 
-**Workspace contexts** (`ws-*`) use the **OpenCode** backend exclusively — they do not route through the HTTP provider registry. See [phase-3 spec](../specs/ops/phase-3/phase-3.md) for OpenCode integration details.
+**Workspace contexts** (`ws-*`) use the **OpenCode** backend exclusively — they do not route through the HTTP provider registry. See [opencode-integration.md](./opencode-integration.md) for integration details and setup, and [phase-3 spec](../specs/ops/phase-3/phase-3.md) for original implementation context.
 
 ## Provider abstraction
 

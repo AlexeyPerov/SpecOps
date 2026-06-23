@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-23 11:36
+
+- Added `docs/opencode-integration.md` with OpenCode architecture flow, workspace/agent/session relationship model, integrated feature coverage, and step-by-step setup for sidecar/URL modes in SpecOps.
+- Updated `docs/providers.md` to link the dedicated OpenCode integration/setup guide from the workspace-context note.
+- Added user-facing OpenCode tooltips in `OpenCodeSettingsPanel.svelte`, `ChatPanel.svelte`, and `TitleBar.svelte` for settings toggles/radios, session menu actions, and the title-bar status button.
+- Scope is tooltip text only (`title` attributes); no behavior or interaction logic changed.
+
+## 2026-06-23 10:15
+
+- **Fix: blank white-screen on app launch (Tauri webview).** `npm run tauri dev` (and any other path that loads the SvelteKit dev server) was opening an empty white webview because `@opencode-ai/sdk/v2`'s barrel re-export pulled `cross-spawn` → `which` → `process` into the browser bundle, throwing `ReferenceError: process is not defined` from the very first `import(".../app.js")` in SvelteKit's client entry. With the app failing to mount, SvelteKit never got a chance to render anything.
+  - **Root cause.** `@opencode-ai/sdk/v2`'s `dist/v2/index.js` is a barrel: it re-exports `./server.js` (the sidecar spawner) alongside `./client.js`. `server.js` does `import launch from "cross-spawn"` at the top level, and `cross-spawn` → `which` references `process.env.PATH` and `process.platform` at the module top level. Vite pre-bundles the whole barrel for the browser (it has no way to know which named export the app uses), so even though `workspaceAgentBackend.ts` only imports `createOpencodeClient` + `OpencodeClient`, the Node-only chain is evaluated on first import in the webview → `process is not defined` → module load rejects → SvelteKit's `Promise.all([import(entry), import(app)])` rejects → nothing mounts.
+  - **Fix.** Deep-import from `@opencode-ai/sdk/v2/client` (one of the SDK's own subpath exports in its `package.json`) instead of `@opencode-ai/sdk/v2`. `v2/client.js` exports `createOpencodeClient`, `OpencodeClient`, and `OpencodeClientConfig` with no Node-only side effects — no `server.js`, no `cross-spawn`, no `process`. Single-line change in `workspaceAgentBackend.ts:5-8`; no call-site edits (the imported symbols are unchanged).
+  - **Verification.** Headless-Chrome dev-server load → no `process is not defined`, full AppShell mounts (189 KB rendered DOM, `tab-strip` / `status-bar` / `cm-editor` / `SpecOps` title present); `npm run build` succeeds (`✓ built in 4.07s`, `✔ done`); `npm run check` → 0 errors / 0 warnings.
+
 ## 2026-06-20 01:05
 
 - **`Select` drop-down restyle — ported Unity-AI-Hub's look onto the existing component.** Brought the signature drop-down button styling from the Unity-AI-Hub Tauri app (`/Users/alexeyperov/Projects/Unity-AI-Hub/hub/src/lib/components/shell/Select.svelte`) into spec-ops's own `Select.svelte`. CSS-only change to a single file; the script (runes, keyboard nav, outside-click/Escape dismissal), markup, props, and `SelectOption` type are untouched, so all 8 existing `<Select>` usages (composer pickers + settings panels) inherit the new look with zero call-site edits.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-23 21:30
+
+- **CI build fixes (release workflow).**
+  - `.github/workflows/release.yml` — removed the `uploadWorkflowArtifacts` input from `tauri-apps/tauri-action@v0.6.2` (not a valid input for v0.6.2; was producing an `Unexpected input(s)` warning every release run). Switched dependency install from `npm install` to `npm ci` so the workflow uses the locked versions in `app/package-lock.json` instead of letting npm silently update them (this was the root cause of the `vite v6.4.3` (vs locally-installed `6.4.2`) mismatch that made the SSR build parse TS-only syntax as plain JS).
+  - `app/svelte.config.js` — enabled script preprocessing via `vitePreprocess({ script: true })`. Without `{ script: true }`, `vitePreprocess` only handles `<style lang="…">` blocks; `<script lang="ts">` content was emitted untouched, which Rollup then tried to parse as plain JS and failed at the first `?` (optional-parameter) annotation (`src/routes/+page.svelte:274` `title?: string`).
+  - `app/package.json` — `build` script now runs `svelte-kit sync && vite build` so `.svelte-kit/tsconfig.json` is generated before Vite reads `tsconfig.json`. Removes the `Cannot find base config file "./.svelte-kit/tsconfig.json"` esbuild warning that appeared at the top of every `vite build` run on a fresh checkout.
+  - **Verification:** `npm run build` completes with no esbuild / TS-parse warnings; `npm test` 1806/1806 pass.
+
 ## 2026-06-23 20:25
 
 - **Phase 3.5 M13.5 — Lazy OpenCode sidecar & session-tab gating (completed).** Stops eager sidecar startup on workspace activation and non-session tabs. The sidecar is now spawned lazily by **Send** and explicit Settings actions only, with a single-flight `ensureOpencodeSidecar` service, an in-memory circuit breaker for hard failures, and a non-blocking Rust spawn. Closes the UI-lag-on-tab-switch / repeated-attach-on-port-in-use symptoms reported in development. Indexed in `execution-plan.md` as M13.5 between M13 and M14.

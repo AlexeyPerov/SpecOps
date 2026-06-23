@@ -137,18 +137,14 @@ function createWorkspaceReadinessChecker(
         };
       }
       const health = getOpencodeHealthStatus();
-      if (health === "error" || health === "degraded") {
+      // M13.5 — only hard errors block typing. The sidecar starts lazily on
+      // Send; "unknown" / "checking" while the sidecar isn't running is the
+      // expected idle state and must not block the composer.
+      if (health === "error") {
         return {
           ready: false,
           message: "OpenCode server is unavailable. Check server health and retry.",
           recoveryHint: "Check OpenCode server health in Settings → Workspaces → OpenCode.",
-        };
-      }
-      if (health === "unknown" || health === "checking") {
-        return {
-          ready: false,
-          message: "OpenCode server health is not yet confirmed.",
-          recoveryHint: "Wait for OpenCode health check or click Check connection in Settings.",
         };
       }
       if (!isOpencodeCatalogReady(workspaceRootPath)) {

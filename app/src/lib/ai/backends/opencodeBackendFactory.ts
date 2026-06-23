@@ -16,6 +16,13 @@ import {
  * callers can short-circuit a refresh without constructing a backend they would
  * never use).
  *
+ * M13.5 — `ensureIntent` controls whether the sidecar may spawn on a backend
+ * API call:
+ *   - `"send"`              — Send pipeline; spawn allowed.
+ *   - `"settings"`          — Settings actions (default); spawn allowed.
+ *   - `"background-sync"`   — auto reconcile / hydrate / catalog prefetch;
+ *                              status-only (never spawns).
+ *
  * Notes:
  * - This helper is intentionally side-effect-free beyond reading app state; it
  *   does not consult the workspace root (the backend resolves its own directory
@@ -25,12 +32,15 @@ import {
  *   mocked factory. The injected mock returns a backend regardless of the
  *   enabled flag, which preserves the existing test behaviour.
  */
-export function createOpencodeBackendFromAppState(): WorkspaceAgentBackend | null {
+export function createOpencodeBackendFromAppState(input?: {
+  ensureIntent?: "send" | "settings" | "background-sync" | "status-only";
+}): WorkspaceAgentBackend | null {
   const { opencode } = appState.getSnapshot().settings;
   if (!isOpencodeEnabled(opencode)) {
     return null;
   }
   return createWorkspaceAgentBackend("opencode", {
     resolveRuntimeConfig: async () => ({ mode: opencode.mode, baseUrl: opencode.baseUrl }),
+    ensureIntent: input?.ensureIntent ?? "settings",
   });
 }

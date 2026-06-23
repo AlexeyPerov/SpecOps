@@ -99,6 +99,51 @@ Internal code may still use **agent** for conversations until [M16](../specs/ops
 - Bundled binaries are expected at `app/src-tauri/binaries/opencode-<target-triple>`.
 - In development, if a bundled binary is missing, SpecOps falls back to an `opencode` executable on `PATH`.
 
+## Sidecar lifecycle — lazy, session-scoped
+
+The sidecar is **lazy** and **session-scoped**. It does not start when a workspace opens or when a file/editor tab is active.
+
+| Trigger | Sidecar spawns? |
+| --- | --- |
+| Send on a session tab (sidecar mode) | **Yes** (primary) |
+| Settings → **Check connection** | **Yes** (explicit retry; clears circuit breaker) |
+| Settings → **Refresh model list** | **Yes** |
+| Open OpenCode config sub-panels (providers, MCP, agents, …) | **Yes** (explicit) |
+| Workspace add / switch / lifecycle | **No** |
+| File/editor tab active | **No** |
+| Session tab open (idle) | **No** |
+| Catalog auto-prefetch on session-tab mount | **No** (deferred until Send or Settings refresh) |
+
+### Non-session tabs never touch OpenCode
+
+On `file`/`editor`/`notepad` tabs the app shell skips OpenCode entirely — no sidecar attach, no catalog refresh, no file-status fetch, no reconcile / hydrate. Workspace file editing does not require OpenCode.
+
+### Background reconcile + hydrate (session tab only)
+
+When the user opens / switches a workspace **on a session tab**, a fire-and-forget background reconcile + hydrate runs **only when all** of:
+
+1. Sidecar is already running and healthy (status probe only — no attach).
+2. Active session has a linked OpenCode session id.
+3. Thread has ≥ 1 message.
+4. Last message role is `user` (pending turn; skip when `assistant` — local cache is sufficient after a completed turn).
+
+Always show the local transcript immediately on switch; the background work is best-effort, single-flight, non-blocking.
+
+### Circuit breaker on hard failure
+
+Treat `portInUse`, `missingBinary`, `launchFailure`, and `healthTimeout` as hard failures. On hard failure:
+
+1. `opencodeHealth.status = "error"` with an actionable `lastErrorMessage`.
+2. In-memory circuit-breaker flag (cleared by app restart, an explicit Settings action, or a successful explicit start).
+3. **One deduped snackbar** per failure episode: *"OpenCode could not start. Check Settings → Workspaces → OpenCode."*
+4. No automatic retry on workspace switch, session-tab switch, or effect re-runs.
+
+Clear breaker: user clicks **Check connection**, toggles OpenCode enabled / mode, or sends the first message after the failure (Send may attempt once and surface the error).
+
+### Non-blocking spawn
+
+`opencode_sidecar_attach_workspace` no longer blocks the Tauri IPC thread for up to 10 s. It spawns the process and returns with `health: checking`; a dedicated background thread polls `/global/health` and updates the sidecar state. The frontend `ensureOpencodeSidecar({ intent: "send" })` waits on the resolved health (with a 10 s cap) so the Send button stays responsive.
+
 ## Important source files
 
 - Backend + SDK mapping: `app/src/lib/ai/backends/workspaceAgentBackend.ts`

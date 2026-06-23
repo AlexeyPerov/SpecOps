@@ -9,8 +9,16 @@
   import { chatStore } from "../../state/chatStore";
   import { refreshOpencodeCatalog } from "../../ai/opencodeCatalog";
   import { requestOpencodeHealthRefresh } from "../../services/appShellEffects";
+  import {
+    clearOpencodeSidecarCircuitBreaker,
+    getOpencodeSidecarLastFailureSignature,
+  } from "../../services/opencodeSidecarEnsure";
+  import { isOpencodeSidecarError } from "../../services/opencodeSidecar";
 
-  let { dialogOpen = false }: { dialogOpen?: boolean } = $props();
+  let {
+    dialogOpen = false,
+    onHardFailure = (_message: string) => {},
+  }: { dialogOpen?: boolean; onHardFailure?: (message: string) => void } = $props();
 
   const snapshot = $derived($appState);
   let opencodeServerPassword = $state("");
@@ -50,6 +58,9 @@
   function applyOpencodeReconnectState(
     nextOpencode: Partial<{ mode: OpencodeTransportMode; baseUrl: string }>,
   ): void {
+    // M13.5 — toggling transport / URL clears the circuit breaker so the
+    // user can retry without first navigating to a workspace.
+    clearOpencodeSidecarCircuitBreaker();
     appState.applyPersistedSettings({
       opencode: nextOpencode,
       opencodeHealth: {
@@ -63,6 +74,8 @@
   }
 
   function updateOpencodeEnabled(enabled: boolean): void {
+    // M13.5 — toggling the master switch clears the breaker.
+    clearOpencodeSidecarCircuitBreaker();
     appState.applyPersistedSettings({
       opencode: { enabled },
       opencodeHealth: enabled

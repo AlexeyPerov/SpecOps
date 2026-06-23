@@ -55,6 +55,7 @@ import {
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { resolveOpencodeModelFallback } from "./opencodeCatalog";
 import { isOpencodeEnabled } from "../services/opencodeSettings";
+import { ensureOpencodeSidecar } from "../services/opencodeSidecarEnsure";
 import {
   OPENCODE_DISABLED_MESSAGE,
 } from "./chatErrorCopy";
@@ -733,6 +734,22 @@ async function executeWorkspaceAgentBackendTurn(params: {
   let sessionId: string | null = null;
 
   try {
+    // M13.5 — lazy sidecar. The Send path is the primary spawn trigger; the
+    // ensure call may take a few hundred ms (port check + process spawn) but
+    // returns immediately from the Rust IPC perspective. Backend methods
+    // below then proceed against the (now-running) sidecar.
+    const settings = appState.getSnapshot().settings;
+    if (settings.opencode.enabled && settings.opencode.mode === "sidecar") {
+      const ensured = await ensureOpencodeSidecar({ intent: "send", directory: root });
+      if (!ensured || ensured.status.health === "error") {
+        throw new WorkspaceAgentBackendError({
+          code: "serverUnavailable",
+          message:
+            ensured?.status.lastError?.message ??
+            "Failed to start OpenCode sidecar.",
+        });
+      }
+    }
     const threadMetadata = chatStore.getMetadata(activeAgentId);
     const modelFromThread = threadMetadata?.selectedModelId?.trim() ?? "";
     const modelId = modelFromThread || params.modelId;

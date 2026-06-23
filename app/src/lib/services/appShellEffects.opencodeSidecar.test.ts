@@ -6,6 +6,7 @@ import {
   isOpencodeSidecarError,
   stopOpencodeSidecar,
 } from "./opencodeSidecar";
+import { ensureOpencodeSidecar } from "./opencodeSidecarEnsure";
 import { requestOpencodeHealthRefresh, syncOpencodeSidecarEffect, syncOpencodeToggleEffect, probeUrlHealth } from "./appShellEffects";
 
 vi.mock("./opencodeSidecar", () => ({
@@ -32,6 +33,15 @@ vi.mock("./opencodeSidecar", () => ({
   }),
 }));
 
+vi.mock("./opencodeSidecarEnsure", () => ({
+  ensureOpencodeSidecar: vi.fn(),
+  isOpencodeSidecarBlocked: vi.fn(() => false),
+  getOpencodeSidecarLastFailureSignature: vi.fn(() => null),
+  getOpencodeSidecarBreakerError: vi.fn(() => null),
+  clearOpencodeSidecarCircuitBreaker: vi.fn(),
+  resetOpencodeSidecarEnsureForTests: vi.fn(),
+}));
+
 vi.mock("./providerSecretsStore", () => ({
   loadOpencodeServerPassword: vi.fn().mockResolvedValue(""),
 }));
@@ -41,6 +51,7 @@ const getStatusMock = vi.mocked(getOpencodeSidecarStatus);
 const mapHealthMock = vi.mocked(healthFromSidecarStatus);
 const isSidecarErrorMock = vi.mocked(isOpencodeSidecarError);
 const stopSidecarMock = vi.mocked(stopOpencodeSidecar);
+const ensureMock = vi.mocked(ensureOpencodeSidecar);
 
 async function flushAsyncWork(): Promise<void> {
   for (let i = 0; i < 6; i++) {
@@ -60,29 +71,40 @@ describe("syncOpencodeSidecarEffect", () => {
     vi.unstubAllGlobals();
   });
 
-  it("attaches sidecar when workspace runtime is ready", () => {
+  it("does not attach sidecar on workspace activation (M13.5)", () => {
     syncOpencodeSidecarEffect({
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      isAgentTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
       setOpencodeHealth: vi.fn(),
     });
 
-    expect(attachMock).toHaveBeenCalledWith("/tmp/workspace");
+    expect(attachMock).not.toHaveBeenCalled();
   });
 
-  it("publishes checking then mapped sidecar health on successful attach", async () => {
-    mapHealthMock.mockReturnValue("degraded");
+  it("probes sidecar health when session tab is active (M13.5)", async () => {
+    getStatusMock.mockResolvedValueOnce({
+      running: true,
+      baseUrl: "http://127.0.0.1:4096",
+      health: "healthy",
+      directory: "/tmp/workspace",
+      port: 4096,
+      pid: 42,
+      lastError: null,
+    });
+    mapHealthMock.mockReturnValue("healthy");
     const setOpencodeHealth = vi.fn();
     syncOpencodeSidecarEffect({
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      isAgentTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
@@ -91,51 +113,31 @@ describe("syncOpencodeSidecarEffect", () => {
 
     await flushAsyncWork();
 
-    expect(setOpencodeHealth).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        status: "checking",
-        source: "sidecar",
-        lastErrorMessage: null,
-      }),
-    );
+    expect(attachMock).not.toHaveBeenCalled();
+    expect(getStatusMock).toHaveBeenCalled();
     expect(setOpencodeHealth).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        status: "degraded",
+        status: "healthy",
         source: "sidecar",
-        lastErrorMessage: null,
       }),
     );
   });
 
-  it("sets error health when sidecar attach fails with typed error", async () => {
-    attachMock.mockRejectedValueOnce({
-      kind: "launchFailure",
-      message: "Unable to spawn sidecar",
-    });
-    isSidecarErrorMock.mockReturnValue(true);
-    const setOpencodeHealth = vi.fn();
-
+  it("skips sidecar probe entirely on file/editor tab (M13.5)", () => {
     syncOpencodeSidecarEffect({
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      isAgentTabActive: false,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
-      setOpencodeHealth,
+      setOpencodeHealth: vi.fn(),
     });
 
-    await flushAsyncWork();
-
-    expect(setOpencodeHealth).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        status: "error",
-        source: "sidecar",
-        lastErrorMessage: "Unable to spawn sidecar",
-      }),
-    );
+    expect(attachMock).not.toHaveBeenCalled();
+    expect(getStatusMock).not.toHaveBeenCalled();
   });
 
   it("skips attach when chat-http is active", () => {
@@ -144,6 +146,7 @@ describe("syncOpencodeSidecarEffect", () => {
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: true,
+      isAgentTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
@@ -153,12 +156,13 @@ describe("syncOpencodeSidecarEffect", () => {
     expect(attachMock).not.toHaveBeenCalled();
   });
 
-  it("skips attach when workspace lifecycle has not started", () => {
+  it("skips probe when workspace lifecycle has not started", () => {
     syncOpencodeSidecarEffect({
       runtimeReady: true,
       workspaceLifecycleActive: false,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      isAgentTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
@@ -166,14 +170,16 @@ describe("syncOpencodeSidecarEffect", () => {
     });
 
     expect(attachMock).not.toHaveBeenCalled();
+    expect(getStatusMock).not.toHaveBeenCalled();
   });
 
-  it("skips attach when runtime is not ready", () => {
+  it("skips probe when runtime is not ready", () => {
     syncOpencodeSidecarEffect({
       runtimeReady: false,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      isAgentTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
@@ -181,15 +187,17 @@ describe("syncOpencodeSidecarEffect", () => {
     });
 
     expect(attachMock).not.toHaveBeenCalled();
+    expect(getStatusMock).not.toHaveBeenCalled();
   });
 
-  it("skips attach and resets health when opencode is disabled", () => {
+  it("skips probe and resets health when opencode is disabled", () => {
     const setOpencodeHealth = vi.fn();
     syncOpencodeSidecarEffect({
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      isAgentTabActive: true,
       opencodeEnabled: false,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
@@ -197,6 +205,7 @@ describe("syncOpencodeSidecarEffect", () => {
     });
 
     expect(attachMock).not.toHaveBeenCalled();
+    expect(getStatusMock).not.toHaveBeenCalled();
     expect(setOpencodeHealth).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "unknown",
@@ -212,6 +221,7 @@ describe("syncOpencodeSidecarEffect", () => {
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      isAgentTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "://bad-url",
@@ -240,6 +250,7 @@ describe("syncOpencodeSidecarEffect", () => {
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
       isChatHttpActive: false,
+      isAgentTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "http://127.0.0.1:4096",
@@ -255,11 +266,29 @@ describe("syncOpencodeSidecarEffect", () => {
       }),
     );
   });
+
+  it("does not probe URL mode when not on a session tab (M13.5)", () => {
+    const setOpencodeHealth = vi.fn();
+    syncOpencodeSidecarEffect({
+      runtimeReady: true,
+      workspaceLifecycleActive: true,
+      activeWorkspaceRoot: "/tmp/workspace",
+      isChatHttpActive: false,
+      isAgentTabActive: false,
+      opencodeEnabled: true,
+      opencodeMode: "url",
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      setOpencodeHealth,
+    });
+
+    expect(setOpencodeHealth).not.toHaveBeenCalled();
+  });
 });
 
 describe("requestOpencodeHealthRefresh", () => {
   beforeEach(() => {
     getStatusMock.mockReset();
+    ensureMock.mockReset();
     mapHealthMock.mockReset();
     mapHealthMock.mockReturnValue("healthy");
     isSidecarErrorMock.mockReset();
@@ -267,28 +296,45 @@ describe("requestOpencodeHealthRefresh", () => {
     vi.unstubAllGlobals();
   });
 
-  it("reads sidecar status and maps it into app health", async () => {
-    getStatusMock.mockResolvedValueOnce({
+  it("spawns sidecar via ensure when mode is sidecar (M13.5)", async () => {
+    const ensuredStatus = {
       running: true,
       baseUrl: "http://127.0.0.1:4096",
-      health: "healthy",
+      health: "healthy" as const,
       directory: "/tmp/workspace",
       port: 4096,
       pid: 42,
       lastError: null,
+    };
+    ensureMock.mockImplementation(async (_input, options) => {
+      // Simulate the real ensure call: publish health on success.
+      options?.setOpencodeHealth?.({
+        status: "healthy",
+        source: "sidecar",
+        checkedAt: new Date().toISOString(),
+        lastErrorMessage: null,
+      });
+      return { status: ensuredStatus, spawned: true };
     });
-    mapHealthMock.mockReturnValueOnce("healthy");
     const setOpencodeHealth = vi.fn();
 
     requestOpencodeHealthRefresh({
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      activeWorkspaceRoot: "/tmp/workspace",
       setOpencodeHealth,
     });
     await flushAsyncWork();
 
-    expect(getStatusMock).toHaveBeenCalledTimes(1);
+    expect(ensureMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "settings",
+        directory: "/tmp/workspace",
+      }),
+      expect.anything(),
+    );
+    expect(getStatusMock).not.toHaveBeenCalled();
     expect(setOpencodeHealth).toHaveBeenLastCalledWith(
       expect.objectContaining({
         status: "healthy",

@@ -6,11 +6,16 @@ import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { WorkspaceAccessReason } from "../ai/capabilities";
 
-const { logDiagnosticMock } = vi.hoisted(() => ({
+const { logDiagnosticMock, ensureOpencodeSidecarMock } = vi.hoisted(() => ({
   logDiagnosticMock: vi.fn().mockResolvedValue(undefined),
+  ensureOpencodeSidecarMock: vi.fn(),
 }));
 vi.mock("./logging", () => ({
   logDiagnostic: logDiagnosticMock,
+}));
+
+vi.mock("./opencodeSidecarEnsure", () => ({
+  ensureOpencodeSidecar: ensureOpencodeSidecarMock,
 }));
 
 vi.mock("../state/appState", () => ({
@@ -39,6 +44,8 @@ vi.mock("../state/chatStore", () => ({
     runAccessPreflight: vi.fn(),
     clearAgentSessionLink: vi.fn(),
     setThreadMessages: vi.fn(),
+    getActiveAgentId: vi.fn(() => null),
+    getActiveThreadSnapshot: vi.fn(() => null),
   },
 }));
 
@@ -80,6 +87,9 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
     backendListSessionsMock.mockReset();
     backendListMessagesMock.mockReset();
     backendGetSessionDetailsMock.mockReset();
+    ensureOpencodeSidecarMock.mockReset();
+    // Default: sidecar not running → L3 background sync skipped.
+    ensureOpencodeSidecarMock.mockResolvedValue(null);
 
     appStateMock.getActiveSession.mockReturnValue({
       selectedTabId: "tab-file",
@@ -100,6 +110,10 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
       checkedAt: "2026-06-10T09:00:00.000Z",
     });
     chatStoreMock.clearAgentSessionLink.mockImplementation(() => false);
+    chatStoreMock.getActiveAgentId.mockReturnValue(null);
+    chatStoreMock.getActiveThreadSnapshot.mockReturnValue(null);
+    chatStoreMock.getAgentSessionLink.mockReturnValue(null);
+    chatStoreMock.getActiveWorkspaceRoot.mockReturnValue("/repo/ws-a");
   });
 
   it("clears stale session mappings during workspace restore", async () => {
@@ -107,6 +121,50 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
       makeEntry({ id: "agent-a", opencodeSessionId: "sess-stale" }),
       makeEntry({ id: "agent-b", opencodeSessionId: "sess-live" }),
     ]);
+    // M13.5 — L3 background sync runs only when sidecar is healthy, active
+    // session is linked, thread has messages, and last message role is user.
+    ensureOpencodeSidecarMock.mockResolvedValue({
+      status: {
+        running: true,
+        baseUrl: "http://127.0.0.1:4096",
+        health: "healthy",
+        directory: "/repo/ws-a",
+        port: 4096,
+        pid: 42,
+        lastError: null,
+      },
+      spawned: false,
+    });
+    chatStoreMock.getActiveAgentId.mockReturnValue("agent-a");
+    chatStoreMock.getAgentSessionLink.mockReturnValue({
+      opencodeSessionId: "sess-stale",
+      opencodeModelId: undefined,
+      opencodeProviderId: undefined,
+    });
+    chatStoreMock.getActiveThreadSnapshot.mockReturnValue({
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          content: "fresh",
+          parts: [],
+          createdAt: "2026-06-10T09:00:00.000Z",
+        },
+      ],
+      metadata: {
+        mode: "ask",
+        agentId: "agent-a",
+        threadId: "t",
+        createdAt: "2026-06-10T09:00:00.000Z",
+        updatedAt: "2026-06-10T09:00:00.000Z",
+        selectedModelId: "",
+        connectionId: undefined,
+        opencodeAgentId: undefined,
+        opencodeProviderId: undefined,
+        compactedMessageCount: 0,
+        summary: "",
+      },
+    });
     backendListSessionsMock.mockResolvedValue([
       {
         id: "sess-live",
@@ -123,6 +181,10 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
     });
 
     await handlers.restoreWorkspaceAgentSession("/repo/ws-a");
+
+    // The L3 background sync is fire-and-forget; wait a tick for the
+    // reconcile to run.
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(chatStoreMock.clearAgentSessionLink).toHaveBeenCalledTimes(1);
     expect(chatStoreMock.clearAgentSessionLink).toHaveBeenCalledWith("agent-a", "/repo/ws-a");
@@ -171,6 +233,50 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
       makeEntry({ id: "agent-a", opencodeSessionId: "sess-a" }),
       makeEntry({ id: "agent-b" }), // no session link — skipped
     ]);
+    // M13.5 — L3 conditions met: sidecar healthy, linked session, thread has
+    // ≥1 message, last message role is user.
+    ensureOpencodeSidecarMock.mockResolvedValue({
+      status: {
+        running: true,
+        baseUrl: "http://127.0.0.1:4096",
+        health: "healthy",
+        directory: "/repo/ws-a",
+        port: 4096,
+        pid: 42,
+        lastError: null,
+      },
+      spawned: false,
+    });
+    chatStoreMock.getActiveAgentId.mockReturnValue("agent-a");
+    chatStoreMock.getAgentSessionLink.mockReturnValue({
+      opencodeSessionId: "sess-a",
+      opencodeModelId: undefined,
+      opencodeProviderId: undefined,
+    });
+    chatStoreMock.getActiveThreadSnapshot.mockReturnValue({
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          content: "fresh prompt",
+          parts: [],
+          createdAt: "2026-06-10T09:00:00.000Z",
+        },
+      ],
+      metadata: {
+        mode: "ask",
+        agentId: "agent-a",
+        threadId: "t",
+        createdAt: "2026-06-10T09:00:00.000Z",
+        updatedAt: "2026-06-10T09:00:00.000Z",
+        selectedModelId: "",
+        connectionId: undefined,
+        opencodeAgentId: undefined,
+        opencodeProviderId: undefined,
+        compactedMessageCount: 0,
+        summary: "",
+      },
+    });
     backendListSessionsMock.mockResolvedValue([{ id: "sess-a" }]);
     backendListMessagesMock.mockResolvedValue([
       {
@@ -186,6 +292,9 @@ describe("createAppShellAgentHandlers.restoreWorkspaceAgentSession", () => {
     });
 
     await handlers.restoreWorkspaceAgentSession("/repo/ws-a");
+
+    // L3 background sync is fire-and-forget; wait for it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(backendListMessagesMock).toHaveBeenCalledTimes(1);
     expect(backendListMessagesMock).toHaveBeenCalledWith({

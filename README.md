@@ -45,15 +45,15 @@ Workspace folders use **OpenCode** as the agent runtime. SpecOps is the UI; Open
    curl -fsSL https://opencode.ai/install | bash
    ```
 2. **Open a workspace folder** in SpecOps (activity rail → add folder).
-3. By default, SpecOps starts a local **OpenCode sidecar** for that directory (default port `4096`). You can disable this via **Settings → Workspaces → OpenCode → Use OpenCode for workspace agents** to use the folder as a plain editor without agents.
+3. By default, **SpecOps starts the OpenCode sidecar lazily** — not on folder open, but on the first **Send** in a session tab (or via **Settings → Workspaces → OpenCode → Check connection**). File editing does not require OpenCode. You can disable this via **Settings → Workspaces → OpenCode → Use OpenCode for workspace sessions** to use the folder as a plain editor without sessions.
 4. When enabled, health is shown under **Settings → Workspaces → OpenCode**.
 4. **Configure a provider** in OpenCode (see below) — workspace agents do not use the HTTP connections in SpecOps settings.
-5. In SpecOps, click **Refresh model list**, then pick an agent, provider, and model from the OpenCode catalog in the workspace agent composer.
-6. Use the **Agents** sidebar: create an agent tab, send a prompt. Tool calls, permission prompts, and question prompts appear in the chat panel.
+5. In SpecOps, click **Refresh model list** (Settings → Workspaces → OpenCode), then pick an agent, provider, and model from the OpenCode catalog in the session composer.
+6. Use the **Sessions** sidebar: create a session tab, send a prompt. Tool calls, permission prompts, and question prompts appear in the chat panel.
 
 ### OpenCode server modes
 
-**Sidecar (default)** — SpecOps launches OpenCode when you open a workspace (when OpenCode is enabled). No extra setup unless you set `OPENCODE_SERVER_PASSWORD` on the server (enter the same value under **Server password** in settings).
+**Sidecar (default)** — SpecOps launches the OpenCode sidecar **on the first session Send** (or via **Settings → Workspaces → OpenCode → Check connection**), not when the workspace opens. The sidecar process and port (`4096` by default) are reused across workspaces until you toggle OpenCode off or stop it. No extra setup unless you set `OPENCODE_SERVER_PASSWORD` on the server (enter the same value under **Server password** in settings).
 
 **URL** — Run OpenCode yourself, for example:
 ```sh

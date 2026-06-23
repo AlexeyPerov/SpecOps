@@ -332,21 +332,14 @@
     });
   });
 
-  $effect(() => {
-    workspaceRootPath;
-    chatContextKind;
-    if (chatContextKind !== "workspace" || !workspaceRootPath) {
-      return;
-    }
-    const settings = appState.getSnapshot().settings;
-    if (!isOpencodeEnabled(settings.opencode)) {
-      return;
-    }
-    const catalog = getOpencodeCatalog(workspaceRootPath);
-    if (catalog.status === "idle" || catalog.status === "error") {
-      void refreshOpencodeCatalog(workspaceRootPath);
-    }
-  });
+  /**
+   * M13.5 — OpenCode catalog (models / providers / agents) is no longer
+   * auto-refreshed on session-tab mount. Sidecar is lazy, so the catalog
+   * stays empty until the user clicks **Refresh model list** in Settings →
+   * Workspaces → OpenCode, or sends the first message (which spawns the
+   * sidecar and pulls the catalog as part of the send pipeline). Acceptable
+   * tradeoff for not eagerly spawning the sidecar on file/editor activity.
+   */
 
   function composerErrorRecoveryHint(message: string): string {
     if (message === httpBlockedCopy.message) {

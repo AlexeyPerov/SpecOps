@@ -54,6 +54,21 @@ vi.mock("../services/questionPrompt", () => ({
   promptQuestion: vi.fn(),
 }));
 
+vi.mock("../services/opencodeSidecarEnsure", () => ({
+  ensureOpencodeSidecar: vi.fn().mockResolvedValue({
+    status: {
+      running: true,
+      baseUrl: "http://127.0.0.1:4096",
+      health: "healthy",
+      directory: "/tmp/workspace",
+      port: 4096,
+      pid: 42,
+      lastError: null,
+    },
+    spawned: true,
+  }),
+}));
+
 const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 const createWorkspaceAgentBackendMock = vi.mocked(createWorkspaceAgentBackend);

@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
@@ -14,6 +14,11 @@ const HEALTH_PATH: &str = "/global/health";
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(10);
 const HEALTH_RETRY_INTERVAL: Duration = Duration::from_millis(500);
 const HEALTH_PROBE_TIMEOUT: Duration = Duration::from_secs(7);
+// M13.5 — non-blocking attach: spawn the sidecar process and return
+// immediately with `health: checking` so the Tauri IPC thread doesn't block
+// for up to 10s. A background poller resolves health on a dedicated thread.
+const HEALTH_POLL_TIMEOUT: Duration = Duration::from_secs(15);
+const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,7 +73,15 @@ pub enum OpencodeSidecarError {
 }
 
 pub struct OpencodeSidecarState {
-    inner: Mutex<OpencodeSidecarInner>,
+    inner: Arc<Mutex<OpencodeSidecarInner>>,
+}
+
+impl Clone for OpencodeSidecarState {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
 }
 
 struct OpencodeSidecarInner {
@@ -83,14 +96,14 @@ struct OpencodeSidecarInner {
 impl OpencodeSidecarState {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(OpencodeSidecarInner {
+            inner: Arc::new(Mutex::new(OpencodeSidecarInner {
                 child: None,
                 directory: None,
                 port: DEFAULT_SIDECAR_PORT,
                 hostname: DEFAULT_SIDECAR_HOSTNAME.to_string(),
                 health: SidecarHealthStatus::Unknown,
                 last_error: None,
-            }),
+            })),
         }
     }
 
@@ -283,7 +296,7 @@ fn read_launch_failure(child: &mut Child) -> OpencodeSidecarError {
     }
 }
 
-fn spawn_sidecar(
+fn spawn_sidecar_process(
     app: &AppHandle,
     port: u16,
     hostname: &str,
@@ -350,6 +363,19 @@ fn spawn_sidecar(
         });
     }
 
+    Ok(child)
+}
+
+/// Spawn a sidecar process and wait for it to become healthy. Used by tests
+/// and the (rare) synchronous path; production `opencode_sidecar_attach_workspace`
+/// uses `spawn_sidecar_process` followed by a background poll to avoid
+/// blocking the Tauri IPC thread for up to 10s (M13.5).
+fn spawn_sidecar_blocking(
+    app: &AppHandle,
+    port: u16,
+    hostname: &str,
+) -> Result<Child, OpencodeSidecarError> {
+    let mut child = spawn_sidecar_process(app, port, hostname)?;
     let base_url = build_base_url(hostname, port);
     match wait_for_health(&base_url) {
         Ok(_) => Ok(child),
@@ -361,6 +387,81 @@ fn spawn_sidecar(
             let _ = child.wait();
             Err(error)
         }
+    }
+}
+
+fn spawn_sidecar(
+    app: &AppHandle,
+    port: u16,
+    hostname: &str,
+) -> Result<Child, OpencodeSidecarError> {
+    spawn_sidecar_blocking(app, port, hostname)
+}
+
+/// Background poller: runs after a non-blocking spawn to resolve `health` on a
+/// dedicated thread. Stops the child and records an error when health doesn't
+/// arrive in time, when the process exits, or when port-in-use is detected.
+fn poll_health_in_background(
+    state: OpencodeSidecarState,
+    port: u16,
+    hostname: String,
+) {
+    let base_url = build_base_url(&hostname, port);
+    let started = Instant::now();
+
+    while started.elapsed() < HEALTH_POLL_TIMEOUT {
+        {
+            let mut inner = match state.inner.lock() {
+                Ok(guard) => guard,
+                Err(_) => return,
+            };
+            // If a stop request landed before we ever reached healthy, bail.
+            let Some(child) = inner.child.as_mut() else {
+                return;
+            };
+            if !child_is_running(child) {
+                let exit_code = child.wait().ok().and_then(|status| status.code());
+                inner.child = None;
+                inner.directory = None;
+                inner.health = SidecarHealthStatus::Unhealthy;
+                inner.last_error = Some(OpencodeSidecarError::LaunchFailure {
+                    message: "OpenCode sidecar process exited before health check succeeded"
+                        .to_string(),
+                    exit_code,
+                });
+                return;
+            }
+            if probe_health(&base_url) {
+                inner.health = SidecarHealthStatus::Healthy;
+                inner.last_error = None;
+                return;
+            }
+        }
+        thread::sleep(HEALTH_POLL_INTERVAL);
+    }
+
+    // Timed out waiting for health. Mark unhealthy and stop the child so it
+    // doesn't linger as a zombie.
+    let timeout_error = OpencodeSidecarError::HealthTimeout {
+        port,
+        attempts: 0,
+        message: format!(
+            "OpenCode sidecar did not become healthy within {}s",
+            HEALTH_POLL_TIMEOUT.as_secs()
+        ),
+    };
+
+    if let Ok(mut inner) = state.inner.lock() {
+        if let Some(child) = inner.child.as_mut() {
+            if child_is_running(child) {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+        inner.child = None;
+        inner.directory = None;
+        inner.health = SidecarHealthStatus::Error;
+        inner.last_error = Some(timeout_error);
     }
 }
 
@@ -411,6 +512,90 @@ fn current_status(inner: &OpencodeSidecarInner) -> OpencodeSidecarStatus {
     }
 }
 
+fn start_or_attach_nonblocking(
+    app: &AppHandle,
+    state: &OpencodeSidecarState,
+    directory: String,
+) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
+    // Phase 1 — under the lock, decide whether to reuse, return early on a
+    // still-booting child, or fall through to spawn.
+    let should_spawn = {
+        let mut inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
+            message: format!("OpenCode sidecar state lock poisoned: {error}"),
+        })?;
+
+        refresh_child_state(&mut inner);
+
+        let port = inner.port;
+        let hostname = inner.hostname.clone();
+        let base_url = build_base_url(&hostname, port);
+        let child_alive = inner.child.as_mut().map(child_is_running).unwrap_or(false);
+        let health_ok = child_alive && probe_health(&base_url);
+
+        if should_reuse_sidecar(child_alive, health_ok) {
+            inner.directory = Some(directory);
+            inner.health = SidecarHealthStatus::Healthy;
+            inner.last_error = None;
+            return Ok(current_status(&inner));
+        }
+
+        // If a child exists but health isn't ok yet (still booting), return
+        // the current `checking` state to the caller without spawning a
+        // duplicate. The background poller (if any) will resolve health.
+        if child_alive {
+            inner.directory = Some(directory);
+            inner.health = SidecarHealthStatus::Checking;
+            inner.last_error = None;
+            return Ok(current_status(&inner));
+        }
+
+        stop_child(&mut inner)?;
+        let _ = (port, hostname);
+        true
+    };
+
+    if !should_spawn {
+        // Defensive guard: every branch above either returned or fell
+        // through to spawn. Unreachable under current control flow.
+        return Err(OpencodeSidecarError::Internal {
+            message: "OpenCode sidecar start reached unexpected state".to_string(),
+        });
+    }
+
+    // Phase 2 — spawn the process under the lock (the spawn itself is fast;
+    // it includes port availability check + process start).
+    let port = {
+        let mut inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
+            message: format!("OpenCode sidecar state lock poisoned: {error}"),
+        })?;
+        let port = inner.port;
+        let hostname = inner.hostname.clone();
+        let child = spawn_sidecar_process(app, port, &hostname)?;
+        inner.child = Some(child);
+        inner.directory = Some(directory);
+        inner.health = SidecarHealthStatus::Checking;
+        inner.last_error = None;
+        port
+    };
+
+    // Phase 3 — kick off a background poller; clone the Arc-shared state.
+    let hostname = {
+        let inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
+            message: format!("OpenCode sidecar state lock poisoned: {error}"),
+        })?;
+        inner.hostname.clone()
+    };
+    let poll_state = state.clone();
+    thread::spawn(move || {
+        poll_health_in_background(poll_state, port, hostname);
+    });
+
+    let inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
+        message: format!("OpenCode sidecar state lock poisoned: {error}"),
+    })?;
+    Ok(current_status(&inner))
+}
+
 fn start_or_attach(
     app: &AppHandle,
     inner: &mut OpencodeSidecarInner,
@@ -450,14 +635,7 @@ pub fn opencode_sidecar_attach_workspace(
     state: State<'_, OpencodeSidecarState>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
     let directory = normalize_directory(&directory)?;
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|error| OpencodeSidecarError::Internal {
-            message: format!("OpenCode sidecar state lock poisoned: {error}"),
-        })?;
-
-    start_or_attach(&app, &mut inner, directory)
+    start_or_attach_nonblocking(&app, state.inner(), directory)
 }
 
 #[tauri::command]

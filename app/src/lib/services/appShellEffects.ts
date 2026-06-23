@@ -27,12 +27,16 @@ import { syncChatAccessMonitor } from "./chatAccessMonitor";
 import { normalizePathSync } from "./diskFingerprint";
 import { syncProjectTreeWatcher } from "./fileWatcher";
 import {
-  attachOpencodeSidecarWorkspace,
   getOpencodeSidecarStatus,
   healthFromSidecarStatus,
   isOpencodeSidecarError,
   stopOpencodeSidecar,
 } from "./opencodeSidecar";
+import {
+  ensureOpencodeSidecar,
+  isOpencodeSidecarBlocked,
+  clearOpencodeSidecarCircuitBreaker,
+} from "./opencodeSidecarEnsure";
 import { isOpencodeEnabled } from "./opencodeSettings";
 import { loadOpencodeServerPassword } from "./providerSecretsStore";
 import type { createProjectTreeController } from "./projectTreeController";
@@ -53,7 +57,10 @@ export interface SyncAgentTabEffectInput {
   selectedAgentId: string | null;
   lastChatScopeKey: string | null;
   ensureChatHttpAgentTab: () => void;
-  restoreWorkspaceAgentSession: (workspaceRoot: string) => Promise<void>;
+  restoreWorkspaceAgentSession: (
+    workspaceRoot: string,
+    options?: { skipOpencodeReconcile?: boolean },
+  ) => Promise<void>;
   setLastChatScopeKey: (key: string | null) => void;
 }
 
@@ -124,7 +131,13 @@ export function syncAgentTabEffect(input: SyncAgentTabEffectInput): void {
     markWorkspaceLifecycleActive();
     void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
     chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
-    void restoreWorkspaceAgentSession(normalizedWorkspaceRoot).catch(() => {
+    // M13.5 — file tabs must not spawn the sidecar for reconcile / hydrate.
+    // The session-tab background sync (L3) runs separately in `syncAgentTabEffect`'s
+    // session-tab branch via `maybeBackgroundSyncWorkspaceSession()` when the
+    // active session is on a session tab.
+    void restoreWorkspaceAgentSession(normalizedWorkspaceRoot, {
+      skipOpencodeReconcile: !isAgentTabActive,
+    }).catch(() => {
       if (isAgentTabActive) {
         void chatStore.runAccessPreflight();
       }
@@ -241,6 +254,8 @@ export interface SyncOpencodeSidecarEffectInput {
   workspaceLifecycleActive: boolean;
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
+  /** M13.5 — gate automatic sidecar-mode health work on session-tab active. */
+  isAgentTabActive: boolean;
   opencodeEnabled: boolean;
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
@@ -324,6 +339,7 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     workspaceLifecycleActive,
     activeWorkspaceRoot,
     isChatHttpActive,
+    isAgentTabActive,
     opencodeEnabled,
     opencodeMode,
     opencodeBaseUrl,
@@ -344,14 +360,14 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     return;
   }
 
-  setOpencodeHealth({
-    status: "checking",
-    source: opencodeMode,
-    checkedAt: new Date().toISOString(),
-    lastErrorMessage: null,
-  });
-
+  // URL mode: probe the configured server (no spawn). Skip when not on a
+  // session tab to avoid probe storms on file/editor activity; the URL is
+  // not a local sidecar so there's no spawn risk, but the probe itself
+  // consumes time and can race with editor saves.
   if (opencodeMode === "url") {
+    if (!isAgentTabActive) {
+      return;
+    }
     let endpoint: URL;
     try {
       endpoint = new URL(opencodeBaseUrl);
@@ -377,7 +393,35 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     return;
   }
 
-  void attachOpencodeSidecarWorkspace(activeWorkspaceRoot)
+  // Sidecar mode (M13.5): no attach on workspace activation. Only probe the
+  // running sidecar (status-only), and only when the user is on a session
+  // tab — the sidecar is meant to serve sessions, not file editing. The
+  // sidecar is started lazily by Send or explicit Settings actions.
+  if (!isAgentTabActive) {
+    return;
+  }
+
+  // Respect circuit breaker: don't keep poking the sidecar after a hard
+  // failure — leave the existing `error` health in place until the user
+  // retries via Settings → Check connection or toggles OpenCode.
+  if (isOpencodeSidecarBlocked()) {
+    return;
+  }
+
+  setOpencodeHealth({
+    status: "checking",
+    source: "sidecar",
+    checkedAt: new Date().toISOString(),
+    lastErrorMessage: null,
+  });
+
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error("OpenCode sidecar status check timed out after 7s")),
+      SIDECAR_STATUS_TIMEOUT_MS,
+    ),
+  );
+  void Promise.race([getOpencodeSidecarStatus(), timeout])
     .then((status) => {
       setOpencodeHealth({
         status: healthFromSidecarStatus(status.health),
@@ -390,7 +434,9 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
       const message =
         isOpencodeSidecarError(error) && error.message.trim().length > 0
           ? error.message
-          : "Failed to start or attach OpenCode sidecar.";
+          : error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : "Failed to read OpenCode sidecar status.";
       setOpencodeHealth({
         status: "error",
         source: "sidecar",
@@ -405,9 +451,16 @@ export function requestOpencodeHealthRefresh(input: {
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
   serverPassword?: string;
+  activeWorkspaceRoot?: string | null;
   setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
 }): void {
-  const { opencodeEnabled, opencodeMode, opencodeBaseUrl, setOpencodeHealth } = input;
+  const {
+    opencodeEnabled,
+    opencodeMode,
+    opencodeBaseUrl,
+    activeWorkspaceRoot,
+    setOpencodeHealth,
+  } = input;
   if (!opencodeEnabled) {
     setOpencodeHealth({
       status: "unknown",
@@ -418,41 +471,35 @@ export function requestOpencodeHealthRefresh(input: {
     return;
   }
   if (opencodeMode === "sidecar") {
-    setOpencodeHealth({
-      status: "checking",
-      source: "sidecar",
-      checkedAt: new Date().toISOString(),
-      lastErrorMessage: null,
-    });
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("OpenCode sidecar status check timed out after 7s")),
-        SIDECAR_STATUS_TIMEOUT_MS,
-      ),
-    );
-    void Promise.race([getOpencodeSidecarStatus(), timeout])
-      .then((status) => {
-        setOpencodeHealth({
-          status: healthFromSidecarStatus(status.health),
-          source: "sidecar",
-          checkedAt: new Date().toISOString(),
-          lastErrorMessage: status.lastError?.message ?? null,
-        });
-      })
-      .catch((error: unknown) => {
-        const message =
-          isOpencodeSidecarError(error) && error.message.trim().length > 0
-            ? error.message
-            : error instanceof Error && error.message.trim().length > 0
-              ? error.message
-              : "Failed to read OpenCode sidecar status.";
-        setOpencodeHealth({
-          status: "error",
-          source: "sidecar",
-          checkedAt: new Date().toISOString(),
-          lastErrorMessage: message,
-        });
+    // Settings intent — may spawn the sidecar (explicit user retry after a
+    // hard failure clears the circuit breaker; first-time start clears
+    // it on success).
+    if (!activeWorkspaceRoot) {
+      setOpencodeHealth({
+        status: "error",
+        source: "sidecar",
+        checkedAt: new Date().toISOString(),
+        lastErrorMessage:
+          "Open a workspace folder before checking the sidecar connection.",
       });
+      return;
+    }
+    void ensureOpencodeSidecar(
+      { intent: "settings", directory: activeWorkspaceRoot },
+      {
+        setOpencodeHealth: (patch) =>
+          setOpencodeHealth({
+            status: patch.status,
+            source: "sidecar",
+            checkedAt: patch.checkedAt,
+            lastErrorMessage: patch.lastErrorMessage,
+          }),
+      },
+    ).catch(() => {
+      // ensure already published health; fall through to a final probe so
+      // the status pill reflects the latest settled state.
+      void probeSidecarStatusAfterRefresh(setOpencodeHealth);
+    });
     return;
   }
 
@@ -472,6 +519,28 @@ export function requestOpencodeHealthRefresh(input: {
       lastErrorMessage: result.message,
     });
   })();
+}
+
+async function probeSidecarStatusAfterRefresh(
+  setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void,
+): Promise<void> {
+  try {
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("OpenCode sidecar status check timed out after 7s")),
+        SIDECAR_STATUS_TIMEOUT_MS,
+      ),
+    );
+    const status = await Promise.race([getOpencodeSidecarStatus(), timeout]);
+    setOpencodeHealth({
+      status: healthFromSidecarStatus(status.health),
+      source: "sidecar",
+      checkedAt: new Date().toISOString(),
+      lastErrorMessage: status.lastError?.message ?? null,
+    });
+  } catch {
+    // Status probe already failed; ensure published the failure. No-op.
+  }
 }
 
 export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffectInput): void {

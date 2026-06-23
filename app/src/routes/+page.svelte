@@ -634,12 +634,14 @@
     isWorkspaceLifecycleActive();
     activeWorkspaceRoot;
     isChatHttpActive;
+    isAgentTabActive;
     documentView.activeDocumentPath;
     syncOpencodeSidecarEffect({
       runtimeReady,
       workspaceLifecycleActive: isWorkspaceLifecycleActive(),
       activeWorkspaceRoot,
       isChatHttpActive,
+      isAgentTabActive,
       opencodeEnabled,
       opencodeMode,
       opencodeBaseUrl,
@@ -670,6 +672,7 @@
     opencodeEnabled;
     opencodeMode;
     opencodeBaseUrl;
+    activeWorkspaceRoot;
     if (!runtimeReady) {
       return;
     }
@@ -677,8 +680,29 @@
       opencodeEnabled,
       opencodeMode,
       opencodeBaseUrl,
+      activeWorkspaceRoot,
       setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
     });
+  });
+
+  /**
+   * M13.5 — deduped snackbar on hard sidecar failure. Emits one status
+   * message per distinct failure signature (kind+message); re-emitting the
+   * same signature (e.g. on tab switch while breaker is active) does not
+   * flash a second snackbar. Cleared when the signature changes.
+   */
+  let lastHardFailureSignature = "";
+  $effect(() => {
+    const health = snapshot.settings.opencodeHealth;
+    if (health.status !== "error") {
+      return;
+    }
+    const signature = health.lastErrorMessage ?? "error";
+    if (signature === lastHardFailureSignature) {
+      return;
+    }
+    lastHardFailureSignature = signature;
+    notify("OpenCode could not start. Check Settings → Workspaces → OpenCode.");
   });
 
   $effect(() => {
@@ -778,11 +802,15 @@
    * workspace changes and after each completed turn (the agent's edits land
    * on disk once the turn finishes). Stale per-workspace cache is cleared on
    * switch.
+   *
+   * M13.5 — file-status refresh touches OpenCode (`file.status`); gate it on
+   * `isAgentTabActive` so file/editor tabs don't trigger backend calls.
    */
   let lastFileStatusWorkspace = $state<string | null>(null);
   $effect(() => {
     runtimeReady;
     activeWorkspaceRoot;
+    isAgentTabActive;
     session.lastActiveAgentId;
     const isGenerating = chatStore.getRuntimeState().isGenerating;
     void isGenerating;
@@ -793,7 +821,7 @@
     }
     lastFileStatusWorkspace = root;
 
-    if (!runtimeReady || !root) {
+    if (!runtimeReady || !root || !isAgentTabActive) {
       return;
     }
     void refreshFileStatuses({ workspaceRootPath: root });

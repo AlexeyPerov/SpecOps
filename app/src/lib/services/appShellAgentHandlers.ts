@@ -20,6 +20,7 @@ import {
   selectedTabAfterMissingLastAgent,
 } from "./workspaceAgentSession";
 import { hydrateWorkspaceAgentMessages } from "./workspaceAgentHydration";
+import { ensureOpencodeSidecar } from "./opencodeSidecarEnsure";
 import { isOpencodeEnabled } from "./opencodeSettings";
 import { promptEntryName } from "./entryNamePrompt";
 import { promptRevertPreview } from "./revertPreviewPrompt";
@@ -151,6 +152,61 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     await handleDeleteAgent(agentId);
   }
 
+  /**
+   * M13.5 — conditional background reconcile + hydrate (L3). Runs only when:
+   *   1. Sidecar is already running and healthy (probe only — no spawn).
+   *   2. Active session has a linked OpenCode session id.
+   *   3. Active session thread has ≥1 message.
+   *   4. Last message role is `"user"` (skip when `"assistant"` — L3-A).
+   *
+   * Fire-and-forget; never blocks the caller.
+   */
+  async function maybeBackgroundSyncWorkspaceSession(): Promise<void> {
+    const workspaceRoot = chatStore.getActiveWorkspaceRoot();
+    if (!workspaceRoot) {
+      return;
+    }
+    const ensured = await ensureOpencodeSidecar({
+      intent: "background-sync",
+      directory: workspaceRoot,
+    });
+    if (!ensured || ensured.status.health !== "healthy") {
+      return;
+    }
+    const activeAgentId = chatStore.getActiveAgentId();
+    if (!activeAgentId) {
+      return;
+    }
+    const link = chatStore.getAgentSessionLink(activeAgentId, workspaceRoot);
+    if (!link?.opencodeSessionId) {
+      return;
+    }
+    const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
+    if (!thread || thread.messages.length === 0) {
+      return;
+    }
+    const lastMessage = thread.messages[thread.messages.length - 1]!;
+    if (lastMessage.role !== "user") {
+      return;
+    }
+    // L3 met — single-flight reconcile + hydrate the active session.
+    try {
+      await reconcileWorkspaceSessionMappings(workspaceRoot);
+      const backend = createOpencodeBackendFromAppState({
+        ensureIntent: "background-sync",
+      });
+      if (backend) {
+        await hydrateWorkspaceAgentMessages({
+          backend,
+          workspaceRootPath: workspaceRoot,
+          agents: chatStore.getAgentIndex(),
+        }).catch(() => {});
+      }
+    } catch {
+      // Best-effort; local cache stays in place.
+    }
+  }
+
   async function restoreWorkspaceAgentSession(
     normalizedRoot: string,
     options?: { skipOpencodeReconcile?: boolean },
@@ -164,35 +220,33 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     const session = appState.getActiveSession();
     await chatStore.loadWorkspaceAgents(normalizedRoot);
     chatStore.mergeSessionDraftAgents(normalizedRoot, openAgentTabIds(session.openTabs));
-    if (!options?.skipOpencodeReconcile) {
-      await reconcileWorkspaceSessionMappings(normalizedRoot);
-    }
+
     const agentIndex = chatStore.getAgentIndex();
-    // M1-T3: hydrate the display source of truth from OpenCode session.messages.
-    // Non-fatal — local snapshot remains as offline cache/fallback on failure.
-    await hydrateWorkspaceAgentMessages({
-      backend: createOpencodeBackendFromAppState()!,
-      workspaceRootPath: normalizedRoot,
-      agents: agentIndex,
-    }).catch(() => {
-      // Hydration is best-effort; the local snapshot stays in place.
-    });
     const restored = resolveRestoredActiveAgent(session, agentIndex);
     if (restored.shouldFocusAgentTab && restored.activeAgentId) {
       chatStore.setActiveAgentId(restored.activeAgentId);
       appState.setLastActiveAgentId(restored.activeAgentId);
       appState.openOrFocusAgentTab(restored.activeAgentId);
       void chatStore.runAccessPreflight();
+    } else {
+      chatStore.setActiveAgentId(null);
+      appState.setLastActiveAgentId(null);
+      const tabs = appState.getActiveSession().openTabs;
+      const selectedTabId = appState.getActiveSession().selectedTabId;
+      const nextSelected = selectedTabAfterMissingLastAgent(tabs, selectedTabId);
+      if (nextSelected && nextSelected !== selectedTabId) {
+        appState.selectTab(nextSelected);
+      }
+    }
+
+    if (options?.skipOpencodeReconcile) {
       return;
     }
-    chatStore.setActiveAgentId(null);
-    appState.setLastActiveAgentId(null);
-    const tabs = appState.getActiveSession().openTabs;
-    const selectedTabId = appState.getActiveSession().selectedTabId;
-    const nextSelected = selectedTabAfterMissingLastAgent(tabs, selectedTabId);
-    if (nextSelected && nextSelected !== selectedTabId) {
-      appState.selectTab(nextSelected);
-    }
+
+    // M13.5 — session tab path: hydrate is conditional on L3 (sidecar healthy,
+    // linked session, ≥1 message, last message user). Fire-and-forget so the
+    // caller doesn't wait on OpenCode.
+    void maybeBackgroundSyncWorkspaceSession();
   }
 
   async function handleCloseTab(tabId: string): Promise<void> {

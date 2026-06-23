@@ -1,4 +1,4 @@
-import { attachOpencodeSidecarWorkspace } from "../../services/opencodeSidecar";
+import { ensureOpencodeSidecar } from "../../services/opencodeSidecarEnsure";
 import type { OpencodeTransportMode } from "../../domain/contracts";
 import { logDiagnostic } from "../../services/logging";
 import { loadOpencodeServerPassword } from "../../services/providerSecretsStore";
@@ -824,6 +824,13 @@ interface WorkspaceAgentBackendDependencies {
     workspaceRootPath: string;
     serverPassword: string;
   }) => RawOpencodeClient;
+  /**
+   * M13.5 — intent passed to `ensureOpencodeSidecar` from the central sidecar
+   * service. Defaults to `"settings"` (most callers are user-driven Settings
+   * or Send paths that may spawn). Background reconcile / hydrate / catalog
+   * prefetch callers pass `"background-sync"` so they never spawn.
+   */
+  ensureIntent?: "send" | "settings" | "background-sync" | "status-only";
 }
 
 const DEFAULT_OPENCODE_BASE_URL = "http://127.0.0.1:4096";
@@ -2359,14 +2366,25 @@ function createOpencodeBackend(
     ]);
     let baseUrl = runtime.baseUrl.trim();
     if (runtime.mode === "sidecar") {
-      const sidecar = await attachOpencodeSidecarWorkspace(directory).catch((error: unknown) => {
+      // M13.5 — central sidecar service. `background-sync` / `status-only`
+      // intents never spawn; `send` / `settings` may spawn when needed.
+      const ensured = await ensureOpencodeSidecar({
+        intent: deps.ensureIntent ?? "settings",
+        directory,
+      }).catch((error: unknown) => {
         throw new WorkspaceAgentBackendError({
           code: "serverUnavailable",
           message: "Failed to start or attach OpenCode sidecar.",
           cause: error,
         });
       });
-      baseUrl = sidecar.baseUrl ?? baseUrl;
+      if (!ensured) {
+        throw new WorkspaceAgentBackendError({
+          code: "serverUnavailable",
+          message: "OpenCode sidecar is not running.",
+        });
+      }
+      baseUrl = ensured.status.baseUrl ?? baseUrl;
     }
     if (baseUrl.length === 0) {
       throw new WorkspaceAgentBackendError({

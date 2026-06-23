@@ -248,6 +248,7 @@ export interface SyncOpencodeSidecarEffectInput {
 }
 
 const URL_HEALTH_TIMEOUT_MS = 10_000;
+const SIDECAR_STATUS_TIMEOUT_MS = 7_000;
 
 interface UrlHealthProbeResult {
   status: OpencodeHealthStatus;
@@ -422,7 +423,13 @@ export function requestOpencodeHealthRefresh(input: {
       checkedAt: new Date().toISOString(),
       lastErrorMessage: null,
     });
-    void getOpencodeSidecarStatus()
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("OpenCode sidecar status check timed out after 7s")),
+        SIDECAR_STATUS_TIMEOUT_MS,
+      ),
+    );
+    void Promise.race([getOpencodeSidecarStatus(), timeout])
       .then((status) => {
         setOpencodeHealth({
           status: healthFromSidecarStatus(status.health),
@@ -435,7 +442,9 @@ export function requestOpencodeHealthRefresh(input: {
         const message =
           isOpencodeSidecarError(error) && error.message.trim().length > 0
             ? error.message
-            : "Failed to read OpenCode sidecar status.";
+            : error instanceof Error && error.message.trim().length > 0
+              ? error.message
+              : "Failed to read OpenCode sidecar status.";
         setOpencodeHealth({
           status: "error",
           source: "sidecar",

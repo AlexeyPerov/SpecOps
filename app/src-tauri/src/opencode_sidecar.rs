@@ -13,6 +13,7 @@ pub const DEFAULT_SIDECAR_HOSTNAME: &str = "127.0.0.1";
 const HEALTH_PATH: &str = "/global/health";
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(10);
 const HEALTH_RETRY_INTERVAL: Duration = Duration::from_millis(500);
+const HEALTH_PROBE_TIMEOUT: Duration = Duration::from_secs(7);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -199,9 +200,15 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
     None
 }
 
+fn build_probe_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout(HEALTH_PROBE_TIMEOUT)
+        .build()
+}
+
 fn probe_health(base_url: &str) -> bool {
     let health_url = format!("{base_url}{HEALTH_PATH}");
-    let agent = ureq::agent();
+    let agent = build_probe_agent();
     match agent.get(&health_url).call() {
         Ok(response) => {
             if response.status() != 200 {
@@ -226,7 +233,7 @@ enum PortProbeResult {
 
 fn probe_health_detailed(base_url: &str) -> PortProbeResult {
     let health_url = format!("{base_url}{HEALTH_PATH}");
-    let agent = ureq::agent();
+    let agent = build_probe_agent();
     match agent.get(&health_url).call() {
         Ok(response) => {
             if response.status() == 200 {

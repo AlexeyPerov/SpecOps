@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-23 12:30
+
+- **Fix: OpenCode sidecar health check could hang forever on "Checking (sidecar)".** `opencode_sidecar_status` invoked a blocking `ureq` HTTP probe against `http://127.0.0.1:4096/global/health` with no timeout; if another process held the port and accepted the TCP connection but never responded (or the port listener was orphaned), the probe blocked indefinitely, the Tauri `invoke` promise never resolved, and the Settings → OpenCode panel stayed on "Checking (sidecar)" forever.
+- Rust: added `HEALTH_PROBE_TIMEOUT = 7s` and a new `build_probe_agent()` helper using `ureq::AgentBuilder::new().timeout(...).build()`; both `probe_health` and `probe_health_detailed` (used by `opencode_sidecar_status`, `start_or_attach`, and `spawn_sidecar`'s `wait_for_health`) now share this bounded agent.
+- JS: added `SIDECAR_STATUS_TIMEOUT_MS = 7_000` next to the existing `URL_HEALTH_TIMEOUT_MS` in `appShellEffects.ts`; the sidecar branch of `requestOpencodeHealthRefresh` now races `getOpencodeSidecarStatus()` against a `setTimeout` reject, surfacing a clear error in the OpenCode settings pill (matching the URL-mode timeout pattern) instead of leaving the UI stuck on "Checking (sidecar)".
+
 ## 2026-06-23 11:36
 
 - Added `docs/opencode-integration.md` with OpenCode architecture flow, workspace/agent/session relationship model, integrated feature coverage, and step-by-step setup for sidecar/URL modes in SpecOps.

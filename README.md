@@ -53,7 +53,7 @@ Workspace folders use **OpenCode** as the agent runtime. SpecOps is the UI; Open
 
 ### OpenCode server modes
 
-**Sidecar (default)** — SpecOps launches the OpenCode sidecar **on the first session Send** (or via **Settings → Workspaces → OpenCode → Check connection**), not when the workspace opens. The sidecar process and port (`4096` by default) are reused across workspaces until you toggle OpenCode off or stop it. No extra setup unless you set `OPENCODE_SERVER_PASSWORD` on the server (enter the same value under **Server password** in settings).
+**Sidecar (default)** — SpecOps launches the OpenCode sidecar **on the first session Send** (or via **Settings → Workspaces → OpenCode → Check connection**), not when the workspace opens. The sidecar process and port (`4096` by default; configurable in **Settings → Workspaces → OpenCode → Sidecar port**) are reused across workspaces until you toggle OpenCode off or stop it. No extra setup unless you set `OPENCODE_SERVER_PASSWORD` on the server (enter the same value under **Server password** in settings).
 
 **URL** — Run OpenCode yourself, for example:
 ```sh

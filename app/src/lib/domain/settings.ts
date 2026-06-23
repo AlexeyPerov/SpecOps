@@ -99,6 +99,13 @@ export interface OpencodeSettings {
   mode: OpencodeTransportMode;
   /** Remote OpenCode server base URL used when mode is `url`. */
   baseUrl: string;
+  /**
+   * Local sidecar port used when mode is `sidecar`. M14-T2 introduces this as
+   * an explicit field so users can pick a free port (the prior hard-coded
+   * `4096` lived in Rust). Validated to 1024–65535; missing or out-of-range
+   * values normalize to {@link defaultOpencodeSettings.sidecarPort} (4096).
+   */
+  sidecarPort: number;
 }
 
 /**

@@ -14,6 +14,7 @@ function createBackendWithMessages(
     resolveRuntimeConfig: async () => ({
       mode: "url",
       baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
     }),
     resolveServerPassword: async () => "",
     createOpencodeClient: () =>

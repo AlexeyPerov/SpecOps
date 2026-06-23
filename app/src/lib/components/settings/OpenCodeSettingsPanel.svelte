@@ -4,7 +4,11 @@
     loadOpencodeServerPassword,
     saveOpencodeServerPassword,
   } from "../../services/providerSecretsStore";
-  import { validateOpencodeBaseUrl } from "../../services/opencodeSettings";
+  import {
+    buildOpencodeSidecarBaseUrl,
+    validateOpencodeBaseUrl,
+    validateOpencodeSidecarPort,
+  } from "../../services/opencodeSettings";
   import { appState } from "../../state/appState";
   import { chatStore } from "../../state/chatStore";
   import { refreshOpencodeCatalog } from "../../ai/opencodeCatalog";
@@ -56,7 +60,11 @@
   }
 
   function applyOpencodeReconnectState(
-    nextOpencode: Partial<{ mode: OpencodeTransportMode; baseUrl: string }>,
+    nextOpencode: Partial<{
+      mode: OpencodeTransportMode;
+      baseUrl: string;
+      sidecarPort: number;
+    }>,
   ): void {
     // M13.5 — toggling transport / URL clears the circuit breaker so the
     // user can retry without first navigating to a workspace.
@@ -106,6 +114,33 @@
     applyOpencodeReconnectState({ baseUrl });
   }
 
+  /**
+   * M14-T5 — persist a new sidecar port. Validates the input (1024–65535,
+   * integer) before writing; rejects out-of-range / non-integer values
+   * without surfacing them to settings store. Sidecar mode reuses this
+   * same reconnect flow so the running sidecar (if any) restarts on the
+   * new port on the next attach.
+   */
+  function updateOpencodeSidecarPort(rawPort: string): void {
+    const trimmed = rawPort.trim();
+    if (trimmed.length === 0) {
+      // Treat empty as "no change" — the user is mid-edit; the existing
+      // persisted port remains valid and the input shows the value again
+      // on next render. Avoids bouncing the input back to a stale number
+      // while typing.
+      return;
+    }
+    const candidate = Number(trimmed);
+    if (validateOpencodeSidecarPort(candidate) !== null) {
+      return;
+    }
+    applyOpencodeReconnectState({
+      mode: "sidecar",
+      sidecarPort: candidate,
+      baseUrl: buildOpencodeSidecarBaseUrl(candidate),
+    });
+  }
+
   async function loadOpencodePassword(): Promise<void> {
     opencodeServerPassword = await loadOpencodeServerPassword();
   }
@@ -137,6 +172,7 @@
       opencodeEnabled: snapshot.settings.opencode.enabled,
       opencodeMode: snapshot.settings.opencode.mode,
       opencodeBaseUrl: snapshot.settings.opencode.baseUrl,
+      opencodeSidecarPort: snapshot.settings.opencode.sidecarPort,
       serverPassword: opencodeServerPassword,
       setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
     });
@@ -153,6 +189,11 @@
   const opencodeUrlValidationMessage = $derived(
     snapshot.settings.opencode.mode === "url"
       ? validateOpencodeBaseUrl(snapshot.settings.opencode.baseUrl)
+      : null,
+  );
+  const opencodeSidecarPortValidationMessage = $derived(
+    snapshot.settings.opencode.mode === "sidecar"
+      ? validateOpencodeSidecarPort(snapshot.settings.opencode.sidecarPort)
       : null,
   );
   const opencodeHealth = $derived(snapshot.settings.opencodeHealth);
@@ -227,6 +268,31 @@
         {#if opencodeUrlValidationMessage}
           <p class="settings-section-note opencode-validation-note">{opencodeUrlValidationMessage}</p>
         {/if}
+      {:else}
+        <label class="settings-field">
+          <span>Sidecar port</span>
+          <input
+            type="number"
+            inputmode="numeric"
+            min="1024"
+            max="65535"
+            step="1"
+            spellcheck="false"
+            placeholder="4096"
+            title="Local port the OpenCode sidecar binds to. Default 4096; change if the port is already in use locally."
+            value={snapshot.settings.opencode.sidecarPort}
+            oninput={(event) =>
+              updateOpencodeSidecarPort((event.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+        {#if opencodeSidecarPortValidationMessage}
+          <p class="settings-section-note opencode-validation-note">
+            {opencodeSidecarPortValidationMessage}
+          </p>
+        {/if}
+        <p class="settings-section-note">
+          Sidecar URL: <code>{snapshot.settings.opencode.baseUrl}</code>
+        </p>
       {/if}
       <label class="settings-field">
         <span>Server password</span>

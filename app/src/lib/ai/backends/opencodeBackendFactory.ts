@@ -40,7 +40,11 @@ export function createOpencodeBackendFromAppState(input?: {
     return null;
   }
   return createWorkspaceAgentBackend("opencode", {
-    resolveRuntimeConfig: async () => ({ mode: opencode.mode, baseUrl: opencode.baseUrl }),
+    resolveRuntimeConfig: async () => ({
+      mode: opencode.mode,
+      baseUrl: opencode.baseUrl,
+      sidecarPort: opencode.sidecarPort,
+    }),
     ensureIntent: input?.ensureIntent ?? "settings",
   });
 }

@@ -751,6 +751,12 @@ export class WorkspaceAgentBackendNotImplementedError extends Error {
 interface OpencodeRuntimeConfig {
   mode: OpencodeTransportMode;
   baseUrl: string;
+  /**
+   * M14-T4 — sidecar port from `settings.opencode.sidecarPort`. Forwarded
+   * to the sidecar attach on every ensure call so a settings-driven port
+   * change re-attaches the sidecar on the new port. URL mode ignores it.
+   */
+  sidecarPort: number;
 }
 
 export interface RawOpencodeClient {
@@ -833,7 +839,7 @@ interface WorkspaceAgentBackendDependencies {
   ensureIntent?: "send" | "settings" | "background-sync" | "status-only";
 }
 
-const DEFAULT_OPENCODE_BASE_URL = "http://127.0.0.1:4096";
+const DEFAULT_OPENCODE_SIDECAR_PORT = 4096;
 
 function assertWorkspaceRootPath(value: string): string {
   const normalized = value.trim();
@@ -2345,7 +2351,8 @@ function createOpencodeBackend(
     deps.resolveRuntimeConfig ??
     (async (): Promise<OpencodeRuntimeConfig> => ({
       mode: "sidecar",
-      baseUrl: DEFAULT_OPENCODE_BASE_URL,
+      baseUrl: `http://127.0.0.1:${DEFAULT_OPENCODE_SIDECAR_PORT}`,
+      sidecarPort: DEFAULT_OPENCODE_SIDECAR_PORT,
     }));
   const resolveServerPassword =
     deps.resolveServerPassword ??
@@ -2368,9 +2375,12 @@ function createOpencodeBackend(
     if (runtime.mode === "sidecar") {
       // M13.5 — central sidecar service. `background-sync` / `status-only`
       // intents never spawn; `send` / `settings` may spawn when needed.
+      // M14-T4 — forward the configured sidecar port so a settings-driven
+      // port change re-attaches on the new port.
       const ensured = await ensureOpencodeSidecar({
         intent: deps.ensureIntent ?? "settings",
         directory,
+        port: runtime.sidecarPort,
       }).catch((error: unknown) => {
         throw new WorkspaceAgentBackendError({
           code: "serverUnavailable",

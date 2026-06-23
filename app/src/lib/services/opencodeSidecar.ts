@@ -88,14 +88,41 @@ export function isOpencodeSidecarError(value: unknown): value is OpencodeSidecar
   );
 }
 
-export async function attachOpencodeSidecarWorkspace(
-  directory: string,
-): Promise<OpencodeSidecarStatus> {
-  return invoke<OpencodeSidecarStatus>("opencode_sidecar_attach_workspace", { directory });
+/**
+ * M14-T4 — invoke wrappers for the OpenCode sidecar Tauri commands.
+ *
+ * The Rust sidecar accepts an optional `port` override (`u16`). When `Some`,
+ * the sidecar (re)starts on that port before attaching to `directory`; when
+ * `None`, the existing configured port is kept (default `4096` on first
+ * attach). Settings UI passes the user's `opencode.sidecarPort` on attach;
+ * Send / Settings Check connection / Refresh model list / config sub-panel
+ * callers forward the same value so the running sidecar reflects the
+ * persisted setting.
+ */
+
+export interface OpencodeSidecarAttachInput {
+  directory: string;
+  /** Optional port override (1024–65535). `undefined` keeps the existing
+   * configured port. */
+  port?: number;
 }
 
-export async function startOpencodeSidecar(directory: string): Promise<OpencodeSidecarStatus> {
-  return invoke<OpencodeSidecarStatus>("opencode_sidecar_start", { directory });
+export async function attachOpencodeSidecarWorkspace(
+  input: OpencodeSidecarAttachInput,
+): Promise<OpencodeSidecarStatus> {
+  return invoke<OpencodeSidecarStatus>("opencode_sidecar_attach_workspace", {
+    directory: input.directory,
+    ...(input.port !== undefined ? { port: input.port } : {}),
+  });
+}
+
+export async function startOpencodeSidecar(
+  input: OpencodeSidecarAttachInput,
+): Promise<OpencodeSidecarStatus> {
+  return invoke<OpencodeSidecarStatus>("opencode_sidecar_start", {
+    directory: input.directory,
+    ...(input.port !== undefined ? { port: input.port } : {}),
+  });
 }
 
 export async function stopOpencodeSidecar(): Promise<OpencodeSidecarStatus> {
@@ -103,9 +130,12 @@ export async function stopOpencodeSidecar(): Promise<OpencodeSidecarStatus> {
 }
 
 export async function restartOpencodeSidecar(
-  directory: string,
+  input: OpencodeSidecarAttachInput,
 ): Promise<OpencodeSidecarStatus> {
-  return invoke<OpencodeSidecarStatus>("opencode_sidecar_restart", { directory });
+  return invoke<OpencodeSidecarStatus>("opencode_sidecar_restart", {
+    directory: input.directory,
+    ...(input.port !== undefined ? { port: input.port } : {}),
+  });
 }
 
 export async function getOpencodeSidecarStatus(): Promise<OpencodeSidecarStatus> {

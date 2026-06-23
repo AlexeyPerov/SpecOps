@@ -33,18 +33,36 @@ describe("opencodeSidecar", () => {
   });
 
   it("attachOpencodeSidecarWorkspace invokes attach command", async () => {
-    await attachOpencodeSidecarWorkspace("/tmp/workspace");
+    await attachOpencodeSidecarWorkspace({ directory: "/tmp/workspace" });
 
     expect(invokeMock).toHaveBeenCalledWith("opencode_sidecar_attach_workspace", {
       directory: "/tmp/workspace",
     });
   });
 
+  it("attachOpencodeSidecarWorkspace forwards sidecar port when provided", async () => {
+    await attachOpencodeSidecarWorkspace({ directory: "/tmp/workspace", port: 54321 });
+
+    expect(invokeMock).toHaveBeenCalledWith("opencode_sidecar_attach_workspace", {
+      directory: "/tmp/workspace",
+      port: 54321,
+    });
+  });
+
   it("startOpencodeSidecar invokes start command", async () => {
-    await startOpencodeSidecar("/tmp/workspace");
+    await startOpencodeSidecar({ directory: "/tmp/workspace" });
 
     expect(invokeMock).toHaveBeenCalledWith("opencode_sidecar_start", {
       directory: "/tmp/workspace",
+    });
+  });
+
+  it("startOpencodeSidecar forwards sidecar port when provided", async () => {
+    await startOpencodeSidecar({ directory: "/tmp/workspace", port: 54321 });
+
+    expect(invokeMock).toHaveBeenCalledWith("opencode_sidecar_start", {
+      directory: "/tmp/workspace",
+      port: 54321,
     });
   });
 
@@ -55,10 +73,19 @@ describe("opencodeSidecar", () => {
   });
 
   it("restartOpencodeSidecar invokes restart command", async () => {
-    await restartOpencodeSidecar("/tmp/workspace");
+    await restartOpencodeSidecar({ directory: "/tmp/workspace" });
 
     expect(invokeMock).toHaveBeenCalledWith("opencode_sidecar_restart", {
       directory: "/tmp/workspace",
+    });
+  });
+
+  it("restartOpencodeSidecar forwards sidecar port when provided", async () => {
+    await restartOpencodeSidecar({ directory: "/tmp/workspace", port: 54321 });
+
+    expect(invokeMock).toHaveBeenCalledWith("opencode_sidecar_restart", {
+      directory: "/tmp/workspace",
+      port: 54321,
     });
   });
 

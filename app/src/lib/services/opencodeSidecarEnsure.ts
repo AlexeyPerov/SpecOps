@@ -43,6 +43,14 @@ export type EnsureOpencodeSidecarIntent =
 export interface EnsureOpencodeSidecarInput {
   intent: EnsureOpencodeSidecarIntent;
   directory: string;
+  /**
+   * M14-T4 — optional sidecar port override (1024–65535). When provided,
+   * the sidecar (re)starts on this port before attaching to `directory`.
+   * When omitted, the existing configured port is kept (default `4096` on
+   * first attach). Callers should pass `settings.opencode.sidecarPort`
+   * so a settings-driven port change re-attaches on the new port.
+   */
+  port?: number;
 }
 
 export interface EnsureOpencodeSidecarResult {
@@ -173,7 +181,7 @@ export async function ensureOpencodeSidecar(
     }) => void;
   } = {},
 ): Promise<EnsureOpencodeSidecarResult | null> {
-  const { intent, directory } = input;
+  const { intent, directory, port } = input;
   const nowIso = () => new Date().toISOString();
 
   // "status-only" and "background-sync" never spawn. When the breaker is
@@ -237,7 +245,10 @@ export async function ensureOpencodeSidecar(
           checkedAt: nowIso(),
           lastErrorMessage: null,
         });
-        const status = await attachOpencodeSidecarWorkspace(directory);
+        const status = await attachOpencodeSidecarWorkspace({
+          directory,
+          ...(port !== undefined ? { port } : {}),
+        });
         // Wait for health to settle (non-blocking from the IPC perspective;
         // the Rust attach already returned). When health is "healthy" we
         // publish success and clear the breaker; when it ends in a hard

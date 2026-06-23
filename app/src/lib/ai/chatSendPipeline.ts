@@ -649,8 +649,8 @@ async function ensureWorkspaceAgentSessionId(input: {
 }): Promise<{ backend: ReturnType<typeof createWorkspaceAgentBackend>; sessionId: string }> {
   const backend = createWorkspaceAgentBackend("opencode", {
     resolveRuntimeConfig: async () => {
-      const { mode, baseUrl } = appState.getSnapshot().settings.opencode;
-      return { mode, baseUrl };
+      const { mode, baseUrl, sidecarPort } = appState.getSnapshot().settings.opencode;
+      return { mode, baseUrl, sidecarPort };
     },
   });
   const existingLink = chatStore.getAgentSessionLink(input.activeAgentId, input.root);
@@ -740,7 +740,11 @@ async function executeWorkspaceAgentBackendTurn(params: {
     // below then proceed against the (now-running) sidecar.
     const settings = appState.getSnapshot().settings;
     if (settings.opencode.enabled && settings.opencode.mode === "sidecar") {
-      const ensured = await ensureOpencodeSidecar({ intent: "send", directory: root });
+      const ensured = await ensureOpencodeSidecar({
+        intent: "send",
+        directory: root,
+        port: settings.opencode.sidecarPort,
+      });
       if (!ensured || ensured.status.health === "error") {
         throw new WorkspaceAgentBackendError({
           code: "serverUnavailable",

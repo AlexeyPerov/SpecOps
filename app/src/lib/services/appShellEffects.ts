@@ -259,6 +259,9 @@ export interface SyncOpencodeSidecarEffectInput {
   opencodeEnabled: boolean;
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
+  /** M14-T4 — current sidecar port from settings; forwarded to the sidecar
+   * on the next attach. Not used by the URL-mode probe path. */
+  opencodeSidecarPort: number;
   serverPassword?: string;
   setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
 }
@@ -450,6 +453,9 @@ export function requestOpencodeHealthRefresh(input: {
   opencodeEnabled: boolean;
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
+  /** M14-T4 — current sidecar port; forwarded to `ensureOpencodeSidecar`
+   * so a settings-driven port change re-attaches on the new port. */
+  opencodeSidecarPort: number;
   serverPassword?: string;
   activeWorkspaceRoot?: string | null;
   setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
@@ -458,6 +464,7 @@ export function requestOpencodeHealthRefresh(input: {
     opencodeEnabled,
     opencodeMode,
     opencodeBaseUrl,
+    opencodeSidecarPort,
     activeWorkspaceRoot,
     setOpencodeHealth,
   } = input;
@@ -485,7 +492,11 @@ export function requestOpencodeHealthRefresh(input: {
       return;
     }
     void ensureOpencodeSidecar(
-      { intent: "settings", directory: activeWorkspaceRoot },
+      {
+        intent: "settings",
+        directory: activeWorkspaceRoot,
+        port: opencodeSidecarPort,
+      },
       {
         setOpencodeHealth: (patch) =>
           setOpencodeHealth({

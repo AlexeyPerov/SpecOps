@@ -11,6 +11,7 @@ import { createRawOpencodeClientStub } from "../../test/rawOpencodeClientStub";
 function createOpencodeBackendForTests(params?: {
   mode?: "sidecar" | "url";
   baseUrl?: string;
+  sidecarPort?: number;
   createSessionResult?: unknown;
   getSessionResult?: unknown;
   listSessionsResult?: unknown;
@@ -33,6 +34,7 @@ function createOpencodeBackendForTests(params?: {
     resolveRuntimeConfig: async () => ({
       mode: params?.mode ?? "url",
       baseUrl: params?.baseUrl ?? "http://opencode.local",
+      sidecarPort: params?.sidecarPort ?? 4096,
     }),
     resolveServerPassword: async () => "",
     createOpencodeClient: (input) => {
@@ -249,6 +251,7 @@ describe("workspaceAgentBackend", () => {
         resolveRuntimeConfig: async () => ({
           mode: "url",
           baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
         }),
       });
 
@@ -274,6 +277,7 @@ describe("workspaceAgentBackend", () => {
       resolveRuntimeConfig: async () => ({
         mode: "url",
         baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
       }),
       resolveServerPassword: async () => "s3cr3t",
     });
@@ -294,6 +298,7 @@ describe("workspaceAgentBackend", () => {
       resolveRuntimeConfig: async () => ({
         mode: "url",
         baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
       }),
       resolveServerPassword: async () => "",
     });
@@ -1049,7 +1054,7 @@ describe("workspaceAgentBackend", () => {
     }) {
       const calls: Array<{ query: string; limit?: number }> = [];
       const backend = createWorkspaceAgentBackend("opencode", {
-        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local", sidecarPort: 4096 }),
         resolveServerPassword: async () => "",
         createOpencodeClient: () =>
           createRawOpencodeClientStub({
@@ -1179,7 +1184,7 @@ describe("workspaceAgentBackend", () => {
 
     it("listCommands returns [] on transport / auth / notFound errors", async () => {
       const backend = createWorkspaceAgentBackend("opencode", {
-        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local", sidecarPort: 4096 }),
         resolveServerPassword: async () => "",
         createOpencodeClient: () =>
           createRawOpencodeClientStub({
@@ -1295,7 +1300,7 @@ describe("workspaceAgentBackend", () => {
 
     it("findFiles returns [] on transport errors (degrades to agent-only)", async () => {
       const backend = createWorkspaceAgentBackend("opencode", {
-        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+        resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local", sidecarPort: 4096 }),
         resolveServerPassword: async () => "",
         createOpencodeClient: () =>
           createRawOpencodeClientStub({
@@ -1405,6 +1410,7 @@ describe("workspaceAgentBackend", () => {
         resolveRuntimeConfig: async () => ({
           mode: "url",
           baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
         }),
         resolveServerPassword: async () => serverPassword ?? "",
       });
@@ -1441,6 +1447,7 @@ describe("workspaceAgentBackend", () => {
         resolveRuntimeConfig: async () => ({
           mode: "url",
           baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
         }),
       });
       await expect(
@@ -1461,6 +1468,7 @@ describe("workspaceAgentBackend", () => {
         resolveRuntimeConfig: async () => ({
           mode: "url",
           baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
         }),
       });
       await expect(
@@ -1484,6 +1492,7 @@ describe("workspaceAgentBackend", () => {
         resolveRuntimeConfig: async () => ({
           mode: "url",
           baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
         }),
       });
       const result = await backend.send({
@@ -1516,6 +1525,7 @@ describe("workspaceAgentBackend", () => {
         resolveRuntimeConfig: async () => ({
           mode: "url",
           baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
         }),
       });
       await backend.send({
@@ -1553,6 +1563,7 @@ describe("workspaceAgentBackend", () => {
         resolveRuntimeConfig: async () => ({
           mode: "url",
           baseUrl: "http://opencode.local",
+      sidecarPort: 4096,
         }),
       });
       const seen: WorkspaceAgentStreamEvent[] = [];
@@ -1592,7 +1603,7 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
       (calls[key] ??= []).push(args);
     };
     const backend = createWorkspaceAgentBackend("opencode", {
-      resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+      resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local", sidecarPort: 4096 }),
       resolveServerPassword: async () => "",
       createOpencodeClient: () =>
         createRawOpencodeClientStub({
@@ -1852,7 +1863,7 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
 
   it("getSessionDetails maps the rich session shape", async () => {
     const backend = createWorkspaceAgentBackend("opencode", {
-      resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+      resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local", sidecarPort: 4096 }),
       resolveServerPassword: async () => "",
       createOpencodeClient: () =>
         createRawOpencodeClientStub({
@@ -1883,7 +1894,7 @@ describe("workspaceAgentBackend lifecycle (M2)", () => {
 
   it("getSessionDetails returns null on notFound", async () => {
     const backend = createWorkspaceAgentBackend("opencode", {
-      resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+      resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local", sidecarPort: 4096 }),
       resolveServerPassword: async () => "",
       createOpencodeClient: () =>
         createRawOpencodeClientStub({

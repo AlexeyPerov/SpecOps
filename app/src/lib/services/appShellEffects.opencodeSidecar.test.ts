@@ -81,6 +81,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth: vi.fn(),
     });
 
@@ -108,6 +109,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth,
     });
 
@@ -133,6 +135,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth: vi.fn(),
     });
 
@@ -150,6 +153,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth: vi.fn(),
     });
 
@@ -166,6 +170,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth: vi.fn(),
     });
 
@@ -183,6 +188,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth: vi.fn(),
     });
 
@@ -201,6 +207,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: false,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth,
     });
 
@@ -225,6 +232,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "://bad-url",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth,
     });
 
@@ -254,6 +262,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth,
     });
 
@@ -278,6 +287,7 @@ describe("syncOpencodeSidecarEffect", () => {
       opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth,
     });
 
@@ -322,6 +332,7 @@ describe("requestOpencodeHealthRefresh", () => {
       opencodeEnabled: true,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       activeWorkspaceRoot: "/tmp/workspace",
       setOpencodeHealth,
     });
@@ -357,6 +368,7 @@ describe("requestOpencodeHealthRefresh", () => {
       opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth,
     });
     await flushAsyncWork();
@@ -377,6 +389,7 @@ describe("requestOpencodeHealthRefresh", () => {
       opencodeEnabled: false,
       opencodeMode: "sidecar",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       setOpencodeHealth,
     });
 
@@ -500,6 +513,7 @@ describe("requestOpencodeHealthRefresh URL auth", () => {
       opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       serverPassword: "",
       setOpencodeHealth,
     });
@@ -517,6 +531,7 @@ describe("requestOpencodeHealthRefresh URL auth", () => {
       opencodeEnabled: true,
       opencodeMode: "url",
       opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
       serverPassword: "test-pass",
       setOpencodeHealth,
     });

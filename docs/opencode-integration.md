@@ -88,6 +88,11 @@ Internal code may still use **agent** for conversations until [M16](../specs/ops
 2. Ensure **Use OpenCode for workspace sessions** is enabled.
 3. Choose transport mode:
    - **Sidecar (default):** local OpenCode sidecar managed by SpecOps.
+     The **Sidecar port** field sets the local port the sidecar binds to
+     (default `4096`; validated to 1024–65535). The effective sidecar URL
+     is shown read-only below the input — it tracks the port so the URL
+     probe and SDK wiring stay consistent. Change the port only when
+     `4096` is already in use locally.
    - **URL:** enter your OpenCode server URL (`http://` or `https://`).
 4. If your server requires auth, set **Server password** (stored in `provider-secrets.json`, not in `settings.json`).
 5. Click **Check connection** to verify health.
@@ -98,6 +103,16 @@ Internal code may still use **agent** for conversations until [M16](../specs/ops
 
 - Bundled binaries are expected at `app/src-tauri/binaries/opencode-<target-triple>`.
 - In development, if a bundled binary is missing, SpecOps falls back to an `opencode` executable on `PATH`.
+- The maintainer script
+  [`scripts/update-opencode-sidecar.sh`](../scripts/update-opencode-sidecar.sh)
+  refreshes the bundled binaries from upstream GitHub releases. See
+  [`app/src-tauri/binaries/README.md`](../app/src-tauri/binaries/README.md)
+  for asset→triple mapping and usage (npm alias: `npm --prefix app run update-opencode-sidecar`).
+- The bundled CLI version can drift from the `@opencode-ai/sdk` version in
+  `app/package.json` (SDK uses a caret range and resolves at install time;
+  bundled binary is a pinned release). The script does not modify the
+  SDK lockfile — bump `@opencode-ai/sdk` manually if you need them to
+  match exactly.
 
 ## Sidecar lifecycle — lazy, session-scoped
 

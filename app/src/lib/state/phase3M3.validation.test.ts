@@ -497,6 +497,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
       };
       const backend = realCreate("opencode", {
         resolveRuntimeConfig: async () => ({
+          sidecarPort: 4096,
           mode: "url",
           baseUrl: "http://opencode.local",
         }),
@@ -535,6 +536,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
       };
       const backend = realCreate("opencode", {
         resolveRuntimeConfig: async () => ({
+          sidecarPort: 4096,
           mode: "url",
           baseUrl: "http://opencode.local",
         }),
@@ -581,6 +583,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
       };
       const backend = realCreate("opencode", {
         resolveRuntimeConfig: async () => ({
+          sidecarPort: 4096,
           mode: "url",
           baseUrl: "http://opencode.local",
         }),
@@ -624,6 +627,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
       };
       const backend = realCreate("opencode", {
         resolveRuntimeConfig: async () => ({
+          sidecarPort: 4096,
           mode: "url",
           baseUrl: "http://opencode.local",
         }),
@@ -664,6 +668,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
       };
       const backend = realCreate("opencode", {
         resolveRuntimeConfig: async () => ({
+          sidecarPort: 4096,
           mode: "url",
           baseUrl: "http://opencode.local",
         }),

@@ -13,7 +13,7 @@ import { createRawOpencodeClientStub } from "../../test/rawOpencodeClientStub";
 describe("workspaceAgentBackend — M4 config management", () => {
   function createBackend(clientOverrides: Parameters<typeof createRawOpencodeClientStub>[0] = {}) {
     return createWorkspaceAgentBackend("opencode", {
-      resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local" }),
+      resolveRuntimeConfig: async () => ({ mode: "url", baseUrl: "http://opencode.local", sidecarPort: 4096 }),
       resolveServerPassword: async () => "",
       createOpencodeClient: () => createRawOpencodeClientStub(clientOverrides),
     });

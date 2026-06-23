@@ -277,6 +277,7 @@
   }
   const opencodeBaseUrl = $derived(snapshot.settings.opencode.baseUrl);
   const opencodeEnabled = $derived(snapshot.settings.opencode.enabled);
+  const opencodeSidecarPort = $derived(snapshot.settings.opencode.sidecarPort);
   const showAgentsSidebar = $derived(
     (isChatHttpActive || (Boolean(activeWorkspaceRoot) && opencodeEnabled)) &&
       !workspaceLayout.agentsSidebarCollapsed,
@@ -645,6 +646,7 @@
       opencodeEnabled,
       opencodeMode,
       opencodeBaseUrl,
+      opencodeSidecarPort,
       setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
     });
     syncOpencodeToggleEffect({
@@ -672,6 +674,7 @@
     opencodeEnabled;
     opencodeMode;
     opencodeBaseUrl;
+    opencodeSidecarPort;
     activeWorkspaceRoot;
     if (!runtimeReady) {
       return;
@@ -680,6 +683,7 @@
       opencodeEnabled,
       opencodeMode,
       opencodeBaseUrl,
+      opencodeSidecarPort,
       activeWorkspaceRoot,
       setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
     });

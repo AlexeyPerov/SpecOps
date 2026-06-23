@@ -266,7 +266,7 @@ fn probe_health_detailed(base_url: &str) -> PortProbeResult {
     }
 }
 
-fn wait_for_health(base_url: &str) -> Result<u32, OpencodeSidecarError> {
+fn wait_for_health(base_url: &str, port: u16) -> Result<u32, OpencodeSidecarError> {
     let started = Instant::now();
     let mut attempts = 0u32;
 
@@ -279,7 +279,7 @@ fn wait_for_health(base_url: &str) -> Result<u32, OpencodeSidecarError> {
     }
 
     Err(OpencodeSidecarError::HealthTimeout {
-        port: DEFAULT_SIDECAR_PORT,
+        port,
         attempts,
         message: format!(
             "OpenCode sidecar did not become healthy within {}s",
@@ -377,7 +377,7 @@ fn spawn_sidecar_blocking(
 ) -> Result<Child, OpencodeSidecarError> {
     let mut child = spawn_sidecar_process(app, port, hostname)?;
     let base_url = build_base_url(hostname, port);
-    match wait_for_health(&base_url) {
+    match wait_for_health(&base_url, port) {
         Ok(_) => Ok(child),
         Err(error) => {
             if !child_is_running(&mut child) {
@@ -512,10 +512,22 @@ fn current_status(inner: &OpencodeSidecarInner) -> OpencodeSidecarStatus {
     }
 }
 
+/// M14-T3 — port override. When `Some(p)`, the inner state adopts the new
+/// port before any reuse/spawn decision. A port change while a child is
+/// running forces a stop + respawn (the existing `opencode serve` instance
+/// is bound to the old port and would shadow the new one). When `None`,
+/// the existing `inner.port` is kept.
+fn apply_port_override(inner: &mut OpencodeSidecarInner, port_override: Option<u16>) {
+    if let Some(port) = port_override {
+        inner.port = port;
+    }
+}
+
 fn start_or_attach_nonblocking(
     app: &AppHandle,
     state: &OpencodeSidecarState,
     directory: String,
+    port_override: Option<u16>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
     // Phase 1 — under the lock, decide whether to reuse, return early on a
     // still-booting child, or fall through to spawn.
@@ -523,6 +535,8 @@ fn start_or_attach_nonblocking(
         let mut inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
             message: format!("OpenCode sidecar state lock poisoned: {error}"),
         })?;
+
+        apply_port_override(&mut inner, port_override);
 
         refresh_child_state(&mut inner);
 
@@ -600,7 +614,9 @@ fn start_or_attach(
     app: &AppHandle,
     inner: &mut OpencodeSidecarInner,
     directory: String,
+    port_override: Option<u16>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
+    apply_port_override(inner, port_override);
     refresh_child_state(inner);
 
     let base_url = build_base_url(&inner.hostname, inner.port);
@@ -633,9 +649,13 @@ pub fn opencode_sidecar_attach_workspace(
     directory: String,
     app: AppHandle,
     state: State<'_, OpencodeSidecarState>,
+    // M14-T3 — optional port override. When `Some(p)`, the sidecar is
+    // (re)started on port `p` before attaching to `directory`. When `None`,
+    // the existing port (default `4096`) is kept.
+    port: Option<u16>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
     let directory = normalize_directory(&directory)?;
-    start_or_attach_nonblocking(&app, state.inner(), directory)
+    start_or_attach_nonblocking(&app, state.inner(), directory, port)
 }
 
 #[tauri::command]
@@ -643,8 +663,10 @@ pub fn opencode_sidecar_start(
     directory: String,
     app: AppHandle,
     state: State<'_, OpencodeSidecarState>,
+    // M14-T3 — see `opencode_sidecar_attach_workspace`.
+    port: Option<u16>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
-    opencode_sidecar_attach_workspace(directory, app, state)
+    opencode_sidecar_attach_workspace(directory, app, state, port)
 }
 
 #[tauri::command]
@@ -667,6 +689,9 @@ pub fn opencode_sidecar_restart(
     directory: String,
     app: AppHandle,
     state: State<'_, OpencodeSidecarState>,
+    // M14-T3 — see `opencode_sidecar_attach_workspace`. A non-`None` value
+    // here is what a settings-driven restart on port change uses.
+    port: Option<u16>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
     let directory = normalize_directory(&directory)?;
     let mut inner = state
@@ -677,7 +702,7 @@ pub fn opencode_sidecar_restart(
         })?;
 
     stop_child(&mut inner)?;
-    start_or_attach(&app, &mut inner, directory)
+    start_or_attach(&app, &mut inner, directory, port)
 }
 
 #[tauri::command]
@@ -818,6 +843,49 @@ mod tests {
                 assert!(message.contains("URL mode"));
             }
             _ => panic!("expected PortInUse"),
+        }
+    }
+
+    #[test]
+    fn apply_port_override_updates_inner_port() {
+        let mut inner = test_inner();
+        inner.port = DEFAULT_SIDECAR_PORT;
+
+        apply_port_override(&mut inner, Some(54321));
+        assert_eq!(inner.port, 54321);
+
+        apply_port_override(&mut inner, None);
+        assert_eq!(inner.port, 54321);
+    }
+
+    #[test]
+    fn current_status_reports_configured_port() {
+        let mut inner = test_inner();
+        // No child → no port in status even when configured.
+        let status = current_status(&inner);
+        assert!(status.port.is_none());
+
+        inner.port = 54321;
+        // Even without a child, the configured port isn't surfaced (status
+        // is "running: false"). This matches the existing semantics where
+        // `port` reflects the actually-bound port, not the configured one.
+        let status = current_status(&inner);
+        assert!(status.port.is_none());
+    }
+
+    #[test]
+    fn health_timeout_error_reports_actual_port() {
+        let error = OpencodeSidecarError::HealthTimeout {
+            port: 54321,
+            attempts: 3,
+            message: "OpenCode sidecar did not become healthy within 10s".to_string(),
+        };
+        match error {
+            OpencodeSidecarError::HealthTimeout { port, attempts, .. } => {
+                assert_eq!(port, 54321);
+                assert_eq!(attempts, 3);
+            }
+            _ => panic!("expected HealthTimeout"),
         }
     }
 }

@@ -37,7 +37,7 @@
         }}
         aria-haspopup="dialog"
         aria-expanded={statusButtonActive}
-        title="Workspace status"
+        title="OpenCode workspace status"
       >●</button>
       <StatusPopover
         workspaceRootPath={statusWorkspaceRoot}

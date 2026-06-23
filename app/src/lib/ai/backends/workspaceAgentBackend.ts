@@ -5,7 +5,7 @@ import { loadOpencodeServerPassword } from "../../services/providerSecretsStore"
 import {
   createOpencodeClient as createOpencodeSdkClient,
   type OpencodeClient as OpencodeSdkClient,
-} from "@opencode-ai/sdk/v2";
+} from "@opencode-ai/sdk/v2/client";
 import {
   readBoolean,
   readNumber,

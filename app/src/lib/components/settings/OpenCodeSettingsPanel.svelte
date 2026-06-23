@@ -160,10 +160,11 @@
     Workspace agents use the OpenCode backend. Configure transport mode and server health here.
   </p>
   <div class="settings-subsection">
-    <label class="settings-toggle">
+    <label class="settings-toggle" title="Enable OpenCode for workspace agents">
       <input
         type="checkbox"
         checked={snapshot.settings.opencode.enabled}
+        title="Enable OpenCode for workspace agents"
         onchange={(event) =>
           updateOpencodeEnabled((event.currentTarget as HTMLInputElement).checked)}
       />
@@ -183,6 +184,7 @@
           type="radio"
           name="opencode-transport-mode"
           checked={snapshot.settings.opencode.mode === "sidecar"}
+          title="Use local OpenCode sidecar transport"
           onchange={() => updateOpencodeMode("sidecar")}
         />
         Sidecar (default)
@@ -192,6 +194,7 @@
           type="radio"
           name="opencode-transport-mode"
           checked={snapshot.settings.opencode.mode === "url"}
+          title="Connect to OpenCode by server URL"
           onchange={() => updateOpencodeMode("url")}
         />
         URL
@@ -239,7 +242,12 @@
       {#if opencodeHealth.lastErrorMessage}
         <p class="settings-section-note opencode-health-error">{opencodeHealth.lastErrorMessage}</p>
       {/if}
-      <button type="button" class="settings-action" onclick={checkOpencodeConnection}>
+      <button
+        type="button"
+        class="settings-action"
+        onclick={checkOpencodeConnection}
+        title="Check OpenCode connection status"
+      >
         Check connection
       </button>
     </div>
@@ -248,7 +256,12 @@
       <p class="settings-section-note">
         Workspace model selection is populated from the OpenCode server catalog.
       </p>
-      <button type="button" class="settings-action" onclick={refreshOpencodeModels}>
+      <button
+        type="button"
+        class="settings-action"
+        onclick={refreshOpencodeModels}
+        title="Reload models from OpenCode"
+      >
         Refresh model list
       </button>
     </div>

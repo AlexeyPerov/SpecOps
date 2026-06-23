@@ -431,38 +431,69 @@
             aria-haspopup="menu"
             aria-expanded={sessionActionsOpen}
             disabled={isBlocked || isGenerating}
+            title="Open OpenCode session actions"
           >
             Session
           </button>
           {#if sessionActionsOpen}
             <div class="chat-session-actions-menu" role="menu">
               {#if onShareAgent && !isShared}
-                <button type="button" role="menuitem" onclick={() => runSessionAction(onShareAgent)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onclick={() => runSessionAction(onShareAgent)}
+                  title="Share this OpenCode session"
+                >
                   Share…
                 </button>
               {/if}
               {#if onUnshareAgent && isShared}
-                <button type="button" role="menuitem" onclick={() => runSessionAction(onUnshareAgent)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onclick={() => runSessionAction(onUnshareAgent)}
+                  title="Stop sharing this OpenCode session"
+                >
                   Unshare
                 </button>
               {/if}
               {#if onSummarizeAgent}
-                <button type="button" role="menuitem" onclick={() => runSessionAction(onSummarizeAgent)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onclick={() => runSessionAction(onSummarizeAgent)}
+                  title="Generate an OpenCode session summary"
+                >
                   Summarize
                 </button>
               {/if}
               {#if onExportAgent}
-                <button type="button" role="menuitem" onclick={() => runSessionAction(onExportAgent)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onclick={() => runSessionAction(onExportAgent)}
+                  title="Export this OpenCode transcript as Markdown"
+                >
                   Export transcript…
                 </button>
               {/if}
               {#if onOpenTimeline}
-                <button type="button" role="menuitem" onclick={() => runSessionAction(onOpenTimeline)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onclick={() => runSessionAction(onOpenTimeline)}
+                  title="Open this OpenCode session timeline"
+                >
                   Timeline…
                 </button>
               {/if}
               {#if onUnrevertSession}
-                <button type="button" role="menuitem" onclick={() => runSessionAction(onUnrevertSession)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onclick={() => runSessionAction(onUnrevertSession)}
+                  title="Redo the last reverted OpenCode session state"
+                >
                   Redo reverted
                 </button>
               {/if}

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { chatStore, resetAgentIdCounterForTests } from "./chatStore";
+import { chatStore, resetSessionIdCounterForTests } from "./chatStore";
 import {
   WorkspaceAccessReason,
   type CapabilityChecker,
@@ -16,7 +16,7 @@ const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 describe("Task 5: workspace agent metadata isolation and preflight separation", () => {
   beforeEach(() => {
     chatStore.reset();
-    resetAgentIdCounterForTests();
+    resetSessionIdCounterForTests();
     chatStore.setCapabilityChecker(null);
     chatStore.setWorkspaceReadinessChecker(null);
     ensureWorkspaceReadAccessMock.mockReset();
@@ -45,7 +45,7 @@ describe("Task 5: workspace agent metadata isolation and preflight separation", 
 
     it("does not default to HTTP connectionId for workspace threads created via updateThreadMetadata", () => {
       chatStore.setActiveWorkspaceRoot("/work/a");
-      chatStore.createDraftAgent();
+      chatStore.createDraftSession();
       chatStore.updateThreadMetadata({ mode: "ask" });
 
       const metadata = chatStore.getMetadata();
@@ -56,7 +56,7 @@ describe("Task 5: workspace agent metadata isolation and preflight separation", 
 
     it("stores OpenCode-only fields on workspace threads", () => {
       chatStore.setActiveWorkspaceRoot("/work/a");
-      chatStore.createDraftAgent();
+      chatStore.createDraftSession();
       chatStore.updateThreadMetadata({
         opencodeAgentId: "build",
         opencodeProviderId: "anthropic",
@@ -169,7 +169,7 @@ describe("Task 5: workspace agent metadata isolation and preflight separation", 
   describe("workspace send passes OpenCode provider", () => {
     it("uses thread opencodeProviderId for session link instead of hardcoded value", () => {
       chatStore.setActiveWorkspaceRoot("/work/a");
-      chatStore.createDraftAgent();
+      chatStore.createDraftSession();
       chatStore.updateThreadMetadata({ opencodeProviderId: "anthropic" });
 
       expect(chatStore.getMetadata()?.opencodeProviderId).toBe("anthropic");
@@ -179,7 +179,7 @@ describe("Task 5: workspace agent metadata isolation and preflight separation", 
   describe("composer selection actions for workspace", () => {
     it("selectModel updates selectedModelId directly for workspace context", () => {
       chatStore.setActiveWorkspaceRoot("/work/a");
-      chatStore.createDraftAgent();
+      chatStore.createDraftSession();
       chatStore.updateThreadMetadata({ selectedModelId: "model-a" });
 
       // Direct metadata update (simulating what composerSelectionActions does)

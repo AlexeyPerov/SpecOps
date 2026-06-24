@@ -44,7 +44,7 @@ function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
       openTabs: [createFileTab(tabId, documentId)],
       lastActiveWindowId,
       windowBounds: null,
-      lastActiveAgentId: null,
+      lastActiveSessionId: null,
     },
   };
 }
@@ -282,24 +282,24 @@ export function createWorkspaceContextsSlice(deps: {
       });
       return closed;
     },
-    setLastActiveAgentId(agentId: string | null) {
+    setLastActiveSessionId(sessionId: string | null) {
       update((state) =>
         patchActiveContext(state, (ctx) => {
-          if (ctx.session.lastActiveAgentId === agentId) {
+          if (ctx.session.lastActiveSessionId === sessionId) {
             return ctx;
           }
           return {
             ...ctx,
             session: {
               ...ctx.session,
-              lastActiveAgentId: agentId,
+              lastActiveSessionId: sessionId,
             },
           };
         }),
       );
     },
-    getLastActiveAgentId(): string | null {
-      return getActiveSession(getSnapshot()).lastActiveAgentId ?? null;
+    getLastActiveSessionId(): string | null {
+      return getActiveSession(getSnapshot()).lastActiveSessionId ?? null;
     },
     setWindowBounds(windowBounds: WindowBounds | null) {
       update((state) =>
@@ -345,8 +345,8 @@ export function createWorkspaceContextsSlice(deps: {
     setProjectPanelCollapsed(projectPanelCollapsed: boolean) {
       slice.updateActiveWorkspaceLayout({ projectPanelCollapsed });
     },
-    setAgentsSidebarCollapsed(agentsSidebarCollapsed: boolean) {
-      slice.updateActiveWorkspaceLayout({ agentsSidebarCollapsed });
+    setSessionsSidebarCollapsed(sessionsSidebarCollapsed: boolean) {
+      slice.updateActiveWorkspaceLayout({ sessionsSidebarCollapsed });
     },
     reorderWorkspaces(fromIndex: number, toIndex: number) {
       update((state) => {

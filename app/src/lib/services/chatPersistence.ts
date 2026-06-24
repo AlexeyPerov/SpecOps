@@ -1,38 +1,38 @@
 import { readTextFile, remove, writeTextFile } from "@tauri-apps/plugin-fs";
 import type {
-  ChatAgentThreadFileSnapshot,
+  ChatSessionThreadFileSnapshot,
   ChatThreadSnapshot,
-  WorkspaceAgentsIndexSnapshot,
+  WorkspaceSessionsIndexSnapshot,
 } from "../domain/contracts";
 import type { ChatScopeKey } from "../state/chatStore/types";
 import { normalizeThreadSnapshotForScope } from "../ai/providers/threadScopeNormalization";
-import { deriveAgentTitleFromThread } from "./chatAgents";
+import { deriveSessionTitleFromThread } from "./chatSessions";
 import {
   CHAT_THREAD_VERSION,
   countConversationTurns,
-  decodeChatAgentThreadFileSnapshot,
-  decodeWorkspaceAgentsIndexSnapshot,
-  encodeChatAgentThreadFileSnapshot,
-  encodeWorkspaceAgentsIndexSnapshot,
+  decodeChatSessionThreadFileSnapshot,
+  decodeWorkspaceSessionsIndexSnapshot,
+  encodeChatSessionThreadFileSnapshot,
+  encodeWorkspaceSessionsIndexSnapshot,
   needsChatCompaction,
-  removeAgentIndexEntry,
-  upsertAgentIndexEntry,
+  removeSessionIndexEntry,
+  upsertSessionIndexEntry,
   CHAT_RETENTION_MAX_TURNS,
-  emptyAgentsIndexSnapshot,
+  emptySessionsIndexSnapshot,
   workspaceChatPathHashKey,
 } from "./chatPersistenceCodec";
 import {
   chatScopeStorageSegment,
-  getAgentThreadFilePath,
-  getWorkspaceAgentsDir,
-  getWorkspaceAgentsIndexFilePath,
+  getSessionThreadFilePath,
+  getWorkspaceSessionsDir,
+  getWorkspaceSessionsIndexFilePath,
 } from "./chatPersistencePaths";
 
 /**
- * Rolling retention cap per agent thread.
+ * Rolling retention cap per session thread.
  *
  * Policy (specs/ai-requirements.md — Persistence and retention):
- * - One thread per agent with a rolling turn cap.
+ * - One thread per session with a rolling turn cap.
  * - On overflow, remove oldest turns first (FIFO); never drop newest messages.
  * - Removed turn text is summarized into `thread.metadata.summary` (M4-3).
  *
@@ -41,155 +41,155 @@ import {
  */
 const PERSIST_DEBOUNCE_MS = 700;
 
-type PendingAgentPersist = {
+type PendingSessionPersist = {
   scopeKey: ChatScopeKey;
-  agentId: string;
-  snapshot: ChatAgentThreadFileSnapshot;
+  sessionId: string;
+  snapshot: ChatSessionThreadFileSnapshot;
 };
 
 type PendingIndexPersist = {
   scopeKey: ChatScopeKey;
-  snapshot: WorkspaceAgentsIndexSnapshot;
+  snapshot: WorkspaceSessionsIndexSnapshot;
 };
 
-let agentPersistTimer: ReturnType<typeof setTimeout> | null = null;
+let sessionPersistTimer: ReturnType<typeof setTimeout> | null = null;
 let indexPersistTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingAgentPersist: PendingAgentPersist | null = null;
+let pendingSessionPersist: PendingSessionPersist | null = null;
 let pendingIndexPersist: PendingIndexPersist | null = null;
 
 /** Clears debounce timer state between unit tests. */
 export function resetChatPersistenceForTests(): void {
-  if (agentPersistTimer) {
-    clearTimeout(agentPersistTimer);
-    agentPersistTimer = null;
+  if (sessionPersistTimer) {
+    clearTimeout(sessionPersistTimer);
+    sessionPersistTimer = null;
   }
   if (indexPersistTimer) {
     clearTimeout(indexPersistTimer);
     indexPersistTimer = null;
   }
-  pendingAgentPersist = null;
+  pendingSessionPersist = null;
   pendingIndexPersist = null;
 }
 
-export async function readWorkspaceAgentsIndexSnapshot(
+export async function readWorkspaceSessionsIndexSnapshot(
   scopeKey: ChatScopeKey,
-): Promise<WorkspaceAgentsIndexSnapshot> {
+): Promise<WorkspaceSessionsIndexSnapshot> {
   try {
-    const indexPath = await getWorkspaceAgentsIndexFilePath(scopeKey);
+    const indexPath = await getWorkspaceSessionsIndexFilePath(scopeKey);
     const raw = await readTextFile(indexPath);
-    return decodeWorkspaceAgentsIndexSnapshot(raw);
+    return decodeWorkspaceSessionsIndexSnapshot(raw);
   } catch {
-    return emptyAgentsIndexSnapshot();
+    return emptySessionsIndexSnapshot();
   }
 }
 
-export async function writeWorkspaceAgentsIndexSnapshot(
+export async function writeWorkspaceSessionsIndexSnapshot(
   scopeKey: ChatScopeKey,
-  snapshot: WorkspaceAgentsIndexSnapshot,
+  snapshot: WorkspaceSessionsIndexSnapshot,
 ): Promise<void> {
-  const indexPath = await getWorkspaceAgentsIndexFilePath(scopeKey);
-  await writeTextFile(indexPath, encodeWorkspaceAgentsIndexSnapshot(snapshot));
+  const indexPath = await getWorkspaceSessionsIndexFilePath(scopeKey);
+  await writeTextFile(indexPath, encodeWorkspaceSessionsIndexSnapshot(snapshot));
 }
 
-export async function readAgentThreadFileSnapshot(
+export async function readSessionThreadFileSnapshot(
   scopeKey: ChatScopeKey,
-  agentId: string,
+  sessionId: string,
 ): Promise<ChatThreadSnapshot | null> {
   try {
-    const threadPath = await getAgentThreadFilePath(scopeKey, agentId);
+    const threadPath = await getSessionThreadFilePath(scopeKey, sessionId);
     const raw = await readTextFile(threadPath);
-    const decoded = decodeChatAgentThreadFileSnapshot(raw, scopeKey);
+    const decoded = decodeChatSessionThreadFileSnapshot(raw, scopeKey);
     return normalizeThreadSnapshotForScope(decoded?.thread ?? null, scopeKey);
   } catch {
     return null;
   }
 }
 
-export async function writeAgentThreadFileSnapshot(
+export async function writeSessionThreadFileSnapshot(
   scopeKey: ChatScopeKey,
-  agentId: string,
-  snapshot: ChatAgentThreadFileSnapshot,
+  sessionId: string,
+  snapshot: ChatSessionThreadFileSnapshot,
 ): Promise<void> {
-  const threadPath = await getAgentThreadFilePath(scopeKey, agentId);
-  await writeTextFile(threadPath, encodeChatAgentThreadFileSnapshot(snapshot));
+  const threadPath = await getSessionThreadFilePath(scopeKey, sessionId);
+  await writeTextFile(threadPath, encodeChatSessionThreadFileSnapshot(snapshot));
 }
 
-export async function syncAgentIndexEntryForThread(
+export async function syncSessionIndexEntryForThread(
   scopeKey: ChatScopeKey,
-  agentId: string,
+  sessionId: string,
   thread: ChatThreadSnapshot,
-): Promise<WorkspaceAgentsIndexSnapshot> {
-  const currentIndex = await readWorkspaceAgentsIndexSnapshot(scopeKey);
-  const nextIndex = upsertAgentIndexEntry(currentIndex, {
-    id: agentId,
-    title: deriveAgentTitleFromThread(thread),
+): Promise<WorkspaceSessionsIndexSnapshot> {
+  const currentIndex = await readWorkspaceSessionsIndexSnapshot(scopeKey);
+  const nextIndex = upsertSessionIndexEntry(currentIndex, {
+    id: sessionId,
+    title: deriveSessionTitleFromThread(thread),
     lastUsedAt: thread.metadata.updatedAt,
   });
-  await writeWorkspaceAgentsIndexSnapshot(scopeKey, nextIndex);
+  await writeWorkspaceSessionsIndexSnapshot(scopeKey, nextIndex);
   return nextIndex;
 }
 
-export async function persistAgentThreadSnapshot(
+export async function persistSessionThreadSnapshot(
   scopeKey: ChatScopeKey,
-  agentId: string,
+  sessionId: string,
   thread: ChatThreadSnapshot,
 ): Promise<void> {
-  await syncAgentIndexEntryForThread(scopeKey, agentId, thread);
-  await writeAgentThreadFileSnapshot(scopeKey, agentId, {
+  await syncSessionIndexEntryForThread(scopeKey, sessionId, thread);
+  await writeSessionThreadFileSnapshot(scopeKey, sessionId, {
     version: CHAT_THREAD_VERSION,
     thread,
   });
 }
 
-export async function deleteAgentThreadFileSnapshot(
+export async function deleteSessionThreadFileSnapshot(
   scopeKey: ChatScopeKey,
-  agentId: string,
+  sessionId: string,
 ): Promise<void> {
-  if (pendingAgentPersist?.scopeKey === scopeKey && pendingAgentPersist.agentId === agentId) {
-    pendingAgentPersist = null;
+  if (pendingSessionPersist?.scopeKey === scopeKey && pendingSessionPersist.sessionId === sessionId) {
+    pendingSessionPersist = null;
   }
 
   try {
-    const threadPath = await getAgentThreadFilePath(scopeKey, agentId);
+    const threadPath = await getSessionThreadFilePath(scopeKey, sessionId);
     await remove(threadPath);
   } catch {
-    // missing thread file is fine for drafts and already-deleted agents
+    // missing thread file is fine for drafts and already-deleted sessions
   }
 }
 
-export async function deleteAgentPersistence(
+export async function deleteSessionPersistence(
   scopeKey: ChatScopeKey,
-  agentId: string,
+  sessionId: string,
 ): Promise<void> {
-  await deleteAgentThreadFileSnapshot(scopeKey, agentId);
-  const currentIndex = await readWorkspaceAgentsIndexSnapshot(scopeKey);
-  const nextIndex = removeAgentIndexEntry(currentIndex, agentId);
-  await writeWorkspaceAgentsIndexSnapshot(scopeKey, nextIndex);
+  await deleteSessionThreadFileSnapshot(scopeKey, sessionId);
+  const currentIndex = await readWorkspaceSessionsIndexSnapshot(scopeKey);
+  const nextIndex = removeSessionIndexEntry(currentIndex, sessionId);
+  await writeWorkspaceSessionsIndexSnapshot(scopeKey, nextIndex);
 }
 
-export function scheduleAgentThreadFilePersistence(
+export function scheduleSessionThreadFilePersistence(
   scopeKey: ChatScopeKey,
-  agentId: string,
-  snapshot: ChatAgentThreadFileSnapshot,
+  sessionId: string,
+  snapshot: ChatSessionThreadFileSnapshot,
 ): void {
-  pendingAgentPersist = { scopeKey, agentId, snapshot };
-  if (agentPersistTimer) {
-    clearTimeout(agentPersistTimer);
+  pendingSessionPersist = { scopeKey, sessionId, snapshot };
+  if (sessionPersistTimer) {
+    clearTimeout(sessionPersistTimer);
   }
-  agentPersistTimer = setTimeout(() => {
-    const next = pendingAgentPersist;
-    pendingAgentPersist = null;
-    agentPersistTimer = null;
+  sessionPersistTimer = setTimeout(() => {
+    const next = pendingSessionPersist;
+    pendingSessionPersist = null;
+    sessionPersistTimer = null;
     if (!next) {
       return;
     }
-    void persistAgentThreadSnapshot(next.scopeKey, next.agentId, next.snapshot.thread);
+    void persistSessionThreadSnapshot(next.scopeKey, next.sessionId, next.snapshot.thread);
   }, PERSIST_DEBOUNCE_MS);
 }
 
-export function scheduleWorkspaceAgentsIndexPersistence(
+export function scheduleWorkspaceSessionsIndexPersistence(
   scopeKey: ChatScopeKey,
-  snapshot: WorkspaceAgentsIndexSnapshot,
+  snapshot: WorkspaceSessionsIndexSnapshot,
 ): void {
   pendingIndexPersist = { scopeKey, snapshot };
   if (indexPersistTimer) {
@@ -202,7 +202,7 @@ export function scheduleWorkspaceAgentsIndexPersistence(
     if (!next) {
       return;
     }
-    void writeWorkspaceAgentsIndexSnapshot(next.scopeKey, next.snapshot);
+    void writeWorkspaceSessionsIndexSnapshot(next.scopeKey, next.snapshot);
   }, PERSIST_DEBOUNCE_MS);
 }
 
@@ -210,15 +210,15 @@ export {
   chatScopeStorageSegment,
   CHAT_RETENTION_MAX_TURNS,
   countConversationTurns,
-  decodeChatAgentThreadFileSnapshot,
-  decodeWorkspaceAgentsIndexSnapshot,
-  encodeChatAgentThreadFileSnapshot,
-  encodeWorkspaceAgentsIndexSnapshot,
-  getAgentThreadFilePath,
-  getWorkspaceAgentsDir,
-  getWorkspaceAgentsIndexFilePath,
+  decodeChatSessionThreadFileSnapshot,
+  decodeWorkspaceSessionsIndexSnapshot,
+  encodeChatSessionThreadFileSnapshot,
+  encodeWorkspaceSessionsIndexSnapshot,
+  getSessionThreadFilePath,
+  getWorkspaceSessionsDir,
+  getWorkspaceSessionsIndexFilePath,
   needsChatCompaction,
-  removeAgentIndexEntry,
-  upsertAgentIndexEntry,
+  removeSessionIndexEntry,
+  upsertSessionIndexEntry,
   workspaceChatPathHashKey,
 };

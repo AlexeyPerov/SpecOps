@@ -7,10 +7,10 @@ import type {
 } from "../domain/contracts";
 import type { ChatThreadRuntimeState } from "../state/chatStore/types";
 import {
-  createAgentNotificationObserver,
+  createSessionNotificationObserver,
   deriveNotificationEvents,
   type NotificationSinks,
-} from "./agentNotificationObserver";
+} from "./sessionNotificationObserver";
 
 function runtime(overrides: Partial<ChatThreadRuntimeState> = {}): ChatThreadRuntimeState {
   return {
@@ -29,7 +29,7 @@ describe("deriveNotificationEvents", () => {
     const prev = runtime({ isGenerating: true });
     const next = runtime({ isGenerating: false });
     expect(deriveNotificationEvents(prev, next)).toEqual<NotificationEventId[]>([
-      "agentDone",
+      "sessionDone",
     ]);
   });
 
@@ -98,18 +98,18 @@ describe("deriveNotificationEvents", () => {
   });
 });
 
-describe("createAgentNotificationObserver", () => {
+describe("createSessionNotificationObserver", () => {
   const sound: SoundSettings = { ...defaultSoundSettings };
   const osNotifications: OsNotificationSettings = {
     enabled: true,
-    events: { agentDone: true, permission: true, question: true, error: true },
+    events: { sessionDone: true, permission: true, question: true, error: true },
   };
 
   function observerWithMocks() {
     const playSound = vi.fn();
     const notifyOs = vi.fn();
     const sinks: NotificationSinks = { playSound, notifyOs };
-    const observer = createAgentNotificationObserver(sinks);
+    const observer = createSessionNotificationObserver(sinks);
     return { observer, playSound, notifyOs };
   }
 
@@ -118,18 +118,18 @@ describe("createAgentNotificationObserver", () => {
 
     observer.update({
       activeScopeKey: "/work",
-      runtimeByAgentId: { "agent-1": runtime({ isGenerating: true }) },
+      runtimeBySessionId: { "agent-1": runtime({ isGenerating: true }) },
       settings: { sound, osNotifications },
     });
     observer.update({
       activeScopeKey: "/work",
-      runtimeByAgentId: { "agent-1": runtime({ isGenerating: false }) },
+      runtimeBySessionId: { "agent-1": runtime({ isGenerating: false }) },
       settings: { sound, osNotifications },
     });
 
-    expect(playSound).toHaveBeenCalledWith("agentDone", sound);
+    expect(playSound).toHaveBeenCalledWith("sessionDone", sound);
     expect(notifyOs).toHaveBeenCalledWith(
-      "agentDone",
+      "sessionDone",
       osNotifications,
       expect.objectContaining({ title: expect.any(String) }),
     );
@@ -141,12 +141,12 @@ describe("createAgentNotificationObserver", () => {
 
     observer.update({
       activeScopeKey: "/work",
-      runtimeByAgentId: { "agent-1": state },
+      runtimeBySessionId: { "agent-1": state },
       settings: { sound, osNotifications },
     });
     observer.update({
       activeScopeKey: "/work",
-      runtimeByAgentId: { "agent-1": state },
+      runtimeBySessionId: { "agent-1": state },
       settings: { sound, osNotifications },
     });
 
@@ -159,14 +159,14 @@ describe("createAgentNotificationObserver", () => {
     // Seed agent-1 as generating in scope A.
     observer.update({
       activeScopeKey: "/a",
-      runtimeByAgentId: { "agent-1": runtime({ isGenerating: true }) },
+      runtimeBySessionId: { "agent-1": runtime({ isGenerating: true }) },
       settings: { sound, osNotifications },
     });
     // Switch to scope B where agent-1 already finished — because history was
     // reset, this should NOT look like a true→false transition.
     observer.update({
       activeScopeKey: "/b",
-      runtimeByAgentId: { "agent-1": runtime({ isGenerating: false }) },
+      runtimeBySessionId: { "agent-1": runtime({ isGenerating: false }) },
       settings: { sound, osNotifications },
     });
 
@@ -178,7 +178,7 @@ describe("createAgentNotificationObserver", () => {
 
     observer.update({
       activeScopeKey: "/work",
-      runtimeByAgentId: {
+      runtimeBySessionId: {
         "agent-a": runtime({ isGenerating: true }),
         "agent-b": runtime({ isGenerating: true }),
       },
@@ -186,7 +186,7 @@ describe("createAgentNotificationObserver", () => {
     });
     observer.update({
       activeScopeKey: "/work",
-      runtimeByAgentId: {
+      runtimeBySessionId: {
         "agent-a": runtime({ isGenerating: false }),
         "agent-b": runtime({ isGenerating: true }),
       },
@@ -195,16 +195,16 @@ describe("createAgentNotificationObserver", () => {
 
     // Only agent-a completed.
     expect(playSound).toHaveBeenCalledTimes(1);
-    expect(playSound).toHaveBeenCalledWith("agentDone", sound);
+    expect(playSound).toHaveBeenCalledWith("sessionDone", sound);
   });
 
   it("uses defaults sinks when none are provided", () => {
     // Just ensure it constructs and update no-ops cleanly without injected sinks.
-    const observer = createAgentNotificationObserver();
+    const observer = createSessionNotificationObserver();
     expect(() =>
       observer.update({
         activeScopeKey: "/work",
-        runtimeByAgentId: { "agent-1": runtime({ isGenerating: true }) },
+        runtimeBySessionId: { "agent-1": runtime({ isGenerating: true }) },
         settings: { sound, osNotifications },
       }),
     ).not.toThrow();

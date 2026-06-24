@@ -87,13 +87,13 @@ Each context has a **`ContextSnapshot`**: `documents[]` and `session` (tabs, sel
 ### Documents and tabs
 
 - **`DocumentState`** — editor buffer, dirty flag, disk fingerprint, markdown view mode, etc.
-- **`TabState`** — `file` (links `documentId`) or `agent` (links `agentId`).
+- **`TabState`** — `file` (links `documentId`) or `session` (links `sessionId`).
 
 File open/save flows go through `appState` and services (`fileSystem`, `openFileGate`, `externalFileChanges`).
 
-### AI agents (workspace-scoped)
+### Workspace sessions (workspace-scoped)
 
-- One **agent** per conversation; many agents per workspace.
+- One **session** per conversation; many sessions per workspace. (OpenCode **agent** = persona/config only — see [opencode-integration.md](./opencode-integration.md).)
 - **`chatStore`** holds in-memory threads keyed by workspace root path (phase-1 baseline; context-id scoping is planned for later phases).
 - Threads persist under the app data dir (see [Persistence](#persistence)).
 - Modes: **`ask`** and **`review`** (system prompts in `app/src/lib/ai/modes/builtins.ts`).
@@ -174,7 +174,7 @@ All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`)
 | `provider-secrets.json` | Provider API keys keyed by `ChatProviderId` (`providerSecretsStore.ts`: `loadProviderApiKey` / `saveProviderApiKey`) |
 | `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
 | `themes.json` | Active and custom themes |
-| `chat/{hash}/` | Per-workspace agent index and thread JSON |
+| `chat/{hash}/` | Per-workspace session index (`index.json`, `sessions` envelope) and per-session thread JSON (`{sessionId}.json`). M16 renamed the on-disk envelope key from `agents` → `sessions` and the in-memory id from `agentId` → `sessionId`; pre-M16 `chat/{hash}/` folders are abandoned (no migration — pre-release). |
 
 Session and chat writes are debounced. The project **does not** add backward-compatible migrations for persisted data unless explicitly requested (see agent rules below).
 
@@ -200,7 +200,7 @@ Custom commands: `take_pending_opened_paths`, `sync_file_watcher_paths`.
 
 Tab ids and sidebar labels live in **`SETTINGS_TABS`** (`app/src/lib/services/settingsDialogUi.ts`), not as hardcoded unions scattered across the dialog. Each entry is a `SettingsTabDefinition` (`id`, `label`, `panelAriaLabel`). Current tabs: `editor`, `shortcuts`, `appearance`, `dev`, `connections`, `chatModes`, `debugAi`, `opencode`, `openCodeConfig`, `providers`, `mcp`, `agents`, `permissions`, `commands`, `instructions`, `debugAgent`, `logs`. Sidebar sections are built dynamically by `buildSettingsSidebar(settings.chatHttp)`: top-level tabs (**Editor**, **Shortcuts**, **Appearance**); **Dev** always contains the Chat (beta) master toggle and **Logs**; the **Chats** subtree (`connections`, `chatModes`, `debugAi`) appears only when `chatHttp.enabled` is `true`. **Workspaces** holds the OpenCode tabs (incl. workspace Debug Provider). `openSettingsDialog(tab)` resolves the requested tab against the chat-http beta gate — gated tabs redirect to `dev` when the beta is off; otherwise the opener is called with the resolved tab.
 
-Routing helpers: `editorRouting.ts` (file vs agent tab), `workspaceAgentSession.ts` (agent tab lifecycle).
+Routing helpers: `editorRouting.ts` (file vs session tab), `workspaceAgentSession.ts` (session tab lifecycle).
 
 Editor: CodeMirror via `EditorSurface.svelte` (Svelte 5 runes), language detection in `editorLanguage.ts`. `TabBar.svelte` and `TabBarContextMenu.svelte` also use runes.
 

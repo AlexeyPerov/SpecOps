@@ -35,7 +35,7 @@ SpecOps aligns with OpenCode Desktop vocabulary in the UI:
 | **Agent** | An OpenCode **persona/config** only — Settings → Agents, composer persona picker, `@agent:` mentions, default agent in config. |
 | **Chat** | The experimental `chat-http` lane (Settings → Dev); unrelated to workspace sessions. |
 
-Internal code may still use **agent** for conversations until [M16](../specs/ops/phase-3.5/execution-plan-m16.md) (`agentId`, `AgentsSidebar`, disk paths). Do not confuse with:
+Internal code uses **session** for conversations (post-[M16](../specs/ops/phase-3.5/execution-plan-m16.md)): `sessionId`, `SessionIndexEntry`, `SessionsSidebar`, and `chat/{hash}/` (`sessions` envelope). The OpenCode SDK bridges in `workspaceAgentBackend.ts` keep the **agent** module name for the SDK wrapper. Do not confuse with:
 
 - **OpenCode session** — server-side conversation object linked via `opencodeSessionId`.
 - **Window session** — `SessionState` in `session.json` (editor tabs, last active context); not a chat session.

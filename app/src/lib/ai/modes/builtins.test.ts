@@ -33,7 +33,7 @@ function settingsWith(overrides: Partial<AppSettingsState["chatModes"]>): AppSet
 function threadSnapshot(mode: ChatThreadSnapshot["metadata"]["mode"]): ChatThreadSnapshot {
   return {
     metadata: {
-      agentId: "agent-test",
+      sessionId: "agent-test",
       threadId: "agent-test",
       mode,
       provider: "http",

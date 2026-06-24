@@ -1,17 +1,17 @@
 import type { ChatThreadSnapshot } from "../../domain/contracts";
-import type { ChatStoreState, WorkspaceAgentsState } from "./types";
+import type { ChatStoreState, WorkspaceSessionsState } from "./types";
 
-export const initialWorkspaceAgentsState = (): WorkspaceAgentsState => ({
-  activeAgentId: null,
-  agentIndex: [],
-  threadsByAgentId: {},
-  runtimeByAgentId: {},
+export const initialWorkspaceSessionsState = (): WorkspaceSessionsState => ({
+  activeSessionId: null,
+  sessionIndex: [],
+  threadsBySessionId: {},
+  runtimeBySessionId: {},
 });
 
 export function workspaceState(
   state: ChatStoreState,
   root: string | null,
-): WorkspaceAgentsState | null {
+): WorkspaceSessionsState | null {
   if (!root) {
     return null;
   }
@@ -21,12 +21,12 @@ export function workspaceState(
 export function getOrCreateWorkspaceState(
   state: ChatStoreState,
   root: string,
-): { nextState: ChatStoreState; workspace: WorkspaceAgentsState } {
+): { nextState: ChatStoreState; workspace: WorkspaceSessionsState } {
   const existing = state.workspaces[root];
   if (existing) {
     return { nextState: state, workspace: existing };
   }
-  const workspace = initialWorkspaceAgentsState();
+  const workspace = initialWorkspaceSessionsState();
   return {
     nextState: {
       ...state,
@@ -42,7 +42,7 @@ export function getOrCreateWorkspaceState(
 export function patchWorkspaceState(
   state: ChatStoreState,
   root: string,
-  patch: WorkspaceAgentsState,
+  patch: WorkspaceSessionsState,
 ): ChatStoreState {
   return {
     ...state,
@@ -53,23 +53,23 @@ export function patchWorkspaceState(
   };
 }
 
-export function activeAgentId(state: ChatStoreState): string | null {
-  return workspaceState(state, state.activeChatScopeKey)?.activeAgentId ?? null;
+export function activeSessionId(state: ChatStoreState): string | null {
+  return workspaceState(state, state.activeChatScopeKey)?.activeSessionId ?? null;
 }
 
-export function threadForAgent(
+export function threadForSession(
   state: ChatStoreState,
-  agentId: string | null,
+  sessionId: string | null,
 ): ChatThreadSnapshot | null {
   const scopeKey = state.activeChatScopeKey;
-  if (!scopeKey || !agentId) {
+  if (!scopeKey || !sessionId) {
     return null;
   }
-  return state.workspaces[scopeKey]?.threadsByAgentId[agentId] ?? null;
+  return state.workspaces[scopeKey]?.threadsBySessionId[sessionId] ?? null;
 }
 
 export function activeThread(state: ChatStoreState): ChatThreadSnapshot | null {
-  return threadForAgent(state, activeAgentId(state));
+  return threadForSession(state, activeSessionId(state));
 }
 
 export function resolveChatScopeKey(

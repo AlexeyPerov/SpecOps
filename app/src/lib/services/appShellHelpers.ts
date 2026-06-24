@@ -6,9 +6,9 @@ export const DEFAULT_MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
 
 export const RESPONSIVE_CONSOLE_CLOSE_WIDTH = 900;
 export const RESPONSIVE_PANEL_COLLAPSE_WIDTH = 1100;
-export const RESPONSIVE_PANEL_COLLAPSE_WIDTH_AGENT = 1200;
-export const RESPONSIVE_AGENTS_COLLAPSE_WIDTH = 1320;
-export const RESPONSIVE_AGENTS_COLLAPSE_WIDTH_AGENT = 1400;
+export const RESPONSIVE_PANEL_COLLAPSE_WIDTH_SESSION = 1200;
+export const RESPONSIVE_SESSIONS_COLLAPSE_WIDTH = 1320;
+export const RESPONSIVE_SESSIONS_COLLAPSE_WIDTH_SESSION = 1400;
 
 export function watchedPathsFromState(state: AppDomainState): string[] {
   const paths = new Set<string>();
@@ -52,36 +52,36 @@ export function canFitMarkdownSplit(
 export interface ResponsiveLayoutInput {
   shellMainRowWidth: number;
   workspaceActive: boolean;
-  isAgentTabActive: boolean;
+  isSessionTabActive: boolean;
   workspaceLayout: WorkspaceLayoutState;
   consoleOpen: boolean;
 }
 
 export interface ResponsiveLayoutFlags {
   autoProjectPanelCollapsed: boolean;
-  autoAgentsSidebarCollapsed: boolean;
+  autoSessionsSidebarCollapsed: boolean;
   consoleOpen: boolean;
 }
 
 export function computeResponsiveLayoutFlags(
   input: ResponsiveLayoutInput,
 ): ResponsiveLayoutFlags {
-  const agentTabLayout = input.isAgentTabActive && input.workspaceActive;
-  const panelCollapseWidth = agentTabLayout
-    ? RESPONSIVE_PANEL_COLLAPSE_WIDTH_AGENT
+  const sessionTabLayout = input.isSessionTabActive && input.workspaceActive;
+  const panelCollapseWidth = sessionTabLayout
+    ? RESPONSIVE_PANEL_COLLAPSE_WIDTH_SESSION
     : RESPONSIVE_PANEL_COLLAPSE_WIDTH;
-  const agentsCollapseWidth = agentTabLayout
-    ? RESPONSIVE_AGENTS_COLLAPSE_WIDTH_AGENT
-    : RESPONSIVE_AGENTS_COLLAPSE_WIDTH;
+  const sessionsCollapseWidth = sessionTabLayout
+    ? RESPONSIVE_SESSIONS_COLLAPSE_WIDTH_SESSION
+    : RESPONSIVE_SESSIONS_COLLAPSE_WIDTH;
 
   const autoProjectPanelCollapsed =
     input.shellMainRowWidth > 0 &&
     input.shellMainRowWidth < panelCollapseWidth &&
     input.workspaceActive;
 
-  const autoAgentsSidebarCollapsed =
+  const autoSessionsSidebarCollapsed =
     input.shellMainRowWidth > 0 &&
-    input.shellMainRowWidth < agentsCollapseWidth &&
+    input.shellMainRowWidth < sessionsCollapseWidth &&
     input.workspaceActive;
 
   const projectPanelCollapsed =
@@ -96,7 +96,7 @@ export function computeResponsiveLayoutFlags(
 
   return {
     autoProjectPanelCollapsed,
-    autoAgentsSidebarCollapsed,
+    autoSessionsSidebarCollapsed,
     consoleOpen,
   };
 }

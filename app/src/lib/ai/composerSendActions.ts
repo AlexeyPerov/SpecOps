@@ -1,16 +1,16 @@
 import { sendChatMessage, retryLastChatTurn } from "./sendChatMessage";
 import { chatStore } from "../state/chatStore";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import type { WorkspaceAgentSendContext } from "./backends/workspaceAgentBackend";
 
 export function persistActiveThreadSnapshot(): void {
   const root = chatStore.getActiveChatScopeKey();
-  const agentId = chatStore.getActiveAgentId();
-  const thread = agentId ? chatStore.getActiveThreadSnapshot(agentId) : null;
-  if (!root || !agentId || !thread || !thread.messages.some((message) => message.role === "user")) {
+  const sessionId = chatStore.getActiveSessionId();
+  const thread = sessionId ? chatStore.getActiveThreadSnapshot(sessionId) : null;
+  if (!root || !sessionId || !thread || !thread.messages.some((message) => message.role === "user")) {
     return;
   }
-  scheduleAgentThreadFilePersistence(root, agentId, {
+  scheduleSessionThreadFilePersistence(root, sessionId, {
     version: 1,
     thread,
   });

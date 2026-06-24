@@ -30,7 +30,7 @@ describe("chatDiagnostics", () => {
 
   it("writes structured chat send metadata to the app console", async () => {
     logChatSendStart({
-      agentId: "agent-1",
+      sessionId: "agent-1",
       turnId: "turn-1",
       providerId: "http",
       connectionId: "conn-glm",
@@ -45,7 +45,7 @@ describe("chatDiagnostics", () => {
 
   it("logs blocked connection switches as warnings", async () => {
     logChatConnectionSwitch({
-      agentId: "agent-1",
+      sessionId: "agent-1",
       fromConnectionId: "conn-a",
       toConnectionId: "conn-b",
       switched: false,

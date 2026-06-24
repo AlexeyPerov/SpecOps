@@ -1,7 +1,7 @@
 import {
   CHAT_HTTP_CONTEXT_ID,
-  isAgentTab,
   isFileTab,
+  isSessionTab,
 } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
@@ -12,12 +12,12 @@ import {
 } from "../ai/backends/workspaceAgentBackend";
 import { createOpencodeBackendFromAppState } from "../ai/backends/opencodeBackendFactory";
 import {
-  isAgentSessionMappingValid,
-  mappedSessionForAgent,
-  nextSidebarAgentId,
-  openAgentTabIds,
-  resolveRestoredActiveAgent,
-  selectedTabAfterMissingLastAgent,
+  isSessionMappingValid,
+  mappedSessionForId,
+  nextSidebarSessionId,
+  openSessionTabIds,
+  resolveRestoredActiveSession,
+  selectedTabAfterMissingLastSession,
 } from "./workspaceAgentSession";
 import { hydrateWorkspaceAgentMessages } from "./workspaceAgentHydration";
 import { ensureOpencodeSidecar } from "./opencodeSidecarEnsure";
@@ -68,48 +68,48 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       throw error;
     }
 
-    const index = chatStore.getAgentIndex();
+    const index = chatStore.getSessionIndex();
     for (const entry of index) {
-      const mapping = mappedSessionForAgent(index, entry.id);
-      if (isAgentSessionMappingValid(mapping, existingSessionIds)) {
+      const mapping = mappedSessionForId(index, entry.id);
+      if (isSessionMappingValid(mapping, existingSessionIds)) {
         continue;
       }
       if (!mapping) {
         continue;
       }
-      chatStore.clearAgentSessionLink(entry.id, normalizedRoot);
+      chatStore.clearSessionLink(entry.id, normalizedRoot);
     }
   }
 
-  function handleNewAgent(): void {
-    const agentId = chatStore.createDraftAgent();
-    if (!agentId) {
+  function handleNewSession(): void {
+    const sessionId = chatStore.createDraftSession();
+    if (!sessionId) {
       return;
     }
-    appState.setLastActiveAgentId(agentId);
-    appState.openOrFocusAgentTab(agentId);
+    appState.setLastActiveSessionId(sessionId);
+    appState.openOrFocusSessionTab(sessionId);
   }
 
-  function handleSelectAgent(agentId: string): void {
-    chatStore.setActiveAgentId(agentId);
-    appState.setLastActiveAgentId(agentId);
-    appState.openOrFocusAgentTab(agentId);
+  function handleSelectSession(sessionId: string): void {
+    chatStore.setActiveSessionId(sessionId);
+    appState.setLastActiveSessionId(sessionId);
+    appState.openOrFocusSessionTab(sessionId);
     void chatStore.runAccessPreflight();
   }
 
-  async function handleDeleteAgent(agentId: string): Promise<void> {
-    appState.closeTabsForAgent(agentId);
-    const deleted = await chatStore.deleteAgent(agentId);
+  async function handleDeleteSession(sessionId: string): Promise<void> {
+    appState.closeTabsForSession(sessionId);
+    const deleted = await chatStore.deleteSession(sessionId);
     if (!deleted) {
       return;
     }
-    const nextAgentId = chatStore.getActiveAgentId();
-    if (nextAgentId) {
-      appState.openOrFocusAgentTab(nextAgentId);
+    const nextSessionId = chatStore.getActiveSessionId();
+    if (nextSessionId) {
+      appState.openOrFocusSessionTab(nextSessionId);
     }
   }
 
-  function ensureChatHttpAgentTab(): void {
+  function ensureChatHttpSessionTab(): void {
     if (!getIsChatHttpActive()) {
       return;
     }
@@ -117,22 +117,22 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     if (activeScope !== CHAT_HTTP_CONTEXT_ID) {
       return;
     }
-    let agentId = chatStore.getActiveAgentId();
-    if (!agentId) {
-      agentId = chatStore.createDraftAgent();
+    let sessionId = chatStore.getActiveSessionId();
+    if (!sessionId) {
+      sessionId = chatStore.createDraftSession();
     }
-    if (!agentId) {
+    if (!sessionId) {
       return;
     }
-    chatStore.setActiveAgentId(agentId);
-    appState.setLastActiveAgentId(agentId);
+    chatStore.setActiveSessionId(sessionId);
+    appState.setLastActiveSessionId(sessionId);
     const sessionSnapshot = appState.getActiveSession();
     const selectedTab = sessionSnapshot.openTabs.find(
       (tab) => tab.id === sessionSnapshot.selectedTabId,
     );
-    const selectedMatchesChatAgent =
-      selectedTab && isAgentTab(selectedTab) && selectedTab.agentId === agentId;
-    if (selectedMatchesChatAgent) {
+    const selectedMatchesChatSession =
+      selectedTab && isSessionTab(selectedTab) && selectedTab.sessionId === sessionId;
+    if (selectedMatchesChatSession) {
       return;
     }
     const fileTabIds = sessionSnapshot.openTabs
@@ -141,15 +141,15 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     if (fileTabIds.length > 0) {
       appState.closeTabsByIds(fileTabIds, null);
     }
-    appState.openOrFocusAgentTab(agentId);
+    appState.openOrFocusSessionTab(sessionId);
   }
 
-  async function handleDeleteAgentFromChat(): Promise<void> {
-    const agentId = chatStore.getActiveAgentId();
-    if (!agentId) {
+  async function handleDeleteSessionFromChat(): Promise<void> {
+    const sessionId = chatStore.getActiveSessionId();
+    if (!sessionId) {
       return;
     }
-    await handleDeleteAgent(agentId);
+    await handleDeleteSession(sessionId);
   }
 
   /**
@@ -173,15 +173,15 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     if (!ensured || ensured.status.health !== "healthy") {
       return;
     }
-    const activeAgentId = chatStore.getActiveAgentId();
-    if (!activeAgentId) {
+    const activeSessionId = chatStore.getActiveSessionId();
+    if (!activeSessionId) {
       return;
     }
-    const link = chatStore.getAgentSessionLink(activeAgentId, workspaceRoot);
+    const link = chatStore.getSessionLink(activeSessionId, workspaceRoot);
     if (!link?.opencodeSessionId) {
       return;
     }
-    const thread = chatStore.getActiveThreadSnapshot(activeAgentId);
+    const thread = chatStore.getActiveThreadSnapshot(activeSessionId);
     if (!thread || thread.messages.length === 0) {
       return;
     }
@@ -199,7 +199,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
         await hydrateWorkspaceAgentMessages({
           backend,
           workspaceRootPath: workspaceRoot,
-          agents: chatStore.getAgentIndex(),
+          agents: chatStore.getSessionIndex(),
         }).catch(() => {});
       }
     } catch {
@@ -207,33 +207,33 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
   }
 
-  async function restoreWorkspaceAgentSession(
+  async function restoreWorkspaceSession(
     normalizedRoot: string,
     options?: { skipOpencodeReconcile?: boolean },
   ): Promise<void> {
     const snapshot = appState.getSnapshot();
     if (!isOpencodeEnabled(snapshot.settings.opencode)) {
-      chatStore.setActiveAgentId(null);
-      appState.setLastActiveAgentId(null);
+      chatStore.setActiveSessionId(null);
+      appState.setLastActiveSessionId(null);
       return;
     }
     const session = appState.getActiveSession();
-    await chatStore.loadWorkspaceAgents(normalizedRoot);
-    chatStore.mergeSessionDraftAgents(normalizedRoot, openAgentTabIds(session.openTabs));
+    await chatStore.loadWorkspaceSessions(normalizedRoot);
+    chatStore.mergeSessionDrafts(normalizedRoot, openSessionTabIds(session.openTabs));
 
-    const agentIndex = chatStore.getAgentIndex();
-    const restored = resolveRestoredActiveAgent(session, agentIndex);
-    if (restored.shouldFocusAgentTab && restored.activeAgentId) {
-      chatStore.setActiveAgentId(restored.activeAgentId);
-      appState.setLastActiveAgentId(restored.activeAgentId);
-      appState.openOrFocusAgentTab(restored.activeAgentId);
+    const sessionIndex = chatStore.getSessionIndex();
+    const restored = resolveRestoredActiveSession(session, sessionIndex);
+    if (restored.shouldFocusSessionTab && restored.activeSessionId) {
+      chatStore.setActiveSessionId(restored.activeSessionId);
+      appState.setLastActiveSessionId(restored.activeSessionId);
+      appState.openOrFocusSessionTab(restored.activeSessionId);
       void chatStore.runAccessPreflight();
     } else {
-      chatStore.setActiveAgentId(null);
-      appState.setLastActiveAgentId(null);
+      chatStore.setActiveSessionId(null);
+      appState.setLastActiveSessionId(null);
       const tabs = appState.getActiveSession().openTabs;
       const selectedTabId = appState.getActiveSession().selectedTabId;
-      const nextSelected = selectedTabAfterMissingLastAgent(tabs, selectedTabId);
+      const nextSelected = selectedTabAfterMissingLastSession(tabs, selectedTabId);
       if (nextSelected && nextSelected !== selectedTabId) {
         appState.selectTab(nextSelected);
       }
@@ -252,8 +252,8 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   async function handleCloseTab(tabId: string): Promise<void> {
     const beforeSession = appState.getActiveSession();
     const closingTab = beforeSession.openTabs.find((tab) => tab.id === tabId);
-    const closedAgentId =
-      closingTab && isAgentTab(closingTab) ? closingTab.agentId : null;
+    const closedSessionId =
+      closingTab && isSessionTab(closingTab) ? closingTab.sessionId : null;
     const wasSelected = beforeSession.selectedTabId === tabId;
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
 
@@ -265,11 +265,11 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       return;
     }
 
-    if (closedAgentId && workspaceRoot) {
-      chatStore.cancelAgentGeneration(workspaceRoot, closedAgentId);
+    if (closedSessionId && workspaceRoot) {
+      chatStore.cancelSessionGeneration(workspaceRoot, closedSessionId);
     }
 
-    if (!closedAgentId || !wasSelected) {
+    if (!closedSessionId || !wasSelected) {
       return;
     }
 
@@ -277,45 +277,45 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     const selectedAfter = afterSession.openTabs.find(
       (tab) => tab.id === afterSession.selectedTabId,
     );
-    if (selectedAfter && isAgentTab(selectedAfter)) {
+    if (selectedAfter && isSessionTab(selectedAfter)) {
       return;
     }
 
-    const nextSidebarId = nextSidebarAgentId(chatStore.getAgentIndex(), closedAgentId);
+    const nextSidebarId = nextSidebarSessionId(chatStore.getSessionIndex(), closedSessionId);
     if (nextSidebarId) {
-      chatStore.setActiveAgentId(nextSidebarId);
-      appState.setLastActiveAgentId(nextSidebarId);
+      chatStore.setActiveSessionId(nextSidebarId);
+      appState.setLastActiveSessionId(nextSidebarId);
       return;
     }
-    chatStore.setActiveAgentId(null);
-    appState.setLastActiveAgentId(null);
+    chatStore.setActiveSessionId(null);
+    appState.setLastActiveSessionId(null);
   }
 
   // --- OpenCode session lifecycle handlers (M2) -------------------------------
   //
-  // Each handler follows the same shape: look up the agent's linked session,
-  // short-circuit when there isn't one (no-op + notify), call the backend,
-  // then mutate the chatStore / appState to reflect the new state. Backend
-  // errors are surfaced via `notify` rather than thrown — these are
+  // Each handler follows the same shape: look up the session's linked OpenCode
+  // session, short-circuit when there isn't one (no-op + notify), call the
+  // backend, then mutate the chatStore / appState to reflect the new state.
+  // Backend errors are surfaced via `notify` rather than thrown — these are
   // user-initiated actions from the UI, not programmatic flows.
 
   function createOpencodeBackend() {
     return createOpencodeBackendFromAppState()!;
   }
 
-  function resolveLinkedSession(agentId: string): {
-    sessionId: string;
+  function resolveLinkedSession(sessionId: string): {
+    opencodeSessionId: string;
     workspaceRoot: string;
   } | null {
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
     if (!workspaceRoot) {
       return null;
     }
-    const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
+    const link = chatStore.getSessionLink(sessionId, workspaceRoot);
     if (!link?.opencodeSessionId) {
       return null;
     }
-    return { sessionId: link.opencodeSessionId, workspaceRoot };
+    return { opencodeSessionId: link.opencodeSessionId, workspaceRoot };
   }
 
   function describeBackendError(error: unknown): string {
@@ -326,18 +326,18 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   }
 
   /**
-   * M2-T1 — rename the active (or specified) agent tab. Prompts for a new
+   * M2-T1 — rename the active (or specified) session tab. Prompts for a new
    * title, calls `session.update({ title })`, then updates the SpecOps index
    * entry. The OpenCode call happens first so we never show a title the
    * server rejected.
    */
-  async function handleRenameAgent(agentId: string): Promise<void> {
+  async function handleRenameSession(sessionId: string): Promise<void> {
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
     if (!workspaceRoot) {
       return;
     }
-    const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
-    const currentTitle = chatStore.getAgentTitle(agentId) ?? "";
+    const link = chatStore.getSessionLink(sessionId, workspaceRoot);
+    const currentTitle = chatStore.getSessionTitle(sessionId) ?? "";
     const next = await promptEntryName({
       title: "Rename session",
       defaultValue: currentTitle,
@@ -346,9 +346,9 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     if (!next || next.trim().length === 0 || next.trim() === currentTitle.trim()) {
       return;
     }
-    // Draft agents (no linked session yet) only need a local rename.
+    // Draft sessions (no linked session yet) only need a local rename.
     if (!link?.opencodeSessionId) {
-      chatStore.renameAgent(agentId, next, workspaceRoot);
+      chatStore.renameSession(sessionId, next, workspaceRoot);
       notify("Session renamed.");
       return;
     }
@@ -362,17 +362,17 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       notify(`Rename failed: ${describeBackendError(error)}`);
       return;
     }
-    chatStore.renameAgent(agentId, next, workspaceRoot);
+    chatStore.renameSession(sessionId, next, workspaceRoot);
     notify("Session renamed.");
   }
 
   /**
-   * M2-T3 — fork the active agent's session from a message. Calls
-   * `session.fork`, then creates a fresh agent tab linked to the child
-   * session (per Q14: fork → new tab). The parent tab is left untouched.
+   * M2-T3 — fork the active session from a message. Calls `session.fork`,
+   * then creates a fresh session tab linked to the child session (per Q14:
+   * fork → new tab). The parent tab is left untouched.
    */
-  async function handleForkAgent(
-    agentId: string,
+  async function handleForkSession(
+    sessionId: string,
     messageId?: string,
   ): Promise<string | null> {
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
@@ -380,7 +380,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       notify("Open a workspace to fork a session.");
       return null;
     }
-    const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
+    const link = chatStore.getSessionLink(sessionId, workspaceRoot);
     if (!link?.opencodeSessionId) {
       notify("This session isn't linked to OpenCode yet.");
       return null;
@@ -396,7 +396,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       notify(`Fork failed: ${describeBackendError(error)}`);
       return null;
     }
-    const newAgentId = chatStore.forkAgent(
+    const newSessionId = chatStore.forkSession(
       {
         opencodeSessionId: child.id,
         opencodeParentSessionId: link.opencodeSessionId,
@@ -408,14 +408,14 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       },
       workspaceRoot,
     );
-    if (!newAgentId) {
+    if (!newSessionId) {
       notify("Fork completed but the new tab could not be opened.");
       return null;
     }
-    appState.setLastActiveAgentId(newAgentId);
-    appState.openOrFocusAgentTab(newAgentId);
+    appState.setLastActiveSessionId(newSessionId);
+    appState.openOrFocusSessionTab(newSessionId);
     notify("Forked into a new session tab.");
-    return newAgentId;
+    return newSessionId;
   }
 
   /**
@@ -425,15 +425,15 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
    * Returns the resulting session details so the caller can surface the diff.
    */
   async function handleRevertSession(
-    agentId: string,
+    sessionId: string,
     messageId?: string,
   ): Promise<WorkspaceAgentSessionDetails | null> {
-    const resolved = resolveLinkedSession(agentId);
+    const resolved = resolveLinkedSession(sessionId);
     if (!resolved) {
       notify("This session isn't linked to OpenCode yet.");
       return null;
     }
-    const messageLabel = resolveRevertMessageLabel(agentId, messageId);
+    const messageLabel = resolveRevertMessageLabel(sessionId, messageId);
     const confirmed = await promptRevertPreview({
       messageId: messageId ?? "latest",
       messageLabel,
@@ -447,7 +447,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     try {
       const updated = await createOpencodeBackend().revertSession({
         workspaceRootPath: resolved.workspaceRoot,
-        sessionId: resolved.sessionId,
+        sessionId: resolved.opencodeSessionId,
         ...(messageId ? { messageId } : {}),
       });
       notify("Reverted session to the selected message.");
@@ -462,11 +462,11 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
    * Builds a short label for the revert target message — used in the confirm
    * dialog. Falls back to "the latest message" when no id is given.
    */
-  function resolveRevertMessageLabel(agentId: string, messageId?: string): string {
+  function resolveRevertMessageLabel(sessionId: string, messageId?: string): string {
     if (!messageId) {
       return "the latest message";
     }
-    const messages = chatStore.getMessages(agentId);
+    const messages = chatStore.getMessages(sessionId);
     const target = messages.find((message) => message.id === messageId);
     if (!target) {
       return "the selected message";
@@ -480,9 +480,9 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
 
   /** M2-T4 redo — restore a previously-reverted session in place. */
   async function handleUnrevertSession(
-    agentId: string,
+    sessionId: string,
   ): Promise<WorkspaceAgentSessionDetails | null> {
-    const resolved = resolveLinkedSession(agentId);
+    const resolved = resolveLinkedSession(sessionId);
     if (!resolved) {
       notify("This session isn't linked to OpenCode yet.");
       return null;
@@ -490,7 +490,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     try {
       const updated = await createOpencodeBackend().unrevertSession({
         workspaceRootPath: resolved.workspaceRoot,
-        sessionId: resolved.sessionId,
+        sessionId: resolved.opencodeSessionId,
       });
       notify("Restored reverted messages.");
       return updated;
@@ -504,8 +504,8 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
    * M2-T5 — share / unshare. Shares return a public URL that we persist on
    * the index entry and copy to the clipboard.
    */
-  async function handleShareAgent(agentId: string): Promise<string | null> {
-    const resolved = resolveLinkedSession(agentId);
+  async function handleShareSession(sessionId: string): Promise<string | null> {
+    const resolved = resolveLinkedSession(sessionId);
     if (!resolved) {
       notify("This session isn't linked to OpenCode yet.");
       return null;
@@ -513,15 +513,15 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     try {
       const updated = await createOpencodeBackend().shareSession({
         workspaceRootPath: resolved.workspaceRoot,
-        sessionId: resolved.sessionId,
+        sessionId: resolved.opencodeSessionId,
       });
       const url = updated.shareUrl;
       if (!url) {
         notify("OpenCode did not return a share URL.");
         return null;
       }
-      chatStore.setAgentSessionLink(
-        agentId,
+      chatStore.setSessionLink(
+        sessionId,
         { opencodeShareUrl: url },
         resolved.workspaceRoot,
       );
@@ -534,18 +534,18 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
   }
 
-  async function handleUnshareAgent(agentId: string): Promise<void> {
-    const resolved = resolveLinkedSession(agentId);
+  async function handleUnshareSession(sessionId: string): Promise<void> {
+    const resolved = resolveLinkedSession(sessionId);
     if (!resolved) {
       return;
     }
     try {
       await createOpencodeBackend().unshareSession({
         workspaceRootPath: resolved.workspaceRoot,
-        sessionId: resolved.sessionId,
+        sessionId: resolved.opencodeSessionId,
       });
-      chatStore.setAgentSessionLink(
-        agentId,
+      chatStore.setSessionLink(
+        sessionId,
         { opencodeShareUrl: "" },
         resolved.workspaceRoot,
       );
@@ -556,8 +556,8 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   }
 
   /** M2-T6 — generate / refresh the session summary via OpenCode. */
-  async function handleSummarizeAgent(agentId: string): Promise<boolean> {
-    const resolved = resolveLinkedSession(agentId);
+  async function handleSummarizeSession(sessionId: string): Promise<boolean> {
+    const resolved = resolveLinkedSession(sessionId);
     if (!resolved) {
       notify("This session isn't linked to OpenCode yet.");
       return false;
@@ -566,7 +566,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     try {
       const ok = await createOpencodeBackend().summarizeSession({
         workspaceRootPath: resolved.workspaceRoot,
-        sessionId: resolved.sessionId,
+        sessionId: resolved.opencodeSessionId,
       });
       if (!ok) {
         notify("No summary was produced.");
@@ -578,7 +578,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       await hydrateWorkspaceAgentMessages({
         backend: createOpencodeBackend(),
         workspaceRootPath: resolved.workspaceRoot,
-        agents: chatStore.getAgentIndex(),
+        agents: chatStore.getSessionIndex(),
       }).catch(() => {
         // Hydration is best-effort.
       });
@@ -591,20 +591,20 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   }
 
   /**
-   * M2-T7 — export the active agent's transcript to a Markdown file via the
+   * M2-T7 — export the active session's transcript to a Markdown file via the
    * Tauri save dialog. Hydration is best-effort: we export whatever messages
    * are currently in the store (already hydrated from `session.messages` for
-   * workspace agents).
+   * workspace sessions).
    */
-  async function handleExportAgent(agentId: string): Promise<void> {
+  async function handleExportSession(sessionId: string): Promise<void> {
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
     if (!workspaceRoot) {
       notify("Open a workspace to export a transcript.");
       return;
     }
-    const link = chatStore.getAgentSessionLink(agentId, workspaceRoot);
-    const title = chatStore.getAgentTitle(agentId) ?? "session";
-    const messages = chatStore.getMessages(agentId);
+    const link = chatStore.getSessionLink(sessionId, workspaceRoot);
+    const title = chatStore.getSessionTitle(sessionId) ?? "session";
+    const messages = chatStore.getMessages(sessionId);
     const markdown = buildSessionTranscriptMarkdown({
       title,
       workspaceRootPath: workspaceRoot,
@@ -622,9 +622,9 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   }
 
   /**
-   * M2-T2 — open an OpenCode session that may not have a SpecOps agent tab
-   * yet (e.g. created from the TUI or another client). Creates a fresh agent
-   * tab linked to it.
+   * M2-T2 — open an OpenCode session that may not have a SpecOps session tab
+   * yet (e.g. created from the TUI or another client). Creates a fresh
+   * session tab linked to it.
    */
   async function handleOpenExternalSession(sessionId: string, title?: string): Promise<void> {
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
@@ -633,12 +633,12 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       return;
     }
     // Reuse an existing tab if one is already linked to this session.
-    const index = chatStore.getAgentIndex();
+    const index = chatStore.getSessionIndex();
     const existing = index.find((entry) => entry.opencodeSessionId === sessionId);
     if (existing) {
-      chatStore.setActiveAgentId(existing.id);
-      appState.setLastActiveAgentId(existing.id);
-      appState.openOrFocusAgentTab(existing.id);
+      chatStore.setActiveSessionId(existing.id);
+      appState.setLastActiveSessionId(existing.id);
+      appState.openOrFocusSessionTab(existing.id);
       return;
     }
     // M7-T4: seed the title from getSessionDetails so the tab isn't stuck on
@@ -656,7 +656,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     } catch {
       // Non-fatal — the placeholder title stays; hydration may still refresh it.
     }
-    const agentId = chatStore.forkAgent(
+    const newSessionId = chatStore.forkSession(
       {
         opencodeSessionId: sessionId,
         opencodeParentSessionId: "",
@@ -664,19 +664,19 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       },
       workspaceRoot,
     );
-    if (!agentId) {
+    if (!newSessionId) {
       notify("Could not open the session.");
       return;
     }
-    appState.setLastActiveAgentId(agentId);
-    appState.openOrFocusAgentTab(agentId);
+    appState.setLastActiveSessionId(newSessionId);
+    appState.openOrFocusSessionTab(newSessionId);
     // M7-T4: hydrate the thread from session.messages (best-effort, matching
     // the M2 convention) so the tab shows its messages instead of an empty list
     // until the user reopens it.
     await hydrateWorkspaceAgentMessages({
       backend: createOpencodeBackend(),
       workspaceRootPath: workspaceRoot,
-      agents: chatStore.getAgentIndex(),
+      agents: chatStore.getSessionIndex(),
     }).catch(() => {
       // Hydration is best-effort; the local snapshot stays in place.
     });
@@ -721,21 +721,21 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   }
 
   return {
-    handleNewAgent,
-    handleSelectAgent,
-    handleDeleteAgent,
-    ensureChatHttpAgentTab,
-    handleDeleteAgentFromChat,
-    restoreWorkspaceAgentSession,
+    handleNewSession,
+    handleSelectSession,
+    handleDeleteSession,
+    ensureChatHttpSessionTab,
+    handleDeleteSessionFromChat,
+    restoreWorkspaceSession,
     handleCloseTab,
-    handleRenameAgent,
-    handleForkAgent,
+    handleRenameSession,
+    handleForkSession,
     handleRevertSession,
     handleUnrevertSession,
-    handleShareAgent,
-    handleUnshareAgent,
-    handleSummarizeAgent,
-    handleExportAgent,
+    handleShareSession,
+    handleUnshareSession,
+    handleSummarizeSession,
+    handleExportSession,
     handleOpenExternalSession,
     handleListWorkspaceSessions,
   };
@@ -750,6 +750,6 @@ async function copyToClipboard(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
-    // Non-fatal — the share URL is still persisted on the agent entry.
+    // Non-fatal — the share URL is still persisted on the session entry.
   }
 }

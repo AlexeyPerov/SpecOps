@@ -12,7 +12,7 @@ import { defaultDebugProviderSettings } from "../ai/providers/debugProviderSetti
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { appState } from "./appState";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 
 vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
@@ -22,12 +22,12 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
   };
 });
 
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
-const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
+const schedulePersistMock = vi.mocked(scheduleSessionThreadFilePersistence);
 
 describe("M6-4 edge-case transitions", () => {
   beforeEach(() => {
@@ -69,7 +69,7 @@ describe("M6-4 edge-case transitions", () => {
   });
 
   it("cancels in-flight generation and removes the partial assistant placeholder", () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
     chatStore.appendMessage(
       {
@@ -78,7 +78,7 @@ describe("M6-4 edge-case transitions", () => {
         content: "Hello",
         createdAt: "2026-05-28T12:00:00.000Z",
       },
-      { agentId: agentId! },
+      { sessionId: agentId! },
     );
     chatStore.beginTurn("turn-1", agentId!);
     chatStore.appendMessage(
@@ -88,23 +88,23 @@ describe("M6-4 edge-case transitions", () => {
         content: "Partial",
         createdAt: "2026-05-28T12:00:01.000Z",
       },
-      { agentId: agentId!, skipCompaction: true },
+      { sessionId: agentId!, skipCompaction: true },
     );
 
-    expect(chatStore.cancelAgentGeneration("/work/a", agentId!)).toBe(true);
+    expect(chatStore.cancelSessionGeneration("/work/a", agentId!)).toBe(true);
     expect(chatStore.getRuntimeState(agentId!, "/work/a")).toMatchObject({
       isGenerating: false,
       activeTurnId: null,
     });
     expect(
-      chatStore.getWorkspaceAgentsState("/work/a")?.threadsByAgentId[agentId!]?.messages.some(
+      chatStore.getWorkspaceSessionsState("/work/a")?.threadsBySessionId[agentId!]?.messages.some(
         (message) => message.id === "assistant-turn-1",
       ),
     ).toBe(false);
   });
 
   it("clears failed retry state when switching providers", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, agentId!);
     chatStore.beginTurn("turn-fail", agentId!);
     chatStore.failTurn({ message: "Provider failed" }, "turn-fail", agentId!);
@@ -128,7 +128,7 @@ describe("M6-4 edge-case transitions", () => {
   });
 
   it("does not leave isGenerating stuck after workspace cancellation during send", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     const sendPromise = sendChatMessage("Hold please", agentId!);

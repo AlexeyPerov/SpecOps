@@ -20,7 +20,7 @@ import {
 import { createRegistryCapabilityChecker } from "./providers/capabilityChecker";
 import { resetChatProvidersForTests } from "./providers/bootstrap";
 import { sendChatMessage, retryLastChatTurn } from "./sendChatMessage";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { createWorkspaceAgentBackend } from "./backends/workspaceAgentBackend";
 import { promptPermission } from "../services/permissionPrompt";
@@ -30,7 +30,7 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
   };
 });
 
@@ -69,7 +69,7 @@ vi.mock("../services/opencodeSidecarEnsure", () => ({
   }),
 }));
 
-const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
+const schedulePersistMock = vi.mocked(scheduleSessionThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 const createWorkspaceAgentBackendMock = vi.mocked(createWorkspaceAgentBackend);
 const promptPermissionMock = vi.mocked(promptPermission);
@@ -139,7 +139,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
   });
 
@@ -178,7 +178,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace" });
 
     const resultPromise = sendChatMessage("First message without metadata");
@@ -411,14 +411,14 @@ describe("sendChatMessage", () => {
         }),
       ),
     );
-    const agentId = chatStore.getActiveAgentId();
+    const agentId = chatStore.getActiveSessionId();
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
 
     const sendPromise = sendChatMessage("Cancel streamed HTTP");
     await Promise.resolve();
     expect(chatStore.getRuntimeState().isGenerating).toBe(true);
     expect(agentId).toBeTruthy();
-    const cancelled = chatStore.cancelAgentGeneration("/work/a", agentId!);
+    const cancelled = chatStore.cancelSessionGeneration("/work/a", agentId!);
     expect(cancelled).toBe(true);
     const result = await sendPromise;
 
@@ -493,7 +493,7 @@ describe("sendChatMessage", () => {
 
   it("skips workspace access preflight for chat-http sends", async () => {
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
     ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
 
@@ -508,7 +508,7 @@ describe("sendChatMessage", () => {
 
   it("persists workspace sends under the active workspace scope key", async () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
     const sendPromise = sendChatMessage("workspace scope persistence");
@@ -522,7 +522,7 @@ describe("sendChatMessage", () => {
 
   it("persists chat-http sends under the chat-http scope key", async () => {
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
     const sendPromise = sendChatMessage("chat-http scope persistence", undefined, {
@@ -603,11 +603,11 @@ describe("sendChatMessage", () => {
       abortSession,
       streamEvents,
     } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
-    chatStore.setAgentSessionLink(chatStore.getActiveAgentId()!, { opencodeSessionId: "sess-1" }, "/work/a");
+    chatStore.setSessionLink(chatStore.getActiveSessionId()!, { opencodeSessionId: "sess-1" }, "/work/a");
 
     const sendPromise = sendChatMessage("Cancel OpenCode stream");
     await Promise.resolve();
-    const cancelled = chatStore.cancelAgentGeneration("/work/a", chatStore.getActiveAgentId()!);
+    const cancelled = chatStore.cancelSessionGeneration("/work/a", chatStore.getActiveSessionId()!);
     expect(cancelled).toBe(true);
 
     const result = await sendPromise;
@@ -626,7 +626,7 @@ describe("sendChatMessage", () => {
   it("does not use workspace backend for chat-http sends", async () => {
     appState.switchContext("chat-http");
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
     const resultPromise = sendChatMessage("chat-http should stay provider", undefined, {

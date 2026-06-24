@@ -3,15 +3,14 @@ import { compactChatThread } from "../../services/chatRetention";
 import { createThreadMetadata, cloneThread } from "./threadHelpers";
 import type { ChatStoreState } from "./types";
 import {
-  createAgentId,
-  ensureActiveAgent,
-  findAgentIndexEntry,
-  isDraftAgentEntry,
-  patchAgentIndexEntry,
-  promoteDraftAgentIndexEntry,
-  resolveTargetAgentId,
-} from "./agents";
-import { patchWorkspaceState, resolveChatScopeKey, threadForAgent } from "./workspace";
+  ensureActiveSession,
+  findSessionIndexEntry,
+  isDraftSessionEntry,
+  patchSessionIndexEntry,
+  promoteDraftSessionIndexEntry,
+  resolveTargetSessionId,
+} from "./sessions";
+import { patchWorkspaceState, resolveChatScopeKey, threadForSession } from "./workspace";
 
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
@@ -24,7 +23,7 @@ export function createThreadMessagesSlice(deps: {
   return {
     appendMessage(
       message: ChatMessage,
-      options?: { agentId?: string; skipCompaction?: boolean },
+      options?: { sessionId?: string; skipCompaction?: boolean },
     ): boolean {
       let appended = false;
       update((state) => {
@@ -38,34 +37,34 @@ export function createThreadMessagesSlice(deps: {
           return state;
         }
 
-        let agentId = resolveTargetAgentId(state, options?.agentId);
+        let sessionId = resolveTargetSessionId(state, options?.sessionId);
         let workingState = state;
         let workspace = state.workspaces[root];
 
-        if (!agentId) {
+        if (!sessionId) {
           if (message.role !== "user") {
             return state;
           }
-          const ensured = ensureActiveAgent(state);
+          const ensured = ensureActiveSession(state);
           if (!ensured) {
             return state;
           }
           workingState = ensured.state;
           workspace = ensured.workspace;
-          agentId = ensured.agentId;
+          sessionId = ensured.sessionId;
         }
 
-        if (!workspace || !agentId) {
+        if (!workspace || !sessionId) {
           return state;
         }
 
-        const existingThread = workspace.threadsByAgentId[agentId] ?? null;
+        const existingThread = workspace.threadsBySessionId[sessionId] ?? null;
         if (!existingThread && message.role !== "user") {
           return state;
         }
 
         const thread = cloneThread(existingThread) ?? {
-          metadata: createThreadMetadata(agentId, message.createdAt, root),
+          metadata: createThreadMetadata(sessionId, message.createdAt, root),
           messages: [],
         };
         thread.messages = [...thread.messages, { ...message }];
@@ -75,18 +74,18 @@ export function createThreadMessagesSlice(deps: {
         };
         const nextThread = options?.skipCompaction ? thread : compactChatThread(thread).thread;
 
-        let nextAgentIndex = workspace.agentIndex;
+        let nextSessionIndex = workspace.sessionIndex;
         if (message.role === "user") {
           const userMessageCount = nextThread.messages.filter((entry) => entry.role === "user").length;
-          const indexEntry = findAgentIndexEntry(workspace, agentId);
-          if (userMessageCount === 1 && isDraftAgentEntry(indexEntry)) {
-            nextAgentIndex = patchAgentIndexEntry(
-              workspace.agentIndex,
-              agentId,
-              promoteDraftAgentIndexEntry(indexEntry!, message.content, message.createdAt),
+          const indexEntry = findSessionIndexEntry(workspace, sessionId);
+          if (userMessageCount === 1 && isDraftSessionEntry(indexEntry)) {
+            nextSessionIndex = patchSessionIndexEntry(
+              workspace.sessionIndex,
+              sessionId,
+              promoteDraftSessionIndexEntry(indexEntry!, message.content, message.createdAt),
             );
           } else if (indexEntry) {
-            nextAgentIndex = patchAgentIndexEntry(workspace.agentIndex, agentId, {
+            nextSessionIndex = patchSessionIndexEntry(workspace.sessionIndex, sessionId, {
               ...indexEntry,
               lastUsedAt: message.createdAt,
             });
@@ -96,11 +95,11 @@ export function createThreadMessagesSlice(deps: {
         appended = true;
         return patchWorkspaceState(workingState, root, {
           ...workspace,
-          activeAgentId: workspace.activeAgentId ?? agentId,
-          agentIndex: nextAgentIndex,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [agentId]: nextThread,
+          activeSessionId: workspace.activeSessionId ?? sessionId,
+          sessionIndex: nextSessionIndex,
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [sessionId]: nextThread,
           },
         });
       });
@@ -109,21 +108,21 @@ export function createThreadMessagesSlice(deps: {
     updateMessageContent(
       messageId: string,
       content: string,
-      agentId?: string,
+      sessionId?: string,
       workspaceRoot?: string | null,
     ): boolean {
       let updated = false;
       update((state) => {
         const root = resolveChatScopeKey(state, workspaceRoot);
-        const targetAgentId = resolveTargetAgentId(state, agentId);
-        if (!root || !targetAgentId) {
+        const targetSessionId = resolveTargetSessionId(state, sessionId);
+        if (!root || !targetSessionId) {
           return state;
         }
         const workspace = state.workspaces[root];
         if (!workspace) {
           return state;
         }
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         if (!thread) {
           return state;
         }
@@ -148,27 +147,27 @@ export function createThreadMessagesSlice(deps: {
         updated = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: nextThread,
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: nextThread,
           },
         });
       });
       return updated;
     },
-    removeMessage(messageId: string, agentId?: string, workspaceRoot?: string | null): boolean {
+    removeMessage(messageId: string, sessionId?: string, workspaceRoot?: string | null): boolean {
       let removed = false;
       update((state) => {
         const root = resolveChatScopeKey(state, workspaceRoot);
-        const targetAgentId = resolveTargetAgentId(state, agentId);
-        if (!root || !targetAgentId) {
+        const targetSessionId = resolveTargetSessionId(state, sessionId);
+        if (!root || !targetSessionId) {
           return state;
         }
         const workspace = state.workspaces[root];
         if (!workspace) {
           return state;
         }
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         if (!thread) {
           return state;
         }
@@ -189,27 +188,27 @@ export function createThreadMessagesSlice(deps: {
         removed = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: nextThread,
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: nextThread,
           },
         });
       });
       return removed;
     },
-    compactActiveThread(agentId?: string): boolean {
+    compactActiveThread(sessionId?: string): boolean {
       let compacted = false;
       update((state) => {
         const root = state.activeChatScopeKey;
-        const targetAgentId = resolveTargetAgentId(state, agentId);
-        if (!root || !targetAgentId) {
+        const targetSessionId = resolveTargetSessionId(state, sessionId);
+        if (!root || !targetSessionId) {
           return state;
         }
         const workspace = state.workspaces[root];
         if (!workspace) {
           return state;
         }
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         if (!thread) {
           return state;
         }
@@ -217,9 +216,9 @@ export function createThreadMessagesSlice(deps: {
         compacted = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: result.thread,
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: result.thread,
           },
         });
       });
@@ -228,21 +227,21 @@ export function createThreadMessagesSlice(deps: {
     updateMessageToolCalls(
       messageId: string,
       toolCalls: ToolCallRecord[],
-      agentId?: string,
+      sessionId?: string,
       workspaceRoot?: string | null,
     ): boolean {
       let updated = false;
       update((state) => {
         const root = resolveChatScopeKey(state, workspaceRoot);
-        const targetAgentId = resolveTargetAgentId(state, agentId);
-        if (!root || !targetAgentId) {
+        const targetSessionId = resolveTargetSessionId(state, sessionId);
+        if (!root || !targetSessionId) {
           return state;
         }
         const workspace = state.workspaces[root];
         if (!workspace) {
           return state;
         }
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         if (!thread) {
           return state;
         }
@@ -267,9 +266,9 @@ export function createThreadMessagesSlice(deps: {
         updated = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: nextThread,
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: nextThread,
           },
         });
       });
@@ -278,21 +277,21 @@ export function createThreadMessagesSlice(deps: {
     updateMessageParts(
       messageId: string,
       parts: ChatMessagePart[],
-      agentId?: string,
+      sessionId?: string,
       workspaceRoot?: string | null,
     ): boolean {
       let updated = false;
       update((state) => {
         const root = resolveChatScopeKey(state, workspaceRoot);
-        const targetAgentId = resolveTargetAgentId(state, agentId);
-        if (!root || !targetAgentId) {
+        const targetSessionId = resolveTargetSessionId(state, sessionId);
+        if (!root || !targetSessionId) {
           return state;
         }
         const workspace = state.workspaces[root];
         if (!workspace) {
           return state;
         }
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         if (!thread) {
           return state;
         }
@@ -317,42 +316,42 @@ export function createThreadMessagesSlice(deps: {
         updated = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: nextThread,
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: nextThread,
           },
         });
       });
       return updated;
     },
-    getMessages(agentId?: string): ChatMessage[] {
-      const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
-      const thread = threadForAgent(getSnapshot(), targetAgentId);
+    getMessages(sessionId?: string): ChatMessage[] {
+      const targetSessionId = resolveTargetSessionId(getSnapshot(), sessionId);
+      const thread = threadForSession(getSnapshot(), targetSessionId);
       return thread?.messages ?? [];
     },
     /**
-     * Replaces all messages for an agent's thread with the supplied list.
-     * Used by workspace-agent hydration (M1-T3): the OpenCode `session.messages`
+     * Replaces all messages for a session's thread with the supplied list.
+     * Used by workspace-session hydration (M1-T3): the OpenCode `session.messages`
      * payload becomes the display source of truth; the local snapshot is an
-     * offline cache/fallback. Returns false if no thread exists for the agent.
+     * offline cache/fallback. Returns false if no thread exists for the session.
      */
     setThreadMessages(
       messages: ChatMessage[],
-      agentId?: string,
+      sessionId?: string,
       workspaceRoot?: string | null,
     ): boolean {
       let updated = false;
       update((state) => {
         const root = resolveChatScopeKey(state, workspaceRoot);
-        const targetAgentId = resolveTargetAgentId(state, agentId);
-        if (!root || !targetAgentId) {
+        const targetSessionId = resolveTargetSessionId(state, sessionId);
+        if (!root || !targetSessionId) {
           return state;
         }
         const workspace = state.workspaces[root];
         if (!workspace) {
           return state;
         }
-        const existingThread = workspace.threadsByAgentId[targetAgentId];
+        const existingThread = workspace.threadsBySessionId[targetSessionId];
         if (!existingThread) {
           return state;
         }
@@ -370,9 +369,9 @@ export function createThreadMessagesSlice(deps: {
         updated = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: nextThread,
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: nextThread,
           },
         });
       });

@@ -6,18 +6,18 @@ import {
   setChatRetentionMaxTurnsForTests,
 } from "../services/chatRetention";
 import {
-  deleteAgentPersistence,
-  readAgentThreadFileSnapshot,
-  readWorkspaceAgentsIndexSnapshot,
+  deleteSessionPersistence,
+  readSessionThreadFileSnapshot,
+  readWorkspaceSessionsIndexSnapshot,
 } from "../services/chatPersistence";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    readAgentThreadFileSnapshot: vi.fn(),
-    readWorkspaceAgentsIndexSnapshot: vi.fn(),
-    deleteAgentPersistence: vi.fn(),
+    readSessionThreadFileSnapshot: vi.fn(),
+    readWorkspaceSessionsIndexSnapshot: vi.fn(),
+    deleteSessionPersistence: vi.fn(),
   };
 });
 
@@ -25,16 +25,16 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
+const deleteSessionPersistenceMock = vi.mocked(deleteSessionPersistence);
 
 describe("M4 milestone validation", () => {
   beforeEach(() => {
     chatStore.reset();
     chatStore.setCapabilityChecker(null);
     setChatRetentionMaxTurnsForTests(undefined);
-    deleteAgentPersistenceMock.mockReset();
-    deleteAgentPersistenceMock.mockResolvedValue(undefined);
-    vi.mocked(readAgentThreadFileSnapshot).mockReset();
+    deleteSessionPersistenceMock.mockReset();
+    deleteSessionPersistenceMock.mockResolvedValue(undefined);
+    vi.mocked(readSessionThreadFileSnapshot).mockReset();
   });
 
   it("keeps long-running usage bounded via FIFO cap overflow", () => {
@@ -136,14 +136,14 @@ describe("M4 milestone validation", () => {
 
     expect(chatStore.hasThread()).toBe(false);
     expect(chatStore.isEmpty()).toBe(true);
-    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", "agent-1");
+    expect(deleteSessionPersistenceMock).toHaveBeenCalledWith("/work/a", "session-1");
   });
 
   it("isolates clear history to the active workspace", async () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.setAgentThread("agent-a", {
+    chatStore.setSessionThread("agent-a", {
       metadata: {
-        agentId: "agent-a",
+        sessionId: "agent-a",
         threadId: "agent-a",
         mode: "ask",
         provider: "http",
@@ -160,9 +160,9 @@ describe("M4 milestone validation", () => {
         },
       ],
     });
-    chatStore.setAgentThread("agent-b", {
+    chatStore.setSessionThread("agent-b", {
       metadata: {
-        agentId: "agent-b",
+        sessionId: "agent-b",
         threadId: "agent-b",
         mode: "review",
         provider: "debug-workspace",
@@ -179,13 +179,13 @@ describe("M4 milestone validation", () => {
         },
       ],
     });
-    chatStore.setActiveAgentId("agent-a");
+    chatStore.setActiveSessionId("agent-a");
 
     await chatStore.clearActiveWorkspaceChatHistory();
 
-    const workspace = chatStore.getWorkspaceAgentsState("/work/a");
-    expect(workspace?.threadsByAgentId["agent-a"]).toBeUndefined();
-    expect(workspace?.threadsByAgentId["agent-b"]?.metadata.compactedMessageCount).toBe(2);
+    const workspace = chatStore.getWorkspaceSessionsState("/work/a");
+    expect(workspace?.threadsBySessionId["agent-a"]).toBeUndefined();
+    expect(workspace?.threadsBySessionId["agent-b"]?.metadata.compactedMessageCount).toBe(2);
   });
 
   it("provides retry scaffolding without provider coupling", () => {

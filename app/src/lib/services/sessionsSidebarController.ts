@@ -4,28 +4,28 @@ import {
   normalizePanelWidthPx,
 } from "./panelLayout";
 
-export type AgentsSidebarControllerDeps = {
+export type SessionsSidebarControllerDeps = {
   getCollapsed: () => boolean;
   getDisplayWidth: () => number;
   setDisplayWidth: (width: number) => void;
   setIsResizing: (value: boolean) => void;
   onPanelWidthChange: (width: number) => void;
   onToggleCollapsed: (next: boolean) => void;
-  onNewAgent: () => void;
-  onDeleteAgent: (agentId: string) => void;
+  onNewSession: () => void;
+  onDeleteSession: (sessionId: string) => void;
   /** M2-T1: rename — delegated to the handler (prompts + backend call). */
-  onRenameAgent: (agentId: string) => void | Promise<void>;
+  onRenameSession: (sessionId: string) => void | Promise<void>;
   /** M2-T5: share — delegated to the handler. */
-  onShareAgent: (agentId: string) => void | Promise<void>;
+  onShareSession: (sessionId: string) => void | Promise<void>;
   /** M2-T7: export — delegated to the handler. */
-  onExportAgent: (agentId: string) => void | Promise<void>;
+  onExportSession: (sessionId: string) => void | Promise<void>;
 };
 
-export function clampAgentsSidebarWidth(next: number): number {
+export function clampSessionsSidebarWidth(next: number): number {
   return Math.max(MIN_PANEL_WIDTH_PX, Math.min(MAX_PANEL_WIDTH_PX, next));
 }
 
-export function syncAgentsSidebarDisplayWidth(
+export function syncSessionsSidebarDisplayWidth(
   panelWidthPx: number,
   isResizing: boolean,
 ): number | null {
@@ -35,7 +35,7 @@ export function syncAgentsSidebarDisplayWidth(
   return normalizePanelWidthPx(panelWidthPx);
 }
 
-export function createAgentsSidebarController(deps: AgentsSidebarControllerDeps) {
+export function createSessionsSidebarController(deps: SessionsSidebarControllerDeps) {
   function handleResizeStart(event: PointerEvent): void {
     if (deps.getCollapsed()) {
       return;
@@ -50,7 +50,7 @@ export function createAgentsSidebarController(deps: AgentsSidebarControllerDeps)
 
     const onPointerMove = (moveEvent: PointerEvent): void => {
       const deltaX = moveEvent.clientX - startX;
-      deps.setDisplayWidth(clampAgentsSidebarWidth(startWidth + deltaX));
+      deps.setDisplayWidth(clampSessionsSidebarWidth(startWidth + deltaX));
     };
 
     const onPointerEnd = (): void => {
@@ -83,20 +83,20 @@ export function createAgentsSidebarController(deps: AgentsSidebarControllerDeps)
     handleToggleClick();
   }
 
-  function handleNewAgentPointerDown(event: PointerEvent): void {
+  function handleNewSessionPointerDown(event: PointerEvent): void {
     event.preventDefault();
-    deps.onNewAgent();
+    deps.onNewSession();
   }
 
-  function handleNewAgentClick(event: MouseEvent): void {
+  function handleNewSessionClick(event: MouseEvent): void {
     if (event.detail !== 0) {
       return;
     }
-    deps.onNewAgent();
+    deps.onNewSession();
   }
 
-  function confirmDeleteAgent(
-    agentId: string,
+  function confirmDeleteSession(
+    sessionId: string,
     title: string,
     entrySingularLabel: string,
   ): void {
@@ -106,33 +106,33 @@ export function createAgentsSidebarController(deps: AgentsSidebarControllerDeps)
     if (!confirmed) {
       return;
     }
-    deps.onDeleteAgent(agentId);
+    deps.onDeleteSession(sessionId);
   }
 
   /** M2-T1 — delegates to the handler which prompts + calls OpenCode. */
-  function renameAgent(agentId: string): void | Promise<void> {
-    return deps.onRenameAgent(agentId);
+  function renameSession(sessionId: string): void | Promise<void> {
+    return deps.onRenameSession(sessionId);
   }
 
   /** M2-T5 — delegates to the handler which shares + copies the URL. */
-  function shareAgent(agentId: string): void | Promise<void> {
-    return deps.onShareAgent(agentId);
+  function shareSession(sessionId: string): void | Promise<void> {
+    return deps.onShareSession(sessionId);
   }
 
   /** M2-T7 — delegates to the handler which builds + saves the markdown. */
-  function exportAgent(agentId: string): void | Promise<void> {
-    return deps.onExportAgent(agentId);
+  function exportSession(sessionId: string): void | Promise<void> {
+    return deps.onExportSession(sessionId);
   }
 
   return {
     handleResizeStart,
     handleTogglePointerDown,
     handleToggleButtonClick,
-    handleNewAgentPointerDown,
-    handleNewAgentClick,
-    confirmDeleteAgent,
-    renameAgent,
-    shareAgent,
-    exportAgent,
+    handleNewSessionPointerDown,
+    handleNewSessionClick,
+    confirmDeleteSession,
+    renameSession,
+    shareSession,
+    exportSession,
   };
 }

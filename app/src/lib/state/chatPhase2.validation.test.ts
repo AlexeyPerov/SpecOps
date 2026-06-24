@@ -26,7 +26,7 @@ import {
 } from "../ai/providers/registry";
 import { resetChatProvidersForTests } from "../ai/providers/bootstrap";
 import { isChatHttpRailVisible } from "../ai/providers/chatHttpRailGating";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState } from "./appState";
@@ -36,7 +36,7 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
   };
 });
 
@@ -44,7 +44,7 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
+const schedulePersistMock = vi.mocked(scheduleSessionThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function sseStreamResponse(chunks: string[]): Response {
@@ -152,7 +152,7 @@ describe("Phase 2 validation — chat-http SSE streaming", () => {
     );
     registerPhase2Providers(fetchFn as typeof fetch);
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "http", mode: "review" });
     ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
 

@@ -17,9 +17,9 @@ describe("panelLayout", () => {
   it("returns defaults when layout is missing", () => {
     expect(normalizeWorkspaceLayout()).toEqual({
       projectPanelWidthPx: DEFAULT_PANEL_WIDTH_PX,
-      agentsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
+      sessionsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
       projectPanelCollapsed: false,
-      agentsSidebarCollapsed: false,
+      sessionsSidebarCollapsed: false,
     });
   });
 
@@ -27,13 +27,13 @@ describe("panelLayout", () => {
     expect(
       normalizeWorkspaceLayout({
         projectPanelWidthPx: 500,
-        agentsSidebarCollapsed: true,
+        sessionsSidebarCollapsed: true,
       }),
     ).toEqual({
       projectPanelWidthPx: 500,
-      agentsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
+      sessionsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
       projectPanelCollapsed: false,
-      agentsSidebarCollapsed: true,
+      sessionsSidebarCollapsed: true,
     });
   });
 });

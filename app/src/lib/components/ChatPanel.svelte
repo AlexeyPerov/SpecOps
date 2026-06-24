@@ -34,7 +34,7 @@
     chatStore,
     formatCompactionNotice,
   } from "../state/chatStore";
-  import { draftEntryTitleForScope } from "../services/chatAgents";
+  import { draftEntryTitleForScope } from "../services/chatSessions";
   import { getOpencodeCatalog, refreshOpencodeCatalog } from "../ai/opencodeCatalog";
   import { isOpencodeEnabled } from "../services/opencodeSettings";
   import { extractSessionTotals } from "../ai/chatSteps";
@@ -46,20 +46,20 @@
 
   interface Props {
     chatContextKind?: "workspace" | "chat-http";
-    onDeleteAgent?: () => void | Promise<void>;
+    onDeleteSession?: () => void | Promise<void>;
     /** M2-T3: fork the active session from a message into a new tab. */
-    onForkAgent?: (messageId?: string) => void | Promise<void>;
+    onForkSession?: (messageId?: string) => void | Promise<void>;
     /** M2-T4 undo: revert the active session to a message in place. */
     onRevertSession?: (messageId?: string) => void | Promise<void>;
     /** M2-T4 redo: restore a reverted session in place. */
     onUnrevertSession?: () => void | Promise<void>;
     /** M2-T5: share / unshare the active session. */
-    onShareAgent?: () => void | Promise<void>;
-    onUnshareAgent?: () => void | Promise<void>;
+    onShareSession?: () => void | Promise<void>;
+    onUnshareSession?: () => void | Promise<void>;
     /** M2-T6: generate / refresh the session summary. */
-    onSummarizeAgent?: () => void | Promise<void>;
+    onSummarizeSession?: () => void | Promise<void>;
     /** M2-T7: export the active transcript to Markdown. */
-    onExportAgent?: () => void | Promise<void>;
+    onExportSession?: () => void | Promise<void>;
     /** M2-T5: current share URL for the active session, if any. */
     activeShareUrl?: string | null;
     /** M2-T3: parent session id when the active session is a fork. */
@@ -78,14 +78,14 @@
 
   let {
     chatContextKind = "workspace",
-    onDeleteAgent,
-    onForkAgent,
+    onDeleteSession,
+    onForkSession,
     onRevertSession,
     onUnrevertSession,
-    onShareAgent,
-    onUnshareAgent,
-    onSummarizeAgent,
-    onExportAgent,
+    onShareSession,
+    onUnshareSession,
+    onSummarizeSession,
+    onExportSession,
     activeShareUrl = null,
     activeParentSessionId = null,
     canToggleTodoPanel = false,
@@ -179,32 +179,32 @@
    * this resolves to null (no badge rendered).
    */
   const sessionTotals = $derived(extractSessionTotals(messages));
-  const activeAgentId = $derived(chatStore.getActiveAgentId());
+  const activeSessionId = $derived(chatStore.getActiveSessionId());
   const activeAgentTitle = $derived.by(() => {
-    if (!activeAgentId) {
+    if (!activeSessionId) {
       return isChatHttpScope ? "Chat" : "Session";
     }
     return (
-      chatStore.getAgentTitle(activeAgentId) ??
+      chatStore.getSessionTitle(activeSessionId) ??
       draftEntryTitleForScope(isChatHttpScope ? CHAT_HTTP_CONTEXT_ID : null)
     );
   });
-  const canDeleteAgent = $derived(activeAgentId !== null);
+  const canDeleteSession = $derived(activeSessionId !== null);
   /**
    * M2 session actions are only meaningful for workspace agent tabs with a
    * linked OpenCode session. Chat-http / debug threads and draft agents have
    * no server-side session to fork / revert / share / summarize / export, so
    * the menu is hidden entirely for them.
    */
-  const isWorkspaceAgent = $derived(chatContextKind === "workspace" && activeAgentId !== null);
+  const isWorkspaceSession = $derived(chatContextKind === "workspace" && activeSessionId !== null);
   const hasSessionActions = $derived(
-    isWorkspaceAgent &&
+    isWorkspaceSession &&
       Boolean(
-        onForkAgent ||
+        onForkSession ||
           onRevertSession ||
-          onShareAgent ||
-          onSummarizeAgent ||
-          onExportAgent ||
+          onShareSession ||
+          onSummarizeSession ||
+          onExportSession ||
           onOpenTimeline,
       ),
   );
@@ -357,8 +357,8 @@
     return PROVIDER_REQUEST_FAILURE_RECOVERY;
   }
 
-  async function deleteAgent(): Promise<void> {
-    if (!canDeleteAgent || !activeAgentId) {
+  async function deleteSession(): Promise<void> {
+    if (!canDeleteSession || !activeSessionId) {
       return;
     }
     const targetLabel = isChatHttpScope ? "chat" : "session";
@@ -368,11 +368,11 @@
     if (!confirmed) {
       return;
     }
-    if (onDeleteAgent) {
-      await onDeleteAgent();
+    if (onDeleteSession) {
+      await onDeleteSession();
       return;
     }
-    await chatStore.deleteAgent(activeAgentId);
+    await chatStore.deleteSession(activeSessionId);
   }
 </script>
 
@@ -430,41 +430,41 @@
           </button>
           {#if sessionActionsOpen}
             <div class="chat-session-actions-menu" role="menu">
-              {#if onShareAgent && !isShared}
+              {#if onShareSession && !isShared}
                 <button
                   type="button"
                   role="menuitem"
-                  onclick={() => runSessionAction(onShareAgent)}
+                  onclick={() => runSessionAction(onShareSession)}
                   title="Share this OpenCode session"
                 >
                   Share…
                 </button>
               {/if}
-              {#if onUnshareAgent && isShared}
+              {#if onUnshareSession && isShared}
                 <button
                   type="button"
                   role="menuitem"
-                  onclick={() => runSessionAction(onUnshareAgent)}
+                  onclick={() => runSessionAction(onUnshareSession)}
                   title="Stop sharing this OpenCode session"
                 >
                   Unshare
                 </button>
               {/if}
-              {#if onSummarizeAgent}
+              {#if onSummarizeSession}
                 <button
                   type="button"
                   role="menuitem"
-                  onclick={() => runSessionAction(onSummarizeAgent)}
+                  onclick={() => runSessionAction(onSummarizeSession)}
                   title="Generate an OpenCode session summary"
                 >
                   Summarize
                 </button>
               {/if}
-              {#if onExportAgent}
+              {#if onExportSession}
                 <button
                   type="button"
                   role="menuitem"
-                  onclick={() => runSessionAction(onExportAgent)}
+                  onclick={() => runSessionAction(onExportSession)}
                   title="Export this OpenCode transcript as Markdown"
                 >
                   Export transcript…
@@ -494,11 +494,11 @@
           {/if}
         </div>
       {/if}
-      {#if canDeleteAgent}
+      {#if canDeleteSession}
         <button
           type="button"
           class="chat-delete-button"
-          onclick={() => void deleteAgent()}
+          onclick={() => void deleteSession()}
           disabled={isBlocked || isGenerating}
         >
           {isChatHttpScope ? "Delete chat" : "Delete session"}
@@ -528,9 +528,9 @@
       activeModeRequiredSections={activeResolvedMode.requiredSections}
       {compactionNotice}
       sessionSummary={metadata?.summary ?? ""}
-      canForkFromMessage={isWorkspaceAgent && Boolean(onForkAgent)}
-      canRevertFromMessage={isWorkspaceAgent && Boolean(onRevertSession)}
-      onForkFromMessage={(messageId) => void onForkAgent?.(messageId)}
+      canForkFromMessage={isWorkspaceSession && Boolean(onForkSession)}
+      canRevertFromMessage={isWorkspaceSession && Boolean(onRevertSession)}
+      onForkFromMessage={(messageId) => void onForkSession?.(messageId)}
       onRevertFromMessage={(messageId) => void onRevertSession?.(messageId)}
       emptyHint={
         isChatHttpScope
@@ -560,7 +560,7 @@
       threadMessages={messages}
       threadSummary={metadata?.summary}
       threadId={metadata?.threadId}
-      activeAgentId={activeAgentId}
+      activeSessionId={activeSessionId}
       workspaceRootPath={workspaceRootPath}
       appSettings={$appState.settings}
       {composerError}
@@ -568,8 +568,8 @@
       {activeOpencodeAgentId}
       {activeOpencodeProviderId}
       onAbortTurn={() => {
-        if (activeAgentId) {
-          abortTurn(activeAgentId, workspaceRootPath);
+        if (activeSessionId) {
+          abortTurn(activeSessionId, workspaceRootPath);
         }
       }}
       onInlineError={(message) => {

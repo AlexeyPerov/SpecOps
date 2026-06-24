@@ -34,7 +34,7 @@ function buildSnapshot(docId: string, tabId: string): ContextSnapshot {
       openTabs: [createFileTab(tabId, docId)],
       lastActiveWindowId: "main",
       windowBounds: null,
-      lastActiveAgentId: null,
+      lastActiveSessionId: null,
     },
   };
 }

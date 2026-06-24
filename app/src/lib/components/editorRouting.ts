@@ -1,9 +1,9 @@
-import { isAgentTab, type TabState } from "../domain/contracts";
+import { isSessionTab, type TabState } from "../domain/contracts";
 
-export function isAgentEditorPaneActive(
+export function isSessionEditorPaneActive(
   openTabs: TabState[],
   selectedTabId: string | null,
 ): boolean {
   const tab = openTabs.find((entry) => entry.id === selectedTabId);
-  return Boolean(tab && isAgentTab(tab));
+  return Boolean(tab && isSessionTab(tab));
 }

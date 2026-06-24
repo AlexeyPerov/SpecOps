@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createAgentTab, createFileTab, isAgentTab, tabDocumentId } from "../../domain/contracts";
+import { createSessionTab, createFileTab, isSessionTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -90,7 +90,7 @@ describe("appState session restore", () => {
             openTabs: [createFileTab("tab-chat", "doc-chat")],
             lastActiveWindowId: "main",
             windowBounds: null,
-            lastActiveAgentId: null,
+            lastActiveSessionId: null,
           },
         },
         workspaces: [
@@ -155,9 +155,9 @@ describe("appState session restore", () => {
                 windowBounds: null,
                 layout: {
                   projectPanelWidthPx: 320,
-                  agentsSidebarWidthPx: 280,
+                  sessionsSidebarWidthPx: 280,
                   projectPanelCollapsed: true,
-                  agentsSidebarCollapsed: false,
+                  sessionsSidebarCollapsed: false,
                 },
               },
             },
@@ -184,17 +184,17 @@ describe("appState session restore", () => {
     appState.addWorkspace("/tmp/ws-one");
     appState.updateActiveWorkspaceLayout({
       projectPanelWidthPx: 300,
-      agentsSidebarWidthPx: 260,
+      sessionsSidebarWidthPx: 260,
       projectPanelCollapsed: true,
-      agentsSidebarCollapsed: false,
+      sessionsSidebarCollapsed: false,
     });
 
     appState.addWorkspace("/tmp/ws-two");
     appState.updateActiveWorkspaceLayout({
       projectPanelWidthPx: 400,
-      agentsSidebarWidthPx: 360,
+      sessionsSidebarWidthPx: 360,
       projectPanelCollapsed: false,
-      agentsSidebarCollapsed: true,
+      sessionsSidebarCollapsed: true,
     });
 
     const wsOneId = appState.getSnapshot().contexts.workspaces[0]?.id;
@@ -202,9 +202,9 @@ describe("appState session restore", () => {
     appState.switchContext(wsOneId!);
 
     expect(appState.getActiveWorkspaceLayout().projectPanelWidthPx).toBe(300);
-    expect(appState.getActiveWorkspaceLayout().agentsSidebarWidthPx).toBe(260);
+    expect(appState.getActiveWorkspaceLayout().sessionsSidebarWidthPx).toBe(260);
     expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
-    expect(appState.getActiveWorkspaceLayout().agentsSidebarCollapsed).toBe(false);
+    expect(appState.getActiveWorkspaceLayout().sessionsSidebarCollapsed).toBe(false);
   });
 
   it("switches between workspace and chat-http contexts without mutating workspace state", () => {

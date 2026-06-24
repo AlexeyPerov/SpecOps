@@ -1,5 +1,5 @@
 import type { DocumentState, TabState } from "../domain/contracts";
-import { isAgentTab, isFileTab, tabDocumentId } from "../domain/contracts";
+import { isFileTab, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import {

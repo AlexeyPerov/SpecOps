@@ -20,14 +20,14 @@ import {
 import { createRegistryCapabilityChecker } from "./providers/capabilityChecker";
 import { resetChatProvidersForTests } from "./providers/bootstrap";
 import { sendChatMessage, retryLastChatTurn } from "./sendChatMessage";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
   };
 });
 
@@ -35,7 +35,7 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
+const schedulePersistMock = vi.mocked(scheduleSessionThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function httpFetchStreamSuccess(content: string): typeof fetch {
@@ -88,7 +88,7 @@ describe("sendChatMessage", () => {
     );
     chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
   });
 
@@ -98,7 +98,7 @@ describe("sendChatMessage", () => {
 
   it("keeps review mode selected when sending in chat-http", async () => {
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "review" });
 
     const resultPromise = sendChatMessage("must be ask-only", undefined, {
@@ -125,9 +125,9 @@ describe("sendChatMessage", () => {
     );
     chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
-    const agentId = chatStore.createDraftAgent();
-    expect(agentId).toBe("agent-1");
-    expect(chatStore.isAgentDraft(agentId!)).toBe(true);
+    const agentId = chatStore.createDraftSession();
+    expect(agentId).toBe("session-1");
+    expect(chatStore.isSessionDraft(agentId!)).toBe(true);
     chatStore.updateThreadMetadata({ provider: "debug-workspace" });
 
     const resultPromise = sendChatMessage("Sidebar title from first send");
@@ -135,14 +135,14 @@ describe("sendChatMessage", () => {
     const result = await resultPromise;
 
     expect(result.ok).toBe(true);
-    expect(chatStore.isAgentDraft(agentId!)).toBe(false);
-    expect(chatStore.getAgentTitle(agentId!)).toBe("Sidebar title from first send");
+    expect(chatStore.isSessionDraft(agentId!)).toBe(false);
+    expect(chatStore.getSessionTitle(agentId!)).toBe("Sidebar title from first send");
     expect(schedulePersistMock).toHaveBeenCalledTimes(3);
     const persistedSnapshot = schedulePersistMock.mock.calls.at(-1)?.[2];
     expect(persistedSnapshot?.thread.messages.some((message) => message.role === "user")).toBe(true);
   });
 
-  it("returns no_agent when send runs without an active draft or agent", async () => {
+  it("returns no_session when send runs without an active draft or session", async () => {
     chatStore.reset();
     chatStore.setActiveWorkspaceRoot("/work/a");
 
@@ -150,7 +150,7 @@ describe("sendChatMessage", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: "no_agent",
+      reason: "no_session",
       message: "Could not resolve an active session.",
     });
     expect(schedulePersistMock).not.toHaveBeenCalled();
@@ -468,7 +468,7 @@ describe("sendChatMessage", () => {
     resetChatProviderRegistryForTests();
     chatStore.reset();
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     appState.updateHttpConnection(DEFAULT_HTTP_CONNECTION_ID, {
       enabled: true,
       modelCatalog: {

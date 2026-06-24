@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
-  import { isAgentEditorPaneActive } from "../lib/components/editorRouting";
+  import { isSessionEditorPaneActive } from "../lib/components/editorRouting";
   import { createAppShellAgentHandlers } from "../lib/services/appShellAgentHandlers";
   import { createAppShellLayoutHandlers } from "../lib/services/appShellLayoutHandlers";
   import {
@@ -16,9 +16,9 @@
   import { appState } from "../lib/state/appState";
   import { getActiveContextSnapshot } from "../lib/state/appState/contextHelpers";
   import {
-    chatActiveAgentId,
-    chatActiveRuntimeByAgentId,
-    chatAgentIndex,
+    chatActiveSessionId,
+    chatActiveRuntimeBySessionId,
+    chatSessionIndex,
     chatStore,
   } from "../lib/state/chatStore";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
@@ -42,7 +42,7 @@
   import {
     requestOpencodeHealthRefresh,
     syncActiveFileTreeExpandEffect,
-    syncAgentTabEffect,
+    syncSessionTabEffect,
     syncChatAccessMonitorEffect,
     syncExternalFileWatcherEffect,
     syncOpencodeSidecarEffect,
@@ -75,8 +75,8 @@
     clearStatusSummary,
   } from "../lib/ai/opencodeStatusSummary";
   import {
-    createAgentNotificationObserver,
-  } from "../lib/services/agentNotificationObserver";
+    createSessionNotificationObserver,
+  } from "../lib/services/sessionNotificationObserver";
 
   /**
    * Resolves a workspace-relative path (e.g. from an OpenCode diff payload)
@@ -124,8 +124,8 @@
    * fires sound + OS notifications. Created once; updated on every chatStore
    * change via the effect below.
    */
-  const agentNotificationObserver = createAgentNotificationObserver();
-  const activeRuntimeByAgentId = $derived($chatActiveRuntimeByAgentId);
+  const sessionNotificationObserver = createSessionNotificationObserver();
+  const activeRuntimeBySessionId = $derived($chatActiveRuntimeBySessionId);
   let runtimeSyncExternalFileWatcher = $state<
     ((state: AppDomainState) => Promise<void>) | null
   >(null);
@@ -149,7 +149,7 @@
     { probeWorkspaceReadAccessFn: probeWorkspaceReadAccess },
   );
   let autoProjectPanelCollapsed = $state(false);
-  let autoAgentsSidebarCollapsed = $state(false);
+  let autoSessionsSidebarCollapsed = $state(false);
   let lastChatScopeKey = $state<string | null>(null);
 
   const snapshot = $derived($appState);
@@ -169,23 +169,23 @@
       !workspaceLayout.projectPanelCollapsed &&
       !autoProjectPanelCollapsed,
   );
-  const workspaceAgents = $derived($chatAgentIndex);
-  const selectedAgentId = $derived($chatActiveAgentId);
+  const workspaceSessions = $derived($chatSessionIndex);
+  const selectedSessionId = $derived($chatActiveSessionId);
   /**
    * M2 — active agent's OpenCode session link for the chat header badges and
    * session-action gating. Resolved off the agent index (already reactive)
-   * rather than calling `chatStore.getAgentSessionLink` imperatively.
+   * rather than reading the session index imperatively.
    */
-  const activeAgentEntry = $derived(
-    workspaceAgents.find((agent) => agent.id === selectedAgentId) ?? null,
+  const activeSessionEntry = $derived(
+    workspaceSessions.find((agent) => agent.id === selectedSessionId) ?? null,
   );
-  const activeShareUrl = $derived(activeAgentEntry?.opencodeShareUrl ?? null);
+  const activeShareUrl = $derived(activeSessionEntry?.opencodeShareUrl ?? null);
   const activeParentSessionId = $derived(
-    activeAgentEntry?.opencodeParentSessionId ?? null,
+    activeSessionEntry?.opencodeParentSessionId ?? null,
   );
   /** M5-T1 — linked session id for the active agent (scopes session.todo). */
   const activeOpencodeSessionId = $derived(
-    activeAgentEntry?.opencodeSessionId ?? null,
+    activeSessionEntry?.opencodeSessionId ?? null,
   );
   const opencodeMode = $derived(snapshot.settings.opencode.mode);
 
@@ -242,7 +242,7 @@
   );
   const openSessionIds = $derived(
     new Set(
-      workspaceAgents
+      workspaceSessions
         .map((agent) => agent.opencodeSessionId)
         .filter((id): id is string => Boolean(id)),
     ),
@@ -278,9 +278,9 @@
   const opencodeBaseUrl = $derived(snapshot.settings.opencode.baseUrl);
   const opencodeEnabled = $derived(snapshot.settings.opencode.enabled);
   const opencodeSidecarPort = $derived(snapshot.settings.opencode.sidecarPort);
-  const showAgentsSidebar = $derived(
+  const showSessionsSidebar = $derived(
     (isChatHttpActive || (Boolean(activeWorkspaceRoot) && opencodeEnabled)) &&
-      !workspaceLayout.agentsSidebarCollapsed,
+      !workspaceLayout.sessionsSidebarCollapsed,
   );
   const showActivityRail = $derived(
     !(
@@ -299,8 +299,8 @@
   const activeTab = $derived(
     session.openTabs.find((tab) => tab.id === session.selectedTabId),
   );
-  const isAgentTabActive = $derived(
-    isAgentEditorPaneActive(session.openTabs, session.selectedTabId),
+  const isSessionTabActive = $derived(
+    isSessionEditorPaneActive(session.openTabs, session.selectedTabId),
   );
   const activeDocument = $derived(
     documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
@@ -315,7 +315,7 @@
 
   const projectTreeHandlers = createAppShellProjectTreeHandlers({
     getActiveWorkspaceRoot: () => activeWorkspaceRoot,
-    getIsAgentTabActive: () => isAgentTabActive,
+    getIsSessionTabActive: () => isSessionTabActive,
     getCurrentWindowId: () => currentWindowId,
     notify,
     projectTreeController,
@@ -348,7 +348,7 @@
     getEditorPaneWidth: () => editorPaneWidth,
     getActiveWorkspaceRoot: () => activeWorkspaceRoot,
     getIsChatHttpActive: () => isChatHttpActive,
-    getIsAgentTabActive: () => isAgentTabActive,
+    getIsSessionTabActive: () => isSessionTabActive,
     getWorkspaceLayout: () => workspaceLayout,
     getConsoleOpen: () => consoleOpen,
     setConsoleOpen: (open) => {
@@ -358,9 +358,9 @@
     setAutoProjectPanelCollapsed: (collapsed) => {
       autoProjectPanelCollapsed = collapsed;
     },
-    getAutoAgentsSidebarCollapsed: () => autoAgentsSidebarCollapsed,
-    setAutoAgentsSidebarCollapsed: (collapsed) => {
-      autoAgentsSidebarCollapsed = collapsed;
+    getAutoSessionsSidebarCollapsed: () => autoSessionsSidebarCollapsed,
+    setAutoSessionsSidebarCollapsed: (collapsed) => {
+      autoSessionsSidebarCollapsed = collapsed;
     },
     getActiveDocument: () => activeDocument,
     getConsoleHeightPx: () => consoleHeightPx,
@@ -375,9 +375,9 @@
 
   const {
     toggleProjectPanelCollapsed,
-    toggleAgentsSidebarCollapsed,
+    toggleSessionsSidebarCollapsed,
     handleProjectPanelWidthChange,
-    handleAgentsSidebarWidthChange,
+    handleSessionsSidebarWidthChange,
     toggleConsole,
     persistConsoleHeightNow,
     canFitMarkdownSplit,
@@ -401,21 +401,21 @@
   });
 
   const {
-    handleNewAgent,
-    handleSelectAgent,
-    handleDeleteAgent,
-    ensureChatHttpAgentTab,
-    handleDeleteAgentFromChat,
-    restoreWorkspaceAgentSession,
+    handleNewSession,
+    handleSelectSession,
+    handleDeleteSession,
+    ensureChatHttpSessionTab,
+    handleDeleteSessionFromChat,
+    restoreWorkspaceSession,
     handleCloseTab,
-    handleRenameAgent,
-    handleForkAgent,
+    handleRenameSession,
+    handleForkSession,
     handleRevertSession,
     handleUnrevertSession,
-    handleShareAgent,
-    handleUnshareAgent,
-    handleSummarizeAgent,
-    handleExportAgent,
+    handleShareSession,
+    handleUnshareSession,
+    handleSummarizeSession,
+    handleExportSession,
     handleOpenExternalSession,
     handleListWorkspaceSessions,
   } = createAppShellAgentHandlers({
@@ -523,7 +523,7 @@
       runCommand,
       openAndActivatePath,
       consumeOpenedPaths,
-      restoreWorkspaceAgentSession,
+      restoreWorkspaceSession,
       loadProjectTreeRoot,
       notifyProjectTreeFilesystemChange,
       setConsoleHeightPx: (heightPx) => {
@@ -561,20 +561,20 @@
     chatHttpRailVisible;
     activeContextId;
     activeWorkspaceRoot;
-    isAgentTabActive;
-    selectedAgentId;
+    isSessionTabActive;
+    selectedSessionId;
     lastChatScopeKey;
-    syncAgentTabEffect({
+    syncSessionTabEffect({
       activeTab,
       isChatHttpActive,
       chatHttpRailVisible,
       activeContextId,
       activeWorkspaceRoot,
-      isAgentTabActive,
-      selectedAgentId,
+      isSessionTabActive,
+      selectedSessionId,
       lastChatScopeKey,
-      ensureChatHttpAgentTab,
-      restoreWorkspaceAgentSession,
+      ensureChatHttpSessionTab,
+      restoreWorkspaceSession,
       setLastChatScopeKey: (key) => {
         lastChatScopeKey = key;
       },
@@ -586,8 +586,8 @@
     snapshot;
     currentWindowId;
     activeWorkspaceRoot;
-    selectedAgentId;
-    session.lastActiveAgentId;
+    selectedSessionId;
+    session.lastActiveSessionId;
     session.selectedTabId;
     lastSelectedTabId;
     syncSessionPersistenceEffect({
@@ -595,8 +595,8 @@
       snapshot,
       currentWindowId,
       activeWorkspaceRoot,
-      selectedAgentId,
-      sessionLastActiveAgentId: session.lastActiveAgentId,
+      selectedSessionId,
+      sessionLastActiveSessionId: session.lastActiveSessionId,
       selectedTabId: session.selectedTabId,
       lastSelectedTabId,
       onTabActivated,
@@ -614,15 +614,15 @@
    */
   $effect(() => {
     runtimeReady;
-    activeRuntimeByAgentId;
+    activeRuntimeBySessionId;
     snapshot.settings.soundSettings;
     snapshot.settings.osNotificationSettings;
     if (!runtimeReady) {
       return;
     }
-    agentNotificationObserver.update({
-      activeScopeKey: activeRuntimeByAgentId.scopeKey,
-      runtimeByAgentId: activeRuntimeByAgentId.runtimeByAgentId,
+    sessionNotificationObserver.update({
+      activeScopeKey: activeRuntimeBySessionId.scopeKey,
+      runtimeBySessionId: activeRuntimeBySessionId.runtimeBySessionId,
       settings: {
         sound: snapshot.settings.soundSettings,
         osNotifications: snapshot.settings.osNotificationSettings,
@@ -635,14 +635,14 @@
     isWorkspaceLifecycleActive();
     activeWorkspaceRoot;
     isChatHttpActive;
-    isAgentTabActive;
+    isSessionTabActive;
     documentView.activeDocumentPath;
     syncOpencodeSidecarEffect({
       runtimeReady,
       workspaceLifecycleActive: isWorkspaceLifecycleActive(),
       activeWorkspaceRoot,
       isChatHttpActive,
-      isAgentTabActive,
+      isSessionTabActive,
       opencodeEnabled,
       opencodeMode,
       opencodeBaseUrl,
@@ -713,7 +713,7 @@
     runtimeReady;
     snapshot;
     runtimeSyncExternalFileWatcher;
-    isAgentTabActive;
+    isSessionTabActive;
     activeWorkspaceRoot;
     isChatHttpActive;
     activeContextId;
@@ -728,7 +728,7 @@
     });
     syncChatAccessMonitorEffect({
       runtimeReady,
-      isAgentTabActive,
+      isSessionTabActive,
       activeWorkspaceRoot,
       isChatHttpActive,
     });
@@ -752,7 +752,7 @@
     activeWorkspaceRoot;
     activeOpencodeSessionId;
     todoPanelOpen;
-    session.lastActiveAgentId;
+    session.lastActiveSessionId;
     const isGenerating = chatStore.getRuntimeState().isGenerating;
     void isGenerating;
 
@@ -786,7 +786,7 @@
     activeWorkspaceRoot;
     activeOpencodeSessionId;
     diffPanelOpen;
-    session.lastActiveAgentId;
+    session.lastActiveSessionId;
     const isGenerating = chatStore.getRuntimeState().isGenerating;
     void isGenerating;
 
@@ -808,14 +808,14 @@
    * switch.
    *
    * M13.5 — file-status refresh touches OpenCode (`file.status`); gate it on
-   * `isAgentTabActive` so file/editor tabs don't trigger backend calls.
+   * `isSessionTabActive` so file/editor tabs don't trigger backend calls.
    */
   let lastFileStatusWorkspace = $state<string | null>(null);
   $effect(() => {
     runtimeReady;
     activeWorkspaceRoot;
-    isAgentTabActive;
-    session.lastActiveAgentId;
+    isSessionTabActive;
+    session.lastActiveSessionId;
     const isGenerating = chatStore.getRuntimeState().isGenerating;
     void isGenerating;
 
@@ -825,7 +825,7 @@
     }
     lastFileStatusWorkspace = root;
 
-    if (!runtimeReady || !root || !isAgentTabActive) {
+    if (!runtimeReady || !root || !isSessionTabActive) {
       return;
     }
     void refreshFileStatuses({ workspaceRootPath: root });
@@ -899,23 +899,23 @@
     onRequestCloseWorkspace: handleOpenWorkspaceContextMenu,
     onReorderWorkspaces: (fromIndex, toIndex) => appState.reorderWorkspaces(fromIndex, toIndex),
   }}
-  agentsSidebar={{
+  sessionsSidebar={{
     show: (Boolean(activeWorkspaceRoot) && opencodeEnabled) || isChatHttpActive,
-    agents: workspaceAgents,
-    activeAgentId: selectedAgentId,
+    sessions: workspaceSessions,
+    activeSessionId: selectedSessionId,
     sidebarTitle: isChatHttpActive ? "Chats" : "Sessions",
-    collapsed: !showAgentsSidebar,
-    panelWidthPx: workspaceLayout.agentsSidebarWidthPx,
-    onToggleCollapsed: toggleAgentsSidebarCollapsed,
-    onPanelWidthChange: handleAgentsSidebarWidthChange,
-    onSelectAgent: handleSelectAgent,
-    onNewAgent: handleNewAgent,
-    onDeleteAgent: handleDeleteAgent,
-    onRenameAgent: handleRenameAgent,
-    onShareAgent: (agentId) => {
-      void handleShareAgent(agentId);
+    collapsed: !showSessionsSidebar,
+    panelWidthPx: workspaceLayout.sessionsSidebarWidthPx,
+    onToggleCollapsed: toggleSessionsSidebarCollapsed,
+    onPanelWidthChange: handleSessionsSidebarWidthChange,
+    onSelectSession: handleSelectSession,
+    onNewSession: handleNewSession,
+    onDeleteSession: handleDeleteSession,
+    onRenameSession: handleRenameSession,
+    onShareSession: (sessionId) => {
+      void handleShareSession(sessionId);
     },
-    onExportAgent: handleExportAgent,
+    onExportSession: handleExportSession,
     onOpenSessions: openSessionListPanel,
   }}
   projectTree={{
@@ -943,7 +943,7 @@
     documents,
     activeDocument,
     isChatHttpActive,
-    isAgentTabActive,
+    isSessionTabActive,
     isImageDocument: documentView.isImageDocument,
     isBinaryDocument: documentView.isBinaryDocument,
     isLargePendingDocument: documentView.isLargePendingDocument,
@@ -970,50 +970,50 @@
     onMarkdownViewModeChange: setMarkdownViewMode,
     onUntitledTitleRefresh: scheduleUntitledTitleRefresh,
     onScrollTopChange: handleDocumentScrollTop,
-    onDeleteAgentFromChat: handleDeleteAgentFromChat,
+    onDeleteSessionFromChat: handleDeleteSessionFromChat,
     onGoToLine: runGoToLine,
     onCloseGoTo: () => appState.setGoToOpen(false),
     notify,
-    onForkAgent: (messageId?: string) => {
-      const agentId = chatStore.getActiveAgentId();
-      if (agentId) {
-        void handleForkAgent(agentId, messageId);
+    onForkSession: (messageId?: string) => {
+      const sessionId = chatStore.getActiveSessionId();
+      if (sessionId) {
+        void handleForkSession(sessionId, messageId);
       }
     },
     onRevertSession: (messageId?: string) => {
-      const agentId = chatStore.getActiveAgentId();
-      if (agentId) {
-        void handleRevertSession(agentId, messageId);
+      const sessionId = chatStore.getActiveSessionId();
+      if (sessionId) {
+        void handleRevertSession(sessionId, messageId);
       }
     },
     onUnrevertSession: () => {
-      const agentId = chatStore.getActiveAgentId();
-      if (agentId) {
-        void handleUnrevertSession(agentId);
+      const sessionId = chatStore.getActiveSessionId();
+      if (sessionId) {
+        void handleUnrevertSession(sessionId);
       }
     },
-    onShareAgent: () => {
-      const agentId = chatStore.getActiveAgentId();
-      if (agentId) {
-        void handleShareAgent(agentId);
+    onShareSession: () => {
+      const sessionId = chatStore.getActiveSessionId();
+      if (sessionId) {
+        void handleShareSession(sessionId);
       }
     },
-    onUnshareAgent: () => {
-      const agentId = chatStore.getActiveAgentId();
-      if (agentId) {
-        void handleUnshareAgent(agentId);
+    onUnshareSession: () => {
+      const sessionId = chatStore.getActiveSessionId();
+      if (sessionId) {
+        void handleUnshareSession(sessionId);
       }
     },
-    onSummarizeAgent: () => {
-      const agentId = chatStore.getActiveAgentId();
-      if (agentId) {
-        void handleSummarizeAgent(agentId);
+    onSummarizeSession: () => {
+      const sessionId = chatStore.getActiveSessionId();
+      if (sessionId) {
+        void handleSummarizeSession(sessionId);
       }
     },
-    onExportAgent: () => {
-      const agentId = chatStore.getActiveAgentId();
-      if (agentId) {
-        void handleExportAgent(agentId);
+    onExportSession: () => {
+      const sessionId = chatStore.getActiveSessionId();
+      if (sessionId) {
+        void handleExportSession(sessionId);
       }
     },
     activeShareUrl,
@@ -1045,7 +1045,7 @@
     open: sessionListOpen,
     sessions: sessionListSessions,
     openSessionIds,
-    activeSessionId: activeAgentEntry?.opencodeSessionId ?? null,
+    activeSessionId: activeSessionEntry?.opencodeSessionId ?? null,
     loading: sessionListLoading,
     errorMessage: sessionListError,
     sort: sessionListSort,

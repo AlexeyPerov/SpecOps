@@ -10,7 +10,7 @@ export function createThreadsSlice(deps: {
   update: ChatStoreUpdate;
   getSnapshot: () => ChatStoreState;
   getActiveChatScopeKey: () => string | null;
-  getRuntimeState: (agentId?: string) => { isGenerating: boolean };
+  getRuntimeState: (sessionId?: string) => { isGenerating: boolean };
   capabilityCheckerRef: { current: CapabilityChecker | null };
 }) {
   const { update, getSnapshot, getActiveChatScopeKey, getRuntimeState, capabilityCheckerRef } = deps;

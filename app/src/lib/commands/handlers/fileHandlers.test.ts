@@ -557,7 +557,7 @@ describe("file.rename command", () => {
   it("no-ops when the active tab is not a file tab", async () => {
     const { context, notify } = createCommandContext();
     appState.addWorkspace("/tmp/ws");
-    appState.openOrFocusAgentTab("agent-a");
+    appState.openOrFocusSessionTab("agent-a");
 
     dispatchCommand("file.rename", context);
     await flushCommandQueue();

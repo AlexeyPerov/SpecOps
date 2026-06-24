@@ -51,15 +51,15 @@ export function cloneThread(thread: ChatThreadSnapshot | null): ChatThreadSnapsh
  * omitted — workspace threads store OpenCode-only selection state.
  */
 export function createThreadMetadata(
-  agentId: string,
+  sessionId: string,
   createdAt: string,
   scopeKey?: string | null,
 ): ChatThreadMetadata {
   const isWorkspaceScope = scopeKey != null && scopeKey !== CHAT_HTTP_CONTEXT_ID;
   if (isWorkspaceScope) {
     return {
-      agentId,
-      threadId: agentId,
+      sessionId,
+      threadId: sessionId,
       mode: DEFAULT_CHAT_MODE,
       createdAt,
       updatedAt: createdAt,
@@ -67,8 +67,8 @@ export function createThreadMetadata(
   }
   const provider = defaultChatProviderResolver();
   return {
-    agentId,
-    threadId: agentId,
+    sessionId,
+    threadId: sessionId,
     mode: DEFAULT_CHAT_MODE,
     provider,
     createdAt,

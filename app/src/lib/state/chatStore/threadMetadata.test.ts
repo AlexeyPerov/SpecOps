@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
-import { chatStore, formatCompactionNotice, resetAgentIdCounterForTests } from "../chatStore";
-import { DRAFT_AGENT_TITLE } from "../../services/chatAgents";
+import { chatStore, formatCompactionNotice, resetSessionIdCounterForTests } from "../chatStore";
+import { DRAFT_SESSION_TITLE } from "../../services/chatSessions";
 import type { ChatThreadSnapshot } from "../../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../../ai/capabilities";
 import {
@@ -9,9 +9,9 @@ import {
   WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
 } from "../../ai/chatErrorCopy";
 import {
-  deleteAgentPersistence,
-  readAgentThreadFileSnapshot,
-  readWorkspaceAgentsIndexSnapshot,
+  deleteSessionPersistence,
+  readSessionThreadFileSnapshot,
+  readWorkspaceSessionsIndexSnapshot,
 } from "../../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../../services/fileSystem";
@@ -33,9 +33,9 @@ vi.mock("../../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/chatPersistence")>();
   return {
     ...actual,
-    readAgentThreadFileSnapshot: vi.fn(),
-    readWorkspaceAgentsIndexSnapshot: vi.fn(),
-    deleteAgentPersistence: vi.fn(),
+    readSessionThreadFileSnapshot: vi.fn(),
+    readWorkspaceSessionsIndexSnapshot: vi.fn(),
+    deleteSessionPersistence: vi.fn(),
   };
 });
 
@@ -43,9 +43,9 @@ vi.mock("../../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const readAgentThreadFileSnapshotMock = vi.mocked(readAgentThreadFileSnapshot);
-const readWorkspaceAgentsIndexSnapshotMock = vi.mocked(readWorkspaceAgentsIndexSnapshot);
-const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
+const readSessionThreadFileSnapshotMock = vi.mocked(readSessionThreadFileSnapshot);
+const readWorkspaceSessionsIndexSnapshotMock = vi.mocked(readWorkspaceSessionsIndexSnapshot);
+const deleteSessionPersistenceMock = vi.mocked(deleteSessionPersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function providerSwitchOptions() {
@@ -199,7 +199,7 @@ describe("chatStore model switching", () => {
       modelCatalog: catalogs.http,
     });
 
-    expect(chatStore.getActiveAgentId()).toBeNull();
+    expect(chatStore.getActiveSessionId()).toBeNull();
 
     const result = await chatStore.switchThreadModel("GLM-4.5-Air", {
       providerSettings: appState.getSnapshot().settings.providerSettings,
@@ -207,14 +207,14 @@ describe("chatStore model switching", () => {
     });
 
     expect(result.switched).toBe(true);
-    expect(chatStore.getActiveAgentId()).not.toBeNull();
+    expect(chatStore.getActiveSessionId()).not.toBeNull();
     expect(chatStore.getMetadata()?.selectedModelId).toBe("GLM-4.5-Air");
   });
 
   it("uses connection catalog default in getActiveChatModel before a thread exists", () => {
     chatStore.reset();
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     appState.updateHttpConnection(DEFAULT_HTTP_CONNECTION_ID, {
       modelCatalog: {
         modelIds: ["GLM-4.5-Air"],

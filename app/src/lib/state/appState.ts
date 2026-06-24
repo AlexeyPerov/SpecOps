@@ -36,7 +36,7 @@ function buildDefaultContextSession() {
     openTabs: [createFileTab("tab-1", "doc-1")],
     lastActiveWindowId: "main",
     windowBounds: null,
-    lastActiveAgentId: null,
+    lastActiveSessionId: null,
   };
 }
 

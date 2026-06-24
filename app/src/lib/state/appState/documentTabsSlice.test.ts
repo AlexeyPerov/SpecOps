@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createAgentTab, createFileTab, isAgentTab, tabDocumentId } from "../../domain/contracts";
+import { createSessionTab, createFileTab, isSessionTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -36,37 +36,37 @@ describe("appState tabs and selection", () => {
     expect(appState.getActiveSession().selectedTabId).toBe("tab-1");
   });
 
-  it("openOrFocusAgentTab opens a new agent tab and focuses an existing one", () => {
-    appState.openOrFocusAgentTab("agent-a");
+  it("openOrFocusSessionTab opens a new agent tab and focuses an existing one", () => {
+    appState.openOrFocusSessionTab("agent-a");
     let snapshot = appState.getSnapshot();
     expect(appState.getActiveSession().openTabs).toHaveLength(2);
-    const firstAgentTab = appState.getActiveSession().openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a");
+    const firstAgentTab = appState.getActiveSession().openTabs.find((tab) => isSessionTab(tab) && tab.sessionId === "agent-a");
     expect(firstAgentTab?.id).toBe("tab-2");
     expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
 
     appState.selectTab("tab-1");
-    appState.openOrFocusAgentTab("agent-a");
+    appState.openOrFocusSessionTab("agent-a");
     snapshot = appState.getSnapshot();
     expect(appState.getActiveSession().openTabs).toHaveLength(2);
     expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
   });
 
-  it("closeTabsForAgent removes all tabs for that agent", () => {
-    appState.openOrFocusAgentTab("agent-a");
-    appState.openOrFocusAgentTab("agent-b");
-    appState.closeTabsForAgent("agent-a");
+  it("closeTabsForSession removes all tabs for that agent", () => {
+    appState.openOrFocusSessionTab("agent-a");
+    appState.openOrFocusSessionTab("agent-b");
+    appState.closeTabsForSession("agent-a");
 
     const snapshot = appState.getSnapshot();
-    expect(appState.getActiveSession().openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-a")).toBe(false);
-    expect(appState.getActiveSession().openTabs.some((tab) => isAgentTab(tab) && tab.agentId === "agent-b")).toBe(true);
+    expect(appState.getActiveSession().openTabs.some((tab) => isSessionTab(tab) && tab.sessionId === "agent-a")).toBe(false);
+    expect(appState.getActiveSession().openTabs.some((tab) => isSessionTab(tab) && tab.sessionId === "agent-b")).toBe(true);
   });
 
   it("closeTabForce focuses the next open agent tab in tab-bar order", () => {
-    appState.openOrFocusAgentTab("agent-a");
-    appState.openOrFocusAgentTab("agent-b");
+    appState.openOrFocusSessionTab("agent-a");
+    appState.openOrFocusSessionTab("agent-b");
     const agentATabId = appState
       .getActiveSession()
-      .openTabs.find((tab) => isAgentTab(tab) && tab.agentId === "agent-a")?.id;
+      .openTabs.find((tab) => isSessionTab(tab) && tab.sessionId === "agent-a")?.id;
     expect(agentATabId).toBeDefined();
     appState.selectTab(agentATabId!);
 
@@ -74,14 +74,14 @@ describe("appState tabs and selection", () => {
 
     const snapshot = appState.getSnapshot();
     const selected = appState.getActiveSession().openTabs.find((tab) => tab.id === appState.getActiveSession().selectedTabId);
-    expect(selected && isAgentTab(selected) ? selected.agentId : null).toBe("agent-b");
+    expect(selected && isSessionTab(selected) ? selected.sessionId : null).toBe("agent-b");
   });
 
-  it("persists lastActiveAgentId in session state", () => {
-    appState.setLastActiveAgentId("agent-a");
-    expect(appState.getActiveSession().lastActiveAgentId).toBe("agent-a");
-    appState.setLastActiveAgentId(null);
-    expect(appState.getActiveSession().lastActiveAgentId).toBeNull();
+  it("persists lastActiveSessionId in session state", () => {
+    appState.setLastActiveSessionId("agent-a");
+    expect(appState.getActiveSession().lastActiveSessionId).toBe("agent-a");
+    appState.setLastActiveSessionId(null);
+    expect(appState.getActiveSession().lastActiveSessionId).toBeNull();
   });
 
   it("selectOrReopenTabForDocument selects an open tab", () => {

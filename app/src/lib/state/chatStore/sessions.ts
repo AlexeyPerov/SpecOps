@@ -1,23 +1,23 @@
-import type { AgentIndexEntry } from "../../domain/contracts";
-import { draftEntryTitleForScope, deriveAgentTitle } from "../../services/chatAgents";
+import type { SessionIndexEntry } from "../../domain/contracts";
+import { draftEntryTitleForScope, deriveSessionTitle } from "../../services/chatSessions";
 import {
-  deleteAgentPersistence,
-  readAgentThreadFileSnapshot,
-  readWorkspaceAgentsIndexSnapshot,
+  deleteSessionPersistence,
+  readSessionThreadFileSnapshot,
+  readWorkspaceSessionsIndexSnapshot,
 } from "../../services/chatPersistence";
-import type { ChatStoreState, WorkspaceAgentsState } from "./types";
+import type { ChatStoreState, WorkspaceSessionsState } from "./types";
 import {
   getOrCreateWorkspaceState,
   patchWorkspaceState,
-  activeAgentId,
+  activeSessionId,
 } from "./workspace";
 import { normalizeThreadSnapshotForScope } from "../../ai/providers/threadScopeNormalization";
 import { cloneThread } from "./threadHelpers";
 
-let agentIdCounter = 0;
+let sessionIdCounter = 0;
 
-function parseAgentCounterFromId(agentId: string): number | null {
-  const match = /^agent-(\d+)$/.exec(agentId);
+function parseSessionCounterFromId(sessionId: string): number | null {
+  const match = /^session-(\d+)$/.exec(sessionId);
   if (!match) {
     return null;
   }
@@ -25,61 +25,61 @@ function parseAgentCounterFromId(agentId: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** Clears agent id counter between unit tests. */
-export function resetAgentIdCounterForTests(): void {
-  agentIdCounter = 0;
+/** Clears session id counter between unit tests. */
+export function resetSessionIdCounterForTests(): void {
+  sessionIdCounter = 0;
 }
 
-export function createAgentId(): string {
-  agentIdCounter += 1;
-  return `agent-${agentIdCounter}`;
+export function createSessionId(): string {
+  sessionIdCounter += 1;
+  return `session-${sessionIdCounter}`;
 }
 
-export function createDraftAgentEntry(
-  agentId: string,
+export function createDraftSessionEntry(
+  sessionId: string,
   lastUsedAt: string,
   scopeKey?: string | null,
-): AgentIndexEntry {
+): SessionIndexEntry {
   return {
-    id: agentId,
+    id: sessionId,
     title: draftEntryTitleForScope(scopeKey),
     lastUsedAt,
     isDraft: true,
   };
 }
 
-export function findAgentIndexEntry(
-  workspace: WorkspaceAgentsState,
-  agentId: string,
-): AgentIndexEntry | undefined {
-  return workspace.agentIndex.find((entry) => entry.id === agentId);
+export function findSessionIndexEntry(
+  workspace: WorkspaceSessionsState,
+  sessionId: string,
+): SessionIndexEntry | undefined {
+  return workspace.sessionIndex.find((entry) => entry.id === sessionId);
 }
 
-export function isDraftAgentEntry(entry: AgentIndexEntry | undefined): boolean {
+export function isDraftSessionEntry(entry: SessionIndexEntry | undefined): boolean {
   return entry?.isDraft === true;
 }
 
-export function promoteDraftAgentIndexEntry(
-  entry: AgentIndexEntry,
+export function promoteDraftSessionIndexEntry(
+  entry: SessionIndexEntry,
   firstUserMessageContent: string,
   lastUsedAt: string,
-): AgentIndexEntry {
+): SessionIndexEntry {
   return {
     id: entry.id,
-    title: deriveAgentTitle({ firstUserMessage: firstUserMessageContent }),
+    title: deriveSessionTitle({ firstUserMessage: firstUserMessageContent }),
     lastUsedAt,
   };
 }
 
-export function patchAgentIndexEntry(
-  agentIndex: AgentIndexEntry[],
-  agentId: string,
-  nextEntry: AgentIndexEntry,
-): AgentIndexEntry[] {
-  return agentIndex.map((entry) => (entry.id === agentId ? nextEntry : entry));
+export function patchSessionIndexEntry(
+  sessionIndex: SessionIndexEntry[],
+  sessionId: string,
+  nextEntry: SessionIndexEntry,
+): SessionIndexEntry[] {
+  return sessionIndex.map((entry) => (entry.id === sessionId ? nextEntry : entry));
 }
 
-export interface AgentSessionLinkPatch {
+export interface SessionLinkPatch {
   opencodeSessionId?: string;
   opencodeModelId?: string;
   opencodeProviderId?: string;
@@ -87,11 +87,11 @@ export interface AgentSessionLinkPatch {
   opencodeParentSessionId?: string;
 }
 
-function applyAgentSessionLinkPatch(
-  entry: AgentIndexEntry,
-  patch: AgentSessionLinkPatch,
-): AgentIndexEntry {
-  const next: AgentIndexEntry = {
+function applySessionLinkPatch(
+  entry: SessionIndexEntry,
+  patch: SessionLinkPatch,
+): SessionIndexEntry {
+  const next: SessionIndexEntry = {
     ...entry,
     ...patch,
   };
@@ -118,8 +118,8 @@ function applyAgentSessionLinkPatch(
   return next;
 }
 
-function didSessionLinkChange(entry: AgentIndexEntry, patch: AgentSessionLinkPatch): boolean {
-  const next = applyAgentSessionLinkPatch(entry, patch);
+function didSessionLinkChange(entry: SessionIndexEntry, patch: SessionLinkPatch): boolean {
+  const next = applySessionLinkPatch(entry, patch);
   return (
     next.opencodeSessionId !== entry.opencodeSessionId ||
     next.opencodeModelId !== entry.opencodeModelId ||
@@ -129,44 +129,44 @@ function didSessionLinkChange(entry: AgentIndexEntry, patch: AgentSessionLinkPat
   );
 }
 
-export function resolveTargetAgentId(state: ChatStoreState, agentId?: string): string | null {
-  if (agentId) {
-    return agentId;
+export function resolveTargetSessionId(state: ChatStoreState, sessionId?: string): string | null {
+  if (sessionId) {
+    return sessionId;
   }
-  return activeAgentId(state);
+  return activeSessionId(state);
 }
 
-export function ensureActiveAgent(
+export function ensureActiveSession(
   state: ChatStoreState,
-): { state: ChatStoreState; workspace: WorkspaceAgentsState; agentId: string } | null {
+): { state: ChatStoreState; workspace: WorkspaceSessionsState; sessionId: string } | null {
   const root = state.activeChatScopeKey;
   if (!root) {
     return null;
   }
 
   const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
-  if (workspace.activeAgentId) {
-    return { state: nextState, workspace, agentId: workspace.activeAgentId };
+  if (workspace.activeSessionId) {
+    return { state: nextState, workspace, sessionId: workspace.activeSessionId };
   }
 
-  const agentId = createAgentId();
+  const sessionId = createSessionId();
   const lastUsedAt = new Date().toISOString();
-  const nextWorkspace: WorkspaceAgentsState = {
+  const nextWorkspace: WorkspaceSessionsState = {
     ...workspace,
-    activeAgentId: agentId,
-    agentIndex: [...workspace.agentIndex, createDraftAgentEntry(agentId, lastUsedAt, root)],
+    activeSessionId: sessionId,
+    sessionIndex: [...workspace.sessionIndex, createDraftSessionEntry(sessionId, lastUsedAt, root)],
   };
 
   return {
     state: patchWorkspaceState(nextState, root, nextWorkspace),
     workspace: nextWorkspace,
-    agentId,
+    sessionId,
   };
 }
 
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
-export function createAgentsSlice(deps: {
+export function createSessionsSlice(deps: {
   update: ChatStoreUpdate;
   getSnapshot: () => ChatStoreState;
   getActiveChatScopeKey: () => string | null;
@@ -180,59 +180,59 @@ export function createAgentsSlice(deps: {
     return normalizeThreadSnapshotForScope(thread, scopeKey);
   }
 
-  function syncAgentIdCounterFromWorkspace(workspace: WorkspaceAgentsState): void {
-    let maxCounter = agentIdCounter;
-    for (const entry of workspace.agentIndex) {
-      const parsed = parseAgentCounterFromId(entry.id);
+  function syncSessionIdCounterFromWorkspace(workspace: WorkspaceSessionsState): void {
+    let maxCounter = sessionIdCounter;
+    for (const entry of workspace.sessionIndex) {
+      const parsed = parseSessionCounterFromId(entry.id);
       if (parsed !== null && parsed > maxCounter) {
         maxCounter = parsed;
       }
     }
-    agentIdCounter = maxCounter;
+    sessionIdCounter = maxCounter;
   }
 
   return {
-    getActiveAgentId(): string | null {
-      return activeAgentId(getSnapshot());
+    getActiveSessionId(): string | null {
+      return activeSessionId(getSnapshot());
     },
-    setActiveAgentId(agentId: string | null): void {
+    setActiveSessionId(sessionId: string | null): void {
       update((state) => {
         const root = state.activeChatScopeKey;
         if (!root) {
           return state;
         }
         const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
-        if (workspace.activeAgentId === agentId) {
+        if (workspace.activeSessionId === sessionId) {
           return nextState;
         }
         return patchWorkspaceState(nextState, root, {
           ...workspace,
-          activeAgentId: agentId,
+          activeSessionId: sessionId,
         });
       });
     },
-    createDraftAgent(options?: { activate?: boolean }): string | null {
+    createDraftSession(options?: { activate?: boolean }): string | null {
       const root = getActiveChatScopeKey();
       if (!root) {
         return null;
       }
 
-      let createdAgentId: string | null = null;
+      let createdSessionId: string | null = null;
       update((state) => {
         const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
-        const agentId = createAgentId();
+        const sessionId = createSessionId();
         const lastUsedAt = new Date().toISOString();
         const activate = options?.activate !== false;
-        createdAgentId = agentId;
+        createdSessionId = sessionId;
         return patchWorkspaceState(nextState, root, {
           ...workspace,
-          activeAgentId: activate ? agentId : workspace.activeAgentId,
-          agentIndex: [...workspace.agentIndex, createDraftAgentEntry(agentId, lastUsedAt, root)],
+          activeSessionId: activate ? sessionId : workspace.activeSessionId,
+          sessionIndex: [...workspace.sessionIndex, createDraftSessionEntry(sessionId, lastUsedAt, root)],
         });
       });
-      return createdAgentId;
+      return createdSessionId;
     },
-    isAgentDraft(agentId: string): boolean {
+    isSessionDraft(sessionId: string): boolean {
       const root = getActiveChatScopeKey();
       if (!root) {
         return false;
@@ -241,9 +241,9 @@ export function createAgentsSlice(deps: {
       if (!workspace) {
         return false;
       }
-      return isDraftAgentEntry(findAgentIndexEntry(workspace, agentId));
+      return isDraftSessionEntry(findSessionIndexEntry(workspace, sessionId));
     },
-    getAgentTitle(agentId: string): string | null {
+    getSessionTitle(sessionId: string): string | null {
       const root = getActiveChatScopeKey();
       if (!root) {
         return null;
@@ -252,19 +252,19 @@ export function createAgentsSlice(deps: {
       if (!workspace) {
         return null;
       }
-      return findAgentIndexEntry(workspace, agentId)?.title ?? null;
+      return findSessionIndexEntry(workspace, sessionId)?.title ?? null;
     },
-    getAgentIndex(): AgentIndexEntry[] {
+    getSessionIndex(): SessionIndexEntry[] {
       const root = getActiveChatScopeKey();
       if (!root) {
         return [];
       }
-      return [...(getSnapshot().workspaces[root]?.agentIndex ?? [])];
+      return [...(getSnapshot().workspaces[root]?.sessionIndex ?? [])];
     },
-    getAgentSessionLink(
-      agentId: string,
+    getSessionLink(
+      sessionId: string,
       rootOverride?: string | null,
-    ): AgentSessionLinkPatch | null {
+    ): SessionLinkPatch | null {
       const root = rootOverride ?? getActiveChatScopeKey();
       if (!root) {
         return null;
@@ -273,7 +273,7 @@ export function createAgentsSlice(deps: {
       if (!workspace) {
         return null;
       }
-      const entry = findAgentIndexEntry(workspace, agentId);
+      const entry = findSessionIndexEntry(workspace, sessionId);
       if (!entry || !entry.opencodeSessionId) {
         return null;
       }
@@ -285,9 +285,9 @@ export function createAgentsSlice(deps: {
         opencodeParentSessionId: entry.opencodeParentSessionId,
       };
     },
-    setAgentSessionLink(
-      agentId: string,
-      patch: AgentSessionLinkPatch,
+    setSessionLink(
+      sessionId: string,
+      patch: SessionLinkPatch,
       rootOverride?: string | null,
     ): boolean {
       const root = rootOverride ?? getActiveChatScopeKey();
@@ -297,7 +297,7 @@ export function createAgentsSlice(deps: {
       let changed = false;
       update((state) => {
         const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
-        const entry = findAgentIndexEntry(workspace, agentId);
+        const entry = findSessionIndexEntry(workspace, sessionId);
         if (!entry) {
           return nextState;
         }
@@ -307,18 +307,18 @@ export function createAgentsSlice(deps: {
         changed = true;
         return patchWorkspaceState(nextState, root, {
           ...workspace,
-          agentIndex: patchAgentIndexEntry(
-            workspace.agentIndex,
-            agentId,
-            applyAgentSessionLinkPatch(entry, patch),
+          sessionIndex: patchSessionIndexEntry(
+            workspace.sessionIndex,
+            sessionId,
+            applySessionLinkPatch(entry, patch),
           ),
         });
       });
       return changed;
     },
-    clearAgentSessionLink(agentId: string, rootOverride?: string | null): boolean {
-      return this.setAgentSessionLink(
-        agentId,
+    clearSessionLink(sessionId: string, rootOverride?: string | null): boolean {
+      return this.setSessionLink(
+        sessionId,
         {
           opencodeSessionId: "",
           opencodeModelId: "",
@@ -330,13 +330,13 @@ export function createAgentsSlice(deps: {
       );
     },
     /**
-     * Rename an agent tab (M2-T1). Updates `title` and bumps `lastUsedAt` so
+     * Rename a session tab (M2-T1). Updates `title` and bumps `lastUsedAt` so
      * the row re-sorts to the top of the sidebar. Returns false when the
-     * agent isn't found or the trimmed title is empty. Does NOT call OpenCode
+     * session isn't found or the trimmed title is empty. Does NOT call OpenCode
      * — the caller (handler) is responsible for `session.update({ title })`
      * and only invokes this once that succeeds.
      */
-    renameAgent(agentId: string, title: string, rootOverride?: string | null): boolean {
+    renameSession(sessionId: string, title: string, rootOverride?: string | null): boolean {
       const root = rootOverride ?? getActiveChatScopeKey();
       if (!root) {
         return false;
@@ -351,7 +351,7 @@ export function createAgentsSlice(deps: {
         if (!workspace) {
           return state;
         }
-        const entry = findAgentIndexEntry(workspace, agentId);
+        const entry = findSessionIndexEntry(workspace, sessionId);
         if (!entry) {
           return state;
         }
@@ -360,28 +360,28 @@ export function createAgentsSlice(deps: {
           return state;
         }
         renamed = true;
-        const nextEntry: AgentIndexEntry = {
+        const nextEntry: SessionIndexEntry = {
           ...entry,
           title: trimmed,
           lastUsedAt: new Date().toISOString(),
         };
         return patchWorkspaceState(state, root, {
           ...workspace,
-          agentIndex: patchAgentIndexEntry(workspace.agentIndex, agentId, nextEntry),
+          sessionIndex: patchSessionIndexEntry(workspace.sessionIndex, sessionId, nextEntry),
         });
       });
       return renamed;
     },
     /**
-     * Create a fresh agent tab linked to a (just-forked) OpenCode session
+     * Create a fresh session tab linked to a (just-forked) OpenCode session
      * (M2-T3). The new entry is non-draft and active so the UI opens it. The
      * caller (handler) is responsible for calling `session.fork` first and
-     * passing the child session id + parent id here. Returns the new agent id.
+     * passing the child session id + parent id here. Returns the new session id.
      *
      * `modelId` / `providerId` are inherited from the parent entry when not
      * supplied, so the forked tab keeps the same model selection.
      */
-    forkAgent(
+    forkSession(
       link: {
         opencodeSessionId: string;
         opencodeParentSessionId: string;
@@ -399,7 +399,7 @@ export function createAgentsSlice(deps: {
       if (!workspace) {
         return null;
       }
-      const parentEntry = workspace.agentIndex.find(
+      const parentEntry = workspace.sessionIndex.find(
         (entry) => entry.opencodeSessionId === link.opencodeParentSessionId,
       );
       const modelId = link.opencodeModelId ?? parentEntry?.opencodeModelId;
@@ -407,10 +407,10 @@ export function createAgentsSlice(deps: {
       const title =
         link.title?.trim() ||
         (parentEntry ? `${parentEntry.title} (fork)` : "Forked session");
-      const agentId = createAgentId();
+      const sessionId = createSessionId();
       const lastUsedAt = new Date().toISOString();
-      const entry: AgentIndexEntry = {
-        id: agentId,
+      const entry: SessionIndexEntry = {
+        id: sessionId,
         title,
         lastUsedAt,
         opencodeSessionId: link.opencodeSessionId,
@@ -425,34 +425,34 @@ export function createAgentsSlice(deps: {
         }
         return patchWorkspaceState(state, root, {
           ...ws,
-          activeAgentId: agentId,
-          agentIndex: [...ws.agentIndex, entry],
+          activeSessionId: sessionId,
+          sessionIndex: [...ws.sessionIndex, entry],
         });
       });
-      return agentId;
+      return sessionId;
     },
-    getWorkspaceAgentsState(root: string): WorkspaceAgentsState | null {
+    getWorkspaceSessionsState(root: string): WorkspaceSessionsState | null {
       const workspace = getSnapshot().workspaces[root];
       if (!workspace) {
         return null;
       }
       return {
-        activeAgentId: workspace.activeAgentId,
-        agentIndex: [...workspace.agentIndex],
-        threadsByAgentId: { ...workspace.threadsByAgentId },
-        runtimeByAgentId: { ...workspace.runtimeByAgentId },
+        activeSessionId: workspace.activeSessionId,
+        sessionIndex: [...workspace.sessionIndex],
+        threadsBySessionId: { ...workspace.threadsBySessionId },
+        runtimeBySessionId: { ...workspace.runtimeBySessionId },
       };
     },
-    async loadWorkspaceAgents(normalizedRootPath: string): Promise<void> {
-      const index = await readWorkspaceAgentsIndexSnapshot(normalizedRootPath);
-      const threadsByAgentId: Record<string, import("../../domain/contracts").ChatThreadSnapshot | null> =
+    async loadWorkspaceSessions(normalizedRootPath: string): Promise<void> {
+      const index = await readWorkspaceSessionsIndexSnapshot(normalizedRootPath);
+      const threadsBySessionId: Record<string, import("../../domain/contracts").ChatThreadSnapshot | null> =
         {};
-      for (const entry of index.agents) {
+      for (const entry of index.sessions) {
         if (entry.isDraft) {
           continue;
         }
-        const thread = await readAgentThreadFileSnapshot(normalizedRootPath, entry.id);
-        threadsByAgentId[entry.id] = normalizeThreadForScope(
+        const thread = await readSessionThreadFileSnapshot(normalizedRootPath, entry.id);
+        threadsBySessionId[entry.id] = normalizeThreadForScope(
           normalizedRootPath,
           cloneThread(thread),
         );
@@ -460,31 +460,31 @@ export function createAgentsSlice(deps: {
 
       update((state) => {
         const existing = state.workspaces[normalizedRootPath];
-        const persistedIds = new Set(index.agents.map((entry) => entry.id));
-        const sessionDrafts = (existing?.agentIndex ?? []).filter(
+        const persistedIds = new Set(index.sessions.map((entry) => entry.id));
+        const sessionDrafts = (existing?.sessionIndex ?? []).filter(
           (entry) => entry.isDraft && !persistedIds.has(entry.id),
         );
-        const mergedIndex = [...index.agents, ...sessionDrafts];
+        const mergedIndex = [...index.sessions, ...sessionDrafts];
         const mergedIds = new Set(mergedIndex.map((entry) => entry.id));
-        const mergedThreadsByAgentId = { ...threadsByAgentId };
-        const mergedRuntimeByAgentId = { ...(existing?.runtimeByAgentId ?? {}) };
+        const mergedThreadsBySessionId = { ...threadsBySessionId };
+        const mergedRuntimeBySessionId = { ...(existing?.runtimeBySessionId ?? {}) };
         for (const draft of sessionDrafts) {
-          if (existing?.threadsByAgentId[draft.id]) {
-            mergedThreadsByAgentId[draft.id] = existing.threadsByAgentId[draft.id];
+          if (existing?.threadsBySessionId[draft.id]) {
+            mergedThreadsBySessionId[draft.id] = existing.threadsBySessionId[draft.id];
           }
-          if (existing?.runtimeByAgentId[draft.id]) {
-            mergedRuntimeByAgentId[draft.id] = existing.runtimeByAgentId[draft.id];
+          if (existing?.runtimeBySessionId[draft.id]) {
+            mergedRuntimeBySessionId[draft.id] = existing.runtimeBySessionId[draft.id];
           }
         }
-        const activeAgentIdValue =
-          existing?.activeAgentId && mergedIds.has(existing.activeAgentId)
-            ? existing.activeAgentId
+        const activeSessionIdValue =
+          existing?.activeSessionId && mergedIds.has(existing.activeSessionId)
+            ? existing.activeSessionId
             : null;
-        syncAgentIdCounterFromWorkspace({
-          activeAgentId: activeAgentIdValue,
-          agentIndex: mergedIndex,
-          threadsByAgentId: mergedThreadsByAgentId,
-          runtimeByAgentId: mergedRuntimeByAgentId,
+        syncSessionIdCounterFromWorkspace({
+          activeSessionId: activeSessionIdValue,
+          sessionIndex: mergedIndex,
+          threadsBySessionId: mergedThreadsBySessionId,
+          runtimeBySessionId: mergedRuntimeBySessionId,
         });
 
         return {
@@ -492,49 +492,49 @@ export function createAgentsSlice(deps: {
           workspaces: {
             ...state.workspaces,
             [normalizedRootPath]: {
-              activeAgentId: activeAgentIdValue,
-              agentIndex: mergedIndex,
-              threadsByAgentId: mergedThreadsByAgentId,
-              runtimeByAgentId: mergedRuntimeByAgentId,
+              activeSessionId: activeSessionIdValue,
+              sessionIndex: mergedIndex,
+              threadsBySessionId: mergedThreadsBySessionId,
+              runtimeBySessionId: mergedRuntimeBySessionId,
             },
           },
         };
       });
     },
-    mergeSessionDraftAgents(normalizedRootPath: string, agentIds: readonly string[]): void {
-      if (agentIds.length === 0) {
+    mergeSessionDrafts(normalizedRootPath: string, sessionIds: readonly string[]): void {
+      if (sessionIds.length === 0) {
         return;
       }
       update((state) => {
         const { nextState, workspace } = getOrCreateWorkspaceState(state, normalizedRootPath);
-        const knownIds = new Set(workspace.agentIndex.map((entry) => entry.id));
-        const additions: AgentIndexEntry[] = [];
+        const knownIds = new Set(workspace.sessionIndex.map((entry) => entry.id));
+        const additions: SessionIndexEntry[] = [];
         const lastUsedAt = new Date().toISOString();
-        for (const agentId of agentIds) {
-          if (knownIds.has(agentId)) {
+        for (const sessionId of sessionIds) {
+          if (knownIds.has(sessionId)) {
             continue;
           }
-          knownIds.add(agentId);
-          additions.push(createDraftAgentEntry(agentId, lastUsedAt, normalizedRootPath));
+          knownIds.add(sessionId);
+          additions.push(createDraftSessionEntry(sessionId, lastUsedAt, normalizedRootPath));
         }
         if (additions.length === 0) {
           return nextState;
         }
-        syncAgentIdCounterFromWorkspace({
+        syncSessionIdCounterFromWorkspace({
           ...workspace,
-          agentIndex: [...workspace.agentIndex, ...additions],
+          sessionIndex: [...workspace.sessionIndex, ...additions],
         });
         return patchWorkspaceState(nextState, normalizedRootPath, {
           ...workspace,
-          agentIndex: [...workspace.agentIndex, ...additions],
+          sessionIndex: [...workspace.sessionIndex, ...additions],
         });
       });
     },
-    /** @deprecated Use loadWorkspaceAgents. */
+    /** @deprecated Use loadWorkspaceSessions. */
     async loadWorkspaceThread(normalizedRootPath: string): Promise<void> {
-      await this.loadWorkspaceAgents(normalizedRootPath);
+      await this.loadWorkspaceSessions(normalizedRootPath);
     },
-    async deleteAgent(agentId: string): Promise<boolean> {
+    async deleteSession(sessionId: string): Promise<boolean> {
       const root = getActiveChatScopeKey();
       if (!root) {
         return false;
@@ -546,29 +546,29 @@ export function createAgentsSlice(deps: {
           return state;
         }
 
-        const { [agentId]: _removedThread, ...remainingThreads } = workspace.threadsByAgentId;
-        const { [agentId]: _removedRuntime, ...remainingRuntime } = workspace.runtimeByAgentId;
-        const nextActiveAgentId =
-          workspace.activeAgentId === agentId ? null : workspace.activeAgentId;
+        const { [sessionId]: _removedThread, ...remainingThreads } = workspace.threadsBySessionId;
+        const { [sessionId]: _removedRuntime, ...remainingRuntime } = workspace.runtimeBySessionId;
+        const nextActiveSessionId =
+          workspace.activeSessionId === sessionId ? null : workspace.activeSessionId;
 
         return patchWorkspaceState(state, root, {
           ...workspace,
-          activeAgentId: nextActiveAgentId,
-          agentIndex: workspace.agentIndex.filter((entry) => entry.id !== agentId),
-          threadsByAgentId: remainingThreads,
-          runtimeByAgentId: remainingRuntime,
+          activeSessionId: nextActiveSessionId,
+          sessionIndex: workspace.sessionIndex.filter((entry) => entry.id !== sessionId),
+          threadsBySessionId: remainingThreads,
+          runtimeBySessionId: remainingRuntime,
         });
       });
 
-      await deleteAgentPersistence(root, agentId);
+      await deleteSessionPersistence(root, sessionId);
       return true;
     },
     async clearActiveWorkspaceChatHistory(): Promise<boolean> {
-      const agentId = this.getActiveAgentId();
-      if (!agentId) {
+      const sessionId = this.getActiveSessionId();
+      if (!sessionId) {
         return false;
       }
-      return this.deleteAgent(agentId);
+      return this.deleteSession(sessionId);
     },
   };
 }

@@ -1,10 +1,10 @@
 import type { ChatThreadMetadata, ChatThreadSnapshot } from "../../domain/contracts";
 import { normalizeThreadSnapshotForScope } from "../../ai/providers/threadScopeNormalization";
-import { draftEntryTitleForScope } from "../../services/chatAgents";
+import { draftEntryTitleForScope } from "../../services/chatSessions";
 import { createThreadMetadata, cloneThread, applyMetadataPatch } from "./threadHelpers";
 import type { ChatStoreState } from "./types";
-import { createAgentId, ensureActiveAgent, resolveTargetAgentId } from "./agents";
-import { getOrCreateWorkspaceState, patchWorkspaceState, threadForAgent } from "./workspace";
+import { createSessionId, ensureActiveSession, resolveTargetSessionId } from "./sessions";
+import { getOrCreateWorkspaceState, patchWorkspaceState, threadForSession } from "./workspace";
 
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
@@ -52,7 +52,7 @@ export function createThreadMetadataSlice(deps: {
   const { update, getSnapshot, getActiveChatScopeKey } = deps;
 
   return {
-    setAgentThread(agentId: string, thread: ChatThreadSnapshot | null): void {
+    setSessionThread(sessionId: string, thread: ChatThreadSnapshot | null): void {
       const root = getActiveChatScopeKey();
       if (!root) {
         return;
@@ -61,24 +61,24 @@ export function createThreadMetadataSlice(deps: {
         const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
         return patchWorkspaceState(nextState, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [agentId]: normalizeThreadForScope(cloneThread(thread), root),
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [sessionId]: normalizeThreadForScope(cloneThread(thread), root),
           },
         });
       });
     },
-    /** @deprecated Use setAgentThread + setActiveAgentId. Kept for transitional callers. */
+    /** @deprecated Use setSessionThread + setActiveSessionId. Kept for transitional callers. */
     setWorkspaceThread(normalizedRootPath: string, thread: ChatThreadSnapshot | null): void {
       update((state) => {
         const { nextState, workspace } = getOrCreateWorkspaceState(state, normalizedRootPath);
-        const agentId = thread?.metadata.agentId ?? workspace.activeAgentId ?? createAgentId();
-        const nextIndex = workspace.agentIndex.some((entry) => entry.id === agentId)
-          ? workspace.agentIndex
+        const sessionId = thread?.metadata.sessionId ?? workspace.activeSessionId ?? createSessionId();
+        const nextIndex = workspace.sessionIndex.some((entry) => entry.id === sessionId)
+          ? workspace.sessionIndex
           : [
-              ...workspace.agentIndex,
+              ...workspace.sessionIndex,
               {
-                id: agentId,
+                id: sessionId,
                 title: draftEntryTitleForScope(normalizedRootPath),
                 lastUsedAt: thread?.metadata.updatedAt ?? new Date().toISOString(),
                 isDraft: !thread || thread.messages.length === 0,
@@ -91,11 +91,11 @@ export function createThreadMetadataSlice(deps: {
             ...nextState.workspaces,
             [normalizedRootPath]: {
               ...workspace,
-              activeAgentId: agentId,
-              agentIndex: nextIndex,
-              threadsByAgentId: {
-                ...workspace.threadsByAgentId,
-                [agentId]: normalizeThreadForScope(cloneThread(thread), normalizedRootPath),
+              activeSessionId: sessionId,
+              sessionIndex: nextIndex,
+              threadsBySessionId: {
+                ...workspace.threadsBySessionId,
+                [sessionId]: normalizeThreadForScope(cloneThread(thread), normalizedRootPath),
               },
             },
           },
@@ -116,7 +116,7 @@ export function createThreadMetadataSlice(deps: {
         >
       >,
       updatedAt: string = new Date().toISOString(),
-      agentId?: string,
+      sessionId?: string,
     ): boolean {
       let updatedMetadata = false;
       update((state) => {
@@ -127,33 +127,33 @@ export function createThreadMetadataSlice(deps: {
 
         let workingState = state;
         let workspace = state.workspaces[root];
-        let targetAgentId = resolveTargetAgentId(state, agentId);
+        let targetSessionId = resolveTargetSessionId(state, sessionId);
 
-        if (!targetAgentId) {
-          const ensured = ensureActiveAgent(state);
+        if (!targetSessionId) {
+          const ensured = ensureActiveSession(state);
           if (!ensured) {
             return state;
           }
           workingState = ensured.state;
           workspace = ensured.workspace;
-          targetAgentId = ensured.agentId;
+          targetSessionId = ensured.sessionId;
         }
 
-        if (!workspace || !targetAgentId) {
+        if (!workspace || !targetSessionId) {
           return state;
         }
 
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         if (!thread) {
           updatedMetadata = true;
           return patchWorkspaceState(workingState, root, {
             ...workspace,
-            activeAgentId: workspace.activeAgentId ?? targetAgentId,
-            threadsByAgentId: {
-              ...workspace.threadsByAgentId,
-              [targetAgentId]: {
+            activeSessionId: workspace.activeSessionId ?? targetSessionId,
+            threadsBySessionId: {
+              ...workspace.threadsBySessionId,
+              [targetSessionId]: {
                 metadata: applyMetadataPatch(
-                  createThreadMetadata(targetAgentId, updatedAt, root),
+                  createThreadMetadata(targetSessionId, updatedAt, root),
                   normalizeMetadataPatchForScope(patch, root),
                   updatedAt,
                 ),
@@ -166,9 +166,9 @@ export function createThreadMetadataSlice(deps: {
         updatedMetadata = true;
         return patchWorkspaceState(workingState, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: {
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: {
               ...thread,
               metadata: applyMetadataPatch(
                 thread.metadata,
@@ -181,23 +181,23 @@ export function createThreadMetadataSlice(deps: {
       });
       return updatedMetadata;
     },
-    getActiveThreadSnapshot(agentId?: string): ChatThreadSnapshot | null {
-      const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
-      return cloneThread(threadForAgent(getSnapshot(), targetAgentId));
+    getActiveThreadSnapshot(sessionId?: string): ChatThreadSnapshot | null {
+      const targetSessionId = resolveTargetSessionId(getSnapshot(), sessionId);
+      return cloneThread(threadForSession(getSnapshot(), targetSessionId));
     },
-    getMetadata(agentId?: string): ChatThreadMetadata | null {
-      const thread = threadForAgent(
+    getMetadata(sessionId?: string): ChatThreadMetadata | null {
+      const thread = threadForSession(
         getSnapshot(),
-        resolveTargetAgentId(getSnapshot(), agentId),
+        resolveTargetSessionId(getSnapshot(), sessionId),
       );
       return thread?.metadata ?? null;
     },
-    hasThread(agentId?: string): boolean {
-      return this.getMetadata(agentId) !== null;
+    hasThread(sessionId?: string): boolean {
+      return this.getMetadata(sessionId) !== null;
     },
-    isEmpty(agentId?: string): boolean {
-      const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
-      const thread = threadForAgent(getSnapshot(), targetAgentId);
+    isEmpty(sessionId?: string): boolean {
+      const targetSessionId = resolveTargetSessionId(getSnapshot(), sessionId);
+      const thread = threadForSession(getSnapshot(), targetSessionId);
       return (thread?.messages.length ?? 0) === 0;
     },
   };

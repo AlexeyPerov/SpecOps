@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
-import type { AgentIndexEntry, ChatMessage } from "../domain/contracts";
+import type { SessionIndexEntry, ChatMessage } from "../domain/contracts";
 import {
-  AGENT_DATE_GROUP_ORDER,
-  AGENT_TITLE_MAX_LENGTH,
-  classifyAgentDateGroup,
-  deriveAgentSubtitleFromMessages,
-  deriveAgentSubtitleFromThread,
-  deriveAgentTitle,
-  deriveAgentTitleFromMessages,
-  deriveAgentTitleFromThread,
-  DRAFT_AGENT_TITLE,
-  filterAgentsByTitle,
+  SESSION_DATE_GROUP_ORDER,
+  SESSION_TITLE_MAX_LENGTH,
+  classifySessionDateGroup,
+  deriveSessionSubtitleFromMessages,
+  deriveSessionSubtitleFromThread,
+  deriveSessionTitle,
+  deriveSessionTitleFromMessages,
+  deriveSessionTitleFromThread,
+  DRAFT_SESSION_TITLE,
+  filterSessionsByTitle,
   formatSidebarListTitle,
-  groupAgentsByLastUsedDate,
+  groupSessionsByLastUsedDate,
   SIDEBAR_LIST_TEXT_MAX_LENGTH,
-  truncateAgentTitle,
+  truncateSessionTitle,
   truncateWithEllipsis,
-} from "./chatAgents";
+} from "./chatSessions";
 
 function userMessage(content: string, id = "m-1"): ChatMessage {
   return {
@@ -38,25 +38,25 @@ function assistantMessage(content: string, id = "m-2"): ChatMessage {
 
 describe("agent title helpers", () => {
   it("uses New session for drafts", () => {
-    expect(deriveAgentTitle({ isDraft: true })).toBe(DRAFT_AGENT_TITLE);
+    expect(deriveSessionTitle({ isDraft: true })).toBe(DRAFT_SESSION_TITLE);
   });
 
   it("derives title from first user message line", () => {
-    expect(deriveAgentTitle({ firstUserMessage: "Explain this API\nand edge cases" })).toBe(
+    expect(deriveSessionTitle({ firstUserMessage: "Explain this API\nand edge cases" })).toBe(
       "Explain this API",
     );
   });
 
   it("truncates long first lines", () => {
     const longLine = "x".repeat(80);
-    expect(truncateAgentTitle(longLine)).toHaveLength(AGENT_TITLE_MAX_LENGTH);
-    expect(deriveAgentTitle({ firstUserMessage: longLine })).toHaveLength(AGENT_TITLE_MAX_LENGTH);
+    expect(truncateSessionTitle(longLine)).toHaveLength(SESSION_TITLE_MAX_LENGTH);
+    expect(deriveSessionTitle({ firstUserMessage: longLine })).toHaveLength(SESSION_TITLE_MAX_LENGTH);
   });
 
   it("derives title from thread messages", () => {
     const thread = {
       metadata: {
-        agentId: "agent-1",
+        sessionId: "agent-1",
         threadId: "agent-1",
         mode: "ask" as const,
         provider: "http" as const,
@@ -66,9 +66,9 @@ describe("agent title helpers", () => {
       messages: [userMessage("Review auth flow")],
     };
 
-    expect(deriveAgentTitleFromThread(thread)).toBe("Review auth flow");
-    expect(deriveAgentTitleFromThread(null)).toBe(DRAFT_AGENT_TITLE);
-    expect(deriveAgentTitleFromMessages([])).toBe(DRAFT_AGENT_TITLE);
+    expect(deriveSessionTitleFromThread(thread)).toBe("Review auth flow");
+    expect(deriveSessionTitleFromThread(null)).toBe(DRAFT_SESSION_TITLE);
+    expect(deriveSessionTitleFromMessages([])).toBe(DRAFT_SESSION_TITLE);
   });
 });
 
@@ -88,17 +88,17 @@ describe("sidebar list text helpers", () => {
   it("derives subtitle from first assistant message", () => {
     const longReply = "a".repeat(SIDEBAR_LIST_TEXT_MAX_LENGTH + 5);
     const messages = [userMessage("Hello"), assistantMessage(longReply)];
-    expect(deriveAgentSubtitleFromMessages(messages)).toBe(
+    expect(deriveSessionSubtitleFromMessages(messages)).toBe(
       `${"a".repeat(SIDEBAR_LIST_TEXT_MAX_LENGTH)}...`,
     );
-    expect(deriveAgentSubtitleFromMessages([userMessage("Only user")])).toBeNull();
-    expect(deriveAgentSubtitleFromMessages([assistantMessage("   ")])).toBeNull();
+    expect(deriveSessionSubtitleFromMessages([userMessage("Only user")])).toBeNull();
+    expect(deriveSessionSubtitleFromMessages([assistantMessage("   ")])).toBeNull();
   });
 
   it("derives subtitle from thread messages", () => {
     const thread = {
       metadata: {
-        agentId: "agent-1",
+        sessionId: "agent-1",
         threadId: "agent-1",
         mode: "ask" as const,
         provider: "http" as const,
@@ -108,15 +108,15 @@ describe("sidebar list text helpers", () => {
       messages: [userMessage("Question"), assistantMessage("Short reply")],
     };
 
-    expect(deriveAgentSubtitleFromThread(thread)).toBe("Short reply");
-    expect(deriveAgentSubtitleFromThread(null)).toBeNull();
+    expect(deriveSessionSubtitleFromThread(thread)).toBe("Short reply");
+    expect(deriveSessionSubtitleFromThread(null)).toBeNull();
   });
 });
 
 describe("agent date grouping", () => {
   const now = new Date("2026-05-28T15:00:00.000Z");
 
-  const agents: AgentIndexEntry[] = [
+  const agents: SessionIndexEntry[] = [
     { id: "a-today", title: "Today agent", lastUsedAt: "2026-05-28T10:00:00.000Z" },
     { id: "a-yesterday", title: "Yesterday agent", lastUsedAt: "2026-05-27T10:00:00.000Z" },
     { id: "a-week", title: "Week agent", lastUsedAt: "2026-05-22T10:00:00.000Z" },
@@ -124,16 +124,16 @@ describe("agent date grouping", () => {
   ];
 
   it("classifies lastUsedAt into date buckets", () => {
-    expect(classifyAgentDateGroup("2026-05-28T10:00:00.000Z", now)).toBe("today");
-    expect(classifyAgentDateGroup("2026-05-27T10:00:00.000Z", now)).toBe("yesterday");
-    expect(classifyAgentDateGroup("2026-05-22T10:00:00.000Z", now)).toBe("last-7-days");
-    expect(classifyAgentDateGroup("2026-05-01T10:00:00.000Z", now)).toBe("older");
+    expect(classifySessionDateGroup("2026-05-28T10:00:00.000Z", now)).toBe("today");
+    expect(classifySessionDateGroup("2026-05-27T10:00:00.000Z", now)).toBe("yesterday");
+    expect(classifySessionDateGroup("2026-05-22T10:00:00.000Z", now)).toBe("last-7-days");
+    expect(classifySessionDateGroup("2026-05-01T10:00:00.000Z", now)).toBe("older");
   });
 
   it("groups agents by last used date in descending order within each bucket", () => {
-    const grouped = groupAgentsByLastUsedDate(agents, now);
+    const grouped = groupSessionsByLastUsedDate(agents, now);
 
-    for (const group of AGENT_DATE_GROUP_ORDER) {
+    for (const group of SESSION_DATE_GROUP_ORDER) {
       const entries = grouped[group];
       for (let index = 1; index < entries.length; index += 1) {
         expect(entries[index - 1]!.lastUsedAt.localeCompare(entries[index]!.lastUsedAt)).toBeGreaterThanOrEqual(
@@ -149,12 +149,12 @@ describe("agent date grouping", () => {
   });
 
   it("filters agents by title only", () => {
-    const withDrafts: AgentIndexEntry[] = [
+    const withDrafts: SessionIndexEntry[] = [
       ...agents,
-      { id: "draft-1", title: DRAFT_AGENT_TITLE, lastUsedAt: "2026-05-28T11:00:00.000Z" },
+      { id: "draft-1", title: DRAFT_SESSION_TITLE, lastUsedAt: "2026-05-28T11:00:00.000Z" },
     ];
 
-    expect(filterAgentsByTitle(withDrafts, "new session").map((entry) => entry.id)).toEqual(["draft-1"]);
-    expect(filterAgentsByTitle(withDrafts, "week").map((entry) => entry.id)).toEqual(["a-week"]);
+    expect(filterSessionsByTitle(withDrafts, "new session").map((entry) => entry.id)).toEqual(["draft-1"]);
+    expect(filterSessionsByTitle(withDrafts, "week").map((entry) => entry.id)).toEqual(["a-week"]);
   });
 });

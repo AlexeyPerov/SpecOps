@@ -39,7 +39,7 @@ import {
 } from "../ai/providers/registry";
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { resetChatProvidersForTests } from "../ai/providers/bootstrap";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { createWorkspaceAgentBackend } from "../ai/backends/workspaceAgentBackend";
 import { promptPermission } from "../services/permissionPrompt";
@@ -50,17 +50,17 @@ import {
 } from "../ai/backends/workspaceAgentBackend";
 import { createRawOpencodeClientStub } from "../test/rawOpencodeClientStub";
 import {
-  mappedSessionForAgent,
-  isAgentSessionMappingValid,
-  reconcileAgentSessionMapping,
-  type AgentSessionMapping,
+  mappedSessionForId,
+  isSessionMappingValid,
+  reconcileSessionMapping,
+  type SessionMapping,
 } from "../services/workspaceAgentSession";
 
 vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
   };
 });
 
@@ -99,7 +99,7 @@ vi.mock("../services/opencodeSidecarEnsure", () => ({
   }),
 }));
 
-const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
+const schedulePersistMock = vi.mocked(scheduleSessionThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 const createWorkspaceAgentBackendMock = vi.mocked(createWorkspaceAgentBackend);
 const promptPermissionMock = vi.mocked(promptPermission);
@@ -184,7 +184,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
     );
     chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
   });
 
@@ -258,7 +258,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
     it("chat-http send uses HTTP provider, not workspace backend", async () => {
       appState.switchContext("chat-http");
       chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-      chatStore.createDraftAgent();
+      chatStore.createDraftSession();
       chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
       const resultPromise = sendChatMessage("Chat-http message", undefined, {
@@ -273,7 +273,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
 
     it("chat-http send skips workspace access preflight", async () => {
       chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-      chatStore.createDraftAgent();
+      chatStore.createDraftSession();
       chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
       ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
 
@@ -365,13 +365,13 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
           }),
         ),
       );
-      const agentId = chatStore.getActiveAgentId();
+      const agentId = chatStore.getActiveSessionId();
       chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
 
       const sendPromise = sendChatMessage("Cancel HTTP");
       await Promise.resolve();
       expect(chatStore.getRuntimeState().isGenerating).toBe(true);
-      chatStore.cancelAgentGeneration("/work/a", agentId!);
+      chatStore.cancelSessionGeneration("/work/a", agentId!);
       const result = await sendPromise;
 
       expect(result.ok).toBe(false);
@@ -689,39 +689,39 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
 
   describe("Session restore reconciliation post-cutover", () => {
     it("detects stale session mapping when session no longer exists on backend", () => {
-      const mapping: AgentSessionMapping = {
-        agentId: "agent-a",
-        sessionId: "sess-stale",
+      const mapping: SessionMapping = {
+        sessionId: "agent-a",
+        opencodeSessionId: "sess-stale",
         modelId: "gpt-4.1",
         providerId: "opencode",
       };
       const existingIds = new Set(["sess-live"]);
 
-      expect(isAgentSessionMappingValid(mapping, existingIds)).toBe(false);
+      expect(isSessionMappingValid(mapping, existingIds)).toBe(false);
     });
 
     it("valid session mapping when session exists on backend", () => {
-      const mapping: AgentSessionMapping = {
-        agentId: "agent-a",
-        sessionId: "sess-live",
+      const mapping: SessionMapping = {
+        sessionId: "agent-a",
+        opencodeSessionId: "sess-live",
         modelId: "gpt-4.1",
         providerId: "opencode",
       };
       const existingIds = new Set(["sess-live"]);
 
-      expect(isAgentSessionMappingValid(mapping, existingIds)).toBe(true);
+      expect(isSessionMappingValid(mapping, existingIds)).toBe(true);
     });
 
     it("reconcile replaces stale mapping with new session", () => {
-      const mapping: AgentSessionMapping = {
-        agentId: "agent-a",
-        sessionId: "sess-stale",
+      const mapping: SessionMapping = {
+        sessionId: "agent-a",
+        opencodeSessionId: "sess-stale",
         modelId: "gpt-4.1",
         providerId: "opencode",
       };
       const existingIds = new Set(["sess-live"]);
 
-      const result = reconcileAgentSessionMapping({
+      const result = reconcileSessionMapping({
         mapping,
         existingSessionIds: existingIds,
         createdSessionId: "sess-new",
@@ -732,15 +732,15 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
     });
 
     it("reconcile keeps valid mapping without replacement", () => {
-      const mapping: AgentSessionMapping = {
-        agentId: "agent-a",
-        sessionId: "sess-live",
+      const mapping: SessionMapping = {
+        sessionId: "agent-a",
+        opencodeSessionId: "sess-live",
         modelId: "gpt-4.1",
         providerId: "opencode",
       };
       const existingIds = new Set(["sess-live"]);
 
-      const result = reconcileAgentSessionMapping({
+      const result = reconcileSessionMapping({
         mapping,
         existingSessionIds: existingIds,
         createdSessionId: "sess-new",
@@ -750,7 +750,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
       expect(result.sessionId).toBe("sess-live");
     });
 
-    it("mappedSessionForAgent produces session-scoped mapping without HTTP run-id fields", () => {
+    it("mappedSessionForId produces session-scoped mapping without HTTP run-id fields", () => {
       const agents = [
         {
           id: "agent-a",
@@ -762,10 +762,10 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
         },
       ];
 
-      const mapping = mappedSessionForAgent(agents, "agent-a");
+      const mapping = mappedSessionForId(agents, "agent-a");
       expect(mapping).toEqual({
-        agentId: "agent-a",
-        sessionId: "sess-1",
+        sessionId: "agent-a",
+        opencodeSessionId: "sess-1",
         modelId: "gpt-4.1",
         providerId: "opencode",
       });
@@ -1009,11 +1009,11 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
           yield { type: "message.delta", delta: "tail" };
         }),
       } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
-      chatStore.setAgentSessionLink(chatStore.getActiveAgentId()!, { opencodeSessionId: "sess-1" }, "/work/a");
+      chatStore.setSessionLink(chatStore.getActiveSessionId()!, { opencodeSessionId: "sess-1" }, "/work/a");
 
       const sendPromise = sendChatMessage("Cancel me");
       await Promise.resolve();
-      const cancelled = chatStore.cancelAgentGeneration("/work/a", chatStore.getActiveAgentId()!);
+      const cancelled = chatStore.cancelSessionGeneration("/work/a", chatStore.getActiveSessionId()!);
       expect(cancelled).toBe(true);
 
       const result = await sendPromise;
@@ -1052,15 +1052,15 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
           };
         }),
       } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
-      chatStore.setAgentSessionLink(
-        chatStore.getActiveAgentId()!,
+      chatStore.setSessionLink(
+        chatStore.getActiveSessionId()!,
         { opencodeSessionId: "sess-1" },
         "/work/a",
       );
 
       const sendPromise = sendChatMessage("Cancel pending permission");
       await Promise.resolve();
-      const cancelled = chatStore.cancelAgentGeneration("/work/a", chatStore.getActiveAgentId()!);
+      const cancelled = chatStore.cancelSessionGeneration("/work/a", chatStore.getActiveSessionId()!);
       expect(cancelled).toBe(true);
 
       const result = await sendPromise;

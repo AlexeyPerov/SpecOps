@@ -132,15 +132,15 @@ export interface OpencodeHealthState {
 }
 
 /**
- * Agent feedback events that can fire sound and/or OS notifications
- * (phase-3.5/questions.md Q9). Kept in one place so sound and OS settings share
- * the same event vocabulary.
+ * Workspace session feedback events that can fire sound and/or OS
+ * notifications (phase-3.5/questions.md Q9). Kept in one place so sound and OS
+ * settings share the same event vocabulary.
  */
-export type NotificationEventId = "agentDone" | "permission" | "question" | "error";
+export type NotificationEventId = "sessionDone" | "permission" | "question" | "error";
 
 /** The full set of feedback events, in display order. */
 export const NOTIFICATION_EVENT_IDS: readonly NotificationEventId[] = [
-  "agentDone",
+  "sessionDone",
   "permission",
   "question",
   "error",

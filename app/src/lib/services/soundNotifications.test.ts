@@ -51,7 +51,7 @@ function createMockContext() {
 
 describe("getEventTone", () => {
   it("returns a distinct multi-note recipe per event", () => {
-    const ids = ["agentDone", "permission", "question", "error"] as const;
+    const ids = ["sessionDone", "permission", "question", "error"] as const;
     const tones = ids.map((event) => getEventTone(event));
     for (const tone of tones) {
       expect(tone.notes.length).toBeGreaterThan(0);
@@ -69,7 +69,7 @@ describe("playSound", () => {
     const mock = createMockContext();
     setSoundContextForTests(mock.context);
 
-    playSound("agentDone", { ...defaultSoundSettings, enabled: false });
+    playSound("sessionDone", { ...defaultSoundSettings, enabled: false });
 
     expect(mock.createOscillator).not.toHaveBeenCalled();
   });
@@ -90,9 +90,9 @@ describe("playSound", () => {
     const mock = createMockContext();
     setSoundContextForTests(mock.context);
 
-    playSound("agentDone", defaultSoundSettings);
+    playSound("sessionDone", defaultSoundSettings);
 
-    const expectedNotes = getEventTone("agentDone").notes.length;
+    const expectedNotes = getEventTone("sessionDone").notes.length;
     expect(mock.createOscillator).toHaveBeenCalledTimes(expectedNotes);
     // Each scheduled note carries a positive frequency.
     expect(mock.frequencies).toHaveLength(expectedNotes);
@@ -103,6 +103,6 @@ describe("playSound", () => {
 
   it("no-ops when no AudioContext is available", () => {
     setSoundContextForTests(null);
-    expect(() => playSound("agentDone", defaultSoundSettings)).not.toThrow();
+    expect(() => playSound("sessionDone", defaultSoundSettings)).not.toThrow();
   });
 });

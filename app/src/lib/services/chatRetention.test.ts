@@ -53,7 +53,7 @@ function providerSwitchEvent(id: string): ChatMessage {
 function threadWithMessages(messages: ChatMessage[]): ChatThreadSnapshot {
   return {
     metadata: {
-      agentId: "agent-test",
+      sessionId: "agent-test",
       threadId: "agent-test",
       mode: "ask",
       provider: "http",

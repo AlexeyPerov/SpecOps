@@ -35,7 +35,7 @@ function sanitizeVerboseLogBody(body: unknown): unknown {
 }
 
 export function logChatProviderSwitch(params: {
-  agentId: string;
+  sessionId: string;
   fromProvider: ChatProviderId | null;
   toProvider: ChatProviderId;
   connectionId?: string;
@@ -48,7 +48,7 @@ export function logChatProviderSwitch(params: {
     params.switched ? "chat provider switched" : "chat provider switch blocked",
     {
       kind: "chat.provider-switch",
-      agentId: params.agentId,
+      sessionId: params.sessionId,
       fromProvider: params.fromProvider,
       toProvider: params.toProvider,
       connectionId: params.connectionId,
@@ -60,7 +60,7 @@ export function logChatProviderSwitch(params: {
 }
 
 export function logChatConnectionSwitch(params: {
-  agentId: string;
+  sessionId: string;
   fromConnectionId?: string | null;
   toConnectionId: string;
   modelId?: string;
@@ -72,7 +72,7 @@ export function logChatConnectionSwitch(params: {
     params.switched ? "chat connection switched" : "chat connection switch blocked",
     {
       kind: "chat.connection-switch",
-      agentId: params.agentId,
+      sessionId: params.sessionId,
       fromConnectionId: params.fromConnectionId,
       toConnectionId: params.toConnectionId,
       modelId: params.modelId,
@@ -83,7 +83,7 @@ export function logChatConnectionSwitch(params: {
 }
 
 export function logChatModelSwitch(params: {
-  agentId: string;
+  sessionId: string;
   providerId: ChatProviderId;
   connectionId?: string;
   fromModel?: string | null;
@@ -96,7 +96,7 @@ export function logChatModelSwitch(params: {
     params.switched ? "chat model switched" : "chat model switch blocked",
     {
       kind: "chat.model-switch",
-      agentId: params.agentId,
+      sessionId: params.sessionId,
       providerId: params.providerId,
       connectionId: params.connectionId,
       fromModel: params.fromModel,
@@ -108,7 +108,7 @@ export function logChatModelSwitch(params: {
 }
 
 export function logChatSendStart(params: {
-  agentId: string;
+  sessionId: string;
   turnId: string;
   providerId: ChatProviderId;
   connectionId?: string;
@@ -123,7 +123,7 @@ export function logChatSendStart(params: {
 }
 
 export function logChatSendComplete(params: {
-  agentId: string;
+  sessionId: string;
   turnId: string;
   providerId: ChatProviderId;
   connectionId?: string;
@@ -138,7 +138,7 @@ export function logChatSendComplete(params: {
 }
 
 export function logChatSendFailed(params: {
-  agentId: string;
+  sessionId: string;
   turnId: string;
   providerId: ChatProviderId;
   connectionId?: string;

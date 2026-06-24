@@ -10,9 +10,9 @@ export interface WindowBounds {
 
 export interface WorkspaceLayoutState {
   projectPanelWidthPx: number;
-  agentsSidebarWidthPx: number;
+  sessionsSidebarWidthPx: number;
   projectPanelCollapsed: boolean;
-  agentsSidebarCollapsed: boolean;
+  sessionsSidebarCollapsed: boolean;
 }
 
 export interface SessionState {
@@ -20,8 +20,8 @@ export interface SessionState {
   openTabs: TabState[];
   lastActiveWindowId: string;
   windowBounds: WindowBounds | null;
-  /** Last focused agent in this workspace context; persisted in session snapshot. */
-  lastActiveAgentId?: string | null;
+  /** Last focused workspace session in this context; persisted in session snapshot. */
+  lastActiveSessionId?: string | null;
   /** Per-workspace panel layout; persisted in session snapshot. */
   layout?: WorkspaceLayoutState;
 }

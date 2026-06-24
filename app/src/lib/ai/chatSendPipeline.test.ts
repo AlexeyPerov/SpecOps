@@ -10,7 +10,7 @@ import {
 } from "./providers/registry";
 import { createRegistryCapabilityChecker } from "./providers/capabilityChecker";
 import { resetChatProvidersForTests } from "./providers/bootstrap";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { createWorkspaceAgentBackend } from "./backends/workspaceAgentBackend";
 import {
@@ -27,7 +27,7 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
   };
 });
 
@@ -143,7 +143,7 @@ describe("chatSendPipeline workspace backend streaming", () => {
     );
     chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
   });
 
@@ -494,12 +494,12 @@ describe("chatSendPipeline workspace backend streaming", () => {
       abortSession,
       streamEvents,
     } as unknown as ReturnType<typeof createWorkspaceAgentBackend>);
-    chatStore.setAgentSessionLink(chatStore.getActiveAgentId()!, { opencodeSessionId: "sess-1" }, "/work/a");
+    chatStore.setSessionLink(chatStore.getActiveSessionId()!, { opencodeSessionId: "sess-1" }, "/work/a");
 
     const { sendChatMessage } = await import("./sendChatMessage");
     const sendPromise = sendChatMessage("Long job");
     await Promise.resolve();
-    const cancelled = chatStore.cancelAgentGeneration("/work/a", chatStore.getActiveAgentId()!);
+    const cancelled = chatStore.cancelSessionGeneration("/work/a", chatStore.getActiveSessionId()!);
     expect(cancelled).toBe(true);
 
     const result = await sendPromise;

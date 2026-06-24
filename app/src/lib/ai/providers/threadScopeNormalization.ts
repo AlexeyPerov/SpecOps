@@ -87,11 +87,11 @@ export function normalizeWorkspaceThreadsForScope(
   }
 
   let threadsChanged = false;
-  const threadsByAgentId = { ...workspace.threadsByAgentId };
-  for (const [agentId, thread] of Object.entries(threadsByAgentId)) {
+  const threadsBySessionId = { ...workspace.threadsBySessionId };
+  for (const [sessionId, thread] of Object.entries(threadsBySessionId)) {
     const normalized = normalizeThreadSnapshotForScope(thread, scopeKey);
     if (normalized && normalized !== thread) {
-      threadsByAgentId[agentId] = normalized;
+      threadsBySessionId[sessionId] = normalized;
       threadsChanged = true;
     }
   }
@@ -106,7 +106,7 @@ export function normalizeWorkspaceThreadsForScope(
       ...state.workspaces,
       [scopeKey]: {
         ...workspace,
-        threadsByAgentId,
+        threadsBySessionId,
       },
     },
   };

@@ -1,26 +1,26 @@
-import type { AgentIndexEntry, ChatMessage, ChatThreadSnapshot } from "../domain/contracts";
+import type { ChatMessage, ChatThreadSnapshot, SessionIndexEntry } from "../domain/contracts";
 import { extractSessionTotals } from "../ai/chatSteps";
 import { formatCost } from "../ai/chatTokenFormat";
 
-export const DRAFT_AGENT_TITLE = "New session";
+export const DRAFT_SESSION_TITLE = "New session";
 export const DRAFT_CHAT_TITLE = "New chat";
 
 export function draftEntryTitleForScope(scopeKey: string | null | undefined): string {
-  return scopeKey === "chat-http" ? DRAFT_CHAT_TITLE : DRAFT_AGENT_TITLE;
+  return scopeKey === "chat-http" ? DRAFT_CHAT_TITLE : DRAFT_SESSION_TITLE;
 }
-export const AGENT_TITLE_MAX_LENGTH = 64;
+export const SESSION_TITLE_MAX_LENGTH = 64;
 export const SIDEBAR_LIST_TEXT_MAX_LENGTH = 32;
 
-export type AgentDateGroup = "today" | "yesterday" | "last-7-days" | "older";
+export type SessionDateGroup = "today" | "yesterday" | "last-7-days" | "older";
 
-export const AGENT_DATE_GROUP_LABELS: Record<AgentDateGroup, string> = {
+export const SESSION_DATE_GROUP_LABELS: Record<SessionDateGroup, string> = {
   today: "Today",
   yesterday: "Yesterday",
   "last-7-days": "Last 7 days",
   older: "Older",
 };
 
-export const AGENT_DATE_GROUP_ORDER: readonly AgentDateGroup[] = [
+export const SESSION_DATE_GROUP_ORDER: readonly SessionDateGroup[] = [
   "today",
   "yesterday",
   "last-7-days",
@@ -33,7 +33,7 @@ function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-export function truncateAgentTitle(title: string, maxLength = AGENT_TITLE_MAX_LENGTH): string {
+export function truncateSessionTitle(title: string, maxLength = SESSION_TITLE_MAX_LENGTH): string {
   if (title.length <= maxLength) {
     return title;
   }
@@ -60,12 +60,12 @@ export function firstAssistantMessageContent(messages: readonly ChatMessage[]): 
   return content || null;
 }
 
-export function deriveAgentSubtitleFromMessages(
+export function deriveSessionSubtitleFromMessages(
   messages: readonly ChatMessage[],
 ): string | null {
   const content = firstAssistantMessageContent(messages);
   // M2-T8: append the cumulative session cost (when present) so each sidebar
-  // row carries a per-agent cost hint alongside the first-response preview.
+  // row carries a per-session cost hint alongside the first-response preview.
   const totals = extractSessionTotals(messages);
   const costSuffix = totals && totals.cost > 0 ? ` · ${formatCost(totals.cost)}` : "";
   if (!content && !costSuffix) {
@@ -75,48 +75,48 @@ export function deriveAgentSubtitleFromMessages(
   return `${preview}${costSuffix}`.trim() || null;
 }
 
-export function deriveAgentSubtitleFromThread(thread: ChatThreadSnapshot | null): string | null {
+export function deriveSessionSubtitleFromThread(thread: ChatThreadSnapshot | null): string | null {
   if (!thread || thread.messages.length === 0) {
     return null;
   }
-  return deriveAgentSubtitleFromMessages(thread.messages);
+  return deriveSessionSubtitleFromMessages(thread.messages);
 }
 
 export function firstLineOfText(text: string): string {
   return text.split(/\r?\n/, 1)[0]?.trim() ?? "";
 }
 
-export function deriveAgentTitle(options: {
+export function deriveSessionTitle(options: {
   isDraft?: boolean;
   firstUserMessage?: string | null;
 }): string {
   if (options.isDraft) {
-    return DRAFT_AGENT_TITLE;
+    return DRAFT_SESSION_TITLE;
   }
   const firstLine = firstLineOfText(options.firstUserMessage ?? "");
   if (!firstLine) {
-    return DRAFT_AGENT_TITLE;
+    return DRAFT_SESSION_TITLE;
   }
-  return truncateAgentTitle(firstLine);
+  return truncateSessionTitle(firstLine);
 }
 
-export function deriveAgentTitleFromThread(thread: ChatThreadSnapshot | null): string {
+export function deriveSessionTitleFromThread(thread: ChatThreadSnapshot | null): string {
   if (!thread || thread.messages.length === 0) {
-    return DRAFT_AGENT_TITLE;
+    return DRAFT_SESSION_TITLE;
   }
   const firstUserMessage = thread.messages.find((message) => message.role === "user");
-  return deriveAgentTitle({ firstUserMessage: firstUserMessage?.content ?? null });
+  return deriveSessionTitle({ firstUserMessage: firstUserMessage?.content ?? null });
 }
 
-export function deriveAgentTitleFromMessages(messages: readonly ChatMessage[]): string {
+export function deriveSessionTitleFromMessages(messages: readonly ChatMessage[]): string {
   if (messages.length === 0) {
-    return DRAFT_AGENT_TITLE;
+    return DRAFT_SESSION_TITLE;
   }
   const firstUserMessage = messages.find((message) => message.role === "user");
-  return deriveAgentTitle({ firstUserMessage: firstUserMessage?.content ?? null });
+  return deriveSessionTitle({ firstUserMessage: firstUserMessage?.content ?? null });
 }
 
-export function classifyAgentDateGroup(lastUsedAt: string, now = new Date()): AgentDateGroup {
+export function classifySessionDateGroup(lastUsedAt: string, now = new Date()): SessionDateGroup {
   const usedDay = startOfUtcDay(new Date(lastUsedAt));
   const todayStart = startOfUtcDay(now);
   const diffDays = Math.floor((todayStart.getTime() - usedDay.getTime()) / MS_PER_DAY);
@@ -133,32 +133,32 @@ export function classifyAgentDateGroup(lastUsedAt: string, now = new Date()): Ag
   return "older";
 }
 
-export function groupAgentsByLastUsedDate(
-  agents: readonly AgentIndexEntry[],
+export function groupSessionsByLastUsedDate(
+  sessions: readonly SessionIndexEntry[],
   now = new Date(),
-): Record<AgentDateGroup, AgentIndexEntry[]> {
-  const groups: Record<AgentDateGroup, AgentIndexEntry[]> = {
+): Record<SessionDateGroup, SessionIndexEntry[]> {
+  const groups: Record<SessionDateGroup, SessionIndexEntry[]> = {
     today: [],
     yesterday: [],
     "last-7-days": [],
     older: [],
   };
 
-  const sorted = [...agents].sort((left, right) => right.lastUsedAt.localeCompare(left.lastUsedAt));
-  for (const agent of sorted) {
-    groups[classifyAgentDateGroup(agent.lastUsedAt, now)].push(agent);
+  const sorted = [...sessions].sort((left, right) => right.lastUsedAt.localeCompare(left.lastUsedAt));
+  for (const session of sorted) {
+    groups[classifySessionDateGroup(session.lastUsedAt, now)].push(session);
   }
 
   return groups;
 }
 
-export function filterAgentsByTitle(
-  agents: readonly AgentIndexEntry[],
+export function filterSessionsByTitle(
+  sessions: readonly SessionIndexEntry[],
   query: string,
-): AgentIndexEntry[] {
+): SessionIndexEntry[] {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
-    return [...agents];
+    return [...sessions];
   }
-  return agents.filter((agent) => agent.title.toLowerCase().includes(normalizedQuery));
+  return sessions.filter((session) => session.title.toLowerCase().includes(normalizedQuery));
 }

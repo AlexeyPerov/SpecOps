@@ -23,23 +23,23 @@ import {
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { resetChatProvidersForTests } from "../ai/providers/bootstrap";
 import {
-  AGENT_DATE_GROUP_ORDER,
-  DRAFT_AGENT_TITLE,
-  filterAgentsByTitle,
-  groupAgentsByLastUsedDate,
-} from "../services/chatAgents";
+  SESSION_DATE_GROUP_ORDER,
+  DRAFT_SESSION_TITLE,
+  filterSessionsByTitle,
+  groupSessionsByLastUsedDate,
+} from "../services/chatSessions";
 import {
-  deleteAgentPersistence,
-  scheduleAgentThreadFilePersistence,
+  deleteSessionPersistence,
+  scheduleSessionThreadFilePersistence,
 } from "../services/chatPersistence";
 import * as consoleTabPrefs from "../services/consoleTabPrefs";
 import {
-  findNextOpenAgentTabAfterClose,
-  nextSidebarAgentId,
-  resolveRestoredActiveAgent,
+  findNextOpenSessionTabAfterClose,
+  nextSidebarSessionId,
+  resolveRestoredActiveSession,
 } from "../services/workspaceAgentSession";
-import { createAgentTab, createFileTab } from "../domain/contracts";
-import type { AgentIndexEntry } from "../domain/contracts";
+import { createSessionTab, createFileTab } from "../domain/contracts";
+import type { SessionIndexEntry } from "../domain/contracts";
 import { appState } from "./appState";
 import { chatStore } from "./chatStore";
 
@@ -47,8 +47,8 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
-    deleteAgentPersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
+    deleteSessionPersistence: vi.fn(),
   };
 });
 
@@ -56,8 +56,8 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn().mockResolvedValue("ready"),
 }));
 
-const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
-const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
+const schedulePersistMock = vi.mocked(scheduleSessionThreadFilePersistence);
+const deleteSessionPersistenceMock = vi.mocked(deleteSessionPersistence);
 
 describe("M5.2 milestone validation", () => {
   beforeEach(() => {
@@ -66,8 +66,8 @@ describe("M5.2 milestone validation", () => {
     resetChatProviderRegistryForTests();
     resetChatProvidersForTests();
     schedulePersistMock.mockReset();
-    deleteAgentPersistenceMock.mockReset();
-    deleteAgentPersistenceMock.mockResolvedValue(undefined);
+    deleteSessionPersistenceMock.mockReset();
+    deleteSessionPersistenceMock.mockResolvedValue(undefined);
     appState.updateDebugWorkspaceProviderSettings({
       ...defaultDebugProviderSettings,
       enabled: true,
@@ -98,25 +98,25 @@ describe("M5.2 milestone validation", () => {
   });
 
   it("keeps draft agents off disk until the first user message", () => {
-    const agentId = chatStore.createDraftAgent();
-    expect(agentId).toBe("agent-1");
-    expect(chatStore.isAgentDraft(agentId!)).toBe(true);
-    expect(chatStore.getAgentTitle(agentId!)).toBe(DRAFT_AGENT_TITLE);
+    const agentId = chatStore.createDraftSession();
+    expect(agentId).toBe("session-1");
+    expect(chatStore.isSessionDraft(agentId!)).toBe(true);
+    expect(chatStore.getSessionTitle(agentId!)).toBe(DRAFT_SESSION_TITLE);
     expect(chatStore.hasThread(agentId!)).toBe(false);
     expect(schedulePersistMock).not.toHaveBeenCalled();
   });
 
   it("supports multiple concurrent draft sessions titled New session", () => {
-    chatStore.createDraftAgent();
-    chatStore.createDraftAgent({ activate: true });
+    chatStore.createDraftSession();
+    chatStore.createDraftSession({ activate: true });
 
-    const index = chatStore.getAgentIndex();
+    const index = chatStore.getSessionIndex();
     expect(index).toHaveLength(2);
-    expect(index.every((entry) => entry.title === DRAFT_AGENT_TITLE && entry.isDraft)).toBe(true);
+    expect(index.every((entry) => entry.title === DRAFT_SESSION_TITLE && entry.isDraft)).toBe(true);
   });
 
   it("promotes draft title and persists thread on first send", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     const resultPromise = sendChatMessage("First persisted line", agentId!);
@@ -124,15 +124,15 @@ describe("M5.2 milestone validation", () => {
     const result = await resultPromise;
 
     expect(result.ok).toBe(true);
-    expect(chatStore.isAgentDraft(agentId!)).toBe(false);
-    expect(chatStore.getAgentTitle(agentId!)).toBe("First persisted line");
+    expect(chatStore.isSessionDraft(agentId!)).toBe(false);
+    expect(chatStore.getSessionTitle(agentId!)).toBe("First persisted line");
     expect(schedulePersistMock).toHaveBeenCalled();
     expect(schedulePersistMock.mock.calls.at(-1)?.[2].thread.messages.at(-1)?.role).toBe("assistant");
   });
 
   it("allows two agents to generate with Debug at the same time", async () => {
-    const agentA = chatStore.createDraftAgent({ activate: false });
-    const agentB = chatStore.createDraftAgent({ activate: true });
+    const agentA = chatStore.createDraftSession({ activate: false });
+    const agentB = chatStore.createDraftSession({ activate: true });
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentA!);
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentB!);
 
@@ -155,20 +155,20 @@ describe("M5.2 milestone validation", () => {
 
   it("groups sidebar agents by date and filters by title", () => {
     const now = new Date("2026-05-28T15:00:00.000Z");
-    const agents: AgentIndexEntry[] = [
+    const agents: SessionIndexEntry[] = [
       { id: "a-today", title: "Today", lastUsedAt: "2026-05-28T10:00:00.000Z" },
       { id: "a-yesterday", title: "Yesterday", lastUsedAt: "2026-05-27T10:00:00.000Z" },
-      { id: "draft-1", title: DRAFT_AGENT_TITLE, lastUsedAt: "2026-05-28T11:00:00.000Z", isDraft: true },
+      { id: "draft-1", title: DRAFT_SESSION_TITLE, lastUsedAt: "2026-05-28T11:00:00.000Z", isDraft: true },
     ];
-    const grouped = groupAgentsByLastUsedDate(agents, now);
+    const grouped = groupSessionsByLastUsedDate(agents, now);
 
-    expect(AGENT_DATE_GROUP_ORDER.every((bucket) => bucket in grouped)).toBe(true);
+    expect(SESSION_DATE_GROUP_ORDER.every((bucket) => bucket in grouped)).toBe(true);
     expect(grouped.today.map((entry) => entry.id)).toEqual(["draft-1", "a-today"]);
-    expect(filterAgentsByTitle(agents, "new session").map((entry) => entry.id)).toEqual(["draft-1"]);
+    expect(filterSessionsByTitle(agents, "new session").map((entry) => entry.id)).toEqual(["draft-1"]);
   });
 
-  it("deleteAgent clears store keys and schedules disk removal", async () => {
-    const agentId = chatStore.createDraftAgent();
+  it("deleteSession clears store keys and schedules disk removal", async () => {
+    const agentId = chatStore.createDraftSession();
     chatStore.appendMessage(
       {
         id: "m-1",
@@ -176,65 +176,65 @@ describe("M5.2 milestone validation", () => {
         content: "hello",
         createdAt: "2026-05-28T12:00:00.000Z",
       },
-      { agentId: agentId! },
+      { sessionId: agentId! },
     );
     chatStore.beginTurn("turn-1", agentId!);
 
-    await chatStore.deleteAgent(agentId!);
+    await chatStore.deleteSession(agentId!);
 
-    const workspace = chatStore.getWorkspaceAgentsState("/work/a");
-    expect(workspace?.threadsByAgentId[agentId!]).toBeUndefined();
-    expect(workspace?.runtimeByAgentId[agentId!]).toBeUndefined();
-    expect(workspace?.agentIndex.some((entry) => entry.id === agentId)).toBe(false);
-    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", agentId);
+    const workspace = chatStore.getWorkspaceSessionsState("/work/a");
+    expect(workspace?.threadsBySessionId[agentId!]).toBeUndefined();
+    expect(workspace?.runtimeBySessionId[agentId!]).toBeUndefined();
+    expect(workspace?.sessionIndex.some((entry) => entry.id === agentId)).toBe(false);
+    expect(deleteSessionPersistenceMock).toHaveBeenCalledWith("/work/a", agentId);
   });
 
   it("restores last active agent only when it still exists in the index", () => {
-    const index: AgentIndexEntry[] = [
+    const index: SessionIndexEntry[] = [
       { id: "agent-a", title: "Agent A", lastUsedAt: "2026-05-28T12:00:00.000Z" },
     ];
     expect(
-      resolveRestoredActiveAgent(
+      resolveRestoredActiveSession(
         {
           selectedTabId: "tab-1",
           openTabs: [],
           lastActiveWindowId: "main",
           windowBounds: null,
-          lastActiveAgentId: "agent-a",
+          lastActiveSessionId: "agent-a",
         },
         index,
       ),
-    ).toEqual({ activeAgentId: "agent-a", shouldFocusAgentTab: true });
+    ).toEqual({ activeSessionId: "agent-a", shouldFocusSessionTab: true });
     expect(
-      resolveRestoredActiveAgent(
+      resolveRestoredActiveSession(
         {
           selectedTabId: "tab-1",
           openTabs: [],
           lastActiveWindowId: "main",
           windowBounds: null,
-          lastActiveAgentId: "missing",
+          lastActiveSessionId: "missing",
         },
         index,
       ),
-    ).toEqual({ activeAgentId: null, shouldFocusAgentTab: false });
+    ).toEqual({ activeSessionId: null, shouldFocusSessionTab: false });
   });
 
   it("closes agent tabs with next open tab then next sidebar row fallback", () => {
     const now = new Date("2026-05-28T12:00:00.000Z");
     const tabs = [
       createFileTab("tab-1", "doc-1"),
-      createAgentTab("tab-2", "agent-a"),
-      createAgentTab("tab-3", "agent-b"),
+      createSessionTab("tab-2", "agent-a"),
+      createSessionTab("tab-3", "agent-b"),
     ];
-    const agents: AgentIndexEntry[] = [
+    const agents: SessionIndexEntry[] = [
       { id: "agent-a", title: "A", lastUsedAt: "2026-05-28T11:00:00.000Z" },
       { id: "agent-b", title: "B", lastUsedAt: "2026-05-28T10:00:00.000Z" },
     ];
 
-    expect(findNextOpenAgentTabAfterClose(tabs, "tab-2")?.agentId).toBe("agent-b");
-    expect(nextSidebarAgentId(agents, "agent-a", now)).toBe("agent-b");
-    expect(nextSidebarAgentId(agents, "agent-b", now)).toBeNull();
-    expect(findNextOpenAgentTabAfterClose([createAgentTab("tab-2", "agent-a")], "tab-2")).toBeNull();
+    expect(findNextOpenSessionTabAfterClose(tabs, "tab-2")?.sessionId).toBe("agent-b");
+    expect(nextSidebarSessionId(agents, "agent-a", now)).toBe("agent-b");
+    expect(nextSidebarSessionId(agents, "agent-b", now)).toBeNull();
+    expect(findNextOpenSessionTabAfterClose([createSessionTab("tab-2", "agent-a")], "tab-2")).toBeNull();
   });
 
   it("exposes console height prefs only (logs-only console shell)", () => {

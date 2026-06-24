@@ -31,7 +31,7 @@ function workspace(id: ContextId, rootPath: string): WorkspaceEntry {
         openTabs: [],
         lastActiveWindowId: "main",
         windowBounds: null,
-        lastActiveAgentId: null,
+        lastActiveSessionId: null,
       },
     },
   };

@@ -31,7 +31,7 @@ import {
 } from "../ai/providers/registry";
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { resetChatProvidersForTests } from "../ai/providers/bootstrap";
-import { scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { appState } from "./appState";
 import { chatStore } from "./chatStore";
@@ -40,7 +40,7 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
   };
 });
 
@@ -48,7 +48,7 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
+const schedulePersistMock = vi.mocked(scheduleSessionThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function httpFetchSuccess(content: string): typeof fetch {
@@ -116,7 +116,7 @@ describe("M5.3 milestone validation", () => {
   });
 
   it("passes Debug access preflight when Debug is enabled", async () => {
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" });
 
     const result = await chatStore.runAccessPreflight();
@@ -127,7 +127,7 @@ describe("M5.3 milestone validation", () => {
 
   it("passes Debug access preflight for draft agents without thread metadata when Debug is the default provider", async () => {
     chatStore.setDefaultChatProviderResolver(() => "debug-workspace");
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
 
     const result = await chatStore.runAccessPreflight();
 
@@ -136,7 +136,7 @@ describe("M5.3 milestone validation", () => {
   });
 
   it("blocks HTTP access preflight when credentials are missing", async () => {
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
 
     const result = await chatStore.runAccessPreflight();
@@ -149,7 +149,7 @@ describe("M5.3 milestone validation", () => {
     appState.updateHttpConnectionSettings({ enabled: true });
     appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
-    chatStore.createDraftAgent();
+    chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" });
 
     const result = await chatStore.runAccessPreflight();
@@ -159,7 +159,7 @@ describe("M5.3 milestone validation", () => {
   });
 
   it("blocks send when Debug provider is disabled", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
     appState.updateDebugWorkspaceProviderSettings({
       ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
@@ -177,7 +177,7 @@ describe("M5.3 milestone validation", () => {
   });
 
   it("blocks send when HTTP is selected but not configured", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, agentId!);
 
     const result = await sendChatMessage("Should not send", agentId!);
@@ -195,8 +195,8 @@ describe("M5.3 milestone validation", () => {
     appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
 
-    const debugAgent = chatStore.createDraftAgent({ activate: false });
-    const httpAgent = chatStore.createDraftAgent({ activate: true });
+    const debugAgent = chatStore.createDraftSession({ activate: false });
+    const httpAgent = chatStore.createDraftSession({ activate: true });
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, debugAgent!);
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, httpAgent!);
 
@@ -218,8 +218,8 @@ describe("M5.3 milestone validation", () => {
   });
 
   it("locks generation per agent while allowing other agents to send", async () => {
-    const agentA = chatStore.createDraftAgent({ activate: false });
-    const agentB = chatStore.createDraftAgent({ activate: true });
+    const agentA = chatStore.createDraftSession({ activate: false });
+    const agentB = chatStore.createDraftSession({ activate: true });
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentA!);
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentB!);
 
@@ -242,7 +242,7 @@ describe("M5.3 milestone validation", () => {
   });
 
   it("streams Debug partial updates then finalizes generation state", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     const observedLengths: number[] = [];
@@ -265,7 +265,7 @@ describe("M5.3 milestone validation", () => {
   });
 
   it("records Debug failure in retry scaffolding", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
     appState.updateDebugWorkspaceProviderSettings({
       ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
@@ -301,7 +301,7 @@ describe("M5.3 milestone validation", () => {
       ),
     );
 
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "http", mode: "review" }, undefined, agentId!);
 
     const result = await sendChatMessage("Review this spec", agentId!);
@@ -316,7 +316,7 @@ describe("M5.3 milestone validation", () => {
     appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
 
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, agentId!);
     chatStore.appendMessage(
       {
@@ -325,7 +325,7 @@ describe("M5.3 milestone validation", () => {
         content: "hello",
         createdAt: "2026-05-28T12:00:00.000Z",
       },
-      { agentId: agentId! },
+      { sessionId: agentId! },
     );
 
     const switchResult = await chatStore.switchThreadProvider("debug-workspace",
@@ -349,7 +349,7 @@ describe("M5.3 milestone validation", () => {
     });
 
     const thread = chatStore.getActiveThreadSnapshot(agentId!);
-    scheduleAgentThreadFilePersistence("/work/a", agentId!, { version: 1, thread: thread! });
+    scheduleSessionThreadFilePersistence("/work/a", agentId!, { version: 1, thread: thread! });
     const persistedSnapshot = schedulePersistMock.mock.calls.at(-1)?.[2];
     expect(
       persistedSnapshot?.thread.messages.some(
@@ -361,7 +361,7 @@ describe("M5.3 milestone validation", () => {
   it("blocks send when workspace access preflight fails", async () => {
     ensureWorkspaceReadAccessMock.mockResolvedValue("blocked");
     appState.addWorkspace("/work/a");
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     const result = await sendChatMessage("Should be blocked", agentId!);

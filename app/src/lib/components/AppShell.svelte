@@ -17,7 +17,7 @@
   import TabBar from "./TabBar.svelte";
   import ActivityRail from "./ActivityRail.svelte";
   import ProjectPanel from "./ProjectPanel.svelte";
-  import AgentsSidebar from "./AgentsSidebar.svelte";
+  import SessionsSidebar from "./SessionsSidebar.svelte";
   import ChatPanel from "./ChatPanel.svelte";
   import TodoPanel from "./TodoPanel.svelte";
   import DiffViewerPanel from "./DiffViewerPanel.svelte";
@@ -28,7 +28,7 @@
   import TitleBar from "./TitleBar.svelte";
   import type { EditorCommandRunner } from "../types/editor";
   import type {
-    AgentIndexEntry,
+    SessionIndexEntry,
     AppCommandId,
     ContextId,
     DocumentState,
@@ -48,24 +48,24 @@
     onReorderWorkspaces: (fromIndex: number, toIndex: number) => void;
   }
 
-  export interface AppShellAgentsSidebarProps {
+  export interface AppShellSessionsSidebarProps {
     show: boolean;
-    agents: AgentIndexEntry[];
-    activeAgentId: string | null;
+    sessions: SessionIndexEntry[];
+    activeSessionId: string | null;
     sidebarTitle: string;
     collapsed: boolean;
     panelWidthPx: number;
     onToggleCollapsed: (next: boolean) => void;
     onPanelWidthChange: (widthPx: number) => void;
-    onSelectAgent: (agentId: string) => void;
-    onNewAgent: () => void;
-    onDeleteAgent: (agentId: string) => void | Promise<void>;
+    onSelectSession: (sessionId: string) => void;
+    onNewSession: () => void;
+    onDeleteSession: (sessionId: string) => void | Promise<void>;
     /** M2-T1: rename the agent tab + linked session. */
-    onRenameAgent?: (agentId: string) => void | Promise<void>;
+    onRenameSession?: (sessionId: string) => void | Promise<void>;
     /** M2-T5: copy a public share URL for the linked session. */
-    onShareAgent?: (agentId: string) => void | Promise<void>;
+    onShareSession?: (sessionId: string) => void | Promise<void>;
     /** M2-T7: export the transcript to a Markdown file. */
-    onExportAgent?: (agentId: string) => void | Promise<void>;
+    onExportSession?: (sessionId: string) => void | Promise<void>;
     /** M2-T2: open the unified per-workspace session list panel. */
     onOpenSessions?: () => void | Promise<void>;
   }
@@ -100,7 +100,7 @@
     documents: DocumentState[];
     activeDocument: DocumentState | undefined;
     isChatHttpActive: boolean;
-    isAgentTabActive: boolean;
+    isSessionTabActive: boolean;
     isImageDocument: boolean;
     isBinaryDocument: boolean;
     isLargePendingDocument: boolean;
@@ -127,23 +127,23 @@
     onMarkdownViewModeChange: (nextMode: "edit" | "split" | "preview") => void;
     onUntitledTitleRefresh: (documentId: string) => void;
     onScrollTopChange: (documentId: string, scrollTop: number) => void;
-    onDeleteAgentFromChat: () => void | Promise<void>;
+    onDeleteSessionFromChat: () => void | Promise<void>;
     onGoToLine: () => void;
     onCloseGoTo: () => void;
     notify: (message: string) => void;
     /** M2-T3: fork the active session from a message into a new tab. */
-    onForkAgent?: (messageId?: string) => void | Promise<void>;
+    onForkSession?: (messageId?: string) => void | Promise<void>;
     /** M2-T4: revert the active session to a message in place (undo). */
     onRevertSession?: (messageId?: string) => void | Promise<void>;
     /** M2-T4: restore a reverted session in place (redo). */
     onUnrevertSession?: () => void | Promise<void>;
     /** M2-T5: share / unshare the active session. */
-    onShareAgent?: () => void | Promise<void>;
-    onUnshareAgent?: () => void | Promise<void>;
+    onShareSession?: () => void | Promise<void>;
+    onUnshareSession?: () => void | Promise<void>;
     /** M2-T6: generate / refresh the session summary. */
-    onSummarizeAgent?: () => void | Promise<void>;
+    onSummarizeSession?: () => void | Promise<void>;
     /** M2-T7: export the active transcript to Markdown. */
-    onExportAgent?: () => void | Promise<void>;
+    onExportSession?: () => void | Promise<void>;
     /** M2-T5: current share URL for the active session, if any. */
     activeShareUrl?: string | null;
     /** M2-T3: parent session id, if the active session is a fork. */
@@ -245,7 +245,7 @@
 
   let {
     activityRail,
-    agentsSidebar,
+    sessionsSidebar,
     projectTree,
     editor,
     statusBar,
@@ -270,7 +270,7 @@
     workspaceContextMenuEl = $bindable<HTMLDivElement | null>(null),
   }: {
     activityRail: AppShellActivityRailProps;
-    agentsSidebar: AppShellAgentsSidebarProps;
+    sessionsSidebar: AppShellSessionsSidebarProps;
     projectTree: AppShellProjectTreeProps;
     editor: AppShellEditorChromeProps;
     statusBar: AppShellStatusBarProps;
@@ -316,22 +316,22 @@
         onReorderWorkspaces={activityRail.onReorderWorkspaces}
       />
     {/if}
-    {#if agentsSidebar.show}
-      <AgentsSidebar
-        agents={agentsSidebar.agents}
-        activeAgentId={agentsSidebar.activeAgentId}
-        sidebarTitle={agentsSidebar.sidebarTitle}
-        collapsed={agentsSidebar.collapsed}
-        panelWidthPx={agentsSidebar.panelWidthPx}
-        onToggleCollapsed={agentsSidebar.onToggleCollapsed}
-        onPanelWidthChange={agentsSidebar.onPanelWidthChange}
-        onSelectAgent={agentsSidebar.onSelectAgent}
-        onNewAgent={agentsSidebar.onNewAgent}
-        onDeleteAgent={(agentId) => void agentsSidebar.onDeleteAgent(agentId)}
-        onRenameAgent={agentsSidebar.onRenameAgent}
-        onShareAgent={agentsSidebar.onShareAgent}
-        onExportAgent={agentsSidebar.onExportAgent}
-        onOpenSessions={agentsSidebar.onOpenSessions}
+    {#if sessionsSidebar.show}
+      <SessionsSidebar
+        sessions={sessionsSidebar.sessions}
+        activeSessionId={sessionsSidebar.activeSessionId}
+        sidebarTitle={sessionsSidebar.sidebarTitle}
+        collapsed={sessionsSidebar.collapsed}
+        panelWidthPx={sessionsSidebar.panelWidthPx}
+        onToggleCollapsed={sessionsSidebar.onToggleCollapsed}
+        onPanelWidthChange={sessionsSidebar.onPanelWidthChange}
+        onSelectSession={sessionsSidebar.onSelectSession}
+        onNewSession={sessionsSidebar.onNewSession}
+        onDeleteSession={(sessionId) => void sessionsSidebar.onDeleteSession(sessionId)}
+        onRenameSession={sessionsSidebar.onRenameSession}
+        onShareSession={sessionsSidebar.onShareSession}
+        onExportSession={sessionsSidebar.onExportSession}
+        onOpenSessions={sessionsSidebar.onOpenSessions}
       />
     {/if}
     <section class="editor-shell" bind:this={editorShellEl}>
@@ -371,20 +371,20 @@
 
       <section
         class="editor-pane"
-        class:editor-pane-agent={editor.isAgentTabActive}
+        class:editor-pane-session={editor.isSessionTabActive}
         bind:this={editorPaneEl}
       >
-        {#if editor.isChatHttpActive || editor.isAgentTabActive}
+        {#if editor.isChatHttpActive || editor.isSessionTabActive}
           <ChatPanel
             chatContextKind={editor.isChatHttpActive ? "chat-http" : "workspace"}
-            onDeleteAgent={editor.onDeleteAgentFromChat}
-            onForkAgent={editor.onForkAgent}
+            onDeleteSession={editor.onDeleteSessionFromChat}
+            onForkSession={editor.onForkSession}
             onRevertSession={editor.onRevertSession}
             onUnrevertSession={editor.onUnrevertSession}
-            onShareAgent={editor.onShareAgent}
-            onUnshareAgent={editor.onUnshareAgent}
-            onSummarizeAgent={editor.onSummarizeAgent}
-            onExportAgent={editor.onExportAgent}
+            onShareSession={editor.onShareSession}
+            onUnshareSession={editor.onUnshareSession}
+            onSummarizeSession={editor.onSummarizeSession}
+            onExportSession={editor.onExportSession}
             activeShareUrl={editor.activeShareUrl}
             activeParentSessionId={editor.activeParentSessionId}
             canToggleTodoPanel={Boolean(todoPanel)}
@@ -464,7 +464,7 @@
           {/if}
         {/if}
 
-        {#if editor.isTextEditorDocument && !editor.isAgentTabActive && !editor.isChatHttpActive && editor.findReplaceOpen}
+        {#if editor.isTextEditorDocument && !editor.isSessionTabActive && !editor.isChatHttpActive && editor.findReplaceOpen}
           <FindReplacePanel
             bind:findQuery
             bind:replaceValue
@@ -475,7 +475,7 @@
           />
         {/if}
 
-        {#if editor.isTextEditorDocument && !editor.isAgentTabActive && !editor.isChatHttpActive && editor.goToOpen}
+        {#if editor.isTextEditorDocument && !editor.isSessionTabActive && !editor.isChatHttpActive && editor.goToOpen}
           <div class="floating-tool goto-tool">
             <h3>Go To Line</h3>
             <input placeholder="Line number..." bind:value={goToLineValue} />
@@ -550,7 +550,7 @@
           : undefined}
         onclick={statusBar.onToggleConsole}
       >
-        {#if !editor.isAgentTabActive && !editor.isChatHttpActive}
+        {#if !editor.isSessionTabActive && !editor.isChatHttpActive}
           <span class="status-segment optional-segment optional-cursor">
             Ln {editor.cursorLine}, Col {editor.cursorColumn}
           </span>

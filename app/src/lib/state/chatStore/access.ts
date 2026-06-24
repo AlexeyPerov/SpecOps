@@ -52,7 +52,7 @@ export function createAccessSlice(deps: {
   getSnapshot: () => ChatStoreState;
   getActiveChatScopeKey: () => import("./types").ChatScopeKey | null;
   getActiveWorkspaceRoot: () => string | null;
-  getMetadata: (agentId?: string) => import("../../domain/contracts").ChatThreadMetadata | null;
+  getMetadata: (sessionId?: string) => import("../../domain/contracts").ChatThreadMetadata | null;
   capabilityCheckerRef: { current: CapabilityChecker | null };
   workspaceReadinessCheckerRef: { current: WorkspaceReadinessChecker | null };
 }) {
@@ -83,14 +83,14 @@ export function createAccessSlice(deps: {
     }));
   }
 
-  function appendAgentAccessLossMessage(rootPath: string, agentId: string): void {
+  function appendSessionAccessLossMessage(rootPath: string, sessionId: string): void {
     const checkedAt = new Date().toISOString();
     update((state) => {
       const workspace = state.workspaces[rootPath];
       if (!workspace) {
         return state;
       }
-      const thread = workspace.threadsByAgentId[agentId];
+      const thread = workspace.threadsBySessionId[sessionId];
       if (!thread || thread.messages.length === 0) {
         return state;
       }
@@ -120,9 +120,9 @@ export function createAccessSlice(deps: {
       };
       return patchWorkspaceState(state, rootPath, {
         ...workspace,
-        threadsByAgentId: {
-          ...workspace.threadsByAgentId,
-          [agentId]: nextThread,
+        threadsBySessionId: {
+          ...workspace.threadsBySessionId,
+          [sessionId]: nextThread,
         },
       });
     });
@@ -140,13 +140,13 @@ export function createAccessSlice(deps: {
       nextState.reason === WorkspaceAccessReason.WorkspacePathInaccessible
     ) {
       const workspace = snapshot.workspaces[rootPath];
-      const agentsWithThreads = workspace
-        ? Object.keys(workspace.threadsByAgentId).filter(
-            (agentId) => (workspace.threadsByAgentId[agentId]?.messages.length ?? 0) > 0,
+      const sessionsWithThreads = workspace
+        ? Object.keys(workspace.threadsBySessionId).filter(
+            (sessionId) => (workspace.threadsBySessionId[sessionId]?.messages.length ?? 0) > 0,
           )
         : [];
-      for (const agentId of agentsWithThreads) {
-        appendAgentAccessLossMessage(rootPath, agentId);
+      for (const sessionId of sessionsWithThreads) {
+        appendSessionAccessLossMessage(rootPath, sessionId);
       }
     }
     setWorkspaceAccessState(rootPath, nextState);
@@ -160,9 +160,9 @@ export function createAccessSlice(deps: {
     setWorkspaceReadinessChecker(checker: WorkspaceReadinessChecker | null): void {
       workspaceReadinessCheckerRef.current = checker;
     },
-    async checkActiveWorkspaceCapabilities(agentId?: string): Promise<CapabilityCheckResult> {
+    async checkActiveWorkspaceCapabilities(sessionId?: string): Promise<CapabilityCheckResult> {
       const rootPath = getActiveWorkspaceRoot();
-      const metadata = getMetadata(agentId);
+      const metadata = getMetadata(sessionId);
 
       if (!rootPath) {
         return {

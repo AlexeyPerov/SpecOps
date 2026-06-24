@@ -1,13 +1,13 @@
 import type { AppDomainState } from "../../domain/contracts";
 import {
-  createAgentTab,
   createFileTab,
-  isAgentTab,
+  createSessionTab,
   isFileTab,
+  isSessionTab,
   normalizeTabState,
   tabDocumentId,
 } from "../../domain/contracts";
-import { findNextOpenAgentTabAfterClose } from "../../services/workspaceAgentSession";
+import { findNextOpenSessionTabAfterClose } from "../../services/workspaceAgentSession";
 import {
   findDocumentByPath,
   findDocumentByPathInContext,
@@ -59,7 +59,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
                 ...ctx.session,
                 openTabs: [],
                 selectedTabId: null,
-                lastActiveAgentId: null,
+                lastActiveSessionId: null,
               },
             };
           }
@@ -71,7 +71,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
               ...ctx.session,
               openTabs: [createFileTab(tabIdNew, docId)],
               selectedTabId: tabIdNew,
-              lastActiveAgentId: null,
+              lastActiveSessionId: null,
             },
           };
         }
@@ -80,10 +80,10 @@ export function createDocumentTabsLifecycleSlice(deps: {
           ctx.session.selectedTabId === tabId
             ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
             : ctx.session.selectedTabId;
-        if (ctx.session.selectedTabId === tabId && isAgentTab(closingTab)) {
-          const nextAgentTab = findNextOpenAgentTabAfterClose(openTabs, tabId);
-          if (nextAgentTab) {
-            selectedTabId = nextAgentTab.id;
+        if (ctx.session.selectedTabId === tabId && isSessionTab(closingTab)) {
+          const nextSessionTab = findNextOpenSessionTabAfterClose(openTabs, tabId);
+          if (nextSessionTab) {
+            selectedTabId = nextSessionTab.id;
           }
         }
         return {
@@ -121,11 +121,11 @@ export function createDocumentTabsLifecycleSlice(deps: {
     selectTab(tabId: string) {
       update((state) => selectTabInternal(state, tabId));
     },
-    openOrFocusAgentTab(agentId: string) {
+    openOrFocusSessionTab(sessionId: string) {
       update((state) => {
         const existingTab = getActiveSession(state).openTabs
           .map((rawTab) => normalizeTabState(rawTab))
-          .find((tab) => isAgentTab(tab) && tab.agentId === agentId);
+          .find((tab) => isSessionTab(tab) && tab.sessionId === sessionId);
         if (existingTab) {
           return selectTabInternal(state, existingTab.id);
         }
@@ -134,17 +134,17 @@ export function createDocumentTabsLifecycleSlice(deps: {
           ...ctx,
           session: {
             ...ctx.session,
-            openTabs: [...ctx.session.openTabs, createAgentTab(tabId, agentId)],
+            openTabs: [...ctx.session.openTabs, createSessionTab(tabId, sessionId)],
             selectedTabId: tabId,
           },
         }));
       });
     },
-    closeTabsForAgent(agentId: string) {
+    closeTabsForSession(sessionId: string) {
       update((state) => {
         const tabIds = getActiveSession(state).openTabs
           .map((rawTab) => normalizeTabState(rawTab))
-          .filter((tab) => isAgentTab(tab) && tab.agentId === agentId)
+          .filter((tab) => isSessionTab(tab) && tab.sessionId === sessionId)
           .map((tab) => tab.id);
         return closeTabsForce(state, tabIds, null);
       });
@@ -215,10 +215,10 @@ export function createDocumentTabsLifecycleSlice(deps: {
             ctx.session.selectedTabId === tabId
               ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
               : ctx.session.selectedTabId;
-          if (ctx.session.selectedTabId === tabId && isAgentTab(closingTab)) {
-            const nextAgentTab = findNextOpenAgentTabAfterClose(openTabs, tabId);
-            if (nextAgentTab) {
-              selectedTabId = nextAgentTab.id;
+          if (ctx.session.selectedTabId === tabId && isSessionTab(closingTab)) {
+            const nextSessionTab = findNextOpenSessionTabAfterClose(openTabs, tabId);
+            if (nextSessionTab) {
+              selectedTabId = nextSessionTab.id;
             }
           }
           return {

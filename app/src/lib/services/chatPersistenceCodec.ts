@@ -1,16 +1,16 @@
 import type {
-  AgentIndexEntry,
-  ChatAgentThreadFileSnapshot,
   ChatMessage,
   ChatMessagePart,
   ChatMessageRole,
   ChatModeId,
   ChatProviderId,
+  ChatSessionThreadFileSnapshot,
   ChatThreadMetadata,
   ChatThreadSnapshot,
   ChatTokenUsage,
+  SessionIndexEntry,
   ToolCallRecord,
-  WorkspaceAgentsIndexSnapshot,
+  WorkspaceSessionsIndexSnapshot,
 } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import {
@@ -23,7 +23,7 @@ import { readBoolean, readNumber } from "../ai/backends/wireReaders";
 
 export const CHAT_RETENTION_MAX_TURNS = 50;
 export const CHAT_THREAD_VERSION = 1;
-export const CHAT_AGENTS_INDEX_VERSION = 1;
+export const CHAT_SESSIONS_INDEX_VERSION = 1;
 
 export function countConversationTurns(messages: readonly ChatMessage[]): number {
   return messages.reduce((count, message) => count + (message.role === "user" ? 1 : 0), 0);
@@ -49,10 +49,10 @@ export function workspaceChatPathHashKey(normalizedRootPath: string): string {
   return hashNormalizedPath(normalizedRootPath);
 }
 
-export function emptyAgentsIndexSnapshot(): WorkspaceAgentsIndexSnapshot {
+export function emptySessionsIndexSnapshot(): WorkspaceSessionsIndexSnapshot {
   return {
-    version: CHAT_AGENTS_INDEX_VERSION,
-    agents: [],
+    version: CHAT_SESSIONS_INDEX_VERSION,
+    sessions: [],
   };
 }
 
@@ -86,8 +86,12 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
   if (!isRecord(value)) {
     return null;
   }
+  // M16: the conversation id field is now `sessionId` (renamed from `agentId`).
+  // Tolerate the legacy key so a half-migrated thread file still decodes.
+  const sessionIdValue =
+    typeof value.sessionId === "string" ? value.sessionId : value.agentId;
   if (
-    typeof value.agentId !== "string" ||
+    typeof sessionIdValue !== "string" ||
     typeof value.threadId !== "string" ||
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string"
@@ -123,7 +127,7 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
     return null;
   }
   return {
-    agentId: value.agentId,
+    sessionId: sessionIdValue,
     threadId: value.threadId,
     mode,
     provider: normalizeLegacyProviderId(value.provider, scopeKey),
@@ -446,7 +450,7 @@ function parseThread(value: unknown, scopeKey: string): ChatThreadSnapshot | nul
   };
 }
 
-function parseAgentIndexEntry(value: unknown): AgentIndexEntry | null {
+function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -491,10 +495,10 @@ function parseAgentIndexEntry(value: unknown): AgentIndexEntry | null {
   };
 }
 
-export function decodeChatAgentThreadFileSnapshot(
+export function decodeChatSessionThreadFileSnapshot(
   raw: string,
   scopeKey: string = CHAT_HTTP_CONTEXT_ID,
-): ChatAgentThreadFileSnapshot | null {
+): ChatSessionThreadFileSnapshot | null {
   try {
     const parsed = JSON.parse(raw) as { version?: unknown; thread?: unknown };
     if (parsed.version !== CHAT_THREAD_VERSION) {
@@ -513,8 +517,8 @@ export function decodeChatAgentThreadFileSnapshot(
   }
 }
 
-export function encodeChatAgentThreadFileSnapshot(snapshot: ChatAgentThreadFileSnapshot): string {
-  const normalizedSnapshot: ChatAgentThreadFileSnapshot =
+export function encodeChatSessionThreadFileSnapshot(snapshot: ChatSessionThreadFileSnapshot): string {
+  const normalizedSnapshot: ChatSessionThreadFileSnapshot =
     snapshot.version === CHAT_THREAD_VERSION
       ? snapshot
       : {
@@ -524,59 +528,59 @@ export function encodeChatAgentThreadFileSnapshot(snapshot: ChatAgentThreadFileS
   return JSON.stringify(normalizedSnapshot, null, 2);
 }
 
-export function decodeWorkspaceAgentsIndexSnapshot(raw: string): WorkspaceAgentsIndexSnapshot {
+export function decodeWorkspaceSessionsIndexSnapshot(raw: string): WorkspaceSessionsIndexSnapshot {
   try {
-    const parsed = JSON.parse(raw) as { version?: unknown; agents?: unknown };
-    if (parsed.version !== CHAT_AGENTS_INDEX_VERSION || !Array.isArray(parsed.agents)) {
-      return emptyAgentsIndexSnapshot();
+    const parsed = JSON.parse(raw) as { version?: unknown; sessions?: unknown };
+    if (parsed.version !== CHAT_SESSIONS_INDEX_VERSION || !Array.isArray(parsed.sessions)) {
+      return emptySessionsIndexSnapshot();
     }
 
-    const agents: AgentIndexEntry[] = [];
-    for (const entry of parsed.agents) {
-      const agent = parseAgentIndexEntry(entry);
-      if (!agent) {
-        return emptyAgentsIndexSnapshot();
+    const sessions: SessionIndexEntry[] = [];
+    for (const entry of parsed.sessions) {
+      const session = parseSessionIndexEntry(entry);
+      if (!session) {
+        return emptySessionsIndexSnapshot();
       }
-      agents.push(agent);
+      sessions.push(session);
     }
 
     return {
-      version: CHAT_AGENTS_INDEX_VERSION,
-      agents,
+      version: CHAT_SESSIONS_INDEX_VERSION,
+      sessions,
     };
   } catch {
-    return emptyAgentsIndexSnapshot();
+    return emptySessionsIndexSnapshot();
   }
 }
 
-export function encodeWorkspaceAgentsIndexSnapshot(snapshot: WorkspaceAgentsIndexSnapshot): string {
-  const normalizedSnapshot: WorkspaceAgentsIndexSnapshot =
-    snapshot.version === CHAT_AGENTS_INDEX_VERSION
+export function encodeWorkspaceSessionsIndexSnapshot(snapshot: WorkspaceSessionsIndexSnapshot): string {
+  const normalizedSnapshot: WorkspaceSessionsIndexSnapshot =
+    snapshot.version === CHAT_SESSIONS_INDEX_VERSION
       ? snapshot
       : {
-          version: CHAT_AGENTS_INDEX_VERSION,
-          agents: snapshot.agents,
+          version: CHAT_SESSIONS_INDEX_VERSION,
+          sessions: snapshot.sessions,
         };
   return JSON.stringify(normalizedSnapshot, null, 2);
 }
 
-export function upsertAgentIndexEntry(
-  index: WorkspaceAgentsIndexSnapshot,
-  entry: AgentIndexEntry,
-): WorkspaceAgentsIndexSnapshot {
-  const withoutExisting = index.agents.filter((agent) => agent.id !== entry.id);
+export function upsertSessionIndexEntry(
+  index: WorkspaceSessionsIndexSnapshot,
+  entry: SessionIndexEntry,
+): WorkspaceSessionsIndexSnapshot {
+  const withoutExisting = index.sessions.filter((session) => session.id !== entry.id);
   return {
-    version: CHAT_AGENTS_INDEX_VERSION,
-    agents: [...withoutExisting, entry],
+    version: CHAT_SESSIONS_INDEX_VERSION,
+    sessions: [...withoutExisting, entry],
   };
 }
 
-export function removeAgentIndexEntry(
-  index: WorkspaceAgentsIndexSnapshot,
-  agentId: string,
-): WorkspaceAgentsIndexSnapshot {
+export function removeSessionIndexEntry(
+  index: WorkspaceSessionsIndexSnapshot,
+  sessionId: string,
+): WorkspaceSessionsIndexSnapshot {
   return {
-    version: CHAT_AGENTS_INDEX_VERSION,
-    agents: index.agents.filter((agent) => agent.id !== agentId),
+    version: CHAT_SESSIONS_INDEX_VERSION,
+    sessions: index.sessions.filter((session) => session.id !== sessionId),
   };
 }

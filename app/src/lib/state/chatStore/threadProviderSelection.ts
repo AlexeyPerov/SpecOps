@@ -44,22 +44,22 @@ import {
   getDefaultChatProvider,
   resolveModelForConnection,
 } from "./threadHelpers";
-import { ensureActiveAgent, resolveTargetAgentId } from "./agents";
+import { ensureActiveSession, resolveTargetSessionId } from "./sessions";
 import { defaultRuntimeState } from "./runtime";
 import { patchWorkspaceState } from "./workspace";
 
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
 export interface ThreadProviderSelectionApi {
-  getMetadata(agentId?: string): import("../../domain/contracts").ChatThreadMetadata | null;
-  getActiveThreadSnapshot(agentId?: string): ChatThreadSnapshot | null;
+  getMetadata(sessionId?: string): import("../../domain/contracts").ChatThreadMetadata | null;
+  getActiveThreadSnapshot(sessionId?: string): ChatThreadSnapshot | null;
 }
 
 export function createThreadProviderSelectionSlice(deps: {
   update: ChatStoreUpdate;
   getSnapshot: () => ChatStoreState;
   getActiveChatScopeKey: () => string | null;
-  getRuntimeState: (agentId?: string) => { isGenerating: boolean };
+  getRuntimeState: (sessionId?: string) => { isGenerating: boolean };
   capabilityCheckerRef: { current: CapabilityChecker | null };
   threadMetadataApi: ThreadProviderSelectionApi;
 }) {
@@ -76,23 +76,23 @@ export function createThreadProviderSelectionSlice(deps: {
     return capabilityCheckerRef.current ?? stubCapabilityChecker;
   }
 
-  function resolveOrEnsureTargetAgentId(agentId?: string): string | null {
-    const existing = resolveTargetAgentId(getSnapshot(), agentId);
+  function resolveOrEnsureTargetSessionId(sessionId?: string): string | null {
+    const existing = resolveTargetSessionId(getSnapshot(), sessionId);
     if (existing) {
       return existing;
     }
-    const ensured = ensureActiveAgent(getSnapshot());
+    const ensured = ensureActiveSession(getSnapshot());
     if (!ensured) {
       return null;
     }
     update(() => ensured.state);
-    return ensured.agentId;
+    return ensured.sessionId;
   }
 
   return {
-    getActiveChatProvider(agentId?: string): ChatProviderId {
+    getActiveChatProvider(sessionId?: string): ChatProviderId {
       const root = getActiveChatScopeKey();
-      const raw = threadMetadataApi.getMetadata(agentId)?.provider ?? getDefaultChatProvider();
+      const raw = threadMetadataApi.getMetadata(sessionId)?.provider ?? getDefaultChatProvider();
       if (!root) {
         return raw;
       }
@@ -101,10 +101,10 @@ export function createThreadProviderSelectionSlice(deps: {
     getActiveChatModel(
       providerModelCatalogs: ProviderModelCatalogs,
       providerSettings?: AppProviderSettings,
-      agentId?: string,
+      sessionId?: string,
     ): string {
-      const providerId = this.getActiveChatProvider(agentId);
-      const thread = threadMetadataApi.getActiveThreadSnapshot(agentId);
+      const providerId = this.getActiveChatProvider(sessionId);
+      const thread = threadMetadataApi.getActiveThreadSnapshot(sessionId);
       if (!providerSettings) {
         return getProviderDefaultModelId(
           normalizeProviderModelCatalogs(providerModelCatalogs),
@@ -122,19 +122,19 @@ export function createThreadProviderSelectionSlice(deps: {
     async switchThreadProvider(
       nextProvider: ChatProviderId,
       options: ChatProviderSwitchOptions,
-      agentId?: string,
+      sessionId?: string,
     ): Promise<SwitchThreadProviderResult> {
       const root = getActiveChatScopeKey();
       if (!root) {
         return { switched: false, message: "Open Chat and select a chat to switch providers." };
       }
 
-      const targetAgentId = resolveOrEnsureTargetAgentId(agentId);
-      if (!targetAgentId) {
-        return { switched: false, message: "Select an agent to switch providers." };
+      const targetSessionId = resolveOrEnsureTargetSessionId(sessionId);
+      if (!targetSessionId) {
+        return { switched: false, message: "Select a session to switch providers." };
       }
 
-      if (getRuntimeState(targetAgentId).isGenerating) {
+      if (getRuntimeState(targetSessionId).isGenerating) {
         return {
           switched: false,
           message: "Provider cannot be changed while a response is generating.",
@@ -151,7 +151,7 @@ export function createThreadProviderSelectionSlice(deps: {
         };
       }
 
-      const metadata = threadMetadataApi.getMetadata(targetAgentId);
+      const metadata = threadMetadataApi.getMetadata(targetSessionId);
       const fromProvider = metadata?.provider ?? null;
       if (fromProvider === nextProvider) {
         return { switched: false };
@@ -162,7 +162,7 @@ export function createThreadProviderSelectionSlice(deps: {
         providerSettings: options.providerSettings,
         connectionId: metadata?.connectionId,
       };
-      const currentThread = threadMetadataApi.getActiveThreadSnapshot(targetAgentId);
+      const currentThread = threadMetadataApi.getActiveThreadSnapshot(targetSessionId);
       const currentModelId = currentThread
         ? resolveEffectiveThreadModelId(currentThread, normalizedCatalogs, catalogContext)
         : metadata?.selectedModelId;
@@ -217,12 +217,12 @@ export function createThreadProviderSelectionSlice(deps: {
         if (!workspace) {
           return state;
         }
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         const baseThread =
           thread ??
           ({
             metadata: applyMetadataPatch(
-              createThreadMetadata(targetAgentId, updatedAt, root),
+              createThreadMetadata(targetSessionId, updatedAt, root),
               {},
               updatedAt,
             ),
@@ -232,9 +232,9 @@ export function createThreadProviderSelectionSlice(deps: {
         switched = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: {
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: {
               ...baseThread,
               metadata: applyMetadataPatch(
                 baseThread.metadata,
@@ -249,15 +249,15 @@ export function createThreadProviderSelectionSlice(deps: {
               messages: [...baseThread.messages, switchMessage],
             },
           },
-          runtimeByAgentId: {
-            ...workspace.runtimeByAgentId,
-            [targetAgentId]: defaultRuntimeState(),
+          runtimeBySessionId: {
+            ...workspace.runtimeBySessionId,
+            [targetSessionId]: defaultRuntimeState(),
           },
         });
       });
 
       logChatProviderSwitch({
-        agentId: targetAgentId,
+        sessionId: targetSessionId,
         fromProvider,
         toProvider: nextProvider,
         connectionId: resolvedConnectionId,
@@ -270,17 +270,17 @@ export function createThreadProviderSelectionSlice(deps: {
     switchThreadConnection(
       nextConnectionId: string,
       options: ChatProviderSwitchOptions,
-      agentId?: string,
+      sessionId?: string,
     ): SwitchThreadConnectionResult {
       const root = getActiveChatScopeKey();
       if (!root) {
         return { switched: false, message: "Open Chat and select a chat to switch connections." };
       }
-      const targetAgentId = resolveOrEnsureTargetAgentId(agentId);
-      if (!targetAgentId) {
+      const targetSessionId = resolveOrEnsureTargetSessionId(sessionId);
+      if (!targetSessionId) {
         return { switched: false, message: "Select a chat to switch connections." };
       }
-      if (getRuntimeState(targetAgentId).isGenerating) {
+      if (getRuntimeState(targetSessionId).isGenerating) {
         return {
           switched: false,
           message: "Connection cannot be changed while a response is generating.",
@@ -290,7 +290,7 @@ export function createThreadProviderSelectionSlice(deps: {
       if (!trimmedConnectionId) {
         return { switched: false, message: "Choose a configured connection." };
       }
-      const metadata = threadMetadataApi.getMetadata(targetAgentId);
+      const metadata = threadMetadataApi.getMetadata(targetSessionId);
       if (!metadata || metadata.provider !== "http") {
         return { switched: false, message: "Connection switching is available only for HTTP chats." };
       }
@@ -312,12 +312,12 @@ export function createThreadProviderSelectionSlice(deps: {
         if (!workspace) {
           return state;
         }
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         const baseThread =
           thread ??
           ({
             metadata: applyMetadataPatch(
-              createThreadMetadata(targetAgentId, updatedAt, root),
+              createThreadMetadata(targetSessionId, updatedAt, root),
               { provider: "http", connectionId: trimmedConnectionId, selectedModelId: nextModelId },
               updatedAt,
             ),
@@ -326,9 +326,9 @@ export function createThreadProviderSelectionSlice(deps: {
         switched = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: {
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: {
               ...baseThread,
               metadata: applyMetadataPatch(
                 baseThread.metadata,
@@ -337,14 +337,14 @@ export function createThreadProviderSelectionSlice(deps: {
               ),
             },
           },
-          runtimeByAgentId: {
-            ...workspace.runtimeByAgentId,
-            [targetAgentId]: defaultRuntimeState(),
+          runtimeBySessionId: {
+            ...workspace.runtimeBySessionId,
+            [targetSessionId]: defaultRuntimeState(),
           },
         });
       });
       logChatConnectionSwitch({
-        agentId: targetAgentId,
+        sessionId: targetSessionId,
         fromConnectionId: metadata.connectionId ?? null,
         toConnectionId: trimmedConnectionId,
         modelId: nextModelId,
@@ -356,19 +356,19 @@ export function createThreadProviderSelectionSlice(deps: {
     async switchThreadModel(
       nextModelId: string,
       options: ChatModelSwitchOptions,
-      agentId?: string,
+      sessionId?: string,
     ): Promise<SwitchThreadModelResult> {
       const root = getActiveChatScopeKey();
       if (!root) {
         return { switched: false, message: "Open Chat and select a chat to switch models." };
       }
 
-      const targetAgentId = resolveOrEnsureTargetAgentId(agentId);
-      if (!targetAgentId) {
-        return { switched: false, message: "Select an agent to switch models." };
+      const targetSessionId = resolveOrEnsureTargetSessionId(sessionId);
+      if (!targetSessionId) {
+        return { switched: false, message: "Select a session to switch models." };
       }
 
-      if (getRuntimeState(targetAgentId).isGenerating) {
+      if (getRuntimeState(targetSessionId).isGenerating) {
         return {
           switched: false,
           message: "Model cannot be changed while a response is generating.",
@@ -380,8 +380,8 @@ export function createThreadProviderSelectionSlice(deps: {
         return { switched: false, message: "Choose a model from the list." };
       }
 
-      const providerId = this.getActiveChatProvider(targetAgentId);
-      const metadata = threadMetadataApi.getMetadata(targetAgentId);
+      const providerId = this.getActiveChatProvider(targetSessionId);
+      const metadata = threadMetadataApi.getMetadata(targetSessionId);
       const normalizedCatalogs = normalizeProviderModelCatalogs(options.providerModelCatalogs);
       const catalogContext = {
         providerSettings: options.providerSettings,
@@ -389,7 +389,7 @@ export function createThreadProviderSelectionSlice(deps: {
       };
       if (!isModelInThreadCatalog(normalizedCatalogs, providerId, trimmedModelId, catalogContext)) {
         logChatModelSwitch({
-          agentId: targetAgentId,
+          sessionId: targetSessionId,
           providerId,
           connectionId: metadata?.connectionId,
           toModel: trimmedModelId,
@@ -402,7 +402,7 @@ export function createThreadProviderSelectionSlice(deps: {
         };
       }
 
-      const currentThread = threadMetadataApi.getActiveThreadSnapshot(targetAgentId);
+      const currentThread = threadMetadataApi.getActiveThreadSnapshot(targetSessionId);
       const fromModel = currentThread
         ? resolveEffectiveThreadModelId(currentThread, normalizedCatalogs, catalogContext)
         : null;
@@ -430,12 +430,12 @@ export function createThreadProviderSelectionSlice(deps: {
         if (!workspace) {
           return state;
         }
-        const thread = workspace.threadsByAgentId[targetAgentId];
+        const thread = workspace.threadsBySessionId[targetSessionId];
         const baseThread =
           thread ??
           ({
             metadata: applyMetadataPatch(
-              createThreadMetadata(targetAgentId, updatedAt, root),
+              createThreadMetadata(targetSessionId, updatedAt, root),
               {},
               updatedAt,
             ),
@@ -445,9 +445,9 @@ export function createThreadProviderSelectionSlice(deps: {
         switched = true;
         return patchWorkspaceState(state, root, {
           ...workspace,
-          threadsByAgentId: {
-            ...workspace.threadsByAgentId,
-            [targetAgentId]: {
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [targetSessionId]: {
               ...baseThread,
               metadata: applyMetadataPatch(
                 baseThread.metadata,
@@ -457,15 +457,15 @@ export function createThreadProviderSelectionSlice(deps: {
               messages: [...baseThread.messages, switchMessage],
             },
           },
-          runtimeByAgentId: {
-            ...workspace.runtimeByAgentId,
-            [targetAgentId]: defaultRuntimeState(),
+          runtimeBySessionId: {
+            ...workspace.runtimeBySessionId,
+            [targetSessionId]: defaultRuntimeState(),
           },
         });
       });
 
       logChatModelSwitch({
-        agentId: targetAgentId,
+        sessionId: targetSessionId,
         providerId,
         connectionId: metadata?.connectionId,
         fromModel,

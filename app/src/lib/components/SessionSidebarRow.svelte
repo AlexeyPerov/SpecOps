@@ -1,41 +1,41 @@
 <script lang="ts">
-  import type { AgentIndexEntry } from "../domain/contracts";
-  import { formatSidebarListTitle } from "../services/chatAgents";
-  import { chatAgentSubtitleById } from "../state/chatStore";
+  import type { SessionIndexEntry } from "../domain/contracts";
+  import { formatSidebarListTitle } from "../services/chatSessions";
+  import { chatSessionSubtitleById } from "../state/chatStore";
 
   interface Props {
-    agent: AgentIndexEntry;
+    session: SessionIndexEntry;
     selected?: boolean;
-    onSelect?: (agentId: string) => void;
-    onContextMenu?: (event: MouseEvent, agentId: string) => void;
+    onSelect?: (sessionId: string) => void;
+    onContextMenu?: (event: MouseEvent, sessionId: string) => void;
   }
 
   let {
-    agent,
+    session,
     selected = false,
     onSelect = () => {},
     onContextMenu = () => {},
   }: Props = $props();
 
-  const subtitleById = $derived($chatAgentSubtitleById);
-  const subtitle = $derived(subtitleById.get(agent.id) ?? null);
+  const subtitleById = $derived($chatSessionSubtitleById);
+  const subtitle = $derived(subtitleById.get(session.id) ?? null);
 </script>
 
 <button
-  class={`agents-row ${selected ? "agents-row-selected" : ""}`}
+  class={`sessions-row ${selected ? "sessions-row-selected" : ""}`}
   type="button"
-  title={agent.title}
-  onclick={() => onSelect(agent.id)}
-  oncontextmenu={(event) => onContextMenu(event, agent.id)}
+  title={session.title}
+  onclick={() => onSelect(session.id)}
+  oncontextmenu={(event) => onContextMenu(event, session.id)}
 >
-  <span class="agents-row-title">{formatSidebarListTitle(agent.title)}</span>
+  <span class="sessions-row-title">{formatSidebarListTitle(session.title)}</span>
   {#if subtitle}
-    <span class="agents-row-subtitle" title={subtitle.full}>{subtitle.display}</span>
+    <span class="sessions-row-subtitle" title={subtitle.full}>{subtitle.display}</span>
   {/if}
 </button>
 
 <style>
-  .agents-row {
+  .sessions-row {
     width: 100%;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
@@ -51,17 +51,17 @@
     align-items: stretch;
   }
 
-  .agents-row:hover {
+  .sessions-row:hover {
     background: var(--color-hover);
     cursor: pointer;
   }
 
-  .agents-row-selected {
+  .sessions-row-selected {
     background: var(--color-selection);
     border-color: var(--color-border-subtle);
   }
 
-  .agents-row-title {
+  .sessions-row-title {
     display: block;
     min-width: 0;
     overflow: hidden;
@@ -69,7 +69,7 @@
     white-space: nowrap;
   }
 
-  .agents-row-subtitle {
+  .sessions-row-subtitle {
     display: block;
     min-width: 0;
     overflow: hidden;

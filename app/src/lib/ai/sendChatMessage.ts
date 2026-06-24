@@ -5,7 +5,7 @@ import {
   createUserMessage,
   executeProviderTurn,
   isWorkspaceSendBlockedWhenOpencodeDisabled,
-  persistAgentThreadOnce,
+  persistSessionThreadOnce,
   resolveSendTarget,
   shouldUseWorkspaceAgentBackend,
   validateOpencodeBackendSend,
@@ -22,7 +22,7 @@ export type { ChatTurnSuccessResult, RetryLastChatTurnResult, RetryLastChatTurnF
 
 export async function sendChatMessage(
   content: string,
-  agentId?: string,
+  sessionId?: string,
   options?: ChatSendContextOptions,
 ): Promise<SendChatMessageResult> {
   const trimmed = content.trim();
@@ -30,12 +30,12 @@ export async function sendChatMessage(
     return { ok: false, reason: "empty", message: "Message cannot be empty." };
   }
 
-  const target = resolveSendTarget("send", agentId, options);
+  const target = resolveSendTarget("send", sessionId, options);
   if (!target.ok) {
     return target;
   }
 
-  const turnId = beginTurn(target.activeAgentId);
+  const turnId = beginTurn(target.activeSessionId);
   if (!turnId) {
     return {
       ok: false,
@@ -45,15 +45,15 @@ export async function sendChatMessage(
   }
 
   const userMessage = createUserMessage(trimmed);
-  if (!chatStore.appendMessage(userMessage, { agentId: target.activeAgentId })) {
-    abortTurn(target.activeAgentId, target.root);
+  if (!chatStore.appendMessage(userMessage, { sessionId: target.activeSessionId })) {
+    abortTurn(target.activeSessionId, target.root);
     return {
       ok: false,
       reason: "append_failed",
       message: "Could not append your message to the active thread.",
     };
   }
-  persistAgentThreadOnce(target.root, target.activeAgentId);
+  persistSessionThreadOnce(target.root, target.activeSessionId);
 
   const useWorkspaceBackend = shouldUseWorkspaceAgentBackend({
     root: target.root,
@@ -64,42 +64,42 @@ export async function sendChatMessage(
     root: target.root,
     chatContextKind: target.chatContextKind,
   })) {
-    chatStore.removeMessage(userMessage.id, target.activeAgentId, target.root);
-    abortTurn(target.activeAgentId, target.root);
+    chatStore.removeMessage(userMessage.id, target.activeSessionId, target.root);
+    abortTurn(target.activeSessionId, target.root);
     return { ok: false, reason: "provider_unavailable", message: OPENCODE_DISABLED_MESSAGE };
   }
 
   if (useWorkspaceBackend) {
     const opencodeValidation = await validateOpencodeBackendSend(
       target.root,
-      target.activeAgentId,
+      target.activeSessionId,
     );
     if (!opencodeValidation.ok) {
-      chatStore.removeMessage(userMessage.id, target.activeAgentId, target.root);
-      abortTurn(target.activeAgentId, target.root);
+      chatStore.removeMessage(userMessage.id, target.activeSessionId, target.root);
+      abortTurn(target.activeSessionId, target.root);
       return opencodeValidation;
     }
     return executeProviderTurn({
       root: target.root,
       chatContextKind: target.chatContextKind,
-      activeAgentId: target.activeAgentId,
+      activeSessionId: target.activeSessionId,
       turnId,
       modelId: opencodeValidation.modelId,
       ...(options?.context ? { context: options.context } : {}),
     });
   }
 
-  const providerValidation = await validateProviderSend(target.activeAgentId, options);
+  const providerValidation = await validateProviderSend(target.activeSessionId, options);
   if (!providerValidation.ok) {
-    chatStore.removeMessage(userMessage.id, target.activeAgentId, target.root);
-    abortTurn(target.activeAgentId, target.root);
+    chatStore.removeMessage(userMessage.id, target.activeSessionId, target.root);
+    abortTurn(target.activeSessionId, target.root);
     return providerValidation;
   }
 
   return executeProviderTurn({
     root: target.root,
     chatContextKind: target.chatContextKind,
-    activeAgentId: target.activeAgentId,
+    activeSessionId: target.activeSessionId,
     turnId,
     provider: providerValidation.provider,
     accessStatus: providerValidation.accessStatus,

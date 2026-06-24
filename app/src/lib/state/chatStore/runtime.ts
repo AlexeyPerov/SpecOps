@@ -4,8 +4,8 @@ import {
   patchWorkspaceState,
   resolveChatScopeKey,
 } from "./workspace";
-import { resolveTargetAgentId } from "./agents";
-import { activeAgentId } from "./workspace";
+import { resolveTargetSessionId } from "./sessions";
+import { activeSessionId } from "./workspace";
 export function defaultRuntimeState(): ChatThreadRuntimeState {
   return {
     isGenerating: false,
@@ -17,23 +17,23 @@ export function defaultRuntimeState(): ChatThreadRuntimeState {
   };
 }
 
-export function runtimeForAgentInWorkspace(
+export function runtimeForSessionInWorkspace(
   state: ChatStoreState,
   workspaceRoot: string | null,
-  agentId: string | null,
+  sessionId: string | null,
 ): ChatThreadRuntimeState {
-  if (!workspaceRoot || !agentId) {
+  if (!workspaceRoot || !sessionId) {
     return defaultRuntimeState();
   }
-  return state.workspaces[workspaceRoot]?.runtimeByAgentId[agentId] ?? defaultRuntimeState();
+  return state.workspaces[workspaceRoot]?.runtimeBySessionId[sessionId] ?? defaultRuntimeState();
 }
 
-export function runtimeForAgent(state: ChatStoreState, agentId: string | null): ChatThreadRuntimeState {
-  return runtimeForAgentInWorkspace(state, state.activeChatScopeKey, agentId);
+export function runtimeForSession(state: ChatStoreState, sessionId: string | null): ChatThreadRuntimeState {
+  return runtimeForSessionInWorkspace(state, state.activeChatScopeKey, sessionId);
 }
 
 export function activeRuntime(state: ChatStoreState): ChatThreadRuntimeState {
-  return runtimeForAgent(state, activeAgentId(state));
+  return runtimeForSession(state, activeSessionId(state));
 }
 
 export function assistantPlaceholderId(turnId: string): string {
@@ -49,8 +49,8 @@ export function createRuntimeSlice(deps: {
 }) {
   const { update, getSnapshot, getActiveChatScopeKey } = deps;
 
-  function updateAgentRuntime(
-    agentId: string,
+  function updateSessionRuntime(
+    sessionId: string,
     updater: (runtime: ChatThreadRuntimeState) => ChatThreadRuntimeState,
     workspaceRoot?: string | null,
   ): boolean {
@@ -61,13 +61,13 @@ export function createRuntimeSlice(deps: {
         return state;
       }
       const { nextState, workspace } = getOrCreateWorkspaceState(state, root);
-      const current = workspace.runtimeByAgentId[agentId] ?? defaultRuntimeState();
+      const current = workspace.runtimeBySessionId[sessionId] ?? defaultRuntimeState();
       updated = true;
       return patchWorkspaceState(nextState, root, {
         ...workspace,
-        runtimeByAgentId: {
-          ...workspace.runtimeByAgentId,
-          [agentId]: updater(current),
+        runtimeBySessionId: {
+          ...workspace.runtimeBySessionId,
+          [sessionId]: updater(current),
         },
       });
     });
@@ -75,42 +75,42 @@ export function createRuntimeSlice(deps: {
   }
 
   return {
-    getRuntimeState(agentId?: string, workspaceRoot?: string | null): ChatThreadRuntimeState {
+    getRuntimeState(sessionId?: string, workspaceRoot?: string | null): ChatThreadRuntimeState {
       const snapshot = getSnapshot();
       const root = resolveChatScopeKey(snapshot, workspaceRoot);
-      const targetAgentId =
-        agentId ?? (root ? (snapshot.workspaces[root]?.activeAgentId ?? null) : null);
-      return { ...runtimeForAgentInWorkspace(snapshot, root, targetAgentId) };
+      const targetSessionId =
+        sessionId ?? (root ? (snapshot.workspaces[root]?.activeSessionId ?? null) : null);
+      return { ...runtimeForSessionInWorkspace(snapshot, root, targetSessionId) };
     },
-    isGenerationTurnActive(workspaceRoot: string, agentId: string, turnId: string): boolean {
-      const runtime = runtimeForAgentInWorkspace(getSnapshot(), workspaceRoot, agentId);
+    isGenerationTurnActive(workspaceRoot: string, sessionId: string, turnId: string): boolean {
+      const runtime = runtimeForSessionInWorkspace(getSnapshot(), workspaceRoot, sessionId);
       return runtime.isGenerating && runtime.activeTurnId === turnId;
     },
-    cancelAgentGeneration(workspaceRoot: string, agentId: string): boolean {
+    cancelSessionGeneration(workspaceRoot: string, sessionId: string): boolean {
       let cancelled = false;
       update((state) => {
         const workspace = state.workspaces[workspaceRoot];
         if (!workspace) {
           return state;
         }
-        const runtime = workspace.runtimeByAgentId[agentId] ?? defaultRuntimeState();
+        const runtime = workspace.runtimeBySessionId[sessionId] ?? defaultRuntimeState();
         if (!runtime.isGenerating) {
           return state;
         }
 
         cancelled = true;
         const turnId = runtime.activeTurnId;
-        let threadsByAgentId = workspace.threadsByAgentId;
+        let threadsBySessionId = workspace.threadsBySessionId;
         if (turnId) {
-          const thread = workspace.threadsByAgentId[agentId];
+          const thread = workspace.threadsBySessionId[sessionId];
           if (thread) {
             const placeholderId = assistantPlaceholderId(turnId);
             const nextMessages = thread.messages.filter((entry) => entry.id !== placeholderId);
             if (nextMessages.length !== thread.messages.length) {
               const updatedAt = new Date().toISOString();
-              threadsByAgentId = {
-                ...threadsByAgentId,
-                [agentId]: {
+              threadsBySessionId = {
+                ...threadsBySessionId,
+                [sessionId]: {
                   ...thread,
                   messages: nextMessages,
                   metadata: {
@@ -125,10 +125,10 @@ export function createRuntimeSlice(deps: {
 
         return patchWorkspaceState(state, workspaceRoot, {
           ...workspace,
-          threadsByAgentId,
-          runtimeByAgentId: {
-            ...workspace.runtimeByAgentId,
-            [agentId]: defaultRuntimeState(),
+          threadsBySessionId,
+          runtimeBySessionId: {
+            ...workspace.runtimeBySessionId,
+            [sessionId]: defaultRuntimeState(),
           },
         });
       });
@@ -139,32 +139,32 @@ export function createRuntimeSlice(deps: {
       if (!workspace) {
         return [];
       }
-      const agentIds = new Set<string>([
-        ...Object.keys(workspace.runtimeByAgentId),
-        ...workspace.agentIndex.map((entry) => entry.id),
+      const sessionIds = new Set<string>([
+        ...Object.keys(workspace.runtimeBySessionId),
+        ...workspace.sessionIndex.map((entry) => entry.id),
       ]);
       const cancelled: string[] = [];
-      for (const agentId of agentIds) {
-        if (this.cancelAgentGeneration(workspaceRoot, agentId)) {
-          cancelled.push(agentId);
+      for (const sessionId of sessionIds) {
+        if (this.cancelSessionGeneration(workspaceRoot, sessionId)) {
+          cancelled.push(sessionId);
         }
       }
       return cancelled;
     },
-    beginTurn(turnId: string, agentId?: string): boolean {
+    beginTurn(turnId: string, sessionId?: string): boolean {
       const root = getActiveChatScopeKey();
       if (!root) {
         return false;
       }
-      const targetAgentId = resolveTargetAgentId(getSnapshot(), agentId);
-      if (!targetAgentId) {
+      const targetSessionId = resolveTargetSessionId(getSnapshot(), sessionId);
+      if (!targetSessionId) {
         return false;
       }
-      const runtime = runtimeForAgent(getSnapshot(), targetAgentId);
+      const runtime = runtimeForSession(getSnapshot(), targetSessionId);
       if (runtime.isGenerating) {
         return false;
       }
-      return updateAgentRuntime(targetAgentId, () => ({
+      return updateSessionRuntime(targetSessionId, () => ({
         isGenerating: true,
         isWaitingForPermission: false,
         isWaitingForQuestion: false,
@@ -173,38 +173,38 @@ export function createRuntimeSlice(deps: {
         lastError: null,
       }));
     },
-    completeTurn(agentId?: string, workspaceRoot?: string | null): boolean {
+    completeTurn(sessionId?: string, workspaceRoot?: string | null): boolean {
       const snapshot = getSnapshot();
       const root = resolveChatScopeKey(snapshot, workspaceRoot);
-      const targetAgentId = resolveTargetAgentId(snapshot, agentId);
-      if (!root || !targetAgentId) {
+      const targetSessionId = resolveTargetSessionId(snapshot, sessionId);
+      if (!root || !targetSessionId) {
         return false;
       }
-      const runtime = runtimeForAgentInWorkspace(snapshot, root, targetAgentId);
+      const runtime = runtimeForSessionInWorkspace(snapshot, root, targetSessionId);
       if (!runtime.isGenerating) {
         return false;
       }
-      return updateAgentRuntime(targetAgentId, () => defaultRuntimeState(), root);
+      return updateSessionRuntime(targetSessionId, () => defaultRuntimeState(), root);
     },
     failTurn(
       error: ChatTurnError,
       turnId?: string,
-      agentId?: string,
+      sessionId?: string,
       workspaceRoot?: string | null,
     ): boolean {
       const snapshot = getSnapshot();
       const root = resolveChatScopeKey(snapshot, workspaceRoot);
-      const targetAgentId = resolveTargetAgentId(snapshot, agentId);
-      if (!root || !targetAgentId) {
+      const targetSessionId = resolveTargetSessionId(snapshot, sessionId);
+      if (!root || !targetSessionId) {
         return false;
       }
-      const runtime = runtimeForAgentInWorkspace(snapshot, root, targetAgentId);
+      const runtime = runtimeForSessionInWorkspace(snapshot, root, targetSessionId);
       const failedTurnId = turnId ?? runtime.activeTurnId;
       if (!failedTurnId) {
         return false;
       }
-      return updateAgentRuntime(
-        targetAgentId,
+      return updateSessionRuntime(
+        targetSessionId,
         () => ({
           isGenerating: false,
           isWaitingForPermission: false,
@@ -216,18 +216,18 @@ export function createRuntimeSlice(deps: {
         root,
       );
     },
-    canRetryLastTurn(agentId?: string): boolean {
-      const runtime = this.getRuntimeState(agentId);
+    canRetryLastTurn(sessionId?: string): boolean {
+      const runtime = this.getRuntimeState(sessionId);
       return runtime.lastFailedTurnId !== null && !runtime.isGenerating;
     },
-    setWaitingForPermission(agentId: string, waiting: boolean, workspaceRoot?: string | null): boolean {
-      return updateAgentRuntime(agentId, (current) => ({
+    setWaitingForPermission(sessionId: string, waiting: boolean, workspaceRoot?: string | null): boolean {
+      return updateSessionRuntime(sessionId, (current) => ({
         ...current,
         isWaitingForPermission: waiting,
       }), workspaceRoot);
     },
-    setWaitingForQuestion(agentId: string, waiting: boolean, workspaceRoot?: string | null): boolean {
-      return updateAgentRuntime(agentId, (current) => ({
+    setWaitingForQuestion(sessionId: string, waiting: boolean, workspaceRoot?: string | null): boolean {
+      return updateSessionRuntime(sessionId, (current) => ({
         ...current,
         isWaitingForQuestion: waiting,
       }), workspaceRoot);

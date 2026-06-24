@@ -6,7 +6,7 @@ import { defaultSettings } from "../state/appState/settingsSlice";
 function threadSnapshot(): ChatThreadSnapshot {
   return {
     metadata: {
-      agentId: "agent-1",
+      sessionId: "agent-1",
       threadId: "thread-1",
       mode: "ask",
       provider: "http",

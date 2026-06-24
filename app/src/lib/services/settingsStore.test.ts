@@ -425,7 +425,7 @@ describe("appearance settings persistence", () => {
         enabled: false,
         volume: 42,
         events: {
-          agentDone: true,
+          sessionDone: true,
           permission: false,
           question: true,
           error: false,
@@ -434,7 +434,7 @@ describe("appearance settings persistence", () => {
       osNotificationSettings: {
         enabled: true,
         events: {
-          agentDone: false,
+          sessionDone: false,
           permission: true,
           question: true,
           error: true,

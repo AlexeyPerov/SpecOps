@@ -74,7 +74,7 @@ function assistantMessage(content: string): ChatMessage {
 function threadSnapshot(overrides?: Partial<ChatThreadSnapshot["metadata"]>): ChatThreadSnapshot {
   return {
     metadata: {
-      agentId: "agent-test",
+      sessionId: "agent-test",
       threadId: "agent-test",
       mode: "ask",
       provider: "debug-workspace",

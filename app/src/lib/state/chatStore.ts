@@ -3,7 +3,11 @@ import type { CapabilityChecker, WorkspaceReadinessChecker } from "../ai/capabil
 import type { ContextId } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { createAccessSlice } from "./chatStore/access";
-import { createAgentsSlice, resetAgentIdCounterForTests, createAgentId } from "./chatStore/agents";
+import {
+  createSessionsSlice,
+  resetSessionIdCounterForTests,
+  createSessionId,
+} from "./chatStore/sessions";
 import { createRuntimeSlice, activeRuntime } from "./chatStore/runtime";
 import { createThreadsSlice } from "./chatStore/threads";
 import {
@@ -11,7 +15,7 @@ import {
   setDefaultThreadConnectionResolver,
   setDefaultChatProviderResolver,
 } from "./chatStore/threadHelpers";
-import { activeThread, activeAgentId } from "./chatStore/workspace";
+import { activeThread, activeSessionId } from "./chatStore/workspace";
 import { defaultUnknownAccessState } from "./chatStore/access";
 import type {
   ChatAccessState,
@@ -24,13 +28,13 @@ import type {
   SwitchThreadModelResult,
   SwitchThreadConnectionResult,
   SwitchThreadProviderResult,
-  WorkspaceAgentsState,
+  WorkspaceSessionsState,
 } from "./chatStore/types";
 import { normalizeWorkspaceThreadsForScope } from "../ai/providers/threadScopeNormalization";
 import {
-  deriveAgentSubtitleFromThread,
+  deriveSessionSubtitleFromThread,
   firstAssistantMessageContent,
-} from "../services/chatAgents";
+} from "../services/chatSessions";
 import { chatScopeKeyForContextId, isChatContextScopeKey } from "./chatStore/types";
 
 export type {
@@ -43,14 +47,14 @@ export type {
   SwitchThreadModelResult,
   SwitchThreadConnectionResult,
   SwitchThreadProviderResult,
-  WorkspaceAgentsState,
+  WorkspaceSessionsState,
 };
 
 export {
-  createAgentId,
+  createSessionId,
   formatCompactionNotice,
   setDefaultThreadConnectionResolver,
-  resetAgentIdCounterForTests,
+  resetSessionIdCounterForTests,
   setDefaultChatProviderResolver,
 };
 
@@ -93,7 +97,7 @@ function createChatStore() {
     update,
     getSnapshot,
     getActiveChatScopeKey,
-    getRuntimeState: (agentId) => runtimeSlice.getRuntimeState(agentId),
+    getRuntimeState: (sessionId) => runtimeSlice.getRuntimeState(sessionId),
     capabilityCheckerRef,
   });
   const accessSlice = createAccessSlice({
@@ -101,17 +105,17 @@ function createChatStore() {
     getSnapshot,
     getActiveChatScopeKey,
     getActiveWorkspaceRoot,
-    getMetadata: (agentId) => threadsSlice.getMetadata(agentId),
+    getMetadata: (sessionId) => threadsSlice.getMetadata(sessionId),
     capabilityCheckerRef,
     workspaceReadinessCheckerRef,
   });
-  const agentsSlice = createAgentsSlice({ update, getSnapshot, getActiveChatScopeKey });
+  const sessionsSlice = createSessionsSlice({ update, getSnapshot, getActiveChatScopeKey });
 
   return {
     subscribe,
     reset() {
       set(initialState);
-      resetAgentIdCounterForTests();
+      resetSessionIdCounterForTests();
     },
     getSnapshot,
     setActiveChatScopeKey(scopeKey: ChatScopeKey | null): void {
@@ -143,7 +147,7 @@ function createChatStore() {
     getActiveWorkspaceRoot,
     setDefaultChatProviderResolver,
     setDefaultThreadConnectionResolver,
-    ...agentsSlice,
+    ...sessionsSlice,
     ...threadsSlice,
     ...runtimeSlice,
     ...accessSlice,
@@ -176,57 +180,57 @@ export const chatCanRetryLastTurn = derived(chatRuntimeState, ($runtime) =>
   Boolean($runtime.lastFailedTurnId && !$runtime.isGenerating),
 );
 
-export const chatAgentIndex = derived(chatStore, ($chatStore) => {
+export const chatSessionIndex = derived(chatStore, ($chatStore) => {
   const scopeKey = $chatStore.activeChatScopeKey;
   if (!scopeKey) {
     return [];
   }
-  return [...($chatStore.workspaces[scopeKey]?.agentIndex ?? [])];
+  return [...($chatStore.workspaces[scopeKey]?.sessionIndex ?? [])];
 });
 
 /**
- * M6-T4/T5 — active workspace's per-agent runtime map, plus its scope key, so
- * the notification observer effect can react to agent-state transitions for
- * every agent (not only the selected one). Returns a fresh object reference on
+ * M6-T4/T5 — active workspace's per-session runtime map, plus its scope key, so
+ * the notification observer effect can react to session-state transitions for
+ * every session (not only the selected one). Returns a fresh object reference on
  * every chatStore change so `$derived` re-runs downstream.
  */
-export const chatActiveRuntimeByAgentId = derived(
+export const chatActiveRuntimeBySessionId = derived(
   chatStore,
   ($chatStore) => {
     const scopeKey = $chatStore.activeChatScopeKey;
     if (!scopeKey) {
-      return { scopeKey: null, runtimeByAgentId: {} };
+      return { scopeKey: null, runtimeBySessionId: {} };
     }
-    const runtimeByAgentId = $chatStore.workspaces[scopeKey]?.runtimeByAgentId ?? {};
-    return { scopeKey, runtimeByAgentId: { ...runtimeByAgentId } };
+    const runtimeBySessionId = $chatStore.workspaces[scopeKey]?.runtimeBySessionId ?? {};
+    return { scopeKey, runtimeBySessionId: { ...runtimeBySessionId } };
   },
 );
 
-export type ChatAgentSubtitle = {
+export type ChatSessionSubtitle = {
   display: string;
   full: string;
 };
 
-export const chatAgentSubtitleById = derived(chatStore, ($chatStore) => {
+export const chatSessionSubtitleById = derived(chatStore, ($chatStore) => {
   const scopeKey = $chatStore.activeChatScopeKey;
   if (!scopeKey) {
-    return new Map<string, ChatAgentSubtitle>();
+    return new Map<string, ChatSessionSubtitle>();
   }
 
   const workspace = $chatStore.workspaces[scopeKey];
   if (!workspace) {
-    return new Map<string, ChatAgentSubtitle>();
+    return new Map<string, ChatSessionSubtitle>();
   }
 
-  const subtitles = new Map<string, ChatAgentSubtitle>();
-  for (const [agentId, thread] of Object.entries(workspace.threadsByAgentId)) {
-    const display = deriveAgentSubtitleFromThread(thread);
+  const subtitles = new Map<string, ChatSessionSubtitle>();
+  for (const [sessionId, thread] of Object.entries(workspace.threadsBySessionId)) {
+    const display = deriveSessionSubtitleFromThread(thread);
     const full = thread ? firstAssistantMessageContent(thread.messages) : null;
     if (display && full) {
-      subtitles.set(agentId, { display, full });
+      subtitles.set(sessionId, { display, full });
     }
   }
   return subtitles;
 });
 
-export const chatActiveAgentId = derived(chatStore, ($chatStore) => activeAgentId($chatStore));
+export const chatActiveSessionId = derived(chatStore, ($chatStore) => activeSessionId($chatStore));

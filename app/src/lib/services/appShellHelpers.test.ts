@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AppDomainState } from "../domain/contracts";
-import { createAgentTab, createFileTab } from "../domain/contracts";
+import { createSessionTab, createFileTab } from "../domain/contracts";
 import {
   canFitMarkdownSplit,
   computeResponsiveLayoutFlags,
@@ -70,7 +70,7 @@ describe("watchedPathsFromState", () => {
 
   it("skips agent tabs", () => {
     const state = domainState({
-      openTabs: [createAgentTab("tab-agent", "agent-1"), createFileTab("tab-1", "doc-1")],
+      openTabs: [createSessionTab("tab-agent", "agent-1"), createFileTab("tab-1", "doc-1")],
       documents: [emptyDocument("doc-1", "/tmp/a.txt")],
     });
 
@@ -134,9 +134,9 @@ describe("canFitMarkdownSplit", () => {
 describe("computeResponsiveLayoutFlags", () => {
   const baseLayout = {
     projectPanelWidthPx: 240,
-    agentsSidebarWidthPx: 280,
+    sessionsSidebarWidthPx: 280,
     projectPanelCollapsed: false,
-    agentsSidebarCollapsed: false,
+    sessionsSidebarCollapsed: false,
   };
 
   it("does not auto-collapse when width is zero", () => {
@@ -144,13 +144,13 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 0,
         workspaceActive: true,
-        isAgentTabActive: false,
+        isSessionTabActive: false,
         workspaceLayout: baseLayout,
         consoleOpen: true,
       }),
     ).toEqual({
       autoProjectPanelCollapsed: false,
-      autoAgentsSidebarCollapsed: false,
+      autoSessionsSidebarCollapsed: false,
       consoleOpen: true,
     });
   });
@@ -160,7 +160,7 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 1099,
         workspaceActive: true,
-        isAgentTabActive: false,
+        isSessionTabActive: false,
         workspaceLayout: baseLayout,
         consoleOpen: true,
       }).autoProjectPanelCollapsed,
@@ -169,7 +169,7 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 1100,
         workspaceActive: true,
-        isAgentTabActive: false,
+        isSessionTabActive: false,
         workspaceLayout: baseLayout,
         consoleOpen: true,
       }).autoProjectPanelCollapsed,
@@ -181,7 +181,7 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 1199,
         workspaceActive: true,
-        isAgentTabActive: true,
+        isSessionTabActive: true,
         workspaceLayout: baseLayout,
         consoleOpen: true,
       }).autoProjectPanelCollapsed,
@@ -190,7 +190,7 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 1200,
         workspaceActive: true,
-        isAgentTabActive: true,
+        isSessionTabActive: true,
         workspaceLayout: baseLayout,
         consoleOpen: true,
       }).autoProjectPanelCollapsed,
@@ -202,19 +202,19 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 1319,
         workspaceActive: true,
-        isAgentTabActive: false,
+        isSessionTabActive: false,
         workspaceLayout: baseLayout,
         consoleOpen: true,
-      }).autoAgentsSidebarCollapsed,
+      }).autoSessionsSidebarCollapsed,
     ).toBe(true);
     expect(
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 1399,
         workspaceActive: true,
-        isAgentTabActive: true,
+        isSessionTabActive: true,
         workspaceLayout: baseLayout,
         consoleOpen: true,
-      }).autoAgentsSidebarCollapsed,
+      }).autoSessionsSidebarCollapsed,
     ).toBe(true);
   });
 
@@ -223,10 +223,10 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 800,
         workspaceActive: false,
-        isAgentTabActive: true,
+        isSessionTabActive: true,
         workspaceLayout: baseLayout,
         consoleOpen: true,
-      }).autoAgentsSidebarCollapsed,
+      }).autoSessionsSidebarCollapsed,
     ).toBe(false);
   });
 
@@ -235,7 +235,7 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 899,
         workspaceActive: true,
-        isAgentTabActive: false,
+        isSessionTabActive: false,
         workspaceLayout: { ...baseLayout, projectPanelCollapsed: true },
         consoleOpen: true,
       }).consoleOpen,
@@ -247,7 +247,7 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 850,
         workspaceActive: true,
-        isAgentTabActive: false,
+        isSessionTabActive: false,
         workspaceLayout: baseLayout,
         consoleOpen: true,
       }).consoleOpen,
@@ -259,7 +259,7 @@ describe("computeResponsiveLayoutFlags", () => {
       computeResponsiveLayoutFlags({
         shellMainRowWidth: 850,
         workspaceActive: false,
-        isAgentTabActive: false,
+        isSessionTabActive: false,
         workspaceLayout: baseLayout,
         consoleOpen: true,
       }).consoleOpen,

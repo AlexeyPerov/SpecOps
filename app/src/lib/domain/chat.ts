@@ -163,7 +163,7 @@ export interface ChatMessage {
 }
 
 export interface ChatThreadMetadata {
-  agentId: string;
+  sessionId: string;
   threadId: string;
   mode: ChatModeId;
   /** Chat HTTP/debug provider; omitted for workspace (OpenCode) threads. */
@@ -181,25 +181,25 @@ export interface ChatThreadMetadata {
   selectedModelId?: string;
   /** Selected HTTP connection for `provider === "http"` threads. */
   connectionId?: string;
-  /** Selected OpenCode agent for workspace threads (e.g. plan, build). */
+  /** Selected OpenCode agent (persona) for workspace threads (e.g. plan, build). */
   opencodeAgentId?: string;
   /** Selected OpenCode provider for workspace threads. */
   opencodeProviderId?: string;
 }
 
-/** One persisted agent conversation (messages + per-agent settings). */
+/** One persisted workspace session conversation (messages + per-session settings). */
 export interface ChatThreadSnapshot {
   metadata: ChatThreadMetadata;
   messages: ChatMessage[];
 }
 
-export interface AgentIndexEntry {
+export interface SessionIndexEntry {
   id: string;
   title: string;
   lastUsedAt: string;
   /** Session-only drafts are not written to disk until first user message. */
   isDraft?: boolean;
-  /** Linked OpenCode session for this agent tab (phase 3 workspace runtime). */
+  /** Linked OpenCode session for this workspace session tab (phase 3 runtime). */
   opencodeSessionId?: string;
   /** Last model used with the linked OpenCode session (restore hint). */
   opencodeModelId?: string;
@@ -211,14 +211,14 @@ export interface AgentIndexEntry {
   opencodeParentSessionId?: string;
 }
 
-/** Per-workspace agent list only — no conversation payload. */
-export interface WorkspaceAgentsIndexSnapshot {
+/** Per-workspace session list only — no conversation payload. */
+export interface WorkspaceSessionsIndexSnapshot {
   version: 1;
-  agents: AgentIndexEntry[];
+  sessions: SessionIndexEntry[];
 }
 
-/** Versioned on-disk envelope for a single agent thread file. */
-export interface ChatAgentThreadFileSnapshot {
+/** Versioned on-disk envelope for a single session thread file. */
+export interface ChatSessionThreadFileSnapshot {
   version: 1;
   thread: ChatThreadSnapshot;
 }

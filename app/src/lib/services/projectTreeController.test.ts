@@ -66,7 +66,7 @@ describe("createProjectTreeController", () => {
 
     await controller.loadProjectTreeRoot({
       workspaceRoot: "/repo",
-      isAgentTabActive: false,
+      isSessionTabActive: false,
     });
     await controller.ensureExpandedForActiveFile("/repo", "/repo/src/lib/main.ts");
 
@@ -85,8 +85,8 @@ describe("createProjectTreeController", () => {
     const controller = createProjectTreeController((state) => snapshots.push(state), {
       loadDirectoryChildrenFn: vi.fn(async () => [makeNode("src", "/repo/src", "directory")]),
     });
-    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isAgentTabActive: false });
-    await controller.loadProjectTreeRoot({ workspaceRoot: null, isAgentTabActive: false });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+    await controller.loadProjectTreeRoot({ workspaceRoot: null, isSessionTabActive: false });
 
     const lastState = snapshots[snapshots.length - 1];
     expect(lastState.rootNodes).toEqual([]);

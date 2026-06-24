@@ -81,7 +81,7 @@
   min-height: 0;
 }
 
-.editor-pane-agent {
+.editor-pane-session {
   padding: 0;
   display: flex;
   flex-direction: column;

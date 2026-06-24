@@ -3,25 +3,25 @@ import { mkdir, readTextFile, remove, writeTextFile } from "@tauri-apps/plugin-f
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import {
   chatScopeStorageSegment,
-  decodeChatAgentThreadFileSnapshot,
-  decodeWorkspaceAgentsIndexSnapshot,
-  deleteAgentPersistence,
-  deleteAgentThreadFileSnapshot,
-  encodeChatAgentThreadFileSnapshot,
-  encodeWorkspaceAgentsIndexSnapshot,
-  getAgentThreadFilePath,
-  getWorkspaceAgentsDir,
-  getWorkspaceAgentsIndexFilePath,
-  persistAgentThreadSnapshot,
-  readAgentThreadFileSnapshot,
-  readWorkspaceAgentsIndexSnapshot,
+  decodeChatSessionThreadFileSnapshot,
+  decodeWorkspaceSessionsIndexSnapshot,
+  deleteSessionPersistence,
+  deleteSessionThreadFileSnapshot,
+  encodeChatSessionThreadFileSnapshot,
+  encodeWorkspaceSessionsIndexSnapshot,
+  getSessionThreadFilePath,
+  getWorkspaceSessionsDir,
+  getWorkspaceSessionsIndexFilePath,
+  persistSessionThreadSnapshot,
+  readSessionThreadFileSnapshot,
+  readWorkspaceSessionsIndexSnapshot,
   resetChatPersistenceForTests,
-  upsertAgentIndexEntry,
+  upsertSessionIndexEntry,
   workspaceChatPathHashKey,
-  writeAgentThreadFileSnapshot,
-  writeWorkspaceAgentsIndexSnapshot,
+  writeSessionThreadFileSnapshot,
+  writeWorkspaceSessionsIndexSnapshot,
 } from "./chatPersistence";
-import type { ChatAgentThreadFileSnapshot, ChatThreadSnapshot } from "../domain/contracts";
+import type { ChatSessionThreadFileSnapshot, ChatThreadSnapshot } from "../domain/contracts";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   mkdir: vi.fn(),
@@ -49,7 +49,7 @@ const AGENT_ID = "agent-1";
 function sampleThread(agentId = AGENT_ID): ChatThreadSnapshot {
   return {
     metadata: {
-      agentId,
+      sessionId: agentId,
       threadId: agentId,
       mode: "review",
       provider: "http",
@@ -86,9 +86,9 @@ describe("workspace agent path mapping", () => {
   });
 
   it("maps workspace to a dedicated agents directory", async () => {
-    const workspaceDir = await getWorkspaceAgentsDir(WORKSPACE);
-    const indexPath = await getWorkspaceAgentsIndexFilePath(WORKSPACE);
-    const threadPath = await getAgentThreadFilePath(WORKSPACE, AGENT_ID);
+    const workspaceDir = await getWorkspaceSessionsDir(WORKSPACE);
+    const indexPath = await getWorkspaceSessionsIndexFilePath(WORKSPACE);
+    const threadPath = await getSessionThreadFilePath(WORKSPACE, AGENT_ID);
 
     expect(workspaceDir).toBe("/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE));
     expect(indexPath).toBe(workspaceDir + "/index.json");
@@ -96,9 +96,9 @@ describe("workspace agent path mapping", () => {
   });
 
   it("maps chat-http scope to a literal chat/chat-http/ directory", async () => {
-    const chatHttpDir = await getWorkspaceAgentsDir(CHAT_HTTP_CONTEXT_ID);
-    const indexPath = await getWorkspaceAgentsIndexFilePath(CHAT_HTTP_CONTEXT_ID);
-    const threadPath = await getAgentThreadFilePath(CHAT_HTTP_CONTEXT_ID, AGENT_ID);
+    const chatHttpDir = await getWorkspaceSessionsDir(CHAT_HTTP_CONTEXT_ID);
+    const indexPath = await getWorkspaceSessionsIndexFilePath(CHAT_HTTP_CONTEXT_ID);
+    const threadPath = await getSessionThreadFilePath(CHAT_HTTP_CONTEXT_ID, AGENT_ID);
 
     expect(chatScopeStorageSegment(CHAT_HTTP_CONTEXT_ID)).toBe("chat-http");
     expect(chatHttpDir).toBe("/data/spec-ops/chat/chat-http");
@@ -109,18 +109,18 @@ describe("workspace agent path mapping", () => {
 
 describe("agent thread snapshot codec", () => {
   it("round-trips per-agent thread snapshot", () => {
-    const snapshot: ChatAgentThreadFileSnapshot = {
+    const snapshot: ChatSessionThreadFileSnapshot = {
       version: 1,
       thread: sampleThread(),
     };
 
-    const encoded = encodeChatAgentThreadFileSnapshot(snapshot);
-    const decoded = decodeChatAgentThreadFileSnapshot(encoded);
+    const encoded = encodeChatSessionThreadFileSnapshot(snapshot);
+    const decoded = decodeChatSessionThreadFileSnapshot(encoded);
     expect(decoded).toEqual(snapshot);
   });
 
   it("round-trips selectedModelId metadata and model-switched system events", () => {
-    const snapshot: ChatAgentThreadFileSnapshot = {
+    const snapshot: ChatSessionThreadFileSnapshot = {
       version: 1,
       thread: {
         ...sampleThread(),
@@ -145,13 +145,13 @@ describe("agent thread snapshot codec", () => {
       },
     };
 
-    const encoded = encodeChatAgentThreadFileSnapshot(snapshot);
-    const decoded = decodeChatAgentThreadFileSnapshot(encoded);
+    const encoded = encodeChatSessionThreadFileSnapshot(snapshot);
+    const decoded = decodeChatSessionThreadFileSnapshot(encoded);
     expect(decoded).toEqual(snapshot);
   });
 
   it("round-trips opencodeAgentId and opencodeProviderId metadata", () => {
-    const snapshot: ChatAgentThreadFileSnapshot = {
+    const snapshot: ChatSessionThreadFileSnapshot = {
       version: 1,
       thread: {
         ...sampleThread(),
@@ -163,18 +163,18 @@ describe("agent thread snapshot codec", () => {
       },
     };
 
-    const encoded = encodeChatAgentThreadFileSnapshot(snapshot);
-    const decoded = decodeChatAgentThreadFileSnapshot(encoded);
+    const encoded = encodeChatSessionThreadFileSnapshot(snapshot);
+    const decoded = decodeChatSessionThreadFileSnapshot(encoded);
     expect(decoded).toEqual(snapshot);
   });
 
   it("decodes legacy snapshots without selectedModelId or model-switched events", () => {
-    const legacy = encodeChatAgentThreadFileSnapshot({
+    const legacy = encodeChatSessionThreadFileSnapshot({
       version: 1,
       thread: sampleThread(),
     });
 
-    const decoded = decodeChatAgentThreadFileSnapshot(legacy);
+    const decoded = decodeChatSessionThreadFileSnapshot(legacy);
     expect(decoded?.thread.metadata.selectedModelId).toBeUndefined();
     expect(decoded?.thread.messages.every((message) => message.systemEvent?.type !== "model-switched")).toBe(
       true,
@@ -186,7 +186,7 @@ describe("agent thread snapshot codec", () => {
       version: 1,
       thread: {
         metadata: {
-          agentId: AGENT_ID,
+          sessionId: AGENT_ID,
           threadId: AGENT_ID,
           mode: "ask",
           provider: "glm",
@@ -204,12 +204,12 @@ describe("agent thread snapshot codec", () => {
       },
     });
 
-    const decoded = decodeChatAgentThreadFileSnapshot(rawLegacySnapshot);
+    const decoded = decodeChatSessionThreadFileSnapshot(rawLegacySnapshot);
     expect(decoded?.thread.metadata.provider).toBe("http");
   });
 
   it("preserves provider-switched events when model-switched events are present", () => {
-    const snapshot: ChatAgentThreadFileSnapshot = {
+    const snapshot: ChatSessionThreadFileSnapshot = {
       version: 1,
       thread: {
         ...sampleThread(),
@@ -230,7 +230,7 @@ describe("agent thread snapshot codec", () => {
       },
     };
 
-    const decoded = decodeChatAgentThreadFileSnapshot(encodeChatAgentThreadFileSnapshot(snapshot));
+    const decoded = decodeChatSessionThreadFileSnapshot(encodeChatSessionThreadFileSnapshot(snapshot));
     expect(decoded?.thread.messages[0]?.systemEvent).toEqual({
       type: "provider-switched",
       fromProvider: "http",
@@ -245,11 +245,11 @@ describe("agent thread snapshot codec", () => {
 
   it("rejects legacy single-thread envelopes", () => {
     const legacy = JSON.stringify({ version: 1, thread: null });
-    expect(decodeChatAgentThreadFileSnapshot(legacy)).toBeNull();
+    expect(decodeChatSessionThreadFileSnapshot(legacy)).toBeNull();
   });
 
   it("round-trips structured message parts (reasoning, subtask, step, cost)", () => {
-    const snapshot: ChatAgentThreadFileSnapshot = {
+    const snapshot: ChatSessionThreadFileSnapshot = {
       version: 1,
       thread: {
         ...sampleThread(),
@@ -320,19 +320,19 @@ describe("agent thread snapshot codec", () => {
       },
     };
 
-    const encoded = encodeChatAgentThreadFileSnapshot(snapshot);
-    const decoded = decodeChatAgentThreadFileSnapshot(encoded);
+    const encoded = encodeChatSessionThreadFileSnapshot(snapshot);
+    const decoded = decodeChatSessionThreadFileSnapshot(encoded);
     expect(decoded).toEqual(snapshot);
   });
 
   it("preserves messages without parts (undefined parts)", () => {
-    const snapshot: ChatAgentThreadFileSnapshot = {
+    const snapshot: ChatSessionThreadFileSnapshot = {
       version: 1,
       thread: sampleThread(),
     };
 
-    const decoded = decodeChatAgentThreadFileSnapshot(
-      encodeChatAgentThreadFileSnapshot(snapshot),
+    const decoded = decodeChatSessionThreadFileSnapshot(
+      encodeChatSessionThreadFileSnapshot(snapshot),
     );
     expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
   });
@@ -354,7 +354,7 @@ describe("agent thread snapshot codec", () => {
       },
     });
 
-    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    const decoded = decodeChatSessionThreadFileSnapshot(raw);
     expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
     expect(decoded?.thread.messages[0]?.content).toBe("hello");
   });
@@ -387,7 +387,7 @@ describe("agent thread snapshot codec", () => {
       },
     });
 
-    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    const decoded = decodeChatSessionThreadFileSnapshot(raw);
     // Malformed entries are dropped; the two valid parts survive in order.
     expect(decoded?.thread.messages[0]?.parts).toEqual([validReasoning, validText]);
     expect(decoded?.thread.messages[0]?.content).toBe("Let me look at that.");
@@ -414,7 +414,7 @@ describe("agent thread snapshot codec", () => {
       },
     });
 
-    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    const decoded = decodeChatSessionThreadFileSnapshot(raw);
     // Every entry failed → degrade to `undefined`, not an empty-parts message.
     expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
     expect(decoded?.thread.messages[0]?.content).toBe("hello");
@@ -437,7 +437,7 @@ describe("agent thread snapshot codec", () => {
       },
     });
 
-    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    const decoded = decodeChatSessionThreadFileSnapshot(raw);
     expect(decoded?.thread.messages[0]?.parts).toBeUndefined();
   });
 });
@@ -446,7 +446,7 @@ describe("workspace agents index codec", () => {
   it("round-trips agent index snapshot", () => {
     const snapshot = {
       version: 1 as const,
-      agents: [
+      sessions: [
         {
           id: AGENT_ID,
           title: "hello",
@@ -458,14 +458,14 @@ describe("workspace agents index codec", () => {
       ],
     };
 
-    const encoded = encodeWorkspaceAgentsIndexSnapshot(snapshot);
-    expect(decodeWorkspaceAgentsIndexSnapshot(encoded)).toEqual(snapshot);
+    const encoded = encodeWorkspaceSessionsIndexSnapshot(snapshot);
+    expect(decodeWorkspaceSessionsIndexSnapshot(encoded)).toEqual(snapshot);
   });
 
   it("drops invalid opencode mapping metadata from corrupted entries", () => {
     const raw = JSON.stringify({
       version: 1,
-      agents: [
+      sessions: [
         {
           id: AGENT_ID,
           title: "hello",
@@ -474,28 +474,28 @@ describe("workspace agents index codec", () => {
         },
       ],
     });
-    expect(decodeWorkspaceAgentsIndexSnapshot(raw)).toEqual({ version: 1, agents: [] });
+    expect(decodeWorkspaceSessionsIndexSnapshot(raw)).toEqual({ version: 1, sessions: [] });
   });
 
   it("upserts index entries by agent id", () => {
     const initial = {
       version: 1 as const,
-      agents: [{ id: "a-1", title: "One", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+      sessions: [{ id: "a-1", title: "One", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
     };
 
-    const next = upsertAgentIndexEntry(initial, {
+    const next = upsertSessionIndexEntry(initial, {
       id: "a-2",
       title: "Two",
       lastUsedAt: "2026-05-26T00:00:00.000Z",
     });
-    expect(next.agents.map((entry) => entry.id)).toEqual(["a-1", "a-2"]);
+    expect(next.sessions.map((entry) => entry.id)).toEqual(["a-1", "a-2"]);
 
-    const updated = upsertAgentIndexEntry(next, {
+    const updated = upsertSessionIndexEntry(next, {
       id: "a-1",
       title: "One updated",
       lastUsedAt: "2026-05-27T00:00:00.000Z",
     });
-    expect(updated.agents).toEqual([
+    expect(updated.sessions).toEqual([
       { id: "a-2", title: "Two", lastUsedAt: "2026-05-26T00:00:00.000Z" },
       { id: "a-1", title: "One updated", lastUsedAt: "2026-05-27T00:00:00.000Z" },
     ]);
@@ -516,31 +516,31 @@ describe("agent persistence reads and writes", () => {
 
   it("returns null when agent thread file is missing (draft agents)", async () => {
     readTextFileMock.mockRejectedValue(new Error("missing"));
-    await expect(readAgentThreadFileSnapshot(WORKSPACE, AGENT_ID)).resolves.toBeNull();
+    await expect(readSessionThreadFileSnapshot(WORKSPACE, AGENT_ID)).resolves.toBeNull();
   });
 
   it("returns empty index when index file is corrupt", async () => {
     readTextFileMock.mockResolvedValue("{ broken json");
-    await expect(readWorkspaceAgentsIndexSnapshot(WORKSPACE)).resolves.toEqual({
+    await expect(readWorkspaceSessionsIndexSnapshot(WORKSPACE)).resolves.toEqual({
       version: 1,
-      agents: [],
+      sessions: [],
     });
   });
 
   it("writes per-agent thread and index entry together", async () => {
     readTextFileMock.mockResolvedValue(
-      encodeWorkspaceAgentsIndexSnapshot({ version: 1, agents: [] }),
+      encodeWorkspaceSessionsIndexSnapshot({ version: 1, sessions: [] }),
     );
 
     const thread = sampleThread();
-    await persistAgentThreadSnapshot(WORKSPACE, AGENT_ID, thread);
+    await persistSessionThreadSnapshot(WORKSPACE, AGENT_ID, thread);
 
     expect(writeTextFileMock).toHaveBeenCalledTimes(2);
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/index.json",
-      encodeWorkspaceAgentsIndexSnapshot({
+      encodeWorkspaceSessionsIndexSnapshot({
         version: 1,
-        agents: [
+        sessions: [
           {
             id: AGENT_ID,
             title: "hello",
@@ -551,14 +551,14 @@ describe("agent persistence reads and writes", () => {
     );
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/" + AGENT_ID + ".json",
-      encodeChatAgentThreadFileSnapshot({ version: 1, thread }),
+      encodeChatSessionThreadFileSnapshot({ version: 1, thread }),
     );
   });
 
   it("does not create a thread file when only index is written", async () => {
-    await writeWorkspaceAgentsIndexSnapshot(WORKSPACE, {
+    await writeWorkspaceSessionsIndexSnapshot(WORKSPACE, {
       version: 1,
-      agents: [{ id: AGENT_ID, title: "New session", lastUsedAt: "2026-05-28T00:00:00.000Z", isDraft: true }],
+      sessions: [{ id: AGENT_ID, title: "New session", lastUsedAt: "2026-05-28T00:00:00.000Z", isDraft: true }],
     });
 
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
@@ -570,36 +570,36 @@ describe("agent persistence reads and writes", () => {
 
   it("deletes agent thread file and index entry", async () => {
     readTextFileMock.mockResolvedValue(
-      encodeWorkspaceAgentsIndexSnapshot({
+      encodeWorkspaceSessionsIndexSnapshot({
         version: 1,
-        agents: [{ id: AGENT_ID, title: "hello", lastUsedAt: "2026-05-25T00:00:01.000Z" }],
+        sessions: [{ id: AGENT_ID, title: "hello", lastUsedAt: "2026-05-25T00:00:01.000Z" }],
       }),
     );
 
-    await deleteAgentPersistence(WORKSPACE, AGENT_ID);
+    await deleteSessionPersistence(WORKSPACE, AGENT_ID);
 
     expect(removeMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/" + AGENT_ID + ".json",
     );
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/index.json",
-      encodeWorkspaceAgentsIndexSnapshot({ version: 1, agents: [] }),
+      encodeWorkspaceSessionsIndexSnapshot({ version: 1, sessions: [] }),
     );
   });
 
-  it("deleteAgentThreadFileSnapshot tolerates missing files", async () => {
+  it("deleteSessionThreadFileSnapshot tolerates missing files", async () => {
     removeMock.mockRejectedValue(new Error("missing"));
-    await expect(deleteAgentThreadFileSnapshot(WORKSPACE, AGENT_ID)).resolves.toBeUndefined();
+    await expect(deleteSessionThreadFileSnapshot(WORKSPACE, AGENT_ID)).resolves.toBeUndefined();
   });
 
   it("writes agent thread file without touching index when requested directly", async () => {
     const thread = sampleThread();
-    await writeAgentThreadFileSnapshot(WORKSPACE, AGENT_ID, { version: 1, thread });
+    await writeSessionThreadFileSnapshot(WORKSPACE, AGENT_ID, { version: 1, thread });
 
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
     expect(writeTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/" + AGENT_ID + ".json",
-      encodeChatAgentThreadFileSnapshot({ version: 1, thread }),
+      encodeChatSessionThreadFileSnapshot({ version: 1, thread }),
     );
   });
 });

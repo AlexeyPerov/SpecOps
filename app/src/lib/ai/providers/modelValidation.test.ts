@@ -15,7 +15,7 @@ import { defaultProviderModelCatalogs } from "./providerModelCatalog";
 function threadSnapshot(overrides?: Partial<ChatThreadSnapshot["metadata"]>): ChatThreadSnapshot {
   return {
     metadata: {
-      agentId: "agent-test",
+      sessionId: "agent-test",
       threadId: "agent-test",
       mode: "ask",
       provider: "http",

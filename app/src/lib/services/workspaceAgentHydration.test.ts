@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentIndexEntry } from "../domain/contracts";
+import type { SessionIndexEntry } from "../domain/contracts";
 import { WorkspaceAgentBackendError } from "../ai/backends/workspaceAgentBackend";
 
 const mocks = vi.hoisted(() => ({
@@ -14,7 +14,7 @@ vi.mock("../state/chatStore", () => ({
 
 const { hydrateWorkspaceAgentMessages } = await import("./workspaceAgentHydration");
 
-function makeAgent(input: { id: string; opencodeSessionId?: string }): AgentIndexEntry {
+function makeAgent(input: { id: string; opencodeSessionId?: string }): SessionIndexEntry {
   return {
     id: input.id,
     title: input.id,

@@ -78,7 +78,7 @@ function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
         session: {
           openTabs: [],
           selectedTabId: null,
-          lastActiveAgentId: null,
+          lastActiveSessionId: null,
           lastActiveWindowId: "main",
           windowBounds: bounds,
         },
@@ -88,7 +88,7 @@ function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
         session: {
           openTabs: [],
           selectedTabId: null,
-          lastActiveAgentId: null,
+          lastActiveSessionId: null,
           lastActiveWindowId: "main",
           windowBounds: bounds,
         },

@@ -18,7 +18,7 @@ export interface ProjectTreeControllerDeps {
 
 export interface LoadProjectTreeRootOptions {
   workspaceRoot: string | null;
-  isAgentTabActive: boolean;
+  isSessionTabActive: boolean;
   onWorkspaceBlocked?: () => void;
 }
 
@@ -126,7 +126,7 @@ export function createProjectTreeController(
   loadProjectTreeRoot: (options: LoadProjectTreeRootOptions) => Promise<void>;
   loadProjectTreeChildren: (workspaceRoot: string | null, directoryPath: string) => Promise<void>;
   handleToggleProjectTreeDirectory: (workspaceRoot: string | null, path: string) => Promise<void>;
-  refreshProjectTree: (workspaceRoot: string | null, isAgentTabActive: boolean) => Promise<void>;
+  refreshProjectTree: (workspaceRoot: string | null, isSessionTabActive: boolean) => Promise<void>;
   ensureExpandedForActiveFile: (
     workspaceRoot: string | null,
     activePath: string | null,
@@ -186,7 +186,7 @@ export function createProjectTreeController(
 
   const loadProjectTreeRoot = async ({
     workspaceRoot,
-    isAgentTabActive,
+    isSessionTabActive,
     onWorkspaceBlocked,
   }: LoadProjectTreeRootOptions): Promise<void> => {
     if (!workspaceRoot) {
@@ -203,7 +203,7 @@ export function createProjectTreeController(
     };
     publish();
 
-    if (isAgentTabActive && probeAccess) {
+    if (isSessionTabActive && probeAccess) {
       const probe = await probeAccess(workspaceRoot);
       if (probe === "blocked") {
         onWorkspaceBlocked?.();
@@ -237,7 +237,7 @@ export function createProjectTreeController(
 
   const refreshProjectTree = async (
     workspaceRoot: string | null,
-    isAgentTabActive: boolean,
+    isSessionTabActive: boolean,
   ): Promise<void> => {
     if (!workspaceRoot) {
       return;
@@ -250,7 +250,7 @@ export function createProjectTreeController(
     publish();
     await loadProjectTreeRoot({
       workspaceRoot,
-      isAgentTabActive,
+      isSessionTabActive,
     });
     for (const path of expanded) {
       await loadProjectTreeChildren(workspaceRoot, path);

@@ -15,9 +15,9 @@ export function normalizePanelWidthPx(value: unknown): number {
 export function defaultWorkspaceLayout(): WorkspaceLayoutState {
   return {
     projectPanelWidthPx: DEFAULT_PANEL_WIDTH_PX,
-    agentsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
+    sessionsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
     projectPanelCollapsed: false,
-    agentsSidebarCollapsed: false,
+    sessionsSidebarCollapsed: false,
   };
 }
 
@@ -33,17 +33,17 @@ export function normalizeWorkspaceLayout(
       layout.projectPanelWidthPx !== undefined
         ? normalizePanelWidthPx(layout.projectPanelWidthPx)
         : defaults.projectPanelWidthPx,
-    agentsSidebarWidthPx:
-      layout.agentsSidebarWidthPx !== undefined
-        ? normalizePanelWidthPx(layout.agentsSidebarWidthPx)
-        : defaults.agentsSidebarWidthPx,
+    sessionsSidebarWidthPx:
+      layout.sessionsSidebarWidthPx !== undefined
+        ? normalizePanelWidthPx(layout.sessionsSidebarWidthPx)
+        : defaults.sessionsSidebarWidthPx,
     projectPanelCollapsed:
       typeof layout.projectPanelCollapsed === "boolean"
         ? layout.projectPanelCollapsed
         : defaults.projectPanelCollapsed,
-    agentsSidebarCollapsed:
-      typeof layout.agentsSidebarCollapsed === "boolean"
-        ? layout.agentsSidebarCollapsed
-        : defaults.agentsSidebarCollapsed,
+    sessionsSidebarCollapsed:
+      typeof layout.sessionsSidebarCollapsed === "boolean"
+        ? layout.sessionsSidebarCollapsed
+        : defaults.sessionsSidebarCollapsed,
   };
 }

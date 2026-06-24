@@ -216,7 +216,7 @@ export interface AppShellMountDeps {
     runCommand: (commandId: AppCommandId) => void;
     openAndActivatePath: (path: string) => Promise<void>;
     consumeOpenedPaths: (paths: string[]) => Promise<void>;
-    restoreWorkspaceAgentSession: (workspaceRoot: string) => Promise<void>;
+    restoreWorkspaceSession: (workspaceRoot: string) => Promise<void>;
     loadProjectTreeRoot: () => Promise<void>;
     onFilesystemChange: (path: string) => void;
     setConsoleHeightPx: (heightPx: number) => void;
@@ -229,7 +229,7 @@ export interface AppShellMountDeps {
   runCommand: (commandId: AppCommandId) => void;
   openAndActivatePath: (path: string) => Promise<void>;
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
-  restoreWorkspaceAgentSession: (workspaceRoot: string) => Promise<void>;
+  restoreWorkspaceSession: (workspaceRoot: string) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
   notifyProjectTreeFilesystemChange: (path: string) => void;
   setConsoleHeightPx: (heightPx: number) => void;
@@ -268,7 +268,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       runCommand: deps.runCommand,
       openAndActivatePath: deps.openAndActivatePath,
       consumeOpenedPaths: deps.consumeOpenedPaths,
-      restoreWorkspaceAgentSession: deps.restoreWorkspaceAgentSession,
+      restoreWorkspaceSession: deps.restoreWorkspaceSession,
       loadProjectTreeRoot: deps.loadProjectTreeRoot,
       onFilesystemChange: deps.notifyProjectTreeFilesystemChange,
       setConsoleHeightPx: deps.setConsoleHeightPx,

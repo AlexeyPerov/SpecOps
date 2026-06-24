@@ -1,10 +1,10 @@
 import type { WorkspaceAccessStatus } from "../../ai/capabilities";
 import { WorkspaceAccessReason } from "../../ai/capabilities";
 import type {
-  AgentIndexEntry,
   ChatThreadSnapshot,
   ContextId,
   ProviderModelCatalogs,
+  SessionIndexEntry,
 } from "../../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 
@@ -27,18 +27,18 @@ export function chatScopeKeyForContextId(contextId: ContextId): ChatScopeKey | n
   return null;
 }
 
-/** Per-workspace agent index, threads, and ephemeral runtime. */
-export interface WorkspaceAgentsState {
-  activeAgentId: string | null;
-  agentIndex: AgentIndexEntry[];
-  threadsByAgentId: Record<string, ChatThreadSnapshot | null>;
-  runtimeByAgentId: Record<string, ChatThreadRuntimeState>;
+/** Per-workspace session index, threads, and ephemeral runtime. */
+export interface WorkspaceSessionsState {
+  activeSessionId: string | null;
+  sessionIndex: SessionIndexEntry[];
+  threadsBySessionId: Record<string, ChatThreadSnapshot | null>;
+  runtimeBySessionId: Record<string, ChatThreadRuntimeState>;
 }
 
 export interface ChatStoreState {
   /** Active chat scope: normalized workspace root path or `chat-http`. */
   activeChatScopeKey: ChatScopeKey | null;
-  workspaces: Record<string, WorkspaceAgentsState>;
+  workspaces: Record<string, WorkspaceSessionsState>;
   accessByWorkspace: Record<string, ChatAccessState>;
 }
 
@@ -47,7 +47,7 @@ export interface ChatTurnError {
   code?: string;
 }
 
-/** Ephemeral per-agent chat runtime; not persisted to disk. */
+/** Ephemeral per-session chat runtime; not persisted to disk. */
 export interface ChatThreadRuntimeState {
   isGenerating: boolean;
   isWaitingForPermission: boolean;

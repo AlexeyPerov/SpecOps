@@ -20,7 +20,7 @@ export const defaultOsNotificationSettings: OsNotificationSettings = {
 
 function allEventsEnabled(): Record<NotificationEventId, boolean> {
   return {
-    agentDone: true,
+    sessionDone: true,
     permission: true,
     question: true,
     error: true,

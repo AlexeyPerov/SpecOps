@@ -41,7 +41,7 @@ import {
 } from "../ai/providers/registry";
 import { createRegistryCapabilityChecker } from "../ai/providers/capabilityChecker";
 import { resetChatProvidersForTests } from "../ai/providers/bootstrap";
-import { deleteAgentPersistence, scheduleAgentThreadFilePersistence } from "../services/chatPersistence";
+import { deleteSessionPersistence, scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { appState } from "./appState";
@@ -51,8 +51,8 @@ vi.mock("../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/chatPersistence")>();
   return {
     ...actual,
-    scheduleAgentThreadFilePersistence: vi.fn(),
-    deleteAgentPersistence: vi.fn(),
+    scheduleSessionThreadFilePersistence: vi.fn(),
+    deleteSessionPersistence: vi.fn(),
   };
 });
 
@@ -60,8 +60,8 @@ vi.mock("../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
-const schedulePersistMock = vi.mocked(scheduleAgentThreadFilePersistence);
+const deleteSessionPersistenceMock = vi.mocked(deleteSessionPersistence);
+const schedulePersistMock = vi.mocked(scheduleSessionThreadFilePersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function httpFetchSuccess(content: string): typeof fetch {
@@ -108,8 +108,8 @@ describe("M6 milestone validation — AI chat MVP", () => {
     vi.useFakeTimers();
     chatStore.reset();
     resetChatProvidersForTests();
-    deleteAgentPersistenceMock.mockReset();
-    deleteAgentPersistenceMock.mockResolvedValue(undefined);
+    deleteSessionPersistenceMock.mockReset();
+    deleteSessionPersistenceMock.mockResolvedValue(undefined);
     schedulePersistMock.mockReset();
     ensureWorkspaceReadAccessMock.mockReset();
     ensureWorkspaceReadAccessMock.mockResolvedValue("ready");
@@ -137,7 +137,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
   });
 
   it("retries failed Debug turns without duplicating the user message", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
     appState.updateDebugWorkspaceProviderSettings({
       ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
@@ -206,7 +206,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
       ),
     );
 
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, agentId!);
 
     const failed = await sendChatMessage("Retry HTTP", agentId!);
@@ -226,8 +226,8 @@ describe("M6 milestone validation — AI chat MVP", () => {
     appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
 
-    const debugAgent = chatStore.createDraftAgent({ activate: false });
-    const httpAgent = chatStore.createDraftAgent({ activate: true });
+    const debugAgent = chatStore.createDraftSession({ activate: false });
+    const httpAgent = chatStore.createDraftSession({ activate: true });
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, debugAgent!);
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, httpAgent!);
 
@@ -257,7 +257,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
   });
 
   it("blocks retry while generation is in progress", async () => {
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
     appState.updateDebugWorkspaceProviderSettings({
       ...appState.getSnapshot().settings.providerSettings.debugWorkspace,
@@ -301,7 +301,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
 
   it("preserves compaction metadata and delete agent clears the thread", async () => {
     setChatRetentionMaxTurnsForTests(1);
-    const agentId = chatStore.createDraftAgent();
+    const agentId = chatStore.createDraftSession();
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, agentId!);
 
     chatStore.appendMessage(
@@ -311,7 +311,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
         content: "first question",
         createdAt: "2026-05-26T00:00:01.000Z",
       },
-      { agentId: agentId! },
+      { sessionId: agentId! },
     );
     chatStore.appendMessage(
       {
@@ -320,7 +320,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
         content: "first answer",
         createdAt: "2026-05-26T00:00:02.000Z",
       },
-      { agentId: agentId! },
+      { sessionId: agentId! },
     );
     chatStore.appendMessage(
       {
@@ -329,7 +329,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
         content: "second question",
         createdAt: "2026-05-26T00:00:03.000Z",
       },
-      { agentId: agentId! },
+      { sessionId: agentId! },
     );
 
     const metadata = chatStore.getMetadata(agentId!);
@@ -337,12 +337,12 @@ describe("M6 milestone validation — AI chat MVP", () => {
     expect(metadata?.compactedMessageCount).toBeGreaterThan(0);
     expect(metadata?.lastCompactedAt).toBeDefined();
 
-    await chatStore.deleteAgent(agentId!);
+    await chatStore.deleteSession(agentId!);
 
-    const workspace = chatStore.getWorkspaceAgentsState("/work/a");
-    expect(workspace?.threadsByAgentId[agentId!]).toBeUndefined();
-    expect(workspace?.agentIndex.some((entry) => entry.id === agentId)).toBe(false);
-    expect(deleteAgentPersistenceMock).toHaveBeenCalledWith("/work/a", agentId);
+    const workspace = chatStore.getWorkspaceSessionsState("/work/a");
+    expect(workspace?.threadsBySessionId[agentId!]).toBeUndefined();
+    expect(workspace?.sessionIndex.some((entry) => entry.id === agentId)).toBe(false);
+    expect(deleteSessionPersistenceMock).toHaveBeenCalledWith("/work/a", agentId);
   });
 
   it("allows two agents to generate concurrently without blocking each other", async () => {
@@ -350,8 +350,8 @@ describe("M6 milestone validation — AI chat MVP", () => {
     appState.setProviderApiKey("http", "http-test-key");
     registerProviders(true);
 
-    const debugAgent = chatStore.createDraftAgent({ activate: false });
-    const httpAgent = chatStore.createDraftAgent({ activate: true });
+    const debugAgent = chatStore.createDraftSession({ activate: false });
+    const httpAgent = chatStore.createDraftSession({ activate: true });
     chatStore.updateThreadMetadata({ provider: "debug-workspace", mode: "ask" }, undefined, debugAgent!);
     chatStore.updateThreadMetadata({ provider: "http", mode: "ask" }, undefined, httpAgent!);
 

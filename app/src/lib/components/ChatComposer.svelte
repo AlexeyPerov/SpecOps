@@ -97,7 +97,7 @@
     threadMessages: ChatMessage[];
     threadSummary?: string;
     threadId?: string;
-    activeAgentId?: string | null;
+    activeSessionId?: string | null;
     workspaceRootPath: string;
     appSettings: AppSettingsState;
     composerError: ComposerError | null;
@@ -133,7 +133,7 @@
     threadMessages,
     threadSummary = undefined,
     threadId = undefined,
-    activeAgentId = null,
+    activeSessionId = null,
     workspaceRootPath,
     appSettings,
     composerError,
@@ -524,7 +524,7 @@
     threadMessages;
     threadSummary;
     threadId;
-    activeAgentId;
+    activeSessionId;
     activeMode;
     activeProvider;
     activeModel;
@@ -541,7 +541,7 @@
       budgetEstimate = estimateContextWindowBudget({
         thread: {
           metadata: {
-            agentId: activeAgentId ?? "preview-agent",
+            sessionId: activeSessionId ?? "preview-session",
             threadId: threadId ?? "preview-thread",
             mode: activeMode,
             provider: activeProvider,

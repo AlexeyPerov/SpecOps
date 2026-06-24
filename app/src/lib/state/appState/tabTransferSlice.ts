@@ -49,7 +49,7 @@ function removeFileTabFromSnapshot(
         ...snapshot.session,
         openTabs: [createFileTab(bootstrapTabId, docId)],
         selectedTabId: bootstrapTabId,
-        lastActiveAgentId: null,
+        lastActiveSessionId: null,
         lastActiveWindowId,
       },
     };
@@ -249,7 +249,7 @@ export function createTabTransferSlice(deps: {
                 ...ctx.session,
                 openTabs: [],
                 selectedTabId: null,
-                lastActiveAgentId: null,
+                lastActiveSessionId: null,
               },
             };
           }

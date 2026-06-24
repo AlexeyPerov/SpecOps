@@ -15,14 +15,14 @@ export interface AppShellLayoutHandlersDeps {
   getEditorPaneWidth: () => number;
   getActiveWorkspaceRoot: () => string | null;
   getIsChatHttpActive: () => boolean;
-  getIsAgentTabActive: () => boolean;
+  getIsSessionTabActive: () => boolean;
   getWorkspaceLayout: () => WorkspaceLayoutState;
   getConsoleOpen: () => boolean;
   setConsoleOpen: (open: boolean) => void;
   getAutoProjectPanelCollapsed: () => boolean;
   setAutoProjectPanelCollapsed: (collapsed: boolean) => void;
-  getAutoAgentsSidebarCollapsed: () => boolean;
-  setAutoAgentsSidebarCollapsed: (collapsed: boolean) => void;
+  getAutoSessionsSidebarCollapsed: () => boolean;
+  setAutoSessionsSidebarCollapsed: (collapsed: boolean) => void;
   getActiveDocument: () => DocumentState | undefined;
   getConsoleHeightPx: () => number;
   setConsoleHeightPx: (heightPx: number) => void;
@@ -35,16 +35,16 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
     appState.setProjectPanelCollapsed(next);
   }
 
-  function toggleAgentsSidebarCollapsed(next: boolean): void {
-    appState.setAgentsSidebarCollapsed(next);
+  function toggleSessionsSidebarCollapsed(next: boolean): void {
+    appState.setSessionsSidebarCollapsed(next);
   }
 
   function handleProjectPanelWidthChange(widthPx: number): void {
     appState.updateActiveWorkspaceLayout({ projectPanelWidthPx: widthPx });
   }
 
-  function handleAgentsSidebarWidthChange(widthPx: number): void {
-    appState.updateActiveWorkspaceLayout({ agentsSidebarWidthPx: widthPx });
+  function handleSessionsSidebarWidthChange(widthPx: number): void {
+    appState.updateActiveWorkspaceLayout({ sessionsSidebarWidthPx: widthPx });
   }
 
   function toggleConsole(): void {
@@ -76,15 +76,15 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
     const flags = computeResponsiveLayoutFlags({
       shellMainRowWidth: deps.getShellMainRowWidth(),
       workspaceActive: Boolean(deps.getActiveWorkspaceRoot()) && !deps.getIsChatHttpActive(),
-      isAgentTabActive: deps.getIsAgentTabActive(),
+      isSessionTabActive: deps.getIsSessionTabActive(),
       workspaceLayout: deps.getWorkspaceLayout(),
       consoleOpen: deps.getConsoleOpen(),
     });
     if (deps.getAutoProjectPanelCollapsed() !== flags.autoProjectPanelCollapsed) {
       deps.setAutoProjectPanelCollapsed(flags.autoProjectPanelCollapsed);
     }
-    if (deps.getAutoAgentsSidebarCollapsed() !== flags.autoAgentsSidebarCollapsed) {
-      deps.setAutoAgentsSidebarCollapsed(flags.autoAgentsSidebarCollapsed);
+    if (deps.getAutoSessionsSidebarCollapsed() !== flags.autoSessionsSidebarCollapsed) {
+      deps.setAutoSessionsSidebarCollapsed(flags.autoSessionsSidebarCollapsed);
     }
     if (deps.getConsoleOpen() !== flags.consoleOpen) {
       deps.setConsoleOpen(flags.consoleOpen);
@@ -117,9 +117,9 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
 
   return {
     toggleProjectPanelCollapsed,
-    toggleAgentsSidebarCollapsed,
+    toggleSessionsSidebarCollapsed,
     handleProjectPanelWidthChange,
-    handleAgentsSidebarWidthChange,
+    handleSessionsSidebarWidthChange,
     toggleConsole,
     persistConsoleHeightNow,
     canFitMarkdownSplit,

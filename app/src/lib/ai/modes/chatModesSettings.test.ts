@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultSettings } from "../../state/appState/settingsSlice";
-import { decodeChatAgentThreadFileSnapshot } from "../../services/chatPersistence";
+import { decodeChatSessionThreadFileSnapshot } from "../../services/chatPersistence";
 import { isPersistedChatModeId, normalizeChatModesSettings } from "./chatModesSettings";
 
 describe("chat mode persistence validation", () => {
@@ -17,7 +17,7 @@ describe("chat mode persistence validation", () => {
       version: 1,
       thread: {
         metadata: {
-          agentId: "agent-1",
+          sessionId: "agent-1",
           threadId: "agent-1",
           mode: "not-a-mode",
           provider: "http",
@@ -28,7 +28,7 @@ describe("chat mode persistence validation", () => {
       },
     });
 
-    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    const decoded = decodeChatSessionThreadFileSnapshot(raw);
     expect(decoded?.thread.metadata.mode).toBe("ask");
   });
 
@@ -37,7 +37,7 @@ describe("chat mode persistence validation", () => {
       version: 1,
       thread: {
         metadata: {
-          agentId: "agent-1",
+          sessionId: "agent-1",
           threadId: "agent-1",
           mode: "custom-preset-ideation",
           provider: "http",
@@ -48,7 +48,7 @@ describe("chat mode persistence validation", () => {
       },
     });
 
-    const decoded = decodeChatAgentThreadFileSnapshot(raw);
+    const decoded = decodeChatSessionThreadFileSnapshot(raw);
     expect(decoded?.thread.metadata.mode).toBe("custom-preset-ideation");
   });
 });

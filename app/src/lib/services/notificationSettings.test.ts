@@ -36,11 +36,11 @@ describe("normalizeSoundSettings", () => {
   it("preserves valid partial input, filling missing fields with defaults", () => {
     const result = normalizeSoundSettings({
       enabled: false,
-      events: { agentDone: false },
+      events: { sessionDone: false },
     });
     expect(result.enabled).toBe(false);
     expect(result.volume).toBe(DEFAULT_SOUND_VOLUME);
-    expect(result.events.agentDone).toBe(false);
+    expect(result.events.sessionDone).toBe(false);
     expect(result.events.permission).toBe(true); // default fills the rest
   });
 
@@ -53,9 +53,9 @@ describe("normalizeSoundSettings", () => {
 
   it("ignores non-boolean event flags", () => {
     const result = normalizeSoundSettings({
-      events: { agentDone: "yes", error: 1 },
+      events: { sessionDone: "yes", error: 1 },
     });
-    expect(result.events.agentDone).toBe(true); // default
+    expect(result.events.sessionDone).toBe(true); // default
     expect(result.events.error).toBe(true); // default
   });
 });
@@ -73,7 +73,7 @@ describe("normalizeOsNotificationSettings", () => {
     expect(result.enabled).toBe(false);
     expect(result.events.permission).toBe(false);
     expect(result.events.question).toBe(false);
-    expect(result.events.agentDone).toBe(true); // default
+    expect(result.events.sessionDone).toBe(true); // default
     expect(result.events.error).toBe(true); // default
   });
 });
@@ -81,7 +81,7 @@ describe("normalizeOsNotificationSettings", () => {
 describe("NOTIFICATION_EVENT_IDS", () => {
   it("lists the four feedback events in display order", () => {
     expect([...NOTIFICATION_EVENT_IDS]).toEqual([
-      "agentDone",
+      "sessionDone",
       "permission",
       "question",
       "error",

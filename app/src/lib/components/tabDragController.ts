@@ -1,5 +1,5 @@
 import type { TabState } from "../domain/contracts";
-import { isAgentTab } from "../domain/contracts";
+import { isSessionTab } from "../domain/contracts";
 import { moveTabFromDrag } from "../services/tabWindowTransfer";
 
 export const DRAG_THRESHOLD_PX = 4;
@@ -281,7 +281,7 @@ export function createTabDragController(deps: TabDragControllerDeps) {
     if (event.button !== 0 || state.isFinishingDrag) {
       return;
     }
-    if (isAgentTab(tab)) {
+    if (isSessionTab(tab)) {
       return;
     }
 

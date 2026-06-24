@@ -4,15 +4,15 @@ export type {
   DocumentIdentity,
   DocumentState,
   FileTabState,
-  AgentTabState,
+  SessionTabState,
   TabState,
   MarkdownViewMode,
 } from "./document";
 export {
-  createAgentTab,
   createFileTab,
-  isAgentTab,
+  createSessionTab,
   isFileTab,
+  isSessionTab,
   normalizeTabState,
   tabDocumentId,
 } from "./document";
@@ -55,10 +55,8 @@ export type {
 } from "./settings";
 export { NOTIFICATION_EVENT_IDS } from "./settings";
 export type {
-  AgentIndexEntry,
   BuiltinChatModeId,
   BuiltinChatModeToggles,
-  ChatAgentThreadFileSnapshot,
   ChatCostPart,
   ChatDiffPart,
   ChatFilePart,
@@ -71,6 +69,7 @@ export type {
   ChatModesSettings,
   ChatProviderId,
   ChatReasoningPart,
+  ChatSessionThreadFileSnapshot,
   ChatStepPart,
   ChatSubtaskPart,
   ChatSubtaskStatus,
@@ -80,9 +79,10 @@ export type {
   ChatThreadSnapshot,
   ChatTokenUsage,
   CustomChatModeDefinition,
+  SessionIndexEntry,
   ToolCallRecord,
   ToolCallStatus,
-  WorkspaceAgentsIndexSnapshot,
+  WorkspaceSessionsIndexSnapshot,
 } from "./chat";
 export { DEBUG_CHAT_PROVIDER_IDS, isDebugChatProviderId, PRODUCT_CHAT_PROVIDER_IDS } from "./chat";
 export type {

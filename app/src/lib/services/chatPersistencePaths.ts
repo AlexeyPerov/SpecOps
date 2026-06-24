@@ -6,7 +6,7 @@ import { ensureSpecOpsDataDir } from "./appDataDir";
 import { workspaceChatPathHashKey } from "./chatPersistenceCodec";
 
 const CHAT_DIR_NAME = "chat";
-const AGENTS_INDEX_FILE = "index.json";
+const SESSIONS_INDEX_FILE = "index.json";
 
 /** Resolves the on-disk segment under `chat/` for a chat scope key. */
 export function chatScopeStorageSegment(scopeKey: ChatScopeKey): string {
@@ -16,7 +16,7 @@ export function chatScopeStorageSegment(scopeKey: ChatScopeKey): string {
   return workspaceChatPathHashKey(scopeKey);
 }
 
-export async function getWorkspaceAgentsDir(scopeKey: ChatScopeKey): Promise<string> {
+export async function getWorkspaceSessionsDir(scopeKey: ChatScopeKey): Promise<string> {
   const base = await ensureSpecOpsDataDir();
   const chatDir = await join(base, CHAT_DIR_NAME);
   const workspaceDir = await join(chatDir, chatScopeStorageSegment(scopeKey));
@@ -24,15 +24,15 @@ export async function getWorkspaceAgentsDir(scopeKey: ChatScopeKey): Promise<str
   return workspaceDir;
 }
 
-export async function getWorkspaceAgentsIndexFilePath(scopeKey: ChatScopeKey): Promise<string> {
-  const workspaceDir = await getWorkspaceAgentsDir(scopeKey);
-  return join(workspaceDir, AGENTS_INDEX_FILE);
+export async function getWorkspaceSessionsIndexFilePath(scopeKey: ChatScopeKey): Promise<string> {
+  const workspaceDir = await getWorkspaceSessionsDir(scopeKey);
+  return join(workspaceDir, SESSIONS_INDEX_FILE);
 }
 
-export async function getAgentThreadFilePath(
+export async function getSessionThreadFilePath(
   scopeKey: ChatScopeKey,
-  agentId: string,
+  sessionId: string,
 ): Promise<string> {
-  const workspaceDir = await getWorkspaceAgentsDir(scopeKey);
-  return join(workspaceDir, `${agentId}.json`);
+  const workspaceDir = await getWorkspaceSessionsDir(scopeKey);
+  return join(workspaceDir, `${sessionId}.json`);
 }

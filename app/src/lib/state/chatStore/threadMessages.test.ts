@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
-import { chatStore, formatCompactionNotice, resetAgentIdCounterForTests } from "../chatStore";
-import { DRAFT_AGENT_TITLE } from "../../services/chatAgents";
+import { chatStore, formatCompactionNotice, resetSessionIdCounterForTests } from "../chatStore";
+import { DRAFT_SESSION_TITLE } from "../../services/chatSessions";
 import type { ChatThreadSnapshot } from "../../domain/contracts";
 import { WorkspaceAccessReason, type CapabilityChecker } from "../../ai/capabilities";
 import {
@@ -9,9 +9,9 @@ import {
   WORKSPACE_PATH_INACCESSIBLE_RECOVERY,
 } from "../../ai/chatErrorCopy";
 import {
-  deleteAgentPersistence,
-  readAgentThreadFileSnapshot,
-  readWorkspaceAgentsIndexSnapshot,
+  deleteSessionPersistence,
+  readSessionThreadFileSnapshot,
+  readWorkspaceSessionsIndexSnapshot,
 } from "../../services/chatPersistence";
 import { setChatRetentionMaxTurnsForTests } from "../../services/chatRetention";
 import { ensureWorkspaceReadAccess } from "../../services/fileSystem";
@@ -33,9 +33,9 @@ vi.mock("../../services/chatPersistence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/chatPersistence")>();
   return {
     ...actual,
-    readAgentThreadFileSnapshot: vi.fn(),
-    readWorkspaceAgentsIndexSnapshot: vi.fn(),
-    deleteAgentPersistence: vi.fn(),
+    readSessionThreadFileSnapshot: vi.fn(),
+    readWorkspaceSessionsIndexSnapshot: vi.fn(),
+    deleteSessionPersistence: vi.fn(),
   };
 });
 
@@ -43,9 +43,9 @@ vi.mock("../../services/fileSystem", () => ({
   ensureWorkspaceReadAccess: vi.fn(),
 }));
 
-const readAgentThreadFileSnapshotMock = vi.mocked(readAgentThreadFileSnapshot);
-const readWorkspaceAgentsIndexSnapshotMock = vi.mocked(readWorkspaceAgentsIndexSnapshot);
-const deleteAgentPersistenceMock = vi.mocked(deleteAgentPersistence);
+const readSessionThreadFileSnapshotMock = vi.mocked(readSessionThreadFileSnapshot);
+const readWorkspaceSessionsIndexSnapshotMock = vi.mocked(readWorkspaceSessionsIndexSnapshot);
+const deleteSessionPersistenceMock = vi.mocked(deleteSessionPersistence);
 const ensureWorkspaceReadAccessMock = vi.mocked(ensureWorkspaceReadAccess);
 
 function providerSwitchOptions() {
@@ -60,12 +60,12 @@ describe("chatStore", () => {
     chatStore.reset();
     chatStore.setCapabilityChecker(null);
     setChatRetentionMaxTurnsForTests(undefined);
-    resetAgentIdCounterForTests();
-    readAgentThreadFileSnapshotMock.mockReset();
-    readWorkspaceAgentsIndexSnapshotMock.mockReset();
-    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({ version: 1, agents: [] });
-    deleteAgentPersistenceMock.mockReset();
-    deleteAgentPersistenceMock.mockResolvedValue(undefined);
+    resetSessionIdCounterForTests();
+    readSessionThreadFileSnapshotMock.mockReset();
+    readWorkspaceSessionsIndexSnapshotMock.mockReset();
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({ version: 1, sessions: [] });
+    deleteSessionPersistenceMock.mockReset();
+    deleteSessionPersistenceMock.mockResolvedValue(undefined);
     ensureWorkspaceReadAccessMock.mockReset();
   });
 
@@ -82,8 +82,8 @@ describe("chatStore", () => {
     expect(chatStore.hasThread()).toBe(true);
     expect(chatStore.isEmpty()).toBe(false);
     expect(chatStore.getMetadata()).toMatchObject({
-      agentId: "agent-1",
-      threadId: "agent-1",
+      sessionId: "session-1",
+      threadId: "session-1",
       mode: "ask",
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:00.000Z",
@@ -115,8 +115,8 @@ describe("chatStore", () => {
     expect(metadataUpdated).toBe(true);
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["m-1", "m-2"]);
     expect(chatStore.getMetadata()).toEqual({
-      agentId: "agent-1",
-      threadId: "agent-1",
+      sessionId: "session-1",
+      threadId: "session-1",
       mode: "review",
       provider: "debug-workspace",
       createdAt: "2026-05-25T00:00:00.000Z",
@@ -133,8 +133,8 @@ describe("chatStore", () => {
     expect(updated).toBe(true);
     expect(chatStore.getMessages()).toEqual([]);
     expect(chatStore.getMetadata()).toEqual({
-      agentId: "agent-1",
-      threadId: "agent-1",
+      sessionId: "session-1",
+      threadId: "session-1",
       mode: "review",
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:00.000Z",
@@ -191,7 +191,7 @@ describe("chatStore", () => {
   it("switches active thread state when changing active agent", () => {
     const threadA: ChatThreadSnapshot = {
       metadata: {
-        agentId: "agent-a",
+        sessionId: "agent-a",
         threadId: "agent-a",
         mode: "ask",
         provider: "http",
@@ -210,7 +210,7 @@ describe("chatStore", () => {
 
     const threadB: ChatThreadSnapshot = {
       metadata: {
-        agentId: "agent-b",
+        sessionId: "agent-b",
         threadId: "agent-b",
         mode: "review",
         provider: "debug-workspace",
@@ -228,13 +228,13 @@ describe("chatStore", () => {
     };
 
     chatStore.setActiveWorkspaceRoot("/work/a");
-    chatStore.setAgentThread("agent-a", threadA);
-    chatStore.setAgentThread("agent-b", threadB);
-    chatStore.setActiveAgentId("agent-a");
+    chatStore.setSessionThread("agent-a", threadA);
+    chatStore.setSessionThread("agent-b", threadB);
+    chatStore.setActiveSessionId("agent-a");
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["a-1"]);
     expect(chatStore.getMetadata()?.mode).toBe("ask");
 
-    chatStore.setActiveAgentId("agent-b");
+    chatStore.setActiveSessionId("agent-b");
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["b-1"]);
     expect(chatStore.getMetadata()?.mode).toBe("review");
     expect(chatStore.getMetadata()?.provider).toBe("debug-workspace");
@@ -243,7 +243,7 @@ describe("chatStore", () => {
   it("loads workspace agents from index and thread files", async () => {
     const threadA: ChatThreadSnapshot = {
       metadata: {
-        agentId: "agent-a",
+        sessionId: "agent-a",
         threadId: "agent-a",
         mode: "ask",
         provider: "http",
@@ -260,38 +260,38 @@ describe("chatStore", () => {
       ],
     };
 
-    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
       version: 1,
-      agents: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+      sessions: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
     });
-    readAgentThreadFileSnapshotMock.mockResolvedValue(threadA);
+    readSessionThreadFileSnapshotMock.mockResolvedValue(threadA);
 
     chatStore.setActiveWorkspaceRoot("/work/a");
-    await chatStore.loadWorkspaceAgents("/work/a");
+    await chatStore.loadWorkspaceSessions("/work/a");
 
-    expect(chatStore.getActiveAgentId()).toBeNull();
-    chatStore.setActiveAgentId("agent-a");
+    expect(chatStore.getActiveSessionId()).toBeNull();
+    chatStore.setActiveSessionId("agent-a");
     expect(chatStore.getMessages()).toEqual(threadA.messages);
   });
 
-  it("mergeSessionDraftAgents adds draft entries for open tab ids missing from disk index", async () => {
-    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+  it("mergeSessionDrafts adds draft entries for open tab ids missing from disk index", async () => {
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
       version: 1,
-      agents: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+      sessions: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
     });
-    readAgentThreadFileSnapshotMock.mockResolvedValue(null);
+    readSessionThreadFileSnapshotMock.mockResolvedValue(null);
 
     chatStore.setActiveWorkspaceRoot("/work/a");
-    await chatStore.loadWorkspaceAgents("/work/a");
-    chatStore.mergeSessionDraftAgents("/work/a", ["agent-draft-tab"]);
+    await chatStore.loadWorkspaceSessions("/work/a");
+    chatStore.mergeSessionDrafts("/work/a", ["agent-draft-tab"]);
 
-    const index = chatStore.getAgentIndex();
+    const index = chatStore.getSessionIndex();
     expect(index.some((entry) => entry.id === "agent-draft-tab" && entry.isDraft)).toBe(true);
     expect(index.some((entry) => entry.id === "agent-a")).toBe(true);
   });
 
   it("shows empty state when workspace has no persisted thread", async () => {
-    readAgentThreadFileSnapshotMock.mockResolvedValue(null);
+    readSessionThreadFileSnapshotMock.mockResolvedValue(null);
 
     chatStore.setActiveWorkspaceRoot("/work/empty");
     await chatStore.loadWorkspaceThread("/work/empty");
@@ -303,19 +303,19 @@ describe("chatStore", () => {
   });
 
   it("preserves in-memory session draft agents when disk index is empty", async () => {
-    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
       version: 1,
-      agents: [],
+      sessions: [],
     });
 
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    const draftId = chatStore.createDraftAgent();
+    const draftId = chatStore.createDraftSession();
     expect(draftId).toBeTruthy();
 
-    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+    await chatStore.loadWorkspaceSessions(CHAT_HTTP_CONTEXT_ID);
 
-    expect(chatStore.getActiveAgentId()).toBe(draftId);
-    expect(chatStore.getAgentIndex().some((entry) => entry.id === draftId && entry.isDraft)).toBe(
+    expect(chatStore.getActiveSessionId()).toBe(draftId);
+    expect(chatStore.getSessionIndex().some((entry) => entry.id === draftId && entry.isDraft)).toBe(
       true,
     );
   });
@@ -323,14 +323,14 @@ describe("chatStore", () => {
   it("scopes chat-http agents separately from workspace agents", async () => {
     const workspaceIndex = {
       version: 1 as const,
-      agents: [{ id: "ws-agent", title: "Workspace", lastUsedAt: "2026-06-05T00:00:00.000Z" }],
+      sessions: [{ id: "ws-agent", title: "Workspace", lastUsedAt: "2026-06-05T00:00:00.000Z" }],
     };
     const chatHttpIndex = {
       version: 1 as const,
-      agents: [{ id: "http-agent", title: "Chat HTTP", lastUsedAt: "2026-06-05T00:00:01.000Z" }],
+      sessions: [{ id: "http-agent", title: "Chat HTTP", lastUsedAt: "2026-06-05T00:00:01.000Z" }],
     };
 
-    readWorkspaceAgentsIndexSnapshotMock.mockImplementation(async (scopeKey: string) => {
+    readWorkspaceSessionsIndexSnapshotMock.mockImplementation(async (scopeKey: string) => {
       if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
         return chatHttpIndex;
       }
@@ -338,23 +338,23 @@ describe("chatStore", () => {
     });
 
     chatStore.setActiveWorkspaceRoot("/work/a");
-    await chatStore.loadWorkspaceAgents("/work/a");
-    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
+    await chatStore.loadWorkspaceSessions("/work/a");
+    expect(chatStore.getSessionIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
 
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+    await chatStore.loadWorkspaceSessions(CHAT_HTTP_CONTEXT_ID);
     expect(chatStore.getActiveChatScopeKey()).toBe(CHAT_HTTP_CONTEXT_ID);
     expect(chatStore.getActiveWorkspaceRoot()).toBeNull();
-    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["http-agent"]);
+    expect(chatStore.getSessionIndex().map((entry) => entry.id)).toEqual(["http-agent"]);
 
     chatStore.setActiveWorkspaceRoot("/work/a");
-    expect(chatStore.getAgentIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
+    expect(chatStore.getSessionIndex().map((entry) => entry.id)).toEqual(["ws-agent"]);
   });
 
   it("keeps persisted chat-http review mode threads unchanged on load", async () => {
     const chatHttpThread: ChatThreadSnapshot = {
       metadata: {
-        agentId: "http-agent",
+        sessionId: "http-agent",
         threadId: "http-agent",
         mode: "review",
         provider: "http",
@@ -371,15 +371,15 @@ describe("chatStore", () => {
       ],
     };
 
-    readWorkspaceAgentsIndexSnapshotMock.mockResolvedValue({
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
       version: 1,
-      agents: [{ id: "http-agent", title: "Chat HTTP", lastUsedAt: "2026-06-05T00:00:01.000Z" }],
+      sessions: [{ id: "http-agent", title: "Chat HTTP", lastUsedAt: "2026-06-05T00:00:01.000Z" }],
     });
-    readAgentThreadFileSnapshotMock.mockResolvedValue(chatHttpThread);
+    readSessionThreadFileSnapshotMock.mockResolvedValue(chatHttpThread);
 
     chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-    await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
-    chatStore.setActiveAgentId("http-agent");
+    await chatStore.loadWorkspaceSessions(CHAT_HTTP_CONTEXT_ID);
+    chatStore.setActiveSessionId("http-agent");
 
     expect(chatStore.getMetadata()?.mode).toBe("review");
   });
@@ -550,7 +550,7 @@ describe("chatStore", () => {
           ],
         },
       ],
-      "agent-1",
+      "session-1",
       "/work/a",
     );
 

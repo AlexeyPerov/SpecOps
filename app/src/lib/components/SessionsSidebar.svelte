@@ -1,66 +1,66 @@
 <script lang="ts">
-  import "../styles/agents-sidebar.css";
-  import type { AgentIndexEntry } from "../domain/contracts";
+  import "../styles/sessions-sidebar.css";
+  import type { SessionIndexEntry } from "../domain/contracts";
   import {
-    AGENT_DATE_GROUP_LABELS,
-    AGENT_DATE_GROUP_ORDER,
-    DRAFT_AGENT_TITLE,
-    filterAgentsByTitle,
-    groupAgentsByLastUsedDate,
-    type AgentDateGroup,
-  } from "../services/chatAgents";
+    SESSION_DATE_GROUP_LABELS,
+    SESSION_DATE_GROUP_ORDER,
+    DRAFT_SESSION_TITLE,
+    filterSessionsByTitle,
+    groupSessionsByLastUsedDate,
+    type SessionDateGroup,
+  } from "../services/chatSessions";
   import {
-    createAgentsSidebarController,
-    syncAgentsSidebarDisplayWidth,
-  } from "../services/agentsSidebarController";
+    createSessionsSidebarController,
+    syncSessionsSidebarDisplayWidth,
+  } from "../services/sessionsSidebarController";
   import { DEFAULT_PANEL_WIDTH_PX } from "../services/panelLayout";
-  import AgentSidebarRow from "./AgentSidebarRow.svelte";
+  import SessionSidebarRow from "./SessionSidebarRow.svelte";
 
   interface Props {
-    agents?: AgentIndexEntry[];
-    activeAgentId?: string | null;
+    sessions?: SessionIndexEntry[];
+    activeSessionId?: string | null;
     sidebarTitle?: string;
     collapsed?: boolean;
     panelWidthPx?: number;
     onPanelWidthChange?: (width: number) => void;
     onToggleCollapsed?: (next: boolean) => void;
-    onSelectAgent?: (agentId: string) => void;
-    onNewAgent?: () => void;
-    onDeleteAgent?: (agentId: string) => void;
-    /** M2-T1: rename the agent tab + linked session. */
-    onRenameAgent?: (agentId: string) => void | Promise<void>;
+    onSelectSession?: (sessionId: string) => void;
+    onNewSession?: () => void;
+    onDeleteSession?: (sessionId: string) => void;
+    /** M2-T1: rename the session tab + linked session. */
+    onRenameSession?: (sessionId: string) => void | Promise<void>;
     /** M2-T5: copy a public share URL for the linked session. */
-    onShareAgent?: (agentId: string) => void | Promise<void>;
+    onShareSession?: (sessionId: string) => void | Promise<void>;
     /** M2-T7: export the transcript to a Markdown file. */
-    onExportAgent?: (agentId: string) => void | Promise<void>;
+    onExportSession?: (sessionId: string) => void | Promise<void>;
     /** M2-T2: open the unified per-workspace session list panel. */
     onOpenSessions?: () => void | Promise<void>;
   }
 
   let {
-    agents = [],
-    activeAgentId = null,
+    sessions = [],
+    activeSessionId = null,
     sidebarTitle = "Sessions",
     collapsed = false,
     panelWidthPx = DEFAULT_PANEL_WIDTH_PX,
     onPanelWidthChange = () => {},
     onToggleCollapsed = () => {},
-    onSelectAgent = () => {},
-    onNewAgent = () => {},
-    onDeleteAgent = () => {},
-    onRenameAgent = () => {},
-    onShareAgent = () => {},
-    onExportAgent = () => {},
+    onSelectSession = () => {},
+    onNewSession = () => {},
+    onDeleteSession = () => {},
+    onRenameSession = () => {},
+    onShareSession = () => {},
+    onExportSession = () => {},
     onOpenSessions = () => {},
   }: Props = $props();
 
   let searchQuery = $state("");
   let displayWidth = $state(DEFAULT_PANEL_WIDTH_PX);
   let isResizing = $state(false);
-  let contextMenu = $state<{ agentId: string; x: number; y: number } | null>(null);
+  let contextMenu = $state<{ sessionId: string; x: number; y: number } | null>(null);
   let contextMenuEl = $state<HTMLDivElement | null>(null);
 
-  const sidebarController = createAgentsSidebarController({
+  const sidebarController = createSessionsSidebarController({
     getCollapsed: () => collapsed,
     getDisplayWidth: () => displayWidth,
     setDisplayWidth: (width) => {
@@ -71,36 +71,36 @@
     },
     onPanelWidthChange: (width) => onPanelWidthChange(width),
     onToggleCollapsed: (next) => onToggleCollapsed(next),
-    onNewAgent: () => onNewAgent(),
-    onDeleteAgent: (id) => onDeleteAgent(id),
-    onRenameAgent: (id) => onRenameAgent(id),
-    onShareAgent: (id) => onShareAgent(id),
-    onExportAgent: (id) => onExportAgent(id),
+    onNewSession: () => onNewSession(),
+    onDeleteSession: (id) => onDeleteSession(id),
+    onRenameSession: (id) => onRenameSession(id),
+    onShareSession: (id) => onShareSession(id),
+    onExportSession: (id) => onExportSession(id),
   });
 
   $effect(() => {
-    const syncedWidth = syncAgentsSidebarDisplayWidth(panelWidthPx, isResizing);
+    const syncedWidth = syncSessionsSidebarDisplayWidth(panelWidthPx, isResizing);
     if (syncedWidth !== null) {
       displayWidth = syncedWidth;
     }
   });
 
-  const filteredAgents = $derived(filterAgentsByTitle(agents, searchQuery));
-  const groupedAgents = $derived(groupAgentsByLastUsedDate(filteredAgents));
+  const filteredSessions = $derived(filterSessionsByTitle(sessions, searchQuery));
+  const groupedSessions = $derived(groupSessionsByLastUsedDate(filteredSessions));
   const isChatsSidebar = $derived(sidebarTitle.trim().toLowerCase() === "chats");
   const entryPluralLabel = $derived(isChatsSidebar ? "chats" : "sessions");
   const entrySingularLabel = $derived(isChatsSidebar ? "chat" : "session");
-  const newEntryLabel = $derived(isChatsSidebar ? "New chat" : DRAFT_AGENT_TITLE);
+  const newEntryLabel = $derived(isChatsSidebar ? "New chat" : DRAFT_SESSION_TITLE);
 
-  function groupsWithAgents(): AgentDateGroup[] {
-    return AGENT_DATE_GROUP_ORDER.filter((group) => groupedAgents[group].length > 0);
+  function groupsWithSessions(): SessionDateGroup[] {
+    return SESSION_DATE_GROUP_ORDER.filter((group) => groupedSessions[group].length > 0);
   }
 
-  function openContextMenu(event: MouseEvent, agentId: string): void {
+  function openContextMenu(event: MouseEvent, sessionId: string): void {
     event.preventDefault();
     event.stopPropagation();
     closeContextMenu();
-    contextMenu = { agentId, x: event.clientX, y: event.clientY };
+    contextMenu = { sessionId, x: event.clientX, y: event.clientY };
     window.addEventListener("pointerdown", onWindowPointerDown);
     window.addEventListener("keydown", onWindowKeydown);
   }
@@ -131,9 +131,9 @@
     if (!contextMenu) {
       return;
     }
-    const entry = agents.find((agent) => agent.id === contextMenu?.agentId);
+    const entry = sessions.find((session) => session.id === contextMenu?.sessionId);
     const title = entry?.title ?? `this ${entrySingularLabel}`;
-    sidebarController.confirmDeleteAgent(contextMenu.agentId, title, entrySingularLabel);
+    sidebarController.confirmDeleteSession(contextMenu.sessionId, title, entrySingularLabel);
     closeContextMenu();
   }
 
@@ -141,63 +141,63 @@
     if (!contextMenu) {
       return;
     }
-    const agentId = contextMenu.agentId;
+    const sessionId = contextMenu.sessionId;
     closeContextMenu();
-    void sidebarController.renameAgent(agentId);
+    void sidebarController.renameSession(sessionId);
   }
 
   function handleShareFromContextMenu(): void {
     if (!contextMenu) {
       return;
     }
-    const agentId = contextMenu.agentId;
+    const sessionId = contextMenu.sessionId;
     closeContextMenu();
-    void sidebarController.shareAgent(agentId);
+    void sidebarController.shareSession(sessionId);
   }
 
   function handleExportFromContextMenu(): void {
     if (!contextMenu) {
       return;
     }
-    const agentId = contextMenu.agentId;
+    const sessionId = contextMenu.sessionId;
     closeContextMenu();
-    void sidebarController.exportAgent(agentId);
+    void sidebarController.exportSession(sessionId);
   }
 
   /**
    * Whether the context-menu target has a linked OpenCode session. Actions
    * that require a server-side session (share / export) are hidden for draft
-   * agents and chat-http chats that have no link yet. Rename is always shown.
+   * sessions and chat-http chats that have no link yet. Rename is always shown.
    */
   let contextMenuHasSessionLink = $derived.by(() => {
     if (!contextMenu) {
       return false;
     }
     return Boolean(
-      agents.find((agent) => agent.id === contextMenu?.agentId)?.opencodeSessionId,
+      sessions.find((session) => session.id === contextMenu?.sessionId)?.opencodeSessionId,
     );
   });
 </script>
 
 <aside
-  class={`agents-sidebar ${collapsed ? "agents-sidebar-collapsed" : ""} ${isResizing ? "agents-sidebar-resizing" : ""}`}
+  class={`sessions-sidebar ${collapsed ? "sessions-sidebar-collapsed" : ""} ${isResizing ? "sessions-sidebar-resizing" : ""}`}
   aria-label={`${sidebarTitle} sidebar`}
   style={collapsed ? undefined : `width:${displayWidth}px`}
 >
   {#if !collapsed}
     <div
-      class="agents-sidebar-resize-handle"
+      class="sessions-sidebar-resize-handle"
       role="separator"
       aria-orientation="vertical"
       aria-label={`Resize ${entryPluralLabel} sidebar`}
       onpointerdown={sidebarController.handleResizeStart}
     ></div>
   {/if}
-  <header class="agents-sidebar-header">
+  <header class="sessions-sidebar-header">
     {#if !collapsed}
-      <div class="agents-sidebar-title">{sidebarTitle}</div>
+      <div class="sessions-sidebar-title">{sidebarTitle}</div>
       <button
-        class="agents-sidebar-button agents-sidebar-toggle"
+        class="sessions-sidebar-button sessions-sidebar-toggle"
         type="button"
         onpointerup={sidebarController.handleTogglePointerDown}
         onclick={sidebarController.handleToggleButtonClick}
@@ -206,16 +206,16 @@
         ⟪
       </button>
       <button
-        class="agents-sidebar-button agents-sidebar-new"
+        class="sessions-sidebar-button sessions-sidebar-new"
         type="button"
-        onpointerdown={sidebarController.handleNewAgentPointerDown}
-        onclick={sidebarController.handleNewAgentClick}
+        onpointerdown={sidebarController.handleNewSessionPointerDown}
+        onclick={sidebarController.handleNewSessionClick}
       >
         {newEntryLabel}
       </button>
       {#if onOpenSessions}
         <button
-          class="agents-sidebar-button agents-sidebar-sessions"
+          class="sessions-sidebar-button sessions-sidebar-sessions"
           type="button"
           onclick={() => onOpenSessions()}
           title="Browse all OpenCode sessions for this workspace, including ones not opened here yet"
@@ -225,7 +225,7 @@
       {/if}
     {:else}
       <button
-        class="agents-sidebar-button agents-sidebar-toggle"
+        class="sessions-sidebar-button sessions-sidebar-toggle"
         type="button"
         onpointerup={sidebarController.handleTogglePointerDown}
         onclick={sidebarController.handleToggleButtonClick}
@@ -237,33 +237,33 @@
   </header>
 
   {#if !collapsed}
-    <div class="agents-sidebar-body">
-      <label class="agents-search-field">
-        <span class="agents-search-label">{`Search ${entryPluralLabel}`}</span>
+    <div class="sessions-sidebar-body">
+      <label class="sessions-search-field">
+        <span class="sessions-search-label">{`Search ${entryPluralLabel}`}</span>
         <input
-          class="agents-search-input"
+          class="sessions-search-input"
           type="search"
           placeholder={`Search ${entryPluralLabel}…`}
           bind:value={searchQuery}
         />
       </label>
 
-      <div class="agents-list">
-        {#if filteredAgents.length === 0}
-          <p class="agents-empty" role="status">
+      <div class="sessions-list">
+        {#if filteredSessions.length === 0}
+          <p class="sessions-empty" role="status">
             {searchQuery.trim()
               ? `No ${entryPluralLabel} match your search.`
               : `No ${entryPluralLabel} yet.`}
           </p>
         {:else}
-          {#each groupsWithAgents() as group (group)}
-            <section class="agents-group" aria-label={AGENT_DATE_GROUP_LABELS[group]}>
-              <h3 class="agents-group-label">{AGENT_DATE_GROUP_LABELS[group]}</h3>
-              {#each groupedAgents[group] as agent (agent.id)}
-                <AgentSidebarRow
-                  {agent}
-                  selected={agent.id === activeAgentId}
-                  onSelect={onSelectAgent}
+          {#each groupsWithSessions() as group (group)}
+            <section class="sessions-group" aria-label={SESSION_DATE_GROUP_LABELS[group]}>
+              <h3 class="sessions-group-label">{SESSION_DATE_GROUP_LABELS[group]}</h3>
+              {#each groupedSessions[group] as session (session.id)}
+                <SessionSidebarRow
+                  {session}
+                  selected={session.id === activeSessionId}
+                  onSelect={onSelectSession}
                   onContextMenu={openContextMenu}
                 />
               {/each}
@@ -278,14 +278,14 @@
 {#if contextMenu}
   <div
     bind:this={contextMenuEl}
-    class="agents-context-menu"
+    class="sessions-context-menu"
     style={`left:${contextMenu.x}px; top:${contextMenu.y}px;`}
     role="menu"
     tabindex="-1"
     onpointerdown={(event) => event.stopPropagation()}
   >
     <button
-      class="agents-context-item"
+      class="sessions-context-item"
       type="button"
       role="menuitem"
       onclick={handleRenameFromContextMenu}
@@ -294,7 +294,7 @@
     </button>
     {#if contextMenuHasSessionLink}
       <button
-        class="agents-context-item"
+        class="sessions-context-item"
         type="button"
         role="menuitem"
         onclick={handleShareFromContextMenu}
@@ -302,7 +302,7 @@
         Copy share link
       </button>
       <button
-        class="agents-context-item"
+        class="sessions-context-item"
         type="button"
         role="menuitem"
         onclick={handleExportFromContextMenu}
@@ -311,7 +311,7 @@
       </button>
     {/if}
     <button
-      class="agents-context-item agents-context-item-danger"
+      class="sessions-context-item sessions-context-item-danger"
       type="button"
       role="menuitem"
       onclick={handleDeleteFromContextMenu}

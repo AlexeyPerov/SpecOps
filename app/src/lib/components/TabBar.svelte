@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
-  import { isAgentTab, isFileTab } from "../domain/contracts";
+  import { isFileTab, isSessionTab } from "../domain/contracts";
   import { appState } from "../state/appState";
-  import { chatAgentIndex } from "../state/chatStore";
-  import { draftEntryTitleForScope } from "../services/chatAgents";
+  import { chatSessionIndex } from "../state/chatStore";
+  import { draftEntryTitleForScope } from "../services/chatSessions";
   import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import { DEFAULT_UNTITLED_TITLE } from "../services/untitledTitle";
   import TabBarContextMenu from "./TabBarContextMenu.svelte";
@@ -78,15 +78,15 @@
     return documents.find((doc) => doc.id === tab.documentId);
   }
 
-  const agentTitleById = $derived(new Map($chatAgentIndex.map((entry) => [entry.id, entry.title])));
+  const sessionTitleById = $derived(new Map($chatSessionIndex.map((entry) => [entry.id, entry.title])));
 
   const draftTabTitle = $derived(
     draftEntryTitleForScope(useChatTerminology ? CHAT_HTTP_CONTEXT_ID : null),
   );
 
   function tabTitle(tab: TabState): string {
-    if (isAgentTab(tab)) {
-      return agentTitleById.get(tab.agentId) ?? draftTabTitle;
+    if (isSessionTab(tab)) {
+      return sessionTitleById.get(tab.sessionId) ?? draftTabTitle;
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc) {
@@ -97,7 +97,7 @@
   }
 
   function tabTooltip(tab: TabState): string {
-    if (isAgentTab(tab)) {
+    if (isSessionTab(tab)) {
       return useChatTerminology ? "Chat" : "Session";
     }
     const tabDoc = tabDocument(tab);
@@ -141,7 +141,7 @@
           title={tabTooltip(tab)}
           oncontextmenu={(event) => contextMenuComponent?.openContextMenu(event, tab)}
           onpointerdown={(event) => {
-            if (isAgentTab(tab)) {
+            if (isSessionTab(tab)) {
               if (event.button === 0) {
                 onSelect(tab.id);
               }

@@ -14,7 +14,7 @@ interface ToneRecipe {
 
 const EVENT_TONES: Record<NotificationEventId, ToneRecipe> = {
   // Rising major third — "finished, good news".
-  agentDone: {
+  sessionDone: {
     notes: [
       { frequency: 660, duration: 0.09 },
       { frequency: 880, duration: 0.14 },

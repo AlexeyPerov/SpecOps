@@ -64,7 +64,7 @@ export interface AppShellRuntimeOptions {
   runCommand: (commandId: AppCommandId) => void;
   openAndActivatePath: (path: string) => Promise<void>;
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
-  restoreWorkspaceAgentSession: (
+  restoreWorkspaceSession: (
     normalizedRoot: string,
     options?: { skipOpencodeReconcile?: boolean },
   ) => Promise<void>;
@@ -280,7 +280,7 @@ export async function startAppShellRuntime(
     const restoredActiveContextId = appState.getSnapshot().contexts.activeContextId;
     if (restoredActiveContextId === CHAT_HTTP_CONTEXT_ID) {
       chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-      await chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID);
+      await chatStore.loadWorkspaceSessions(CHAT_HTTP_CONTEXT_ID);
       return;
     }
     const restoredWorkspaceRoot = appState.getWorkspaceRoot();
@@ -288,7 +288,7 @@ export async function startAppShellRuntime(
       const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
       void ensureWorkspaceReadAccess(normalizedRoot);
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
-      await options.restoreWorkspaceAgentSession(normalizedRoot, { skipOpencodeReconcile: true });
+      await options.restoreWorkspaceSession(normalizedRoot, { skipOpencodeReconcile: true });
       return;
     }
     chatStore.setActiveWorkspaceRoot(null);

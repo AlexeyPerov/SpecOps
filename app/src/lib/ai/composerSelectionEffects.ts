@@ -87,14 +87,14 @@ export function syncComposerModelFallback(input: SyncComposerModelFallbackInput)
   if (isModelSelectionDisabled) {
     return;
   }
-  const agentId = chatStore.getActiveAgentId();
-  if (!agentId) {
+  const sessionId = chatStore.getActiveSessionId();
+  if (!sessionId) {
     return;
   }
   if (activeModel && availableModels.includes(activeModel)) {
     return;
   }
-  const thread = chatStore.getActiveThreadSnapshot(agentId);
+  const thread = chatStore.getActiveThreadSnapshot(sessionId);
   const fallbackModel =
     resolveComposerModelId({
       thread,
@@ -106,5 +106,5 @@ export function syncComposerModelFallback(input: SyncComposerModelFallbackInput)
   if (!fallbackModel || !availableModels.includes(fallbackModel) || fallbackModel === activeModel) {
     return;
   }
-  chatStore.updateThreadMetadata({ selectedModelId: fallbackModel }, undefined, agentId);
+  chatStore.updateThreadMetadata({ selectedModelId: fallbackModel }, undefined, sessionId);
 }

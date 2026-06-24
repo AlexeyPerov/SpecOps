@@ -2,7 +2,7 @@
  * App shell reactive side effects extracted from +page.svelte.
  *
  * Effect ordering constraints:
- * 1. Agent/chat scope (syncAgentTabEffect) should run before session persistence
+ * 1. Session/chat scope (syncSessionTabEffect) should run before session persistence
  *    so lastActiveAgentId reflects the current agent tab selection.
  * 2. Project tree watcher (syncProjectTreeWatcherEffect) depends on runtimeReady
  *    and activeWorkspaceRoot; load root before starting the watcher.
@@ -19,7 +19,7 @@
  */
 
 import type { AppDomainState, ContextId, TabState } from "../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID, isAgentTab } from "../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID, isSessionTab } from "../domain/contracts";
 import type { OpencodeHealthStatus } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
@@ -47,42 +47,42 @@ import { scheduleSessionPersistence } from "./sessionManager";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { savePersistedSettings, toPersistedSettings } from "./settingsStore";
 
-export interface SyncAgentTabEffectInput {
+export interface SyncSessionTabEffectInput {
   activeTab: TabState | undefined;
   isChatHttpActive: boolean;
   chatHttpRailVisible: boolean;
   activeContextId: ContextId;
   activeWorkspaceRoot: string | null;
-  isAgentTabActive: boolean;
-  selectedAgentId: string | null;
+  isSessionTabActive: boolean;
+  selectedSessionId: string | null;
   lastChatScopeKey: string | null;
-  ensureChatHttpAgentTab: () => void;
-  restoreWorkspaceAgentSession: (
+  ensureChatHttpSessionTab: () => void;
+  restoreWorkspaceSession: (
     workspaceRoot: string,
     options?: { skipOpencodeReconcile?: boolean },
   ) => Promise<void>;
   setLastChatScopeKey: (key: string | null) => void;
 }
 
-export function syncAgentTabEffect(input: SyncAgentTabEffectInput): void {
+export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
   const {
     activeTab,
     isChatHttpActive,
     chatHttpRailVisible,
     activeContextId,
     activeWorkspaceRoot,
-    isAgentTabActive,
-    selectedAgentId,
+    isSessionTabActive,
+    selectedSessionId,
     lastChatScopeKey,
-    ensureChatHttpAgentTab,
-    restoreWorkspaceAgentSession,
+    ensureChatHttpSessionTab,
+    restoreWorkspaceSession,
     setLastChatScopeKey,
   } = input;
 
-  if (activeTab && isAgentTab(activeTab) && !isChatHttpActive) {
-    if (chatStore.getActiveAgentId() !== activeTab.agentId) {
-      chatStore.setActiveAgentId(activeTab.agentId);
-      appState.setLastActiveAgentId(activeTab.agentId);
+  if (activeTab && isSessionTab(activeTab) && !isChatHttpActive) {
+    if (chatStore.getActiveSessionId() !== activeTab.sessionId) {
+      chatStore.setActiveSessionId(activeTab.sessionId);
+      appState.setLastActiveSessionId(activeTab.sessionId);
       void chatStore.runAccessPreflight();
     }
   }
@@ -93,8 +93,8 @@ export function syncAgentTabEffect(input: SyncAgentTabEffectInput): void {
   }
 
   if (isChatHttpActive) {
-    selectedAgentId;
-    ensureChatHttpAgentTab();
+    selectedSessionId;
+    ensureChatHttpSessionTab();
   }
 
   if (activeContextId === CHAT_HTTP_CONTEXT_ID) {
@@ -104,11 +104,11 @@ export function syncAgentTabEffect(input: SyncAgentTabEffectInput): void {
       }
       setLastChatScopeKey(CHAT_HTTP_CONTEXT_ID);
       chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-      void chatStore.loadWorkspaceAgents(CHAT_HTTP_CONTEXT_ID).then(() => {
-        ensureChatHttpAgentTab();
+      void chatStore.loadWorkspaceSessions(CHAT_HTTP_CONTEXT_ID).then(() => {
+        ensureChatHttpSessionTab();
       });
     } else {
-      ensureChatHttpAgentTab();
+      ensureChatHttpSessionTab();
     }
     return;
   }
@@ -132,13 +132,13 @@ export function syncAgentTabEffect(input: SyncAgentTabEffectInput): void {
     void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
     chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
     // M13.5 — file tabs must not spawn the sidecar for reconcile / hydrate.
-    // The session-tab background sync (L3) runs separately in `syncAgentTabEffect`'s
+    // The session-tab background sync (L3) runs separately in `syncSessionTabEffect`'s
     // session-tab branch via `maybeBackgroundSyncWorkspaceSession()` when the
     // active session is on a session tab.
-    void restoreWorkspaceAgentSession(normalizedWorkspaceRoot, {
-      skipOpencodeReconcile: !isAgentTabActive,
+    void restoreWorkspaceSession(normalizedWorkspaceRoot, {
+      skipOpencodeReconcile: !isSessionTabActive,
     }).catch(() => {
-      if (isAgentTabActive) {
+      if (isSessionTabActive) {
         void chatStore.runAccessPreflight();
       }
     });
@@ -150,8 +150,8 @@ export interface SyncSessionPersistenceEffectInput {
   snapshot: AppDomainState;
   currentWindowId: string;
   activeWorkspaceRoot: string | null;
-  selectedAgentId: string | null;
-  sessionLastActiveAgentId: string | null | undefined;
+  selectedSessionId: string | null;
+  sessionLastActiveSessionId: string | null | undefined;
   selectedTabId: string | null | undefined;
   lastSelectedTabId: string | null;
   onTabActivated: (tabId: string) => Promise<void>;
@@ -164,8 +164,8 @@ export function syncSessionPersistenceEffect(input: SyncSessionPersistenceEffect
     snapshot,
     currentWindowId,
     activeWorkspaceRoot,
-    selectedAgentId,
-    sessionLastActiveAgentId,
+    selectedSessionId,
+    sessionLastActiveSessionId,
     selectedTabId,
     lastSelectedTabId,
     onTabActivated,
@@ -173,10 +173,10 @@ export function syncSessionPersistenceEffect(input: SyncSessionPersistenceEffect
   } = input;
 
   if (runtimeReady && activeWorkspaceRoot) {
-    const chatActiveId = selectedAgentId;
-    const sessionLastActive = sessionLastActiveAgentId ?? null;
+    const chatActiveId = selectedSessionId;
+    const sessionLastActive = sessionLastActiveSessionId ?? null;
     if (chatActiveId !== sessionLastActive) {
-      appState.setLastActiveAgentId(chatActiveId);
+      appState.setLastActiveSessionId(chatActiveId);
     }
   }
 
@@ -255,7 +255,7 @@ export interface SyncOpencodeSidecarEffectInput {
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
   /** M13.5 — gate automatic sidecar-mode health work on session-tab active. */
-  isAgentTabActive: boolean;
+  isSessionTabActive: boolean;
   opencodeEnabled: boolean;
   opencodeMode: import("../domain/contracts").OpencodeTransportMode;
   opencodeBaseUrl: string;
@@ -342,7 +342,7 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     workspaceLifecycleActive,
     activeWorkspaceRoot,
     isChatHttpActive,
-    isAgentTabActive,
+    isSessionTabActive,
     opencodeEnabled,
     opencodeMode,
     opencodeBaseUrl,
@@ -368,7 +368,7 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
   // not a local sidecar so there's no spawn risk, but the probe itself
   // consumes time and can race with editor saves.
   if (opencodeMode === "url") {
-    if (!isAgentTabActive) {
+    if (!isSessionTabActive) {
       return;
     }
     let endpoint: URL;
@@ -400,7 +400,7 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
   // running sidecar (status-only), and only when the user is on a session
   // tab — the sidecar is meant to serve sessions, not file editing. The
   // sidecar is started lazily by Send or explicit Settings actions.
-  if (!isAgentTabActive) {
+  if (!isSessionTabActive) {
     return;
   }
 
@@ -578,17 +578,17 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
 
 export interface SyncChatAccessMonitorEffectInput {
   runtimeReady: boolean;
-  isAgentTabActive: boolean;
+  isSessionTabActive: boolean;
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
 }
 
 export function syncChatAccessMonitorEffect(input: SyncChatAccessMonitorEffectInput): void {
-  const { runtimeReady, isAgentTabActive, activeWorkspaceRoot, isChatHttpActive } = input;
+  const { runtimeReady, isSessionTabActive, activeWorkspaceRoot, isChatHttpActive } = input;
   if (!runtimeReady) {
     return;
   }
-  syncChatAccessMonitor(isAgentTabActive && Boolean(activeWorkspaceRoot) && !isChatHttpActive);
+  syncChatAccessMonitor(isSessionTabActive && Boolean(activeWorkspaceRoot) && !isChatHttpActive);
 }
 
 export interface SyncExternalFileWatcherEffectInput {

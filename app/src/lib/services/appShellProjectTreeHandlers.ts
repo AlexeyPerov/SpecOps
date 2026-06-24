@@ -15,7 +15,7 @@ import type { createProjectTreeController } from "./projectTreeController";
 
 export interface AppShellProjectTreeHandlersDeps {
   getActiveWorkspaceRoot: () => string | null;
-  getIsAgentTabActive: () => boolean;
+  getIsSessionTabActive: () => boolean;
   getCurrentWindowId: () => string;
   notify: (message: string) => void;
   projectTreeController: ReturnType<typeof createProjectTreeController>;
@@ -24,7 +24,7 @@ export interface AppShellProjectTreeHandlersDeps {
 export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandlersDeps) {
   const {
     getActiveWorkspaceRoot,
-    getIsAgentTabActive,
+    getIsSessionTabActive,
     getCurrentWindowId,
     notify,
     projectTreeController,
@@ -33,7 +33,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
   async function loadProjectTreeRoot(): Promise<void> {
     await projectTreeController.loadProjectTreeRoot({
       workspaceRoot: getActiveWorkspaceRoot(),
-      isAgentTabActive: getIsAgentTabActive(),
+      isSessionTabActive: getIsSessionTabActive(),
       onWorkspaceBlocked: () => {
         void chatStore.runAccessPreflight();
       },
@@ -54,7 +54,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
   }
 
   async function refreshProjectTree(): Promise<void> {
-    await projectTreeController.refreshProjectTree(getActiveWorkspaceRoot(), getIsAgentTabActive());
+    await projectTreeController.refreshProjectTree(getActiveWorkspaceRoot(), getIsSessionTabActive());
   }
 
   function notifyProjectTreeFilesystemChange(path: string): void {

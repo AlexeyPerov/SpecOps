@@ -17,7 +17,7 @@
   const os = $derived(snapshot.settings.osNotificationSettings);
 
   const EVENT_LABELS: Record<NotificationEventId, string> = {
-    agentDone: "Session finished",
+    sessionDone: "Session finished",
     permission: "Permission requested",
     question: "Question asked",
     error: "Error",

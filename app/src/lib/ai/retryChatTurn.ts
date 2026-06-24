@@ -25,15 +25,15 @@ export type RetryLastChatTurnResult =
   | { ok: false; reason: RetryLastChatTurnFailureReason; message: string };
 
 export async function retryLastChatTurn(
-  agentId?: string,
+  sessionId?: string,
   options?: ChatSendContextOptions,
 ): Promise<RetryLastChatTurnResult> {
-  const target = resolveSendTarget("retry", agentId, options);
+  const target = resolveSendTarget("retry", sessionId, options);
   if (!target.ok) {
     return target;
   }
 
-  if (!chatStore.canRetryLastTurn(target.activeAgentId)) {
+  if (!chatStore.canRetryLastTurn(target.activeSessionId)) {
     return {
       ok: false,
       reason: "no_failed_turn",
@@ -41,7 +41,7 @@ export async function retryLastChatTurn(
     };
   }
 
-  const thread = chatStore.getActiveThreadSnapshot(target.activeAgentId);
+  const thread = chatStore.getActiveThreadSnapshot(target.activeSessionId);
   if (!findLastUserMessage(thread?.messages ?? [])) {
     return {
       ok: false,
@@ -63,12 +63,12 @@ export async function retryLastChatTurn(
   }
 
   if (useWorkspaceBackend) {
-    const opencodeValidation = await validateOpencodeBackendSend(target.root, target.activeAgentId);
+    const opencodeValidation = await validateOpencodeBackendSend(target.root, target.activeSessionId);
     if (!opencodeValidation.ok) {
       return opencodeValidation;
     }
-    const previousError = getLastRetryError(target.activeAgentId);
-    const turnId = beginTurn(target.activeAgentId);
+    const previousError = getLastRetryError(target.activeSessionId);
+    const turnId = beginTurn(target.activeSessionId);
     if (!turnId) {
       return {
         ok: false,
@@ -79,20 +79,20 @@ export async function retryLastChatTurn(
     return executeProviderTurn({
       root: target.root,
       chatContextKind: target.chatContextKind,
-      activeAgentId: target.activeAgentId,
+      activeSessionId: target.activeSessionId,
       turnId,
       modelId: opencodeValidation.modelId,
       previousError,
     });
   }
 
-  const validation = await validateProviderSend(target.activeAgentId, options);
+  const validation = await validateProviderSend(target.activeSessionId, options);
   if (!validation.ok) {
     return validation;
   }
 
-  const previousError = getLastRetryError(target.activeAgentId);
-  const turnId = beginTurn(target.activeAgentId);
+  const previousError = getLastRetryError(target.activeSessionId);
+  const turnId = beginTurn(target.activeSessionId);
   if (!turnId) {
     return {
       ok: false,
@@ -104,7 +104,7 @@ export async function retryLastChatTurn(
   return executeProviderTurn({
     root: target.root,
     chatContextKind: target.chatContextKind,
-    activeAgentId: target.activeAgentId,
+    activeSessionId: target.activeSessionId,
     turnId,
     provider: validation.provider,
     accessStatus: validation.accessStatus,

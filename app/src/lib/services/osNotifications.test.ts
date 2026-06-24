@@ -14,7 +14,7 @@ afterEach(() => {
 
 describe("defaultCopyForEvent", () => {
   it("returns a title and body for every event", () => {
-    for (const eventId of ["agentDone", "permission", "question", "error"] as const) {
+    for (const eventId of ["sessionDone", "permission", "question", "error"] as const) {
       const copy = defaultCopyForEvent(eventId);
       expect(copy.title.length).toBeGreaterThan(0);
       expect(copy.body.length).toBeGreaterThan(0);
@@ -71,7 +71,7 @@ describe("notifyOs", () => {
 
   it("no-ops when the master toggle is off", async () => {
     await notifyOs(
-      "agentDone",
+      "sessionDone",
       { ...defaultOsNotificationSettings, enabled: false },
     );
     expect(createdNotifications).toHaveLength(0);
@@ -88,7 +88,7 @@ describe("notifyOs", () => {
   it("no-ops when the window is focused", async () => {
     // jsdom defaults to document.hidden === false (focused).
     expect(document.hidden).toBe(false);
-    await notifyOs("agentDone", defaultOsNotificationSettings);
+    await notifyOs("sessionDone", defaultOsNotificationSettings);
     expect(createdNotifications).toHaveLength(0);
   });
 
@@ -119,7 +119,7 @@ describe("notifyOs", () => {
       configurable: true,
     });
     try {
-      await notifyOs("agentDone", defaultOsNotificationSettings);
+      await notifyOs("sessionDone", defaultOsNotificationSettings);
       expect(createdNotifications).toHaveLength(0);
     } finally {
       Object.defineProperty(document, "hidden", {

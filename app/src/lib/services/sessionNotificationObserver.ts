@@ -8,11 +8,11 @@ import { playSound } from "./soundNotifications";
 import { notifyOs, defaultCopyForEvent } from "./osNotifications";
 
 /**
- * Pure derivation: given the previous and current per-agent runtime state,
+ * Pure derivation: given the previous and current per-session runtime state,
  * returns the feedback events that occurred on this transition. Centralizing
  * this makes the trigger rules unit-testable without a DOM.
  *
- * - agentDone: isGenerating went true → false without a fresh failure.
+ * - sessionDone: isGenerating went true → false without a fresh failure.
  * - permission: isWaitingForPermission went false → true.
  * - question: isWaitingForQuestion went false → true.
  * - error: lastFailedTurnId changed (a new failed turn).
@@ -31,7 +31,7 @@ export function deriveNotificationEvents(
     // an error event rather than a done event.
     const newFailure = current.lastFailedTurnId !== prev.lastFailedTurnId;
     if (!newFailure) {
-      events.push("agentDone");
+      events.push("sessionDone");
     }
   }
 
@@ -55,14 +55,14 @@ export interface NotificationSettingsSnapshot {
   osNotifications: OsNotificationSettings;
 }
 
-export interface AgentNotificationObserver {
+export interface SessionNotificationObserver {
   /** Call on every chatStore snapshot change. */
   update(state: {
     activeScopeKey: string | null;
-    runtimeByAgentId: Record<string, ChatThreadRuntimeState>;
+    runtimeBySessionId: Record<string, ChatThreadRuntimeState>;
     settings: NotificationSettingsSnapshot;
   }): void;
-  /** Release per-agent history. Call when the active workspace changes. */
+  /** Release per-session history. Call when the active workspace changes. */
   reset(): void;
   /** Teardown: clears all history. */
   dispose(): void;
@@ -77,16 +77,16 @@ export interface NotificationSinks {
 const defaultSinks: NotificationSinks = { playSound, notifyOs };
 
 /**
- * Tracks the previous runtime state per agent id within the active workspace
+ * Tracks the previous runtime state per session id within the active workspace
  * and fires sound + OS notifications on the transitions reported by
  * {@link deriveNotificationEvents}. Call `update` on every chatStore change;
  * call `reset` when the active workspace changes so we don't carry stale
  * history across scopes.
  */
-export function createAgentNotificationObserver(
+export function createSessionNotificationObserver(
   sinks: NotificationSinks = defaultSinks,
-): AgentNotificationObserver {
-  let previousByAgentId: Record<string, ChatThreadRuntimeState> = {};
+): SessionNotificationObserver {
+  let previousBySessionId: Record<string, ChatThreadRuntimeState> = {};
   let trackedScopeKey: string | null = null;
 
   function emit(
@@ -101,26 +101,26 @@ export function createAgentNotificationObserver(
   }
 
   return {
-    update({ activeScopeKey, runtimeByAgentId, settings }) {
+    update({ activeScopeKey, runtimeBySessionId, settings }) {
       if (activeScopeKey !== trackedScopeKey) {
         trackedScopeKey = activeScopeKey;
-        previousByAgentId = {};
+        previousBySessionId = {};
       }
-      // Only observe the active workspace's agents.
-      for (const [agentId, runtime] of Object.entries(runtimeByAgentId)) {
-        const previous = previousByAgentId[agentId];
+      // Only observe the active workspace's sessions.
+      for (const [sessionId, runtime] of Object.entries(runtimeBySessionId)) {
+        const previous = previousBySessionId[sessionId];
         const events = deriveNotificationEvents(previous, runtime);
-        previousByAgentId[agentId] = runtime;
+        previousBySessionId[sessionId] = runtime;
         if (events.length > 0) {
           emit(events, settings);
         }
       }
     },
     reset() {
-      previousByAgentId = {};
+      previousBySessionId = {};
     },
     dispose() {
-      previousByAgentId = {};
+      previousBySessionId = {};
       trackedScopeKey = null;
     },
   };

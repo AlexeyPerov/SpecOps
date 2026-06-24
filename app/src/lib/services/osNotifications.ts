@@ -9,7 +9,7 @@ export interface OsNotificationPayload {
 }
 
 const EVENT_DEFAULT_COPY: Record<NotificationEventId, OsNotificationPayload> = {
-  agentDone: { title: "Session finished", body: "The session completed its run." },
+  sessionDone: { title: "Session finished", body: "The session completed its run." },
   permission: {
     title: "Permission requested",
     body: "The session is waiting for your approval.",

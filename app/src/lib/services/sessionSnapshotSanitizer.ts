@@ -1,6 +1,6 @@
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { DocumentState, TabState, WindowSessionSnapshot } from "../domain/contracts";
-import { createFileTab, isAgentTab, isFileTab, normalizeTabState } from "../domain/contracts";
+import { createFileTab, isFileTab, isSessionTab, normalizeTabState } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getErrorMessage } from "../commands/commandErrors";
 import { emptyUnsavedDocumentTitle } from "./untitledDocument";
@@ -91,7 +91,7 @@ async function sanitizeContext(
 
   for (const rawTab of context.session.openTabs) {
     const tab = normalizeTabState(rawTab);
-    if (isAgentTab(tab)) {
+    if (isSessionTab(tab)) {
       openTabs.push(tab);
       continue;
     }

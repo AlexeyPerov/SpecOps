@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CHAT_HTTP_CONTEXT_ID,
-  createAgentTab,
   createFileTab,
-  isAgentTab,
+  createSessionTab,
   isDebugChatProviderId,
   isFileTab,
+  isSessionTab,
   normalizeTabState,
   PRODUCT_CHAT_PROVIDER_IDS,
   tabDocumentId,
@@ -27,12 +27,12 @@ describe("domain/contracts barrel", () => {
   it("re-exports document tab helpers", () => {
     const tab = createFileTab("tab-1", "doc-1");
     expect(isFileTab(tab)).toBe(true);
-    expect(isAgentTab(tab)).toBe(false);
+    expect(isSessionTab(tab)).toBe(false);
     expect(tabDocumentId(tab)).toBe("doc-1");
 
-    const agentTab = createAgentTab("tab-2", "agent-1");
-    expect(isAgentTab(agentTab)).toBe(true);
-    expect(tabDocumentId(agentTab)).toBeNull();
+    const sessionTab = createSessionTab("tab-2", "session-1");
+    expect(isSessionTab(sessionTab)).toBe(true);
+    expect(tabDocumentId(sessionTab)).toBeNull();
 
     const legacy = normalizeTabState({ id: "tab-3", documentId: "doc-2", pinned: true });
     expect(legacy).toEqual(createFileTab("tab-3", "doc-2", true));

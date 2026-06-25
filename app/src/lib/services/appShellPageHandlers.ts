@@ -16,10 +16,6 @@ import { logDiagnostic } from "./logging";
 import type { SettingsDialogTab } from "./settingsDialogUi";
 
 export interface AppShellCommandHandlersDeps {
-  getThemePaneOpen: () => boolean;
-  setThemePaneOpen: (open: boolean) => void;
-  getSettingsDialogOpen: () => boolean;
-  setSettingsDialogOpen: (open: boolean) => void;
   notify: (message: string) => void;
   getSnapshot: () => AppDomainState;
   getCurrentWindowId: () => string;
@@ -29,10 +25,6 @@ export interface AppShellCommandHandlersDeps {
 export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps) {
   function runCommand(commandId: AppCommandId): void {
     dispatchMenuCommand(commandId, {
-      isThemePaneOpen: deps.getThemePaneOpen,
-      setThemePaneOpen: deps.setThemePaneOpen,
-      isSettingsDialogOpen: deps.getSettingsDialogOpen,
-      setSettingsDialogOpen: deps.setSettingsDialogOpen,
       notify: deps.notify,
       getState: deps.getSnapshot,
       getWindowId: deps.getCurrentWindowId,
@@ -43,9 +35,6 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
 
   function handleKeydown(event: KeyboardEvent): void {
     const command = keymapCommandForEvent(event);
-    if (deps.getSettingsDialogOpen() && command && command !== "app.toggleSettings") {
-      return;
-    }
     if (command === "app.toggleFindReplace") {
       event.preventDefault();
       runCommand(command);
@@ -208,8 +197,6 @@ export interface AppShellMountDeps {
   registerSettingsDialogOpener: (
     opener: ((tab: SettingsDialogTab) => void) | null,
   ) => void;
-  setSettingsDialogInitialTab: (tab: SettingsDialogTab) => void;
-  setSettingsDialogOpen: (open: boolean) => void;
   setupLayoutObserver: () => void;
   startAppShellRuntime: (options: {
     notify: (message: string) => void;
@@ -252,8 +239,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
   let resizeObserverDisconnected = false;
 
   deps.registerSettingsDialogOpener((tab) => {
-    deps.setSettingsDialogInitialTab(tab);
-    deps.setSettingsDialogOpen(true);
+    appState.openOrFocusViewTab("settings", tab);
   });
 
   void tick().then(() => {

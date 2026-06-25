@@ -5,11 +5,11 @@ import { getActiveDocuments, getActiveSession } from "../../state/appState/conte
 import type { CommandHandlerMap } from "./types";
 
 export const appHandlers: CommandHandlerMap = {
-  "app.toggleThemePane": ({ isThemePaneOpen, setThemePaneOpen }) => {
-    setThemePaneOpen(!isThemePaneOpen());
+  "app.toggleThemePane": () => {
+    appState.openOrFocusViewTab("themes");
   },
-  "app.toggleSettings": ({ isSettingsDialogOpen, setSettingsDialogOpen }) => {
-    setSettingsDialogOpen(!isSettingsDialogOpen());
+  "app.toggleSettings": () => {
+    appState.openOrFocusViewTab("settings");
   },
   "app.newWindow": async ({ getState, notify }) => {
     const createdWindowId = await createNewWindowWithTransfer(getState(), null);

@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSessionTab, createFileTab, isSessionTab, tabDocumentId } from "../../domain/contracts";
+import {
+  createSessionTab,
+  createFileTab,
+  isSessionTab,
+  isViewTab,
+  tabDocumentId,
+} from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -49,6 +55,32 @@ describe("appState tabs and selection", () => {
     snapshot = appState.getSnapshot();
     expect(appState.getActiveSession().openTabs).toHaveLength(2);
     expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+  });
+
+  it("openOrFocusViewTab opens a singleton view tab and focuses an existing one", () => {
+    appState.openOrFocusViewTab("settings", "connections");
+    const settingsTabs = () =>
+      appState.getActiveSession().openTabs.filter(
+        (tab): tab is import("../../domain/contracts").ViewTabState =>
+          isViewTab(tab) && tab.view === "settings",
+      );
+    expect(settingsTabs()).toHaveLength(1);
+    const firstSettingsTab = settingsTabs()[0];
+    expect(firstSettingsTab.subTab).toBe("connections");
+    expect(appState.getActiveSession().selectedTabId).toBe(firstSettingsTab.id);
+
+    // Selecting away and re-opening must focus, not duplicate.
+    appState.selectTab("tab-1");
+    appState.openOrFocusViewTab("settings");
+    expect(settingsTabs()).toHaveLength(1);
+    expect(appState.getActiveSession().selectedTabId).toBe(firstSettingsTab.id);
+
+    // A different view opens as a separate tab.
+    appState.openOrFocusViewTab("themes");
+    const themesTabs = appState
+      .getActiveSession()
+      .openTabs.filter((tab) => isViewTab(tab) && tab.view === "themes");
+    expect(themesTabs).toHaveLength(1);
   });
 
   it("closeTabsForSession removes all tabs for that agent", () => {

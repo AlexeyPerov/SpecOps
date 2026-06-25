@@ -10,8 +10,6 @@
     type ThemeTokenKey,
   } from "../styles/themeTokens";
 
-  let { open = false }: { open?: boolean } = $props();
-
   const snapshot = $derived($appState);
 
   const activeCustom = $derived(
@@ -89,12 +87,12 @@
   }
 </script>
 
-<aside class="theme-pane" data-open={open} aria-label="Theme" aria-hidden={!open}>
-  <header class="theme-pane-header">
-    <h2 class="theme-pane-title">Theme</h2>
+<div class="themes-view" aria-label="Theme">
+  <header class="themes-view-header">
+    <h2 class="themes-view-title">Theme</h2>
   </header>
 
-  <div class="theme-pane-scroll">
+  <div class="themes-view-scroll">
     <section class="settings-section">
       <h3>Appearance</h3>
       <label class="settings-toggle">
@@ -187,7 +185,8 @@
                         activeCustom.id,
                         key,
                         (event.currentTarget as HTMLInputElement).value,
-                      )}
+                      )
+                    }
                   />
                   <input
                     type="text"
@@ -199,7 +198,8 @@
                         activeCustom.id,
                         key,
                         (event.currentTarget as HTMLInputElement).value,
-                      )}
+                      )
+                    }
                   />
                 </div>
               </div>
@@ -209,53 +209,34 @@
       </section>
     {/if}
   </div>
-</aside>
+</div>
 
 <style>
   @import "../styles/settingsForm.css";
   @import "../styles/themePaneForm.css";
 
-  .theme-pane {
-    position: absolute;
-    top: var(--space-8);
-    right: var(--space-8);
-    width: var(--settings-pane-width);
-    max-width: calc(100% - var(--space-8) * 2);
-    height: calc(100% - var(--space-8) * 2);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
-    box-shadow: var(--shadow-overlay);
+  .themes-view {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    height: 100%;
     min-height: 0;
-    transform: translateX(110%);
-    opacity: 0;
-    pointer-events: none;
-    transition:
-      transform var(--motion-medium) var(--easing-emphasized),
-      opacity var(--motion-medium) var(--easing-standard);
+    background: var(--color-surface-1);
   }
 
-  .theme-pane[data-open="true"] {
-    transform: translateX(0);
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .theme-pane-header {
+  .themes-view-header {
     flex-shrink: 0;
     padding: var(--space-12) var(--space-12) var(--space-8);
     border-bottom: 1px solid var(--color-border-subtle);
   }
 
-  .theme-pane-title {
+  .themes-view-title {
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
   }
 
-  .theme-pane-scroll {
+  .themes-view-scroll {
     flex: 1;
     min-height: 0;
     overflow-y: auto;

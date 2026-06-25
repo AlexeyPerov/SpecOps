@@ -47,12 +47,6 @@ export async function buildFileMenu(params: {
     commandId: "workspace.add",
     runCommand,
   });
-  const fileSettingsItem = await commandItem({
-    id: "cmd.file.settings",
-    text: "Settings…",
-    commandId: "app.toggleSettings",
-    runCommand,
-  });
   const newWindowItem = await commandItem({
     id: "cmd.file.newWindow",
     text: "New Window",
@@ -115,8 +109,6 @@ export async function buildFileMenu(params: {
       openRecentSubmenu,
       openAllInFolderItem,
       addWorkspaceItem,
-      await PredefinedMenuItem.new({ item: "Separator" }),
-      fileSettingsItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       newWindowItem,
       moveTabItem,
@@ -288,6 +280,13 @@ export async function buildViewMenu(runCommand: (commandId: AppCommandId) => voi
 }
 
 export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => void) {
+  const themesItem = await commandItem({
+    id: "cmd.app.themes",
+    text: "Themes",
+    accelerator: "CmdOrCtrl+Shift+,",
+    commandId: "app.toggleThemePane",
+    runCommand,
+  });
   const settingsItem = await commandItem({
     id: "cmd.app.settings",
     text: "Settings",
@@ -307,6 +306,7 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
         },
       }),
       await PredefinedMenuItem.new({ item: "Separator" }),
+      themesItem,
       settingsItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       await PredefinedMenuItem.new({ item: "Quit" }),

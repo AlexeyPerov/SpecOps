@@ -190,19 +190,11 @@ function createEditorRunnerMock(): EditorCommandRunner {
 function createCommandContext(overrides?: {
   confirm?: (message: string) => boolean;
   editorRunner?: EditorCommandRunner | null;
-  isThemePaneOpen?: boolean;
-  isSettingsDialogOpen?: boolean;
 }) {
   const notify = vi.fn();
-  const setThemePaneOpen = vi.fn();
-  const setSettingsDialogOpen = vi.fn();
   const editorRunner = overrides?.editorRunner ?? null;
   return {
     context: {
-      setThemePaneOpen,
-      isThemePaneOpen: vi.fn(() => overrides?.isThemePaneOpen ?? false),
-      setSettingsDialogOpen,
-      isSettingsDialogOpen: vi.fn(() => overrides?.isSettingsDialogOpen ?? false),
       notify,
       getState: () => appState.getSnapshot(),
       getWindowId: () => "main",
@@ -210,8 +202,6 @@ function createCommandContext(overrides?: {
       getEditorRunner: vi.fn(() => editorRunner),
     },
     notify,
-    setThemePaneOpen,
-    setSettingsDialogOpen,
     editorRunner,
   };
 }
@@ -272,28 +262,34 @@ describe("view.toggleDiffPreview command", () => {
 });
 
 describe("app shell toggle commands", () => {
-  it("app.toggleThemePane opens the theme pane when closed", () => {
-    const { context, setThemePaneOpen } = createCommandContext();
+  it("app.toggleThemePane opens a themes view tab", () => {
+    const { context } = createCommandContext();
 
     dispatchCommand("app.toggleThemePane", context);
 
-    expect(setThemePaneOpen).toHaveBeenCalledWith(true);
+    const tabs = appState.getActiveSession().openTabs;
+    expect(tabs.some((tab) => tab.kind === "view" && tab.view === "themes")).toBe(true);
   });
 
-  it("app.toggleSettings opens settings when closed", () => {
-    const { context, setSettingsDialogOpen } = createCommandContext();
+  it("app.toggleSettings opens a settings view tab", () => {
+    const { context } = createCommandContext();
 
     dispatchCommand("app.toggleSettings", context);
 
-    expect(setSettingsDialogOpen).toHaveBeenCalledWith(true);
+    const tabs = appState.getActiveSession().openTabs;
+    expect(tabs.some((tab) => tab.kind === "view" && tab.view === "settings")).toBe(true);
   });
 
-  it("app.toggleSettings closes settings when already open", () => {
-    const { context, setSettingsDialogOpen } = createCommandContext({ isSettingsDialogOpen: true });
+  it("app.toggleSettings focuses the existing settings tab instead of duplicating", () => {
+    const { context } = createCommandContext();
 
     dispatchCommand("app.toggleSettings", context);
+    dispatchCommand("app.toggleSettings", context);
 
-    expect(setSettingsDialogOpen).toHaveBeenCalledWith(false);
+    const settingsTabs = appState
+      .getActiveSession()
+      .openTabs.filter((tab) => tab.kind === "view" && tab.view === "settings");
+    expect(settingsTabs).toHaveLength(1);
   });
 
   it("app.newWindow notifies on success and failure", async () => {

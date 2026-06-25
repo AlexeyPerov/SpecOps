@@ -42,7 +42,23 @@ export interface SessionTabState {
   pinned: boolean;
 }
 
-export type TabState = FileTabState | SessionTabState;
+/**
+ * A non-document, non-session editor-pane tab. View tabs render a chrome-less
+ * surface such as Settings or Themes inside the editor pane (they are opened
+ * as notepad tabs rather than as popups/panels).
+ *
+ * `subTab` carries an optional target within the view — e.g. a settings
+ * section id for deep links from elsewhere in the app.
+ */
+export interface ViewTabState {
+  id: string;
+  kind: "view";
+  view: "settings" | "themes";
+  pinned: boolean;
+  subTab?: string;
+}
+
+export type TabState = FileTabState | SessionTabState | ViewTabState;
 
 export function isFileTab(tab: TabState): tab is FileTabState {
   return tab.kind === "file";
@@ -52,12 +68,25 @@ export function isSessionTab(tab: TabState): tab is SessionTabState {
   return tab.kind === "session";
 }
 
+export function isViewTab(tab: TabState): tab is ViewTabState {
+  return tab.kind === "view";
+}
+
 export function createFileTab(id: string, documentId: string, pinned = false): FileTabState {
   return { id, kind: "file", documentId, pinned };
 }
 
 export function createSessionTab(id: string, sessionId: string, pinned = false): SessionTabState {
   return { id, kind: "session", sessionId, pinned };
+}
+
+export function createViewTab(
+  id: string,
+  view: "settings" | "themes",
+  pinned = false,
+  subTab?: string,
+): ViewTabState {
+  return { id, kind: "view", view, pinned, ...(subTab ? { subTab } : {}) };
 }
 
 /**
@@ -70,7 +99,15 @@ export function createSessionTab(id: string, sessionId: string, pinned = false):
  * itself was reset by M16-T5 — see `specs/changelog.md`).
  */
 export function normalizeTabState(
-  tab: TabState | (Omit<FileTabState, "kind"> & { kind?: unknown; sessionId?: unknown; agentId?: unknown }),
+  tab:
+    | TabState
+    | (Omit<FileTabState, "kind"> & {
+        kind?: unknown;
+        sessionId?: unknown;
+        agentId?: unknown;
+        view?: unknown;
+        subTab?: unknown;
+      }),
 ): TabState {
   if (tab.kind === "session" && typeof tab.sessionId === "string") {
     return {
@@ -89,6 +126,10 @@ export function normalizeTabState(
       pinned: tab.pinned ?? false,
     };
   }
+  if (tab.kind === "view" && (tab.view === "settings" || tab.view === "themes")) {
+    const subTab = typeof tab.subTab === "string" ? tab.subTab : undefined;
+    return createViewTab(tab.id, tab.view, tab.pinned ?? false, subTab);
+  }
   if ("documentId" in tab && typeof tab.documentId === "string") {
     return createFileTab(tab.id, tab.documentId, tab.pinned ?? false);
   }
@@ -96,7 +137,16 @@ export function normalizeTabState(
 }
 
 export function tabDocumentId(
-  tab: TabState | (Omit<FileTabState, "kind"> & { kind?: unknown; sessionId?: unknown; agentId?: unknown }) | undefined,
+  tab:
+    | TabState
+    | (Omit<FileTabState, "kind"> & {
+        kind?: unknown;
+        sessionId?: unknown;
+        agentId?: unknown;
+        view?: unknown;
+        subTab?: unknown;
+      })
+    | undefined,
 ): string | null {
   if (!tab) {
     return null;

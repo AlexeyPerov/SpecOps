@@ -6,13 +6,13 @@
   import BinaryFilePane from "./BinaryFilePane.svelte";
   import LargeFileConfirmPane from "./LargeFileConfirmPane.svelte";
   import ConsolePanel from "./ConsolePanel.svelte";
-  import SettingsDialog from "./SettingsDialog.svelte";
+  import SettingsView from "./settings/SettingsView.svelte";
+  import ThemesView from "./ThemesView.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
   import RevertPreviewDialog from "./RevertPreviewDialog.svelte";
   import SessionListPanel from "./SessionListPanel.svelte";
   import PermissionPrompt from "./PermissionPrompt.svelte";
   import QuestionPrompt from "./QuestionPrompt.svelte";
-  import ThemePane from "./ThemePane.svelte";
   import FindReplacePanel from "./FindReplacePanel.svelte";
   import TabBar from "./TabBar.svelte";
   import ActivityRail from "./ActivityRail.svelte";
@@ -24,7 +24,6 @@
   import SessionTimelineDialog from "./SessionTimelineDialog.svelte";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
-  import type { SettingsDialogTab } from "../services/settingsDialogUi";
   import TitleBar from "./TitleBar.svelte";
   import type { EditorCommandRunner } from "../types/editor";
   import type {
@@ -101,6 +100,9 @@
     activeDocument: DocumentState | undefined;
     isChatHttpActive: boolean;
     isSessionTabActive: boolean;
+    isSettingsViewActive: boolean;
+    isThemesViewActive: boolean;
+    isViewTabActive: boolean;
     isImageDocument: boolean;
     isBinaryDocument: boolean;
     isLargePendingDocument: boolean;
@@ -195,10 +197,6 @@
   }
 
   export interface AppShellOverlayProps {
-    themePaneOpen: boolean;
-    settingsDialogOpen: boolean;
-    settingsDialogInitialTab: SettingsDialogTab;
-    onSettingsDialogClose: () => void;
     notify: (message: string) => void;
   }
 
@@ -358,15 +356,6 @@
             </button>
           {/if}
         </div>
-        <div class="header-right">
-          <button
-            class="toolbar-button"
-            type="button"
-            onclick={() => editor.onRunCommand("app.toggleThemePane")}
-          >
-            Theme
-          </button>
-        </div>
       </header>
 
       <section
@@ -374,7 +363,11 @@
         class:editor-pane-session={editor.isSessionTabActive}
         bind:this={editorPaneEl}
       >
-        {#if editor.isChatHttpActive || editor.isSessionTabActive}
+        {#if editor.isSettingsViewActive}
+          <SettingsView />
+        {:else if editor.isThemesViewActive}
+          <ThemesView />
+        {:else if editor.isChatHttpActive || editor.isSessionTabActive}
           <ChatPanel
             chatContextKind={editor.isChatHttpActive ? "chat-http" : "workspace"}
             onDeleteSession={editor.onDeleteSessionFromChat}
@@ -487,7 +480,6 @@
             </div>
           </div>
         {/if}
-        <ThemePane open={overlays.themePaneOpen} />
       </section>
     </section>
     {#if projectTree.workspaceRoot}
@@ -550,7 +542,7 @@
           : undefined}
         onclick={statusBar.onToggleConsole}
       >
-        {#if !editor.isSessionTabActive && !editor.isChatHttpActive}
+        {#if !editor.isSessionTabActive && !editor.isChatHttpActive && !editor.isViewTabActive}
           <span class="status-segment optional-segment optional-cursor">
             Ln {editor.cursorLine}, Col {editor.cursorColumn}
           </span>
@@ -596,12 +588,6 @@
     </footer>
   </div>
 </main>
-
-<SettingsDialog
-  open={overlays.settingsDialogOpen}
-  initialTab={overlays.settingsDialogInitialTab}
-  onClose={overlays.onSettingsDialogClose}
-/>
 
 <EntryNamePrompt onNotify={overlays.notify} />
 <RevertPreviewDialog />

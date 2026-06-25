@@ -2,10 +2,6 @@ import type { AppCommandId, AppDomainState } from "../../domain/contracts";
 import type { EditorCommandRunner } from "../../types/editor";
 
 export type CommandContext = {
-  setThemePaneOpen: (next: boolean) => void;
-  isThemePaneOpen: () => boolean;
-  setSettingsDialogOpen: (next: boolean) => void;
-  isSettingsDialogOpen: () => boolean;
   notify: (message: string) => void;
   getState: () => AppDomainState;
   getWindowId: () => string;

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
-  import { isSessionEditorPaneActive } from "../lib/components/editorRouting";
+  import { activeViewKind, isSessionEditorPaneActive } from "../lib/components/editorRouting";
   import { createAppShellAgentHandlers } from "../lib/services/appShellAgentHandlers";
   import { createAppShellLayoutHandlers } from "../lib/services/appShellLayoutHandlers";
   import {
@@ -24,7 +24,7 @@
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
-  import { registerSettingsDialogOpener, type SettingsDialogTab } from "../lib/services/settingsDialogUi";
+  import { registerSettingsDialogOpener } from "../lib/services/settingsDialogUi";
   import type { AppDomainState } from "../lib/domain/contracts";
   import { CHAT_HTTP_CONTEXT_ID, type ContextId, tabDocumentId } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
@@ -97,9 +97,6 @@
     const root = workspaceRoot.replace(/\/+$/, "");
     return `${root}/${trimmed}`;
   }
-  let themePaneOpen = $state(false);
-  let settingsDialogOpen = $state(false);
-  let settingsDialogInitialTab = $state<SettingsDialogTab>("editor");
   let consoleOpen = $state(false);
   let consoleHeightPx = $state(DEFAULT_CONSOLE_HEIGHT_PX);
   let statusMessage = $state("Ready");
@@ -302,6 +299,12 @@
   const isSessionTabActive = $derived(
     isSessionEditorPaneActive(session.openTabs, session.selectedTabId),
   );
+  const activeViewTabKind = $derived(
+    activeViewKind(session.openTabs, session.selectedTabId),
+  );
+  const isSettingsViewActive = $derived(activeViewTabKind === "settings");
+  const isThemesViewActive = $derived(activeViewTabKind === "themes");
+  const isViewTabActive = $derived(activeViewTabKind !== null);
   const activeDocument = $derived(
     documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
       documents[0],
@@ -458,14 +461,6 @@
   });
 
   const { runCommand, handleKeydown } = createAppShellCommandHandlers({
-    getThemePaneOpen: () => themePaneOpen,
-    setThemePaneOpen: (open) => {
-      themePaneOpen = open;
-    },
-    getSettingsDialogOpen: () => settingsDialogOpen,
-    setSettingsDialogOpen: (open) => {
-      settingsDialogOpen = open;
-    },
     notify,
     getSnapshot: () => snapshot,
     getCurrentWindowId: () => currentWindowId,
@@ -511,12 +506,6 @@
 
     return setupAppShellMount({
       registerSettingsDialogOpener,
-      setSettingsDialogInitialTab: (tab) => {
-        settingsDialogInitialTab = tab;
-      },
-      setSettingsDialogOpen: (open) => {
-        settingsDialogOpen = open;
-      },
       setupLayoutObserver,
       startAppShellRuntime,
       notify,
@@ -944,6 +933,9 @@
     activeDocument,
     isChatHttpActive,
     isSessionTabActive,
+    isSettingsViewActive,
+    isThemesViewActive,
+    isViewTabActive,
     isImageDocument: documentView.isImageDocument,
     isBinaryDocument: documentView.isBinaryDocument,
     isLargePendingDocument: documentView.isLargePendingDocument,
@@ -1035,10 +1027,6 @@
     onCloseWorkspace: closeWorkspaceFromContextMenu,
   }}
   overlays={{
-    themePaneOpen,
-    settingsDialogOpen,
-    settingsDialogInitialTab,
-    onSettingsDialogClose: () => (settingsDialogOpen = false),
     notify,
   }}
   sessionListPanel={{

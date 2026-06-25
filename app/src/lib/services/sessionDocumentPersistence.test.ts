@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentState } from "../domain/contracts";
+import { createFileTab, createViewTab } from "../domain/contracts";
 import {
   applyLargeFileConfirmGateOnRestore,
   documentForSessionPersistence,
@@ -128,6 +129,35 @@ describe("stripWindowSnapshotForSession", () => {
     expect(stripped.notepad.documents[0]?.content).toBe("");
     expect(stripped.chatHttp?.documents[0]?.content).toBe("");
     expect(stripped.workspaces[0]?.snapshot.documents[0]?.contentKind).toBe("image");
+  });
+
+  it("strips ephemeral view tabs and reseats a view-tab selection", () => {
+    const stripped = stripWindowSnapshotForSession({
+      activeContextId: "notepad",
+      notepad: {
+        documents: [baseDocument()],
+        session: {
+          // Settings view tab is selected; a file tab also exists.
+          selectedTabId: "tab-settings",
+          openTabs: [
+            createFileTab("tab-file", "doc-1"),
+            createViewTab("tab-settings", "settings"),
+            createViewTab("tab-themes", "themes"),
+          ],
+          lastActiveWindowId: "main",
+          windowBounds: null,
+        },
+      },
+      workspaces: [],
+      editorPreferences: { zoomPercent: 100, wrapLines: true },
+    });
+
+    const tabs = stripped.notepad.session.openTabs;
+    expect(tabs.every((tab) => tab.kind !== "view")).toBe(true);
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]?.kind).toBe("file");
+    // Selection fell back to the remaining file tab.
+    expect(stripped.notepad.session.selectedTabId).toBe("tab-file");
   });
 });
 

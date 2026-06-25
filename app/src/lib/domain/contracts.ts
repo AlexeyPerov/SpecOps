@@ -6,13 +6,16 @@ export type {
   FileTabState,
   SessionTabState,
   TabState,
+  ViewTabState,
   MarkdownViewMode,
 } from "./document";
 export {
   createFileTab,
   createSessionTab,
+  createViewTab,
   isFileTab,
   isSessionTab,
+  isViewTab,
   normalizeTabState,
   tabDocumentId,
 } from "./document";

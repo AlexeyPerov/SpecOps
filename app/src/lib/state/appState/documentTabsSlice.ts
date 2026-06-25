@@ -2,8 +2,10 @@ import type { AppDomainState } from "../../domain/contracts";
 import {
   createFileTab,
   createSessionTab,
+  createViewTab,
   isFileTab,
   isSessionTab,
+  isViewTab,
   normalizeTabState,
   tabDocumentId,
 } from "../../domain/contracts";
@@ -135,6 +137,32 @@ export function createDocumentTabsLifecycleSlice(deps: {
           session: {
             ...ctx.session,
             openTabs: [...ctx.session.openTabs, createSessionTab(tabId, sessionId)],
+            selectedTabId: tabId,
+          },
+        }));
+      });
+    },
+    /**
+     * Open (or focus) a singleton view tab — Settings or Themes — in the
+     * active session's tab strip, treating it like any other tab. When a view
+     * tab of the same `view` already exists it is selected instead of
+     * duplicated. An optional `subTab` carries a deep-link target (e.g. a
+     * settings section id) that is attached to a freshly created tab.
+     */
+    openOrFocusViewTab(view: "settings" | "themes", subTab?: string) {
+      update((state) => {
+        const existingTab = getActiveSession(state).openTabs
+          .map((rawTab) => normalizeTabState(rawTab))
+          .find((tab) => isViewTab(tab) && tab.view === view);
+        if (existingTab) {
+          return selectTabInternal(state, existingTab.id);
+        }
+        const tabId = nextTabId();
+        return patchActiveContext(state, (ctx) => ({
+          ...ctx,
+          session: {
+            ...ctx.session,
+            openTabs: [...ctx.session.openTabs, createViewTab(tabId, view, false, subTab)],
             selectedTabId: tabId,
           },
         }));

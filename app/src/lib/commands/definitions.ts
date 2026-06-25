@@ -3,8 +3,9 @@ import type { CommandDefinition } from "../domain/contracts";
 export const commandDefinitions: CommandDefinition[] = [
   {
     id: "app.toggleThemePane",
-    label: "Toggle Theme Pane",
-    menuPath: "View/Theme Pane",
+    label: "Themes",
+    menuPath: "SpecOps/Themes",
+    binding: { mac: "Cmd+Shift+,", windows: "Ctrl+Shift+," },
   },
   {
     id: "app.toggleSettings",

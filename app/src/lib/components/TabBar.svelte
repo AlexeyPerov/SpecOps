@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
-  import { isFileTab, isSessionTab } from "../domain/contracts";
+  import { isFileTab, isSessionTab, isViewTab } from "../domain/contracts";
   import { appState } from "../state/appState";
   import { chatSessionIndex } from "../state/chatStore";
   import { draftEntryTitleForScope } from "../services/chatSessions";
@@ -88,6 +88,9 @@
     if (isSessionTab(tab)) {
       return sessionTitleById.get(tab.sessionId) ?? draftTabTitle;
     }
+    if (isViewTab(tab)) {
+      return tab.view === "settings" ? "Settings" : "Themes";
+    }
     const tabDoc = tabDocument(tab);
     if (!tabDoc) {
       return DEFAULT_UNTITLED_TITLE;
@@ -99,6 +102,9 @@
   function tabTooltip(tab: TabState): string {
     if (isSessionTab(tab)) {
       return useChatTerminology ? "Chat" : "Session";
+    }
+    if (isViewTab(tab)) {
+      return tab.view === "settings" ? "Settings" : "Themes";
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc?.filePath) {

@@ -1,6 +1,12 @@
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { DocumentState, TabState, WindowSessionSnapshot } from "../domain/contracts";
-import { createFileTab, isFileTab, isSessionTab, normalizeTabState } from "../domain/contracts";
+import {
+  createFileTab,
+  isFileTab,
+  isSessionTab,
+  isViewTab,
+  normalizeTabState,
+} from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getErrorMessage } from "../commands/commandErrors";
 import { emptyUnsavedDocumentTitle } from "./untitledDocument";
@@ -93,6 +99,10 @@ async function sanitizeContext(
     const tab = normalizeTabState(rawTab);
     if (isSessionTab(tab)) {
       openTabs.push(tab);
+      continue;
+    }
+    // View tabs (Settings/Themes) are ephemeral and never restored.
+    if (isViewTab(tab)) {
       continue;
     }
     const linkedDocument = documentsById.get(tab.documentId);

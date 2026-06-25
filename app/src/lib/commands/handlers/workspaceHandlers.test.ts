@@ -190,19 +190,11 @@ function createEditorRunnerMock(): EditorCommandRunner {
 function createCommandContext(overrides?: {
   confirm?: (message: string) => boolean;
   editorRunner?: EditorCommandRunner | null;
-  isThemePaneOpen?: boolean;
-  isSettingsDialogOpen?: boolean;
 }) {
   const notify = vi.fn();
-  const setThemePaneOpen = vi.fn();
-  const setSettingsDialogOpen = vi.fn();
   const editorRunner = overrides?.editorRunner ?? null;
   return {
     context: {
-      setThemePaneOpen,
-      isThemePaneOpen: vi.fn(() => overrides?.isThemePaneOpen ?? false),
-      setSettingsDialogOpen,
-      isSettingsDialogOpen: vi.fn(() => overrides?.isSettingsDialogOpen ?? false),
       notify,
       getState: () => appState.getSnapshot(),
       getWindowId: () => "main",
@@ -210,8 +202,6 @@ function createCommandContext(overrides?: {
       getEditorRunner: vi.fn(() => editorRunner),
     },
     notify,
-    setThemePaneOpen,
-    setSettingsDialogOpen,
     editorRunner,
   };
 }

@@ -195,7 +195,6 @@
   {/if}
   <header class="sessions-sidebar-header">
     {#if !collapsed}
-      <div class="sessions-sidebar-title">{sidebarTitle}</div>
       <button
         class="sessions-sidebar-button sessions-sidebar-toggle"
         type="button"

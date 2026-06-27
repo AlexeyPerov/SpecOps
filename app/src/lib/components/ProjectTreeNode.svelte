@@ -105,7 +105,7 @@
 <style>
   .project-tree-row {
     width: 100%;
-    min-height: 24px;
+    min-height: 22px;
     display: flex;
     align-items: center;
     gap: var(--space-6);

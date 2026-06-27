@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { IMPORTED_THEMES } from "../styles/importedThemes";
 import type { BuiltinThemeId } from "../styles/themeTokens";
 import {
   DEFAULT_BUILTIN_THEME,
@@ -16,6 +17,7 @@ export type { ThemeTokens } from "../styles/themeTokens";
 
 export type ActiveThemeRef =
   | { kind: "builtin"; id: BuiltinThemeId }
+  | { kind: "preset"; id: string }
   | { kind: "custom"; id: string };
 
 export interface CustomThemeRecord {
@@ -123,6 +125,15 @@ function normalizeActiveTheme(
   if (ref.kind === "builtin" && typeof ref.id === "string" && isBuiltinThemeId(ref.id)) {
     return { kind: "builtin", id: ref.id };
   }
+  if (ref.kind === "preset" && typeof ref.id === "string") {
+    const id = ref.id.trim();
+    // A preset id may vanish in a future version (curated set changed); fall
+    // back to the default builtin rather than resolving to a missing theme.
+    if (IMPORTED_THEMES.some((preset) => preset.id === id)) {
+      return { kind: "preset", id };
+    }
+    return defaultThemeFile.activeTheme;
+  }
   if (ref.kind === "custom" && typeof ref.id === "string") {
     const id = ref.id.trim();
     if (customThemes.some((theme) => theme.id === id)) {
@@ -170,6 +181,9 @@ function normalizeThemeFile(data: ThemeFileV1): ThemeFileV1 {
 
   let activeTheme = data.activeTheme;
   if (activeTheme.kind === "builtin" && !isBuiltinThemeId(activeTheme.id)) {
+    activeTheme = defaultThemeFile.activeTheme;
+  }
+  if (activeTheme.kind === "preset" && !IMPORTED_THEMES.some((p) => p.id === activeTheme.id)) {
     activeTheme = defaultThemeFile.activeTheme;
   }
   if (

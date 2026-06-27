@@ -47,6 +47,10 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
     appState.updateActiveWorkspaceLayout({ sessionsSidebarWidthPx: widthPx });
   }
 
+  function handleActivityRailWidthChange(widthPx: number): void {
+    appState.updateActiveWorkspaceLayout({ activityRailWidthPx: widthPx });
+  }
+
   function toggleConsole(): void {
     deps.setConsoleOpen(!deps.getConsoleOpen());
   }
@@ -120,6 +124,7 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
     toggleSessionsSidebarCollapsed,
     handleProjectPanelWidthChange,
     handleSessionsSidebarWidthChange,
+    handleActivityRailWidthChange,
     toggleConsole,
     persistConsoleHeightNow,
     canFitMarkdownSplit,

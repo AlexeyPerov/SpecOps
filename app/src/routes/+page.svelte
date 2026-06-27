@@ -381,6 +381,7 @@
     toggleSessionsSidebarCollapsed,
     handleProjectPanelWidthChange,
     handleSessionsSidebarWidthChange,
+    handleActivityRailWidthChange,
     toggleConsole,
     persistConsoleHeightNow,
     canFitMarkdownSplit,
@@ -883,8 +884,10 @@
     workspaces,
     activeContextId,
     chatHttpRailVisible,
+    panelWidthPx: workspaceLayout.activityRailWidthPx,
     onSelectContext: handleSelectContext,
     onAddWorkspace: handleAddWorkspace,
+    onPanelWidthChange: handleActivityRailWidthChange,
     onRequestCloseWorkspace: handleOpenWorkspaceContextMenu,
     onReorderWorkspaces: (fromIndex, toIndex) => appState.reorderWorkspaces(fromIndex, toIndex),
   }}

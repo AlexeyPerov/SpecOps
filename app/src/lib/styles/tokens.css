@@ -64,9 +64,16 @@
   --color-statusbar-bg: #ebeff6;
   --color-pressed: rgb(20 71 170 / 18%);
 
+  /* Solid fallbacks for gradient-capable background tokens. Builtin themes set
+     these equal to the token value; custom themes with gradients get the
+     extracted first color stop written by applyCustomTheme. Read by the
+     `color-mix` surface derivatives below, which cannot accept a gradient. */
+  --color-bg-root-solid: #f3f6fa;
+  --color-surface-1-solid: #ffffff;
+
   /* Structural surface/border/selection tokens used by phase-3.5 components. */
-  --color-surface-0: color-mix(in srgb, var(--color-bg-root) 60%, var(--color-surface-1));
-  --color-surface-2: color-mix(in srgb, var(--color-surface-1) 88%, var(--color-text-secondary));
+  --color-surface-0: color-mix(in srgb, var(--color-bg-root-solid) 60%, var(--color-surface-1-solid));
+  --color-surface-2: color-mix(in srgb, var(--color-surface-1-solid) 88%, var(--color-text-secondary));
   --color-border-strong: rgb(4 14 26 / 26%);
   --color-selection: color-mix(in srgb, var(--color-accent) 22%, transparent);
   --color-danger: #d92d20;
@@ -104,9 +111,13 @@
   --color-statusbar-bg: #101620;
   --color-pressed: rgb(89 152 243 / 26%);
 
+  /* Solid fallbacks for gradient-capable background tokens. See light block. */
+  --color-bg-root-solid: #0f141b;
+  --color-surface-1-solid: #131a23;
+
   /* Structural surface/border/selection tokens used by phase-3.5 components. */
-  --color-surface-0: color-mix(in srgb, var(--color-bg-root) 70%, var(--color-surface-1));
-  --color-surface-2: color-mix(in srgb, var(--color-surface-1) 82%, var(--color-text-secondary));
+  --color-surface-0: color-mix(in srgb, var(--color-bg-root-solid) 70%, var(--color-surface-1-solid));
+  --color-surface-2: color-mix(in srgb, var(--color-surface-1-solid) 82%, var(--color-text-secondary));
   --color-border-strong: rgb(215 227 248 / 34%);
   --color-selection: color-mix(in srgb, var(--color-accent) 32%, transparent);
   --color-danger: #f97066;

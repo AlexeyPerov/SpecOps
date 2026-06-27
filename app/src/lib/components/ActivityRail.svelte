@@ -2,24 +2,60 @@
   import { onDestroy } from "svelte";
   import HoverTooltip from "./HoverTooltip.svelte";
   import { CHAT_HTTP_CONTEXT_ID, type ContextId, type WorkspaceEntry } from "../domain/contracts";
+  import { chatStore } from "../state/chatStore";
   import {
     createWorkspaceRailDragController,
     previewWorkspaces,
     type WorkspaceDragState,
   } from "./workspaceRailDragController";
+  import {
+    DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
+    isActivityRailExpanded,
+    normalizeActivityRailWidthPx,
+  } from "../services/panelLayout";
 
-  export let workspaces: WorkspaceEntry[] = [];
-  export let activeContextId: ContextId = "notepad";
-  export let showChatHttp = false;
-  export let onSelectContext: (contextId: ContextId) => void = () => {};
-  export let onAddWorkspace: () => void = () => {};
-  export let onRequestCloseWorkspace: (workspaceId: ContextId, x: number, y: number) => void = () => {};
-  export let onReorderWorkspaces: (fromIndex: number, toIndex: number) => void = () => {};
+  interface Props {
+    workspaces?: WorkspaceEntry[];
+    activeContextId?: ContextId;
+    showChatHttp?: boolean;
+    /** Resizable rail width (compact 48px → expanded cards). */
+    panelWidthPx?: number;
+    onSelectContext?: (contextId: ContextId) => void;
+    onAddWorkspace?: () => void;
+    onPanelWidthChange?: (width: number) => void;
+    onRequestCloseWorkspace?: (workspaceId: ContextId, x: number, y: number) => void;
+    onReorderWorkspaces?: (fromIndex: number, toIndex: number) => void;
+  }
+
+  let {
+    workspaces = [],
+    activeContextId = "notepad",
+    showChatHttp = false,
+    panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
+    onSelectContext = () => {},
+    onAddWorkspace = () => {},
+    onPanelWidthChange = () => {},
+    onRequestCloseWorkspace = () => {},
+    onReorderWorkspaces = () => {},
+  }: Props = $props();
 
   let activityRailEl: HTMLElement | null = null;
   let railWorkspacesEl: HTMLDivElement | null = null;
+  let displayWidth = $state(DEFAULT_ACTIVITY_RAIL_WIDTH_PX);
+  let isResizing = $state(false);
 
-  let dragState: WorkspaceDragState = {
+  // Keep the local display width in sync with the persisted width unless the
+  // user is actively dragging the handle (mirrors the project-panel pattern).
+  $effect(() => {
+    const synced = panelWidthPx;
+    if (!isResizing) {
+      displayWidth = normalizeActivityRailWidthPx(synced);
+    }
+  });
+
+  const expanded = $derived(isActivityRailExpanded(displayWidth));
+
+  let dragState = $state<WorkspaceDragState>({
     pointerId: null,
     pressedWorkspaceId: null,
     dragWorkspaceId: null,
@@ -36,26 +72,32 @@
     workspaceRects: new Map(),
     didDrag: false,
     isFinishingDrag: false,
-  };
+  });
 
-  $: dragEnabled = workspaces.length > 1;
-  $: workspacesForRender = previewWorkspaces(
-    workspaces,
-    dragState.didDrag,
-    dragState.dragFromIndex,
-    dragState.dropIndex,
+  const dragEnabled = $derived(workspaces.length > 1);
+  const workspacesForRender = $derived(
+    previewWorkspaces(
+      workspaces,
+      dragState.didDrag,
+      dragState.dragFromIndex,
+      dragState.dropIndex,
+    ),
   );
-  $: draggedWorkspace = dragState.dragWorkspaceId
-    ? (workspaces.find((workspace) => workspace.id === dragState.dragWorkspaceId) ?? null)
-    : null;
-  $: ghostLeft =
+  const draggedWorkspace = $derived(
+    dragState.dragWorkspaceId
+      ? (workspaces.find((workspace) => workspace.id === dragState.dragWorkspaceId) ?? null)
+      : null,
+  );
+  const ghostLeft = $derived(
     dragState.activityRailRect && dragState.dragWorkspaceRect
       ? dragState.dragPointerX - dragState.dragOffsetX - dragState.activityRailRect.left
-      : 0;
-  $: ghostTop =
+      : 0,
+  );
+  const ghostTop = $derived(
     dragState.activityRailRect && dragState.dragWorkspaceRect
       ? dragState.dragPointerY - dragState.dragOffsetY - dragState.activityRailRect.top
-      : 0;
+      : 0,
+  );
 
   const dragController = createWorkspaceRailDragController({
     getWorkspaces: () => workspaces,
@@ -66,6 +108,22 @@
     onStateChange: (nextState) => {
       dragState = nextState;
     },
+  });
+
+  /**
+   * Per-workspace opened-session counts, derived from the chatStore workspaces
+   * map (keyed by normalized root path). Tab counts come from each workspace
+   * entry's session snapshot (already reactive via the appState prop chain).
+   */
+  const countsByRoot = $derived.by(() => {
+    const map = new Map<string, { sessions: number; tabs: number }>();
+    const storeWorkspaces = $chatStore.workspaces;
+    for (const workspace of workspaces) {
+      const sessions = storeWorkspaces[workspace.rootPath]?.sessionIndex.length ?? 0;
+      const tabs = workspace.snapshot.session.openTabs.length;
+      map.set(workspace.rootPath, { sessions, tabs });
+    }
+    return map;
   });
 
   function workspaceName(workspace: WorkspaceEntry): string {
@@ -79,16 +137,50 @@
     return (name[0] ?? "?").toUpperCase();
   }
 
+  function workspacePath(workspace: WorkspaceEntry): string {
+    return workspace.rootPath;
+  }
+
+  function handleResizeStart(event: PointerEvent): void {
+    event.preventDefault();
+    isResizing = true;
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startWidth = displayWidth;
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture(pointerId);
+
+    const onPointerMove = (moveEvent: PointerEvent): void => {
+      // Rail is anchored to the left edge, so dragging its right handle to the
+      // right grows the width.
+      const deltaX = moveEvent.clientX - startX;
+      displayWidth = normalizeActivityRailWidthPx(startWidth + deltaX);
+    };
+
+    const onPointerEnd = (): void => {
+      isResizing = false;
+      target?.releasePointerCapture(pointerId);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerEnd);
+      window.removeEventListener("pointercancel", onPointerEnd);
+      onPanelWidthChange(displayWidth);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerEnd);
+    window.addEventListener("pointercancel", onPointerEnd);
+  }
+
   onDestroy(() => {
     dragController.destroy();
   });
 </script>
 
 <aside
-  class="activity-rail"
-  class:activity-rail-dragging={dragState.didDrag}
+  class={`activity-rail${expanded ? " activity-rail-expanded" : ""}${isResizing ? " activity-rail-resizing" : ""}`}
   aria-label="Activity rail"
   bind:this={activityRailEl}
+  style={`width:${displayWidth}px`}
 >
   <HoverTooltip label="Notepad">
     <button
@@ -130,13 +222,54 @@
     </HoverTooltip>
   {/if}
 
-  <div class="rail-workspaces" bind:this={railWorkspacesEl}>
+  <div class="rail-divider" aria-hidden="true"></div>
+
+  <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl}>
     {#each workspacesForRender as workspace (workspace.id)}
+      {@const counts = countsByRoot.get(workspace.rootPath) ?? { sessions: 0, tabs: 0 }}
       {#if dragState.didDrag && workspace.id === dragState.dragWorkspaceId}
         <span
           class="rail-workspace-placeholder"
           style={`width:${dragState.dragWorkspaceRect?.width ?? 32}px; height:${dragState.dragWorkspaceRect?.height ?? 32}px;`}
         ></span>
+      {:else if expanded}
+        <HoverTooltip label={workspaceName(workspace)} detail={workspace.rootPath}>
+          <button
+            class={`rail-workspace-card ${activeContextId === workspace.id ? "rail-workspace-card-active" : ""}`}
+            data-workspace-id={workspace.id}
+            type="button"
+            aria-label={`Workspace ${workspaceName(workspace)}`}
+            oncontextmenu={(event) => {
+              event.preventDefault();
+              onRequestCloseWorkspace(workspace.id, event.clientX, event.clientY);
+            }}
+            onpointerdown={(event) => {
+              if (!dragEnabled) {
+                return;
+              }
+              dragController.pointerDown(
+                event,
+                workspace,
+                workspaces.findIndex((entry) => entry.id === workspace.id),
+              );
+            }}
+            onclick={() => {
+              if (!dragEnabled) {
+                onSelectContext(workspace.id);
+              }
+            }}
+          >
+            <span class="rail-workspace-avatar">{workspaceInitial(workspace)}</span>
+            <span class="rail-workspace-info">
+              <span class="rail-workspace-name" title={workspacePath(workspace)}>{workspaceName(workspace)}</span>
+              <span class="rail-workspace-path" title={workspacePath(workspace)}>{workspacePath(workspace)}</span>
+              <span class="rail-workspace-stats">
+                <span class="rail-workspace-stat">Sessions: {counts.sessions}</span>
+                <span class="rail-workspace-stat">Tabs: {counts.tabs}</span>
+              </span>
+            </span>
+          </button>
+        </HoverTooltip>
       {:else}
         <HoverTooltip label={workspaceName(workspace)} detail={workspace.rootPath}>
           <button
@@ -193,6 +326,14 @@
       +
     </button>
   </HoverTooltip>
+
+  <div
+    class="activity-rail-resize-handle"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize workspaces sidebar"
+    onpointerdown={handleResizeStart}
+  ></div>
 </aside>
 
 <style>
@@ -205,11 +346,35 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-6);
+    /* Horizontal padding shrunk so the 32px square buttons (and their active
+       highlight) are never clipped at the rail edges. */
+    padding: var(--space-8) var(--space-1);
+  }
+
+  .activity-rail-dragging,
+  .activity-rail-resizing {
+    user-select: none;
+  }
+
+  /* Expanded rail behaves like a column panel: left-aligned content, room for
+     the wider info cards. */
+  .activity-rail-expanded {
+    align-items: stretch;
+    gap: var(--space-4);
     padding: var(--space-8) var(--space-6);
   }
 
-  .activity-rail-dragging {
-    user-select: none;
+  .rail-divider {
+    width: 24px;
+    height: 1px;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--color-border-subtle) 60%, transparent);
+    margin: var(--space-1) 0;
+  }
+
+  .activity-rail-expanded .rail-divider {
+    width: 100%;
+    margin: var(--space-2) 0;
   }
 
   .rail-workspaces {
@@ -222,6 +387,11 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+  }
+
+  .rail-workspaces-expanded {
+    align-items: stretch;
+    gap: var(--space-4);
   }
 
   .rail-workspace-placeholder {
@@ -240,10 +410,16 @@
     justify-content: center;
     font-size: 13px;
     line-height: 1;
+    flex-shrink: 0;
     transition:
       background-color var(--motion-fast) var(--easing-standard),
       border-color var(--motion-fast) var(--easing-standard),
       color var(--motion-fast) var(--easing-standard);
+  }
+
+  .activity-rail-expanded .rail-button {
+    width: 36px;
+    height: 36px;
   }
 
   .rail-button:hover {
@@ -295,5 +471,100 @@
   .rail-button-add {
     margin-top: auto;
     font-size: 16px;
+  }
+
+  /* ---- Expanded info card ---- */
+  .rail-workspace-card {
+    width: 100%;
+    min-height: 64px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-primary);
+    font: inherit;
+    text-align: left;
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-6);
+    padding: var(--space-4) var(--space-6);
+    cursor: pointer;
+    transition:
+      background-color var(--motion-fast) var(--easing-standard),
+      border-color var(--motion-fast) var(--easing-standard);
+  }
+
+  .rail-workspace-card:hover {
+    background: var(--color-hover);
+  }
+
+  .rail-workspace-card-active {
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+
+  .rail-workspace-avatar {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    align-self: flex-start;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  }
+
+  .rail-workspace-info {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .rail-workspace-name {
+    font-size: var(--font-size-body);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rail-workspace-path {
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rail-workspace-stats {
+    margin-top: var(--space-1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  .rail-workspace-stat {
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--color-text-secondary);
+  }
+
+  .activity-rail-resize-handle {
+    position: absolute;
+    right: -3px;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    touch-action: none;
   }
 </style>

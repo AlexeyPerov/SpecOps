@@ -182,6 +182,30 @@ describe("loadThemeFile", () => {
     const result = await loadThemeFile();
     expect(result.activeTheme).toEqual(defaultThemeFile.activeTheme);
   });
+
+  it("round-trips a known preset activeTheme ref through load", async () => {
+    themeReadOrder(
+      JSON.stringify({
+        version: 1,
+        activeTheme: { kind: "preset", id: "darkside" },
+        customThemes: [],
+      }),
+    );
+    const result = await loadThemeFile();
+    expect(result.activeTheme).toEqual({ kind: "preset", id: "darkside" });
+  });
+
+  it("falls back to default builtin when preset id is unknown (future-version safety)", async () => {
+    themeReadOrder(
+      JSON.stringify({
+        version: 1,
+        activeTheme: { kind: "preset", id: "removed-in-future" },
+        customThemes: [],
+      }),
+    );
+    const result = await loadThemeFile();
+    expect(result.activeTheme).toEqual(defaultThemeFile.activeTheme);
+  });
 });
 
 describe("saveThemeFile", () => {

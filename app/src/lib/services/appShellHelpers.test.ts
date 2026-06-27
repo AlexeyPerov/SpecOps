@@ -137,6 +137,7 @@ describe("computeResponsiveLayoutFlags", () => {
     sessionsSidebarWidthPx: 280,
     projectPanelCollapsed: false,
     sessionsSidebarCollapsed: false,
+    activityRailWidthPx: 48,
   };
 
   it("does not auto-collapse when width is zero", () => {

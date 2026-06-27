@@ -38,6 +38,37 @@ export interface CustomThemeApplyInput {
   tokens: ThemeTokens;
 }
 
+/**
+ * Tokens that may hold a CSS gradient (background surfaces) instead of a solid
+ * color. All other tokens feed `color-mix` derivatives or render as tiny
+ * swatches, so they must stay solid.
+ */
+export const GRADIENT_CAPABLE_KEYS: ReadonlySet<ThemeTokenKey> = new Set<ThemeTokenKey>([
+  "color-bg-root",
+  "color-surface-1",
+  "color-surface-overlay",
+  "color-statusbar-bg",
+  "scrollbar-track",
+]);
+
+/**
+ * Returns the solid CSS color embedded in `value`. Non-gradient values pass
+ * through unchanged; for gradients the first color stop is extracted so
+ * `color-mix` derivatives (which cannot accept a gradient) keep working.
+ * Returns `#000000` if no parseable hex/rgb/hsl color is found.
+ */
+export function extractSolidColor(value: string): string {
+  const trimmed = value.trim();
+  if (!/gradient/i.test(trimmed)) {
+    return trimmed;
+  }
+  // Match the first concrete color stop — hex, rgba()/rgb(), hsla()/hsl().
+  // The bare-keyword branch is deliberately omitted so gradient function names
+  // (`linear`/`radial`/`conic`) and `transparent` don't shadow real stops.
+  const match = trimmed.match(/#(?:[0-9a-f]{3,8})|rgba?\([^)]+\)|hsla?\([^)]+\)/i);
+  return match ? match[0] : "#000000";
+}
+
 export function getBuiltinThemeLabel(id: BuiltinThemeId): string {
   return BUILTIN_LABELS[id];
 }
@@ -117,10 +148,18 @@ export function clearThemeOverrides(root: HTMLElement): void {
   }
 }
 
+/** Removes every `<key>-solid` var written by gradient-capable token apply. */
+export function clearGradientSolidVars(root: HTMLElement): void {
+  for (const key of GRADIENT_CAPABLE_KEYS) {
+    root.style.removeProperty(`${cssVarName(key)}-solid`);
+  }
+}
+
 export function applyBuiltinTheme(id: BuiltinThemeId, root: HTMLElement): void {
   const mode = getBuiltinThemeMode(id);
   root.dataset.theme = mode;
   clearThemeOverrides(root);
+  clearGradientSolidVars(root);
 
   const accent = getBuiltinAccentHex(id);
   root.style.setProperty("--accent-color", accent);
@@ -129,6 +168,14 @@ export function applyBuiltinTheme(id: BuiltinThemeId, root: HTMLElement): void {
   const palette = getThemeSyntaxPalette(id);
   for (const key of SYNTAX_PALETTE_CSS_VARS) {
     root.style.setProperty(`--syntax-${key}`, palette[key]);
+  }
+
+  // Builtin tokens are solid, so `-solid` mirrors them exactly. This keeps the
+  // `color-mix` surface derivatives in `tokens.css` reading the same value
+  // regardless of whether a builtin or custom/gradient theme is active.
+  const tokens = resolveBuiltinTokens(id);
+  for (const key of GRADIENT_CAPABLE_KEYS) {
+    root.style.setProperty(`${cssVarName(key)}-solid`, tokens[key]);
   }
 }
 
@@ -141,10 +188,14 @@ export function applyThemeSyntaxPalette(id: BuiltinThemeId, root: HTMLElement): 
 
 export function applyCustomTheme(custom: CustomThemeApplyInput, root: HTMLElement): void {
   root.dataset.theme = custom.baseMode;
+  clearGradientSolidVars(root);
 
   for (const key of THEME_TOKEN_KEYS) {
     const value = custom.tokens[key];
     root.style.setProperty(cssVarName(key), value);
+    if (GRADIENT_CAPABLE_KEYS.has(key)) {
+      root.style.setProperty(`${cssVarName(key)}-solid`, extractSolidColor(value));
+    }
   }
 
   const accent = custom.tokens["accent-color"];

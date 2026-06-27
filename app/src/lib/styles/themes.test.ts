@@ -3,8 +3,10 @@ import {
   applyBuiltinTheme,
   applyCustomTheme,
   clearThemeOverrides,
+  extractSolidColor,
   getBuiltinAccentHex,
   getThemeSyntaxPalette,
+  GRADIENT_CAPABLE_KEYS,
   resolveBuiltinTokens,
   snapshotThemeTokens,
   THEME_TOKEN_GROUPS,
@@ -140,6 +142,74 @@ describe("applyCustomTheme", () => {
       expect(root.style.getPropertyValue(`--${key}`)).toBe(tokens[key]);
     }
     expect(root.style.getPropertyValue("--color-accent")).toBe(tokens["accent-color"]);
+  });
+
+  it("writes a <key>-solid var for gradient-capable tokens (mirrors solid value)", () => {
+    const root = createMockRoot();
+    const tokens = resolveBuiltinTokens("dark-amber");
+    applyCustomTheme({ baseMode: "dark", tokens }, root);
+
+    for (const key of GRADIENT_CAPABLE_KEYS) {
+      expect(root.style.getPropertyValue(`--${key}-solid`)).toBe(tokens[key]);
+    }
+  });
+
+  it("extracts the first color stop of a gradient into the -solid var", () => {
+    const root = createMockRoot();
+    const tokens = resolveBuiltinTokens("dark-amber");
+    tokens["color-bg-root"] = "linear-gradient(#1a1a2e, #16213e)";
+
+    applyCustomTheme({ baseMode: "dark", tokens }, root);
+
+    // The gradient value is preserved verbatim on the main var…
+    expect(root.style.getPropertyValue("--color-bg-root")).toBe(
+      "linear-gradient(#1a1a2e, #16213e)",
+    );
+    // …and the solid fallback is the first stop so color-mix derivatives resolve.
+    expect(root.style.getPropertyValue("--color-bg-root-solid")).toBe("#1a1a2e");
+  });
+
+  it("does not write -solid vars for non-gradient-capable tokens", () => {
+    const root = createMockRoot();
+    const tokens = resolveBuiltinTokens("dark-amber");
+    applyCustomTheme({ baseMode: "dark", tokens }, root);
+
+    expect(root.style.getPropertyValue("--accent-color-solid")).toBe("");
+    expect(root.style.getPropertyValue("--syntax-keyword-solid")).toBe("");
+    expect(root.style.getPropertyValue("--color-text-primary-solid")).toBe("");
+  });
+});
+
+describe("applyBuiltinTheme", () => {
+  it("mirrors -solid vars for gradient-capable tokens so surface derivatives resolve", () => {
+    const root = createMockRoot();
+    applyBuiltinTheme("dark-amber", root);
+    for (const key of GRADIENT_CAPABLE_KEYS) {
+      expect(root.style.getPropertyValue(`--${key}-solid`)).toBeTruthy();
+    }
+  });
+});
+
+describe("extractSolidColor", () => {
+  it("passes through solid colors unchanged", () => {
+    expect(extractSolidColor("#1a1a2e")).toBe("#1a1a2e");
+    expect(extractSolidColor("rgba(10, 20, 30, 0.5)")).toBe("rgba(10, 20, 30, 0.5)");
+    expect(extractSolidColor("rgb(255 0 0)")).toBe("rgb(255 0 0)");
+  });
+
+  it("extracts the first hex stop from a linear gradient", () => {
+    expect(extractSolidColor("linear-gradient(#1a1a2e, #16213e)")).toBe("#1a1a2e");
+    expect(extractSolidColor("linear-gradient(90deg, #ff0000, #00ff00)")).toBe("#ff0000");
+  });
+
+  it("extracts an rgba stop from a radial gradient", () => {
+    expect(extractSolidColor("radial-gradient(rgba(1,2,3,0.4), #000)")).toBe(
+      "rgba(1,2,3,0.4)",
+    );
+  });
+
+  it("falls back to #000000 for a gradient with no parseable color", () => {
+    expect(extractSolidColor("linear-gradient(transparent, transparent)")).toBe("#000000");
   });
 });
 

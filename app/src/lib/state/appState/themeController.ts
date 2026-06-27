@@ -1,4 +1,5 @@
 import type { AppThemeState } from "../../domain/contracts";
+import { IMPORTED_THEMES } from "../../styles/importedThemes";
 import {
   defaultThemeFile,
   saveThemeFile,
@@ -84,6 +85,13 @@ function fallbackBuiltinForTheme(theme: AppThemeState): BuiltinThemeId {
   if (theme.activeTheme.kind === "builtin") {
     return theme.activeTheme.id;
   }
+  if (theme.activeTheme.kind === "preset") {
+    const preset = IMPORTED_THEMES.find((p) => p.id === theme.activeTheme.id);
+    if (!preset) {
+      return DEFAULT_BUILTIN_THEME;
+    }
+    return preset.baseMode === "dark" ? "dark-amber" : "light-blue";
+  }
   const custom = findCustomTheme(theme, theme.activeTheme.id);
   if (!custom) {
     return DEFAULT_BUILTIN_THEME;
@@ -94,6 +102,10 @@ function fallbackBuiltinForTheme(theme: AppThemeState): BuiltinThemeId {
 export function baseModeForTheme(theme: AppThemeState): "dark" | "light" {
   if (theme.activeTheme.kind === "builtin") {
     return getBuiltinThemeMode(theme.activeTheme.id);
+  }
+  if (theme.activeTheme.kind === "preset") {
+    const preset = IMPORTED_THEMES.find((p) => p.id === theme.activeTheme.id);
+    return preset?.baseMode ?? "dark";
   }
   return findCustomTheme(theme, theme.activeTheme.id)?.baseMode ?? "dark";
 }
@@ -106,6 +118,17 @@ export function applyThemeState(theme: AppThemeState): void {
   const root = document.documentElement;
   if (theme.activeTheme.kind === "builtin") {
     applyBuiltinTheme(theme.activeTheme.id, root);
+    return;
+  }
+
+  if (theme.activeTheme.kind === "preset") {
+    const preset = IMPORTED_THEMES.find((p) => p.id === theme.activeTheme.id);
+    if (preset) {
+      applyCustomTheme(preset, root);
+      return;
+    }
+    // Unknown preset id (removed in a newer version) — fall back gracefully.
+    applyBuiltinTheme(DEFAULT_BUILTIN_THEME, root);
     return;
   }
 

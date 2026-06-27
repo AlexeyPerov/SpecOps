@@ -3,12 +3,15 @@
   import type { CustomThemeRecord } from "../services/themeStore";
   import {
     BUILTIN_THEME_IDS,
+    extractSolidColor,
     getBuiltinAccentHex,
     getBuiltinThemeLabel,
+    GRADIENT_CAPABLE_KEYS,
     THEME_TOKEN_GROUPS,
     THEME_TOKEN_LABELS,
     type ThemeTokenKey,
   } from "../styles/themeTokens";
+  import { IMPORTED_THEMES } from "../styles/importedThemes";
 
   const snapshot = $derived($appState);
 
@@ -32,6 +35,10 @@
 
   function isCustomActive(id: string): boolean {
     return snapshot.theme.activeTheme.kind === "custom" && snapshot.theme.activeTheme.id === id;
+  }
+
+  function isPresetActive(id: string): boolean {
+    return snapshot.theme.activeTheme.kind === "preset" && snapshot.theme.activeTheme.id === id;
   }
 
   function customAccentSwatch(custom: CustomThemeRecord): string {
@@ -60,8 +67,9 @@
     return null;
   }
 
-  function pickerValueForToken(value: string): string {
-    return cssColorToHex(value) ?? "#000000";
+  function pickerValueForToken(key: ThemeTokenKey, value: string): string {
+    const solid = GRADIENT_CAPABLE_KEYS.has(key) ? extractSolidColor(value) : value;
+    return cssColorToHex(solid) ?? "#000000";
   }
 
   function updateToken(customId: string, key: ThemeTokenKey, value: string): void {
@@ -122,6 +130,31 @@
           </label>
         {/each}
       </div>
+      {#if IMPORTED_THEMES.length > 0}
+        <div class="settings-subsection">
+          <h4>Presets</h4>
+          <p class="settings-hint">
+            Read-only — create a custom theme from “+ New theme” to edit colors.
+          </p>
+          {#each IMPORTED_THEMES as preset (preset.id)}
+            <label class="settings-theme-row">
+              <input
+                type="radio"
+                name="theme"
+                value={preset.id}
+                checked={isPresetActive(preset.id)}
+                onchange={() => appState.setActiveTheme({ kind: "preset", id: preset.id })}
+              />
+              <span
+                class="theme-swatch"
+                style="background-color: {preset.tokens["accent-color"]}"
+              ></span>
+              <span>{preset.name}</span>
+              <span class="theme-row-tag">{preset.baseMode}</span>
+            </label>
+          {/each}
+        </div>
+      {/if}
       <button type="button" class="settings-button" onclick={() => appState.createCustomTheme()}>
         + New theme
       </button>
@@ -171,6 +204,12 @@
         {#each THEME_TOKEN_GROUPS as group}
           <div class="settings-subsection">
             <h4>{group.label}</h4>
+            {#if group.id === "background"}
+              <p class="settings-hint">
+                Background fields accept CSS gradients (e.g.
+                <code>linear-gradient(#1a1a2e, #16213e)</code>).
+              </p>
+            {/if}
             {#each group.keys as key (key)}
               {@const tokenValue = activeCustom.tokens[key]}
               <div class="theme-token-row">
@@ -178,7 +217,7 @@
                 <div class="theme-token-controls">
                   <input
                     type="color"
-                    value={pickerValueForToken(tokenValue)}
+                    value={pickerValueForToken(key, tokenValue)}
                     aria-label="{THEME_TOKEN_LABELS[key]} color picker"
                     oninput={(event) =>
                       updateToken(

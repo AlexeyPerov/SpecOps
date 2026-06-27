@@ -173,7 +173,7 @@ All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`)
 | `settings.json` | Editor, external files, `providerSettings` (HTTP + Debug), `providerModelCatalogs` (not API keys) |
 | `provider-secrets.json` | Provider API keys keyed by `ChatProviderId` (`providerSecretsStore.ts`: `loadProviderApiKey` / `saveProviderApiKey`) |
 | `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
-| `themes.json` | Active and custom themes |
+| `theme.json` | Active theme (builtin/preset/custom ref) and custom themes. Read-only preset catalog (daylerees imports) ships in-app, not on disk |
 | `chat/{hash}/` | Per-workspace session index (`index.json`, `sessions` envelope) and per-session thread JSON (`{sessionId}.json`). M16 renamed the on-disk envelope key from `agents` → `sessions` and the in-memory id from `agentId` → `sessionId`; pre-M16 `chat/{hash}/` folders are abandoned (no migration — pre-release). |
 
 Session and chat writes are debounced. The project **does not** add backward-compatible migrations for persisted data unless explicitly requested (see agent rules below).

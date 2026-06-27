@@ -66,3 +66,7 @@
   color: var(--color-text-secondary);
   cursor: not-allowed;
 }
+
+.tab-context-item-danger {
+  color: var(--color-danger, #c44);
+}

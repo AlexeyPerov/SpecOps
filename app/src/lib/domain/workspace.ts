@@ -13,6 +13,8 @@ export interface WorkspaceLayoutState {
   sessionsSidebarWidthPx: number;
   projectPanelCollapsed: boolean;
   sessionsSidebarCollapsed: boolean;
+  /** Resizable activity-rail width (compact letter rail → expanded cards). */
+  activityRailWidthPx: number;
 }
 
 export interface SessionState {

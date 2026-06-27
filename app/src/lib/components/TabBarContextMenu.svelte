@@ -11,6 +11,7 @@
     canCloseTabsToRight,
     canCopyRelativePath,
     canCopyTabPath,
+    canDeleteTabFile,
     canOpenNearbyFiles,
     canRenameTab,
     canRevealTabInFileManager,
@@ -118,6 +119,9 @@
   const contextMenuCanReveal = $derived(canRevealTabInFileManager(contextMenuTab, documents));
   const contextMenuCanRename = $derived(canRenameTab(contextMenuTab, contextMenuTabDoc));
   const contextMenuWorkspaceRoot = $derived(appState.getWorkspaceRoot());
+  const contextMenuCanDelete = $derived(
+    canDeleteTabFile(contextMenuTab, contextMenuTabDoc, contextMenuWorkspaceRoot),
+  );
   const contextMenuCanCloseOtherTabs = $derived(canCloseOtherTabs(openTabs, contextMenuTab));
   const contextMenuCanCloseTabsToRight = $derived(canCloseTabsToRight(openTabs, contextMenuTab));
   const contextMenuCanCloseMissingFileTabs = $derived(canCloseMissingFileTabs(openTabs, documents));
@@ -258,6 +262,20 @@
         }}
       >
         Rename
+      </button>
+    {/if}
+
+    {#if contextMenuCanDelete}
+      <button
+        class="tab-context-item tab-context-item-danger"
+        type="button"
+        role="menuitem"
+        onpointerdown={(event) => {
+          event.stopPropagation();
+          void menuHandlers.deleteContextTabFile();
+        }}
+      >
+        Remove
       </button>
     {/if}
 

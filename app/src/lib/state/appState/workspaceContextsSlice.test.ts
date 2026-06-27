@@ -158,6 +158,7 @@ describe("appState session restore", () => {
                   sessionsSidebarWidthPx: 280,
                   projectPanelCollapsed: true,
                   sessionsSidebarCollapsed: false,
+                  activityRailWidthPx: 48,
                 },
               },
             },

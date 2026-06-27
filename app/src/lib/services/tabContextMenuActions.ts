@@ -1,11 +1,13 @@
+import { confirm } from "@tauri-apps/plugin-dialog";
 import type { DocumentState, TabState } from "../domain/contracts";
 import { isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { revealInFileManager } from "./revealInFileManager";
 import { readNearbyTextFiles, type NearbyTextFile } from "./nearbyFiles";
 import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
-import { runInNotepadContext, workspaceRelativePath } from "./workspacePaths";
+import { isPathUnderRoot, runInNotepadContext, workspaceRelativePath } from "./workspacePaths";
 import { renameDocumentOnDisk } from "./documentRename";
+import { deleteProjectEntry } from "./projectFileOps";
 import {
   closeOtherTabsWithUnsavedPrompt,
   closeTabWithUnsavedPrompt,
@@ -106,6 +108,21 @@ export function canRenameTab(
   );
 }
 
+export function canDeleteTabFile(
+  tab: TabState | null,
+  tabDoc: DocumentState | null,
+  workspaceRoot: string | null,
+): boolean {
+  // The file must be on disk inside the active workspace; unsaved/untitled
+  // docs (no filePath) and files outside the workspace root cannot be removed
+  // this way. Missing files may still be on disk under a different path, so
+  // allow the delete attempt (it reports a clear error if removal fails).
+  if (!tab || !isFileTab(tab) || !tabDoc?.filePath || !workspaceRoot) {
+    return false;
+  }
+  return isPathUnderRoot(tabDoc.filePath, workspaceRoot);
+}
+
 export type TabContextMenuHandlerDeps = {
   getContextTab: () => TabState | null;
   getOpenTabs: () => TabState[];
@@ -138,6 +155,39 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
         windowId: deps.getWindowId(),
         notify: deps.notify,
       });
+    } finally {
+      deps.closeContextMenu();
+    }
+  }
+
+  async function deleteContextTabFile(): Promise<void> {
+    const contextTab = deps.getContextTab();
+    const tabDoc = contextTab ? tabDocument(contextTab) : undefined;
+    const workspaceRoot = appState.getWorkspaceRoot();
+    if (!tabDoc?.filePath || !workspaceRoot) {
+      deps.closeContextMenu();
+      return;
+    }
+    const entryLabel = tabDoc.filePath.replaceAll("\\", "/").split("/").pop() ?? tabDoc.filePath;
+    try {
+      const confirmed = await confirm(`Delete file "${entryLabel}"?`, {
+        title: "Delete",
+        okLabel: "Delete",
+        cancelLabel: "Cancel",
+        kind: "warning",
+      });
+      if (!confirmed) {
+        return;
+      }
+      // deleteProjectEntry removes the file from disk and closes the tab via
+      // closeTabsForDeletedDocumentsUnderPath — same path as the project tree
+      // Delete action. The project tree watcher refreshes the tree afterwards.
+      const result = await deleteProjectEntry(workspaceRoot, tabDoc.filePath);
+      if (!result.ok) {
+        deps.notify(result.reason);
+      }
+    } catch {
+      // best-effort from the tab menu
     } finally {
       deps.closeContextMenu();
     }
@@ -250,6 +300,7 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
 
   return {
     renameContextTab,
+    deleteContextTabFile,
     revealTabInFileManager,
     copyTabPath,
     copyTabRelativePath,

@@ -7,6 +7,7 @@ import {
   canCloseTabsToRight,
   canCopyRelativePath,
   canCopyTabPath,
+  canDeleteTabFile,
   canOpenNearbyFiles,
   canRenameTab,
   canRevealTabInFileManager,
@@ -112,5 +113,21 @@ describe("tabContextMenuActions", () => {
     expect(canRenameTab(tab, doc())).toBe(true);
     expect(canRenameTab(tab, doc({ filePath: null }))).toBe(false);
     expect(canRenameTab(tab, doc({ fileMissing: true }))).toBe(false);
+  });
+
+  it("enables delete only for on-disk workspace files", () => {
+    const tab = tabs()[0];
+
+    // On-disk file inside the workspace root.
+    expect(canDeleteTabFile(tab, doc(), "/tmp/ws")).toBe(true);
+    // Untitled doc (no file path).
+    expect(canDeleteTabFile(tab, doc({ filePath: null }), "/tmp/ws")).toBe(false);
+    // File outside the workspace root.
+    expect(canDeleteTabFile(tab, doc({ filePath: "/tmp/outside/a.txt" }), "/tmp/ws")).toBe(false);
+    // No active workspace (e.g. notepad).
+    expect(canDeleteTabFile(tab, doc(), null)).toBe(false);
+    // Missing file is still allowed — it may be on disk under the same path,
+    // and deleteProjectEntry surfaces a clear error if removal fails.
+    expect(canDeleteTabFile(tab, doc({ fileMissing: true }), "/tmp/ws")).toBe(true);
   });
 });

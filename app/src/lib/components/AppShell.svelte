@@ -41,8 +41,10 @@
     workspaces: WorkspaceEntry[];
     activeContextId: ContextId;
     chatHttpRailVisible: boolean;
+    panelWidthPx: number;
     onSelectContext: (contextId: ContextId) => void;
     onAddWorkspace: () => void;
+    onPanelWidthChange: (width: number) => void;
     onRequestCloseWorkspace: (workspaceId: ContextId, x: number, y: number) => void;
     onReorderWorkspaces: (fromIndex: number, toIndex: number) => void;
   }
@@ -308,8 +310,10 @@
         workspaces={activityRail.workspaces}
         activeContextId={activityRail.activeContextId}
         showChatHttp={activityRail.chatHttpRailVisible}
+        panelWidthPx={activityRail.panelWidthPx}
         onSelectContext={activityRail.onSelectContext}
         onAddWorkspace={activityRail.onAddWorkspace}
+        onPanelWidthChange={activityRail.onPanelWidthChange}
         onRequestCloseWorkspace={activityRail.onRequestCloseWorkspace}
         onReorderWorkspaces={activityRail.onReorderWorkspaces}
       />

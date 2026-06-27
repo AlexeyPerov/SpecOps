@@ -227,7 +227,6 @@ export async function startAppShellRuntime(
         zoomPercent: persistedSettings.zoomPercent,
         externalFiles: toExternalFilesSettings(persistedSettings),
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
-        hideActivityRailWhenNotepadOnly: persistedSettings.hideActivityRailWhenNotepadOnly,
         opencode: persistedSettings.opencode,
         chatHttp: persistedSettings.chatHttp,
         providerSettings: persistedSettings.providerSettings,

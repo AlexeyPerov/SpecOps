@@ -158,7 +158,6 @@ describe("appState session restore", () => {
                   sessionsSidebarWidthPx: 280,
                   projectPanelCollapsed: true,
                   sessionsSidebarCollapsed: false,
-                  activityRailWidthPx: 48,
                 },
               },
             },
@@ -206,6 +205,22 @@ describe("appState session restore", () => {
     expect(appState.getActiveWorkspaceLayout().sessionsSidebarWidthPx).toBe(260);
     expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
     expect(appState.getActiveWorkspaceLayout().sessionsSidebarCollapsed).toBe(false);
+  });
+
+  it("keeps the activity-rail width across context switches (independent of mode/workspace)", () => {
+    appState.setActivityRailWidth(220);
+    expect(appState.getSnapshot().activityRailWidthPx).toBe(220);
+
+    appState.addWorkspace("/tmp/ws-rail");
+    expect(appState.getSnapshot().activityRailWidthPx).toBe(220);
+
+    appState.switchContext("notepad");
+    expect(appState.getSnapshot().activityRailWidthPx).toBe(220);
+
+    appState.setActivityRailWidth(150);
+    const wsId = appState.getSnapshot().contexts.workspaces[0]?.id!;
+    appState.switchContext(wsId);
+    expect(appState.getSnapshot().activityRailWidthPx).toBe(150);
   });
 
   it("switches between workspace and chat-http contexts without mutating workspace state", () => {

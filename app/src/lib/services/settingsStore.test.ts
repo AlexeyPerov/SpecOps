@@ -54,7 +54,6 @@ describe("settings mapping", () => {
         maxOpenWithoutConfirmBytes: 512 * 1024,
       },
       decoratePlaintextSymbols: false,
-      hideActivityRailWhenNotepadOnly: true,
       opencode: defaultOpencodeSettings,
       chatHttp: { enabled: false },
       logSettings: { ...defaultLogSettings, verboseProviderLogging: false },

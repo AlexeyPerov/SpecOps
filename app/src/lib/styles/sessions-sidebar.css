@@ -88,6 +88,17 @@
   border-color: var(--color-border-subtle);
 }
 
+.sessions-sidebar-import {
+  width: 100%;
+  border-color: var(--color-border-subtle);
+  background: var(--color-bg-root);
+  justify-content: center;
+}
+
+.sessions-sidebar-import:hover {
+  border-color: var(--color-border-subtle);
+}
+
 .sessions-sidebar-body {
   min-height: 0;
   display: flex;

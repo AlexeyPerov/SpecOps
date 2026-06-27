@@ -220,6 +220,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         goToOpen: false,
         previewMode: "editor",
       },
+      activityRailWidthPx: 48,
     };
 
     await syncOpenFileRegistryForWindow("win-a", state);
@@ -325,6 +326,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         goToOpen: false,
         previewMode: "editor",
       },
+      activityRailWidthPx: 48,
     };
 
     await syncOpenFileRegistryForWindow("win-a", state);

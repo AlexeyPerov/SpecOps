@@ -48,7 +48,7 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
   }
 
   function handleActivityRailWidthChange(widthPx: number): void {
-    appState.updateActiveWorkspaceLayout({ activityRailWidthPx: widthPx });
+    appState.setActivityRailWidth(widthPx);
   }
 
   function toggleConsole(): void {

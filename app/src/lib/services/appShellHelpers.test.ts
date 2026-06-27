@@ -32,6 +32,7 @@ function domainState(overrides: {
     theme: {} as AppDomainState["theme"],
     recentFiles: [],
     editor: {} as AppDomainState["editor"],
+    activityRailWidthPx: 48,
   };
 }
 
@@ -137,7 +138,6 @@ describe("computeResponsiveLayoutFlags", () => {
     sessionsSidebarWidthPx: 280,
     projectPanelCollapsed: false,
     sessionsSidebarCollapsed: false,
-    activityRailWidthPx: 48,
   };
 
   it("does not auto-collapse when width is zero", () => {

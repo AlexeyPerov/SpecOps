@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 import type { AppDomainState, AppThemeState, ExternalFilesSettings, ThemeMode } from "../domain/contracts";
 import { createFileTab } from "../domain/contracts";
 import { bumpRecentFile } from "../services/recentFiles";
+import { DEFAULT_ACTIVITY_RAIL_WIDTH_PX, normalizeActivityRailWidthPx } from "../services/panelLayout";
 import { syncRecentFiles } from "../services/recentFilesSync";
 import { loadThemeFile } from "../services/themeStore";
 import { BUILTIN_THEME_IDS } from "../styles/themeTokens";
@@ -71,6 +72,7 @@ const initialState: AppDomainState = {
     goToOpen: false,
     previewMode: "editor",
   },
+  activityRailWidthPx: DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
 };
 
 function createStateStore() {
@@ -384,14 +386,17 @@ function createStateStore() {
         },
       }));
     },
-    setHideActivityRailWhenNotepadOnly(value: boolean) {
-      update((state) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          hideActivityRailWhenNotepadOnly: value,
-        },
-      }));
+    /**
+     * Persists the activity-rail width. Window-scoped and independent of the
+     * active mode/workspace — survives context switches and window reloads.
+     */
+    setActivityRailWidth(widthPx: number) {
+      const normalized = normalizeActivityRailWidthPx(widthPx);
+      update((state) =>
+        state.activityRailWidthPx === normalized
+          ? state
+          : { ...state, activityRailWidthPx: normalized },
+      );
     },
     ...workspaceContextsSlice,
     ...documentTabsSlice,

@@ -210,7 +210,6 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       zoomPercent: snapshot.editor.zoomPercent,
       externalFiles: snapshot.settings.externalFiles,
       decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
-      hideActivityRailWhenNotepadOnly: snapshot.settings.hideActivityRailWhenNotepadOnly,
       opencode: snapshot.settings.opencode,
       chatHttp: snapshot.settings.chatHttp,
       logSettings: snapshot.settings.logSettings,

@@ -12,7 +12,9 @@ import { createFileTab } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { isChatHttpRailVisible } from "../../ai/providers/chatHttpRailGating";
 import {
+  DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
   defaultWorkspaceLayout,
+  normalizeActivityRailWidthPx,
   normalizeWorkspaceLayout,
 } from "../../services/panelLayout";
 import {
@@ -84,6 +86,7 @@ export function createWorkspaceContextsSlice(deps: {
         zoomPercent: state.editor.zoomPercent,
         wrapLines: state.editor.wrapLines,
       },
+      activityRailWidthPx: state.activityRailWidthPx,
     };
   }
 
@@ -113,6 +116,10 @@ export function createWorkspaceContextsSlice(deps: {
       };
       reindexIdCountersFromContexts(contexts);
       const preservedTheme = getSnapshot().theme;
+      const railWidth =
+        snapshot.activityRailWidthPx !== undefined
+          ? normalizeActivityRailWidthPx(snapshot.activityRailWidthPx)
+          : DEFAULT_ACTIVITY_RAIL_WIDTH_PX;
       set({
         contexts,
         settings: preservedSettings,
@@ -125,6 +132,7 @@ export function createWorkspaceContextsSlice(deps: {
           goToOpen: false,
           previewMode: "editor",
         },
+        activityRailWidthPx: railWidth,
       });
       applyTheme(preservedTheme);
     },
@@ -325,11 +333,8 @@ export function createWorkspaceContextsSlice(deps: {
       return normalizeWorkspaceLayout(getActiveSession(state).layout);
     },
     updateActiveWorkspaceLayout(partial: Partial<WorkspaceLayoutState>): void {
-      update((state) => {
-        if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
-          return state;
-        }
-        return patchActiveContext(state, (ctx) => {
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
           const current = normalizeWorkspaceLayout(ctx.session.layout);
           const nextLayout = normalizeWorkspaceLayout({ ...current, ...partial });
           return {
@@ -339,8 +344,8 @@ export function createWorkspaceContextsSlice(deps: {
               layout: nextLayout,
             },
           };
-        });
-      });
+        }),
+      );
     },
     setProjectPanelCollapsed(projectPanelCollapsed: boolean) {
       slice.updateActiveWorkspaceLayout({ projectPanelCollapsed });

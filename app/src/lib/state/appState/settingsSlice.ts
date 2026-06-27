@@ -63,7 +63,6 @@ export const defaultSettings: AppSettingsState = {
   statusBarVisible: true,
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
-  hideActivityRailWhenNotepadOnly: true,
   opencode: defaultOpencodeSettings,
   chatHttp: defaultChatHttpSettings,
   opencodeHealth: {
@@ -145,7 +144,6 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       zoomPercent?: number;
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
-      hideActivityRailWhenNotepadOnly?: boolean;
       opencode?: Partial<OpencodeSettings>;
       chatHttp?: Partial<ChatHttpSettings>;
       opencodeHealth?: Partial<OpencodeHealthState>;
@@ -187,15 +185,6 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             settings: {
               ...next.settings,
               decoratePlaintextSymbols: partial.decoratePlaintextSymbols,
-            },
-          };
-        }
-        if (typeof partial.hideActivityRailWhenNotepadOnly === "boolean") {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              hideActivityRailWhenNotepadOnly: partial.hideActivityRailWhenNotepadOnly,
             },
           };
         }

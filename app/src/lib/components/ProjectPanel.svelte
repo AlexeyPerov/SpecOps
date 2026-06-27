@@ -4,7 +4,7 @@
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import {
-    DEFAULT_PANEL_WIDTH_PX,
+    DEFAULT_PROJECT_PANEL_WIDTH_PX,
     MAX_PANEL_WIDTH_PX,
     MIN_PANEL_WIDTH_PX,
     normalizePanelWidthPx,
@@ -20,7 +20,7 @@
   export let statusByPath: ReadonlyMap<string, OpencodeFileChangeStatus> | null = null;
   export let showHidden = false;
   export let collapsed = false;
-  export let panelWidthPx = DEFAULT_PANEL_WIDTH_PX;
+  export let panelWidthPx = DEFAULT_PROJECT_PANEL_WIDTH_PX;
   export let onRefresh: () => void = () => {};
   export let onToggleHidden: (next: boolean) => void = () => {};
   export let onToggleCollapsed: (next: boolean) => void = () => {};

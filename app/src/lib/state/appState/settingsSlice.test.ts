@@ -26,9 +26,10 @@ describe("appState settings and editor chrome", () => {
   });
 
   it("setDarkTheme/setLightTheme update the corresponding slot", () => {
+    // Fresh-install default dark slot is the `turnip` preset (see defaultThemeFile).
     expect(appState.getSnapshot().theme.darkTheme).toEqual({
-      kind: "builtin",
-      id: "dark-amber",
+      kind: "preset",
+      id: "turnip",
     });
     appState.setDarkTheme({ kind: "builtin", id: "dark-amber" });
     appState.setLightTheme({ kind: "preset", id: "github" });
@@ -59,12 +60,13 @@ describe("appState settings and editor chrome", () => {
   });
 
   it("cycleTheme advances to the next theme and switches to manual mode", () => {
-    // Default state: auto mode + OS dark → effective ref is dark-amber (builtin index 0).
-    // The next theme in the builtin→preset→custom order is light-blue (builtin index 1).
+    // Default state: auto mode + OS dark → effective ref is `turnip` (preset). The
+    // cycle order is builtins → presets → customs; `tron` is the preset that
+    // follows `turnip` in the IMPORTED_THEMES list, so it is the next ref.
     appState.cycleTheme();
     const snapshot = appState.getSnapshot();
     expect(snapshot.theme.mode).toBe("manual");
-    expect(snapshot.theme.manualTheme).toEqual({ kind: "builtin", id: "light-blue" });
+    expect(snapshot.theme.manualTheme).toEqual({ kind: "preset", id: "tron" });
   });
 
   it("createCustomTheme adds a custom theme and assigns it to the matching slot", () => {
@@ -130,7 +132,7 @@ describe("appState settings and editor chrome", () => {
     const snapshot = appState.getSnapshot();
     expect(snapshot.editor.zoomPercent).toBe(130);
     expect(snapshot.editor.wrapLines).toBe(false);
-    expect(snapshot.theme.darkTheme.id).toBe("dark-amber");
+    expect(snapshot.theme.darkTheme.id).toBe("turnip");
   });
 
   it("applyWindowSession preserves the active theme", () => {

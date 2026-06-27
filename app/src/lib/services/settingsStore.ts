@@ -63,7 +63,6 @@ export interface PersistedSettings {
   maxBinaryOpenAsTextBytes: number;
   maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
-  hideActivityRailWhenNotepadOnly: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   logSettings: LogSettings;
@@ -90,7 +89,6 @@ export const defaultPersistedSettings: PersistedSettings = {
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
-  hideActivityRailWhenNotepadOnly: true,
   opencode: defaultOpencodeSettings,
   chatHttp: defaultChatHttpSettings,
   logSettings: defaultLogSettings,
@@ -159,9 +157,6 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         decoratePlaintextSymbols: isBoolean(parsed.decoratePlaintextSymbols)
           ? parsed.decoratePlaintextSymbols
           : defaultPersistedSettings.decoratePlaintextSymbols,
-        hideActivityRailWhenNotepadOnly: isBoolean(parsed.hideActivityRailWhenNotepadOnly)
-          ? parsed.hideActivityRailWhenNotepadOnly
-          : defaultPersistedSettings.hideActivityRailWhenNotepadOnly,
         opencode: normalizeOpencodeSettings(parsed.opencode),
         chatHttp: normalizeChatHttpSettings(parsed.chatHttp),
         logSettings: normalizeLogSettings(parsed.logSettings),
@@ -209,7 +204,6 @@ export function toPersistedSettings(input: {
   zoomPercent: number;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
-  hideActivityRailWhenNotepadOnly: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   logSettings: LogSettings;
@@ -227,7 +221,6 @@ export function toPersistedSettings(input: {
     zoomPercent: input.zoomPercent,
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
-    hideActivityRailWhenNotepadOnly: input.hideActivityRailWhenNotepadOnly,
     opencode: normalizeOpencodeSettings(input.opencode),
     chatHttp: normalizeChatHttpSettings(input.chatHttp),
     logSettings: normalizeLogSettings(input.logSettings),

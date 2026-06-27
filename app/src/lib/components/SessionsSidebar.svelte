@@ -212,16 +212,6 @@
       >
         {newEntryLabel}
       </button>
-      {#if onOpenSessions}
-        <button
-          class="sessions-sidebar-button sessions-sidebar-sessions"
-          type="button"
-          onclick={() => onOpenSessions()}
-          title="Browse all OpenCode sessions for this workspace, including ones not opened here yet"
-        >
-          All sessions…
-        </button>
-      {/if}
     {:else}
       <button
         class="sessions-sidebar-button sessions-sidebar-toggle"
@@ -237,6 +227,16 @@
 
   {#if !collapsed}
     <div class="sessions-sidebar-body">
+      {#if onOpenSessions}
+        <button
+          class="sessions-sidebar-button sessions-sidebar-import"
+          type="button"
+          onclick={() => onOpenSessions()}
+          title="Browse all OpenCode sessions for this workspace, including ones not opened here yet"
+        >
+          Import
+        </button>
+      {/if}
       <label class="sessions-search-field">
         <span class="sessions-search-label">{`Search ${entryPluralLabel}`}</span>
         <input

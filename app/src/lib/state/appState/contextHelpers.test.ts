@@ -81,6 +81,7 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
       goToOpen: false,
       previewMode: "editor",
     },
+    activityRailWidthPx: 48,
   };
 }
 

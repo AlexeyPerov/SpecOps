@@ -13,6 +13,13 @@
     isActivityRailExpanded,
     normalizeActivityRailWidthPx,
   } from "../services/panelLayout";
+  import NotepadIcon from "./icons/NotepadIcon.svelte";
+
+  /** A notepad tab shown in the expanded notepad card's "last opened" list. */
+  export interface NotepadRailTab {
+    tabId: string;
+    label: string;
+  }
 
   interface Props {
     workspaces?: WorkspaceEntry[];
@@ -20,11 +27,17 @@
     showChatHttp?: boolean;
     /** Resizable rail width (compact 48px → expanded cards). */
     panelWidthPx?: number;
+    /** Number of currently-open tabs in the notepad context. */
+    notepadOpenTabCount?: number;
+    /** Last opened notepad tabs (append order), already formatted. */
+    notepadRecentTabs?: NotepadRailTab[];
     onSelectContext?: (contextId: ContextId) => void;
     onAddWorkspace?: () => void;
     onPanelWidthChange?: (width: number) => void;
     onRequestCloseWorkspace?: (workspaceId: ContextId, x: number, y: number) => void;
     onReorderWorkspaces?: (fromIndex: number, toIndex: number) => void;
+    /** Switches to notepad and selects the given tab id. */
+    onSelectNotepadTab?: (tabId: string) => void;
   }
 
   let {
@@ -32,18 +45,20 @@
     activeContextId = "notepad",
     showChatHttp = false,
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
+    notepadOpenTabCount = 0,
+    notepadRecentTabs = [],
     onSelectContext = () => {},
     onAddWorkspace = () => {},
     onPanelWidthChange = () => {},
     onRequestCloseWorkspace = () => {},
     onReorderWorkspaces = () => {},
+    onSelectNotepadTab = () => {},
   }: Props = $props();
 
   let activityRailEl: HTMLElement | null = null;
   let railWorkspacesEl: HTMLDivElement | null = null;
   let displayWidth = $state(DEFAULT_ACTIVITY_RAIL_WIDTH_PX);
   let isResizing = $state(false);
-
   // Keep the local display width in sync with the persisted width unless the
   // user is actively dragging the handle (mirrors the project-panel pattern).
   $effect(() => {
@@ -182,16 +197,49 @@
   bind:this={activityRailEl}
   style={`width:${displayWidth}px`}
 >
-  <HoverTooltip label="Notepad">
-    <button
-      class={`rail-button ${activeContextId === "notepad" ? "rail-button-active" : ""}`}
-      type="button"
-      aria-label="Notepad"
-      onclick={() => onSelectContext("notepad")}
+  {#if expanded}
+    <div
+      class={`rail-notepad-card ${activeContextId === "notepad" ? "rail-notepad-card-active" : ""}`}
     >
-      N
-    </button>
-  </HoverTooltip>
+      <button
+        class="rail-notepad-card-header"
+        type="button"
+        aria-label="Notepad"
+        onclick={() => onSelectContext("notepad")}
+      >
+        <span class="rail-notepad-card-icon"><NotepadIcon size={16} /></span>
+        <span class="rail-notepad-card-title">Notepad</span>
+        <span class="rail-notepad-card-count">Tabs: {notepadOpenTabCount}</span>
+      </button>
+      {#if notepadRecentTabs.length > 0}
+        <ul class="rail-notepad-card-tabs" role="list">
+          {#each notepadRecentTabs as tab (tab.tabId)}
+            <li>
+              <button
+                class="rail-notepad-tab"
+                type="button"
+                title={tab.label}
+                onclick={() => onSelectNotepadTab(tab.tabId)}
+              >
+                {tab.label}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  {:else}
+    <HoverTooltip label="Notepad">
+      <button
+        class={`rail-button rail-button-notepad ${activeContextId === "notepad" ? "rail-button-active" : ""}`}
+        type="button"
+        aria-label="Notepad"
+        onclick={() => onSelectContext("notepad")}
+      >
+        <NotepadIcon size={16} />
+      </button>
+    </HoverTooltip>
+  {/if}
 
   {#if showChatHttp}
     <HoverTooltip label="Chat (beta)">
@@ -556,6 +604,114 @@
     font-size: 11px;
     line-height: 1.3;
     color: var(--color-text-secondary);
+  }
+
+  /* ---- Expanded notepad card ---- */
+  .rail-notepad-card {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    transition:
+      background-color var(--motion-fast) var(--easing-standard),
+      border-color var(--motion-fast) var(--easing-standard);
+  }
+
+  .rail-notepad-card-active {
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+
+  .rail-notepad-card-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-1) 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font: inherit;
+    text-align: left;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: color var(--motion-fast) var(--easing-standard);
+  }
+
+  .rail-notepad-card-header:hover {
+    color: var(--color-accent);
+  }
+
+  .rail-notepad-card-header:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
+  }
+
+  .rail-notepad-card-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-accent);
+  }
+
+  .rail-notepad-card-title {
+    flex: 1;
+    font-size: var(--font-size-body);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rail-notepad-card-count {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+  }
+
+  .rail-notepad-card-tabs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .rail-notepad-tab {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1.3;
+    text-align: left;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition:
+      background-color var(--motion-fast) var(--easing-standard),
+      color var(--motion-fast) var(--easing-standard);
+  }
+
+  .rail-notepad-tab:hover {
+    background: var(--color-hover);
+    color: var(--color-text-primary);
+  }
+
+  .rail-notepad-tab:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
   }
 
   .activity-rail-resize-handle {

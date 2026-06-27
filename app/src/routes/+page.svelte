@@ -26,12 +26,13 @@
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
   import { registerSettingsDialogOpener } from "../lib/services/settingsDialogUi";
   import type { AppDomainState } from "../lib/domain/contracts";
-  import { CHAT_HTTP_CONTEXT_ID, type ContextId, tabDocumentId } from "../lib/domain/contracts";
+  import { CHAT_HTTP_CONTEXT_ID, isFileTab, type ContextId, tabDocumentId } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
+  import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
   import { DEFAULT_CONSOLE_HEIGHT_PX } from "../lib/services/consoleTabPrefs";
-  import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
+  import { normalizeWorkspaceLayout, normalizeActivityRailWidthPx } from "../lib/services/panelLayout";
   import { deriveAppShellDocumentView } from "../lib/services/appShellDocumentView";
   import { createWorkspaceContextMenuActions } from "../lib/services/workspaceContextMenuController";
   import {
@@ -279,12 +280,6 @@
     (isChatHttpActive || (Boolean(activeWorkspaceRoot) && opencodeEnabled)) &&
       !workspaceLayout.sessionsSidebarCollapsed,
   );
-  const showActivityRail = $derived(
-    !(
-      snapshot.settings.hideActivityRailWhenNotepadOnly &&
-      snapshot.contexts.workspaces.length === 0
-    ),
-  );
   const chatHttpRailVisible = $derived(
     isChatHttpRailVisible(
       snapshot.settings.providerSettings,
@@ -305,6 +300,25 @@
   const isSettingsViewActive = $derived(activeViewTabKind === "settings");
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
   const isViewTabActive = $derived(activeViewTabKind !== null);
+  // Notepad rail card data — reads the notepad context directly so it is
+  // available regardless of which context is currently active. Most recently
+  // opened file tab in append order (newest-opened last). Kept to a single
+  // row so the notepad card stays compact and its divider lands near the
+  // editor tab-bar bottom line.
+  const notepadSession = $derived(snapshot.contexts.notepad.session);
+  const notepadOpenTabCount = $derived(notepadSession.openTabs.length);
+  const notepadRecentTabs = $derived.by(() => {
+    const notepadDocs = snapshot.contexts.notepad.documents;
+    const fileTabs = notepadSession.openTabs.filter(isFileTab);
+    const lastOne = fileTabs.slice(-1);
+    return lastOne.map((tab) => {
+      const doc = notepadDocs.find((documentState) => documentState.id === tab.documentId);
+      return {
+        tabId: tab.id,
+        label: formatNotepadTabLabel(doc?.filePath ?? null, doc?.title ?? ""),
+      };
+    });
+  });
   const activeDocument = $derived(
     documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
       documents[0],
@@ -498,6 +512,12 @@
   function handleAddWorkspace(): void {
     runCommand("workspace.add");
     void loadProjectTreeRoot();
+  }
+
+  /** Switches to the notepad context and selects the given tab. */
+  function handleSelectNotepadTab(tabId: string): void {
+    appState.switchContext("notepad");
+    appState.selectTab(tabId);
   }
 
   onMount(() => {
@@ -880,16 +900,19 @@
   {consoleOpen}
   onConsoleHeightCommit={persistConsoleHeightNow}
   activityRail={{
-    show: showActivityRail,
+    show: true,
     workspaces,
     activeContextId,
     chatHttpRailVisible,
-    panelWidthPx: workspaceLayout.activityRailWidthPx,
+    panelWidthPx: normalizeActivityRailWidthPx(snapshot.activityRailWidthPx),
+    notepadOpenTabCount,
+    notepadRecentTabs,
     onSelectContext: handleSelectContext,
     onAddWorkspace: handleAddWorkspace,
     onPanelWidthChange: handleActivityRailWidthChange,
     onRequestCloseWorkspace: handleOpenWorkspaceContextMenu,
     onReorderWorkspaces: (fromIndex, toIndex) => appState.reorderWorkspaces(fromIndex, toIndex),
+    onSelectNotepadTab: handleSelectNotepadTab,
   }}
   sessionsSidebar={{
     show: (Boolean(activeWorkspaceRoot) && opencodeEnabled) || isChatHttpActive,

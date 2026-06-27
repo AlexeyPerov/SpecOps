@@ -182,7 +182,6 @@ export interface AppSettingsState {
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
-  hideActivityRailWhenNotepadOnly: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   opencodeHealth: OpencodeHealthState;

@@ -99,6 +99,7 @@ function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
     theme: {} as AppDomainState["theme"],
     recentFiles: [],
     editor: {} as AppDomainState["editor"],
+    activityRailWidthPx: 48,
   };
 }
 

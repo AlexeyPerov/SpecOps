@@ -105,18 +105,18 @@
 <style>
   .project-tree-row {
     width: 100%;
-    min-height: 22px;
+    min-height: 19px;
     display: flex;
     align-items: center;
-    gap: var(--space-6);
+    gap: var(--space-3);
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--color-text-primary);
     font: inherit;
     text-align: left;
-    padding: 0 var(--space-6);
-    padding-left: calc(var(--space-6) + var(--node-depth) * var(--tree-indent));
+    padding: 0 var(--space-2);
+    padding-left: calc(var(--space-2) + var(--node-depth) * var(--tree-indent));
   }
 
   .project-tree-row:hover {

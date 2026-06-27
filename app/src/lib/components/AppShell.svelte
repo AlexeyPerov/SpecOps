@@ -42,11 +42,14 @@
     activeContextId: ContextId;
     chatHttpRailVisible: boolean;
     panelWidthPx: number;
+    notepadOpenTabCount: number;
+    notepadRecentTabs: { tabId: string; label: string }[];
     onSelectContext: (contextId: ContextId) => void;
     onAddWorkspace: () => void;
     onPanelWidthChange: (width: number) => void;
     onRequestCloseWorkspace: (workspaceId: ContextId, x: number, y: number) => void;
     onReorderWorkspaces: (fromIndex: number, toIndex: number) => void;
+    onSelectNotepadTab: (tabId: string) => void;
   }
 
   export interface AppShellSessionsSidebarProps {
@@ -311,11 +314,14 @@
         activeContextId={activityRail.activeContextId}
         showChatHttp={activityRail.chatHttpRailVisible}
         panelWidthPx={activityRail.panelWidthPx}
+        notepadOpenTabCount={activityRail.notepadOpenTabCount}
+        notepadRecentTabs={activityRail.notepadRecentTabs}
         onSelectContext={activityRail.onSelectContext}
         onAddWorkspace={activityRail.onAddWorkspace}
         onPanelWidthChange={activityRail.onPanelWidthChange}
         onRequestCloseWorkspace={activityRail.onRequestCloseWorkspace}
         onReorderWorkspaces={activityRail.onReorderWorkspaces}
+        onSelectNotepadTab={activityRail.onSelectNotepadTab}
       />
     {/if}
     {#if sessionsSidebar.show}

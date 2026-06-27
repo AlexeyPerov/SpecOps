@@ -5,6 +5,14 @@ export const MIN_PANEL_WIDTH_PX = 180;
 export const MAX_PANEL_WIDTH_PX = 520;
 
 /**
+ * Default project panel width. Slightly wider than the sessions sidebar so the
+ * file/folder tree has more room on fresh installs (~15% over the sidebar
+ * default). Independent of {@link DEFAULT_PANEL_WIDTH_PX} so the sidebar can
+ * keep its own default.
+ */
+export const DEFAULT_PROJECT_PANEL_WIDTH_PX = Math.round(DEFAULT_PANEL_WIDTH_PX * 1.15);
+
+/**
  * Activity rail (workspaces sidebar) width bounds. The rail starts in the
  * compact 48px letter form and can be dragged out to the same max as the
  * project panel. Below the expanded threshold it renders compact letter
@@ -13,7 +21,12 @@ export const MAX_PANEL_WIDTH_PX = 520;
 export const DEFAULT_ACTIVITY_RAIL_WIDTH_PX = 48;
 export const MIN_ACTIVITY_RAIL_WIDTH_PX = 48;
 export const MAX_ACTIVITY_RAIL_WIDTH_PX = MAX_PANEL_WIDTH_PX;
-export const ACTIVITY_RAIL_EXPANDED_THRESHOLD_PX = Math.round(MAX_ACTIVITY_RAIL_WIDTH_PX / 2);
+/**
+ * The rail switches from the compact letter form to expanded info cards at
+ * ~20% of its max width. Kept deliberately low so the expanded state appears
+ * early as the user drags the rail out.
+ */
+export const ACTIVITY_RAIL_EXPANDED_THRESHOLD_PX = Math.round(MAX_ACTIVITY_RAIL_WIDTH_PX * 0.2);
 
 /** Clamps panel width for resize and persisted workspace layout. */
 export function normalizePanelWidthPx(value: unknown): number {
@@ -38,11 +51,10 @@ export function isActivityRailExpanded(width: number): boolean {
 
 export function defaultWorkspaceLayout(): WorkspaceLayoutState {
   return {
-    projectPanelWidthPx: DEFAULT_PANEL_WIDTH_PX,
+    projectPanelWidthPx: DEFAULT_PROJECT_PANEL_WIDTH_PX,
     sessionsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
     projectPanelCollapsed: false,
     sessionsSidebarCollapsed: false,
-    activityRailWidthPx: DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
   };
 }
 
@@ -70,9 +82,5 @@ export function normalizeWorkspaceLayout(
       typeof layout.sessionsSidebarCollapsed === "boolean"
         ? layout.sessionsSidebarCollapsed
         : defaults.sessionsSidebarCollapsed,
-    activityRailWidthPx:
-      layout.activityRailWidthPx !== undefined
-        ? normalizeActivityRailWidthPx(layout.activityRailWidthPx)
-        : defaults.activityRailWidthPx,
   };
 }

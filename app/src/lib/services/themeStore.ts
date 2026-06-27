@@ -50,13 +50,17 @@ const SETTINGS_FILE_NAME = "settings.json";
 const DEFAULT_DARK_BUILTIN: ActiveThemeRef = { kind: "builtin", id: "dark-amber" };
 const DEFAULT_LIGHT_BUILTIN: ActiveThemeRef = { kind: "builtin", id: "light-blue" };
 const DEFAULT_MANUAL_BUILTIN: ActiveThemeRef = { kind: "builtin", id: "dark-amber" };
+// Fresh-install defaults pick the curated `turnip` preset for the dark and
+// manual slots (turnip is a dark theme), so a brand-new user lands on it.
+const DEFAULT_DARK: ActiveThemeRef = { kind: "preset", id: "turnip" };
+const DEFAULT_MANUAL: ActiveThemeRef = { kind: "preset", id: "turnip" };
 
 export const defaultThemeFile: ThemeFileV2 = {
   version: 2,
   mode: "auto",
-  darkTheme: DEFAULT_DARK_BUILTIN,
+  darkTheme: DEFAULT_DARK,
   lightTheme: DEFAULT_LIGHT_BUILTIN,
-  manualTheme: DEFAULT_MANUAL_BUILTIN,
+  manualTheme: DEFAULT_MANUAL,
   customThemes: [],
 };
 

@@ -163,7 +163,7 @@
 <style>
   .project-tree-view {
     min-height: 0;
-    padding: var(--space-6);
+    padding: var(--space-2);
   }
 
   .project-tree-view[data-dragging="true"] {

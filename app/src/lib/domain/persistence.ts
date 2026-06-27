@@ -22,6 +22,12 @@ export interface AppDomainState {
     goToOpen: boolean;
     previewMode: "editor" | "markdown" | "diff";
   };
+  /**
+   * Activity-rail (workspaces sidebar) width, independent of the selected
+   * mode/workspace. Per-window: restored from / persisted to the window
+   * session snapshot, so each window remembers its own rail width.
+   */
+  activityRailWidthPx: number;
 }
 
 export interface WindowSessionSnapshot {
@@ -33,6 +39,11 @@ export interface WindowSessionSnapshot {
   chatCloud?: ContextSnapshot;
   workspaces: WorkspaceEntry[];
   editorPreferences: Pick<AppDomainState["editor"], "zoomPercent" | "wrapLines">;
+  /**
+   * Activity-rail (workspaces sidebar) width, independent of the selected
+   * mode/workspace. Per-window (each window remembers its own rail width).
+   */
+  activityRailWidthPx?: number;
 }
 
 export interface AppSessionSnapshot {

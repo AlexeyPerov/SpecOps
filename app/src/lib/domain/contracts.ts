@@ -55,6 +55,7 @@ export type {
   ProviderSettingsBase,
   ProviderSettingsById,
   SoundSettings,
+  ThemeMode,
 } from "./settings";
 export { NOTIFICATION_EVENT_IDS } from "./settings";
 export type {

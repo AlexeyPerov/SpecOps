@@ -204,7 +204,10 @@ describe("syncOpenFileRegistryForWindow", () => {
         decoratePlaintextSymbols: false,
       },
       theme: {
-        activeTheme: { kind: "builtin", id: "dark-amber" },
+        mode: "auto",
+        darkTheme: { kind: "builtin", id: "dark-amber" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
+        manualTheme: { kind: "builtin", id: "dark-amber" },
         customThemes: [],
       },
       recentFiles: [],
@@ -306,7 +309,10 @@ describe("syncOpenFileRegistryForWindow", () => {
         decoratePlaintextSymbols: false,
       },
       theme: {
-        activeTheme: { kind: "builtin", id: "dark-amber" },
+        mode: "auto",
+        darkTheme: { kind: "builtin", id: "dark-amber" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
+        manualTheme: { kind: "builtin", id: "dark-amber" },
         customThemes: [],
       },
       recentFiles: [],

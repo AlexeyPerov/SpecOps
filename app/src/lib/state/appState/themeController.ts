@@ -5,7 +5,7 @@ import {
   saveThemeFile,
   type ActiveThemeRef,
   type CustomThemeRecord,
-  type ThemeFileV1,
+  type ThemeFileV2,
 } from "../../services/themeStore";
 import type { BuiltinThemeId } from "../../styles/themeTokens";
 import {
@@ -20,9 +20,54 @@ import {
 } from "../../styles/themeTokens";
 
 export const defaultThemeState: AppThemeState = {
-  activeTheme: defaultThemeFile.activeTheme,
+  mode: defaultThemeFile.mode,
+  darkTheme: defaultThemeFile.darkTheme,
+  lightTheme: defaultThemeFile.lightTheme,
+  manualTheme: defaultThemeFile.manualTheme,
   customThemes: defaultThemeFile.customThemes,
 };
+
+/**
+ * Current OS color-scheme preference, mirrored from the
+ * `(prefers-color-scheme: dark)` media query via {@link subscribeSystemColorScheme}.
+ * Callers that don't have a fresh value handy (e.g. re-applying a preserved theme
+ * after a window-session swap) read this default via {@link applyThemeState}.
+ */
+let systemPrefersDark = readSystemPrefersDark();
+
+function readSystemPrefersDark(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return true;
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+export function getSystemPrefersDark(): boolean {
+  return systemPrefersDark;
+}
+
+export function setSystemPrefersDark(value: boolean): void {
+  systemPrefersDark = value;
+}
+
+/**
+ * Subscribes to the OS `prefers-color-scheme` media query. Returns an unlisten
+ * function. No-op (returns a no-op) when `matchMedia` is unavailable (jsdom,
+ * SSR). On each OS change `onChange` is invoked with the new preference; the
+ * caller re-resolves the active theme when `mode === "auto"`.
+ */
+export function subscribeSystemColorScheme(onChange: (prefersDark: boolean) => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {};
+  }
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const handler = (event: MediaQueryListEvent) => {
+    systemPrefersDark = event.matches;
+    onChange(event.matches);
+  };
+  mq.addEventListener("change", handler);
+  return () => mq.removeEventListener("change", handler);
+}
 
 let themeSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let themeSaveErrorNotifier: ((message: string) => void) | null = null;
@@ -37,16 +82,20 @@ export function resetThemePersistenceForTests(): void {
     clearTimeout(themeSaveTimer);
     themeSaveTimer = null;
   }
+  systemPrefersDark = readSystemPrefersDark();
 }
 
 export function setThemeSaveErrorNotifier(notifier: (message: string) => void): void {
   themeSaveErrorNotifier = notifier;
 }
 
-function toThemeFile(theme: AppThemeState): ThemeFileV1 {
+function toThemeFile(theme: AppThemeState): ThemeFileV2 {
   return {
-    version: 1,
-    activeTheme: theme.activeTheme,
+    version: 2,
+    mode: theme.mode,
+    darkTheme: theme.darkTheme,
+    lightTheme: theme.lightTheme,
+    manualTheme: theme.manualTheme,
     customThemes: theme.customThemes,
   };
 }
@@ -77,52 +126,65 @@ export function scheduleDebouncedThemeSave(theme: AppThemeState): void {
   }, THEME_TOKEN_SAVE_DEBOUNCE_MS);
 }
 
-function findCustomTheme(theme: AppThemeState, id: string): CustomThemeRecord | undefined {
-  return theme.customThemes.find((entry) => entry.id === id);
+function findCustomTheme(customThemes: CustomThemeRecord[], id: string): CustomThemeRecord | undefined {
+  return customThemes.find((entry) => entry.id === id);
 }
 
-function fallbackBuiltinForTheme(theme: AppThemeState): BuiltinThemeId {
-  if (theme.activeTheme.kind === "builtin") {
-    return theme.activeTheme.id;
+/** Resolves the dark/light classification of a single theme ref. */
+export function baseModeForRef(
+  ref: ActiveThemeRef,
+  customThemes: CustomThemeRecord[],
+): "dark" | "light" {
+  if (ref.kind === "builtin") {
+    return getBuiltinThemeMode(ref.id);
   }
-  if (theme.activeTheme.kind === "preset") {
-    const preset = IMPORTED_THEMES.find((p) => p.id === theme.activeTheme.id);
-    if (!preset) {
-      return DEFAULT_BUILTIN_THEME;
-    }
-    return preset.baseMode === "dark" ? "dark-amber" : "light-blue";
+  if (ref.kind === "preset") {
+    return IMPORTED_THEMES.find((p) => p.id === ref.id)?.baseMode ?? "dark";
   }
-  const custom = findCustomTheme(theme, theme.activeTheme.id);
-  if (!custom) {
-    return DEFAULT_BUILTIN_THEME;
-  }
-  return custom.baseMode === "dark" ? "dark-amber" : "light-blue";
+  return findCustomTheme(customThemes, ref.id)?.baseMode ?? "dark";
 }
 
-export function baseModeForTheme(theme: AppThemeState): "dark" | "light" {
-  if (theme.activeTheme.kind === "builtin") {
-    return getBuiltinThemeMode(theme.activeTheme.id);
+/**
+ * Resolves which theme ref is currently effective given the mode and OS color
+ * scheme. `manual` pins {@link AppThemeState.manualTheme}; `auto` follows
+ * {@link systemPrefersDark} and switches between dark/light slots.
+ */
+export function resolveActiveTheme(
+  theme: AppThemeState,
+  prefersDark: boolean = systemPrefersDark,
+): ActiveThemeRef {
+  if (theme.mode === "manual") {
+    return theme.manualTheme;
   }
-  if (theme.activeTheme.kind === "preset") {
-    const preset = IMPORTED_THEMES.find((p) => p.id === theme.activeTheme.id);
-    return preset?.baseMode ?? "dark";
-  }
-  return findCustomTheme(theme, theme.activeTheme.id)?.baseMode ?? "dark";
+  return prefersDark ? theme.darkTheme : theme.lightTheme;
 }
 
-export function applyThemeState(theme: AppThemeState): void {
+function fallbackBuiltinForRef(
+  ref: ActiveThemeRef,
+  customThemes: CustomThemeRecord[],
+): BuiltinThemeId {
+  if (ref.kind === "builtin") {
+    return ref.id;
+  }
+  const baseMode = baseModeForRef(ref, customThemes);
+  return baseMode === "dark" ? "dark-amber" : "light-blue";
+}
+
+export function applyThemeState(theme: AppThemeState, prefersDark?: boolean): void {
   if (typeof document === "undefined") {
     return;
   }
 
   const root = document.documentElement;
-  if (theme.activeTheme.kind === "builtin") {
-    applyBuiltinTheme(theme.activeTheme.id, root);
+  const ref = resolveActiveTheme(theme, prefersDark);
+
+  if (ref.kind === "builtin") {
+    applyBuiltinTheme(ref.id, root);
     return;
   }
 
-  if (theme.activeTheme.kind === "preset") {
-    const preset = IMPORTED_THEMES.find((p) => p.id === theme.activeTheme.id);
+  if (ref.kind === "preset") {
+    const preset = IMPORTED_THEMES.find((p) => p.id === ref.id);
     if (preset) {
       applyCustomTheme(preset, root);
       return;
@@ -132,7 +194,7 @@ export function applyThemeState(theme: AppThemeState): void {
     return;
   }
 
-  const custom = findCustomTheme(theme, theme.activeTheme.id);
+  const custom = findCustomTheme(theme.customThemes, ref.id);
   if (custom) {
     applyCustomTheme(custom, root);
     return;
@@ -157,7 +219,8 @@ function nextCustomThemeName(customThemes: CustomThemeRecord[]): string {
 }
 
 function snapshotCurrentThemeTokens(theme: AppThemeState): ThemeTokens {
-  const fallbackBuiltin = fallbackBuiltinForTheme(theme);
+  const ref = resolveActiveTheme(theme);
+  const fallbackBuiltin = fallbackBuiltinForRef(ref, theme.customThemes);
   if (typeof document !== "undefined") {
     try {
       return snapshotThemeTokens(document.documentElement, fallbackBuiltin);
@@ -168,8 +231,14 @@ function snapshotCurrentThemeTokens(theme: AppThemeState): ThemeTokens {
   return resolveBuiltinTokens(fallbackBuiltin);
 }
 
+/**
+ * Snapshots the currently effective theme's tokens into a new editable custom
+ * theme, inherits its baseMode, makes it the active ref for that mode, and
+ * applies it to the DOM. Returns the next theme state.
+ */
 export function createCustomThemeFromCurrent(theme: AppThemeState): AppThemeState {
-  const baseMode = baseModeForTheme(theme);
+  const ref = resolveActiveTheme(theme);
+  const baseMode = baseModeForRef(ref, theme.customThemes);
   const tokens = snapshotCurrentThemeTokens(theme);
   const id = crypto.randomUUID();
   const custom: CustomThemeRecord = {
@@ -179,9 +248,12 @@ export function createCustomThemeFromCurrent(theme: AppThemeState): AppThemeStat
     tokens,
   };
 
+  const customRef: ActiveThemeRef = { kind: "custom", id };
   const nextTheme: AppThemeState = {
-    activeTheme: { kind: "custom", id },
+    ...theme,
     customThemes: [...theme.customThemes, custom],
+    darkTheme: baseMode === "dark" ? customRef : theme.darkTheme,
+    lightTheme: baseMode === "light" ? customRef : theme.lightTheme,
   };
   applyThemeState(nextTheme);
   return nextTheme;

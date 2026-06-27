@@ -1,11 +1,12 @@
 <script lang="ts">
   import { appState } from "../state/appState";
-  import type { CustomThemeRecord } from "../services/themeStore";
+  import type { ActiveThemeRef } from "../services/themeStore";
   import {
     BUILTIN_THEME_IDS,
     extractSolidColor,
     getBuiltinAccentHex,
     getBuiltinThemeLabel,
+    getBuiltinThemeMode,
     GRADIENT_CAPABLE_KEYS,
     THEME_TOKEN_GROUPS,
     THEME_TOKEN_LABELS,
@@ -15,13 +16,64 @@
 
   const snapshot = $derived($appState);
 
-  const activeCustom = $derived(
-    snapshot.theme.activeTheme.kind === "custom"
-      ? (snapshot.theme.customThemes.find(
-          (custom) => custom.id === snapshot.theme.activeTheme.id,
-        ) ?? null)
-      : null,
-  );
+  /** A unified theme entry for the light/dark pickers. */
+  interface ThemeOption {
+    ref: ActiveThemeRef;
+    name: string;
+    accent: string;
+    baseMode: "dark" | "light";
+    editable: boolean;
+  }
+
+  const THEME_MODES = [
+    { id: "manual", label: "Manual" },
+    { id: "auto", label: "Auto" },
+  ] as const;
+
+  // Build the option list once per render from builtins + presets + customs.
+  const allOptions = $derived<ThemeOption[]>([
+    ...BUILTIN_THEME_IDS.map<ThemeOption>((id) => ({
+      ref: { kind: "builtin", id },
+      name: getBuiltinThemeLabel(id),
+      accent: getBuiltinAccentHex(id),
+      baseMode: getBuiltinThemeMode(id),
+      editable: false,
+    })),
+    ...IMPORTED_THEMES.map<ThemeOption>((preset) => ({
+      ref: { kind: "preset", id: preset.id },
+      name: preset.name,
+      accent: preset.tokens["accent-color"],
+      baseMode: preset.baseMode,
+      editable: false,
+    })),
+    ...snapshot.theme.customThemes.map<ThemeOption>((custom) => ({
+      ref: { kind: "custom", id: custom.id },
+      name: custom.name,
+      accent: custom.tokens["accent-color"],
+      baseMode: custom.baseMode,
+      editable: true,
+    })),
+  ]);
+
+  const lightOptions = $derived(allOptions.filter((option) => option.baseMode === "light"));
+  const darkOptions = $derived(allOptions.filter((option) => option.baseMode === "dark"));
+
+  const activeCustom = $derived.by(() => {
+    // The editor targets whichever theme is currently rendered: manual mode pins
+    // manualTheme, auto mode follows the current OS pref between the two slots.
+    const effectiveRef =
+      snapshot.theme.mode === "manual"
+        ? snapshot.theme.manualTheme
+        : systemPrefersDark()
+          ? snapshot.theme.darkTheme
+          : snapshot.theme.lightTheme;
+    if (effectiveRef.kind !== "custom") {
+      return null;
+    }
+    return (
+      snapshot.theme.customThemes.find((custom) => custom.id === effectiveRef.id) ?? null
+    );
+  });
 
   let nameDraft = $state("");
 
@@ -29,20 +81,31 @@
     nameDraft = activeCustom?.name ?? "";
   });
 
-  function isBuiltinActive(id: string): boolean {
-    return snapshot.theme.activeTheme.kind === "builtin" && snapshot.theme.activeTheme.id === id;
+  function systemPrefersDark(): boolean {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return true;
+    }
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
   }
 
-  function isCustomActive(id: string): boolean {
-    return snapshot.theme.activeTheme.kind === "custom" && snapshot.theme.activeTheme.id === id;
+  function refsEqual(a: ActiveThemeRef, b: ActiveThemeRef): boolean {
+    return a.kind === b.kind && a.id === b.id;
   }
 
-  function isPresetActive(id: string): boolean {
-    return snapshot.theme.activeTheme.kind === "preset" && snapshot.theme.activeTheme.id === id;
+  function isLightActive(option: ThemeOption): boolean {
+    return refsEqual(option.ref, snapshot.theme.lightTheme);
   }
 
-  function customAccentSwatch(custom: CustomThemeRecord): string {
-    return custom.tokens["accent-color"];
+  function isDarkActive(option: ThemeOption): boolean {
+    return refsEqual(option.ref, snapshot.theme.darkTheme);
+  }
+
+  function isManualActive(option: ThemeOption): boolean {
+    return refsEqual(option.ref, snapshot.theme.manualTheme);
+  }
+
+  function isModeActive(mode: "auto" | "manual"): boolean {
+    return snapshot.theme.mode === mode;
   }
 
   function cssColorToHex(value: string): string | null {
@@ -114,70 +177,96 @@
         />
         Decorate plaintext symbols
       </label>
+
       <div class="settings-subsection">
-        <h4>Built-in themes</h4>
-        {#each BUILTIN_THEME_IDS as themeId}
-          <label class="settings-theme-row">
-            <input
-              type="radio"
-              name="theme"
-              value={themeId}
-              checked={isBuiltinActive(themeId)}
-              onchange={() => appState.setActiveTheme({ kind: "builtin", id: themeId })}
-            />
-            <span class="theme-swatch" style="background-color: {getBuiltinAccentHex(themeId)}"></span>
-            <span>{getBuiltinThemeLabel(themeId)}</span>
-          </label>
-        {/each}
-      </div>
-      {#if IMPORTED_THEMES.length > 0}
-        <div class="settings-subsection">
-          <h4>Presets</h4>
+        <h4>Mode</h4>
+        <div class="theme-mode-segmented" role="radiogroup" aria-label="Theme mode">
+          {#each THEME_MODES as mode (mode.id)}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={isModeActive(mode.id)}
+              class="theme-mode-option"
+              class:active={isModeActive(mode.id)}
+              onclick={() => appState.setThemeMode(mode.id)}
+            >
+              {mode.label}
+            </button>
+          {/each}
+        </div>
+        {#if snapshot.theme.mode === "auto"}
           <p class="settings-hint">
-            Read-only — create a custom theme from “+ New theme” to edit colors.
+            Auto follows your system appearance (dark/light). Pick the two themes to switch between below.
           </p>
-          {#each IMPORTED_THEMES as preset (preset.id)}
+        {/if}
+      </div>
+
+      {#if snapshot.theme.mode === "manual"}
+        <div class="settings-subsection">
+          <h4>Theme</h4>
+          {#each allOptions as option (option.ref.kind + ":" + option.ref.id)}
             <label class="settings-theme-row">
               <input
                 type="radio"
-                name="theme"
-                value={preset.id}
-                checked={isPresetActive(preset.id)}
-                onchange={() => appState.setActiveTheme({ kind: "preset", id: preset.id })}
+                name="manual-theme"
+                value={option.ref.id}
+                checked={isManualActive(option)}
+                onchange={() => appState.setManualTheme(option.ref)}
               />
-              <span
-                class="theme-swatch"
-                style="background-color: {preset.tokens["accent-color"]}"
-              ></span>
-              <span>{preset.name}</span>
-              <span class="theme-row-tag">{preset.baseMode}</span>
+              <span class="theme-swatch" style="background-color: {option.accent}"></span>
+              <span>{option.name}</span>
+              {#if option.editable}
+                <span class="theme-row-tag">custom</span>
+              {/if}
             </label>
           {/each}
         </div>
+      {:else}
+        <div class="settings-subsection">
+          <h4>Light theme</h4>
+        {#each lightOptions as option (option.ref.kind + ":" + option.ref.id)}
+          <label class="settings-theme-row">
+            <input
+              type="radio"
+              name="light-theme"
+              value={option.ref.id}
+              checked={isLightActive(option)}
+              onchange={() => appState.setLightTheme(option.ref)}
+            />
+            <span class="theme-swatch" style="background-color: {option.accent}"></span>
+            <span>{option.name}</span>
+            {#if option.editable}
+              <span class="theme-row-tag">custom</span>
+            {/if}
+          </label>
+        {/each}
+      </div>
+
+      <div class="settings-subsection">
+        <h4>Dark theme</h4>
+        {#each darkOptions as option (option.ref.kind + ":" + option.ref.id)}
+          <label class="settings-theme-row">
+            <input
+              type="radio"
+              name="dark-theme"
+              value={option.ref.id}
+              checked={isDarkActive(option)}
+              onchange={() => appState.setDarkTheme(option.ref)}
+            />
+            <span class="theme-swatch" style="background-color: {option.accent}"></span>
+            <span>{option.name}</span>
+            {#if option.editable}
+              <span class="theme-row-tag">custom</span>
+            {/if}
+          </label>
+        {/each}
+      </div>
       {/if}
+
       <button type="button" class="settings-button" onclick={() => appState.createCustomTheme()}>
         + New theme
       </button>
     </section>
-
-    {#if snapshot.theme.customThemes.length > 0}
-      <section class="settings-section">
-        <h3>Your themes</h3>
-        {#each snapshot.theme.customThemes as custom (custom.id)}
-          <label class="settings-theme-row">
-            <input
-              type="radio"
-              name="theme"
-              value={custom.id}
-              checked={isCustomActive(custom.id)}
-              onchange={() => appState.setActiveTheme({ kind: "custom", id: custom.id })}
-            />
-            <span class="theme-swatch" style="background-color: {customAccentSwatch(custom)}"></span>
-            <span>{custom.name}</span>
-          </label>
-        {/each}
-      </section>
-    {/if}
 
     {#if activeCustom}
       <section class="settings-section">
@@ -280,5 +369,36 @@
     min-height: 0;
     overflow-y: auto;
     padding: var(--space-8) var(--space-12) var(--space-12);
+  }
+
+  .theme-mode-segmented {
+    display: inline-flex;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-surface-2);
+    border-radius: var(--radius-md, 6px);
+    border: 1px solid var(--color-border-subtle);
+  }
+
+  .theme-mode-option {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    padding: var(--space-4) var(--space-12);
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+  }
+
+  .theme-mode-option.active {
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  }
+
+  .theme-mode-option:hover:not(.active) {
+    color: var(--color-text-primary);
   }
 </style>

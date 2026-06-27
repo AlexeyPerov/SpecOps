@@ -7,7 +7,7 @@ import {
   migrateFromLegacySettings,
   normalizeThemeTokens,
   saveThemeFile,
-  type ThemeFileV1,
+  type ThemeFileV2,
 } from "./themeStore";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
@@ -112,30 +112,38 @@ describe("loadThemeFile", () => {
     expect(writeTextFileMock).not.toHaveBeenCalled();
   });
 
-  it("migrates from settings.json when theme.json is missing", async () => {
+  it("seeds from settings.json (dark) when theme.json is missing", async () => {
     themeReadOrder(null, JSON.stringify({ theme: "dark-violet", wrapLines: true, zoomPercent: 100 }));
     await expect(loadThemeFile()).resolves.toEqual({
-      version: 1,
-      activeTheme: { kind: "builtin", id: "dark-amber" },
+      version: 2,
+      mode: "auto",
+      darkTheme: { kind: "builtin", id: "dark-amber" },
+      lightTheme: { kind: "builtin", id: "light-blue" },
+      manualTheme: { kind: "builtin", id: "dark-amber" },
       customThemes: [],
     });
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
     const [path, content] = writeTextFileMock.mock.calls[0];
     expect(path).toBe(THEME_PATH);
     expect(JSON.parse(content as string)).toEqual({
-      version: 1,
-      activeTheme: { kind: "builtin", id: "dark-amber" },
+      version: 2,
+      mode: "auto",
+      darkTheme: { kind: "builtin", id: "dark-amber" },
+      lightTheme: { kind: "builtin", id: "light-blue" },
+      manualTheme: { kind: "builtin", id: "dark-amber" },
       customThemes: [],
     });
   });
 
-  it("migrates legacy themeMode/accent from settings.json", async () => {
+  it("seeds from settings.json (light) into the light slot", async () => {
     themeReadOrder(
       null,
       JSON.stringify({ themeMode: "light", accent: "green", wrapLines: true, zoomPercent: 100 }),
     );
     const result = await loadThemeFile();
-    expect(result.activeTheme).toEqual({ kind: "builtin", id: "light-blue" });
+    expect(result.lightTheme).toEqual({ kind: "builtin", id: "light-blue" });
+    expect(result.darkTheme).toEqual({ kind: "builtin", id: "dark-amber" });
+    expect(result.mode).toBe("auto");
   });
 
   it("returns defaults for invalid theme.json", async () => {
@@ -143,16 +151,68 @@ describe("loadThemeFile", () => {
     await expect(loadThemeFile()).resolves.toEqual(defaultThemeFile);
   });
 
-  it("returns defaults for unsupported version", async () => {
-    themeReadOrder(JSON.stringify({ version: 2, activeTheme: { kind: "builtin", id: "dark-amber" } }));
+  it("returns defaults for unsupported version (3)", async () => {
+    themeReadOrder(JSON.stringify({ version: 3, mode: "auto" }));
     await expect(loadThemeFile()).resolves.toEqual(defaultThemeFile);
+  });
+
+  it("defensively seeds a legacy V1 file into V2 (dark active → dark slot)", async () => {
+    themeReadOrder(
+      JSON.stringify({
+        version: 1,
+        activeTheme: { kind: "builtin", id: "dark-amber" },
+        customThemes: [],
+      }),
+    );
+    const result = await loadThemeFile();
+    expect(result.version).toBe(2);
+    expect(result.mode).toBe("auto");
+    expect(result.darkTheme).toEqual({ kind: "builtin", id: "dark-amber" });
+    expect(result.lightTheme).toEqual({ kind: "builtin", id: "light-blue" });
+  });
+
+  it("defensively seeds a legacy V1 file into V2 (light active → light slot)", async () => {
+    themeReadOrder(
+      JSON.stringify({
+        version: 1,
+        activeTheme: { kind: "builtin", id: "light-blue" },
+        customThemes: [],
+      }),
+    );
+    const result = await loadThemeFile();
+    expect(result.darkTheme).toEqual({ kind: "builtin", id: "dark-amber" });
+    expect(result.lightTheme).toEqual({ kind: "builtin", id: "light-blue" });
+  });
+
+  it("loads a V2 file verbatim", async () => {
+    themeReadOrder(
+      JSON.stringify({
+        version: 2,
+        mode: "manual",
+        darkTheme: { kind: "preset", id: "darkside" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
+        manualTheme: { kind: "preset", id: "github" },
+        customThemes: [],
+      }),
+    );
+    const result = await loadThemeFile();
+    expect(result).toEqual({
+      version: 2,
+      mode: "manual",
+      darkTheme: { kind: "preset", id: "darkside" },
+      lightTheme: { kind: "builtin", id: "light-blue" },
+      manualTheme: { kind: "preset", id: "github" },
+      customThemes: [],
+    });
   });
 
   it("loads and normalizes custom themes with partial tokens", async () => {
     themeReadOrder(
       JSON.stringify({
-        version: 1,
-        activeTheme: { kind: "builtin", id: "dark-amber" },
+        version: 2,
+        mode: "auto",
+        darkTheme: { kind: "builtin", id: "dark-amber" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
         customThemes: [
           {
             id: "custom-1",
@@ -171,40 +231,46 @@ describe("loadThemeFile", () => {
     }
   });
 
-  it("falls back active custom ref when custom theme is missing", async () => {
+  it("falls back dark slot to default when custom ref is missing", async () => {
     themeReadOrder(
       JSON.stringify({
-        version: 1,
-        activeTheme: { kind: "custom", id: "missing-id" },
+        version: 2,
+        mode: "dark",
+        darkTheme: { kind: "custom", id: "missing-id" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
         customThemes: [],
       }),
     );
     const result = await loadThemeFile();
-    expect(result.activeTheme).toEqual(defaultThemeFile.activeTheme);
+    expect(result.darkTheme).toEqual({ kind: "builtin", id: "dark-amber" });
   });
 
-  it("round-trips a known preset activeTheme ref through load", async () => {
+  it("round-trips a known preset darkTheme ref through load", async () => {
     themeReadOrder(
       JSON.stringify({
-        version: 1,
-        activeTheme: { kind: "preset", id: "darkside" },
+        version: 2,
+        mode: "auto",
+        darkTheme: { kind: "preset", id: "darkside" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
         customThemes: [],
       }),
     );
     const result = await loadThemeFile();
-    expect(result.activeTheme).toEqual({ kind: "preset", id: "darkside" });
+    expect(result.darkTheme).toEqual({ kind: "preset", id: "darkside" });
   });
 
   it("falls back to default builtin when preset id is unknown (future-version safety)", async () => {
     themeReadOrder(
       JSON.stringify({
-        version: 1,
-        activeTheme: { kind: "preset", id: "removed-in-future" },
+        version: 2,
+        mode: "auto",
+        darkTheme: { kind: "preset", id: "removed-in-future" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
         customThemes: [],
       }),
     );
     const result = await loadThemeFile();
-    expect(result.activeTheme).toEqual(defaultThemeFile.activeTheme);
+    expect(result.darkTheme).toEqual({ kind: "builtin", id: "dark-amber" });
   });
 });
 
@@ -216,9 +282,12 @@ describe("saveThemeFile", () => {
   });
 
   it("writes normalized theme.json with all token keys per custom theme", async () => {
-    const input: ThemeFileV1 = {
-      version: 1,
-      activeTheme: { kind: "builtin", id: "light-blue" },
+    const input: ThemeFileV2 = {
+      version: 2,
+      mode: "manual",
+      darkTheme: { kind: "builtin", id: "dark-amber" },
+      lightTheme: { kind: "builtin", id: "light-blue" },
+      manualTheme: { kind: "builtin", id: "light-blue" },
       customThemes: [
         {
           id: "c1",
@@ -234,9 +303,9 @@ describe("saveThemeFile", () => {
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
     const [path, content] = writeTextFileMock.mock.calls[0];
     expect(path).toBe(THEME_PATH);
-    const saved = JSON.parse(content as string) as ThemeFileV1;
-    expect(saved.version).toBe(1);
-    expect(saved.activeTheme).toEqual({ kind: "builtin", id: "light-blue" });
+    const saved = JSON.parse(content as string) as ThemeFileV2;
+    expect(saved.version).toBe(2);
+    expect(saved.lightTheme).toEqual({ kind: "builtin", id: "light-blue" });
     expect(saved.customThemes[0].tokens["accent-color"]).toBe("#aabbcc");
     for (const key of THEME_TOKEN_KEYS) {
       expect(saved.customThemes[0].tokens[key]).toBeTruthy();
@@ -259,13 +328,19 @@ describe("saveThemeFile", () => {
     });
 
     await saveThemeFile({
-      version: 1,
-      activeTheme: { kind: "builtin", id: "dark-amber" },
+      version: 2,
+      mode: "auto",
+      darkTheme: { kind: "builtin", id: "dark-amber" },
+      lightTheme: { kind: "builtin", id: "light-blue" },
+      manualTheme: { kind: "builtin", id: "dark-amber" },
       customThemes: [],
     });
     await expect(loadThemeFile()).resolves.toEqual({
-      version: 1,
-      activeTheme: { kind: "builtin", id: "dark-amber" },
+      version: 2,
+      mode: "auto",
+      darkTheme: { kind: "builtin", id: "dark-amber" },
+      lightTheme: { kind: "builtin", id: "light-blue" },
+      manualTheme: { kind: "builtin", id: "dark-amber" },
       customThemes: [],
     });
   });

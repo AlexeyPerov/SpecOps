@@ -308,16 +308,17 @@ describe("app shell toggle commands", () => {
     expect(notify).toHaveBeenCalledWith("Failed to open new window.");
   });
 
-  it("view.cycleTheme toggles the active builtin theme", () => {
+  it("view.cycleTheme advances to the next theme and switches to manual mode", () => {
     const { context } = createCommandContext();
-    appState.setTheme("dark-amber");
+    appState.setThemeMode("manual");
+    appState.setManualTheme({ kind: "builtin", id: "dark-amber" });
 
     dispatchCommand("view.cycleTheme", context);
 
-    expect(appState.getSnapshot().theme.activeTheme).toEqual({
-      kind: "builtin",
-      id: "light-blue",
-    });
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.mode).toBe("manual");
+    // dark-amber is builtin index 0; the next theme is light-blue (builtin index 1).
+    expect(snapshot.theme.manualTheme).toEqual({ kind: "builtin", id: "light-blue" });
   });
 
   it("app.toggleFindReplace toggles find/replace panel state", () => {

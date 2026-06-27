@@ -119,7 +119,7 @@ Implementation is split into colocated modules under `app/src/lib/state/appState
 | `contextHelpers.ts` | Context snapshots, workspace lookup, document path lookup, ID counters |
 | `documentHelpers.ts` | Build/normalize document helpers |
 | `tabHelpers.ts` | Tab reorder and bulk-close helpers |
-| `themeController.ts` | Theme persistence, DOM application, custom-theme transforms |
+| `themeController.ts` | Theme persistence, DOM application, custom-theme transforms, system color-scheme (`prefers-color-scheme`) subscription for auto mode |
 | `settingsSlice.ts` | Settings composer; composes `providerSettingsSlice`, `chatModesSettingsSlice`, `logSettingsSlice` |
 | `documentTabsSlice.ts` | Tab lifecycle; composes `documentContentSlice`, `tabTransferSlice` |
 | `workspaceContextsSlice.ts` | Context switch, workspace open/close, session restore/snapshot |
@@ -173,7 +173,7 @@ All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`)
 | `settings.json` | Editor, external files, `providerSettings` (HTTP + Debug), `providerModelCatalogs` (not API keys) |
 | `provider-secrets.json` | Provider API keys keyed by `ChatProviderId` (`providerSecretsStore.ts`: `loadProviderApiKey` / `saveProviderApiKey`) |
 | `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
-| `theme.json` | Active theme (builtin/preset/custom ref) and custom themes. Read-only preset catalog (daylerees imports) ships in-app, not on disk |
+| `theme.json` | Theme mode (`auto`/`manual`) plus separate dark/light theme refs (used by `auto`), a single `manualTheme` ref (pinned by `manual`), and custom themes (v2 schema). `auto` follows the OS `prefers-color-scheme` media query, switching between the dark and light theme. Legacy v1 files (single `activeTheme`) and the pre-theme.json `settings.json` `theme` value are defensively re-seeded into the matching dark/light slot on load (not migrated). Read-only preset catalog (daylerees imports) ships in-app, not on disk |
 | `chat/{hash}/` | Per-workspace session index (`index.json`, `sessions` envelope) and per-session thread JSON (`{sessionId}.json`). M16 renamed the on-disk envelope key from `agents` → `sessions` and the in-memory id from `agentId` → `sessionId`; pre-M16 `chat/{hash}/` folders are abandoned (no migration — pre-release). |
 
 Session and chat writes are debounced. The project **does not** add backward-compatible migrations for persisted data unless explicitly requested (see agent rules below).

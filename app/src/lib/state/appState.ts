@@ -1,11 +1,12 @@
 import { writable } from "svelte/store";
-import type { AppDomainState, AppThemeState, ExternalFilesSettings } from "../domain/contracts";
+import type { AppDomainState, AppThemeState, ExternalFilesSettings, ThemeMode } from "../domain/contracts";
 import { createFileTab } from "../domain/contracts";
 import { bumpRecentFile } from "../services/recentFiles";
 import { syncRecentFiles } from "../services/recentFilesSync";
 import { loadThemeFile } from "../services/themeStore";
+import { BUILTIN_THEME_IDS } from "../styles/themeTokens";
+import { IMPORTED_THEMES } from "../styles/importedThemes";
 import type { BuiltinThemeId } from "../styles/themeTokens";
-import { DEFAULT_BUILTIN_THEME } from "../styles/themeTokens";
 import {
   findWorkspaceByPath,
   NOTEPAD_CONTEXT_ID,
@@ -17,13 +18,16 @@ import { resetCommandBindingOverrides } from "../commands/commandBindingRuntime"
 import { createSettingsSlice, defaultSettings } from "./appState/settingsSlice";
 import {
   applyThemeState,
-  baseModeForTheme,
+  baseModeForRef,
   createCustomThemeFromCurrent,
   defaultThemeState,
+  getSystemPrefersDark,
   persistThemeImmediate,
   resetThemePersistenceForTests,
+  resolveActiveTheme,
   scheduleDebouncedThemeSave,
   setThemeSaveErrorNotifier,
+  setSystemPrefersDark,
   syncCustomThemeToken,
   type ActiveThemeRef,
   type ThemeTokenKey,
@@ -98,26 +102,90 @@ function createStateStore() {
   return {
     subscribe,
     getSnapshot,
-    setActiveTheme(ref: ActiveThemeRef) {
+    /**
+     * Sets the theme mode (dark/light/auto). `auto` follows the OS
+     * `prefers-color-scheme` media query.
+     */
+    setThemeMode(mode: ThemeMode) {
       update((state) => {
-        const theme: AppThemeState = { ...state.theme, activeTheme: ref };
+        const theme: AppThemeState = { ...state.theme, mode };
         applyThemeState(theme);
         persistThemeImmediate(theme);
         return { ...state, theme };
       });
     },
-    /** @deprecated Use `setActiveTheme({ kind: "builtin", id })`. */
+    /** Sets the theme applied when the effective mode resolves to dark. */
+    setDarkTheme(ref: ActiveThemeRef) {
+      update((state) => {
+        const theme: AppThemeState = { ...state.theme, darkTheme: ref };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    /** Sets the theme applied when the effective mode resolves to light. */
+    setLightTheme(ref: ActiveThemeRef) {
+      update((state) => {
+        const theme: AppThemeState = { ...state.theme, lightTheme: ref };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    /** Sets the theme pinned when mode=manual. */
+    setManualTheme(ref: ActiveThemeRef) {
+      update((state) => {
+        const theme: AppThemeState = { ...state.theme, manualTheme: ref };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    /**
+     * Convenience: assigns `ref` to whichever dark/light slot matches its
+     * baseMode. Used by the custom-theme editor and legacy callers that pick
+     * "the active theme" without knowing which slot they're targeting.
+     */
+    setActiveTheme(ref: ActiveThemeRef) {
+      update((state) => {
+        const baseMode = baseModeForRef(ref, state.theme.customThemes);
+        const theme: AppThemeState =
+          baseMode === "dark"
+            ? { ...state.theme, darkTheme: ref }
+            : { ...state.theme, lightTheme: ref };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    /** @deprecated Use `setDarkTheme`/`setLightTheme` or `setThemeMode`. */
     setTheme(id: BuiltinThemeId) {
       this.setActiveTheme({ kind: "builtin", id });
     },
+    /**
+     * Quick-toggle: cycles to the next available theme (builtins → presets →
+     * customs, in stable order) and switches to `manual` mode so the ⌘U
+     * shortcut immediately renders a different theme.
+     */
     cycleTheme() {
       update((state) => {
-        const currentMode = baseModeForTheme(state.theme);
-        const nextId: BuiltinThemeId = currentMode === "dark" ? "light-blue" : "dark-amber";
-        const theme: AppThemeState = {
-          ...state.theme,
-          activeTheme: { kind: "builtin", id: nextId },
-        };
+        const refs: ActiveThemeRef[] = [
+          ...BUILTIN_THEME_IDS.map<ActiveThemeRef>((id) => ({ kind: "builtin", id })),
+          ...IMPORTED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
+          ...state.theme.customThemes.map<ActiveThemeRef>((custom) => ({
+            kind: "custom",
+            id: custom.id,
+          })),
+        ];
+        if (refs.length === 0) {
+          return state;
+        }
+        const current = resolveActiveTheme(state.theme);
+        const currentIndex = refs.findIndex(
+          (ref) => ref.kind === current.kind && ref.id === current.id,
+        );
+        const nextRef = refs[(currentIndex + 1) % refs.length];
+        const theme: AppThemeState = { ...state.theme, mode: "manual", manualTheme: nextRef };
         applyThemeState(theme);
         persistThemeImmediate(theme);
         return { ...state, theme };
@@ -147,11 +215,18 @@ function createStateStore() {
     deleteCustomTheme(id: string) {
       update((state) => {
         const customThemes = state.theme.customThemes.filter((custom) => custom.id !== id);
-        const wasActive = state.theme.activeTheme.kind === "custom" && state.theme.activeTheme.id === id;
-        const activeTheme: ActiveThemeRef = wasActive
-          ? { kind: "builtin", id: DEFAULT_BUILTIN_THEME }
-          : state.theme.activeTheme;
-        const theme: AppThemeState = { activeTheme, customThemes };
+        // If the deleted custom was the active ref for either slot, fall that
+        // slot back to its builtin default so the rendered theme never dangles.
+        const fallbackFor = (ref: ActiveThemeRef): ActiveThemeRef =>
+          ref.kind === "custom" && ref.id === id
+            ? { kind: "builtin", id: baseModeForRef(ref, customThemes) === "light" ? "light-blue" : "dark-amber" }
+            : ref;
+        const theme: AppThemeState = {
+          ...state.theme,
+          darkTheme: fallbackFor(state.theme.darkTheme),
+          lightTheme: fallbackFor(state.theme.lightTheme),
+          customThemes,
+        };
         applyThemeState(theme);
         persistThemeImmediate(theme);
         return { ...state, theme };
@@ -165,17 +240,36 @@ function createStateStore() {
       update((state) => {
         const customThemes = syncCustomThemeToken(state.theme.customThemes, id, key, value);
         const theme: AppThemeState = { ...state.theme, customThemes };
-        if (state.theme.activeTheme.kind === "custom" && state.theme.activeTheme.id === id) {
+        // Re-apply only if the edited custom theme is currently effective.
+        const active = resolveActiveTheme(theme);
+        if (active.kind === "custom" && active.id === id) {
           applyThemeState(theme);
         }
         scheduleDebouncedThemeSave(theme);
         return { ...state, theme };
       });
     },
+    /**
+     * Called by the OS color-scheme listener when `prefers-color-scheme` changes.
+     * Only re-applies in auto mode (dark/light are pinned regardless of OS).
+     */
+    applySystemPrefersDark(prefersDark: boolean) {
+      setSystemPrefersDark(prefersDark);
+      update((state) => {
+        if (state.theme.mode !== "auto") {
+          return state;
+        }
+        applyThemeState(state.theme, prefersDark);
+        return state;
+      });
+    },
     async loadTheme(): Promise<void> {
       const file = await loadThemeFile();
       const theme: AppThemeState = {
-        activeTheme: file.activeTheme,
+        mode: file.mode,
+        darkTheme: file.darkTheme,
+        lightTheme: file.lightTheme,
+        manualTheme: file.manualTheme,
         customThemes: file.customThemes,
       };
       set({ ...getSnapshot(), theme });

@@ -65,8 +65,22 @@ export interface ProviderSettingsById {
 /** In-app and persisted bundle of provider-specific settings (excludes API keys). */
 export type AppProviderSettings = ProviderSettingsById;
 
+/**
+ * Theme mode. `auto` follows the OS `prefers-color-scheme` media query and
+ * switches between the user's chosen {@link AppThemeState.darkTheme} and
+ * {@link AppThemeState.lightTheme}. `manual` pins a single theme
+ * ({@link AppThemeState.manualTheme}) regardless of OS.
+ */
+export type ThemeMode = "auto" | "manual";
+
 export interface AppThemeState {
-  activeTheme: ActiveThemeRef;
+  mode: ThemeMode;
+  /** Applied when the effective mode resolves to dark (mode=auto with OS in dark). */
+  darkTheme: ActiveThemeRef;
+  /** Applied when the effective mode resolves to light (mode=auto with OS in light). */
+  lightTheme: ActiveThemeRef;
+  /** Applied when mode=manual, regardless of the OS color scheme. */
+  manualTheme: ActiveThemeRef;
   customThemes: CustomThemeRecord[];
 }
 

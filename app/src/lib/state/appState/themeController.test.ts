@@ -1,11 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IMPORTED_THEMES } from "../../styles/importedThemes";
 import {
   DEFAULT_BUILTIN_THEME,
   resolveBuiltinTokens,
 } from "../../styles/themeTokens";
 import type { AppThemeState } from "../../domain/contracts";
-import { applyThemeState, baseModeForTheme } from "./themeController";
+import {
+  applyThemeState,
+  baseModeForRef,
+  resolveActiveTheme,
+  setSystemPrefersDark,
+  subscribeSystemColorScheme,
+} from "./themeController";
+import type { ActiveThemeRef } from "../../services/themeStore";
 
 function createMockRoot(): HTMLElement {
   const properties = new Map<string, string>();
@@ -29,11 +36,52 @@ function createMockRoot(): HTMLElement {
 
 const REAL_DOCUMENT = globalThis.document;
 
+function buildTheme(overrides: Partial<AppThemeState> = {}): AppThemeState {
+  return {
+    mode: "auto",
+    darkTheme: { kind: "builtin", id: "dark-amber" },
+    lightTheme: { kind: "builtin", id: "light-blue" },
+    manualTheme: { kind: "builtin", id: "dark-amber" },
+    customThemes: [],
+    ...overrides,
+  };
+}
+
+describe("resolveActiveTheme", () => {
+  it("returns manualTheme in manual mode regardless of OS pref", () => {
+    const theme = buildTheme({ mode: "manual" });
+    expect(resolveActiveTheme(theme, false)).toEqual(theme.manualTheme);
+    expect(resolveActiveTheme(theme, true)).toEqual(theme.manualTheme);
+  });
+
+  it("returns darkTheme in auto mode when OS prefers dark", () => {
+    const theme = buildTheme({ mode: "auto" });
+    expect(resolveActiveTheme(theme, true)).toEqual(theme.darkTheme);
+  });
+
+  it("returns lightTheme in auto mode when OS prefers light", () => {
+    const theme = buildTheme({ mode: "auto" });
+    expect(resolveActiveTheme(theme, false)).toEqual(theme.lightTheme);
+  });
+
+  it("respects distinct dark/light preset refs in auto mode", () => {
+    const darkside = IMPORTED_THEMES.find((p) => p.id === "darkside");
+    const github = IMPORTED_THEMES.find((p) => p.id === "github");
+    if (!darkside || !github) {
+      return;
+    }
+    const theme = buildTheme({
+      mode: "auto",
+      darkTheme: { kind: "preset", id: "darkside" },
+      lightTheme: { kind: "preset", id: "github" },
+    });
+    expect(resolveActiveTheme(theme, true)).toEqual({ kind: "preset", id: "darkside" });
+    expect(resolveActiveTheme(theme, false)).toEqual({ kind: "preset", id: "github" });
+  });
+});
+
 describe("applyThemeState — preset kind", () => {
   beforeEach(() => {
-    // The real `document` is not available in the node test env; stand up a
-    // minimal stub so applyThemeState's `document.documentElement` resolves to
-    // a tracked mock root whose setProperty/removeProperty calls we assert on.
     const root = createMockRoot();
     globalThis.document = { documentElement: root } as unknown as Document;
   });
@@ -42,17 +90,17 @@ describe("applyThemeState — preset kind", () => {
     globalThis.document = REAL_DOCUMENT as Document;
   });
 
-  it("applies a known preset's tokens to the DOM", () => {
+  it("applies a known dark preset's tokens to the DOM when auto + OS dark", () => {
     const darkside = IMPORTED_THEMES.find((p) => p.id === "darkside");
     if (!darkside) {
-      // Skip if the curated set changes shape; the catalog test covers existence.
       return;
     }
-    const theme: AppThemeState = {
-      activeTheme: { kind: "preset", id: "darkside" },
-      customThemes: [],
-    };
-    applyThemeState(theme);
+    const theme = buildTheme({
+      mode: "auto",
+      darkTheme: { kind: "preset", id: "darkside" },
+    });
+    setSystemPrefersDark(true);
+    applyThemeState(theme, true);
 
     const root = document.documentElement;
     expect(root.dataset.theme).toBe(darkside.baseMode);
@@ -65,11 +113,11 @@ describe("applyThemeState — preset kind", () => {
   });
 
   it("falls back to the default builtin theme when a preset id is unknown", () => {
-    const theme: AppThemeState = {
-      activeTheme: { kind: "preset", id: "removed-in-a-future-version" },
-      customThemes: [],
-    };
-    applyThemeState(theme);
+    const theme = buildTheme({
+      mode: "manual",
+      manualTheme: { kind: "preset", id: "removed-in-a-future-version" },
+    });
+    applyThemeState(theme, true);
 
     const root = document.documentElement;
     const fallback = resolveBuiltinTokens(DEFAULT_BUILTIN_THEME);
@@ -79,24 +127,75 @@ describe("applyThemeState — preset kind", () => {
   });
 });
 
-describe("baseModeForTheme — preset kind", () => {
+describe("baseModeForRef", () => {
+  it("resolves builtin dark/light by id prefix", () => {
+    const customThemes: never[] = [];
+    expect(baseModeForRef({ kind: "builtin", id: "dark-amber" }, customThemes)).toBe("dark");
+    expect(baseModeForRef({ kind: "builtin", id: "light-blue" }, customThemes)).toBe("light");
+  });
+
   it("returns the preset's declared baseMode", () => {
     const github = IMPORTED_THEMES.find((p) => p.id === "github");
     if (!github) {
       return;
     }
-    const theme: AppThemeState = {
-      activeTheme: { kind: "preset", id: "github" },
-      customThemes: [],
-    };
-    expect(baseModeForTheme(theme)).toBe("light");
+    expect(baseModeForRef({ kind: "preset", id: "github" }, [])).toBe("light");
   });
 
   it("falls back to dark when a preset id is unknown", () => {
-    const theme: AppThemeState = {
-      activeTheme: { kind: "preset", id: "nope" },
-      customThemes: [],
+    expect(baseModeForRef({ kind: "preset", id: "nope" }, [])).toBe("dark");
+  });
+
+  it("returns a custom theme's baseMode", () => {
+    const ref: ActiveThemeRef = { kind: "custom", id: "c1" };
+    const customThemes = [
+      { id: "c1", name: "Mine", baseMode: "light" as const, tokens: {} as never },
+    ];
+    expect(baseModeForRef(ref, customThemes)).toBe("light");
+  });
+});
+
+describe("subscribeSystemColorScheme", () => {
+  it("returns a no-op unlisten when matchMedia is unavailable", () => {
+    const original = globalThis.window;
+    // @ts-expect-error — simulate a windowless env (jsdom without matchMedia)
+    delete globalThis.window;
+    const unlisten = subscribeSystemColorScheme(() => {});
+    expect(typeof unlisten).toBe("function");
+    expect(() => unlisten()).not.toThrow();
+    globalThis.window = original;
+  });
+
+  it("invokes the callback on change and stops after unlisten", () => {
+    const handlers: ((event: MediaQueryListEvent) => void)[] = [];
+    const removeSpy = vi.fn();
+    const addSpy = vi.fn((_: string, handler: (event: MediaQueryListEvent) => void) => {
+      handlers.push(handler);
+    });
+    const mq = {
+      matches: false,
+      addEventListener: addSpy,
+      removeEventListener: removeSpy,
     };
-    expect(baseModeForTheme(theme)).toBe("dark");
+    const originalMatchMedia = globalThis.window?.matchMedia;
+    (globalThis.window as unknown as { matchMedia: unknown }).matchMedia = () => mq;
+    try {
+      const onChange = vi.fn();
+      const unlisten = subscribeSystemColorScheme(onChange);
+      expect(addSpy).toHaveBeenCalledWith("change", expect.any(Function));
+
+      // Simulate OS switching to dark.
+      const handler = handlers[0]!;
+      handler({ matches: true } as MediaQueryListEvent);
+      expect(onChange).toHaveBeenCalledWith(true);
+
+      unlisten();
+      expect(removeSpy).toHaveBeenCalledWith("change", expect.any(Function));
+    } finally {
+      if (originalMatchMedia) {
+        (globalThis.window as unknown as { matchMedia: unknown }).matchMedia =
+          originalMatchMedia;
+      }
+    }
   });
 });

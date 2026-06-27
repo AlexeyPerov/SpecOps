@@ -8,9 +8,11 @@ import {
   normalizeLegacyThemeId,
   resolveBuiltinTokens,
   THEME_TOKEN_KEYS,
+  getBuiltinThemeMode,
   type ThemeTokenKey,
   type ThemeTokens,
 } from "../styles/themeTokens";
+import type { ThemeMode } from "../domain/settings";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
 export type { ThemeTokens } from "../styles/themeTokens";
@@ -27,18 +29,34 @@ export interface CustomThemeRecord {
   tokens: ThemeTokens;
 }
 
-export interface ThemeFileV1 {
-  version: 1;
-  activeTheme: ActiveThemeRef;
+/**
+ * Canonical on-disk theme file. `darkTheme`/`lightTheme` are the two themes
+ * `auto` mode switches between; `manualTheme` is the single theme pinned when
+ * `mode === "manual"`; `mode` decides which is effective (`auto` follows the
+ * OS `prefers-color-scheme` media query).
+ */
+export interface ThemeFileV2 {
+  version: 2;
+  mode: ThemeMode;
+  darkTheme: ActiveThemeRef;
+  lightTheme: ActiveThemeRef;
+  manualTheme: ActiveThemeRef;
   customThemes: CustomThemeRecord[];
 }
 
 const FILE_NAME = "theme.json";
 const SETTINGS_FILE_NAME = "settings.json";
 
-export const defaultThemeFile: ThemeFileV1 = {
-  version: 1,
-  activeTheme: { kind: "builtin", id: DEFAULT_BUILTIN_THEME },
+const DEFAULT_DARK_BUILTIN: ActiveThemeRef = { kind: "builtin", id: "dark-amber" };
+const DEFAULT_LIGHT_BUILTIN: ActiveThemeRef = { kind: "builtin", id: "light-blue" };
+const DEFAULT_MANUAL_BUILTIN: ActiveThemeRef = { kind: "builtin", id: "dark-amber" };
+
+export const defaultThemeFile: ThemeFileV2 = {
+  version: 2,
+  mode: "auto",
+  darkTheme: DEFAULT_DARK_BUILTIN,
+  lightTheme: DEFAULT_LIGHT_BUILTIN,
+  manualTheme: DEFAULT_MANUAL_BUILTIN,
   customThemes: [],
 };
 
@@ -117,9 +135,10 @@ function normalizeCustomThemeRecord(raw: unknown): CustomThemeRecord | null {
 function normalizeActiveTheme(
   raw: unknown,
   customThemes: CustomThemeRecord[],
+  fallback: ActiveThemeRef,
 ): ActiveThemeRef {
   if (!raw || typeof raw !== "object") {
-    return defaultThemeFile.activeTheme;
+    return fallback;
   }
   const ref = raw as Record<string, unknown>;
   if (ref.kind === "builtin" && typeof ref.id === "string" && isBuiltinThemeId(ref.id)) {
@@ -128,11 +147,11 @@ function normalizeActiveTheme(
   if (ref.kind === "preset" && typeof ref.id === "string") {
     const id = ref.id.trim();
     // A preset id may vanish in a future version (curated set changed); fall
-    // back to the default builtin rather than resolving to a missing theme.
+    // back to the provided default rather than resolving to a missing theme.
     if (IMPORTED_THEMES.some((preset) => preset.id === id)) {
       return { kind: "preset", id };
     }
-    return defaultThemeFile.activeTheme;
+    return fallback;
   }
   if (ref.kind === "custom" && typeof ref.id === "string") {
     const id = ref.id.trim();
@@ -140,15 +159,41 @@ function normalizeActiveTheme(
       return { kind: "custom", id };
     }
   }
-  return defaultThemeFile.activeTheme;
+  return fallback;
 }
 
-function parseThemeFile(raw: string): ThemeFileV1 | null {
+/**
+ * Resolves the dark/light classification of a theme ref, used only to seed the
+ * dark/light slot from a legacy `activeTheme` during defensive normalization
+ * (per AGENTS.md: no data migrations — old files simply re-seed defaults).
+ */
+function baseModeForRef(
+  ref: ActiveThemeRef,
+  customThemes: CustomThemeRecord[],
+): "dark" | "light" {
+  if (ref.kind === "builtin") {
+    return getBuiltinThemeMode(ref.id);
+  }
+  if (ref.kind === "preset") {
+    return IMPORTED_THEMES.find((p) => p.id === ref.id)?.baseMode ?? "dark";
+  }
+  return customThemes.find((theme) => theme.id === ref.id)?.baseMode ?? "dark";
+}
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === "auto" || value === "manual";
+}
+
+/**
+ * Parses a `theme.json` blob into a V2 file. Accepts both `version: 2`
+ * (canonical) and `version: 1` (legacy) payloads; V1 is defensively seeded to
+ * V2 by slotting the old `activeTheme` into the matching dark/light slot and
+ * defaulting `mode` to `auto`. Any other version returns `null` so the caller
+ * falls back to defaults.
+ */
+function parseThemeFile(raw: string): ThemeFileV2 | null {
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (parsed.version !== 1) {
-      return null;
-    }
 
     const customThemes: CustomThemeRecord[] = [];
     if (Array.isArray(parsed.customThemes)) {
@@ -162,9 +207,38 @@ function parseThemeFile(raw: string): ThemeFileV1 | null {
       }
     }
 
+    if (parsed.version === 1) {
+      // Legacy V1 → V2 defensive seeding (NOT a migration: the file is rewritten
+      // as V2 on the next save). The old single activeTheme becomes whichever
+      // dark/light slot it belongs to; the other slot stays at its builtin default.
+      const legacyActive = normalizeActiveTheme(parsed.activeTheme, customThemes, DEFAULT_DARK_BUILTIN);
+      const seededDark =
+        baseModeForRef(legacyActive, customThemes) === "dark" ? legacyActive : DEFAULT_DARK_BUILTIN;
+      const seededLight =
+        baseModeForRef(legacyActive, customThemes) === "light"
+          ? legacyActive
+          : DEFAULT_LIGHT_BUILTIN;
+      return {
+        version: 2,
+        mode: "auto",
+        darkTheme: seededDark,
+        lightTheme: seededLight,
+        manualTheme: DEFAULT_MANUAL_BUILTIN,
+        customThemes,
+      };
+    }
+
+    if (parsed.version !== 2) {
+      return null;
+    }
+
     return {
-      version: 1,
-      activeTheme: normalizeActiveTheme(parsed.activeTheme, customThemes),
+      version: 2,
+      mode: isThemeMode(parsed.mode) ? parsed.mode : "auto",
+      darkTheme: normalizeActiveTheme(parsed.darkTheme, customThemes, DEFAULT_DARK_BUILTIN),
+      lightTheme: normalizeActiveTheme(parsed.lightTheme, customThemes, DEFAULT_LIGHT_BUILTIN),
+      // Files written before manualTheme existed default to dark-amber (no migration).
+      manualTheme: normalizeActiveTheme(parsed.manualTheme, customThemes, DEFAULT_MANUAL_BUILTIN),
       customThemes,
     };
   } catch {
@@ -172,30 +246,30 @@ function parseThemeFile(raw: string): ThemeFileV1 | null {
   }
 }
 
-function normalizeThemeFile(data: ThemeFileV1): ThemeFileV1 {
+function normalizeThemeFile(data: ThemeFileV2): ThemeFileV2 {
   const customThemes = data.customThemes.map((custom) => ({
     ...custom,
     name: custom.name.trim(),
     tokens: normalizeThemeTokens(custom.baseMode, custom.tokens),
   }));
 
-  let activeTheme = data.activeTheme;
-  if (activeTheme.kind === "builtin" && !isBuiltinThemeId(activeTheme.id)) {
-    activeTheme = defaultThemeFile.activeTheme;
-  }
-  if (activeTheme.kind === "preset" && !IMPORTED_THEMES.some((p) => p.id === activeTheme.id)) {
-    activeTheme = defaultThemeFile.activeTheme;
-  }
-  if (
-    activeTheme.kind === "custom" &&
-    !customThemes.some((theme) => theme.id === activeTheme.id)
-  ) {
-    activeTheme = defaultThemeFile.activeTheme;
-  }
+  const validRef = (ref: ActiveThemeRef): boolean => {
+    if (ref.kind === "builtin") return isBuiltinThemeId(ref.id);
+    if (ref.kind === "preset") return IMPORTED_THEMES.some((p) => p.id === ref.id);
+    return customThemes.some((theme) => theme.id === ref.id);
+  };
+
+  const darkTheme = validRef(data.darkTheme) ? data.darkTheme : DEFAULT_DARK_BUILTIN;
+  const lightTheme = validRef(data.lightTheme) ? data.lightTheme : DEFAULT_LIGHT_BUILTIN;
+  const manualTheme = validRef(data.manualTheme) ? data.manualTheme : DEFAULT_MANUAL_BUILTIN;
+  const mode: ThemeMode = isThemeMode(data.mode) ? data.mode : "auto";
 
   return {
-    version: 1,
-    activeTheme,
+    version: 2,
+    mode,
+    darkTheme,
+    lightTheme,
+    manualTheme,
     customThemes,
   };
 }
@@ -220,15 +294,26 @@ async function readLegacySettingsTheme(): Promise<string | undefined> {
   return undefined;
 }
 
-async function tryMigrateFromSettings(): Promise<ThemeFileV1 | null> {
+/**
+ * Defensive seeding from a legacy `settings.json` (pre-theme.json era). Not a
+ * migration: maps the old `theme`/`themeMode`+`accent` to a builtin, slots it
+ * into dark or light, and writes a fresh V2 file.
+ */
+async function tryMigrateFromSettings(): Promise<ThemeFileV2 | null> {
   const legacyTheme = await readLegacySettingsTheme();
   const activeTheme = migrateFromLegacySettings(legacyTheme);
   if (activeTheme === null) {
     return null;
   }
-  const migrated: ThemeFileV1 = {
-    version: 1,
-    activeTheme,
+  const seededDark = baseModeForRef(activeTheme, []) === "dark" ? activeTheme : DEFAULT_DARK_BUILTIN;
+  const seededLight =
+    baseModeForRef(activeTheme, []) === "light" ? activeTheme : DEFAULT_LIGHT_BUILTIN;
+  const migrated: ThemeFileV2 = {
+    version: 2,
+    mode: "auto",
+    darkTheme: seededDark,
+    lightTheme: seededLight,
+    manualTheme: DEFAULT_MANUAL_BUILTIN,
     customThemes: [],
   };
   await saveThemeFile(migrated);
@@ -244,7 +329,7 @@ async function readThemeFileRaw(): Promise<string | null> {
   }
 }
 
-export async function loadThemeFile(): Promise<ThemeFileV1> {
+export async function loadThemeFile(): Promise<ThemeFileV2> {
   const raw = await readThemeFileRaw();
   if (raw !== null) {
     const parsed = parseThemeFile(raw);
@@ -262,10 +347,13 @@ export async function loadThemeFile(): Promise<ThemeFileV1> {
   return defaultThemeFile;
 }
 
-export async function saveThemeFile(data: ThemeFileV1): Promise<void> {
+export async function saveThemeFile(data: ThemeFileV2): Promise<void> {
   const normalized = normalizeThemeFile({
-    version: 1,
-    activeTheme: data.activeTheme,
+    version: 2,
+    mode: data.mode,
+    darkTheme: data.darkTheme,
+    lightTheme: data.lightTheme,
+    manualTheme: data.manualTheme,
     customThemes: data.customThemes,
   });
   const path = await getThemeFilePath();

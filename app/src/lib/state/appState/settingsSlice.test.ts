@@ -25,57 +25,55 @@ describe("appState settings and editor chrome", () => {
     saveThemeFileMock.mockClear();
   });
 
-  it("setActiveTheme updates the active built-in theme", () => {
-    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+  it("setDarkTheme/setLightTheme update the corresponding slot", () => {
+    expect(appState.getSnapshot().theme.darkTheme).toEqual({
       kind: "builtin",
       id: "dark-amber",
     });
-    appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
-    expect(appState.getSnapshot().theme.activeTheme).toEqual({
-      kind: "builtin",
-      id: "light-blue",
-    });
+    appState.setDarkTheme({ kind: "builtin", id: "dark-amber" });
+    appState.setLightTheme({ kind: "preset", id: "github" });
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.darkTheme).toEqual({ kind: "builtin", id: "dark-amber" });
+    expect(snapshot.theme.lightTheme).toEqual({ kind: "preset", id: "github" });
     expect(saveThemeFileMock).toHaveBeenCalled();
   });
 
-  it("cycleTheme toggles between the two built-in themes", () => {
-    expect(appState.getSnapshot().theme.activeTheme.id).toBe("dark-amber");
-    appState.cycleTheme();
-    expect(appState.getSnapshot().theme.activeTheme).toEqual({
-      kind: "builtin",
-      id: "light-blue",
-    });
-    appState.cycleTheme();
-    expect(appState.getSnapshot().theme.activeTheme).toEqual({
-      kind: "builtin",
-      id: "dark-amber",
-    });
+  it("setThemeMode updates the active mode", () => {
+    appState.setThemeMode("manual");
+    expect(appState.getSnapshot().theme.mode).toBe("manual");
+    appState.setThemeMode("auto");
+    expect(appState.getSnapshot().theme.mode).toBe("auto");
   });
 
-  it("cycleTheme from active custom switches to opposite built-in", () => {
-    appState.createCustomTheme();
-    expect(appState.getSnapshot().theme.activeTheme.kind).toBe("custom");
-    appState.cycleTheme();
-    expect(appState.getSnapshot().theme.activeTheme).toEqual({
-      kind: "builtin",
-      id: "light-blue",
-    });
-    appState.createCustomTheme();
+  it("setActiveTheme routes a dark ref to the dark slot and a light ref to the light slot", () => {
     appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
-    appState.createCustomTheme();
-    appState.cycleTheme();
-    expect(appState.getSnapshot().theme.activeTheme).toEqual({
+    expect(appState.getSnapshot().theme.lightTheme).toEqual({
+      kind: "builtin",
+      id: "light-blue",
+    });
+    appState.setActiveTheme({ kind: "builtin", id: "dark-amber" });
+    expect(appState.getSnapshot().theme.darkTheme).toEqual({
       kind: "builtin",
       id: "dark-amber",
     });
   });
 
-  it("createCustomTheme adds a custom theme and selects it", () => {
+  it("cycleTheme advances to the next theme and switches to manual mode", () => {
+    // Default state: auto mode + OS dark → effective ref is dark-amber (builtin index 0).
+    // The next theme in the builtin→preset→custom order is light-blue (builtin index 1).
+    appState.cycleTheme();
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.mode).toBe("manual");
+    expect(snapshot.theme.manualTheme).toEqual({ kind: "builtin", id: "light-blue" });
+  });
+
+  it("createCustomTheme adds a custom theme and assigns it to the matching slot", () => {
     appState.createCustomTheme();
     const snapshot = appState.getSnapshot();
-    expect(snapshot.theme.activeTheme.kind).toBe("custom");
     expect(snapshot.theme.customThemes).toHaveLength(1);
     expect(snapshot.theme.customThemes[0]?.name).toBe("Custom 1");
+    // Default mode is auto with OS dark, so a dark custom theme lands in darkTheme.
+    expect(snapshot.theme.darkTheme.kind).toBe("custom");
     expect(saveThemeFileMock).toHaveBeenCalled();
   });
 
@@ -88,13 +86,13 @@ describe("appState settings and editor chrome", () => {
     expect(appState.getSnapshot().theme.customThemes[0]?.name).toBe("My Theme");
   });
 
-  it("deleteCustomTheme falls back to dark-amber when active custom is deleted", () => {
+  it("deleteCustomTheme resets the affected slot to its builtin default", () => {
     appState.createCustomTheme();
     const customId = appState.getSnapshot().theme.customThemes[0]!.id;
     appState.deleteCustomTheme(customId);
     const snapshot = appState.getSnapshot();
     expect(snapshot.theme.customThemes).toHaveLength(0);
-    expect(snapshot.theme.activeTheme).toEqual({
+    expect(snapshot.theme.darkTheme).toEqual({
       kind: "builtin",
       id: "dark-amber",
     });
@@ -132,11 +130,11 @@ describe("appState settings and editor chrome", () => {
     const snapshot = appState.getSnapshot();
     expect(snapshot.editor.zoomPercent).toBe(130);
     expect(snapshot.editor.wrapLines).toBe(false);
-    expect(snapshot.theme.activeTheme.id).toBe("dark-amber");
+    expect(snapshot.theme.darkTheme.id).toBe("dark-amber");
   });
 
   it("applyWindowSession preserves the active theme", () => {
-    appState.setActiveTheme({ kind: "builtin", id: "light-blue" });
+    appState.setLightTheme({ kind: "preset", id: "github" });
     appState.applyWindowSession({
       activeContextId: "notepad",
       notepad: {
@@ -199,9 +197,9 @@ describe("appState settings and editor chrome", () => {
         wrapLines: true,
       },
     });
-    expect(appState.getSnapshot().theme.activeTheme).toEqual({
-      kind: "builtin",
-      id: "light-blue",
+    expect(appState.getSnapshot().theme.lightTheme).toEqual({
+      kind: "preset",
+      id: "github",
     });
   });
 

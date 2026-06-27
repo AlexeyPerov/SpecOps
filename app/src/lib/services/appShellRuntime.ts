@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
+import { subscribeSystemColorScheme } from "../state/appState/themeController";
 import { applyFontSettingsToDom } from "../state/appState/fontSettingsSlice";
 import { chatStore } from "../state/chatStore";
 import { initializeLogging, logDiagnostic } from "./logging";
@@ -213,6 +214,13 @@ export async function startAppShellRuntime(
     const connectionApiKeys = await loadConnectionApiKeys();
     setThemeSaveErrorNotifier(options.notify);
     await appState.loadTheme();
+    // Subscribe to OS color-scheme changes so `auto` theme mode re-resolves
+    // when the user flips their system light/dark preference. Only re-applies
+    // when mode === "auto" (dark/light are pinned); see applySystemPrefersDark.
+    const unlistenSystemColorScheme = subscribeSystemColorScheme((prefersDark) => {
+      appState.applySystemPrefersDark(prefersDark);
+    });
+    cleanupCallbacks.push(unlistenSystemColorScheme);
     if (persistedSettings) {
       appState.applyPersistedSettings({
         wrapLines: persistedSettings.wrapLines,

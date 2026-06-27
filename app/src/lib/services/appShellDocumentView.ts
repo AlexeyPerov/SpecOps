@@ -1,8 +1,8 @@
-import { marked } from "marked";
 import type { DocumentState } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { formatStatusPath } from "./appShellHelpers";
 import { DEFAULT_UNTITLED_TITLE } from "./untitledTitle";
+import { renderDocumentMarkdown } from "./markdownImageSrc";
 
 export interface AppShellDocumentView {
   isImageDocument: boolean;
@@ -30,7 +30,9 @@ export function deriveAppShellDocumentView(
   const previewFileSizeBytes = activeDocument?.diskFingerprint?.sizeBytes ?? 0;
   const isMarkdownDocument = isTextEditorDocument && activeDocument?.language === "markdown";
   const markdownHtml =
-    isMarkdownDocument && activeDocument ? (marked.parse(activeDocument.content) as string) : "";
+    isMarkdownDocument && activeDocument
+      ? renderDocumentMarkdown(activeDocument.content, activeDocument.filePath ?? null)
+      : "";
   const statusPath = formatStatusPath(
     activeDocument?.filePath ?? null,
     activeDocument?.title,

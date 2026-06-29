@@ -302,6 +302,20 @@
     editorPaneEl?: HTMLElement | null;
     workspaceContextMenuEl?: HTMLDivElement | null;
   } = $props();
+
+  // Phase 4: editorRunner is re-bound automatically by Phase 3's design —
+  // only the active pane mounts editor chrome (DocumentEditor /
+  // MarkdownEditorPane), so a focus change unmounts the old editor (clearing
+  // the runner) and the new one registers it on mount. This effect closes the
+  // one gap: when the active pane switches to a non-editor tab (session /
+  // settings / themes / image / binary / large-pending / empty), no editor
+  // mounts, so the runner would otherwise retain its last value and leak into
+  // commands. Clearing it here guarantees commands no-op for non-editor tabs.
+  $effect(() => {
+    if (!editor.isTextEditorDocument) {
+      editorRunner = null;
+    }
+  });
 </script>
 
 <main class="shell">

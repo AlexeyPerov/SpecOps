@@ -2,7 +2,10 @@
   import { onMount } from "svelte";
   import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
-  import { activeViewKind, isSessionEditorPaneActive } from "../lib/components/editorRouting";
+  import {
+    activeViewKindInActivePane,
+    isSessionTabActiveInActivePane,
+  } from "../lib/components/editorRouting";
   import { createAppShellAgentHandlers } from "../lib/services/appShellAgentHandlers";
   import { createAppShellLayoutHandlers } from "../lib/services/appShellLayoutHandlers";
   import {
@@ -299,12 +302,12 @@
   const sessionTabs = $derived(getSessionTabs(session));
   const sessionSelectedTabId = $derived(getSessionSelectedTabId(session));
   const activeTab = $derived(getSessionActiveTab(session));
-  const isSessionTabActive = $derived(
-    isSessionEditorPaneActive(sessionTabs, sessionSelectedTabId),
-  );
-  const activeViewTabKind = $derived(
-    activeViewKind(sessionTabs, sessionSelectedTabId),
-  );
+  // Phase 4: routing reads off the ACTIVE pane's selected tab (activePane →
+  // activeTab, Q15). The session-tab singleton (Q5) keeps the sidecar gating
+  // sound — the session tab lives in at most one pane, so checking the active
+  // pane's selection is sufficient.
+  const isSessionTabActive = $derived(isSessionTabActiveInActivePane(session));
+  const activeViewTabKind = $derived(activeViewKindInActivePane(session));
   const isSettingsViewActive = $derived(activeViewTabKind === "settings");
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
   const isViewTabActive = $derived(activeViewTabKind !== null);
@@ -334,10 +337,18 @@
       };
     });
   });
-  const activeDocument = $derived(
-    documents.find((documentState) => documentState.id === tabDocumentId(activeTab)) ??
-      documents[0],
-  );
+  // Phase 4: the active document is the active pane's selected FILE tab's
+  // document. Session / view tabs and empty panes resolve to `undefined`
+  // (previously this fell back to documents[0], which could surface an
+  // unrelated doc when the active pane showed a non-file tab — a latent
+  // footgun now that the split lets any pane show a session/view tab).
+  const activeDocument = $derived.by(() => {
+    const docId = activeTab ? tabDocumentId(activeTab) : null;
+    if (!docId) {
+      return undefined;
+    }
+    return documents.find((documentState) => documentState.id === docId);
+  });
   const documentView = $derived(deriveAppShellDocumentView(activeDocument));
   let largeFileConfirming = $state(false);
 

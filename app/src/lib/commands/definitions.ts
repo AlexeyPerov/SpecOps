@@ -223,4 +223,58 @@ export const commandDefinitions: CommandDefinition[] = [
     menuPath: "View/Reset Zoom",
     binding: { mac: "Cmd+0", windows: "Ctrl+0" },
   },
+  {
+    id: "view.layoutSingle",
+    label: "Layout: Single",
+    menuPath: "View/Layout/Single",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "view.layoutCols2",
+    label: "Layout: 2 Columns",
+    menuPath: "View/Layout/2 Columns",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "view.layoutRows2",
+    label: "Layout: 2 Rows",
+    menuPath: "View/Layout/2 Rows",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "view.layoutRows3",
+    label: "Layout: 3 Rows",
+    menuPath: "View/Layout/3 Rows",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "view.layoutGrid",
+    label: "Layout: Grid",
+    menuPath: "View/Layout/Grid",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
+    id: "view.focusPane1",
+    label: "Focus Pane 1",
+    menuPath: "Hidden/Focus Pane 1",
+    binding: { mac: "Cmd+Alt+1", windows: "Ctrl+Alt+1" },
+  },
+  {
+    id: "view.focusPane2",
+    label: "Focus Pane 2",
+    menuPath: "Hidden/Focus Pane 2",
+    binding: { mac: "Cmd+Alt+2", windows: "Ctrl+Alt+2" },
+  },
+  {
+    id: "view.focusPane3",
+    label: "Focus Pane 3",
+    menuPath: "Hidden/Focus Pane 3",
+    binding: { mac: "Cmd+Alt+3", windows: "Ctrl+Alt+3" },
+  },
+  {
+    id: "view.focusPane4",
+    label: "Focus Pane 4",
+    menuPath: "Hidden/Focus Pane 4",
+    binding: { mac: "Cmd+Alt+4", windows: "Ctrl+Alt+4" },
+  },
 ];

@@ -15,6 +15,7 @@ import {
 } from "./appState/contextHelpers";
 import { buildEmptyUnsavedDocument } from "./appState/documentHelpers";
 import { createDocumentTabsSlice } from "./appState/documentTabsSlice";
+import { createEditorLayoutSlice } from "./appState/editorLayoutSlice";
 import { resetCommandBindingOverrides } from "../commands/commandBindingRuntime";
 import { createSettingsSlice, defaultSettings } from "./appState/settingsSlice";
 import {
@@ -92,6 +93,7 @@ function createStateStore() {
 
   const settingsSlice = createSettingsSlice(update);
   const documentTabsSlice = createDocumentTabsSlice({ update, getSnapshot });
+  const editorLayoutSlice = createEditorLayoutSlice({ update });
   const workspaceContextsSlice = createWorkspaceContextsSlice({
     update,
     getSnapshot,
@@ -399,6 +401,7 @@ function createStateStore() {
     },
     ...workspaceContextsSlice,
     ...documentTabsSlice,
+    ...editorLayoutSlice,
     ...settingsSlice,
   };
 }

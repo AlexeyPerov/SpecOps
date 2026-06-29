@@ -15,6 +15,7 @@
   import QuestionPrompt from "./QuestionPrompt.svelte";
   import FindReplacePanel from "./FindReplacePanel.svelte";
   import TabBar from "./TabBar.svelte";
+  import EditorGridLayout from "./EditorGridLayout.svelte";
   import ActivityRail from "./ActivityRail.svelte";
   import ProjectPanel from "./ProjectPanel.svelte";
   import SessionsSidebar from "./SessionsSidebar.svelte";
@@ -35,7 +36,6 @@
     TabState,
     WorkspaceEntry,
   } from "../domain/contracts";
-  import { getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
   import "../styles/app-shell.css";
 
   export interface AppShellActivityRailProps {
@@ -140,6 +140,9 @@
     onGoToLine: () => void;
     onCloseGoTo: () => void;
     notify: (message: string) => void;
+    onSelectTab: (tabId: string) => void;
+    onClosePane: (paneId: string) => void;
+    onFocusPane: (paneId: string) => void;
     /** M2-T3: fork the active session from a message into a new tab. */
     onForkSession?: (messageId?: string) => void | Promise<void>;
     /** M2-T4: revert the active session to a message in place (undo). */
@@ -345,154 +348,141 @@
       />
     {/if}
     <section class="editor-shell" bind:this={editorShellEl}>
-      <header class="tab-header">
-        <div class="header-left">
-          <TabBar
-            openTabs={getSessionTabs(editor.session)}
-            documents={editor.documents}
-            selectedTabId={getSessionSelectedTabId(editor.session)}
-            useChatTerminology={editor.isChatHttpActive}
-            windowId={editor.currentWindowId}
-            notify={editor.notify}
-            onCloseTab={editor.onCloseTab}
-          />
-          {#if !editor.isChatHttpActive}
-            <button
-              class="toolbar-button add-file-button"
-              type="button"
-              aria-label="Create new untitled file"
-              title="New Untitled File"
-              onclick={() => editor.onRunCommand("file.new")}
-            >
-              +
-            </button>
-          {/if}
-        </div>
-      </header>
-
-      <section
-        class="editor-pane"
-        class:editor-pane-session={editor.isSessionTabActive}
-        bind:this={editorPaneEl}
+      <EditorGridLayout
+        layout={editor.session.editorLayout}
+        documents={editor.documents}
+        useChatTerminology={editor.isChatHttpActive}
+        windowId={editor.currentWindowId}
+        notify={editor.notify}
+        onSelectTab={editor.onSelectTab}
+        onCloseTab={editor.onCloseTab}
+        onClosePane={editor.onClosePane}
+        onFocusPane={editor.onFocusPane}
       >
-        {#if editor.isSettingsViewActive}
-          <SettingsView />
-        {:else if editor.isThemesViewActive}
-          <ThemesView />
-        {:else if editor.isChatHttpActive || editor.isSessionTabActive}
-          <ChatPanel
-            chatContextKind={editor.isChatHttpActive ? "chat-http" : "workspace"}
-            onDeleteSession={editor.onDeleteSessionFromChat}
-            onForkSession={editor.onForkSession}
-            onRevertSession={editor.onRevertSession}
-            onUnrevertSession={editor.onUnrevertSession}
-            onShareSession={editor.onShareSession}
-            onUnshareSession={editor.onUnshareSession}
-            onSummarizeSession={editor.onSummarizeSession}
-            onExportSession={editor.onExportSession}
-            activeShareUrl={editor.activeShareUrl}
-            activeParentSessionId={editor.activeParentSessionId}
-            canToggleTodoPanel={Boolean(todoPanel)}
-            todoPanelOpen={Boolean(todoPanel?.open)}
-            onToggleTodoPanel={() => todoPanel?.onToggle?.()}
-            canToggleDiffPanel={Boolean(diffPanel)}
-            diffPanelOpen={Boolean(diffPanel?.open)}
-            onToggleDiffPanel={() => diffPanel?.onToggle?.()}
-            onOpenTimeline={timelineDialog?.onToggle}
-          />
-        {:else if editor.previewMode === "diff"}
-          <DiffPreviewPane
-            savedContent={editor.activeDocument?.savedContent ?? ""}
-            currentContent={editor.activeDocument?.content ?? ""}
-          />
-        {:else if editor.isImageDocument}
-          <ImagePreviewPane
-            filePath={editor.activeDocument?.filePath ?? null}
-            title={editor.activeDocument?.title ?? "Image"}
-            sizeBytes={editor.previewFileSizeBytes}
-          />
-        {:else if editor.isBinaryDocument}
-          <BinaryFilePane
-            filePath={editor.activeDocument?.filePath ?? null}
-            title={editor.activeDocument?.title ?? "Binary file"}
-            sizeBytes={editor.previewFileSizeBytes}
-            maxOpenAsTextBytes={editor.maxBinaryOpenAsTextBytes}
-          />
-        {:else if editor.isLargePendingDocument}
-          <LargeFileConfirmPane
-            filePath={editor.activeDocument?.filePath ?? null}
-            title={editor.activeDocument?.title ?? "Large file"}
-            sizeBytes={editor.previewFileSizeBytes}
-            maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
-            confirming={editor.largeFileConfirming}
-            onConfirm={editor.onConfirmLargeFile}
-          />
-        {:else}
-          {#if editor.isMarkdownDocument}
-            <MarkdownEditorPane
-              content={editor.activeDocument?.content ?? ""}
-              documentId={editor.activeDocument?.id ?? null}
-              documentFilePath={editor.activeDocument?.filePath ?? null}
-              scrollTop={editor.activeDocument?.scrollTop ?? 0}
-              language={editor.activeDocument?.language ?? "markdown"}
-              wrapLines={editor.wrapLines}
-              zoomPercent={editor.zoomPercent}
-              decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
-              markdownHtml={editor.markdownHtml}
-              storedMarkdownViewMode={editor.activeDocument?.markdownViewMode ?? "edit"}
-              canFitSplit={editor.canFitMarkdownSplit}
-              windowId={editor.currentWindowId}
-              onStatusMessage={editor.notify}
-              onMarkdownViewModeChange={editor.onMarkdownViewModeChange}
-              onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
-              onScrollTopChange={editor.onScrollTopChange}
-              registerEditorCommandRunner={(runner) => {
-                editorRunner = runner;
-              }}
+        <section
+          class="editor-pane"
+          class:editor-pane-session={editor.isSessionTabActive}
+          bind:this={editorPaneEl}
+        >
+          {#if editor.isSettingsViewActive}
+            <SettingsView />
+          {:else if editor.isThemesViewActive}
+            <ThemesView />
+          {:else if editor.isChatHttpActive || editor.isSessionTabActive}
+            <ChatPanel
+              chatContextKind={editor.isChatHttpActive ? "chat-http" : "workspace"}
+              onDeleteSession={editor.onDeleteSessionFromChat}
+              onForkSession={editor.onForkSession}
+              onRevertSession={editor.onRevertSession}
+              onUnrevertSession={editor.onUnrevertSession}
+              onShareSession={editor.onShareSession}
+              onUnshareSession={editor.onUnshareSession}
+              onSummarizeSession={editor.onSummarizeSession}
+              onExportSession={editor.onExportSession}
+              activeShareUrl={editor.activeShareUrl}
+              activeParentSessionId={editor.activeParentSessionId}
+              canToggleTodoPanel={Boolean(todoPanel)}
+              todoPanelOpen={Boolean(todoPanel?.open)}
+              onToggleTodoPanel={() => todoPanel?.onToggle?.()}
+              canToggleDiffPanel={Boolean(diffPanel)}
+              diffPanelOpen={Boolean(diffPanel?.open)}
+              onToggleDiffPanel={() => diffPanel?.onToggle?.()}
+              onOpenTimeline={timelineDialog?.onToggle}
+            />
+          {:else if editor.previewMode === "diff"}
+            <DiffPreviewPane
+              savedContent={editor.activeDocument?.savedContent ?? ""}
+              currentContent={editor.activeDocument?.content ?? ""}
+            />
+          {:else if editor.isImageDocument}
+            <ImagePreviewPane
+              filePath={editor.activeDocument?.filePath ?? null}
+              title={editor.activeDocument?.title ?? "Image"}
+              sizeBytes={editor.previewFileSizeBytes}
+            />
+          {:else if editor.isBinaryDocument}
+            <BinaryFilePane
+              filePath={editor.activeDocument?.filePath ?? null}
+              title={editor.activeDocument?.title ?? "Binary file"}
+              sizeBytes={editor.previewFileSizeBytes}
+              maxOpenAsTextBytes={editor.maxBinaryOpenAsTextBytes}
+            />
+          {:else if editor.isLargePendingDocument}
+            <LargeFileConfirmPane
+              filePath={editor.activeDocument?.filePath ?? null}
+              title={editor.activeDocument?.title ?? "Large file"}
+              sizeBytes={editor.previewFileSizeBytes}
+              maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
+              confirming={editor.largeFileConfirming}
+              onConfirm={editor.onConfirmLargeFile}
             />
           {:else}
-            <DocumentEditor
-              content={editor.activeDocument?.content ?? ""}
+            {#if editor.isMarkdownDocument}
+              <MarkdownEditorPane
+                content={editor.activeDocument?.content ?? ""}
+                documentId={editor.activeDocument?.id ?? null}
+                documentFilePath={editor.activeDocument?.filePath ?? null}
+                scrollTop={editor.activeDocument?.scrollTop ?? 0}
+                language={editor.activeDocument?.language ?? "markdown"}
+                wrapLines={editor.wrapLines}
+                zoomPercent={editor.zoomPercent}
+                decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
+                markdownHtml={editor.markdownHtml}
+                storedMarkdownViewMode={editor.activeDocument?.markdownViewMode ?? "edit"}
+                canFitSplit={editor.canFitMarkdownSplit}
+                windowId={editor.currentWindowId}
+                onStatusMessage={editor.notify}
+                onMarkdownViewModeChange={editor.onMarkdownViewModeChange}
+                onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
+                onScrollTopChange={editor.onScrollTopChange}
+                registerEditorCommandRunner={(runner) => {
+                  editorRunner = runner;
+                }}
+              />
+            {:else}
+              <DocumentEditor
+                content={editor.activeDocument?.content ?? ""}
+                documentId={editor.activeDocument?.id ?? null}
+                scrollTop={editor.activeDocument?.scrollTop ?? 0}
+                wrapLines={editor.wrapLines}
+                zoomPercent={editor.zoomPercent}
+                language={editor.activeDocument?.language ?? "plaintext"}
+                decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
+                onStatusMessage={editor.notify}
+                onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
+                onScrollTopChange={editor.onScrollTopChange}
+                registerEditorCommandRunner={(runner) => {
+                  editorRunner = runner;
+                }}
+              />
+            {/if}
+          {/if}
+
+          {#if editor.isTextEditorDocument && !editor.isSessionTabActive && !editor.isChatHttpActive && editor.findReplaceOpen}
+            <FindReplacePanel
+              bind:findQuery
+              bind:replaceValue
+              bind:findCaseSensitive
+              {editorRunner}
+              notify={editor.notify}
               documentId={editor.activeDocument?.id ?? null}
-              scrollTop={editor.activeDocument?.scrollTop ?? 0}
-              wrapLines={editor.wrapLines}
-              zoomPercent={editor.zoomPercent}
-              language={editor.activeDocument?.language ?? "plaintext"}
-              decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
-              onStatusMessage={editor.notify}
-              onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
-              onScrollTopChange={editor.onScrollTopChange}
-              registerEditorCommandRunner={(runner) => {
-                editorRunner = runner;
-              }}
             />
           {/if}
-        {/if}
 
-        {#if editor.isTextEditorDocument && !editor.isSessionTabActive && !editor.isChatHttpActive && editor.findReplaceOpen}
-          <FindReplacePanel
-            bind:findQuery
-            bind:replaceValue
-            bind:findCaseSensitive
-            {editorRunner}
-            notify={editor.notify}
-            documentId={editor.activeDocument?.id ?? null}
-          />
-        {/if}
-
-        {#if editor.isTextEditorDocument && !editor.isSessionTabActive && !editor.isChatHttpActive && editor.goToOpen}
-          <div class="floating-tool goto-tool">
-            <h3>Go To Line</h3>
-            <input placeholder="Line number..." bind:value={goToLineValue} />
-            <div class="tool-actions">
-              <button type="button" class="toolbar-button" onclick={editor.onGoToLine}>Go</button>
-              <button type="button" class="toolbar-button" onclick={editor.onCloseGoTo}>
-                Close
-              </button>
+          {#if editor.isTextEditorDocument && !editor.isSessionTabActive && !editor.isChatHttpActive && editor.goToOpen}
+            <div class="floating-tool goto-tool">
+              <h3>Go To Line</h3>
+              <input placeholder="Line number..." bind:value={goToLineValue} />
+              <div class="tool-actions">
+                <button type="button" class="toolbar-button" onclick={editor.onGoToLine}>Go</button>
+                <button type="button" class="toolbar-button" onclick={editor.onCloseGoTo}>
+                  Close
+                </button>
+              </div>
             </div>
-          </div>
-        {/if}
-      </section>
+          {/if}
+        </section>
+      </EditorGridLayout>
     </section>
     {#if projectTree.workspaceRoot}
       <ProjectPanel

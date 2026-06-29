@@ -477,6 +477,62 @@ describe("view editor chrome commands", () => {
   });
 });
 
+describe("view layout commands", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("view.layoutGrid switches to a 2x2 grid", () => {
+    const { context } = createCommandContext();
+    dispatchCommand("view.layoutGrid", context);
+    const layout = appState.getActiveSession().editorLayout;
+    expect(layout.kind).toBe("grid-2x2");
+    expect(layout.panes).toHaveLength(4);
+  });
+
+  it("view.layoutCols2 switches to two columns", () => {
+    const { context } = createCommandContext();
+    dispatchCommand("view.layoutCols2", context);
+    expect(appState.getActiveSession().editorLayout.slots).toEqual([[0, 1]]);
+  });
+
+  it("view.layoutRows2 switches to two rows", () => {
+    const { context } = createCommandContext();
+    dispatchCommand("view.layoutRows2", context);
+    expect(appState.getActiveSession().editorLayout.slots).toEqual([[0], [1]]);
+  });
+
+  it("view.layoutRows3 switches to three rows", () => {
+    const { context } = createCommandContext();
+    dispatchCommand("view.layoutRows3", context);
+    expect(appState.getActiveSession().editorLayout.slots).toEqual([[0], [1], [2]]);
+  });
+
+  it("view.layoutSingle collapses back to a single pane", () => {
+    const { context } = createCommandContext();
+    dispatchCommand("view.layoutGrid", context);
+    dispatchCommand("view.layoutSingle", context);
+    const layout = appState.getActiveSession().editorLayout;
+    expect(layout.kind).toBe("single");
+    expect(layout.panes).toHaveLength(1);
+  });
+
+  it("view.focusPane1..4 focus the slot-ordered panes", () => {
+    const { context } = createCommandContext();
+    dispatchCommand("view.layoutGrid", context);
+    const panes = appState.getActiveSession().editorLayout.panes;
+
+    dispatchCommand("view.focusPane1", context);
+    expect(appState.getActiveSession().editorLayout.activePaneId).toBe(panes[0].id);
+    dispatchCommand("view.focusPane2", context);
+    expect(appState.getActiveSession().editorLayout.activePaneId).toBe(panes[1].id);
+    dispatchCommand("view.focusPane3", context);
+    expect(appState.getActiveSession().editorLayout.activePaneId).toBe(panes[2].id);
+    dispatchCommand("view.focusPane4", context);
+    expect(appState.getActiveSession().editorLayout.activePaneId).toBe(panes[3].id);
+  });
+});
+
 describe("command dispatch coverage", () => {
   it("tracks at least one dispatch test per defined command", () => {
     const testedIds = new Set([
@@ -517,6 +573,15 @@ describe("command dispatch coverage", () => {
       "view.zoomIn",
       "view.zoomOut",
       "view.zoomReset",
+      "view.layoutSingle",
+      "view.layoutCols2",
+      "view.layoutRows2",
+      "view.layoutRows3",
+      "view.layoutGrid",
+      "view.focusPane1",
+      "view.focusPane2",
+      "view.focusPane3",
+      "view.focusPane4",
     ]);
 
     const missing = commandDefinitions

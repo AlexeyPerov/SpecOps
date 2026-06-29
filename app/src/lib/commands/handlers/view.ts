@@ -1,4 +1,5 @@
 import { appState } from "../../state/appState";
+import type { LayoutKind } from "../../domain/contracts";
 import type { CommandHandlerMap } from "./types";
 
 export const viewHandlers: CommandHandlerMap = {
@@ -27,4 +28,31 @@ export const viewHandlers: CommandHandlerMap = {
     appState.setZoomPercent(100);
     getEditorRunner()?.setZoom(100);
   },
+  "view.layoutSingle": () => appState.setEditorLayout("single"),
+  "view.layoutCols2": () => appState.setEditorLayout("cols-2"),
+  "view.layoutRows2": () => appState.setEditorLayout("rows-2"),
+  "view.layoutRows3": () => appState.setEditorLayout("rows-3"),
+  "view.layoutGrid": () => appState.setEditorLayout("grid-2x2"),
+  "view.focusPane1": () => appState.setActiveEditorPaneBySlot(1),
+  "view.focusPane2": () => appState.setActiveEditorPaneBySlot(2),
+  "view.focusPane3": () => appState.setActiveEditorPaneBySlot(3),
+  "view.focusPane4": () => appState.setActiveEditorPaneBySlot(4),
 };
+
+/** Preset → command id map, used to mark the active layout in the View menu. */
+export const LAYOUT_PRESET_COMMANDS: ReadonlyArray<{
+  kind: LayoutKind;
+  commandId:
+    | "view.layoutSingle"
+    | "view.layoutCols2"
+    | "view.layoutRows2"
+    | "view.layoutRows3"
+    | "view.layoutGrid";
+}> = [
+  { kind: "single", commandId: "view.layoutSingle" },
+  { kind: "cols-2", commandId: "view.layoutCols2" },
+  { kind: "rows-2", commandId: "view.layoutRows2" },
+  { kind: "rows-3", commandId: "view.layoutRows3" },
+  { kind: "grid-2x2", commandId: "view.layoutGrid" },
+];
+

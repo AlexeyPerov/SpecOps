@@ -22,9 +22,14 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  display: grid;
-  grid-template-rows: var(--tab-header-height) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   --editor-content-padding-x: var(--space-8);
+}
+
+.editor-shell > .editor-grid {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .shell-main-row .agents-sidebar {

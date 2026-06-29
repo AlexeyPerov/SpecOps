@@ -221,6 +221,41 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
 }
 
 export async function buildViewMenu(runCommand: (commandId: AppCommandId) => void) {
+  const layoutSingle = await commandItem({
+    id: "cmd.view.layoutSingle",
+    text: "Single",
+    commandId: "view.layoutSingle",
+    runCommand,
+  });
+  const layoutCols2 = await commandItem({
+    id: "cmd.view.layoutCols2",
+    text: "2 Columns",
+    commandId: "view.layoutCols2",
+    runCommand,
+  });
+  const layoutRows2 = await commandItem({
+    id: "cmd.view.layoutRows2",
+    text: "2 Rows",
+    commandId: "view.layoutRows2",
+    runCommand,
+  });
+  const layoutRows3 = await commandItem({
+    id: "cmd.view.layoutRows3",
+    text: "3 Rows",
+    commandId: "view.layoutRows3",
+    runCommand,
+  });
+  const layoutGrid = await commandItem({
+    id: "cmd.view.layoutGrid",
+    text: "Grid",
+    commandId: "view.layoutGrid",
+    runCommand,
+  });
+  const layoutSubmenu = await Submenu.new({
+    text: "Layout",
+    items: [layoutSingle, layoutCols2, layoutRows2, layoutRows3, layoutGrid],
+  });
+
   const themeItem = await commandItem({
     id: "cmd.view.theme",
     text: "Cycle Theme",
@@ -267,6 +302,8 @@ export async function buildViewMenu(runCommand: (commandId: AppCommandId) => voi
   return Submenu.new({
     text: "View",
     items: [
+      layoutSubmenu,
+      await PredefinedMenuItem.new({ item: "Separator" }),
       themeItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       diffItem,

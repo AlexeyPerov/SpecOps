@@ -1,6 +1,6 @@
 import { writable } from "svelte/store";
 import type { AppDomainState, AppThemeState, ExternalFilesSettings, ThemeMode } from "../domain/contracts";
-import { createFileTab } from "../domain/contracts";
+import { createFileTab, createSinglePaneLayout } from "../domain/contracts";
 import { bumpRecentFile } from "../services/recentFiles";
 import { DEFAULT_ACTIVITY_RAIL_WIDTH_PX, normalizeActivityRailWidthPx } from "../services/panelLayout";
 import { syncRecentFiles } from "../services/recentFilesSync";
@@ -37,8 +37,7 @@ import { createWorkspaceContextsSlice } from "./appState/workspaceContextsSlice"
 
 function buildDefaultContextSession() {
   return {
-    selectedTabId: "tab-1",
-    openTabs: [createFileTab("tab-1", "doc-1")],
+    editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-1")], "tab-1"),
     lastActiveWindowId: "main",
     windowBounds: null,
     lastActiveSessionId: null,

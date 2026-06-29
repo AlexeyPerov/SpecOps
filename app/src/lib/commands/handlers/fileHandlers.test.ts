@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiskFingerprint } from "../../domain/contracts";
+import { getSessionTabs } from "../../domain/contracts";
 import { appState } from "../../state/appState";
 import { keyboardEvent } from "../../test/helpers";
 
@@ -306,7 +307,7 @@ describe("file.new command", () => {
 
     dispatchCommand("file.new", context);
 
-    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(getSessionTabs(appState.getActiveSession())).toHaveLength(2);
     expect(notify).toHaveBeenCalledWith("New tab created.");
   });
 });
@@ -338,7 +339,7 @@ describe("tab.close command", () => {
     dispatchCommand("tab.close", context);
     await flushCommandQueue();
 
-    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(getSessionTabs(appState.getActiveSession())).toHaveLength(2);
     expect(notify).not.toHaveBeenCalledWith("Tab closed.");
   });
 });

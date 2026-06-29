@@ -1,5 +1,10 @@
 import type { ContextSnapshot, DocumentState, WindowSessionSnapshot } from "../domain/contracts";
-import { isViewTab } from "../domain/contracts";
+import {
+  getSessionSelectedTabId,
+  getSessionTabs,
+  isViewTab,
+  setActivePaneTabs,
+} from "../domain/contracts";
 import { isImageFilePath } from "./fileContentKind";
 import { statDiskFingerprint } from "./diskFingerprint";
 import { shouldGateFileOpenBySize } from "./largeFileOpen";
@@ -44,19 +49,20 @@ export function documentForSessionPersistence(doc: DocumentState): DocumentState
  * tab, the selection falls back to the first remaining tab (or null).
  */
 function stripViewTabs(context: ContextSnapshot): ContextSnapshot {
-  if (!context.session.openTabs.some((tab) => isViewTab(tab))) {
+  const tabs = getSessionTabs(context.session);
+  if (!tabs.some((tab) => isViewTab(tab))) {
     return context;
   }
-  const remainingTabs = context.session.openTabs.filter((tab) => !isViewTab(tab));
-  const selectedTabId = remainingTabs.some((tab) => tab.id === context.session.selectedTabId)
-    ? context.session.selectedTabId
+  const remainingTabs = tabs.filter((tab) => !isViewTab(tab));
+  const previousSelectedId = getSessionSelectedTabId(context.session);
+  const selectedTabId = remainingTabs.some((tab) => tab.id === previousSelectedId)
+    ? previousSelectedId
     : (remainingTabs[0]?.id ?? null);
   return {
     ...context,
     session: {
       ...context.session,
-      openTabs: remainingTabs,
-      selectedTabId,
+      editorLayout: setActivePaneTabs(context.session.editorLayout, remainingTabs, selectedTabId),
     },
   };
 }

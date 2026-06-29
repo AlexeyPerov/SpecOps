@@ -6,7 +6,11 @@ import type {
   SessionState,
   WorkspaceEntry,
 } from "../../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID, isFileTab } from "../../domain/contracts";
+import {
+  CHAT_HTTP_CONTEXT_ID,
+  getSessionTabs,
+  isFileTab,
+} from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { normalizeDocument } from "./documentHelpers";
 
@@ -68,9 +72,9 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
   idCounters.tab = Math.max(
     1,
     ...[
-      ...contexts.notepad.session.openTabs,
-      ...contexts.chatHttp.session.openTabs,
-      ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.session.openTabs),
+      ...getSessionTabs(contexts.notepad.session),
+      ...getSessionTabs(contexts.chatHttp.session),
+      ...contexts.workspaces.flatMap((workspace) => getSessionTabs(workspace.snapshot.session)),
     ].map((tab) => Number(tab.id.replace("tab-", "")) || 1),
   );
   reindexWorkspaceCounter(contexts.workspaces);
@@ -81,9 +85,22 @@ export function cloneContextSnapshot(snapshot: ContextSnapshot): ContextSnapshot
     documents: snapshot.documents.map(normalizeDocument),
     session: {
       ...snapshot.session,
-      openTabs: snapshot.session.openTabs.map((tab) => ({ ...tab })),
+      editorLayout: cloneEditorLayout(snapshot.session.editorLayout),
       windowBounds: snapshot.session.windowBounds ?? null,
     },
+  };
+}
+
+function cloneEditorLayout(layout: ContextSnapshot["session"]["editorLayout"]): ContextSnapshot["session"]["editorLayout"] {
+  return {
+    kind: layout.kind,
+    activePaneId: layout.activePaneId,
+    slots: layout.slots.map((row) => [...row]),
+    panes: layout.panes.map((pane) => ({
+      id: pane.id,
+      tabs: pane.tabs.map((tab) => ({ ...tab })),
+      selectedTabId: pane.selectedTabId,
+    })),
   };
 }
 
@@ -240,7 +257,7 @@ export function findFileTabForNormalizedPath(
   context: ContextSnapshot,
   normalizedPath: string,
 ): { tabId: string; documentId: string; document: DocumentState } | null {
-  for (const tab of context.session.openTabs) {
+  for (const tab of getSessionTabs(context.session)) {
     if (!isFileTab(tab)) {
       continue;
     }

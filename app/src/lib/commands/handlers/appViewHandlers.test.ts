@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiskFingerprint } from "../../domain/contracts";
+import { getSessionSelectedTabId, getSessionTabs } from "../../domain/contracts";
 import { appState } from "../../state/appState";
 import { keyboardEvent } from "../../test/helpers";
 
@@ -267,7 +268,7 @@ describe("app shell toggle commands", () => {
 
     dispatchCommand("app.toggleThemePane", context);
 
-    const tabs = appState.getActiveSession().openTabs;
+    const tabs = getSessionTabs(appState.getActiveSession());
     expect(tabs.some((tab) => tab.kind === "view" && tab.view === "themes")).toBe(true);
   });
 
@@ -276,7 +277,7 @@ describe("app shell toggle commands", () => {
 
     dispatchCommand("app.toggleSettings", context);
 
-    const tabs = appState.getActiveSession().openTabs;
+    const tabs = getSessionTabs(appState.getActiveSession());
     expect(tabs.some((tab) => tab.kind === "view" && tab.view === "settings")).toBe(true);
   });
 
@@ -286,9 +287,9 @@ describe("app shell toggle commands", () => {
     dispatchCommand("app.toggleSettings", context);
     dispatchCommand("app.toggleSettings", context);
 
-    const settingsTabs = appState
-      .getActiveSession()
-      .openTabs.filter((tab) => tab.kind === "view" && tab.view === "settings");
+    const settingsTabs = getSessionTabs(appState.getActiveSession()).filter(
+      (tab) => tab.kind === "view" && tab.view === "settings",
+    );
     expect(settingsTabs).toHaveLength(1);
   });
 
@@ -354,18 +355,18 @@ describe("tab navigation commands", () => {
 
     dispatchCommand("tab.next", context);
 
-    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-2");
   });
 
   it("tab.previous selects the previous tab", () => {
     const { context } = createCommandContext();
     appState.createTab();
-    const tabs = appState.getActiveSession().openTabs;
+    const tabs = getSessionTabs(appState.getActiveSession());
     appState.selectTab(tabs[1]!.id);
 
     dispatchCommand("tab.previous", context);
 
-    expect(appState.getActiveSession().selectedTabId).toBe(tabs[0]?.id);
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe(tabs[0]?.id);
   });
 
   it("tab.moveToNewWindow transfers the active tab", async () => {

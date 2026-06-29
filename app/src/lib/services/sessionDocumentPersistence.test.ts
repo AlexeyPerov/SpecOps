@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentState } from "../domain/contracts";
-import { createFileTab, createViewTab } from "../domain/contracts";
+import { createFileTab, createSinglePaneLayout, createViewTab, getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
 import {
   applyLargeFileConfirmGateOnRestore,
   documentForSessionPersistence,
@@ -94,8 +94,7 @@ describe("stripWindowSnapshotForSession", () => {
       notepad: {
         documents: [baseDocument()],
         session: {
-          selectedTabId: "tab-1",
-          openTabs: [],
+          editorLayout: createSinglePaneLayout([], "tab-1"),
           lastActiveWindowId: "main",
           windowBounds: null,
         },
@@ -103,8 +102,7 @@ describe("stripWindowSnapshotForSession", () => {
       chatHttp: {
         documents: [baseDocument({ id: "doc-chat", filePath: "/tmp/chat.png" })],
         session: {
-          selectedTabId: "tab-chat",
-          openTabs: [],
+          editorLayout: createSinglePaneLayout([], "tab-chat"),
           lastActiveWindowId: "main",
           windowBounds: null,
         },
@@ -116,8 +114,7 @@ describe("stripWindowSnapshotForSession", () => {
           snapshot: {
             documents: [baseDocument({ id: "doc-2" })],
             session: {
-              selectedTabId: null,
-              openTabs: [],
+              editorLayout: createSinglePaneLayout([], null),
               lastActiveWindowId: "main",
               windowBounds: null,
             },
@@ -138,12 +135,14 @@ describe("stripWindowSnapshotForSession", () => {
         documents: [baseDocument()],
         session: {
           // Settings view tab is selected; a file tab also exists.
-          selectedTabId: "tab-settings",
-          openTabs: [
-            createFileTab("tab-file", "doc-1"),
-            createViewTab("tab-settings", "settings"),
-            createViewTab("tab-themes", "themes"),
-          ],
+          editorLayout: createSinglePaneLayout(
+            [
+              createFileTab("tab-file", "doc-1"),
+              createViewTab("tab-settings", "settings"),
+              createViewTab("tab-themes", "themes"),
+            ],
+            "tab-settings",
+          ),
           lastActiveWindowId: "main",
           windowBounds: null,
         },
@@ -152,12 +151,12 @@ describe("stripWindowSnapshotForSession", () => {
       editorPreferences: { zoomPercent: 100, wrapLines: true },
     });
 
-    const tabs = stripped.notepad.session.openTabs;
+    const tabs = getSessionTabs(stripped.notepad.session);
     expect(tabs.every((tab) => tab.kind !== "view")).toBe(true);
     expect(tabs).toHaveLength(1);
     expect(tabs[0]?.kind).toBe("file");
     // Selection fell back to the remaining file tab.
-    expect(stripped.notepad.session.selectedTabId).toBe("tab-file");
+    expect(getSessionSelectedTabId(stripped.notepad.session)).toBe("tab-file");
   });
 });
 

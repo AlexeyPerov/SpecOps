@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSessionTab, createFileTab, isSessionTab, tabDocumentId } from "../../domain/contracts";
+import { createFileTab, createSessionTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs, isSessionTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -59,8 +59,7 @@ describe("appState session restore", () => {
             },
           ],
           session: {
-            selectedTabId: "tab-1",
-            openTabs: [createFileTab("tab-1", "doc-1")],
+            editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-1")], "tab-1"),
             lastActiveWindowId: "main",
             windowBounds: null,
           },
@@ -86,8 +85,7 @@ describe("appState session restore", () => {
             },
           ],
           session: {
-            selectedTabId: "tab-chat",
-            openTabs: [createFileTab("tab-chat", "doc-chat")],
+            editorLayout: createSinglePaneLayout([createFileTab("tab-chat", "doc-chat")], "tab-chat"),
             lastActiveWindowId: "main",
             windowBounds: null,
             lastActiveSessionId: null,
@@ -118,8 +116,7 @@ describe("appState session restore", () => {
                 },
               ],
               session: {
-                selectedTabId: "tab-2",
-                openTabs: [createFileTab("tab-2", "doc-2")],
+                editorLayout: createSinglePaneLayout([createFileTab("tab-2", "doc-2")], "tab-2"),
                 lastActiveWindowId: "main",
                 windowBounds: null,
               },
@@ -149,8 +146,7 @@ describe("appState session restore", () => {
                 },
               ],
               session: {
-                selectedTabId: "tab-3",
-                openTabs: [createFileTab("tab-3", "doc-3")],
+                editorLayout: createSinglePaneLayout([createFileTab("tab-3", "doc-3")], "tab-3"),
                 lastActiveWindowId: "main",
                 windowBounds: null,
                 layout: {
@@ -174,7 +170,7 @@ describe("appState session restore", () => {
     const snapshot = appState.getSnapshot();
     expect(snapshot.contexts.activeContextId).toBe("ws-2");
     expect(snapshot.contexts.workspaces.map((workspace) => workspace.id)).toEqual(["ws-1", "ws-2"]);
-    expect(appState.getActiveSession().selectedTabId).toBe("tab-3");
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-3");
     expect(appState.getActiveDocuments()[0]?.filePath).toBe("/tmp/ws-two/b.ts");
     expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
     expect(appState.getActiveWorkspaceLayout().projectPanelWidthPx).toBe(320);
@@ -250,7 +246,7 @@ describe("appState session restore", () => {
     expect(workspaceId).not.toBe("notepad");
 
     appState.openFileInTab("/tmp/ws-chat-switch/note.ts", "export const ok = true;");
-    const workspaceSelectedTabId = appState.getActiveSession().selectedTabId;
+    const workspaceSelectedTabId = getSessionSelectedTabId(appState.getActiveSession());
     expect(workspaceSelectedTabId).toBeTruthy();
 
     expect(appState.switchContext("chat-http")).toBe(true);
@@ -260,7 +256,7 @@ describe("appState session restore", () => {
     expect(appState.switchContext(workspaceId)).toBe(true);
     expect(appState.getSnapshot().contexts.activeContextId).toBe(workspaceId);
     expect(appState.getWorkspaceRoot()).toBe("/tmp/ws-chat-switch");
-    expect(appState.getActiveSession().selectedTabId).toBe(workspaceSelectedTabId);
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe(workspaceSelectedTabId);
   });
 
   it("does not create file tabs in chat-http context", () => {
@@ -285,15 +281,15 @@ describe("appState session restore", () => {
     appState.setProviderApiKey("http", "configured-key");
 
     expect(appState.switchContext("chat-http")).toBe(true);
-    const beforeTabs = appState.getActiveSession().openTabs.length;
+    const beforeTabs = getSessionTabs(appState.getActiveSession()).length;
     const beforeDocuments = appState.getActiveDocuments().length;
 
     appState.createTab();
     appState.openFileInTab("/tmp/chat-http-no-file-tabs.txt", "content");
 
-    expect(appState.getActiveSession().openTabs).toHaveLength(beforeTabs);
+    expect(getSessionTabs(appState.getActiveSession())).toHaveLength(beforeTabs);
     expect(appState.getActiveDocuments()).toHaveLength(beforeDocuments);
-    expect(appState.getActiveSession().selectedTabId).toBe("tab-1");
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-1");
   });
 
   it("restores chat-http as active when chatHttp beta is enabled and HTTP connection is configured", () => {

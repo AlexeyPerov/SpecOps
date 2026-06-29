@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSessionTab, createFileTab } from "../domain/contracts";
+import { createFileTab, createSessionTab, createSinglePaneLayout } from "../domain/contracts";
 import type { SessionIndexEntry } from "../domain/contracts";
 import {
   sessionExistsInIndex,
@@ -65,8 +65,7 @@ describe("workspaceAgentSession", () => {
     expect(
       resolveRestoredActiveSession(
         {
-          selectedTabId: "tab-1",
-          openTabs: [],
+          editorLayout: createSinglePaneLayout([], "tab-1"),
           lastActiveWindowId: "main",
           windowBounds: null,
           lastActiveSessionId: "agent-a",
@@ -77,8 +76,7 @@ describe("workspaceAgentSession", () => {
     expect(
       resolveRestoredActiveSession(
         {
-          selectedTabId: "tab-1",
-          openTabs: [],
+          editorLayout: createSinglePaneLayout([], "tab-1"),
           lastActiveWindowId: "main",
           windowBounds: null,
           lastActiveSessionId: "missing",

@@ -1,6 +1,7 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint } from "../domain/contracts";
+import { getSessionActiveTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import {
@@ -279,9 +280,7 @@ export async function reloadActiveDocumentFromDiskWithRuntime(
   deferredDirtyDocumentIds: Set<string>,
 ): Promise<ExternalCheckResult> {
   const snapshot = appState.getSnapshot();
-  const selectedTab = getActiveSession(snapshot).openTabs.find(
-    (tab) => tab.id === getActiveSession(snapshot).selectedTabId,
-  );
+  const selectedTab = getSessionActiveTab(getActiveSession(snapshot));
   if (!selectedTab) {
     return "skipped";
   }

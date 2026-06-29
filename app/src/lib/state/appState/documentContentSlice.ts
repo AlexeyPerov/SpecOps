@@ -6,8 +6,10 @@ import type {
 } from "../../domain/contracts";
 import {
   createFileTab,
+  getSessionTabs,
   isFileTab,
   normalizeTabState,
+  setActivePaneTabs,
 } from "../../domain/contracts";
 import { deriveUntitledTitle } from "../../services/untitledTitle";
 import { bumpRecentFile } from "../../services/recentFiles";
@@ -73,7 +75,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
                 : documentState,
             ),
           }));
-          const existingTab = getActiveSession(upgradedState).openTabs
+          const existingTab = getSessionTabs(getActiveSession(upgradedState))
             .map((rawTab) => normalizeTabState(rawTab))
             .find((tab) => isFileTab(tab) && tab.documentId === duplicate.id);
           if (existingTab) {
@@ -98,14 +100,20 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
         );
 
         return {
-          ...patchActiveContext(state, (ctx) => ({
-            documents: [...ctx.documents, documentState],
-            session: {
-              ...ctx.session,
-              openTabs: [...ctx.session.openTabs, createFileTab(tabId, docId)],
-              selectedTabId: tabId,
-            },
-          })),
+          ...patchActiveContext(state, (ctx) => {
+            const tabs = getSessionTabs(ctx.session);
+            return {
+              documents: [...ctx.documents, documentState],
+              session: {
+                ...ctx.session,
+                editorLayout: setActivePaneTabs(
+                  ctx.session.editorLayout,
+                  [...tabs, createFileTab(tabId, docId)],
+                  tabId,
+                ),
+              },
+            };
+          }),
           recentFiles,
         };
       });

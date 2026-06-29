@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSessionTab, createFileTab, isSessionTab, tabDocumentId } from "../../domain/contracts";
+import { createFileTab, createSessionTab, createSinglePaneLayout, isSessionTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -160,8 +160,7 @@ describe("appState settings and editor chrome", () => {
           },
         ],
         session: {
-          selectedTabId: "tab-1",
-          openTabs: [createFileTab("tab-1", "doc-1")],
+          editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-1")], "tab-1"),
           lastActiveWindowId: "main",
           windowBounds: null,
         },
@@ -187,8 +186,7 @@ describe("appState settings and editor chrome", () => {
           },
         ],
         session: {
-          selectedTabId: "tab-chat",
-          openTabs: [createFileTab("tab-chat", "doc-chat")],
+          editorLayout: createSinglePaneLayout([createFileTab("tab-chat", "doc-chat")], "tab-chat"),
           lastActiveWindowId: "main",
           windowBounds: null,
         },

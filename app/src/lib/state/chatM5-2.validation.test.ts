@@ -38,7 +38,7 @@ import {
   nextSidebarSessionId,
   resolveRestoredActiveSession,
 } from "../services/workspaceAgentSession";
-import { createSessionTab, createFileTab } from "../domain/contracts";
+import { createFileTab, createSessionTab, createSinglePaneLayout } from "../domain/contracts";
 import type { SessionIndexEntry } from "../domain/contracts";
 import { appState } from "./appState";
 import { chatStore } from "./chatStore";
@@ -196,8 +196,7 @@ describe("M5.2 milestone validation", () => {
     expect(
       resolveRestoredActiveSession(
         {
-          selectedTabId: "tab-1",
-          openTabs: [],
+          editorLayout: createSinglePaneLayout([], "tab-1"),
           lastActiveWindowId: "main",
           windowBounds: null,
           lastActiveSessionId: "agent-a",
@@ -208,8 +207,7 @@ describe("M5.2 milestone validation", () => {
     expect(
       resolveRestoredActiveSession(
         {
-          selectedTabId: "tab-1",
-          openTabs: [],
+          editorLayout: createSinglePaneLayout([], "tab-1"),
           lastActiveWindowId: "main",
           windowBounds: null,
           lastActiveSessionId: "missing",

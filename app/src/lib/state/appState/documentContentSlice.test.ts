@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSessionTab, createFileTab, isSessionTab, tabDocumentId } from "../../domain/contracts";
+import { createSessionTab, createFileTab, getSessionSelectedTabId, isSessionTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -38,7 +38,7 @@ describe("appState documents and paths", () => {
     appState.openFileInTab("/tmp/dup.txt", "second");
     const snapshot = appState.getSnapshot();
     expect(appState.getActiveDocuments().filter((doc) => doc.filePath === "/tmp/dup.txt")).toHaveLength(1);
-    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-2");
     expect(snapshot.recentFiles[0]).toBe("/tmp/dup.txt");
   });
 

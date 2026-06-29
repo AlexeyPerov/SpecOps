@@ -1,4 +1,4 @@
-import { isFileTab } from "../domain/contracts";
+import { getSessionTabs, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveSession } from "../state/appState/contextHelpers";
 import { logDiagnostic } from "./logging";
@@ -12,7 +12,7 @@ export function removeInaccessibleDocumentTab(
 ): void {
   const snapshot = appState.getSnapshot();
   const session = getActiveSession(snapshot);
-  const tab = session.openTabs.find(
+  const tab = getSessionTabs(session).find(
     (entry) => isFileTab(entry) && entry.documentId === documentId,
   );
   if (!tab) {

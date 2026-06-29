@@ -1,5 +1,5 @@
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
-import { isFileTab } from "../domain/contracts";
+import { getSessionTabs, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import { isFileMissingError, isFsScopePermissionError, normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
@@ -107,7 +107,7 @@ export async function runStartupExternalChecks(): Promise<void> {
   if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "startup")) {
     return;
   }
-  for (const tab of getActiveSession(snapshot).openTabs) {
+  for (const tab of getSessionTabs(getActiveSession(snapshot))) {
     if (isFileTab(tab)) {
       await checkDocumentExternalChanges(tab.documentId, "startup");
     }
@@ -119,7 +119,7 @@ export async function runFocusExternalChecks(): Promise<void> {
   if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "focus")) {
     return;
   }
-  for (const tab of getActiveSession(snapshot).openTabs) {
+  for (const tab of getSessionTabs(getActiveSession(snapshot))) {
     if (isFileTab(tab)) {
       await checkDocumentIfDeferred(tab.documentId, "focus");
     }
@@ -133,7 +133,7 @@ export async function runWatcherExternalCheck(normalizedOrRawPath: string): Prom
     return;
   }
   const normalized = normalizePathSync(normalizedOrRawPath);
-  for (const tab of getActiveSession(snapshot).openTabs) {
+  for (const tab of getSessionTabs(getActiveSession(snapshot))) {
     if (!isFileTab(tab)) {
       continue;
     }
@@ -149,7 +149,7 @@ export async function runWatcherExternalCheck(normalizedOrRawPath: string): Prom
 export function collectOpenFilePaths(): string[] {
   const snapshot = appState.getSnapshot();
   const paths = new Set<string>();
-  for (const tab of getActiveSession(snapshot).openTabs) {
+  for (const tab of getSessionTabs(getActiveSession(snapshot))) {
     if (!isFileTab(tab)) {
       continue;
     }

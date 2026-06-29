@@ -48,7 +48,7 @@ import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { savePersistedSettings, toPersistedSettings } from "./settingsStore";
 
 export interface SyncSessionTabEffectInput {
-  activeTab: TabState | undefined;
+  activeTab: TabState | undefined | null;
   isChatHttpActive: boolean;
   chatHttpRailVisible: boolean;
   activeContextId: ContextId;

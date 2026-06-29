@@ -1,6 +1,6 @@
 import { appState } from "../../state/appState";
 import { createNewWindowWithTransfer } from "../../services/windowManager";
-import { tabDocumentId } from "../../domain/contracts";
+import { getSessionActiveTab, tabDocumentId } from "../../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../../state/appState/contextHelpers";
 import type { CommandHandlerMap } from "./types";
 
@@ -33,9 +33,7 @@ export const appHandlers: CommandHandlerMap = {
     if (state.editor.previewMode === "markdown") {
       appState.setPreviewMode("editor");
     }
-    const selectedTab = getActiveSession(state).openTabs.find(
-      (tab) => tab.id === getActiveSession(state).selectedTabId,
-    );
+    const selectedTab = getSessionActiveTab(getActiveSession(state));
     const activeDocumentId = tabDocumentId(selectedTab);
     const activeDocument = activeDocumentId
       ? getActiveDocuments(state).find((document) => document.id === activeDocumentId)

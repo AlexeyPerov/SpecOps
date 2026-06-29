@@ -1,5 +1,5 @@
 import type { DocumentState, TabState } from "../domain/contracts";
-import { isFileTab, tabDocumentId } from "../domain/contracts";
+import { getSessionTabs, isFileTab, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import {
@@ -39,7 +39,7 @@ export async function closeTabWithUnsavedPrompt(
   options?: { forceClose?: boolean },
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  const tab = getActiveSession(snapshot).openTabs.find((entry) => entry.id === tabId);
+  const tab = getSessionTabs(getActiveSession(snapshot)).find((entry) => entry.id === tabId);
   if (!tab) {
     return false;
   }
@@ -71,7 +71,7 @@ export async function closeTabsWithUnsavedPrompt(
   selectedTabIdAfter: string | null,
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  const openTabs = getActiveSession(snapshot).openTabs;
+  const openTabs = getSessionTabs(getActiveSession(snapshot));
 
   for (const tabId of tabIds) {
     const tab = openTabs.find((entry) => entry.id === tabId);
@@ -100,10 +100,11 @@ export async function closeOtherTabsWithUnsavedPrompt(
   deps: CloseTabFlowDeps,
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  if (!getActiveSession(snapshot).openTabs.some((tab) => tab.id === contextTabId)) {
+  const tabs = getSessionTabs(getActiveSession(snapshot));
+  if (!tabs.some((tab) => tab.id === contextTabId)) {
     return false;
   }
-  const tabIds = tabIdsToCloseOtherThan(getActiveSession(snapshot).openTabs, contextTabId);
+  const tabIds = tabIdsToCloseOtherThan(tabs, contextTabId);
   return closeTabsWithUnsavedPrompt(tabIds, deps, contextTabId);
 }
 
@@ -112,7 +113,7 @@ export async function closeTabsToRightWithUnsavedPrompt(
   deps: CloseTabFlowDeps,
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  const tabIds = tabIdsToCloseToRightOf(getActiveSession(snapshot).openTabs, contextTabId);
+  const tabIds = tabIdsToCloseToRightOf(getSessionTabs(getActiveSession(snapshot)), contextTabId);
   return closeTabsWithUnsavedPrompt(tabIds, deps, contextTabId);
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContextId, WorkspaceEntry } from "../domain/contracts";
+import { createSinglePaneLayout } from "../domain/contracts";
 import {
   isPointerInsideRect,
   nextWorkspaceDropIndex,
@@ -27,8 +28,7 @@ function workspace(id: ContextId, rootPath: string): WorkspaceEntry {
     snapshot: {
       documents: [],
       session: {
-        selectedTabId: null,
-        openTabs: [],
+        editorLayout: createSinglePaneLayout([], null),
         lastActiveWindowId: "main",
         windowBounds: null,
         lastActiveSessionId: null,

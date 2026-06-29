@@ -146,7 +146,8 @@ export function tabDocumentId(
         view?: unknown;
         subTab?: unknown;
       })
-    | undefined,
+    | undefined
+    | null,
 ): string | null {
   if (!tab) {
     return null;

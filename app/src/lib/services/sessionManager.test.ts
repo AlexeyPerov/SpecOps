@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppDomainState, AppSessionSnapshot, WindowSessionSnapshot } from "../domain/contracts";
-import { createFileTab } from "../domain/contracts";
+import { createFileTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { createSessionFsMock } from "../test/sessionMock";
 import * as sessionManager from "./sessionManager";
@@ -61,8 +61,7 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
       },
     ],
     session: {
-      selectedTabId: "tab-1",
-      openTabs: [createFileTab("tab-1", "doc-1")],
+      editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-1")], "tab-1"),
       lastActiveWindowId: "win-a",
       windowBounds: null,
     },
@@ -91,8 +90,7 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
         },
       ],
       session: {
-        selectedTabId: "tab-chat",
-        openTabs: [createFileTab("tab-chat", "doc-chat")],
+        editorLayout: createSinglePaneLayout([createFileTab("tab-chat", "doc-chat")], "tab-chat"),
         lastActiveWindowId: "win-a",
         windowBounds: null,
       },
@@ -135,7 +133,7 @@ describe("sanitizeWindowSnapshot", () => {
   it("marks missing files on disk without dropping tabs", async () => {
     const snapshot = windowSnapshot();
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(sanitized.notepad.session.openTabs).toHaveLength(1);
+    expect(getSessionTabs(sanitized.notepad.session)).toHaveLength(1);
     expect(sanitized.notepad.documents[0]?.fileMissing).toBe(true);
   });
 
@@ -146,17 +144,19 @@ describe("sanitizeWindowSnapshot", () => {
         ...windowSnapshot().notepad,
         session: {
           ...windowSnapshot().notepad.session,
-          selectedTabId: "tab-1",
-          openTabs: [
-            createFileTab("tab-1", "doc-1"),
-            createFileTab("tab-2", "doc-missing"),
-          ],
+          editorLayout: createSinglePaneLayout(
+            [
+              createFileTab("tab-1", "doc-1"),
+              createFileTab("tab-2", "doc-missing"),
+            ],
+            "tab-1",
+          ),
         },
       },
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(sanitized.notepad.session.openTabs.map((tab) => tab.id)).toEqual(["tab-1"]);
+    expect(getSessionTabs(sanitized.notepad.session).map((tab) => tab.id)).toEqual(["tab-1"]);
   });
 
   it("refreshes legacy image documents from disk on restore", async () => {
@@ -196,14 +196,13 @@ describe("sanitizeWindowSnapshot", () => {
         documents: [],
         session: {
           ...windowSnapshot().notepad.session,
-          selectedTabId: "tab-1",
-          openTabs: [createFileTab("tab-1", "doc-missing")],
+          editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-missing")], "tab-1"),
         },
       },
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(sanitized.notepad.session.openTabs).toHaveLength(1);
+    expect(getSessionTabs(sanitized.notepad.session)).toHaveLength(1);
     expect(sanitized.notepad.documents[0]?.title).toBe("Untitled");
   });
 });
@@ -241,7 +240,7 @@ describe("restoreWindowSession", () => {
 
     const restored = await sessionManager.restoreWindowSession("win-a");
     expect(restored?.snapshot.activeContextId).toBe("chat-http");
-    expect(restored?.snapshot.chatHttp?.session.selectedTabId).toBe("tab-chat");
+    expect(getSessionSelectedTabId(restored?.snapshot.chatHttp?.session as never)).toBe("tab-chat");
   });
 
   it("falls back to backup when primary session is corrupt", async () => {
@@ -261,7 +260,7 @@ describe("restoreWindowSession", () => {
     });
 
     const restored = await sessionManager.restoreWindowSession("win-a");
-    expect(restored?.snapshot.notepad.session.selectedTabId).toBe("tab-1");
+    expect(getSessionSelectedTabId(restored?.snapshot.notepad.session as never)).toBe("tab-1");
   });
 
   it("returns null when both primary and backup fail", async () => {
@@ -317,7 +316,7 @@ describe("persistSessionSnapshot", () => {
     await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
     const persistedWindow = sessionMock.getSessionStore()?.windows["win-a"];
     expect(persistedWindow?.chatHttp).toBeDefined();
-    expect(persistedWindow?.chatHttp?.session.openTabs).toHaveLength(1);
+    expect(getSessionTabs(persistedWindow?.chatHttp?.session as never)).toHaveLength(1);
   });
 
   it("preserves global recent files when persisting a window snapshot", async () => {
@@ -356,7 +355,7 @@ describe("persistGlobalRecentFiles", () => {
     );
     const written = JSON.parse(String(sessionWriteCall?.[1] ?? "{}"));
     expect(written.recentFiles).toEqual(["/tmp/a.txt", "/tmp/b.txt"]);
-    expect(written.windows["win-a"]?.notepad.session.selectedTabId).toBe("tab-1");
+    expect(getSessionSelectedTabId(written.windows["win-a"]?.notepad.session as never)).toBe("tab-1");
   });
 });
 

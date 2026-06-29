@@ -1,6 +1,6 @@
 import { get } from "svelte/store";
 import type { AppCommandId } from "../domain/contracts";
-import { tabDocumentId } from "../domain/contracts";
+import { getSessionActiveTab, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import { logDiagnostic } from "../services/logging";
@@ -100,8 +100,7 @@ export function keymapCommandForEvent(event: KeyboardEvent): AppCommandId | null
 
 export function getActiveDocumentContent(): string {
   const state = getSnapshot();
-  const activeTabId = getActiveSession(state).selectedTabId;
-  const activeTab = getActiveSession(state).openTabs.find((tab) => tab.id === activeTabId);
+  const activeTab = getSessionActiveTab(getActiveSession(state));
   if (!activeTab) {
     return "";
   }

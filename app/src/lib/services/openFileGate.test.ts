@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { WINDOW_EVENT_SELECT_TAB_FOR_PATH } from "./windowManager";
 import {
@@ -81,7 +82,7 @@ describe("requestOpenPath", () => {
       documentId: "doc-2",
     });
     expect(claimOpenFileMock).toHaveBeenCalledWith("/tmp/existing.txt", "win-a", "doc-2");
-    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-2");
   });
 
   it("returns needs_read for a new path", async () => {
@@ -129,7 +130,7 @@ describe("requestOpenPath", () => {
       .contexts.workspaces[0]?.snapshot.documents.find((doc) => doc.id === notepadDocId);
     expect(workspaceDoc?.content).toBe("local edits changed");
     expect(workspaceDoc?.isDirty).toBe(true);
-    const notepadHasTab = appState.getSnapshot().contexts.notepad.session.openTabs.some((tab) => {
+    const notepadHasTab = getSessionTabs(appState.getSnapshot().contexts.notepad.session).some((tab) => {
       if (tab.kind !== "file") {
         return false;
       }
@@ -148,7 +149,7 @@ describe("selectTabForNormalizedPath", () => {
   it("selects the tab for a normalized path", () => {
     appState.openFileInTab("/tmp/select.txt", "content");
     expect(selectTabForNormalizedPath("/tmp/select.txt")).toBe(true);
-    expect(appState.getActiveSession().selectedTabId).toBe("tab-2");
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-2");
   });
 
   it("returns false when no tab matches", () => {

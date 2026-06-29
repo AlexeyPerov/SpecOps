@@ -3,10 +3,14 @@ import {
   createFileTab,
   createSessionTab,
   createViewTab,
+  getSessionSelectedTabId,
+  getSessionTabs,
   isFileTab,
   isSessionTab,
   isViewTab,
   normalizeTabState,
+  reorderActivePaneTabs,
+  setActivePaneTabs,
   tabDocumentId,
 } from "../../domain/contracts";
 import { findNextOpenSessionTabAfterClose } from "../../services/workspaceAgentSession";
@@ -26,7 +30,6 @@ import {
   canCreateFileTabs,
   closeTabsForce,
   missingTabIdsToClose,
-  moveTab,
   reopenTabForDocument,
   selectTabInternal,
   tabIdsToCloseOtherThan,
@@ -44,23 +47,22 @@ export function createDocumentTabsLifecycleSlice(deps: {
   function closeTabForce(tabId: string): void {
     update((state) =>
       patchActiveContext(state, (ctx) => {
-        const openTabs = ctx.session.openTabs;
-        if (openTabs.length === 0) {
+        const tabs = getSessionTabs(ctx.session);
+        if (tabs.length === 0) {
           return ctx;
         }
-        const idx = openTabs.findIndex((tab) => tab.id === tabId);
+        const idx = tabs.findIndex((tab) => tab.id === tabId);
         if (idx < 0) {
           return ctx;
         }
-        const filtered = openTabs.filter((tab) => tab.id !== tabId);
+        const filtered = tabs.filter((tab) => tab.id !== tabId);
         if (filtered.length === 0) {
           if (!canCreateFileTabs(state)) {
             return {
               ...ctx,
               session: {
                 ...ctx.session,
-                openTabs: [],
-                selectedTabId: null,
+                editorLayout: setActivePaneTabs(ctx.session.editorLayout, [], null),
                 lastActiveSessionId: null,
               },
             };
@@ -71,19 +73,22 @@ export function createDocumentTabsLifecycleSlice(deps: {
             documents: [...ctx.documents, newDocument],
             session: {
               ...ctx.session,
-              openTabs: [createFileTab(tabIdNew, docId)],
-              selectedTabId: tabIdNew,
+              editorLayout: setActivePaneTabs(
+                ctx.session.editorLayout,
+                [createFileTab(tabIdNew, docId)],
+                tabIdNew,
+              ),
               lastActiveSessionId: null,
             },
           };
         }
-        const closingTab = openTabs[idx];
+        const closingTab = tabs[idx];
         let selectedTabId =
-          ctx.session.selectedTabId === tabId
+          getSessionSelectedTabId(ctx.session) === tabId
             ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
-            : ctx.session.selectedTabId;
-        if (ctx.session.selectedTabId === tabId && isSessionTab(closingTab)) {
-          const nextSessionTab = findNextOpenSessionTabAfterClose(openTabs, tabId);
+            : getSessionSelectedTabId(ctx.session);
+        if (getSessionSelectedTabId(ctx.session) === tabId && isSessionTab(closingTab)) {
+          const nextSessionTab = findNextOpenSessionTabAfterClose(tabs, tabId);
           if (nextSessionTab) {
             selectedTabId = nextSessionTab.id;
           }
@@ -92,8 +97,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
           ...ctx,
           session: {
             ...ctx.session,
-            openTabs: filtered,
-            selectedTabId,
+            editorLayout: setActivePaneTabs(ctx.session.editorLayout, filtered, selectedTabId),
           },
         };
       }),
@@ -109,12 +113,16 @@ export function createDocumentTabsLifecycleSlice(deps: {
         return patchActiveContext(state, (ctx) => {
           const { docId: id, tabId } = nextDocAndTabIds();
           const newDocument = buildEmptyUnsavedDocument(id);
+          const tabs = getSessionTabs(ctx.session);
           return {
             documents: [...ctx.documents, newDocument],
             session: {
               ...ctx.session,
-              openTabs: [...ctx.session.openTabs, createFileTab(tabId, id)],
-              selectedTabId: tabId,
+              editorLayout: setActivePaneTabs(
+                ctx.session.editorLayout,
+                [...tabs, createFileTab(tabId, id)],
+                tabId,
+              ),
             },
           };
         });
@@ -125,21 +133,27 @@ export function createDocumentTabsLifecycleSlice(deps: {
     },
     openOrFocusSessionTab(sessionId: string) {
       update((state) => {
-        const existingTab = getActiveSession(state).openTabs
+        const existingTab = getSessionTabs(getActiveSession(state))
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isSessionTab(tab) && tab.sessionId === sessionId);
         if (existingTab) {
           return selectTabInternal(state, existingTab.id);
         }
         const tabId = nextTabId();
-        return patchActiveContext(state, (ctx) => ({
-          ...ctx,
-          session: {
-            ...ctx.session,
-            openTabs: [...ctx.session.openTabs, createSessionTab(tabId, sessionId)],
-            selectedTabId: tabId,
-          },
-        }));
+        return patchActiveContext(state, (ctx) => {
+          const tabs = getSessionTabs(ctx.session);
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              editorLayout: setActivePaneTabs(
+                ctx.session.editorLayout,
+                [...tabs, createSessionTab(tabId, sessionId)],
+                tabId,
+              ),
+            },
+          };
+        });
       });
     },
     /**
@@ -151,26 +165,32 @@ export function createDocumentTabsLifecycleSlice(deps: {
      */
     openOrFocusViewTab(view: "settings" | "themes", subTab?: string) {
       update((state) => {
-        const existingTab = getActiveSession(state).openTabs
+        const existingTab = getSessionTabs(getActiveSession(state))
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isViewTab(tab) && tab.view === view);
         if (existingTab) {
           return selectTabInternal(state, existingTab.id);
         }
         const tabId = nextTabId();
-        return patchActiveContext(state, (ctx) => ({
-          ...ctx,
-          session: {
-            ...ctx.session,
-            openTabs: [...ctx.session.openTabs, createViewTab(tabId, view, false, subTab)],
-            selectedTabId: tabId,
-          },
-        }));
+        return patchActiveContext(state, (ctx) => {
+          const tabs = getSessionTabs(ctx.session);
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              editorLayout: setActivePaneTabs(
+                ctx.session.editorLayout,
+                [...tabs, createViewTab(tabId, view, false, subTab)],
+                tabId,
+              ),
+            },
+          };
+        });
       });
     },
     closeTabsForSession(sessionId: string) {
       update((state) => {
-        const tabIds = getActiveSession(state).openTabs
+        const tabIds = getSessionTabs(getActiveSession(state))
           .map((rawTab) => normalizeTabState(rawTab))
           .filter((tab) => isSessionTab(tab) && tab.sessionId === sessionId)
           .map((tab) => tab.id);
@@ -179,7 +199,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
     },
     selectOrReopenTabForDocument(documentId: string) {
       update((state) => {
-        const existingTab = getActiveSession(state).openTabs
+        const existingTab = getSessionTabs(getActiveSession(state))
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isFileTab(tab) && tab.documentId === documentId);
         if (existingTab) {
@@ -212,16 +232,13 @@ export function createDocumentTabsLifecycleSlice(deps: {
     reorderTabs(fromIndex: number, toIndex: number) {
       update((state) =>
         patchActiveContext(state, (ctx) => {
-          const openTabs = moveTab(ctx.session.openTabs, fromIndex, toIndex);
-          if (openTabs === ctx.session.openTabs) {
+          const nextLayout = reorderActivePaneTabs(ctx.session.editorLayout, fromIndex, toIndex);
+          if (nextLayout === ctx.session.editorLayout) {
             return ctx;
           }
           return {
             ...ctx,
-            session: {
-              ...ctx.session,
-              openTabs,
-            },
+            session: { ...ctx.session, editorLayout: nextLayout },
           };
         }),
       );
@@ -229,22 +246,22 @@ export function createDocumentTabsLifecycleSlice(deps: {
     closeTab(tabId: string) {
       update((state) =>
         patchActiveContext(state, (ctx) => {
-          const openTabs = ctx.session.openTabs;
-          if (openTabs.length <= 1) {
+          const tabs = getSessionTabs(ctx.session);
+          if (tabs.length <= 1) {
             return ctx;
           }
-          const idx = openTabs.findIndex((tab) => tab.id === tabId);
+          const idx = tabs.findIndex((tab) => tab.id === tabId);
           if (idx < 0) {
             return ctx;
           }
-          const filtered = openTabs.filter((tab) => tab.id !== tabId);
-          const closingTab = openTabs[idx];
+          const filtered = tabs.filter((tab) => tab.id !== tabId);
+          const closingTab = tabs[idx];
           let selectedTabId =
-            ctx.session.selectedTabId === tabId
+            getSessionSelectedTabId(ctx.session) === tabId
               ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
-              : ctx.session.selectedTabId;
-          if (ctx.session.selectedTabId === tabId && isSessionTab(closingTab)) {
-            const nextSessionTab = findNextOpenSessionTabAfterClose(openTabs, tabId);
+              : getSessionSelectedTabId(ctx.session);
+          if (getSessionSelectedTabId(ctx.session) === tabId && isSessionTab(closingTab)) {
+            const nextSessionTab = findNextOpenSessionTabAfterClose(tabs, tabId);
             if (nextSessionTab) {
               selectedTabId = nextSessionTab.id;
             }
@@ -253,8 +270,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
             ...ctx,
             session: {
               ...ctx.session,
-              openTabs: filtered,
-              selectedTabId,
+              editorLayout: setActivePaneTabs(ctx.session.editorLayout, filtered, selectedTabId),
             },
           };
         }),
@@ -263,7 +279,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
     closeTabForce,
     closeTabWithPrompt(tabId: string, confirm: (message: string) => boolean): boolean {
       const snapshot = getSnapshot();
-      const targetTab = getActiveSession(snapshot).openTabs.find((tab) => tab.id === tabId);
+      const targetTab = getSessionTabs(getActiveSession(snapshot)).find((tab) => tab.id === tabId);
       if (!targetTab) {
         return false;
       }
@@ -279,16 +295,17 @@ export function createDocumentTabsLifecycleSlice(deps: {
     },
     closeOtherTabs(contextTabId: string, confirm: (message: string) => boolean): boolean {
       const snapshot = getSnapshot();
-      if (!getActiveSession(snapshot).openTabs.some((tab) => tab.id === contextTabId)) {
+      const tabs = getSessionTabs(getActiveSession(snapshot));
+      if (!tabs.some((tab) => tab.id === contextTabId)) {
         return false;
       }
-      const tabIds = tabIdsToCloseOtherThan(getActiveSession(snapshot).openTabs, contextTabId);
+      const tabIds = tabIdsToCloseOtherThan(tabs, contextTabId);
       if (tabIds.length === 0) {
         return false;
       }
 
       for (const tabId of tabIds) {
-        const tab = getActiveSession(snapshot).openTabs
+        const tab = tabs
           .map((rawTab) => normalizeTabState(rawTab))
           .find((entry) => entry.id === tabId);
         if (!tab || !isFileTab(tab)) {
@@ -305,13 +322,14 @@ export function createDocumentTabsLifecycleSlice(deps: {
     },
     closeTabsToRight(contextTabId: string, confirm: (message: string) => boolean): boolean {
       const snapshot = getSnapshot();
-      const tabIds = tabIdsToCloseToRightOf(getActiveSession(snapshot).openTabs, contextTabId);
+      const tabs = getSessionTabs(getActiveSession(snapshot));
+      const tabIds = tabIdsToCloseToRightOf(tabs, contextTabId);
       if (tabIds.length === 0) {
         return false;
       }
 
       for (const tabId of tabIds) {
-        const tab = getActiveSession(snapshot).openTabs
+        const tab = tabs
           .map((rawTab) => normalizeTabState(rawTab))
           .find((entry) => entry.id === tabId);
         if (!tab || !isFileTab(tab)) {
@@ -334,7 +352,8 @@ export function createDocumentTabsLifecycleSlice(deps: {
     },
     closeMissingFileTabs(): boolean {
       const snapshot = getSnapshot();
-      const tabIds = missingTabIdsToClose(getActiveSession(snapshot).openTabs, getActiveDocuments(snapshot));
+      const tabs = getSessionTabs(getActiveSession(snapshot));
+      const tabIds = missingTabIdsToClose(tabs, getActiveDocuments(snapshot));
       if (tabIds.length === 0) {
         return false;
       }

@@ -1,4 +1,5 @@
 import type { DocumentState } from "../domain/contracts";
+import { getSessionTabs } from "../domain/contracts";
 import { isEditableContentKind } from "./fileContentKind";
 import { appState } from "../state/appState";
 import { saveFile, saveFileAs } from "./fileSystem";
@@ -42,9 +43,8 @@ async function persistDocument(
   const activeWorkspaceRoot = appState.getWorkspaceRoot();
   const savedOutsideWorkspace =
     activeWorkspaceRoot !== null && !isPathUnderRoot(targetPath, activeWorkspaceRoot);
-  const tabId = appState
-    .getActiveSession()
-    .openTabs.find((tab) => tab.kind === "file" && tab.documentId === document.id)?.id;
+  const tabId = getSessionTabs(appState.getActiveSession())
+    .find((tab) => tab.kind === "file" && tab.documentId === document.id)?.id;
 
   if (options?.allowWorkspaceTabMove && savedOutsideWorkspace && tabId) {
     appState.closeTabForce(tabId);

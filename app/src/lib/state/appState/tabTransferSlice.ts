@@ -1,7 +1,11 @@
 import type { AppDomainState, ContextId, ContextSnapshot } from "../../domain/contracts";
 import {
   createFileTab,
+  getSessionTabs,
   isFileTab,
+  layoutFromFlatTabs,
+  recomputeSelectedTabId,
+  setActivePaneTabs,
   tabDocumentId,
 } from "../../domain/contracts";
 import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
@@ -22,18 +26,23 @@ import { canCreateFileTabs, reopenTabForDocument, selectTabInternal } from "./ta
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
+function activePaneSelectedTabId(snapshot: ContextSnapshot): string | null {
+  const layout = snapshot.session.editorLayout;
+  return layout.panes.find((pane) => pane.id === layout.activePaneId)?.selectedTabId ?? null;
+}
+
 function removeFileTabFromSnapshot(
   snapshot: ContextSnapshot,
   tabId: string,
   documentId: string,
   lastActiveWindowId: string,
 ): ContextSnapshot {
-  const openTabs = snapshot.session.openTabs;
-  const idx = openTabs.findIndex((tab) => tab.id === tabId);
+  const tabs = getSessionTabs(snapshot.session);
+  const idx = tabs.findIndex((tab) => tab.id === tabId);
   if (idx < 0) {
     return snapshot;
   }
-  const filtered = openTabs.filter((tab) => tab.id !== tabId);
+  const filtered = tabs.filter((tab) => tab.id !== tabId);
   const documents = snapshot.documents.filter((doc) => {
     if (doc.id !== documentId) {
       return true;
@@ -47,23 +56,22 @@ function removeFileTabFromSnapshot(
       documents: [...documents, newDocument],
       session: {
         ...snapshot.session,
-        openTabs: [createFileTab(bootstrapTabId, docId)],
-        selectedTabId: bootstrapTabId,
+        editorLayout: layoutFromFlatTabs([createFileTab(bootstrapTabId, docId)], bootstrapTabId),
         lastActiveSessionId: null,
         lastActiveWindowId,
       },
     };
   }
-  const selectedTabId =
-    snapshot.session.selectedTabId === tabId
-      ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
-      : snapshot.session.selectedTabId;
+  const selectedTabId = recomputeSelectedTabId(
+    tabs,
+    filtered,
+    activePaneSelectedTabId(snapshot),
+  );
   return {
     documents,
     session: {
       ...snapshot.session,
-      openTabs: filtered,
-      selectedTabId,
+      editorLayout: setActivePaneTabs(snapshot.session.editorLayout, filtered, selectedTabId),
     },
   };
 }
@@ -73,32 +81,37 @@ function addFileTabWithDocument(
   document: ContextSnapshot["documents"][number],
   tabId: string,
 ): ContextSnapshot {
-  const existingTab = snapshot.session.openTabs.find(
+  const tabs = getSessionTabs(snapshot.session);
+  const existingTab = tabs.find(
     (tab) => isFileTab(tab) && tab.documentId === document.id,
   );
   if (existingTab) {
     return {
       ...snapshot,
-      session: { ...snapshot.session, selectedTabId: existingTab.id },
+      session: {
+        ...snapshot.session,
+        editorLayout: setActivePaneTabs(snapshot.session.editorLayout, tabs, existingTab.id),
+      },
     };
   }
   const hasDocument = snapshot.documents.some((doc) => doc.id === document.id);
+  const nextTabs = [...tabs, createFileTab(tabId, document.id)];
   return {
     documents: hasDocument ? snapshot.documents : [...snapshot.documents, document],
     session: {
       ...snapshot.session,
-      openTabs: [...snapshot.session.openTabs, createFileTab(tabId, document.id)],
-      selectedTabId: tabId,
+      editorLayout: setActivePaneTabs(snapshot.session.editorLayout, nextTabs, tabId),
     },
   };
 }
 
 function isDefaultBootstrapWindow(state: AppDomainState): boolean {
   const ctx = getActiveContextSnapshot(state);
-  if (ctx.session.openTabs.length !== 1) {
+  const tabs = getSessionTabs(ctx.session);
+  if (tabs.length !== 1) {
     return false;
   }
-  const tab = ctx.session.openTabs[0];
+  const tab = tabs[0];
   if (!isFileTab(tab)) {
     return false;
   }
@@ -140,7 +153,7 @@ export function createTabTransferSlice(deps: {
         );
         if (existingInWorkspace) {
           migratedDocumentId = existingInWorkspace.id;
-          const existingTab = workspace.snapshot.session.openTabs.find(
+          const existingTab = getSessionTabs(workspace.snapshot.session).find(
             (tab) => isFileTab(tab) && tab.documentId === existingInWorkspace.id,
           );
           return {
@@ -157,7 +170,11 @@ export function createTabTransferSlice(deps: {
                             ...entry.snapshot,
                             session: {
                               ...entry.snapshot.session,
-                              selectedTabId: existingTab.id,
+                              editorLayout: setActivePaneTabs(
+                                entry.snapshot.session.editorLayout,
+                                getSessionTabs(entry.snapshot.session),
+                                existingTab.id,
+                              ),
                             },
                           }
                         : addFileTabWithDocument(
@@ -216,7 +233,7 @@ export function createTabTransferSlice(deps: {
       tabId: string,
     ): { filePath: string | null; content: string; title: string } | null {
       const snapshot = getSnapshot();
-      const tab = getActiveSession(snapshot).openTabs.find((entry) => entry.id === tabId);
+      const tab = getSessionTabs(getActiveSession(snapshot)).find((entry) => entry.id === tabId);
       if (!tab) {
         return null;
       }
@@ -236,33 +253,32 @@ export function createTabTransferSlice(deps: {
     removeTransferredTab(tabId: string): void {
       update((state) =>
         patchActiveContext(state, (ctx) => {
-          const openTabs = ctx.session.openTabs;
-          const idx = openTabs.findIndex((tab) => tab.id === tabId);
+          const tabs = getSessionTabs(ctx.session);
+          const idx = tabs.findIndex((tab) => tab.id === tabId);
           if (idx < 0) {
             return ctx;
           }
-          const filtered = openTabs.filter((tab) => tab.id !== tabId);
+          const filtered = tabs.filter((tab) => tab.id !== tabId);
           if (filtered.length === 0) {
             return {
               ...ctx,
               session: {
                 ...ctx.session,
-                openTabs: [],
-                selectedTabId: null,
+                editorLayout: setActivePaneTabs(ctx.session.editorLayout, [], null),
                 lastActiveSessionId: null,
               },
             };
           }
-          const selectedTabId =
-            ctx.session.selectedTabId === tabId
-              ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
-              : ctx.session.selectedTabId;
+          const selectedTabId = recomputeSelectedTabId(
+            tabs,
+            filtered,
+            activePaneSelectedTabId(ctx),
+          );
           return {
             ...ctx,
             session: {
               ...ctx.session,
-              openTabs: filtered,
-              selectedTabId,
+              editorLayout: setActivePaneTabs(ctx.session.editorLayout, filtered, selectedTabId),
             },
           };
         }),
@@ -270,11 +286,11 @@ export function createTabTransferSlice(deps: {
     },
     transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
       const snapshot = getSnapshot();
-      const selectedTabId = getActiveSession(snapshot).selectedTabId;
+      const selectedTabId = activePaneSelectedTabId(getActiveContextSnapshot(snapshot));
       if (!selectedTabId) {
         return null;
       }
-      const tab = getActiveSession(snapshot).openTabs.find((entry) => entry.id === selectedTabId);
+      const tab = getSessionTabs(getActiveSession(snapshot)).find((entry) => entry.id === selectedTabId);
       if (!tab) {
         return null;
       }
@@ -307,7 +323,7 @@ export function createTabTransferSlice(deps: {
           const duplicate = findDocumentByPath(state, payload.filePath);
           if (duplicate) {
             documentId = duplicate.id;
-            const existingTab = getActiveSession(state).openTabs.find(
+            const existingTab = getSessionTabs(getActiveSession(state)).find(
               (tab) => isFileTab(tab) && tab.documentId === duplicate.id,
             );
             if (existingTab) {
@@ -328,19 +344,28 @@ export function createTabTransferSlice(deps: {
             documents: [newDoc],
             session: {
               ...getActiveSession(state),
-              openTabs: [createFileTab(tabId, docId)],
-              selectedTabId: tabId,
+              editorLayout: setActivePaneTabs(
+                getActiveSession(state).editorLayout,
+                [createFileTab(tabId, docId)],
+                tabId,
+              ),
             },
           }));
         }
-        return patchActiveContext(state, (ctx) => ({
-          documents: [...ctx.documents, newDoc],
-          session: {
-            ...ctx.session,
-            openTabs: [...ctx.session.openTabs, createFileTab(tabId, docId)],
-            selectedTabId: tabId,
-          },
-        }));
+        return patchActiveContext(state, (ctx) => {
+          const tabs = getSessionTabs(ctx.session);
+          return {
+            documents: [...ctx.documents, newDoc],
+            session: {
+              ...ctx.session,
+              editorLayout: setActivePaneTabs(
+                ctx.session.editorLayout,
+                [...tabs, createFileTab(tabId, docId)],
+                tabId,
+              ),
+            },
+          };
+        });
       });
       return documentId;
     },

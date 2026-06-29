@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { moveTabToNewWindow } from "./tabWindowTransfer";
 import { createNewWindowWithTransfer } from "./windowManager";
@@ -28,7 +29,7 @@ describe("moveTabToNewWindow", () => {
 
   it("keeps the tab when window creation fails", async () => {
     appState.openFileInTab("/tmp/move-me.txt", "payload");
-    const tabId = appState.getActiveSession().selectedTabId!;
+    const tabId = getSessionSelectedTabId(appState.getActiveSession())!;
     createNewWindowWithTransferMock.mockResolvedValue(null);
     const notify = vi.fn();
 
@@ -36,14 +37,14 @@ describe("moveTabToNewWindow", () => {
       moveTabToNewWindow({ tabId, sourceWindowId: "main", notify }),
     ).resolves.toBe(false);
 
-    expect(appState.getActiveSession().openTabs).toHaveLength(2);
+    expect(getSessionTabs(appState.getActiveSession())).toHaveLength(2);
     expect(notify).toHaveBeenCalledWith("Failed to open new window.");
     expect(syncOpenFileRegistryForWindowMock).not.toHaveBeenCalled();
   });
 
   it("removes the tab and syncs registry after successful transfer", async () => {
     appState.openFileInTab("/tmp/move-me.txt", "payload");
-    const tabId = appState.getActiveSession().selectedTabId!;
+    const tabId = getSessionSelectedTabId(appState.getActiveSession())!;
     createNewWindowWithTransferMock.mockResolvedValue("window-2");
     const notify = vi.fn();
 
@@ -51,7 +52,7 @@ describe("moveTabToNewWindow", () => {
       moveTabToNewWindow({ tabId, sourceWindowId: "main", notify }),
     ).resolves.toBe(true);
 
-    expect(appState.getActiveSession().openTabs).toHaveLength(1);
+    expect(getSessionTabs(appState.getActiveSession())).toHaveLength(1);
     expect(createNewWindowWithTransferMock).toHaveBeenCalledWith(expect.anything(), {
       filePath: "/tmp/move-me.txt",
       content: "payload",

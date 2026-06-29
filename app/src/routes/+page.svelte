@@ -26,7 +26,15 @@
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
   import { registerSettingsDialogOpener } from "../lib/services/settingsDialogUi";
   import type { AppDomainState } from "../lib/domain/contracts";
-  import { CHAT_HTTP_CONTEXT_ID, isFileTab, type ContextId, tabDocumentId } from "../lib/domain/contracts";
+  import {
+    CHAT_HTTP_CONTEXT_ID,
+    getSessionActiveTab,
+    getSessionSelectedTabId,
+    getSessionTabs,
+    isFileTab,
+    type ContextId,
+    tabDocumentId,
+  } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
@@ -288,14 +296,14 @@
       snapshot.settings.chatHttp,
     ),
   );
-  const activeTab = $derived(
-    session.openTabs.find((tab) => tab.id === session.selectedTabId),
-  );
+  const sessionTabs = $derived(getSessionTabs(session));
+  const sessionSelectedTabId = $derived(getSessionSelectedTabId(session));
+  const activeTab = $derived(getSessionActiveTab(session));
   const isSessionTabActive = $derived(
-    isSessionEditorPaneActive(session.openTabs, session.selectedTabId),
+    isSessionEditorPaneActive(sessionTabs, sessionSelectedTabId),
   );
   const activeViewTabKind = $derived(
-    activeViewKind(session.openTabs, session.selectedTabId),
+    activeViewKind(sessionTabs, sessionSelectedTabId),
   );
   const isSettingsViewActive = $derived(activeViewTabKind === "settings");
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
@@ -306,10 +314,17 @@
   // row so the notepad card stays compact and its divider lands near the
   // editor tab-bar bottom line.
   const notepadSession = $derived(snapshot.contexts.notepad.session);
-  const notepadOpenTabCount = $derived(notepadSession.openTabs.length);
+  const notepadOpenTabCount = $derived(getSessionTabs(notepadSession).length);
   const notepadRecentTabs = $derived.by(() => {
     const notepadDocs = snapshot.contexts.notepad.documents;
-    const fileTabs = notepadSession.openTabs.filter(isFileTab);
+    const fileTabs = getSessionTabs(notepadSession)
+      .filter(isFileTab)
+      .filter((tab) => {
+        const doc = notepadDocs.find((documentState) => documentState.id === tab.documentId);
+        // Skip untitled/unsaved docs (no on-disk path) so the card only lists
+        // real saved files.
+        return Boolean(doc?.filePath);
+      });
     const lastOne = fileTabs.slice(-1);
     return lastOne.map((tab) => {
       const doc = notepadDocs.find((documentState) => documentState.id === tab.documentId);
@@ -598,7 +613,7 @@
     activeWorkspaceRoot;
     selectedSessionId;
     session.lastActiveSessionId;
-    session.selectedTabId;
+    sessionSelectedTabId;
     lastSelectedTabId;
     syncSessionPersistenceEffect({
       runtimeReady,
@@ -607,7 +622,7 @@
       activeWorkspaceRoot,
       selectedSessionId,
       sessionLastActiveSessionId: session.lastActiveSessionId,
-      selectedTabId: session.selectedTabId,
+      selectedTabId: sessionSelectedTabId,
       lastSelectedTabId,
       onTabActivated,
       setLastSelectedTabId: (tabId) => {

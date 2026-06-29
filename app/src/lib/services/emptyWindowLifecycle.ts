@@ -1,18 +1,19 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppDomainState } from "../domain/contracts";
-import { isFileTab } from "../domain/contracts";
+import { getSessionTabs, isFileTab } from "../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import { isEmptyUnsavedDocument } from "./untitledDocument";
 
 export function shouldCloseWindowAfterTabTransfer(snapshot: AppDomainState): boolean {
   const session = getActiveSession(snapshot);
-  if (session.openTabs.length === 0) {
+  const tabs = getSessionTabs(session);
+  if (tabs.length === 0) {
     return true;
   }
-  if (session.openTabs.length !== 1) {
+  if (tabs.length !== 1) {
     return false;
   }
-  const tab = session.openTabs[0];
+  const tab = tabs[0];
   if (!isFileTab(tab)) {
     return false;
   }

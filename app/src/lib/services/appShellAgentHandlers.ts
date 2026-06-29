@@ -1,5 +1,7 @@
 import {
   CHAT_HTTP_CONTEXT_ID,
+  getSessionSelectedTabId,
+  getSessionTabs,
   isFileTab,
   isSessionTab,
 } from "../domain/contracts";
@@ -127,15 +129,15 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     chatStore.setActiveSessionId(sessionId);
     appState.setLastActiveSessionId(sessionId);
     const sessionSnapshot = appState.getActiveSession();
-    const selectedTab = sessionSnapshot.openTabs.find(
-      (tab) => tab.id === sessionSnapshot.selectedTabId,
+    const selectedTab = getSessionTabs(sessionSnapshot).find((tab) =>
+      tab.id === getSessionSelectedTabId(sessionSnapshot),
     );
     const selectedMatchesChatSession =
       selectedTab && isSessionTab(selectedTab) && selectedTab.sessionId === sessionId;
     if (selectedMatchesChatSession) {
       return;
     }
-    const fileTabIds = sessionSnapshot.openTabs
+    const fileTabIds = getSessionTabs(sessionSnapshot)
       .filter((tab) => isFileTab(tab))
       .map((tab) => tab.id);
     if (fileTabIds.length > 0) {
@@ -219,7 +221,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
     const session = appState.getActiveSession();
     await chatStore.loadWorkspaceSessions(normalizedRoot);
-    chatStore.mergeSessionDrafts(normalizedRoot, openSessionTabIds(session.openTabs));
+    chatStore.mergeSessionDrafts(normalizedRoot, openSessionTabIds(getSessionTabs(session)));
 
     const sessionIndex = chatStore.getSessionIndex();
     const restored = resolveRestoredActiveSession(session, sessionIndex);
@@ -231,8 +233,8 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     } else {
       chatStore.setActiveSessionId(null);
       appState.setLastActiveSessionId(null);
-      const tabs = appState.getActiveSession().openTabs;
-      const selectedTabId = appState.getActiveSession().selectedTabId;
+      const tabs = getSessionTabs(appState.getActiveSession());
+      const selectedTabId = getSessionSelectedTabId(appState.getActiveSession());
       const nextSelected = selectedTabAfterMissingLastSession(tabs, selectedTabId);
       if (nextSelected && nextSelected !== selectedTabId) {
         appState.selectTab(nextSelected);
@@ -251,10 +253,11 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
 
   async function handleCloseTab(tabId: string): Promise<void> {
     const beforeSession = appState.getActiveSession();
-    const closingTab = beforeSession.openTabs.find((tab) => tab.id === tabId);
+    const beforeTabs = getSessionTabs(beforeSession);
+    const closingTab = beforeTabs.find((tab) => tab.id === tabId);
     const closedSessionId =
       closingTab && isSessionTab(closingTab) ? closingTab.sessionId : null;
-    const wasSelected = beforeSession.selectedTabId === tabId;
+    const wasSelected = getSessionSelectedTabId(beforeSession) === tabId;
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
 
     const closed = await closeTabWithUnsavedPrompt(tabId, {
@@ -274,8 +277,8 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
 
     const afterSession = appState.getActiveSession();
-    const selectedAfter = afterSession.openTabs.find(
-      (tab) => tab.id === afterSession.selectedTabId,
+    const selectedAfter = getSessionTabs(afterSession).find((tab) =>
+      tab.id === getSessionSelectedTabId(afterSession),
     );
     if (selectedAfter && isSessionTab(selectedAfter)) {
       return;

@@ -2,10 +2,14 @@ import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { DocumentState, TabState, WindowSessionSnapshot } from "../domain/contracts";
 import {
   createFileTab,
+  getSessionSelectedTabId,
+  getSessionTabs,
   isFileTab,
   isSessionTab,
   isViewTab,
+  layoutFromFlatTabs,
   normalizeTabState,
+  setActivePaneTabs,
 } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getErrorMessage } from "../commands/commandErrors";
@@ -93,9 +97,15 @@ async function sanitizeContext(
       }),
     ),
   );
-  const openTabs: TabState[] = [];
 
-  for (const rawTab of context.session.openTabs) {
+  // Re-seed legacy flat-list snapshots (pre-split-view) into a single-pane
+  // editor layout. No persisted migration (AGENTS.md); the restore path handles
+  // the old shape on read. New snapshots already carry `editorLayout`.
+  const incomingTabs = readIncomingTabs(context);
+  const incomingSelectedTabId = readIncomingSelectedTabId(context);
+
+  const openTabs: TabState[] = [];
+  for (const rawTab of incomingTabs) {
     const tab = normalizeTabState(rawTab);
     if (isSessionTab(tab)) {
       openTabs.push(tab);
@@ -126,17 +136,13 @@ async function sanitizeContext(
       "doc",
       context.documents.map((documentState) => documentState.id),
     );
-    const tabId = nextNumericId(
-      "tab",
-      context.session.openTabs.map((tab) => tab.id),
-    );
+    const tabId = nextNumericId("tab", incomingTabs.map((tab) => tab.id));
     const fallbackDocument = buildFallbackDocument(docId);
     return {
       documents: [fallbackDocument],
       session: normalizeSessionState({
         ...context.session,
-        openTabs: [createFileTab(tabId, docId)],
-        selectedTabId: tabId,
+        editorLayout: layoutFromFlatTabs([createFileTab(tabId, docId)], tabId),
         windowBounds: context.session.windowBounds ?? null,
       }),
     };
@@ -148,19 +154,86 @@ async function sanitizeContext(
   const documents = [...documentsById.values()].filter((documentState) =>
     referencedDocIds.has(documentState.id),
   );
-  const selectedTabId = openTabs.some((tab) => tab.id === context.session.selectedTabId)
-    ? context.session.selectedTabId
+  const selectedTabId = openTabs.some((tab) => tab.id === incomingSelectedTabId)
+    ? incomingSelectedTabId
     : openTabs[0]?.id ?? null;
 
   return {
     documents,
     session: normalizeSessionState({
       ...context.session,
-      openTabs,
-      selectedTabId,
+      editorLayout: layoutFromFlatTabs(openTabs, selectedTabId),
       windowBounds: context.session.windowBounds ?? null,
     }),
   };
+}
+
+/**
+ * Read the open tabs from a (possibly legacy) restored context. New snapshots
+ * carry `editorLayout`; pre-split-view snapshots carried a flat `openTabs` list.
+ */
+function readIncomingTabs(context: WindowSessionSnapshot["notepad"]): TabState[] {
+  const session = context.session as unknown as Record<string, unknown>;
+  if (session.editorLayout && typeof session.editorLayout === "object") {
+    // New shape: flatten all panes' tabs in reading order.
+    const layout = session.editorLayout as {
+      panes?: { tabs?: TabState[] }[];
+      slots?: number[][];
+    };
+    if (Array.isArray(layout.panes)) {
+      const ordered: TabState[] = [];
+      const seen = new Set<number>();
+      for (const row of layout.slots ?? []) {
+        for (const paneIndex of row) {
+          if (seen.has(paneIndex)) {
+            continue;
+          }
+          seen.add(paneIndex);
+          const pane = layout.panes[paneIndex];
+          if (pane?.tabs) {
+            ordered.push(...pane.tabs);
+          }
+        }
+      }
+      for (let i = 0; i < layout.panes.length; i += 1) {
+        if (!seen.has(i)) {
+          const pane = layout.panes[i];
+          if (pane?.tabs) {
+            ordered.push(...pane.tabs);
+          }
+        }
+      }
+      return ordered;
+    }
+  }
+  if (Array.isArray(session.openTabs)) {
+    return session.openTabs as TabState[];
+  }
+  return [];
+}
+
+function readIncomingSelectedTabId(context: WindowSessionSnapshot["notepad"]): string | null {
+  const session = context.session as unknown as Record<string, unknown>;
+  if (session.editorLayout && typeof session.editorLayout === "object") {
+    const layout = session.editorLayout as {
+      panes?: { selectedTabId?: string | null; id?: string }[];
+      activePaneId?: string;
+    };
+    const activeId = layout.activePaneId;
+    const activePane = layout.panes?.find((pane) => pane.id === activeId);
+    if (activePane && typeof activePane.selectedTabId === "string") {
+      return activePane.selectedTabId;
+    }
+    const firstPane = layout.panes?.[0];
+    if (firstPane && typeof firstPane.selectedTabId === "string") {
+      return firstPane.selectedTabId;
+    }
+    return null;
+  }
+  if (typeof session.selectedTabId === "string") {
+    return session.selectedTabId;
+  }
+  return null;
 }
 
 export async function sanitizeWindowSnapshot(

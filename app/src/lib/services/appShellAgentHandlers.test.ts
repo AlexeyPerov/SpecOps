@@ -5,6 +5,7 @@ import { WorkspaceAgentBackendError } from "../ai/backends/workspaceAgentBackend
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { WorkspaceAccessReason } from "../ai/capabilities";
+import { createSinglePaneLayout } from "../domain/contracts";
 
 const { logDiagnosticMock, ensureOpencodeSidecarMock } = vi.hoisted(() => ({
   logDiagnosticMock: vi.fn().mockResolvedValue(undefined),
@@ -92,8 +93,7 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
     ensureOpencodeSidecarMock.mockResolvedValue(null);
 
     appStateMock.getActiveSession.mockReturnValue({
-      selectedTabId: "tab-file",
-      openTabs: [],
+      editorLayout: createSinglePaneLayout([], "tab-file"),
       lastActiveWindowId: "main",
       windowBounds: null,
       lastActiveSessionId: "agent-a",
@@ -339,8 +339,7 @@ describe("createAppShellAgentHandlers.handleOpenExternalSession", () => {
     backendGetSessionDetailsMock.mockReset();
 
     appStateMock.getActiveSession.mockReturnValue({
-      selectedTabId: "tab-agent",
-      openTabs: [],
+      editorLayout: createSinglePaneLayout([], "tab-agent"),
       lastActiveWindowId: "main",
       windowBounds: null,
       lastActiveSessionId: null,
@@ -464,8 +463,7 @@ describe("createAppShellAgentHandlers.handleListWorkspaceSessions", () => {
     backendListSessionDetailsMock.mockReset();
 
     appStateMock.getActiveSession.mockReturnValue({
-      selectedTabId: "tab-agent",
-      openTabs: [],
+      editorLayout: createSinglePaneLayout([], "tab-agent"),
       lastActiveWindowId: "main",
       windowBounds: null,
       lastActiveSessionId: null,

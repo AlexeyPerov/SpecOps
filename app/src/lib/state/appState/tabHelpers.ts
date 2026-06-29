@@ -1,5 +1,12 @@
 import type { AppDomainState, DocumentState, TabState } from "../../domain/contracts";
-import { createFileTab, isFileTab, normalizeTabState } from "../../domain/contracts";
+import {
+  createFileTab,
+  getSessionTabs,
+  isFileTab,
+  normalizeTabState,
+  recomputeSelectedTabId,
+  setActivePaneTabs,
+} from "../../domain/contracts";
 import { isChatHttpContext, nextDocAndTabIds, nextTabId, patchActiveContext } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 
@@ -65,60 +72,44 @@ export function missingTabIdsToClose(
     .map((tab) => tab.id);
 }
 
-export function nextSelectedTabAfterBulkClose(
-  previousTabs: TabState[],
-  remainingTabs: TabState[],
-  previousSelectedTabId: string | null,
-  preferredTabId: string | null = null,
-): string | null {
-  if (preferredTabId && remainingTabs.some((tab) => tab.id === preferredTabId)) {
-    return preferredTabId;
-  }
-  if (!previousSelectedTabId) {
-    return remainingTabs[0]?.id ?? null;
-  }
-  if (remainingTabs.some((tab) => tab.id === previousSelectedTabId)) {
-    return previousSelectedTabId;
-  }
-
-  const selectedIndex = previousTabs.findIndex((tab) => tab.id === previousSelectedTabId);
-  if (selectedIndex >= 0) {
-    for (let idx = selectedIndex - 1; idx >= 0; idx -= 1) {
-      const candidateId = previousTabs[idx]?.id;
-      if (candidateId && remainingTabs.some((tab) => tab.id === candidateId)) {
-        return candidateId;
-      }
-    }
-  }
-  return remainingTabs[0]?.id ?? null;
-}
-
 export function canCreateFileTabs(state: AppDomainState): boolean {
   return !isChatHttpContext(state.contexts.activeContextId);
 }
 
 export function selectTabInternal(state: AppDomainState, tabId: string): AppDomainState {
   return patchActiveContext(state, (ctx) => {
-    if (!ctx.session.openTabs.some((tab) => tab.id === tabId)) {
+    const tabs = getSessionTabs(ctx.session);
+    if (!tabs.some((tab) => tab.id === tabId)) {
+      return ctx;
+    }
+    const nextLayout = setActivePaneTabs(
+      ctx.session.editorLayout,
+      tabs,
+      tabId,
+    );
+    if (nextLayout === ctx.session.editorLayout) {
       return ctx;
     }
     return {
       ...ctx,
-      session: { ...ctx.session, selectedTabId: tabId },
+      session: { ...ctx.session, editorLayout: nextLayout },
     };
   });
 }
 
 export function reopenTabForDocument(state: AppDomainState, documentId: string): AppDomainState {
   const tabId = nextTabId();
-  return patchActiveContext(state, (ctx) => ({
-    ...ctx,
-    session: {
-      ...ctx.session,
-      openTabs: [...ctx.session.openTabs, createFileTab(tabId, documentId)],
-      selectedTabId: tabId,
-    },
-  }));
+  return patchActiveContext(state, (ctx) => {
+    const tabs = getSessionTabs(ctx.session);
+    const nextTabs = [...tabs, createFileTab(tabId, documentId)];
+    return {
+      ...ctx,
+      session: {
+        ...ctx.session,
+        editorLayout: setActivePaneTabs(ctx.session.editorLayout, nextTabs, tabId),
+      },
+    };
+  });
 }
 
 export function closeTabsForce(state: AppDomainState, tabIds: string[], preferredTabId: string | null): AppDomainState {
@@ -127,8 +118,9 @@ export function closeTabsForce(state: AppDomainState, tabIds: string[], preferre
   }
   return patchActiveContext(state, (ctx) => {
     const idsToClose = new Set(tabIds);
-    const filteredTabs = ctx.session.openTabs.filter((tab) => !idsToClose.has(tab.id));
-    if (filteredTabs.length === ctx.session.openTabs.length) {
+    const tabs = getSessionTabs(ctx.session);
+    const filteredTabs = tabs.filter((tab) => !idsToClose.has(tab.id));
+    if (filteredTabs.length === tabs.length) {
       return ctx;
     }
     if (filteredTabs.length === 0) {
@@ -137,8 +129,7 @@ export function closeTabsForce(state: AppDomainState, tabIds: string[], preferre
           ...ctx,
           session: {
             ...ctx.session,
-            openTabs: [],
-            selectedTabId: null,
+            editorLayout: setActivePaneTabs(ctx.session.editorLayout, [], null),
           },
         };
       }
@@ -148,8 +139,11 @@ export function closeTabsForce(state: AppDomainState, tabIds: string[], preferre
         documents: [...ctx.documents, newDocument],
         session: {
           ...ctx.session,
-          openTabs: [createFileTab(tabId, docId)],
-          selectedTabId: tabId,
+          editorLayout: setActivePaneTabs(
+            ctx.session.editorLayout,
+            [createFileTab(tabId, docId)],
+            tabId,
+          ),
         },
       };
     }
@@ -158,14 +152,32 @@ export function closeTabsForce(state: AppDomainState, tabIds: string[], preferre
       ...ctx,
       session: {
         ...ctx.session,
-        openTabs: filteredTabs,
-        selectedTabId: nextSelectedTabAfterBulkClose(
-          ctx.session.openTabs,
+        editorLayout: setActivePaneTabs(
+          ctx.session.editorLayout,
           filteredTabs,
-          ctx.session.selectedTabId,
-          preferredTabId,
+          recomputeSelectedTabId(
+            tabs,
+            filteredTabs,
+            ctx.session.editorLayout.panes.find(
+              (pane) => pane.id === ctx.session.editorLayout.activePaneId,
+            )?.selectedTabId ?? null,
+            preferredTabId,
+          ),
         ),
       },
     };
   });
+}
+
+/**
+ * @deprecated Use `recomputeSelectedTabId` from `domain/editorLayout` for new
+ * code. Kept only for call sites that still pass the legacy signature.
+ */
+export function nextSelectedTabAfterBulkClose(
+  previousTabs: TabState[],
+  remainingTabs: TabState[],
+  previousSelectedTabId: string | null,
+  preferredTabId: string | null = null,
+): string | null {
+  return recomputeSelectedTabId(previousTabs, remainingTabs, previousSelectedTabId, preferredTabId);
 }

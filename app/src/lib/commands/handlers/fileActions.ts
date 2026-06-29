@@ -1,6 +1,11 @@
 import { dirname } from "@tauri-apps/api/path";
 import { appState } from "../../state/appState";
-import { tabDocumentId } from "../../domain/contracts";
+import {
+  getSessionActiveTab,
+  getSessionSelectedTabId,
+  getSessionTabs,
+  tabDocumentId,
+} from "../../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../../state/appState/contextHelpers";
 import { openFolderDialog, saveFile, saveFileAs } from "../../services/fileSystem";
 import { untitledSaveDefaultPath } from "../../services/untitledSavePath";
@@ -23,9 +28,7 @@ export async function handleFileOpenAllInFolder(context: CommandContext): Promis
   const { getState, getWindowId, confirm, notify } = context;
   await runInNotepadContext(async () => {
     const state = getState();
-    const selectedTab = getActiveSession(state).openTabs.find(
-      (tab) => tab.id === getActiveSession(state).selectedTabId,
-    );
+    const selectedTab = getSessionActiveTab(getActiveSession(state));
     const activeDocumentId = tabDocumentId(selectedTab);
     const activeDocument = activeDocumentId
       ? getActiveDocuments(state).find((document) => document.id === activeDocumentId)
@@ -88,9 +91,7 @@ export async function handleFileOpenAllInFolder(context: CommandContext): Promis
 export async function handleFileSave(context: CommandContext): Promise<void> {
   const { getState, notify, getWindowId } = context;
   const state = getState();
-  const selected = getActiveSession(state).openTabs.find(
-    (tab) => tab.id === getActiveSession(state).selectedTabId,
-  );
+  const selected = getSessionActiveTab(getActiveSession(state));
   if (!selected) {
     notify("No active tab to save.");
     return;
@@ -134,9 +135,7 @@ export async function handleFileSave(context: CommandContext): Promise<void> {
 export async function handleFileSaveAs(context: CommandContext): Promise<void> {
   const { getState, notify, getWindowId } = context;
   const state = getState();
-  const selected = getActiveSession(state).openTabs.find(
-    (tab) => tab.id === getActiveSession(state).selectedTabId,
-  );
+  const selected = getSessionActiveTab(getActiveSession(state));
   if (!selected) {
     notify("No active tab to save.");
     return;
@@ -231,9 +230,7 @@ export async function handleFileSaveAll(context: CommandContext): Promise<void> 
 export async function handleFileReloadFromDisk(context: CommandContext): Promise<void> {
   const { getState, notify } = context;
   const state = getState();
-  const selected = getActiveSession(state).openTabs.find(
-    (tab) => tab.id === getActiveSession(state).selectedTabId,
-  );
+  const selected = getSessionActiveTab(getActiveSession(state));
   if (!selected) {
     notify("No active tab to reload.");
     return;
@@ -271,7 +268,7 @@ export async function handleFileReloadFromDisk(context: CommandContext): Promise
 export async function handleTabClose(context: CommandContext): Promise<void> {
   const { getState, notify, getWindowId } = context;
   const state = getState();
-  const selectedTabId = getActiveSession(state).selectedTabId;
+  const selectedTabId = getSessionSelectedTabId(getActiveSession(state));
   if (!selectedTabId) {
     return;
   }
@@ -287,7 +284,7 @@ export async function handleTabClose(context: CommandContext): Promise<void> {
 
 export async function handleTabMoveToNewWindow(context: CommandContext): Promise<void> {
   const { notify, getState, getWindowId } = context;
-  const selectedTabId = getActiveSession(getState()).selectedTabId;
+  const selectedTabId = getSessionSelectedTabId(getActiveSession(getState()));
   if (!selectedTabId) {
     notify("No active tab to transfer.");
     return;
@@ -304,8 +301,8 @@ export async function handleTabMoveToNewWindow(context: CommandContext): Promise
 
 export function handleTabNext(context: CommandContext): void {
   const state = context.getState();
-  const tabs = getActiveSession(state).openTabs;
-  const index = tabs.findIndex((tab) => tab.id === getActiveSession(state).selectedTabId);
+  const tabs = getSessionTabs(getActiveSession(state));
+  const index = tabs.findIndex((tab) => tab.id === getSessionSelectedTabId(getActiveSession(state)));
   if (index < 0 || tabs.length < 2) {
     return;
   }
@@ -314,8 +311,8 @@ export function handleTabNext(context: CommandContext): void {
 
 export function handleTabPrevious(context: CommandContext): void {
   const state = context.getState();
-  const tabs = getActiveSession(state).openTabs;
-  const index = tabs.findIndex((tab) => tab.id === getActiveSession(state).selectedTabId);
+  const tabs = getSessionTabs(getActiveSession(state));
+  const index = tabs.findIndex((tab) => tab.id === getSessionSelectedTabId(getActiveSession(state)));
   if (index < 0 || tabs.length < 2) {
     return;
   }

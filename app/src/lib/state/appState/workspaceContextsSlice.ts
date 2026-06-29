@@ -8,7 +8,11 @@ import type {
   WindowSessionSnapshot,
   WorkspaceLayoutState,
 } from "../../domain/contracts";
-import { createFileTab } from "../../domain/contracts";
+import {
+  createFileTab,
+  createSinglePaneLayout,
+  getSessionTabs,
+} from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { isChatHttpRailVisible } from "../../ai/providers/chatHttpRailGating";
 import {
@@ -42,8 +46,7 @@ function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
   return {
     documents: [buildEmptyUnsavedDocument(documentId)],
     session: {
-      selectedTabId: tabId,
-      openTabs: [createFileTab(tabId, documentId)],
+      editorLayout: createSinglePaneLayout([createFileTab(tabId, documentId)], tabId),
       lastActiveWindowId,
       windowBounds: null,
       lastActiveSessionId: null,
@@ -52,7 +55,7 @@ function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
 }
 
 function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot {
-  if (snapshot.session.openTabs.length > 0) {
+  if (getSessionTabs(snapshot.session).length > 0) {
     return snapshot;
   }
   return fallbackContextSnapshot(snapshot.session.lastActiveWindowId);

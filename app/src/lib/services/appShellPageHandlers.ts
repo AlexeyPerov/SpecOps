@@ -1,6 +1,6 @@
 import { tick } from "svelte";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
-import { isFileTab } from "../domain/contracts";
+import { getSessionSelectedTabId, getSessionTabs, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import type { EditorCommandRunner } from "../types/editor";
 import {
@@ -91,7 +91,7 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
     if (!deps.getRuntimeReady()) {
       return;
     }
-    const tab = appState.getActiveSession().openTabs.find((entry) => entry.id === tabId);
+    const tab = getSessionTabs(appState.getActiveSession()).find((entry) => entry.id === tabId);
     if (!tab || !isFileTab(tab)) {
       return;
     }
@@ -263,7 +263,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       runtimeCleanup = runtimeHandle.cleanup;
       deps.setRuntimeSyncExternalFileWatcher(runtimeHandle.syncExternalFileWatcher);
       deps.setCurrentWindowId(runtimeHandle.windowId);
-      deps.setLastSelectedTabId(appState.getActiveSession().selectedTabId);
+      deps.setLastSelectedTabId(getSessionSelectedTabId(appState.getActiveSession()));
       deps.setRuntimeReady(true);
     })
     .catch(async (error: unknown) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AppDomainState } from "../domain/contracts";
-import { createSessionTab, createFileTab } from "../domain/contracts";
+import type { AppDomainState, TabState } from "../domain/contracts";
+import { createSessionTab, createFileTab, createSinglePaneLayout } from "../domain/contracts";
 import {
   canFitMarkdownSplit,
   computeResponsiveLayoutFlags,
@@ -9,14 +9,13 @@ import {
 } from "./appShellHelpers";
 
 function domainState(overrides: {
-  openTabs?: AppDomainState["contexts"]["notepad"]["session"]["openTabs"];
+  openTabs?: TabState[];
   documents?: AppDomainState["contexts"]["notepad"]["documents"];
 }): AppDomainState {
   const snapshot = {
     documents: overrides.documents ?? [],
     session: {
-      openTabs: overrides.openTabs ?? [],
-      selectedTabId: null,
+      editorLayout: createSinglePaneLayout(overrides.openTabs ?? [], null),
       lastActiveWindowId: "main",
       windowBounds: null,
     },

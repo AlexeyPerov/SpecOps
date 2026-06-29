@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import HoverTooltip from "./HoverTooltip.svelte";
-  import { CHAT_HTTP_CONTEXT_ID, type ContextId, type WorkspaceEntry } from "../domain/contracts";
+  import {
+    CHAT_HTTP_CONTEXT_ID,
+    getSessionTabs,
+    type ContextId,
+    type WorkspaceEntry,
+  } from "../domain/contracts";
   import { chatStore } from "../state/chatStore";
   import {
     createWorkspaceRailDragController,
@@ -135,7 +140,7 @@
     const storeWorkspaces = $chatStore.workspaces;
     for (const workspace of workspaces) {
       const sessions = storeWorkspaces[workspace.rootPath]?.sessionIndex.length ?? 0;
-      const tabs = workspace.snapshot.session.openTabs.length;
+      const tabs = getSessionTabs(workspace.snapshot.session).length;
       map.set(workspace.rootPath, { sessions, tabs });
     }
     return map;
@@ -198,36 +203,45 @@
   style={`width:${displayWidth}px`}
 >
   {#if expanded}
-    <div
-      class={`rail-notepad-card ${activeContextId === "notepad" ? "rail-notepad-card-active" : ""}`}
+    <button
+      class={`rail-workspace-card ${activeContextId === "notepad" ? "rail-workspace-card-active" : ""}`}
+      type="button"
+      aria-label="Notepad"
+      onclick={() => onSelectContext("notepad")}
     >
-      <button
-        class="rail-notepad-card-header"
-        type="button"
-        aria-label="Notepad"
-        onclick={() => onSelectContext("notepad")}
-      >
-        <span class="rail-notepad-card-icon"><NotepadIcon size={16} /></span>
-        <span class="rail-notepad-card-title">Notepad</span>
-        <span class="rail-notepad-card-count">Tabs: {notepadOpenTabCount}</span>
-      </button>
-      {#if notepadRecentTabs.length > 0}
-        <ul class="rail-notepad-card-tabs" role="list">
-          {#each notepadRecentTabs as tab (tab.tabId)}
-            <li>
-              <button
+      <span class="rail-workspace-avatar rail-notepad-avatar"><NotepadIcon size={16} /></span>
+      <span class="rail-workspace-info">
+        <span class="rail-workspace-name">Notepad</span>
+        <span class="rail-workspace-path">Tabs: {notepadOpenTabCount}</span>
+        {#if notepadRecentTabs.length > 0}
+          <span class="rail-workspace-stats">
+            {#each notepadRecentTabs as tab (tab.tabId)}
+              <!-- Nested interactive trigger inside the card button: a span with
+                   role=button (nested <button>/<a> are invalid here). -->
+              <span
                 class="rail-notepad-tab"
-                type="button"
+                role="button"
+                tabindex="0"
                 title={tab.label}
-                onclick={() => onSelectNotepadTab(tab.tabId)}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  onSelectNotepadTab(tab.tabId);
+                }}
+                onkeydown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onSelectNotepadTab(tab.tabId);
+                  }
+                }}
               >
                 {tab.label}
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </div>
+              </span>
+            {/each}
+          </span>
+        {/if}
+      </span>
+    </button>
   {:else}
     <HoverTooltip label="Notepad">
       <button
@@ -269,8 +283,6 @@
       </button>
     </HoverTooltip>
   {/if}
-
-  <div class="rail-divider" aria-hidden="true"></div>
 
   <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl}>
     {#each workspacesForRender as workspace (workspace.id)}
@@ -393,10 +405,12 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-6);
-    /* Horizontal padding shrunk so the 32px square buttons (and their active
-       highlight) are never clipped at the rail edges. */
-    padding: var(--space-8) var(--space-1);
+    gap: var(--space-2);
+    /* Collapsed mode: no top padding and a tight gap so the Notepad button sits
+       at the very top and its divider lands at the editor tab-bar bottom line
+       (~var(--tab-header-height) down the rail). Expanded mode overrides these
+       below. */
+    padding: 0 var(--space-1);
   }
 
   .activity-rail-dragging,
@@ -405,24 +419,13 @@
   }
 
   /* Expanded rail behaves like a column panel: left-aligned content, room for
-     the wider info cards. */
+     the wider info cards. Top padding + gap are kept tight so the notepad card
+     region stays compact and its divider lands near the editor tab-bar bottom
+     line (~var(--tab-header-height)). */
   .activity-rail-expanded {
     align-items: stretch;
-    gap: var(--space-4);
-    padding: var(--space-8) var(--space-6);
-  }
-
-  .rail-divider {
-    width: 24px;
-    height: 1px;
-    flex-shrink: 0;
-    background: color-mix(in srgb, var(--color-border-subtle) 60%, transparent);
-    margin: var(--space-1) 0;
-  }
-
-  .activity-rail-expanded .rail-divider {
-    width: 100%;
-    margin: var(--space-2) 0;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-6);
   }
 
   .rail-workspaces {
@@ -431,7 +434,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-6);
+    gap: var(--space-2);
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
@@ -439,7 +442,7 @@
 
   .rail-workspaces-expanded {
     align-items: stretch;
-    gap: var(--space-4);
+    gap: var(--space-2);
   }
 
   .rail-workspace-placeholder {
@@ -606,86 +609,14 @@
     color: var(--color-text-secondary);
   }
 
-  /* ---- Expanded notepad card ---- */
-  .rail-notepad-card {
-    width: 100%;
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    background: transparent;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-3);
-    transition:
-      background-color var(--motion-fast) var(--easing-standard),
-      border-color var(--motion-fast) var(--easing-standard);
-  }
-
-  .rail-notepad-card-active {
-    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
-    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent);
-  }
-
-  .rail-notepad-card-header {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-1) 0;
-    border: none;
-    background: transparent;
-    color: var(--color-text-primary);
-    font: inherit;
-    text-align: left;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: color var(--motion-fast) var(--easing-standard);
-  }
-
-  .rail-notepad-card-header:hover {
-    color: var(--color-accent);
-  }
-
-  .rail-notepad-card-header:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 1px;
-  }
-
-  .rail-notepad-card-icon {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-accent);
-  }
-
-  .rail-notepad-card-title {
-    flex: 1;
-    font-size: var(--font-size-body);
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .rail-notepad-card-count {
-    flex-shrink: 0;
-    font-size: 11px;
-    color: var(--color-text-secondary);
-  }
-
-  .rail-notepad-card-tabs {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
+  /* ---- Expanded notepad card (reuses .rail-workspace-card layout; only the
+     avatar icon and tab-link styling below are notepad-specific content). ---- */
+  .rail-notepad-avatar {
+    /* The notepad avatar holds an icon, not initials — keep it centered. */
+    text-transform: none;
   }
 
   .rail-notepad-tab {
-    width: 100%;
     border: none;
     background: transparent;
     color: var(--color-text-secondary);

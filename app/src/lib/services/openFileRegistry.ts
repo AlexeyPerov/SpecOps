@@ -7,7 +7,7 @@ import type {
   OpenFileRegistry,
   WindowSessionSnapshot,
 } from "../domain/contracts";
-import { isFileTab, normalizeTabState } from "../domain/contracts";
+import { isFileTab, normalizeTabState, getSessionTabs, getSessionSelectedTabId, setActivePaneTabs } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
@@ -81,7 +81,7 @@ export async function syncOpenFileRegistryForWindow(
   ];
 
   for (const contextSnapshot of contextSnapshots) {
-    for (const rawTab of contextSnapshot.session.openTabs) {
+    for (const rawTab of getSessionTabs(contextSnapshot.session)) {
       const tab = normalizeTabState(rawTab);
       if (!isFileTab(tab)) {
         continue;
@@ -121,7 +121,7 @@ export function applyRegistryDedupeToWindowSnapshot(
     const documentsById = new Map(context.documents.map((doc) => [doc.id, doc]));
     const openTabs = [];
 
-    for (const rawTab of context.session.openTabs) {
+    for (const rawTab of getSessionTabs(context.session)) {
       const tab = normalizeTabState(rawTab);
       if (!isFileTab(tab)) {
         openTabs.push(tab);
@@ -147,16 +147,16 @@ export function applyRegistryDedupeToWindowSnapshot(
       openTabs.filter(isFileTab).map((tab) => tab.documentId),
     );
     const documents = context.documents.filter((doc) => referencedDocIds.has(doc.id));
-    const selectedTabId = openTabs.some((tab) => tab.id === context.session.selectedTabId)
-      ? context.session.selectedTabId
+    const previousSelectedId = getSessionSelectedTabId(context.session);
+    const selectedTabId = openTabs.some((tab) => tab.id === previousSelectedId)
+      ? previousSelectedId
       : openTabs[0]?.id ?? null;
 
     return {
       documents,
       session: {
         ...context.session,
-        openTabs,
-        selectedTabId,
+        editorLayout: setActivePaneTabs(context.session.editorLayout, openTabs, selectedTabId),
       },
     };
   }

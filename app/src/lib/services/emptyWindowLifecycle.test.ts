@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { getSessionSelectedTabId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { shouldCloseWindowAfterTabTransfer } from "./emptyWindowLifecycle";
 
 describe("shouldCloseWindowAfterTabTransfer", () => {
   it("returns true when no tabs remain", () => {
     appState.resetAppState();
-    appState.removeTransferredTab(appState.getActiveSession().selectedTabId!);
+    appState.removeTransferredTab(getSessionSelectedTabId(appState.getActiveSession())!);
     expect(shouldCloseWindowAfterTabTransfer(appState.getSnapshot())).toBe(true);
   });
 

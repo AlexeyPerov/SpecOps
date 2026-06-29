@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
+import { getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { flushMicrotasks } from "../test/sessionMock";
 import { statDiskFingerprint } from "./diskFingerprint";
@@ -91,7 +92,7 @@ describe("checkDocumentExternalChanges", () => {
     );
 
     await expect(checkDocumentExternalChanges(documentId, "startup")).resolves.toBe("skipped");
-    expect(appState.getActiveSession().openTabs.some((tab) => tab.kind === "file" && tab.documentId === documentId)).toBe(
+    expect(getSessionTabs(appState.getActiveSession()).some((tab) => tab.kind === "file" && tab.documentId === documentId)).toBe(
       false,
     );
   });

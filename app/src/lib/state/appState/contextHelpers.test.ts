@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AppDomainState, ContextSnapshot } from "../../domain/contracts";
-import { createFileTab } from "../../domain/contracts";
+import {
+  createFileTab,
+  createSinglePaneLayout,
+  getSessionSelectedTabId,
+  setActivePaneTabs,
+} from "../../domain/contracts";
 import {
   getContextSnapshotById,
   patchActiveContext,
@@ -30,8 +35,7 @@ function buildSnapshot(docId: string, tabId: string): ContextSnapshot {
       },
     ],
     session: {
-      selectedTabId: tabId,
-      openTabs: [createFileTab(tabId, docId)],
+      editorLayout: createSinglePaneLayout([createFileTab(tabId, docId)], tabId),
       lastActiveWindowId: "main",
       windowBounds: null,
       lastActiveSessionId: null,
@@ -97,12 +101,18 @@ describe("contextHelpers chat-http support", () => {
       ...snapshot,
       session: {
         ...snapshot.session,
-        selectedTabId: "tab-changed",
+        editorLayout: setActivePaneTabs(
+          snapshot.session.editorLayout,
+          snapshot.session.editorLayout.panes[0].tabs,
+          "tab-changed",
+        ),
       },
     }));
-    expect(next.contexts.chatHttp.session.selectedTabId).toBe("tab-changed");
-    expect(next.contexts.notepad.session.selectedTabId).toBe("tab-1");
-    expect(next.contexts.workspaces[0]?.snapshot.session.selectedTabId).toBe("tab-3");
+    expect(getSessionSelectedTabId(next.contexts.chatHttp.session)).toBe("tab-changed");
+    expect(getSessionSelectedTabId(next.contexts.notepad.session)).toBe("tab-1");
+    expect(getSessionSelectedTabId(next.contexts.workspaces[0]?.snapshot.session as never)).toBe(
+      "tab-3",
+    );
   });
 
   it("patchContextById updates chat-http snapshot by id", () => {
@@ -111,10 +121,14 @@ describe("contextHelpers chat-http support", () => {
       ...snapshot,
       session: {
         ...snapshot.session,
-        selectedTabId: "tab-patched",
+        editorLayout: setActivePaneTabs(
+          snapshot.session.editorLayout,
+          snapshot.session.editorLayout.panes[0].tabs,
+          "tab-patched",
+        ),
       },
     }));
-    expect(next.contexts.chatHttp.session.selectedTabId).toBe("tab-patched");
-    expect(next.contexts.notepad.session.selectedTabId).toBe("tab-1");
+    expect(getSessionSelectedTabId(next.contexts.chatHttp.session)).toBe("tab-patched");
+    expect(getSessionSelectedTabId(next.contexts.notepad.session)).toBe("tab-1");
   });
 });

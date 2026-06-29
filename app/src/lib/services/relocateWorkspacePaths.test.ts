@@ -19,7 +19,7 @@ import {
   markDocumentsMissingUnderPath,
   syncDocumentsAfterPathRelocation,
 } from "./relocateWorkspacePaths";
-import { isFileTab, normalizeTabState, tabDocumentId } from "../domain/contracts";
+import { getSessionTabs, isFileTab, normalizeTabState, tabDocumentId } from "../domain/contracts";
 
 describe("syncDocumentsAfterPathRelocation", () => {
   beforeEach(() => {
@@ -67,17 +67,13 @@ describe("markDocumentsMissingUnderPath", () => {
     const docId = appState.getActiveDocuments().find((doc) => doc.filePath?.includes("nested.ts"))?.id;
     expect(docId).toBeDefined();
     expect(
-      appState
-        .getActiveSession()
-        .openTabs.some((tab) => isFileTab(normalizeTabState(tab)) && tabDocumentId(tab) === docId),
+      getSessionTabs(appState.getActiveSession()).some((tab) => isFileTab(normalizeTabState(tab)) && tabDocumentId(tab) === docId),
     ).toBe(true);
 
     closeTabsForDeletedDocumentsUnderPath("/tmp/ws-del", "/tmp/ws-del/old/nested.ts");
 
     expect(
-      appState
-        .getActiveSession()
-        .openTabs.some((tab) => isFileTab(normalizeTabState(tab)) && tabDocumentId(tab) === docId),
+      getSessionTabs(appState.getActiveSession()).some((tab) => isFileTab(normalizeTabState(tab)) && tabDocumentId(tab) === docId),
     ).toBe(false);
   });
 });

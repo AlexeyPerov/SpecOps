@@ -32,8 +32,10 @@
     ContextId,
     DocumentState,
     SessionState,
+    TabState,
     WorkspaceEntry,
   } from "../domain/contracts";
+  import { getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
   import "../styles/app-shell.css";
 
   export interface AppShellActivityRailProps {
@@ -346,9 +348,9 @@
       <header class="tab-header">
         <div class="header-left">
           <TabBar
-            openTabs={editor.session.openTabs}
+            openTabs={getSessionTabs(editor.session)}
             documents={editor.documents}
-            selectedTabId={editor.session.selectedTabId}
+            selectedTabId={getSessionSelectedTabId(editor.session)}
             useChatTerminology={editor.isChatHttpActive}
             windowId={editor.currentWindowId}
             notify={editor.notify}

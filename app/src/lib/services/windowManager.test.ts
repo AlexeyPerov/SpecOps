@@ -11,6 +11,7 @@ import { applyWindowBounds, readWindowBounds } from "./windowBounds";
 import { updateLastActiveWindow } from "./sessionManager";
 import type { AppDomainState, WindowBounds } from "../domain/contracts";
 import { NOTEPAD_CONTEXT_ID } from "../state/appState/contextHelpers";
+import { createSinglePaneLayout } from "../domain/contracts";
 
 vi.mock("@tauri-apps/api/event", () => ({
   emitTo: vi.fn().mockResolvedValue(undefined),
@@ -76,8 +77,7 @@ function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
       notepad: {
         documents: [],
         session: {
-          openTabs: [],
-          selectedTabId: null,
+          editorLayout: createSinglePaneLayout([], null),
           lastActiveSessionId: null,
           lastActiveWindowId: "main",
           windowBounds: bounds,
@@ -86,8 +86,7 @@ function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
       chatHttp: {
         documents: [],
         session: {
-          openTabs: [],
-          selectedTabId: null,
+          editorLayout: createSinglePaneLayout([], null),
           lastActiveSessionId: null,
           lastActiveWindowId: "main",
           windowBounds: bounds,

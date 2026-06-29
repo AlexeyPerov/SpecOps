@@ -1,4 +1,5 @@
-import type { DocumentState, TabState } from "./document";
+import type { EditorLayout } from "./editorLayout";
+import type { DocumentState } from "./document";
 
 export interface WindowBounds {
   width: number;
@@ -15,9 +16,20 @@ export interface WorkspaceLayoutState {
   sessionsSidebarCollapsed: boolean;
 }
 
+/**
+ * Per-context editor session state.
+ *
+ * Tabs live inside an `editorLayout` (split view / layout groups): a list of
+ * panes, each with its own tab strip and selected tab, plus a `slots` grid
+ * descriptor. The flat `openTabs`/`selectedTabId` fields were replaced by the
+ * layout model (single-pane = one pane). Helpers in `domain/editorLayout.ts`
+ * (getSessionTabs/getSessionSelectedTabId/...) reach the active pane.
+ *
+ * `layout` (WorkspaceLayoutState) is the unrelated, long-standing per-workspace
+ * panel-layout field (project panel / sessions sidebar sizes & collapse state).
+ */
 export interface SessionState {
-  selectedTabId: string | null;
-  openTabs: TabState[];
+  editorLayout: EditorLayout;
   lastActiveWindowId: string;
   windowBounds: WindowBounds | null;
   /** Last focused workspace session in this context; persisted in session snapshot. */

@@ -5,7 +5,7 @@ import type {
   OpenFileRegistry,
   WindowSessionSnapshot,
 } from "../domain/contracts";
-import { createFileTab } from "../domain/contracts";
+import { createFileTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
 import { createSessionFsMock } from "../test/sessionMock";
 import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
@@ -75,11 +75,10 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
       },
     ],
     session: {
-      selectedTabId: "tab-1",
-      openTabs: [
-        createFileTab("tab-1", "doc-1"),
-        createFileTab("tab-2", "doc-2"),
-      ],
+      editorLayout: createSinglePaneLayout(
+        [createFileTab("tab-1", "doc-1"), createFileTab("tab-2", "doc-2")],
+        "tab-1",
+      ),
       lastActiveWindowId: "win-a",
       windowBounds: null,
     },
@@ -182,8 +181,7 @@ describe("syncOpenFileRegistryForWindow", () => {
             },
           ],
           session: {
-            selectedTabId: "tab-1",
-            openTabs: [createFileTab("tab-1", "doc-1")],
+            editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-1")], "tab-1"),
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
@@ -191,8 +189,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         chatHttp: {
           documents: [],
           session: {
-            selectedTabId: null,
-            openTabs: [],
+            editorLayout: createSinglePaneLayout([], null),
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
@@ -256,8 +253,7 @@ describe("syncOpenFileRegistryForWindow", () => {
             },
           ],
           session: {
-            selectedTabId: "tab-n",
-            openTabs: [createFileTab("tab-n", "doc-n")],
+            editorLayout: createSinglePaneLayout([createFileTab("tab-n", "doc-n")], "tab-n"),
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
@@ -265,8 +261,7 @@ describe("syncOpenFileRegistryForWindow", () => {
         chatHttp: {
           documents: [],
           session: {
-            selectedTabId: null,
-            openTabs: [],
+            editorLayout: createSinglePaneLayout([], null),
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
@@ -296,8 +291,7 @@ describe("syncOpenFileRegistryForWindow", () => {
                 },
               ],
               session: {
-                selectedTabId: "tab-w",
-                openTabs: [createFileTab("tab-w", "doc-w")],
+                editorLayout: createSinglePaneLayout([createFileTab("tab-w", "doc-w")], "tab-w"),
                 lastActiveWindowId: "win-a",
                 windowBounds: null,
               },
@@ -384,8 +378,8 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, "win-a", snapshot);
 
-    expect(nextSnapshot.notepad.session.openTabs.map((tab) => tab.id)).toEqual(["tab-2"]);
-    expect(nextSnapshot.notepad.session.selectedTabId).toBe("tab-2");
+    expect(getSessionTabs(nextSnapshot.notepad.session).map((tab) => tab.id)).toEqual(["tab-2"]);
+    expect(getSessionSelectedTabId(nextSnapshot.notepad.session)).toBe("tab-2");
     expect(nextSnapshot.notepad.documents.map((doc) => doc.id)).toEqual(["doc-2"]);
     expect(nextRegistry["/tmp/shared.txt"]).toEqual({ windowId: "win-b", documentId: "doc-9" });
   });
@@ -397,7 +391,7 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, "win-a", snapshot);
 
-    expect(nextSnapshot.notepad.session.openTabs).toHaveLength(2);
+    expect(getSessionTabs(nextSnapshot.notepad.session)).toHaveLength(2);
     expect(nextRegistry["/tmp/shared.txt"]).toEqual({ windowId: "win-a", documentId: "doc-1" });
   });
 });

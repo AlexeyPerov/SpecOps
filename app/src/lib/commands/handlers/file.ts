@@ -1,5 +1,5 @@
 import { appState } from "../../state/appState";
-import { CHAT_HTTP_CONTEXT_ID, tabDocumentId } from "../../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID, getSessionActiveTab, tabDocumentId } from "../../domain/contracts";
 import { getActiveSession } from "../../state/appState/contextHelpers";
 import { openFileDialog } from "../../services/fileSystem";
 import { renameDocumentOnDisk } from "../../services/documentRename";
@@ -66,9 +66,7 @@ export const fileHandlers: CommandHandlerMap = {
   "file.saveAll": (context) => handleFileSaveAll(context),
   "file.rename": async ({ getState, notify, getWindowId }) => {
     const state = getState();
-    const selected = getActiveSession(state).openTabs.find(
-      (tab) => tab.id === getActiveSession(state).selectedTabId,
-    );
+    const selected = getSessionActiveTab(getActiveSession(state));
     if (!selected) {
       return;
     }

@@ -3,6 +3,7 @@ import { openPath } from "./fileSystem";
 import {
   completeLargePendingOpen,
   completeOpenPath,
+  completeOpenPathInPane,
   refreshExistingDocumentFromDisk,
   requestOpenPath,
 } from "./openFileGate";
@@ -63,6 +64,65 @@ export async function openActivePath(
 
     const opened = await openPath(path);
     await completeOpenPath(opened.path, opened.content, windowId, opened.contentKind);
+    return { kind: "opened", path: opened.path };
+  } catch (error: unknown) {
+    if (isFileMissingError(error)) {
+      await pruneMissingRecentFile(path);
+      return { kind: "missing", path };
+    }
+    const reason = getErrorMessage(error);
+    return { kind: "failed", path, reason };
+  }
+}
+
+/**
+ * Phase 6 — open a file into a specific pane (file→pane DnD). Same gating as
+ * {@link openActivePath} (cross-window redirect, large-file confirm), but the
+ * terminal "open" step routes through {@link completeOpenPathInPane} so the
+ * file lands in `paneId` (stealing it from any other pane first per Q9). The
+ * "existing" branch also re-reads from disk for consistency with the active-pane
+ * open path, then opens into the target pane via the reducer's steal/focus path.
+ */
+export async function openActivePathInPane(
+  path: string,
+  windowId: string,
+  paneId: string,
+): Promise<OpenActivePathResult> {
+  try {
+    const gateResult = await requestOpenPath(path, windowId);
+    if (gateResult.kind === "redirected") {
+      appState.touchRecentFile(gateResult.path);
+      return { kind: "redirected", path: gateResult.path };
+    }
+    if (gateResult.kind === "existing") {
+      const existingDocument = appState
+        .getActiveDocuments()
+        .find((documentState) => documentState.id === gateResult.documentId);
+      if (existingDocument?.contentKind === "large_pending") {
+        return { kind: "existing", path: gateResult.path };
+      }
+      await refreshExistingDocumentFromDisk(gateResult.documentId, path);
+      // Re-open into the target pane; openFileInPane steals + focuses.
+      const reOpened = await openPath(path);
+      await completeOpenPathInPane(reOpened.path, reOpened.content, windowId, paneId, reOpened.contentKind);
+      return { kind: "existing", path: gateResult.path };
+    }
+
+    const maxOpenWithoutConfirmBytes = getMaxOpenWithoutConfirmBytes();
+    const fingerprint = await statDiskFingerprint(path);
+    if (shouldGateFileOpenBySize(path, fingerprint.sizeBytes, maxOpenWithoutConfirmBytes)) {
+      await completeLargePendingOpen(path, fingerprint, windowId);
+      return { kind: "pending_confirm", path: normalizePathSync(path) };
+    }
+
+    const opened = await openPath(path);
+    await completeOpenPathInPane(
+      opened.path,
+      opened.content,
+      windowId,
+      paneId,
+      opened.contentKind,
+    );
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {
     if (isFileMissingError(error)) {

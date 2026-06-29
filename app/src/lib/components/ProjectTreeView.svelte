@@ -7,6 +7,7 @@
     createProjectTreeDragController,
     type ProjectTreeDragState,
   } from "./projectTreeDrag";
+  import type { PaneDropTargetElements } from "./paneDropTargets";
 
   interface Props {
     nodes?: ProjectTreeNode[];
@@ -23,6 +24,12 @@
     onContextMenuNode?: (event: MouseEvent, node: ProjectTreeNode) => void;
     onMoveEntry?: (sourcePath: string, destDirPath: string) => Promise<void>;
     notify?: (message: string) => void;
+    /** Phase 6 — live pane elements for file→pane DnD hit-testing. */
+    getPaneElements?: () => PaneDropTargetElements[];
+    /** Phase 6 — open a file into a specific pane. */
+    onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
+    /** Phase 6 — reports the hovered pane id during a file drag (for affordance). */
+    onFileDropPaneChange?: (paneId: string | null) => void;
   }
 
   let {
@@ -39,6 +46,9 @@
     onContextMenuNode = () => {},
     onMoveEntry = async () => {},
     notify = () => {},
+    getPaneElements = () => [],
+    onOpenFileInPane,
+    onFileDropPaneChange = () => {},
   }: Props = $props();
 
   let ignoreNextActivation = false;
@@ -48,15 +58,24 @@
     sourcePath: null,
     sourceKind: null,
     dropTargetPath: null,
+    dropPaneId: null,
     didDrag: false,
     startX: 0,
     startY: 0,
+  });
+
+  // Lift the file-drop pane id to the parent so the editor grid can render an
+  // affordance on the hovered pane.
+  $effect(() => {
+    onFileDropPaneChange(dragState.didDrag ? dragState.dropPaneId : null);
   });
 
   const dragController = createProjectTreeDragController({
     getWorkspaceRoot: () => workspaceRoot || null,
     onMove: (sourcePath, destDirPath) => onMoveEntry(sourcePath, destDirPath),
     notify: (message) => notify(message),
+    getPaneElements: () => getPaneElements(),
+    onOpenFileInPane: (filePath, paneId) => onOpenFileInPane?.(filePath, paneId),
     onStateChange: (next) => {
       dragState = next;
     },

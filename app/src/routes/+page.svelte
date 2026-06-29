@@ -39,6 +39,7 @@
     tabDocumentId,
   } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
+  import { collectPaneElementsFromDom } from "../lib/components/paneDropTargets";
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
@@ -351,6 +352,12 @@
   });
   const documentView = $derived(deriveAppShellDocumentView(activeDocument));
   let largeFileConfirming = $state(false);
+  /**
+   * Phase 6 — the pane currently highlighted as a file-drop target during a
+   * project-tree file drag. Bound through AppShell → EditorGridLayout so the
+   * hovered pane renders an affordance; cleared when the drag ends.
+   */
+  let fileDropTargetPaneId = $state<string | null>(null);
 
   function notify(message: string): void {
     statusMessage = message;
@@ -368,6 +375,7 @@
     loadProjectTreeRoot,
     handleToggleProjectTreeDirectory,
     handleOpenProjectTreeFile,
+    handleOpenProjectTreeFileInPane,
     refreshProjectTree,
     notifyProjectTreeFilesystemChange,
     handleMoveProjectTreeEntry,
@@ -977,6 +985,11 @@
     onNewFolder: handleNewProjectFolder,
     onRenameEntry: handleRenameProjectEntry,
     onDeleteEntry: handleDeleteProjectEntry,
+    getPaneElements: () => collectPaneElementsFromDom(),
+    onOpenFileInPane: handleOpenProjectTreeFileInPane,
+    onFileDropPaneChange: (paneId) => {
+      fileDropTargetPaneId = paneId;
+    },
     notify,
   }}
   editor={{
@@ -1012,6 +1025,13 @@
     onSelectTab: appState.selectTab,
     onClosePane: appState.closeEditorPane,
     onFocusPane: appState.setActiveEditorPane,
+    onMoveTabBetweenPanes: (fromPaneId, tabId, toPaneId, toIndex) =>
+      appState.moveTabBetweenPanes(fromPaneId, tabId, toPaneId, toIndex),
+    onOpenFileInPane: (filePath, paneId) => handleOpenProjectTreeFileInPane(filePath, paneId),
+    fileDropTargetPaneId,
+    onFileDropPaneChange: (paneId) => {
+      fileDropTargetPaneId = paneId;
+    },
     onRunCommand: runCommand,
     onConfirmLargeFile: handleConfirmLargeFile,
     onMarkdownViewModeChange: setMarkdownViewMode,

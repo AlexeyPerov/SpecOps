@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import TabBar from "./TabBar.svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
+  import type { PaneDropTargetElements } from "./paneDropTargets";
 
   /**
    * One pane inside the editor grid (split view). Owns a tab strip scoped to
@@ -11,6 +13,10 @@
    *
    * The × close button is hidden only when a single pane remains; it is always
    * visible on empty panes (F3). Clicking anywhere in the pane focuses it.
+   *
+   * Phase 5/6 — registers its strip + body elements with the parent grid (for
+   * cross-pane DnD hit-testing) and renders a drop affordance when this pane is
+   * the active tab or file drop target.
    */
   let {
     paneId,
@@ -26,6 +32,14 @@
     onCloseTab,
     onClosePane,
     onFocus,
+    onRegisterElements,
+    onUnregisterElements,
+    getPaneElements,
+    tabDropTargetPaneId = null,
+    fileDropTargetPaneId = null,
+    onTabDropTargetChange,
+    onMoveTabBetweenPanes,
+    onOpenFileInPane,
     children,
   }: {
     paneId: string;
@@ -41,8 +55,27 @@
     onCloseTab: (tabId: string) => void | Promise<void>;
     onClosePane: (paneId: string) => void;
     onFocus: (paneId: string) => void;
+    onRegisterElements: (
+      paneId: string,
+      elements: { stripEl: HTMLElement | null; bodyEl: HTMLElement | null },
+    ) => void;
+    onUnregisterElements: (paneId: string) => void;
+    getPaneElements: () => PaneDropTargetElements[];
+    tabDropTargetPaneId: string | null;
+    fileDropTargetPaneId: string | null;
+    onTabDropTargetChange: (paneId: string | null) => void;
+    onMoveTabBetweenPanes: (
+      fromPaneId: string,
+      tabId: string,
+      toPaneId: string,
+      toIndex: number,
+    ) => void;
+    onOpenFileInPane: (filePath: string, paneId: string) => void | Promise<void>;
     children?: import("svelte").Snippet;
   } = $props();
+
+  let tabStripEl = $state<HTMLDivElement | null>(null);
+  let paneBodyEl = $state<HTMLDivElement | null>(null);
 
   const selectedTab = $derived(tabs.find((tab) => tab.id === selectedTabId) ?? null);
   const selectedDocument = $derived(
@@ -62,15 +95,30 @@
     }
     return selectedDocument?.title ?? "Untitled";
   });
+
+  const isTabDropTarget = $derived(tabDropTargetPaneId === paneId);
+  const isFileDropTarget = $derived(fileDropTargetPaneId === paneId);
+
+  // Register/unregister our elements with the parent grid so the cross-pane
+  // hit-tester can see this pane's strip + body. Re-registers when the bound
+  // elements change (mount/unmount).
+  $effect(() => {
+    onRegisterElements(paneId, { stripEl: tabStripEl, bodyEl: paneBodyEl });
+  });
+  onDestroy(() => {
+    onUnregisterElements(paneId);
+  });
 </script>
 
 <section
   class="editor-pane-view"
   class:editor-pane-view-active={isActive}
+  class:pane-drop-target={isTabDropTarget || isFileDropTarget}
+  data-pane-id={paneId}
   onpointerdown={() => onFocus(paneId)}
 >
-  <header class="pane-header">
-    <div class="pane-tab-bar">
+  <header class="pane-header" data-pane-strip={paneId}>
+    <div class="pane-tab-bar" bind:this={tabStripEl}>
       <TabBar
         openTabs={tabs}
         {documents}
@@ -78,8 +126,12 @@
         {useChatTerminology}
         {windowId}
         {notify}
+        {paneId}
+        {getPaneElements}
         onSelect={(tabId) => onSelectTab(tabId)}
         onCloseTab={(tabId) => onCloseTab(tabId)}
+        onMoveBetweenPanes={onMoveTabBetweenPanes}
+        onDropTargetChange={onTabDropTargetChange}
       />
     </div>
     {#if canClose}
@@ -98,7 +150,7 @@
     {/if}
   </header>
 
-  <div class="pane-body">
+  <div class="pane-body" data-pane-body={paneId} bind:this={paneBodyEl}>
     {#if isActive}
       {@render children?.()}
     {:else if tabs.length === 0}
@@ -124,6 +176,11 @@
   .editor-pane-view-active {
     border-color: var(--accent-color, #3b82f6);
     box-shadow: 0 0 0 1px var(--accent-color, #3b82f6) inset;
+  }
+  .pane-drop-target {
+    outline: 2px dashed var(--accent-color, #3b82f6);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--accent-color, #3b82f6) 8%, transparent);
   }
   .pane-header {
     display: flex;

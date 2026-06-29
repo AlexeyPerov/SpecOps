@@ -1,6 +1,10 @@
 import type { TabState } from "../domain/contracts";
 import { isSessionTab } from "../domain/contracts";
 import { moveTabFromDrag } from "../services/tabWindowTransfer";
+import {
+  hitTestPaneElements,
+  type PaneDropTargetElements,
+} from "./paneDropTargets";
 
 export const DRAG_THRESHOLD_PX = 4;
 
@@ -10,6 +14,13 @@ export interface TabDragState {
   dragTabId: string | null;
   dragFromIndex: number;
   dropIndex: number;
+  /**
+   * Phase 5 — the pane id the dragged tab would land in if dropped now. Null
+   * means "no cross-pane target" (drop resolves to the source strip's
+   * `dropIndex`, or a tear-off when outside every pane). Equal to the source
+   * `paneId` means an in-strip reorder.
+   */
+  dropPaneId: string | null;
   dragOffsetX: number;
   dragOffsetY: number;
   dragPointerX: number;
@@ -25,10 +36,35 @@ export interface TabDragState {
 }
 
 export interface TabDragControllerDeps {
+  /** The source pane's tab list (the strip this controller is bound to). */
   getOpenTabs: () => TabState[];
+  /** The source pane's strip element. */
   getTabStripEl: () => HTMLDivElement | null;
+  /**
+   * The source pane's id (Phase 5). Defaults to the empty string; when empty,
+   * cross-pane moves are disabled (the controller behaves as before — in-strip
+   * reorder + tear-off only).
+   */
+  getPaneId?: () => string;
+  /**
+   * Phase 5 — all panes' DOM elements for cross-pane hit-testing. When omitted
+   * or returning an empty list, the controller falls back to in-strip-only
+   * behavior (single-pane / legacy call sites).
+   */
+  getPaneElements?: () => PaneDropTargetElements[];
   onSelect: (tabId: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
+  /**
+   * Phase 5 — move a tab between panes. Receives the source pane id, the moved
+   * tab id, the destination pane id, and the drop index within the destination
+   * (post-removal when same-pane). Only invoked for a cross-pane drop.
+   */
+  onMoveBetweenPanes?: (
+    fromPaneId: string,
+    tabId: string,
+    toPaneId: string,
+    toIndex: number,
+  ) => void;
   getWindowId: () => string;
   notify: (message: string) => void;
   onStateChange: (state: TabDragState) => void;
@@ -41,6 +77,7 @@ function createInitialState(): TabDragState {
     dragTabId: null,
     dragFromIndex: -1,
     dropIndex: -1,
+    dropPaneId: null,
     dragOffsetX: 0,
     dragOffsetY: 0,
     dragPointerX: 0,
@@ -183,6 +220,8 @@ export function createTabDragController(deps: TabDragControllerDeps) {
     const fromIndex = state.dragFromIndex;
     const toIndex = state.dropIndex;
     const activeTabId = state.dragTabId;
+    const sourcePaneId = deps.getPaneId?.() ?? null;
+    const dropPaneId = state.dropPaneId;
     const pointerX = state.dragPointerX;
     const pointerY = state.dragPointerY;
     const pointerStartX = state.dragPointerStartX;
@@ -204,6 +243,24 @@ export function createTabDragController(deps: TabDragControllerDeps) {
           node.releasePointerCapture(activePointerId);
         }
       }
+    }
+
+    // Phase 5 — cross-pane move takes priority over reorder/tear-off. Only
+    // fires when the drop resolved to a *different* pane than the source (a
+    // same-pane hit falls through to the in-strip reorder path below).
+    if (
+      commitReorder &&
+      wasDrag &&
+      activeTabId &&
+      sourcePaneId &&
+      dropPaneId &&
+      dropPaneId !== sourcePaneId &&
+      toIndex >= 0
+    ) {
+      deps.onMoveBetweenPanes?.(sourcePaneId, activeTabId, dropPaneId, toIndex);
+      state.isFinishingDrag = false;
+      emitState();
+      return;
     }
 
     const tearOff =
@@ -259,7 +316,24 @@ export function createTabDragController(deps: TabDragControllerDeps) {
 
     state.didDrag = true;
     collectTabRects();
-    state.dropIndex = nextDropIndex(event.clientX);
+    // Phase 5 — hit-test every pane; if a *different* pane is under the
+    // pointer, record it as the drop target (and its strip's drop index). A
+    // same-pane hit (or no pane-elements wired) keeps the in-strip `dropIndex`.
+    const sourcePaneId = deps.getPaneId?.() ?? null;
+    const paneElements = deps.getPaneElements?.() ?? [];
+    const crossPaneTarget =
+      sourcePaneId && paneElements.length > 0
+        ? hitTestPaneElements(event.clientX, event.clientY, paneElements)
+        : null;
+    if (crossPaneTarget && crossPaneTarget.paneId !== sourcePaneId) {
+      state.dropPaneId = crossPaneTarget.paneId;
+      // For a strip hit on the other pane, use its computed index; for a body
+      // hit (or empty strip), append.
+      state.dropIndex = crossPaneTarget.index ?? deps.getOpenTabs().length;
+    } else {
+      state.dropPaneId = crossPaneTarget ? crossPaneTarget.paneId : null;
+      state.dropIndex = nextDropIndex(event.clientX);
+    }
     emitState();
   }
 

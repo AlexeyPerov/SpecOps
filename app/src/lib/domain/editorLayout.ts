@@ -137,6 +137,24 @@ export function findPane(layout: EditorLayout, paneId: string): EditorPane | und
   return layout.panes.find((pane) => pane.id === paneId);
 }
 
+/**
+ * Find the pane that currently holds a given tab id, and the tab itself.
+ * Returns `null` when no pane has the tab. Used by the file→pane "steal" path
+ * (Phase 6) and tab lookups that span the whole layout.
+ */
+export function findTabOwner(
+  layout: EditorLayout,
+  tabId: string,
+): { pane: EditorPane; tab: TabState } | null {
+  for (const pane of layout.panes) {
+    const tab = pane.tabs.find((entry) => entry.id === tabId);
+    if (tab) {
+      return { pane, tab };
+    }
+  }
+  return null;
+}
+
 export function activePane(layout: EditorLayout): EditorPane {
   const pane = layout.panes.find((entry) => entry.id === layout.activePaneId);
   return pane ?? layout.panes[0];
@@ -490,6 +508,117 @@ export function reorderTabs(tabs: TabState[], fromIndex: number, toIndex: number
   }
   next.splice(toIndex, 0, moved);
   return next;
+}
+
+/**
+ * Remove a single tab from a specific pane (by id), recomputing that pane's
+ * `selectedTabId`. Leaves the pane empty if it was the last tab (Q6 empty-pane
+ * survival). No-op (returns same ref) when the pane or tab does not exist.
+ *
+ * Used by the file→pane "steal" path (Phase 6): when a file is opened in a
+ * target pane, any existing tab for it elsewhere is removed first (Q9 — one
+ * document per context).
+ */
+export function removeTabFromPane(
+  layout: EditorLayout,
+  paneId: string,
+  tabId: string,
+): EditorLayout {
+  const pane = findPane(layout, paneId);
+  if (!pane) {
+    return layout;
+  }
+  const idx = pane.tabs.findIndex((tab) => tab.id === tabId);
+  if (idx < 0) {
+    return layout;
+  }
+  const remaining = pane.tabs.filter((tab) => tab.id !== tabId);
+  const nextSelected = recomputeSelectedTabId(pane.tabs, remaining, pane.selectedTabId);
+  return withPane(layout, paneId, { ...pane, tabs: remaining, selectedTabId: nextSelected });
+}
+
+/**
+ * Move a tab from one pane to another (Phase 5 tab→pane DnD). Always a move
+ * (locked default). When `fromPaneId === toPaneId` this collapses to an
+ * in-pane reorder (the tab is removed before `toIndex` is applied, so the index
+ * matches what the user sees post-removal). The destination pane selects the
+ * moved tab and becomes the active pane (focus follows the drop — P5 exit
+ * criterion).
+ *
+ * `toIndex` is clamped to `[0, destination tab count]`; passing the length
+ * appends (this is how a drop on an empty pane appends). Returns the same ref
+ * when the tab or either pane is missing, or when the move would be a no-op
+ * (same pane, same index).
+ */
+export function moveTabBetweenPanes(
+  layout: EditorLayout,
+  fromPaneId: string,
+  tabId: string,
+  toPaneId: string,
+  toIndex: number,
+): EditorLayout {
+  const fromPane = findPane(layout, fromPaneId);
+  const toPane = findPane(layout, toPaneId);
+  if (!fromPane || !toPane) {
+    return layout;
+  }
+  const fromIndex = fromPane.tabs.findIndex((tab) => tab.id === tabId);
+  if (fromIndex < 0) {
+    return layout;
+  }
+  const moved = fromPane.tabs[fromIndex];
+  if (!moved) {
+    return layout;
+  }
+
+  const samePane = fromPaneId === toPaneId;
+  // For a same-pane move, interpret toIndex against the post-removal list so it
+  // matches the visual drop position the user sees.
+  const remaining = fromPane.tabs.filter((tab) => tab.id !== tabId);
+  const fromSelectedNext = recomputeSelectedTabId(
+    fromPane.tabs,
+    remaining,
+    fromPane.selectedTabId,
+  );
+
+  const baseList = samePane ? remaining : toPane.tabs;
+  const clampedIndex = Math.max(0, Math.min(toIndex, baseList.length));
+  if (samePane && clampedIndex === fromIndex) {
+    // No-op reorder; still ensure the moved tab is selected + pane active.
+    if (fromPane.selectedTabId === tabId && layout.activePaneId === toPaneId) {
+      return layout;
+    }
+    const patched = withPane(layout, toPaneId, {
+      ...toPane,
+      tabs: toPane.tabs,
+      selectedTabId: tabId,
+    });
+    return setActivePane(patched, toPaneId);
+  }
+
+  const nextToTabs = [...baseList];
+  nextToTabs.splice(clampedIndex, 0, moved);
+
+  let next: EditorLayout;
+  if (samePane) {
+    next = withPane(layout, toPaneId, {
+      ...toPane,
+      tabs: nextToTabs,
+      selectedTabId: tabId,
+    });
+  } else {
+    const fromNext = withPane(layout, fromPaneId, {
+      ...fromPane,
+      tabs: remaining,
+      selectedTabId: fromSelectedNext,
+    });
+    next = withPane(fromNext, toPaneId, {
+      ...toPane,
+      tabs: nextToTabs,
+      selectedTabId: tabId,
+    });
+  }
+  return setActivePane(next, toPaneId);
 }
 
 /**

@@ -166,6 +166,26 @@ export async function completeOpenPath(
   return documentId;
 }
 
+/**
+ * Phase 6 — open a freshly-read file into a specific pane (file→pane DnD).
+ * Sibling of {@link completeOpenPath} that routes through
+ * `appState.openFileInPane` instead of `openFileInTab`; the steal/focus logic
+ * lives in the reducer. Used only when a drag drops onto a pane (click-to-open
+ * still uses `completeOpenPath`).
+ */
+export async function completeOpenPathInPane(
+  path: string,
+  content: string,
+  windowId: string,
+  paneId: string,
+  contentKind: FileContentKind = "text",
+): Promise<string> {
+  const documentId = appState.openFileInPane(path, content, paneId, contentKind);
+  await claimOpenFile(path, windowId, documentId);
+  await initializeDocumentDiskState(documentId, path);
+  return documentId;
+}
+
 export async function completeLargePendingOpen(
   path: string,
   fingerprint: DiskFingerprint,

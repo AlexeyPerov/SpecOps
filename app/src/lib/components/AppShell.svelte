@@ -98,6 +98,12 @@
     onNewFolder: (parentDirPath: string) => void | Promise<void>;
     onRenameEntry: (path: string, kind: ProjectTreeNode["kind"]) => void | Promise<void>;
     onDeleteEntry: (path: string, kind: ProjectTreeNode["kind"]) => void | Promise<void>;
+    /** Phase 6 — live editor pane elements for file→pane DnD hit-testing. */
+    getPaneElements?: () => import("./paneDropTargets").PaneDropTargetElements[];
+    /** Phase 6 — open a file into a specific pane (file drag drop). */
+    onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
+    /** Phase 6 — reports the hovered pane during a file drag (for affordance). */
+    onFileDropPaneChange?: (paneId: string | null) => void;
     notify: (message: string) => void;
   }
 
@@ -143,6 +149,15 @@
     onSelectTab: (tabId: string) => void;
     onClosePane: (paneId: string) => void;
     onFocusPane: (paneId: string) => void;
+    onMoveTabBetweenPanes: (
+      fromPaneId: string,
+      tabId: string,
+      toPaneId: string,
+      toIndex: number,
+    ) => void;
+    onOpenFileInPane: (filePath: string, paneId: string) => void | Promise<void>;
+    fileDropTargetPaneId?: string | null;
+    onFileDropPaneChange?: (paneId: string | null) => void;
     /** M2-T3: fork the active session from a message into a new tab. */
     onForkSession?: (messageId?: string) => void | Promise<void>;
     /** M2-T4: revert the active session to a message in place (undo). */
@@ -372,6 +387,9 @@
         onCloseTab={editor.onCloseTab}
         onClosePane={editor.onClosePane}
         onFocusPane={editor.onFocusPane}
+        onMoveTabBetweenPanes={editor.onMoveTabBetweenPanes}
+        onOpenFileInPane={editor.onOpenFileInPane}
+        fileDropTargetPaneId={editor.fileDropTargetPaneId ?? null}
       >
         <section
           class="editor-pane"
@@ -521,6 +539,9 @@
         onNewFolder={(parent) => void projectTree.onNewFolder(parent)}
         onRenameEntry={(path, kind) => void projectTree.onRenameEntry(path, kind)}
         onDeleteEntry={(path, kind) => void projectTree.onDeleteEntry(path, kind)}
+        getPaneElements={projectTree.getPaneElements ?? (() => [])}
+        onOpenFileInPane={projectTree.onOpenFileInPane ?? null}
+        onFileDropPaneChange={(paneId) => projectTree.onFileDropPaneChange?.(paneId)}
         notify={projectTree.notify}
       />
     {/if}

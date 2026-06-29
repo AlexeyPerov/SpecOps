@@ -5,10 +5,15 @@ import type {
   DocumentState,
 } from "../../domain/contracts";
 import {
+  allTabs,
+  appendTabToPane,
   createFileTab,
+  findTabOwner,
   getSessionTabs,
   isFileTab,
   normalizeTabState,
+  removeTabFromPane,
+  setActivePaneInLayout,
   setActivePaneTabs,
 } from "../../domain/contracts";
 import { deriveUntitledTitle } from "../../services/untitledTitle";
@@ -29,6 +34,32 @@ import {
 import { canCreateFileTabs, reopenTabForDocument, selectTabInternal } from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
+
+/**
+ * Select `tabId` within `paneId` and make that pane active. Used by the
+ * file→pane path to focus an existing tab in the target pane. Returns the same
+ * layout ref when the pane/tab is missing.
+ */
+function selectAndActivatePane(
+  layout: AppDomainState["contexts"]["notepad"]["session"]["editorLayout"],
+  paneId: string,
+  tabId: string,
+): AppDomainState["contexts"]["notepad"]["session"]["editorLayout"] {
+  const activated = setActivePaneInLayout(layout, paneId);
+  const pane = activated.panes.find((entry) => entry.id === paneId);
+  if (!pane || !pane.tabs.some((tab) => tab.id === tabId)) {
+    return activated;
+  }
+  if (pane.selectedTabId === tabId) {
+    return activated;
+  }
+  return {
+    ...activated,
+    panes: activated.panes.map((entry) =>
+      entry.id === paneId ? { ...entry, selectedTabId: tabId } : entry,
+    ),
+  };
+}
 
 export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
   const { update } = deps;
@@ -114,6 +145,136 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
               },
             };
           }),
+          recentFiles,
+        };
+      });
+      syncRecentFiles(recentFiles);
+      return openedDocumentId;
+    },
+    /**
+     * Open a file into a specific pane (file→pane DnD, Phase 6). Mirrors
+     * {@link openFileInTab} but targets `paneId` instead of the active pane,
+     * and enforces the one-document-per-context invariant (Q9): if the file is
+     * already open in another pane, that tab is removed first (steal); if it's
+     * already in the target pane, it is simply focused. The target pane becomes
+     * active and selects the opened/focused tab. No-ops (returns "") when the
+     * active context can't host file tabs (chat-http).
+     */
+    openFileInPane(
+      filePath: string,
+      content: string,
+      paneId: string,
+      contentKind: DocumentContentKind = "text",
+    ): string {
+      let openedDocumentId = "";
+      let recentFiles: string[] = [];
+      update((state) => {
+        if (!canCreateFileTabs(state)) {
+          return state;
+        }
+        recentFiles = bumpRecentFile(state.recentFiles, filePath);
+        const duplicate = findDocumentByPath(state, filePath);
+        if (duplicate) {
+          openedDocumentId = duplicate.id;
+          // Locate any existing file tab for this document across ALL panes
+          // (file tabs are 1:1 with documents within a context). The
+          // steal/focus decision hangs off where that tab currently lives —
+          // `allTabs` scans every pane, not just the active one.
+          const existingTabId =
+            allTabs(getActiveSession(state).editorLayout).find(
+              (tab) => isFileTab(tab) && tab.documentId === duplicate.id,
+            )?.id ?? null;
+          const existingOwner =
+            existingTabId === null
+              ? null
+              : findTabOwner(getActiveSession(state).editorLayout, existingTabId);
+
+          // Steal (Q9): if the tab is in a different pane, remove it there.
+          const stolenState =
+            existingOwner && existingOwner.pane.id !== paneId
+              ? patchActiveContext(state, (ctx) => ({
+                  ...ctx,
+                  session: {
+                    ...ctx.session,
+                    editorLayout: removeTabFromPane(
+                      ctx.session.editorLayout,
+                      existingOwner.pane.id,
+                      existingOwner.tab.id,
+                    ),
+                  },
+                }))
+              : state;
+
+          // Upgrade the document with the freshly-read file payload.
+          const upgradedState = patchActiveContext(stolenState, (ctx) => ({
+            ...ctx,
+            documents: ctx.documents.map((documentState) =>
+              documentState.id === duplicate.id
+                ? documentWithOpenedFilePayload(
+                    documentState,
+                    filePath,
+                    content,
+                    contentKind,
+                  )
+                : documentState,
+            ),
+          }));
+
+          // Focus the existing tab if it stayed in the target pane; otherwise
+          // (it was stolen, or never had a tab) re-open it there.
+          if (existingOwner && existingOwner.pane.id === paneId && existingTabId) {
+            return {
+              ...patchActiveContext(upgradedState, (ctx) => ({
+                ...ctx,
+                session: {
+                  ...ctx.session,
+                  editorLayout: selectAndActivatePane(
+                    ctx.session.editorLayout,
+                    paneId,
+                    existingTabId,
+                  ),
+                },
+              })),
+              recentFiles,
+            };
+          }
+          const reopenedTabId = nextDocAndTabIds().tabId;
+          return {
+            ...patchActiveContext(upgradedState, (ctx) => ({
+              ...ctx,
+              session: {
+                ...ctx.session,
+                editorLayout: appendTabToPane(
+                  setActivePaneInLayout(ctx.session.editorLayout, paneId),
+                  createFileTab(reopenedTabId, duplicate.id),
+                  paneId,
+                ),
+              },
+            })),
+            recentFiles,
+          };
+        }
+
+        const { docId, tabId } = nextDocAndTabIds();
+        openedDocumentId = docId;
+        const documentState = buildDocument(
+          { id: docId, filePath },
+          content,
+          basename(filePath),
+          contentKind,
+        );
+        return {
+          ...patchActiveContext(state, (ctx) => ({
+            documents: [...ctx.documents, documentState],
+            session: {
+              ...ctx.session,
+              editorLayout: appendTabToPane(
+                setActivePaneInLayout(ctx.session.editorLayout, paneId),
+                createFileTab(tabId, docId),
+                paneId,
+              ),
+            },
+          })),
           recentFiles,
         };
       });

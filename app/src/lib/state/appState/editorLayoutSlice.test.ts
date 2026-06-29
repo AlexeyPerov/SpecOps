@@ -155,3 +155,115 @@ describe("editorLayoutSlice — test isolation", () => {
     expect(saveThemeFileMock).toBeDefined();
   });
 });
+
+describe("editorLayoutSlice — moveTabBetweenPanes (Phase 5)", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("moves the active pane's tab into another pane and focuses the destination", () => {
+    appState.setEditorLayout("cols-2");
+    const layout = activeLayout();
+    const sourcePaneId = layout.panes[0].id;
+    const destPaneId = layout.panes[1].id;
+    const movedTabId = layout.panes[0].tabs[0].id;
+
+    appState.moveTabBetweenPanes(sourcePaneId, movedTabId, destPaneId, 0);
+
+    const next = activeLayout();
+    expect(next.panes[0].tabs.map((tab) => tab.id)).not.toContain(movedTabId);
+    expect(next.panes[1].tabs.map((tab) => tab.id)).toContain(movedTabId);
+    expect(next.activePaneId).toBe(destPaneId);
+    expect(next.panes[1].selectedTabId).toBe(movedTabId);
+  });
+
+  it("appends when dropping on an empty pane", () => {
+    appState.setEditorLayout("cols-2");
+    const layout = activeLayout();
+    const sourcePaneId = layout.panes[0].id;
+    const destPaneId = layout.panes[1].id; // empty after split
+    const movedTabId = layout.panes[0].tabs[0].id;
+
+    appState.moveTabBetweenPanes(sourcePaneId, movedTabId, destPaneId, 99);
+
+    const next = activeLayout();
+    expect(next.panes[1].tabs.map((tab) => tab.id)).toEqual([movedTabId]);
+  });
+
+  it("is a no-op for an unknown source pane", () => {
+    appState.setEditorLayout("cols-2");
+    const before = activeLayout();
+    appState.moveTabBetweenPanes("missing", "nope", before.panes[1].id, 0);
+    expect(activeLayout()).toBe(before);
+  });
+});
+
+describe("documentContentSlice — openFileInPane (Phase 6)", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("opens a fresh file into an empty pane and focuses it", () => {
+    appState.setEditorLayout("cols-2");
+    const destPaneId = activeLayout().panes[1].id;
+
+    const docId = appState.openFileInPane("/tmp/alpha.txt", "alpha", destPaneId);
+
+    expect(docId).not.toBe("");
+    const next = activeLayout();
+    expect(next.panes[1].tabs.map((tab) => tab.id)).toHaveLength(1);
+    expect(next.activePaneId).toBe(destPaneId);
+    expect(next.panes[1].selectedTabId).toBe(next.panes[1].tabs[0].id);
+  });
+
+  it("steals an already-open file from another pane into the target (Q9)", () => {
+    appState.setEditorLayout("cols-2");
+    const layout = activeLayout();
+    const sourcePaneId = layout.panes[0].id;
+    const destPaneId = layout.panes[1].id;
+
+    // Open the file in the source pane first.
+    const sourceDocId = appState.openFileInPane("/tmp/beta.txt", "beta", sourcePaneId);
+    expect(sourceDocId).not.toBe("");
+    const sourceTabs = activeLayout().panes[0].tabs;
+    const betaTab = sourceTabs.find(
+      (tab): tab is import("../../domain/contracts").FileTabState =>
+        tab.kind === "file" && tab.documentId === sourceDocId,
+    );
+    expect(betaTab).toBeDefined();
+    const sourceTabId = betaTab!.id;
+
+    // Drag-drop the same file into the destination pane.
+    const docId = appState.openFileInPane("/tmp/beta.txt", "beta-updated", destPaneId);
+
+    expect(docId).toBe(sourceDocId);
+    const next = activeLayout();
+    // Source pane no longer holds the tab.
+    expect(next.panes[0].tabs.some((tab) => tab.id === sourceTabId)).toBe(false);
+    // Destination pane now holds it, focused.
+    expect(
+      next.panes[1].tabs.some((tab) => tab.kind === "file" && tab.documentId === sourceDocId),
+    ).toBe(true);
+    expect(next.activePaneId).toBe(destPaneId);
+  });
+
+  it("focuses the existing tab when the file is already in the target pane", () => {
+    appState.setEditorLayout("cols-2");
+    const destPaneId = activeLayout().panes[1].id;
+
+    appState.openFileInPane("/tmp/gamma.txt", "gamma", destPaneId);
+    const existingTabId = activeLayout().panes[1].tabs[0].id;
+
+    // Open another file into the source pane to move focus away.
+    const sourcePaneId = activeLayout().panes[0].id;
+    appState.openFileInPane("/tmp/delta.txt", "delta", sourcePaneId);
+
+    // Re-open gamma in the dest pane: no new tab, just focused.
+    appState.openFileInPane("/tmp/gamma.txt", "gamma-again", destPaneId);
+
+    const next = activeLayout();
+    expect(next.panes[1].tabs.map((tab) => tab.id)).toEqual([existingTabId]);
+    expect(next.activePaneId).toBe(destPaneId);
+    expect(next.panes[1].selectedTabId).toBe(existingTabId);
+  });
+});

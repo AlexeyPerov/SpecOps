@@ -11,14 +11,17 @@ import {
   createSinglePaneLayout,
   expectedPaneCount,
   findPane,
+  findTabOwner,
   getSessionSelectedTabId,
   getSessionTabs,
   layoutFromFlatTabs,
   mergePaneTabs,
+  moveTabBetweenPanes,
   nextPaneId,
   normalizeEditorLayout,
   presetSlots,
   reflowAfterClose,
+  removeTabFromPane,
   selectTabInLayout,
   setActivePaneInLayout,
   setLayoutKind,
@@ -367,5 +370,141 @@ describe("nextPaneId", () => {
     const layout = createSinglePaneLayout([fileTab("t1")]);
     expect(findPane(layout, layout.panes[0].id)).toBe(layout.panes[0]);
     expect(findPane(layout, "missing")).toBeUndefined();
+  });
+});
+
+describe("findTabOwner", () => {
+  it("returns the pane + tab holding the given tab id", () => {
+    const t1 = fileTab("t1");
+    const t2 = fileTab("t2");
+    const layout = buildLayout(
+      "cols-2",
+      [pane("pane-a", [t1]), pane("pane-b", [t2])],
+      [[0, 1]],
+    );
+    expect(findTabOwner(layout, "t2")?.pane.id).toBe("pane-b");
+    expect(findTabOwner(layout, "t2")?.tab.id).toBe("t2");
+  });
+
+  it("returns null when no pane holds the tab", () => {
+    const layout = createSinglePaneLayout([fileTab("t1")]);
+    expect(findTabOwner(layout, "missing")).toBeNull();
+  });
+});
+
+describe("removeTabFromPane (Phase 6 steal helper)", () => {
+  it("removes the tab and recomputes the pane's selectedTabId", () => {
+    const t1 = fileTab("t1");
+    const t2 = fileTab("t2");
+    const layout = buildLayout("single", [pane("p", [t1, t2], "t2")], [[0]]);
+    const next = removeTabFromPane(layout, "p", "t2");
+    expect(next.panes[0].tabs.map((tab) => tab.id)).toEqual(["t1"]);
+    // Selected tab was removed → falls back to the neighbor (t1).
+    expect(next.panes[0].selectedTabId).toBe("t1");
+  });
+
+  it("leaves the pane empty (selectedTabId null) when removing the last tab (Q6)", () => {
+    const t1 = fileTab("t1");
+    const layout = buildLayout("single", [pane("p", [t1], "t1")], [[0]]);
+    const next = removeTabFromPane(layout, "p", "t1");
+    expect(next.panes[0].tabs).toEqual([]);
+    expect(next.panes[0].selectedTabId).toBeNull();
+  });
+
+  it("preserves an unrelated selectedTabId when removing a non-selected tab", () => {
+    const t1 = fileTab("t1");
+    const t2 = fileTab("t2");
+    const layout = buildLayout("single", [pane("p", [t1, t2], "t1")], [[0]]);
+    const next = removeTabFromPane(layout, "p", "t2");
+    expect(next.panes[0].selectedTabId).toBe("t1");
+  });
+
+  it("is a no-op when the pane or tab is missing", () => {
+    const t1 = fileTab("t1");
+    const layout = buildLayout("single", [pane("p", [t1], "t1")], [[0]]);
+    expect(removeTabFromPane(layout, "missing", "t1")).toBe(layout);
+    expect(removeTabFromPane(layout, "p", "missing")).toBe(layout);
+  });
+});
+
+describe("moveTabBetweenPanes (Phase 5 tab→pane DnD)", () => {
+  it("moves a tab across panes and focuses the destination", () => {
+    const t1 = fileTab("t1");
+    const t2 = fileTab("t2");
+    const layout = buildLayout(
+      "cols-2",
+      [pane("a", [t1], "t1"), pane("b", [t2], "t2")],
+      [[0, 1]],
+      "a",
+    );
+    const next = moveTabBetweenPanes(layout, "a", "t1", "b", 0);
+    expect(next.panes[0].tabs.map((tab) => tab.id)).toEqual([]);
+    expect(next.panes[1].tabs.map((tab) => tab.id)).toEqual(["t1", "t2"]);
+    // Destination selects the moved tab and becomes active.
+    expect(next.panes[1].selectedTabId).toBe("t1");
+    expect(next.activePaneId).toBe("b");
+  });
+
+  it("appends when toIndex equals the destination length (drop on empty pane)", () => {
+    const t1 = fileTab("t1");
+    const layout = buildLayout(
+      "cols-2",
+      [pane("a", [t1], "t1"), pane("b", [], null)],
+      [[0, 1]],
+      "a",
+    );
+    const next = moveTabBetweenPanes(layout, "a", "t1", "b", 5);
+    expect(next.panes[1].tabs.map((tab) => tab.id)).toEqual(["t1"]);
+    expect(next.panes[1].selectedTabId).toBe("t1");
+  });
+
+  it("reorders within the same pane (same from/to pane collapses to reorder)", () => {
+    const t1 = fileTab("t1");
+    const t2 = fileTab("t2");
+    const t3 = fileTab("t3");
+    const layout = buildLayout("single", [pane("p", [t1, t2, t3], "t1")], [[0]]);
+    // Move t3 to index 0.
+    const next = moveTabBetweenPanes(layout, "p", "t3", "p", 0);
+    expect(next.panes[0].tabs.map((tab) => tab.id)).toEqual(["t3", "t1", "t2"]);
+    expect(next.panes[0].selectedTabId).toBe("t3");
+  });
+
+  it("preserves the session-tab singleton (a session tab relocates, not duplicates)", () => {
+    const s1 = sessionTab("s1", "agent-a");
+    const layout = buildLayout(
+      "cols-2",
+      [pane("a", [s1], "s1"), pane("b", [], null)],
+      [[0, 1]],
+      "a",
+    );
+    const next = moveTabBetweenPanes(layout, "a", "s1", "b", 0);
+    expect(next.panes[0].tabs).toEqual([]);
+    expect(next.panes[1].tabs.map((tab) => tab.id)).toEqual(["s1"]);
+  });
+
+  it("recomputes the source pane's selectedTabId after the move", () => {
+    const t1 = fileTab("t1");
+    const t2 = fileTab("t2");
+    const layout = buildLayout(
+      "cols-2",
+      [pane("a", [t1, t2], "t1"), pane("b", [], null)],
+      [[0, 1]],
+      "a",
+    );
+    const next = moveTabBetweenPanes(layout, "a", "t1", "b", 0);
+    // t1 was the selected tab in a; after removal it falls back to t2.
+    expect(next.panes[0].selectedTabId).toBe("t2");
+  });
+
+  it("is a no-op when the tab or either pane is missing", () => {
+    const t1 = fileTab("t1");
+    const layout = buildLayout(
+      "cols-2",
+      [pane("a", [t1], "t1"), pane("b", [], null)],
+      [[0, 1]],
+    );
+    expect(moveTabBetweenPanes(layout, "missing", "t1", "b", 0)).toBe(layout);
+    expect(moveTabBetweenPanes(layout, "a", "t1", "missing", 0)).toBe(layout);
+    expect(moveTabBetweenPanes(layout, "a", "missing", "b", 0)).toBe(layout);
   });
 });

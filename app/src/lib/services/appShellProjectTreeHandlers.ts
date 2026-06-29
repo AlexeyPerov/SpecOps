@@ -9,7 +9,11 @@ import {
   renameProjectEntry,
 } from "./projectFileOps";
 import { chatStore } from "../state/chatStore";
-import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
+import {
+  describeOpenActivePathResult,
+  openActivePath,
+  openActivePathInPane,
+} from "./openActivePath";
 import { promptEntryName } from "./entryNamePrompt";
 import type { createProjectTreeController } from "./projectTreeController";
 
@@ -50,6 +54,20 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
 
   async function handleOpenProjectTreeFile(path: string): Promise<void> {
     const result = await openActivePath(path, getCurrentWindowId());
+    notify(describeOpenActivePathResult(result));
+  }
+
+  /**
+   * Phase 6 — open a file dragged from the project tree into a specific pane.
+   * Routes through `openActivePathInPane` so the file lands in `paneId`
+   * (stealing it from any other pane first per Q9). Click-to-open still uses
+   * {@link handleOpenProjectTreeFile} (targets the active pane).
+   */
+  async function handleOpenProjectTreeFileInPane(
+    path: string,
+    paneId: string,
+  ): Promise<void> {
+    const result = await openActivePathInPane(path, getCurrentWindowId(), paneId);
     notify(describeOpenActivePathResult(result));
   }
 
@@ -219,6 +237,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     loadProjectTreeChildren,
     handleToggleProjectTreeDirectory,
     handleOpenProjectTreeFile,
+    handleOpenProjectTreeFileInPane,
     refreshProjectTree,
     notifyProjectTreeFilesystemChange,
     handleMoveProjectTreeEntry,

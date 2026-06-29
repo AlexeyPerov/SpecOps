@@ -3,6 +3,7 @@
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
+  import type { PaneDropTargetElements } from "./paneDropTargets";
   import {
     DEFAULT_PROJECT_PANEL_WIDTH_PX,
     MAX_PANEL_WIDTH_PX,
@@ -33,6 +34,14 @@
   export let onRenameEntry: (path: string, kind: ProjectTreeNode["kind"]) => void = () => {};
   export let onDeleteEntry: (path: string, kind: ProjectTreeNode["kind"]) => void = () => {};
   export let notify: (message: string) => void = () => {};
+  /** Phase 6 — live pane elements for file→pane DnD. */
+  export let getPaneElements: () => PaneDropTargetElements[] = () => [];
+  /** Phase 6 — open a file into a specific pane. */
+  export let onOpenFileInPane:
+    | ((filePath: string, paneId: string) => void | Promise<void>)
+    | null = null;
+  /** Phase 6 — reports the hovered pane during a file drag (for affordance). */
+  export let onFileDropPaneChange: (paneId: string | null) => void = () => {};
   let panelBodyEl: HTMLDivElement | null = null;
   let contextMenuComponent: ProjectTreeContextMenu | undefined;
   let displayWidth = panelWidthPx;
@@ -181,6 +190,9 @@
         onContextMenuNode={handleContextMenuNode}
         {onMoveEntry}
         {notify}
+        {getPaneElements}
+        onOpenFileInPane={onOpenFileInPane ?? undefined}
+        {onFileDropPaneChange}
       />
     </div>
   {/if}

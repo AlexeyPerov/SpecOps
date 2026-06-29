@@ -13,6 +13,7 @@
     previewTabs,
     type TabDragState,
   } from "./tabDragController";
+  import type { PaneDropTargetElements } from "./paneDropTargets";
 
   interface Props {
     openTabs?: TabState[];
@@ -23,6 +24,21 @@
     onCloseTab?: (tabId: string) => void;
     windowId?: string;
     notify?: (message: string) => void;
+    /**
+     * Phase 5 — this strip's pane id. When set together with `getPaneElements`
+     * and `onMoveBetweenPanes`, the drag controller hit-tests every pane and
+     * can move the tab across panes. Defaults keep TabBar working in any
+     * single-pane / non-split call site.
+     */
+    paneId?: string;
+    getPaneElements?: () => PaneDropTargetElements[];
+    onMoveBetweenPanes?: (
+      fromPaneId: string,
+      tabId: string,
+      toPaneId: string,
+      toIndex: number,
+    ) => void;
+    onDropTargetChange?: (paneId: string | null) => void;
   }
 
   let {
@@ -34,6 +50,10 @@
     onCloseTab = (tabId: string) => appState.closeTabForce(tabId),
     windowId = "main",
     notify = () => {},
+    paneId = "",
+    getPaneElements = () => [],
+    onMoveBetweenPanes,
+    onDropTargetChange = () => {},
   }: Props = $props();
 
   let tabStripEl = $state<HTMLDivElement | null>(null);
@@ -45,6 +65,7 @@
     dragTabId: null,
     dragFromIndex: -1,
     dropIndex: -1,
+    dropPaneId: null,
     dragOffsetX: 0,
     dragOffsetY: 0,
     dragPointerX: 0,
@@ -59,11 +80,27 @@
     isFinishingDrag: false,
   });
 
+  // Lift the drop-target pane id to the parent grid so the hovered pane can
+  // render an affordance. Only reports a *cross-pane* target (null otherwise),
+  // so the parent doesn't highlight the source pane.
+  $effect(() => {
+    const target = dragState.didDrag ? dragState.dropPaneId : null;
+    if (target && target !== paneId) {
+      onDropTargetChange(target);
+    } else if (!target) {
+      onDropTargetChange(null);
+    }
+  });
+
   const dragController = createTabDragController({
     getOpenTabs: () => openTabs,
     getTabStripEl: () => tabStripEl,
+    getPaneId: () => paneId,
+    getPaneElements: () => getPaneElements(),
     onSelect: (tabId) => onSelect(tabId),
     onReorder: (fromIndex, toIndex) => appState.reorderTabs(fromIndex, toIndex),
+    onMoveBetweenPanes: (fromPaneId, tabId, toPaneId, toIndex) =>
+      onMoveBetweenPanes?.(fromPaneId, tabId, toPaneId, toIndex),
     getWindowId: () => windowId,
     notify: (message) => notify(message),
     onStateChange: (nextState) => {

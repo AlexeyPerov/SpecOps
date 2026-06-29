@@ -1,14 +1,20 @@
 import type { AppDomainState } from "../../domain/contracts";
-import { reflowAfterClose, setActivePaneInLayout, setLayoutKind } from "../../domain/contracts";
+import {
+  moveTabBetweenPanes,
+  reflowAfterClose,
+  setActivePaneInLayout,
+  setLayoutKind,
+} from "../../domain/contracts";
 import { patchActiveContext } from "./contextHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
 /**
  * Split-view (layout groups) reducer slice. Owns the per-context editor layout
- * mutations: switching the active preset, focusing a pane, and closing a pane
- * (which reflows by remaining count). See `domain/editorLayout.ts` and
- * `specs/text-editor/split-view-execution-plan.md` Phase 3.
+ * mutations: switching the active preset, focusing a pane, closing a pane
+ * (which reflows by remaining count), and moving a tab between panes (tab→pane
+ * DnD, Phase 5). See `domain/editorLayout.ts` and
+ * `specs/text-editor/split-view-execution-plan.md` Phases 3 & 5.
  */
 export function createEditorLayoutSlice(deps: { update: AppStateUpdate }) {
   const { update } = deps;
@@ -78,6 +84,34 @@ export function createEditorLayoutSlice(deps: { update: AppStateUpdate }) {
       update((state) =>
         patchActiveContext(state, (ctx) => {
           const next = reflowAfterClose(ctx.session.editorLayout, paneId);
+          if (next === ctx.session.editorLayout) {
+            return ctx;
+          }
+          return { ...ctx, session: { ...ctx.session, editorLayout: next } };
+        }),
+      );
+    },
+    /**
+     * Move a tab from one pane to another (tab→pane DnD, Phase 5). Always a
+     * move; the destination pane selects the moved tab and becomes active
+     * (focus follows the drop). When `fromPaneId === toPaneId` this is an
+     * in-pane reorder.
+     */
+    moveTabBetweenPanes(
+      fromPaneId: string,
+      tabId: string,
+      toPaneId: string,
+      toIndex: number,
+    ): void {
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          const next = moveTabBetweenPanes(
+            ctx.session.editorLayout,
+            fromPaneId,
+            tabId,
+            toPaneId,
+            toIndex,
+          );
           if (next === ctx.session.editorLayout) {
             return ctx;
           }

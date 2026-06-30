@@ -2,6 +2,8 @@
   import { onDestroy } from "svelte";
   import TabBar from "./TabBar.svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
+  import { isFileTab } from "../domain/contracts";
+  import { isTabVisibleInStrip } from "../services/implicitDraftTab";
   import type { PaneDropTargetElements } from "./paneDropTargets";
 
   /**
@@ -47,7 +49,7 @@
     windowId: string;
     notify: (message: string) => void;
     onSelectTab: (tabId: string) => void;
-    onCloseTab: (tabId: string) => void | Promise<void>;
+    onCloseTab: (paneId: string, tabId: string) => void | Promise<void>;
     onClosePane: (paneId: string) => void;
     onFocus: (paneId: string) => void;
     onRegisterElements: (
@@ -75,6 +77,17 @@
   const isTabDropTarget = $derived(tabDropTargetPaneId === paneId);
   const isFileDropTarget = $derived(fileDropTargetPaneId === paneId);
 
+  function tabDocument(tab: TabState): DocumentState | undefined {
+    if (!isFileTab(tab)) {
+      return undefined;
+    }
+    return documents.find((doc) => doc.id === tab.documentId);
+  }
+
+  const visibleTabCount = $derived(
+    tabs.filter((tab) => isTabVisibleInStrip(tab, tabDocument(tab))).length,
+  );
+
   // Register/unregister our elements with the parent grid so the cross-pane
   // hit-tester can see this pane's strip + body. Re-registers when the bound
   // elements change (mount/unmount).
@@ -95,7 +108,7 @@
   onpointerdown={() => onFocus(paneId)}
 >
   <header class="pane-header" data-pane-strip={paneId}>
-    <div class="pane-tab-bar" bind:this={tabStripEl}>
+    <div class="pane-tab-bar" class:pane-tab-bar-empty={visibleTabCount === 0} bind:this={tabStripEl}>
       <TabBar
         openTabs={tabs}
         {documents}
@@ -106,7 +119,7 @@
         {paneId}
         {getPaneElements}
         onSelect={(tabId) => onSelectTab(tabId)}
-        onCloseTab={(tabId) => onCloseTab(tabId)}
+        onCloseTab={(closePaneId, tabId) => onCloseTab(closePaneId, tabId)}
         onMoveBetweenPanes={onMoveTabBetweenPanes}
         onDropTargetChange={onTabDropTargetChange}
       />
@@ -128,10 +141,10 @@
   </header>
 
   <div class="pane-body" data-pane-body={paneId} bind:this={paneBodyEl}>
-    {#if tabs.length === 0}
-      <div class="pane-empty">Drop a file or tab here</div>
-    {:else}
+    {#if selectedTabId}
       {@render children?.()}
+    {:else}
+      <div class="pane-empty">Drop a file or tab here</div>
     {/if}
   </div>
 </section>
@@ -169,6 +182,12 @@
     min-width: 0;
     padding-left: 3px;
     overflow: hidden;
+  }
+  .pane-tab-bar-empty {
+    min-height: 0;
+  }
+  .pane-tab-bar-empty :global(.tab-strip) {
+    min-height: 0;
   }
   .pane-close-button {
     flex: 0 0 auto;

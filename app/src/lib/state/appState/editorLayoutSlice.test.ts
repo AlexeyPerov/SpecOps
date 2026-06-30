@@ -34,7 +34,10 @@ describe("editorLayoutSlice — setEditorLayout presets", () => {
     ]);
     // The original single pane survives as pane #1 with its tabs.
     expect(layout.panes[0].tabs.length).toBeGreaterThan(0);
-    expect(layout.panes[1].tabs).toEqual([]);
+    // New panes receive implicit hidden drafts so typing can start immediately.
+    expect(layout.panes[1].tabs).toHaveLength(1);
+    expect(layout.panes[1].tabs[0]).toMatchObject({ stripHidden: true });
+    expect(layout.panes[1].selectedTabId).toBeTruthy();
   });
 
   it("cols-2 produces two side-by-side panes", () => {
@@ -181,13 +184,14 @@ describe("editorLayoutSlice — moveTabBetweenPanes (Phase 5)", () => {
     appState.setEditorLayout("cols-2");
     const layout = activeLayout();
     const sourcePaneId = layout.panes[0].id;
-    const destPaneId = layout.panes[1].id; // empty after split
+    const destPaneId = layout.panes[1].id;
     const movedTabId = layout.panes[0].tabs[0].id;
+    const destDraftTabId = layout.panes[1].tabs[0].id;
 
     appState.moveTabBetweenPanes(sourcePaneId, movedTabId, destPaneId, 99);
 
     const next = activeLayout();
-    expect(next.panes[1].tabs.map((tab) => tab.id)).toEqual([movedTabId]);
+    expect(next.panes[1].tabs.map((tab) => tab.id)).toEqual([destDraftTabId, movedTabId]);
   });
 
   it("is a no-op for an unknown source pane", () => {
@@ -211,9 +215,15 @@ describe("documentContentSlice — openFileInPane (Phase 6)", () => {
 
     expect(docId).not.toBe("");
     const next = activeLayout();
-    expect(next.panes[1].tabs.map((tab) => tab.id)).toHaveLength(1);
+    const destPane = next.panes[1];
+    expect(destPane.tabs).toHaveLength(2);
+    expect(destPane.tabs.some((tab) => tab.kind === "file" && tab.documentId === docId)).toBe(
+      true,
+    );
     expect(next.activePaneId).toBe(destPaneId);
-    expect(next.panes[1].selectedTabId).toBe(next.panes[1].tabs[0].id);
+    expect(destPane.selectedTabId).toBe(
+      destPane.tabs.find((tab) => tab.kind === "file" && tab.documentId === docId)?.id,
+    );
   });
 
   it("steals an already-open file from another pane into the target (Q9)", () => {
@@ -252,7 +262,13 @@ describe("documentContentSlice — openFileInPane (Phase 6)", () => {
     const destPaneId = activeLayout().panes[1].id;
 
     appState.openFileInPane("/tmp/gamma.txt", "gamma", destPaneId);
-    const existingTabId = activeLayout().panes[1].tabs[0].id;
+    const gammaDocId = appState.findDocumentIdByPath("/tmp/gamma.txt");
+    const existingTabId = activeLayout()
+      .panes[1].tabs.find(
+        (tab): tab is import("../../domain/contracts").FileTabState =>
+          tab.kind === "file" && tab.documentId === gammaDocId,
+      )?.id;
+    expect(existingTabId).toBeTruthy();
 
     // Open another file into the source pane to move focus away.
     const sourcePaneId = activeLayout().panes[0].id;
@@ -262,7 +278,11 @@ describe("documentContentSlice — openFileInPane (Phase 6)", () => {
     appState.openFileInPane("/tmp/gamma.txt", "gamma-again", destPaneId);
 
     const next = activeLayout();
-    expect(next.panes[1].tabs.map((tab) => tab.id)).toEqual([existingTabId]);
+    expect(
+      next.panes[1].tabs.filter(
+        (tab) => tab.kind === "file" && tab.documentId === gammaDocId,
+      ),
+    ).toHaveLength(1);
     expect(next.activePaneId).toBe(destPaneId);
     expect(next.panes[1].selectedTabId).toBe(existingTabId);
   });

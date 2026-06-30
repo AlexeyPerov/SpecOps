@@ -32,6 +32,7 @@ export {
   allTabs,
   appendTabToPane,
   applyPreset,
+  effectiveLayoutSlots,
   createEmptyPane,
   createSinglePaneLayout,
   expectedPaneCount,
@@ -60,9 +61,12 @@ export {
   setActivePaneInLayout,
   setActivePaneTabs,
   setLayoutKind,
+  slotsEqual,
   setPaneTabs,
   totalTabCount,
 } from "./editorLayout";
+export { ensureImplicitDraftsInLayout, revealFileTabsInLayout } from "./implicitDraftLayout";
+export type { EnsureImplicitDraftsResult } from "./implicitDraftLayout";
 export type {
   ContextId,
   ContextSnapshot,

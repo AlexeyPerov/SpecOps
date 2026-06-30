@@ -128,7 +128,7 @@
     largeFileConfirming: boolean;
     canFitMarkdownSplit: boolean;
     currentWindowId: string;
-    onCloseTab: (tabId: string) => void | Promise<void>;
+    onCloseTab: (paneId: string, tabId: string) => void | Promise<void>;
     onRunCommand: (commandId: AppCommandId) => void;
     onConfirmLargeFile: () => void | Promise<void>;
     onMarkdownViewModeChange: (nextMode: "edit" | "split" | "preview") => void;

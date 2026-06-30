@@ -56,6 +56,45 @@ export function nextPaneId(): string {
   return `${PANE_ID_PREFIX}${paneIdCounter}`;
 }
 
+/** Shallow equality for slot row arrays (used to detect stale geometry). */
+export function slotsEqual(a: number[][], b: number[][]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i += 1) {
+    const rowA = a[i];
+    const rowB = b[i];
+    if (!rowA || !rowB || rowA.length !== rowB.length) {
+      return false;
+    }
+    for (let j = 0; j < rowA.length; j += 1) {
+      if (rowA[j] !== rowB[j]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function slotsMatchPreset(slots: number[][], kind: Exclude<LayoutKind, "custom">): boolean {
+  return slotsEqual(slots, presetSlots(kind));
+}
+
+/**
+ * Resolve the grid geometry to render. Falls back to the preset template for
+ * non-custom kinds when `slots` is missing/empty, and to the close-reflow
+ * count template for custom layouts with stale slots.
+ */
+export function effectiveLayoutSlots(layout: EditorLayout): number[][] {
+  if (Array.isArray(layout.slots) && layout.slots.length > 0) {
+    return layout.slots;
+  }
+  if (layout.kind !== "custom") {
+    return presetSlots(layout.kind);
+  }
+  return templateForCount(layout.panes.length).slots;
+}
+
 /** Canonical slot templates per preset (pane-count is implied by the kind). */
 export function presetSlots(kind: Exclude<LayoutKind, "custom">): number[][] {
   switch (kind) {
@@ -715,7 +754,7 @@ export function setLayoutKind(layout: EditorLayout, kind: LayoutKind): EditorLay
   if (kind === "custom") {
     return layout;
   }
-  if (layout.kind === kind) {
+  if (layout.kind === kind && slotsMatchPreset(layout.slots, kind)) {
     return layout;
   }
   return applyPreset(layout, kind);

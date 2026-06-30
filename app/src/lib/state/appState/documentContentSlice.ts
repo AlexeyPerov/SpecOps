@@ -1,5 +1,6 @@
 import type {
   AppDomainState,
+  ContextSnapshot,
   DiskFingerprint,
   DocumentContentKind,
   DocumentState,
@@ -13,9 +14,11 @@ import {
   isFileTab,
   normalizeTabState,
   removeTabFromPane,
+  revealFileTabsInLayout,
   setActivePaneInLayout,
   setActivePaneTabs,
 } from "../../domain/contracts";
+import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
 import { deriveUntitledTitle } from "../../services/untitledTitle";
 import { bumpRecentFile } from "../../services/recentFiles";
 import { syncRecentFiles } from "../../services/recentFilesSync";
@@ -228,10 +231,13 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
                 ...ctx,
                 session: {
                   ...ctx.session,
-                  editorLayout: selectAndActivatePane(
-                    ctx.session.editorLayout,
-                    paneId,
-                    existingTabId,
+                  editorLayout: revealFileTabsInLayout(
+                    selectAndActivatePane(
+                      ctx.session.editorLayout,
+                      paneId,
+                      existingTabId,
+                    ),
+                    duplicate.id,
                   ),
                 },
               })),
@@ -244,10 +250,13 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
               ...ctx,
               session: {
                 ...ctx.session,
-                editorLayout: appendTabToPane(
-                  setActivePaneInLayout(ctx.session.editorLayout, paneId),
-                  createFileTab(reopenedTabId, duplicate.id),
-                  paneId,
+                editorLayout: revealFileTabsInLayout(
+                  appendTabToPane(
+                    setActivePaneInLayout(ctx.session.editorLayout, paneId),
+                    createFileTab(reopenedTabId, duplicate.id),
+                    paneId,
+                  ),
+                  duplicate.id,
                 ),
               },
             })),
@@ -283,24 +292,44 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
     },
     setDocumentContent(documentId: string, content: string) {
       update((state) =>
-        patchActiveContext(state, (ctx) => ({
-          ...ctx,
-          documents: ctx.documents.map((documentState) => {
-            if (documentState.id !== documentId) {
-              return documentState;
+        patchActiveContext(state, (ctx) => {
+          const previous = ctx.documents.find((documentState) => documentState.id === documentId);
+          const wasEmpty =
+            previous?.filePath === null &&
+            previous.content === "" &&
+            previous.savedContent === "";
+          const hasContent = content.length > 0;
+
+          let nextCtx = {
+            ...ctx,
+            documents: ctx.documents.map((documentState) => {
+              if (documentState.id !== documentId) {
+                return documentState;
+              }
+              if (documentState.contentKind !== "text") {
+                return documentState;
+              }
+              const lineEnding: "lf" | "crlf" = content.includes("\r\n") ? "crlf" : "lf";
+              return {
+                ...documentState,
+                content,
+                lineEnding,
+                isDirty: content !== documentState.savedContent,
+              };
+            }),
+          };
+
+          if (wasEmpty && hasContent) {
+            const nextLayout = revealFileTabsInLayout(nextCtx.session.editorLayout, documentId);
+            if (nextLayout !== nextCtx.session.editorLayout) {
+              nextCtx = {
+                ...nextCtx,
+                session: { ...nextCtx.session, editorLayout: nextLayout },
+              };
             }
-            if (documentState.contentKind !== "text") {
-              return documentState;
-            }
-            const lineEnding: "lf" | "crlf" = content.includes("\r\n") ? "crlf" : "lf";
-            return {
-              ...documentState,
-              content,
-              lineEnding,
-              isDirty: content !== documentState.savedContent,
-            };
-          }),
-        })),
+          }
+          return nextCtx;
+        }),
       );
     },
     refreshUntitledTitle(documentId: string) {
@@ -350,25 +379,37 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
     markDocumentSaved(documentId: string, filePath: string | null, content: string) {
       let recentFiles: string[] = [];
       update((state) => {
-        const nextState = patchActiveContext(state, (ctx) => ({
-          ...ctx,
-          documents: ctx.documents.map((documentState) => {
-            if (documentState.id !== documentId) {
-              return documentState;
+        const nextState = patchActiveContext(state, (ctx) => {
+          let nextCtx: ContextSnapshot = {
+            ...ctx,
+            documents: ctx.documents.map((documentState) => {
+              if (documentState.id !== documentId) {
+                return documentState;
+              }
+              return {
+                ...documentState,
+                filePath,
+                title: filePath ? basename(filePath) : documentState.title,
+                savedContent: content,
+                content,
+                lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
+                isDirty: false,
+                language: inferLanguage(filePath),
+                fileMissing: false,
+              };
+            }),
+          };
+          if (filePath !== null) {
+            const nextLayout = revealFileTabsInLayout(nextCtx.session.editorLayout, documentId);
+            if (nextLayout !== nextCtx.session.editorLayout) {
+              nextCtx = {
+                ...nextCtx,
+                session: { ...nextCtx.session, editorLayout: nextLayout },
+              };
             }
-            return {
-              ...documentState,
-              filePath,
-              title: filePath ? basename(filePath) : documentState.title,
-              savedContent: content,
-              content,
-              lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
-              isDirty: false,
-              language: inferLanguage(filePath),
-              fileMissing: false,
-            };
-          }),
-        }));
+          }
+          return nextCtx;
+        });
         recentFiles =
           filePath === null ? state.recentFiles : bumpRecentFile(state.recentFiles, filePath);
         return { ...nextState, recentFiles };

@@ -53,6 +53,14 @@ describe("appState documents and paths", () => {
     expect(document?.lineEnding).toBe("crlf");
   });
 
+  it("setDocumentContent reveals a hidden implicit draft tab when content appears", () => {
+    const bootstrapTab = appState.getActiveSession().editorLayout.panes[0].tabs[0];
+    expect(bootstrapTab).toMatchObject({ stripHidden: true });
+    appState.setDocumentContent("doc-1", "hello");
+    const tab = appState.getActiveSession().editorLayout.panes[0].tabs[0];
+    expect(tab).toMatchObject({ stripHidden: false });
+  });
+
   it("markDocumentSaved clears dirty state and updates metadata", () => {
     appState.setDocumentContent("doc-1", "draft");
     appState.markDocumentSaved("doc-1", "/tmp/saved.txt", "draft");

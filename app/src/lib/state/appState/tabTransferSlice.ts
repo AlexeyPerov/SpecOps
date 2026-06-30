@@ -8,7 +8,7 @@ import {
   setActivePaneTabs,
   tabDocumentId,
 } from "../../domain/contracts";
-import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
+import { createImplicitDraftPair, isReplaceableBootstrapTab } from "../../services/implicitDraftTab";
 import { isPathUnderRoot } from "../../services/workspacePaths";
 import {
   findDocumentByPath,
@@ -21,8 +21,9 @@ import {
   nextTabId,
   patchActiveContext,
 } from "./contextHelpers";
-import { buildDocument, buildEmptyUnsavedDocument } from "./documentHelpers";
+import { buildDocument } from "./documentHelpers";
 import { canCreateFileTabs, reopenTabForDocument, selectTabInternal } from "./tabHelpers";
+import { seedImplicitDraftsInContext } from "./implicitDraftContext";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
@@ -50,13 +51,13 @@ function removeFileTabFromSnapshot(
     return filtered.some((tab) => isFileTab(tab) && tab.documentId === documentId);
   });
   if (filtered.length === 0) {
-    const { docId, tabId: bootstrapTabId } = nextDocAndTabIds();
-    const newDocument = buildEmptyUnsavedDocument(docId);
+    const { tabId: draftTabId, docId: draftDocId } = nextDocAndTabIds();
+    const { tab, document: draftDoc } = createImplicitDraftPair(draftTabId, draftDocId);
     return {
-      documents: [...documents, newDocument],
+      documents: [...documents, draftDoc],
       session: {
         ...snapshot.session,
-        editorLayout: layoutFromFlatTabs([createFileTab(bootstrapTabId, docId)], bootstrapTabId),
+        editorLayout: layoutFromFlatTabs([tab], tab.id),
         lastActiveSessionId: null,
         lastActiveWindowId,
       },
@@ -116,10 +117,7 @@ function isDefaultBootstrapWindow(state: AppDomainState): boolean {
     return false;
   }
   const documentState = ctx.documents.find((doc) => doc.id === tab.documentId);
-  if (!documentState) {
-    return false;
-  }
-  return isEmptyUnsavedDocument(documentState);
+  return isReplaceableBootstrapTab(tab, documentState);
 }
 
 export function createTabTransferSlice(deps: {
@@ -260,7 +258,7 @@ export function createTabTransferSlice(deps: {
           }
           const filtered = tabs.filter((tab) => tab.id !== tabId);
           if (filtered.length === 0) {
-            return {
+            let nextCtx: ContextSnapshot = {
               ...ctx,
               session: {
                 ...ctx.session,
@@ -268,6 +266,10 @@ export function createTabTransferSlice(deps: {
                 lastActiveSessionId: null,
               },
             };
+            if (canCreateFileTabs(state)) {
+              nextCtx = seedImplicitDraftsInContext(nextCtx);
+            }
+            return nextCtx;
           }
           const selectedTabId = recomputeSelectedTabId(
             tabs,

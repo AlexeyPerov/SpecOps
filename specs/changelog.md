@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-30 — Implicit untitled drafts per pane
+
+- **Every file pane starts with a hidden untitled draft.** New and empty panes get an implicit `stripHidden` file tab plus empty document so the editor is ready to type without showing a tab until content appears (state A → B).
+- **Closing the last empty untitled tab returns to a hidden draft** (state C) instead of a visible bootstrap tab; File → New still opens a visible tab immediately.
+- **Split-view seeding and UI.** Layout presets seed hidden drafts into new panes; `TabBar` filters hidden tabs; `EditorPaneView` / `EditorGridLayout` render the selected draft editor even when the strip is empty. Pane-aware tab close uses `findTabOwner` across the layout.
+
+## 2026-06-30 — Split-view layout geometry + equal pane sizing fix
+
+- **View → Layout presets render correctly again.** `setLayoutKind` now re-applies a preset when `kind` matches but `slots` are stale (e.g. empty or row-shaped while kind is `cols-2`). New `effectiveLayoutSlots` helper resolves render-time geometry; `EditorGridLayout` assigns explicit `grid-row` / `grid-column` from slot coordinates instead of relying on auto-placement.
+- **Equal pane height restored.** Repaired the editor-shell height chain (`shell-main-row`, `editor-shell`, `editor-grid`, grid cells) so `1fr` row tracks fill the available editor area and empty/new panes no longer collapse to a single tab-bar line.
+
 ## 2026-06-30 13:54
 
 - **Freeze fix F3-B — stable editor host per pane.** Each split pane now keeps a persistent editor subtree across tab and pane-focus changes: `EditorGridLayout` renders per-pane content via `renderPaneContent`, `EditorPaneView` no longer swaps inactive panes to placeholders, and new `EditorPaneContent` resolves tab/document routing per pane (including lazy markdown preview HTML).

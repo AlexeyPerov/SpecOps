@@ -38,7 +38,7 @@ import { createWorkspaceContextsSlice } from "./appState/workspaceContextsSlice"
 
 function buildDefaultContextSession() {
   return {
-    editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-1")], "tab-1"),
+    editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-1", false, true)], "tab-1"),
     lastActiveWindowId: "main",
     windowBounds: null,
     lastActiveSessionId: null,

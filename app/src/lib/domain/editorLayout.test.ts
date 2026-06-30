@@ -7,6 +7,7 @@ import {
   activePaneTabs,
   allTabs,
   applyPreset,
+  effectiveLayoutSlots,
   createEmptyPane,
   createSinglePaneLayout,
   expectedPaneCount,
@@ -28,6 +29,7 @@ import {
   selectTabInLayout,
   setActivePaneInLayout,
   setLayoutKind,
+  slotsEqual,
   totalTabCount,
   type EditorLayout,
   type EditorPane,
@@ -305,14 +307,51 @@ describe("applyPreset", () => {
 });
 
 describe("setLayoutKind", () => {
-  it("is a no-op when the kind already matches", () => {
+  it("is a no-op when the kind already matches and slots match the preset", () => {
     const layout = createSinglePaneLayout([fileTab("a")]);
     expect(setLayoutKind(layout, "single")).toBe(layout);
+  });
+
+  it("re-applies the preset when kind matches but slots are stale", () => {
+    const layout = buildLayout(
+      "cols-2",
+      [pane("p1", [fileTab("t1")]), pane("p2", [])],
+      [[0], [1]],
+      "p1",
+    );
+    const next = setLayoutKind(layout, "cols-2");
+    expect(next).not.toBe(layout);
+    expect(next.slots).toEqual([[0, 1]]);
+    expect(next.kind).toBe("cols-2");
   });
 
   it("is a no-op for custom (never settable from the menu)", () => {
     const layout = createSinglePaneLayout([fileTab("a")]);
     expect(setLayoutKind(layout, "custom")).toBe(layout);
+  });
+});
+
+describe("effectiveLayoutSlots", () => {
+  it("returns preset slots when slots array is empty", () => {
+    const layout = buildLayout("cols-2", [pane("p1", []), pane("p2", [])], [], "p1");
+    expect(effectiveLayoutSlots(layout)).toEqual([[0, 1]]);
+  });
+
+  it("returns stored slots when present", () => {
+    const layout = buildLayout(
+      "custom",
+      [pane("p1", []), pane("p2", []), pane("p3", [])],
+      [[0, 1], [2]],
+      "p1",
+    );
+    expect(effectiveLayoutSlots(layout)).toEqual([[0, 1], [2]]);
+  });
+});
+
+describe("slotsEqual", () => {
+  it("compares slot row arrays", () => {
+    expect(slotsEqual([[0, 1]], [[0, 1]])).toBe(true);
+    expect(slotsEqual([[0], [1]], [[0, 1]])).toBe(false);
   });
 });
 

@@ -1,14 +1,19 @@
 import type { AppDomainState, DocumentState, TabState } from "../../domain/contracts";
 import {
   createFileTab,
+  findTabOwner,
   getSessionTabs,
   isFileTab,
   normalizeTabState,
   recomputeSelectedTabId,
   setActivePaneTabs,
 } from "../../domain/contracts";
+import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
+import { createImplicitDraftPair } from "../../services/implicitDraftTab";
 import { isChatHttpContext, nextDocAndTabIds, nextTabId, patchActiveContext } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
+import { closeTabInPaneForceOnContext } from "./closeTabInPane";
+import { selectTabAcrossPanes } from "./closeTabInPane";
 
 export function moveArrayItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   if (
@@ -77,24 +82,7 @@ export function canCreateFileTabs(state: AppDomainState): boolean {
 }
 
 export function selectTabInternal(state: AppDomainState, tabId: string): AppDomainState {
-  return patchActiveContext(state, (ctx) => {
-    const tabs = getSessionTabs(ctx.session);
-    if (!tabs.some((tab) => tab.id === tabId)) {
-      return ctx;
-    }
-    const nextLayout = setActivePaneTabs(
-      ctx.session.editorLayout,
-      tabs,
-      tabId,
-    );
-    if (nextLayout === ctx.session.editorLayout) {
-      return ctx;
-    }
-    return {
-      ...ctx,
-      session: { ...ctx.session, editorLayout: nextLayout },
-    };
-  });
+  return selectTabAcrossPanes(state, tabId);
 }
 
 export function reopenTabForDocument(state: AppDomainState, documentId: string): AppDomainState {
@@ -118,52 +106,41 @@ export function closeTabsForce(state: AppDomainState, tabIds: string[], preferre
   }
   return patchActiveContext(state, (ctx) => {
     const idsToClose = new Set(tabIds);
-    const tabs = getSessionTabs(ctx.session);
+    const activePaneId = ctx.session.editorLayout.activePaneId;
+    const pane = ctx.session.editorLayout.panes.find((entry) => entry.id === activePaneId);
+    if (!pane) {
+      return ctx;
+    }
+    const tabs = pane.tabs;
     const filteredTabs = tabs.filter((tab) => !idsToClose.has(tab.id));
     if (filteredTabs.length === tabs.length) {
       return ctx;
     }
     if (filteredTabs.length === 0) {
-      if (isChatHttpContext(state.contexts.activeContextId)) {
-        return {
-          ...ctx,
-          session: {
-            ...ctx.session,
-            editorLayout: setActivePaneTabs(ctx.session.editorLayout, [], null),
-          },
-        };
-      }
-      const { docId, tabId } = nextDocAndTabIds();
-      const newDocument = buildEmptyUnsavedDocument(docId);
-      return {
-        documents: [...ctx.documents, newDocument],
-        session: {
-          ...ctx.session,
-          editorLayout: setActivePaneTabs(
-            ctx.session.editorLayout,
-            [createFileTab(tabId, docId)],
-            tabId,
-          ),
-        },
-      };
+      return closeTabInPaneForceOnContext(state, ctx, activePaneId, tabs[0]?.id ?? tabIds[0]!);
     }
 
     return {
       ...ctx,
       session: {
         ...ctx.session,
-        editorLayout: setActivePaneTabs(
-          ctx.session.editorLayout,
-          filteredTabs,
-          recomputeSelectedTabId(
-            tabs,
-            filteredTabs,
-            ctx.session.editorLayout.panes.find(
-              (pane) => pane.id === ctx.session.editorLayout.activePaneId,
-            )?.selectedTabId ?? null,
-            preferredTabId,
+        editorLayout: {
+          ...ctx.session.editorLayout,
+          panes: ctx.session.editorLayout.panes.map((entry) =>
+            entry.id === activePaneId
+              ? {
+                  ...entry,
+                  tabs: filteredTabs,
+                  selectedTabId: recomputeSelectedTabId(
+                    tabs,
+                    filteredTabs,
+                    entry.selectedTabId,
+                    preferredTabId,
+                  ),
+                }
+              : entry,
           ),
-        ),
+        },
       },
     };
   });

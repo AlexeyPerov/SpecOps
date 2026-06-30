@@ -3,6 +3,7 @@ import {
   createFileTab,
   createSessionTab,
   createViewTab,
+  findTabOwner,
   getSessionSelectedTabId,
   getSessionTabs,
   isFileTab,
@@ -25,13 +26,13 @@ import {
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 import { createDocumentContentSlice } from "./documentContentSlice";
+import { closeTabForceById, closeTabInPaneForceOnContext, selectTabAcrossPanes } from "./closeTabInPane";
 import { createTabTransferSlice } from "./tabTransferSlice";
 import {
   canCreateFileTabs,
   closeTabsForce,
   missingTabIdsToClose,
   reopenTabForDocument,
-  selectTabInternal,
   tabIdsToCloseOtherThan,
   tabIdsToCloseToRightOf,
 } from "./tabHelpers";
@@ -45,63 +46,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
   const { update, getSnapshot } = deps;
 
   function closeTabForce(tabId: string): void {
-    update((state) =>
-      patchActiveContext(state, (ctx) => {
-        const tabs = getSessionTabs(ctx.session);
-        if (tabs.length === 0) {
-          return ctx;
-        }
-        const idx = tabs.findIndex((tab) => tab.id === tabId);
-        if (idx < 0) {
-          return ctx;
-        }
-        const filtered = tabs.filter((tab) => tab.id !== tabId);
-        if (filtered.length === 0) {
-          if (!canCreateFileTabs(state)) {
-            return {
-              ...ctx,
-              session: {
-                ...ctx.session,
-                editorLayout: setActivePaneTabs(ctx.session.editorLayout, [], null),
-                lastActiveSessionId: null,
-              },
-            };
-          }
-          const { docId, tabId: tabIdNew } = nextDocAndTabIds();
-          const newDocument = buildEmptyUnsavedDocument(docId);
-          return {
-            documents: [...ctx.documents, newDocument],
-            session: {
-              ...ctx.session,
-              editorLayout: setActivePaneTabs(
-                ctx.session.editorLayout,
-                [createFileTab(tabIdNew, docId)],
-                tabIdNew,
-              ),
-              lastActiveSessionId: null,
-            },
-          };
-        }
-        const closingTab = tabs[idx];
-        let selectedTabId =
-          getSessionSelectedTabId(ctx.session) === tabId
-            ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
-            : getSessionSelectedTabId(ctx.session);
-        if (getSessionSelectedTabId(ctx.session) === tabId && isSessionTab(closingTab)) {
-          const nextSessionTab = findNextOpenSessionTabAfterClose(tabs, tabId);
-          if (nextSessionTab) {
-            selectedTabId = nextSessionTab.id;
-          }
-        }
-        return {
-          ...ctx,
-          session: {
-            ...ctx.session,
-            editorLayout: setActivePaneTabs(ctx.session.editorLayout, filtered, selectedTabId),
-          },
-        };
-      }),
-    );
+    update((state) => closeTabForceById(state, tabId));
   }
 
   return {
@@ -120,7 +65,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
               ...ctx.session,
               editorLayout: setActivePaneTabs(
                 ctx.session.editorLayout,
-                [...tabs, createFileTab(tabId, id)],
+                [...tabs, createFileTab(tabId, id, false, false)],
                 tabId,
               ),
             },
@@ -129,7 +74,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
       });
     },
     selectTab(tabId: string) {
-      update((state) => selectTabInternal(state, tabId));
+      update((state) => selectTabAcrossPanes(state, tabId));
     },
     openOrFocusSessionTab(sessionId: string) {
       update((state) => {
@@ -137,7 +82,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isSessionTab(tab) && tab.sessionId === sessionId);
         if (existingTab) {
-          return selectTabInternal(state, existingTab.id);
+          return selectTabAcrossPanes(state, existingTab.id);
         }
         const tabId = nextTabId();
         return patchActiveContext(state, (ctx) => {
@@ -169,7 +114,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isViewTab(tab) && tab.view === view);
         if (existingTab) {
-          return selectTabInternal(state, existingTab.id);
+          return selectTabAcrossPanes(state, existingTab.id);
         }
         const tabId = nextTabId();
         return patchActiveContext(state, (ctx) => {
@@ -203,7 +148,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isFileTab(tab) && tab.documentId === documentId);
         if (existingTab) {
-          return selectTabInternal(state, existingTab.id);
+          return selectTabAcrossPanes(state, existingTab.id);
         }
         if (!canCreateFileTabs(state)) {
           return state;
@@ -246,33 +191,11 @@ export function createDocumentTabsLifecycleSlice(deps: {
     closeTab(tabId: string) {
       update((state) =>
         patchActiveContext(state, (ctx) => {
-          const tabs = getSessionTabs(ctx.session);
-          if (tabs.length <= 1) {
+          const owner = findTabOwner(ctx.session.editorLayout, tabId);
+          if (!owner || owner.pane.tabs.length <= 1) {
             return ctx;
           }
-          const idx = tabs.findIndex((tab) => tab.id === tabId);
-          if (idx < 0) {
-            return ctx;
-          }
-          const filtered = tabs.filter((tab) => tab.id !== tabId);
-          const closingTab = tabs[idx];
-          let selectedTabId =
-            getSessionSelectedTabId(ctx.session) === tabId
-              ? filtered[Math.max(0, idx - 1)]?.id ?? filtered[0]?.id ?? null
-              : getSessionSelectedTabId(ctx.session);
-          if (getSessionSelectedTabId(ctx.session) === tabId && isSessionTab(closingTab)) {
-            const nextSessionTab = findNextOpenSessionTabAfterClose(tabs, tabId);
-            if (nextSessionTab) {
-              selectedTabId = nextSessionTab.id;
-            }
-          }
-          return {
-            ...ctx,
-            session: {
-              ...ctx.session,
-              editorLayout: setActivePaneTabs(ctx.session.editorLayout, filtered, selectedTabId),
-            },
-          };
+          return closeTabInPaneForceOnContext(state, ctx, owner.pane.id, tabId);
         }),
       );
     },

@@ -1,4 +1,4 @@
-import type { AppDomainState } from "../../domain/contracts";
+import type { AppDomainState, ContextSnapshot, EditorLayout } from "../../domain/contracts";
 import {
   moveTabBetweenPanes,
   reflowAfterClose,
@@ -6,8 +6,25 @@ import {
   setLayoutKind,
 } from "../../domain/contracts";
 import { patchActiveContext } from "./contextHelpers";
+import { seedImplicitDraftsInContext } from "./implicitDraftContext";
+import { canCreateFileTabs } from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
+
+function applyLayoutWithDrafts(
+  state: AppDomainState,
+  ctx: ContextSnapshot,
+  layout: EditorLayout,
+): ContextSnapshot {
+  if (layout === ctx.session.editorLayout) {
+    return ctx;
+  }
+  let nextCtx: ContextSnapshot = { ...ctx, session: { ...ctx.session, editorLayout: layout } };
+  if (!canCreateFileTabs(state)) {
+    return nextCtx;
+  }
+  return seedImplicitDraftsInContext(nextCtx);
+}
 
 /**
  * Split-view (layout groups) reducer slice. Owns the per-context editor layout
@@ -25,10 +42,8 @@ export function createEditorLayoutSlice(deps: { update: AppStateUpdate }) {
       update((state) =>
         patchActiveContext(state, (ctx) => {
           const next = setLayoutKind(ctx.session.editorLayout, kind);
-          if (next === ctx.session.editorLayout) {
-            return ctx;
-          }
-          return { ...ctx, session: { ...ctx.session, editorLayout: next } };
+          const seeded = applyLayoutWithDrafts(state, ctx, next);
+          return seeded === ctx ? ctx : seeded;
         }),
       );
     },
@@ -87,7 +102,8 @@ export function createEditorLayoutSlice(deps: { update: AppStateUpdate }) {
           if (next === ctx.session.editorLayout) {
             return ctx;
           }
-          return { ...ctx, session: { ...ctx.session, editorLayout: next } };
+          const seeded = applyLayoutWithDrafts(state, ctx, next);
+          return seeded === ctx ? ctx : seeded;
         }),
       );
     },

@@ -263,7 +263,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     void maybeBackgroundSyncWorkspaceSession();
   }
 
-  async function handleCloseTab(tabId: string): Promise<void> {
+  async function handleCloseTab(_paneId: string, tabId: string): Promise<void> {
     const beforeSession = appState.getActiveSession();
     const beforeTabs = getSessionTabs(beforeSession);
     const closingTab = beforeTabs.find((tab) => tab.id === tabId);

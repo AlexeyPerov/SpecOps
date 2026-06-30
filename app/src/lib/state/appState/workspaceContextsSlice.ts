@@ -46,7 +46,7 @@ function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
   return {
     documents: [buildEmptyUnsavedDocument(documentId)],
     session: {
-      editorLayout: createSinglePaneLayout([createFileTab(tabId, documentId)], tabId),
+      editorLayout: createSinglePaneLayout([createFileTab(tabId, documentId, false, true)], tabId),
       lastActiveWindowId,
       windowBounds: null,
       lastActiveSessionId: null,

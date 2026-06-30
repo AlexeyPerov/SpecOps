@@ -7,6 +7,7 @@
   import { draftEntryTitleForScope } from "../services/chatSessions";
   import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import { DEFAULT_UNTITLED_TITLE } from "../services/untitledTitle";
+  import { isTabVisibleInStrip } from "../services/implicitDraftTab";
   import TabBarContextMenu from "./TabBarContextMenu.svelte";
   import {
     createTabDragController,
@@ -21,7 +22,7 @@
     selectedTabId?: string | null;
     useChatTerminology?: boolean;
     onSelect?: (tabId: string) => void;
-    onCloseTab?: (tabId: string) => void;
+    onCloseTab?: (paneId: string, tabId: string) => void;
     windowId?: string;
     notify?: (message: string) => void;
     /**
@@ -47,7 +48,7 @@
     selectedTabId = null,
     useChatTerminology = false,
     onSelect = (tabId: string) => appState.selectTab(tabId),
-    onCloseTab = (tabId: string) => appState.closeTabForce(tabId),
+    onCloseTab = (closePaneId: string, tabId: string) => appState.closeTabForce(tabId),
     windowId = "main",
     notify = () => {},
     paneId = "",
@@ -92,13 +93,38 @@
     }
   });
 
+  function tabDocument(tab: TabState): DocumentState | undefined {
+    if (!isFileTab(tab)) {
+      return undefined;
+    }
+    return documents.find((doc) => doc.id === tab.documentId);
+  }
+
+  const visibleTabs = $derived(
+    openTabs.filter((tab) => isTabVisibleInStrip(tab, tabDocument(tab))),
+  );
+
   const dragController = createTabDragController({
-    getOpenTabs: () => openTabs,
+    getOpenTabs: () => visibleTabs,
     getTabStripEl: () => tabStripEl,
     getPaneId: () => paneId,
     getPaneElements: () => getPaneElements(),
     onSelect: (tabId) => onSelect(tabId),
-    onReorder: (fromIndex, toIndex) => appState.reorderTabs(fromIndex, toIndex),
+    onReorder: (fromVisibleIndex, toVisibleIndex) => {
+      const fromTab = visibleTabs[fromVisibleIndex];
+      if (!fromTab) {
+        return;
+      }
+      const fromIndex = openTabs.findIndex((entry) => entry.id === fromTab.id);
+      const toIndex =
+        toVisibleIndex >= visibleTabs.length
+          ? openTabs.length - 1
+          : openTabs.findIndex((entry) => entry.id === visibleTabs[toVisibleIndex]?.id);
+      if (fromIndex < 0 || toIndex < 0) {
+        return;
+      }
+      appState.reorderTabs(fromIndex, toIndex);
+    },
     onMoveBetweenPanes: (fromPaneId, tabId, toPaneId, toIndex) =>
       onMoveBetweenPanes?.(fromPaneId, tabId, toPaneId, toIndex),
     getWindowId: () => windowId,
@@ -107,13 +133,6 @@
       dragState = nextState;
     },
   });
-
-  function tabDocument(tab: TabState): DocumentState | undefined {
-    if (!isFileTab(tab)) {
-      return undefined;
-    }
-    return documents.find((doc) => doc.id === tab.documentId);
-  }
 
   const sessionTitleById = $derived(new Map($chatSessionIndex.map((entry) => [entry.id, entry.title])));
 
@@ -152,7 +171,7 @@
 
   const tabsForRender = $derived(
     previewTabs(
-      openTabs,
+      visibleTabs,
       dragState.didDrag,
       dragState.dragFromIndex,
       dragState.dropIndex,
@@ -190,7 +209,7 @@
               }
               return;
             }
-            dragController.pointerDown(event, tab, openTabs.findIndex((entry) => entry.id === tab.id));
+            dragController.pointerDown(event, tab, visibleTabs.findIndex((entry) => entry.id === tab.id));
           }}
         >
           <span class="tab-label">
@@ -207,7 +226,7 @@
           }}
           onclick={(event) => {
             event.stopPropagation();
-            onCloseTab(tab.id);
+            onCloseTab(paneId, tab.id);
           }}
         >
           ×

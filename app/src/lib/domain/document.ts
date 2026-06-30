@@ -33,6 +33,8 @@ export interface FileTabState {
   kind: "file";
   documentId: string;
   pinned: boolean;
+  /** When true, tab is omitted from the strip until the document has content. */
+  stripHidden?: boolean;
 }
 
 export interface SessionTabState {
@@ -72,8 +74,13 @@ export function isViewTab(tab: TabState): tab is ViewTabState {
   return tab.kind === "view";
 }
 
-export function createFileTab(id: string, documentId: string, pinned = false): FileTabState {
-  return { id, kind: "file", documentId, pinned };
+export function createFileTab(
+  id: string,
+  documentId: string,
+  pinned = false,
+  stripHidden = false,
+): FileTabState {
+  return stripHidden ? { id, kind: "file", documentId, pinned, stripHidden: true } : { id, kind: "file", documentId, pinned };
 }
 
 export function createSessionTab(id: string, sessionId: string, pinned = false): SessionTabState {
@@ -131,7 +138,9 @@ export function normalizeTabState(
     return createViewTab(tab.id, tab.view, tab.pinned ?? false, subTab);
   }
   if ("documentId" in tab && typeof tab.documentId === "string") {
-    return createFileTab(tab.id, tab.documentId, tab.pinned ?? false);
+    const fileTab = tab as Omit<FileTabState, "kind"> & { kind?: unknown };
+    const stripHidden = fileTab.stripHidden === true;
+    return createFileTab(tab.id, tab.documentId, tab.pinned ?? false, stripHidden);
   }
   throw new Error(`Invalid tab state: ${tab.id}`);
 }

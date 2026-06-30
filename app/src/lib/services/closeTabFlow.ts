@@ -1,5 +1,5 @@
 import type { DocumentState, TabState } from "../domain/contracts";
-import { getSessionTabs, isFileTab, tabDocumentId } from "../domain/contracts";
+import { findTabOwner, getSessionTabs, isFileTab, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import {
@@ -39,10 +39,12 @@ export async function closeTabWithUnsavedPrompt(
   options?: { forceClose?: boolean },
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  const tab = getSessionTabs(getActiveSession(snapshot)).find((entry) => entry.id === tabId);
-  if (!tab) {
+  const session = getActiveSession(snapshot);
+  const owner = findTabOwner(session.editorLayout, tabId);
+  if (!owner) {
     return false;
   }
+  const tab = owner.tab;
 
   if (isFileTab(tab)) {
     const documentId = tabDocumentId(tab);

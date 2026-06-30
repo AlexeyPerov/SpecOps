@@ -6,6 +6,7 @@
     EditorPane,
     TabState,
   } from "../domain/contracts";
+  import { effectiveLayoutSlots } from "../domain/contracts";
   import type { PaneDropTargetElements } from "./paneDropTargets";
 
   /**
@@ -44,7 +45,7 @@
     windowId: string;
     notify: (message: string) => void;
     onSelectTab: (tabId: string) => void;
-    onCloseTab: (tabId: string) => void | Promise<void>;
+    onCloseTab: (paneId: string, tabId: string) => void | Promise<void>;
     onClosePane: (paneId: string) => void;
     onFocusPane: (paneId: string) => void;
     onMoveTabBetweenPanes: (
@@ -61,23 +62,34 @@
   } = $props();
 
   const canClosePane = $derived(layout.panes.length > 1);
-  const maxRowWidth = $derived(Math.max(1, ...layout.slots.map((row) => row.length)));
-  const rowCount = $derived(layout.slots.length);
 
-  // Flatten slots into cells in reading order, tracking each cell's pane + row width.
+  const resolvedSlots = $derived(effectiveLayoutSlots(layout));
+  const maxRowWidth = $derived(Math.max(1, ...resolvedSlots.map((row) => row.length)));
+  const rowCount = $derived(Math.max(1, resolvedSlots.length));
+
   interface PaneCell {
     pane: EditorPane;
     paneIndex: number;
-    spansFullWidth: boolean;
+    /** 1-based CSS grid row. */
+    gridRow: number;
+    /** CSS grid-column value (e.g. `1`, `2`, `1 / -1`). */
+    gridColumn: string;
     key: string;
   }
+
   const cells = $derived.by<PaneCell[]>(() => {
+    const slots = resolvedSlots;
+    const width = maxRowWidth;
     const out: PaneCell[] = [];
     const seen = new Set<number>();
-    for (const row of layout.slots) {
+
+    for (let rowIndex = 0; rowIndex < slots.length; rowIndex += 1) {
+      const row = slots[rowIndex] ?? [];
       const rowWidth = row.length;
-      for (const paneIndex of row) {
-        if (seen.has(paneIndex)) {
+      const spansFullWidth = rowWidth < width;
+      for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
+        const paneIndex = row[colIndex];
+        if (paneIndex === undefined || seen.has(paneIndex)) {
           continue;
         }
         seen.add(paneIndex);
@@ -88,20 +100,25 @@
         out.push({
           pane,
           paneIndex,
-          spansFullWidth: rowWidth < maxRowWidth,
+          gridRow: rowIndex + 1,
+          gridColumn: spansFullWidth ? "1 / -1" : String(colIndex + 1),
           key: pane.id,
         });
       }
     }
-    // Safety net: include any pane not referenced by slots.
+
+    // Safety net: panes not referenced by slots stack in extra full-width rows.
+    let extraRow = slots.length + 1;
     for (let i = 0; i < layout.panes.length; i += 1) {
       if (!seen.has(i)) {
         out.push({
           pane: layout.panes[i],
           paneIndex: i,
-          spansFullWidth: false,
+          gridRow: extraRow,
+          gridColumn: "1 / -1",
           key: `extra-${layout.panes[i].id}`,
         });
+        extraRow += 1;
       }
     }
     return out;
@@ -110,6 +127,10 @@
   const gridStyle = $derived(
     `grid-template-columns: repeat(${maxRowWidth}, minmax(0, 1fr)); grid-template-rows: repeat(${rowCount}, minmax(0, 1fr));`,
   );
+
+  function cellGridStyle(cell: PaneCell): string {
+    return `grid-row: ${cell.gridRow}; grid-column: ${cell.gridColumn};`;
+  }
 
   function paneTabs(pane: EditorPane): TabState[] {
     return pane.tabs;
@@ -159,10 +180,7 @@
 
 <div class="editor-grid" style={gridStyle}>
   {#each cells as cell (cell.key)}
-    <div
-      class="editor-grid-cell"
-      style={cell.spansFullWidth ? "grid-column: 1 / -1;" : ""}
-    >
+    <div class="editor-grid-cell" style={cellGridStyle(cell)}>
       <EditorPaneView
         paneId={cell.pane.id}
         tabs={paneTabs(cell.pane)}
@@ -186,7 +204,7 @@
         onMoveTabBetweenPanes={onMoveTabBetweenPanes}
         onOpenFileInPane={onOpenFileInPane}
       >
-        {#if cell.pane.tabs.length > 0}
+        {#if cell.pane.selectedTabId}
           {@render renderPaneContent?.(cell.pane.id)}
         {/if}
       </EditorPaneView>
@@ -197,6 +215,7 @@
 <style>
   .editor-grid {
     display: grid;
+    flex: 1 1 auto;
     width: 100%;
     height: 100%;
     min-width: 0;
@@ -207,6 +226,8 @@
   .editor-grid-cell {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     min-height: 0;
     overflow: hidden;

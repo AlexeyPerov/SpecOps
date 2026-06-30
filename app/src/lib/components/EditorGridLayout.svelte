@@ -203,12 +203,14 @@
     min-width: 0;
     min-height: 0;
     gap: 1px;
-    background: var(--pane-border-color, rgba(128, 128, 128, 0.2));
+    background: var(--color-border-subtle);
   }
   .editor-grid-cell {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    background: var(--pane-bg, var(--bg-color, #fff));
+    background: var(--color-bg-root);
   }
 </style>

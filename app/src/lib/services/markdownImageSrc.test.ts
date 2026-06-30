@@ -128,4 +128,60 @@ describe("renderDocumentMarkdown", () => {
     );
     expect(html).toContain("&quot;");
   });
+
+  it("rewrites a raw HTML <img> with a relative src", () => {
+    const html = renderDocumentMarkdown(
+      '<img src="hub/icon.png" alt="X" width="250">',
+      "/docs/README.md",
+    );
+    expect(html).toContain('src="asset:/docs/hub/icon.png"');
+    expect(html).toContain('data-md-local-path="/docs/hub/icon.png"');
+    expect(html).toContain('alt="X"');
+    expect(html).toContain('width="250"');
+  });
+
+  it("rewrites a raw <img> wrapped in <p align=center> (README hero case)", () => {
+    const html = renderDocumentMarkdown(
+      '<p align="center">\n  <img src="hub/src-tauri/icons/Square310x310Logo.png" alt="MCP for Unity" width="250">\n</p>',
+      "/users/alexeyperov/projects/unity-ai-hub/README.md",
+    );
+    expect(html).toContain(
+      'src="asset:/users/alexeyperov/projects/unity-ai-hub/hub/src-tauri/icons/Square310x310Logo.png"',
+    );
+    expect(html).toContain(
+      'data-md-local-path="/users/alexeyperov/projects/unity-ai-hub/hub/src-tauri/icons/Square310x310Logo.png"',
+    );
+    expect(html).toContain('align="center"');
+    expect(html).toContain('width="250"');
+    expect(html).toContain('alt="MCP for Unity"');
+  });
+
+  it("leaves a raw <img> with a remote src unchanged", () => {
+    const src = '<img src="https://example.com/x.png" alt="remote">';
+    expect(renderDocumentMarkdown(src, "/docs/README.md")).toBe(src);
+  });
+
+  it("handles single-quoted and bare src values on raw <img>", () => {
+    const single = renderDocumentMarkdown(
+      "<img src='hub/a.png' alt='s'>",
+      "/docs/README.md",
+    );
+    expect(single).toContain('src=\'asset:/docs/hub/a.png\'');
+
+    const bare = renderDocumentMarkdown(
+      "<img src=hub/b.png alt=b>",
+      "/docs/README.md",
+    );
+    expect(bare).toContain("src=asset:/docs/hub/b.png");
+    expect(bare).toContain('data-md-local-path="/docs/hub/b.png"');
+  });
+
+  it("is idempotent over a markdown-generated <img>", () => {
+    const once = renderDocumentMarkdown("![a](./img.png)", "/docs/README.md");
+    const twice = renderDocumentMarkdown(once, "/docs/README.md");
+    // Markdown output already carries a passthrough asset URL and is not
+    // re-parsed as raw HTML here; just confirm no double-stamping occurred.
+    const matches = twice.match(/data-md-local-path/g) ?? [];
+    expect(matches.length).toBe(1);
+  });
 });

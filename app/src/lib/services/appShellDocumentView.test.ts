@@ -45,14 +45,19 @@ describe("deriveAppShellDocumentView — undefined input (non-file active tab)",
 });
 
 describe("deriveAppShellDocumentView — text/markdown document", () => {
-  it("flags a markdown document and renders its preview html", () => {
+  it("flags a markdown document and skips preview html unless requested", () => {
     const view = deriveAppShellDocumentView(textDocument());
     expect(view.isTextEditorDocument).toBe(true);
     expect(view.isMarkdownDocument).toBe(true);
     expect(view.isImageDocument).toBe(false);
-    expect(view.markdownHtml).toContain("Hello");
+    expect(view.markdownHtml).toBe("");
     expect(view.statusPath).toBe("tmp/readme.md");
     expect(view.activeDocumentPath).toBe("/tmp/readme.md");
+  });
+
+  it("renders preview html when explicitly requested", () => {
+    const view = deriveAppShellDocumentView(textDocument(), { renderMarkdownHtml: true });
+    expect(view.markdownHtml).toContain("Hello");
   });
 
   it("reports the on-disk size from the fingerprint", () => {

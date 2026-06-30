@@ -27,11 +27,11 @@ import { isOpencodeEnabled } from "./opencodeSettings";
 import { promptEntryName } from "./entryNamePrompt";
 import { promptRevertPreview } from "./revertPreviewPrompt";
 import { saveFileAs } from "./fileSystem";
+import { logDiagnostic } from "./logging";
 import {
   buildSessionTranscriptMarkdown,
   suggestExportFileName,
 } from "../ai/backends/opencodeSessionExport";
-import { logDiagnostic } from "./logging";
 
 export interface AppShellAgentHandlersDeps {
   getIsChatHttpActive: () => boolean;
@@ -220,10 +220,22 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       return;
     }
     const session = appState.getActiveSession();
+    const loadSessionsStartedAt = Date.now();
     await chatStore.loadWorkspaceSessions(normalizedRoot);
+    const sessionIndex = chatStore.getSessionIndex();
+    void logDiagnostic({
+      level: "info",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "restoreWorkspaceSession: sessions loaded",
+      metadata: {
+        workspaceRoot: normalizedRoot,
+        durationMs: Date.now() - loadSessionsStartedAt,
+        sessionCount: sessionIndex.length,
+      },
+    });
     chatStore.mergeSessionDrafts(normalizedRoot, openSessionTabIds(getSessionTabs(session)));
 
-    const sessionIndex = chatStore.getSessionIndex();
     const restored = resolveRestoredActiveSession(session, sessionIndex);
     if (restored.shouldFocusSessionTab && restored.activeSessionId) {
       chatStore.setActiveSessionId(restored.activeSessionId);

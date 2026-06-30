@@ -15,6 +15,7 @@ import {
   openActivePathInPane,
 } from "./openActivePath";
 import { promptEntryName } from "./entryNamePrompt";
+import { logDiagnostic } from "./logging";
 import type { createProjectTreeController } from "./projectTreeController";
 
 export interface AppShellProjectTreeHandlersDeps {
@@ -35,11 +36,23 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
   } = deps;
 
   async function loadProjectTreeRoot(): Promise<void> {
+    const startedAt = Date.now();
+    const workspaceRoot = getActiveWorkspaceRoot();
     await projectTreeController.loadProjectTreeRoot({
-      workspaceRoot: getActiveWorkspaceRoot(),
+      workspaceRoot,
       isSessionTabActive: getIsSessionTabActive(),
       onWorkspaceBlocked: () => {
         void chatStore.runAccessPreflight();
+      },
+    });
+    void logDiagnostic({
+      level: "info",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "project tree root load complete",
+      metadata: {
+        workspaceRoot,
+        durationMs: Date.now() - startedAt,
       },
     });
   }

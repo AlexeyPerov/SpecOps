@@ -80,6 +80,10 @@
 
 .editor-pane {
   position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   padding: var(--space-8);
   overflow: hidden;
   min-width: 0;

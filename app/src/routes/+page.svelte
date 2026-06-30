@@ -350,7 +350,20 @@
     }
     return documents.find((documentState) => documentState.id === docId);
   });
-  const documentView = $derived(deriveAppShellDocumentView(activeDocument));
+  const shouldRenderMarkdownPreview = $derived.by(() => {
+    if (!activeDocument || activeDocument.language !== "markdown") {
+      return false;
+    }
+    if (activeDocument.markdownViewMode === "preview") {
+      return true;
+    }
+    return activeDocument.markdownViewMode === "split" && canFitMarkdownSplit();
+  });
+  const documentView = $derived(
+    deriveAppShellDocumentView(activeDocument, {
+      renderMarkdownHtml: shouldRenderMarkdownPreview,
+    }),
+  );
   let largeFileConfirming = $state(false);
   /**
    * Phase 6 — the pane currently highlighted as a file-drop target during a
@@ -545,7 +558,6 @@
 
   function handleAddWorkspace(): void {
     runCommand("workspace.add");
-    void loadProjectTreeRoot();
   }
 
   /** Switches to the notepad context and selects the given tab. */
@@ -680,7 +692,6 @@
     activeWorkspaceRoot;
     isChatHttpActive;
     isSessionTabActive;
-    documentView.activeDocumentPath;
     syncOpencodeSidecarEffect({
       runtimeReady,
       workspaceLifecycleActive: isWorkspaceLifecycleActive(),
@@ -705,6 +716,12 @@
       projectTreeController,
       loadProjectTreeRoot,
     });
+  });
+
+  $effect(() => {
+    documentView.activeDocumentPath;
+    isChatHttpActive;
+    activeWorkspaceRoot;
     syncActiveFileTreeExpandEffect({
       activeDocumentPath: documentView.activeDocumentPath,
       isChatHttpActive,

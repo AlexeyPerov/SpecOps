@@ -16,8 +16,13 @@ export interface AppShellDocumentView {
   activeDocumentPath: string | null;
 }
 
+export interface DeriveAppShellDocumentViewOptions {
+  renderMarkdownHtml?: boolean;
+}
+
 export function deriveAppShellDocumentView(
   activeDocument: DocumentState | undefined,
+  options: DeriveAppShellDocumentViewOptions = {},
 ): AppShellDocumentView {
   const isImageDocument = activeDocument?.contentKind === "image";
   const isBinaryDocument = activeDocument?.contentKind === "binary";
@@ -29,8 +34,9 @@ export function deriveAppShellDocumentView(
     activeDocument !== undefined;
   const previewFileSizeBytes = activeDocument?.diskFingerprint?.sizeBytes ?? 0;
   const isMarkdownDocument = isTextEditorDocument && activeDocument?.language === "markdown";
+  const renderMarkdownHtml = options.renderMarkdownHtml ?? false;
   const markdownHtml =
-    isMarkdownDocument && activeDocument
+    renderMarkdownHtml && isMarkdownDocument && activeDocument
       ? renderDocumentMarkdown(activeDocument.content, activeDocument.filePath ?? null)
       : "";
   const statusPath = formatStatusPath(

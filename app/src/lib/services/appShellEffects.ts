@@ -43,6 +43,7 @@ import type { createProjectTreeController } from "./projectTreeController";
 
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
 import { ensureWorkspaceReadAccess } from "./fileSystem";
+import { logDiagnostic } from "./logging";
 import { scheduleSessionPersistence } from "./sessionManager";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { savePersistedSettings, toPersistedSettings } from "./settingsStore";
@@ -131,17 +132,39 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
     markWorkspaceLifecycleActive();
     void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
     chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
-    // M13.5 — file tabs must not spawn the sidecar for reconcile / hydrate.
-    // The session-tab background sync (L3) runs separately in `syncSessionTabEffect`'s
-    // session-tab branch via `maybeBackgroundSyncWorkspaceSession()` when the
-    // active session is on a session tab.
+    const restoreStartedAt = Date.now();
     void restoreWorkspaceSession(normalizedWorkspaceRoot, {
       skipOpencodeReconcile: !isSessionTabActive,
-    }).catch(() => {
-      if (isSessionTabActive) {
-        void chatStore.runAccessPreflight();
-      }
-    });
+    })
+      .then(() =>
+        logDiagnostic({
+          level: "info",
+          source: "frontend",
+          timestamp: new Date().toISOString(),
+          message: "workspace switch restore complete",
+          metadata: {
+            workspaceRoot: normalizedWorkspaceRoot,
+            durationMs: Date.now() - restoreStartedAt,
+            isSessionTabActive,
+            skipOpencodeReconcile: !isSessionTabActive,
+          },
+        }),
+      )
+      .catch(() => {
+        void logDiagnostic({
+          level: "warn",
+          source: "frontend",
+          timestamp: new Date().toISOString(),
+          message: "workspace switch restore failed",
+          metadata: {
+            workspaceRoot: normalizedWorkspaceRoot,
+            durationMs: Date.now() - restoreStartedAt,
+          },
+        });
+        if (isSessionTabActive) {
+          void chatStore.runAccessPreflight();
+        }
+      });
   }
 }
 

@@ -20,6 +20,7 @@ export interface LoadProjectTreeRootOptions {
   workspaceRoot: string | null;
   isSessionTabActive: boolean;
   onWorkspaceBlocked?: () => void;
+  force?: boolean;
 }
 
 function createInitialState(showHidden = false): ProjectTreeControllerState {
@@ -138,6 +139,7 @@ export function createProjectTreeController(
   const loadChildren = deps.loadDirectoryChildrenFn ?? loadDirectoryChildren;
   const probeAccess = deps.probeWorkspaceReadAccessFn;
   let state = createInitialState();
+  let lastLoadedWorkspaceRoot: string | null = null;
   let filesystemChangeTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingFilesystemDirs = new Set<string>();
 
@@ -147,6 +149,7 @@ export function createProjectTreeController(
 
   const reset = (): void => {
     state = createInitialState(state.showHidden);
+    lastLoadedWorkspaceRoot = null;
     publish();
   };
 
@@ -188,9 +191,24 @@ export function createProjectTreeController(
     workspaceRoot,
     isSessionTabActive,
     onWorkspaceBlocked,
+    force = false,
   }: LoadProjectTreeRootOptions): Promise<void> => {
     if (!workspaceRoot) {
       reset();
+      return;
+    }
+    const normalizedWorkspaceRoot = normalizePathForComparison(workspaceRoot);
+    if (
+      !force &&
+      state.rootNodes.length > 0 &&
+      lastLoadedWorkspaceRoot === normalizedWorkspaceRoot
+    ) {
+      if (isSessionTabActive && probeAccess) {
+        const probe = await probeAccess(workspaceRoot);
+        if (probe === "blocked") {
+          onWorkspaceBlocked?.();
+        }
+      }
       return;
     }
 
@@ -201,6 +219,7 @@ export function createProjectTreeController(
       ...state,
       rootNodes,
     };
+    lastLoadedWorkspaceRoot = normalizedWorkspaceRoot;
     publish();
 
     if (isSessionTabActive && probeAccess) {
@@ -251,6 +270,7 @@ export function createProjectTreeController(
     await loadProjectTreeRoot({
       workspaceRoot,
       isSessionTabActive,
+      force: true,
     });
     for (const path of expanded) {
       await loadProjectTreeChildren(workspaceRoot, path);

@@ -104,6 +104,52 @@ interface ImageTokenWithLocalPath extends Tokens.Image {
   localPath?: string | null;
 }
 
+/** Matches an HTML `<img ...>` tag, capturing the inner attribute span. */
+const RAW_IMG_TAG = /<img\b([^>]*)>/gi;
+/** Within an img tag's attribute span, captures the quote char and the src value. */
+const SRC_ATTR = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
+
+/**
+ * Rewrites `src` attributes on raw HTML `<img>` tags so local images embedded
+ * as HTML (rather than markdown `![]()` syntax) also resolve and render.
+ *
+ * Raw HTML flows through marked as opaque `html` tokens, so the `walkTokens`
+ * hook never visits them — this post-processes the rendered string. Markdown-
+ * generated images are already rewritten (and carry a passthrough-scheme src),
+ * so this function is a no-op for them and safe to run over the whole output.
+ *
+ * Resolved local paths are stamped onto the tag as `data-md-local-path` so the
+ * blob fallback in `MarkdownEditorPane.svelte` picks them up. All other
+ * attributes (width, alt, align, …) are preserved untouched.
+ */
+function rewriteRawHtmlImageSources(html: string, documentFilePath: string | null): string {
+  return html.replace(RAW_IMG_TAG, (wholeTag, attrSpan: string) => {
+    const match = SRC_ATTR.exec(attrSpan);
+    if (!match) {
+      return wholeTag;
+    }
+    const quote = match[1] !== undefined ? '"' : match[2] !== undefined ? "'" : "";
+    const rawSrc = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    const localPath = resolveLocalImagePath(rawSrc, documentFilePath);
+    if (!localPath) {
+      return wholeTag;
+    }
+    const newSrc = `${quote}${convertFileSrc(localPath)}${quote}`;
+    let newAttrSpan: string;
+    if (quote) {
+      newAttrSpan = attrSpan.replace(match[0], `src=${newSrc}`);
+    } else {
+      // Bare value: replace the captured src=… run, keeping the surrounding spacing.
+      newAttrSpan = attrSpan.replace(match[0], `src=${newSrc}`);
+    }
+    // Stamp the local path for the blob fallback, unless already present.
+    if (!/\bdata-md-local-path\b/i.test(newAttrSpan)) {
+      newAttrSpan = `${newAttrSpan} data-md-local-path="${escapeAttr(localPath)}"`;
+    }
+    return `<img${newAttrSpan}>`;
+  });
+}
+
 /**
  * Renders a markdown document to HTML, rewriting image sources via
  * {@link resolveMarkdownImageSrc} and stamping local paths onto the rendered
@@ -144,5 +190,6 @@ export function renderDocumentMarkdown(
       },
     },
   });
-  return instance.parse(content, { async: false }) as string;
+  const html = instance.parse(content, { async: false }) as string;
+  return rewriteRawHtmlImageSources(html, documentFilePath);
 }

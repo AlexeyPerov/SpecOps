@@ -169,27 +169,32 @@
   .editor-pane-view {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    background: var(--color-bg-root);
     border: 1px solid transparent;
     border-radius: 4px;
   }
   .editor-pane-view-active {
-    border-color: var(--accent-color, #3b82f6);
-    box-shadow: 0 0 0 1px var(--accent-color, #3b82f6) inset;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 1px var(--color-accent) inset;
   }
   .pane-drop-target {
-    outline: 2px dashed var(--accent-color, #3b82f6);
+    outline: 2px dashed var(--color-accent);
     outline-offset: -2px;
-    background: color-mix(in srgb, var(--accent-color, #3b82f6) 8%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
   }
   .pane-header {
     display: flex;
     align-items: stretch;
     gap: 2px;
     min-height: var(--tab-header-height, 32px);
-    border-bottom: 1px solid var(--pane-border-color, rgba(128, 128, 128, 0.2));
+    border-bottom: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-1);
   }
   .pane-tab-bar {
     flex: 1 1 auto;
@@ -209,13 +214,14 @@
     min-height: 0;
     position: relative;
     display: flex;
+    flex-direction: column;
   }
   .pane-empty {
     flex: 1 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--pane-empty-color, rgba(128, 128, 128, 0.7));
+    color: var(--color-text-secondary);
     font-size: 13px;
     user-select: none;
   }
@@ -224,8 +230,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--pane-empty-color, rgba(128, 128, 128, 0.7));
-    background: var(--pane-placeholder-bg, rgba(128, 128, 128, 0.04));
+    color: var(--color-text-secondary);
+    background: var(--color-surface-0);
     font-size: 13px;
     user-select: none;
   }

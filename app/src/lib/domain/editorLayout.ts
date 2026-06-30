@@ -639,6 +639,38 @@ export function removeTabsFromActivePane(
   return withActivePane(layout, { ...pane, tabs: remaining, selectedTabId: nextSelected });
 }
 
+/**
+ * Remove every tab matching `shouldRemove` from **all** panes, recomputing each
+ * affected pane's `selectedTabId` (falling back to the first remaining tab, or
+ * null when the pane is emptied — Q6 empty-pane survival). Pane structure, ids,
+ * order, and `slots` are preserved. Returns the same ref when nothing matched.
+ *
+ * Used at persist time to strip ephemeral view tabs (Settings/Themes) from every
+ * pane before serialization — they must never reopen after a restart.
+ */
+export function removeMatchingTabsFromAllPanes(
+  layout: EditorLayout,
+  shouldRemove: (tab: TabState) => boolean,
+): EditorLayout {
+  let changed = false;
+  const panes = layout.panes.map((pane) => {
+    if (!pane.tabs.some(shouldRemove)) {
+      return pane;
+    }
+    const remaining = pane.tabs.filter((tab) => !shouldRemove(tab));
+    if (remaining.length === pane.tabs.length) {
+      return pane;
+    }
+    changed = true;
+    const nextSelected = recomputeSelectedTabId(pane.tabs, remaining, pane.selectedTabId);
+    return { ...pane, tabs: remaining, selectedTabId: nextSelected };
+  });
+  if (!changed) {
+    return layout;
+  }
+  return { ...layout, panes };
+}
+
 export function recomputeSelectedTabId(
   previousTabs: TabState[],
   remainingTabs: TabState[],
@@ -680,23 +712,54 @@ export function setLayoutKind(layout: EditorLayout, kind: LayoutKind): EditorLay
   return applyPreset(layout, kind);
 }
 
-/** Normalize a (possibly stale or hand-built) layout into a valid one. */
+/**
+ * Normalize a (possibly stale or hand-built) layout into a valid one. Re-stamps
+ * the `slots`/`kind` geometry from the surviving pane count (stale slots from a
+ * hand-built or partially-edited layout are discarded), clamps each pane's
+ * `selectedTabId` to a present tab, and reassigns `activePaneId` to the first
+ * pane when it no longer exists. Pane ids are kept when valid. Empty/non-array
+ * `panes` falls back to a single empty pane.
+ */
 export function normalizeEditorLayout(layout: EditorLayout | undefined | null): EditorLayout {
+  return restructureEditorLayout(layout, () => true);
+}
+
+/**
+ * Rebuild a (possibly stale/malformed) layout, dropping tabs that fail the
+ * `retainTab` predicate (e.g. file tabs whose document no longer exists, or
+ * ephemeral view tabs). The structured multi-pane layout is **preserved**:
+ * surviving panes keep their ids, tab order, and per-pane selection; the
+ * `slots`/`kind` geometry is recomputed from the surviving pane count. Panes
+ * that lose every tab stay in place (Q6 empty-pane survival). When the whole
+ * layout is missing/malformed, or every pane is dropped, a single empty pane is
+ * returned.
+ *
+ * `activePaneId` follows the active pane when it survives (its tabs pruned);
+ * otherwise the first surviving pane becomes active.
+ */
+export function restructureEditorLayout(
+  layout: EditorLayout | undefined | null,
+  retainTab: (tab: TabState) => boolean,
+): EditorLayout {
   if (!layout || !Array.isArray(layout.panes) || layout.panes.length === 0) {
     return createSinglePaneLayout([]);
   }
-  const panes = layout.panes.map((pane) => ({
-    id: typeof pane.id === "string" && pane.id.length > 0 ? pane.id : nextPaneId(),
-    tabs: Array.isArray(pane.tabs) ? pane.tabs : [],
-    selectedTabId: typeof pane.selectedTabId === "string" ? pane.selectedTabId : null,
-  }));
-  const activePaneId =
-    panes.some((pane) => pane.id === layout.activePaneId) ? layout.activePaneId : panes[0].id;
+  const panes: EditorPane[] = layout.panes.map((pane) => {
+    const id = typeof pane.id === "string" && pane.id.length > 0 ? pane.id : nextPaneId();
+    const rawTabs = Array.isArray(pane.tabs) ? pane.tabs.filter(retainTab) : [];
+    const nextPane: EditorPane = {
+      id,
+      tabs: rawTabs,
+      selectedTabId:
+        typeof pane.selectedTabId === "string" && rawTabs.some((tab) => tab.id === pane.selectedTabId)
+          ? pane.selectedTabId
+          : (rawTabs[0]?.id ?? null),
+    };
+    return nextPane;
+  });
+  const activePaneId = panes.some((pane) => pane.id === layout.activePaneId)
+    ? layout.activePaneId
+    : panes[0].id;
   const { kind, slots } = templateForCount(panes.length);
-  return {
-    kind,
-    panes: panes.map((pane) => ({ ...pane, selectedTabId: clampSelectedTabId(pane) })),
-    slots,
-    activePaneId,
-  };
+  return { kind, panes, slots, activePaneId };
 }

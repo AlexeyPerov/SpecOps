@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppDomainState, AppSessionSnapshot, WindowSessionSnapshot } from "../domain/contracts";
-import { createFileTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
+import type { AppDomainState, AppSessionSnapshot, EditorLayout, EditorPane, WindowSessionSnapshot } from "../domain/contracts";
+import {
+  activePane,
+  createFileTab,
+  createSinglePaneLayout,
+  getSessionSelectedTabId,
+  getSessionTabs,
+} from "../domain/contracts";
 import { appState } from "../state/appState";
 import { createSessionFsMock } from "../test/sessionMock";
 import * as sessionManager from "./sessionManager";
@@ -204,6 +210,221 @@ describe("sanitizeWindowSnapshot", () => {
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
     expect(getSessionTabs(sanitized.notepad.session)).toHaveLength(1);
     expect(sanitized.notepad.documents[0]?.title).toBe("Untitled");
+  });
+});
+
+describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
+  beforeEach(() => {
+    sessionMock.diskFiles.clear();
+  });
+
+  function makePane(id: string, tabs: { id: string; documentId: string }[], selectedTabId?: string): EditorPane {
+    return {
+      id,
+      tabs: tabs.map((t) => createFileTab(t.id, t.documentId)),
+      selectedTabId: selectedTabId ?? tabs[0]?.id ?? null,
+    };
+  }
+
+  function cols2Layout(p1: EditorPane, p2: EditorPane, activePaneId = p2.id): EditorLayout {
+    return { kind: "cols-2", panes: [p1, p2], slots: [[0, 1]], activePaneId };
+  }
+
+  function doc(id: string, filePath: string | null = null) {
+    return {
+      id,
+      filePath,
+      title: filePath ? filePath.split("/").pop()! : id,
+      content: "",
+      savedContent: "",
+      isDirty: false,
+      contentKind: "text" as const,
+      language: "plaintext",
+      encoding: "utf-8" as const,
+      lineEnding: "lf" as const,
+      diskFingerprint: null,
+      dismissedFingerprint: null,
+      fileMissing: false,
+      scrollTop: 0,
+      markdownViewMode: "edit" as const,
+    };
+  }
+
+  it("preserves a multi-pane layout on restore (per-pane tabs + selection + activePaneId)", async () => {
+    sessionMock.diskFiles.set("/tmp/a.txt", "x");
+    sessionMock.diskFiles.set("/tmp/b.txt", "y");
+    const layout = cols2Layout(
+      makePane("pane-1", [{ id: "tab-a", documentId: "doc-a" }], "tab-a"),
+      makePane("pane-2", [{ id: "tab-b", documentId: "doc-b" }], "tab-b"),
+      "pane-1",
+    );
+    const snapshot = windowSnapshot({
+      notepad: {
+        documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b", "/tmp/b.txt")],
+        session: {
+          editorLayout: layout,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      },
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    const restored = sanitized.notepad.session.editorLayout;
+    expect(restored.panes).toHaveLength(2);
+    expect(restored.panes.map((p) => p.id)).toEqual(["pane-1", "pane-2"]);
+    expect(restored.panes[0].tabs.map((t) => t.id)).toEqual(["tab-a"]);
+    expect(restored.panes[1].tabs.map((t) => t.id)).toEqual(["tab-b"]);
+    expect(restored.activePaneId).toBe("pane-1");
+  });
+
+  it("prunes per-pane tabs whose document is missing from the snapshot (per-pane)", async () => {
+    sessionMock.diskFiles.set("/tmp/a.txt", "x");
+    sessionMock.diskFiles.set("/tmp/b.txt", "y");
+    const layout = cols2Layout(
+      makePane(
+        "pane-1",
+        [
+          { id: "tab-a", documentId: "doc-a" },
+          { id: "tab-gone", documentId: "doc-gone" },
+        ],
+        "tab-gone",
+      ),
+      makePane("pane-2", [{ id: "tab-b", documentId: "doc-b" }], "tab-b"),
+      "pane-1",
+    );
+    const snapshot = windowSnapshot({
+      notepad: {
+        documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b", "/tmp/b.txt")],
+        session: {
+          editorLayout: layout,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      },
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    const restored = sanitized.notepad.session.editorLayout;
+    // pane-1 lost its selected tab; selection falls back to the first remaining.
+    expect(restored.panes[0].tabs.map((t) => t.id)).toEqual(["tab-a"]);
+    expect(restored.panes[0].selectedTabId).toBe("tab-a");
+    expect(restored.panes[1].tabs.map((t) => t.id)).toEqual(["tab-b"]);
+    expect(restored.panes).toHaveLength(2);
+  });
+
+  it("clamps a stale activePaneId to the first pane", async () => {
+    sessionMock.diskFiles.set("/tmp/a.txt", "x");
+    const layout = cols2Layout(
+      makePane("pane-1", [{ id: "tab-a", documentId: "doc-a" }]),
+      makePane("pane-2", [{ id: "tab-b", documentId: "doc-b" }]),
+      "missing-pane",
+    );
+    const snapshot = windowSnapshot({
+      notepad: {
+        documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b")],
+        session: {
+          editorLayout: layout,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      },
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    expect(sanitized.notepad.session.editorLayout.activePaneId).toBe("pane-1");
+  });
+
+  it("falls back to a single empty pane when the layout shape is malformed", async () => {
+    const snapshot = windowSnapshot({
+      notepad: {
+        documents: [doc("doc-a")],
+        session: {
+          // Malformed: panes present but not an array of valid panes.
+          editorLayout: { kind: "custom", panes: [], slots: [], activePaneId: "x" } as never,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      },
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    const restored = sanitized.notepad.session.editorLayout;
+    expect(restored.panes).toHaveLength(1);
+    expect(restored.kind).toBe("single");
+  });
+
+  it("re-seeds a legacy flat openTabs snapshot into a single pane", async () => {
+    sessionMock.diskFiles.set("/tmp/a.txt", "x");
+    const snapshot = windowSnapshot({
+      notepad: {
+        documents: [doc("doc-a", "/tmp/a.txt")],
+        session: {
+          // Legacy pre-split-view shape: no editorLayout, flat openTabs + selectedTabId.
+          editorLayout: undefined as never,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+          openTabs: [createFileTab("tab-a", "doc-a")],
+          selectedTabId: "tab-a",
+        } as never,
+      },
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    const restored = sanitized.notepad.session.editorLayout;
+    expect(restored.kind).toBe("single");
+    expect(restored.panes).toHaveLength(1);
+    expect(getSessionTabs(sanitized.notepad.session).map((t) => t.id)).toEqual(["tab-a"]);
+  });
+
+  it("marks per-pane file tabs missing on disk without dropping them", async () => {
+    // No disk entry for /tmp/a.txt → fileStillExists returns false.
+    sessionMock.diskFiles.set("/tmp/b.txt", "y");
+    const layout = cols2Layout(
+      makePane("pane-1", [{ id: "tab-a", documentId: "doc-a" }]),
+      makePane("pane-2", [{ id: "tab-b", documentId: "doc-b" }]),
+      "pane-2",
+    );
+    const snapshot = windowSnapshot({
+      notepad: {
+        documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b", "/tmp/b.txt")],
+        session: {
+          editorLayout: layout,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      },
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    const restored = sanitized.notepad.session.editorLayout;
+    expect(restored.panes).toHaveLength(2);
+    expect(restored.panes[0].tabs.map((t) => t.id)).toEqual(["tab-a"]);
+    expect(sanitized.notepad.documents.find((d) => d.id === "doc-a")?.fileMissing).toBe(true);
+    expect(sanitized.notepad.documents.find((d) => d.id === "doc-b")?.fileMissing).toBe(false);
+  });
+
+  it("uses activePane accessor against the restored multi-pane layout", async () => {
+    sessionMock.diskFiles.set("/tmp/a.txt", "x");
+    sessionMock.diskFiles.set("/tmp/b.txt", "y");
+    const layout = cols2Layout(
+      makePane("pane-1", [{ id: "tab-a", documentId: "doc-a" }]),
+      makePane("pane-2", [{ id: "tab-b", documentId: "doc-b" }]),
+      "pane-2",
+    );
+    const snapshot = windowSnapshot({
+      notepad: {
+        documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b", "/tmp/b.txt")],
+        session: {
+          editorLayout: layout,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      },
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    expect(activePane(sanitized.notepad.session.editorLayout).id).toBe("pane-2");
   });
 });
 

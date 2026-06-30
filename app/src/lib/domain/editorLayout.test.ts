@@ -21,7 +21,9 @@ import {
   normalizeEditorLayout,
   presetSlots,
   reflowAfterClose,
+  removeMatchingTabsFromAllPanes,
   removeTabFromPane,
+  restructureEditorLayout,
   selectTabInLayout,
   setActivePaneInLayout,
   setLayoutKind,
@@ -37,6 +39,10 @@ function fileTab(id: string): TabState {
 
 function sessionTab(id: string, sessionId = id): TabState {
   return { id, kind: "session", sessionId, pinned: false };
+}
+
+function viewTab(id: string): TabState {
+  return { id, kind: "view", view: "settings", pinned: false };
 }
 
 function pane(id: string, tabs: TabState[], selectedTabId: string | null = null): EditorPane {
@@ -335,6 +341,151 @@ describe("normalizeEditorLayout", () => {
       activePaneId: "missing",
     });
     expect(layout.activePaneId).toBe("p1");
+  });
+
+  it("preserves a multi-pane layout and recomputes slots from pane count", () => {
+    const layout = normalizeEditorLayout({
+      kind: "grid-2x2",
+      panes: [
+        pane("p1", [fileTab("t1")], "t1"),
+        pane("p2", [fileTab("t2")], "t2"),
+        pane("p3", [fileTab("t3")], "t3"),
+        pane("p4", [fileTab("t4")], "t4"),
+      ],
+      // Deliberately stale slots/kind; both get recomputed.
+      slots: [[0]],
+      activePaneId: "p3",
+    });
+    expect(layout.panes.map((p) => p.id)).toEqual(["p1", "p2", "p3", "p4"]);
+    expect(layout.activePaneId).toBe("p3");
+    expect(layout.slots).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+    expect(layout.kind).toBe("grid-2x2");
+  });
+});
+
+describe("restructureEditorLayout (Phase 7 restore)", () => {
+  it("preserves the multi-pane structure, keeping surviving tabs in their panes", () => {
+    const layout = buildLayout(
+      "cols-2",
+      [pane("p1", [fileTab("t1"), fileTab("t2")], "t2"), pane("p2", [fileTab("t3")], "t3")],
+      [[0, 1]],
+      "p2",
+    );
+    const next = restructureEditorLayout(layout, () => true);
+    expect(next.panes.map((p) => p.id)).toEqual(["p1", "p2"]);
+    expect(next.panes[0].tabs.map((t) => t.id)).toEqual(["t1", "t2"]);
+    expect(next.panes[0].selectedTabId).toBe("t2");
+    expect(next.panes[1].tabs.map((t) => t.id)).toEqual(["t3"]);
+    expect(next.activePaneId).toBe("p2");
+    expect(next.slots).toEqual([[0, 1]]);
+  });
+
+  it("drops tabs that fail the predicate per-pane and clamps each pane's selection", () => {
+    const layout = buildLayout(
+      "cols-2",
+      [
+        pane("p1", [fileTab("t1"), fileTab("t2")], "t2"),
+        pane("p2", [fileTab("t3")], "t3"),
+      ],
+      [[0, 1]],
+      "p1",
+    );
+    // Drop t2 (active in p1) and t3 (only tab in p2).
+    const next = restructureEditorLayout(layout, (tab) => tab.id !== "t2" && tab.id !== "t3");
+    expect(next.panes[0].tabs.map((t) => t.id)).toEqual(["t1"]);
+    expect(next.panes[0].selectedTabId).toBe("t1");
+    // Empty pane survives (Q6).
+    expect(next.panes[1].tabs).toEqual([]);
+    expect(next.panes[1].selectedTabId).toBeNull();
+  });
+
+  it("keeps an emptied pane in place (Q6 empty-pane survival)", () => {
+    const layout = buildLayout(
+      "rows-2",
+      [pane("p1", [fileTab("t1")], "t1"), pane("p2", [fileTab("t2")], "t2")],
+      [[0], [1]],
+      "p1",
+    );
+    const next = restructureEditorLayout(layout, (tab) => tab.id === "t1");
+    expect(next.panes).toHaveLength(2);
+    expect(next.panes[1].tabs).toEqual([]);
+    expect(next.panes[1].selectedTabId).toBeNull();
+  });
+
+  it("reassigns activePaneId to the first pane when the active pane id is stale", () => {
+    const layout = buildLayout(
+      "cols-2",
+      [pane("p1", [fileTab("t1")], "t1"), pane("p2", [fileTab("t2")], "t2")],
+      [[0, 1]],
+      "gone",
+    );
+    const next = restructureEditorLayout(layout, () => true);
+    expect(next.activePaneId).toBe("p1");
+  });
+
+  it("falls back to a single empty pane for missing/malformed input", () => {
+    expect(restructureEditorLayout(undefined, () => true).panes).toHaveLength(1);
+    expect(
+      restructureEditorLayout({ kind: "single", panes: [], slots: [], activePaneId: "x" }, () => true)
+        .panes,
+    ).toHaveLength(1);
+    expect(restructureEditorLayout(null, () => true).panes).toHaveLength(1);
+  });
+});
+
+describe("removeMatchingTabsFromAllPanes (Phase 7 persist strip)", () => {
+  it("is a no-op (same ref) when no pane has a matching tab", () => {
+    const layout = buildLayout(
+      "cols-2",
+      [pane("p1", [fileTab("t1")], "t1"), pane("p2", [fileTab("t2")], "t2")],
+      [[0, 1]],
+      "p1",
+    );
+    expect(removeMatchingTabsFromAllPanes(layout, () => false)).toBe(layout);
+  });
+
+  it("strips matching tabs from every pane, preserving pane structure", () => {
+    const layout = buildLayout(
+      "grid-2x2",
+      [
+        pane("p1", [viewTab("v1"), fileTab("t1")], "v1"),
+        pane("p2", [fileTab("t2"), viewTab("v2")], "t2"),
+        pane("p3", [fileTab("t3")], "t3"),
+        pane("p4", [viewTab("v3")], "v3"),
+      ],
+      [
+        [0, 1],
+        [2, 3],
+      ],
+      "p2",
+    );
+    const next = removeMatchingTabsFromAllPanes(layout, (tab) => tab.kind === "view");
+    expect(next.panes[0].tabs.map((t) => t.id)).toEqual(["t1"]);
+    expect(next.panes[0].selectedTabId).toBe("t1");
+    expect(next.panes[1].tabs.map((t) => t.id)).toEqual(["t2"]);
+    expect(next.panes[3].tabs).toEqual([]);
+    expect(next.panes[3].selectedTabId).toBeNull();
+    // Structure unchanged.
+    expect(next.panes.map((p) => p.id)).toEqual(["p1", "p2", "p3", "p4"]);
+    expect(next.slots).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+  });
+
+  it("does not mutate the input layout", () => {
+    const layout = buildLayout(
+      "single",
+      [pane("p1", [viewTab("v1"), fileTab("t1")], "t1")],
+      [[0]],
+      "p1",
+    );
+    const before = layout.panes[0].tabs.length;
+    removeMatchingTabsFromAllPanes(layout, (tab) => tab.kind === "view");
+    expect(layout.panes[0].tabs).toHaveLength(before);
   });
 });
 

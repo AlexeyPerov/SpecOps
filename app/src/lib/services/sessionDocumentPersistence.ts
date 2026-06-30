@@ -1,10 +1,5 @@
 import type { ContextSnapshot, DocumentState, WindowSessionSnapshot } from "../domain/contracts";
-import {
-  getSessionSelectedTabId,
-  getSessionTabs,
-  isViewTab,
-  setActivePaneTabs,
-} from "../domain/contracts";
+import { isViewTab, removeMatchingTabsFromAllPanes } from "../domain/contracts";
 import { isImageFilePath } from "./fileContentKind";
 import { statDiskFingerprint } from "./diskFingerprint";
 import { shouldGateFileOpenBySize } from "./largeFileOpen";
@@ -45,24 +40,20 @@ export function documentForSessionPersistence(doc: DocumentState): DocumentState
 /**
  * Drop ephemeral view tabs (Settings/Themes) from a context before it is
  * serialized to session.json. View tabs are session-only affordances — they
- * must never reopen after a restart. If the context's selected tab was a view
- * tab, the selection falls back to the first remaining tab (or null).
+ * must never reopen after a restart. Strips them from **every** pane (a view
+ * tab may live in a non-active pane in a split layout); each affected pane's
+ * `selectedTabId` falls back to its first remaining tab (or null when emptied).
  */
 function stripViewTabs(context: ContextSnapshot): ContextSnapshot {
-  const tabs = getSessionTabs(context.session);
-  if (!tabs.some((tab) => isViewTab(tab))) {
+  const stripped = removeMatchingTabsFromAllPanes(context.session.editorLayout, isViewTab);
+  if (stripped === context.session.editorLayout) {
     return context;
   }
-  const remainingTabs = tabs.filter((tab) => !isViewTab(tab));
-  const previousSelectedId = getSessionSelectedTabId(context.session);
-  const selectedTabId = remainingTabs.some((tab) => tab.id === previousSelectedId)
-    ? previousSelectedId
-    : (remainingTabs[0]?.id ?? null);
   return {
     ...context,
     session: {
       ...context.session,
-      editorLayout: setActivePaneTabs(context.session.editorLayout, remainingTabs, selectedTabId),
+      editorLayout: stripped,
     },
   };
 }

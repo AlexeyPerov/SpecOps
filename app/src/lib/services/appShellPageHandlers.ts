@@ -10,6 +10,7 @@ import {
 } from "../commands/registry";
 import { getErrorMessage } from "../commands/commandErrors";
 import { checkDocumentIfDeferred } from "./externalFileChanges";
+import { shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 import { confirmLargeFileOpen } from "./openFileGate";
 import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
 import { logDiagnostic } from "./logging";
@@ -66,7 +67,11 @@ export interface AppShellFileHandlersDeps {
   notify: (message: string) => void;
 }
 
+const TAB_ACTIVATION_CHECK_COOLDOWN_MS = 600;
+
 export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
+  let lastTabActivationCheck: { documentId: string; checkedAtMs: number } | null = null;
+
   async function openAndActivatePath(path: string): Promise<void> {
     const result = await openActivePath(path, deps.getCurrentWindowId());
     deps.notify(describeOpenActivePathResult(result));
@@ -91,10 +96,26 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
     if (!deps.getRuntimeReady()) {
       return;
     }
+    const snapshot = appState.getSnapshot();
+    if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "tab")) {
+      return;
+    }
     const tab = getSessionTabs(appState.getActiveSession()).find((entry) => entry.id === tabId);
     if (!tab || !isFileTab(tab)) {
       return;
     }
+    const now = Date.now();
+    if (
+      lastTabActivationCheck &&
+      lastTabActivationCheck.documentId === tab.documentId &&
+      now - lastTabActivationCheck.checkedAtMs < TAB_ACTIVATION_CHECK_COOLDOWN_MS
+    ) {
+      return;
+    }
+    lastTabActivationCheck = {
+      documentId: tab.documentId,
+      checkedAtMs: now,
+    };
     await checkDocumentIfDeferred(tab.documentId, "tab");
   }
 

@@ -634,12 +634,63 @@ export interface SyncActiveFileTreeExpandEffectInput {
   projectTreeController: ProjectTreeController;
 }
 
+const ACTIVE_FILE_TREE_EXPAND_DEBOUNCE_MS = 75;
+let activeFileTreeExpandTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingActiveFileExpandRequest:
+  | {
+      key: string;
+      workspaceRoot: string;
+      documentPath: string;
+      projectTreeController: ProjectTreeController;
+    }
+  | null = null;
+let lastAppliedActiveFileExpandKey: string | null = null;
+
+export function resetAppShellEffectsForTests(): void {
+  if (activeFileTreeExpandTimer) {
+    clearTimeout(activeFileTreeExpandTimer);
+    activeFileTreeExpandTimer = null;
+  }
+  pendingActiveFileExpandRequest = null;
+  lastAppliedActiveFileExpandKey = null;
+}
+
 export function syncActiveFileTreeExpandEffect(input: SyncActiveFileTreeExpandEffectInput): void {
   const { activeDocumentPath, isChatHttpActive, activeWorkspaceRoot, projectTreeController } = input;
-  if (!activeDocumentPath || isChatHttpActive) {
+  if (!activeDocumentPath || !activeWorkspaceRoot || isChatHttpActive) {
+    if (activeFileTreeExpandTimer) {
+      clearTimeout(activeFileTreeExpandTimer);
+      activeFileTreeExpandTimer = null;
+    }
+    pendingActiveFileExpandRequest = null;
     return;
   }
-  void projectTreeController.ensureExpandedForActiveFile(activeWorkspaceRoot, activeDocumentPath);
+  const key = `${activeWorkspaceRoot}::${activeDocumentPath}`;
+  if (key === lastAppliedActiveFileExpandKey || pendingActiveFileExpandRequest?.key === key) {
+    return;
+  }
+  pendingActiveFileExpandRequest = {
+    key,
+    workspaceRoot: activeWorkspaceRoot,
+    documentPath: activeDocumentPath,
+    projectTreeController,
+  };
+  if (activeFileTreeExpandTimer) {
+    clearTimeout(activeFileTreeExpandTimer);
+  }
+  activeFileTreeExpandTimer = setTimeout(() => {
+    activeFileTreeExpandTimer = null;
+    const request = pendingActiveFileExpandRequest;
+    pendingActiveFileExpandRequest = null;
+    if (!request || request.key === lastAppliedActiveFileExpandKey) {
+      return;
+    }
+    lastAppliedActiveFileExpandKey = request.key;
+    void request.projectTreeController.ensureExpandedForActiveFile(
+      request.workspaceRoot,
+      request.documentPath,
+    );
+  }, ACTIVE_FILE_TREE_EXPAND_DEBOUNCE_MS);
 }
 
 export interface SyncWorkspaceContextEffectInput {

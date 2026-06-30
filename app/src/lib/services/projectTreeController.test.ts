@@ -80,6 +80,42 @@ describe("createProjectTreeController", () => {
     ]);
   });
 
+  it("does not reload ancestors that are already expanded and loaded", async () => {
+    const snapshots: ProjectTreeControllerState[] = [];
+    const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string, directoryPath: string) => {
+      if (workspaceRoot !== "/repo") {
+        return [];
+      }
+      if (directoryPath === "/repo") {
+        return [makeNode("src", "/repo/src", "directory")];
+      }
+      if (directoryPath === "/repo/src") {
+        return [makeNode("lib", "/repo/src/lib", "directory")];
+      }
+      if (directoryPath === "/repo/src/lib") {
+        return [makeNode("main.ts", "/repo/src/lib/main.ts", "file")];
+      }
+      return [];
+    });
+    const controller = createProjectTreeController(
+      (state) => snapshots.push(state),
+      { loadDirectoryChildrenFn },
+    );
+
+    await controller.loadProjectTreeRoot({
+      workspaceRoot: "/repo",
+      isSessionTabActive: false,
+    });
+    await controller.ensureExpandedForActiveFile("/repo", "/repo/src/lib/main.ts");
+    loadDirectoryChildrenFn.mockClear();
+    const publishCountBefore = snapshots.length;
+
+    await controller.ensureExpandedForActiveFile("/repo", "/repo/src/lib/main.ts");
+
+    expect(loadDirectoryChildrenFn).not.toHaveBeenCalled();
+    expect(snapshots).toHaveLength(publishCountBefore);
+  });
+
   it("resets state when workspace root is missing", async () => {
     const snapshots: ProjectTreeControllerState[] = [];
     const controller = createProjectTreeController((state) => snapshots.push(state), {

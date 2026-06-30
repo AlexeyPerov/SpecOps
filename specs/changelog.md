@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-30 12:20
+
+- **Freeze fixes F4-A + F4-B implemented.** Added debounce + dedupe to active-file tree expansion (`syncActiveFileTreeExpandEffect`) and pre-filtered already-expanded/loaded ancestors in `projectTreeController.ensureExpandedForActiveFile` to avoid repeat publishes and directory reloads during rapid tab switches.
+- **Tab-activation checks now guarded.** `createAppShellFileHandlers.onTabActivated` now skips tab-triggered deferred external checks when tab-activation checks are disabled and throttles repeated checks for the same `documentId` with a short cooldown, while still checking immediately when users switch to a different file tab.
+- **Validation coverage expanded.** Added focused tests for active-file expansion debounce/dedupe, project-tree ancestor pre-filtering, and tab-activation check cooldown/settings guards in `appShellEffects.test.ts`, `projectTreeController.test.ts`, and `appShellPageHandlers.test.ts`.
+- **Plan status updated.** Marked `specs/text-editor/freeze-fixes-3-4-execution-plan.md` items `1.1 F4-A` and `1.2 F4-B` as done.
+
 ## 2026-06-30 — Freeze fixes 3+4 execution plan
 
 - **New plan doc — `specs/text-editor/freeze-fixes-3-4-execution-plan.md`.** Added a dedicated execution plan for the remaining freeze work (fixes 3 and 4), ordered by effort/impact ratio ascending (best ROI first). Includes ROI table, scoped tasks, estimates, risk, exit criteria, validation checklist, and total time budget.

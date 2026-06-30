@@ -288,20 +288,26 @@ export function createProjectTreeController(
     if (ancestorPaths.length === 0) {
       return;
     }
-    const nextExpanded = new Set(state.expandedPaths);
-    for (const ancestorPath of ancestorPaths) {
-      nextExpanded.add(ancestorPath);
-    }
-    state = {
-      ...state,
-      expandedPaths: nextExpanded,
-    };
-    publish();
+    const ancestorsToExpand = ancestorPaths.filter((ancestorPath) => !state.expandedPaths.has(ancestorPath));
+    const ancestorsToLoad = ancestorPaths.filter(
+      (ancestorPath) =>
+        !state.childrenByPath.has(ancestorPath) && !state.loadingPaths.has(ancestorPath),
+    );
 
-    for (const ancestorPath of ancestorPaths) {
-      if (!state.childrenByPath.has(ancestorPath) && !state.loadingPaths.has(ancestorPath)) {
-        await loadProjectTreeChildren(workspaceRoot, ancestorPath);
+    if (ancestorsToExpand.length > 0) {
+      const nextExpanded = new Set(state.expandedPaths);
+      for (const ancestorPath of ancestorsToExpand) {
+        nextExpanded.add(ancestorPath);
       }
+      state = {
+        ...state,
+        expandedPaths: nextExpanded,
+      };
+      publish();
+    }
+
+    for (const ancestorPath of ancestorsToLoad) {
+      await loadProjectTreeChildren(workspaceRoot, ancestorPath);
     }
   };
 

@@ -7,7 +7,12 @@ import type {
   OpenFileRegistry,
   WindowSessionSnapshot,
 } from "../domain/contracts";
-import { isFileTab, normalizeTabState, getSessionTabs, getSessionSelectedTabId, setActivePaneTabs } from "../domain/contracts";
+import {
+  allTabs,
+  isFileTab,
+  normalizeTabState,
+  recomputeSelectedTabId,
+} from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
@@ -81,7 +86,7 @@ export async function syncOpenFileRegistryForWindow(
   ];
 
   for (const contextSnapshot of contextSnapshots) {
-    for (const rawTab of getSessionTabs(contextSnapshot.session)) {
+    for (const rawTab of allTabs(contextSnapshot.session.editorLayout)) {
       const tab = normalizeTabState(rawTab);
       if (!isFileTab(tab)) {
         continue;
@@ -119,44 +124,60 @@ export function applyRegistryDedupeToWindowSnapshot(
   const nextRegistry = { ...registry };
   function dedupeContext(context: ContextSnapshot): ContextSnapshot {
     const documentsById = new Map(context.documents.map((doc) => [doc.id, doc]));
-    const openTabs = [];
+    const layout = context.session.editorLayout;
+    let layoutChanged = false;
 
-    for (const rawTab of getSessionTabs(context.session)) {
-      const tab = normalizeTabState(rawTab);
-      if (!isFileTab(tab)) {
-        openTabs.push(tab);
-        continue;
-      }
-      const linkedDocument = documentsById.get(tab.documentId);
-      if (!linkedDocument?.filePath) {
-        openTabs.push(tab);
-        continue;
+    const panes = layout.panes.map((pane) => {
+      const retainedTabs = [];
+      for (const rawTab of pane.tabs) {
+        const tab = normalizeTabState(rawTab);
+        if (!isFileTab(tab)) {
+          retainedTabs.push(tab);
+          continue;
+        }
+        const linkedDocument = documentsById.get(tab.documentId);
+        if (!linkedDocument?.filePath) {
+          retainedTabs.push(tab);
+          continue;
+        }
+
+        const key = normalizePathSync(linkedDocument.filePath);
+        const owner = nextRegistry[key];
+        if (owner && owner.windowId !== windowId) {
+          layoutChanged = true;
+          continue;
+        }
+
+        nextRegistry[key] = { windowId, documentId: linkedDocument.id };
+        retainedTabs.push(tab);
       }
 
-      const key = normalizePathSync(linkedDocument.filePath);
-      const owner = nextRegistry[key];
-      if (owner && owner.windowId !== windowId) {
-        continue;
+      const selectedTabId = recomputeSelectedTabId(
+        pane.tabs,
+        retainedTabs,
+        pane.selectedTabId,
+      );
+      if (
+        retainedTabs.length !== pane.tabs.length ||
+        selectedTabId !== pane.selectedTabId
+      ) {
+        layoutChanged = true;
       }
-
-      nextRegistry[key] = { windowId, documentId: linkedDocument.id };
-      openTabs.push(tab);
-    }
+      return { ...pane, tabs: retainedTabs, selectedTabId };
+    });
 
     const referencedDocIds = new Set(
-      openTabs.filter(isFileTab).map((tab) => tab.documentId),
+      allTabs({ ...layout, panes })
+        .filter(isFileTab)
+        .map((tab) => tab.documentId),
     );
     const documents = context.documents.filter((doc) => referencedDocIds.has(doc.id));
-    const previousSelectedId = getSessionSelectedTabId(context.session);
-    const selectedTabId = openTabs.some((tab) => tab.id === previousSelectedId)
-      ? previousSelectedId
-      : openTabs[0]?.id ?? null;
 
     return {
       documents,
       session: {
         ...context.session,
-        editorLayout: setActivePaneTabs(context.session.editorLayout, openTabs, selectedTabId),
+        editorLayout: layoutChanged ? { ...layout, panes } : layout,
       },
     };
   }

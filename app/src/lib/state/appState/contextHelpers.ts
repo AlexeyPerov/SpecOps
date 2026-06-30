@@ -8,6 +8,7 @@ import type {
 } from "../../domain/contracts";
 import {
   CHAT_HTTP_CONTEXT_ID,
+  allTabs,
   getSessionTabs,
   isFileTab,
 } from "../../domain/contracts";
@@ -72,9 +73,11 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
   idCounters.tab = Math.max(
     1,
     ...[
-      ...getSessionTabs(contexts.notepad.session),
-      ...getSessionTabs(contexts.chatHttp.session),
-      ...contexts.workspaces.flatMap((workspace) => getSessionTabs(workspace.snapshot.session)),
+      ...allTabs(contexts.notepad.session.editorLayout),
+      ...allTabs(contexts.chatHttp.session.editorLayout),
+      ...contexts.workspaces.flatMap((workspace) =>
+        allTabs(workspace.snapshot.session.editorLayout),
+      ),
     ].map((tab) => Number(tab.id.replace("tab-", "")) || 1),
   );
   reindexWorkspaceCounter(contexts.workspaces);

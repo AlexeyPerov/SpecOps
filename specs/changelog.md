@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-30 — Split-view session restore: all panes persist
+
+- **Grid / multi-pane tabs survive relaunch.** Open-file registry sync and restore dedupe now scan every pane in the editor layout (not just the active pane), so documents and tabs in non-focused layout groups are kept across sessions.
+
 ## 2026-06-30 — Implicit untitled drafts per pane
 
 - **Every file pane starts with a hidden untitled draft.** New and empty panes get an implicit `stripHidden` file tab plus empty document so the editor is ready to type without showing a tab until content appears (state A → B).

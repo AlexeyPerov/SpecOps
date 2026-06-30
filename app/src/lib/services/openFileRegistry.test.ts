@@ -6,6 +6,7 @@ import type {
   WindowSessionSnapshot,
 } from "../domain/contracts";
 import { createFileTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
+import type { EditorLayout } from "../domain/contracts";
 import { createSessionFsMock } from "../test/sessionMock";
 import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
 import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
@@ -330,6 +331,142 @@ describe("syncOpenFileRegistryForWindow", () => {
       "/tmp/ws/workspace.txt": { windowId: "win-a", documentId: "doc-w" },
     });
   });
+
+  it("registers file tabs from every pane in a split layout", async () => {
+    const gridLayout: EditorLayout = {
+      kind: "grid-2x2",
+      panes: [
+        { id: "pane-1", tabs: [createFileTab("tab-1", "doc-1")], selectedTabId: "tab-1" },
+        { id: "pane-2", tabs: [createFileTab("tab-2", "doc-2")], selectedTabId: "tab-2" },
+        { id: "pane-3", tabs: [createFileTab("tab-3", "doc-3")], selectedTabId: "tab-3" },
+        { id: "pane-4", tabs: [createFileTab("tab-4", "doc-4")], selectedTabId: "tab-4" },
+      ],
+      slots: [[0, 1], [2, 3]],
+      activePaneId: "pane-1",
+    };
+    const state: AppDomainState = {
+      contexts: {
+        activeContextId: "notepad",
+        notepad: {
+          documents: [
+            {
+              id: "doc-1",
+              filePath: "/tmp/a.txt",
+              title: "a.txt",
+              content: "",
+              savedContent: "",
+              isDirty: false,
+              contentKind: "text",
+              language: "plaintext",
+              encoding: "utf-8",
+              lineEnding: "lf",
+              diskFingerprint: null,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              scrollTop: 0,
+              markdownViewMode: "edit",
+            },
+            {
+              id: "doc-2",
+              filePath: "/tmp/b.txt",
+              title: "b.txt",
+              content: "",
+              savedContent: "",
+              isDirty: false,
+              contentKind: "text",
+              language: "plaintext",
+              encoding: "utf-8",
+              lineEnding: "lf",
+              diskFingerprint: null,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              scrollTop: 0,
+              markdownViewMode: "edit",
+            },
+            {
+              id: "doc-3",
+              filePath: "/tmp/c.txt",
+              title: "c.txt",
+              content: "",
+              savedContent: "",
+              isDirty: false,
+              contentKind: "text",
+              language: "plaintext",
+              encoding: "utf-8",
+              lineEnding: "lf",
+              diskFingerprint: null,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              scrollTop: 0,
+              markdownViewMode: "edit",
+            },
+            {
+              id: "doc-4",
+              filePath: "/tmp/d.txt",
+              title: "d.txt",
+              content: "",
+              savedContent: "",
+              isDirty: false,
+              contentKind: "text",
+              language: "plaintext",
+              encoding: "utf-8",
+              lineEnding: "lf",
+              diskFingerprint: null,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              scrollTop: 0,
+              markdownViewMode: "edit",
+            },
+          ],
+          session: {
+            editorLayout: gridLayout,
+            lastActiveWindowId: "win-a",
+            windowBounds: null,
+          },
+        },
+        chatHttp: {
+          documents: [],
+          session: {
+            editorLayout: createSinglePaneLayout([], null),
+            lastActiveWindowId: "win-a",
+            windowBounds: null,
+          },
+        },
+        workspaces: [],
+      },
+      settings: {
+        ...defaultSettings,
+        decoratePlaintextSymbols: false,
+      },
+      theme: {
+        mode: "auto",
+        darkTheme: { kind: "builtin", id: "dark-amber" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
+        manualTheme: { kind: "builtin", id: "dark-amber" },
+        customThemes: [],
+      },
+      recentFiles: [],
+      editor: {
+        cursorLine: 1,
+        cursorColumn: 1,
+        zoomPercent: 100,
+        wrapLines: true,
+        findReplaceOpen: false,
+        goToOpen: false,
+        previewMode: "editor",
+      },
+      activityRailWidthPx: 48,
+    };
+
+    await syncOpenFileRegistryForWindow("win-a", state);
+
+    expect(sessionMock.getSessionStore()?.openFileRegistry).toMatchObject({
+      "/tmp/a.txt": { windowId: "win-a", documentId: "doc-1" },
+      "/tmp/b.txt": { windowId: "win-a", documentId: "doc-2" },
+      "/tmp/c.txt": { windowId: "win-a", documentId: "doc-3" },
+      "/tmp/d.txt": { windowId: "win-a", documentId: "doc-4" },
+    });
+  });
 });
 
 describe("releaseAllOpenFilesForWindow", () => {
@@ -393,5 +530,208 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
 
     expect(getSessionTabs(nextSnapshot.notepad.session)).toHaveLength(2);
     expect(nextRegistry["/tmp/shared.txt"]).toEqual({ windowId: "win-a", documentId: "doc-1" });
+  });
+
+  it("preserves tabs and documents in non-active panes during dedupe", () => {
+    const gridLayout: EditorLayout = {
+      kind: "grid-2x2",
+      panes: [
+        { id: "pane-1", tabs: [createFileTab("tab-1", "doc-1")], selectedTabId: "tab-1" },
+        { id: "pane-2", tabs: [createFileTab("tab-2", "doc-2")], selectedTabId: "tab-2" },
+        { id: "pane-3", tabs: [createFileTab("tab-3", "doc-3")], selectedTabId: "tab-3" },
+        { id: "pane-4", tabs: [createFileTab("tab-4", "doc-4")], selectedTabId: "tab-4" },
+      ],
+      slots: [[0, 1], [2, 3]],
+      activePaneId: "pane-1",
+    };
+    const snapshot = baseWindowSnapshot({
+      notepad: {
+        documents: [
+          {
+            id: "doc-1",
+            filePath: "/tmp/a.txt",
+            title: "a.txt",
+            content: "a",
+            savedContent: "a",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+          {
+            id: "doc-2",
+            filePath: "/tmp/b.txt",
+            title: "b.txt",
+            content: "b",
+            savedContent: "b",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+          {
+            id: "doc-3",
+            filePath: "/tmp/c.txt",
+            title: "c.txt",
+            content: "c",
+            savedContent: "c",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+          {
+            id: "doc-4",
+            filePath: "/tmp/d.txt",
+            title: "d.txt",
+            content: "d",
+            savedContent: "d",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+        ],
+        session: {
+          editorLayout: gridLayout,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      },
+    });
+
+    const { snapshot: nextSnapshot } = applyRegistryDedupeToWindowSnapshot({}, "win-a", snapshot);
+    const restored = nextSnapshot.notepad.session.editorLayout;
+
+    expect(restored.panes).toHaveLength(4);
+    expect(restored.panes.map((pane) => pane.tabs.map((tab) => tab.id))).toEqual([
+      ["tab-1"],
+      ["tab-2"],
+      ["tab-3"],
+      ["tab-4"],
+    ]);
+    expect(nextSnapshot.notepad.documents.map((doc) => doc.id)).toEqual([
+      "doc-1",
+      "doc-2",
+      "doc-3",
+      "doc-4",
+    ]);
+  });
+
+  it("drops a tab only in the pane that owns a path claimed by another window", () => {
+    const gridLayout: EditorLayout = {
+      kind: "cols-2",
+      panes: [
+        { id: "pane-1", tabs: [createFileTab("tab-1", "doc-1")], selectedTabId: "tab-1" },
+        {
+          id: "pane-2",
+          tabs: [createFileTab("tab-2", "doc-2"), createFileTab("tab-3", "doc-3")],
+          selectedTabId: "tab-2",
+        },
+      ],
+      slots: [[0, 1]],
+      activePaneId: "pane-1",
+    };
+    const snapshot = baseWindowSnapshot({
+      notepad: {
+        documents: [
+          {
+            id: "doc-1",
+            filePath: "/tmp/a.txt",
+            title: "a.txt",
+            content: "a",
+            savedContent: "a",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+          {
+            id: "doc-2",
+            filePath: "/tmp/shared.txt",
+            title: "shared.txt",
+            content: "shared",
+            savedContent: "shared",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+          {
+            id: "doc-3",
+            filePath: "/tmp/c.txt",
+            title: "c.txt",
+            content: "c",
+            savedContent: "c",
+            isDirty: false,
+            contentKind: "text",
+            language: "plaintext",
+            encoding: "utf-8",
+            lineEnding: "lf",
+            diskFingerprint: null,
+            dismissedFingerprint: null,
+            fileMissing: false,
+            scrollTop: 0,
+            markdownViewMode: "edit",
+          },
+        ],
+        session: {
+          editorLayout: gridLayout,
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      },
+    });
+    const registry: OpenFileRegistry = {
+      "/tmp/shared.txt": { windowId: "win-b", documentId: "doc-9" },
+    };
+
+    const { snapshot: nextSnapshot } = applyRegistryDedupeToWindowSnapshot(
+      registry,
+      "win-a",
+      snapshot,
+    );
+    const restored = nextSnapshot.notepad.session.editorLayout;
+
+    expect(restored.panes[0].tabs.map((tab) => tab.id)).toEqual(["tab-1"]);
+    expect(restored.panes[1].tabs.map((tab) => tab.id)).toEqual(["tab-3"]);
+    expect(restored.panes[1].selectedTabId).toBe("tab-3");
+    expect(nextSnapshot.notepad.documents.map((doc) => doc.id)).toEqual(["doc-1", "doc-3"]);
   });
 });

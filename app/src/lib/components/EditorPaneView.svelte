@@ -110,6 +110,8 @@
   });
 </script>
 
+<!-- Pointer-only focus convenience; keyboard focus has its own ⌘⌥1..4 path. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <section
   class="editor-pane-view"
   class:editor-pane-view-active={isActive}

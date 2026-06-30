@@ -46,6 +46,7 @@ export {
   moveTabBetweenPanes,
   nextPaneId,
   normalizeEditorLayout,
+  paneActiveTab,
   presetSlots,
   recomputeSelectedTabId,
   reflowAfterClose,

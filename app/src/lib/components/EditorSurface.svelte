@@ -124,6 +124,22 @@
     };
   }
 
+  function publishCommandRunner(): void {
+    if (!view || !registerEditorCommandRunner) {
+      return;
+    }
+    registerEditorCommandRunner(
+      createEditorCommandRunner({
+        getView: () => view,
+        lineWrapCompartment,
+        fontSizeCompartment,
+        searchHighlightCompartment,
+        onStatusMessage,
+        updateCursor,
+      }),
+    );
+  }
+
   onMount(() => {
     if (!hostEl) {
       return;
@@ -201,16 +217,7 @@
     currentEditorLanguage = language;
     applyScrollTop(scrollTop);
 
-    registerEditorCommandRunner?.(
-      createEditorCommandRunner({
-        getView: () => view,
-        lineWrapCompartment,
-        fontSizeCompartment,
-        searchHighlightCompartment,
-        onStatusMessage,
-        updateCursor,
-      }),
-    );
+    publishCommandRunner();
 
     void logDiagnostic({
       level: "debug",
@@ -235,6 +242,11 @@
       message: "EditorSurface destroyed",
       metadata: { documentId },
     });
+  });
+
+  $effect(() => {
+    registerEditorCommandRunner;
+    publishCommandRunner();
   });
 
   $effect(() => {

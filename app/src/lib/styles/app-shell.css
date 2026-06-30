@@ -4,11 +4,11 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   background: var(--color-bg-root);
   color: var(--color-text-primary);
+  overflow: hidden;
 }
 
 .shell-main-row {
   min-height: 0;
-  height: 100%;
   display: grid;
   grid-template-columns:
     auto
@@ -84,7 +84,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  padding: var(--space-8);
+  padding: 5px var(--space-8);
   overflow: hidden;
   min-width: 0;
   min-height: 0;

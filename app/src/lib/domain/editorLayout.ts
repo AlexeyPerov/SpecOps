@@ -169,8 +169,17 @@ export function activeSelectedTabId(layout: EditorLayout): string | null {
 }
 
 export function activeTab(layout: EditorLayout): TabState | null {
-  const tabs = activePane(layout).tabs;
-  const selectedId = activePane(layout).selectedTabId;
+  return paneActiveTab(layout, activePane(layout).id);
+}
+
+/** Selected tab for a specific pane (not necessarily the active pane). */
+export function paneActiveTab(layout: EditorLayout, paneId: string): TabState | null {
+  const pane = findPane(layout, paneId);
+  if (!pane) {
+    return null;
+  }
+  const tabs = pane.tabs;
+  const selectedId = pane.selectedTabId;
   if (selectedId) {
     return tabs.find((tab) => tab.id === selectedId) ?? tabs[0] ?? null;
   }

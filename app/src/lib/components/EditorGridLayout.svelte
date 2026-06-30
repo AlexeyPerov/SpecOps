@@ -14,9 +14,8 @@
    * a cell whose row is narrower than the widest row spans the full width
    * (this is what produces the close-reflow 2-over-1 shape).
    *
-   * The active pane (per `layout.activePaneId`) renders the live editor chrome
-   * via the `children` snippet; other panes render a placeholder until per-pane
-   * editor wiring lands (Phase 4).
+   * Each pane with tabs renders stable editor content via `renderPaneContent`;
+   * the active pane owns command-runner registration (F3-B).
    *
    * Phase 5/6 — owns the cross-pane DnD registry: each `EditorPaneView`
    * registers its strip + body elements here so the tab/project drag
@@ -37,7 +36,7 @@
     onOpenFileInPane,
     tabDropTargetPaneId = $bindable(null),
     fileDropTargetPaneId = null,
-    children,
+    renderPaneContent,
   }: {
     layout: EditorLayout;
     documents: DocumentState[];
@@ -58,7 +57,7 @@
     tabDropTargetPaneId?: string | null;
     /** Driven by the parent (from the project-tree file drag); read-only here. */
     fileDropTargetPaneId?: string | null;
-    children?: import("svelte").Snippet;
+    renderPaneContent?: import("svelte").Snippet<[paneId: string]>;
   } = $props();
 
   const canClosePane = $derived(layout.panes.length > 1);
@@ -187,8 +186,8 @@
         onMoveTabBetweenPanes={onMoveTabBetweenPanes}
         onOpenFileInPane={onOpenFileInPane}
       >
-        {#if cell.pane.id === layout.activePaneId}
-          {@render children?.()}
+        {#if cell.pane.tabs.length > 0}
+          {@render renderPaneContent?.(cell.pane.id)}
         {/if}
       </EditorPaneView>
     </div>

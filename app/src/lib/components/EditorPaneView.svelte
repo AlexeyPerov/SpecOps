@@ -6,13 +6,8 @@
 
   /**
    * One pane inside the editor grid (split view). Owns a tab strip scoped to
-   * this pane's tabs and renders the editor surface for the pane's selected
-   * tab. The active pane (per `layout.activePaneId`) carries the live editor
-   * chrome — non-active panes show a lightweight placeholder until per-pane
-   * editor wiring lands (Phase 4).
-   *
-   * The × close button is hidden only when a single pane remains; it is always
-   * visible on empty panes (F3). Clicking anywhere in the pane focuses it.
+   * this pane's tabs and a stable body subtree for the pane's selected tab
+   * (F3-B). Clicking anywhere in the pane focuses it.
    *
    * Phase 5/6 — registers its strip + body elements with the parent grid (for
    * cross-pane DnD hit-testing) and renders a drop affordance when this pane is
@@ -77,25 +72,6 @@
   let tabStripEl = $state<HTMLDivElement | null>(null);
   let paneBodyEl = $state<HTMLDivElement | null>(null);
 
-  const selectedTab = $derived(tabs.find((tab) => tab.id === selectedTabId) ?? null);
-  const selectedDocument = $derived(
-    selectedTab && selectedTab.kind === "file"
-      ? (documents.find((doc) => doc.id === selectedTab.documentId) ?? null)
-      : null,
-  );
-  const label = $derived.by(() => {
-    if (!selectedTab) {
-      return "No tab";
-    }
-    if (selectedTab.kind === "session") {
-      return "Session";
-    }
-    if (selectedTab.kind === "view") {
-      return selectedTab.view === "settings" ? "Settings" : "Themes";
-    }
-    return selectedDocument?.title ?? "Untitled";
-  });
-
   const isTabDropTarget = $derived(tabDropTargetPaneId === paneId);
   const isFileDropTarget = $derived(fileDropTargetPaneId === paneId);
 
@@ -114,7 +90,6 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <section
   class="editor-pane-view"
-  class:editor-pane-view-active={isActive}
   class:pane-drop-target={isTabDropTarget || isFileDropTarget}
   data-pane-id={paneId}
   onpointerdown={() => onFocus(paneId)}
@@ -153,14 +128,10 @@
   </header>
 
   <div class="pane-body" data-pane-body={paneId} bind:this={paneBodyEl}>
-    {#if isActive}
-      {@render children?.()}
-    {:else if tabs.length === 0}
+    {#if tabs.length === 0}
       <div class="pane-empty">Drop a file or tab here</div>
     {:else}
-      <div class="pane-placeholder">
-        <span class="pane-placeholder-label">{label}</span>
-      </div>
+      {@render children?.()}
     {/if}
   </div>
 </section>
@@ -179,10 +150,6 @@
     border: 1px solid transparent;
     border-radius: 4px;
   }
-  .editor-pane-view-active {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 1px var(--color-accent) inset;
-  }
   .pane-drop-target {
     outline: 2px dashed var(--color-accent);
     outline-offset: -2px;
@@ -190,7 +157,7 @@
   }
   .pane-header {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: 2px;
     min-height: var(--tab-header-height, 32px);
     border-bottom: 1px solid var(--color-border-subtle);
@@ -198,7 +165,9 @@
   }
   .pane-tab-bar {
     flex: 1 1 auto;
+    height: 100%;
     min-width: 0;
+    padding-left: 3px;
     overflow: hidden;
   }
   .pane-close-button {
@@ -222,16 +191,6 @@
     align-items: center;
     justify-content: center;
     color: var(--color-text-secondary);
-    font-size: 13px;
-    user-select: none;
-  }
-  .pane-placeholder {
-    flex: 1 1 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-secondary);
-    background: var(--color-surface-0);
     font-size: 13px;
     user-select: none;
   }

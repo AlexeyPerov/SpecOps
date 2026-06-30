@@ -19,6 +19,7 @@ import {
   moveTabBetweenPanes,
   nextPaneId,
   normalizeEditorLayout,
+  paneActiveTab,
   presetSlots,
   reflowAfterClose,
   removeMatchingTabsFromAllPanes,
@@ -498,6 +499,18 @@ describe("session-level accessors", () => {
     };
     expect(getSessionTabs(session).map((t) => t.id)).toEqual(["t1", "t2"]);
     expect(getSessionSelectedTabId(session)).toBe("t2");
+  });
+
+  it("paneActiveTab resolves the selected tab for a specific pane", () => {
+    const layout = buildLayout(
+      "cols-2",
+      [pane("pane-1", [fileTab("t1")], "t1"), pane("pane-2", [fileTab("t2"), fileTab("t3")], "t3")],
+      [[0, 1]],
+      "pane-1",
+    );
+    expect(paneActiveTab(layout, "pane-1")?.id).toBe("t1");
+    expect(paneActiveTab(layout, "pane-2")?.id).toBe("t3");
+    expect(paneActiveTab(layout, "missing")).toBeNull();
   });
 });
 

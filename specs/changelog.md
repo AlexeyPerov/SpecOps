@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-30 13:54
+
+- **Freeze fix F3-B — stable editor host per pane.** Each split pane now keeps a persistent editor subtree across tab and pane-focus changes: `EditorGridLayout` renders per-pane content via `renderPaneContent`, `EditorPaneView` no longer swaps inactive panes to placeholders, and new `EditorPaneContent` resolves tab/document routing per pane (including lazy markdown preview HTML).
+- **Active-pane command runner semantics preserved.** `EditorSurface` re-publishes its command runner when registration becomes available; `AppShell` clears `editorRunner` on active-pane switch and when the active tab is non-text, so only the focused pane's editor drives find/replace, go-to, and status-bar commands.
+- **Pane-scoped routing helpers + tests.** Added `paneActiveTab` and pane-level routing predicates (`isSessionTabActiveInPane`, `activeViewKindInPane`) with coverage in `editorLayout.test.ts` and `editorRouting.test.ts`. Validated with `npm run check` and full `npm test` (1994/1994).
+
+## 2026-06-30 13:10
+
+- **Split-view layout regressions fixed.** Removed the always-on active pane highlight in `EditorPaneView.svelte`, centered the tab strip vertically with a 3px left inset (`EditorPaneView.svelte`, `TabBar.svelte`), and tightened markdown mode-bar spacing to ~5px above and below (`app-shell.css`, `MarkdownEditorPane.svelte`).
+- **Editor/shell sizing stabilized.** Repaired the editor height chain for empty files by making markdown editor containers flex to full height (`MarkdownEditorPane.svelte`), and removed window-level scrolling by constraining shell/document overflow (`app-shell.css`, `tokens.css`) so only editor/preview panes scroll and the log panel remains visible.
+
 ## 2026-06-30 12:29
 
 - **Freeze fixes F4-C + F3-A implemented.** `projectTreeController` now batches child-load updates into fewer publishes by combining children+loading-clear on success, avoiding redundant expand publishes before async loads, and keeping state correctness on failures.

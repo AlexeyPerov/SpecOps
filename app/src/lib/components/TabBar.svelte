@@ -241,6 +241,7 @@
   .tab-strip {
     display: flex;
     align-items: center;
+    height: 100%;
     /* Inter-tab gap is load-bearing relative to the tab vertical inset
        (tab height = --tab-header-height - 8px); keep both as literal px so the
        M11-T1 spacing-scale change doesn't shrink the tabs. */

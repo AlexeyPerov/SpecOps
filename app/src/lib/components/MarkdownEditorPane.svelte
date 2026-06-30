@@ -252,10 +252,10 @@
 
 <style>
   .markdown-layout {
-    height: 100%;
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    flex: 1 1 auto;
+    gap: 5px;
     min-height: 0;
   }
 
@@ -309,6 +309,9 @@
   }
 
   .markdown-editor-pane {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
     min-height: 0;
   }
 

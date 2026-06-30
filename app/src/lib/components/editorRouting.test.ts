@@ -16,8 +16,10 @@ import type { TabState } from "../domain/contracts";
 import {
   activeViewKind,
   activeViewKindInActivePane,
+  activeViewKindInPane,
   isSessionEditorPaneActive,
   isSessionTabActiveInActivePane,
+  isSessionTabActiveInPane,
 } from "./editorRouting";
 
 /** Build a SessionState whose editorLayout is a single pane holding `tabs`. */
@@ -224,5 +226,43 @@ describe("active-pane routing (split view)", () => {
     };
     // appendTabToPane selects the appended tab in the active pane.
     expect(isSessionTabActiveInActivePane(session)).toBe(true);
+  });
+
+  describe("pane-scoped routing (F3-B)", () => {
+    it("isSessionTabActiveInPane reads a specific pane, not the active pane", () => {
+      const layout: EditorLayout = {
+        kind: "cols-2",
+        panes: [
+          { id: "pane-1", tabs: [createFileTab("tab-1", "doc-1")], selectedTabId: "tab-1" },
+          {
+            id: "pane-2",
+            tabs: [createSessionTab("tab-2", "agent-a")],
+            selectedTabId: "tab-2",
+          },
+        ],
+        slots: [[0, 1]],
+        activePaneId: "pane-1",
+      };
+      expect(isSessionTabActiveInPane(layout, "pane-1")).toBe(false);
+      expect(isSessionTabActiveInPane(layout, "pane-2")).toBe(true);
+    });
+
+    it("activeViewKindInPane resolves settings/themes per pane", () => {
+      const layout: EditorLayout = {
+        kind: "cols-2",
+        panes: [
+          {
+            id: "pane-1",
+            tabs: [createViewTab("tab-1", "settings")],
+            selectedTabId: "tab-1",
+          },
+          { id: "pane-2", tabs: [createFileTab("tab-2", "doc-1")], selectedTabId: "tab-2" },
+        ],
+        slots: [[0, 1]],
+        activePaneId: "pane-2",
+      };
+      expect(activeViewKindInPane(layout, "pane-1")).toBe("settings");
+      expect(activeViewKindInPane(layout, "pane-2")).toBeNull();
+    });
   });
 });

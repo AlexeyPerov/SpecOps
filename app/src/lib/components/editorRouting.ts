@@ -1,5 +1,8 @@
 import {
+  findPane,
   getSessionActiveTab,
+  paneActiveTab,
+  type EditorLayout,
   isSessionTab,
   isViewTab,
   type SessionState,
@@ -70,4 +73,31 @@ export function activeViewKindInActivePane(
     return tab.view;
   }
   return null;
+}
+
+/** Session-tab predicate for an arbitrary pane's selected tab. */
+export function isSessionTabActiveInPane(
+  layout: EditorLayout,
+  paneId: string,
+): boolean {
+  const tab = paneActiveTab(layout, paneId);
+  return Boolean(tab && isSessionTab(tab));
+}
+
+/** View-tab kind for an arbitrary pane's selected tab. */
+export function activeViewKindInPane(
+  layout: EditorLayout,
+  paneId: string,
+): "settings" | "themes" | null {
+  const tab = paneActiveTab(layout, paneId);
+  if (tab && isViewTab(tab)) {
+    return tab.view;
+  }
+  return null;
+}
+
+/** Whether a pane has any tabs open. */
+export function paneHasTabs(layout: EditorLayout, paneId: string): boolean {
+  const pane = findPane(layout, paneId);
+  return Boolean(pane && pane.tabs.length > 0);
 }

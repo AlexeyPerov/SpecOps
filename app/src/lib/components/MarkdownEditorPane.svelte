@@ -18,6 +18,7 @@
   export let wrapLines = false;
   export let zoomPercent = 100;
   export let decoratePlaintextSymbols = true;
+  export let markdownEnabled = true;
   export let markdownHtml = "";
   export let storedMarkdownViewMode: "edit" | "split" | "preview" = "edit";
   export let canFitSplit = true;
@@ -36,8 +37,11 @@
   /** Object URLs we created as image fallbacks, revoked when the doc changes. */
   let fallbackObjectUrls = new Set<string>();
 
-  $: markdownViewMode =
-    storedMarkdownViewMode === "split" && !canFitSplit ? "edit" : storedMarkdownViewMode;
+  $: markdownViewMode = !markdownEnabled
+    ? "edit"
+    : storedMarkdownViewMode === "split" && !canFitSplit
+      ? "edit"
+      : storedMarkdownViewMode;
 
   // Revoke blob fallbacks from the previous document before wiring the new one.
   $: documentId, revokeFallbackUrls();
@@ -176,33 +180,35 @@
 </script>
 
 <div class="markdown-layout">
-  <div class="markdown-mode-bar">
-    <div class="markdown-mode-actions">
-      <button
-        class={`mode-button ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
-        type="button"
-        onclick={() => onMarkdownViewModeChange("edit")}
-      >
-        edit
-      </button>
-      <button
-        class={`mode-button ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
-        type="button"
-        onclick={() => onMarkdownViewModeChange("split")}
-      >
-        split
-      </button>
-      <button
-        class={`mode-button ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
-        type="button"
-        onclick={() => onMarkdownViewModeChange("preview")}
-      >
-        preview
-      </button>
+  {#if markdownEnabled}
+    <div class="markdown-mode-bar">
+      <div class="markdown-mode-actions">
+        <button
+          class={`mode-button ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
+          type="button"
+          onclick={() => onMarkdownViewModeChange("edit")}
+        >
+          edit
+        </button>
+        <button
+          class={`mode-button ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
+          type="button"
+          onclick={() => onMarkdownViewModeChange("split")}
+        >
+          split
+        </button>
+        <button
+          class={`mode-button ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
+          type="button"
+          onclick={() => onMarkdownViewModeChange("preview")}
+        >
+          preview
+        </button>
+      </div>
     </div>
-  </div>
+  {/if}
 
-  {#if markdownViewMode === "preview"}
+  {#if markdownEnabled && markdownViewMode === "preview"}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -212,9 +218,9 @@
     >
       {@html markdownHtml}
     </div>
-  {:else if markdownViewMode === "split"}
-    <div class="markdown-split">
-      <div class="markdown-editor-pane" bind:this={markdownEditorPaneEl}>
+  {:else}
+    <div class:markdown-split={markdownEnabled && markdownViewMode === "split"} class="markdown-body">
+      <div class="markdown-editor-pane" class:markdown-editor-single={markdownViewMode !== "split"} bind:this={markdownEditorPaneEl}>
         <DocumentEditor
           {content}
           {documentId}
@@ -229,31 +235,17 @@
           {registerEditorCommandRunner}
         />
       </div>
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="markdown-preview markdown-preview-pane"
-        bind:this={markdownPreviewPaneEl}
-        onclick={onMarkdownPreviewClick}
-      >
-        {@html markdownHtml}
-      </div>
-    </div>
-  {:else}
-    <div class="markdown-editor-single">
-      <DocumentEditor
-        {content}
-        {documentId}
-        {scrollTop}
-        {wrapLines}
-        {zoomPercent}
-        {language}
-        {decoratePlaintextSymbols}
-        {onStatusMessage}
-        {onUntitledTitleRefresh}
-        {onScrollTopChange}
-        {registerEditorCommandRunner}
-      />
+      {#if markdownEnabled && markdownViewMode === "split"}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="markdown-preview markdown-preview-pane"
+          bind:this={markdownPreviewPaneEl}
+          onclick={onMarkdownPreviewClick}
+        >
+          {@html markdownHtml}
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -301,9 +293,11 @@
     background: var(--color-hover);
   }
 
-  .markdown-editor-single {
+  .markdown-body {
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .markdown-split {

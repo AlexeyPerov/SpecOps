@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-30 12:29
+
+- **Freeze fixes F4-C + F3-A implemented.** `projectTreeController` now batches child-load updates into fewer publishes by combining children+loading-clear on success, avoiding redundant expand publishes before async loads, and keeping state correctness on failures.
+- **Editor remount churn reduced incrementally.** `AppShell` now routes all text documents through a single `MarkdownEditorPane` path, and `MarkdownEditorPane` keeps a single `DocumentEditor` instance across markdown edit/split mode changes (preview-only mode still intentionally renders without the editor).
+- **Editor lifecycle diagnostics added.** `EditorSurface` now emits debug diagnostics on mount and destroy to verify remount frequency during tab/mode switching.
+- **Validation + plan status updated.** Added F4-C publish-count coverage in `projectTreeController.test.ts`, validated with `npm run check` and full `npm test` (1991/1991), and marked execution-plan items `1.3 F4-C` and `1.4 F3-A` as done.
+
 ## 2026-06-30 12:20
 
 - **Freeze fixes F4-A + F4-B implemented.** Added debounce + dedupe to active-file tree expansion (`syncActiveFileTreeExpandEffect`) and pre-filtered already-expanded/loaded ancestors in `projectTreeController.ensureExpandedForActiveFile` to avoid repeat publishes and directory reloads during rapid tab switches.

@@ -20,6 +20,7 @@
     createEditorCommandRunner,
   } from "../editor/editorCommandRunner";
   import { searchHighlightCompartment } from "../editor/searchHighlight";
+  import { logDiagnostic } from "../services/logging";
 
   interface Props {
     content?: string;
@@ -210,6 +211,14 @@
         updateCursor,
       }),
     );
+
+    void logDiagnostic({
+      level: "debug",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "EditorSurface mounted",
+      metadata: { documentId },
+    });
   });
 
   onDestroy(() => {
@@ -219,6 +228,13 @@
     }
     detachScrollListener?.();
     view?.destroy();
+    void logDiagnostic({
+      level: "debug",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "EditorSurface destroyed",
+      metadata: { documentId },
+    });
   });
 
   $effect(() => {

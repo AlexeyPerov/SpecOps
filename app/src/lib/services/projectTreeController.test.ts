@@ -42,6 +42,41 @@ describe("directoriesToRefreshForChange", () => {
 });
 
 describe("createProjectTreeController", () => {
+  it("publishes loading and loaded states once per child directory load", async () => {
+    const snapshots: ProjectTreeControllerState[] = [];
+    const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string, directoryPath: string) => {
+      if (workspaceRoot !== "/repo") {
+        return [];
+      }
+      if (directoryPath === "/repo") {
+        return [makeNode("src", "/repo/src", "directory")];
+      }
+      if (directoryPath === "/repo/src") {
+        return [makeNode("main.ts", "/repo/src/main.ts", "file")];
+      }
+      return [];
+    });
+    const controller = createProjectTreeController(
+      (state) => snapshots.push(state),
+      { loadDirectoryChildrenFn },
+    );
+    await controller.loadProjectTreeRoot({
+      workspaceRoot: "/repo",
+      isSessionTabActive: false,
+    });
+    const publishCountBefore = snapshots.length;
+
+    await controller.loadProjectTreeChildren("/repo", "/repo/src");
+
+    const publishCountAfter = snapshots.length;
+    expect(publishCountAfter - publishCountBefore).toBe(2);
+    const lastState = snapshots[publishCountAfter - 1];
+    expect(lastState.loadingPaths.has("/repo/src")).toBe(false);
+    expect(lastState.childrenByPath.get("/repo/src")?.map((node) => node.path)).toEqual([
+      "/repo/src/main.ts",
+    ]);
+  });
+
   it("expands and loads missing ancestors for active file", async () => {
     const snapshots: ProjectTreeControllerState[] = [];
     const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string, directoryPath: string) => {
@@ -68,7 +103,9 @@ describe("createProjectTreeController", () => {
       workspaceRoot: "/repo",
       isSessionTabActive: false,
     });
+    const publishCountBefore = snapshots.length;
     await controller.ensureExpandedForActiveFile("/repo", "/repo/src/lib/main.ts");
+    const publishCountAfter = snapshots.length;
 
     const lastState = snapshots[snapshots.length - 1];
     expect(lastState.expandedPaths).toEqual(new Set(["/repo/src", "/repo/src/lib"]));
@@ -78,6 +115,7 @@ describe("createProjectTreeController", () => {
     expect(lastState.childrenByPath.get("/repo/src/lib")?.map((node) => node.path)).toEqual([
       "/repo/src/lib/main.ts",
     ]);
+    expect(publishCountAfter - publishCountBefore).toBeLessThanOrEqual(5);
   });
 
   it("does not reload ancestors that are already expanded and loaded", async () => {

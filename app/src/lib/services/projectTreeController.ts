@@ -171,12 +171,15 @@ export function createProjectTreeController(
       });
       const nextChildren = new Map(state.childrenByPath);
       nextChildren.set(directoryPath, children);
+      const nextLoading = new Set(state.loadingPaths);
+      nextLoading.delete(directoryPath);
       state = {
         ...state,
         childrenByPath: nextChildren,
+        loadingPaths: nextLoading,
       };
       publish();
-    } finally {
+    } catch (error) {
       const nextLoading = new Set(state.loadingPaths);
       nextLoading.delete(directoryPath);
       state = {
@@ -184,6 +187,7 @@ export function createProjectTreeController(
         loadingPaths: nextLoading,
       };
       publish();
+      throw error;
     }
   };
 
@@ -244,14 +248,20 @@ export function createProjectTreeController(
       publish();
       return;
     }
+    const shouldLoadChildren = !state.childrenByPath.has(path);
     state = {
       ...state,
       expandedPaths: new Set([...state.expandedPaths, path]),
     };
-    publish();
-    if (!state.childrenByPath.has(path)) {
-      await loadProjectTreeChildren(workspaceRoot, path);
+    if (!shouldLoadChildren) {
+      publish();
+      return;
     }
+    if (!workspaceRoot || !isPathInsideRoot(path, workspaceRoot)) {
+      publish();
+      return;
+    }
+    await loadProjectTreeChildren(workspaceRoot, path);
   };
 
   const refreshProjectTree = async (
@@ -303,7 +313,12 @@ export function createProjectTreeController(
         ...state,
         expandedPaths: nextExpanded,
       };
-      publish();
+    }
+    if (ancestorsToLoad.length === 0) {
+      if (ancestorsToExpand.length > 0) {
+        publish();
+      }
+      return;
     }
 
     for (const ancestorPath of ancestorsToLoad) {

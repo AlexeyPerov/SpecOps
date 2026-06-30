@@ -1,5 +1,4 @@
 <script lang="ts">
-  import DocumentEditor from "./DocumentEditor.svelte";
   import MarkdownEditorPane from "./MarkdownEditorPane.svelte";
   import DiffPreviewPane from "./DiffPreviewPane.svelte";
   import ImagePreviewPane from "./ImagePreviewPane.svelte";
@@ -449,45 +448,28 @@
               onConfirm={editor.onConfirmLargeFile}
             />
           {:else}
-            {#if editor.isMarkdownDocument}
-              <MarkdownEditorPane
-                content={editor.activeDocument?.content ?? ""}
-                documentId={editor.activeDocument?.id ?? null}
-                documentFilePath={editor.activeDocument?.filePath ?? null}
-                scrollTop={editor.activeDocument?.scrollTop ?? 0}
-                language={editor.activeDocument?.language ?? "markdown"}
-                wrapLines={editor.wrapLines}
-                zoomPercent={editor.zoomPercent}
-                decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
-                markdownHtml={editor.markdownHtml}
-                storedMarkdownViewMode={editor.activeDocument?.markdownViewMode ?? "edit"}
-                canFitSplit={editor.canFitMarkdownSplit}
-                windowId={editor.currentWindowId}
-                onStatusMessage={editor.notify}
-                onMarkdownViewModeChange={editor.onMarkdownViewModeChange}
-                onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
-                onScrollTopChange={editor.onScrollTopChange}
-                registerEditorCommandRunner={(runner) => {
-                  editorRunner = runner;
-                }}
-              />
-            {:else}
-              <DocumentEditor
-                content={editor.activeDocument?.content ?? ""}
-                documentId={editor.activeDocument?.id ?? null}
-                scrollTop={editor.activeDocument?.scrollTop ?? 0}
-                wrapLines={editor.wrapLines}
-                zoomPercent={editor.zoomPercent}
-                language={editor.activeDocument?.language ?? "plaintext"}
-                decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
-                onStatusMessage={editor.notify}
-                onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
-                onScrollTopChange={editor.onScrollTopChange}
-                registerEditorCommandRunner={(runner) => {
-                  editorRunner = runner;
-                }}
-              />
-            {/if}
+            <MarkdownEditorPane
+              markdownEnabled={editor.isMarkdownDocument}
+              content={editor.activeDocument?.content ?? ""}
+              documentId={editor.activeDocument?.id ?? null}
+              documentFilePath={editor.activeDocument?.filePath ?? null}
+              scrollTop={editor.activeDocument?.scrollTop ?? 0}
+              language={editor.activeDocument?.language ?? "plaintext"}
+              wrapLines={editor.wrapLines}
+              zoomPercent={editor.zoomPercent}
+              decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
+              markdownHtml={editor.markdownHtml}
+              storedMarkdownViewMode={editor.activeDocument?.markdownViewMode ?? "edit"}
+              canFitSplit={editor.canFitMarkdownSplit}
+              windowId={editor.currentWindowId}
+              onStatusMessage={editor.notify}
+              onMarkdownViewModeChange={editor.onMarkdownViewModeChange}
+              onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
+              onScrollTopChange={editor.onScrollTopChange}
+              registerEditorCommandRunner={(runner) => {
+                editorRunner = runner;
+              }}
+            />
           {/if}
 
           {#if editor.isTextEditorDocument && !editor.isSessionTabActive && !editor.isChatHttpActive && editor.findReplaceOpen}

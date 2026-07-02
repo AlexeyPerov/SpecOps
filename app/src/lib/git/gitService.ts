@@ -1,9 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  parseAheadBehindCount,
+  parseBranchShowCurrent,
+  parseShortHeadRef,
+  parseUpstreamRef,
+} from "./gitParse";
+import {
   createGitCommandError,
   createGitNotARepositoryError,
   mapGitInvokeError,
   normalizeGitOutputPath,
+  type AheadBehindCounts,
+  type CurrentBranchInfo,
   type GitAvailableResponse,
   type GitNotARepositoryError,
   type ResolveRepoRootResult,
@@ -83,7 +91,65 @@ export async function resolveRepoRoot(
   return { ok: true, repoRoot };
 }
 
-export type { GitAvailableResponse, GitError, RunGitResponse } from "./types";
+/**
+ * Query the current branch (or detached HEAD short SHA) and upstream tracking ref.
+ */
+export async function queryCurrentBranch(repoRoot: string): Promise<CurrentBranchInfo> {
+  const branchResponse = await runGit(repoRoot, ["branch", "--show-current"]);
+  if (branchResponse.exitCode !== 0) {
+    throw createGitCommandError(branchResponse);
+  }
+
+  const branchName = parseBranchShowCurrent(branchResponse.stdout);
+  if (branchName === null) {
+    const headResponse = await runGit(repoRoot, ["rev-parse", "--short", "HEAD"]);
+    if (headResponse.exitCode !== 0) {
+      throw createGitCommandError(headResponse);
+    }
+
+    return {
+      name: parseShortHeadRef(headResponse.stdout),
+      isDetached: true,
+      upstream: null,
+    };
+  }
+
+  const upstreamResponse = await runGit(repoRoot, ["rev-parse", "--abbrev-ref", "@{upstream}"]);
+  const upstream =
+    upstreamResponse.exitCode === 0 ? parseUpstreamRef(upstreamResponse.stdout) : null;
+
+  return {
+    name: branchName,
+    isDetached: false,
+    upstream,
+  };
+}
+
+/**
+ * Query ahead/behind counts against the current branch upstream.
+ * Returns `null` when no upstream is configured.
+ */
+export async function queryAheadBehind(repoRoot: string): Promise<AheadBehindCounts | null> {
+  const response = await runGit(repoRoot, [
+    "rev-list",
+    "--left-right",
+    "--count",
+    "@{u}...HEAD",
+  ]);
+  if (response.exitCode !== 0) {
+    return null;
+  }
+
+  return parseAheadBehindCount(response.stdout);
+}
+
+export type {
+  AheadBehindCounts,
+  CurrentBranchInfo,
+  GitAvailableResponse,
+  GitError,
+  RunGitResponse,
+} from "./types";
 export {
   createGitCommandError,
   createGitInvalidPathError,

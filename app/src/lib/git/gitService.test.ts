@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { checkGitAvailable, resolveRepoRoot, runGit } from "./gitService";
+import { checkGitAvailable, queryAheadBehind, queryCurrentBranch, resolveRepoRoot, runGit } from "./gitService";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
 import { isGitError } from "./types";
 
@@ -148,5 +148,131 @@ describe("resolveRepoRoot", () => {
       expect(result.error.kind).toBe("notARepository");
       expect(result.error.workspaceRootPath).toBe(workspaceRootPath);
     }
+  });
+});
+
+describe("queryCurrentBranch", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("returns attached branch name and upstream when configured", async () => {
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "main\n",
+        stderr: "",
+        durationMs: 2,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "origin/main\n",
+        stderr: "",
+        durationMs: 1,
+      });
+
+    const result = await queryCurrentBranch("/tmp/repo");
+
+    expect(result).toEqual({
+      name: "main",
+      isDetached: false,
+      upstream: "origin/main",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["branch", "--show-current"],
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["rev-parse", "--abbrev-ref", "@{upstream}"],
+    });
+  });
+
+  it("returns detached HEAD short SHA with no upstream", async () => {
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "\n",
+        stderr: "",
+        durationMs: 2,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "a607443\n",
+        stderr: "",
+        durationMs: 1,
+      });
+
+    const result = await queryCurrentBranch("/tmp/repo");
+
+    expect(result).toEqual({
+      name: "a607443",
+      isDetached: true,
+      upstream: null,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["rev-parse", "--short", "HEAD"],
+    });
+  });
+
+  it("returns null upstream when rev-parse upstream fails", async () => {
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "main\n",
+        stderr: "",
+        durationMs: 2,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 128,
+        stdout: "",
+        stderr: "fatal: no upstream configured for branch 'main'\n",
+        durationMs: 1,
+      });
+
+    const result = await queryCurrentBranch("/tmp/repo");
+
+    expect(result).toEqual({
+      name: "main",
+      isDetached: false,
+      upstream: null,
+    });
+  });
+});
+
+describe("queryAheadBehind", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("returns ahead/behind counts when upstream exists", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "2\t3\n",
+      stderr: "",
+      durationMs: 3,
+    });
+
+    const result = await queryAheadBehind("/tmp/repo");
+
+    expect(result).toEqual({ behind: 2, ahead: 3 });
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["rev-list", "--left-right", "--count", "@{u}...HEAD"],
+    });
+  });
+
+  it("returns null when upstream is not configured", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: no upstream configured for branch 'main'\n",
+      durationMs: 2,
+    });
+
+    const result = await queryAheadBehind("/tmp/repo");
+
+    expect(result).toBeNull();
   });
 });

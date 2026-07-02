@@ -22,6 +22,8 @@ export interface ParsedBranchLine {
   subject: string;
 }
 
+import type { AheadBehindCounts } from "./types";
+
 /** Parsed working-tree row from `git status --porcelain` output (phase 3). */
 export interface ParsedStatusLine {
   indexStatus: string;
@@ -78,6 +80,49 @@ export function parseLogCommitLine(line: string): ParsedCommitLine | null {
     committerEmail: committer.email,
     committerTime: Number.parseInt(committerTimeRaw, 10),
     subject,
+  };
+}
+
+/**
+ * Parse `git branch --show-current` stdout.
+ * Returns `null` when stdout is empty (detached HEAD).
+ */
+export function parseBranchShowCurrent(stdout: string): string | null {
+  const trimmed = stdout.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Parse `git rev-parse --short HEAD` stdout for detached HEAD display. */
+export function parseShortHeadRef(stdout: string): string {
+  return stdout.trim();
+}
+
+/**
+ * Parse `git rev-parse --abbrev-ref @{upstream}` stdout.
+ * Returns `null` when upstream is missing or unresolved.
+ */
+export function parseUpstreamRef(stdout: string): string | null {
+  const trimmed = stdout.trim();
+  if (!trimmed || trimmed === "HEAD") {
+    return null;
+  }
+  return trimmed;
+}
+
+/**
+ * Parse `git rev-list --left-right --count @{u}...HEAD` stdout.
+ * Git prints `behind\tahead` (left = upstream-only, right = HEAD-only).
+ */
+export function parseAheadBehindCount(stdout: string): AheadBehindCounts | null {
+  const trimmed = stdout.trim();
+  const match = /^(\d+)\s+(\d+)$/.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    behind: Number.parseInt(match[1], 10),
+    ahead: Number.parseInt(match[2], 10),
   };
 }
 

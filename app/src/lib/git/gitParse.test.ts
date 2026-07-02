@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseLogCommitLine } from "./gitParse";
+import {
+  parseAheadBehindCount,
+  parseBranchShowCurrent,
+  parseLogCommitLine,
+  parseShortHeadRef,
+  parseUpstreamRef,
+} from "./gitParse";
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -34,6 +40,50 @@ describe("parseLogCommitLine", () => {
 
   it("returns null when the line does not have eight NUL-separated fields", () => {
     expect(parseLogCommitLine("incomplete")).toBeNull();
+  });
+});
+
+describe("parseBranchShowCurrent", () => {
+  it("returns the branch name when stdout is non-empty", () => {
+    expect(parseBranchShowCurrent("main\n")).toBe("main");
+    expect(parseBranchShowCurrent("feature/login")).toBe("feature/login");
+  });
+
+  it("returns null for empty stdout (detached HEAD)", () => {
+    expect(parseBranchShowCurrent("")).toBeNull();
+    expect(parseBranchShowCurrent("\n")).toBeNull();
+    expect(parseBranchShowCurrent("   \n")).toBeNull();
+  });
+});
+
+describe("parseShortHeadRef", () => {
+  it("trims short SHA output", () => {
+    expect(parseShortHeadRef("a6074434\n")).toBe("a6074434");
+  });
+});
+
+describe("parseUpstreamRef", () => {
+  it("returns upstream ref when present", () => {
+    expect(parseUpstreamRef("origin/main\n")).toBe("origin/main");
+    expect(parseUpstreamRef("master")).toBe("master");
+  });
+
+  it("returns null when upstream is missing or unresolved", () => {
+    expect(parseUpstreamRef("")).toBeNull();
+    expect(parseUpstreamRef("HEAD")).toBeNull();
+    expect(parseUpstreamRef("\n")).toBeNull();
+  });
+});
+
+describe("parseAheadBehindCount", () => {
+  it("parses tab-separated behind and ahead counts", () => {
+    expect(parseAheadBehindCount("2\t3\n")).toEqual({ behind: 2, ahead: 3 });
+    expect(parseAheadBehindCount("0\t0")).toEqual({ behind: 0, ahead: 0 });
+  });
+
+  it("returns null for malformed stdout", () => {
+    expect(parseAheadBehindCount("")).toBeNull();
+    expect(parseAheadBehindCount("ahead 2")).toBeNull();
   });
 });
 

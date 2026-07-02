@@ -75,6 +75,23 @@ describe("appState tabs and selection", () => {
     expect(themesTabs).toHaveLength(1);
   });
 
+  it("openOrFocusViewTab opens a singleton version-control tab and focuses an existing one", () => {
+    appState.openOrFocusViewTab("version-control");
+    const versionControlTabs = () =>
+      getSessionTabs(appState.getActiveSession()).filter(
+        (tab): tab is import("../../domain/contracts").ViewTabState =>
+          isViewTab(tab) && tab.view === "version-control",
+      );
+    expect(versionControlTabs()).toHaveLength(1);
+    const firstVersionControlTab = versionControlTabs()[0];
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe(firstVersionControlTab.id);
+
+    appState.selectTab("tab-1");
+    appState.openOrFocusViewTab("version-control");
+    expect(versionControlTabs()).toHaveLength(1);
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe(firstVersionControlTab.id);
+  });
+
   it("closeTabsForSession removes all tabs for that agent", () => {
     appState.openOrFocusSessionTab("agent-a");
     appState.openOrFocusSessionTab("agent-b");

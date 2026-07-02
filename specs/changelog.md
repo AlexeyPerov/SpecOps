@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-02 — Git phase 1 Task 1.1: widen view-tab domain for version-control
+
+- **`app/src/lib/domain/document.ts`** — add `"version-control"` to `ViewTabState.view`, `createViewTab`, and `normalizeTabState`.
+- **`app/src/lib/state/appState/documentTabsSlice.ts`** — `openOrFocusViewTab("version-control")` opens or focuses a singleton tab per session.
+- **`app/src/lib/components/editorRouting.ts`** — extend `EditorViewKind` comment for Version Control.
+- **`app/src/lib/state/appState/documentTabsSlice.test.ts`** — singleton open/focus test for version-control view tab.
+- **`specs/git/phase-1-execution-plan.md`** — Task 1.1 marked `[DONE]`.
+
 ## 2026-07-02 14:02 — Git phase 0 Tasks 0.5–0.6: gitService wrappers and parser fixtures
 
 - **`app/src/lib/git/gitService.ts`** — `runGit(repoRoot, args, env?)` and `checkGitAvailable()` thin wrappers around Tauri `invoke`; `resolveRepoRoot` refactored to use `runGit`. Tauri validation failures map to typed `GitError` via `mapGitInvokeError`.

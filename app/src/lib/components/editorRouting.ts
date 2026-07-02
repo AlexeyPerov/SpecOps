@@ -11,7 +11,7 @@ import {
 } from "../domain/contracts";
 
 /** The set of view-tab kinds the editor pane can render (Settings, Themes,
- *  Workspace Settings, Workspace Manager). */
+ *  Workspace Settings, Workspace Manager, Version Control). */
 export type EditorViewKind = ViewTabState["view"];
 
 /**

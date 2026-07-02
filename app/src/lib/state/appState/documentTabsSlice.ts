@@ -103,14 +103,14 @@ export function createDocumentTabsLifecycleSlice(deps: {
     },
     /**
      * Open (or focus) a singleton view tab — Settings, Themes, Workspace
-     * Settings, or Workspace Manager — in the active session's tab strip,
+     * Settings, Workspace Manager, or Version Control — in the active session's tab strip,
      * treating it like any other tab. When a view tab of the same `view`
      * already exists it is selected instead of duplicated. An optional `subTab`
      * carries a deep-link target (e.g. a settings section id) that is attached
      * to a freshly created tab.
      */
     openOrFocusViewTab(
-      view: "settings" | "themes" | "workspace-settings" | "workspace-manager",
+      view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control",
       subTab?: string,
     ) {
       update((state) => {

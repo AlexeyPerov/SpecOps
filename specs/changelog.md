@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-02 — Git specs: reference links + AGENTS rule
+
+- **`specs/git/**`** — all reference-project links now include a GitHub fallback ([sourcegit-scm/sourcegit](https://github.com/sourcegit-scm/sourcegit)) alongside local checkout paths so cloud agents can read reference code. Task-level “Required context” entries link to matching paths on GitHub where applicable.
+- **`AGENTS.md`** — new **Reference projects** rule: do not use reference-project names or internal ids in commits, changelog, code comments, or user-visible strings; specs may still link to reference repos for design examples.
+
 ## 2026-07-02 — Version Control (git) specs
 
 - **New spec pack:** `specs/git/` — approved design and phased implementation plans for workspace **Version Control** (system git via Tauri, singleton view tab from workspace context menu). Locked decisions: independent of OpenCode; auto repo-root discovery; flat current-branch history; Changes panel with stage/commit; fetch/pull/push on default upstream; macOS + Windows first.

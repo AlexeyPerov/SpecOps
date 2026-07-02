@@ -341,6 +341,14 @@ export async function checkoutBranch(repoRoot: string, branchName: string): Prom
   }
 }
 
+/** Fetch from default remotes (`git fetch`). */
+export async function fetchRemote(repoRoot: string): Promise<void> {
+  const response = await runGit(repoRoot, ["fetch"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
 /** Create a new branch from HEAD and check it out (`git checkout -b <name>`). */
 export async function createBranch(repoRoot: string, name: string): Promise<void> {
   const validation = validateGitRefName(name);

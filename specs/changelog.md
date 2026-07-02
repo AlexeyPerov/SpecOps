@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-02 — Git phase 3 Task 3.7: fetch from remote
+
+- **`app/src/lib/git/gitService.ts`** — `fetchRemote(repoRoot)` runs `git fetch`; throws `GitCommandError` on failure.
+- **`app/src/lib/components/VersionControlView.svelte`** — **Fetch** toolbar button with busy state ("Fetching…"); on success refreshes ahead/behind header and active panel via `panelRefreshToken`; network/git failures show stderr in an error dialog.
+- **`app/src/lib/git/gitService.test.ts`** — unit tests for `fetchRemote` success and failure paths.
+- **`specs/git/phase-3-execution-plan.md`** — Task 3.7 marked `[DONE]`.
+
 ## 2026-07-02 — Agent rule: work on master by default
 
 - **`AGENTS.md`** — Added **Branching** rule: agents must not create separate feature branches or PRs; commit and push directly to `master` unless the user explicitly requests a branch/PR workflow.

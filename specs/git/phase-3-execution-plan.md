@@ -150,7 +150,7 @@ Dependencies: Task 3.5.
 
 ---
 
-#### Task 3.7: Fetch (G3-7) [Score:5] [Agent:easy] [~0.5d]
+#### Task 3.7: Fetch (G3-7) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 

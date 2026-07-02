@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { confirm } from "@tauri-apps/plugin-dialog";
+  import { confirm, message } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import GitCommitDetailPanel from "./GitCommitDetailPanel.svelte";
   import GitBranchesPanel from "./GitBranchesPanel.svelte";
@@ -7,14 +7,14 @@
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
   import GitTagsPanel from "./GitTagsPanel.svelte";
   import { gitInstallHint } from "../git/gitInstallHints";
-  import { queryAheadBehind, queryCurrentBranch } from "../git/gitService";
+  import { fetchRemote, queryAheadBehind, queryCurrentBranch } from "../git/gitService";
   import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo } from "../git/types";
+  import { isGitError, normalizeGitOutputPath } from "../git/types";
   import {
     initRepositoryAtWorkspaceRoot,
     probeVersionControlContext,
     workspaceUsesParentRepository,
   } from "../git/versionControlProbe";
-  import { normalizeGitOutputPath } from "../git/types";
 
   /**
    * Per-workspace version control view, rendered as a chrome-less editor-pane
@@ -55,6 +55,7 @@
   let branchHeaderError = $state<string | null>(null);
   let selectedCommitSha = $state<string | null>(null);
   let refreshBusy = $state(false);
+  let fetchBusy = $state(false);
   let panelRefreshToken = $state(0);
   let lastRefreshAt = 0;
 
@@ -312,6 +313,41 @@
     return normalizeGitOutputPath(path);
   }
 
+  function formatGitActionError(error: unknown): string {
+    if (isGitError(error) && error.kind === "command") {
+      return error.stderr.trim() || error.message;
+    }
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  async function refreshAfterFetch(): Promise<void> {
+    if (!repoRoot) {
+      return;
+    }
+    panelRefreshToken += 1;
+    await refreshBranchHeader(repoRoot);
+  }
+
+  async function handleFetch(): Promise<void> {
+    if (!repoRoot || fetchBusy || refreshBusy) {
+      return;
+    }
+
+    fetchBusy = true;
+
+    try {
+      await fetchRemote(repoRoot);
+      await refreshAfterFetch();
+    } catch (error) {
+      await message(formatGitActionError(error), {
+        title: "Fetch failed",
+        kind: "error",
+      });
+    } finally {
+      fetchBusy = false;
+    }
+  }
+
   async function handleRefresh(): Promise<void> {
     if (!workspaceRootPath || refreshBusy) {
       return;
@@ -430,8 +466,14 @@
         >
           {refreshBusy ? "Refreshing…" : "Refresh"}
         </button>
-        <button type="button" class="version-control-action" disabled title="Fetch (phase 3)">
-          Fetch
+        <button
+          type="button"
+          class="version-control-action"
+          disabled={fetchBusy || refreshBusy}
+          title="Fetch from remote"
+          onclick={handleFetch}
+        >
+          {fetchBusy ? "Fetching…" : "Fetch"}
         </button>
         <button type="button" class="version-control-action" disabled title="Pull (phase 3)">
           Pull

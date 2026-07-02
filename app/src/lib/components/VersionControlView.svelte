@@ -1,6 +1,7 @@
 <script lang="ts">
   import { confirm } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import GitCommitDetailPanel from "./GitCommitDetailPanel.svelte";
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
   import { gitInstallHint } from "../git/gitInstallHints";
   import { queryAheadBehind, queryCurrentBranch } from "../git/gitService";
@@ -411,11 +412,18 @@
         aria-label={SECTIONS.find((section) => section.id === activeSection)?.label ?? "Section"}
       >
         {#if activeSection === "history" && repoRoot}
-          <GitHistoryPanel
-            repoRoot={repoRoot}
-            selectedSha={selectedCommitSha}
-            onSelectCommit={handleSelectCommit}
-          />
+          <div class="version-control-history-layout">
+            <div class="version-control-history-list">
+              <GitHistoryPanel
+                repoRoot={repoRoot}
+                selectedSha={selectedCommitSha}
+                onSelectCommit={handleSelectCommit}
+              />
+            </div>
+            <div class="version-control-history-detail">
+              <GitCommitDetailPanel repoRoot={repoRoot} sha={selectedCommitSha} />
+            </div>
+          </div>
         {:else}
           <p class="version-control-placeholder">{placeholderCopy}</p>
         {/if}
@@ -672,6 +680,45 @@
   .version-control-body-flush {
     overflow: hidden;
     padding: 0;
+  }
+
+  .version-control-history-layout {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .version-control-history-list,
+  .version-control-history-detail {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .version-control-history-list {
+    flex: 1 1 45%;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .version-control-history-detail {
+    flex: 1 1 55%;
+  }
+
+  @media (min-width: 56rem) {
+    .version-control-history-layout {
+      flex-direction: row;
+    }
+
+    .version-control-history-list {
+      flex: 0 0 min(42%, 28rem);
+      border-bottom: none;
+      border-right: 1px solid var(--color-border-subtle);
+    }
+
+    .version-control-history-detail {
+      flex: 1 1 auto;
+    }
   }
 
   .version-control-placeholder {

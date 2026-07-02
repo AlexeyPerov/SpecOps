@@ -6,6 +6,7 @@ Sample `stdout` captured from real `git` invocations for parser tests. Regenerat
 |---|---|
 | `git-log-format.txt` | `git log --no-show-signature --decorate=full --format=%H%x00%P%x00%D%x00%aN±%aE%x00%at%x00%cN±%cE%x00%ct%x00%s` |
 | `git-branch-vv.txt` | `git branch -vv` |
+| `git-show-name-status.txt` | `git show --name-status --format=%H%x00%P%x00%aN%x00%aE%x00%at%x00%cN%x00%cE%x00%ct%x00%B` |
 | `git-tag-list.txt` | `git tag -l` |
 | `git-status-porcelain.txt` | `git status --porcelain` |
 

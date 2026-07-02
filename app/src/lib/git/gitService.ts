@@ -2,7 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   parseAheadBehindCount,
   parseBranchShowCurrent,
+  parseBranchVvLines,
+  parseCommitShow,
   GIT_LOG_FORMAT,
+  GIT_SHOW_FORMAT,
   parseLogCommits,
   parseShortHeadRef,
   parseUpstreamRef,
@@ -14,6 +17,8 @@ import {
   mapGitInvokeError,
   normalizeGitOutputPath,
   type AheadBehindCounts,
+  type BranchSummary,
+  type CommitDetail,
   type CommitSummary,
   type CurrentBranchInfo,
   type GitAvailableResponse,
@@ -171,10 +176,53 @@ export async function queryCommits(
   return parseLogCommits(response.stdout);
 }
 
+/**
+ * Query full commit metadata and changed files for one revision.
+ * Uses `git show --name-status --format=…` (no diff hunks).
+ */
+export async function queryCommitDetail(repoRoot: string, sha: string): Promise<CommitDetail> {
+  const response = await runGit(repoRoot, [
+    "show",
+    "--name-status",
+    `--format=${GIT_SHOW_FORMAT}`,
+    sha,
+  ]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  const detail = parseCommitShow(response.stdout);
+  if (!detail) {
+    throw createGitCommandError({
+      ...response,
+      exitCode: response.exitCode || 1,
+      stderr: response.stderr || "Failed to parse commit detail output",
+    });
+  }
+
+  return detail;
+}
+
+/**
+ * Query local branches with current marker, upstream, and last-commit hint.
+ */
+export async function queryBranches(repoRoot: string): Promise<BranchSummary[]> {
+  const response = await runGit(repoRoot, ["branch", "-vv"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return parseBranchVvLines(response.stdout);
+}
+
 export type {
   AheadBehindCounts,
+  BranchSummary,
   CommitDecorator,
   CommitDecoratorType,
+  CommitDetail,
+  CommitFileChange,
+  CommitFileStatus,
   CommitSummary,
   CurrentBranchInfo,
   GitAvailableResponse,
@@ -183,7 +231,7 @@ export type {
   RunGitResponse,
 } from "./types";
 export { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
-export { GIT_LOG_FORMAT } from "./gitParse";
+export { GIT_LOG_FORMAT, GIT_SHOW_FORMAT } from "./gitParse";
 export {
   createGitCommandError,
   createGitInvalidPathError,

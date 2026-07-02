@@ -1,4 +1,12 @@
-import type { CommitDecorator, CommitDecoratorType, CommitSummary } from "./types";
+import type {
+  BranchSummary,
+  CommitDecorator,
+  CommitDecoratorType,
+  CommitDetail,
+  CommitFileChange,
+  CommitFileStatus,
+  CommitSummary,
+} from "./types";
 
 /** Parsed commit row from structured `git log --format=…` output (phase 2). */
 export interface ParsedCommitLine {
@@ -213,9 +221,168 @@ export function parseAheadBehindCount(stdout: string): AheadBehindCounts | null 
   };
 }
 
-/** Placeholder for phase 2 branch list parsing (`git branch -vv`). */
-export function parseBranchVvLines(_stdout: string): ParsedBranchLine[] {
-  return [];
+/** Structured NUL-separated `git show --format=…` prefix (phase 2 commit detail). */
+export const GIT_SHOW_FORMAT =
+  "%H%x00%P%x00%aN%x00%aE%x00%at%x00%cN%x00%cE%x00%ct%x00%B";
+
+const COMMIT_SHOW_METADATA_FIELD_COUNT = 8;
+const NAME_STATUS_LINE = /^[ADMRCTU]\d*\t/;
+
+function isNameStatusLine(line: string): boolean {
+  return NAME_STATUS_LINE.test(line);
+}
+
+function parseUpstreamBracket(content: string): { upstream: string | null; track: string | null } {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return { upstream: null, track: null };
+  }
+
+  const colon = trimmed.indexOf(":");
+  if (colon === -1) {
+    return { upstream: trimmed, track: null };
+  }
+
+  return {
+    upstream: trimmed.slice(0, colon).trim() || null,
+    track: trimmed.slice(colon + 1).trim() || null,
+  };
+}
+
+function parseNameStatusLine(line: string): CommitFileChange | null {
+  const renameOrCopy = /^([RC])(\d+)\t([^\t]+)\t(.+)$/.exec(line);
+  if (renameOrCopy) {
+    return {
+      status: renameOrCopy[1] as CommitFileStatus,
+      previousPath: renameOrCopy[3],
+      path: renameOrCopy[4],
+    };
+  }
+
+  const simple = /^([ADMTUX])\t(.+)$/.exec(line);
+  if (simple) {
+    return {
+      status: simple[1] as CommitFileStatus,
+      path: simple[2],
+    };
+  }
+
+  return null;
+}
+
+function splitCommitShowSections(stdout: string): { metadataRaw: string; fileLines: string[] } {
+  const lines = stdout.split("\n");
+  let end = lines.length;
+  while (end > 0 && lines[end - 1] === "") {
+    end -= 1;
+  }
+
+  let fileStart = end;
+  while (fileStart > 0 && isNameStatusLine(lines[fileStart - 1] ?? "")) {
+    fileStart -= 1;
+  }
+
+  return {
+    metadataRaw: lines.slice(0, fileStart).join("\n"),
+    fileLines: lines.slice(fileStart, end),
+  };
+}
+
+function parseCommitShowMetadata(raw: string): Omit<CommitDetail, "files"> | null {
+  let pos = 0;
+  const fields: string[] = [];
+
+  for (let index = 0; index < COMMIT_SHOW_METADATA_FIELD_COUNT; index += 1) {
+    const next = raw.indexOf("\0", pos);
+    if (next === -1) {
+      return null;
+    }
+    fields.push(raw.slice(pos, next));
+    pos = next + 1;
+  }
+
+  const message = raw.slice(pos).replace(/\n$/, "");
+  const [
+    sha,
+    parentsRaw,
+    authorName,
+    authorEmail,
+    authorTimeRaw,
+    committerName,
+    committerEmail,
+    committerTimeRaw,
+  ] = fields;
+
+  return {
+    sha,
+    parents: parentsRaw ? parentsRaw.split(" ").filter(Boolean) : [],
+    authorName,
+    authorEmail,
+    authorTime: Number.parseInt(authorTimeRaw, 10),
+    committerName,
+    committerEmail,
+    committerTime: Number.parseInt(committerTimeRaw, 10),
+    message,
+  };
+}
+
+/** Parse one `git branch -vv` line into a branch row. */
+export function parseBranchVvLine(line: string): ParsedBranchLine | null {
+  const trimmed = line.trimEnd();
+  if (!trimmed) {
+    return null;
+  }
+
+  const match =
+    /^(\*|\s)\s(\S+)\s+([0-9a-fA-F]+)(?:\s+\[([^\]]*)\])?(?:\s+(.*))?$/.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  const upstreamInfo = match[4] ? parseUpstreamBracket(match[4]) : { upstream: null, track: null };
+
+  return {
+    isCurrent: match[1] === "*",
+    name: match[2],
+    head: match[3],
+    upstream: upstreamInfo.upstream,
+    upstreamTrack: upstreamInfo.track,
+    subject: match[5]?.trim() ?? "",
+  };
+}
+
+/** Parse `git branch -vv` stdout into local branch rows. */
+export function parseBranchVvLines(stdout: string): BranchSummary[] {
+  const branches: BranchSummary[] = [];
+  for (const line of stdout.split("\n")) {
+    const parsed = parseBranchVvLine(line);
+    if (parsed) {
+      branches.push(parsed);
+    }
+  }
+  return branches;
+}
+
+/** Parse `git show --name-status --format=…` stdout into commit detail. */
+export function parseCommitShow(stdout: string): CommitDetail | null {
+  const { metadataRaw, fileLines } = splitCommitShowSections(stdout);
+  const metadata = parseCommitShowMetadata(metadataRaw);
+  if (!metadata) {
+    return null;
+  }
+
+  const files: CommitFileChange[] = [];
+  for (const line of fileLines) {
+    const parsed = parseNameStatusLine(line);
+    if (parsed) {
+      files.push(parsed);
+    }
+  }
+
+  return {
+    ...metadata,
+    files,
+  };
 }
 
 /** Placeholder for phase 2 tag list parsing (`git tag -l`). */

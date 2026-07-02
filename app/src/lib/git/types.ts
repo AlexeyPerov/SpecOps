@@ -167,3 +167,37 @@ export interface CommitSummary {
 export interface QueryCommitsOptions {
   limit?: number;
 }
+
+/** Status letter from `git show --name-status` file rows. */
+export type CommitFileStatus = "A" | "M" | "D" | "R" | "C" | "T" | "U" | "X";
+
+/** One changed path from commit detail name-status output. */
+export interface CommitFileChange {
+  status: CommitFileStatus;
+  path: string;
+  previousPath?: string;
+}
+
+/** Full commit metadata + changed files (phase 2 detail pane). */
+export interface CommitDetail {
+  sha: string;
+  parents: string[];
+  authorName: string;
+  authorEmail: string;
+  authorTime: number;
+  committerName: string;
+  committerEmail: string;
+  committerTime: number;
+  message: string;
+  files: CommitFileChange[];
+}
+
+/** Local branch row from `git branch -vv` (phase 2). */
+export interface BranchSummary {
+  name: string;
+  head: string;
+  isCurrent: boolean;
+  upstream: string | null;
+  upstreamTrack: string | null;
+  subject: string;
+}

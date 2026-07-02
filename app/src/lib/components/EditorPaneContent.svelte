@@ -7,6 +7,7 @@
   import SettingsView from "./settings/SettingsView.svelte";
   import WorkspaceSettingsView from "./settings/WorkspaceSettingsView.svelte";
   import WorkspaceManagerView from "./WorkspaceManagerView.svelte";
+  import VersionControlView from "./VersionControlView.svelte";
   import ThemesView from "./ThemesView.svelte";
   import ChatPanel from "./ChatPanel.svelte";
   import FindReplacePanel from "./FindReplacePanel.svelte";
@@ -154,6 +155,7 @@
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
   const isWorkspaceSettingsViewActive = $derived(activeViewTabKind === "workspace-settings");
   const isWorkspaceManagerViewActive = $derived(activeViewTabKind === "workspace-manager");
+  const isVersionControlViewActive = $derived(activeViewTabKind === "version-control");
 
   const paneDocument = $derived.by(() => {
     const docId = selectedTab ? tabDocumentId(selectedTab) : null;
@@ -210,6 +212,8 @@
       onSelectWorkspace={onWorkspaceManagerSelectWorkspace}
       onOpenWorkspaceSettings={onWorkspaceManagerOpenSettings}
     />
+  {:else if isVersionControlViewActive}
+    <VersionControlView workspaceRootPath={workspaceRootPath} />
   {:else if isChatHttpActive || isSessionTabActive}
     <ChatPanel
       chatContextKind={isChatHttpActive ? "chat-http" : "workspace"}

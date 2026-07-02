@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-02 — Git phase 1 Tasks 1.2–1.4: VC context menu, shell view, editor routing
+
+- **`app/src/lib/services/workspaceContextMenuController.ts`** — `openVersionControl(workspaceId)` switches context and opens/focuses the singleton `"version-control"` view tab; menu closes after action.
+- **`app/src/lib/services/workspaceContextMenuController.test.ts`** — unit test for `openVersionControl`.
+- **`app/src/lib/components/AppShell.svelte`** — workspace context menu item **Version Control** (after Settings).
+- **`app/src/routes/+page.svelte`** — wire `onOpenVersionControl` through AppShell props.
+- **`app/src/lib/components/VersionControlView.svelte`** — shell with sidebar sections (History, Branches, Tags, Changes), placeholder bodies, and disabled Fetch/Pull/Push header stub; accepts `workspaceRootPath`.
+- **`app/src/lib/components/EditorPaneContent.svelte`** — render `VersionControlView` when `activeViewTabKind === "version-control"`.
+- **`app/src/lib/components/TabBar.svelte`** — tab strip title/tooltip **Version Control**.
+- **`specs/git/phase-1-execution-plan.md`** — Tasks 1.2, 1.3, 1.4 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 1 Task 1.1: widen view-tab domain for version-control
 
 - **`app/src/lib/domain/document.ts`** — add `"version-control"` to `ViewTabState.view`, `createViewTab`, and `normalizeTabState`.

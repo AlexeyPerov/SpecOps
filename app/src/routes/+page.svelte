@@ -636,6 +636,7 @@
     move: moveWorkspaceFromContextMenu,
     closeWorkspace: closeWorkspaceFromContextMenu,
     openSettings: openSettingsFromContextMenu,
+    openVersionControl: openVersionControlFromContextMenu,
     handleActiveContextSwitch,
     handleSelectContext,
   } = createWorkspaceContextMenuActions({
@@ -1390,6 +1391,7 @@
     onMoveUp: () => moveWorkspaceFromContextMenu("up"),
     onMoveDown: () => moveWorkspaceFromContextMenu("down"),
     onOpenSettings: openSettingsFromContextMenu,
+    onOpenVersionControl: openVersionControlFromContextMenu,
     onCloseWorkspace: closeWorkspaceFromContextMenu,
   }}
   overlays={{

@@ -232,6 +232,7 @@
     onMoveUp: () => void;
     onMoveDown: () => void;
     onOpenSettings: (workspaceId: ContextId) => void;
+    onOpenVersionControl: (workspaceId: ContextId) => void;
     onCloseWorkspace: (workspaceId: ContextId) => void;
   }
 
@@ -697,6 +698,20 @@
       }}
     >
       Settings
+    </button>
+    <button
+      class="workspace-context-item"
+      type="button"
+      role="menuitem"
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!workspaceContextMenu.menu) {
+          return;
+        }
+        workspaceContextMenu.onOpenVersionControl(workspaceContextMenu.menu.workspaceId);
+      }}
+    >
+      Version Control
     </button>
     <button
       class="workspace-context-item"

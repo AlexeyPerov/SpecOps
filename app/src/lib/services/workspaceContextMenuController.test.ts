@@ -1,9 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   computeWorkspaceReorderTarget,
+  createWorkspaceContextMenuActions,
   findWorkspaceIndex,
   resolveCloseWorkspaceAction,
+  type WorkspaceContextMenuState,
 } from "./workspaceContextMenuController";
+
+vi.mock("../state/appState", () => ({
+  appState: {
+    switchContext: vi.fn(() => true),
+    openOrFocusViewTab: vi.fn(),
+    reorderWorkspaces: vi.fn(),
+    closeWorkspace: vi.fn(() => true),
+  },
+}));
+
+vi.mock("./workspaceLifecycle", () => ({
+  markWorkspaceLifecycleActive: vi.fn(),
+}));
+
+import { appState } from "../state/appState";
+import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 
 describe("resolveCloseWorkspaceAction", () => {
   it("returns discard-all when there are no dirty documents", () => {
@@ -79,5 +97,44 @@ describe("computeWorkspaceReorderTarget", () => {
 
   it("returns null when the current index is invalid", () => {
     expect(computeWorkspaceReorderTarget(-1, "down", workspaceCount)).toBeNull();
+  });
+});
+
+describe("createWorkspaceContextMenuActions", () => {
+  function createActions() {
+    let menu: WorkspaceContextMenuState | null = {
+      workspaceId: "ws-1",
+      x: 10,
+      y: 20,
+    };
+    const actions = createWorkspaceContextMenuActions({
+      getMenu: () => menu,
+      setMenu: (nextMenu) => {
+        menu = nextMenu;
+      },
+      getMenuEl: () => null,
+      getWorkspaceIds: () => ["ws-1"],
+      getPreviousActiveContextId: () => null,
+      setPreviousActiveContextId: () => {},
+      setConsoleOpen: () => {},
+      setMarkdownViewMode: () => {},
+      loadProjectTreeRoot: async () => {},
+      notify: () => {},
+      confirmSaveAll: () => true,
+      confirmDiscardAll: () => true,
+    });
+    return { actions, getMenu: () => menu };
+  }
+
+  it("openVersionControl switches context, opens the tab, and closes the menu", () => {
+    vi.mocked(appState.switchContext).mockReturnValue(true);
+    const { actions, getMenu } = createActions();
+
+    actions.openVersionControl("ws-1");
+
+    expect(appState.switchContext).toHaveBeenCalledWith("ws-1");
+    expect(markWorkspaceLifecycleActive).toHaveBeenCalled();
+    expect(appState.openOrFocusViewTab).toHaveBeenCalledWith("version-control");
+    expect(getMenu()).toBeNull();
   });
 });

@@ -7,9 +7,21 @@
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
   import GitTagsPanel from "./GitTagsPanel.svelte";
   import { gitInstallHint } from "../git/gitInstallHints";
-  import { fetchRemote, queryAheadBehind, queryCurrentBranch } from "../git/gitService";
+  import {
+    fetchRemote,
+    GitNoUpstreamError,
+    isWorkingTreeDirty,
+    pullRemote,
+    pushRemote,
+    queryAheadBehind,
+    queryCurrentBranch,
+  } from "../git/gitService";
   import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo } from "../git/types";
   import { isGitError, normalizeGitOutputPath } from "../git/types";
+  import {
+    mutationChangesHead,
+    type VersionControlMutationScope,
+  } from "../git/versionControlRefresh";
   import {
     initRepositoryAtWorkspaceRoot,
     probeVersionControlContext,
@@ -56,6 +68,8 @@
   let selectedCommitSha = $state<string | null>(null);
   let refreshBusy = $state(false);
   let fetchBusy = $state(false);
+  let pullBusy = $state(false);
+  let pushBusy = $state(false);
   let panelRefreshToken = $state(0);
   let lastRefreshAt = 0;
 
@@ -301,35 +315,35 @@
     }
   }
 
-  async function refreshAfterMutation(): Promise<void> {
+  async function refreshAfterMutation(
+    scope: VersionControlMutationScope = "stage",
+  ): Promise<void> {
     if (!repoRoot) {
       return;
     }
+    if (mutationChangesHead(scope)) {
+      selectedCommitSha = null;
+    }
     panelRefreshToken += 1;
-    selectedCommitSha = null;
     await refreshBranchHeader(repoRoot);
   }
+
   function formatRepoRoot(path: string): string {
     return normalizeGitOutputPath(path);
   }
 
   function formatGitActionError(error: unknown): string {
+    if (error instanceof GitNoUpstreamError) {
+      return error.message;
+    }
     if (isGitError(error) && error.kind === "command") {
       return error.stderr.trim() || error.message;
     }
     return error instanceof Error ? error.message : String(error);
   }
 
-  async function refreshAfterFetch(): Promise<void> {
-    if (!repoRoot) {
-      return;
-    }
-    panelRefreshToken += 1;
-    await refreshBranchHeader(repoRoot);
-  }
-
   async function handleFetch(): Promise<void> {
-    if (!repoRoot || fetchBusy || refreshBusy) {
+    if (!repoRoot || fetchBusy || refreshBusy || pullBusy || pushBusy) {
       return;
     }
 
@@ -337,7 +351,7 @@
 
     try {
       await fetchRemote(repoRoot);
-      await refreshAfterFetch();
+      await refreshAfterMutation("fetch");
     } catch (error) {
       await message(formatGitActionError(error), {
         title: "Fetch failed",
@@ -345,6 +359,58 @@
       });
     } finally {
       fetchBusy = false;
+    }
+  }
+
+  async function handlePull(): Promise<void> {
+    if (!repoRoot || pullBusy || refreshBusy || fetchBusy || pushBusy) {
+      return;
+    }
+
+    pullBusy = true;
+
+    try {
+      const dirty = await isWorkingTreeDirty(repoRoot);
+      if (dirty) {
+        await message(
+          "Pull is blocked while the working tree has uncommitted changes. Commit, stash, or discard your changes first.",
+          {
+            title: "Working tree not clean",
+            kind: "warning",
+          },
+        );
+        return;
+      }
+
+      await pullRemote(repoRoot);
+      await refreshAfterMutation("pull");
+    } catch (error) {
+      await message(formatGitActionError(error), {
+        title: "Pull failed",
+        kind: "error",
+      });
+    } finally {
+      pullBusy = false;
+    }
+  }
+
+  async function handlePush(): Promise<void> {
+    if (!repoRoot || pushBusy || refreshBusy || fetchBusy || pullBusy) {
+      return;
+    }
+
+    pushBusy = true;
+
+    try {
+      await pushRemote(repoRoot);
+      await refreshAfterMutation("push");
+    } catch (error) {
+      await message(formatGitActionError(error), {
+        title: "Push failed",
+        kind: "error",
+      });
+    } finally {
+      pushBusy = false;
     }
   }
 
@@ -469,17 +535,29 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={fetchBusy || refreshBusy}
+          disabled={fetchBusy || refreshBusy || pullBusy || pushBusy}
           title="Fetch from remote"
           onclick={handleFetch}
         >
           {fetchBusy ? "Fetching…" : "Fetch"}
         </button>
-        <button type="button" class="version-control-action" disabled title="Pull (phase 3)">
-          Pull
+        <button
+          type="button"
+          class="version-control-action"
+          disabled={pullBusy || refreshBusy || fetchBusy || pushBusy}
+          title="Pull from upstream"
+          onclick={handlePull}
+        >
+          {pullBusy ? "Pulling…" : "Pull"}
         </button>
-        <button type="button" class="version-control-action" disabled title="Push (phase 3)">
-          Push
+        <button
+          type="button"
+          class="version-control-action"
+          disabled={pushBusy || refreshBusy || fetchBusy || pullBusy}
+          title="Push to upstream"
+          onclick={handlePush}
+        >
+          {pushBusy ? "Pushing…" : "Push"}
         </button>
       </div>
     </header>
@@ -546,7 +624,11 @@
             onMutation={refreshAfterMutation}
           />
         {:else if activeSection === "tags" && repoRoot}
-          <GitTagsPanel repoRoot={repoRoot} refreshToken={panelRefreshToken} />
+          <GitTagsPanel
+            repoRoot={repoRoot}
+            refreshToken={panelRefreshToken}
+            onMutation={refreshAfterMutation}
+          />
         {:else if activeSection === "changes" && repoRoot}
           <GitChangesPanel
             repoRoot={repoRoot}

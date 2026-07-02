@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-02 — Git phase 3 Tasks 3.8–3.12: pull, push, tags, refresh bundle
+
+- **`app/src/lib/git/gitService.ts`** — `pullRemote`, `pushRemote` (with `GitNoUpstreamError` for missing upstream), `createTag`, and `deleteLocalTag`; all `run_git` / commit invocations log command + exit code to the app console via `logDiagnostic`.
+- **`app/src/lib/git/versionControlRefresh.ts`** — `VersionControlMutationScope` and `mutationChangesHead` helper for scoped post-mutation refresh.
+- **`app/src/lib/components/VersionControlView.svelte`** — **Pull** and **Push** toolbar buttons (busy states, dirty-tree block on pull, stderr dialogs); centralized `refreshAfterMutation(scope)` refreshes header + active panels via `panelRefreshToken`.
+- **`app/src/lib/components/GitTagsPanel.svelte`** — create tag prompt (ref validation), selectable tag list, delete with confirmation (`git tag -d` local only).
+- **`app/src/lib/components/GitChangesPanel.svelte`**, **`GitBranchesPanel.svelte`** — pass mutation scope to `onMutation` (`commit`, `stage`, `checkout`, `branch`).
+- **`app/src/lib/git/gitService.test.ts`**, **`app/src/lib/git/versionControlRefresh.test.ts`** — unit tests for pull/push/tag commands, no-upstream handling, and git command logging.
+- **`specs/git/phase-3-execution-plan.md`** — Tasks 3.8–3.12 marked `[DONE]`; phase 3 exit criteria checked off.
+
 ## 2026-07-02 — Git phase 3 Task 3.7: fetch from remote
 
 - **`app/src/lib/git/gitService.ts`** — `fetchRemote(repoRoot)` runs `git fetch`; throws `GitCommandError` on failure.

@@ -169,7 +169,7 @@ Dependencies: Phase 2 header.
 
 ---
 
-#### Task 3.8: Pull (G3-8) [Score:7] [Agent:medium] [~0.5d]
+#### Task 3.8: Pull (G3-8) [Score:7] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 
@@ -188,7 +188,7 @@ Dependencies: Tasks 3.1, 3.7.
 
 ---
 
-#### Task 3.9: Push (G3-9) [Score:6] [Agent:medium] [~0.5d]
+#### Task 3.9: Push (G3-9) [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 
@@ -207,7 +207,7 @@ Dependencies: Task 3.7.
 
 ---
 
-#### Task 3.10: Create tag (G3-10) [Score:5] [Agent:easy] [~0.5d]
+#### Task 3.10: Create tag (G3-10) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -226,7 +226,7 @@ Dependencies: Phase 2 tags UI.
 
 ---
 
-#### Task 3.11: Delete local tag (G3-11) [Score:4] [Agent:easy] [~0.5d]
+#### Task 3.11: Delete local tag (G3-11) [Score:4] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -245,7 +245,7 @@ Dependencies: Task 3.10.
 
 ---
 
-#### Task 3.12: Post-mutation refresh bundle (G3-12) [Score:5] [Agent:easy] [~0.5d]
+#### Task 3.12: Post-mutation refresh bundle (G3-12) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -275,9 +275,9 @@ Phase 2 tags → Task 3.10 → Task 3.11 → Task 3.12
 
 ## Phase 3 exit criteria
 
-- [ ] Full MVP mutation set: stage, commit, checkout, create branch, fetch, pull, push, create/delete tag.
-- [ ] Changes panel end-to-end commit flow works.
-- [ ] Dirty git tree blocks checkout and pull.
-- [ ] Toolbar network actions use default upstream.
+- [x] Full MVP mutation set: stage, commit, checkout, create branch, fetch, pull, push, create/delete tag.
+- [x] Changes panel end-to-end commit flow works.
+- [x] Dirty git tree blocks checkout and pull.
+- [x] Toolbar network actions use default upstream.
 
 **Estimate:** ~7–8 days

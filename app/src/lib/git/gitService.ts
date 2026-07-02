@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { logDiagnostic } from "../services/logging";
 import {
   parseAheadBehindCount,
   parseBranchShowCurrent,
@@ -37,6 +38,26 @@ import {
 
 const NOT_A_REPOSITORY_EXIT_CODE = 128;
 
+function logGitCommandSummary(
+  repoRoot: string,
+  args: string[],
+  response: RunGitResponse,
+): void {
+  const command = `git ${args.join(" ")}`;
+  void logDiagnostic({
+    level: response.exitCode === 0 ? "info" : "warn",
+    source: "frontend",
+    message: `${command} → exit ${response.exitCode}`,
+    timestamp: new Date().toISOString(),
+    metadata: {
+      command: args,
+      exitCode: response.exitCode,
+      durationMs: response.durationMs,
+      repoRoot,
+    },
+  });
+}
+
 function isNotARepositoryResponse(response: RunGitResponse): boolean {
   if (response.exitCode === NOT_A_REPOSITORY_EXIT_CODE) {
     return true;
@@ -56,11 +77,13 @@ export async function runGit(
   env?: Record<string, string>,
 ): Promise<RunGitResponse> {
   try {
-    return await invoke<RunGitResponse>("run_git", {
+    const response = await invoke<RunGitResponse>("run_git", {
       repoRoot,
       args,
       ...(env ? { env } : {}),
     });
+    logGitCommandSummary(repoRoot, args, response);
+    return response;
   } catch (error) {
     throw mapGitInvokeError(error, repoRoot);
   }
@@ -322,6 +345,7 @@ export async function createCommit(repoRoot: string, message: string): Promise<v
       repoRoot,
       message: trimmed,
     });
+    logGitCommandSummary(repoRoot, ["commit", "-F", "<message-file>"], response);
     if (response.exitCode !== 0) {
       throw createGitCommandError(response);
     }
@@ -344,6 +368,73 @@ export async function checkoutBranch(repoRoot: string, branchName: string): Prom
 /** Fetch from default remotes (`git fetch`). */
 export async function fetchRemote(repoRoot: string): Promise<void> {
   const response = await runGit(repoRoot, ["fetch"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+/** Pull from default upstream (`git pull`). */
+export async function pullRemote(repoRoot: string): Promise<void> {
+  const response = await runGit(repoRoot, ["pull"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+export class GitNoUpstreamError extends Error {
+  readonly kind = "noUpstream" as const;
+  readonly branchName: string | null;
+
+  constructor(message: string, branchName: string | null = null) {
+    super(message);
+    this.name = "GitNoUpstreamError";
+    this.branchName = branchName;
+  }
+}
+
+function parseNoUpstreamBranch(stderr: string): string | null {
+  const match = stderr.match(/branch (\S+) has no upstream branch/);
+  return match?.[1] ?? null;
+}
+
+function isNoUpstreamPushError(stderr: string): boolean {
+  const lower = stderr.toLowerCase();
+  return lower.includes("no upstream branch") || lower.includes("set-upstream");
+}
+
+/** Push to default upstream (`git push`). */
+export async function pushRemote(repoRoot: string): Promise<void> {
+  const response = await runGit(repoRoot, ["push"]);
+  if (response.exitCode !== 0) {
+    if (isNoUpstreamPushError(response.stderr)) {
+      const branchName = parseNoUpstreamBranch(response.stderr);
+      throw new GitNoUpstreamError(
+        branchName
+          ? `Branch "${branchName}" has no upstream. Set an upstream branch before pushing.`
+          : "Current branch has no upstream. Set an upstream branch before pushing.",
+        branchName,
+      );
+    }
+    throw createGitCommandError(response);
+  }
+}
+
+/** Create a lightweight tag at HEAD (`git tag <name>`). */
+export async function createTag(repoRoot: string, name: string): Promise<void> {
+  const validation = validateGitRefName(name);
+  if (!validation.ok) {
+    throw new GitRefValidationError(validation.message);
+  }
+
+  const response = await runGit(repoRoot, ["tag", name.trim()]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+/** Delete a local tag (`git tag -d <name>`). Does not delete remote tags. */
+export async function deleteLocalTag(repoRoot: string, name: string): Promise<void> {
+  const response = await runGit(repoRoot, ["tag", "-d", name]);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }

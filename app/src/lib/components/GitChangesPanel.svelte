@@ -9,11 +9,12 @@
   } from "../git/gitService";
   import { formatWorkingTreeStatusCode } from "../git/gitStatusFormat";
   import type { WorkingTreeFileEntry } from "../git/types";
+  import type { VersionControlMutationScope } from "../git/versionControlRefresh";
 
   interface Props {
     repoRoot: string;
     refreshToken?: number;
-    onMutation?: () => void | Promise<void>;
+    onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
   }
 
   let { repoRoot, refreshToken = 0, onMutation = () => {} }: Props = $props();
@@ -71,9 +72,9 @@
     };
   });
 
-  async function refreshAfterAction(): Promise<void> {
+  async function refreshAfterAction(scope: VersionControlMutationScope = "stage"): Promise<void> {
     await loadWorkingTreeStatus(repoRoot);
-    await onMutation();
+    await onMutation(scope);
   }
 
   function toggleUnstaged(path: string, checked: boolean): void {
@@ -161,7 +162,7 @@
       await createCommit(repoRoot, trimmed);
       commitMessage = "";
       commitError = null;
-      await refreshAfterAction();
+      await refreshAfterAction("commit");
     } catch (error) {
       if (error instanceof GitCommitValidationError) {
         commitError = error.message;

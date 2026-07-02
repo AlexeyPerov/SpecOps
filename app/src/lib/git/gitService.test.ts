@@ -5,12 +5,17 @@ import {
   createBranch,
   createCommit,
   checkoutBranch,
+  createTag,
+  deleteLocalTag,
   fetchRemote,
   GIT_LOG_FORMAT,
   GIT_SHOW_FORMAT,
   GitCommitValidationError,
+  GitNoUpstreamError,
   GitRefValidationError,
   isWorkingTreeDirty,
+  pullRemote,
+  pushRemote,
   queryAheadBehind,
   queryBranches,
   queryCommitDetail,
@@ -30,6 +35,10 @@ import { isGitError } from "./types";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
+}));
+
+vi.mock("../services/logging", () => ({
+  logDiagnostic: vi.fn(),
 }));
 
 const invokeMock = vi.mocked(invoke);
@@ -712,5 +721,186 @@ describe("createBranch", () => {
       GitRefValidationError,
     );
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("pullRemote", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git pull", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "Already up to date.\n",
+      stderr: "",
+      durationMs: 80,
+    });
+
+    await pullRemote("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["pull"],
+    });
+  });
+
+  it("throws GitCommandError on merge conflict", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 1,
+      stdout: "",
+      stderr: "error: Your local changes to the following files would be overwritten by merge:\n",
+      durationMs: 40,
+    });
+
+    await expect(pullRemote("/tmp/repo")).rejects.toSatisfy((error) => {
+      return isGitError(error) && error.kind === "command" && error.exitCode === 1;
+    });
+  });
+});
+
+describe("pushRemote", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git push", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 120,
+    });
+
+    await pushRemote("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["push"],
+    });
+  });
+
+  it("throws GitNoUpstreamError when branch has no upstream", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr:
+        "fatal: The current branch main has no upstream branch.\nTo push the current branch and set the remote as upstream, use\n\n    git push --set-upstream origin main\n",
+      durationMs: 5,
+    });
+
+    await expect(pushRemote("/tmp/repo")).rejects.toBeInstanceOf(GitNoUpstreamError);
+    await expect(pushRemote("/tmp/repo")).rejects.toMatchObject({
+      branchName: "main",
+      message: expect.stringContaining("no upstream"),
+    });
+  });
+
+  it("throws GitCommandError for other push failures", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: Authentication failed for 'https://example.com/repo.git/'\n",
+      durationMs: 50,
+    });
+
+    await expect(pushRemote("/tmp/repo")).rejects.toSatisfy((error) => {
+      return (
+        isGitError(error) &&
+        error.kind === "command" &&
+        error.stderr.includes("Authentication failed")
+      );
+    });
+  });
+});
+
+describe("createTag", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git tag for valid names", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await createTag("/tmp/repo", "v1.0.0");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["tag", "v1.0.0"],
+    });
+  });
+
+  it("rejects invalid tag names before invoking git", async () => {
+    await expect(createTag("/tmp/repo", "bad tag")).rejects.toBeInstanceOf(GitRefValidationError);
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces duplicate tag git error", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: tag 'v1.0.0' already exists\n",
+      durationMs: 2,
+    });
+
+    await expect(createTag("/tmp/repo", "v1.0.0")).rejects.toSatisfy((error) => {
+      return isGitError(error) && error.kind === "command" && error.stderr.includes("already exists");
+    });
+  });
+});
+
+describe("deleteLocalTag", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git tag -d", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "Deleted tag 'v1.0.0' (was abc1234)\n",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await deleteLocalTag("/tmp/repo", "v1.0.0");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["tag", "-d", "v1.0.0"],
+    });
+  });
+});
+
+describe("git command logging", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("logs command summary after runGit", async () => {
+    const { logDiagnostic } = await import("../services/logging");
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 3,
+    });
+
+    await runGit("/tmp/repo", ["status"]);
+
+    expect(logDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "info",
+        message: "git status → exit 0",
+        metadata: expect.objectContaining({
+          exitCode: 0,
+          command: ["status"],
+        }),
+      }),
+    );
   });
 });

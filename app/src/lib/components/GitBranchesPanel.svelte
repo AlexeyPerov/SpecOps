@@ -9,12 +9,13 @@
   } from "../git/gitService";
   import { validateGitRefName } from "../git/gitRefName";
   import type { BranchSummary } from "../git/types";
+  import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { promptEntryName } from "../services/entryNamePrompt";
 
   interface Props {
     repoRoot: string;
     refreshToken?: number;
-    onMutation?: () => void | Promise<void>;
+    onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
   }
 
   let { repoRoot, refreshToken = 0, onMutation = () => {} }: Props = $props();
@@ -102,7 +103,7 @@
 
       await checkoutBranch(repoRoot, selectedSummary.name);
       await loadBranches(repoRoot);
-      await onMutation();
+      await onMutation("checkout");
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error);
     } finally {
@@ -137,7 +138,7 @@
       await createBranch(repoRoot, name);
       selectedBranch = name.trim();
       await loadBranches(repoRoot);
-      await onMutation();
+      await onMutation("branch");
     } catch (error) {
       if (error instanceof GitRefValidationError) {
         actionError = error.message;

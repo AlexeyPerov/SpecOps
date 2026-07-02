@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-02 — Git phase 1 Tasks 1.5–1.6: VC empty states and init repository
+
+- **`app/src/lib/git/versionControlProbe.ts`** — `probeVersionControlContext` probes git availability and repo root on mount/workspace change; `initRepositoryAtWorkspaceRoot` runs `git init`; `workspaceUsesParentRepository` detects nested workspace folders inside a parent repo.
+- **`app/src/lib/git/gitInstallHints.ts`** — platform-aware install copy and download links for macOS and Windows when git is missing.
+- **`app/src/lib/components/VersionControlView.svelte`** — dedicated empty states for missing git, non-repo workspace, and probe errors; section sidebar hidden until repo is valid; parent-repo scope note when workspace is nested inside an existing repository; **Init repository** button with confirm dialog and re-probe after success.
+- **`app/src/lib/git/versionControlProbe.test.ts`**, **`app/src/lib/git/gitInstallHints.test.ts`** — unit tests for probe, init, parent-repo detection, and install hints (10 tests).
+- **`specs/git/phase-1-execution-plan.md`** — Tasks 1.5, 1.6 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 1 Tasks 1.2–1.4: VC context menu, shell view, editor routing
 
 - **`app/src/lib/services/workspaceContextMenuController.ts`** — `openVersionControl(workspaceId)` switches context and opens/focuses the singleton `"version-control"` view tab; menu closes after action.

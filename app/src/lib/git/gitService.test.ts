@@ -21,6 +21,7 @@ import {
   queryCommitDetail,
   queryCommits,
   queryCurrentBranch,
+  queryIsBareRepository,
   queryTags,
   queryWorkingTreeStatus,
   resolveRepoRoot,
@@ -873,6 +874,38 @@ describe("deleteLocalTag", () => {
       repoRoot: "/tmp/repo",
       args: ["tag", "-d", "v1.0.0"],
     });
+  });
+});
+
+describe("queryIsBareRepository", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("returns true when git reports bare repository", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "true\n",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await expect(queryIsBareRepository("/tmp/bare.git")).resolves.toBe(true);
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/bare.git",
+      args: ["rev-parse", "--is-bare-repository"],
+    });
+  });
+
+  it("returns false for non-bare repositories", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "false\n",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await expect(queryIsBareRepository("/tmp/repo")).resolves.toBe(false);
   });
 });
 

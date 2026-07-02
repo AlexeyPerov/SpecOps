@@ -1,5 +1,6 @@
 <script lang="ts">
   import { confirm } from "@tauri-apps/plugin-dialog";
+  import { reportGitError } from "../git/gitErrorUi";
   import {
     createTag,
     deleteLocalTag,
@@ -7,17 +8,24 @@
     queryTags,
   } from "../git/gitService";
   import { validateGitRefName } from "../git/gitRefName";
-  import { isGitError } from "../git/types";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { promptEntryName } from "../services/entryNamePrompt";
 
   interface Props {
     repoRoot: string;
+    readOnly?: boolean;
     refreshToken?: number;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
+    notify?: (message: string) => void;
   }
 
-  let { repoRoot, refreshToken = 0, onMutation = () => {} }: Props = $props();
+  let {
+    repoRoot,
+    readOnly = false,
+    refreshToken = 0,
+    onMutation = () => {},
+    notify = () => {},
+  }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -28,7 +36,7 @@
   let actionBusy = $state(false);
   let actionError = $state<string | null>(null);
 
-  const canDelete = $derived(selectedTag !== null && !actionBusy);
+  const canDelete = $derived(selectedTag !== null && !actionBusy && !readOnly);
 
   async function loadTags(root: string, signal?: AbortSignal): Promise<void> {
     loadStatus = "loading";
@@ -75,15 +83,8 @@
     }
   }
 
-  function formatGitActionError(error: unknown): string {
-    if (isGitError(error) && error.kind === "command") {
-      return error.stderr.trim() || error.message;
-    }
-    return error instanceof Error ? error.message : String(error);
-  }
-
   async function handleCreateTag(): Promise<void> {
-    if (actionBusy) {
+    if (actionBusy || readOnly) {
       return;
     }
 
@@ -114,7 +115,7 @@
       if (error instanceof GitRefValidationError) {
         actionError = error.message;
       } else {
-        actionError = formatGitActionError(error);
+        actionError = reportGitError(error, { operation: "Create tag", repoRoot, notify });
       }
     } finally {
       actionBusy = false;
@@ -147,7 +148,7 @@
       await loadTags(repoRoot);
       await onMutation("tag");
     } catch (error) {
-      actionError = formatGitActionError(error);
+      actionError = reportGitError(error, { operation: "Delete tag", repoRoot, notify });
     } finally {
       actionBusy = false;
     }
@@ -159,7 +160,8 @@
     <button
       type="button"
       class="git-tags-action"
-      disabled={actionBusy}
+      disabled={actionBusy || readOnly}
+      title={readOnly ? "Tag creation is unavailable for bare repositories" : "Create a new tag"}
       onclick={handleCreateTag}
     >
       {actionBusy ? "Working…" : "Create tag"}

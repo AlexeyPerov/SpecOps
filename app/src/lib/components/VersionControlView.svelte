@@ -6,10 +6,10 @@
   import GitChangesPanel from "./GitChangesPanel.svelte";
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
   import GitTagsPanel from "./GitTagsPanel.svelte";
+  import { reportGitError } from "../git/gitErrorUi";
   import { gitInstallHint } from "../git/gitInstallHints";
   import {
     fetchRemote,
-    GitNoUpstreamError,
     isWorkingTreeDirty,
     pullRemote,
     pushRemote,
@@ -17,7 +17,7 @@
     queryCurrentBranch,
   } from "../git/gitService";
   import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo } from "../git/types";
-  import { isGitError, normalizeGitOutputPath } from "../git/types";
+  import { normalizeGitOutputPath } from "../git/types";
   import {
     mutationChangesHead,
     type VersionControlMutationScope,
@@ -27,6 +27,7 @@
     probeVersionControlContext,
     workspaceUsesParentRepository,
   } from "../git/versionControlProbe";
+  import { assertNoUnsavedDocuments } from "../services/unsavedDocumentGuard";
 
   /**
    * Per-workspace version control view, rendered as a chrome-less editor-pane
@@ -34,7 +35,13 @@
    * the active workspace root path is passed in so phase 2/3 panels can scope
    * git operations to it.
    */
-  let { workspaceRootPath }: { workspaceRootPath: string | null } = $props();
+  let {
+    workspaceRootPath,
+    notify = () => {},
+  }: {
+    workspaceRootPath: string | null;
+    notify?: (message: string) => void;
+  } = $props();
 
   type Section = "history" | "branches" | "tags" | "changes";
   type ProbeStatus =
@@ -58,6 +65,7 @@
   let activeSection = $state<Section>("history");
   let probeStatus = $state<ProbeStatus>("loading");
   let repoRoot = $state<string | null>(null);
+  let isBareRepository = $state(false);
   let probeError = $state<string | null>(null);
   let initBusy = $state(false);
   let initError = $state<string | null>(null);
@@ -90,6 +98,8 @@
     }
     return workspaceUsesParentRepository(workspaceRootPath, repoRoot);
   });
+
+  const isReadOnlyRepository = $derived(isBareRepository);
 
   const placeholderCopy = $derived.by(() => {
     return "Select a section.";
@@ -201,6 +211,7 @@
     if (!root) {
       probeStatus = "noWorkspace";
       repoRoot = null;
+      isBareRepository = false;
       probeError = null;
       initError = null;
       resetBranchHeader();
@@ -230,21 +241,25 @@
         case "noWorkspace":
           probeStatus = "noWorkspace";
           repoRoot = null;
+          isBareRepository = false;
           break;
         case "gitUnavailable":
           probeStatus = "gitUnavailable";
           repoRoot = null;
+          isBareRepository = false;
           probeError = result.error;
           resetBranchHeader();
           break;
         case "notARepository":
           probeStatus = "notARepository";
           repoRoot = null;
+          isBareRepository = false;
           resetBranchHeader();
           break;
         case "ready":
           probeStatus = "ready";
           repoRoot = result.repoRoot;
+          isBareRepository = result.isBareRepository;
           if (shouldRefreshBranchHeader) {
             await refreshBranchHeader(result.repoRoot, signal);
           }
@@ -256,6 +271,7 @@
       }
       probeStatus = "error";
       repoRoot = null;
+      isBareRepository = false;
       probeError = error instanceof Error ? error.message : String(error);
       resetBranchHeader();
     }
@@ -332,16 +348,6 @@
     return normalizeGitOutputPath(path);
   }
 
-  function formatGitActionError(error: unknown): string {
-    if (error instanceof GitNoUpstreamError) {
-      return error.message;
-    }
-    if (isGitError(error) && error.kind === "command") {
-      return error.stderr.trim() || error.message;
-    }
-    return error instanceof Error ? error.message : String(error);
-  }
-
   async function handleFetch(): Promise<void> {
     if (!repoRoot || fetchBusy || refreshBusy || pullBusy || pushBusy) {
       return;
@@ -353,10 +359,7 @@
       await fetchRemote(repoRoot);
       await refreshAfterMutation("fetch");
     } catch (error) {
-      await message(formatGitActionError(error), {
-        title: "Fetch failed",
-        kind: "error",
-      });
+      reportGitError(error, { operation: "Fetch", repoRoot, notify });
     } finally {
       fetchBusy = false;
     }
@@ -370,6 +373,13 @@
     pullBusy = true;
 
     try {
+      if (workspaceRootPath) {
+        const unsavedOk = await assertNoUnsavedDocuments(workspaceRootPath);
+        if (!unsavedOk) {
+          return;
+        }
+      }
+
       const dirty = await isWorkingTreeDirty(repoRoot);
       if (dirty) {
         await message(
@@ -385,10 +395,7 @@
       await pullRemote(repoRoot);
       await refreshAfterMutation("pull");
     } catch (error) {
-      await message(formatGitActionError(error), {
-        title: "Pull failed",
-        kind: "error",
-      });
+      reportGitError(error, { operation: "Pull", repoRoot, notify });
     } finally {
       pullBusy = false;
     }
@@ -405,10 +412,7 @@
       await pushRemote(repoRoot);
       await refreshAfterMutation("push");
     } catch (error) {
-      await message(formatGitActionError(error), {
-        title: "Push failed",
-        kind: "error",
-      });
+      reportGitError(error, { operation: "Push", repoRoot, notify });
     } finally {
       pushBusy = false;
     }
@@ -544,8 +548,8 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={pullBusy || refreshBusy || fetchBusy || pushBusy}
-          title="Pull from upstream"
+          disabled={pullBusy || refreshBusy || fetchBusy || pushBusy || isReadOnlyRepository}
+          title={isReadOnlyRepository ? "Pull is unavailable for bare repositories" : "Pull from upstream"}
           onclick={handlePull}
         >
           {pullBusy ? "Pulling…" : "Pull"}
@@ -567,6 +571,21 @@
         This workspace folder is inside the git repository at
         <span class="version-control-scope-path">{formatRepoRoot(repoRoot)}</span>. Version control
         actions apply to that repository — you do not need to initialize a new repository here.
+      </p>
+    {/if}
+
+    {#if isBareRepository}
+      <p class="version-control-scope-note version-control-readonly-note" role="note">
+        This is a bare repository with no working tree. History and fetch are available; staging,
+        committing, and other write actions are disabled.
+      </p>
+    {/if}
+
+    {#if currentBranch?.isDetached}
+      <p class="version-control-scope-note version-control-detached-note" role="note">
+        You are in a detached HEAD state at
+        <span class="version-control-scope-path">{currentBranch.name}</span>. You can browse history
+        and check out a branch when the working tree is clean.
       </p>
     {/if}
 
@@ -617,23 +636,30 @@
               />
             </div>
           </div>
-        {:else if activeSection === "branches" && repoRoot}
+        {:else if activeSection === "branches" && repoRoot && workspaceRootPath}
           <GitBranchesPanel
             repoRoot={repoRoot}
+            workspaceRootPath={workspaceRootPath}
+            readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}
+            {notify}
           />
         {:else if activeSection === "tags" && repoRoot}
           <GitTagsPanel
             repoRoot={repoRoot}
+            readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}
+            {notify}
           />
         {:else if activeSection === "changes" && repoRoot}
           <GitChangesPanel
             repoRoot={repoRoot}
+            readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}
+            {notify}
           />
         {:else}
           <p class="version-control-placeholder">{placeholderCopy}</p>
@@ -736,6 +762,14 @@
   .version-control-scope-path {
     font-family: var(--font-mono, ui-monospace, monospace);
     color: var(--color-text);
+  }
+
+  .version-control-readonly-note {
+    background: color-mix(in srgb, var(--color-danger, #c0392b) 8%, var(--color-surface-1));
+  }
+
+  .version-control-detached-note {
+    background: color-mix(in srgb, var(--color-text-muted) 10%, var(--color-surface-1));
   }
 
   .version-control-header {

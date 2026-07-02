@@ -1,5 +1,6 @@
 <script lang="ts">
   import { message } from "@tauri-apps/plugin-dialog";
+  import { reportGitError } from "../git/gitErrorUi";
   import {
     checkoutBranch,
     createBranch,
@@ -11,14 +12,25 @@
   import type { BranchSummary } from "../git/types";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { promptEntryName } from "../services/entryNamePrompt";
+  import { assertNoUnsavedDocuments } from "../services/unsavedDocumentGuard";
 
   interface Props {
     repoRoot: string;
+    workspaceRootPath: string;
+    readOnly?: boolean;
     refreshToken?: number;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
+    notify?: (message: string) => void;
   }
 
-  let { repoRoot, refreshToken = 0, onMutation = () => {} }: Props = $props();
+  let {
+    repoRoot,
+    workspaceRootPath,
+    readOnly = false,
+    refreshToken = 0,
+    onMutation = () => {},
+    notify = () => {},
+  }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -31,7 +43,7 @@
 
   const selectedSummary = $derived(branches.find((branch) => branch.name === selectedBranch) ?? null);
   const canCheckout = $derived(
-    selectedSummary !== null && !selectedSummary.isCurrent && !actionBusy,
+    selectedSummary !== null && !selectedSummary.isCurrent && !actionBusy && !readOnly,
   );
 
   async function loadBranches(root: string, signal?: AbortSignal): Promise<void> {
@@ -89,6 +101,11 @@
     actionError = null;
 
     try {
+      const unsavedOk = await assertNoUnsavedDocuments(workspaceRootPath);
+      if (!unsavedOk) {
+        return;
+      }
+
       const dirty = await isWorkingTreeDirty(repoRoot);
       if (dirty) {
         await message(
@@ -105,14 +122,14 @@
       await loadBranches(repoRoot);
       await onMutation("checkout");
     } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error);
+      actionError = reportGitError(error, { operation: "Checkout", repoRoot, notify });
     } finally {
       actionBusy = false;
     }
   }
 
   async function handleCreateBranch(): Promise<void> {
-    if (actionBusy) {
+    if (actionBusy || readOnly) {
       return;
     }
 
@@ -135,6 +152,11 @@
     actionError = null;
 
     try {
+      const unsavedOk = await assertNoUnsavedDocuments(workspaceRootPath);
+      if (!unsavedOk) {
+        return;
+      }
+
       await createBranch(repoRoot, name);
       selectedBranch = name.trim();
       await loadBranches(repoRoot);
@@ -143,7 +165,7 @@
       if (error instanceof GitRefValidationError) {
         actionError = error.message;
       } else {
-        actionError = error instanceof Error ? error.message : String(error);
+        actionError = reportGitError(error, { operation: "Create branch", repoRoot, notify });
       }
     } finally {
       actionBusy = false;
@@ -165,7 +187,8 @@
     <button
       type="button"
       class="git-branches-action"
-      disabled={actionBusy}
+      disabled={actionBusy || readOnly}
+      title={readOnly ? "Branch creation is unavailable for bare repositories" : "Create a new branch"}
       onclick={handleCreateBranch}
     >
       Create branch

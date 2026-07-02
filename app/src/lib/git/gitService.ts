@@ -44,6 +44,7 @@ function logGitCommandSummary(
   response: RunGitResponse,
 ): void {
   const command = `git ${args.join(" ")}`;
+  const stderr = response.stderr.trim();
   void logDiagnostic({
     level: response.exitCode === 0 ? "info" : "warn",
     source: "frontend",
@@ -54,6 +55,7 @@ function logGitCommandSummary(
       exitCode: response.exitCode,
       durationMs: response.durationMs,
       repoRoot,
+      ...(response.exitCode !== 0 && stderr ? { stderr } : {}),
     },
   });
 }
@@ -268,6 +270,16 @@ export async function queryWorkingTreeStatus(repoRoot: string): Promise<WorkingT
   }
 
   return splitWorkingTreeStatus(parseStatusPorcelain(response.stdout));
+}
+
+/** Returns true when the repository has no working tree (`git rev-parse --is-bare-repository`). */
+export async function queryIsBareRepository(repoRoot: string): Promise<boolean> {
+  const response = await runGit(repoRoot, ["rev-parse", "--is-bare-repository"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return response.stdout.trim().toLowerCase() === "true";
 }
 
 /** Returns true when porcelain status has any entries (dirty working tree). */

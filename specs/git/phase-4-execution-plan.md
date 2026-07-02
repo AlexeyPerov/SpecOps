@@ -30,7 +30,7 @@ Residual uncertainties:
 
 ## Task Breakdown
 
-#### Task 4.1: Unsaved editor document guard (G4-1) [Score:8] [Agent:medium] [~1d]
+#### Task 4.1: Unsaved editor document guard (G4-1) [Score:8] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 
@@ -50,7 +50,7 @@ Dependencies: Phase 3 exit criteria.
 
 ---
 
-#### Task 4.2: Bare repo + detached HEAD UX (G4-2) [Score:5] [Agent:medium] [~0.5d]
+#### Task 4.2: Bare repo + detached HEAD UX (G4-2) [Score:5] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 
@@ -69,7 +69,7 @@ Dependencies: Phase 3.
 
 ---
 
-#### Task 4.3: Network and git error surfacing (G4-3) [Score:5] [Agent:easy] [~0.5d]
+#### Task 4.3: Network and git error surfacing (G4-3) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 

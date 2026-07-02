@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reportGitError } from "../git/gitErrorUi";
   import {
     createCommit,
     GitCommitValidationError,
@@ -13,11 +14,19 @@
 
   interface Props {
     repoRoot: string;
+    readOnly?: boolean;
     refreshToken?: number;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
+    notify?: (message: string) => void;
   }
 
-  let { repoRoot, refreshToken = 0, onMutation = () => {} }: Props = $props();
+  let {
+    repoRoot,
+    readOnly = false,
+    refreshToken = 0,
+    onMutation = () => {},
+    notify = () => {},
+  }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -33,7 +42,9 @@
   let actionError = $state<string | null>(null);
 
   const hasStagedChanges = $derived(staged.length > 0);
-  const canCommit = $derived(hasStagedChanges && !actionBusy && commitMessage.trim().length > 0);
+  const canCommit = $derived(
+    hasStagedChanges && !actionBusy && !readOnly && commitMessage.trim().length > 0,
+  );
   const isClean = $derived(loadStatus === "ready" && staged.length === 0 && unstaged.length === 0);
 
   async function loadWorkingTreeStatus(root: string, signal?: AbortSignal): Promise<void> {
@@ -98,7 +109,7 @@
   }
 
   async function handleStageSelected(): Promise<void> {
-    if (selectedUnstaged.size === 0 || actionBusy) {
+    if (selectedUnstaged.size === 0 || actionBusy || readOnly) {
       return;
     }
     actionBusy = true;
@@ -107,14 +118,14 @@
       await stagePaths(repoRoot, [...selectedUnstaged]);
       await refreshAfterAction();
     } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error);
+      actionError = reportGitError(error, { operation: "Stage", repoRoot, notify });
     } finally {
       actionBusy = false;
     }
   }
 
   async function handleStageAll(): Promise<void> {
-    if (unstaged.length === 0 || actionBusy) {
+    if (unstaged.length === 0 || actionBusy || readOnly) {
       return;
     }
     actionBusy = true;
@@ -123,14 +134,14 @@
       await stageAll(repoRoot);
       await refreshAfterAction();
     } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error);
+      actionError = reportGitError(error, { operation: "Stage all", repoRoot, notify });
     } finally {
       actionBusy = false;
     }
   }
 
   async function handleUnstageSelected(): Promise<void> {
-    if (selectedStaged.size === 0 || actionBusy) {
+    if (selectedStaged.size === 0 || actionBusy || readOnly) {
       return;
     }
     actionBusy = true;
@@ -139,7 +150,7 @@
       await unstagePaths(repoRoot, [...selectedStaged]);
       await refreshAfterAction();
     } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error);
+      actionError = reportGitError(error, { operation: "Unstage", repoRoot, notify });
     } finally {
       actionBusy = false;
     }
@@ -152,7 +163,7 @@
       commitError = "Commit message cannot be empty.";
       return;
     }
-    if (!hasStagedChanges || actionBusy) {
+    if (!hasStagedChanges || actionBusy || readOnly) {
       return;
     }
 
@@ -167,7 +178,7 @@
       if (error instanceof GitCommitValidationError) {
         commitError = error.message;
       } else {
-        actionError = error instanceof Error ? error.message : String(error);
+        actionError = reportGitError(error, { operation: "Commit", repoRoot, notify });
       }
     } finally {
       actionBusy = false;
@@ -204,7 +215,7 @@
           <button
             type="button"
             class="git-changes-action-button"
-            disabled={selectedUnstaged.size === 0 || actionBusy}
+            disabled={selectedUnstaged.size === 0 || actionBusy || readOnly}
             onclick={handleStageSelected}
           >
             Stage selected
@@ -212,7 +223,7 @@
           <button
             type="button"
             class="git-changes-action-button"
-            disabled={unstaged.length === 0 || actionBusy}
+            disabled={unstaged.length === 0 || actionBusy || readOnly}
             onclick={handleStageAll}
           >
             Stage all
@@ -229,7 +240,7 @@
                 <input
                   type="checkbox"
                   checked={selectedUnstaged.has(entry.path)}
-                  disabled={actionBusy}
+                  disabled={actionBusy || readOnly}
                   onchange={(event) =>
                     toggleUnstaged(entry.path, (event.currentTarget as HTMLInputElement).checked)}
                 />
@@ -251,7 +262,7 @@
           <button
             type="button"
             class="git-changes-action-button"
-            disabled={selectedStaged.size === 0 || actionBusy}
+            disabled={selectedStaged.size === 0 || actionBusy || readOnly}
             onclick={handleUnstageSelected}
           >
             Unstage selected
@@ -268,7 +279,7 @@
                 <input
                   type="checkbox"
                   checked={selectedStaged.has(entry.path)}
-                  disabled={actionBusy}
+                  disabled={actionBusy || readOnly}
                   onchange={(event) =>
                     toggleStaged(entry.path, (event.currentTarget as HTMLInputElement).checked)}
                 />
@@ -291,7 +302,7 @@
         class="git-changes-message"
         class:git-changes-message-invalid={commitError !== null}
         bind:value={commitMessage}
-        disabled={actionBusy}
+        disabled={actionBusy || readOnly}
         rows={4}
         placeholder="Describe your changes…"
         aria-invalid={commitError !== null}

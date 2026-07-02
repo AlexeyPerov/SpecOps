@@ -1,11 +1,11 @@
-import { checkGitAvailable, resolveRepoRoot, runGit } from "./gitService";
+import { checkGitAvailable, queryIsBareRepository, resolveRepoRoot, runGit } from "./gitService";
 import { normalizeGitOutputPath, type RunGitResponse } from "./types";
 
 export type VersionControlProbeResult =
   | { kind: "noWorkspace" }
   | { kind: "gitUnavailable"; error: string | null }
   | { kind: "notARepository"; workspaceRootPath: string }
-  | { kind: "ready"; workspaceRootPath: string; repoRoot: string };
+  | { kind: "ready"; workspaceRootPath: string; repoRoot: string; isBareRepository: boolean };
 
 /**
  * Probe git availability and repository root for the active workspace.
@@ -28,10 +28,13 @@ export async function probeVersionControlContext(
     return { kind: "notARepository", workspaceRootPath };
   }
 
+  const isBareRepository = await queryIsBareRepository(repoResult.repoRoot);
+
   return {
     kind: "ready",
     workspaceRootPath,
     repoRoot: repoResult.repoRoot,
+    isBareRepository,
   };
 }
 

@@ -74,7 +74,16 @@ describe("probeVersionControlContext", () => {
       stderr: "",
       durationMs: 3,
     };
-    invokeMock.mockResolvedValueOnce(gitResponse).mockResolvedValueOnce(revParseResponse);
+    const bareResponse: RunGitResponse = {
+      exitCode: 0,
+      stdout: "false\n",
+      stderr: "",
+      durationMs: 1,
+    };
+    invokeMock
+      .mockResolvedValueOnce(gitResponse)
+      .mockResolvedValueOnce(revParseResponse)
+      .mockResolvedValueOnce(bareResponse);
 
     const result = await probeVersionControlContext("/tmp/example-repo/packages/nested");
 
@@ -82,6 +91,40 @@ describe("probeVersionControlContext", () => {
       kind: "ready",
       workspaceRootPath: "/tmp/example-repo/packages/nested",
       repoRoot: "/tmp/example-repo",
+      isBareRepository: false,
+    });
+  });
+
+  it("returns ready with isBareRepository when repo is bare", async () => {
+    const gitResponse: GitAvailableResponse = {
+      available: true,
+      version: "git version 2.43.0",
+      error: null,
+    };
+    const revParseResponse: RunGitResponse = {
+      exitCode: 0,
+      stdout: "/tmp/bare-repo.git\n",
+      stderr: "",
+      durationMs: 3,
+    };
+    const bareResponse: RunGitResponse = {
+      exitCode: 0,
+      stdout: "true\n",
+      stderr: "",
+      durationMs: 1,
+    };
+    invokeMock
+      .mockResolvedValueOnce(gitResponse)
+      .mockResolvedValueOnce(revParseResponse)
+      .mockResolvedValueOnce(bareResponse);
+
+    const result = await probeVersionControlContext("/tmp/bare-repo.git");
+
+    expect(result).toEqual({
+      kind: "ready",
+      workspaceRootPath: "/tmp/bare-repo.git",
+      repoRoot: "/tmp/bare-repo.git",
+      isBareRepository: true,
     });
   });
 });

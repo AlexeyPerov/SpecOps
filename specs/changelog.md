@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-02 — Git phase 4 Tasks 4.1–4.3: unsaved guard, bare/detached UX, git error surfacing
+
+- **`app/src/lib/services/unsavedDocumentGuard.ts`** — `collectDirtyDocumentsForWorkspace` and `assertNoUnsavedDocuments` block checkout, pull, and branch creation when the active workspace has unsaved editor buffers (Cancel-only dialog).
+- **`app/src/lib/git/gitService.ts`** — `queryIsBareRepository`; failed git commands now log stderr in console diagnostics.
+- **`app/src/lib/git/versionControlProbe.ts`** — probe `ready` result includes `isBareRepository`.
+- **`app/src/lib/git/gitErrorUi.ts`** — standardized `formatGitErrorPrimaryMessage` / `reportGitError` (status-bar toast + stderr in console) with mappings for auth, merge conflict, no upstream, and invalid git command cases.
+- **`app/src/lib/components/VersionControlView.svelte`** — bare-repo and detached HEAD banners; read-only mode disables pull and write panels; fetch/pull/push failures use toast + console; pull guarded by unsaved-doc check.
+- **`app/src/lib/components/GitBranchesPanel.svelte`**, **`GitChangesPanel.svelte`**, **`GitTagsPanel.svelte`** — unsaved-doc guard on checkout/create branch; read-only mode for bare repos; standardized git error reporting.
+- **`app/src/lib/components/EditorPaneContent.svelte`** — passes `notify` into version control view.
+- **Tests** — `unsavedDocumentGuard.test.ts`, `gitErrorUi.test.ts`; extended probe/service tests.
+- **`specs/git/phase-4-execution-plan.md`** — Tasks 4.1–4.3 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 3 Tasks 3.8–3.12: pull, push, tags, refresh bundle
 
 - **`app/src/lib/git/gitService.ts`** — `pullRemote`, `pushRemote` (with `GitNoUpstreamError` for missing upstream), `createTag`, and `deleteLocalTag`; all `run_git` / commit invocations log command + exit code to the app console via `logDiagnostic`.

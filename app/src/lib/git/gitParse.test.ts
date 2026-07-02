@@ -10,11 +10,15 @@ import { GIT_LOG_FORMAT } from "./gitParse";
 import {
   parseAheadBehindCount,
   parseBranchShowCurrent,
+  parseBranchVvLine,
+  parseBranchVvLines,
   parseCommitDecorators,
+  parseCommitShow,
   parseLogCommitLine,
   parseLogCommits,
   parseShortHeadRef,
   parseUpstreamRef,
+  GIT_SHOW_FORMAT,
 } from "./gitParse";
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -171,6 +175,110 @@ describe("parseAheadBehindCount", () => {
   });
 });
 
+describe("parseBranchVvLine", () => {
+  it("parses fixture branch rows with current marker and subject", () => {
+    const lines = readFixture("git-branch-vv.txt").split("\n").filter(Boolean);
+
+    expect(parseBranchVvLine(lines[0]!)).toEqual({
+      isCurrent: false,
+      name: "feature/login",
+      head: "fe3fcdb",
+      upstream: null,
+      upstreamTrack: null,
+      subject: "Add login flow",
+    });
+    expect(parseBranchVvLine(lines[1]!)).toEqual({
+      isCurrent: true,
+      name: "master",
+      head: "0154eaa",
+      upstream: null,
+      upstreamTrack: null,
+      subject: "Initial commit",
+    });
+  });
+
+  it("parses upstream and tracking info from brackets", () => {
+    expect(
+      parseBranchVvLine("* main abc1234 [origin/main: ahead 2, behind 1] Latest commit"),
+    ).toEqual({
+      isCurrent: true,
+      name: "main",
+      head: "abc1234",
+      upstream: "origin/main",
+      upstreamTrack: "ahead 2, behind 1",
+      subject: "Latest commit",
+    });
+  });
+});
+
+describe("parseBranchVvLines", () => {
+  it("parses all fixture branches and flags the current branch", () => {
+    const branches = parseBranchVvLines(readFixture("git-branch-vv.txt"));
+
+    expect(branches).toHaveLength(2);
+    expect(branches.find((branch) => branch.isCurrent)?.name).toBe("master");
+    expect(branches.find((branch) => branch.name === "feature/login")?.isCurrent).toBe(false);
+  });
+});
+
+describe("parseCommitShow", () => {
+  it("parses metadata and name-status file rows from fixture stdout", () => {
+    const detail = parseCommitShow(readFixture("git-show-name-status.txt"));
+
+    expect(detail).not.toBeNull();
+    expect(detail?.sha).toBe("b15c01ba9a549a389363b7c6565d839973977239");
+    expect(detail?.parents).toEqual(["56382141a5939d37907cdb8a363c79e52ed6583d"]);
+    expect(detail?.authorName).toBe("Alexey Perov");
+    expect(detail?.authorEmail).toBe("a.perov@zmeke.com");
+    expect(detail?.committerName).toBe("GitHub");
+    expect(detail?.message).toContain("feat(git): add commit log query and parser (Task 2.2)");
+    expect(detail?.files.length).toBeGreaterThan(0);
+    expect(detail?.files.every((file) => file.status === "M")).toBe(true);
+    expect(detail?.files.some((file) => file.path.endsWith("gitParse.ts"))).toBe(true);
+  });
+
+  it("parses rename rows with previous and new paths", () => {
+    const stdout =
+      "abc123\x00\x00Author\x00author@example.com\x001700000000\x00Author\x00author@example.com\x001700000000\x00Rename commit\n\nR100\told/path.ts\tnew/path.ts\n";
+    const detail = parseCommitShow(stdout);
+
+    expect(detail?.files).toEqual([
+      {
+        status: "R",
+        previousPath: "old/path.ts",
+        path: "new/path.ts",
+      },
+    ]);
+  });
+});
+
+describe("parseCommitShow integration", () => {
+  it("parses real git show output from a temp repository", () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "specops-git-show-"));
+    try {
+      execSync("git init", { cwd: repoDir, stdio: "pipe" });
+      execSync('git config user.email "test@example.com"', { cwd: repoDir, stdio: "pipe" });
+      execSync('git config user.name "Test User"', { cwd: repoDir, stdio: "pipe" });
+
+      writeFileSync(join(repoDir, "added.txt"), "new");
+      execSync("git add added.txt", { cwd: repoDir, stdio: "pipe" });
+      execSync('git commit -m "Add file"', { cwd: repoDir, stdio: "pipe" });
+
+      const stdout = execSync(
+        `git show --name-status --format=${JSON.stringify(GIT_SHOW_FORMAT)} HEAD`,
+        { cwd: repoDir, encoding: "buffer" },
+      );
+
+      const detail = parseCommitShow(stdout.toString("utf8"));
+
+      expect(detail?.message).toContain("Add file");
+      expect(detail?.files).toEqual([{ status: "A", path: "added.txt" }]);
+    } finally {
+      rmSync(repoDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("fixture files", () => {
   it("documents git commands in README and provides non-empty stdout samples", () => {
     const readme = readFixture("README.md");
@@ -178,9 +286,11 @@ describe("fixture files", () => {
     expect(readme).toContain("git branch -vv");
     expect(readme).toContain("git tag -l");
     expect(readme).toContain("git status --porcelain");
+    expect(readme).toContain("git show --name-status");
 
     expect(readFixture("git-log-format.txt").trim().length).toBeGreaterThan(0);
     expect(readFixture("git-branch-vv.txt").trim().length).toBeGreaterThan(0);
+    expect(readFixture("git-show-name-status.txt").trim().length).toBeGreaterThan(0);
     expect(readFixture("git-tag-list.txt").trim().length).toBeGreaterThan(0);
     expect(readFixture("git-status-porcelain.txt").trim().length).toBeGreaterThan(0);
   });

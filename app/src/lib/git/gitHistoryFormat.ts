@@ -59,6 +59,14 @@ export function formatRelativeCommitDate(
   return rtf.format(diffYear, "year");
 }
 
+/** Format a commit timestamp for detail pane display. */
+export function formatCommitTimestamp(unixSeconds: number): string {
+  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) {
+    return "";
+  }
+  return new Date(unixSeconds * 1000).toLocaleString();
+}
+
 /** Accessible title for a branch/tag ref badge on a commit row. */
 export function commitRefBadgeTitle(ref: CommitDecorator): string {
   switch (ref.type) {

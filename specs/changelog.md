@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-02 — Git phase 2 Tasks 2.4–2.5: commit detail pane + branch list query
+
+- **`app/src/lib/git/types.ts`** — `CommitDetail`, `CommitFileChange`, and `BranchSummary` types for detail pane and branch queries.
+- **`app/src/lib/git/gitParse.ts`** — `GIT_SHOW_FORMAT`, `parseCommitShow`, `parseBranchVvLine`, and `parseBranchVvLines` for `git show --name-status` and `git branch -vv` stdout.
+- **`app/src/lib/git/gitService.ts`** — `queryCommitDetail(repoRoot, sha)` and `queryBranches(repoRoot)`.
+- **`app/src/lib/git/fixtures/git-show-name-status.txt`** — sample `git show --name-status` stdout for parser tests.
+- **`app/src/lib/components/GitCommitDetailPanel.svelte`** — commit metadata + changed-files list (A/M/D/R); loading, error, and empty-selection states; no diff hunks.
+- **`app/src/lib/components/VersionControlView.svelte`** — responsive history split layout (list beside detail on wide viewports, stacked on narrow).
+- **`app/src/lib/git/gitHistoryFormat.ts`** — `formatCommitTimestamp` for detail pane dates.
+- **`app/src/lib/git/gitParse.test.ts`**, **`app/src/lib/git/gitService.test.ts`** — branch fixture parser tests, commit show parser/integration tests, and query wrapper tests.
+- **`specs/git/phase-2-execution-plan.md`** — Tasks 2.4 and 2.5 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 2 Task 2.3: history panel UI
 
 - **`app/src/lib/git/gitHistoryFormat.ts`** — `formatShortSha`, `formatRelativeCommitDate`, and `commitRefBadgeTitle` helpers for history list rows.

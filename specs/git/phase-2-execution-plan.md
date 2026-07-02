@@ -93,7 +93,7 @@ Dependencies: Task 2.2.
 
 ---
 
-#### Task 2.4: Commit detail — metadata + files (G2-4) [Score:7] [Agent:medium] [~1d]
+#### Task 2.4: Commit detail — metadata + files (G2-4) [Score:7] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 
@@ -112,7 +112,7 @@ Dependencies: Task 2.3.
 
 ---
 
-#### Task 2.5: Branch list query + parser (G2-5) [Score:6] [Agent:medium] [~0.5d]
+#### Task 2.5: Branch list query + parser (G2-5) [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 

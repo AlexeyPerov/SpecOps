@@ -3,7 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   checkGitAvailable,
   GIT_LOG_FORMAT,
+  GIT_SHOW_FORMAT,
   queryAheadBehind,
+  queryBranches,
+  queryCommitDetail,
   queryCommits,
   queryCurrentBranch,
   resolveRepoRoot,
@@ -350,6 +353,86 @@ describe("queryCommits", () => {
     });
 
     await expect(queryCommits("/tmp/repo")).rejects.toSatisfy((error) => {
+      return isGitError(error) && error.kind === "command" && error.exitCode === 128;
+    });
+  });
+});
+
+describe("queryCommitDetail", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git show --name-status with structured format and parses detail", async () => {
+    const stdout =
+      "abc123\x00def456\x00Dev\x00dev@example.com\x001700000000\x00Dev\x00dev@example.com\x001700000000\x00Subject line\n\nA\tnew.txt\nM\texisting.ts\n";
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout,
+      stderr: "",
+      durationMs: 4,
+    });
+
+    const result = await queryCommitDetail("/tmp/repo", "abc123");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["show", "--name-status", `--format=${GIT_SHOW_FORMAT}`, "abc123"],
+    });
+    expect(result.sha).toBe("abc123");
+    expect(result.message).toBe("Subject line");
+    expect(result.files).toEqual([
+      { status: "A", path: "new.txt" },
+      { status: "M", path: "existing.ts" },
+    ]);
+  });
+
+  it("throws GitCommandError when git show fails", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: bad object abc123\n",
+      durationMs: 2,
+    });
+
+    await expect(queryCommitDetail("/tmp/repo", "abc123")).rejects.toSatisfy((error) => {
+      return isGitError(error) && error.kind === "command" && error.exitCode === 128;
+    });
+  });
+});
+
+describe("queryBranches", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git branch -vv and parses branches with current marker", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "  feature/login fe3fcdb Add login flow\n* master        0154eaa Initial commit\n",
+      stderr: "",
+      durationMs: 3,
+    });
+
+    const result = await queryBranches("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["branch", "-vv"],
+    });
+    expect(result).toHaveLength(2);
+    expect(result.find((branch) => branch.isCurrent)?.name).toBe("master");
+  });
+
+  it("throws GitCommandError when git branch fails", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: not a git repository\n",
+      durationMs: 2,
+    });
+
+    await expect(queryBranches("/tmp/repo")).rejects.toSatisfy((error) => {
       return isGitError(error) && error.kind === "command" && error.exitCode === 128;
     });
   });

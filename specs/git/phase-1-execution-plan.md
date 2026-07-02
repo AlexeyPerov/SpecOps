@@ -113,7 +113,7 @@ Dependencies: Tasks 1.1, 1.3.
 
 ---
 
-#### Task 1.5: Empty states — no git / not a repo (G1-5) [Score:6] [Agent:medium] [~0.5d]
+#### Task 1.5: Empty states — no git / not a repo (G1-5) [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 
@@ -133,7 +133,7 @@ Dependencies: Tasks 1.3, 1.4, Phase 0.
 
 ---
 
-#### Task 1.6: Init repository action (G1-6) [Score:5] [Agent:medium] [~0.5d]
+#### Task 1.6: Init repository action (G1-6) [Score:5] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 
@@ -162,9 +162,9 @@ Task 1.1 → Task 1.2
 
 ## Phase 1 exit criteria
 
-- [ ] Context menu opens singleton VC tab per workspace.
-- [ ] Empty states for missing git and non-repo workspaces.
-- [ ] Optional init creates repo at workspace root.
-- [ ] Section shell ready for phase 2 data wiring.
+- [x] Context menu opens singleton VC tab per workspace.
+- [x] Empty states for missing git and non-repo workspaces.
+- [x] Optional init creates repo at workspace root.
+- [x] Section shell ready for phase 2 data wiring.
 
 **Estimate:** ~2.5–3 days

@@ -17,6 +17,8 @@ import {
   parseLogCommitLine,
   parseLogCommits,
   parseShortHeadRef,
+  parseStatusPorcelain,
+  splitWorkingTreeStatus,
   parseUpstreamRef,
   GIT_SHOW_FORMAT,
 } from "./gitParse";
@@ -273,6 +275,104 @@ describe("parseCommitShow integration", () => {
 
       expect(detail?.message).toContain("Add file");
       expect(detail?.files).toEqual([{ status: "A", path: "added.txt" }]);
+    } finally {
+      rmSync(repoDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("parseStatusPorcelain", () => {
+  it("parses modified and untracked fixture lines", () => {
+    const lines = parseStatusPorcelain(readFixture("git-status-porcelain.txt"));
+
+    expect(lines.some((line) => line.path === "README.md" && line.workTreeStatus === "M")).toBe(
+      true,
+    );
+    expect(lines.some((line) => line.path === "untracked.txt")).toBe(true);
+    expect(lines.find((line) => line.path === "untracked.txt")).toEqual({
+      indexStatus: "?",
+      workTreeStatus: "?",
+      path: "untracked.txt",
+    });
+  });
+
+  it("parses staged-only, both-staged-unstaged, and rename arrow paths", () => {
+    const lines = parseStatusPorcelain(readFixture("git-status-porcelain.txt"));
+
+    expect(lines.find((line) => line.path === "staged-only.txt")).toEqual({
+      indexStatus: "M",
+      workTreeStatus: " ",
+      path: "staged-only.txt",
+    });
+    expect(lines.find((line) => line.path === "both-staged-unstaged.txt")).toEqual({
+      indexStatus: "M",
+      workTreeStatus: "M",
+      path: "both-staged-unstaged.txt",
+    });
+    expect(lines.find((line) => line.path === "new-name.txt")).toEqual({
+      indexStatus: "R",
+      workTreeStatus: " ",
+      path: "new-name.txt",
+    });
+    expect(lines.find((line) => line.path === "path with spaces.txt")).toEqual({
+      indexStatus: "?",
+      workTreeStatus: "?",
+      path: "path with spaces.txt",
+    });
+  });
+});
+
+describe("splitWorkingTreeStatus", () => {
+  it("splits staged vs unstaged and includes untracked in unstaged", () => {
+    const status = splitWorkingTreeStatus(parseStatusPorcelain(readFixture("git-status-porcelain.txt")));
+
+    expect(status.staged.map((entry) => entry.path)).toEqual([
+      "added-staged.txt",
+      "both-staged-unstaged.txt",
+      "deleted-staged.txt",
+      "new-name.txt",
+      "staged-only.txt",
+    ]);
+    expect(status.unstaged.map((entry) => entry.path)).toEqual([
+      "both-staged-unstaged.txt",
+      "deleted-unstaged.txt",
+      "path with spaces.txt",
+      "README.md",
+      "untracked.txt",
+    ]);
+    expect(status.unstaged.find((entry) => entry.path === "untracked.txt")?.statusCode).toBe("??");
+  });
+});
+
+describe("parseStatusPorcelain integration", () => {
+  it("parses real git status output from a temp repository", () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "specops-git-status-"));
+    try {
+      execSync("git init", { cwd: repoDir, stdio: "pipe" });
+      execSync('git config user.email "test@example.com"', { cwd: repoDir, stdio: "pipe" });
+      execSync('git config user.name "Test User"', { cwd: repoDir, stdio: "pipe" });
+
+      writeFileSync(join(repoDir, "tracked.txt"), "v1");
+      execSync("git add tracked.txt", { cwd: repoDir, stdio: "pipe" });
+      execSync('git commit -m "init"', { cwd: repoDir, stdio: "pipe" });
+
+      writeFileSync(join(repoDir, "tracked.txt"), "v2");
+      writeFileSync(join(repoDir, "new.txt"), "new");
+      writeFileSync(join(repoDir, "spaces file.txt"), "space");
+
+      const stdout = execSync("git status --porcelain", {
+        cwd: repoDir,
+        encoding: "utf8",
+      });
+
+      const status = splitWorkingTreeStatus(parseStatusPorcelain(stdout));
+
+      expect(status.unstaged.map((entry) => entry.path).sort()).toEqual([
+        "new.txt",
+        "spaces file.txt",
+        "tracked.txt",
+      ]);
+      expect(status.staged).toEqual([]);
     } finally {
       rmSync(repoDir, { recursive: true, force: true });
     }

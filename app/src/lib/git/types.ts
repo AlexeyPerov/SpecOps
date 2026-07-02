@@ -201,3 +201,17 @@ export interface BranchSummary {
   upstreamTrack: string | null;
   subject: string;
 }
+
+/** One working-tree file row from porcelain status (phase 3). */
+export interface WorkingTreeFileEntry {
+  path: string;
+  indexStatus: string;
+  workTreeStatus: string;
+  statusCode: string;
+}
+
+/** Staged and unstaged file lists from `git status --porcelain` (phase 3). */
+export interface WorkingTreeStatus {
+  staged: WorkingTreeFileEntry[];
+  unstaged: WorkingTreeFileEntry[];
+}

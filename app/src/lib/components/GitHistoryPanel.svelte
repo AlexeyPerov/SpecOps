@@ -9,11 +9,17 @@
 
   interface Props {
     repoRoot: string;
+    refreshToken?: number;
     selectedSha?: string | null;
     onSelectCommit?: (commit: CommitSummary) => void;
   }
 
-  let { repoRoot, selectedSha = null, onSelectCommit = () => {} }: Props = $props();
+  let {
+    repoRoot,
+    refreshToken = 0,
+    selectedSha = null,
+    onSelectCommit = () => {},
+  }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -44,6 +50,8 @@
 
   $effect(() => {
     const root = repoRoot;
+    const token = refreshToken;
+    void token;
     const controller = new AbortController();
     void loadCommits(root, controller.signal);
     return () => {

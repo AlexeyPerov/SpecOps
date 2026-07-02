@@ -3,6 +3,8 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import GitCommitDetailPanel from "./GitCommitDetailPanel.svelte";
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
+  import GitChangesPanel from "./GitChangesPanel.svelte";
+  import GitBranchesPanel from "./GitBranchesPanel.svelte";
   import { gitInstallHint } from "../git/gitInstallHints";
   import { queryAheadBehind, queryCurrentBranch } from "../git/gitService";
   import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo } from "../git/types";
@@ -49,6 +51,7 @@
   let aheadBehind = $state<AheadBehindCounts | null>(null);
   let branchHeaderError = $state<string | null>(null);
   let selectedCommitSha = $state<string | null>(null);
+  let panelRefreshToken = $state(0);
 
   const workspaceName = $derived.by(() => {
     if (!workspaceRootPath) {
@@ -69,9 +72,6 @@
   });
 
   const placeholderCopy = $derived.by(() => {
-    if (activeSection === "changes") {
-      return "Coming in phase 3.";
-    }
     return "Coming in phase 2.";
   });
 
@@ -279,6 +279,14 @@
     }
   }
 
+  async function refreshAfterMutation(): Promise<void> {
+    if (!repoRoot) {
+      return;
+    }
+    panelRefreshToken += 1;
+    selectedCommitSha = null;
+    await refreshBranchHeader(repoRoot);
+  }
   function formatRepoRoot(path: string): string {
     return normalizeGitOutputPath(path);
   }
@@ -416,6 +424,7 @@
             <div class="version-control-history-list">
               <GitHistoryPanel
                 repoRoot={repoRoot}
+                refreshToken={panelRefreshToken}
                 selectedSha={selectedCommitSha}
                 onSelectCommit={handleSelectCommit}
               />
@@ -424,6 +433,18 @@
               <GitCommitDetailPanel repoRoot={repoRoot} sha={selectedCommitSha} />
             </div>
           </div>
+        {:else if activeSection === "branches" && repoRoot}
+          <GitBranchesPanel
+            repoRoot={repoRoot}
+            refreshToken={panelRefreshToken}
+            onMutation={refreshAfterMutation}
+          />
+        {:else if activeSection === "changes" && repoRoot}
+          <GitChangesPanel
+            repoRoot={repoRoot}
+            refreshToken={panelRefreshToken}
+            onMutation={refreshAfterMutation}
+          />
         {:else}
           <p class="version-control-placeholder">{placeholderCopy}</p>
         {/if}

@@ -2,15 +2,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
   checkGitAvailable,
+  createBranch,
+  createCommit,
+  checkoutBranch,
   GIT_LOG_FORMAT,
   GIT_SHOW_FORMAT,
+  GitCommitValidationError,
+  GitRefValidationError,
+  isWorkingTreeDirty,
   queryAheadBehind,
   queryBranches,
   queryCommitDetail,
   queryCommits,
   queryCurrentBranch,
+  queryWorkingTreeStatus,
   resolveRepoRoot,
   runGit,
+  stageAll,
+  stagePaths,
+  unstagePaths,
 } from "./gitService";
 import { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
@@ -435,5 +445,194 @@ describe("queryBranches", () => {
     await expect(queryBranches("/tmp/repo")).rejects.toSatisfy((error) => {
       return isGitError(error) && error.kind === "command" && error.exitCode === 128;
     });
+  });
+});
+
+describe("queryWorkingTreeStatus", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git status --porcelain and splits staged vs unstaged", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: " M README.md\nM  staged.txt\n?? untracked.txt\n",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    const result = await queryWorkingTreeStatus("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["status", "--porcelain"],
+    });
+    expect(result.staged.map((entry) => entry.path)).toEqual(["staged.txt"]);
+    expect(result.unstaged.map((entry) => entry.path).sort()).toEqual([
+      "README.md",
+      "untracked.txt",
+    ]);
+  });
+});
+
+describe("isWorkingTreeDirty", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("returns false for clean porcelain output", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await expect(isWorkingTreeDirty("/tmp/repo")).resolves.toBe(false);
+  });
+
+  it("returns true when porcelain has entries", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "?? file.txt\n",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await expect(isWorkingTreeDirty("/tmp/repo")).resolves.toBe(true);
+  });
+});
+
+describe("stagePaths and unstagePaths", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git add with path separator for paths containing spaces", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await stagePaths("/tmp/repo", ["path with spaces.txt", "plain.txt"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["add", "--", "path with spaces.txt", "plain.txt"],
+    });
+  });
+
+  it("runs git restore --staged for unstage", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await unstagePaths("/tmp/repo", ["staged.txt"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["restore", "--staged", "--", "staged.txt"],
+    });
+  });
+
+  it("runs git add -A for stage all", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await stageAll("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["add", "-A"],
+    });
+  });
+});
+
+describe("createCommit", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("invokes git_commit_with_message with trimmed message", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "[main abc1234] Subject\n",
+      stderr: "",
+      durationMs: 3,
+    });
+
+    await createCommit("/tmp/repo", "  Subject line  ");
+
+    expect(invokeMock).toHaveBeenCalledWith("git_commit_with_message", {
+      repoRoot: "/tmp/repo",
+      message: "Subject line",
+    });
+  });
+
+  it("rejects empty message before invoking git", async () => {
+    await expect(createCommit("/tmp/repo", "   ")).rejects.toBeInstanceOf(
+      GitCommitValidationError,
+    );
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkoutBranch", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git checkout with branch name", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await checkoutBranch("/tmp/repo", "feature/login");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["checkout", "feature/login"],
+    });
+  });
+});
+
+describe("createBranch", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git checkout -b for valid branch names", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await createBranch("/tmp/repo", "feature/new");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["checkout", "-b", "feature/new"],
+    });
+  });
+
+  it("rejects invalid branch names before invoking git", async () => {
+    await expect(createBranch("/tmp/repo", "bad name")).rejects.toBeInstanceOf(
+      GitRefValidationError,
+    );
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });

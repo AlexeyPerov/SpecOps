@@ -1,2 +1,9 @@
  M README.md
 ?? untracked.txt
+M  staged-only.txt
+MM both-staged-unstaged.txt
+A  added-staged.txt
+ D deleted-unstaged.txt
+D  deleted-staged.txt
+R  old-name.txt -> new-name.txt
+?? "path with spaces.txt"

@@ -4,16 +4,21 @@ import {
   parseBranchShowCurrent,
   parseBranchVvLines,
   parseCommitShow,
+  parseStatusPorcelain,
+  splitWorkingTreeStatus,
   GIT_LOG_FORMAT,
   GIT_SHOW_FORMAT,
   parseLogCommits,
   parseShortHeadRef,
   parseUpstreamRef,
 } from "./gitParse";
+import { validateGitRefName } from "./gitRefName";
 import {
   createGitCommandError,
+  createGitInvalidPathError,
   createGitNotARepositoryError,
   DEFAULT_COMMIT_LOG_LIMIT,
+  isGitError,
   mapGitInvokeError,
   normalizeGitOutputPath,
   type AheadBehindCounts,
@@ -26,6 +31,7 @@ import {
   type QueryCommitsOptions,
   type ResolveRepoRootResult,
   type RunGitResponse,
+  type WorkingTreeStatus,
 } from "./types";
 
 const NOT_A_REPOSITORY_EXIT_CODE = 128;
@@ -215,6 +221,125 @@ export async function queryBranches(repoRoot: string): Promise<BranchSummary[]> 
   return parseBranchVvLines(response.stdout);
 }
 
+/**
+ * Query staged and unstaged working-tree files via `git status --porcelain`.
+ */
+export async function queryWorkingTreeStatus(repoRoot: string): Promise<WorkingTreeStatus> {
+  const response = await runGit(repoRoot, ["status", "--porcelain"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return splitWorkingTreeStatus(parseStatusPorcelain(response.stdout));
+}
+
+/** Returns true when porcelain status has any entries (dirty working tree). */
+export async function isWorkingTreeDirty(repoRoot: string): Promise<boolean> {
+  const response = await runGit(repoRoot, ["status", "--porcelain"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return parseStatusPorcelain(response.stdout).length > 0;
+}
+
+/** Stage selected paths (`git add -- …`). */
+export async function stagePaths(repoRoot: string, paths: string[]): Promise<void> {
+  if (paths.length === 0) {
+    return;
+  }
+
+  const response = await runGit(repoRoot, ["add", "--", ...paths]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+/** Stage all unstaged changes (`git add -A`). */
+export async function stageAll(repoRoot: string): Promise<void> {
+  const response = await runGit(repoRoot, ["add", "-A"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+/** Unstage selected paths (`git restore --staged -- …`). */
+export async function unstagePaths(repoRoot: string, paths: string[]): Promise<void> {
+  if (paths.length === 0) {
+    return;
+  }
+
+  const response = await runGit(repoRoot, ["restore", "--staged", "--", ...paths]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+export class GitCommitValidationError extends Error {
+  readonly kind = "commitValidation" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "GitCommitValidationError";
+  }
+}
+
+export class GitRefValidationError extends Error {
+  readonly kind = "refValidation" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "GitRefValidationError";
+  }
+}
+
+/**
+ * Create a commit with a message written to a secure temp file on the Rust side.
+ * Message is trimmed; empty messages are rejected before invoking git.
+ */
+export async function createCommit(repoRoot: string, message: string): Promise<void> {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    throw new GitCommitValidationError("Commit message cannot be empty.");
+  }
+
+  try {
+    const response = await invoke<RunGitResponse>("git_commit_with_message", {
+      repoRoot,
+      message: trimmed,
+    });
+    if (response.exitCode !== 0) {
+      throw createGitCommandError(response);
+    }
+  } catch (error) {
+    if (error instanceof GitCommitValidationError || isGitError(error)) {
+      throw error;
+    }
+    throw mapGitInvokeError(error, repoRoot);
+  }
+}
+
+/** Switch to an existing local branch (`git checkout <name>`). */
+export async function checkoutBranch(repoRoot: string, branchName: string): Promise<void> {
+  const response = await runGit(repoRoot, ["checkout", branchName]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+/** Create a new branch from HEAD and check it out (`git checkout -b <name>`). */
+export async function createBranch(repoRoot: string, name: string): Promise<void> {
+  const validation = validateGitRefName(name);
+  if (!validation.ok) {
+    throw new GitRefValidationError(validation.message);
+  }
+
+  const response = await runGit(repoRoot, ["checkout", "-b", name.trim()]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
 export type {
   AheadBehindCounts,
   BranchSummary,
@@ -229,6 +354,8 @@ export type {
   GitError,
   QueryCommitsOptions,
   RunGitResponse,
+  WorkingTreeFileEntry,
+  WorkingTreeStatus,
 } from "./types";
 export { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
 export { GIT_LOG_FORMAT, GIT_SHOW_FORMAT } from "./gitParse";

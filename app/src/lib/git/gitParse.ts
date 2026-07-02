@@ -6,6 +6,8 @@ import type {
   CommitFileChange,
   CommitFileStatus,
   CommitSummary,
+  WorkingTreeFileEntry,
+  WorkingTreeStatus,
 } from "./types";
 
 /** Parsed commit row from structured `git log --format=…` output (phase 2). */
@@ -390,7 +392,104 @@ export function parseTagList(_stdout: string): string[] {
   return [];
 }
 
-/** Placeholder for phase 3 porcelain status parsing (`git status --porcelain`). */
-export function parseStatusPorcelain(_stdout: string): ParsedStatusLine[] {
-  return [];
+function unquotePorcelainPath(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed
+      .slice(1, -1)
+      .replace(/\\([\\"nrt])/g, (_match, char: string) => {
+        switch (char) {
+          case "n":
+            return "\n";
+          case "t":
+            return "\t";
+          case "r":
+            return "\r";
+          case '"':
+            return '"';
+          case "\\":
+            return "\\";
+          default:
+            return char;
+        }
+      });
+  }
+  return trimmed;
+}
+
+function parsePorcelainPathPart(pathPart: string): string {
+  const unquoted = unquotePorcelainPath(pathPart);
+  const arrowMatch = /^(.+?) -> (.+)$/.exec(unquoted);
+  if (arrowMatch) {
+    return unquotePorcelainPath(arrowMatch[2]);
+  }
+
+  const tabIndex = unquoted.indexOf("\t");
+  if (tabIndex !== -1) {
+    return unquotePorcelainPath(unquoted.slice(tabIndex + 1));
+  }
+
+  return unquoted;
+}
+
+/** Parse `git status --porcelain` v1 stdout into working-tree rows. */
+export function parseStatusPorcelain(stdout: string): ParsedStatusLine[] {
+  const lines: ParsedStatusLine[] = [];
+
+  for (const rawLine of stdout.split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
+    if (!line || line.length < 3 || line[2] !== " ") {
+      continue;
+    }
+
+    const indexStatus = line[0] ?? " ";
+    const workTreeStatus = line[1] ?? " ";
+    const path = parsePorcelainPathPart(line.slice(3));
+
+    if (!path) {
+      continue;
+    }
+
+    lines.push({ indexStatus, workTreeStatus, path });
+  }
+
+  return lines;
+}
+
+/** Split parsed porcelain rows into staged and unstaged file lists. */
+export function splitWorkingTreeStatus(lines: ParsedStatusLine[]): WorkingTreeStatus {
+  const staged: WorkingTreeFileEntry[] = [];
+  const unstaged: WorkingTreeFileEntry[] = [];
+
+  for (const line of lines) {
+    const { indexStatus, workTreeStatus, path } = line;
+    const statusCode = `${indexStatus}${workTreeStatus}`;
+
+    if (indexStatus !== " " && indexStatus !== "?") {
+      staged.push({
+        path,
+        indexStatus,
+        workTreeStatus,
+        statusCode,
+      });
+    }
+
+    const isUntracked = indexStatus === "?" && workTreeStatus === "?";
+    if (isUntracked || (workTreeStatus !== " " && workTreeStatus !== "?")) {
+      unstaged.push({
+        path,
+        indexStatus,
+        workTreeStatus,
+        statusCode: isUntracked ? "??" : statusCode,
+      });
+    }
+  }
+
+  const sortByPath = (left: WorkingTreeFileEntry, right: WorkingTreeFileEntry): number =>
+    left.path.localeCompare(right.path, undefined, { sensitivity: "base" });
+
+  return {
+    staged: staged.sort(sortByPath),
+    unstaged: unstaged.sort(sortByPath),
+  };
 }

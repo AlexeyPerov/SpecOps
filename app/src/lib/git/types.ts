@@ -80,6 +80,43 @@ export function createGitCommandError(response: RunGitResponse): GitCommandError
   };
 }
 
+export function createGitInvalidPathError(
+  workspaceRootPath: string,
+  message: string,
+): GitInvalidPathError {
+  return {
+    kind: "invalidPath",
+    message,
+    workspaceRootPath,
+  };
+}
+
+function invokeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+/** Map a failed Tauri `invoke` for git commands to a typed `GitError`. */
+export function mapGitInvokeError(error: unknown, workspaceRootPath: string): GitError {
+  const message = invokeErrorMessage(error);
+  if (
+    message.includes("repo_root must not be empty") ||
+    message.includes("absolute path") ||
+    message.includes("Failed to resolve repo_root path")
+  ) {
+    return createGitInvalidPathError(workspaceRootPath, message);
+  }
+
+  return {
+    kind: "command",
+    message,
+    exitCode: -1,
+    stderr: message,
+  };
+}
+
 export function normalizeGitOutputPath(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
 }

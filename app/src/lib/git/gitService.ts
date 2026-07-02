@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   createGitCommandError,
   createGitNotARepositoryError,
+  mapGitInvokeError,
   normalizeGitOutputPath,
+  type GitAvailableResponse,
   type GitNotARepositoryError,
   type ResolveRepoRootResult,
   type RunGitResponse,
@@ -18,16 +20,44 @@ function isNotARepositoryResponse(response: RunGitResponse): boolean {
 }
 
 /**
+ * Run `git` in `repoRoot` with argv passed directly (no shell interpolation).
+ *
+ * Tauri validation errors (empty or invalid `repoRoot`) are thrown as typed
+ * {@link GitError} values.
+ */
+export async function runGit(
+  repoRoot: string,
+  args: string[],
+  env?: Record<string, string>,
+): Promise<RunGitResponse> {
+  try {
+    return await invoke<RunGitResponse>("run_git", {
+      repoRoot,
+      args,
+      ...(env ? { env } : {}),
+    });
+  } catch (error) {
+    throw mapGitInvokeError(error, repoRoot);
+  }
+}
+
+/** Probe whether system `git` is available on PATH. */
+export async function checkGitAvailable(): Promise<GitAvailableResponse> {
+  try {
+    return await invoke<GitAvailableResponse>("git_available");
+  } catch (error) {
+    throw mapGitInvokeError(error, "");
+  }
+}
+
+/**
  * Resolve the git repository root for a workspace path via
  * `git rev-parse --show-toplevel`.
  */
 export async function resolveRepoRoot(
   workspaceRootPath: string,
 ): Promise<ResolveRepoRootResult> {
-  const response = await invoke<RunGitResponse>("run_git", {
-    repoRoot: workspaceRootPath,
-    args: ["rev-parse", "--show-toplevel"],
-  });
+  const response = await runGit(workspaceRootPath, ["rev-parse", "--show-toplevel"]);
 
   if (isNotARepositoryResponse(response)) {
     const error: GitNotARepositoryError = createGitNotARepositoryError(
@@ -56,8 +86,10 @@ export async function resolveRepoRoot(
 export type { GitAvailableResponse, GitError, RunGitResponse } from "./types";
 export {
   createGitCommandError,
+  createGitInvalidPathError,
   createGitNotARepositoryError,
   isGitError,
   isGitNotARepositoryError,
+  mapGitInvokeError,
   normalizeGitOutputPath,
 } from "./types";

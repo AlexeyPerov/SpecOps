@@ -126,7 +126,7 @@ Dependencies: Task 0.3.
 
 ---
 
-#### Task 0.5: TS gitService invoke wrapper (G0-5) [Score:5] [Agent:easy] [~0.5d]
+#### Task 0.5: TS gitService invoke wrapper (G0-5) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -146,7 +146,7 @@ Dependencies: Task 0.4.
 
 ---
 
-#### Task 0.6: Parser test fixtures + pure helpers (G0-6) [Score:6] [Agent:medium] [~1d]
+#### Task 0.6: Parser test fixtures + pure helpers (G0-6) [Score:6] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 

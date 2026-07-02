@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-02 — Git phase 2 Task 2.2: commit log query + parser
+
+- **`app/src/lib/git/types.ts`** — `CommitSummary`, `CommitDecorator`, `QueryCommitsOptions`, and `DEFAULT_COMMIT_LOG_LIMIT` (500).
+- **`app/src/lib/git/gitParse.ts`** — `GIT_LOG_FORMAT`, `parseCommitDecorators`, and `parseLogCommits` for structured NUL-separated `git log` output; branch/tag ref decorations parsed from `%D`.
+- **`app/src/lib/git/gitService.ts`** — `queryCommits(repoRoot, { limit })` using `git log --no-show-signature --decorate=full` with configurable limit (default 500).
+- **`app/src/lib/git/gitParse.test.ts`**, **`app/src/lib/git/gitService.test.ts`** — fixture parser tests, decorator parsing coverage, temp-repo integration test, and `queryCommits` wrapper tests.
+- **`specs/git/phase-2-execution-plan.md`** — Task 2.2 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 2 Task 2.1: current branch + upstream query
 
 - **`app/src/lib/git/types.ts`** — `CurrentBranchInfo` and `AheadBehindCounts` types for branch header queries.

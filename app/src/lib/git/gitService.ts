@@ -2,18 +2,23 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   parseAheadBehindCount,
   parseBranchShowCurrent,
+  GIT_LOG_FORMAT,
+  parseLogCommits,
   parseShortHeadRef,
   parseUpstreamRef,
 } from "./gitParse";
 import {
   createGitCommandError,
   createGitNotARepositoryError,
+  DEFAULT_COMMIT_LOG_LIMIT,
   mapGitInvokeError,
   normalizeGitOutputPath,
   type AheadBehindCounts,
+  type CommitSummary,
   type CurrentBranchInfo,
   type GitAvailableResponse,
   type GitNotARepositoryError,
+  type QueryCommitsOptions,
   type ResolveRepoRootResult,
   type RunGitResponse,
 } from "./types";
@@ -143,13 +148,42 @@ export async function queryAheadBehind(repoRoot: string): Promise<AheadBehindCou
   return parseAheadBehindCount(response.stdout);
 }
 
+/**
+ * Query commit history for the current branch using structured `git log` output.
+ * Returns commits newest-first (default `git log` order).
+ */
+export async function queryCommits(
+  repoRoot: string,
+  options: QueryCommitsOptions = {},
+): Promise<CommitSummary[]> {
+  const limit = options.limit ?? DEFAULT_COMMIT_LOG_LIMIT;
+  const response = await runGit(repoRoot, [
+    "log",
+    "--no-show-signature",
+    "--decorate=full",
+    `--format=${GIT_LOG_FORMAT}`,
+    `-${limit}`,
+  ]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return parseLogCommits(response.stdout);
+}
+
 export type {
   AheadBehindCounts,
+  CommitDecorator,
+  CommitDecoratorType,
+  CommitSummary,
   CurrentBranchInfo,
   GitAvailableResponse,
   GitError,
+  QueryCommitsOptions,
   RunGitResponse,
 } from "./types";
+export { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
+export { GIT_LOG_FORMAT } from "./gitParse";
 export {
   createGitCommandError,
   createGitInvalidPathError,

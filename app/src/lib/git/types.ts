@@ -133,3 +133,37 @@ export interface AheadBehindCounts {
   ahead: number;
   behind: number;
 }
+
+/** Default cap for `git log` queries (phase 2). */
+export const DEFAULT_COMMIT_LOG_LIMIT = 500;
+
+/** Branch/tag ref decoration on a commit from `git log --decorate=full`. */
+export type CommitDecoratorType =
+  | "currentBranchHead"
+  | "localBranchHead"
+  | "currentCommitHead"
+  | "remoteBranchHead"
+  | "tag";
+
+export interface CommitDecorator {
+  type: CommitDecoratorType;
+  name: string;
+}
+
+/** Parsed commit row for history list (phase 2). */
+export interface CommitSummary {
+  sha: string;
+  parents: string[];
+  refs: CommitDecorator[];
+  authorName: string;
+  authorEmail: string;
+  authorTime: number;
+  committerName: string;
+  committerEmail: string;
+  committerTime: number;
+  subject: string;
+}
+
+export interface QueryCommitsOptions {
+  limit?: number;
+}

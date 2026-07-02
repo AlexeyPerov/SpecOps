@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { checkGitAvailable, queryAheadBehind, queryCurrentBranch, resolveRepoRoot, runGit } from "./gitService";
+import {
+  checkGitAvailable,
+  GIT_LOG_FORMAT,
+  queryAheadBehind,
+  queryCommits,
+  queryCurrentBranch,
+  resolveRepoRoot,
+  runGit,
+} from "./gitService";
+import { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
 import { isGitError } from "./types";
 
@@ -274,5 +283,74 @@ describe("queryAheadBehind", () => {
     const result = await queryAheadBehind("/tmp/repo");
 
     expect(result).toBeNull();
+  });
+});
+
+describe("queryCommits", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs structured git log with default limit and parses commits", async () => {
+    const stdout =
+      "abc123\x00def456\x00HEAD -> refs/heads/main\x00Dev±dev@example.com\x001700000000\x00Dev±dev@example.com\x001700000000\x00Latest\n";
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout,
+      stderr: "",
+      durationMs: 5,
+    });
+
+    const result = await queryCommits("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "log",
+        "--no-show-signature",
+        "--decorate=full",
+        `--format=${GIT_LOG_FORMAT}`,
+        `-${DEFAULT_COMMIT_LOG_LIMIT}`,
+      ],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.sha).toBe("abc123");
+    expect(result[0]?.refs).toEqual([{ type: "currentBranchHead", name: "main" }]);
+    expect(result[0]?.subject).toBe("Latest");
+  });
+
+  it("honors a custom limit option", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await queryCommits("/tmp/repo", { limit: 25 });
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "log",
+        "--no-show-signature",
+        "--decorate=full",
+        `--format=${GIT_LOG_FORMAT}`,
+        "-25",
+      ],
+    });
+  });
+
+  it("throws GitCommandError when git log fails", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: bad default revision 'HEAD'\n",
+      durationMs: 2,
+    });
+
+    await expect(queryCommits("/tmp/repo")).rejects.toSatisfy((error) => {
+      return isGitError(error) && error.kind === "command" && error.exitCode === 128;
+    });
   });
 });

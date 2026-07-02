@@ -130,7 +130,7 @@ Dependencies: Task 2.1.
 
 ---
 
-#### Task 2.6: Branches panel UI (read-only) (G2-6) [Score:5] [Agent:easy] [~0.5d]
+#### Task 2.6: Branches panel UI (read-only) (G2-6) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -148,7 +148,7 @@ Dependencies: Task 2.5.
 
 ---
 
-#### Task 2.7: Tag list query + UI (G2-7) [Score:5] [Agent:easy] [~0.5d]
+#### Task 2.7: Tag list query + UI (G2-7) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -167,7 +167,7 @@ Dependencies: Task 2.1.
 
 ---
 
-#### Task 2.8: Refresh orchestration (G2-8) [Score:6] [Agent:medium] [~0.5d]
+#### Task 2.8: Refresh orchestration (G2-8) [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 

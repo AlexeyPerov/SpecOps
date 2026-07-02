@@ -9,9 +9,10 @@
   interface Props {
     repoRoot: string;
     sha?: string | null;
+    refreshToken?: number;
   }
 
-  let { repoRoot, sha = null }: Props = $props();
+  let { repoRoot, sha = null, refreshToken = 0 }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -43,6 +44,7 @@
   $effect(() => {
     const root = repoRoot;
     const commitSha = sha;
+    const token = refreshToken;
     const controller = new AbortController();
 
     if (!commitSha) {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-02 — Git phase 2 Tasks 2.6–2.8: branches/tags panels + refresh orchestration
+
+- **`app/src/lib/git/gitParse.ts`** — `parseTagList` for `git tag -l` stdout (alphabetically sorted tag names).
+- **`app/src/lib/git/gitService.ts`** — `queryTags(repoRoot)` via `git tag -l`.
+- **`app/src/lib/components/GitBranchesPanel.svelte`** — read-only local branch list with current-branch highlight, upstream/tracking hints, and disabled checkout/create actions (phase 3).
+- **`app/src/lib/components/GitTagsPanel.svelte`** — read-only tag list with empty state and disabled create/delete actions (phase 3).
+- **`app/src/lib/components/VersionControlView.svelte`** — Branches and Tags sections wired to new panels; **Refresh** toolbar button with debounce, silent repo re-probe, header loading indicator, and `panelRefreshToken` orchestration for active section reload.
+- **`app/src/lib/components/GitHistoryPanel.svelte`**, **`GitCommitDetailPanel.svelte`** — accept `refreshToken` prop for coordinated refresh.
+- **`app/src/lib/git/gitParse.test.ts`**, **`app/src/lib/git/gitService.test.ts`** — tag parser and `queryTags` wrapper tests.
+- **`specs/git/phase-2-execution-plan.md`** — Tasks 2.6, 2.7, and 2.8 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 2 Tasks 2.4–2.5: commit detail pane + branch list query
 
 - **`app/src/lib/git/types.ts`** — `CommitDetail`, `CommitFileChange`, and `BranchSummary` types for detail pane and branch queries.

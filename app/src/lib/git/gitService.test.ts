@@ -9,6 +9,7 @@ import {
   queryCommitDetail,
   queryCommits,
   queryCurrentBranch,
+  queryTags,
   resolveRepoRoot,
   runGit,
 } from "./gitService";
@@ -396,6 +397,42 @@ describe("queryCommitDetail", () => {
     });
 
     await expect(queryCommitDetail("/tmp/repo", "abc123")).rejects.toSatisfy((error) => {
+      return isGitError(error) && error.kind === "command" && error.exitCode === 128;
+    });
+  });
+});
+
+describe("queryTags", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git tag -l and returns alphabetically sorted tag names", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "v2.0.0\nalpha\nv1.0.0\n",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    const result = await queryTags("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["tag", "-l"],
+    });
+    expect(result).toEqual(["alpha", "v1.0.0", "v2.0.0"]);
+  });
+
+  it("throws GitCommandError when git tag fails", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: not a git repository\n",
+      durationMs: 2,
+    });
+
+    await expect(queryTags("/tmp/repo")).rejects.toSatisfy((error) => {
       return isGitError(error) && error.kind === "command" && error.exitCode === 128;
     });
   });

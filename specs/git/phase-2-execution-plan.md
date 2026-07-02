@@ -53,7 +53,7 @@ Dependencies: Phase 1 exit criteria.
 
 ---
 
-#### Task 2.2: Commit log query + parser (G2-2) [Score:8] [Agent:medium] [~1d]
+#### Task 2.2: Commit log query + parser (G2-2) [Score:8] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 

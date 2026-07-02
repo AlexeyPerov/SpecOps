@@ -1,8 +1,10 @@
+import type { CommitDecorator, CommitDecoratorType, CommitSummary } from "./types";
+
 /** Parsed commit row from structured `git log --format=…` output (phase 2). */
 export interface ParsedCommitLine {
   sha: string;
   parents: string[];
-  decorators: string;
+  decoratorsRaw: string;
   authorName: string;
   authorEmail: string;
   authorTime: number;
@@ -32,6 +34,18 @@ export interface ParsedStatusLine {
 }
 
 const LOG_COMMIT_FIELD_COUNT = 8;
+
+/** Structured NUL-separated `git log --format=…` string (phase 2 commit queries). */
+export const GIT_LOG_FORMAT =
+  "%H%x00%P%x00%D%x00%aN±%aE%x00%at%x00%cN±%cE%x00%ct%x00%s";
+
+const DECORATOR_TYPE_ORDER: Record<CommitDecoratorType, number> = {
+  currentBranchHead: 1,
+  localBranchHead: 2,
+  currentCommitHead: 3,
+  remoteBranchHead: 4,
+  tag: 5,
+};
 
 function splitNameEmail(value: string): { name: string; email: string } {
   const separator = value.indexOf("±");
@@ -72,7 +86,7 @@ export function parseLogCommitLine(line: string): ParsedCommitLine | null {
   return {
     sha,
     parents: parentsRaw ? parentsRaw.split(" ").filter(Boolean) : [],
-    decorators,
+    decoratorsRaw: decorators,
     authorName: author.name,
     authorEmail: author.email,
     authorTime: Number.parseInt(authorTimeRaw, 10),
@@ -81,6 +95,79 @@ export function parseLogCommitLine(line: string): ParsedCommitLine | null {
     committerTime: Number.parseInt(committerTimeRaw, 10),
     subject,
   };
+}
+
+/**
+ * Parse `%D` decorator field from `git log --decorate=full` output into branch/tag refs.
+ */
+export function parseCommitDecorators(raw: string): CommitDecorator[] {
+  const trimmed = raw.trim();
+  if (trimmed.length < 3) {
+    return [];
+  }
+
+  const refs: CommitDecorator[] = [];
+  for (const segment of trimmed.split(",")) {
+    const decorator = segment.trim();
+    if (!decorator || decorator.endsWith("/HEAD")) {
+      continue;
+    }
+
+    if (decorator.startsWith("tag: refs/tags/")) {
+      refs.push({ type: "tag", name: decorator.slice("tag: refs/tags/".length) });
+    } else if (decorator.startsWith("HEAD -> refs/heads/")) {
+      refs.push({
+        type: "currentBranchHead",
+        name: decorator.slice("HEAD -> refs/heads/".length),
+      });
+    } else if (decorator === "HEAD") {
+      refs.push({ type: "currentCommitHead", name: decorator });
+    } else if (decorator.startsWith("refs/heads/")) {
+      refs.push({ type: "localBranchHead", name: decorator.slice("refs/heads/".length) });
+    } else if (decorator.startsWith("refs/remotes/")) {
+      refs.push({ type: "remoteBranchHead", name: decorator.slice("refs/remotes/".length) });
+    }
+  }
+
+  refs.sort((left, right) => {
+    const typeDelta = DECORATOR_TYPE_ORDER[left.type] - DECORATOR_TYPE_ORDER[right.type];
+    if (typeDelta !== 0) {
+      return typeDelta;
+    }
+    return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+  });
+
+  return refs;
+}
+
+function toCommitSummary(parsed: ParsedCommitLine): CommitSummary {
+  return {
+    sha: parsed.sha,
+    parents: parsed.parents,
+    refs: parseCommitDecorators(parsed.decoratorsRaw),
+    authorName: parsed.authorName,
+    authorEmail: parsed.authorEmail,
+    authorTime: parsed.authorTime,
+    committerName: parsed.committerName,
+    committerEmail: parsed.committerEmail,
+    committerTime: parsed.committerTime,
+    subject: parsed.subject,
+  };
+}
+
+/** Parse structured `git log --format=…` stdout into commits (newest-first order preserved). */
+export function parseLogCommits(stdout: string): CommitSummary[] {
+  const commits: CommitSummary[] = [];
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) {
+      continue;
+    }
+    const parsed = parseLogCommitLine(line);
+    if (parsed) {
+      commits.push(toCommitSummary(parsed));
+    }
+  }
+  return commits;
 }
 
 /**

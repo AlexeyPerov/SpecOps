@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-02 — Git phase 2 Task 2.3: history panel UI
+
+- **`app/src/lib/git/gitHistoryFormat.ts`** — `formatShortSha`, `formatRelativeCommitDate`, and `commitRefBadgeTitle` helpers for history list rows.
+- **`app/src/lib/components/GitHistoryPanel.svelte`** — scrollable commit list (subject, short SHA, author, relative date) with branch/tag ref badges; loading, error, and empty-repo states; row selection callback for Task 2.4 detail pane.
+- **`app/src/lib/components/VersionControlView.svelte`** — History section renders `GitHistoryPanel` when repo is ready; tracks selected commit SHA.
+- **`app/src/lib/git/gitHistoryFormat.test.ts`** — unit tests for SHA abbreviation and relative date formatting.
+- **`specs/git/phase-2-execution-plan.md`** — Task 2.3 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 2 Task 2.2: commit log query + parser
 
 - **`app/src/lib/git/types.ts`** — `CommitSummary`, `CommitDecorator`, `QueryCommitsOptions`, and `DEFAULT_COMMIT_LOG_LIMIT` (500).

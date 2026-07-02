@@ -1,9 +1,10 @@
 <script lang="ts">
   import { confirm } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import GitHistoryPanel from "./GitHistoryPanel.svelte";
   import { gitInstallHint } from "../git/gitInstallHints";
   import { queryAheadBehind, queryCurrentBranch } from "../git/gitService";
-  import type { AheadBehindCounts, CurrentBranchInfo } from "../git/types";
+  import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo } from "../git/types";
   import {
     initRepositoryAtWorkspaceRoot,
     probeVersionControlContext,
@@ -46,6 +47,7 @@
   let currentBranch = $state<CurrentBranchInfo | null>(null);
   let aheadBehind = $state<AheadBehindCounts | null>(null);
   let branchHeaderError = $state<string | null>(null);
+  let selectedCommitSha = $state<string | null>(null);
 
   const workspaceName = $derived.by(() => {
     if (!workspaceRootPath) {
@@ -133,6 +135,11 @@
     currentBranch = null;
     aheadBehind = null;
     branchHeaderError = null;
+    selectedCommitSha = null;
+  }
+
+  function handleSelectCommit(commit: CommitSummary): void {
+    selectedCommitSha = commit.sha;
   }
 
   async function refreshBranchHeader(root: string, signal?: AbortSignal): Promise<void> {
@@ -399,10 +406,19 @@
 
       <div
         class="version-control-body"
+        class:version-control-body-flush={activeSection === "history"}
         role="tabpanel"
         aria-label={SECTIONS.find((section) => section.id === activeSection)?.label ?? "Section"}
       >
-        <p class="version-control-placeholder">{placeholderCopy}</p>
+        {#if activeSection === "history" && repoRoot}
+          <GitHistoryPanel
+            repoRoot={repoRoot}
+            selectedSha={selectedCommitSha}
+            onSelectCommit={handleSelectCommit}
+          />
+        {:else}
+          <p class="version-control-placeholder">{placeholderCopy}</p>
+        {/if}
       </div>
     </div>
   {/if}
@@ -651,6 +667,11 @@
     min-height: 0;
     overflow-y: auto;
     padding: var(--space-10) var(--space-12) var(--space-12);
+  }
+
+  .version-control-body-flush {
+    overflow: hidden;
+    padding: 0;
   }
 
   .version-control-placeholder {

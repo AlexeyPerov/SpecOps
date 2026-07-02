@@ -73,7 +73,7 @@ Dependencies: Task 2.1.
 
 ---
 
-#### Task 2.3: History panel UI (G2-3) [Score:7] [Agent:medium] [~1d]
+#### Task 2.3: History panel UI (G2-3) [Score:7] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 

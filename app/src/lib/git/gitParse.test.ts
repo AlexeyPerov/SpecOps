@@ -253,6 +253,24 @@ describe("parseCommitShow", () => {
       },
     ]);
   });
+
+  it("normalizes Windows backslashes in name-status paths", () => {
+    const stdout =
+      "abc123\x00\x00Author\x00author@example.com\x001700000000\x00Author\x00author@example.com\x001700000000\x00Rename commit\n\nR100\told\\path.ts\tnew\\path.ts\nM\tsrc\\components\\App.svelte\n";
+    const detail = parseCommitShow(stdout);
+
+    expect(detail?.files).toEqual([
+      {
+        status: "R",
+        previousPath: "old/path.ts",
+        path: "new/path.ts",
+      },
+      {
+        status: "M",
+        path: "src/components/App.svelte",
+      },
+    ]);
+  });
 });
 
 describe("parseTagList", () => {
@@ -339,6 +357,38 @@ describe("parseStatusPorcelain", () => {
       indexStatus: "?",
       workTreeStatus: "?",
       path: "path with spaces.txt",
+    });
+  });
+
+  it("normalizes Windows backslashes in porcelain paths", () => {
+    const lines = parseStatusPorcelain(
+      [
+        " M src\\components\\App.svelte",
+        "?? nested\\folder\\new.txt",
+        'R  old\\name.txt -> new\\name.txt',
+        '?? "nested\\folder\\spaces file.txt"',
+      ].join("\n"),
+    );
+
+    expect(lines.find((line) => line.path === "src/components/App.svelte")).toEqual({
+      indexStatus: " ",
+      workTreeStatus: "M",
+      path: "src/components/App.svelte",
+    });
+    expect(lines.find((line) => line.path === "nested/folder/new.txt")).toEqual({
+      indexStatus: "?",
+      workTreeStatus: "?",
+      path: "nested/folder/new.txt",
+    });
+    expect(lines.find((line) => line.path === "new/name.txt")).toEqual({
+      indexStatus: "R",
+      workTreeStatus: " ",
+      path: "new/name.txt",
+    });
+    expect(lines.find((line) => line.path === "nested/folder/spaces file.txt")).toEqual({
+      indexStatus: "?",
+      workTreeStatus: "?",
+      path: "nested/folder/spaces file.txt",
     });
   });
 });

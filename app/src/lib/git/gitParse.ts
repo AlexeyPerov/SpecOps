@@ -9,6 +9,7 @@ import type {
   WorkingTreeFileEntry,
   WorkingTreeStatus,
 } from "./types";
+import { normalizeGitOutputPath } from "./types";
 
 /** Parsed commit row from structured `git log --format=…` output (phase 2). */
 export interface ParsedCommitLine {
@@ -251,13 +252,17 @@ function parseUpstreamBracket(content: string): { upstream: string | null; track
   };
 }
 
+function normalizeRepoRelativePath(path: string): string {
+  return normalizeGitOutputPath(path);
+}
+
 function parseNameStatusLine(line: string): CommitFileChange | null {
   const renameOrCopy = /^([RC])(\d+)\t([^\t]+)\t(.+)$/.exec(line);
   if (renameOrCopy) {
     return {
       status: renameOrCopy[1] as CommitFileStatus,
-      previousPath: renameOrCopy[3],
-      path: renameOrCopy[4],
+      previousPath: normalizeRepoRelativePath(renameOrCopy[3]),
+      path: normalizeRepoRelativePath(renameOrCopy[4]),
     };
   }
 
@@ -265,7 +270,7 @@ function parseNameStatusLine(line: string): CommitFileChange | null {
   if (simple) {
     return {
       status: simple[1] as CommitFileStatus,
-      path: simple[2],
+      path: normalizeRepoRelativePath(simple[2]),
     };
   }
 
@@ -426,15 +431,15 @@ function parsePorcelainPathPart(pathPart: string): string {
   const unquoted = unquotePorcelainPath(pathPart);
   const arrowMatch = /^(.+?) -> (.+)$/.exec(unquoted);
   if (arrowMatch) {
-    return unquotePorcelainPath(arrowMatch[2]);
+    return normalizeRepoRelativePath(unquotePorcelainPath(arrowMatch[2]));
   }
 
   const tabIndex = unquoted.indexOf("\t");
   if (tabIndex !== -1) {
-    return unquotePorcelainPath(unquoted.slice(tabIndex + 1));
+    return normalizeRepoRelativePath(unquotePorcelainPath(unquoted.slice(tabIndex + 1)));
   }
 
-  return unquoted;
+  return normalizeRepoRelativePath(unquoted);
 }
 
 /** Parse `git status --porcelain` v1 stdout into working-tree rows. */

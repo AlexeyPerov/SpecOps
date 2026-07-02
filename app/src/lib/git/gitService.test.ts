@@ -572,6 +572,22 @@ describe("stagePaths and unstagePaths", () => {
     });
   });
 
+  it("passes forward-slash paths to git add after Windows-style normalization", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await stagePaths("/tmp/repo", ["nested/folder/file.ts"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["add", "--", "nested/folder/file.ts"],
+    });
+  });
+
   it("runs git restore --staged for unstage", async () => {
     invokeMock.mockResolvedValue({
       exitCode: 0,

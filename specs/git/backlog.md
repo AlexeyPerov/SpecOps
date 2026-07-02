@@ -25,6 +25,7 @@ These were considered during planning and rejected for v1:
 | D-09 | Workspace Manager git column | VC tab must land first | Idea §3 #16 |
 | D-10 | History across all branches/remotes | Current branch only in MVP | Idea §3 #5 |
 | D-11 | Linux as co-equal launch platform | macOS + Windows first | Idea §3 #15 |
+| D-12 | Cancel in-flight git subprocess | MVP disables toolbar during ops; no kill/cancel UI | Phase 4 Task 4.5 |
 
 ---
 

@@ -39,6 +39,14 @@ fn decode_utf8(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// Format a filesystem path for `git commit -F` argv on all platforms.
+///
+/// Git accepts forward slashes on Windows; normalizing avoids mixed-slash paths
+/// when the temp file lives under `%TEMP%` with backslashes.
+fn git_message_file_arg(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 fn normalize_repo_root(repo_root: &str) -> Result<PathBuf, String> {
     let trimmed = repo_root.trim();
     if trimmed.is_empty() {
@@ -171,7 +179,7 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
     std::fs::write(&temp_path, request.message.as_bytes())
         .map_err(|error| format!("Failed to write commit message file: {error}"))?;
 
-    let temp_arg = temp_path.to_string_lossy().into_owned();
+    let temp_arg = git_message_file_arg(&temp_path);
     let response = execute_git(
         &repo_root,
         &[
@@ -352,6 +360,15 @@ mod tests {
         assert_eq!(response.exit_code, 0);
         assert_eq!(response.stdout.trim(), repo_root.to_string_lossy());
         let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn git_message_file_arg_uses_forward_slashes_on_windows_style_paths() {
+        let path = PathBuf::from(r"C:\Users\test\AppData\Local\Temp\spec-ops-git-commit-123");
+        assert_eq!(
+            git_message_file_arg(&path),
+            "C:/Users/test/AppData/Local/Temp/spec-ops-git-commit-123"
+        );
     }
 
     #[test]

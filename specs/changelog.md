@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-02 — Git phase 4 Tasks 4.4–4.5: cross-platform paths and toolbar busy UX
+
+- **`app/src/lib/git/gitParse.ts`** — normalize repo-relative paths from porcelain status and name-status output to forward slashes for consistent UI display; normalized paths remain valid for `git add` / `git restore --staged`.
+- **`app/src/lib/git/types.ts`** — `normalizeGitOutputPath` used at parse boundary (existing helper).
+- **`app/src-tauri/src/git.rs`** — `git_message_file_arg` formats temp commit message paths with forward slashes for `git commit -F` on Windows.
+- **`app/src/lib/git/versionControlRemoteOps.ts`** — shared toolbar busy guards (`canStartRemoteGitOperation`, `isVersionControlToolbarBusy`) blocking parallel fetch/pull/push/refresh.
+- **`app/src/lib/components/VersionControlView.svelte`** — all toolbar buttons disabled while any remote op or refresh is in flight; busy labels clear in `finally` on success and error.
+- **Tests** — `types.test.ts`, extended `gitParse.test.ts` / `gitService.test.ts`, `versionControlRemoteOps.test.ts`, Rust `git_message_file_arg` test.
+- **`specs/git/backlog.md`** — D-12: cancel in-flight git subprocess deferred post-MVP.
+- **`specs/git/phase-4-execution-plan.md`** — Tasks 4.4–4.5 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 4 Tasks 4.1–4.3: unsaved guard, bare/detached UX, git error surfacing
 
 - **`app/src/lib/services/unsavedDocumentGuard.ts`** — `collectDirtyDocumentsForWorkspace` and `assertNoUnsavedDocuments` block checkout, pull, and branch creation when the active workspace has unsaved editor buffers (Cancel-only dialog).

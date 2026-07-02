@@ -23,6 +23,10 @@
     type VersionControlMutationScope,
   } from "../git/versionControlRefresh";
   import {
+    canStartRemoteGitOperation,
+    isVersionControlToolbarBusy,
+  } from "../git/versionControlRemoteOps";
+  import {
     initRepositoryAtWorkspaceRoot,
     probeVersionControlContext,
     workspaceUsesParentRepository,
@@ -98,6 +102,10 @@
     }
     return workspaceUsesParentRepository(workspaceRootPath, repoRoot);
   });
+
+  const toolbarBusy = $derived(
+    isVersionControlToolbarBusy({ fetchBusy, pullBusy, pushBusy, refreshBusy }),
+  );
 
   const isReadOnlyRepository = $derived(isBareRepository);
 
@@ -349,7 +357,7 @@
   }
 
   async function handleFetch(): Promise<void> {
-    if (!repoRoot || fetchBusy || refreshBusy || pullBusy || pushBusy) {
+    if (!repoRoot || !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy })) {
       return;
     }
 
@@ -366,7 +374,7 @@
   }
 
   async function handlePull(): Promise<void> {
-    if (!repoRoot || pullBusy || refreshBusy || fetchBusy || pushBusy) {
+    if (!repoRoot || !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy })) {
       return;
     }
 
@@ -402,7 +410,7 @@
   }
 
   async function handlePush(): Promise<void> {
-    if (!repoRoot || pushBusy || refreshBusy || fetchBusy || pullBusy) {
+    if (!repoRoot || !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy })) {
       return;
     }
 
@@ -419,7 +427,7 @@
   }
 
   async function handleRefresh(): Promise<void> {
-    if (!workspaceRootPath || refreshBusy) {
+    if (!workspaceRootPath || toolbarBusy) {
       return;
     }
 
@@ -530,7 +538,7 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={refreshBusy}
+          disabled={toolbarBusy}
           title="Refresh repository state"
           onclick={handleRefresh}
         >
@@ -539,7 +547,7 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={fetchBusy || refreshBusy || pullBusy || pushBusy}
+          disabled={toolbarBusy}
           title="Fetch from remote"
           onclick={handleFetch}
         >
@@ -548,7 +556,7 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={pullBusy || refreshBusy || fetchBusy || pushBusy || isReadOnlyRepository}
+          disabled={toolbarBusy || isReadOnlyRepository}
           title={isReadOnlyRepository ? "Pull is unavailable for bare repositories" : "Pull from upstream"}
           onclick={handlePull}
         >
@@ -557,7 +565,7 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={pushBusy || refreshBusy || fetchBusy || pullBusy}
+          disabled={toolbarBusy}
           title="Push to upstream"
           onclick={handlePush}
         >

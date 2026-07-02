@@ -88,7 +88,7 @@ Dependencies: Phase 3.
 
 ---
 
-#### Task 4.4: Cross-platform path display (G4-4) [Score:6] [Agent:medium] [~1d]
+#### Task 4.4: Cross-platform path display (G4-4) [Score:6] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 
@@ -107,7 +107,7 @@ Dependencies: Phase 3.
 
 ---
 
-#### Task 4.5: Long-running operation UX (G4-5) [Score:4] [Agent:easy] [~0.5d]
+#### Task 4.5: Long-running operation UX (G4-5) [Score:4] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 

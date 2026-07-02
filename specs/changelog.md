@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-02 — Git phase 2 Task 2.1: current branch + upstream query
+
+- **`app/src/lib/git/types.ts`** — `CurrentBranchInfo` and `AheadBehindCounts` types for branch header queries.
+- **`app/src/lib/git/gitParse.ts`** — parser helpers for `git branch --show-current`, upstream ref, short HEAD, and ahead/behind rev-list output.
+- **`app/src/lib/git/gitService.ts`** — `queryCurrentBranch(repoRoot)` and `queryAheadBehind(repoRoot)` using `branch --show-current`, `rev-parse`, and `rev-list --left-right --count @{u}...HEAD`.
+- **`app/src/lib/git/gitParse.test.ts`**, **`app/src/lib/git/gitService.test.ts`** — unit tests for branch/upstream parsers and query wrappers.
+- **`app/src/lib/components/VersionControlView.svelte`** — header shows live branch name, detached HEAD badge, upstream tracking summary (ahead/behind or “No upstream”).
+- **`specs/git/phase-2-execution-plan.md`** — Task 2.1 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 1 Tasks 1.5–1.6: VC empty states and init repository
 
 - **`app/src/lib/git/versionControlProbe.ts`** — `probeVersionControlContext` probes git availability and repo root on mount/workspace change; `initRepositoryAtWorkspaceRoot` runs `git init`; `workspaceUsesParentRepository` detects nested workspace folders inside a parent repo.

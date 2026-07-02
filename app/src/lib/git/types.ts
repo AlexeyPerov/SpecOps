@@ -120,3 +120,16 @@ export function mapGitInvokeError(error: unknown, workspaceRootPath: string): Gi
 export function normalizeGitOutputPath(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
 }
+
+/** Current branch metadata from `git branch --show-current` (+ upstream when attached). */
+export interface CurrentBranchInfo {
+  name: string;
+  isDetached: boolean;
+  upstream: string | null;
+}
+
+/** Ahead/behind counts relative to the tracking branch. */
+export interface AheadBehindCounts {
+  ahead: number;
+  behind: number;
+}

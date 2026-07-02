@@ -32,7 +32,7 @@ Residual uncertainties:
 
 ## Task Breakdown
 
-#### Task 2.1: Current branch + upstream query (G2-1) [Score:6] [Agent:medium] [~0.5d]
+#### Task 2.1: Current branch + upstream query (G2-1) [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 

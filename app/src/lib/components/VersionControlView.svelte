@@ -2,6 +2,8 @@
   import { confirm } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { gitInstallHint } from "../git/gitInstallHints";
+  import { queryAheadBehind, queryCurrentBranch } from "../git/gitService";
+  import type { AheadBehindCounts, CurrentBranchInfo } from "../git/types";
   import {
     initRepositoryAtWorkspaceRoot,
     probeVersionControlContext,
@@ -25,6 +27,7 @@
     | "notARepository"
     | "ready"
     | "error";
+  type BranchHeaderStatus = "idle" | "loading" | "ready" | "error";
 
   const SECTIONS: ReadonlyArray<{ id: Section; label: string }> = [
     { id: "history", label: "History" },
@@ -39,6 +42,10 @@
   let probeError = $state<string | null>(null);
   let initBusy = $state(false);
   let initError = $state<string | null>(null);
+  let branchHeaderStatus = $state<BranchHeaderStatus>("idle");
+  let currentBranch = $state<CurrentBranchInfo | null>(null);
+  let aheadBehind = $state<AheadBehindCounts | null>(null);
+  let branchHeaderError = $state<string | null>(null);
 
   const workspaceName = $derived.by(() => {
     if (!workspaceRootPath) {
@@ -65,6 +72,99 @@
     return "Coming in phase 2.";
   });
 
+  const branchHeaderLabel = $derived.by(() => {
+    if (currentBranch?.isDetached) {
+      return "HEAD";
+    }
+    return "Branch";
+  });
+
+  const branchDisplayName = $derived.by(() => {
+    if (branchHeaderStatus === "loading") {
+      return "…";
+    }
+    if (branchHeaderStatus === "error") {
+      return "—";
+    }
+    if (!currentBranch) {
+      return "—";
+    }
+    return currentBranch.name;
+  });
+
+  const branchTitle = $derived.by(() => {
+    if (!currentBranch) {
+      return "Current branch";
+    }
+    if (currentBranch.isDetached) {
+      return `Detached HEAD at ${currentBranch.name}`;
+    }
+    if (currentBranch.upstream) {
+      return `${currentBranch.name} tracks ${currentBranch.upstream}`;
+    }
+    return currentBranch.name;
+  });
+
+  const trackingSummary = $derived.by(() => {
+    if (branchHeaderStatus !== "ready" || !currentBranch || currentBranch.isDetached) {
+      return null;
+    }
+    if (!currentBranch.upstream) {
+      return "No upstream";
+    }
+    if (!aheadBehind) {
+      return null;
+    }
+    const parts: string[] = [];
+    if (aheadBehind.ahead > 0) {
+      parts.push(`${aheadBehind.ahead} ahead`);
+    }
+    if (aheadBehind.behind > 0) {
+      parts.push(`${aheadBehind.behind} behind`);
+    }
+    if (parts.length === 0) {
+      return "Up to date";
+    }
+    return parts.join(" · ");
+  });
+
+  function resetBranchHeader(): void {
+    branchHeaderStatus = "idle";
+    currentBranch = null;
+    aheadBehind = null;
+    branchHeaderError = null;
+  }
+
+  async function refreshBranchHeader(root: string, signal?: AbortSignal): Promise<void> {
+    branchHeaderStatus = "loading";
+    branchHeaderError = null;
+    currentBranch = null;
+    aheadBehind = null;
+
+    try {
+      const branch = await queryCurrentBranch(root);
+      if (signal?.aborted) {
+        return;
+      }
+
+      currentBranch = branch;
+      if (!branch.isDetached && branch.upstream) {
+        aheadBehind = await queryAheadBehind(root);
+        if (signal?.aborted) {
+          return;
+        }
+      }
+
+      branchHeaderStatus = "ready";
+    } catch (error) {
+      if (signal?.aborted) {
+        return;
+      }
+      branchHeaderStatus = "error";
+      branchHeaderError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   async function refreshProbe(signal?: AbortSignal): Promise<void> {
     const root = workspaceRootPath;
     if (!root) {
@@ -72,12 +172,14 @@
       repoRoot = null;
       probeError = null;
       initError = null;
+      resetBranchHeader();
       return;
     }
 
     probeStatus = "loading";
     probeError = null;
     initError = null;
+    resetBranchHeader();
 
     try {
       const result = await probeVersionControlContext(root);
@@ -102,6 +204,7 @@
         case "ready":
           probeStatus = "ready";
           repoRoot = result.repoRoot;
+          await refreshBranchHeader(result.repoRoot, signal);
           break;
       }
     } catch (error) {
@@ -235,10 +338,23 @@
     </div>
   {:else}
     <header class="version-control-header" aria-label="Version control toolbar">
-      <span class="version-control-branch" title="Current branch">
-        <span class="version-control-branch-label">Branch</span>
-        <span class="version-control-branch-name">—</span>
-      </span>
+      <div class="version-control-header-status">
+        <span class="version-control-branch" title={branchTitle}>
+          <span class="version-control-branch-label">{branchHeaderLabel}</span>
+          <span class="version-control-branch-name">{branchDisplayName}</span>
+          {#if currentBranch?.isDetached}
+            <span class="version-control-detached-badge">Detached</span>
+          {/if}
+        </span>
+        {#if trackingSummary}
+          <span class="version-control-tracking" title="Upstream tracking">
+            {trackingSummary}
+          </span>
+        {/if}
+        {#if branchHeaderError}
+          <span class="version-control-branch-error" role="alert">{branchHeaderError}</span>
+        {/if}
+      </div>
       <div class="version-control-header-actions">
         <button type="button" class="version-control-action" disabled title="Fetch (phase 3)">
           Fetch
@@ -397,6 +513,14 @@
     border-bottom: 1px solid var(--color-border-subtle);
   }
 
+  .version-control-header-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-width: 0;
+    flex: 1;
+  }
+
   .version-control-branch {
     display: inline-flex;
     align-items: center;
@@ -416,6 +540,33 @@
   .version-control-branch-name {
     color: var(--color-text);
     font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .version-control-detached-badge {
+    flex-shrink: 0;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
+    color: var(--color-text-secondary);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .version-control-tracking {
+    flex-shrink: 0;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+
+  .version-control-branch-error {
+    font-size: 0.8125rem;
+    color: var(--color-danger, #c0392b);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

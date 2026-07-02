@@ -1,5 +1,7 @@
 <script lang="ts">
   import { countLinesInWorkspace, type LineCountResult } from "../../services/lineCounter";
+  import { getLineCounterCache, setLineCounterCache } from "../../services/lineCounterCache";
+  import { ensureWorkspaceReadAccess } from "../../services/fileSystem";
 
   let { workspaceRoot }: { workspaceRoot: string | null } = $props();
 
@@ -7,26 +9,85 @@
   let running = $state(false);
   let error = $state<string | null>(null);
   let scannedAt = $state<Date | null>(null);
+  let progressLabel = $state<string | null>(null);
+  let scanAbort = $state<AbortController | null>(null);
 
   const totalLines = $derived(result?.totalLines ?? 0);
   const codeFileCount = $derived(result?.codeFiles.length ?? 0);
   const ignoredFileCount = $derived(result?.ignoredFiles.length ?? 0);
   const skippedDirCount = $derived(result?.skippedDirs.length ?? 0);
+  const readErrorCount = $derived(result?.readErrors.length ?? 0);
+  const hasReadErrors = $derived(readErrorCount > 0);
+
+  $effect(() => {
+    const root = workspaceRoot;
+    const controller = new AbortController();
+    scanAbort = controller;
+
+    if (root) {
+      const cached = getLineCounterCache(root);
+      if (cached) {
+        result = cached.result;
+        scannedAt = cached.scannedAt;
+      } else {
+        result = null;
+        scannedAt = null;
+      }
+    } else {
+      result = null;
+      scannedAt = null;
+    }
+
+    error = null;
+    progressLabel = null;
+
+    return () => {
+      controller.abort();
+    };
+  });
 
   async function runCount(): Promise<void> {
     if (!workspaceRoot || running) {
       return;
     }
+
+    const accessStatus = await ensureWorkspaceReadAccess(workspaceRoot);
+    if (accessStatus !== "ready") {
+      error = "Cannot read this workspace folder. Check filesystem permissions or add the folder again.";
+      return;
+    }
+
+    const signal = scanAbort?.signal;
     running = true;
     error = null;
+    progressLabel = null;
+
     try {
-      result = await countLinesInWorkspace(workspaceRoot);
-      scannedAt = new Date();
+      const nextResult = await countLinesInWorkspace(workspaceRoot, {
+        signal,
+        onProgress: (info) => {
+          progressLabel = `Scanning ${info.relPath} (${info.filesScanned.toLocaleString()} files)`;
+        },
+      });
+
+      if (signal?.aborted) {
+        return;
+      }
+
+      const nextScannedAt = new Date();
+      result = nextResult;
+      scannedAt = nextScannedAt;
+      setLineCounterCache(workspaceRoot, { result: nextResult, scannedAt: nextScannedAt });
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       error = err instanceof Error ? err.message : String(err);
       result = null;
+      scannedAt = null;
     } finally {
       running = false;
+      progressLabel = null;
     }
   }
 </script>
@@ -34,15 +95,17 @@
 <section class="settings-section">
   <h3>Line counter</h3>
   <p class="settings-section-note">
-    Counts newline lines in source files (the same LineWalker allowlist used by Unity AI Hub):
-    C/C++, Go, Rust, Python, JS/TS, Java, Kotlin, Swift, C#, HTML/CSS, Svelte, Vue and more.
-    Markdown, JSON, YAML and TOML are excluded as data/docs. Dependency and build folders
-    (node_modules, target, dist, build, vendor, __pycache__) and dot-directories are skipped.
+    Counts newline lines in source files (C/C++, Go, Rust, Python, JS/TS, Java, Kotlin, Swift, C#,
+    HTML/CSS, Svelte, Vue and more). Markdown, JSON, YAML and TOML are excluded as data/docs.
+    Dependency and build folders (node_modules, target, dist, build, vendor, __pycache__) and
+    dot-directories are skipped.
   </p>
 
   <div class="line-counter-stat">
-    <span class="line-counter-total">{totalLines.toLocaleString()}</span>
-    <span class="line-counter-total-label">total lines of code</span>
+    <span class="line-counter-total">{result ? totalLines.toLocaleString() : "—"}</span>
+    <span class="line-counter-total-label">
+      {result ? "total lines of code" : "not scanned yet"}
+    </span>
   </div>
 
   {#if result}
@@ -62,6 +125,22 @@
     </dl>
   {/if}
 
+  {#if hasReadErrors}
+    <details class="line-counter-read-errors">
+      <summary>
+        {readErrorCount.toLocaleString()} read {readErrorCount === 1 ? "error" : "errors"}
+        {#if result && result.totalLines === 0}
+          (scan may be incomplete)
+        {/if}
+      </summary>
+      <ul>
+        {#each result?.readErrors ?? [] as readError (readError)}
+          <li>{readError}</li>
+        {/each}
+      </ul>
+    </details>
+  {/if}
+
   {#if scannedAt}
     <p class="line-counter-scanned">Scanned {scannedAt.toLocaleString()}</p>
   {/if}
@@ -76,7 +155,7 @@
     disabled={!workspaceRoot || running}
     onclick={() => void runCount()}
   >
-    {running ? "Counting…" : "Run line count"}
+    {running ? (progressLabel ?? "Counting…") : "Run line count"}
   </button>
 </section>
 
@@ -122,6 +201,30 @@
     font-size: 0.95rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+  }
+
+  .line-counter-read-errors {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+  }
+
+  .line-counter-read-errors summary {
+    cursor: pointer;
+    color: var(--color-danger, var(--color-text-secondary));
+  }
+
+  .line-counter-read-errors ul {
+    margin: var(--space-2) 0 0;
+    padding-left: var(--space-8);
+    max-height: 12rem;
+    overflow-y: auto;
+  }
+
+  .line-counter-read-errors li {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    word-break: break-all;
   }
 
   .line-counter-scanned {

@@ -5,6 +5,7 @@ import {
   createBranch,
   createCommit,
   checkoutBranch,
+  fetchRemote,
   GIT_LOG_FORMAT,
   GIT_SHOW_FORMAT,
   GitCommitValidationError,
@@ -641,6 +642,46 @@ describe("checkoutBranch", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", {
       repoRoot: "/tmp/repo",
       args: ["checkout", "feature/login"],
+    });
+  });
+});
+
+describe("fetchRemote", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git fetch", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 120,
+    });
+
+    await fetchRemote("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["fetch"],
+    });
+  });
+
+  it("throws GitCommandError when git fetch fails", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: unable to access 'https://example.com/repo.git/': Could not resolve host\n",
+      durationMs: 50,
+    });
+
+    await expect(fetchRemote("/tmp/repo")).rejects.toSatisfy((error) => {
+      return (
+        isGitError(error) &&
+        error.kind === "command" &&
+        error.exitCode === 128 &&
+        error.stderr.includes("Could not resolve host")
+      );
     });
   });
 });

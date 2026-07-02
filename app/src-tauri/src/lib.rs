@@ -57,6 +57,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             take_pending_opened_paths,
+            git::git_available,
             git::run_git,
             file_watcher::sync_file_watcher_paths,
             file_watcher::sync_project_tree_watcher,

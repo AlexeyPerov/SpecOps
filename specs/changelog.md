@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-02 13:50 — Git phase 0 Tasks 0.2–0.4: git probe, subprocess executor, repo root resolution
+
+- **`app/src-tauri/src/git.rs`** — `git_available` Tauri command probes `git --version` on PATH and returns `{ available, version, error }`. `run_git` spawns `git` with `current_dir = repo_root`, argv passthrough (no shell), UTF-8 stdout/stderr capture, exit code and duration; rejects empty or relative `repo_root` with path normalization via `canonicalize`. Nine Rust unit/integration tests (availability shape, status in temp repo, argv with spaces, non-zero stderr, nested `rev-parse`, exit 128 not-a-repo).
+- **`app/src-tauri/src/lib.rs`** — register `git::git_available` in invoke handler.
+- **`app/src/lib/git/types.ts`** — shared `RunGitResponse`, `GitAvailableResponse`, `GitError` union, `GitNotARepositoryError`, helpers and type guards.
+- **`app/src/lib/git/gitService.ts`** — `resolveRepoRoot(workspaceRootPath)` invokes `run_git` with `rev-parse --show-toplevel`; maps exit code 128 / not-a-repo stderr to typed `GitNotARepositoryError`.
+- **`app/src/lib/git/gitService.test.ts`** — nested subdirectory fixture, not-a-repo error, stderr-only not-a-repo mapping (3 tests).
+- **`specs/git/phase-0-execution-plan.md`** — Tasks 0.2, 0.3, 0.4 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 0 Task 0.1: Rust git module scaffold
 
 - **`app/src-tauri/src/git.rs`** — new git module with `RunGitRequest` / `RunGitResponse` types and stub `run_git` Tauri command returning empty success (`exitCode: 0`, empty stdout/stderr, `durationMs: 0`). Doc comment documents that backend `std::process::Command` spawn (Task 0.3) does not require shell-plugin capabilities; IPC uses default registered-command ACL.

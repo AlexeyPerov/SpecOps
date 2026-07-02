@@ -31,7 +31,7 @@ Residual uncertainties:
 
 ## Task Breakdown
 
-#### Task 1.1: Widen view-tab domain for `version-control` (G1-1) [Score:5] [Agent:easy] [~0.5d]
+#### Task 1.1: Widen view-tab domain for `version-control` (G1-1) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 

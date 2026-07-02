@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-02 — Git phase 0 Task 0.1: Rust git module scaffold
+
+- **`app/src-tauri/src/git.rs`** — new git module with `RunGitRequest` / `RunGitResponse` types and stub `run_git` Tauri command returning empty success (`exitCode: 0`, empty stdout/stderr, `durationMs: 0`). Doc comment documents that backend `std::process::Command` spawn (Task 0.3) does not require shell-plugin capabilities; IPC uses default registered-command ACL.
+- **`app/src-tauri/src/lib.rs`** — register `mod git` and `git::run_git` in the invoke handler.
+- **`specs/git/phase-0-execution-plan.md`** — Task 0.1 marked `[DONE]`.
+
 ## 2026-07-02 — Cross-context file opening (notepad non-restrict)
 
 - **Optional context restriction** — implements `specs/text-editor/notepad-non-restrict-plan.md`. New global setting **Restrict files to their context** (Editor → Contexts; default off). When off, files open in whichever context is active (Notepad or any workspace) with one tab per path per window; existing tabs are focused without migration. When on, legacy behavior is preserved (outside paths → Notepad, workspace files migrate from Notepad, Save As outside root moves tab).

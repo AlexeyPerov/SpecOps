@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-02 — Line counter fixes (phases 1–4.3)
+
+- **Workspace Settings line counter** — implements `specs/text-editor/line-counter-fixes.md` phases 1–4.3 (Rust walker deferred).
+  - **UI:** Fresh panel shows `—` / “not scanned yet” instead of misleading `0`; `readErrors` surfaced in a collapsible `<details>` block; `{#key workspaceRoot}` reset when switching scoped roots.
+  - **Cache:** New in-memory `services/lineCounterCache.ts` keyed by normalized root path; results survive leaving and re-entering Workspace Settings within a session.
+  - **Walker:** In-flight dedupe per root, `AbortSignal` on unmount/root change, progress callback with file count, event-loop yield every 50 files, sync `joinDirectoryPath` (no per-entry IPC `join`), `ensureWorkspaceReadAccess` before scan, skip files above 5 MiB with `readErrors` entry.
+  - **Tests:** `lineCounterCache.test.ts` (3) and extended `lineCounter.test.ts` walker tests (5). Suite green.
+
 ## 2026-07-02 — Git specs: reference links + AGENTS rule
 
 - **`specs/git/**`** — all reference-project links now include a GitHub fallback ([sourcegit-scm/sourcegit](https://github.com/sourcegit-scm/sourcegit)) alongside local checkout paths so cloud agents can read reference code. Task-level “Required context” entries link to matching paths on GitHub where applicable.

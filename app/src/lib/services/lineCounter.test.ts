@@ -1,10 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readDir, readFile, stat } from "@tauri-apps/plugin-fs";
+import { joinDirectoryPath } from "./folderOpenableFiles";
 import {
   classifyExtension,
+  clearLineCounterInflight,
+  countLinesInWorkspace,
   countNewlines,
+  DEFAULT_MAX_FILE_BYTES,
   extensionOf,
   isCountedExtension,
 } from "./lineCounter";
+
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  readDir: vi.fn(),
+  readFile: vi.fn(),
+  stat: vi.fn(),
+}));
+
+const readDirMock = vi.mocked(readDir);
+const readFileMock = vi.mocked(readFile);
+const statMock = vi.mocked(stat);
 
 describe("extensionOf", () => {
   it("returns lowercased extension without the dot", () => {
@@ -98,5 +113,100 @@ describe("classifyExtension", () => {
     expect(classifyExtension("md")).toBe("ignored");
     expect(classifyExtension("json")).toBe("ignored");
     expect(classifyExtension("lock")).toBe("ignored");
+  });
+});
+
+describe("countLinesInWorkspace walker", () => {
+  beforeEach(() => {
+    readDirMock.mockReset();
+    readFileMock.mockReset();
+    statMock.mockReset();
+    clearLineCounterInflight();
+  });
+
+  it("uses synchronous directory path joining for entries", async () => {
+    readDirMock.mockResolvedValue([
+      { name: "main.ts", isDirectory: false, isFile: true, isSymlink: false },
+    ]);
+    statMock.mockResolvedValue({ size: 12, mtime: new Date(), atime: new Date(), birthtime: new Date(), readonly: false, fileAttributes: null });
+    readFileMock.mockResolvedValue(new TextEncoder().encode("a\nb\n"));
+
+    await countLinesInWorkspace("/tmp/project/");
+
+    const expectedPath = joinDirectoryPath("/tmp/project", "main.ts");
+    expect(statMock).toHaveBeenCalledWith(expectedPath);
+    expect(readFileMock).toHaveBeenCalledWith(expectedPath);
+  });
+
+  it("dedupes concurrent walks for the same root", async () => {
+    let resolveReadDir: ((value: Awaited<ReturnType<typeof readDir>>) => void) | undefined;
+    readDirMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReadDir = resolve;
+        }),
+    );
+
+    const first = countLinesInWorkspace("/tmp/project");
+    const second = countLinesInWorkspace("/tmp/project");
+
+    expect(readDirMock).toHaveBeenCalledTimes(1);
+
+    resolveReadDir?.([]);
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.objectContaining({ totalLines: 0 }),
+      expect.objectContaining({ totalLines: 0 }),
+    ]);
+  });
+
+  it("rejects when aborted before the walk completes", async () => {
+    let resolveReadDir: ((value: Awaited<ReturnType<typeof readDir>>) => void) | undefined;
+    readDirMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReadDir = resolve;
+        }),
+    );
+
+    const controller = new AbortController();
+    const pending = countLinesInWorkspace("/tmp/project", { signal: controller.signal });
+    controller.abort();
+
+    resolveReadDir?.([
+      { name: "main.ts", isDirectory: false, isFile: true, isSymlink: false },
+    ]);
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("records oversized files in readErrors instead of reading them", async () => {
+    readDirMock.mockResolvedValue([
+      { name: "bundle.js", isDirectory: false, isFile: true, isSymlink: false },
+    ]);
+    statMock.mockResolvedValue({
+      size: DEFAULT_MAX_FILE_BYTES + 1,
+      mtime: new Date(),
+      atime: new Date(),
+      birthtime: new Date(),
+      readonly: false,
+      fileAttributes: null,
+    });
+
+    const result = await countLinesInWorkspace("/tmp/project");
+
+    expect(readFileMock).not.toHaveBeenCalled();
+    expect(result.readErrors).toEqual([
+      `bundle.js: skipped (file exceeds ${DEFAULT_MAX_FILE_BYTES} bytes)`,
+    ]);
+    expect(result.totalLines).toBe(0);
+  });
+
+  it("surfaces readDir failures in readErrors", async () => {
+    readDirMock.mockRejectedValue(new Error("permission denied"));
+
+    const result = await countLinesInWorkspace("/tmp/project");
+
+    expect(result.totalLines).toBe(0);
+    expect(result.readErrors).toEqual(["/tmp/project: Error: permission denied"]);
   });
 });

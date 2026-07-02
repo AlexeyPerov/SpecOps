@@ -102,7 +102,9 @@
           <span>Show in sidebar</span>
         </label>
       </section>
-      <LineCounterPanel workspaceRoot={workspaceRootPath} />
+      {#key workspaceRootPath}
+        <LineCounterPanel workspaceRoot={workspaceRootPath} />
+      {/key}
     {/if}
   </div>
 </div>

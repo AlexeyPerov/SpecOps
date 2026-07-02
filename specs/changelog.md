@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-02 — Agent rule: work on master by default
+
+- **`AGENTS.md`** — Added **Branching** rule: agents must not create separate feature branches or PRs; commit and push directly to `master` unless the user explicitly requests a branch/PR workflow.
+
 ## 2026-07-02 — Git phase 2 Tasks 2.6–2.8: branches/tags panels + refresh orchestration
 
 - **`app/src/lib/git/gitParse.ts`** — `parseTagList` for `git tag -l` stdout (alphabetically sorted tag names).

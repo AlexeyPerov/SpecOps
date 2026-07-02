@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-02 14:02 — Git phase 0 Tasks 0.5–0.6: gitService wrappers and parser fixtures
+
+- **`app/src/lib/git/gitService.ts`** — `runGit(repoRoot, args, env?)` and `checkGitAvailable()` thin wrappers around Tauri `invoke`; `resolveRepoRoot` refactored to use `runGit`. Tauri validation failures map to typed `GitError` via `mapGitInvokeError`.
+- **`app/src/lib/git/types.ts`** — `createGitInvalidPathError`, `mapGitInvokeError` for invoke error mapping.
+- **`app/src/lib/git/gitService.test.ts`** — tests for `runGit`, `checkGitAvailable`, and existing `resolveRepoRoot` (7 tests total).
+- **`app/src/lib/git/gitParse.ts`** — `parseLogCommitLine` for structured NUL-separated log output; placeholder exports for branch, tag, and status parsers (phase 2/3).
+- **`app/src/lib/git/gitParse.test.ts`** — fixture-backed parse test for a single commit line plus fixture documentation checks.
+- **`app/src/lib/git/fixtures/`** — sample stdout for `git log --format=…`, `git branch -vv`, `git tag -l`, `git status --porcelain` with README documenting source commands.
+- **`specs/git/phase-0-execution-plan.md`** — Tasks 0.5, 0.6 marked `[DONE]`.
+
 ## 2026-07-02 13:50 — Git phase 0 Tasks 0.2–0.4: git probe, subprocess executor, repo root resolution
 
 - **`app/src-tauri/src/git.rs`** — `git_available` Tauri command probes `git --version` on PATH and returns `{ available, version, error }`. `run_git` spawns `git` with `current_dir = repo_root`, argv passthrough (no shell), UTF-8 stdout/stderr capture, exit code and duration; rejects empty or relative `repo_root` with path normalization via `canonicalize`. Nine Rust unit/integration tests (availability shape, status in temp repo, argv with spaces, non-zero stderr, nested `rev-parse`, exit 128 not-a-repo).

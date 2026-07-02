@@ -36,8 +36,16 @@
     notepadOpenTabCount?: number;
     /** Last opened notepad tabs (append order), already formatted. */
     notepadRecentTabs?: NotepadRailTab[];
+    /**
+     * When non-null a workspace context menu is open for that workspace id.
+     * Workspace tooltips are suppressed while any menu is open so the tooltip
+     * never overlaps the menu, and a longer delay (2× default) keeps the
+     * workspace tooltips from flickering up on quick hover.
+     */
+    contextMenuWorkspaceId?: ContextId | null;
     onSelectContext?: (contextId: ContextId) => void;
     onAddWorkspace?: () => void;
+    onOpenWorkspaceManager?: () => void;
     onPanelWidthChange?: (width: number) => void;
     onRequestCloseWorkspace?: (workspaceId: ContextId, x: number, y: number) => void;
     onReorderWorkspaces?: (fromIndex: number, toIndex: number) => void;
@@ -52,8 +60,10 @@
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
     notepadOpenTabCount = 0,
     notepadRecentTabs = [],
+    contextMenuWorkspaceId = null,
     onSelectContext = () => {},
     onAddWorkspace = () => {},
+    onOpenWorkspaceManager = () => {},
     onPanelWidthChange = () => {},
     onRequestCloseWorkspace = () => {},
     onReorderWorkspaces = () => {},
@@ -74,6 +84,17 @@
   });
 
   const expanded = $derived(isActivityRailExpanded(displayWidth));
+
+  /**
+   * Workspace rail tooltips use double the default hover delay (the compact
+   * rail buttons are hovered constantly while dragging between workspaces, and
+   * a longer delay keeps the name tooltip from flickering on every pass).
+   */
+  const WORKSPACE_TOOLTIP_DELAY_MS = 400;
+
+  // Suppress every workspace tooltip while any workspace context menu is open
+  // so the tooltip never overlaps the menu.
+  const workspaceTooltipSuppressed = $derived(contextMenuWorkspaceId !== null);
 
   let dragState = $state<WorkspaceDragState>({
     pointerId: null,
@@ -293,7 +314,12 @@
           style={`width:${dragState.dragWorkspaceRect?.width ?? 32}px; height:${dragState.dragWorkspaceRect?.height ?? 32}px;`}
         ></span>
       {:else if expanded}
-        <HoverTooltip label={workspaceName(workspace)} detail={workspace.rootPath}>
+        <HoverTooltip
+          label={workspaceName(workspace)}
+          detail={workspace.rootPath}
+          delayMs={WORKSPACE_TOOLTIP_DELAY_MS}
+          suppress={workspaceTooltipSuppressed}
+        >
           <button
             class={`rail-workspace-card ${activeContextId === workspace.id ? "rail-workspace-card-active" : ""}`}
             data-workspace-id={workspace.id}
@@ -331,7 +357,12 @@
           </button>
         </HoverTooltip>
       {:else}
-        <HoverTooltip label={workspaceName(workspace)} detail={workspace.rootPath}>
+        <HoverTooltip
+          label={workspaceName(workspace)}
+          detail={workspace.rootPath}
+          delayMs={WORKSPACE_TOOLTIP_DELAY_MS}
+          suppress={workspaceTooltipSuppressed}
+        >
           <button
             class={`rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
             data-workspace-id={workspace.id}
@@ -376,16 +407,40 @@
     </button>
   {/if}
 
-  <HoverTooltip label="Add Workspace">
-    <button
-      class="rail-button rail-button-add"
-      type="button"
-      aria-label="Add Workspace"
-      onclick={onAddWorkspace}
-    >
-      +
-    </button>
-  </HoverTooltip>
+  <div class="rail-footer-stack">
+    <HoverTooltip label="Add Workspace">
+      <button
+        class="rail-button rail-button-add"
+        type="button"
+        aria-label="Add Workspace"
+        onclick={onAddWorkspace}
+      >
+        +
+      </button>
+    </HoverTooltip>
+    <HoverTooltip label="Workspace Manager">
+      <button
+        class="rail-button rail-button-manager"
+        type="button"
+        aria-label="Workspace Manager"
+        onclick={onOpenWorkspaceManager}
+      >
+        <svg
+          class="rail-manager-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <line x1="3" y1="4.5" x2="13" y2="4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+          <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+          <line x1="3" y1="11.5" x2="13" y2="11.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+        </svg>
+      </button>
+    </HoverTooltip>
+  </div>
 
   <div
     class="activity-rail-resize-handle"
@@ -406,11 +461,11 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-2);
-    /* Collapsed mode: no top padding and a tight gap so the Notepad button sits
-       at the very top and its divider lands at the editor tab-bar bottom line
-       (~var(--tab-header-height) down the rail). Expanded mode overrides these
-       below. */
-    padding: 0 var(--space-1);
+    /* Collapsed mode: a small 2px top offset keeps the Notepad button off the
+       top border; a tight gap keeps its divider near the editor tab-bar bottom
+       line (~var(--tab-header-height) down the rail). Expanded mode overrides
+       these below. */
+    padding: var(--space-1) var(--space-1);
   }
 
   .activity-rail-dragging,
@@ -519,9 +574,29 @@
     text-transform: uppercase;
   }
 
-  .rail-button-add {
+  .rail-footer-stack {
     margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+  }
+
+  .activity-rail-expanded .rail-footer-stack {
+    align-items: stretch;
+  }
+
+  .rail-button-add {
     font-size: 16px;
+  }
+
+  .rail-button-manager {
+    padding: 0;
+  }
+
+  .rail-manager-icon {
+    display: block;
   }
 
   /* ---- Expanded info card ---- */

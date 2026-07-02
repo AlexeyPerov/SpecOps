@@ -7,6 +7,8 @@ export type CommandContext = {
   getWindowId: () => string;
   confirm: (message: string) => boolean;
   getEditorRunner: () => EditorCommandRunner | null;
+  /** Opens (or focuses) the Find-in-Project panel. No-op when not registered. */
+  openProjectSearch?: (focusReplace: boolean) => void;
 };
 
 export type CommandHandler = (

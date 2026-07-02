@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import {
@@ -17,7 +17,10 @@
   import { createAppShellProjectTreeHandlers } from "../lib/services/appShellProjectTreeHandlers";
   import type { EditorCommandRunner } from "../lib/types/editor";
   import { appState } from "../lib/state/appState";
-  import { getActiveContextSnapshot } from "../lib/state/appState/contextHelpers";
+  import {
+    findDocumentByPath,
+    getActiveContextSnapshot,
+  } from "../lib/state/appState/contextHelpers";
   import {
     chatActiveSessionId,
     chatActiveRuntimeBySessionId,
@@ -44,14 +47,29 @@
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
   import { DEFAULT_CONSOLE_HEIGHT_PX } from "../lib/services/consoleTabPrefs";
+  import {
+    searchInProject,
+    totalMatchCount,
+    type ProjectSearchResult,
+  } from "../lib/services/projectSearch";
+  import { replaceInProjectFile } from "../lib/services/projectFileOps";
+  import { getErrorMessage } from "../lib/commands/commandErrors";
   import { normalizeWorkspaceLayout, normalizeActivityRailWidthPx } from "../lib/services/panelLayout";
   import { deriveAppShellDocumentView } from "../lib/services/appShellDocumentView";
   import { createWorkspaceContextMenuActions } from "../lib/services/workspaceContextMenuController";
   import {
+    getHiddenRootPaths,
+    setHiddenFromRail,
+    subscribeWorkspacePreferences,
+  } from "../lib/services/workspacePreferences";
+  import { collectImmediateSubfolders } from "../lib/services/workspaceSubfolders";
+  import { normalizePathSync } from "../lib/services/diskFingerprint";
+  import { openFolderDialog } from "../lib/services/fileSystem";
+  import {
     flushSessionPersistence,
     registerTabsChangedSessionFlush,
   } from "../lib/services/sessionManager";
-  import { isWorkspaceLifecycleActive } from "../lib/services/workspaceLifecycle";
+  import { isWorkspaceLifecycleActive, markWorkspaceLifecycleActive } from "../lib/services/workspaceLifecycle";
   import {
     requestOpencodeHealthRefresh,
     syncActiveFileTreeExpandEffect,
@@ -83,11 +101,6 @@
     clearFileStatusTracker,
   } from "../lib/services/fileStatusTracker";
   import {
-    getStatusSummary,
-    refreshStatusSummary,
-    clearStatusSummary,
-  } from "../lib/ai/opencodeStatusSummary";
-  import {
     createSessionNotificationObserver,
   } from "../lib/services/sessionNotificationObserver";
 
@@ -112,6 +125,30 @@
   }
   let consoleOpen = $state(false);
   let consoleHeightPx = $state(DEFAULT_CONSOLE_HEIGHT_PX);
+  let projectSearchOpen = $state(false);
+  let projectSearchHeightPx = $state(DEFAULT_CONSOLE_HEIGHT_PX);
+  let projectSearchFocusReplace = $state(false);
+  let projectSearchQuery = $state("");
+  let projectSearchReplace = $state("");
+  let projectSearchCaseSensitive = $state(false);
+  let projectSearchResults = $state<ProjectSearchResult[]>([]);
+  let projectSearchRunning = $state(false);
+  let projectSearchStatus = $state("");
+  let projectSearchNonce = $state(0);
+  /**
+   * Normalized workspace root paths hidden from the activity rail (decision 3).
+   * Backed by the global `workspacePreferences` store; loaded on startup and
+   * kept reactive so toggling "Show in sidebar" in workspace settings updates
+   * the rail immediately.
+   */
+  let workspaceHiddenRootPaths = $state<Set<string>>(new Set());
+  /** Add-multiple modal state (decision 8): open + scanned subfolders. */
+  let addMultipleOpen = $state(false);
+  let addMultipleLoading = $state(false);
+  let addMultipleError = $state<string | null>(null);
+  let addMultipleParentPath = $state<string | null>(null);
+  let addMultipleEntries = $state<ReadonlyArray<{ path: string; name: string; exists: boolean }>>([]);
+  let addMultipleSelected = $state<Set<string>>(new Set());
   let statusMessage = $state("Ready");
   let editorRunner = $state<EditorCommandRunner | null>(null);
   let currentWindowId = $state("main");
@@ -169,6 +206,14 @@
   const activeContextId = $derived(snapshot.contexts.activeContextId);
   const isChatHttpActive = $derived(activeContextId === CHAT_HTTP_CONTEXT_ID);
   const workspaces = $derived(snapshot.contexts.workspaces);
+  /**
+   * Workspaces visible in the activity rail: hidden-from-rail entries are
+   * filtered out (decision 3). The Workspace Manager always receives the full
+   * `workspaces` list so hidden workspaces remain switchable from there.
+   */
+  const railWorkspaces = $derived(
+    workspaces.filter((workspace) => !workspaceHiddenRootPaths.has(workspace.rootPath)),
+  );
   const activeWorkspaceRoot = $derived(appState.getWorkspaceRoot(activeContextId));
   const workspaceLayout = $derived(
     normalizeWorkspaceLayout(session.layout),
@@ -236,20 +281,12 @@
   const fileStatusState = $derived(fileStatusStore ? $fileStatusStore : null);
   const fileStatusByPath = $derived(fileStatusState?.statusByPath ?? null);
   /**
-   * M5-T4 — status popover state. The button is gated to "workspace open +
-   * OpenCode enabled"; opening it loads the aggregated status summary.
-   */
-  let statusPopoverOpen = $state(false);
-  /**
    * M5-T5 — session timeline dialog state. Reads the active transcript
    * (already hydrated); jumping scrolls the message list to the target id.
    */
   let timelineOpen = $state(false);
   let timelineSearch = $state("");
   const activeMessages = $derived(chatStore.getMessages());
-  const statusButtonVisible = $derived(
-    Boolean(activeWorkspaceRoot) && snapshot.settings.opencode.enabled,
-  );
   const openSessionIds = $derived(
     new Set(
       workspaceSessions
@@ -459,6 +496,109 @@
     toggleConsole();
   }
 
+  function closeProjectSearch(): void {
+    projectSearchOpen = false;
+  }
+
+  /**
+   * Find-in-Project panel height is not persisted yet (no dedicated pref store);
+   * the commit hook is a no-op so the resize handle still works in-session.
+   */
+  function persistProjectSearchHeightNow(): void {
+    // intentionally empty — height resets to default each session.
+  }
+
+  async function runProjectSearch(): Promise<void> {
+    const query = projectSearchQuery.trim();
+    const root = activeWorkspaceRoot;
+    if (!query || !root) {
+      projectSearchResults = [];
+      projectSearchStatus = root ? "Type a search term." : "Open a workspace to search.";
+      return;
+    }
+    projectSearchRunning = true;
+    projectSearchStatus = "Searching…";
+    try {
+      const results = await searchInProject(root, query, {
+        caseSensitive: projectSearchCaseSensitive,
+      });
+      projectSearchResults = results;
+      const files = results.length;
+      const matches = totalMatchCount(results);
+      projectSearchStatus =
+        matches === 0
+          ? "No results"
+          : `${matches} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}`;
+    } catch (error: unknown) {
+      projectSearchStatus = `Search failed: ${getErrorMessage(error)}`;
+    } finally {
+      projectSearchRunning = false;
+    }
+  }
+
+  async function replaceAllInProject(): Promise<void> {
+    const query = projectSearchQuery.trim();
+    const root = activeWorkspaceRoot;
+    if (!query || !root || projectSearchResults.length === 0) {
+      notify("Nothing to replace.");
+      return;
+    }
+    projectSearchRunning = true;
+    projectSearchStatus = "Replacing…";
+    let replaced = 0;
+    let files = 0;
+    let failures = 0;
+    try {
+      for (const result of projectSearchResults) {
+        const outcome = await replaceInProjectFile(
+          root,
+          result.path,
+          query,
+          projectSearchReplace,
+          projectSearchCaseSensitive,
+        );
+        if (outcome.ok) {
+          replaced += outcome.count;
+          files += 1;
+          syncOpenDocumentAfterReplace(result.path, outcome.content);
+        } else if (outcome.reason !== "No matches.") {
+          failures += 1;
+        }
+      }
+      projectSearchStatus = `Replaced ${replaced} occurrence(s) in ${files} file(s)${
+        failures > 0 ? `; ${failures} file(s) failed` : ""
+      }`;
+      notify(`Replaced ${replaced} occurrence(s) in ${files} file(s).`);
+      await runProjectSearch();
+    } finally {
+      projectSearchRunning = false;
+    }
+  }
+
+  async function openProjectSearchResult(
+    path: string,
+    line: number,
+  ): Promise<void> {
+    await openAndActivatePath(path);
+    if (line > 0) {
+      await tick();
+      editorRunner?.goToLine(line);
+    }
+  }
+
+  /**
+   * After replace-on-disk, refresh any open editor document for that path so the
+   * buffer picks up the new content instead of showing stale (now-dirty) text.
+   */
+  function syncOpenDocumentAfterReplace(path: string, content: string): void {
+    const document = findDocumentByPath(appState.getSnapshot(), path);
+    if (!document) {
+      return;
+    }
+    appState.setDocumentContent(document.id, content);
+    appState.markDocumentSaved(document.id, path, content);
+  }
+
   $effect(() => {
     if (!snapshot.settings.logSettings.canOpenLogsPanel && consoleOpen) {
       consoleOpen = false;
@@ -495,6 +635,7 @@
     menuIndex: workspaceContextMenuIndex,
     move: moveWorkspaceFromContextMenu,
     closeWorkspace: closeWorkspaceFromContextMenu,
+    openSettings: openSettingsFromContextMenu,
     handleActiveContextSwitch,
     handleSelectContext,
   } = createWorkspaceContextMenuActions({
@@ -527,6 +668,11 @@
     getSnapshot: () => snapshot,
     getCurrentWindowId: () => currentWindowId,
     getEditorRunner: () => editorRunner,
+    openProjectSearch: (focusReplace) => {
+      projectSearchOpen = true;
+      projectSearchFocusReplace = focusReplace;
+      projectSearchNonce += 1;
+    },
   });
 
   const { openAndActivatePath, consumeOpenedPaths, onTabActivated } = createAppShellFileHandlers({
@@ -560,10 +706,101 @@
     runCommand("workspace.add");
   }
 
+  function handleOpenWorkspaceManager(): void {
+    runCommand("app.openWorkspaceManager");
+  }
+
+  /**
+   * Manager row "Settings" action: switch to the workspace and focus its
+   * `workspace-settings` view tab (same flow as the rail context menu).
+   */
+  function handleOpenWorkspaceSettingsFromManager(workspaceId: ContextId): void {
+    openSettingsFromContextMenu(workspaceId);
+  }
+
   /** Switches to the notepad context and selects the given tab. */
   function handleSelectNotepadTab(tabId: string): void {
     appState.switchContext("notepad");
     appState.selectTab(tabId);
+  }
+
+  /**
+   * "Add multiple…" flow (decision 8): folder picker → list immediate
+   * subfolders → modal with checkboxes (default unchecked, existing excluded)
+   * → batch add. Reuses the same add logic per path as `workspace.add`
+   * (duplicates skipped, access errors notified).
+   */
+  async function handleOpenAddMultipleWorkspaces(): Promise<void> {
+    const parent = await openFolderDialog();
+    if (!parent) {
+      return;
+    }
+    addMultipleOpen = true;
+    addMultipleLoading = true;
+    addMultipleError = null;
+    addMultipleParentPath = parent;
+    addMultipleEntries = [];
+    addMultipleSelected = new Set();
+    try {
+      const existing = new Set(
+        workspaces.map((workspace) => normalizePathSync(workspace.rootPath)),
+      );
+      const entries = await collectImmediateSubfolders(parent, existing);
+      addMultipleEntries = entries;
+    } catch (error) {
+      addMultipleError = error instanceof Error ? error.message : String(error);
+    } finally {
+      addMultipleLoading = false;
+    }
+  }
+
+  function toggleAddMultipleEntry(path: string, checked: boolean): void {
+    const next = new Set(addMultipleSelected);
+    if (checked) {
+      next.add(path);
+    } else {
+      next.delete(path);
+    }
+    addMultipleSelected = next;
+  }
+
+  async function handleConfirmAddMultiple(notify: (message: string) => void): Promise<void> {
+    const selectedPaths = [...addMultipleSelected];
+    addMultipleOpen = false;
+    addMultipleEntries = [];
+    addMultipleSelected = new Set();
+    addMultipleParentPath = null;
+    let added = 0;
+    let blocked = 0;
+    for (const path of selectedPaths) {
+      const created = appState.addWorkspace(path);
+      if (created) {
+        added += 1;
+      } else {
+        blocked += 1;
+      }
+    }
+    if (added > 0) {
+      markWorkspaceLifecycleActive();
+    }
+    const parts: string[] = [];
+    if (added > 0) {
+      parts.push(`Added ${added} workspace${added === 1 ? "" : "s"}.`);
+    }
+    if (blocked > 0) {
+      parts.push(`${blocked} already open or blocked.`);
+    }
+    if (parts.length > 0) {
+      notify(parts.join(" "));
+    }
+  }
+
+  function handleCancelAddMultiple(): void {
+    addMultipleOpen = false;
+    addMultipleEntries = [];
+    addMultipleSelected = new Set();
+    addMultipleError = null;
+    addMultipleParentPath = null;
   }
 
   onMount(() => {
@@ -571,7 +808,14 @@
       void flushSessionPersistence(state, getCurrentWebviewWindow().label);
     });
 
-    return setupAppShellMount({
+    // Reflect the global workspace hide-from-rail preferences (loaded during
+    // runtime startup) and keep the rail filter reactive to later toggles.
+    workspaceHiddenRootPaths = getHiddenRootPaths();
+    const unsubscribeWorkspacePreferences = subscribeWorkspacePreferences((hidden) => {
+      workspaceHiddenRootPaths = new Set(hidden);
+    });
+
+    const shellCleanup = setupAppShellMount({
       registerSettingsDialogOpener,
       setupLayoutObserver,
       startAppShellRuntime,
@@ -609,6 +853,10 @@
         clearUntitledTitleDebounceTimer,
       },
     });
+    return () => {
+      unsubscribeWorkspacePreferences();
+      shellCleanup();
+    };
   });
 
   $effect(() => {
@@ -893,28 +1141,6 @@
   });
 
   /**
-   * M5-T4 — status summary. Refreshed when the popover opens and when the
-   * workspace changes; cleared on switch.
-   */
-  let lastStatusWorkspace = $state<string | null>(null);
-  $effect(() => {
-    runtimeReady;
-    activeWorkspaceRoot;
-    statusPopoverOpen;
-
-    const root = activeWorkspaceRoot;
-    if (lastStatusWorkspace && lastStatusWorkspace !== root) {
-      clearStatusSummary(lastStatusWorkspace);
-    }
-    lastStatusWorkspace = root;
-
-    if (!runtimeReady || !root || !statusPopoverOpen) {
-      return;
-    }
-    void refreshStatusSummary({ workspaceRootPath: root });
-  });
-
-  /**
    * M10-T3 — invalidate the workspace-scoped pull-only stores on workspace
    * switch so the process-lifetime cache doesn't accumulate an entry per
    * workspace ever opened (slow leak in a long-running desktop app). The
@@ -950,16 +1176,53 @@
   bind:goToLineValue
   {consoleOpen}
   onConsoleHeightCommit={persistConsoleHeightNow}
+  projectSearch={{
+    open: projectSearchOpen,
+    heightPx: projectSearchHeightPx,
+    focusNonce: projectSearchNonce,
+    focusReplace: projectSearchFocusReplace,
+    query: projectSearchQuery,
+    replaceValue: projectSearchReplace,
+    caseSensitive: projectSearchCaseSensitive,
+    results: projectSearchResults,
+    running: projectSearchRunning,
+    status: projectSearchStatus,
+    onHeightCommit: persistProjectSearchHeightNow,
+    onHeightChange: (heightPx) => {
+      projectSearchHeightPx = heightPx;
+    },
+    onClose: closeProjectSearch,
+    onQueryChange: (value) => {
+      projectSearchQuery = value;
+    },
+    onReplaceValueChange: (value) => {
+      projectSearchReplace = value;
+    },
+    onCaseSensitiveChange: (value) => {
+      projectSearchCaseSensitive = value;
+    },
+    onRunSearch: () => {
+      void runProjectSearch();
+    },
+    onReplaceAll: () => {
+      void replaceAllInProject();
+    },
+    onOpenResult: (path, line) => {
+      void openProjectSearchResult(path, line);
+    },
+  }}
   activityRail={{
     show: true,
-    workspaces,
+    workspaces: railWorkspaces,
     activeContextId,
     chatHttpRailVisible,
     panelWidthPx: normalizeActivityRailWidthPx(snapshot.activityRailWidthPx),
     notepadOpenTabCount,
     notepadRecentTabs,
+    contextMenuWorkspaceId: workspaceContextMenu?.workspaceId ?? null,
     onSelectContext: handleSelectContext,
     onAddWorkspace: handleAddWorkspace,
+    onOpenWorkspaceManager: handleOpenWorkspaceManager,
     onPanelWidthChange: handleActivityRailWidthChange,
     onRequestCloseWorkspace: handleOpenWorkspaceContextMenu,
     onReorderWorkspaces: (fromIndex, toIndex) => appState.reorderWorkspaces(fromIndex, toIndex),
@@ -1014,6 +1277,16 @@
     documents,
     activeDocument,
     isChatHttpActive,
+    workspaceRootPath: activeWorkspaceRoot,
+    workspaceManager: {
+      workspaces,
+      activeContextId,
+      hiddenRootPaths: workspaceHiddenRootPaths,
+      onAddWorkspace: handleAddWorkspace,
+      onAddMultiple: handleOpenAddMultipleWorkspaces,
+      onSelectWorkspace: handleSelectContext,
+      onOpenWorkspaceSettings: handleOpenWorkspaceSettingsFromManager,
+    },
     isSessionTabActive,
     isSettingsViewActive,
     isThemesViewActive,
@@ -1116,6 +1389,7 @@
     workspaceCount: workspaces.length,
     onMoveUp: () => moveWorkspaceFromContextMenu("up"),
     onMoveDown: () => moveWorkspaceFromContextMenu("down"),
+    onOpenSettings: openSettingsFromContextMenu,
     onCloseWorkspace: closeWorkspaceFromContextMenu,
   }}
   overlays={{
@@ -1145,6 +1419,19 @@
       void refreshSessionList();
     },
   }}
+  addMultipleWorkspaces={{
+    open: addMultipleOpen,
+    loading: addMultipleLoading,
+    errorMessage: addMultipleError,
+    parentPath: addMultipleParentPath,
+    entries: addMultipleEntries,
+    selected: addMultipleSelected,
+    onToggleEntry: toggleAddMultipleEntry,
+    onConfirm: () => {
+      void handleConfirmAddMultiple(notify);
+    },
+    onCancel: handleCancelAddMultiple,
+  }}
   todoPanel={{
     open: todoPanelOpen && Boolean(activeWorkspaceRoot) && Boolean(activeOpencodeSessionId),
     workspaceRootPath: activeWorkspaceRoot,
@@ -1165,17 +1452,6 @@
       // path before opening (matches the project-tree path convention).
       const resolved = resolveWorkspaceRelativePath(activeWorkspaceRoot, filePath);
       void handleOpenProjectTreeFile(resolved);
-    },
-  }}
-  statusPopover={{
-    statusButtonVisible,
-    statusButtonActive: statusPopoverOpen,
-    workspaceRootPath: activeWorkspaceRoot,
-    onToggleStatus: () => {
-      statusPopoverOpen = !statusPopoverOpen;
-    },
-    onStatusClose: () => {
-      statusPopoverOpen = false;
     },
   }}
   timelineDialog={{

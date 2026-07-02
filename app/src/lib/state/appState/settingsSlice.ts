@@ -7,6 +7,7 @@ import type {
   ExternalFilesSettings,
   FontSettings,
   LogSettings,
+  MarkdownViewMode,
   OpencodeHealthState,
   OpencodeSettings,
   OsNotificationSettings,
@@ -59,10 +60,20 @@ const defaultExternalFilesSettings: ExternalFilesSettings = {
   maxOpenWithoutConfirmBytes: DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES,
 };
 
+const MARKDOWN_VIEW_MODES: readonly MarkdownViewMode[] = ["edit", "split", "preview"];
+
+/** Clamps an arbitrary value to a valid {@link MarkdownViewMode}, defaulting to preview. */
+export function normalizeMarkdownViewMode(value: unknown): MarkdownViewMode {
+  return MARKDOWN_VIEW_MODES.includes(value as MarkdownViewMode)
+    ? (value as MarkdownViewMode)
+    : defaultSettings.defaultMarkdownViewMode;
+}
+
 export const defaultSettings: AppSettingsState = {
   statusBarVisible: true,
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
+  defaultMarkdownViewMode: "preview",
   opencode: defaultOpencodeSettings,
   chatHttp: defaultChatHttpSettings,
   opencodeHealth: {
@@ -144,6 +155,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       zoomPercent?: number;
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
+      defaultMarkdownViewMode?: MarkdownViewMode;
       opencode?: Partial<OpencodeSettings>;
       chatHttp?: Partial<ChatHttpSettings>;
       opencodeHealth?: Partial<OpencodeHealthState>;
@@ -185,6 +197,17 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             settings: {
               ...next.settings,
               decoratePlaintextSymbols: partial.decoratePlaintextSymbols,
+            },
+          };
+        }
+        if (partial.defaultMarkdownViewMode !== undefined) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              defaultMarkdownViewMode: normalizeMarkdownViewMode(
+                partial.defaultMarkdownViewMode,
+              ),
             },
           };
         }

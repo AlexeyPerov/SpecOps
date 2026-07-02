@@ -1,6 +1,7 @@
 import type { ActiveThemeRef, CustomThemeRecord } from "../services/themeStore";
 import type { ChatModesSettings, ChatProviderId } from "./chat";
 import type { CommandBindingOverrides } from "./commands";
+import type { MarkdownViewMode } from "./document";
 
 export interface ExternalFilesSettings {
   watchExternalChanges: boolean;
@@ -182,6 +183,11 @@ export interface AppSettingsState {
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
+  /**
+   * Initial view mode applied to newly opened markdown documents. Each
+   * document remembers its own mode after open; this only seeds the first.
+   */
+  defaultMarkdownViewMode: MarkdownViewMode;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   opencodeHealth: OpencodeHealthState;

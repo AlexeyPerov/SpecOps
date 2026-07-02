@@ -196,53 +196,57 @@
     >
       {showReplace ? "▾" : "▸"}
     </button>
-    <input
-      type="text"
-      class="fr-input"
-      placeholder="Find..."
-      bind:value={findQuery}
-      bind:this={findInputEl}
-      oninput={scheduleSearch}
-    />
-    <span class="fr-counter">{matchCountText}</span>
-    <button
-      type="button"
-      class="fr-btn"
-      class:fr-btn-active={findCaseSensitive}
-      title="Match case"
-      onclick={() => {
-        findCaseSensitive = !findCaseSensitive;
-        scheduleSearch();
-      }}
-    >
-      Aa
-    </button>
-    <button type="button" class="fr-btn" title="Previous (Shift+Enter)" onclick={findPrev}>
-      &#x25B2;
-    </button>
-    <button type="button" class="fr-btn" title="Next (Enter)" onclick={findNext}>
-      &#x25BC;
-    </button>
-    <button type="button" class="fr-btn fr-btn-close" title="Close (Escape)" onclick={close}>
-      &times;
-    </button>
+    <div class="fr-field-group">
+      <input
+        type="text"
+        class="fr-input"
+        placeholder="Find..."
+        bind:value={findQuery}
+        bind:this={findInputEl}
+        oninput={scheduleSearch}
+      />
+      <span class="fr-counter">{matchCountText}</span>
+      <button
+        type="button"
+        class="fr-btn"
+        class:fr-btn-active={findCaseSensitive}
+        title="Match case"
+        onclick={() => {
+          findCaseSensitive = !findCaseSensitive;
+          scheduleSearch();
+        }}
+      >
+        Aa
+      </button>
+      <button type="button" class="fr-btn" title="Previous (Shift+Enter)" onclick={findPrev}>
+        &#x25B2;
+      </button>
+      <button type="button" class="fr-btn" title="Next (Enter)" onclick={findNext}>
+        &#x25BC;
+      </button>
+      <button type="button" class="fr-btn fr-btn-close" title="Close (Escape)" onclick={close}>
+        &times;
+      </button>
+    </div>
   </div>
   {#if showReplace}
     <div class="fr-row">
       <div class="fr-chevron-spacer"></div>
-      <input
-        type="text"
-        class="fr-input"
-        placeholder="Replace..."
-        bind:value={replaceValue}
-        bind:this={replaceInputEl}
-      />
-      <button type="button" class="fr-btn fr-btn-wide" title="Replace current match" onclick={replaceCurrent}>
-        Replace
-      </button>
-      <button type="button" class="fr-btn fr-btn-wide" title="Replace all matches" onclick={replaceAll}>
-        All
-      </button>
+      <div class="fr-field-group">
+        <input
+          type="text"
+          class="fr-input"
+          placeholder="Replace..."
+          bind:value={replaceValue}
+          bind:this={replaceInputEl}
+        />
+        <button type="button" class="fr-btn fr-btn-wide" title="Replace current match" onclick={replaceCurrent}>
+          Replace
+        </button>
+        <button type="button" class="fr-btn fr-btn-wide" title="Replace all matches" onclick={replaceAll}>
+          All
+        </button>
+      </div>
     </div>
   {/if}
 </search>
@@ -252,7 +256,7 @@
     position: absolute;
     top: var(--space-8);
     right: var(--space-12);
-    width: 400px;
+    width: 440px;
     background: var(--color-surface-1);
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-md);
@@ -266,7 +270,18 @@
   .fr-row {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
+    gap: var(--space-3);
+  }
+
+  .fr-field-group {
+    /* Groups the field with its action buttons as a single left-aligned cluster
+       so the buttons stay inside the panel (just to the right of the input)
+       rather than being pushed against / past the rounded right edge. */
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
   }
 
   .fr-chevron {
@@ -296,7 +311,10 @@
   }
 
   .fr-input {
-    flex: 1;
+    /* Grows inside .fr-field-group (which is bounded by the panel's padding) so
+       the trailing action buttons always follow the field and stay inside the
+       panel instead of being pushed past the rounded right edge. */
+    flex: 1 1 160px;
     min-width: 0;
     height: 26px;
     border: 1px solid var(--color-border-subtle);
@@ -317,7 +335,7 @@
     font-size: var(--font-size-status);
     color: var(--color-text-secondary);
     white-space: nowrap;
-    min-width: 56px;
+    min-width: 44px;
     text-align: right;
     flex-shrink: 0;
   }

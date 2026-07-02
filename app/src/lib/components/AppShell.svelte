@@ -3,6 +3,7 @@
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
   import RevertPreviewDialog from "./RevertPreviewDialog.svelte";
   import SessionListPanel from "./SessionListPanel.svelte";
+  import AddMultipleWorkspacesModal from "./AddMultipleWorkspacesModal.svelte";
   import PermissionPrompt from "./PermissionPrompt.svelte";
   import QuestionPrompt from "./QuestionPrompt.svelte";
   import TabBar from "./TabBar.svelte";
@@ -14,6 +15,7 @@
   import ChatPanel from "./ChatPanel.svelte";
   import TodoPanel from "./TodoPanel.svelte";
   import DiffViewerPanel from "./DiffViewerPanel.svelte";
+  import ProjectSearchPanel from "./ProjectSearchPanel.svelte";
   import SessionTimelineDialog from "./SessionTimelineDialog.svelte";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
@@ -38,8 +40,11 @@
     panelWidthPx: number;
     notepadOpenTabCount: number;
     notepadRecentTabs: { tabId: string; label: string }[];
+    /** When non-null, a workspace context menu is open — suppress tooltips. */
+    contextMenuWorkspaceId?: ContextId | null;
     onSelectContext: (contextId: ContextId) => void;
     onAddWorkspace: () => void;
+    onOpenWorkspaceManager: () => void;
     onPanelWidthChange: (width: number) => void;
     onRequestCloseWorkspace: (workspaceId: ContextId, x: number, y: number) => void;
     onReorderWorkspaces: (fromIndex: number, toIndex: number) => void;
@@ -99,11 +104,31 @@
     notify: (message: string) => void;
   }
 
+  /**
+   * Workspace-manager view-tab wiring. The list source is the same
+   * `contexts.workspaces` the activity rail uses (decision 1); the callbacks
+   * drive row actions (switch / settings) and the add / add-multiple buttons.
+   */
+  export interface AppShellWorkspaceManagerProps {
+    workspaces: WorkspaceEntry[];
+    activeContextId: ContextId;
+    /** Normalized root paths hidden from the activity rail. */
+    hiddenRootPaths: Set<string>;
+    onAddWorkspace: () => void;
+    onAddMultiple: () => void;
+    onSelectWorkspace: (workspaceId: ContextId) => void;
+    onOpenWorkspaceSettings: (workspaceId: ContextId) => void;
+  }
+
   export interface AppShellEditorChromeProps {
     session: SessionState;
     documents: DocumentState[];
     activeDocument: DocumentState | undefined;
     isChatHttpActive: boolean;
+    /** Active workspace root path, scoped to the workspace-settings view. */
+    workspaceRootPath?: string | null;
+    /** Workspace-manager view-tab wiring (list source, callbacks). */
+    workspaceManager?: AppShellWorkspaceManagerProps;
     isSessionTabActive: boolean;
     isSettingsViewActive: boolean;
     isThemesViewActive: boolean;
@@ -177,26 +202,37 @@
     onToggleConsole: () => void;
   }
 
+  /** Props driving the Find-in-Project bottom panel (console-style local state). */
+  export interface AppShellProjectSearchProps {
+    open: boolean;
+    heightPx: number;
+    focusNonce: number;
+    focusReplace: boolean;
+    query: string;
+    replaceValue: string;
+    caseSensitive: boolean;
+    results: import("../services/projectSearch").ProjectSearchResult[];
+    running: boolean;
+    status: string;
+    onHeightCommit: () => void;
+    onHeightChange: (heightPx: number) => void;
+    onClose: () => void;
+    onQueryChange: (value: string) => void;
+    onReplaceValueChange: (value: string) => void;
+    onCaseSensitiveChange: (value: boolean) => void;
+    onRunSearch: () => void;
+    onReplaceAll: () => void;
+    onOpenResult: (path: string, line: number) => void;
+  }
+
   export interface AppShellWorkspaceContextMenuProps {
     menu: { workspaceId: ContextId; x: number; y: number } | null;
     menuIndex: number;
     workspaceCount: number;
     onMoveUp: () => void;
     onMoveDown: () => void;
+    onOpenSettings: (workspaceId: ContextId) => void;
     onCloseWorkspace: (workspaceId: ContextId) => void;
-  }
-
-  /**
-   * M5-T4 — status popover trigger. `statusButtonVisible` gates the title-bar
-   * button (workspace open + OpenCode enabled); `statusButtonActive` toggles
-   * the popover open state.
-   */
-  export interface AppShellStatusPopoverProps {
-    statusButtonVisible: boolean;
-    statusButtonActive: boolean;
-    workspaceRootPath: string | null;
-    onToggleStatus: () => void;
-    onStatusClose: () => void;
   }
 
   /**
@@ -233,6 +269,19 @@
     onRefresh: () => void;
   }
 
+  /** Add-multiple workspaces modal props (decision 8). */
+  export interface AppShellAddMultipleWorkspacesProps {
+    open: boolean;
+    loading: boolean;
+    errorMessage: string | null;
+    parentPath: string | null;
+    entries: ReadonlyArray<import("../services/workspaceSubfolders").ImmediateSubfolder>;
+    selected: Set<string>;
+    onToggleEntry: (path: string, checked: boolean) => void;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }
+
   /**
    * M5-T1 — agent TODO panel. Shown as a right-side rail when a workspace
    * agent tab with a linked OpenCode session is active. `open` toggles it;
@@ -264,12 +313,13 @@
     projectTree,
     editor,
     statusBar,
+    projectSearch,
     workspaceContextMenu,
     overlays,
     sessionListPanel,
+    addMultipleWorkspaces,
     todoPanel,
     diffPanel,
-    statusPopover,
     timelineDialog,
     onConsoleHeightCommit,
     consoleOpen = false,
@@ -289,12 +339,13 @@
     projectTree: AppShellProjectTreeProps;
     editor: AppShellEditorChromeProps;
     statusBar: AppShellStatusBarProps;
+    projectSearch?: AppShellProjectSearchProps;
     workspaceContextMenu: AppShellWorkspaceContextMenuProps;
     overlays: AppShellOverlayProps;
     sessionListPanel?: AppShellSessionListPanelProps;
+    addMultipleWorkspaces?: AppShellAddMultipleWorkspacesProps;
     todoPanel?: AppShellTodoPanelProps;
     diffPanel?: AppShellDiffPanelProps;
-    statusPopover?: AppShellStatusPopoverProps;
     timelineDialog?: AppShellTimelineDialogProps;
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
@@ -327,13 +378,7 @@
 </script>
 
 <main class="shell">
-  <TitleBar
-    statusButtonVisible={Boolean(statusPopover?.statusButtonVisible)}
-    statusButtonActive={Boolean(statusPopover?.statusButtonActive)}
-    statusWorkspaceRoot={statusPopover?.workspaceRootPath ?? null}
-    onToggleStatus={() => statusPopover?.onToggleStatus()}
-    onStatusClose={() => statusPopover?.onStatusClose()}
-  />
+  <TitleBar />
   <div class="shell-main-row" bind:this={shellMainRowEl}>
     {#if activityRail.show}
       <ActivityRail
@@ -343,8 +388,10 @@
         panelWidthPx={activityRail.panelWidthPx}
         notepadOpenTabCount={activityRail.notepadOpenTabCount}
         notepadRecentTabs={activityRail.notepadRecentTabs}
+        contextMenuWorkspaceId={activityRail.contextMenuWorkspaceId ?? null}
         onSelectContext={activityRail.onSelectContext}
         onAddWorkspace={activityRail.onAddWorkspace}
+        onOpenWorkspaceManager={activityRail.onOpenWorkspaceManager}
         onPanelWidthChange={activityRail.onPanelWidthChange}
         onRequestCloseWorkspace={activityRail.onRequestCloseWorkspace}
         onReorderWorkspaces={activityRail.onReorderWorkspaces}
@@ -391,6 +438,14 @@
             session={editor.session}
             documents={editor.documents}
             isChatHttpActive={editor.isChatHttpActive}
+            workspaceRootPath={editor.workspaceRootPath ?? null}
+            workspaceManagerWorkspaces={editor.workspaceManager?.workspaces ?? []}
+            workspaceManagerActiveContextId={editor.workspaceManager?.activeContextId ?? "notepad"}
+            workspaceManagerHiddenRootPaths={editor.workspaceManager?.hiddenRootPaths ?? new Set()}
+            onWorkspaceManagerAddWorkspace={editor.workspaceManager?.onAddWorkspace ?? (() => {})}
+            onWorkspaceManagerAddMultiple={editor.workspaceManager?.onAddMultiple ?? (() => {})}
+            onWorkspaceManagerSelectWorkspace={editor.workspaceManager?.onSelectWorkspace ?? (() => {})}
+            onWorkspaceManagerOpenSettings={editor.workspaceManager?.onOpenWorkspaceSettings ?? (() => {})}
             previewMode={editor.previewMode}
             findReplaceOpen={editor.findReplaceOpen}
             goToOpen={editor.goToOpen}
@@ -487,6 +542,28 @@
   </div>
 
   <div class="bottom-panel">
+    {#if projectSearch?.open}
+      <ProjectSearchPanel
+        heightPx={projectSearch.heightPx}
+        onHeightCommit={projectSearch.onHeightCommit}
+        onHeightChange={projectSearch.onHeightChange}
+        onClose={projectSearch.onClose}
+        query={projectSearch.query}
+        replaceValue={projectSearch.replaceValue}
+        caseSensitive={projectSearch.caseSensitive}
+        results={projectSearch.results}
+        running={projectSearch.running}
+        status={projectSearch.status}
+        focusNonce={projectSearch.focusNonce}
+        focusReplace={projectSearch.focusReplace}
+        onQueryChange={projectSearch.onQueryChange}
+        onReplaceValueChange={projectSearch.onReplaceValueChange}
+        onCaseSensitiveChange={projectSearch.onCaseSensitiveChange}
+        onRunSearch={projectSearch.onRunSearch}
+        onReplaceAll={projectSearch.onReplaceAll}
+        onOpenResult={projectSearch.onOpenResult}
+      />
+    {/if}
     {#if consoleOpen}
       <ConsolePanel bind:heightPx={consoleHeightPx} onHeightCommit={onConsoleHeightCommit} />
     {/if}
@@ -570,6 +647,20 @@
     onRefresh={sessionListPanel.onRefresh}
   />
 {/if}
+
+{#if addMultipleWorkspaces}
+  <AddMultipleWorkspacesModal
+    open={addMultipleWorkspaces.open}
+    loading={addMultipleWorkspaces.loading}
+    errorMessage={addMultipleWorkspaces.errorMessage}
+    parentPath={addMultipleWorkspaces.parentPath}
+    entries={addMultipleWorkspaces.entries}
+    selected={addMultipleWorkspaces.selected}
+    onToggleEntry={addMultipleWorkspaces.onToggleEntry}
+    onConfirm={addMultipleWorkspaces.onConfirm}
+    onCancel={addMultipleWorkspaces.onCancel}
+  />
+{/if}
 <PermissionPrompt />
 <QuestionPrompt />
 
@@ -593,6 +684,20 @@
     tabindex="-1"
     onpointerdown={(event) => event.stopPropagation()}
   >
+    <button
+      class="workspace-context-item"
+      type="button"
+      role="menuitem"
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!workspaceContextMenu.menu) {
+          return;
+        }
+        workspaceContextMenu.onOpenSettings(workspaceContextMenu.menu.workspaceId);
+      }}
+    >
+      Settings
+    </button>
     <button
       class="workspace-context-item"
       type="button"

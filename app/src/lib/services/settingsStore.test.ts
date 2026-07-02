@@ -54,6 +54,7 @@ describe("settings mapping", () => {
         maxOpenWithoutConfirmBytes: 512 * 1024,
       },
       decoratePlaintextSymbols: false,
+      defaultMarkdownViewMode: "split",
       opencode: defaultOpencodeSettings,
       chatHttp: { enabled: false },
       logSettings: { ...defaultLogSettings, verboseProviderLogging: false },
@@ -455,5 +456,39 @@ describe("appearance settings persistence", () => {
     expect(result?.fontSettings).toEqual(defaultFontSettings);
     expect(result?.soundSettings).toEqual(defaultSoundSettings);
     expect(result?.osNotificationSettings).toEqual(defaultOsNotificationSettings);
+  });
+});
+
+describe("defaultMarkdownViewMode persistence", () => {
+  it("defaults to preview", () => {
+    expect(defaultPersistedSettings.defaultMarkdownViewMode).toBe("preview");
+  });
+
+  it("preserves a configured mode through the round-trip", () => {
+    const persisted = toPersistedSettings({
+      ...defaultPersistedSettings,
+      externalFiles: toExternalFilesSettings(defaultPersistedSettings),
+      defaultMarkdownViewMode: "edit",
+    });
+    expect(persisted.defaultMarkdownViewMode).toBe("edit");
+  });
+
+  it("falls back to preview when the persisted value is invalid", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...defaultPersistedSettings, defaultMarkdownViewMode: "weird" }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.defaultMarkdownViewMode).toBe("preview");
+  });
+
+  it("falls back to preview when the field is missing (legacy settings)", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.defaultMarkdownViewMode).toBe("preview");
   });
 });

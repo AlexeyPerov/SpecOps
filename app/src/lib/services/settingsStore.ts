@@ -16,6 +16,7 @@ import type {
   ExternalFilesSettings,
   FontSettings,
   LogSettings,
+  MarkdownViewMode,
   OpencodeSettings,
   OsNotificationSettings,
   ProviderModelCatalogs,
@@ -63,6 +64,7 @@ export interface PersistedSettings {
   maxBinaryOpenAsTextBytes: number;
   maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
+  defaultMarkdownViewMode: MarkdownViewMode;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   logSettings: LogSettings;
@@ -74,6 +76,8 @@ export interface PersistedSettings {
   soundSettings: SoundSettings;
   osNotificationSettings: OsNotificationSettings;
 }
+
+const MARKDOWN_VIEW_MODES: readonly MarkdownViewMode[] = ["edit", "split", "preview"];
 
 export const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -89,6 +93,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
+  defaultMarkdownViewMode: "preview",
   opencode: defaultOpencodeSettings,
   chatHttp: defaultChatHttpSettings,
   logSettings: defaultLogSettings,
@@ -157,6 +162,11 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         decoratePlaintextSymbols: isBoolean(parsed.decoratePlaintextSymbols)
           ? parsed.decoratePlaintextSymbols
           : defaultPersistedSettings.decoratePlaintextSymbols,
+        defaultMarkdownViewMode: MARKDOWN_VIEW_MODES.includes(
+          parsed.defaultMarkdownViewMode as MarkdownViewMode,
+        )
+          ? (parsed.defaultMarkdownViewMode as MarkdownViewMode)
+          : defaultPersistedSettings.defaultMarkdownViewMode,
         opencode: normalizeOpencodeSettings(parsed.opencode),
         chatHttp: normalizeChatHttpSettings(parsed.chatHttp),
         logSettings: normalizeLogSettings(parsed.logSettings),
@@ -204,6 +214,7 @@ export function toPersistedSettings(input: {
   zoomPercent: number;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
+  defaultMarkdownViewMode: MarkdownViewMode;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   logSettings: LogSettings;
@@ -221,6 +232,11 @@ export function toPersistedSettings(input: {
     zoomPercent: input.zoomPercent,
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
+    defaultMarkdownViewMode: MARKDOWN_VIEW_MODES.includes(
+      input.defaultMarkdownViewMode as MarkdownViewMode,
+    )
+      ? (input.defaultMarkdownViewMode as MarkdownViewMode)
+      : defaultPersistedSettings.defaultMarkdownViewMode,
     opencode: normalizeOpencodeSettings(input.opencode),
     chatHttp: normalizeChatHttpSettings(input.chatHttp),
     logSettings: normalizeLogSettings(input.logSettings),

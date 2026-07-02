@@ -55,7 +55,7 @@ export interface SessionTabState {
 export interface ViewTabState {
   id: string;
   kind: "view";
-  view: "settings" | "themes";
+  view: "settings" | "themes" | "workspace-settings" | "workspace-manager";
   pinned: boolean;
   subTab?: string;
 }
@@ -89,7 +89,7 @@ export function createSessionTab(id: string, sessionId: string, pinned = false):
 
 export function createViewTab(
   id: string,
-  view: "settings" | "themes",
+  view: "settings" | "themes" | "workspace-settings" | "workspace-manager",
   pinned = false,
   subTab?: string,
 ): ViewTabState {
@@ -133,7 +133,13 @@ export function normalizeTabState(
       pinned: tab.pinned ?? false,
     };
   }
-  if (tab.kind === "view" && (tab.view === "settings" || tab.view === "themes")) {
+  if (
+    tab.kind === "view" &&
+    (tab.view === "settings" ||
+      tab.view === "themes" ||
+      tab.view === "workspace-settings" ||
+      tab.view === "workspace-manager")
+  ) {
     const subTab = typeof tab.subTab === "string" ? tab.subTab : undefined;
     return createViewTab(tab.id, tab.view, tab.pinned ?? false, subTab);
   }

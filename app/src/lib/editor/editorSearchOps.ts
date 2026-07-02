@@ -97,6 +97,43 @@ export function countReplaceAllMatches(
   return count;
 }
 
+export function applyReplaceAll(
+  source: string,
+  query: string,
+  replacement: string,
+  caseSensitive: boolean,
+): { text: string; count: number } {
+  if (query.length === 0) {
+    return { text: source, count: 0 };
+  }
+  const haystack = normalizeForSearch(source, caseSensitive);
+  const needle = normalizeForSearch(query, caseSensitive);
+  let index = 0;
+  let count = 0;
+  const pieces: string[] = [];
+  let cursor = 0;
+  while (index < haystack.length) {
+    const found = haystack.indexOf(needle, index);
+    if (found === -1) {
+      break;
+    }
+    if (found > cursor) {
+      pieces.push(source.slice(cursor, found));
+    }
+    pieces.push(replacement);
+    count += 1;
+    cursor = found + query.length;
+    index = found + Math.max(1, query.length);
+  }
+  if (count === 0) {
+    return { text: source, count: 0 };
+  }
+  if (cursor < source.length) {
+    pieces.push(source.slice(cursor));
+  }
+  return { text: pieces.join(""), count };
+}
+
 export function buildReplaceAllChanges(
   source: string,
   query: string,

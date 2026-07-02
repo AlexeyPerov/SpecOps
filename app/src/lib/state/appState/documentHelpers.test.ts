@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DocumentState } from "../../domain/contracts";
-import { documentWithOpenedFilePayload } from "./documentHelpers";
+import { buildDocument, documentWithOpenedFilePayload } from "./documentHelpers";
 
 function baseDoc(overrides: Partial<DocumentState> = {}): DocumentState {
   return {
@@ -71,5 +71,36 @@ describe("documentWithOpenedFilePayload", () => {
     });
     const next = documentWithOpenedFilePayload(doc, "/tmp/notes.txt", "from-disk", "text");
     expect(next).toBe(doc);
+  });
+});
+
+describe("buildDocument", () => {
+  it("seeds markdown files with the configured default view mode", () => {
+    const doc = buildDocument(
+      { id: "doc-1", filePath: "/tmp/readme.md" },
+      "# hi",
+      "readme.md",
+      "text",
+      "preview",
+    );
+    expect(doc.language).toBe("markdown");
+    expect(doc.markdownViewMode).toBe("preview");
+  });
+
+  it("defaults markdown files to edit when no default is given", () => {
+    const doc = buildDocument({ id: "doc-1", filePath: "/tmp/readme.md" }, "# hi", "readme.md");
+    expect(doc.markdownViewMode).toBe("edit");
+  });
+
+  it("ignores the default view mode for non-markdown files", () => {
+    const doc = buildDocument(
+      { id: "doc-1", filePath: "/tmp/notes.txt" },
+      "hi",
+      "notes.txt",
+      "text",
+      "preview",
+    );
+    expect(doc.language).toBe("plaintext");
+    expect(doc.markdownViewMode).toBe("edit");
   });
 });

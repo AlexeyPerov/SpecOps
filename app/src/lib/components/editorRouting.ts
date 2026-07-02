@@ -7,7 +7,12 @@ import {
   isViewTab,
   type SessionState,
   type TabState,
+  type ViewTabState,
 } from "../domain/contracts";
+
+/** The set of view-tab kinds the editor pane can render (Settings, Themes,
+ *  Workspace Settings, Workspace Manager). */
+export type EditorViewKind = ViewTabState["view"];
 
 /**
  * Sidecar-gating predicate: is the active editor surface showing a session tab?
@@ -52,7 +57,7 @@ export function isSessionTabActiveInActivePane(session: SessionState): boolean {
 export function activeViewKind(
   openTabs: TabState[],
   selectedTabId: string | null,
-): "settings" | "themes" | null {
+): EditorViewKind | null {
   const tab = openTabs.find((entry) => entry.id === selectedTabId);
   if (tab && isViewTab(tab)) {
     return tab.view;
@@ -67,7 +72,7 @@ export function activeViewKind(
  */
 export function activeViewKindInActivePane(
   session: SessionState,
-): "settings" | "themes" | null {
+): EditorViewKind | null {
   const tab = getSessionActiveTab(session);
   if (tab && isViewTab(tab)) {
     return tab.view;
@@ -88,7 +93,7 @@ export function isSessionTabActiveInPane(
 export function activeViewKindInPane(
   layout: EditorLayout,
   paneId: string,
-): "settings" | "themes" | null {
+): EditorViewKind | null {
   const tab = paneActiveTab(layout, paneId);
   if (tab && isViewTab(tab)) {
     return tab.view;

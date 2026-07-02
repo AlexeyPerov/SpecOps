@@ -162,6 +162,21 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     close();
   }
 
+  /**
+   * Switches to the workspace and opens its settings view tab (kind
+   * "workspace-settings"), then closes the menu. Mirrors the
+   * settings/themes view-tab pattern: the tab is a singleton within the
+   * workspace's session, so re-invoking focuses the existing tab.
+   */
+  function openSettings(workspaceId: ContextId): void {
+    const switched = appState.switchContext(workspaceId);
+    if (switched && isWorkspaceContextId(workspaceId)) {
+      markWorkspaceLifecycleActive();
+    }
+    appState.openOrFocusViewTab("workspace-settings");
+    close();
+  }
+
   function closeWorkspace(workspaceId: ContextId): void {
     const closed = appState.closeWorkspace(workspaceId, {
       resolveAction: resolveCloseAction,
@@ -189,6 +204,7 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     menuIndex,
     move,
     closeWorkspace,
+    openSettings,
     handleActiveContextSwitch,
     handleSelectContext,
   };

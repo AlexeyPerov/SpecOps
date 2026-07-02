@@ -145,7 +145,16 @@
       return sessionTitleById.get(tab.sessionId) ?? draftTabTitle;
     }
     if (isViewTab(tab)) {
-      return tab.view === "settings" ? "Settings" : "Themes";
+      if (tab.view === "settings") {
+        return "Settings";
+      }
+      if (tab.view === "workspace-settings") {
+        return "Workspace Settings";
+      }
+      if (tab.view === "workspace-manager") {
+        return "Workspace Manager";
+      }
+      return "Themes";
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc) {
@@ -160,7 +169,16 @@
       return useChatTerminology ? "Chat" : "Session";
     }
     if (isViewTab(tab)) {
-      return tab.view === "settings" ? "Settings" : "Themes";
+      if (tab.view === "settings") {
+        return "Settings";
+      }
+      if (tab.view === "workspace-settings") {
+        return "Workspace Settings";
+      }
+      if (tab.view === "workspace-manager") {
+        return "Workspace Manager";
+      }
+      return "Themes";
     }
     const tabDoc = tabDocument(tab);
     if (!tabDoc?.filePath) {

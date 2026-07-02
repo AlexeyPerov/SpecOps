@@ -5,11 +5,16 @@
     label,
     detail = undefined,
     delayMs = 200,
+    /** When true the tooltip never appears (e.g. while a context menu covers
+     *  the anchor). A pending show timer is cancelled and an already-visible
+     *  tooltip is hidden immediately when this flips to true. */
+    suppress = false,
     children,
   }: {
     label: string;
     detail?: string;
     delayMs?: number;
+    suppress?: boolean;
     children: Snippet;
   } = $props();
 
@@ -48,6 +53,14 @@
     clearShowTimer();
     visible = false;
   }
+
+  // While suppressed (e.g. a context menu is open over the anchor), never show
+  // and tear down anything already showing/pending.
+  $effect(() => {
+    if (suppress) {
+      hide();
+    }
+  });
 </script>
 
 <div
@@ -58,6 +71,7 @@
   onmouseleave={hide}
   onfocusin={scheduleShow}
   onfocusout={hide}
+  oncontextmenu={() => hide()}
 >
   {@render children()}
 </div>

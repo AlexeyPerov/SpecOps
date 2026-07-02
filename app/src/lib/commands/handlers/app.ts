@@ -11,6 +11,10 @@ export const appHandlers: CommandHandlerMap = {
   "app.toggleSettings": () => {
     appState.openOrFocusViewTab("settings");
   },
+  "app.openWorkspaceManager": () => {
+    appState.switchContext("notepad");
+    appState.openOrFocusViewTab("workspace-manager");
+  },
   "app.newWindow": async ({ getState, notify }) => {
     const createdWindowId = await createNewWindowWithTransfer(getState(), null);
     if (createdWindowId) {
@@ -27,6 +31,12 @@ export const appHandlers: CommandHandlerMap = {
   },
   "app.toggleGoTo": () => {
     appState.toggleGoTo();
+  },
+  "app.findInProject": ({ openProjectSearch }) => {
+    openProjectSearch?.(false);
+  },
+  "app.replaceInProject": ({ openProjectSearch }) => {
+    openProjectSearch?.(true);
   },
   "view.toggleMarkdownPreview": ({ getState, notify }) => {
     const state = getState();

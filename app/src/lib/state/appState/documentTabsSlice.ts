@@ -102,13 +102,17 @@ export function createDocumentTabsLifecycleSlice(deps: {
       });
     },
     /**
-     * Open (or focus) a singleton view tab — Settings or Themes — in the
-     * active session's tab strip, treating it like any other tab. When a view
-     * tab of the same `view` already exists it is selected instead of
-     * duplicated. An optional `subTab` carries a deep-link target (e.g. a
-     * settings section id) that is attached to a freshly created tab.
+     * Open (or focus) a singleton view tab — Settings, Themes, Workspace
+     * Settings, or Workspace Manager — in the active session's tab strip,
+     * treating it like any other tab. When a view tab of the same `view`
+     * already exists it is selected instead of duplicated. An optional `subTab`
+     * carries a deep-link target (e.g. a settings section id) that is attached
+     * to a freshly created tab.
      */
-    openOrFocusViewTab(view: "settings" | "themes", subTab?: string) {
+    openOrFocusViewTab(
+      view: "settings" | "themes" | "workspace-settings" | "workspace-manager",
+      subTab?: string,
+    ) {
       update((state) => {
         const existingTab = getSessionTabs(getActiveSession(state))
           .map((rawTab) => normalizeTabState(rawTab))

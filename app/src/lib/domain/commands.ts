@@ -1,9 +1,12 @@
 export type AppCommandId =
   | "app.toggleThemePane"
   | "app.toggleSettings"
+  | "app.openWorkspaceManager"
   | "app.newWindow"
   | "app.toggleFindReplace"
   | "app.toggleGoTo"
+  | "app.findInProject"
+  | "app.replaceInProject"
   | "view.cycleTheme"
   | "view.toggleMarkdownPreview"
   | "view.toggleDiffPreview"

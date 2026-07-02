@@ -340,6 +340,8 @@ export function createTabTransferSlice(deps: {
           { id: docId, filePath: payload.filePath },
           payload.content,
           payload.title,
+          "text",
+          state.settings.defaultMarkdownViewMode,
         );
         if (isDefaultBootstrapWindow(state)) {
           return patchActiveContext(state, () => ({

@@ -191,9 +191,11 @@ function createEditorRunnerMock(): EditorCommandRunner {
 function createCommandContext(overrides?: {
   confirm?: (message: string) => boolean;
   editorRunner?: EditorCommandRunner | null;
+  openProjectSearch?: (focusReplace: boolean) => void;
 }) {
   const notify = vi.fn();
   const editorRunner = overrides?.editorRunner ?? null;
+  const openProjectSearch = overrides?.openProjectSearch ?? vi.fn();
   return {
     context: {
       notify,
@@ -201,9 +203,11 @@ function createCommandContext(overrides?: {
       getWindowId: () => "main",
       confirm: vi.fn(overrides?.confirm ?? (() => true)),
       getEditorRunner: vi.fn(() => editorRunner),
+      openProjectSearch,
     },
     notify,
     editorRunner,
+    openProjectSearch,
   };
 }
 
@@ -219,6 +223,9 @@ describe("view.toggleMarkdownPreview command", () => {
   it("cycles the active markdown document between edit and preview", () => {
     const { context, notify } = createCommandContext();
     appState.openFileInTab("/tmp/readme.md", "# Hello");
+    // Markdown files default to preview (see settings.defaultMarkdownViewMode);
+    // pin to edit here so the toggle cycle under test is deterministic.
+    appState.setDocumentMarkdownViewMode("doc-2", "edit");
 
     dispatchCommand("view.toggleMarkdownPreview", context);
     expect(
@@ -293,6 +300,28 @@ describe("app shell toggle commands", () => {
     expect(settingsTabs).toHaveLength(1);
   });
 
+  it("app.openWorkspaceManager switches to notepad and opens a singleton manager tab", () => {
+    const { context } = createCommandContext();
+
+    dispatchCommand("app.openWorkspaceManager", context);
+
+    expect(appState.getActiveContext().id).toBe("notepad");
+    const tabs = getSessionTabs(appState.getActiveSession());
+    expect(tabs.some((tab) => tab.kind === "view" && tab.view === "workspace-manager")).toBe(true);
+  });
+
+  it("app.openWorkspaceManager focuses the existing manager tab instead of duplicating", () => {
+    const { context } = createCommandContext();
+
+    dispatchCommand("app.openWorkspaceManager", context);
+    dispatchCommand("app.openWorkspaceManager", context);
+
+    const managerTabs = getSessionTabs(appState.getActiveSession()).filter(
+      (tab) => tab.kind === "view" && tab.view === "workspace-manager",
+    );
+    expect(managerTabs).toHaveLength(1);
+  });
+
   it("app.newWindow notifies on success and failure", async () => {
     const { context, notify } = createCommandContext();
     createNewWindowWithTransferMock.mockResolvedValueOnce("win-2");
@@ -339,6 +368,24 @@ describe("app shell toggle commands", () => {
 
     dispatchCommand("app.toggleGoTo", context);
     expect(appState.getSnapshot().editor.goToOpen).toBe(true);
+  });
+
+  it("app.findInProject opens the project search panel focused on find", () => {
+    const openProjectSearch = vi.fn();
+    const { context } = createCommandContext({ openProjectSearch });
+
+    dispatchCommand("app.findInProject", context);
+
+    expect(openProjectSearch).toHaveBeenCalledWith(false);
+  });
+
+  it("app.replaceInProject opens the project search panel focused on replace", () => {
+    const openProjectSearch = vi.fn();
+    const { context } = createCommandContext({ openProjectSearch });
+
+    dispatchCommand("app.replaceInProject", context);
+
+    expect(openProjectSearch).toHaveBeenCalledWith(true);
   });
 });
 
@@ -538,10 +585,13 @@ describe("command dispatch coverage", () => {
     const testedIds = new Set([
       "app.toggleThemePane",
       "app.toggleSettings",
+      "app.openWorkspaceManager",
       "app.newWindow",
       "view.cycleTheme",
       "app.toggleFindReplace",
       "app.toggleGoTo",
+      "app.findInProject",
+      "app.replaceInProject",
       "view.toggleMarkdownPreview",
       "view.toggleDiffPreview",
       "file.new",

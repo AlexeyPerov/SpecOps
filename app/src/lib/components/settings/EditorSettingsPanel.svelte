@@ -122,3 +122,25 @@
     text editor.
   </p>
 </section>
+
+<section class="settings-section">
+  <h3>Markdown</h3>
+  <p class="settings-section-note">
+    Initial view applied when opening a markdown file. Each document remembers its own mode after
+    you switch it from the editor's mode bar.
+  </p>
+  <label class="settings-field">
+    <span>Default view</span>
+    <select
+      value={snapshot.settings.defaultMarkdownViewMode}
+      onchange={(event) =>
+        appState.setDefaultMarkdownViewMode(
+          (event.currentTarget as HTMLSelectElement).value as "edit" | "split" | "preview",
+        )}
+    >
+      <option value="edit">Edit</option>
+      <option value="split">Split</option>
+      <option value="preview">Preview</option>
+    </select>
+  </label>
+</section>

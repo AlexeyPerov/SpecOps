@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-07-02 — Version Control (git) specs
+
+- **New spec pack:** `specs/git/` — approved design and phased implementation plans for workspace **Version Control** (system git via Tauri, singleton view tab from workspace context menu). Locked decisions: independent of OpenCode; auto repo-root discovery; flat current-branch history; Changes panel with stage/commit; fetch/pull/push on default upstream; macOS + Windows first.
+  - **`version-control-idea.md`** — summary, goals, locked decisions (incl. Q7: VC module fully independent; project-tree M/A/D badges stay OpenCode-driven in MVP), UX, architecture, git command matrix, requirements, phase overview.
+  - **`backlog.md`** — deferred MVP items (graph, diffs, askpass, remote picker, etc.), SpecOps follow-ups (system-git tree badges S-01, Workspace Manager columns), and SourceGit feature inventory by area.
+  - **`phase-0-execution-plan.md`** … **`phase-4-execution-plan.md`** — atomic ~0.5–1d tasks with agent complexity estimates (~22–25.5 days total MVP).
+
+## 2026-07-02 — Remove title-bar OpenCode status button
+
+- **Removed the top-right title-bar status button** and its `StatusPopover` UI (M5-T4). The title bar is again a plain drag region only. Dropped `AppShellStatusPopoverProps`, the `+page.svelte` popover state/effect, and the unused `StatusPopover.svelte` component; `opencodeStatusSummary` remains available for future settings surfacing.
+
+## 2026-07-02 — Cross-context file opening plan
+
+- **New spec:** `specs/text-editor/notepad-non-restrict-plan.md` — approved implementation plan for optional cross-context file tabs. Default (restriction off): files may open in whichever context is active (Notepad or any workspace) with one tab per path per window. Opt-in **Restrict files to their context** (Editor → Contexts) preserves today’s behavior (outside paths → Notepad, workspace files migrate from Notepad, Save As outside root moves tab). Locked decisions: focus existing tab when already open elsewhere, global setting, unchanged cross-window registry. Four phases (~1–1.25 days): settings plumbing, open pipeline, save alignment, tests.
+
+## 2026-07-02 — Line counter fix plan
+
+- **New spec:** `specs/text-editor/line-counter-fixes.md` — bug analysis and phased fix plan for the Workspace Settings line counter (stuck “Counting…”, always 0 after re-enter). Covers root causes (ephemeral state, IPC-heavy walker, silent `readErrors`, overlapping walks), confirmation steps, and four implementation phases: UI correctness, in-memory cache, abort/dedupe/progress, and performance (sync path join → optional Rust walker).
+
+## 2026-07-01 (20:59) — Workspace Manager
+
+- **New: Workspace Manager** — an app-level overview of every workspace open in the current window, opened as a singleton **notepad** view tab (kind `workspace-manager`). Reachable from **SpecOps → Workspace Manager** (below Settings) and a new **≡** button on the activity rail, stacked beneath the **+** (Add Workspace) button in a bottom-aligned footer. Implements `specs/text-editor/workspace-manager-idea.md` (v1 scope).
+  - **Manager table** (`WorkspaceManagerView.svelte`): lists every workspace with name + path columns; **row click switches** to that workspace (`switchContext`); a per-row **⚙ Settings** button switches to the workspace and focuses its `workspace-settings` view tab (same flow as the rail context menu). Shows an empty state with the add buttons when no workspaces are open.
+  - **Add / Add multiple:** "Add workspace" reuses `workspace.add`. "Add multiple…" opens a folder picker, then a modal (`AddMultipleWorkspacesModal.svelte`) listing the **immediate subfolders** as checkboxes (all unchecked by default, already-open paths disabled and tagged). "Add selected" batch-adds via the same `addWorkspace` per path (duplicates skipped, summary notify). Backed by a new pure, dependency-injected helper `collectImmediateSubfolders(parentPath, existingRootPaths)` (`services/workspaceSubfolders.ts`) that keeps directories only, skips symlinks, normalizes each path against the session dedup key before the `exists` check, and sorts alphabetically.
+  - **Hide from sidebar (global):** a **Show in sidebar** toggle in **Workspace Settings → Overview** (inverted from the stored `hiddenFromRail` flag). Hidden workspaces are filtered out of the activity rail in every window but stay listed and switchable in the manager. Persisted as `workspace-preferences.json` in the app data dir, keyed by normalized root path, via a new best-effort store `services/workspacePreferences.ts` (`loadWorkspacePreferences`/`getHiddenRootPaths`/`isHiddenFromRail`/`setHiddenFromRail`/`subscribeWorkspacePreferences`). Loaded during runtime startup; `+page.svelte` derives `railWorkspaces` (filtered) for the rail while the manager always receives the full list, and subscribes so toggles update the rail immediately.
+  - **Plumbing:** widened `ViewTabState.view` (+ `createViewTab`/`normalizeTabState`/`openOrFocusViewTab`) and `EditorViewKind` to include `"workspace-manager"`; `EditorPaneContent.svelte` renders the new view; `TabBar.svelte` titles/tooltips it "Workspace Manager". New command `app.openWorkspaceManager` (`SpecOps/Workspace Manager` menu item) = `switchContext("notepad")` + `openOrFocusViewTab("workspace-manager")`. `AppShell` gained `AppShellWorkspaceManagerProps` (threaded through the editor chrome) and `AppShellAddMultipleWorkspacesProps` (modal overlay). The activity rail's `+` button's `margin-top: auto` moved to a `.rail-footer-stack` wrapping both `+` and `≡`.
+  - **Tests:** new `workspaceSubfolders.test.ts` (6) and `workspacePreferences.test.ts` (7); added `app.openWorkspaceManager` dispatch + singleton-focus tests to `appViewHandlers.test.ts` and its coverage list. Suite green (2065 tests).
+
+## 2026-07-01 — Workspace Manager spec
+
+- **New spec:** `specs/text-editor/workspace-manager-idea.md` — approved design and five-phase implementation plan for the Workspace Manager (notepad view tab, activity-rail entry, add/add-multiple flows, global hide-from-sidebar preference, locked v1 scope).
+
+## 2026-07-01 — Project panel tree indent
+
+- **Tighter project tree nesting.** Reduced `--tree-indent` from 14px to 4px (~70% less horizontal offset per depth level) so nested files and folders sit closer to their parents (`tokens.css`; used by `ProjectTreeNode.svelte` and loading rows in `ProjectTreeList.svelte`).
+
+## 2026-07-01 — Workspace settings tab + tooltip/context-menu polish
+
+- **New: Workspace Settings tab (with line counter).** The workspace right-click context menu gained a **Settings** action (first item) that switches to the workspace and opens a dedicated **Workspace Settings** view in a separate editor tab (kind `workspace-settings`). It is a chrome-less editor-pane view tab following the existing Settings/Themes pattern — singleton per session, ephemeral (stripped from persisted sessions), and titled "Workspace Settings" in the tab strip.
+  - The view ships with a first **Overview → Line counter** section: a TypeScript port of the Unity-AI-Hub `line_count.rs` LineWalker algorithm (`services/lineCounter.ts`). It counts newline lines in source files (C/C++, Go, Rust, Python, JS/TS, Java, Kotlin, Swift, C#, HTML/CSS, Svelte, Vue, …) using the same allowlist, prunes dot-dirs and dependency/build folders (`node_modules`, `target`, `dist`, `build`, `vendor`, `__pycache__`), skips symlinks, and reports total lines plus code-file / ignored-file / skipped-directory counts via a "Run line count" button. Markdown/JSON/YAML/TOML are excluded as data/docs. No Rust changes — uses the already-permissioned `@tauri-apps/plugin-fs` (`readDir`/`readFile`).
+  - Domain/routing widened: `ViewTabState.view` and `createViewTab`/`normalizeTabState`/`openOrFocusViewTab` accept `"workspace-settings"`; new `EditorViewKind` type alias shared by `editorRouting.ts` view-kind resolvers; `EditorPaneContent` renders `<WorkspaceSettingsView>` for the new kind, scoped by the active workspace root path threaded through `AppShellEditorChromeProps.workspaceRootPath`.
+- **Workspace rail tooltips — hide on right-click, longer delay, suppressed while menu open.** `HoverTooltip` now hides immediately on `contextmenu` (so right-clicking a workspace removes its tooltip instantly) and gained a `suppress` prop that reactively tears down any visible/pending tooltip. Workspace rail buttons doubled their hover delay (200ms → 400ms) and pass `suppress` whenever a workspace context menu is open (`contextMenuWorkspaceId` prop threaded from `+page.svelte` → `AppShell` → `ActivityRail`), so the tooltip never overlaps the menu. (`HoverTooltip.svelte`, `ActivityRail.svelte`, `AppShell.svelte`.)
+
+## 2026-07-01 — Default markdown view setting
+
+- **New setting: default markdown view mode (defaults to Preview).** Newly opened markdown files now start in **preview** by default instead of edit. Added a "Markdown → Default view" dropdown (Edit / Split / Preview) to the Editor settings panel (`EditorSettingsPanel.svelte`) so users can change the initial view. The setting persists to `settings.json` (`defaultMarkdownViewMode`, validated to `edit`/`split`/`preview`, falling back to `preview`) and loads via `applyPersistedSettings`.
+  - Wired through the full settings stack following the existing `decoratePlaintextSymbols` pattern: new `AppSettingsState.defaultMarkdownViewMode` field + `setDefaultMarkdownViewMode` setter (`appState.ts`), defaults + normalization (`settingsSlice.ts`), persistence round-trip (`settingsStore.ts`, `appShellRuntime.ts`, `appShellEffects.ts`).
+  - `buildDocument` (`documentHelpers.ts`) seeds markdown documents with the configured default; non-markdown files and untitled drafts keep `edit`. The open flows in `documentContentSlice.ts` (`openFileInTab`/`openFileInPane`) and `tabTransferSlice.ts` pass `state.settings.defaultMarkdownViewMode` when constructing new documents. Session restore preserves each document's previously saved per-document mode — only first-open gets the default.
+
+## 2026-07-01 — Find in Project + sidebar/panel UI fixes
+
+- **Find in Project (new).** Added project-wide search and replace, surfaced via a new resizable bottom panel (`ProjectSearchPanel.svelte`) that mirrors the console panel's show/resize pattern. Binds `Cmd/Ctrl+Shift+F` (Find in Project) and `Cmd/Ctrl+Shift+R` (Replace in Project), with matching native Edit-menu items.
+  - **Search** walks the whole active workspace (reusing `collectOpenableFolderFiles`, which skips `node_modules`/`.git`/hidden dirs and non-openable/binary files), reads each file, and matches via the existing pure `findAllMatches` helper. Results are grouped per file with line/column/preview and clickable to open the file at the match (`editorRunner.goToLine`).
+  - **Replace** writes back to disk via a new `replaceInProjectFile` (projectFileOps, guarded by `isPathUnderRoot`/blocked-dir checks, reusing the new pure `applyReplaceAll`), then syncs any open document for that path (`setDocumentContent` + `markDocumentSaved`).
+  - New pure helpers: `searchInProject`/`computeFileMatches`/`totalMatchCount` (`services/projectSearch.ts`), `applyReplaceAll` (`editor/editorSearchOps.ts`); new command IDs `app.findInProject`/`app.replaceInProject` (`domain/commands.ts`, `commands/definitions.ts`, handlers, keydown special-case, native menu). The `CommandContext` gained an optional `openProjectSearch(focusReplace)` callback wired from `+page.svelte`.
+- **Sidebar — Notepad button 2px top offset.** Collapsed activity-rail padding changed from `0 var(--space-1)` to `var(--space-1) var(--space-1)` so the Notepad button no longer sits flush against the top border (`ActivityRail.svelte`).
+- **Find/Replace panel — button overflow fix.** Wrapped the input + trailing action buttons in a new `.fr-field-group` flex container (bounded by panel padding) so prev/next/close stay inside the panel instead of being pushed past the rounded right edge; widened panel 400→440px, tightened row gap 8→6px, shrank counter min-width 56→44px (`FindReplacePanel.svelte`).
+
 ## 2026-06-30 — Split-view session restore: all panes persist
 
 - **Grid / multi-pane tabs survive relaunch.** Open-file registry sync and restore dedupe now scan every pane in the editor layout (not just the active pane), so documents and tabs in non-focused layout groups are kept across sessions.

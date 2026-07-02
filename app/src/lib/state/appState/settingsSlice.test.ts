@@ -135,6 +135,17 @@ describe("appState settings and editor chrome", () => {
     expect(snapshot.theme.darkTheme.id).toBe("turnip");
   });
 
+  it("default markdown view mode is preview and the setter updates it", () => {
+    expect(appState.getSnapshot().settings.defaultMarkdownViewMode).toBe("preview");
+    appState.setDefaultMarkdownViewMode("edit");
+    expect(appState.getSnapshot().settings.defaultMarkdownViewMode).toBe("edit");
+  });
+
+  it("applyPersistedSettings clamps an invalid markdown view mode to preview", () => {
+    appState.applyPersistedSettings({ defaultMarkdownViewMode: "garbage" as never });
+    expect(appState.getSnapshot().settings.defaultMarkdownViewMode).toBe("preview");
+  });
+
   it("applyWindowSession preserves the active theme", () => {
     appState.setLightTheme({ kind: "preset", id: "github" });
     appState.applyWindowSession({

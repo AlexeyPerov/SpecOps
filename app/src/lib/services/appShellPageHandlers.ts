@@ -21,6 +21,7 @@ export interface AppShellCommandHandlersDeps {
   getSnapshot: () => AppDomainState;
   getCurrentWindowId: () => string;
   getEditorRunner: () => EditorCommandRunner | null;
+  openProjectSearch: (focusReplace: boolean) => void;
 }
 
 export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps) {
@@ -31,12 +32,21 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
       getWindowId: deps.getCurrentWindowId,
       confirm: (message) => window.confirm(message),
       getEditorRunner: deps.getEditorRunner,
+      openProjectSearch: deps.openProjectSearch,
     });
   }
 
   function handleKeydown(event: KeyboardEvent): void {
     const command = keymapCommandForEvent(event);
     if (command === "app.toggleFindReplace") {
+      event.preventDefault();
+      runCommand(command);
+      return;
+    }
+    if (
+      command === "app.findInProject" ||
+      command === "app.replaceInProject"
+    ) {
       event.preventDefault();
       runCommand(command);
       return;

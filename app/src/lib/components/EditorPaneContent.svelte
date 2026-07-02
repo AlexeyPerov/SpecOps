@@ -5,6 +5,8 @@
   import BinaryFilePane from "./BinaryFilePane.svelte";
   import LargeFileConfirmPane from "./LargeFileConfirmPane.svelte";
   import SettingsView from "./settings/SettingsView.svelte";
+  import WorkspaceSettingsView from "./settings/WorkspaceSettingsView.svelte";
+  import WorkspaceManagerView from "./WorkspaceManagerView.svelte";
   import ThemesView from "./ThemesView.svelte";
   import ChatPanel from "./ChatPanel.svelte";
   import FindReplacePanel from "./FindReplacePanel.svelte";
@@ -15,8 +17,10 @@
   import {
     paneActiveTab,
     tabDocumentId,
+    type ContextId,
     type DocumentState,
     type SessionState,
+    type WorkspaceEntry,
   } from "../domain/contracts";
   import { deriveAppShellDocumentView } from "../services/appShellDocumentView";
   import type { EditorCommandRunner } from "../types/editor";
@@ -27,6 +31,19 @@
     session,
     documents,
     isChatHttpActive = false,
+    /** Active workspace root path, used by the workspace-settings view tab. */
+    workspaceRootPath = null,
+    /** Window-session workspaces, used by the workspace-manager view tab. */
+    workspaceManagerWorkspaces = [],
+    /** Active context id, used by the workspace-manager view tab. */
+    workspaceManagerActiveContextId = "notepad",
+    /** Normalized root paths hidden from the activity rail. */
+    workspaceManagerHiddenRootPaths = new Set<string>(),
+    /** Callbacks for the workspace-manager view tab. */
+    onWorkspaceManagerAddWorkspace = () => {},
+    onWorkspaceManagerAddMultiple = () => {},
+    onWorkspaceManagerSelectWorkspace = (_workspaceId: ContextId) => {},
+    onWorkspaceManagerOpenSettings = (_workspaceId: ContextId) => {},
     previewMode = "editor",
     findReplaceOpen = false,
     goToOpen = false,
@@ -75,6 +92,14 @@
     session: SessionState;
     documents: DocumentState[];
     isChatHttpActive: boolean;
+    workspaceRootPath?: string | null;
+    workspaceManagerWorkspaces?: WorkspaceEntry[];
+    workspaceManagerActiveContextId?: ContextId;
+    workspaceManagerHiddenRootPaths?: Set<string>;
+    onWorkspaceManagerAddWorkspace?: () => void;
+    onWorkspaceManagerAddMultiple?: () => void;
+    onWorkspaceManagerSelectWorkspace?: (workspaceId: ContextId) => void;
+    onWorkspaceManagerOpenSettings?: (workspaceId: ContextId) => void;
     previewMode: "editor" | "markdown" | "diff";
     findReplaceOpen: boolean;
     goToOpen: boolean;
@@ -127,6 +152,8 @@
   const activeViewTabKind = $derived(activeViewKindInPane(layout, paneId));
   const isSettingsViewActive = $derived(activeViewTabKind === "settings");
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
+  const isWorkspaceSettingsViewActive = $derived(activeViewTabKind === "workspace-settings");
+  const isWorkspaceManagerViewActive = $derived(activeViewTabKind === "workspace-manager");
 
   const paneDocument = $derived.by(() => {
     const docId = selectedTab ? tabDocumentId(selectedTab) : null;
@@ -171,6 +198,18 @@
     <SettingsView />
   {:else if isThemesViewActive}
     <ThemesView />
+  {:else if isWorkspaceSettingsViewActive}
+    <WorkspaceSettingsView workspaceRootPath={workspaceRootPath} />
+  {:else if isWorkspaceManagerViewActive}
+    <WorkspaceManagerView
+      workspaces={workspaceManagerWorkspaces}
+      activeContextId={workspaceManagerActiveContextId}
+      hiddenRootPaths={workspaceManagerHiddenRootPaths}
+      onAddWorkspace={onWorkspaceManagerAddWorkspace}
+      onAddMultiple={onWorkspaceManagerAddMultiple}
+      onSelectWorkspace={onWorkspaceManagerSelectWorkspace}
+      onOpenWorkspaceSettings={onWorkspaceManagerOpenSettings}
+    />
   {:else if isChatHttpActive || isSessionTabActive}
     <ChatPanel
       chatContextKind={isChatHttpActive ? "chat-http" : "workspace"}

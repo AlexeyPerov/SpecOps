@@ -1,4 +1,9 @@
-import type { DocumentContentKind, DocumentIdentity, DocumentState } from "../../domain/contracts";
+import type {
+  DocumentContentKind,
+  DocumentIdentity,
+  DocumentState,
+  MarkdownViewMode,
+} from "../../domain/contracts";
 import { inferEditorLanguage } from "../../editor/editorLanguage";
 import { emptyUnsavedDocumentTitle } from "../../services/untitledDocument";
 
@@ -21,7 +26,9 @@ export function buildDocument(
   content: string,
   title: string,
   contentKind: DocumentContentKind = "text",
+  defaultMarkdownViewMode: MarkdownViewMode = "edit",
 ): DocumentState {
+  const language = inferLanguage(identity.filePath);
   return {
     id: identity.id,
     filePath: identity.filePath,
@@ -30,14 +37,16 @@ export function buildDocument(
     savedContent: content,
     isDirty: false,
     contentKind,
-    language: inferLanguage(identity.filePath),
+    language,
     encoding: "utf-8",
     lineEnding: content.includes("\r\n") ? "crlf" : "lf",
     diskFingerprint: null,
     dismissedFingerprint: null,
     fileMissing: false,
     scrollTop: 0,
-    markdownViewMode: "edit",
+    // Seed markdown documents with the configured default view; non-markdown
+    // files always start in edit mode (the mode bar only renders for markdown).
+    markdownViewMode: language === "markdown" ? defaultMarkdownViewMode : "edit",
   };
 }
 

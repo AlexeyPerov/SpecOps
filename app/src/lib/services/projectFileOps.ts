@@ -1,7 +1,8 @@
 import { join } from "@tauri-apps/api/path";
-import { exists, mkdir, remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import { exists, mkdir, readTextFile, remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
 import { SKIPPED_DIRECTORY_NAMES } from "./folderOpenableFiles";
 import { normalizePathSync } from "./diskFingerprint";
+import { applyReplaceAll } from "../editor/editorSearchOps";
 import {
   closeTabsForDeletedDocumentsUnderPath,
   markDocumentsMissingUnderPath,
@@ -12,6 +13,11 @@ import { isPathUnderRoot } from "./workspacePaths";
 export type ProjectFileOpResult =
   | { ok: true; path: string }
   | { ok: false; reason: string };
+
+/** Result of replacing all matches inside a single project file. */
+export type ProjectReplaceResult =
+  | { ok: true; path: string; count: number; content: string }
+  | { ok: false; reason: string; count: number };
 
 function basename(path: string): string {
   const normalized = path.replaceAll("\\", "/");
@@ -124,6 +130,53 @@ export async function createProjectFile(
     const reason = error instanceof Error ? error.message : String(error);
     return { ok: false, reason };
   }
+}
+
+/**
+ * Replace every occurrence of `query` with `replacement` inside an existing
+ * workspace file and persist the result. The new content is returned so callers
+ * can sync any open document for that path. Files outside the workspace or
+ * skipped (heavy/hidden) directories are rejected without touching disk.
+ */
+export async function replaceInProjectFile(
+  workspaceRoot: string,
+  filePath: string,
+  query: string,
+  replacement: string,
+  caseSensitive: boolean,
+): Promise<ProjectReplaceResult> {
+  if (!query) {
+    return { ok: false, reason: "Query is empty.", count: 0 };
+  }
+  if (!isPathUnderRoot(filePath, workspaceRoot)) {
+    return { ok: false, reason: "File is outside the workspace.", count: 0 };
+  }
+  if (isBlockedProjectTreeDirectory(filePath)) {
+    return { ok: false, reason: "Cannot modify files in this folder.", count: 0 };
+  }
+  let content: string;
+  try {
+    content = await readTextFile(filePath);
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason, count: 0 };
+  }
+  const { text: nextContent, count } = applyReplaceAll(
+    content,
+    query,
+    replacement,
+    caseSensitive,
+  );
+  if (count === 0) {
+    return { ok: false, reason: "No matches.", count: 0 };
+  }
+  try {
+    await writeTextFile(filePath, nextContent);
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason, count: 0 };
+  }
+  return { ok: true, path: filePath, count, content: nextContent };
 }
 
 export async function createProjectFolder(

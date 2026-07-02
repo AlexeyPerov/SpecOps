@@ -131,6 +131,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           content,
           basename(filePath),
           contentKind,
+          state.settings.defaultMarkdownViewMode,
         );
 
         return {
@@ -271,6 +272,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           content,
           basename(filePath),
           contentKind,
+          state.settings.defaultMarkdownViewMode,
         );
         return {
           ...patchActiveContext(state, (ctx) => ({

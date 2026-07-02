@@ -14,6 +14,12 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "Cmd+,", windows: "Ctrl+," },
   },
   {
+    id: "app.openWorkspaceManager",
+    label: "Workspace Manager",
+    menuPath: "SpecOps/Workspace Manager",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
     id: "app.newWindow",
     label: "New Window",
     menuPath: "File/New Window",
@@ -36,6 +42,18 @@ export const commandDefinitions: CommandDefinition[] = [
     label: "Go To Line",
     menuPath: "Edit/Go To",
     binding: { mac: "Cmd+L", windows: "Ctrl+L" },
+  },
+  {
+    id: "app.findInProject",
+    label: "Find in Project",
+    menuPath: "Edit/Find in Project",
+    binding: { mac: "Cmd+Shift+F", windows: "Ctrl+Shift+F" },
+  },
+  {
+    id: "app.replaceInProject",
+    label: "Replace in Project",
+    menuPath: "Edit/Replace in Project",
+    binding: { mac: "Cmd+Shift+R", windows: "Ctrl+Shift+R" },
   },
   {
     id: "view.toggleMarkdownPreview",

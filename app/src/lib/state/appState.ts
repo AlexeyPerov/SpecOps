@@ -1,5 +1,5 @@
 import { writable } from "svelte/store";
-import type { AppDomainState, AppThemeState, ExternalFilesSettings, ThemeMode } from "../domain/contracts";
+import type { AppDomainState, AppThemeState, ExternalFilesSettings, MarkdownViewMode, ThemeMode } from "../domain/contracts";
 import { createFileTab, createSinglePaneLayout } from "../domain/contracts";
 import { bumpRecentFile } from "../services/recentFiles";
 import { DEFAULT_ACTIVITY_RAIL_WIDTH_PX, normalizeActivityRailWidthPx } from "../services/panelLayout";
@@ -384,6 +384,15 @@ function createStateStore() {
         settings: {
           ...state.settings,
           decoratePlaintextSymbols: value,
+        },
+      }));
+    },
+    setDefaultMarkdownViewMode(value: MarkdownViewMode) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          defaultMarkdownViewMode: value,
         },
       }));
     },

@@ -153,6 +153,20 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
     commandId: "app.toggleGoTo",
     runCommand,
   });
+  const findInProjectItem = await commandItem({
+    id: "cmd.edit.findInProject",
+    text: "Find in Project",
+    accelerator: "CmdOrCtrl+Shift+F",
+    commandId: "app.findInProject",
+    runCommand,
+  });
+  const replaceInProjectItem = await commandItem({
+    id: "cmd.edit.replaceInProject",
+    text: "Replace in Project",
+    accelerator: "CmdOrCtrl+Shift+R",
+    commandId: "app.replaceInProject",
+    runCommand,
+  });
   const indentItem = await commandItem({
     id: "cmd.edit.indent",
     text: "Indent",
@@ -208,6 +222,8 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
       await PredefinedMenuItem.new({ item: "SelectAll" }),
       await PredefinedMenuItem.new({ item: "Separator" }),
       findReplaceItem,
+      findInProjectItem,
+      replaceInProjectItem,
       goToItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       indentItem,
@@ -331,6 +347,12 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
     commandId: "app.toggleSettings",
     runCommand,
   });
+  const workspaceManagerItem = await commandItem({
+    id: "cmd.app.workspaceManager",
+    text: "Workspace Manager",
+    commandId: "app.openWorkspaceManager",
+    runCommand,
+  });
 
   return Submenu.new({
     text: "SpecOps",
@@ -345,6 +367,7 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
       await PredefinedMenuItem.new({ item: "Separator" }),
       themesItem,
       settingsItem,
+      workspaceManagerItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       await PredefinedMenuItem.new({ item: "Quit" }),
     ],

@@ -54,6 +54,7 @@ import { normalizePathSync } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { readConsoleHeightPreference } from "./consoleTabPrefs";
 import { watchedPathsFromState } from "./appShellHelpers";
+import { loadWorkspacePreferences } from "./workspacePreferences";
 
 const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 const DOCK_NEW_WINDOW_EVENT = "spec-ops/dock/new-window";
@@ -227,6 +228,7 @@ export async function startAppShellRuntime(
         zoomPercent: persistedSettings.zoomPercent,
         externalFiles: toExternalFilesSettings(persistedSettings),
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
+        defaultMarkdownViewMode: persistedSettings.defaultMarkdownViewMode,
         opencode: persistedSettings.opencode,
         chatHttp: persistedSettings.chatHttp,
         providerSettings: persistedSettings.providerSettings,
@@ -249,6 +251,9 @@ export async function startAppShellRuntime(
     initializeChatProviders();
     options.setConsoleHeightPx(await readConsoleHeightPreference());
     await initializeLogging();
+    // Load global workspace hide-from-rail preferences (decision 9). Best-effort;
+    // failure leaves an empty preference set (no workspaces hidden).
+    await loadWorkspacePreferences().catch(() => {});
   });
 
   const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {

@@ -63,7 +63,7 @@ Dependencies: none.
 
 ---
 
-#### Task 0.2: Git binary probe (G0-2) [Score:5] [Agent:easy] [~0.5d]
+#### Task 0.2: Git binary probe (G0-2) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -83,7 +83,7 @@ Dependencies: Task 0.1.
 
 ---
 
-#### Task 0.3: `run_git` subprocess executor (G0-3) [Score:8] [Agent:medium] [~1d]
+#### Task 0.3: `run_git` subprocess executor (G0-3) [Score:8] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 
@@ -105,7 +105,7 @@ Dependencies: Task 0.2.
 
 ---
 
-#### Task 0.4: Repo root resolution (G0-4) [Score:6] [Agent:medium] [~0.5d]
+#### Task 0.4: Repo root resolution (G0-4) [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 

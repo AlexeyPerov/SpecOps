@@ -51,7 +51,7 @@ Dependencies: Phase 0 exit criteria.
 
 ---
 
-#### Task 1.2: Context menu entry + controller action (G1-2) [Score:5] [Agent:easy] [~0.5d]
+#### Task 1.2: Context menu entry + controller action (G1-2) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -71,7 +71,7 @@ Dependencies: Task 1.1.
 
 ---
 
-#### Task 1.3: VersionControlView shell component (G1-3) [Score:7] [Agent:medium] [~1d]
+#### Task 1.3: VersionControlView shell component (G1-3) [Score:7] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 
@@ -93,7 +93,7 @@ Dependencies: Task 1.1.
 
 ---
 
-#### Task 1.4: Editor routing + TabBar titles (G1-4) [Score:4] [Agent:easy] [~0.5d]
+#### Task 1.4: Editor routing + TabBar titles (G1-4) [Score:4] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 

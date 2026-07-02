@@ -154,6 +154,9 @@
       if (tab.view === "workspace-manager") {
         return "Workspace Manager";
       }
+      if (tab.view === "version-control") {
+        return "Version Control";
+      }
       return "Themes";
     }
     const tabDoc = tabDocument(tab);
@@ -177,6 +180,9 @@
       }
       if (tab.view === "workspace-manager") {
         return "Workspace Manager";
+      }
+      if (tab.view === "version-control") {
+        return "Version Control";
       }
       return "Themes";
     }

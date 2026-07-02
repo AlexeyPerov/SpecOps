@@ -177,6 +177,20 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     close();
   }
 
+  /**
+   * Switches to the workspace and opens its version-control view tab (kind
+   * "version-control"), then closes the menu. The tab is a singleton within
+   * the workspace session, so re-invoking focuses the existing tab.
+   */
+  function openVersionControl(workspaceId: ContextId): void {
+    const switched = appState.switchContext(workspaceId);
+    if (switched && isWorkspaceContextId(workspaceId)) {
+      markWorkspaceLifecycleActive();
+    }
+    appState.openOrFocusViewTab("version-control");
+    close();
+  }
+
   function closeWorkspace(workspaceId: ContextId): void {
     const closed = appState.closeWorkspace(workspaceId, {
       resolveAction: resolveCloseAction,
@@ -205,6 +219,7 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     move,
     closeWorkspace,
     openSettings,
+    openVersionControl,
     handleActiveContextSwitch,
     handleSelectContext,
   };

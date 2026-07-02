@@ -459,6 +459,31 @@ describe("appearance settings persistence", () => {
   });
 });
 
+describe("restrictFilesToContext persistence", () => {
+  it("defaults to false", () => {
+    expect(defaultPersistedSettings.restrictFilesToContext).toBe(false);
+  });
+
+  it("preserves the setting through the round-trip", () => {
+    const persisted = toPersistedSettings({
+      ...defaultPersistedSettings,
+      externalFiles: toExternalFilesSettings(defaultPersistedSettings),
+      restrictFilesToContext: true,
+    });
+    expect(persisted.restrictFilesToContext).toBe(true);
+  });
+
+  it("falls back to false when the field is missing (legacy settings)", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.restrictFilesToContext).toBe(false);
+  });
+});
 describe("defaultMarkdownViewMode persistence", () => {
   it("defaults to preview", () => {
     expect(defaultPersistedSettings.defaultMarkdownViewMode).toBe("preview");

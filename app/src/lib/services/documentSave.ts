@@ -5,6 +5,7 @@ import { appState } from "../state/appState";
 import { saveFile, saveFileAs } from "./fileSystem";
 import { renameOpenFileRegistry } from "./openFileRegistry";
 import { untitledSaveDefaultPath } from "./untitledSavePath";
+import { isFileContextRestricted } from "./fileContextPolicy";
 import { isPathUnderRoot } from "./workspacePaths";
 
 export type SaveDocumentDeps = {
@@ -69,7 +70,7 @@ export async function saveDocumentForClose(
   document: DocumentState,
   deps: SaveDocumentDeps,
 ): Promise<boolean> {
-  return persistDocument(document, deps, { allowWorkspaceTabMove: true });
+  return persistDocument(document, deps, { allowWorkspaceTabMove: isFileContextRestricted() });
 }
 
 export async function saveDocumentKeepingTab(

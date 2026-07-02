@@ -74,6 +74,7 @@ export const defaultSettings: AppSettingsState = {
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   defaultMarkdownViewMode: "preview",
+  restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
   chatHttp: defaultChatHttpSettings,
   opencodeHealth: {
@@ -104,6 +105,15 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             ...state.settings.chatHttp,
             enabled,
           }),
+        },
+      }));
+    },
+    setRestrictFilesToContext(restrictFilesToContext: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          restrictFilesToContext,
         },
       }));
     },
@@ -156,6 +166,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
       defaultMarkdownViewMode?: MarkdownViewMode;
+      restrictFilesToContext?: boolean;
       opencode?: Partial<OpencodeSettings>;
       chatHttp?: Partial<ChatHttpSettings>;
       opencodeHealth?: Partial<OpencodeHealthState>;
@@ -208,6 +219,15 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
               defaultMarkdownViewMode: normalizeMarkdownViewMode(
                 partial.defaultMarkdownViewMode,
               ),
+            },
+          };
+        }
+        if (typeof partial.restrictFilesToContext === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              restrictFilesToContext: partial.restrictFilesToContext,
             },
           };
         }

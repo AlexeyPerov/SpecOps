@@ -188,6 +188,12 @@ export interface AppSettingsState {
    * document remembers its own mode after open; this only seeds the first.
    */
   defaultMarkdownViewMode: MarkdownViewMode;
+  /**
+   * When true, files outside the active workspace open in Notepad and
+   * workspace files opened from a workspace migrate out of Notepad. When false
+   * (default), files open in whichever context is active.
+   */
+  restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   opencodeHealth: OpencodeHealthState;

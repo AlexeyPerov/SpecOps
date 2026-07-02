@@ -111,6 +111,7 @@ describe("requestOpenPath", () => {
 
   it("migrates a notepad tab into the active workspace when opening a workspace file", async () => {
     readOpenFileRegistryMock.mockResolvedValue({});
+    appState.setRestrictFilesToContext(true);
     appState.addWorkspace("/tmp/ws");
     appState.switchContext("notepad");
     appState.openFileInTab("/tmp/ws/migrate-me.txt", "local edits");
@@ -138,6 +139,55 @@ describe("requestOpenPath", () => {
       return doc?.filePath === "/tmp/ws/migrate-me.txt";
     });
     expect(notepadHasTab).toBe(false);
+  });
+
+  it("opens outside-root paths in the active workspace when unrestricted", async () => {
+    readOpenFileRegistryMock.mockResolvedValue({});
+    appState.addWorkspace("/tmp/ws");
+
+    await expect(requestOpenPath("/tmp/outside.txt", "win-a")).resolves.toEqual({
+      kind: "needs_read",
+      path: "/tmp/outside.txt",
+      switchedToNotepad: false,
+    });
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("ws-1");
+  });
+
+  it("switches to notepad for outside-root paths when restricted", async () => {
+    readOpenFileRegistryMock.mockResolvedValue({});
+    appState.addWorkspace("/tmp/ws");
+    appState.setRestrictFilesToContext(true);
+
+    await expect(requestOpenPath("/tmp/outside.txt", "win-a")).resolves.toEqual({
+      kind: "needs_read",
+      path: "/tmp/outside.txt",
+      switchedToNotepad: true,
+    });
+    expect(appState.isNotepadActive()).toBe(true);
+  });
+
+  it("focuses notepad without migrating when unrestricted and file is already open there", async () => {
+    readOpenFileRegistryMock.mockResolvedValue({});
+    appState.addWorkspace("/tmp/ws");
+    appState.switchContext("notepad");
+    appState.openFileInTab("/tmp/ws/in-notepad.txt", "notepad copy");
+    appState.switchContext("ws-1");
+
+    const result = await requestOpenPath("/tmp/ws/in-notepad.txt", "win-a");
+    expect(result).toMatchObject({
+      kind: "existing",
+      path: "/tmp/ws/in-notepad.txt",
+    });
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+    const workspaceSnapshot = appState.getSnapshot().contexts.workspaces[0]!.snapshot;
+    const workspaceHasMatchingTab = getSessionTabs(workspaceSnapshot.session).some((tab) => {
+      if (tab.kind !== "file") {
+        return false;
+      }
+      const doc = workspaceSnapshot.documents.find((entry) => entry.id === tab.documentId);
+      return doc?.filePath === "/tmp/ws/in-notepad.txt";
+    });
+    expect(workspaceHasMatchingTab).toBe(false);
   });
 });
 

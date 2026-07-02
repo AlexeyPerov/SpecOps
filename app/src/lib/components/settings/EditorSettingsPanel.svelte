@@ -37,6 +37,25 @@
 </script>
 
 <section class="settings-section">
+  <h3>Contexts</h3>
+  <label class="settings-toggle">
+    <input
+      type="checkbox"
+      checked={snapshot.settings.restrictFilesToContext}
+      onchange={(event) =>
+        appState.setRestrictFilesToContext(
+          (event.currentTarget as HTMLInputElement).checked,
+        )}
+    />
+    Restrict files to their context
+  </label>
+  <p class="settings-section-note">
+    When on, files outside the workspace open in Notepad and workspace files stay in workspaces.
+    When off, files open in whichever context you are in; each file still has only one tab.
+  </p>
+</section>
+
+<section class="settings-section">
   <h3>External files</h3>
   <label class="settings-toggle">
     <input

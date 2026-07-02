@@ -2,7 +2,7 @@ import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { appState } from "../state/appState";
 import type { ContextId, DiskFingerprint } from "../domain/contracts";
-import { getSessionTabs, isFileTab, normalizeTabState } from "../domain/contracts";
+import { getSessionTabs, isFileTab } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import {
   claimOpenFile,
@@ -17,7 +17,8 @@ import { openPath } from "./fileSystem";
 import {
   WINDOW_EVENT_SELECT_TAB_FOR_PATH,
 } from "./windowManager";
-import { ensureNotepadForOutsidePath, isPathUnderRoot } from "./workspacePaths";
+import { isFileContextRestricted } from "./fileContextPolicy";
+import { isPathUnderRoot } from "./workspacePaths";
 
 export type RequestOpenPathResult =
   | { kind: "redirected"; path: string; ownerWindowId: string }
@@ -58,7 +59,6 @@ export async function requestOpenPath(
   path: string,
   windowId: string,
 ): Promise<RequestOpenPathResult> {
-  const outsideRouting = ensureNotepadForOutsidePath(path);
   const normalized = normalizePathSync(path);
   const registry = await readOpenFileRegistry();
   const owner = registry[normalized];
@@ -68,9 +68,11 @@ export async function requestOpenPath(
     return { kind: "redirected", path: normalized, ownerWindowId: owner.windowId };
   }
 
+  const restricted = isFileContextRestricted();
   const activeContextId = appState.getSnapshot().contexts.activeContextId;
   const activeWorkspaceRoot = appState.getWorkspaceRoot();
   if (
+    restricted &&
     activeWorkspaceRoot &&
     activeContextId !== "notepad" &&
     isPathUnderRoot(path, activeWorkspaceRoot)
@@ -95,7 +97,17 @@ export async function requestOpenPath(
     return { kind: "existing", path: normalized, documentId: existingLocal.documentId };
   }
 
-  return { kind: "needs_read", path, switchedToNotepad: outsideRouting.switchedToNotepad };
+  let switchedToNotepad = false;
+  if (
+    restricted &&
+    activeWorkspaceRoot &&
+    activeContextId !== "notepad" &&
+    !isPathUnderRoot(path, activeWorkspaceRoot)
+  ) {
+    switchedToNotepad = appState.switchContext("notepad");
+  }
+
+  return { kind: "needs_read", path, switchedToNotepad };
 }
 
 export async function redirectToOwnerWindow(

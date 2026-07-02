@@ -32,7 +32,7 @@ Residual uncertainties:
 
 ## Task Breakdown
 
-#### Task 3.1: Working tree status query (G3-1) [Score:7] [Agent:medium] [~0.5d]
+#### Task 3.1: Working tree status query (G3-1) [Score:7] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 
@@ -51,7 +51,7 @@ Dependencies: Phase 2 exit criteria.
 
 ---
 
-#### Task 3.2: Changes panel layout (G3-2) [Score:7] [Agent:medium] [~1d]
+#### Task 3.2: Changes panel layout (G3-2) [Score:7] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 
@@ -71,7 +71,7 @@ Dependencies: Task 3.1.
 
 ---
 
-#### Task 3.3: Stage and unstage actions (G3-3) [Score:7] [Agent:medium] [~1d]
+#### Task 3.3: Stage and unstage actions (G3-3) [Score:7] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 
@@ -91,7 +91,7 @@ Dependencies: Task 3.2.
 
 ---
 
-#### Task 3.4: Create commit (G3-4) [Score:7] [Agent:medium] [~1d]
+#### Task 3.4: Create commit (G3-4) [Score:7] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 
@@ -111,7 +111,7 @@ Dependencies: Task 3.3.
 
 ---
 
-#### Task 3.5: Checkout branch (G3-5) [Score:6] [Agent:medium] [~0.5d]
+#### Task 3.5: Checkout branch (G3-5) [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 
@@ -131,7 +131,7 @@ Dependencies: Task 3.1, Phase 2 branches UI.
 
 ---
 
-#### Task 3.6: Create branch (G3-6) [Score:5] [Agent:easy] [~0.5d]
+#### Task 3.6: Create branch (G3-6) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 

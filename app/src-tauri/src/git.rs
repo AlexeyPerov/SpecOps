@@ -99,6 +99,14 @@ pub fn probe_git_available() -> GitAvailableResponse {
     }
 }
 
+/// Request payload for the `git_commit_with_message` Tauri command.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitRequest {
+    pub repo_root: String,
+    pub message: String,
+}
+
 /// Run `git` in `repo_root` with argv passed directly (no shell interpolation).
 pub fn execute_git(
     repo_root: &Path,
@@ -140,6 +148,42 @@ pub fn execute_git(
 #[tauri::command]
 pub fn git_available() -> GitAvailableResponse {
     probe_git_available()
+}
+
+/// Create a commit using a temporary message file (`git commit -F`).
+#[tauri::command]
+pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitResponse, String> {
+    let trimmed = request.message.trim();
+    if trimmed.is_empty() {
+        return Err("commit message must not be empty".to_string());
+    }
+
+    let repo_root = normalize_repo_root(&request.repo_root)?;
+    let temp_path = std::env::temp_dir().join(format!(
+        "spec-ops-git-commit-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0)
+    ));
+
+    std::fs::write(&temp_path, request.message.as_bytes())
+        .map_err(|error| format!("Failed to write commit message file: {error}"))?;
+
+    let temp_arg = temp_path.to_string_lossy().into_owned();
+    let response = execute_git(
+        &repo_root,
+        &[
+            "commit".to_string(),
+            "-F".to_string(),
+            temp_arg,
+        ],
+        None,
+    );
+
+    let _ = std::fs::remove_file(&temp_path);
+    Ok(response)
 }
 
 /// Run `git` in `repo_root` with the given argv (no shell interpolation).
@@ -307,6 +351,54 @@ mod tests {
 
         assert_eq!(response.exit_code, 0);
         assert_eq!(response.stdout.trim(), repo_root.to_string_lossy());
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn git_commit_with_message_rejects_empty_message() {
+        let error = git_commit_with_message(GitCommitRequest {
+            repo_root: "/tmp/repo".to_string(),
+            message: "   ".to_string(),
+        })
+        .expect_err("empty message should fail");
+
+        assert!(error.contains("commit message must not be empty"));
+    }
+
+    #[test]
+    fn git_commit_with_message_creates_commit_in_temp_repo() {
+        let repo_root = create_temp_git_repo();
+        let _ = execute_git(
+            &repo_root,
+            &[
+                "config".to_string(),
+                "user.email".to_string(),
+                "test@example.com".to_string(),
+            ],
+            None,
+        );
+        let _ = execute_git(
+            &repo_root,
+            &["config".to_string(), "user.name".to_string(), "Test".to_string()],
+            None,
+        );
+
+        let file_path = repo_root.join("file.txt");
+        fs::write(&file_path, "content").expect("write file");
+        let add = execute_git(
+            &repo_root,
+            &["add".to_string(), "file.txt".to_string()],
+            None,
+        );
+        assert_eq!(add.exit_code, 0);
+
+        let response = git_commit_with_message(GitCommitRequest {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+            message: "Initial commit\n\nBody paragraph.".to_string(),
+        })
+        .expect("commit should succeed");
+
+        assert_eq!(response.exit_code, 0);
         let _ = fs::remove_dir_all(repo_root);
     }
 

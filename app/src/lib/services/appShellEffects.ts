@@ -234,6 +234,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       externalFiles: snapshot.settings.externalFiles,
       decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
       defaultMarkdownViewMode: snapshot.settings.defaultMarkdownViewMode,
+      restrictFilesToContext: snapshot.settings.restrictFilesToContext,
       opencode: snapshot.settings.opencode,
       chatHttp: snapshot.settings.chatHttp,
       logSettings: snapshot.settings.logSettings,

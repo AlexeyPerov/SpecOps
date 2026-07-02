@@ -146,6 +146,14 @@ describe("appState settings and editor chrome", () => {
     expect(appState.getSnapshot().settings.defaultMarkdownViewMode).toBe("preview");
   });
 
+  it("restrictFilesToContext defaults to false and persists via applyPersistedSettings", () => {
+    expect(appState.getSnapshot().settings.restrictFilesToContext).toBe(false);
+    appState.setRestrictFilesToContext(true);
+    expect(appState.getSnapshot().settings.restrictFilesToContext).toBe(true);
+    appState.applyPersistedSettings({ restrictFilesToContext: false });
+    expect(appState.getSnapshot().settings.restrictFilesToContext).toBe(false);
+  });
+
   it("applyWindowSession preserves the active theme", () => {
     appState.setLightTheme({ kind: "preset", id: "github" });
     appState.applyWindowSession({

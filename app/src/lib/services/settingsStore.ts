@@ -65,6 +65,7 @@ export interface PersistedSettings {
   maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
+  restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   logSettings: LogSettings;
@@ -94,6 +95,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   defaultMarkdownViewMode: "preview",
+  restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
   chatHttp: defaultChatHttpSettings,
   logSettings: defaultLogSettings,
@@ -167,6 +169,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         )
           ? (parsed.defaultMarkdownViewMode as MarkdownViewMode)
           : defaultPersistedSettings.defaultMarkdownViewMode,
+        restrictFilesToContext: isBoolean(parsed.restrictFilesToContext)
+          ? parsed.restrictFilesToContext
+          : defaultPersistedSettings.restrictFilesToContext,
         opencode: normalizeOpencodeSettings(parsed.opencode),
         chatHttp: normalizeChatHttpSettings(parsed.chatHttp),
         logSettings: normalizeLogSettings(parsed.logSettings),
@@ -215,6 +220,7 @@ export function toPersistedSettings(input: {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
+  restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
   logSettings: LogSettings;
@@ -237,6 +243,9 @@ export function toPersistedSettings(input: {
     )
       ? (input.defaultMarkdownViewMode as MarkdownViewMode)
       : defaultPersistedSettings.defaultMarkdownViewMode,
+    restrictFilesToContext: isBoolean(input.restrictFilesToContext)
+      ? input.restrictFilesToContext
+      : defaultPersistedSettings.restrictFilesToContext,
     opencode: normalizeOpencodeSettings(input.opencode),
     chatHttp: normalizeChatHttpSettings(input.chatHttp),
     logSettings: normalizeLogSettings(input.logSettings),

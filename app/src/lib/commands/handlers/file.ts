@@ -8,7 +8,7 @@ import { openActivePath, describeOpenActivePathResult } from "../../services/ope
 import { logDiagnostic } from "../../services/logging";
 import { sanitizeErrorDetails, serializeUnknownError, summarizeError } from "../commandErrors";
 import { openAndStoreFile } from "../openAndStoreFile";
-import { runInNotepadContext } from "../../services/workspacePaths";
+import { runOpenInActiveContext } from "../../services/fileContextPolicy";
 import type { CommandHandlerMap } from "./types";
 import {
   handleFileOpenAllInFolder,
@@ -49,7 +49,7 @@ export const fileHandlers: CommandHandlerMap = {
     }
   },
   "file.openRecent": async ({ notify, getWindowId }) =>
-    runInNotepadContext(async () => {
+    runOpenInActiveContext(async () => {
       const path = takeQueuedOpenRecentPath();
       if (!path) {
         return;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-02 — Cross-context file opening (notepad non-restrict)
+
+- **Optional context restriction** — implements `specs/text-editor/notepad-non-restrict-plan.md`. New global setting **Restrict files to their context** (Editor → Contexts; default off). When off, files open in whichever context is active (Notepad or any workspace) with one tab per path per window; existing tabs are focused without migration. When on, legacy behavior is preserved (outside paths → Notepad, workspace files migrate from Notepad, Save As outside root moves tab).
+- **Settings:** `restrictFilesToContext` on `AppSettingsState`, persisted in `settings.json`; `services/fileContextPolicy.ts` helper.
+- **Open pipeline:** `requestOpenPath` branches on restriction; File → Open Recent, Open All in Folder, and Open All Nearby use `runOpenInActiveContext`.
+- **Save:** Save-on-close and Save As tab moves gated on the setting.
+- **Tests:** `openFileGate`, `fileContextPolicy`, `documentSave`, `settingsStore`, `settingsSlice`.
+
 ## 2026-07-02 — Line counter fixes (phases 1–4.3)
 
 - **Workspace Settings line counter** — implements `specs/text-editor/line-counter-fixes.md` phases 1–4.3 (Rust walker deferred).

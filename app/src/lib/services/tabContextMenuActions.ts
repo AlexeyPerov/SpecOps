@@ -5,7 +5,8 @@ import { appState } from "../state/appState";
 import { revealInFileManager } from "./revealInFileManager";
 import { readNearbyTextFiles, type NearbyTextFile } from "./nearbyFiles";
 import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
-import { isPathUnderRoot, runInNotepadContext, workspaceRelativePath } from "./workspacePaths";
+import { runOpenInActiveContext } from "./fileContextPolicy";
+import { isPathUnderRoot, workspaceRelativePath } from "./workspacePaths";
 import { renameDocumentOnDisk } from "./documentRename";
 import { deleteProjectEntry } from "./projectFileOps";
 import {
@@ -258,7 +259,7 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
   }
 
   async function openAllNearbyFiles(): Promise<void> {
-    await runInNotepadContext(async () => {
+    await runOpenInActiveContext(async () => {
       for (const nearbyFile of deps.getNearbyFiles()) {
         await openPathWithPipeline(nearbyFile.path);
       }

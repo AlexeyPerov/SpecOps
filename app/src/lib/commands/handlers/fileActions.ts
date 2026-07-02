@@ -21,12 +21,13 @@ import {
 } from "../../services/openAllInFolder";
 import { runWithRecentFilesBatch } from "../../services/recentFilesSync";
 import { logDiagnostic } from "../../services/logging";
-import { isPathUnderRoot, runInNotepadContext } from "../../services/workspacePaths";
+import { isFileContextRestricted, runOpenInActiveContext } from "../../services/fileContextPolicy";
+import { isPathUnderRoot } from "../../services/workspacePaths";
 import type { CommandContext } from "./types";
 
 export async function handleFileOpenAllInFolder(context: CommandContext): Promise<void> {
   const { getState, getWindowId, confirm, notify } = context;
-  await runInNotepadContext(async () => {
+  await runOpenInActiveContext(async () => {
     const state = getState();
     const selectedTab = getSessionActiveTab(getActiveSession(state));
     const activeDocumentId = tabDocumentId(selectedTab);
@@ -166,7 +167,7 @@ export async function handleFileSaveAs(context: CommandContext): Promise<void> {
   const previousPath = doc.filePath;
   const sourceTabId = selected.id;
   appState.markDocumentSaved(doc.id, saved.path, doc.content);
-  if (savedOutsideWorkspace) {
+  if (savedOutsideWorkspace && isFileContextRestricted()) {
     appState.closeTabForce(sourceTabId);
     appState.switchContext("notepad");
     appState.openTransferredTab({
@@ -181,7 +182,7 @@ export async function handleFileSaveAs(context: CommandContext): Promise<void> {
   });
   await renameOpenFileRegistry(previousPath, saved.path, getWindowId(), doc.id);
   notify(
-    savedOutsideWorkspace
+    savedOutsideWorkspace && isFileContextRestricted()
       ? `Saved as ${saved.path} and moved tab to Notepad.`
       : `Saved as ${saved.path}`,
   );

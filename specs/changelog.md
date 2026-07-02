@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-02 — Git phase 2 Tasks 2.6–2.8: branches/tags panels + refresh orchestration
+
+- **`app/src/lib/git/gitParse.ts`** — `parseTagList` for `git tag -l` stdout (alphabetically sorted tag names).
+- **`app/src/lib/git/gitService.ts`** — `queryTags(repoRoot)` via `git tag -l`.
+- **`app/src/lib/components/GitTagsPanel.svelte`** — read-only tag list with empty state and disabled create/delete actions (phase 3).
+- **`app/src/lib/components/VersionControlView.svelte`** — Tags section wired to `GitTagsPanel`; **Refresh** toolbar button with debounce, silent repo re-probe, header loading indicator, and `panelRefreshToken` orchestration for active section reload.
+- **`app/src/lib/components/GitHistoryPanel.svelte`**, **`GitCommitDetailPanel.svelte`** — accept `refreshToken` prop for coordinated refresh.
+- **`app/src/lib/git/gitParse.test.ts`**, **`app/src/lib/git/gitService.test.ts`** — tag parser and `queryTags` wrapper tests.
+- **`specs/git/phase-2-execution-plan.md`** — Tasks 2.6, 2.7, and 2.8 marked `[DONE]`.
+
 ## 2026-07-02 — Git phase 3 Tasks 3.1–3.6: working tree status, changes panel, commit, branch checkout/create
 
 - **`app/src/lib/git/types.ts`** — `WorkingTreeFileEntry` and `WorkingTreeStatus` types for porcelain status queries.

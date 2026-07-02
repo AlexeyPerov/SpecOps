@@ -10,6 +10,7 @@ import {
   GIT_SHOW_FORMAT,
   parseLogCommits,
   parseShortHeadRef,
+  parseTagList,
   parseUpstreamRef,
 } from "./gitParse";
 import { validateGitRefName } from "./gitRefName";
@@ -219,6 +220,19 @@ export async function queryBranches(repoRoot: string): Promise<BranchSummary[]> 
   }
 
   return parseBranchVvLines(response.stdout);
+}
+
+/**
+ * Query local tags via `git tag -l`.
+ * Returns tag names sorted alphabetically.
+ */
+export async function queryTags(repoRoot: string): Promise<string[]> {
+  const response = await runGit(repoRoot, ["tag", "-l"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return parseTagList(response.stdout);
 }
 
 /**

@@ -2,9 +2,10 @@
   import { confirm } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import GitCommitDetailPanel from "./GitCommitDetailPanel.svelte";
-  import GitHistoryPanel from "./GitHistoryPanel.svelte";
-  import GitChangesPanel from "./GitChangesPanel.svelte";
   import GitBranchesPanel from "./GitBranchesPanel.svelte";
+  import GitChangesPanel from "./GitChangesPanel.svelte";
+  import GitHistoryPanel from "./GitHistoryPanel.svelte";
+  import GitTagsPanel from "./GitTagsPanel.svelte";
   import { gitInstallHint } from "../git/gitInstallHints";
   import { queryAheadBehind, queryCurrentBranch } from "../git/gitService";
   import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo } from "../git/types";
@@ -40,6 +41,8 @@
     { id: "changes", label: "Changes" },
   ];
 
+  const REFRESH_DEBOUNCE_MS = 500;
+
   let activeSection = $state<Section>("history");
   let probeStatus = $state<ProbeStatus>("loading");
   let repoRoot = $state<string | null>(null);
@@ -51,7 +54,9 @@
   let aheadBehind = $state<AheadBehindCounts | null>(null);
   let branchHeaderError = $state<string | null>(null);
   let selectedCommitSha = $state<string | null>(null);
+  let refreshBusy = $state(false);
   let panelRefreshToken = $state(0);
+  let lastRefreshAt = 0;
 
   const workspaceName = $derived.by(() => {
     if (!workspaceRootPath) {
@@ -72,7 +77,7 @@
   });
 
   const placeholderCopy = $derived.by(() => {
-    return "Coming in phase 2.";
+    return "Select a section.";
   });
 
   const branchHeaderLabel = $derived.by(() => {
@@ -173,7 +178,10 @@
     }
   }
 
-  async function refreshProbe(signal?: AbortSignal): Promise<void> {
+  async function refreshProbe(
+    signal?: AbortSignal,
+    options?: { silent?: boolean; refreshBranchHeader?: boolean },
+  ): Promise<void> {
     const root = workspaceRootPath;
     if (!root) {
       probeStatus = "noWorkspace";
@@ -184,10 +192,18 @@
       return;
     }
 
-    probeStatus = "loading";
-    probeError = null;
-    initError = null;
-    resetBranchHeader();
+    const silent = options?.silent ?? false;
+    const shouldRefreshBranchHeader = options?.refreshBranchHeader ?? !silent;
+
+    if (!silent) {
+      probeStatus = "loading";
+      probeError = null;
+      initError = null;
+      resetBranchHeader();
+    } else {
+      probeError = null;
+      initError = null;
+    }
 
     try {
       const result = await probeVersionControlContext(root);
@@ -204,15 +220,19 @@
           probeStatus = "gitUnavailable";
           repoRoot = null;
           probeError = result.error;
+          resetBranchHeader();
           break;
         case "notARepository":
           probeStatus = "notARepository";
           repoRoot = null;
+          resetBranchHeader();
           break;
         case "ready":
           probeStatus = "ready";
           repoRoot = result.repoRoot;
-          await refreshBranchHeader(result.repoRoot, signal);
+          if (shouldRefreshBranchHeader) {
+            await refreshBranchHeader(result.repoRoot, signal);
+          }
           break;
       }
     } catch (error) {
@@ -222,6 +242,7 @@
       probeStatus = "error";
       repoRoot = null;
       probeError = error instanceof Error ? error.message : String(error);
+      resetBranchHeader();
     }
   }
 
@@ -289,6 +310,34 @@
   }
   function formatRepoRoot(path: string): string {
     return normalizeGitOutputPath(path);
+  }
+
+  async function handleRefresh(): Promise<void> {
+    if (!workspaceRootPath || refreshBusy) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastRefreshAt < REFRESH_DEBOUNCE_MS) {
+      return;
+    }
+    lastRefreshAt = now;
+    refreshBusy = true;
+
+    const controller = new AbortController();
+    try {
+      await refreshProbe(controller.signal, { silent: true, refreshBranchHeader: false });
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      if (probeStatus === "ready" && repoRoot) {
+        panelRefreshToken += 1;
+        await refreshBranchHeader(repoRoot, controller.signal);
+      }
+    } finally {
+      refreshBusy = false;
+    }
   }
 </script>
 
@@ -372,6 +421,15 @@
         {/if}
       </div>
       <div class="version-control-header-actions">
+        <button
+          type="button"
+          class="version-control-action"
+          disabled={refreshBusy}
+          title="Refresh repository state"
+          onclick={handleRefresh}
+        >
+          {refreshBusy ? "Refreshing…" : "Refresh"}
+        </button>
         <button type="button" class="version-control-action" disabled title="Fetch (phase 3)">
           Fetch
         </button>
@@ -415,7 +473,9 @@
 
       <div
         class="version-control-body"
-        class:version-control-body-flush={activeSection === "history"}
+        class:version-control-body-flush={
+          activeSection === "history" || activeSection === "branches" || activeSection === "tags"
+        }
         role="tabpanel"
         aria-label={SECTIONS.find((section) => section.id === activeSection)?.label ?? "Section"}
       >
@@ -430,7 +490,11 @@
               />
             </div>
             <div class="version-control-history-detail">
-              <GitCommitDetailPanel repoRoot={repoRoot} sha={selectedCommitSha} />
+              <GitCommitDetailPanel
+                repoRoot={repoRoot}
+                sha={selectedCommitSha}
+                refreshToken={panelRefreshToken}
+              />
             </div>
           </div>
         {:else if activeSection === "branches" && repoRoot}
@@ -439,6 +503,8 @@
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}
           />
+        {:else if activeSection === "tags" && repoRoot}
+          <GitTagsPanel repoRoot={repoRoot} refreshToken={panelRefreshToken} />
         {:else if activeSection === "changes" && repoRoot}
           <GitChangesPanel
             repoRoot={repoRoot}
@@ -631,7 +697,11 @@
     background: var(--color-surface-2);
     color: var(--color-text);
     font-size: 0.8125rem;
-    cursor: default;
+    cursor: pointer;
+  }
+
+  .version-control-action:hover:not(:disabled) {
+    background: var(--color-surface-3, var(--color-surface-2));
   }
 
   .version-control-action:disabled {

@@ -387,9 +387,14 @@ export function parseCommitShow(stdout: string): CommitDetail | null {
   };
 }
 
-/** Placeholder for phase 2 tag list parsing (`git tag -l`). */
-export function parseTagList(_stdout: string): string[] {
-  return [];
+/** Parse `git tag -l` stdout into alphabetically sorted tag names. */
+export function parseTagList(stdout: string): string[] {
+  const tags = stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return tags.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
 }
 
 function unquotePorcelainPath(raw: string): string {

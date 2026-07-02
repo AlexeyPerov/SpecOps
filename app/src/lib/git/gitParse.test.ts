@@ -18,6 +18,7 @@ import {
   parseLogCommits,
   parseShortHeadRef,
   parseStatusPorcelain,
+  parseTagList,
   splitWorkingTreeStatus,
   parseUpstreamRef,
   GIT_SHOW_FORMAT,
@@ -251,6 +252,26 @@ describe("parseCommitShow", () => {
         path: "new/path.ts",
       },
     ]);
+  });
+});
+
+describe("parseTagList", () => {
+  it("parses fixture tag names sorted alphabetically", () => {
+    expect(parseTagList(readFixture("git-tag-list.txt"))).toEqual(["v1.0.0"]);
+  });
+
+  it("sorts tags alphabetically regardless of git output order", () => {
+    expect(parseTagList("v2.0.0\nalpha\nv1.0.0\nbeta\n")).toEqual([
+      "alpha",
+      "beta",
+      "v1.0.0",
+      "v2.0.0",
+    ]);
+  });
+
+  it("returns an empty list for blank stdout", () => {
+    expect(parseTagList("")).toEqual([]);
+    expect(parseTagList("\n\n")).toEqual([]);
   });
 });
 

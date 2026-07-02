@@ -249,8 +249,19 @@ mod tests {
         dir.canonicalize().unwrap_or(dir)
     }
 
+    fn skip_if_git_unavailable() -> bool {
+        let available = probe_git_available().available;
+        if !available {
+            eprintln!("skipping: git not installed on PATH");
+        }
+        !available
+    }
+
     #[test]
     fn git_available_response_has_expected_shape_when_git_installed() {
+        if skip_if_git_unavailable() {
+            return;
+        }
         let response = probe_git_available();
 
         assert_eq!(response.available, true);
@@ -265,6 +276,9 @@ mod tests {
 
     #[test]
     fn git_available_tauri_command_matches_probe() {
+        if skip_if_git_unavailable() {
+            return;
+        }
         let response = git_available();
         assert_eq!(response.available, true);
         assert!(response.version.is_some());
@@ -273,6 +287,9 @@ mod tests {
 
     #[test]
     fn run_git_status_succeeds_in_temp_repo() {
+        if skip_if_git_unavailable() {
+            return;
+        }
         let repo_root = create_temp_git_repo();
         let response = execute_git(&repo_root, &["status".to_string()], None);
 
@@ -284,6 +301,9 @@ mod tests {
 
     #[test]
     fn run_git_preserves_args_with_spaces_as_single_argv() {
+        if skip_if_git_unavailable() {
+            return;
+        }
         let repo_root = create_temp_git_repo();
         let set_name = execute_git(
             &repo_root,
@@ -309,6 +329,9 @@ mod tests {
 
     #[test]
     fn run_git_non_zero_exit_returns_stderr_without_panicking() {
+        if skip_if_git_unavailable() {
+            return;
+        }
         let repo_root = create_temp_git_repo();
         let response = execute_git(
             &repo_root,
@@ -347,6 +370,9 @@ mod tests {
 
     #[test]
     fn run_git_rev_parse_nested_subdirectory_resolves_repo_root() {
+        if skip_if_git_unavailable() {
+            return;
+        }
         let repo_root = create_temp_git_repo();
         let nested = repo_root.join("packages").join("nested");
         fs::create_dir_all(&nested).expect("create nested dir");
@@ -384,6 +410,9 @@ mod tests {
 
     #[test]
     fn git_commit_with_message_creates_commit_in_temp_repo() {
+        if skip_if_git_unavailable() {
+            return;
+        }
         let repo_root = create_temp_git_repo();
         let _ = execute_git(
             &repo_root,
@@ -421,6 +450,9 @@ mod tests {
 
     #[test]
     fn run_git_not_a_repository_returns_exit_code_128() {
+        if skip_if_git_unavailable() {
+            return;
+        }
         let dir = next_test_dir("not-repo");
         fs::create_dir_all(&dir).expect("create non-repo dir");
         let dir = dir.canonicalize().unwrap_or(dir);

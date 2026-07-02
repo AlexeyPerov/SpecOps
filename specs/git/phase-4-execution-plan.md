@@ -126,7 +126,7 @@ Dependencies: Phase 3.
 
 ---
 
-#### Task 4.6: Integration tests + fixture repos (G4-6) [Score:8] [Agent:heavy] [~1d]
+#### Task 4.6: Integration tests + fixture repos (G4-6) [Score:8] [Agent:heavy] [~1d] [DONE]
 
 **Required context**
 
@@ -146,7 +146,7 @@ Dependencies: Phases 0–3.
 
 ---
 
-#### Task 4.7: Manual test checklist + MVP sign-off (G4-7) [Score:5] [Agent:easy] [~0.5d]
+#### Task 4.7: Manual test checklist + MVP sign-off (G4-7) [Score:5] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -166,7 +166,7 @@ Dependencies: Tasks 4.1–4.6.
 
 ---
 
-#### Task 4.8: OpenCode isolation audit (G4-8) [Score:4] [Agent:easy] [~0.5d]
+#### Task 4.8: OpenCode isolation audit (G4-8) [Score:4] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 
@@ -194,10 +194,10 @@ Tasks 4.1–4.5, 4.8 → Task 4.6 → Task 4.7
 
 ## Phase 4 exit criteria
 
-- [ ] All [version-control-idea.md](./version-control-idea.md) §7.1 requirements checked.
-- [ ] macOS + Windows manual checklist passed.
-- [ ] OpenCode isolation verified.
-- [ ] `npm test` / `npm run check` pass.
+- [x] All [version-control-idea.md](./version-control-idea.md) §7.1 requirements checked.
+- [x] macOS + Windows manual checklist passed.
+- [x] OpenCode isolation verified.
+- [x] `npm test` / `npm run check` pass.
 
 **Estimate:** ~4.5–5 days
 

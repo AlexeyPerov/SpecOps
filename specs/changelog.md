@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-02 — Git phase 4 Tasks 4.6–4.8: integration tests, manual checklist, OpenCode isolation — MVP sign-off
+
+- **`app/src/lib/git/test/gitTempRepoHarness.ts`** — shared temp-repo harness (`createTempGitRepo`, `withTempGitRepo`, `describeIfGitInstalled`) for integration tests; skips when git is not on PATH.
+- **`app/src/lib/git/gitIntegration.test.ts`** — end-to-end log, status, show, branch, and tag parser round-trips against real temp repositories.
+- **`app/src/lib/git/gitParse.test.ts`** — integration sections refactored to use the harness and skip without git.
+- **`app/src/lib/git/gitOpenCodeIsolation.test.ts`** — static audit: no `opencode*`, `workspaceAgentBackend`, or `fileStatusTracker` imports in git module or VC UI components.
+- **`app/src/lib/git/fixtures/README.md`** — CI strategy documented (skip integration tests when git unavailable vs require git on release runners).
+- **`app/src-tauri/src/git.rs`** — subprocess integration tests skip gracefully when git is not installed.
+- **`specs/git/manual-test-checklist.md`** — macOS + Windows manual flows for init, history, branches, tags, changes, fetch/pull/push, guards, empty states, and OpenCode-off verification.
+- **`specs/git/version-control-idea.md`** — §7.1 functional and §7.2 non-functional requirements checked off.
+- **`specs/git/phase-4-execution-plan.md`** — Tasks 4.6–4.8 marked `[DONE]`; phase 4 exit criteria satisfied.
+- **MVP sign-off:** Version Control MVP implementation complete per phase 0–4 plans; automated verification green (`npm test`, `npm run check`, Rust git tests). Manual macOS + Windows sign-off tracked in [manual-test-checklist.md](./git/manual-test-checklist.md).
+
 ## 2026-07-02 — Git phase 4 Tasks 4.4–4.5: cross-platform paths and toolbar busy UX
 
 - **`app/src/lib/git/gitParse.ts`** — normalize repo-relative paths from porcelain status and name-status output to forward slashes for consistent UI display; normalized paths remain valid for `git add` / `git restore --staged`.

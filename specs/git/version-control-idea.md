@@ -197,27 +197,27 @@ Exact formats should mirror stable `--format` strings from the reference project
 
 ### 7.1 Functional (MVP)
 
-- [ ] VC menu item on every workspace context menu
-- [ ] Singleton `version-control` view tab per workspace session
-- [ ] Detect missing git and non-repo workspaces with actionable empty states
-- [ ] Init repository from empty state (creates repo at workspace root)
-- [ ] Display current branch and ahead/behind when upstream exists
-- [ ] Flat commit history for current branch with selectable detail
-- [ ] Branch list with checkout and create-branch
-- [ ] Tag list with create and local delete
-- [ ] Changes panel: unstaged/staged, stage/unstage, commit with message
-- [ ] Fetch, pull, push (default remote/upstream)
-- [ ] Block checkout when git working tree is dirty
-- [ ] Block selected git ops when workspace has unsaved editor documents
-- [ ] Surface git stderr on failure; log commands to app console
+- [x] VC menu item on every workspace context menu
+- [x] Singleton `version-control` view tab per workspace session
+- [x] Detect missing git and non-repo workspaces with actionable empty states
+- [x] Init repository from empty state (creates repo at workspace root)
+- [x] Display current branch and ahead/behind when upstream exists
+- [x] Flat commit history for current branch with selectable detail
+- [x] Branch list with checkout and create-branch
+- [x] Tag list with create and local delete
+- [x] Changes panel: unstaged/staged, stage/unstage, commit with message
+- [x] Fetch, pull, push (default remote/upstream)
+- [x] Block checkout when git working tree is dirty
+- [x] Block selected git ops when workspace has unsaved editor documents
+- [x] Surface git stderr on failure; log commands to app console
 
 ### 7.2 Non-functional
 
-- [ ] No imports from OpenCode modules in `app/src/lib/git/**`
-- [ ] Git subprocess runs only from Tauri backend (not webview shell)
-- [ ] Parsers covered by unit tests with fixture output strings
-- [ ] macOS + Windows tested for path normalization (`\` vs `/` in displayed paths)
-- [ ] No persisted data migrations required (no VC settings in MVP)
+- [x] No imports from OpenCode modules in `app/src/lib/git/**`
+- [x] Git subprocess runs only from Tauri backend (not webview shell)
+- [x] Parsers covered by unit tests with fixture output strings
+- [x] macOS + Windows tested for path normalization (`\` vs `/` in displayed paths)
+- [x] No persisted data migrations required (no VC settings in MVP)
 
 ### 7.3 Explicit non-goals (MVP)
 

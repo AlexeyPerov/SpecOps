@@ -13,3 +13,17 @@ Sample `stdout` captured from real `git` invocations for parser tests. Regenerat
 ## Regeneration notes
 
 Log format uses NUL (`\0`) field separators and `±` between author/committer name and email (same structured format planned for phase 2 commit queries). Branch fixture was captured from a repo with `master` and `feature/login`. Status fixture mixes modified and untracked porcelain lines.
+
+## Integration tests and CI
+
+Parser **unit** tests use the fixture stdout files above and do not require `git` on PATH.
+
+**Integration** tests (`gitIntegration.test.ts`, integration sections in `gitParse.test.ts`, and Rust tests in `app/src-tauri/src/git.rs`) create temporary repositories and shell out to system `git`.
+
+| Environment | Strategy |
+|---|---|
+| **Local dev** | Run `npm test` with `git` installed (recommended). Integration suites exercise real `git log`, `git status`, and `git show` output against temp repos. |
+| **CI without git** | TypeScript integration suites use `describeIfGitInstalled` from `test/gitTempRepoHarness.ts` and register as **skipped** when `git --version` fails — the job stays green. |
+| **CI / release with git** | macOS and Windows release runners include git; integration tests run normally. Rust `cargo test` in `src-tauri` also requires git for subprocess tests. |
+
+To require git in CI later, replace `describeIfGitInstalled` with plain `describe` and add an explicit `git --version` setup step to the workflow.

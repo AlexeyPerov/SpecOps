@@ -1,11 +1,8 @@
-import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { describeIfGitInstalled, withTempGitRepo } from "./test/gitTempRepoHarness";
 import { GIT_LOG_FORMAT } from "./gitParse";
 import {
   parseAheadBehindCount,
@@ -99,27 +96,25 @@ describe("parseLogCommits", () => {
   });
 });
 
-describe("parseLogCommits integration", () => {
+describeIfGitInstalled("parseLogCommits integration", () => {
   it("parses real git log output from a temp repository newest-first", () => {
-    const repoDir = mkdtempSync(join(tmpdir(), "specops-git-log-"));
-    try {
-      execSync("git init", { cwd: repoDir, stdio: "pipe" });
-      execSync('git config user.email "test@example.com"', { cwd: repoDir, stdio: "pipe" });
-      execSync('git config user.name "Test User"', { cwd: repoDir, stdio: "pipe" });
+    withTempGitRepo("specops-git-log-", (repo) => {
+      repo.writeFile("file.txt", "first");
+      repo.run(["add", "file.txt"]);
+      repo.run(["commit", "-m", "First commit"]);
 
-      writeFileSync(join(repoDir, "file.txt"), "first");
-      execSync("git add file.txt", { cwd: repoDir, stdio: "pipe" });
-      execSync('git commit -m "First commit"', { cwd: repoDir, stdio: "pipe" });
+      repo.writeFile("file.txt", "second");
+      repo.run(["add", "file.txt"]);
+      repo.run(["commit", "-m", "Second commit"]);
+      repo.run(["tag", "v1.0"]);
 
-      writeFileSync(join(repoDir, "file.txt"), "second");
-      execSync("git add file.txt", { cwd: repoDir, stdio: "pipe" });
-      execSync('git commit -m "Second commit"', { cwd: repoDir, stdio: "pipe" });
-      execSync("git tag v1.0", { cwd: repoDir, stdio: "pipe" });
-
-      const stdout = execSync(
-        `git log --no-show-signature --decorate=full --format=${JSON.stringify(GIT_LOG_FORMAT)} -2`,
-        { cwd: repoDir, encoding: "utf8" },
-      );
+      const stdout = repo.run([
+        "log",
+        "--no-show-signature",
+        "--decorate=full",
+        `--format=${GIT_LOG_FORMAT}`,
+        "-2",
+      ]) as string;
 
       const commits = parseLogCommits(stdout);
 
@@ -128,9 +123,7 @@ describe("parseLogCommits integration", () => {
       expect(commits[1]?.subject).toBe("First commit");
       expect(commits[0]?.refs.some((ref) => ref.type === "tag" && ref.name === "v1.0")).toBe(true);
       expect(commits[0]?.refs.some((ref) => ref.type === "currentBranchHead")).toBe(true);
-    } finally {
-      rmSync(repoDir, { recursive: true, force: true });
-    }
+    });
   });
 });
 
@@ -293,30 +286,25 @@ describe("parseTagList", () => {
   });
 });
 
-describe("parseCommitShow integration", () => {
+describeIfGitInstalled("parseCommitShow integration", () => {
   it("parses real git show output from a temp repository", () => {
-    const repoDir = mkdtempSync(join(tmpdir(), "specops-git-show-"));
-    try {
-      execSync("git init", { cwd: repoDir, stdio: "pipe" });
-      execSync('git config user.email "test@example.com"', { cwd: repoDir, stdio: "pipe" });
-      execSync('git config user.name "Test User"', { cwd: repoDir, stdio: "pipe" });
+    withTempGitRepo("specops-git-show-", (repo) => {
+      repo.writeFile("added.txt", "new");
+      repo.run(["add", "added.txt"]);
+      repo.run(["commit", "-m", "Add file"]);
 
-      writeFileSync(join(repoDir, "added.txt"), "new");
-      execSync("git add added.txt", { cwd: repoDir, stdio: "pipe" });
-      execSync('git commit -m "Add file"', { cwd: repoDir, stdio: "pipe" });
+      const stdout = repo.run([
+        "show",
+        "--name-status",
+        `--format=${GIT_SHOW_FORMAT}`,
+        "HEAD",
+      ]) as string;
 
-      const stdout = execSync(
-        `git show --name-status --format=${JSON.stringify(GIT_SHOW_FORMAT)} HEAD`,
-        { cwd: repoDir, encoding: "buffer" },
-      );
-
-      const detail = parseCommitShow(stdout.toString("utf8"));
+      const detail = parseCommitShow(stdout);
 
       expect(detail?.message).toContain("Add file");
       expect(detail?.files).toEqual([{ status: "A", path: "added.txt" }]);
-    } finally {
-      rmSync(repoDir, { recursive: true, force: true });
-    }
+    });
   });
 });
 
@@ -415,27 +403,18 @@ describe("splitWorkingTreeStatus", () => {
   });
 });
 
-describe("parseStatusPorcelain integration", () => {
+describeIfGitInstalled("parseStatusPorcelain integration", () => {
   it("parses real git status output from a temp repository", () => {
-    const repoDir = mkdtempSync(join(tmpdir(), "specops-git-status-"));
-    try {
-      execSync("git init", { cwd: repoDir, stdio: "pipe" });
-      execSync('git config user.email "test@example.com"', { cwd: repoDir, stdio: "pipe" });
-      execSync('git config user.name "Test User"', { cwd: repoDir, stdio: "pipe" });
+    withTempGitRepo("specops-git-status-", (repo) => {
+      repo.writeFile("tracked.txt", "v1");
+      repo.run(["add", "tracked.txt"]);
+      repo.run(["commit", "-m", "init"]);
 
-      writeFileSync(join(repoDir, "tracked.txt"), "v1");
-      execSync("git add tracked.txt", { cwd: repoDir, stdio: "pipe" });
-      execSync('git commit -m "init"', { cwd: repoDir, stdio: "pipe" });
+      repo.writeFile("tracked.txt", "v2");
+      repo.writeFile("new.txt", "new");
+      repo.writeFile("spaces file.txt", "space");
 
-      writeFileSync(join(repoDir, "tracked.txt"), "v2");
-      writeFileSync(join(repoDir, "new.txt"), "new");
-      writeFileSync(join(repoDir, "spaces file.txt"), "space");
-
-      const stdout = execSync("git status --porcelain", {
-        cwd: repoDir,
-        encoding: "utf8",
-      });
-
+      const stdout = repo.run(["status", "--porcelain"]) as string;
       const status = splitWorkingTreeStatus(parseStatusPorcelain(stdout));
 
       expect(status.unstaged.map((entry) => entry.path).sort()).toEqual([
@@ -444,9 +423,7 @@ describe("parseStatusPorcelain integration", () => {
         "tracked.txt",
       ]);
       expect(status.staged).toEqual([]);
-    } finally {
-      rmSync(repoDir, { recursive: true, force: true });
-    }
+    });
   });
 });
 

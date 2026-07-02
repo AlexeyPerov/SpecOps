@@ -1,4 +1,5 @@
 mod file_watcher;
+mod git;
 mod opencode_sidecar;
 
 #[cfg(target_os = "macos")]
@@ -56,6 +57,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             take_pending_opened_paths,
+            git::run_git,
             file_watcher::sync_file_watcher_paths,
             file_watcher::sync_project_tree_watcher,
             opencode_sidecar::opencode_sidecar_attach_workspace,

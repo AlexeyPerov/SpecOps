@@ -43,7 +43,7 @@ Residual uncertainties:
 
 ## Task Breakdown
 
-#### Task 0.1: Rust git module scaffold (G0-1) [Score:4] [Agent:easy] [~0.5d]
+#### Task 0.1: Rust git module scaffold (G0-1) [Score:4] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 

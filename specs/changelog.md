@@ -4,12 +4,27 @@
 
 - **`app/src/lib/git/gitParse.ts`** — `parseTagList` for `git tag -l` stdout (alphabetically sorted tag names).
 - **`app/src/lib/git/gitService.ts`** — `queryTags(repoRoot)` via `git tag -l`.
-- **`app/src/lib/components/GitBranchesPanel.svelte`** — read-only local branch list with current-branch highlight, upstream/tracking hints, and disabled checkout/create actions (phase 3).
 - **`app/src/lib/components/GitTagsPanel.svelte`** — read-only tag list with empty state and disabled create/delete actions (phase 3).
-- **`app/src/lib/components/VersionControlView.svelte`** — Branches and Tags sections wired to new panels; **Refresh** toolbar button with debounce, silent repo re-probe, header loading indicator, and `panelRefreshToken` orchestration for active section reload.
+- **`app/src/lib/components/VersionControlView.svelte`** — Tags section wired to `GitTagsPanel`; **Refresh** toolbar button with debounce, silent repo re-probe, header loading indicator, and `panelRefreshToken` orchestration for active section reload.
 - **`app/src/lib/components/GitHistoryPanel.svelte`**, **`GitCommitDetailPanel.svelte`** — accept `refreshToken` prop for coordinated refresh.
 - **`app/src/lib/git/gitParse.test.ts`**, **`app/src/lib/git/gitService.test.ts`** — tag parser and `queryTags` wrapper tests.
 - **`specs/git/phase-2-execution-plan.md`** — Tasks 2.6, 2.7, and 2.8 marked `[DONE]`.
+
+## 2026-07-02 — Git phase 3 Tasks 3.1–3.6: working tree status, changes panel, commit, branch checkout/create
+
+- **`app/src/lib/git/types.ts`** — `WorkingTreeFileEntry` and `WorkingTreeStatus` types for porcelain status queries.
+- **`app/src/lib/git/gitParse.ts`** — `parseStatusPorcelain` (v1 porcelain) and `splitWorkingTreeStatus` to separate staged vs unstaged entries (untracked in unstaged).
+- **`app/src/lib/git/gitService.ts`** — `queryWorkingTreeStatus`, `isWorkingTreeDirty`, `stagePaths`, `stageAll`, `unstagePaths`, `createCommit`, `checkoutBranch`, and `createBranch`.
+- **`app/src/lib/git/gitRefName.ts`** — `validateGitRefName` for basic branch name rules before git calls.
+- **`app/src/lib/git/gitStatusFormat.ts`** — status code labels for the Changes panel.
+- **`app/src-tauri/src/git.rs`** — `git_commit_with_message` Tauri command (`git commit -F` via secure temp file).
+- **`app/src/lib/components/GitChangesPanel.svelte`** — unstaged/staged lists with multi-select, stage/unstage actions, commit message + Commit button (disabled when nothing staged).
+- **`app/src/lib/components/GitBranchesPanel.svelte`** — branch list with checkout (dirty-tree block dialog) and create-branch prompt with validation.
+- **`app/src/lib/components/VersionControlView.svelte`** — wires Changes and Branches panels; `refreshAfterMutation` refreshes header + history via `panelRefreshToken`.
+- **`app/src/lib/components/GitHistoryPanel.svelte`** — accepts `refreshToken` to reload after commits/checkout.
+- **`app/src/lib/git/fixtures/git-status-porcelain.txt`** — expanded fixture (staged, unstaged, rename, quoted paths).
+- **`app/src/lib/git/gitParse.test.ts`**, **`app/src/lib/git/gitService.test.ts`**, **`app/src/lib/git/gitRefName.test.ts`** — parser, service, and ref-name validation tests.
+- **`specs/git/phase-3-execution-plan.md`** — Tasks 3.1–3.6 marked `[DONE]`.
 
 ## 2026-07-02 — Git phase 2 Tasks 2.4–2.5: commit detail pane + branch list query
 

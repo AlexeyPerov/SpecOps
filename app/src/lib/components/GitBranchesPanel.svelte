@@ -1,25 +1,43 @@
 <script lang="ts">
-  import { formatShortSha } from "../git/gitHistoryFormat";
-  import { queryBranches } from "../git/gitService";
+  import { message } from "@tauri-apps/plugin-dialog";
+  import {
+    checkoutBranch,
+    createBranch,
+    GitRefValidationError,
+    isWorkingTreeDirty,
+    queryBranches,
+  } from "../git/gitService";
+  import { validateGitRefName } from "../git/gitRefName";
   import type { BranchSummary } from "../git/types";
+  import { promptEntryName } from "../services/entryNamePrompt";
 
   interface Props {
     repoRoot: string;
     refreshToken?: number;
+    onMutation?: () => void | Promise<void>;
   }
 
-  let { repoRoot, refreshToken = 0 }: Props = $props();
+  let { repoRoot, refreshToken = 0, onMutation = () => {} }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
   let loadStatus = $state<LoadStatus>("idle");
   let branches = $state<BranchSummary[]>([]);
   let loadError = $state<string | null>(null);
+  let selectedBranch = $state<string | null>(null);
+  let actionBusy = $state(false);
+  let actionError = $state<string | null>(null);
+
+  const selectedSummary = $derived(branches.find((branch) => branch.name === selectedBranch) ?? null);
+  const canCheckout = $derived(
+    selectedSummary !== null && !selectedSummary.isCurrent && !actionBusy,
+  );
 
   async function loadBranches(root: string, signal?: AbortSignal): Promise<void> {
     loadStatus = "loading";
     loadError = null;
     branches = [];
+    selectedBranch = null;
 
     try {
       const rows = await queryBranches(root);
@@ -27,6 +45,8 @@
         return;
       }
       branches = rows;
+      const current = rows.find((branch) => branch.isCurrent);
+      selectedBranch = current?.name ?? rows[0]?.name ?? null;
       loadStatus = "ready";
     } catch (error) {
       if (signal?.aborted) {
@@ -40,6 +60,7 @@
   $effect(() => {
     const root = repoRoot;
     const token = refreshToken;
+    void token;
     const controller = new AbortController();
     void loadBranches(root, controller.signal);
     return () => {
@@ -47,23 +68,112 @@
     };
   });
 
-  function upstreamSummary(branch: BranchSummary): string | null {
-    if (!branch.upstream) {
-      return null;
+  function selectBranch(name: string): void {
+    selectedBranch = name;
+  }
+
+  function handleRowKeydown(event: KeyboardEvent, name: string): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectBranch(name);
     }
-    if (branch.upstreamTrack) {
-      return `${branch.upstream} (${branch.upstreamTrack})`;
+  }
+
+  async function handleCheckout(): Promise<void> {
+    if (!selectedSummary || selectedSummary.isCurrent || actionBusy) {
+      return;
     }
-    return branch.upstream;
+
+    actionBusy = true;
+    actionError = null;
+
+    try {
+      const dirty = await isWorkingTreeDirty(repoRoot);
+      if (dirty) {
+        await message(
+          "Checkout is blocked while the working tree has uncommitted changes. Commit, stash, or discard your changes first.",
+          {
+            title: "Working tree not clean",
+            kind: "warning",
+          },
+        );
+        return;
+      }
+
+      await checkoutBranch(repoRoot, selectedSummary.name);
+      await loadBranches(repoRoot);
+      await onMutation();
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : String(error);
+    } finally {
+      actionBusy = false;
+    }
+  }
+
+  async function handleCreateBranch(): Promise<void> {
+    if (actionBusy) {
+      return;
+    }
+
+    const name = await promptEntryName({
+      title: "Create branch",
+      defaultValue: "",
+      confirmLabel: "Create",
+    });
+    if (!name) {
+      return;
+    }
+
+    const validation = validateGitRefName(name);
+    if (!validation.ok) {
+      actionError = validation.message;
+      return;
+    }
+
+    actionBusy = true;
+    actionError = null;
+
+    try {
+      await createBranch(repoRoot, name);
+      selectedBranch = name.trim();
+      await loadBranches(repoRoot);
+      await onMutation();
+    } catch (error) {
+      if (error instanceof GitRefValidationError) {
+        actionError = error.message;
+      } else {
+        actionError = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      actionBusy = false;
+    }
   }
 </script>
 
 <div class="git-branches-panel" aria-label="Local branches">
   <div class="git-branches-toolbar">
-    <button type="button" class="git-branches-action" disabled title="Create branch (phase 3)">
+    <button
+      type="button"
+      class="git-branches-action"
+      disabled={!canCheckout}
+      title={selectedSummary?.isCurrent ? "Already on this branch" : "Checkout selected branch"}
+      onclick={handleCheckout}
+    >
+      {actionBusy ? "Working…" : "Checkout"}
+    </button>
+    <button
+      type="button"
+      class="git-branches-action"
+      disabled={actionBusy}
+      onclick={handleCreateBranch}
+    >
       Create branch
     </button>
   </div>
+
+  {#if actionError}
+    <p class="git-branches-action-error" role="alert">{actionError}</p>
+  {/if}
 
   {#if loadStatus === "loading"}
     <div class="git-branches-state" role="status" aria-live="polite">
@@ -78,50 +188,41 @@
     </div>
   {:else if branches.length === 0}
     <div class="git-branches-state" role="status">
-      <p class="git-branches-state-title">No local branches</p>
-      <p class="git-branches-state-detail">This repository has no local branch refs yet.</p>
+      <p class="git-branches-state-title">No branches</p>
+      <p class="git-branches-state-detail">Create a branch to get started.</p>
     </div>
   {:else}
-    <ul class="git-branches-list" role="list">
+    <ul class="git-branches-list" role="listbox" aria-label="Local branches">
       {#each branches as branch (branch.name)}
         <li class="git-branches-item">
-          <div
+          <button
+            type="button"
             class="git-branches-row"
             class:git-branches-row-current={branch.isCurrent}
-            aria-current={branch.isCurrent ? "true" : undefined}
+            class:git-branches-row-selected={selectedBranch === branch.name}
+            role="option"
+            aria-selected={selectedBranch === branch.name}
+            onclick={() => selectBranch(branch.name)}
+            onkeydown={(event) => handleRowKeydown(event, branch.name)}
           >
-            <div class="git-branches-row-main">
-              <span class="git-branches-name" title={branch.name}>
-                {#if branch.isCurrent}
-                  <span class="git-branches-current-marker" aria-hidden="true">*</span>
-                {/if}
-                {branch.name}
-                {#if branch.isCurrent}
-                  <span class="git-branches-current-badge">Current</span>
-                {/if}
-              </span>
-              <span class="git-branches-meta">
-                <span class="git-branches-sha" title={branch.head}>{formatShortSha(branch.head)}</span>
-                {#if branch.subject}
-                  <span class="git-branches-meta-separator" aria-hidden="true">·</span>
-                  <span class="git-branches-subject" title={branch.subject}>{branch.subject}</span>
-                {/if}
-              </span>
-              {#if upstreamSummary(branch)}
-                <span class="git-branches-upstream" title="Upstream tracking">
-                  {upstreamSummary(branch)}
+            <span class="git-branches-name" title={branch.name}>
+              {#if branch.isCurrent}
+                <span class="git-branches-current-marker" aria-hidden="true">●</span>
+              {/if}
+              {branch.name}
+            </span>
+            <span class="git-branches-meta">
+              <span class="git-branches-head" title={branch.head}>{branch.head}</span>
+              {#if branch.upstream}
+                <span class="git-branches-upstream" title={branch.upstreamTrack ?? branch.upstream}>
+                  ↑ {branch.upstream}
                 </span>
               {/if}
-            </div>
-            <button
-              type="button"
-              class="git-branches-checkout"
-              disabled
-              title="Checkout branch (phase 3)"
-            >
-              Checkout
-            </button>
-          </div>
+            </span>
+            {#if branch.subject}
+              <span class="git-branches-subject" title={branch.subject}>{branch.subject}</span>
+            {/if}
+          </button>
         </li>
       {/each}
     </ul>
@@ -132,17 +233,15 @@
   .git-branches-panel {
     display: flex;
     flex-direction: column;
+    gap: var(--space-6);
     width: 100%;
-    height: 100%;
-    min-height: 0;
+    max-width: 36rem;
   }
 
   .git-branches-toolbar {
-    flex-shrink: 0;
     display: flex;
-    justify-content: flex-end;
-    padding: var(--space-4) var(--space-12);
-    border-bottom: 1px solid var(--color-border-subtle);
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
 
   .git-branches-action {
@@ -152,17 +251,28 @@
     background: var(--color-surface-2);
     color: var(--color-text);
     font-size: 0.8125rem;
-    cursor: not-allowed;
+    cursor: pointer;
+  }
+
+  .git-branches-action:hover:not(:disabled) {
+    background: var(--color-surface-3, var(--color-surface-2));
+  }
+
+  .git-branches-action:disabled {
     opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .git-branches-action-error {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--color-danger, #c0392b);
   }
 
   .git-branches-state {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     gap: var(--space-3);
-    padding: var(--space-10) var(--space-12);
     color: var(--color-text-secondary);
   }
 
@@ -180,103 +290,87 @@
   }
 
   .git-branches-list {
-    flex: 1;
-    min-height: 0;
     margin: 0;
-    padding: var(--space-2) 0;
+    padding: 0;
     list-style: none;
-    overflow-y: auto;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
   }
 
-  .git-branches-item {
-    margin: 0;
+  .git-branches-item + .git-branches-item {
+    border-top: 1px solid var(--color-border-subtle);
   }
 
   .git-branches-row {
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-4);
-    padding: var(--space-4) var(--space-12);
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-4);
+    border: none;
     border-left: 2px solid transparent;
+    background: transparent;
+    color: var(--color-text);
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .git-branches-row:hover {
+    background: var(--color-surface-2);
+  }
+
+  .git-branches-row:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+  }
+
+  .git-branches-row-selected {
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-1));
   }
 
   .git-branches-row-current {
-    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-1));
     border-left-color: var(--color-accent);
-  }
-
-  .git-branches-row-main {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 0;
-    flex: 1;
   }
 
   .git-branches-name {
     display: inline-flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: var(--space-2);
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--color-text);
   }
 
   .git-branches-current-marker {
     color: var(--color-accent);
-  }
-
-  .git-branches-current-badge {
-    padding: 0 var(--space-2);
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
-    color: var(--color-accent);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-size: 0.625rem;
   }
 
   .git-branches-meta {
     display: flex;
-    align-items: center;
     flex-wrap: wrap;
-    gap: var(--space-2);
+    gap: var(--space-3);
     font-size: 0.75rem;
     color: var(--color-text-secondary);
   }
 
-  .git-branches-sha {
+  .git-branches-head {
     font-family: var(--font-mono, ui-monospace, monospace);
     color: var(--color-text-muted);
   }
 
-  .git-branches-meta-separator {
+  .git-branches-upstream {
     color: var(--color-text-muted);
   }
 
   .git-branches-subject {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .git-branches-upstream {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-  }
-
-  .git-branches-checkout {
-    flex-shrink: 0;
-    padding: var(--space-2) var(--space-4);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-2);
-    color: var(--color-text);
-    font-size: 0.75rem;
-    cursor: not-allowed;
-    opacity: 0.55;
+    width: 100%;
   }
 </style>

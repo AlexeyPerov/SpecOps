@@ -1,4 +1,9 @@
 <script lang="ts">
+  import GitCommitGraphColumn from "./GitCommitGraphColumn.svelte";
+  import {
+    buildCommitGraphLayout,
+    commitGraphColumnWidth,
+  } from "../git/commitGraphLayout";
   import {
     commitRefBadgeTitle,
     formatRelativeCommitDate,
@@ -26,6 +31,9 @@
   let loadStatus = $state<LoadStatus>("idle");
   let commits = $state<CommitSummary[]>([]);
   let loadError = $state<string | null>(null);
+
+  const graphLayout = $derived(buildCommitGraphLayout(commits));
+  const graphWidth = $derived(commitGraphColumnWidth(graphLayout.laneCount));
 
   async function loadCommits(root: string, signal?: AbortSignal): Promise<void> {
     loadStatus = "loading";
@@ -104,45 +112,52 @@
       </p>
     </div>
   {:else}
-    <ul class="git-history-list" role="listbox" aria-label="Commits on current branch">
-      {#each commits as commit (commit.sha)}
-        <li class="git-history-item">
-          <button
-            type="button"
-            class="git-history-row"
-            class:git-history-row-selected={selectedSha === commit.sha}
-            role="option"
-            aria-selected={selectedSha === commit.sha}
-            onclick={() => handleSelectCommit(commit)}
-            onkeydown={(event) => handleRowKeydown(event, commit)}
-          >
-            <span class="git-history-subject" title={commit.subject}>{commit.subject}</span>
-            <span class="git-history-meta">
-              <span class="git-history-sha" title={commit.sha}>{formatShortSha(commit.sha)}</span>
-              <span class="git-history-meta-separator" aria-hidden="true">·</span>
-              <span class="git-history-author" title={commit.authorEmail}>{commit.authorName}</span>
-              <span class="git-history-meta-separator" aria-hidden="true">·</span>
-              <time
-                class="git-history-date"
-                datetime={new Date(commit.authorTime * 1000).toISOString()}
-                title={new Date(commit.authorTime * 1000).toLocaleString()}
+    <div class="git-history-scroll">
+      <div class="git-history-content">
+        <div class="git-history-graph" style="width: {graphWidth}px">
+          <GitCommitGraphColumn layout={graphLayout} {selectedSha} />
+        </div>
+        <ul class="git-history-list" role="listbox" aria-label="Commits on current branch">
+          {#each commits as commit (commit.sha)}
+            <li class="git-history-item">
+              <button
+                type="button"
+                class="git-history-row"
+                class:git-history-row-selected={selectedSha === commit.sha}
+                role="option"
+                aria-selected={selectedSha === commit.sha}
+                onclick={() => handleSelectCommit(commit)}
+                onkeydown={(event) => handleRowKeydown(event, commit)}
               >
-                {formatRelativeCommitDate(commit.authorTime)}
-              </time>
-            </span>
-            {#if commit.refs.length > 0}
-              <span class="git-history-refs" aria-label="Refs on this commit">
-                {#each commit.refs as ref (ref.type + ref.name)}
-                  <span class="git-history-ref {refBadgeClass(ref)}" title={commitRefBadgeTitle(ref)}>
-                    {ref.name}
+                <span class="git-history-subject" title={commit.subject}>{commit.subject}</span>
+                <span class="git-history-meta">
+                  <span class="git-history-sha" title={commit.sha}>{formatShortSha(commit.sha)}</span>
+                  <span class="git-history-meta-separator" aria-hidden="true">·</span>
+                  <span class="git-history-author" title={commit.authorEmail}>{commit.authorName}</span>
+                  <span class="git-history-meta-separator" aria-hidden="true">·</span>
+                  <time
+                    class="git-history-date"
+                    datetime={new Date(commit.authorTime * 1000).toISOString()}
+                    title={new Date(commit.authorTime * 1000).toLocaleString()}
+                  >
+                    {formatRelativeCommitDate(commit.authorTime)}
+                  </time>
+                </span>
+                {#if commit.refs.length > 0}
+                  <span class="git-history-refs" aria-label="Refs on this commit">
+                    {#each commit.refs as ref (ref.type + ref.name)}
+                      <span class="git-history-ref {refBadgeClass(ref)}" title={commitRefBadgeTitle(ref)}>
+                        {ref.name}
+                      </span>
+                    {/each}
                   </span>
-                {/each}
-              </span>
-            {/if}
-          </button>
-        </li>
-      {/each}
-    </ul>
+                {/if}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -178,13 +193,33 @@
     line-height: 1.5;
   }
 
-  .git-history-list {
+  .git-history-scroll {
     flex: 1;
     min-height: 0;
+    overflow: auto;
+  }
+
+  .git-history-content {
+    display: flex;
+    align-items: flex-start;
+    min-width: min-content;
+  }
+
+  .git-history-graph {
+    position: sticky;
+    left: 0;
+    flex-shrink: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: var(--color-surface-1);
+  }
+
+  .git-history-list {
+    flex: 1;
+    min-width: 0;
     margin: 0;
     padding: var(--space-2) 0;
     list-style: none;
-    overflow-y: auto;
   }
 
   .git-history-item {

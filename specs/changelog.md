@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-03 — D-01 Tasks 3–4: commit graph SVG column and history panel integration
+
+- **`app/src/lib/components/GitCommitGraphColumn.svelte`** — reusable SVG graph column rendering lane segments, quadratic merge curves, and commit dots (head/merge/default kinds) with an 8-color light/dark palette, selection ring via `--color-accent`, and decorative `aria-hidden` semantics.
+- **`app/src/lib/components/GitCommitGraphColumn.test.ts`** — Vitest mount tests for linear/merge fixtures, SVG sizing (1 vs multi-lane), selection ring, and dot positioning.
+- **`app/src/lib/git/commitGraphLayout.ts`** — `commitGraphColumnWidth`, `commitGraphRowCount`, and `GRAPH_RIGHT_PADDING` helpers shared by the graph component and history panel.
+- **`app/src/lib/components/GitHistoryPanel.svelte`** — two-column scroll layout with a sticky-left graph gutter and commit rows; `$derived` layout from `buildCommitGraphLayout(commits)`; selection and refresh behavior preserved.
+- **`specs/git/execution/d-01-03-commit-graph-svg-component.md`**, **`d-01-04-integrate-graph-into-history-panel.md`** — marked `[DONE]`.
+
 ## 2026-07-03 — D-01 Tasks 1–2: commit graph layout engine and fixtures
 
 - **`app/src/lib/git/commitGraphLayout.ts`** — pure TypeScript layout engine (`buildCommitGraphLayout`) turning newest-first `CommitSummary[]` into lane-assigned dots, branch segments, and quadratic merge curves; fixed geometry constants (`ROW_HEIGHT`, `LANE_WIDTH`, `DOT_RADIUS`, 8-color palette); truncated-parent and octopus-merge edge cases handled without throwing.

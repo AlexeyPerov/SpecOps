@@ -32,6 +32,25 @@ export const COLOR_COUNT = 8;
 /** Left offset for lane 0 center (matches reference graph margin). */
 export const LANE_BASE_X = 10;
 
+/** Right inset after the last lane center for SVG clip width. */
+export const GRAPH_RIGHT_PADDING = 6;
+
+/** Pixel width of the graph column for a given lane count. */
+export function commitGraphColumnWidth(laneCount: number): number {
+  if (laneCount <= 0) {
+    return 0;
+  }
+  return LANE_BASE_X + laneCount * LANE_WIDTH + GRAPH_RIGHT_PADDING;
+}
+
+/** Number of commit rows represented in a layout result. */
+export function commitGraphRowCount(layout: CommitGraphLayoutResult): number {
+  if (layout.dots.length === 0) {
+    return 0;
+  }
+  return Math.max(...layout.dots.map((dot) => dot.rowIndex)) + 1;
+}
+
 export type CommitGraphDotKind = "default" | "head" | "merge";
 
 /** A commit dot on the graph at a row/lane intersection. */

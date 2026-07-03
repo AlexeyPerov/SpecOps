@@ -1,4 +1,4 @@
-# D-01 Task 3 — Commit graph SVG column component
+# D-01 Task 3 — Commit graph SVG column component [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

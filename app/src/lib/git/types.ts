@@ -216,6 +216,9 @@ export interface WorkingTreeStatus {
   unstaged: WorkingTreeFileEntry[];
 }
 
+/** Which side of the working tree to diff against (D-03). */
+export type WorkingTreeDiffSource = "unstaged" | "staged";
+
 /** Line kind within a parsed unified diff hunk (D-02). */
 export type DiffLineKind = "context" | "added" | "deleted" | "hunk-header" | "meta";
 

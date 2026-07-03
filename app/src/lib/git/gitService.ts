@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { logDiagnostic } from "../services/logging";
+import { isWindows } from "../services/platform";
 import {
   parseAheadBehindCount,
   parseBranchShowCurrent,
@@ -35,6 +36,7 @@ import {
   type QueryCommitsOptions,
   type ResolveRepoRootResult,
   type RunGitResponse,
+  type WorkingTreeDiffSource,
   type WorkingTreeStatus,
 } from "./types";
 
@@ -341,6 +343,108 @@ export async function queryCommitFileDiff(
   return match;
 }
 
+function gitNullDevicePath(): string {
+  return isWindows() ? "NUL" : "/dev/null";
+}
+
+function isDiffCommandSuccess(response: RunGitResponse, allowExitOne: boolean): boolean {
+  if (response.exitCode === 0) {
+    return true;
+  }
+  return allowExitOne && response.exitCode === 1 && response.stdout.trim().length > 0;
+}
+
+function assertDiffCommandSuccess(response: RunGitResponse, allowExitOne: boolean): void {
+  if (!isDiffCommandSuccess(response, allowExitOne)) {
+    throw createGitCommandError(response);
+  }
+}
+
+function parseWorkingTreeFileDiffPatch(
+  stdout: string,
+  normalizedPath: string,
+): ParsedTextDiff {
+  const stdoutByteLength = new TextEncoder().encode(stdout).length;
+  if (stdoutByteLength > COMMIT_FILE_DIFF_MAX_BYTES) {
+    throw new GitDiffTooLargeError(normalizedPath, stdoutByteLength, COMMIT_FILE_DIFF_MAX_BYTES);
+  }
+
+  const parsed = parseUnifiedDiff(stdout);
+  const match = findParsedTextDiff(parsed, normalizedPath);
+  if (!match) {
+    throw new GitCommitFileDiffNotFoundError(normalizedPath);
+  }
+
+  return match;
+}
+
+/**
+ * Fetch and parse a single working-tree file diff.
+ *
+ * **Staged** (`git diff --cached`): compares the index to `HEAD` — only hunks
+ * already staged for commit.
+ *
+ * **Unstaged** (`git diff HEAD`): compares the working tree to `HEAD` — all
+ * local changes for the path since the last commit (staged and unstaged deltas
+ * combined). This is a simplified model versus `git diff` (working tree vs
+ * index). Untracked paths fall back to `git diff --no-index` against the
+ * platform null device when `git diff HEAD` produces no patch.
+ */
+export async function queryWorkingTreeFileDiff(
+  repoRoot: string,
+  path: string,
+  source: WorkingTreeDiffSource,
+): Promise<ParsedTextDiff> {
+  const normalizedPath = normalizeGitOutputPath(path);
+
+  if (source === "staged") {
+    const response = await runGit(repoRoot, [
+      "diff",
+      "--no-color",
+      "--patch",
+      `--unified=${DIFF_CONTEXT_LINES}`,
+      "--cached",
+      "--",
+      normalizedPath,
+    ]);
+    assertDiffCommandSuccess(response, false);
+    return parseWorkingTreeFileDiffPatch(response.stdout, normalizedPath);
+  }
+
+  const headResponse = await runGit(repoRoot, [
+    "diff",
+    "--no-color",
+    "--patch",
+    `--unified=${DIFF_CONTEXT_LINES}`,
+    "HEAD",
+    "--",
+    normalizedPath,
+  ]);
+  assertDiffCommandSuccess(headResponse, false);
+
+  if (headResponse.stdout.trim().length > 0) {
+    return parseWorkingTreeFileDiffPatch(headResponse.stdout, normalizedPath);
+  }
+
+  const untrackedResponse = await runGit(repoRoot, [
+    "diff",
+    "--no-index",
+    "--no-color",
+    "--patch",
+    `--unified=${DIFF_CONTEXT_LINES}`,
+    "--",
+    gitNullDevicePath(),
+    normalizedPath,
+  ]);
+  assertDiffCommandSuccess(untrackedResponse, true);
+
+  if (!untrackedResponse.stdout.trim()) {
+    throw new GitCommitFileDiffNotFoundError(normalizedPath);
+  }
+
+  return parseWorkingTreeFileDiffPatch(untrackedResponse.stdout, normalizedPath);
+}
+
 /**
  * Query local branches with current marker, upstream, and last-commit hint.
  */
@@ -589,6 +693,7 @@ export type {
   ParsedTextDiff,
   QueryCommitsOptions,
   RunGitResponse,
+  WorkingTreeDiffSource,
   WorkingTreeFileEntry,
   WorkingTreeStatus,
 } from "./types";

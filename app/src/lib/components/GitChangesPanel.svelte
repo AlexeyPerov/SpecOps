@@ -3,14 +3,17 @@
   import {
     createCommit,
     GitCommitValidationError,
+    GitDiffTooLargeError,
+    queryWorkingTreeFileDiff,
     queryWorkingTreeStatus,
     stageAll,
     stagePaths,
     unstagePaths,
   } from "../git/gitService";
   import { formatWorkingTreeStatusCode } from "../git/gitStatusFormat";
-  import type { WorkingTreeFileEntry } from "../git/types";
+  import type { ParsedTextDiff, WorkingTreeDiffSource, WorkingTreeFileEntry } from "../git/types";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
+  import GitTextDiffView from "./GitTextDiffView.svelte";
 
   interface Props {
     repoRoot: string;
@@ -40,12 +43,53 @@
   let commitError = $state<string | null>(null);
   let actionBusy = $state(false);
   let actionError = $state<string | null>(null);
+  let activeDiffPath = $state<string | null>(null);
+  let activeDiffSource = $state<WorkingTreeDiffSource | null>(null);
+  let fileDiff = $state<ParsedTextDiff | null>(null);
+  let diffLoading = $state(false);
+  let diffError = $state<string | null>(null);
 
   const hasStagedChanges = $derived(staged.length > 0);
   const canCommit = $derived(
     hasStagedChanges && !actionBusy && !readOnly && commitMessage.trim().length > 0,
   );
   const isClean = $derived(loadStatus === "ready" && staged.length === 0 && unstaged.length === 0);
+
+  function pickDefaultDiffSelection(
+    unstagedEntries: WorkingTreeFileEntry[],
+    stagedEntries: WorkingTreeFileEntry[],
+  ): { path: string | null; source: WorkingTreeDiffSource | null } {
+    if (unstagedEntries.length > 0) {
+      return { path: unstagedEntries[0]!.path, source: "unstaged" };
+    }
+    if (stagedEntries.length > 0) {
+      return { path: stagedEntries[0]!.path, source: "staged" };
+    }
+    return { path: null, source: null };
+  }
+
+  function syncActiveDiffSelection(): void {
+    if (activeDiffPath) {
+      if (activeDiffSource === "unstaged" && unstaged.some((entry) => entry.path === activeDiffPath)) {
+        return;
+      }
+      if (activeDiffSource === "staged" && staged.some((entry) => entry.path === activeDiffPath)) {
+        return;
+      }
+      if (unstaged.some((entry) => entry.path === activeDiffPath)) {
+        activeDiffSource = "unstaged";
+        return;
+      }
+      if (staged.some((entry) => entry.path === activeDiffPath)) {
+        activeDiffSource = "staged";
+        return;
+      }
+    }
+
+    const next = pickDefaultDiffSelection(unstaged, staged);
+    activeDiffPath = next.path;
+    activeDiffSource = next.source;
+  }
 
   async function loadWorkingTreeStatus(root: string, signal?: AbortSignal): Promise<void> {
     loadStatus = "loading";
@@ -54,6 +98,11 @@
     unstaged = [];
     selectedUnstaged = new Set();
     selectedStaged = new Set();
+    activeDiffPath = null;
+    activeDiffSource = null;
+    fileDiff = null;
+    diffError = null;
+    diffLoading = false;
 
     try {
       const status = await queryWorkingTreeStatus(root);
@@ -62,6 +111,7 @@
       }
       staged = status.staged;
       unstaged = status.unstaged;
+      syncActiveDiffSelection();
       loadStatus = "ready";
     } catch (error) {
       if (signal?.aborted) {
@@ -72,12 +122,70 @@
     }
   }
 
+  async function loadFileDiff(
+    root: string,
+    path: string,
+    source: WorkingTreeDiffSource,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    diffLoading = true;
+    diffError = null;
+    fileDiff = null;
+
+    try {
+      const result = await queryWorkingTreeFileDiff(root, path, source);
+      if (signal?.aborted) {
+        return;
+      }
+      fileDiff = result;
+    } catch (error) {
+      if (signal?.aborted) {
+        return;
+      }
+      if (error instanceof GitDiffTooLargeError) {
+        diffError =
+          "This diff is too large to display inline. Use an external diff tool to review it.";
+      } else {
+        diffError = reportGitError(error, {
+          operation: "Load working tree diff",
+          repoRoot: root,
+          notify,
+        });
+      }
+    } finally {
+      if (!signal?.aborted) {
+        diffLoading = false;
+      }
+    }
+  }
+
   $effect(() => {
     const root = repoRoot;
     const token = refreshToken;
     void token;
     const controller = new AbortController();
     void loadWorkingTreeStatus(root, controller.signal);
+    return () => {
+      controller.abort();
+    };
+  });
+
+  $effect(() => {
+    const root = repoRoot;
+    const path = activeDiffPath;
+    const source = activeDiffSource;
+    const controller = new AbortController();
+
+    if (readOnly || loadStatus !== "ready" || !path || !source) {
+      fileDiff = null;
+      diffError = null;
+      diffLoading = false;
+      return () => {
+        controller.abort();
+      };
+    }
+
+    void loadFileDiff(root, path, source, controller.signal);
     return () => {
       controller.abort();
     };
@@ -106,6 +214,15 @@
       next.delete(path);
     }
     selectedStaged = next;
+  }
+
+  function selectForDiff(path: string, source: WorkingTreeDiffSource): void {
+    activeDiffPath = path;
+    activeDiffSource = source;
+  }
+
+  function isDiffRowActive(path: string, source: WorkingTreeDiffSource): boolean {
+    return activeDiffPath === path && activeDiffSource === source;
   }
 
   async function handleStageSelected(): Promise<void> {
@@ -198,104 +315,159 @@
         <p class="git-changes-state-detail">{loadError}</p>
       {/if}
     </div>
-  {:else if isClean}
-    <div class="git-changes-state" role="status">
-      <p class="git-changes-state-title">Working tree clean</p>
-      <p class="git-changes-state-detail">No staged or unstaged changes.</p>
-    </div>
   {:else}
     {#if actionError}
       <p class="git-changes-action-error" role="alert">{actionError}</p>
     {/if}
 
-    <section class="git-changes-section" aria-labelledby="git-changes-unstaged-heading">
-      <div class="git-changes-section-header">
-        <h3 id="git-changes-unstaged-heading" class="git-changes-section-title">Unstaged</h3>
-        <div class="git-changes-section-actions">
-          <button
-            type="button"
-            class="git-changes-action-button"
-            disabled={selectedUnstaged.size === 0 || actionBusy || readOnly}
-            onclick={handleStageSelected}
-          >
-            Stage selected
-          </button>
-          <button
-            type="button"
-            class="git-changes-action-button"
-            disabled={unstaged.length === 0 || actionBusy || readOnly}
-            onclick={handleStageAll}
-          >
-            Stage all
-          </button>
-        </div>
-      </div>
-      {#if unstaged.length === 0}
-        <p class="git-changes-empty">No unstaged changes.</p>
-      {:else}
-        <ul class="git-changes-list" role="list">
-          {#each unstaged as entry (entry.path)}
-            <li class="git-changes-item">
-              <label class="git-changes-row">
-                <input
-                  type="checkbox"
-                  checked={selectedUnstaged.has(entry.path)}
-                  disabled={actionBusy || readOnly}
-                  onchange={(event) =>
-                    toggleUnstaged(entry.path, (event.currentTarget as HTMLInputElement).checked)}
-                />
-                <span class="git-changes-status" title={formatWorkingTreeStatusCode(entry.statusCode)}>
-                  {entry.statusCode.trim() || "?"}
-                </span>
-                <span class="git-changes-path" title={entry.path}>{entry.path}</span>
-              </label>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </section>
+    <div class="git-changes-main">
+      <div class="git-changes-lists">
+        <section class="git-changes-section" aria-labelledby="git-changes-unstaged-heading">
+          <div class="git-changes-section-header">
+            <h3 id="git-changes-unstaged-heading" class="git-changes-section-title">Unstaged</h3>
+            <div class="git-changes-section-actions">
+              <button
+                type="button"
+                class="git-changes-action-button"
+                disabled={selectedUnstaged.size === 0 || actionBusy || readOnly}
+                onclick={handleStageSelected}
+              >
+                Stage selected
+              </button>
+              <button
+                type="button"
+                class="git-changes-action-button"
+                disabled={unstaged.length === 0 || actionBusy || readOnly}
+                onclick={handleStageAll}
+              >
+                Stage all
+              </button>
+            </div>
+          </div>
+          {#if unstaged.length === 0}
+            <p class="git-changes-empty">No unstaged changes.</p>
+          {:else}
+            <ul class="git-changes-list" role="list">
+              {#each unstaged as entry (entry.path)}
+                <li
+                  class="git-changes-item"
+                  class:git-changes-item-active={isDiffRowActive(entry.path, "unstaged")}
+                >
+                  <div
+                    class="git-changes-row"
+                    role="button"
+                    tabindex="0"
+                    onclick={() => selectForDiff(entry.path, "unstaged")}
+                    onkeydown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        selectForDiff(entry.path, "unstaged");
+                      }
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUnstaged.has(entry.path)}
+                      disabled={actionBusy || readOnly}
+                      onclick={(event) => event.stopPropagation()}
+                      onchange={(event) =>
+                        toggleUnstaged(
+                          entry.path,
+                          (event.currentTarget as HTMLInputElement).checked,
+                        )}
+                    />
+                    <span
+                      class="git-changes-status"
+                      title={formatWorkingTreeStatusCode(entry.statusCode)}
+                    >
+                      {entry.statusCode.trim() || "?"}
+                    </span>
+                    <span class="git-changes-path" title={entry.path}>{entry.path}</span>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </section>
 
-    <section class="git-changes-section" aria-labelledby="git-changes-staged-heading">
-      <div class="git-changes-section-header">
-        <h3 id="git-changes-staged-heading" class="git-changes-section-title">Staged</h3>
-        <div class="git-changes-section-actions">
-          <button
-            type="button"
-            class="git-changes-action-button"
-            disabled={selectedStaged.size === 0 || actionBusy || readOnly}
-            onclick={handleUnstageSelected}
-          >
-            Unstage selected
-          </button>
-        </div>
+        <section class="git-changes-section" aria-labelledby="git-changes-staged-heading">
+          <div class="git-changes-section-header">
+            <h3 id="git-changes-staged-heading" class="git-changes-section-title">Staged</h3>
+            <div class="git-changes-section-actions">
+              <button
+                type="button"
+                class="git-changes-action-button"
+                disabled={selectedStaged.size === 0 || actionBusy || readOnly}
+                onclick={handleUnstageSelected}
+              >
+                Unstage selected
+              </button>
+            </div>
+          </div>
+          {#if staged.length === 0}
+            <p class="git-changes-empty">No staged changes.</p>
+          {:else}
+            <ul class="git-changes-list" role="list">
+              {#each staged as entry (entry.path)}
+                <li
+                  class="git-changes-item"
+                  class:git-changes-item-active={isDiffRowActive(entry.path, "staged")}
+                >
+                  <div
+                    class="git-changes-row"
+                    role="button"
+                    tabindex="0"
+                    onclick={() => selectForDiff(entry.path, "staged")}
+                    onkeydown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        selectForDiff(entry.path, "staged");
+                      }
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedStaged.has(entry.path)}
+                      disabled={actionBusy || readOnly}
+                      onclick={(event) => event.stopPropagation()}
+                      onchange={(event) =>
+                        toggleStaged(entry.path, (event.currentTarget as HTMLInputElement).checked)}
+                    />
+                    <span
+                      class="git-changes-status"
+                      title={formatWorkingTreeStatusCode(entry.statusCode)}
+                    >
+                      {entry.statusCode.trim() || "?"}
+                    </span>
+                    <span class="git-changes-path" title={entry.path}>{entry.path}</span>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </section>
       </div>
-      {#if staged.length === 0}
-        <p class="git-changes-empty">No staged changes.</p>
-      {:else}
-        <ul class="git-changes-list" role="list">
-          {#each staged as entry (entry.path)}
-            <li class="git-changes-item">
-              <label class="git-changes-row">
-                <input
-                  type="checkbox"
-                  checked={selectedStaged.has(entry.path)}
-                  disabled={actionBusy || readOnly}
-                  onchange={(event) =>
-                    toggleStaged(entry.path, (event.currentTarget as HTMLInputElement).checked)}
-                />
-                <span class="git-changes-status" title={formatWorkingTreeStatusCode(entry.statusCode)}>
-                  {entry.statusCode.trim() || "?"}
-                </span>
-                <span class="git-changes-path" title={entry.path}>{entry.path}</span>
-              </label>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </section>
+
+      <div class="git-changes-diff-pane" aria-label="File diff">
+        {#if readOnly}
+          <p class="git-changes-diff-readonly-banner" role="status">
+            Diff preview is unavailable in read-only repositories.
+          </p>
+        {/if}
+        <GitTextDiffView
+          diff={readOnly ? null : fileDiff}
+          title={activeDiffPath ?? undefined}
+          loading={!readOnly && diffLoading}
+          error={readOnly ? null : diffError}
+        />
+      </div>
+    </div>
 
     <section class="git-changes-commit" aria-labelledby="git-changes-commit-heading">
       <h3 id="git-changes-commit-heading" class="git-changes-section-title">Commit</h3>
+      {#if isClean}
+        <p class="git-changes-clean-note" role="status">Working tree clean — nothing to commit.</p>
+      {/if}
       <label class="git-changes-commit-label" for="git-changes-message">Message</label>
       <textarea
         id="git-changes-message"
@@ -329,14 +501,19 @@
   .git-changes-panel {
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
+    gap: var(--space-6);
     width: 100%;
-    max-width: 40rem;
+    height: 100%;
+    min-height: 0;
+    padding: var(--space-6) var(--space-8);
+    box-sizing: border-box;
   }
 
   .git-changes-state {
+    flex: 1;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: var(--space-3);
     color: var(--color-text-secondary);
   }
@@ -358,6 +535,53 @@
     margin: 0;
     font-size: 0.8125rem;
     color: var(--color-danger, #c0392b);
+  }
+
+  .git-changes-main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(200px, 0.42fr) minmax(300px, 1fr);
+    gap: var(--space-4);
+    align-items: stretch;
+  }
+
+  @media (max-width: 720px) {
+    .git-changes-main {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(240px, 1fr);
+    }
+  }
+
+  .git-changes-lists {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    overflow-y: auto;
+  }
+
+  .git-changes-diff-pane {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--color-surface-1);
+  }
+
+  .git-changes-diff-readonly-banner {
+    flex-shrink: 0;
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border-subtle);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    background: color-mix(in srgb, var(--color-danger, #c0392b) 8%, var(--color-surface-1));
   }
 
   .git-changes-section {
@@ -431,13 +655,22 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
+    width: 100%;
     padding: var(--space-3) var(--space-4);
     cursor: pointer;
     font-size: 0.875rem;
+    border: none;
+    background: transparent;
+    text-align: left;
+    color: inherit;
   }
 
   .git-changes-row:hover {
     background: var(--color-surface-2);
+  }
+
+  .git-changes-item-active .git-changes-row {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   }
 
   .git-changes-status {
@@ -459,11 +692,18 @@
   }
 
   .git-changes-commit {
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
     padding-top: var(--space-4);
     border-top: 1px solid var(--color-border-subtle);
+  }
+
+  .git-changes-clean-note {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
   }
 
   .git-changes-commit-label {

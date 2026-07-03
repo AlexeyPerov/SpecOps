@@ -1,4 +1,4 @@
-# D-03 Task 2 — Changes panel split layout
+# D-03 Task 2 — Changes panel split layout [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

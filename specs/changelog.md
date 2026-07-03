@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-03 — D-03 Tasks 1–3: working-tree file diff service, changes panel split layout, selection-driven diff
+
+- **`app/src/lib/git/types.ts`** — `WorkingTreeDiffSource` union (`"unstaged" | "staged"`).
+- **`app/src/lib/git/gitService.ts`** — `queryWorkingTreeFileDiff(repoRoot, path, source)`: staged via `git diff --cached`, unstaged via `git diff HEAD` with `--no-index` null-device fallback for untracked files; reuses `GitDiffTooLargeError` and unified diff parser; JSDoc documents simplified unstaged semantics.
+- **`app/src/lib/components/GitChangesPanel.svelte`** — left/right split (lists + inline diff, commit area below); row click selects diff source while checkboxes keep multi-select staging; default first unstaged/staged selection; abort-safe diff loading; read-only bare-repo diff banner.
+- **`app/src/lib/components/VersionControlView.svelte`** — flush full-height body layout for Changes section.
+- **Tests** — mocked `queryWorkingTreeFileDiff` argv/parsing/guard coverage; `describeIfGitInstalled` integration for partial staging, untracked `--no-index`, and spaced paths.
+- **`specs/git/execution/d-03-01-query-working-tree-file-diff.md`**, **`d-03-02-changes-panel-split-layout.md`**, **`d-03-03-file-selection-diff-loading.md`** — marked `[DONE]`.
+
 ## 2026-07-03 — D-02 Tasks 3–5: git text diff view, commit detail split layout, binary/large diff states
 
 - **`app/src/lib/components/GitTextDiffView.svelte`** — unified single-pane diff viewer: file header with `+N` / `−M` summary, scrollable `[oldNo | newNo | prefix | content]` grid, added/deleted/hunk styling, loading/error/empty/binary/no-hunk states; horizontal scroll for long lines.

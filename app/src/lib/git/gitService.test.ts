@@ -29,6 +29,7 @@ import {
   queryIsBareRepository,
   queryTags,
   queryWorkingTreeStatus,
+  queryWorkingTreeFileDiff,
   resolveRepoRoot,
   runGit,
   stageAll,
@@ -38,6 +39,8 @@ import {
 import { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
 import { isGitError } from "./types";
+import { describeIfGitInstalled, createTempGitRepo } from "./test/gitTempRepoHarness";
+import { execFileSync } from "node:child_process";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -566,6 +569,244 @@ describe("queryCommitFileDiff", () => {
     expect(result.path).toBe("image.png");
     expect(result.isBinary).toBe(true);
     expect(result.hunks).toEqual([]);
+  });
+});
+
+describe("queryWorkingTreeFileDiff", () => {
+  const samplePatch =
+    "diff --git a/file.txt b/file.txt\nindex abc..def 100644\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1,2 @@\n line\n+added\n";
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git diff --cached for staged source", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: samplePatch,
+      stderr: "",
+      durationMs: 2,
+    });
+
+    const result = await queryWorkingTreeFileDiff("/tmp/repo", "file.txt", "staged");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "diff",
+        "--no-color",
+        "--patch",
+        `--unified=${DIFF_CONTEXT_LINES}`,
+        "--cached",
+        "--",
+        "file.txt",
+      ],
+    });
+    expect(result.path).toBe("file.txt");
+    expect(result.addedLines).toBe(1);
+  });
+
+  it("runs git diff HEAD for unstaged tracked files", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: samplePatch,
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await queryWorkingTreeFileDiff("/tmp/repo", "file.txt", "unstaged");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "diff",
+        "--no-color",
+        "--patch",
+        `--unified=${DIFF_CONTEXT_LINES}`,
+        "HEAD",
+        "--",
+        "file.txt",
+      ],
+    });
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to git diff --no-index when HEAD diff is empty", async () => {
+    const untrackedPatch =
+      "diff --git a/new.txt b/new.txt\nnew file mode 100644\n--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+hello\n";
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        durationMs: 1,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: untrackedPatch,
+        stderr: "",
+        durationMs: 2,
+      });
+
+    const result = await queryWorkingTreeFileDiff("/tmp/repo", "new.txt", "unstaged");
+
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "diff",
+        "--no-index",
+        "--no-color",
+        "--patch",
+        `--unified=${DIFF_CONTEXT_LINES}`,
+        "--",
+        "/dev/null",
+        "new.txt",
+      ],
+    });
+    expect(result.path).toBe("new.txt");
+    expect(result.addedLines).toBe(1);
+  });
+
+  it("passes paths with spaces as a single argv entry", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: samplePatch.replace(/file\.txt/g, "spaces file.txt"),
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await queryWorkingTreeFileDiff("/tmp/repo", "spaces file.txt", "staged");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "diff",
+        "--no-color",
+        "--patch",
+        `--unified=${DIFF_CONTEXT_LINES}`,
+        "--cached",
+        "--",
+        "spaces file.txt",
+      ],
+    });
+  });
+
+  it("throws GitDiffTooLargeError when stdout exceeds the size guard", async () => {
+    const oversizedStdout = "x".repeat(COMMIT_FILE_DIFF_MAX_BYTES + 1);
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: oversizedStdout,
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await expect(
+      queryWorkingTreeFileDiff("/tmp/repo", "large.txt", "staged"),
+    ).rejects.toBeInstanceOf(GitDiffTooLargeError);
+  });
+
+  it("throws GitCommitFileDiffNotFoundError when no patch is produced", async () => {
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        durationMs: 1,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        durationMs: 1,
+      });
+
+    await expect(
+      queryWorkingTreeFileDiff("/tmp/repo", "missing.txt", "unstaged"),
+    ).rejects.toBeInstanceOf(GitCommitFileDiffNotFoundError);
+  });
+});
+
+describeIfGitInstalled("queryWorkingTreeFileDiff integration", () => {
+  function runRealGit(cwd: string, args: string[]): RunGitResponse {
+    try {
+      const stdout = execFileSync("git", args, { cwd, encoding: "utf8" });
+      return { exitCode: 0, stdout, stderr: "", durationMs: 0 };
+    } catch (error) {
+      const execError = error as { status?: number; stdout?: string; stderr?: string };
+      return {
+        exitCode: execError.status ?? 1,
+        stdout: execError.stdout ?? "",
+        stderr: execError.stderr ?? "",
+        durationMs: 0,
+      };
+    }
+  }
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (_command, request) =>
+      runRealGit(
+        (request as { repoRoot: string; args: string[] }).repoRoot,
+        (request as { repoRoot: string; args: string[] }).args,
+      ),
+    );
+  });
+
+  it("returns different staged vs unstaged diffs after partial staging", async () => {
+    const repo = createTempGitRepo("specops-git-wt-diff-");
+    try {
+      repo.writeFile("tracked.txt", "line1\n");
+      repo.run(["add", "tracked.txt"]);
+      repo.run(["commit", "-m", "init"]);
+
+      repo.writeFile("tracked.txt", "line1\nline2 staged\n");
+      repo.run(["add", "tracked.txt"]);
+      repo.writeFile("tracked.txt", "line1\nline2 staged\nline3 unstaged\n");
+
+      const stagedDiff = await queryWorkingTreeFileDiff(repo.dir, "tracked.txt", "staged");
+      const unstagedDiff = await queryWorkingTreeFileDiff(repo.dir, "tracked.txt", "unstaged");
+
+      expect(stagedDiff.addedLines).toBe(1);
+      expect(unstagedDiff.addedLines).toBe(2);
+      expect(stagedDiff.hunks).not.toEqual(unstagedDiff.hunks);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("diffs untracked files via --no-index fallback", async () => {
+    const repo = createTempGitRepo("specops-git-wt-untracked-");
+    try {
+      repo.writeFile("README.md", "base\n");
+      repo.run(["add", "README.md"]);
+      repo.run(["commit", "-m", "init"]);
+      repo.writeFile("brand new.txt", "fresh\n");
+
+      const diff = await queryWorkingTreeFileDiff(repo.dir, "brand new.txt", "unstaged");
+
+      expect(diff.path).toBe("brand new.txt");
+      expect(diff.addedLines).toBe(1);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("handles paths with spaces on real git", async () => {
+    const repo = createTempGitRepo("specops-git-wt-spaces-");
+    try {
+      repo.writeFile("README.md", "base\n");
+      repo.run(["add", "README.md"]);
+      repo.run(["commit", "-m", "init"]);
+      repo.writeFile("spaces file.txt", "changed\n");
+      repo.run(["add", "spaces file.txt"]);
+
+      const diff = await queryWorkingTreeFileDiff(repo.dir, "spaces file.txt", "staged");
+
+      expect(diff.path).toBe("spaces file.txt");
+      expect(diff.addedLines).toBeGreaterThan(0);
+    } finally {
+      repo.cleanup();
+    }
   });
 });
 

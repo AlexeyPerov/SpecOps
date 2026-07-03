@@ -621,7 +621,10 @@
       <div
         class="version-control-body"
         class:version-control-body-flush={
-          activeSection === "history" || activeSection === "branches" || activeSection === "tags"
+          activeSection === "history" ||
+          activeSection === "branches" ||
+          activeSection === "tags" ||
+          activeSection === "changes"
         }
         role="tabpanel"
         aria-label={SECTIONS.find((section) => section.id === activeSection)?.label ?? "Section"}

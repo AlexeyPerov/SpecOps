@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-03 — D-03 Tasks 4–5: staged/unstaged diff source rules and refresh after mutations
+
+- **`app/src/lib/git/workingTreeDiffSelection.ts`** — pure helpers to pick default diff selection, resolve active path/source after status reload (partial stage / list moves), and find the active status row.
+- **`app/src/lib/git/gitStatusFormat.ts`** — `formatWorkingTreeDiffSubtitle` for **Staged changes**, **Unstaged changes**, and **Untracked file** labels.
+- **`app/src/lib/components/GitTextDiffView.svelte`** — optional `subtitle` prop rendered under the file path in the diff header.
+- **`app/src/lib/components/GitChangesPanel.svelte`** — diff list context preserved across refresh; `statusVersion` retriggers diff fetch when selection unchanged; mutations rely on `refreshToken` only (no double status load); subtitles wired from active list row.
+- **Tests** — `workingTreeDiffSelection.test.ts` source-resolution coverage; `GitTextDiffView.test.ts` subtitle rendering.
+- **`specs/git/manual-test-checklist.md`** — Changes section extended for diff subtitles, partial stage, untracked files, and diff refresh after stage/commit/Refresh.
+- **`specs/git/execution/d-03-04-staged-unstaged-diff-source-rules.md`**, **`d-03-05-diff-refresh-after-mutations.md`** — marked `[DONE]`.
+
 ## 2026-07-03 — D-03 Tasks 1–3: working-tree file diff service, changes panel split layout, selection-driven diff
 
 - **`app/src/lib/git/types.ts`** — `WorkingTreeDiffSource` union (`"unstaged" | "staged"`).

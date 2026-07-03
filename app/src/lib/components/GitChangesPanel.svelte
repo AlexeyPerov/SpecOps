@@ -1,5 +1,6 @@
 <script lang="ts">
   import { reportGitError } from "../git/gitErrorUi";
+  import { formatWorkingTreeDiffSubtitle, formatWorkingTreeStatusCode } from "../git/gitStatusFormat";
   import {
     createCommit,
     GitCommitValidationError,
@@ -10,9 +11,12 @@
     stagePaths,
     unstagePaths,
   } from "../git/gitService";
-  import { formatWorkingTreeStatusCode } from "../git/gitStatusFormat";
   import type { ParsedTextDiff, WorkingTreeDiffSource, WorkingTreeFileEntry } from "../git/types";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
+  import {
+    findWorkingTreeEntryForDiff,
+    resolveWorkingTreeDiffSelection,
+  } from "../git/workingTreeDiffSelection";
   import GitTextDiffView from "./GitTextDiffView.svelte";
 
   interface Props {
@@ -48,61 +52,50 @@
   let fileDiff = $state<ParsedTextDiff | null>(null);
   let diffLoading = $state(false);
   let diffError = $state<string | null>(null);
+  let statusVersion = $state(0);
+  let lastLoadedRepoRoot = $state<string | null>(null);
 
   const hasStagedChanges = $derived(staged.length > 0);
+  const activeDiffEntry = $derived.by(() => {
+    if (!activeDiffPath || !activeDiffSource) {
+      return null;
+    }
+    return findWorkingTreeEntryForDiff(activeDiffPath, activeDiffSource, unstaged, staged);
+  });
+  const activeDiffSubtitle = $derived.by(() => {
+    if (!activeDiffSource) {
+      return undefined;
+    }
+    return formatWorkingTreeDiffSubtitle(activeDiffSource, activeDiffEntry);
+  });
   const canCommit = $derived(
     hasStagedChanges && !actionBusy && !readOnly && commitMessage.trim().length > 0,
   );
   const isClean = $derived(loadStatus === "ready" && staged.length === 0 && unstaged.length === 0);
 
-  function pickDefaultDiffSelection(
-    unstagedEntries: WorkingTreeFileEntry[],
-    stagedEntries: WorkingTreeFileEntry[],
-  ): { path: string | null; source: WorkingTreeDiffSource | null } {
-    if (unstagedEntries.length > 0) {
-      return { path: unstagedEntries[0]!.path, source: "unstaged" };
-    }
-    if (stagedEntries.length > 0) {
-      return { path: stagedEntries[0]!.path, source: "staged" };
-    }
-    return { path: null, source: null };
-  }
+  async function loadWorkingTreeStatus(
+    root: string,
+    options: { preserveDiffSelection?: boolean } = {},
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const preserveDiffSelection = options.preserveDiffSelection ?? false;
+    const priorPath = preserveDiffSelection ? activeDiffPath : null;
+    const priorSource = preserveDiffSelection ? activeDiffSource : null;
 
-  function syncActiveDiffSelection(): void {
-    if (activeDiffPath) {
-      if (activeDiffSource === "unstaged" && unstaged.some((entry) => entry.path === activeDiffPath)) {
-        return;
-      }
-      if (activeDiffSource === "staged" && staged.some((entry) => entry.path === activeDiffPath)) {
-        return;
-      }
-      if (unstaged.some((entry) => entry.path === activeDiffPath)) {
-        activeDiffSource = "unstaged";
-        return;
-      }
-      if (staged.some((entry) => entry.path === activeDiffPath)) {
-        activeDiffSource = "staged";
-        return;
-      }
-    }
-
-    const next = pickDefaultDiffSelection(unstaged, staged);
-    activeDiffPath = next.path;
-    activeDiffSource = next.source;
-  }
-
-  async function loadWorkingTreeStatus(root: string, signal?: AbortSignal): Promise<void> {
     loadStatus = "loading";
     loadError = null;
     staged = [];
     unstaged = [];
     selectedUnstaged = new Set();
     selectedStaged = new Set();
-    activeDiffPath = null;
-    activeDiffSource = null;
-    fileDiff = null;
-    diffError = null;
-    diffLoading = false;
+
+    if (!preserveDiffSelection) {
+      activeDiffPath = null;
+      activeDiffSource = null;
+      fileDiff = null;
+      diffError = null;
+      diffLoading = false;
+    }
 
     try {
       const status = await queryWorkingTreeStatus(root);
@@ -111,8 +104,17 @@
       }
       staged = status.staged;
       unstaged = status.unstaged;
-      syncActiveDiffSelection();
+
+      const resolved = resolveWorkingTreeDiffSelection({
+        path: priorPath,
+        source: priorSource,
+        unstaged,
+        staged,
+      });
+      activeDiffPath = resolved.path;
+      activeDiffSource = resolved.source;
       loadStatus = "ready";
+      statusVersion += 1;
     } catch (error) {
       if (signal?.aborted) {
         return;
@@ -163,8 +165,13 @@
     const root = repoRoot;
     const token = refreshToken;
     void token;
+    const preserveDiffSelection = lastLoadedRepoRoot === root;
     const controller = new AbortController();
-    void loadWorkingTreeStatus(root, controller.signal);
+    void loadWorkingTreeStatus(root, { preserveDiffSelection }, controller.signal).then(() => {
+      if (!controller.signal.aborted) {
+        lastLoadedRepoRoot = root;
+      }
+    });
     return () => {
       controller.abort();
     };
@@ -174,6 +181,8 @@
     const root = repoRoot;
     const path = activeDiffPath;
     const source = activeDiffSource;
+    const version = statusVersion;
+    void version;
     const controller = new AbortController();
 
     if (readOnly || loadStatus !== "ready" || !path || !source) {
@@ -192,7 +201,6 @@
   });
 
   async function refreshAfterAction(scope: VersionControlMutationScope = "stage"): Promise<void> {
-    await loadWorkingTreeStatus(repoRoot);
     await onMutation(scope);
   }
 
@@ -457,6 +465,7 @@
         <GitTextDiffView
           diff={readOnly ? null : fileDiff}
           title={activeDiffPath ?? undefined}
+          subtitle={readOnly ? undefined : activeDiffSubtitle}
           loading={!readOnly && diffLoading}
           error={readOnly ? null : diffError}
         />

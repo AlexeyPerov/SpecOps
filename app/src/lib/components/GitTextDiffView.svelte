@@ -9,13 +9,15 @@
   interface Props {
     diff: ParsedTextDiff | null;
     title?: string;
+    subtitle?: string;
     loading?: boolean;
     error?: string | null;
   }
 
-  let { diff = null, title, loading = false, error = null }: Props = $props();
+  let { diff = null, title, subtitle, loading = false, error = null }: Props = $props();
 
   const displayTitle = $derived(title ?? diff?.path ?? "");
+  const displaySubtitle = $derived(subtitle ?? "");
   const addedCount = $derived(diff?.addedLines ?? 0);
   const deletedCount = $derived(diff?.deletedLines ?? 0);
   const isBinary = $derived(diff?.isBinary ?? false);
@@ -68,7 +70,12 @@
 
 <div class="git-text-diff">
   <header class="git-text-diff-header">
-    <p class="git-text-diff-title" title={displayTitle}>{displayTitle || "Diff"}</p>
+    <div class="git-text-diff-heading">
+      <p class="git-text-diff-title" title={displayTitle}>{displayTitle || "Diff"}</p>
+      {#if displaySubtitle}
+        <p class="git-text-diff-subtitle">{displaySubtitle}</p>
+      {/if}
+    </div>
     {#if diff && !isBinary && !hasNoHunks}
       <p class="git-text-diff-summary" aria-label="Line change summary">
         <span class="git-text-diff-added">+{addedCount}</span>
@@ -146,6 +153,13 @@
     border-bottom: 1px solid var(--color-border-subtle);
   }
 
+  .git-text-diff-heading {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
   .git-text-diff-title {
     margin: 0;
     min-width: 0;
@@ -155,6 +169,12 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .git-text-diff-subtitle {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
   }
 
   .git-text-diff-summary {

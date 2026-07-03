@@ -79,4 +79,15 @@ describe("GitTextDiffView.svelte", () => {
       "Diff for src/file.txt",
     );
   });
+
+  it("renders an optional subtitle below the file path", () => {
+    const diff = parseUnifiedDiff(readFixture("git-diff-unified-single-file.txt"))[0]!;
+    const { host } = mountComponent(GitTextDiffView, {
+      diff,
+      title: "src/file.txt",
+      subtitle: "Staged changes",
+    });
+
+    expect(host.querySelector(".git-text-diff-subtitle")?.textContent).toBe("Staged changes");
+  });
 });

@@ -1,3 +1,16 @@
+import type { WorkingTreeDiffSource, WorkingTreeFileEntry } from "./types";
+
+/** Diff pane subtitle for the active working-tree selection. */
+export function formatWorkingTreeDiffSubtitle(
+  source: WorkingTreeDiffSource,
+  entry: WorkingTreeFileEntry | null,
+): string {
+  if (entry?.statusCode === "??") {
+    return "Untracked file";
+  }
+  return source === "staged" ? "Staged changes" : "Unstaged changes";
+}
+
 /** Short label for a porcelain status code shown in the Changes panel. */
 export function formatWorkingTreeStatusCode(statusCode: string): string {
   const trimmed = statusCode.trim();

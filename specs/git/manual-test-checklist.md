@@ -47,6 +47,10 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 - [ ] **Commit:** enter message and **Commit** — commit succeeds; staged list clears; history shows new commit.
 - [ ] **Empty commit blocked:** commit button disabled when nothing staged or message empty.
 - [ ] **Path display:** files in nested folders show forward slashes in UI (no broken `\\` mixes on Windows).
+- [ ] **Working-tree diff:** select an unstaged file — inline diff appears with **Unstaged changes** subtitle; select a staged file — **Staged changes** subtitle.
+- [ ] **Partial stage:** modify a file, stage part of it (or stage then edit again) — file appears in both lists; selecting from unstaged vs staged shows different diffs and subtitles.
+- [ ] **Untracked file:** new untracked file shows all-added diff with **Untracked file** subtitle.
+- [ ] **Diff refresh:** with a file diff open, stage/unstage/commit or toolbar **Refresh** — diff pane updates without re-clicking the row; commit on last staged file clears diff when tree is clean.
 
 ## Remote operations
 

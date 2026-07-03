@@ -1,4 +1,4 @@
-# D-03 Task 4 — Staged vs unstaged diff source rules
+# D-03 Task 4 — Staged vs unstaged diff source rules [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

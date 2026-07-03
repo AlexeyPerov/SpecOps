@@ -13,6 +13,10 @@ import {
   parseCommitShow,
   parseLogCommitLine,
   parseLogCommits,
+  parseLsRemoteTags,
+  parseRemoteVvLines,
+  mergeTagRemotePresence,
+  resolveDefaultRemote,
   parseShortHeadRef,
   parseStatusPorcelain,
   parseTagList,
@@ -283,6 +287,65 @@ describe("parseTagList", () => {
   it("returns an empty list for blank stdout", () => {
     expect(parseTagList("")).toEqual([]);
     expect(parseTagList("\n\n")).toEqual([]);
+  });
+});
+
+describe("parseRemoteVvLines", () => {
+  it("parses fixture remotes with distinct fetch and push URLs", () => {
+    expect(parseRemoteVvLines(readFixture("git-remote-vv.txt"))).toEqual([
+      {
+        name: "origin",
+        fetchUrl: "https://github.com/example/specops.git",
+        pushUrl: "https://github.com/example/specops.git",
+      },
+      {
+        name: "upstream",
+        fetchUrl: "https://github.com/example/upstream.git",
+        pushUrl: "git@github.com:example/upstream-push.git",
+      },
+    ]);
+  });
+
+  it("returns an empty list for blank stdout", () => {
+    expect(parseRemoteVvLines("")).toEqual([]);
+    expect(parseRemoteVvLines("\n\n")).toEqual([]);
+  });
+});
+
+describe("parseLsRemoteTags", () => {
+  it("parses fixture tag names and dedupes peeled object lines", () => {
+    expect(parseLsRemoteTags(readFixture("git-ls-remote-tags.txt"))).toEqual([
+      "v1.0.0",
+      "v2.0.0",
+    ]);
+  });
+
+  it("returns an empty list for blank stdout", () => {
+    expect(parseLsRemoteTags("")).toEqual([]);
+  });
+});
+
+describe("resolveDefaultRemote", () => {
+  it("prefers origin when present", () => {
+    const remotes = [
+      { name: "upstream", fetchUrl: "a", pushUrl: "a" },
+      { name: "origin", fetchUrl: "b", pushUrl: "b" },
+    ];
+    expect(resolveDefaultRemote(remotes)?.name).toBe("origin");
+  });
+
+  it("falls back to the first remote when origin is missing", () => {
+    const remotes = [{ name: "upstream", fetchUrl: "a", pushUrl: "a" }];
+    expect(resolveDefaultRemote(remotes)?.name).toBe("upstream");
+  });
+});
+
+describe("mergeTagRemotePresence", () => {
+  it("marks tags present on the default remote", () => {
+    expect(mergeTagRemotePresence(["alpha", "beta"], ["beta"])).toEqual([
+      { name: "alpha" },
+      { name: "beta", onRemote: true },
+    ]);
   });
 });
 

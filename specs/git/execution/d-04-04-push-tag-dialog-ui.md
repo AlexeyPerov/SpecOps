@@ -1,4 +1,4 @@
-# D-04 Task 4 — Push tag dialog UI
+# D-04 Task 4 — Push tag dialog UI [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

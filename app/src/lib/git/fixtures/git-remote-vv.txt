@@ -1,0 +1,4 @@
+origin	https://github.com/example/specops.git (fetch)
+origin	https://github.com/example/specops.git (push)
+upstream	https://github.com/example/upstream.git (fetch)
+upstream	git@github.com:example/upstream-push.git (push)

@@ -661,6 +661,7 @@
           <GitTagsPanel
             repoRoot={repoRoot}
             readOnly={isReadOnlyRepository}
+            remoteOpBusy={toolbarBusy}
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}
             {notify}

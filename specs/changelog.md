@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-03 — D-04 Tasks 1–6: remote tag push/delete, dialogs, and presence hints
+
+- **`app/src/lib/git/types.ts`** — `GitRemote` and `GitTagSummary` types for remote listing and tag rows with optional default-remote presence.
+- **`app/src/lib/git/gitParse.ts`** — `parseRemoteVvLines`, `parseLsRemoteTags`, `resolveDefaultRemote`, and `mergeTagRemotePresence` parsers/helpers.
+- **`app/src/lib/git/gitService.ts`** — `queryRemotes`, `queryRemoteTags`, `pushTag`, `deleteRemoteTag`, composite `deleteTag`, and `GitTagPartialDeleteError` for partial remote delete failures.
+- **`app/src/lib/git/fixtures/`** — `git-remote-vv.txt` and `git-ls-remote-tags.txt` sample stdout.
+- **`app/src/lib/services/tagPushPrompt.ts`**, **`tagDeletePrompt.ts`** — registry-runner prompt services mirroring existing dialog patterns.
+- **`app/src/lib/components/TagPushPrompt.svelte`**, **`TagDeletePrompt.svelte`** — push-tag remote picker (with optional push-to-all) and delete-tag confirmation with remote checkbox.
+- **`app/src/lib/components/GitTagsPanel.svelte`** — Push tag action, custom delete flow, default-remote presence badges after fetch refresh, toolbar remote-op busy guard.
+- **`app/src/lib/components/VersionControlView.svelte`**, **`AppShell.svelte`** — wire `remoteOpBusy` and mount tag dialogs.
+- **Tests** — parser/service unit coverage plus `describeIfGitInstalled` bare-remote push-tag integration.
+- **`specs/git/execution/d-04-01-query-remotes-service.md`** through **`d-04-06-tag-list-remote-presence-hints.md`** — marked `[DONE]`.
+
 ## 2026-07-03 — D-03 Tasks 4–5: staged/unstaged diff source rules and refresh after mutations
 
 - **`app/src/lib/git/workingTreeDiffSelection.ts`** — pure helpers to pick default diff selection, resolve active path/source after status reload (partial stage / list moves), and find the active status row.

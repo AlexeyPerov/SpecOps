@@ -6,6 +6,8 @@ import type {
   CommitFileChange,
   CommitFileStatus,
   CommitSummary,
+  GitRemote,
+  GitTagSummary,
   WorkingTreeFileEntry,
   WorkingTreeStatus,
 } from "./types";
@@ -400,6 +402,120 @@ export function parseTagList(stdout: string): string[] {
     .filter(Boolean);
 
   return tags.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+}
+
+export interface ParsedRemoteVvLine {
+  name: string;
+  url: string;
+  kind: "fetch" | "push";
+}
+
+/** Parse one line from `git remote -v` stdout. */
+export function parseRemoteVvLine(line: string): ParsedRemoteVvLine | null {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const match = trimmed.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    name: match[1] ?? "",
+    url: match[2] ?? "",
+    kind: match[3] as "fetch" | "push",
+  };
+}
+
+/** Parse `git remote -v` stdout into remotes sorted by name. */
+export function parseRemoteVvLines(stdout: string): GitRemote[] {
+  const byName = new Map<string, { fetchUrl: string | null; pushUrl: string | null }>();
+
+  for (const line of stdout.split("\n")) {
+    const parsed = parseRemoteVvLine(line);
+    if (!parsed) {
+      continue;
+    }
+
+    let entry = byName.get(parsed.name);
+    if (!entry) {
+      entry = { fetchUrl: null, pushUrl: null };
+      byName.set(parsed.name, entry);
+    }
+
+    if (parsed.kind === "fetch") {
+      entry.fetchUrl = parsed.url;
+    } else {
+      entry.pushUrl = parsed.url;
+    }
+  }
+
+  return Array.from(byName.entries())
+    .map(([name, urls]) => ({
+      name,
+      fetchUrl: urls.fetchUrl,
+      pushUrl: urls.pushUrl,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+}
+
+/** Parse `git ls-remote --tags <remote>` stdout into sorted tag names. */
+export function parseLsRemoteTags(stdout: string): string[] {
+  const tags = new Set<string>();
+
+  for (const line of stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const tabIndex = trimmed.indexOf("\t");
+    if (tabIndex === -1) {
+      continue;
+    }
+
+    const ref = trimmed.slice(tabIndex + 1).trim();
+    if (!ref.startsWith("refs/tags/")) {
+      continue;
+    }
+
+    let tagName = ref.slice("refs/tags/".length);
+    if (tagName.endsWith("^{}")) {
+      tagName = tagName.slice(0, -3);
+    }
+
+    if (tagName) {
+      tags.add(tagName);
+    }
+  }
+
+  return Array.from(tags).sort((left, right) =>
+    left.localeCompare(right, undefined, { sensitivity: "base" }),
+  );
+}
+
+/** Prefer `origin`, otherwise the first configured remote. */
+export function resolveDefaultRemote(remotes: GitRemote[]): GitRemote | null {
+  if (remotes.length === 0) {
+    return null;
+  }
+
+  return remotes.find((remote) => remote.name === "origin") ?? remotes[0] ?? null;
+}
+
+/** Mark local tags that also appear on the default remote. */
+export function mergeTagRemotePresence(
+  localTags: string[],
+  remoteTagNames: string[],
+): GitTagSummary[] {
+  const remoteSet = new Set(remoteTagNames);
+
+  return localTags.map((name) => ({
+    name,
+    ...(remoteSet.has(name) ? { onRemote: true } : {}),
+  }));
 }
 
 function unquotePorcelainPath(raw: string): string {

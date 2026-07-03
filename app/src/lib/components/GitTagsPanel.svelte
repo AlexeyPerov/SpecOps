@@ -1,19 +1,29 @@
 <script lang="ts">
-  import { confirm } from "@tauri-apps/plugin-dialog";
   import { reportGitError } from "../git/gitErrorUi";
+  import { mergeTagRemotePresence, resolveDefaultRemote } from "../git/gitParse";
   import {
     createTag,
-    deleteLocalTag,
+    deleteTag,
     GitRefValidationError,
+    GitTagPartialDeleteError,
+    pushTag,
+    queryRemotes,
+    queryRemoteTags,
     queryTags,
+    type GitRemote,
+    type GitTagSummary,
   } from "../git/gitService";
   import { validateGitRefName } from "../git/gitRefName";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
+  import { logDiagnostic } from "../services/logging";
   import { promptEntryName } from "../services/entryNamePrompt";
+  import { promptTagDelete } from "../services/tagDeletePrompt";
+  import { promptTagPush } from "../services/tagPushPrompt";
 
   interface Props {
     repoRoot: string;
     readOnly?: boolean;
+    remoteOpBusy?: boolean;
     refreshToken?: number;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
     notify?: (message: string) => void;
@@ -22,6 +32,7 @@
   let {
     repoRoot,
     readOnly = false,
+    remoteOpBusy = false,
     refreshToken = 0,
     onMutation = () => {},
     notify = () => {},
@@ -30,27 +41,71 @@
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
   let loadStatus = $state<LoadStatus>("idle");
-  let tags = $state<string[]>([]);
+  let tags = $state<GitTagSummary[]>([]);
+  let remotes = $state<GitRemote[]>([]);
+  let defaultRemoteName = $state<string | null>(null);
   let loadError = $state<string | null>(null);
   let selectedTag = $state<string | null>(null);
   let actionBusy = $state(false);
   let actionError = $state<string | null>(null);
 
   const canDelete = $derived(selectedTag !== null && !actionBusy && !readOnly);
+  const canPush = $derived(
+    selectedTag !== null && !actionBusy && !readOnly && !remoteOpBusy && remotes.length > 0,
+  );
+
+  async function loadRemoteTagPresence(
+    root: string,
+    remoteName: string,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    try {
+      return await queryRemoteTags(root, remoteName);
+    } catch (error) {
+      if (signal?.aborted) {
+        return [];
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      void logDiagnostic({
+        level: "warn",
+        source: "frontend",
+        message: `Remote tag probe failed for ${remoteName}: ${message}`,
+        timestamp: new Date().toISOString(),
+        metadata: { repoRoot: root, remoteName },
+      });
+      return [];
+    }
+  }
 
   async function loadTags(root: string, signal?: AbortSignal): Promise<void> {
     loadStatus = "loading";
     loadError = null;
     tags = [];
+    remotes = [];
+    defaultRemoteName = null;
     selectedTag = null;
 
     try {
-      const rows = await queryTags(root);
+      const [localTags, remoteRows] = await Promise.all([queryTags(root), queryRemotes(root)]);
       if (signal?.aborted) {
         return;
       }
-      tags = rows;
-      selectedTag = rows[0] ?? null;
+
+      remotes = remoteRows;
+      const defaultRemote = resolveDefaultRemote(remoteRows);
+      defaultRemoteName = defaultRemote?.name ?? null;
+
+      let tagRows = mergeTagRemotePresence(localTags, []);
+      if (defaultRemote) {
+        const remoteTagNames = await loadRemoteTagPresence(root, defaultRemote.name, signal);
+        if (signal?.aborted) {
+          return;
+        }
+        tagRows = mergeTagRemotePresence(localTags, remoteTagNames);
+      }
+
+      tags = tagRows;
+      selectedTag = tagRows[0]?.name ?? null;
       loadStatus = "ready";
     } catch (error) {
       if (signal?.aborted) {
@@ -122,21 +177,28 @@
     }
   }
 
-  async function handleDeleteTag(): Promise<void> {
-    if (!selectedTag || actionBusy) {
+  async function handlePushTag(): Promise<void> {
+    if (!selectedTag || !canPush) {
       return;
     }
 
-    const confirmed = await confirm(
-      `Delete local tag "${selectedTag}"? This removes the tag locally only; remote tags are not affected.`,
-      {
-        title: "Delete tag",
-        okLabel: "Delete",
-        cancelLabel: "Cancel",
-        kind: "warning",
-      },
-    );
-    if (!confirmed) {
+    let remoteRows = remotes;
+    if (remoteRows.length === 0) {
+      try {
+        remoteRows = await queryRemotes(repoRoot);
+      } catch (error) {
+        actionError = reportGitError(error, { operation: "Load remotes", repoRoot, notify });
+        return;
+      }
+    }
+
+    if (remoteRows.length === 0) {
+      notify("No remotes configured.");
+      return;
+    }
+
+    const result = await promptTagPush({ tagName: selectedTag, remotes: remoteRows });
+    if (!result) {
       return;
     }
 
@@ -144,11 +206,61 @@
     actionError = null;
 
     try {
-      await deleteLocalTag(repoRoot, selectedTag);
+      for (const remoteName of result.remoteNames) {
+        await pushTag(repoRoot, remoteName, selectedTag);
+      }
       await loadTags(repoRoot);
       await onMutation("tag");
+      const remoteLabel =
+        result.remoteNames.length === 1 ? result.remoteNames[0] : `${result.remoteNames.length} remotes`;
+      notify(`Pushed tag "${selectedTag}" to ${remoteLabel}.`);
     } catch (error) {
-      actionError = reportGitError(error, { operation: "Delete tag", repoRoot, notify });
+      actionError = reportGitError(error, { operation: "Push tag", repoRoot, notify });
+    } finally {
+      actionBusy = false;
+    }
+  }
+
+  async function handleDeleteTag(): Promise<void> {
+    if (!selectedTag || actionBusy) {
+      return;
+    }
+
+    let remoteRows = remotes;
+    if (remoteRows.length === 0) {
+      try {
+        remoteRows = await queryRemotes(repoRoot);
+      } catch {
+        remoteRows = [];
+      }
+    }
+
+    const result = await promptTagDelete({ tagName: selectedTag, remotes: remoteRows });
+    if (!result) {
+      return;
+    }
+
+    actionBusy = true;
+    actionError = null;
+
+    try {
+      await deleteTag(repoRoot, selectedTag, {
+        remoteNames: result.deleteFromRemotes ? remoteRows.map((remote) => remote.name) : undefined,
+      });
+      await loadTags(repoRoot);
+      await onMutation("tag");
+      notify(`Deleted tag "${selectedTag}".`);
+    } catch (error) {
+      if (error instanceof GitTagPartialDeleteError) {
+        const remoteList = error.failedRemotes.map((entry) => entry.remoteName).join(", ");
+        notify(
+          `Tag "${selectedTag}" deleted locally, but remote delete failed on: ${remoteList}.`,
+        );
+        await loadTags(repoRoot);
+        await onMutation("tag");
+      } else {
+        actionError = reportGitError(error, { operation: "Delete tag", repoRoot, notify });
+      }
     } finally {
       actionBusy = false;
     }
@@ -165,6 +277,15 @@
       onclick={handleCreateTag}
     >
       {actionBusy ? "Working…" : "Create tag"}
+    </button>
+    <button
+      type="button"
+      class="git-tags-action"
+      disabled={!canPush}
+      title={selectedTag ? `Push ${selectedTag} to a remote` : "Select a tag to push"}
+      onclick={handlePushTag}
+    >
+      Push tag
     </button>
     <button
       type="button"
@@ -199,18 +320,26 @@
     </div>
   {:else}
     <ul class="git-tags-list" role="listbox" aria-label="Tags">
-      {#each tags as tag (tag)}
+      {#each tags as tag (tag.name)}
         <li class="git-tags-item">
           <button
             type="button"
             class="git-tags-row"
-            class:git-tags-row-selected={selectedTag === tag}
+            class:git-tags-row-selected={selectedTag === tag.name}
             role="option"
-            aria-selected={selectedTag === tag}
-            onclick={() => selectTag(tag)}
-            onkeydown={(event) => handleRowKeydown(event, tag)}
+            aria-selected={selectedTag === tag.name}
+            onclick={() => selectTag(tag.name)}
+            onkeydown={(event) => handleRowKeydown(event, tag.name)}
           >
-            <span class="git-tags-name" title={tag}>{tag}</span>
+            <span class="git-tags-name" title={tag.name}>{tag.name}</span>
+            {#if tag.onRemote && defaultRemoteName}
+              <span
+                class="git-tags-remote-badge"
+                title="Present on {defaultRemoteName}"
+              >
+                remote
+              </span>
+            {/if}
           </button>
         </li>
       {/each}
@@ -299,7 +428,9 @@
   }
 
   .git-tags-row {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
     width: 100%;
     padding: var(--space-4) var(--space-12);
     border: none;
@@ -334,5 +465,19 @@
     font-size: 0.8125rem;
     font-weight: 600;
     line-height: 1.5;
+  }
+
+  .git-tags-remote-badge {
+    display: inline-block;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-2);
+    color: var(--color-text-secondary);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: lowercase;
+    line-height: 1.4;
   }
 </style>

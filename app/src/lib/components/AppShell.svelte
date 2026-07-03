@@ -1,6 +1,8 @@
 <script lang="ts">
   import ConsolePanel from "./ConsolePanel.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
+  import TagPushPrompt from "./TagPushPrompt.svelte";
+  import TagDeletePrompt from "./TagDeletePrompt.svelte";
   import RevertPreviewDialog from "./RevertPreviewDialog.svelte";
   import SessionListPanel from "./SessionListPanel.svelte";
   import AddMultipleWorkspacesModal from "./AddMultipleWorkspacesModal.svelte";
@@ -630,6 +632,8 @@
 </main>
 
 <EntryNamePrompt onNotify={overlays.notify} />
+<TagPushPrompt />
+<TagDeletePrompt />
 <RevertPreviewDialog />
 {#if sessionListPanel}
   <SessionListPanel

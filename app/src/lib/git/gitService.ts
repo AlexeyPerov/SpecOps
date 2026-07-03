@@ -13,6 +13,8 @@ import {
   parseLogCommits,
   parseShortHeadRef,
   parseTagList,
+  parseRemoteVvLines,
+  parseLsRemoteTags,
   parseUpstreamRef,
 } from "./gitParse";
 import { parseUnifiedDiff } from "./gitDiffParse";
@@ -32,6 +34,8 @@ import {
   type CurrentBranchInfo,
   type GitAvailableResponse,
   type GitNotARepositoryError,
+  type GitRemote,
+  type GitTagSummary,
   type ParsedTextDiff,
   type QueryCommitsOptions,
   type ResolveRepoRootResult,
@@ -471,6 +475,40 @@ export async function queryTags(repoRoot: string): Promise<string[]> {
 }
 
 /**
+ * List configured remotes via `git remote -v`.
+ * Returns remotes sorted by name; empty when none are configured.
+ */
+export async function queryRemotes(repoRoot: string): Promise<GitRemote[]> {
+  const response = await runGit(repoRoot, ["remote", "-v"]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return parseRemoteVvLines(response.stdout);
+}
+
+/**
+ * List tag names on a remote via `git ls-remote --tags <remote>`.
+ * Dedupes peeled `^{}` object lines.
+ */
+export async function queryRemoteTags(
+  repoRoot: string,
+  remoteName: string,
+): Promise<string[]> {
+  const trimmedRemote = remoteName.trim();
+  if (!trimmedRemote) {
+    throw new GitRefValidationError("Remote name cannot be empty.");
+  }
+
+  const response = await runGit(repoRoot, ["ls-remote", "--tags", trimmedRemote]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return parseLsRemoteTags(response.stdout);
+}
+
+/**
  * Query staged and unstaged working-tree files via `git status --porcelain`.
  */
 export async function queryWorkingTreeStatus(repoRoot: string): Promise<WorkingTreeStatus> {
@@ -662,6 +700,115 @@ export async function deleteLocalTag(repoRoot: string, name: string): Promise<vo
   }
 }
 
+function validateRemoteName(remoteName: string): void {
+  const trimmed = remoteName.trim();
+  if (!trimmed) {
+    throw new GitRefValidationError("Remote name cannot be empty.");
+  }
+}
+
+/**
+ * Push a single local tag to a remote (`git push <remote> refs/tags/<name>`).
+ * Does not use `--tags` or `--delete`.
+ */
+export async function pushTag(
+  repoRoot: string,
+  remoteName: string,
+  tagName: string,
+): Promise<void> {
+  validateRemoteName(remoteName);
+
+  const validation = validateGitRefName(tagName);
+  if (!validation.ok) {
+    throw new GitRefValidationError(validation.message);
+  }
+
+  const trimmedTag = tagName.trim();
+  const response = await runGit(repoRoot, [
+    "push",
+    remoteName.trim(),
+    `refs/tags/${trimmedTag}`,
+  ]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+/**
+ * Delete a tag on a remote via `git push --delete <remote> refs/tags/<name>`.
+ */
+export async function deleteRemoteTag(
+  repoRoot: string,
+  remoteName: string,
+  tagName: string,
+): Promise<void> {
+  validateRemoteName(remoteName);
+
+  const validation = validateGitRefName(tagName);
+  if (!validation.ok) {
+    throw new GitRefValidationError(validation.message);
+  }
+
+  const trimmedTag = tagName.trim();
+  const response = await runGit(repoRoot, [
+    "push",
+    "--delete",
+    remoteName.trim(),
+    `refs/tags/${trimmedTag}`,
+  ]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+}
+
+export class GitTagPartialDeleteError extends Error {
+  readonly kind = "tagPartialDelete" as const;
+  readonly failedRemotes: Array<{ remoteName: string; message: string }>;
+
+  constructor(failedRemotes: Array<{ remoteName: string; message: string }>) {
+    const names = failedRemotes.map((entry) => entry.remoteName).join(", ");
+    super(`Tag deleted locally, but remote delete failed on: ${names}`);
+    this.name = "GitTagPartialDeleteError";
+    this.failedRemotes = failedRemotes;
+  }
+}
+
+export interface DeleteTagOptions {
+  /** When provided, delete the tag on each remote after local delete. */
+  remoteNames?: string[];
+}
+
+/**
+ * Delete a tag locally, optionally followed by remote deletes.
+ * When remote deletes fail after local success, throws {@link GitTagPartialDeleteError}.
+ */
+export async function deleteTag(
+  repoRoot: string,
+  tagName: string,
+  options?: DeleteTagOptions,
+): Promise<void> {
+  await deleteLocalTag(repoRoot, tagName);
+
+  const remoteNames = options?.remoteNames?.map((name) => name.trim()).filter(Boolean) ?? [];
+  if (remoteNames.length === 0) {
+    return;
+  }
+
+  const failedRemotes: Array<{ remoteName: string; message: string }> = [];
+  for (const remoteName of remoteNames) {
+    try {
+      await deleteRemoteTag(repoRoot, remoteName, tagName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failedRemotes.push({ remoteName, message });
+    }
+  }
+
+  if (failedRemotes.length > 0) {
+    throw new GitTagPartialDeleteError(failedRemotes);
+  }
+}
+
 /** Create a new branch from HEAD and check it out (`git checkout -b <name>`). */
 export async function createBranch(repoRoot: string, name: string): Promise<void> {
   const validation = validateGitRefName(name);
@@ -690,6 +837,8 @@ export type {
   DiffLineKind,
   GitAvailableResponse,
   GitError,
+  GitRemote,
+  GitTagSummary,
   ParsedTextDiff,
   QueryCommitsOptions,
   RunGitResponse,

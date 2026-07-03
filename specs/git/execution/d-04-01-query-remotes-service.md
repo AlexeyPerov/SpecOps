@@ -1,4 +1,4 @@
-# D-04 Task 1 — Query remotes service
+# D-04 Task 1 — Query remotes service [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

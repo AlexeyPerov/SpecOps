@@ -7,6 +7,8 @@ import {
   checkoutBranch,
   createTag,
   deleteLocalTag,
+  deleteRemoteTag,
+  deleteTag,
   fetchRemote,
   GIT_LOG_FORMAT,
   GIT_SHOW_FORMAT,
@@ -15,11 +17,13 @@ import {
   GitDiffTooLargeError,
   GitNoUpstreamError,
   GitRefValidationError,
+  GitTagPartialDeleteError,
   COMMIT_FILE_DIFF_MAX_BYTES,
   DIFF_CONTEXT_LINES,
   isWorkingTreeDirty,
   pullRemote,
   pushRemote,
+  pushTag,
   queryAheadBehind,
   queryBranches,
   queryCommitDetail,
@@ -27,6 +31,8 @@ import {
   queryCommits,
   queryCurrentBranch,
   queryIsBareRepository,
+  queryRemotes,
+  queryRemoteTags,
   queryTags,
   queryWorkingTreeStatus,
   queryWorkingTreeFileDiff,
@@ -39,7 +45,7 @@ import {
 import { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
 import { isGitError } from "./types";
-import { describeIfGitInstalled, createTempGitRepo } from "./test/gitTempRepoHarness";
+import { describeIfGitInstalled, createTempGitRepo, withTempGitRepo } from "./test/gitTempRepoHarness";
 import { execFileSync } from "node:child_process";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -1276,6 +1282,215 @@ describe("deleteLocalTag", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", {
       repoRoot: "/tmp/repo",
       args: ["tag", "-d", "v1.0.0"],
+    });
+  });
+});
+
+describe("queryRemotes", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git remote -v and parses remotes", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "origin\thttps://example.com/repo.git (fetch)\norigin\thttps://example.com/repo.git (push)\n",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await expect(queryRemotes("/tmp/repo")).resolves.toEqual([
+      {
+        name: "origin",
+        fetchUrl: "https://example.com/repo.git",
+        pushUrl: "https://example.com/repo.git",
+      },
+    ]);
+  });
+
+  it("returns an empty array when no remotes are configured", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await expect(queryRemotes("/tmp/repo")).resolves.toEqual([]);
+  });
+});
+
+describe("queryRemoteTags", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git ls-remote --tags and parses tag names", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "abc123\trefs/tags/v1.0.0\n",
+      stderr: "",
+      durationMs: 3,
+    });
+
+    await expect(queryRemoteTags("/tmp/repo", "origin")).resolves.toEqual(["v1.0.0"]);
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["ls-remote", "--tags", "origin"],
+    });
+  });
+
+  it("rejects empty remote names before invoking git", async () => {
+    await expect(queryRemoteTags("/tmp/repo", "  ")).rejects.toBeInstanceOf(
+      GitRefValidationError,
+    );
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("pushTag", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git push with refs/tags ref", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 4,
+    });
+
+    await pushTag("/tmp/repo", "origin", "v1.0.0");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["push", "origin", "refs/tags/v1.0.0"],
+    });
+  });
+
+  it("rejects invalid tag names before invoking git", async () => {
+    await expect(pushTag("/tmp/repo", "origin", "bad tag")).rejects.toBeInstanceOf(
+      GitRefValidationError,
+    );
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty remote names before invoking git", async () => {
+    await expect(pushTag("/tmp/repo", " ", "v1.0.0")).rejects.toBeInstanceOf(
+      GitRefValidationError,
+    );
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteRemoteTag", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs git push --delete with refs/tags ref", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 4,
+    });
+
+    await deleteRemoteTag("/tmp/repo", "origin", "v1.0.0");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["push", "--delete", "origin", "refs/tags/v1.0.0"],
+    });
+  });
+});
+
+describe("deleteTag", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("deletes locally only when no remotes are provided", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await deleteTag("/tmp/repo", "v1.0.0");
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["tag", "-d", "v1.0.0"],
+    });
+  });
+
+  it("deletes on each remote when remoteNames are provided", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await deleteTag("/tmp/repo", "v1.0.0", { remoteNames: ["origin", "upstream"] });
+
+    expect(invokeMock).toHaveBeenCalledTimes(3);
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["tag", "-d", "v1.0.0"],
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["push", "--delete", "origin", "refs/tags/v1.0.0"],
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["push", "--delete", "upstream", "refs/tags/v1.0.0"],
+    });
+  });
+
+  it("throws partial delete error when remote delete fails after local success", async () => {
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        durationMs: 1,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 128,
+        stdout: "",
+        stderr: "fatal: remote error\n",
+        durationMs: 2,
+      });
+
+    await expect(deleteTag("/tmp/repo", "v1.0.0", { remoteNames: ["origin"] })).rejects.toBeInstanceOf(
+      GitTagPartialDeleteError,
+    );
+  });
+});
+
+describeIfGitInstalled("pushTag integration", () => {
+  it("pushes a tag to a local bare remote", () => {
+    withTempGitRepo("specops-git-push-tag-src-", (repo) => {
+      const bare = createTempGitRepo("specops-git-push-tag-bare-");
+      try {
+        execFileSync("git", ["remote", "add", "origin", bare.dir], { cwd: repo.dir });
+        repo.writeFile("file.txt", "content");
+        repo.run(["add", "file.txt"]);
+        repo.run(["commit", "-m", "init"]);
+        repo.run(["tag", "v1.0.0"]);
+        repo.run(["push", "origin", "refs/tags/v1.0.0"]);
+
+        const remoteTags = bare.run(["tag", "-l"]) as string;
+        expect(remoteTags.trim()).toBe("v1.0.0");
+      } finally {
+        bare.cleanup();
+      }
     });
   });
 });

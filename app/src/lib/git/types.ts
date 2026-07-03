@@ -192,6 +192,19 @@ export interface CommitDetail {
   files: CommitFileChange[];
 }
 
+/** Configured remote from `git remote -v` (D-04). */
+export interface GitRemote {
+  name: string;
+  fetchUrl: string | null;
+  pushUrl: string | null;
+}
+
+/** Local tag row with optional default-remote presence hint (D-04). */
+export interface GitTagSummary {
+  name: string;
+  onRemote?: boolean;
+}
+
 /** Local branch row from `git branch -vv` (phase 2). */
 export interface BranchSummary {
   name: string;

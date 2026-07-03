@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-07-03 22:30 — Archived D-01–D-04 execution plans; added D-05–D-12 execution plans
+
+- **`specs/archive/git/execution/`** — moved all previously completed execution plans (22 files) from `specs/git/execution/` into archive.
+- **`specs/git/execution/`** — added new execution plans for backlog items D-05 through D-12, split into logically grouped tasks:
+  - `d-05-01-askpass-command-and-credential-request-flow.md`
+  - `d-05-02-askpass-ui-and-git-service-wiring.md`
+  - `d-06-01-remote-picker-state-model-and-persistence.md`
+  - `d-06-02-remote-picker-toolbar-integration.md`
+  - `d-07-01-stash-core-git-service-operations.md`
+  - `d-07-02-stash-checkout-deal-with-local-changes-flow.md`
+  - `d-08-01-autosave-service-for-dirty-documents.md`
+  - `d-08-02-autosave-before-git-operations-integration.md`
+  - `d-09-01-workspace-manager-git-column-foundation.md`
+  - `d-10-01-history-filter-mode-query-contract.md`
+  - `d-10-02-history-filter-ui-and-branch-remote-scopes.md`
+  - `d-11-01-linux-launch-readiness-plan.md`
+  - `d-12-01-cancel-in-flight-git-processes.md`
+- **Plan format updates** — each new plan includes explicit master-only branch policy at the top and SourceGit-related context links with both local-file and GitHub references.
+
 ## 2026-07-03 — D-04 Tasks 1–6: remote tag push/delete, dialogs, and presence hints
 
 - **`app/src/lib/git/types.ts`** — `GitRemote` and `GitTagSummary` types for remote listing and tag rows with optional default-remote presence.

@@ -12,6 +12,9 @@ Sample `stdout` captured from real `git` invocations for parser tests. Regenerat
 | `git-show-name-status.txt` | `git show --name-status --format=%H%x00%P%x00%aN%x00%aE%x00%at%x00%cN%x00%cE%x00%ct%x00%B` |
 | `git-tag-list.txt` | `git tag -l` |
 | `git-status-porcelain.txt` | `git status --porcelain` |
+| `git-diff-unified-single-file.txt` | `git diff --no-color --no-ext-diff --patch --unified=3 HEAD -- <file>` |
+| `git-diff-binary.txt` | `git diff --no-color --no-ext-diff --patch --unified=3 <parent>..<sha> -- <binary>` |
+| `git-diff-multi-file.txt` | `git diff --no-color --no-ext-diff --patch --unified=3 <parent>..<sha>` (two files) |
 
 ## Regeneration notes
 

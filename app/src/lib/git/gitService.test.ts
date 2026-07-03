@@ -10,15 +10,18 @@ import {
   fetchRemote,
   GIT_LOG_FORMAT,
   GIT_SHOW_FORMAT,
+  GitCommitFileDiffNotFoundError,
   GitCommitValidationError,
   GitNoUpstreamError,
   GitRefValidationError,
+  DIFF_CONTEXT_LINES,
   isWorkingTreeDirty,
   pullRemote,
   pushRemote,
   queryAheadBehind,
   queryBranches,
   queryCommitDetail,
+  queryCommitFileDiff,
   queryCommits,
   queryCurrentBranch,
   queryIsBareRepository,
@@ -420,6 +423,109 @@ describe("queryCommitDetail", () => {
     await expect(queryCommitDetail("/tmp/repo", "abc123")).rejects.toSatisfy((error) => {
       return isGitError(error) && error.kind === "command" && error.exitCode === 128;
     });
+  });
+});
+
+describe("queryCommitFileDiff", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  const samplePatch =
+    "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1,2 @@\n-old\n+new\n+added\n";
+
+  it("runs git diff parent..sha for commits with a parent", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: samplePatch,
+      stderr: "",
+      durationMs: 3,
+    });
+
+    const result = await queryCommitFileDiff("/tmp/repo", "child", "file.txt", "parent");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--patch",
+        `--unified=${DIFF_CONTEXT_LINES}`,
+        "parent..child",
+        "--",
+        "file.txt",
+      ],
+    });
+    expect(result.path).toBe("file.txt");
+    expect(result.addedLines).toBe(2);
+    expect(result.deletedLines).toBe(1);
+  });
+
+  it("runs git show for root commits without parentSha", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: samplePatch,
+      stderr: "",
+      durationMs: 3,
+    });
+
+    await queryCommitFileDiff("/tmp/repo", "root", "file.txt");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "show",
+        "--no-color",
+        "--patch",
+        `--unified=${DIFF_CONTEXT_LINES}`,
+        "root",
+        "--",
+        "file.txt",
+      ],
+    });
+  });
+
+  it("matches renamed files by previous path", async () => {
+    const renamePatch =
+      "diff --git a/old.txt b/new.txt\n--- a/old.txt\n+++ b/new.txt\n@@ -1 +1 @@\n-old\n+new\n";
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: renamePatch,
+      stderr: "",
+      durationMs: 3,
+    });
+
+    const result = await queryCommitFileDiff("/tmp/repo", "sha", "old.txt", "parent");
+
+    expect(result.path).toBe("new.txt");
+    expect(result.oldPath).toBe("old.txt");
+  });
+
+  it("throws GitCommandError when git diff fails", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: bad revision\n",
+      durationMs: 2,
+    });
+
+    await expect(queryCommitFileDiff("/tmp/repo", "bad", "file.txt", "parent")).rejects.toSatisfy(
+      (error) => isGitError(error) && error.kind === "command" && error.exitCode === 128,
+    );
+  });
+
+  it("throws GitCommitFileDiffNotFoundError when path is missing from patch", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: samplePatch,
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await expect(
+      queryCommitFileDiff("/tmp/repo", "sha", "missing.txt", "parent"),
+    ).rejects.toBeInstanceOf(GitCommitFileDiffNotFoundError);
   });
 });
 

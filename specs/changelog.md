@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-03 — D-02 Tasks 1–2: unified diff parser and commit file diff service
+
+- **`app/src/lib/git/types.ts`** — `DiffLineKind`, `DiffLine`, `DiffHunk`, and `ParsedTextDiff` types for structured patch output.
+- **`app/src/lib/git/gitDiffParse.ts`** — pure `parseUnifiedDiff(stdout)` parser for multi-file unified patches: `diff --git` / `index` / `---` / `+++` headers, `@@` hunks with line-number tracking, `\ No newline at end of file`, and binary detection (`isBinary`, empty hunks).
+- **`app/src/lib/git/fixtures/`** — `git-diff-unified-single-file.txt`, `git-diff-binary.txt`, `git-diff-multi-file.txt` sample patch stdout.
+- **`app/src/lib/git/gitDiffParse.test.ts`** — fixture assertions for line counts, hunk boundaries, binary patches, and temp-repo integration.
+- **`app/src/lib/git/gitService.ts`** — `DIFF_CONTEXT_LINES`, `queryCommitFileDiff(repoRoot, sha, path, parentSha?)` (`git diff parent..sha` vs root `git show`), `GitCommitFileDiffNotFoundError`; renamed paths match by new or previous path.
+- **`app/src/lib/git/gitService.test.ts`** — mocked service tests for diff/show argv, rename lookup, errors, and missing path.
+- **`specs/git/execution/d-02-01-unified-diff-patch-parser.md`**, **`d-02-02-query-commit-file-diff-service.md`** — marked `[DONE]`.
+
 ## 2026-07-03 — D-01 Tasks 5–6: graph scroll sync, row sizing, and branch highlighting
 
 - **`app/src/lib/git/commitGraphLayout.ts`** — shared `ROW_HEIGHT` drives row alignment; `computeCurrentBranchCommitSet` walks the first-parent chain from HEAD; `buildCommitGraphLayout` accepts `highlightedShas` and marks dots/segments/curves with `isHighlighted` (segments dim when any crossed row is off the current branch).

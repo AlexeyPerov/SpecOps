@@ -14,6 +14,7 @@ import {
   parseTagList,
   parseUpstreamRef,
 } from "./gitParse";
+import { parseUnifiedDiff } from "./gitDiffParse";
 import { validateGitRefName } from "./gitRefName";
 import {
   createGitCommandError,
@@ -30,6 +31,7 @@ import {
   type CurrentBranchInfo,
   type GitAvailableResponse,
   type GitNotARepositoryError,
+  type ParsedTextDiff,
   type QueryCommitsOptions,
   type ResolveRepoRootResult,
   type RunGitResponse,
@@ -37,6 +39,9 @@ import {
 } from "./types";
 
 const NOT_A_REPOSITORY_EXIT_CODE = 128;
+
+/** Context lines for `git diff` / `git show --patch` (D-02). */
+export const DIFF_CONTEXT_LINES = 3;
 
 function logGitCommandSummary(
   repoRoot: string,
@@ -233,6 +238,78 @@ export async function queryCommitDetail(repoRoot: string, sha: string): Promise<
   }
 
   return detail;
+}
+
+export class GitCommitFileDiffNotFoundError extends Error {
+  readonly kind = "commitFileDiffNotFound" as const;
+  readonly path: string;
+
+  constructor(path: string) {
+    super(`No diff found for path "${path}" in commit patch output.`);
+    this.name = "GitCommitFileDiffNotFoundError";
+    this.path = path;
+  }
+}
+
+function findParsedTextDiff(
+  parsed: ReturnType<typeof parseUnifiedDiff>,
+  path: string,
+): ReturnType<typeof parseUnifiedDiff>[number] | undefined {
+  const normalizedPath = normalizeGitOutputPath(path);
+  return parsed.find(
+    (diff) => diff.path === normalizedPath || diff.oldPath === normalizedPath,
+  );
+}
+
+/**
+ * Fetch and parse a single file's patch diff for a commit.
+ *
+ * Normal commits use `git diff <parent>..<sha> -- <path>`. Root commits (no
+ * `parentSha`) use `git show <sha> -- <path>`. Renamed files (`R` in
+ * `queryCommitDetail`) may be requested by either the new path (`path`) or
+ * the previous path (`oldPath` in the parsed diff).
+ */
+export async function queryCommitFileDiff(
+  repoRoot: string,
+  sha: string,
+  path: string,
+  parentSha?: string,
+): Promise<ParsedTextDiff> {
+  const normalizedPath = normalizeGitOutputPath(path);
+  const args =
+    parentSha !== undefined
+      ? [
+          "diff",
+          "--no-color",
+          "--no-ext-diff",
+          "--patch",
+          `--unified=${DIFF_CONTEXT_LINES}`,
+          `${parentSha}..${sha}`,
+          "--",
+          normalizedPath,
+        ]
+      : [
+          "show",
+          "--no-color",
+          "--patch",
+          `--unified=${DIFF_CONTEXT_LINES}`,
+          sha,
+          "--",
+          normalizedPath,
+        ];
+
+  const response = await runGit(repoRoot, args);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  const parsed = parseUnifiedDiff(response.stdout);
+  const match = findParsedTextDiff(parsed, normalizedPath);
+  if (!match) {
+    throw new GitCommitFileDiffNotFoundError(normalizedPath);
+  }
+
+  return match;
 }
 
 /**
@@ -475,8 +552,12 @@ export type {
   CommitFileStatus,
   CommitSummary,
   CurrentBranchInfo,
+  DiffHunk,
+  DiffLine,
+  DiffLineKind,
   GitAvailableResponse,
   GitError,
+  ParsedTextDiff,
   QueryCommitsOptions,
   RunGitResponse,
   WorkingTreeFileEntry,

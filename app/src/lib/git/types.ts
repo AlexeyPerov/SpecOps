@@ -215,3 +215,32 @@ export interface WorkingTreeStatus {
   staged: WorkingTreeFileEntry[];
   unstaged: WorkingTreeFileEntry[];
 }
+
+/** Line kind within a parsed unified diff hunk (D-02). */
+export type DiffLineKind = "context" | "added" | "deleted" | "hunk-header" | "meta";
+
+/** One line from a parsed unified diff hunk. */
+export interface DiffLine {
+  kind: DiffLineKind;
+  content: string;
+  oldLineNo?: number;
+  newLineNo?: number;
+}
+
+/** One `@@ … @@` hunk from a unified diff. */
+export interface DiffHunk {
+  header: string;
+  lines: DiffLine[];
+}
+
+/** Parsed text diff for one file from `git diff` / `git show` patch output (D-02). */
+export interface ParsedTextDiff {
+  path: string;
+  oldPath?: string;
+  hunks: DiffHunk[];
+  addedLines: number;
+  deletedLines: number;
+  isBinary: boolean;
+  oldMode?: string;
+  newMode?: string;
+}

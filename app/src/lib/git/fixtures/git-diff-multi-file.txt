@@ -1,0 +1,14 @@
+diff --git a/a.txt b/a.txt
+index 4a58007..ec20141 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1 @@
+-alpha
++alpha changed
+diff --git a/b.txt b/b.txt
+index 65b2df8..6e8c5e4 100644
+--- a/b.txt
++++ b/b.txt
+@@ -1 +1 @@
+-beta
++beta changed

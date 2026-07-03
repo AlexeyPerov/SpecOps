@@ -1,4 +1,4 @@
-# D-02 Task 2 — Query commit file diff service
+# D-02 Task 2 — Query commit file diff service [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

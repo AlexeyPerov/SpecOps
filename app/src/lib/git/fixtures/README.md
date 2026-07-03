@@ -2,8 +2,11 @@
 
 Sample `stdout` captured from real `git` invocations for parser tests. Regenerate in a temp repo when formats change.
 
-| File | Git command |
+| File | Git command / topology |
 |---|---|
+| `commit-graph-linear.json` | Five-commit single-parent chain (newest-first) for graph layout unit tests |
+| `commit-graph-merge.json` | Feature branch merged into main — merge commit plus 8 other commits |
+| `commit-graph-truncated.json` | Log window cutoff — parent SHA referenced but not present in commit array |
 | `git-log-format.txt` | `git log --no-show-signature --decorate=full --format=%H%x00%P%x00%D%x00%aN±%aE%x00%at%x00%cN±%cE%x00%ct%x00%s` |
 | `git-branch-vv.txt` | `git branch -vv` |
 | `git-show-name-status.txt` | `git show --name-status --format=%H%x00%P%x00%aN%x00%aE%x00%at%x00%cN%x00%cE%x00%ct%x00%B` |

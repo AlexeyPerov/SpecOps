@@ -1,0 +1,110 @@
+[
+  {
+    "sha": "merge-main-head",
+    "parents": ["merge-main-tip"],
+    "refs": [{ "type": "currentBranchHead", "name": "main" }],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783001200,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783001200,
+    "subject": "Release polish on main"
+  },
+  {
+    "sha": "merge-main-tip",
+    "parents": ["merge-commit"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783001100,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783001100,
+    "subject": "Mainline after merge"
+  },
+  {
+    "sha": "merge-commit",
+    "parents": ["merge-base", "merge-feature-tip"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783001000,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783001000,
+    "subject": "Merge feature/login into main"
+  },
+  {
+    "sha": "merge-feature-tip",
+    "parents": ["merge-feature-2"],
+    "refs": [{ "type": "localBranchHead", "name": "feature/login" }],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000950,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000950,
+    "subject": "Feature ready"
+  },
+  {
+    "sha": "merge-feature-2",
+    "parents": ["merge-feature-1"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000900,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000900,
+    "subject": "Add login form"
+  },
+  {
+    "sha": "merge-feature-1",
+    "parents": ["merge-base"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000850,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000850,
+    "subject": "Start feature branch"
+  },
+  {
+    "sha": "merge-base",
+    "parents": ["merge-root-2"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000800,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000800,
+    "subject": "Shared ancestor"
+  },
+  {
+    "sha": "merge-root-2",
+    "parents": ["merge-root-1"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000700,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000700,
+    "subject": "Second commit on main"
+  },
+  {
+    "sha": "merge-root-1",
+    "parents": [],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000600,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000600,
+    "subject": "Initial commit"
+  }
+]

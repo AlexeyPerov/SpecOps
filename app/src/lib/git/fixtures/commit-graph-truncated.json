@@ -1,0 +1,38 @@
+[
+  {
+    "sha": "trunc-tip",
+    "parents": ["trunc-mid"],
+    "refs": [{ "type": "currentBranchHead", "name": "main" }],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000900,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000900,
+    "subject": "Latest visible commit"
+  },
+  {
+    "sha": "trunc-mid",
+    "parents": ["trunc-parent-missing"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000800,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000800,
+    "subject": "Middle commit with parent outside log window"
+  },
+  {
+    "sha": "trunc-older",
+    "parents": ["trunc-parent-missing"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000700,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000700,
+    "subject": "Older sibling still in window"
+  }
+]

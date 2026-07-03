@@ -1,4 +1,4 @@
-# D-01 Task 1 — Commit graph layout algorithm
+# D-01 Task 1 — Commit graph layout algorithm [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 
@@ -42,11 +42,11 @@ Implement a pure TypeScript commit-graph layout engine that turns an ordered com
 
 ## Acceptance checklist
 
-- [ ] `buildCommitGraphLayout` returns stable lane assignments for a linear 5-commit fixture.
-- [ ] Merge commit fixture produces at least one curve/link and multiple active lanes.
-- [ ] Truncated history (parent SHA not in list) does not crash; lane closes gracefully.
-- [ ] No imports from Svelte or Tauri in `commitGraphLayout.ts`.
-- [ ] Public API documented with JSDoc describing coordinate system (origin top-left, y grows down).
+- [x] `buildCommitGraphLayout` returns stable lane assignments for a linear 5-commit fixture.
+- [x] Merge commit fixture produces at least one curve/link and multiple active lanes.
+- [x] Truncated history (parent SHA not in list) does not crash; lane closes gracefully.
+- [x] No imports from Svelte or Tauri in `commitGraphLayout.ts`.
+- [x] Public API documented with JSDoc describing coordinate system (origin top-left, y grows down).
 
 ## Dependencies
 

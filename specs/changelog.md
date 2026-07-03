@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-03 — D-01 Tasks 1–2: commit graph layout engine and fixtures
+
+- **`app/src/lib/git/commitGraphLayout.ts`** — pure TypeScript layout engine (`buildCommitGraphLayout`) turning newest-first `CommitSummary[]` into lane-assigned dots, branch segments, and quadratic merge curves; fixed geometry constants (`ROW_HEIGHT`, `LANE_WIDTH`, `DOT_RADIUS`, 8-color palette); truncated-parent and octopus-merge edge cases handled without throwing.
+- **`app/src/lib/git/fixtures/commit-graph-linear.json`** — five-commit linear chain fixture.
+- **`app/src/lib/git/fixtures/commit-graph-merge.json`** — feature-branch merge topology (9 commits).
+- **`app/src/lib/git/fixtures/commit-graph-truncated.json`** — parent SHA missing from log window.
+- **`app/src/lib/git/commitGraphLayout.test.ts`** — Vitest coverage for linear, merge, truncated, and empty/single-commit cases; optional `describeIfGitInstalled` integration against real merge repo log output.
+- **`app/src/lib/git/fixtures/README.md`** — documents graph topology fixtures.
+- **`specs/git/execution/d-01-01-commit-graph-layout-algorithm.md`**, **`d-01-02-graph-fixtures-and-unit-tests.md`** — marked `[DONE]`.
+
 ## 2026-07-03 — Git MVP phase plans archived; D-01–D-04 execution tasks added
 
 - **`specs/archive/git/`** — moved completed MVP phase 0–4 execution plans from `specs/git/`; cross-links to `version-control-idea.md` and `backlog.md` updated.

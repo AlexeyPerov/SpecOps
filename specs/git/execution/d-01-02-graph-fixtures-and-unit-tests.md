@@ -1,4 +1,4 @@
-# D-01 Task 2 — Graph fixtures and unit tests
+# D-01 Task 2 — Graph fixtures and unit tests [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 
@@ -33,10 +33,10 @@ Lock graph layout behavior with deterministic fixtures and Vitest coverage so la
 
 ## Acceptance checklist
 
-- [ ] `npm test` passes locally.
-- [ ] Tests run without git for JSON fixtures; git integration section skips when git missing.
-- [ ] Fixture README updated.
-- [ ] No Svelte components added in this task.
+- [x] `npm test` passes locally.
+- [x] Tests run without git for JSON fixtures; git integration section skips when git missing.
+- [x] Fixture README updated.
+- [x] No Svelte components added in this task.
 
 ## Dependencies
 

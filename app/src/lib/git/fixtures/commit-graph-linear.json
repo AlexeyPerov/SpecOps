@@ -1,0 +1,62 @@
+[
+  {
+    "sha": "linear-c5-head",
+    "parents": ["linear-c4"],
+    "refs": [{ "type": "currentBranchHead", "name": "main" }],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000900,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000900,
+    "subject": "Fifth commit"
+  },
+  {
+    "sha": "linear-c4",
+    "parents": ["linear-c3"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000800,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000800,
+    "subject": "Fourth commit"
+  },
+  {
+    "sha": "linear-c3",
+    "parents": ["linear-c2"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000700,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000700,
+    "subject": "Third commit"
+  },
+  {
+    "sha": "linear-c2",
+    "parents": ["linear-c1"],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000600,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000600,
+    "subject": "Second commit"
+  },
+  {
+    "sha": "linear-c1",
+    "parents": [],
+    "refs": [],
+    "authorName": "Dev User",
+    "authorEmail": "dev@example.com",
+    "authorTime": 1783000500,
+    "committerName": "Dev User",
+    "committerEmail": "dev@example.com",
+    "committerTime": 1783000500,
+    "subject": "Initial commit"
+  }
+]

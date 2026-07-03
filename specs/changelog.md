@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-03 — Git MVP phase plans archived; D-01–D-04 execution tasks added
+
+- **`specs/archive/git/`** — moved completed MVP phase 0–4 execution plans from `specs/git/`; cross-links to `version-control-idea.md` and `backlog.md` updated.
+- **`specs/git/execution/`** — 22 post-MVP task files (one task per file) for backlog items D-01–D-04: commit graph (6), inline commit diff (5), working-copy diff (5), remote tag push/delete (6). Each includes master-only branch policy for agents.
+- **`specs/git/version-control-idea.md`** — phase plan links point to archive; post-MVP execution folder linked.
+- **`specs/git/backlog.md`** — D-01–D-04 rows link to `execution/`.
+
 ## 2026-07-02 — Git phase 4 Tasks 4.6–4.8: integration tests, manual checklist, OpenCode isolation — MVP sign-off
 
 - **`app/src/lib/git/test/gitTempRepoHarness.ts`** — shared temp-repo harness (`createTempGitRepo`, `withTempGitRepo`, `describeIfGitInstalled`) for integration tests; skips when git is not on PATH.

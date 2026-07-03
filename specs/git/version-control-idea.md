@@ -3,7 +3,7 @@
 Last updated: 2026-07-02  
 Status: approved for planning  
 Reference UI: [local checkout](file:///Users/alexeyperov/Projects-Archive/sourcegit-master) · [GitHub sourcegit-scm/sourcegit](https://github.com/sourcegit-scm/sourcegit)  
-Execution: [phase-0](./phase-0-execution-plan.md) → [phase-1](./phase-1-execution-plan.md) → [phase-2](./phase-2-execution-plan.md) → [phase-3](./phase-3-execution-plan.md) → [phase-4](./phase-4-execution-plan.md)  
+Execution (MVP, archived): [phase-0](../archive/git/phase-0-execution-plan.md) → [phase-1](../archive/git/phase-1-execution-plan.md) → [phase-2](../archive/git/phase-2-execution-plan.md) → [phase-3](../archive/git/phase-3-execution-plan.md) → [phase-4](../archive/git/phase-4-execution-plan.md) · Post-MVP: [backlog](./backlog.md) → [execution/](./execution/)  
 Backlog: [backlog.md](./backlog.md)
 
 ---
@@ -238,11 +238,11 @@ See [backlog.md](./backlog.md) for the full deferred list. Highlights:
 
 | Phase | Focus | Estimate | Plan |
 |---|---|---|---|
-| **0** | Tauri git runner, repo detection, TS service shell, tests | ~3–5 days | [phase-0-execution-plan.md](./phase-0-execution-plan.md) |
-| **1** | View tab kind, context menu, VC view shell, empty states | ~2–3 days | [phase-1-execution-plan.md](./phase-1-execution-plan.md) |
-| **2** | Read-only: history, branches, tags, refresh | ~4–6 days | [phase-2-execution-plan.md](./phase-2-execution-plan.md) |
-| **3** | Mutations: checkout, changes, commit, fetch/pull/push, tags | ~7–10 days | [phase-3-execution-plan.md](./phase-3-execution-plan.md) |
-| **4** | Hardening: guards, errors, cross-platform, verification | ~4–6 days | [phase-4-execution-plan.md](./phase-4-execution-plan.md) |
+| **0** | Tauri git runner, repo detection, TS service shell, tests | ~3–5 days | [phase-0-execution-plan.md](../archive/git/phase-0-execution-plan.md) |
+| **1** | View tab kind, context menu, VC view shell, empty states | ~2–3 days | [phase-1-execution-plan.md](../archive/git/phase-1-execution-plan.md) |
+| **2** | Read-only: history, branches, tags, refresh | ~4–6 days | [phase-2-execution-plan.md](../archive/git/phase-2-execution-plan.md) |
+| **3** | Mutations: checkout, changes, commit, fetch/pull/push, tags | ~7–10 days | [phase-3-execution-plan.md](../archive/git/phase-3-execution-plan.md) |
+| **4** | Hardening: guards, errors, cross-platform, verification | ~4–6 days | [phase-4-execution-plan.md](../archive/git/phase-4-execution-plan.md) |
 
 **Total MVP:** ~3–4.5 weeks (single developer, agent-assisted).
 

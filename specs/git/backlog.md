@@ -14,10 +14,10 @@ These were considered during planning and rejected for v1:
 
 | ID | Feature | Reason deferred | MVP decision ref |
 |---|---|---|---|
-| D-01 | Commit graph / lane layout | High UI complexity | Idea §3 #5 (flat list) |
-| D-02 | Inline diff on commit select | Needs diff viewer infrastructure | Idea §3 #14 |
-| D-03 | Full working-copy diff viewer | Same | Idea §3 #14 |
-| D-04 | Remote tag delete / push tags | Network + UX scope | Idea §3 #13 |
+| D-01 | Commit graph / lane layout | High UI complexity | Idea §3 #5 (flat list) · [execution/](./execution/) |
+| D-02 | Inline diff on commit select | Needs diff viewer infrastructure | Idea §3 #14 · [execution/](./execution/) |
+| D-03 | Full working-copy diff viewer | Same | Idea §3 #14 · [execution/](./execution/) |
+| D-04 | Remote tag delete / push tags | Network + UX scope | Idea §3 #13 · [execution/](./execution/) |
 | D-05 | Custom in-app GIT_ASKPASS | OS credential helper sufficient for MVP | Idea §3 #10 |
 | D-06 | Remote picker for push/pull | Default upstream enough for MVP | Idea §3 #9 |
 | D-07 | Stash → checkout flow | Block dirty checkout instead | Idea §3 #11 |

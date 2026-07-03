@@ -9,7 +9,6 @@ import {
   ROW_HEIGHT,
   buildCommitGraphLayout,
   commitGraphColumnWidth,
-  commitGraphRowCount,
 } from "../git/commitGraphLayout";
 import type { CommitSummary } from "../git/types";
 import GitCommitGraphColumn from "./GitCommitGraphColumn.svelte";
@@ -44,11 +43,15 @@ describe("GitCommitGraphColumn.svelte", () => {
     expect(host.querySelector(".git-graph-dot-merge")).not.toBeNull();
   });
 
-  it("sizes the SVG from lane count and row count", () => {
-    const linearLayout = buildCommitGraphLayout(readCommitFixture("commit-graph-linear.json"));
+  it("sizes the SVG from lane count and explicit row count", () => {
+    const linearCommits = readCommitFixture("commit-graph-linear.json");
+    const linearLayout = buildCommitGraphLayout(linearCommits);
     const mergeLayout = buildCommitGraphLayout(readCommitFixture("commit-graph-merge.json"));
 
-    const linearHost = mountComponent(GitCommitGraphColumn, { layout: linearLayout }).host;
+    const linearHost = mountComponent(GitCommitGraphColumn, {
+      layout: linearLayout,
+      rowCount: linearCommits.length,
+    }).host;
     const mergeHost = mountComponent(GitCommitGraphColumn, { layout: mergeLayout }).host;
 
     const linearSvg = linearHost.querySelector("svg")!;
@@ -58,7 +61,7 @@ describe("GitCommitGraphColumn.svelte", () => {
       commitGraphColumnWidth(linearLayout.laneCount),
     );
     expect(Number(linearSvg.getAttribute("height"))).toBe(
-      commitGraphRowCount(linearLayout) * ROW_HEIGHT,
+      linearCommits.length * ROW_HEIGHT,
     );
     expect(Number(mergeSvg.getAttribute("width"))).toBeGreaterThan(
       Number(linearSvg.getAttribute("width")),
@@ -85,5 +88,22 @@ describe("GitCommitGraphColumn.svelte", () => {
     expect(circle.getAttribute("cx")).toBe(String(expectedX));
     expect(circle.getAttribute("cy")).toBe(String(expectedY));
     expect(circle.getAttribute("r")).toBe(String(DOT_RADIUS));
+  });
+
+  it("applies dimmed styling to non-highlighted graph primitives", () => {
+    const commits = readCommitFixture("commit-graph-merge.json");
+    const highlightedShas = new Set([
+      "merge-main-head",
+      "merge-main-tip",
+      "merge-commit",
+      "merge-base",
+      "merge-root-2",
+      "merge-root-1",
+    ]);
+    const layout = buildCommitGraphLayout(commits, { highlightedShas });
+    const { host } = mountComponent(GitCommitGraphColumn, { layout });
+
+    expect(host.querySelectorAll(".git-graph-dimmed").length).toBeGreaterThan(0);
+    expect(host.querySelector(".git-graph-dot-head.git-graph-dimmed")).toBeNull();
   });
 });

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-03 — D-01 Tasks 5–6: graph scroll sync, row sizing, and branch highlighting
+
+- **`app/src/lib/git/commitGraphLayout.ts`** — shared `ROW_HEIGHT` drives row alignment; `computeCurrentBranchCommitSet` walks the first-parent chain from HEAD; `buildCommitGraphLayout` accepts `highlightedShas` and marks dots/segments/curves with `isHighlighted` (segments dim when any crossed row is off the current branch).
+- **`app/src/lib/components/GitHistoryPanel.svelte`** — fixed 26px commit rows, graph SVG height bound to `commits.length * ROW_HEIGHT`, shared scroll container with sticky graph gutter, `ResizeObserver` for column width on pane resize, virtualization alignment comment.
+- **`app/src/lib/components/GitCommitGraphColumn.svelte`** — explicit `rowCount` prop for SVG height; `git-graph-dimmed` (~40% opacity) for non-current-branch primitives; selection ring stays full opacity.
+- **Tests** — `computeCurrentBranchCommitSet` merge/truncated fixtures; highlighting and dimmed-class mount coverage.
+- **`specs/git/execution/d-01-05-graph-scroll-sync-and-sizing.md`**, **`d-01-06-current-branch-graph-highlighting.md`** — marked `[DONE]`.
+
 ## 2026-07-03 — D-01 Tasks 3–4: commit graph SVG column and history panel integration
 
 - **`app/src/lib/components/GitCommitGraphColumn.svelte`** — reusable SVG graph column rendering lane segments, quadratic merge curves, and commit dots (head/merge/default kinds) with an 8-color light/dark palette, selection ring via `--color-accent`, and decorative `aria-hidden` semantics.

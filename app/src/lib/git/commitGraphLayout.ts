@@ -60,6 +60,8 @@ export interface CommitGraphDot {
   colorIndex: number;
   kind: CommitGraphDotKind;
   sha: string;
+  /** When false, render at reduced opacity (current-branch highlighting). */
+  isHighlighted?: boolean;
 }
 
 /** A point in layout pixel coordinates. */
@@ -72,6 +74,8 @@ export interface CommitGraphPoint {
 export interface CommitGraphSegment {
   colorIndex: number;
   points: CommitGraphPoint[];
+  /** When false, render at reduced opacity (current-branch highlighting). */
+  isHighlighted?: boolean;
 }
 
 /** Merge link from a commit dot to a secondary-parent lane. */
@@ -81,6 +85,8 @@ export interface CommitGraphCurve {
   start: CommitGraphPoint;
   control: CommitGraphPoint;
   end: CommitGraphPoint;
+  /** When false, render at reduced opacity (current-branch highlighting). */
+  isHighlighted?: boolean;
 }
 
 /** Full layout output for SVG or canvas rendering. */
@@ -95,6 +101,12 @@ export interface CommitGraphLayoutResult {
 export interface CommitGraphLayoutOptions {
   /** When true, only the first parent of merge commits is drawn (default false). */
   firstParentOnly?: boolean;
+  /**
+   * SHAs on the current branch (first-parent chain from HEAD). When set, primitives
+   * whose endpoints are both in this set render at full opacity; others at ~40%.
+   * Filter modes (all branches / selected only) are backlog D-10.
+   */
+  highlightedShas?: Set<string>;
 }
 
 interface ActivePath {
@@ -135,6 +147,83 @@ function xFromLane(lane: number): number {
 
 function rowCenterY(rowIndex: number): number {
   return rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+}
+
+function rowIndexFromY(y: number): number {
+  return Math.round(y / ROW_HEIGHT - 0.5);
+}
+
+/**
+ * Walk the first-parent chain from HEAD within the loaded commit window.
+ * Matches current-branch-only history scope from `queryCommits`.
+ */
+export function computeCurrentBranchCommitSet(
+  commits: CommitSummary[],
+  headSha: string,
+): Set<string> {
+  const shaToCommit = new Map(commits.map((commit) => [commit.sha, commit]));
+  const highlighted = new Set<string>();
+  let current: string | undefined = headSha;
+
+  while (current && shaToCommit.has(current)) {
+    highlighted.add(current);
+    const commit: CommitSummary = shaToCommit.get(current)!;
+    current = commit.parents[0];
+  }
+
+  return highlighted;
+}
+
+function applyGraphHighlighting(
+  dots: CommitGraphDot[],
+  segments: CommitGraphSegment[],
+  curves: CommitGraphCurve[],
+  highlightedShas: Set<string> | undefined,
+): {
+  dots: CommitGraphDot[];
+  segments: CommitGraphSegment[];
+  curves: CommitGraphCurve[];
+} {
+  if (!highlightedShas) {
+    return {
+      dots: dots.map((dot) => ({ ...dot, isHighlighted: true })),
+      segments: segments.map((segment) => ({ ...segment, isHighlighted: true })),
+      curves: curves.map((curve) => ({ ...curve, isHighlighted: true })),
+    };
+  }
+
+  const rowToSha = new Map(dots.map((dot) => [dot.rowIndex, dot.sha]));
+
+  const highlightedDots = dots.map((dot) => ({
+    ...dot,
+    isHighlighted: highlightedShas.has(dot.sha),
+  }));
+
+  const highlightedSegments = segments.map((segment) => {
+    const rowIndices = new Set(
+      segment.points.map((point) => rowIndexFromY(point.y)),
+    );
+    const isHighlighted = [...rowIndices].every((rowIndex) => {
+      const sha = rowToSha.get(rowIndex);
+      return sha !== undefined && highlightedShas.has(sha);
+    });
+    return { ...segment, isHighlighted };
+  });
+
+  const highlightedCurves = curves.map((curve) => {
+    const startSha = rowToSha.get(rowIndexFromY(curve.start.y));
+    const endSha = rowToSha.get(rowIndexFromY(curve.end.y));
+    const isHighlighted = Boolean(
+      startSha && endSha && highlightedShas.has(startSha) && highlightedShas.has(endSha),
+    );
+    return { ...curve, isHighlighted };
+  });
+
+  return {
+    dots: highlightedDots,
+    segments: highlightedSegments,
+    curves: highlightedCurves,
+  };
 }
 
 function rowUnitY(rowIndex: number): number {
@@ -422,10 +511,17 @@ export function buildCommitGraphLayout(
 
   const laneCount = Math.max(1, laneFromX(maxLaneX) + 1);
 
-  return {
+  const highlighted = applyGraphHighlighting(
     dots,
     segments,
     curves,
+    options.highlightedShas,
+  );
+
+  return {
+    dots: highlighted.dots,
+    segments: highlighted.segments,
+    curves: highlighted.curves,
     laneCount,
     rowHeight: ROW_HEIGHT,
   };

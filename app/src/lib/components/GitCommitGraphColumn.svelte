@@ -15,20 +15,22 @@
 
   interface Props {
     layout: CommitGraphLayoutResult;
+    /** Explicit row count (e.g. commits.length); defaults to layout dot rows. */
+    rowCount?: number;
     rowHeight?: number;
     selectedSha?: string | null;
-    highlightedShas?: Set<string>;
   }
 
   let {
     layout,
+    rowCount,
     rowHeight = ROW_HEIGHT,
     selectedSha = null,
-    highlightedShas = new Set<string>(),
   }: Props = $props();
 
+  const resolvedRowCount = $derived(rowCount ?? commitGraphRowCount(layout));
   const svgWidth = $derived(commitGraphColumnWidth(layout.laneCount));
-  const svgHeight = $derived(commitGraphRowCount(layout) * rowHeight);
+  const svgHeight = $derived(resolvedRowCount * rowHeight);
 
   function segmentPolyline(segment: CommitGraphSegment): string {
     return segment.points.map((point) => `${point.x},${point.y}`).join(" ");
@@ -51,13 +53,21 @@
     return `git-graph-lane-${colorIndex % COLOR_COUNT}`;
   }
 
+  function highlightClass(isHighlighted: boolean | undefined): string {
+    return isHighlighted === false ? "git-graph-dimmed" : "";
+  }
+
   function dotClass(dot: CommitGraphDot): string {
     const classes = ["git-graph-dot", `git-graph-dot-${dot.kind}`];
     if (selectedSha === dot.sha) {
       classes.push("git-graph-dot-selected");
     }
-    if (highlightedShas.has(dot.sha)) {
+    if (dot.isHighlighted !== false) {
       classes.push("git-graph-dot-highlighted");
+    }
+    const dimClass = highlightClass(dot.isHighlighted);
+    if (dimClass) {
+      classes.push(dimClass);
     }
     return classes.join(" ");
   }
@@ -73,7 +83,7 @@
 >
   {#each layout.segments as segment, index (index)}
     <polyline
-      class="git-graph-segment {laneClass(segment.colorIndex)}"
+      class="git-graph-segment {laneClass(segment.colorIndex)} {highlightClass(segment.isHighlighted)}"
       points={segmentPolyline(segment)}
       fill="none"
     />
@@ -81,7 +91,7 @@
 
   {#each layout.curves as curve, index (index)}
     <path
-      class="git-graph-curve {laneClass(curve.colorIndex)}"
+      class="git-graph-curve {laneClass(curve.colorIndex)} {highlightClass(curve.isHighlighted)}"
       d={curvePath(curve)}
       fill="none"
     />
@@ -129,6 +139,10 @@
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
+  }
+
+  .git-graph-dimmed {
+    opacity: 0.4;
   }
 
   .git-graph-lane-0 {
@@ -199,6 +213,7 @@
     stroke: var(--color-accent) !important;
     stroke-width: 3;
     filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent));
+    opacity: 1 !important;
   }
 
   .git-graph-dot-highlighted:not(.git-graph-dot-selected) {

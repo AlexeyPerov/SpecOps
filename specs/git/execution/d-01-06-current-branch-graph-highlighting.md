@@ -1,4 +1,4 @@
-# D-01 Task 6 — Current-branch graph highlighting
+# D-01 Task 6 — Current-branch graph highlighting [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

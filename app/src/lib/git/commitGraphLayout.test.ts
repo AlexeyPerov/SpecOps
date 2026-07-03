@@ -7,6 +7,7 @@ import {
   LANE_WIDTH,
   ROW_HEIGHT,
   buildCommitGraphLayout,
+  computeCurrentBranchCommitSet,
 } from "./commitGraphLayout";
 import { GIT_LOG_FORMAT, parseLogCommits } from "./gitParse";
 import { describeIfGitInstalled, withTempGitRepo } from "./test/gitTempRepoHarness";
@@ -119,6 +120,63 @@ describe("buildCommitGraphLayout", () => {
       lane: 0,
     });
     expect(layout.laneCount).toBe(1);
+  });
+});
+
+describe("computeCurrentBranchCommitSet", () => {
+  it("walks the first-parent chain from HEAD on a merge fixture", () => {
+    const commits = readCommitFixture("commit-graph-merge.json");
+    const headSha = "merge-main-head";
+    const highlighted = computeCurrentBranchCommitSet(commits, headSha);
+
+    expect(highlighted.has("merge-main-head")).toBe(true);
+    expect(highlighted.has("merge-main-tip")).toBe(true);
+    expect(highlighted.has("merge-commit")).toBe(true);
+    expect(highlighted.has("merge-base")).toBe(true);
+    expect(highlighted.has("merge-root-2")).toBe(true);
+    expect(highlighted.has("merge-root-1")).toBe(true);
+
+    expect(highlighted.has("merge-feature-tip")).toBe(false);
+    expect(highlighted.has("merge-feature-2")).toBe(false);
+    expect(highlighted.has("merge-feature-1")).toBe(false);
+  });
+
+  it("stops at the loaded window boundary", () => {
+    const commits = readCommitFixture("commit-graph-truncated.json");
+    const headSha = commits[0]!.sha;
+    const highlighted = computeCurrentBranchCommitSet(commits, headSha);
+
+    expect(highlighted.has("trunc-tip")).toBe(true);
+    expect(highlighted.has("trunc-mid")).toBe(true);
+    expect(highlighted.has("trunc-older")).toBe(false);
+    expect(highlighted.size).toBe(2);
+  });
+});
+
+describe("buildCommitGraphLayout highlighting", () => {
+  it("dims side-branch primitives while keeping main-line commits highlighted", () => {
+    const commits = readCommitFixture("commit-graph-merge.json");
+    const highlightedShas = computeCurrentBranchCommitSet(commits, "merge-main-head");
+    const layout = buildCommitGraphLayout(commits, { highlightedShas });
+
+    const mainHead = layout.dots.find((dot) => dot.sha === "merge-main-head");
+    const featureTip = layout.dots.find((dot) => dot.sha === "merge-feature-tip");
+
+    expect(mainHead?.isHighlighted).toBe(true);
+    expect(featureTip?.isHighlighted).toBe(false);
+
+    expect(layout.segments.some((segment) => segment.isHighlighted === true)).toBe(true);
+    expect(layout.segments.some((segment) => segment.isHighlighted === false)).toBe(true);
+    expect(layout.curves.some((curve) => curve.isHighlighted === false)).toBe(true);
+  });
+
+  it("marks all primitives highlighted when no highlightedShas option is passed", () => {
+    const commits = readCommitFixture("commit-graph-merge.json");
+    const layout = buildCommitGraphLayout(commits);
+
+    expect(layout.dots.every((dot) => dot.isHighlighted !== false)).toBe(true);
+    expect(layout.segments.every((segment) => segment.isHighlighted !== false)).toBe(true);
+    expect(layout.curves.every((curve) => curve.isHighlighted !== false)).toBe(true);
   });
 });
 

@@ -1,8 +1,10 @@
 <script lang="ts">
   import GitCommitGraphColumn from "./GitCommitGraphColumn.svelte";
   import {
+    ROW_HEIGHT,
     buildCommitGraphLayout,
     commitGraphColumnWidth,
+    computeCurrentBranchCommitSet,
   } from "../git/commitGraphLayout";
   import {
     commitRefBadgeTitle,
@@ -31,9 +33,50 @@
   let loadStatus = $state<LoadStatus>("idle");
   let commits = $state<CommitSummary[]>([]);
   let loadError = $state<string | null>(null);
+  let scrollContainer = $state<HTMLDivElement | null>(null);
+  let scrollContainerSize = $state({ width: 0, height: 0 });
 
-  const graphLayout = $derived(buildCommitGraphLayout(commits));
-  const graphWidth = $derived(commitGraphColumnWidth(graphLayout.laneCount));
+  /*
+   * Graph/row alignment: each list row uses fixed ROW_HEIGHT (from commitGraphLayout)
+   * matching SVG row centers (y = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2). Graph and
+   * rows share one vertical scroll parent (.git-history-scroll) so they stay aligned.
+   * A future virtualized list must use the same ROW_HEIGHT for item height and
+   * translateY offsets so dots remain centered on visible rows.
+   */
+  const headSha = $derived(commits[0]?.sha ?? null);
+  const highlightedShas = $derived.by(() => {
+    if (!headSha || commits.length === 0) {
+      return undefined;
+    }
+    return computeCurrentBranchCommitSet(commits, headSha);
+  });
+
+  const graphLayout = $derived(
+    buildCommitGraphLayout(commits, { highlightedShas }),
+  );
+  const graphWidth = $derived.by(() => {
+    void scrollContainerSize;
+    return commitGraphColumnWidth(graphLayout.laneCount);
+  });
+  const graphHeight = $derived(commits.length * ROW_HEIGHT);
+
+  $effect(() => {
+    const container = scrollContainer;
+    if (!container) {
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      scrollContainerSize = {
+        width: entry?.contentRect.width ?? 0,
+        height: entry?.contentRect.height ?? 0,
+      };
+    });
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+    };
+  });
 
   async function loadCommits(root: string, signal?: AbortSignal): Promise<void> {
     loadStatus = "loading";
@@ -112,10 +155,17 @@
       </p>
     </div>
   {:else}
-    <div class="git-history-scroll">
+    <div class="git-history-scroll" bind:this={scrollContainer}>
       <div class="git-history-content">
-        <div class="git-history-graph" style="width: {graphWidth}px">
-          <GitCommitGraphColumn layout={graphLayout} {selectedSha} />
+        <div
+          class="git-history-graph"
+          style="width: {graphWidth}px; min-width: {graphWidth}px; height: {graphHeight}px"
+        >
+          <GitCommitGraphColumn
+            layout={graphLayout}
+            rowCount={commits.length}
+            {selectedSha}
+          />
         </div>
         <ul class="git-history-list" role="listbox" aria-label="Commits on current branch">
           {#each commits as commit (commit.sha)}
@@ -124,12 +174,22 @@
                 type="button"
                 class="git-history-row"
                 class:git-history-row-selected={selectedSha === commit.sha}
+                style="height: {ROW_HEIGHT}px"
                 role="option"
                 aria-selected={selectedSha === commit.sha}
                 onclick={() => handleSelectCommit(commit)}
                 onkeydown={(event) => handleRowKeydown(event, commit)}
               >
                 <span class="git-history-subject" title={commit.subject}>{commit.subject}</span>
+                {#if commit.refs.length > 0}
+                  <span class="git-history-refs" aria-label="Refs on this commit">
+                    {#each commit.refs as ref (ref.type + ref.name)}
+                      <span class="git-history-ref {refBadgeClass(ref)}" title={commitRefBadgeTitle(ref)}>
+                        {ref.name}
+                      </span>
+                    {/each}
+                  </span>
+                {/if}
                 <span class="git-history-meta">
                   <span class="git-history-sha" title={commit.sha}>{formatShortSha(commit.sha)}</span>
                   <span class="git-history-meta-separator" aria-hidden="true">·</span>
@@ -143,15 +203,6 @@
                     {formatRelativeCommitDate(commit.authorTime)}
                   </time>
                 </span>
-                {#if commit.refs.length > 0}
-                  <span class="git-history-refs" aria-label="Refs on this commit">
-                    {#each commit.refs as ref (ref.type + ref.name)}
-                      <span class="git-history-ref {refBadgeClass(ref)}" title={commitRefBadgeTitle(ref)}>
-                        {ref.name}
-                      </span>
-                    {/each}
-                  </span>
-                {/if}
               </button>
             </li>
           {/each}
@@ -212,13 +263,14 @@
     z-index: 1;
     pointer-events: none;
     background: var(--color-surface-1);
+    overflow: visible;
   }
 
   .git-history-list {
     flex: 1;
     min-width: 0;
     margin: 0;
-    padding: var(--space-2) 0;
+    padding: 0;
     list-style: none;
   }
 
@@ -227,12 +279,13 @@
   }
 
   .git-history-row {
+    box-sizing: border-box;
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
     gap: var(--space-2);
     width: 100%;
-    padding: var(--space-4) var(--space-12);
+    padding: 0 var(--space-12) 0 var(--space-2);
     border: none;
     border-left: 2px solid transparent;
     background: transparent;
@@ -240,6 +293,7 @@
     text-align: left;
     cursor: pointer;
     font: inherit;
+    overflow: hidden;
   }
 
   .git-history-row:hover {
@@ -257,22 +311,26 @@
   }
 
   .git-history-subject {
-    width: 100%;
-    font-size: 0.875rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.8125rem;
     font-weight: 500;
-    line-height: 1.4;
+    line-height: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .git-history-meta {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: var(--space-2);
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
+    line-height: 1;
     color: var(--color-text-secondary);
+    white-space: nowrap;
   }
 
   .git-history-sha {
@@ -285,17 +343,20 @@
   }
 
   .git-history-refs {
+    flex: 0 1 auto;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: var(--space-2);
+    min-width: 0;
+    overflow: hidden;
   }
 
   .git-history-ref {
     padding: 0 var(--space-2);
     border-radius: var(--radius-sm);
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
     font-weight: 600;
-    line-height: 1.6;
+    line-height: 1.4;
     white-space: nowrap;
   }
 

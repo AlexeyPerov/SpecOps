@@ -1,4 +1,4 @@
-# D-01 Task 5 — Graph scroll sync and row sizing
+# D-01 Task 5 — Graph scroll sync and row sizing [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

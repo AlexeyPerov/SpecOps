@@ -1,4 +1,4 @@
-# D-02 Task 5 — Binary and large-file diff states
+# D-02 Task 5 — Binary and large-file diff states [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

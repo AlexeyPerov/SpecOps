@@ -22,7 +22,8 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 ## History
 
 - [ ] **Commit list:** flat list shows SHA, author, date, subject for current branch.
-- [ ] **Commit detail:** select a commit — metadata and changed-files list appear (no inline diff).
+- [ ] **Commit detail:** select a commit — metadata and changed-files list appear; selecting a file shows an inline unified diff in the right pane.
+- [ ] **Binary / large diff:** select a commit that changes a binary file (or a very large text diff) — diff pane shows a clear placeholder instead of garbled text or UI freeze.
 - [ ] **Refresh:** toolbar **Refresh** reloads history without errors.
 
 ## Branches

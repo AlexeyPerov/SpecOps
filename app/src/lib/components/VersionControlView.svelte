@@ -641,6 +641,7 @@
                 repoRoot={repoRoot}
                 sha={selectedCommitSha}
                 refreshToken={panelRefreshToken}
+                {notify}
               />
             </div>
           </div>

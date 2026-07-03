@@ -1,4 +1,4 @@
-# D-02 Task 4 — Commit detail split layout with diff
+# D-02 Task 4 — Commit detail split layout with diff [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

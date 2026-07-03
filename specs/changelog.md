@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-03 — D-02 Tasks 3–5: git text diff view, commit detail split layout, binary/large diff states
+
+- **`app/src/lib/components/GitTextDiffView.svelte`** — unified single-pane diff viewer: file header with `+N` / `−M` summary, scrollable `[oldNo | newNo | prefix | content]` grid, added/deleted/hunk styling, loading/error/empty/binary/no-hunk states; horizontal scroll for long lines.
+- **`app/src/lib/components/GitCommitDetailPanel.svelte`** — three-pane commit detail: metadata on top, resizable file list + inline diff below; default first-file selection; `queryCommitFileDiff` with abort on rapid changes; Up/Down keyboard navigation; `reportGitError` toasts on fetch failures.
+- **`app/src/lib/components/VersionControlView.svelte`** — passes `notify` into commit detail for diff error toasts.
+- **`app/src/lib/git/gitService.ts`** — `COMMIT_FILE_DIFF_MAX_BYTES` (512 KiB) guard and `GitDiffTooLargeError` before parsing oversized patch stdout.
+- **Tests** — `GitTextDiffView.test.ts` fixture/binary/empty/loading/error coverage; `gitService.test.ts` size guard and binary diff path.
+- **`specs/git/manual-test-checklist.md`** — History section updated for inline diff and binary/large-file placeholders.
+- **`specs/git/execution/d-02-03-git-text-diff-view-component.md`**, **`d-02-04-commit-detail-split-layout-with-diff.md`**, **`d-02-05-binary-and-large-file-diff-states.md`** — marked `[DONE]`.
+
 ## 2026-07-03 — D-02 Tasks 1–2: unified diff parser and commit file diff service
 
 - **`app/src/lib/git/types.ts`** — `DiffLineKind`, `DiffLine`, `DiffHunk`, and `ParsedTextDiff` types for structured patch output.

@@ -12,8 +12,10 @@ import {
   GIT_SHOW_FORMAT,
   GitCommitFileDiffNotFoundError,
   GitCommitValidationError,
+  GitDiffTooLargeError,
   GitNoUpstreamError,
   GitRefValidationError,
+  COMMIT_FILE_DIFF_MAX_BYTES,
   DIFF_CONTEXT_LINES,
   isWorkingTreeDirty,
   pullRemote,
@@ -526,6 +528,44 @@ describe("queryCommitFileDiff", () => {
     await expect(
       queryCommitFileDiff("/tmp/repo", "sha", "missing.txt", "parent"),
     ).rejects.toBeInstanceOf(GitCommitFileDiffNotFoundError);
+  });
+
+  it("throws GitDiffTooLargeError when stdout exceeds the size guard", async () => {
+    const oversizedStdout = "x".repeat(COMMIT_FILE_DIFF_MAX_BYTES + 1);
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: oversizedStdout,
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await expect(
+      queryCommitFileDiff("/tmp/repo", "sha", "large.txt", "parent"),
+    ).rejects.toSatisfy((error) => {
+      return (
+        error instanceof GitDiffTooLargeError &&
+        error.path === "large.txt" &&
+        error.byteLength === COMMIT_FILE_DIFF_MAX_BYTES + 1 &&
+        error.maxBytes === COMMIT_FILE_DIFF_MAX_BYTES
+      );
+    });
+  });
+
+  it("parses binary diff output without throwing", async () => {
+    const binaryPatch =
+      "diff --git a/image.png b/image.png\nnew file mode 100644\nBinary files /dev/null and b/image.png differ\n";
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: binaryPatch,
+      stderr: "",
+      durationMs: 2,
+    });
+
+    const result = await queryCommitFileDiff("/tmp/repo", "sha", "image.png", "parent");
+
+    expect(result.path).toBe("image.png");
+    expect(result.isBinary).toBe(true);
+    expect(result.hunks).toEqual([]);
   });
 });
 

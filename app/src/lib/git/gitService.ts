@@ -43,6 +43,13 @@ const NOT_A_REPOSITORY_EXIT_CODE = 128;
 /** Context lines for `git diff` / `git show --patch` (D-02). */
 export const DIFF_CONTEXT_LINES = 3;
 
+/**
+ * Maximum `git diff` / `git show --patch` stdout length parsed in the UI
+ * (512 KiB). Larger patches throw {@link GitDiffTooLargeError} instead of
+ * blocking the renderer.
+ */
+export const COMMIT_FILE_DIFF_MAX_BYTES = 512 * 1024;
+
 function logGitCommandSummary(
   repoRoot: string,
   args: string[],
@@ -251,6 +258,23 @@ export class GitCommitFileDiffNotFoundError extends Error {
   }
 }
 
+export class GitDiffTooLargeError extends Error {
+  readonly kind = "diffTooLarge" as const;
+  readonly path: string;
+  readonly byteLength: number;
+  readonly maxBytes: number;
+
+  constructor(path: string, byteLength: number, maxBytes: number) {
+    super(
+      `Diff for "${path}" is too large to display (${byteLength} bytes; limit ${maxBytes}).`,
+    );
+    this.name = "GitDiffTooLargeError";
+    this.path = path;
+    this.byteLength = byteLength;
+    this.maxBytes = maxBytes;
+  }
+}
+
 function findParsedTextDiff(
   parsed: ReturnType<typeof parseUnifiedDiff>,
   path: string,
@@ -301,6 +325,11 @@ export async function queryCommitFileDiff(
   const response = await runGit(repoRoot, args);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
+  }
+
+  const stdoutByteLength = new TextEncoder().encode(response.stdout).length;
+  if (stdoutByteLength > COMMIT_FILE_DIFF_MAX_BYTES) {
+    throw new GitDiffTooLargeError(normalizedPath, stdoutByteLength, COMMIT_FILE_DIFF_MAX_BYTES);
   }
 
   const parsed = parseUnifiedDiff(response.stdout);

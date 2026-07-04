@@ -1,23 +1,23 @@
-import type { Readable } from "svelte/store";
+import { writable, type Readable, type Writable } from "svelte/store";
+import { logDiagnostic } from "./logging";
+import { createOpencodeBackendFromAppState } from "../ai/backends/opencodeBackendFactory";
 import {
   type OpencodeFileChangeStatus,
   type OpencodeFileStatusEntry,
 } from "../ai/backends/workspaceAgentBackend";
-import { createReactiveResourceStore } from "../ai/opencodeResourceStore";
+import { mapWorkingTreeStatusToAbsoluteBadges } from "../git/projectTreeFileStatusMap";
+import { queryWorkingTreeStatus, resolveRepoRoot } from "../git/gitService";
+import {
+  subscribeVersionControlMutations,
+  type VersionControlMutationScope,
+} from "../git/versionControlRefresh";
 
 /**
- * M5-T3 — workspace file-change tracker. Wraps `file.status` (git working
- * tree) with a per-workspace reactive store. The `ProjectTreeView` reads the
- * `statusByPath` map to badge modified / new / deleted files.
+ * M5-T3 — workspace file-change tracker for project-tree M/A/D badges.
  *
- * Status entries from OpenCode carry workspace-relative paths; callers
- * resolve them to absolute paths (matching the project-tree convention) via
- * `resolveAbsoluteStatusMap`.
- *
- * M10-T1: the cache + inflight + diagnostic skeleton now lives in
- * `createReactiveResourceStore`. The `copyEmptyState` override allocates a
- * fresh `new Map()` per cache entry so a consumer mutating a pre-refresh
- * snapshot's `statusByPath` can't corrupt the singleton (M10-T3).
+ * Git-backed workspaces read `git status --porcelain` (FIX-02). Non-git
+ * workspaces fall back to OpenCode `file.status` when the session tab is
+ * active. Status entries resolve to absolute paths via `resolveAbsoluteStatusMap`.
  */
 
 export type FileStatusTrackerStatus = "idle" | "loading" | "loaded" | "error";
@@ -28,6 +28,8 @@ export interface FileStatusTrackerState {
   statusByPath: Map<string, OpencodeFileChangeStatus>;
   lastErrorMessage: string | null;
   loadedAt: string | null;
+  /** Whether the latest snapshot came from system git or OpenCode. */
+  source: "git" | "opencode" | null;
 }
 
 const emptyState: FileStatusTrackerState = {
@@ -35,59 +37,231 @@ const emptyState: FileStatusTrackerState = {
   statusByPath: new Map(),
   lastErrorMessage: null,
   loadedAt: null,
+  source: null,
 };
 
-const store = createReactiveResourceStore<FileStatusTrackerState, string>({
-  diagnosticLabel: "file status",
-  diagnosticKind: "opencode.file.status.refresh",
-  reactive: true,
-  keyOf: (workspaceRootPath) => workspaceRootPath,
-  diagnosticExtra: (workspaceRootPath) => ({ workspaceRootPath }),
-  // M10-T3: fresh Map per cache entry — the state holds a mutable Map, so a
-  // shallow spread of `emptyState` would alias the singleton Map across every
-  // workspace. Allocate a new one each time.
-  copyEmptyState: () => ({ ...emptyState, statusByPath: new Map() }),
-  disabledState: () => ({ ...emptyState, statusByPath: new Map() }),
-  buildLoadingState: (prior) => ({ ...prior, status: "loading" }),
-  buildErrorState: (message) => ({
-    ...emptyState,
-    statusByPath: new Map(),
-    status: "error",
-    lastErrorMessage: message,
-    loadedAt: null,
-  }),
-  async fetch(backend, workspaceRootPath) {
-    const entries = await backend.listFileStatuses({ workspaceRootPath });
-    const statusByPath = resolveAbsoluteStatusMap(workspaceRootPath, entries);
-    return {
-      status: "loaded",
-      statusByPath,
-      lastErrorMessage: null,
-      loadedAt: new Date().toISOString(),
-    };
-  },
-});
+const FILE_STATUS_DEBOUNCE_MS = 150;
+
+interface FileStatusEntry {
+  value: FileStatusTrackerState;
+  readable: Readable<FileStatusTrackerState>;
+  set: (value: FileStatusTrackerState) => void;
+}
+
+const cache = new Map<string, FileStatusEntry>();
+const inflight = new Map<string, Promise<FileStatusTrackerState>>();
+const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let mutationHooksInstalled = false;
+
+function copyEmptyState(): FileStatusTrackerState {
+  return { ...emptyState, statusByPath: new Map() };
+}
+
+function getOrCreateEntry(workspaceRootPath: string): FileStatusEntry {
+  const existing = cache.get(workspaceRootPath);
+  if (existing) {
+    return existing;
+  }
+
+  const value = copyEmptyState();
+  const store: Writable<FileStatusTrackerState> = writable(value);
+  const entry: FileStatusEntry = {
+    value,
+    readable: { subscribe: store.subscribe },
+    set: store.set,
+  };
+  cache.set(workspaceRootPath, entry);
+  return entry;
+}
+
+function setEntryState(workspaceRootPath: string, state: FileStatusTrackerState): void {
+  const entry = getOrCreateEntry(workspaceRootPath);
+  entry.value = state;
+  entry.set(state);
+}
+
+function emitDiagnostic(input: {
+  reason: string;
+  workspaceRootPath: string;
+  level?: "debug" | "warn";
+  error?: unknown;
+  source?: FileStatusTrackerState["source"];
+}): void {
+  void logDiagnostic({
+    level: input.level ?? "debug",
+    source: "frontend",
+    timestamp: new Date().toISOString(),
+    message: "file status refresh",
+    metadata: {
+      kind: "projectTree.fileStatus.refresh",
+      reason: input.reason,
+      workspaceRootPath: input.workspaceRootPath,
+      source: input.source,
+      error: input.error instanceof Error ? input.error.message : undefined,
+    },
+  });
+}
+
+function ensureMutationRefreshHooks(): void {
+  if (mutationHooksInstalled) {
+    return;
+  }
+  mutationHooksInstalled = true;
+  subscribeVersionControlMutations((workspaceRootPath) => {
+    scheduleDebouncedFileStatusRefresh(workspaceRootPath);
+  });
+}
+
+export function scheduleDebouncedFileStatusRefresh(workspaceRootPath: string): void {
+  ensureMutationRefreshHooks();
+  const existing = debounceTimers.get(workspaceRootPath);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  debounceTimers.set(
+    workspaceRootPath,
+    setTimeout(() => {
+      debounceTimers.delete(workspaceRootPath);
+      void refreshFileStatuses({ workspaceRootPath });
+    }, FILE_STATUS_DEBOUNCE_MS),
+  );
+}
+
+async function fetchGitFileStatuses(
+  workspaceRootPath: string,
+): Promise<FileStatusTrackerState | null> {
+  const repoResult = await resolveRepoRoot(workspaceRootPath);
+  if (!repoResult.ok) {
+    return null;
+  }
+
+  const workingTreeStatus = await queryWorkingTreeStatus(repoResult.repoRoot);
+  const statusByPath = mapWorkingTreeStatusToAbsoluteBadges(
+    repoResult.repoRoot,
+    workingTreeStatus,
+  );
+
+  return {
+    status: "loaded",
+    statusByPath,
+    lastErrorMessage: null,
+    loadedAt: new Date().toISOString(),
+    source: "git",
+  };
+}
+
+async function fetchOpencodeFileStatuses(
+  workspaceRootPath: string,
+): Promise<FileStatusTrackerState> {
+  const backend = createOpencodeBackendFromAppState();
+  if (!backend) {
+    return copyEmptyState();
+  }
+
+  const entries = await backend.listFileStatuses({ workspaceRootPath });
+  const statusByPath = resolveAbsoluteStatusMap(workspaceRootPath, entries);
+  return {
+    status: "loaded",
+    statusByPath,
+    lastErrorMessage: null,
+    loadedAt: new Date().toISOString(),
+    source: "opencode",
+  };
+}
+
+async function fetchFileStatuses(input: {
+  workspaceRootPath: string;
+  allowOpencode?: boolean;
+}): Promise<FileStatusTrackerState> {
+  const gitState = await fetchGitFileStatuses(input.workspaceRootPath);
+  if (gitState) {
+    return gitState;
+  }
+
+  if (input.allowOpencode === false) {
+    return copyEmptyState();
+  }
+
+  return fetchOpencodeFileStatuses(input.workspaceRootPath);
+}
 
 export function getFileStatusTracker(workspaceRootPath: string): Readable<FileStatusTrackerState> {
-  return store.getReadable(workspaceRootPath);
+  ensureMutationRefreshHooks();
+  return getOrCreateEntry(workspaceRootPath).readable;
 }
 
 export function getFileStatusSnapshot(workspaceRootPath: string): FileStatusTrackerState {
-  return store.getSnapshot(workspaceRootPath);
+  return getOrCreateEntry(workspaceRootPath).value;
 }
 
 export function resetFileStatusTrackerForTests(): void {
-  store.resetForTests();
+  cache.clear();
+  inflight.clear();
+  mutationHooksInstalled = false;
+  for (const timer of debounceTimers.values()) {
+    clearTimeout(timer);
+  }
+  debounceTimers.clear();
 }
 
 export async function refreshFileStatuses(input: {
   workspaceRootPath: string;
+  allowOpencode?: boolean;
 }): Promise<FileStatusTrackerState> {
-  return store.refresh(input.workspaceRootPath);
+  ensureMutationRefreshHooks();
+  const { workspaceRootPath } = input;
+  const existing = inflight.get(workspaceRootPath);
+  if (existing) {
+    return existing;
+  }
+
+  setEntryState(workspaceRootPath, {
+    ...getFileStatusSnapshot(workspaceRootPath),
+    status: "loading",
+  });
+
+  const promise = (async (): Promise<FileStatusTrackerState> => {
+    try {
+      const state = await fetchFileStatuses(input);
+      setEntryState(workspaceRootPath, state);
+      emitDiagnostic({
+        reason: "loaded",
+        workspaceRootPath,
+        source: state.source ?? undefined,
+      });
+      return state;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "file status failed.";
+      const errorState: FileStatusTrackerState = {
+        ...copyEmptyState(),
+        status: "error",
+        lastErrorMessage: message,
+      };
+      setEntryState(workspaceRootPath, errorState);
+      emitDiagnostic({
+        reason: "error",
+        workspaceRootPath,
+        level: "warn",
+        error,
+      });
+      return errorState;
+    } finally {
+      inflight.delete(workspaceRootPath);
+    }
+  })();
+
+  inflight.set(workspaceRootPath, promise);
+  return promise;
 }
 
 export function clearFileStatusTracker(workspaceRootPath: string): void {
-  store.clear(workspaceRootPath);
+  cache.delete(workspaceRootPath);
+  inflight.delete(workspaceRootPath);
+  const timer = debounceTimers.get(workspaceRootPath);
+  if (timer) {
+    clearTimeout(timer);
+    debounceTimers.delete(workspaceRootPath);
+  }
 }
 
 // -- Pure helpers (exposed for tests + the tree view) -------------------------
@@ -149,3 +323,5 @@ export function summarizeFileStatuses(
   }
   return counts;
 }
+
+export type { VersionControlMutationScope };

@@ -1117,8 +1117,9 @@
    * on disk once the turn finishes). Stale per-workspace cache is cleared on
    * switch.
    *
-   * M13.5 — file-status refresh touches OpenCode (`file.status`); gate it on
-   * `isSessionTabActive` so file/editor tabs don't trigger backend calls.
+   * M13.5 — file-status refresh: git-backed workspaces use system git and
+   * refresh on any editor tab; non-git workspaces still gate OpenCode
+   * `file.status` on `isSessionTabActive`.
    */
   let lastFileStatusWorkspace = $state<string | null>(null);
   $effect(() => {
@@ -1135,10 +1136,13 @@
     }
     lastFileStatusWorkspace = root;
 
-    if (!runtimeReady || !root || !isSessionTabActive) {
+    if (!runtimeReady || !root) {
       return;
     }
-    void refreshFileStatuses({ workspaceRootPath: root });
+    void refreshFileStatuses({
+      workspaceRootPath: root,
+      allowOpencode: isSessionTabActive,
+    });
   });
 
   /**

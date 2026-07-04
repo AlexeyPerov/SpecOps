@@ -121,7 +121,9 @@ Quick pass on Linux after automated CI is green. Covers busy-state guards and re
 
 - [ ] Disable OpenCode in app settings (or run without sidecar).
 - [ ] Version Control tab still probes repo, shows history, and runs stage/commit/checkout.
-- [ ] Project tree **M/A/D** badges (OpenCode `file.status`) may still appear — that is expected and separate from VC.
+- [ ] Project tree **M/A/D** badges match the Version Control **Changes** panel (both driven by `git status --porcelain` for git-backed workspaces).
+- [ ] After stage, unstage, or commit in VC, tree badges update within one refresh cycle (debounced).
+- [ ] Non-git workspaces show no git badges unless OpenCode `file.status` is active on the session tab.
 
 ## Known Linux gaps
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-04 10:30 — Git integration review: FIX execution plans
+
+- **`specs/git/execution/fixes/`** — added 14 prioritized execution plans from the 2026-07-04 git integration code review:
+  - **P0:** FIX-01 autosave before working-tree mutations; FIX-02 system git project-tree badges (S-01)
+  - **P1:** FIX-03 remote auth/non-interactive env; FIX-04 ahead/behind error handling; FIX-05 workspace manager column refresh; FIX-06 per-repo git command queue
+  - **P2:** FIX-07 probe/status performance; FIX-08 pull dirty-tree UX; FIX-09 cancellation/timeout; FIX-10 gitService modularization; FIX-11 porcelain v2; FIX-12 stash panel UI; FIX-13 Windows PATH fallback
+  - **P3:** FIX-14 git integration polish (branch parsing, history pagination, diff docs, env blocklist, etc.)
+- **`specs/git/execution/fixes/README.md`** — index table with priority and links.
+
 ## 2026-07-04 07:50 — D-12 Task 1: Cancel in-flight git processes
 
 - **`app/src-tauri/src/git.rs`** — cancellable git command registry with command ids, platform process termination, `cancel_git_command` Tauri API, and `cancelled` flag on `RunGitResponse`.

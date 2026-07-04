@@ -11,6 +11,11 @@
 - **Tests** — `gitRemoteEnv.test.ts`, `askpassPrompt.test.ts`; updated `gitService.test.ts`, `gitCancel.test.ts`, `gitErrorUi.test.ts`.
 - **`specs/git/execution/fixes/fix-03-remote-auth-and-non-interactive-env.md`**, **D-05 tasks** — marked `[DONE]`.
 
+## 2026-07-04 11:42 — CI: commit app package-lock.json
+
+- **`.gitignore`** — allowlist `app/package-lock.json` so CI `npm ci` and setup-node cache resolve the lockfile path.
+- **`app/package-lock.json`** — committed locked frontend dependencies for reproducible CI installs.
+
 ## 2026-07-04 11:30 — FIX-02: System git project-tree badges (S-01)
 
 - **`app/src/lib/git/projectTreeFileStatusMap.ts`** — maps `git status --porcelain` codes to M/A/D badges with repo-root absolute paths.

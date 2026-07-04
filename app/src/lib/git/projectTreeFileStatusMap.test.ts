@@ -7,6 +7,7 @@ import {
   mapPorcelainStatusCodeToBadge,
   mapWorkingTreeStatusToAbsoluteBadges,
 } from "./projectTreeFileStatusMap";
+import { normalizeGitOutputPath } from "./types";
 import { describeIfGitInstalled, withTempGitRepo } from "./test/gitTempRepoHarness";
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -60,9 +61,10 @@ describeIfGitInstalled("mapWorkingTreeStatusToAbsoluteBadges integration", () =>
       const stdout = repo.run(["status", "--porcelain"]) as string;
       const status = splitWorkingTreeStatus(parseStatusPorcelain(stdout));
       const badges = mapWorkingTreeStatusToAbsoluteBadges(repo.dir, status);
+      const repoRoot = normalizeGitOutputPath(repo.dir);
 
-      expect(badges.get(`${repo.dir}/tracked.txt`)).toBe("modified");
-      expect(badges.get(`${repo.dir}/new.txt`)).toBe("added");
+      expect(badges.get(`${repoRoot}/tracked.txt`)).toBe("modified");
+      expect(badges.get(`${repoRoot}/new.txt`)).toBe("added");
     });
   });
 });

@@ -11,10 +11,12 @@
 - **Tests** — `gitRemoteEnv.test.ts`, `askpassPrompt.test.ts`; updated `gitService.test.ts`, `gitCancel.test.ts`, `gitErrorUi.test.ts`.
 - **`specs/git/execution/fixes/fix-03-remote-auth-and-non-interactive-env.md`**, **D-05 tasks** — marked `[DONE]`.
 
-## 2026-07-04 11:42 — CI: commit app package-lock.json
+## 2026-07-04 11:47 — CI: Windows CRLF diff parsing and lockfile
 
 - **`.gitignore`** — allowlist `app/package-lock.json` so CI `npm ci` and setup-node cache resolve the lockfile path.
 - **`app/package-lock.json`** — committed locked frontend dependencies for reproducible CI installs.
+- **`gitDiffParse.ts`** — strip `\r` from diff lines so Windows checkout (CRLF fixtures) parses binary and hunk headers correctly.
+- **`projectTreeFileStatusMap.test.ts`** — normalize temp-repo paths for cross-platform badge lookups.
 
 ## 2026-07-04 11:30 — FIX-02: System git project-tree badges (S-01)
 

@@ -17,6 +17,7 @@ import {
   GIT_SHOW_FORMAT,
   GitCommitFileDiffNotFoundError,
   GitCommitValidationError,
+  GitCommandTimedOutError,
   GitDiffTooLargeError,
   GitNoUpstreamError,
   GitRefValidationError,
@@ -30,6 +31,7 @@ import {
   pullRemote,
   pushRemote,
   pushTag,
+  REMOTE_GIT_OPERATION_TIMEOUT_MS,
   queryAheadBehind,
   isNoUpstreamAheadBehindError,
   queryBranches,
@@ -85,6 +87,7 @@ function expectRemoteGitInvoke(
     askpassEnabled: true,
     askpassOperation: operation,
     env: REMOTE_GIT_ENV,
+    timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
     ...extra,
   });
 }
@@ -1236,6 +1239,37 @@ describe("createCommit", () => {
     });
   });
 
+  it("passes commandId through git_commit_with_message", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "[main abc1234] Subject\n",
+      stderr: "",
+      durationMs: 3,
+    });
+
+    await createCommit("/tmp/repo", "Subject", { commandId: "commit-1" });
+
+    expect(invokeMock).toHaveBeenCalledWith("git_commit_with_message", {
+      repoRoot: "/tmp/repo",
+      message: "Subject",
+      commandId: "commit-1",
+    });
+  });
+
+  it("throws GitCommandTimedOutError when commit response is timed out", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: -1,
+      stdout: "",
+      stderr: "Git command timed out.",
+      durationMs: 600_000,
+      timedOut: true,
+    });
+
+    await expect(createCommit("/tmp/repo", "Subject", { commandId: "commit-2" })).rejects.toBeInstanceOf(
+      GitCommandTimedOutError,
+    );
+  });
+
   it("rejects empty message before invoking git", async () => {
     await expect(createCommit("/tmp/repo", "   ")).rejects.toBeInstanceOf(
       GitCommitValidationError,
@@ -1675,6 +1709,7 @@ describe("deleteTag", () => {
       askpassEnabled: true,
       askpassOperation: "tagDelete",
       env: REMOTE_GIT_ENV,
+      timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
     });
     expect(invokeMock).toHaveBeenNthCalledWith(3, "run_git", {
       repoRoot: "/tmp/repo",
@@ -1682,6 +1717,7 @@ describe("deleteTag", () => {
       askpassEnabled: true,
       askpassOperation: "tagDelete",
       env: REMOTE_GIT_ENV,
+      timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
     });
   });
 

@@ -5,6 +5,7 @@
   import AskpassPrompt from "./AskpassPrompt.svelte";
   import TagDeletePrompt from "./TagDeletePrompt.svelte";
   import LocalChangesCheckoutPrompt from "./LocalChangesCheckoutPrompt.svelte";
+  import LocalChangesPullPrompt from "./LocalChangesPullPrompt.svelte";
   import PreGitAutosavePrompt from "./PreGitAutosavePrompt.svelte";
   import RevertPreviewDialog from "./RevertPreviewDialog.svelte";
   import SessionListPanel from "./SessionListPanel.svelte";
@@ -639,6 +640,7 @@
 <TagPushPrompt />
 <TagDeletePrompt />
 <LocalChangesCheckoutPrompt />
+<LocalChangesPullPrompt />
 <PreGitAutosavePrompt />
 <RevertPreviewDialog />
 {#if sessionListPanel}

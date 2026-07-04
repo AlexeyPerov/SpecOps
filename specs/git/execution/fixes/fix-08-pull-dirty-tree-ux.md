@@ -1,4 +1,4 @@
-# FIX-08 — Pull dirty-tree UX
+# FIX-08 — Pull dirty-tree UX [DONE]
 
 **Priority:** P2 · **Score:** 5 · **Agent:** medium · **Estimate:** ~0.5d
 
@@ -33,10 +33,10 @@ Improve pull UX when the working tree is dirty: clearer messaging and optional s
 
 ## Acceptance checklist
 
-- [ ] Dirty-tree pull behavior is documented in UI copy and manual test checklist.
-- [ ] User has at least one actionable path forward (stash, commit, or cancel).
-- [ ] Pre-git autosave still runs before pull/stash.
-- [ ] No silent data loss on failed stash or conflict during pull.
+- [x] Dirty-tree pull behavior is documented in UI copy and manual test checklist.
+- [x] User has at least one actionable path forward (stash, commit, or cancel).
+- [x] Pre-git autosave still runs before pull/stash.
+- [x] No silent data loss on failed stash or conflict during pull.
 
 ## Dependencies
 

@@ -1,11 +1,12 @@
 use crate::git_askpass;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const GIT_BINARY: &str = "git";
 
@@ -29,6 +30,9 @@ pub struct RunGitRequest {
     /// Optional askpass request timeout in milliseconds.
     #[serde(default)]
     pub askpass_timeout_ms: Option<u64>,
+    /// Optional subprocess timeout in milliseconds (cancellable commands only).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Result of a `git` subprocess invocation.
@@ -41,6 +45,8 @@ pub struct RunGitResponse {
     pub duration_ms: u64,
     #[serde(default)]
     pub cancelled: bool,
+    #[serde(default)]
+    pub timed_out: bool,
 }
 
 /// Outcome of a `cancel_git_command` request.
@@ -115,29 +121,112 @@ fn unregister_active_git_command(command_id: &str) {
     }
 }
 
-fn wait_for_registered_git_command(command_id: &str) -> Result<std::process::Output, String> {
-    let registry = git_command_registry();
-    let commands = registry
-        .commands
-        .lock()
-        .map_err(|_| "git command registry lock poisoned".to_string())?;
+fn wait_for_registered_git_command(
+    command_id: &str,
+    timeout_ms: Option<u64>,
+) -> Result<RegisteredCommandOutput, String> {
+    let poll_start = Instant::now();
 
-    let entry = commands
-        .get(command_id)
-        .ok_or_else(|| format!("git command id not registered: {command_id}"))?;
+    loop {
+        if active_git_command_was_cancelled(command_id) {
+            terminate_registered_git_command_child(command_id);
+            return Ok(RegisteredCommandOutput {
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: String::new(),
+                timed_out: false,
+            });
+        }
 
-    let mut child_guard = entry
-        .child
-        .lock()
-        .map_err(|_| "git command child lock poisoned".to_string())?;
+        if let Some(timeout) = timeout_ms {
+            if poll_start.elapsed().as_millis() as u64 >= timeout {
+                terminate_registered_git_command_child(command_id);
+                return Ok(RegisteredCommandOutput {
+                    exit_code: -1,
+                    stdout: String::new(),
+                    stderr: "Git command timed out.".to_string(),
+                    timed_out: true,
+                });
+            }
+        }
 
-    let child = child_guard
-        .as_mut()
-        .ok_or_else(|| format!("git command child already finished: {command_id}"))?;
+        let wait_status = {
+            let registry = git_command_registry();
+            let commands = registry
+                .commands
+                .lock()
+                .map_err(|_| "git command registry lock poisoned".to_string())?;
 
-    child
-        .wait_with_output()
-        .map_err(|error| format!("Failed to wait for git command: {error}"))
+            let entry = commands
+                .get(command_id)
+                .ok_or_else(|| format!("git command id not registered: {command_id}"))?;
+
+            let mut child_guard = entry
+                .child
+                .lock()
+                .map_err(|_| "git command child lock poisoned".to_string())?;
+
+            let Some(child) = child_guard.as_mut() else {
+                return Err(format!("git command child already finished: {command_id}"));
+            };
+
+            child
+                .try_wait()
+                .map_err(|error| format!("Failed to wait for git command: {error}"))
+        };
+
+        match wait_status {
+            Ok(Some(status)) => {
+                let mut child = take_registered_git_command_child(command_id)
+                    .ok_or_else(|| format!("git command child already finished: {command_id}"))?;
+                let exit_code = status.code().unwrap_or(-1);
+                let mut stdout_bytes = Vec::new();
+                let mut stderr_bytes = Vec::new();
+                if let Some(mut stdout) = child.stdout.take() {
+                    let _ = stdout.read_to_end(&mut stdout_bytes);
+                }
+                if let Some(mut stderr) = child.stderr.take() {
+                    let _ = stderr.read_to_end(&mut stderr_bytes);
+                }
+                let _ = child.wait();
+
+                return Ok(RegisteredCommandOutput {
+                    exit_code,
+                    stdout: decode_utf8(&stdout_bytes),
+                    stderr: decode_utf8(&stderr_bytes),
+                    timed_out: false,
+                });
+            }
+            Ok(None) => {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+struct RegisteredCommandOutput {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+    timed_out: bool,
+}
+
+fn take_registered_git_command_child(command_id: &str) -> Option<Child> {
+    let Ok(commands) = git_command_registry().commands.lock() else {
+        return None;
+    };
+    let entry = commands.get(command_id)?;
+    let Ok(mut child_guard) = entry.child.lock() else {
+        return None;
+    };
+    child_guard.take()
+}
+
+fn terminate_registered_git_command_child(command_id: &str) {
+    if let Some(mut child) = take_registered_git_command_child(command_id) {
+        terminate_child_process(&mut child);
+    }
 }
 
 fn active_git_command_was_cancelled(command_id: &str) -> bool {
@@ -278,6 +367,9 @@ pub fn probe_git_available() -> GitAvailableResponse {
 pub struct GitCommitRequest {
     pub repo_root: String,
     pub message: String,
+    /// When set, the commit subprocess is registered for user-initiated cancellation.
+    #[serde(default)]
+    pub command_id: Option<String>,
 }
 
 fn merge_env_maps(
@@ -336,6 +428,7 @@ pub struct ExecuteGitOptions<'a> {
     pub askpass_enabled: bool,
     pub askpass_operation: Option<&'a str>,
     pub askpass_timeout_ms: Option<u64>,
+    pub timeout_ms: Option<u64>,
 }
 
 pub fn execute_git_with_options(
@@ -353,6 +446,7 @@ pub fn execute_git_with_options(
             askpass_enabled: false,
             askpass_operation: None,
             askpass_timeout_ms: None,
+            timeout_ms: None,
         },
     )
 }
@@ -381,6 +475,7 @@ pub fn execute_git_with_full_options(
                     stderr: error,
                     duration_ms: start.elapsed().as_millis() as u64,
                     cancelled: false,
+                    timed_out: false,
                 };
             }
         }
@@ -405,6 +500,7 @@ pub fn execute_git_with_full_options(
                     stderr: error.to_string(),
                     duration_ms: start.elapsed().as_millis() as u64,
                     cancelled: false,
+                    timed_out: false,
                 };
             }
         };
@@ -417,10 +513,11 @@ pub fn execute_git_with_full_options(
                 stderr: error,
                 duration_ms: start.elapsed().as_millis() as u64,
                 cancelled: false,
+                timed_out: false,
             };
         }
 
-        let output = match wait_for_registered_git_command(id) {
+        let output = match wait_for_registered_git_command(id, options.timeout_ms) {
             Ok(output) => output,
             Err(error) => {
                 let cancelled = active_git_command_was_cancelled(id);
@@ -431,19 +528,21 @@ pub fn execute_git_with_full_options(
                     stderr: error,
                     duration_ms: start.elapsed().as_millis() as u64,
                     cancelled,
+                    timed_out: false,
                 };
             }
         };
 
-        let cancelled = active_git_command_was_cancelled(id);
+        let cancelled = active_git_command_was_cancelled(id) && !output.timed_out;
         unregister_active_git_command(id);
 
         RunGitResponse {
-            exit_code: output.status.code().unwrap_or(-1),
-            stdout: decode_utf8(&output.stdout),
-            stderr: decode_utf8(&output.stderr),
+            exit_code: output.exit_code,
+            stdout: output.stdout,
+            stderr: output.stderr,
             duration_ms: start.elapsed().as_millis() as u64,
             cancelled,
+            timed_out: output.timed_out,
         }
     } else {
         match build_git_command(repo_root, args, effective_env).output() {
@@ -453,6 +552,7 @@ pub fn execute_git_with_full_options(
                 stderr: decode_utf8(&output.stderr),
                 duration_ms: start.elapsed().as_millis() as u64,
                 cancelled: false,
+                timed_out: false,
             },
             Err(error) => RunGitResponse {
                 exit_code: -1,
@@ -460,6 +560,7 @@ pub fn execute_git_with_full_options(
                 stderr: error.to_string(),
                 duration_ms: start.elapsed().as_millis() as u64,
                 cancelled: false,
+                timed_out: false,
             },
         }
     };
@@ -495,14 +596,21 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
         .map_err(|error| format!("Failed to write commit message file: {error}"))?;
 
     let temp_arg = git_message_file_arg(&temp_path);
-    let response = execute_git(
+    let response = execute_git_with_full_options(
         &repo_root,
         &[
             "commit".to_string(),
             "-F".to_string(),
             temp_arg,
         ],
-        None,
+        ExecuteGitOptions {
+            env: None,
+            command_id: request.command_id.as_deref(),
+            askpass_enabled: false,
+            askpass_operation: None,
+            askpass_timeout_ms: None,
+            timeout_ms: None,
+        },
     );
 
     let _ = std::fs::remove_file(&temp_path);
@@ -536,6 +644,7 @@ pub fn run_git(request: RunGitRequest) -> Result<RunGitResponse, String> {
             askpass_enabled: request.askpass_enabled,
             askpass_operation: request.askpass_operation.as_deref(),
             askpass_timeout_ms: request.askpass_timeout_ms,
+            timeout_ms: request.timeout_ms,
         },
     ))
 }
@@ -893,7 +1002,7 @@ mod tests {
         register_active_git_command(&command_id, child).expect("register command");
 
         let wait_id = command_id.clone();
-        let wait_handle = std::thread::spawn(move || wait_for_registered_git_command(&wait_id));
+        let wait_handle = std::thread::spawn(move || wait_for_registered_git_command(&wait_id, None));
 
         std::thread::sleep(std::time::Duration::from_millis(50));
 
@@ -946,5 +1055,30 @@ mod tests {
         cancel_git_command_by_id(&command_id);
         unregister_active_git_command(&command_id);
         let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn run_git_timeout_terminates_in_flight_process() {
+        let command_id = format!(
+            "timeout-command-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn sleep");
+
+        register_active_git_command(&command_id, child).expect("register command");
+
+        let response =
+            wait_for_registered_git_command(&command_id, Some(150)).expect("wait should return");
+
+        assert!(response.timed_out);
+        assert_eq!(response.exit_code, -1);
+        assert!(response.stderr.contains("timed out"));
+
+        unregister_active_git_command(&command_id);
     }
 }

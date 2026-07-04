@@ -6,6 +6,8 @@ export interface RunGitResponse {
   durationMs: number;
   /** True when the subprocess was terminated by user-initiated cancellation. */
   cancelled?: boolean;
+  /** True when the subprocess was terminated because a timeout elapsed. */
+  timedOut?: boolean;
 }
 
 /** Result of the `git_available` Tauri command. */
@@ -32,6 +34,8 @@ export interface CancellableGitOptions {
   askpassOperation?: GitAskpassOperation;
   /** Optional askpass request timeout in milliseconds. */
   askpassTimeoutMs?: number;
+  /** Optional subprocess timeout in milliseconds (cancellable commands only). */
+  timeoutMs?: number;
 }
 
 /** Remote git operation context surfaced in askpass prompts. */

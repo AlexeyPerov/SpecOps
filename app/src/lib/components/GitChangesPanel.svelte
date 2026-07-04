@@ -5,6 +5,8 @@
     createCommit,
     GitCommitValidationError,
     GitDiffTooLargeError,
+    isGitCommandCancelledError,
+    isGitCommandTimedOutError,
     queryWorkingTreeFileDiff,
     queryWorkingTreeStatus,
     stageAll,
@@ -28,6 +30,7 @@
     readOnly?: boolean;
     refreshToken?: number;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
+    onRemoteCommandChange?: (command: { id: string; label: string } | null) => void;
     notify?: (message: string) => void;
   }
 
@@ -38,6 +41,7 @@
     readOnly = false,
     refreshToken = 0,
     onMutation = () => {},
+    onRemoteCommandChange = () => {},
     notify = () => {},
   }: Props = $props();
 
@@ -321,6 +325,9 @@
 
     actionBusy = true;
     actionError = null;
+    const commandId = crypto.randomUUID();
+    onRemoteCommandChange({ id: commandId, label: "Commit" });
+
     try {
       const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
         deps: preGitSaveDeps,
@@ -329,18 +336,23 @@
         return;
       }
 
-      await createCommit(repoRoot, trimmed);
+      await createCommit(repoRoot, trimmed, { commandId });
       commitMessage = "";
       commitError = null;
       await refreshAfterAction("commit");
     } catch (error) {
       if (error instanceof GitCommitValidationError) {
         commitError = error.message;
+      } else if (isGitCommandCancelledError(error)) {
+        notify("Commit cancelled.");
+      } else if (isGitCommandTimedOutError(error)) {
+        actionError = reportGitError(error, { operation: "Commit", repoRoot, notify });
       } else {
         actionError = reportGitError(error, { operation: "Commit", repoRoot, notify });
       }
     } finally {
       actionBusy = false;
+      onRemoteCommandChange(null);
     }
   }
 </script>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { GitNoUpstreamError } from "./gitService";
+import { GitCommandTimedOutError, GitNoUpstreamError } from "./gitService";
 import { formatGitErrorPrimaryMessage, reportGitError } from "./gitErrorUi";
 import { createGitCommandError, type RunGitResponse } from "./types";
 
@@ -59,6 +59,11 @@ describe("formatGitErrorPrimaryMessage", () => {
   it("maps missing upstream errors", () => {
     const error = new GitNoUpstreamError('Branch "main" has no upstream.');
     expect(formatGitErrorPrimaryMessage(error)).toContain("no upstream");
+  });
+
+  it("maps timed-out git commands", () => {
+    const error = new GitCommandTimedOutError();
+    expect(formatGitErrorPrimaryMessage(error)).toContain("took too long");
   });
 
   it("maps index.lock failures with retry guidance", () => {

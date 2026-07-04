@@ -6,11 +6,14 @@
   import GitChangesPanel from "./GitChangesPanel.svelte";
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
   import GitTagsPanel from "./GitTagsPanel.svelte";
-  import { notifyGitCancellation, reportGitError, isGitCancellationError } from "../git/gitErrorUi";
+  import { notifyGitCancellation, reportGitError, isGitCancellationError, formatGitErrorPrimaryMessage } from "../git/gitErrorUi";
   import { gitInstallHint } from "../git/gitInstallHints";
   import {
+    applyStash,
     cancelGitCommand,
+    createStash,
     fetchRemote,
+    GitStashApplyConflictError,
     isWorkingTreeDirty,
     pullRemote,
     pushRemote,
@@ -46,6 +49,7 @@
   } from "../git/versionControlRemoteSelection";
   import type { SaveDocumentDeps } from "../services/documentSave";
   import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
+  import { promptLocalChangesPull } from "../services/localChangesPullPrompt";
 
   /**
    * Per-workspace version control view, rendered as a chrome-less editor-pane
@@ -633,6 +637,8 @@
     remoteCancelRequested = false;
     pullBusy = true;
 
+    let stashedRef: string | null = null;
+
     try {
       if (workspaceRootPath) {
         const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
@@ -645,17 +651,59 @@
 
       const dirty = await isWorkingTreeDirty(repoRoot);
       if (dirty) {
-        await message(
-          "Pull is blocked while the working tree has uncommitted changes. Commit, stash, or discard your changes first.",
-          {
-            title: "Working tree not clean",
-            kind: "warning",
-          },
-        );
+        const choice = await promptLocalChangesPull();
+        if (!choice || choice.type === "cancel") {
+          return;
+        }
+        if (choice.type === "block") {
+          await message(
+            "Pull is blocked while the working tree has uncommitted changes. Commit or stash your changes in the Changes panel, then try again.",
+            {
+              title: "Working tree not clean",
+              kind: "warning",
+            },
+          );
+          return;
+        }
+
+        try {
+          await createStash(repoRoot, "WIP before pull");
+          stashedRef = "stash@{0}";
+        } catch (error) {
+          reportGitError(error, { operation: "Stash", repoRoot, notify });
+          return;
+        }
+      }
+
+      try {
+        await pullRemote(repoRoot, buildRemoteOperationTarget(), { commandId });
+      } catch (error) {
+        if (stashedRef) {
+          notify(
+            "Pull failed. Your changes were stashed — apply the latest stash to restore them.",
+          );
+        }
+        handleRemoteOperationError("Pull", error);
         return;
       }
 
-      await pullRemote(repoRoot, buildRemoteOperationTarget(), { commandId });
+      if (stashedRef) {
+        try {
+          await applyStash(repoRoot, stashedRef, true);
+        } catch (error) {
+          const detail = formatGitErrorPrimaryMessage(error);
+          if (error instanceof GitStashApplyConflictError) {
+            notify(
+              `Pull succeeded, but stashed changes conflicted on apply. Resolve conflicts, then apply ${stashedRef} manually.`,
+            );
+          } else {
+            notify(
+              `Pull succeeded, but could not restore stashed changes: ${detail}. Apply ${stashedRef} manually if needed.`,
+            );
+          }
+        }
+      }
+
       await refreshAfterMutation("pull");
     } catch (error) {
       handleRemoteOperationError("Pull", error);
@@ -981,6 +1029,7 @@
             readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}
+            onRemoteCommandChange={registerPanelRemoteCommand}
             {notify}
           />
         {:else}

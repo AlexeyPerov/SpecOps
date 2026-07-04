@@ -54,6 +54,9 @@ import {
   type WorkingTreeStatus,
 } from "./types";
 
+/** Default ceiling for remote git network operations (10 minutes). */
+export const REMOTE_GIT_OPERATION_TIMEOUT_MS = 10 * 60 * 1000;
+
 const NOT_A_REPOSITORY_EXIT_CODE = 128;
 
 /** Context lines for `git diff` / `git show --patch` (D-02). */
@@ -110,6 +113,7 @@ async function invokeRunGit(
       ...(options?.askpass ? { askpassEnabled: true } : {}),
       ...(options?.askpassOperation ? { askpassOperation: options.askpassOperation } : {}),
       ...(options?.askpassTimeoutMs ? { askpassTimeoutMs: options.askpassTimeoutMs } : {}),
+      ...(options?.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
     });
     logGitCommandSummary(repoRoot, args, response);
     return response;
@@ -152,6 +156,7 @@ async function runRemoteGit(
     ...options,
     askpass: true,
     askpassOperation: options?.operation,
+    timeoutMs: options?.timeoutMs ?? REMOTE_GIT_OPERATION_TIMEOUT_MS,
   });
 }
 
@@ -654,7 +659,7 @@ export async function queryRemoteTags(
     ["ls-remote", "--tags", trimmedRemote],
     { ...options, operation: "lsRemote" },
   );
-  assertGitCommandNotCancelled(response);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -748,7 +753,11 @@ export class GitRefValidationError extends Error {
  * Create a commit with a message written to a secure temp file on the Rust side.
  * Message is trimmed; empty messages are rejected before invoking git.
  */
-export async function createCommit(repoRoot: string, message: string): Promise<void> {
+export async function createCommit(
+  repoRoot: string,
+  message: string,
+  options?: CancellableGitOptions,
+): Promise<void> {
   const trimmed = message.trim();
   if (!trimmed) {
     throw new GitCommitValidationError("Commit message cannot be empty.");
@@ -759,13 +768,20 @@ export async function createCommit(repoRoot: string, message: string): Promise<v
       const response = await invoke<RunGitResponse>("git_commit_with_message", {
         repoRoot,
         message: trimmed,
+        ...(options?.commandId ? { commandId: options.commandId } : {}),
       });
       logGitCommandSummary(repoRoot, ["commit", "-F", "<message-file>"], response);
+      assertGitCommandCompleted(response);
       if (response.exitCode !== 0) {
         throw createGitCommandError(response);
       }
     } catch (error) {
-      if (error instanceof GitCommitValidationError || isGitError(error)) {
+      if (
+        error instanceof GitCommitValidationError ||
+        isGitCommandCancelledError(error) ||
+        isGitCommandTimedOutError(error) ||
+        isGitError(error)
+      ) {
         throw error;
       }
       throw mapGitInvokeError(error, repoRoot);
@@ -822,7 +838,7 @@ export async function fetchRemote(
     ...options,
     operation: "fetch",
   });
-  assertGitCommandNotCancelled(response);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -838,7 +854,7 @@ export async function pullRemote(
     ...options,
     operation: "pull",
   });
-  assertGitCommandNotCancelled(response);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -864,14 +880,38 @@ export class GitCommandCancelledError extends Error {
   }
 }
 
+export class GitCommandTimedOutError extends Error {
+  readonly kind = "timedOut" as const;
+
+  constructor(message = "Git command timed out.") {
+    super(message);
+    this.name = "GitCommandTimedOutError";
+  }
+}
+
 export function isGitCommandCancelledError(error: unknown): error is GitCommandCancelledError {
   return error instanceof GitCommandCancelledError;
+}
+
+export function isGitCommandTimedOutError(error: unknown): error is GitCommandTimedOutError {
+  return error instanceof GitCommandTimedOutError;
 }
 
 function assertGitCommandNotCancelled(response: RunGitResponse): void {
   if (response.cancelled) {
     throw new GitCommandCancelledError();
   }
+}
+
+function assertGitCommandNotTimedOut(response: RunGitResponse): void {
+  if (response.timedOut) {
+    throw new GitCommandTimedOutError();
+  }
+}
+
+function assertGitCommandCompleted(response: RunGitResponse): void {
+  assertGitCommandNotCancelled(response);
+  assertGitCommandNotTimedOut(response);
 }
 
 function parseNoUpstreamBranch(stderr: string): string | null {
@@ -894,7 +934,7 @@ export async function pushRemote(
     ...options,
     operation: "push",
   });
-  assertGitCommandNotCancelled(response);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     if (isNoUpstreamPushError(response.stderr)) {
       const branchName = parseNoUpstreamBranch(response.stderr);
@@ -960,7 +1000,7 @@ export async function pushTag(
     ["push", remoteName.trim(), `refs/tags/${trimmedTag}`],
     { ...options, operation: "tagPush" },
   );
-  assertGitCommandNotCancelled(response);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -988,7 +1028,7 @@ export async function deleteRemoteTag(
     ["push", "--delete", remoteName.trim(), `refs/tags/${trimmedTag}`],
     { ...options, operation: "tagDelete" },
   );
-  assertGitCommandNotCancelled(response);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }

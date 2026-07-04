@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-04 14:15 — FIX-08 & FIX-09: Pull dirty-tree UX and git cancellation/timeout
+
+- **`LocalChangesPullPrompt.svelte`**, **`localChangesPullPrompt.ts`** — dirty-tree pull dialog with Cancel, Keep changes, and Stash and pull options.
+- **`VersionControlView.svelte`** — pull flow offers stash-and-pull with independent stash/pull/apply failure toasts; pre-git autosave unchanged.
+- **`app/src-tauri/src/git.rs`** — optional `timeoutMs` on `run_git`; `timedOut` on `RunGitResponse`; polling wait with timeout; commit accepts `commandId`.
+- **`gitService.ts`**, **`types.ts`** — `REMOTE_GIT_OPERATION_TIMEOUT_MS` (10 min) for remote ops; `GitCommandTimedOutError`; `createCommit` accepts cancellable `commandId`.
+- **`GitChangesPanel.svelte`** — commit registers command id for toolbar Cancel.
+- **`gitErrorUi.ts`** — timeout error messaging.
+- **Tests** — Rust timeout test; extended `gitService.test.ts`, `gitCancel.test.ts`, `gitErrorUi.test.ts`.
+- **`specs/git/manual-test-checklist.md`** — dirty-tree pull and cancel/timeout flows.
+- **`specs/git/execution/fixes/fix-08-pull-dirty-tree-ux.md`**, **`fix-09-cancellation-and-subprocess-timeout.md`** — marked `[DONE]`.
+
 ## 2026-07-04 14:00 — FIX-06 & FIX-07: Per-repo git queue and status performance
 
 - **`app/src/lib/git/gitCommandQueue.ts`** — shared per-repository FIFO queue via `enqueueGitCommandForRepo()`; unrelated repos run concurrently.

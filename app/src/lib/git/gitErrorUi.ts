@@ -1,5 +1,5 @@
 import { logDiagnostic } from "../services/logging";
-import { GitNoUpstreamError, isGitCommandCancelledError } from "./gitService";
+import { GitNoUpstreamError, isGitCommandCancelledError, isGitCommandTimedOutError } from "./gitService";
 import { isGitError, type GitCommandError } from "./types";
 
 export interface ReportGitErrorOptions {
@@ -59,6 +59,10 @@ function authFailureGuidance(stderr: string): string {
 export function formatGitErrorPrimaryMessage(error: unknown): string {
   if (error instanceof GitNoUpstreamError) {
     return error.message;
+  }
+
+  if (isGitCommandTimedOutError(error)) {
+    return "The git command took too long and was stopped. Check your network connection and try again.";
   }
 
   if (isGitError(error) && error.kind === "command") {
@@ -133,6 +137,10 @@ export function notifyGitCancellation(
 
 export function isGitCancellationError(error: unknown): boolean {
   return isGitCommandCancelledError(error);
+}
+
+export function isGitTimeoutError(error: unknown): boolean {
+  return isGitCommandTimedOutError(error);
 }
 
 function extractStderr(error: unknown): string | undefined {

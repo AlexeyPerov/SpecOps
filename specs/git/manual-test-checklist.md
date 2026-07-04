@@ -82,9 +82,16 @@ Run these checks once per target Linux environment before manual sign-off. Recor
 - [ ] **No remotes:** repository with no remotes shows **No remotes** hint; Fetch/Pull/Push disabled with explanatory tooltips.
 - [ ] **Fetch:** **Fetch** uses the selected remote (verify with `git fetch <remote>` in console log when only one remote should update).
 - [ ] **Pull:** **Pull** on clean tree uses selected remote and succeeds or shows merge/auth error in toast + console.
+- [ ] **Dirty tree prompt:** modify a tracked file (do not commit) — **Pull** opens **Local changes detected** dialog with Cancel, Keep changes, and Stash and pull.
+- [ ] **Stash and pull:** choose **Stash and pull** on a dirty tree — pull succeeds when remote changes merge cleanly; stashed changes restored afterward (or conflict toast if apply fails).
+- [ ] **Dirty pull cancel:** choose **Cancel** on the dirty-tree pull dialog — no pull; working tree unchanged.
+- [ ] **Dirty pull block:** choose **Keep changes** — warning explains commit/stash first; pull does not run.
 - [ ] **Push:** **Push** uses selected remote; succeeds when upstream configured or shows no-upstream / auth message.
 - [ ] **Selection stability:** changing the remote dropdown does not reload history/changes panels (no unnecessary refresh).
 - [ ] **Parallel guard:** double-click **Push** (or Fetch/Pull) — only one operation runs; buttons re-enable after completion or error.
+- [ ] **Cancel remote op:** start **Fetch**, **Pull**, or **Push** — **Cancel** stops the in-flight command and shows an informational toast (not an error).
+- [ ] **Cancel commit:** start **Commit** in Changes panel — toolbar **Cancel** stops the in-flight commit.
+- [ ] **Cancel tag push:** push a tag to a remote — **Cancel** stops the in-flight tag push.
 
 ## Linux smoke run (VC core flows)
 

@@ -1,4 +1,4 @@
-# FIX-09 — Cancellation breadth and subprocess timeout
+# FIX-09 — Cancellation breadth and subprocess timeout [DONE]
 
 **Priority:** P2 · **Score:** 7 · **Agent:** medium · **Estimate:** ~1d
 
@@ -39,10 +39,10 @@ Extend cancellation and optional timeouts to long-running git operations; fail h
 
 ## Acceptance checklist
 
-- [ ] User can cancel an in-flight commit when VC shows busy state (if UI exposes it).
-- [ ] Tag push/delete remote respects cancel when busy.
-- [ ] Remote operations auto-fail after configured timeout with clear message.
-- [ ] Short local commands (status, single-file diff) remain without timeout by default.
+- [x] User can cancel an in-flight commit when VC shows busy state (if UI exposes it).
+- [x] Tag push/delete remote respects cancel when busy.
+- [x] Remote operations auto-fail after configured timeout with clear message.
+- [x] Short local commands (status, single-file diff) remain without timeout by default.
 
 ## Dependencies
 

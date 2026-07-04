@@ -33,7 +33,7 @@ These were considered during planning and rejected for v1:
 
 | ID | Feature | Notes |
 |---|---|---|
-| S-01 | **Replace project-tree M/A/D badges with system git** | Today badges use OpenCode `file.status` (`ProjectTreeNode.svelte`, `fileStatusTracker.ts`). Independent of VC tab; optional unification on `git status` + refresh hooks after VC mutations |
+| S-01 | **Replace project-tree M/A/D badges with system git** | **Done (FIX-02).** Git-backed workspaces use `git status --porcelain` via `projectTreeFileStatusMap.ts` + `fileStatusTracker.ts`; VC mutations debounce-refresh tree badges |
 | S-02 | Workspace Manager **branch name** column | After VC MVP stable |
 | S-03 | Workspace Manager **dirty/clean** indicator | After S-02 |
 | S-04 | VC entry from Workspace Manager row actions | Mirror ⚙ Settings pattern |

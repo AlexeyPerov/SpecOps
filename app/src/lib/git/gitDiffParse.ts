@@ -26,12 +26,17 @@ export function parseUnifiedDiff(stdout: string): ParsedTextDiff[] {
   return splitDiffSections(stdout).map(parseDiffSection);
 }
 
+function normalizeDiffLine(line: string): string {
+  return line.replace(/\r$/, "");
+}
+
 function splitDiffSections(stdout: string): string[] {
   const lines = stdout.split("\n");
   const sections: string[] = [];
   let current: string[] = [];
 
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    const line = normalizeDiffLine(rawLine);
     if (line.startsWith(DIFF_GIT_PREFIX) && current.length > 0) {
       sections.push(trimSection(current));
       current = [line];
@@ -72,7 +77,7 @@ function parseDiffSection(section: string): ParsedTextDiff {
   let newLineNo = 0;
 
   for (let index = 1; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
+    const line = normalizeDiffLine(lines[index] ?? "");
 
     if (line.startsWith("new file mode ")) {
       newMode = line.slice("new file mode ".length).trim();

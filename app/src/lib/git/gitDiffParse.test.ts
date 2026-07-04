@@ -75,6 +75,17 @@ describe("parseUnifiedDiff", () => {
     expect(parseUnifiedDiff("")).toEqual([]);
     expect(parseUnifiedDiff("   \n  ")).toEqual([]);
   });
+
+  it("strips CRLF line endings from fixture-style patches", () => {
+    const crlf = readFixture("git-diff-unified-single-file.txt").replace(/\n/g, "\r\n");
+    const parsed = parseUnifiedDiff(crlf);
+
+    expect(parsed[0]?.hunks[0]?.header).toBe("@@ -1,3 +1,4 @@");
+    expect(parsed[0]?.newMode).toBe("100644");
+
+    const binaryCrlf = readFixture("git-diff-binary.txt").replace(/\n/g, "\r\n");
+    expect(parseUnifiedDiff(binaryCrlf)[0]?.isBinary).toBe(true);
+  });
 });
 
 describeIfGitInstalled("parseUnifiedDiff integration (temp repo harness)", () => {

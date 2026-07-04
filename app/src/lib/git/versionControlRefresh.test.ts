@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mutationChangesHead } from "./versionControlRefresh";
+import {
+  mutationChangesHead,
+  notifyVersionControlMutation,
+  subscribeVersionControlMutations,
+} from "./versionControlRefresh";
 
 describe("mutationChangesHead", () => {
   it("returns true for operations that move HEAD", () => {
@@ -14,5 +18,20 @@ describe("mutationChangesHead", () => {
     expect(mutationChangesHead("fetch")).toBe(false);
     expect(mutationChangesHead("push")).toBe(false);
     expect(mutationChangesHead("tag")).toBe(false);
+  });
+});
+
+describe("notifyVersionControlMutation", () => {
+  it("notifies subscribed listeners with workspace and scope", () => {
+    const calls: Array<[string, string]> = [];
+    const unsubscribe = subscribeVersionControlMutations((workspaceRootPath, scope) => {
+      calls.push([workspaceRootPath, scope]);
+    });
+
+    notifyVersionControlMutation("/tmp/repo", "commit");
+    unsubscribe();
+    notifyVersionControlMutation("/tmp/repo", "stage");
+
+    expect(calls).toEqual([["/tmp/repo", "commit"]]);
   });
 });

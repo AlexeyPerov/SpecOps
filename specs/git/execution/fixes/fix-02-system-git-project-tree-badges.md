@@ -1,4 +1,4 @@
-# FIX-02 — System git project-tree badges
+# FIX-02 — System git project-tree badges [DONE]
 
 **Priority:** P0 · **Score:** 8 · **Agent:** medium · **Estimate:** ~1d
 
@@ -36,10 +36,10 @@ Drive project-tree file badges from system git status for git-backed workspaces,
 
 ## Acceptance checklist
 
-- [ ] Git-backed workspace tree badges reflect `git status --porcelain` within one refresh cycle after VC mutations.
-- [ ] Non-git workspaces show no incorrect git badges (neutral or hidden).
-- [ ] No new import from git modules into OpenCode/fileStatusTracker coupling (isolation test still passes or is updated intentionally).
-- [ ] Performance: status refresh is debounced and does not block tree rendering.
+- [x] Git-backed workspace tree badges reflect `git status --porcelain` within one refresh cycle after VC mutations.
+- [x] Non-git workspaces show no incorrect git badges (neutral or hidden).
+- [x] No new import from git modules into OpenCode/fileStatusTracker coupling (isolation test still passes or is updated intentionally).
+- [x] Performance: status refresh is debounced and does not block tree rendering.
 
 ## Dependencies
 

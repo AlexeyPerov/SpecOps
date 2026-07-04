@@ -11,6 +11,24 @@
 - **Tests** — `gitRemoteEnv.test.ts`, `askpassPrompt.test.ts`; updated `gitService.test.ts`, `gitCancel.test.ts`, `gitErrorUi.test.ts`.
 - **`specs/git/execution/fixes/fix-03-remote-auth-and-non-interactive-env.md`**, **D-05 tasks** — marked `[DONE]`.
 
+## 2026-07-04 11:47 — CI: Windows CRLF diff parsing and lockfile
+
+- **`.gitignore`** — allowlist `app/package-lock.json` so CI `npm ci` and setup-node cache resolve the lockfile path.
+- **`app/package-lock.json`** — committed locked frontend dependencies for reproducible CI installs.
+- **`gitDiffParse.ts`** — strip `\r` from diff lines so Windows checkout (CRLF fixtures) parses binary and hunk headers correctly.
+- **`projectTreeFileStatusMap.test.ts`** — normalize temp-repo paths for cross-platform badge lookups.
+
+## 2026-07-04 11:30 — FIX-02: System git project-tree badges (S-01)
+
+- **`app/src/lib/git/projectTreeFileStatusMap.ts`** — maps `git status --porcelain` codes to M/A/D badges with repo-root absolute paths.
+- **`app/src/lib/services/fileStatusTracker.ts`** — git-backed workspaces read system git first; OpenCode `file.status` remains the fallback for non-git workspaces on the session tab. Debounced refresh on version-control mutations.
+- **`app/src/lib/git/versionControlRefresh.ts`** — mutation subscribe/notify hooks wired from `VersionControlView.svelte`.
+- **`app/src/routes/+page.svelte`** — git status refresh no longer gated on session-tab active state.
+- **Tests** — `projectTreeFileStatusMap.test.ts`, `fileStatusTracker.git.test.ts`, extended `versionControlRefresh.test.ts`.
+- **`specs/git/manual-test-checklist.md`** — project-tree badge checks aligned with VC Changes panel.
+- **`specs/git/backlog.md`** — S-01 marked done.
+- **`specs/git/execution/fixes/fix-02-system-git-project-tree-badges.md`** — marked `[DONE]`.
+
 ## 2026-07-04 10:45 — FIX-01: Autosave before working-tree mutations
 
 - **`app/src/lib/components/GitChangesPanel.svelte`** — stage, unstage, and commit handlers call `prepareWorkspaceForGitOperation` before git mutations; accepts `workspaceRootPath` and `preGitSaveDeps` props (mirrors `GitBranchesPanel`).

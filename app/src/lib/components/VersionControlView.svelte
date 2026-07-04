@@ -23,6 +23,7 @@
   import { normalizeGitOutputPath } from "../git/types";
   import {
     mutationChangesHead,
+    notifyVersionControlMutation,
     type VersionControlMutationScope,
   } from "../git/versionControlRefresh";
   import {
@@ -484,6 +485,7 @@
       }
 
       await refreshProbe();
+      notifyVersionControlMutation(workspaceRootPath, "branch");
     } catch (error) {
       initError = error instanceof Error ? error.message : String(error);
     } finally {
@@ -501,6 +503,9 @@
       selectedCommitSha = null;
     }
     panelRefreshToken += 1;
+    if (workspaceRootPath) {
+      notifyVersionControlMutation(workspaceRootPath, scope);
+    }
     await refreshBranchHeader(repoRoot);
   }
 

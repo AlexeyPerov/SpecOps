@@ -1,4 +1,4 @@
-# D-12 Task 1 — Cancel in-flight git processes
+# D-12 Task 1 — Cancel in-flight git processes [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 
@@ -34,10 +34,10 @@ Support user-initiated cancellation for long-running git commands (fetch/pull/pu
 
 ## Acceptance checklist
 
-- [ ] User can cancel active fetch/pull/push from UI.
-- [ ] Cancel terminates subprocess and clears busy state promptly.
-- [ ] Cancellation does not leave stale lock state in VC toolbar.
-- [ ] Race conditions are handled safely and test-covered.
+- [x] User can cancel active fetch/pull/push from UI.
+- [x] Cancel terminates subprocess and clears busy state promptly.
+- [x] Cancellation does not leave stale lock state in VC toolbar.
+- [x] Race conditions are handled safely and test-covered.
 
 ## Dependencies
 

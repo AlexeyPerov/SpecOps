@@ -4,6 +4,8 @@ export interface RunGitResponse {
   stdout: string;
   stderr: string;
   durationMs: number;
+  /** True when the subprocess was terminated by user-initiated cancellation. */
+  cancelled?: boolean;
 }
 
 /** Result of the `git_available` Tauri command. */
@@ -11,6 +13,19 @@ export interface GitAvailableResponse {
   available: boolean;
   version: string | null;
   error: string | null;
+}
+
+/** Outcome of a `cancel_git_command` Tauri request. */
+export type CancelGitCommandOutcome = "cancelled" | "notFound" | "alreadyFinished";
+
+/** Result of the `cancel_git_command` Tauri command. */
+export interface CancelGitCommandResponse {
+  outcome: CancelGitCommandOutcome;
+}
+
+/** Optional cancellation handle for long-running git subprocesses. */
+export interface CancellableGitOptions {
+  commandId?: string;
 }
 
 /** Workspace path is not inside a git repository. */

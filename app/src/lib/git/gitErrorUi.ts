@@ -1,5 +1,5 @@
 import { logDiagnostic } from "../services/logging";
-import { GitNoUpstreamError } from "./gitService";
+import { GitNoUpstreamError, isGitCommandCancelledError } from "./gitService";
 import { isGitError, type GitCommandError } from "./types";
 
 export interface ReportGitErrorOptions {
@@ -65,6 +65,34 @@ export function formatGitErrorPrimaryMessage(error: unknown): string {
   }
 
   return String(error);
+}
+
+/**
+ * Surface a user-initiated git cancellation as an informational toast (not an error).
+ */
+export function notifyGitCancellation(
+  operation: string,
+  options: Pick<ReportGitErrorOptions, "notify" | "repoRoot"> = {},
+): void {
+  const toast = `${operation} cancelled.`;
+
+  void logDiagnostic({
+    level: "info",
+    source: "frontend",
+    message: toast,
+    timestamp: new Date().toISOString(),
+    metadata: {
+      operation,
+      cancelled: true,
+      ...(options.repoRoot ? { repoRoot: options.repoRoot } : {}),
+    },
+  });
+
+  options.notify?.(toast);
+}
+
+export function isGitCancellationError(error: unknown): boolean {
+  return isGitCommandCancelledError(error);
 }
 
 function extractStderr(error: unknown): string | undefined {

@@ -32,6 +32,8 @@ import {
   normalizeGitOutputPath,
   type AheadBehindCounts,
   type BranchSummary,
+  type CancelGitCommandResponse,
+  type CancellableGitOptions,
   type CommitDetail,
   type CommitSummary,
   type CurrentBranchInfo,
@@ -100,17 +102,28 @@ export async function runGit(
   repoRoot: string,
   args: string[],
   env?: Record<string, string>,
+  options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
   try {
     const response = await invoke<RunGitResponse>("run_git", {
       repoRoot,
       args,
       ...(env ? { env } : {}),
+      ...(options?.commandId ? { commandId: options.commandId } : {}),
     });
     logGitCommandSummary(repoRoot, args, response);
     return response;
   } catch (error) {
     throw mapGitInvokeError(error, repoRoot);
+  }
+}
+
+/** Terminate an in-flight cancellable git command by id. */
+export async function cancelGitCommand(commandId: string): Promise<CancelGitCommandResponse> {
+  try {
+    return await invoke<CancelGitCommandResponse>("cancel_git_command", { commandId });
+  } catch (error) {
+    throw mapGitInvokeError(error, "");
   }
 }
 
@@ -688,8 +701,10 @@ function buildPushArgs(target?: RemoteOperationTarget): string[] {
 export async function fetchRemote(
   repoRoot: string,
   target?: RemoteOperationTarget,
+  options?: CancellableGitOptions,
 ): Promise<void> {
-  const response = await runGit(repoRoot, buildFetchArgs(target));
+  const response = await runGit(repoRoot, buildFetchArgs(target), undefined, options);
+  assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -699,8 +714,10 @@ export async function fetchRemote(
 export async function pullRemote(
   repoRoot: string,
   target?: RemoteOperationTarget,
+  options?: CancellableGitOptions,
 ): Promise<void> {
-  const response = await runGit(repoRoot, buildPullArgs(target));
+  const response = await runGit(repoRoot, buildPullArgs(target), undefined, options);
+  assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -714,6 +731,25 @@ export class GitNoUpstreamError extends Error {
     super(message);
     this.name = "GitNoUpstreamError";
     this.branchName = branchName;
+  }
+}
+
+export class GitCommandCancelledError extends Error {
+  readonly kind = "cancelled" as const;
+
+  constructor(message = "Git command was cancelled.") {
+    super(message);
+    this.name = "GitCommandCancelledError";
+  }
+}
+
+export function isGitCommandCancelledError(error: unknown): error is GitCommandCancelledError {
+  return error instanceof GitCommandCancelledError;
+}
+
+function assertGitCommandNotCancelled(response: RunGitResponse): void {
+  if (response.cancelled) {
+    throw new GitCommandCancelledError();
   }
 }
 
@@ -731,8 +767,10 @@ function isNoUpstreamPushError(stderr: string): boolean {
 export async function pushRemote(
   repoRoot: string,
   target?: RemoteOperationTarget,
+  options?: CancellableGitOptions,
 ): Promise<void> {
-  const response = await runGit(repoRoot, buildPushArgs(target));
+  const response = await runGit(repoRoot, buildPushArgs(target), undefined, options);
+  assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     if (isNoUpstreamPushError(response.stderr)) {
       const branchName = parseNoUpstreamBranch(response.stderr);

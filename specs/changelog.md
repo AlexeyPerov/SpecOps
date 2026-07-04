@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-04 07:50 — D-12 Task 1: Cancel in-flight git processes
+
+- **`app/src-tauri/src/git.rs`** — cancellable git command registry with command ids, platform process termination, `cancel_git_command` Tauri API, and `cancelled` flag on `RunGitResponse`.
+- **`app/src/lib/git/types.ts`**, **`gitService.ts`** — `cancelGitCommand`, optional `commandId` on `runGit` and remote fetch/pull/push, and `GitCommandCancelledError`.
+- **`app/src/lib/git/gitErrorUi.ts`** — informational cancellation toast helper (`notifyGitCancellation`).
+- **`app/src/lib/components/VersionControlView.svelte`** — Cancel button during fetch/pull/push busy state; disables after cancel is requested; clears toolbar busy flags on completion/cancel.
+- **Tests** — Rust cancellation race tests in `git.rs`; added `gitCancel.test.ts` and `gitErrorUi.cancel.test.ts`.
+- **`specs/git/execution/d-12-01-cancel-in-flight-git-processes.md`** — marked `[DONE]`.
+
 ## 2026-07-04 07:25 — D-11 Task 1: Linux launch readiness plan
 
 - **`.github/workflows/test.yml`** — cross-platform CI job (`ubuntu-latest`, `macos-latest`, `windows-latest`) runs the full vitest suite with git on PATH; Linux integration tests validated locally and in workflow.

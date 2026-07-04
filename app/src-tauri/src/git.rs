@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 const GIT_BINARY: &str = "git";
@@ -14,6 +16,9 @@ pub struct RunGitRequest {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: Option<HashMap<String, String>>,
+    /// When set, the command is registered for user-initiated cancellation.
+    #[serde(default)]
+    pub command_id: Option<String>,
 }
 
 /// Result of a `git` subprocess invocation.
@@ -24,6 +29,156 @@ pub struct RunGitResponse {
     pub stdout: String,
     pub stderr: String,
     pub duration_ms: u64,
+    #[serde(default)]
+    pub cancelled: bool,
+}
+
+/// Outcome of a `cancel_git_command` request.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelGitCommandResponse {
+    pub outcome: CancelGitCommandOutcome,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CancelGitCommandOutcome {
+    Cancelled,
+    NotFound,
+    AlreadyFinished,
+}
+
+struct ActiveGitCommand {
+    child: Mutex<Option<Child>>,
+    cancelled: AtomicBool,
+}
+
+struct GitCommandRegistry {
+    commands: Mutex<HashMap<String, ActiveGitCommand>>,
+}
+
+fn git_command_registry() -> &'static GitCommandRegistry {
+    static REGISTRY: OnceLock<GitCommandRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(|| GitCommandRegistry {
+        commands: Mutex::new(HashMap::new()),
+    })
+}
+
+fn normalize_command_id(command_id: &str) -> Option<String> {
+    let trimmed = command_id.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn terminate_child_process(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn register_active_git_command(command_id: &str, child: Child) -> Result<(), String> {
+    let registry = git_command_registry();
+    let mut commands = registry
+        .commands
+        .lock()
+        .map_err(|_| "git command registry lock poisoned".to_string())?;
+
+    if commands.contains_key(command_id) {
+        return Err(format!("git command id already in use: {command_id}"));
+    }
+
+    commands.insert(
+        command_id.to_string(),
+        ActiveGitCommand {
+            child: Mutex::new(Some(child)),
+            cancelled: AtomicBool::new(false),
+        },
+    );
+    Ok(())
+}
+
+fn unregister_active_git_command(command_id: &str) {
+    if let Ok(mut commands) = git_command_registry().commands.lock() {
+        commands.remove(command_id);
+    }
+}
+
+fn wait_for_registered_git_command(command_id: &str) -> Result<std::process::Output, String> {
+    let registry = git_command_registry();
+    let commands = registry
+        .commands
+        .lock()
+        .map_err(|_| "git command registry lock poisoned".to_string())?;
+
+    let entry = commands
+        .get(command_id)
+        .ok_or_else(|| format!("git command id not registered: {command_id}"))?;
+
+    let mut child_guard = entry
+        .child
+        .lock()
+        .map_err(|_| "git command child lock poisoned".to_string())?;
+
+    let child = child_guard
+        .as_mut()
+        .ok_or_else(|| format!("git command child already finished: {command_id}"))?;
+
+    child
+        .wait_with_output()
+        .map_err(|error| format!("Failed to wait for git command: {error}"))
+}
+
+fn active_git_command_was_cancelled(command_id: &str) -> bool {
+    let Ok(commands) = git_command_registry().commands.lock() else {
+        return false;
+    };
+    commands
+        .get(command_id)
+        .is_some_and(|entry| entry.cancelled.load(Ordering::SeqCst))
+}
+
+pub fn cancel_git_command_by_id(command_id: &str) -> CancelGitCommandResponse {
+    let Some(normalized_id) = normalize_command_id(command_id) else {
+        return CancelGitCommandResponse {
+            outcome: CancelGitCommandOutcome::NotFound,
+        };
+    };
+
+    let registry = git_command_registry();
+    let Ok(commands) = registry.commands.lock() else {
+        return CancelGitCommandResponse {
+            outcome: CancelGitCommandOutcome::NotFound,
+        };
+    };
+
+    let Some(entry) = commands.get(&normalized_id) else {
+        return CancelGitCommandResponse {
+            outcome: CancelGitCommandOutcome::NotFound,
+        };
+    };
+
+    entry.cancelled.store(true, Ordering::SeqCst);
+
+    let Ok(mut child_guard) = entry.child.lock() else {
+        return CancelGitCommandResponse {
+            outcome: CancelGitCommandOutcome::AlreadyFinished,
+        };
+    };
+
+    let Some(child) = child_guard.as_mut() else {
+        return CancelGitCommandResponse {
+            outcome: CancelGitCommandOutcome::AlreadyFinished,
+        };
+    };
+
+    terminate_child_process(child);
+    *child_guard = None;
+
+    CancelGitCommandResponse {
+        outcome: CancelGitCommandOutcome::Cancelled,
+    }
 }
 
 /// Result of probing whether `git` is available on PATH.
@@ -115,14 +270,11 @@ pub struct GitCommitRequest {
     pub message: String,
 }
 
-/// Run `git` in `repo_root` with argv passed directly (no shell interpolation).
-pub fn execute_git(
+fn build_git_command(
     repo_root: &Path,
     args: &[String],
     env: Option<&HashMap<String, String>>,
-) -> RunGitResponse {
-    let start = Instant::now();
-
+) -> Command {
     let mut command = Command::new(GIT_BINARY);
     command
         .current_dir(repo_root)
@@ -136,18 +288,95 @@ pub fn execute_git(
         }
     }
 
-    match command.output() {
+    command
+}
+
+/// Run `git` in `repo_root` with argv passed directly (no shell interpolation).
+pub fn execute_git(
+    repo_root: &Path,
+    args: &[String],
+    env: Option<&HashMap<String, String>>,
+) -> RunGitResponse {
+    execute_git_with_options(repo_root, args, env, None)
+}
+
+/// Run `git` with optional cancellation registration.
+pub fn execute_git_with_options(
+    repo_root: &Path,
+    args: &[String],
+    env: Option<&HashMap<String, String>>,
+    command_id: Option<&str>,
+) -> RunGitResponse {
+    let start = Instant::now();
+    let normalized_command_id = command_id.and_then(normalize_command_id);
+
+    if let Some(id) = normalized_command_id.as_deref() {
+        let mut command = build_git_command(repo_root, args, env);
+        let child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                return RunGitResponse {
+                    exit_code: -1,
+                    stdout: String::new(),
+                    stderr: error.to_string(),
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    cancelled: false,
+                };
+            }
+        };
+
+        if let Err(error) = register_active_git_command(id, child) {
+            unregister_active_git_command(id);
+            return RunGitResponse {
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: error,
+                duration_ms: start.elapsed().as_millis() as u64,
+                cancelled: false,
+            };
+        }
+
+        let output = match wait_for_registered_git_command(id) {
+            Ok(output) => output,
+            Err(error) => {
+                let cancelled = active_git_command_was_cancelled(id);
+                unregister_active_git_command(id);
+                return RunGitResponse {
+                    exit_code: -1,
+                    stdout: String::new(),
+                    stderr: error,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    cancelled,
+                };
+            }
+        };
+
+        let cancelled = active_git_command_was_cancelled(id);
+        unregister_active_git_command(id);
+
+        return RunGitResponse {
+            exit_code: output.status.code().unwrap_or(-1),
+            stdout: decode_utf8(&output.stdout),
+            stderr: decode_utf8(&output.stderr),
+            duration_ms: start.elapsed().as_millis() as u64,
+            cancelled,
+        };
+    }
+
+    match build_git_command(repo_root, args, env).output() {
         Ok(output) => RunGitResponse {
             exit_code: output.status.code().unwrap_or(-1),
             stdout: decode_utf8(&output.stdout),
             stderr: decode_utf8(&output.stderr),
             duration_ms: start.elapsed().as_millis() as u64,
+            cancelled: false,
         },
         Err(error) => RunGitResponse {
             exit_code: -1,
             stdout: String::new(),
             stderr: error.to_string(),
             duration_ms: start.elapsed().as_millis() as u64,
+            cancelled: false,
         },
     }
 }
@@ -212,11 +441,18 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
 #[tauri::command]
 pub fn run_git(request: RunGitRequest) -> Result<RunGitResponse, String> {
     let repo_root = normalize_repo_root(&request.repo_root)?;
-    Ok(execute_git(
+    Ok(execute_git_with_options(
         &repo_root,
         &request.args,
         request.env.as_ref(),
+        request.command_id.as_deref(),
     ))
+}
+
+/// Terminate an in-flight cancellable git command by id.
+#[tauri::command]
+pub fn cancel_git_command(command_id: String) -> CancelGitCommandResponse {
+    cancel_git_command_by_id(&command_id)
 }
 
 #[cfg(test)]
@@ -350,6 +586,7 @@ mod tests {
             repo_root: "   ".to_string(),
             args: vec!["status".to_string()],
             env: None,
+            command_id: None,
         })
         .expect_err("empty repo_root should fail");
 
@@ -362,6 +599,7 @@ mod tests {
             repo_root: "relative/path".to_string(),
             args: vec!["status".to_string()],
             env: None,
+            command_id: None,
         })
         .expect_err("relative repo_root should fail");
 
@@ -503,5 +741,113 @@ mod tests {
         assert_eq!(response.exit_code, 128);
         assert!(response.stderr.contains("not a git repository"));
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cancel_git_command_returns_not_found_for_unknown_id() {
+        let response = cancel_git_command_by_id("missing-command-id");
+        assert_eq!(response.outcome, CancelGitCommandOutcome::NotFound);
+    }
+
+    #[test]
+    fn cancel_git_command_returns_not_found_for_blank_id() {
+        let response = cancel_git_command_by_id("   ");
+        assert_eq!(response.outcome, CancelGitCommandOutcome::NotFound);
+    }
+
+    #[test]
+    fn cancel_git_command_after_completion_returns_not_found() {
+        if skip_if_git_unavailable() {
+            return;
+        }
+        let repo_root = create_temp_git_repo();
+        let command_id = format!(
+            "completed-command-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+
+        let response = execute_git_with_options(
+            &repo_root,
+            &["status".to_string()],
+            None,
+            Some(&command_id),
+        );
+        assert_eq!(response.exit_code, 0);
+        assert!(!response.cancelled);
+
+        let cancel = cancel_git_command_by_id(&command_id);
+        assert_eq!(cancel.outcome, CancelGitCommandOutcome::NotFound);
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn cancel_git_command_terminates_in_flight_process() {
+        let command_id = format!(
+            "in-flight-command-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+
+        register_active_git_command(&command_id, child).expect("register command");
+
+        let wait_id = command_id.clone();
+        let wait_handle = std::thread::spawn(move || wait_for_registered_git_command(&wait_id));
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        let first_cancel = cancel_git_command_by_id(&command_id);
+        assert_eq!(first_cancel.outcome, CancelGitCommandOutcome::Cancelled);
+
+        let second_cancel = cancel_git_command_by_id(&command_id);
+        assert_eq!(
+            second_cancel.outcome,
+            CancelGitCommandOutcome::AlreadyFinished
+        );
+
+        let output = wait_handle.join().expect("join wait thread");
+        assert!(output.is_ok());
+        unregister_active_git_command(&command_id);
+
+        let third_cancel = cancel_git_command_by_id(&command_id);
+        assert_eq!(third_cancel.outcome, CancelGitCommandOutcome::NotFound);
+    }
+
+    #[test]
+    fn run_git_rejects_duplicate_command_ids() {
+        if skip_if_git_unavailable() {
+            return;
+        }
+        let repo_root = create_temp_git_repo();
+        let command_id = format!(
+            "duplicate-command-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+
+        register_active_git_command(&command_id, child).expect("register command");
+
+        let response = run_git(RunGitRequest {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+            args: vec!["status".to_string()],
+            env: None,
+            command_id: Some(command_id.clone()),
+        })
+        .expect("run_git should return response");
+
+        assert_eq!(response.exit_code, -1);
+        assert!(response.stderr.contains("already in use"));
+        cancel_git_command_by_id(&command_id);
+        unregister_active_git_command(&command_id);
+        let _ = fs::remove_dir_all(repo_root);
     }
 }

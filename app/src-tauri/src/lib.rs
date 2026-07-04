@@ -59,6 +59,7 @@ pub fn run() {
             take_pending_opened_paths,
             git::git_available,
             git::run_git,
+            git::cancel_git_command,
             git::git_commit_with_message,
             file_watcher::sync_file_watcher_paths,
             file_watcher::sync_project_tree_watcher,

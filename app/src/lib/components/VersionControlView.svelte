@@ -6,9 +6,10 @@
   import GitChangesPanel from "./GitChangesPanel.svelte";
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
   import GitTagsPanel from "./GitTagsPanel.svelte";
-  import { reportGitError } from "../git/gitErrorUi";
+  import { notifyGitCancellation, reportGitError, isGitCancellationError } from "../git/gitErrorUi";
   import { gitInstallHint } from "../git/gitInstallHints";
   import {
+    cancelGitCommand,
     fetchRemote,
     isWorkingTreeDirty,
     pullRemote,
@@ -26,6 +27,7 @@
   } from "../git/versionControlRefresh";
   import {
     canStartRemoteGitOperation,
+    isRemoteGitOperationBusy,
     isVersionControlToolbarBusy,
   } from "../git/versionControlRemoteOps";
   import {
@@ -102,6 +104,8 @@
   let fetchBusy = $state(false);
   let pullBusy = $state(false);
   let pushBusy = $state(false);
+  let activeRemoteCommandId = $state<string | null>(null);
+  let remoteCancelRequested = $state(false);
   let remotesLoading = $state(false);
   let remotes = $state<GitRemote[]>([]);
   let remoteSelection = $state<VersionControlRemoteSelection>(emptyRemoteSelection());
@@ -129,6 +133,23 @@
   const toolbarBusy = $derived(
     isVersionControlToolbarBusy({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading }),
   );
+
+  const remoteOperationBusy = $derived(
+    isRemoteGitOperationBusy({ fetchBusy, pullBusy, pushBusy }),
+  );
+
+  const activeRemoteOperationLabel = $derived.by(() => {
+    if (fetchBusy) {
+      return "Fetch";
+    }
+    if (pullBusy) {
+      return "Pull";
+    }
+    if (pushBusy) {
+      return "Push";
+    }
+    return "Remote operation";
+  });
 
   const isReadOnlyRepository = $derived(isBareRepository);
 
@@ -479,6 +500,44 @@
     return normalizeGitOutputPath(path);
   }
 
+  function createGitCommandId(): string {
+    return crypto.randomUUID();
+  }
+
+  async function handleCancelRemoteOperation(): Promise<void> {
+    if (!activeRemoteCommandId || remoteCancelRequested) {
+      return;
+    }
+
+    remoteCancelRequested = true;
+    try {
+      const response = await cancelGitCommand(activeRemoteCommandId);
+      if (response.outcome === "cancelled") {
+        notifyGitCancellation(activeRemoteOperationLabel, {
+          repoRoot: repoRoot ?? undefined,
+          notify,
+        });
+      }
+    } catch (error) {
+      remoteCancelRequested = false;
+      reportGitError(error, {
+        operation: "Cancel",
+        repoRoot: repoRoot ?? undefined,
+        notify,
+      });
+    }
+  }
+
+  function handleRemoteOperationError(operation: string, error: unknown): void {
+    if (isGitCancellationError(error)) {
+      if (!remoteCancelRequested) {
+        notifyGitCancellation(operation, { repoRoot: repoRoot ?? undefined, notify });
+      }
+      return;
+    }
+    reportGitError(error, { operation, repoRoot: repoRoot ?? undefined, notify });
+  }
+
   async function handleFetch(): Promise<void> {
     if (
       !repoRoot ||
@@ -487,15 +546,20 @@
       return;
     }
 
+    const commandId = createGitCommandId();
+    activeRemoteCommandId = commandId;
+    remoteCancelRequested = false;
     fetchBusy = true;
 
     try {
-      await fetchRemote(repoRoot, buildRemoteOperationTarget());
+      await fetchRemote(repoRoot, buildRemoteOperationTarget(), { commandId });
       await refreshAfterMutation("fetch");
     } catch (error) {
-      reportGitError(error, { operation: "Fetch", repoRoot, notify });
+      handleRemoteOperationError("Fetch", error);
     } finally {
       fetchBusy = false;
+      activeRemoteCommandId = null;
+      remoteCancelRequested = false;
     }
   }
 
@@ -507,6 +571,9 @@
       return;
     }
 
+    const commandId = createGitCommandId();
+    activeRemoteCommandId = commandId;
+    remoteCancelRequested = false;
     pullBusy = true;
 
     try {
@@ -531,12 +598,14 @@
         return;
       }
 
-      await pullRemote(repoRoot, buildRemoteOperationTarget());
+      await pullRemote(repoRoot, buildRemoteOperationTarget(), { commandId });
       await refreshAfterMutation("pull");
     } catch (error) {
-      reportGitError(error, { operation: "Pull", repoRoot, notify });
+      handleRemoteOperationError("Pull", error);
     } finally {
       pullBusy = false;
+      activeRemoteCommandId = null;
+      remoteCancelRequested = false;
     }
   }
 
@@ -548,15 +617,20 @@
       return;
     }
 
+    const commandId = createGitCommandId();
+    activeRemoteCommandId = commandId;
+    remoteCancelRequested = false;
     pushBusy = true;
 
     try {
-      await pushRemote(repoRoot, buildRemoteOperationTarget());
+      await pushRemote(repoRoot, buildRemoteOperationTarget(), { commandId });
       await refreshAfterMutation("push");
     } catch (error) {
-      reportGitError(error, { operation: "Push", repoRoot, notify });
+      handleRemoteOperationError("Push", error);
     } finally {
       pushBusy = false;
+      activeRemoteCommandId = null;
+      remoteCancelRequested = false;
     }
   }
 
@@ -730,6 +804,17 @@
         >
           {pushBusy ? "Pushing…" : "Push"}
         </button>
+        {#if remoteOperationBusy}
+          <button
+            type="button"
+            class="version-control-action version-control-action-cancel"
+            disabled={remoteCancelRequested}
+            title={`Cancel ${activeRemoteOperationLabel.toLowerCase()}`}
+            onclick={handleCancelRemoteOperation}
+          >
+            {remoteCancelRequested ? "Cancelling…" : "Cancel"}
+          </button>
+        {/if}
       </div>
     </header>
 
@@ -1075,6 +1160,15 @@
   .version-control-action:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+  }
+
+  .version-control-action-cancel {
+    border-color: color-mix(in srgb, var(--color-danger, #c0392b) 35%, var(--color-border-subtle));
+    color: var(--color-danger, #c0392b);
+  }
+
+  .version-control-action-cancel:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger, #c0392b) 10%, var(--color-surface-2));
   }
 
   .version-control-main {

@@ -1,4 +1,4 @@
-# FIX-07 — Git probe and status performance
+# FIX-07 — Git probe and status performance [DONE]
 
 **Priority:** P2 · **Score:** 6 · **Agent:** medium · **Estimate:** ~0.75d
 

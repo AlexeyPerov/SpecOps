@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { resetGitAvailabilityCacheForTests } from "./gitService";
+import { resetGitCommandQueueForTests } from "./gitCommandQueue";
 import {
   initRepositoryAtWorkspaceRoot,
   probeVersionControlContext,
@@ -16,6 +18,8 @@ const invokeMock = vi.mocked(invoke);
 describe("probeVersionControlContext", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    resetGitAvailabilityCacheForTests();
+    resetGitCommandQueueForTests();
   });
 
   it("returns noWorkspace when workspace root is null", async () => {
@@ -132,6 +136,8 @@ describe("probeVersionControlContext", () => {
 describe("initRepositoryAtWorkspaceRoot", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    resetGitAvailabilityCacheForTests();
+    resetGitCommandQueueForTests();
   });
 
   it("runs git init at the workspace root", async () => {

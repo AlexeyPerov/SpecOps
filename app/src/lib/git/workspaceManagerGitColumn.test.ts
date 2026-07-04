@@ -187,7 +187,7 @@ describe("refreshWorkspaceGitColumnCells", () => {
     vi.clearAllMocks();
   });
 
-  it("reloads each workspace sequentially", async () => {
+  it("reloads each workspace concurrently", async () => {
     checkGitAvailableMock.mockResolvedValue({
       available: true,
       version: "git version 2.43.0",
@@ -197,14 +197,24 @@ describe("refreshWorkspaceGitColumnCells", () => {
       ok: true,
       repoRoot: path,
     }));
-    queryRepositoryStatusSummaryMock.mockImplementation(async (repoRoot) => ({
-      branchName: repoRoot.endsWith("a") ? "alpha" : "beta",
-      isDetached: false,
-      aheadBehind: null,
-      isDirty: false,
-    }));
 
-    const results = await refreshWorkspaceGitColumnCells(["/tmp/a", "/tmp/b"]);
+    const started: string[] = [];
+    queryRepositoryStatusSummaryMock.mockImplementation(async (repoRoot) => {
+      started.push(repoRoot);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return {
+        branchName: repoRoot.endsWith("a") ? "alpha" : "beta",
+        isDetached: false,
+        aheadBehind: null,
+        isDirty: false,
+      };
+    });
+
+    const refreshPromise = refreshWorkspaceGitColumnCells(["/tmp/a", "/tmp/b"]);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(started.sort()).toEqual(["/tmp/a", "/tmp/b"]);
+
+    const results = await refreshPromise;
 
     expect(results.get("/tmp/a")).toMatchObject({ status: "ready", displayText: "alpha · clean" });
     expect(results.get("/tmp/b")).toMatchObject({ status: "ready", displayText: "beta · clean" });

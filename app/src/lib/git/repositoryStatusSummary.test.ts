@@ -1,36 +1,44 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { logDiagnostic } from "../services/logging";
-import { isWorkingTreeDirty, queryAheadBehind, queryCurrentBranch } from "./gitService";
+import { runGit } from "./gitService";
 import { queryRepositoryStatusSummary } from "./repositoryStatusSummary";
+import { resetGitCommandQueueForTests } from "./gitCommandQueue";
+import type { RunGitResponse } from "./types";
 
 vi.mock("../services/logging", () => ({
   logDiagnostic: vi.fn(),
 }));
 
-vi.mock("./gitService", () => ({
-  queryCurrentBranch: vi.fn(),
-  queryAheadBehind: vi.fn(),
-  isWorkingTreeDirty: vi.fn(),
-}));
+vi.mock("./gitService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./gitService")>();
+  return {
+    ...actual,
+    runGit: vi.fn(),
+  };
+});
 
-const queryCurrentBranchMock = vi.mocked(queryCurrentBranch);
-const queryAheadBehindMock = vi.mocked(queryAheadBehind);
-const isWorkingTreeDirtyMock = vi.mocked(isWorkingTreeDirty);
+const runGitMock = vi.mocked(runGit);
 const logDiagnosticMock = vi.mocked(logDiagnostic);
+
+function statusResponse(stdout: string): RunGitResponse {
+  return {
+    exitCode: 0,
+    stdout,
+    stderr: "",
+    durationMs: 1,
+  };
+}
 
 describe("queryRepositoryStatusSummary", () => {
   beforeEach(() => {
+    resetGitCommandQueueForTests();
     vi.clearAllMocks();
   });
 
   it("returns branch, tracking, and dirty state for a tracked branch", async () => {
-    queryCurrentBranchMock.mockResolvedValue({
-      name: "main",
-      isDetached: false,
-      upstream: "origin/main",
-    });
-    isWorkingTreeDirtyMock.mockResolvedValue(true);
-    queryAheadBehindMock.mockResolvedValue({ ahead: 2, behind: 1 });
+    runGitMock.mockResolvedValue(
+      statusResponse("## main...origin/main [ahead 2, behind 1]\n M file.txt\n"),
+    );
 
     await expect(queryRepositoryStatusSummary("/tmp/repo")).resolves.toEqual({
       branchName: "main",
@@ -39,15 +47,27 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehindError: null,
       isDirty: true,
     });
+
+    expect(runGitMock).toHaveBeenCalledTimes(1);
+    expect(runGitMock).toHaveBeenCalledWith("/tmp/repo", ["status", "-sb"]);
   });
 
-  it("skips ahead/behind for detached HEAD", async () => {
-    queryCurrentBranchMock.mockResolvedValue({
-      name: "abc1234",
-      isDetached: true,
-      upstream: null,
+  it("uses zero counts when upstream exists without ahead/behind bracket", async () => {
+    runGitMock.mockResolvedValue(statusResponse("## main...origin/main\n"));
+
+    await expect(queryRepositoryStatusSummary("/tmp/repo")).resolves.toEqual({
+      branchName: "main",
+      isDetached: false,
+      aheadBehind: { ahead: 0, behind: 0 },
+      aheadBehindError: null,
+      isDirty: false,
     });
-    isWorkingTreeDirtyMock.mockResolvedValue(false);
+  });
+
+  it("resolves detached HEAD with a follow-up rev-parse call", async () => {
+    runGitMock
+      .mockResolvedValueOnce(statusResponse("## HEAD (no branch)\n"))
+      .mockResolvedValueOnce(statusResponse("abc1234\n"));
 
     await expect(queryRepositoryStatusSummary("/tmp/repo")).resolves.toEqual({
       branchName: "abc1234",
@@ -57,34 +77,25 @@ describe("queryRepositoryStatusSummary", () => {
       isDirty: false,
     });
 
-    expect(queryAheadBehindMock).not.toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenNthCalledWith(1, "/tmp/repo", ["status", "-sb"]);
+    expect(runGitMock).toHaveBeenNthCalledWith(2, "/tmp/repo", ["rev-parse", "--short", "HEAD"]);
   });
 
-  it("omits ahead/behind counts and logs when query fails", async () => {
-    queryCurrentBranchMock.mockResolvedValue({
-      name: "main",
-      isDetached: false,
-      upstream: "origin/main",
-    });
-    isWorkingTreeDirtyMock.mockResolvedValue(false);
-    queryAheadBehindMock.mockRejectedValue(new Error("index.lock exists"));
+  it("omits ahead/behind when upstream is gone", async () => {
+    runGitMock.mockResolvedValue(statusResponse("## main...origin/main [gone]\n"));
 
     await expect(queryRepositoryStatusSummary("/tmp/repo")).resolves.toEqual({
       branchName: "main",
       isDetached: false,
       aheadBehind: null,
-      aheadBehindError: "index.lock exists",
+      aheadBehindError: null,
       isDirty: false,
     });
 
     expect(logDiagnosticMock).toHaveBeenCalledWith(
       expect.objectContaining({
         level: "warn",
-        message: "Failed to query ahead/behind counts for workspace git column",
-        metadata: expect.objectContaining({
-          repoRoot: "/tmp/repo",
-          error: "index.lock exists",
-        }),
+        message: "Upstream branch is gone; omitting ahead/behind counts",
       }),
     );
   });

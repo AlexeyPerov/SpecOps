@@ -20,19 +20,8 @@ const ERROR_CELL: WorkspaceGitColumnCell = { status: "error", text: "—" };
 
 const GIT_COLUMN_REFRESH_DEBOUNCE_MS = 300;
 
-let gitCommandQueue: Promise<unknown> = Promise.resolve();
-const gitColumnRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function enqueueGitCommand<T>(fn: () => Promise<T>): Promise<T> {
-  const next = gitCommandQueue.then(fn, fn);
-  gitCommandQueue = next.then(
-    () => undefined,
-    () => undefined,
-  );
-  return next;
-}
-
 const inFlightByPath = new Map<string, Promise<WorkspaceGitColumnCell>>();
+const gitColumnRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Human-readable git column text: branch · ahead/behind · dirty/clean. */
 export function formatGitColumnDisplayText(summary: RepositoryStatusSummary): string {
@@ -107,32 +96,28 @@ export async function loadWorkspaceGitColumnCell(
     return existing;
   }
 
-  const promise = enqueueGitCommand(() =>
-    loadWorkspaceGitColumnCellInternal(workspaceRootPath),
-  ).finally(() => {
+  const promise = loadWorkspaceGitColumnCellInternal(workspaceRootPath).finally(() => {
     inFlightByPath.delete(workspaceRootPath);
   });
   inFlightByPath.set(workspaceRootPath, promise);
   return promise;
 }
 
-/** Refresh git column cells for many workspaces sequentially. */
+/** Refresh git column cells for many workspaces concurrently (per-repo git queue still serializes same repo). */
 export async function refreshWorkspaceGitColumnCells(
   workspaceRootPaths: readonly string[],
 ): Promise<Map<string, WorkspaceGitColumnCell>> {
-  const results = new Map<string, WorkspaceGitColumnCell>();
-  for (const workspaceRootPath of workspaceRootPaths) {
-    results.set(
+  const entries = await Promise.all(
+    workspaceRootPaths.map(async (workspaceRootPath) => [
       workspaceRootPath,
       await loadWorkspaceGitColumnCell(workspaceRootPath, { force: true }),
-    );
-  }
-  return results;
+    ] as const),
+  );
+  return new Map(entries);
 }
 
-/** Reset module queue state (tests only). */
+/** Reset module in-flight state (tests only). */
 export function resetWorkspaceGitColumnQueueForTests(): void {
-  gitCommandQueue = Promise.resolve();
   inFlightByPath.clear();
   for (const timer of gitColumnRefreshTimers.values()) {
     clearTimeout(timer);

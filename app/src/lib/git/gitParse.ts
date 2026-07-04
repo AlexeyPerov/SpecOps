@@ -227,6 +227,69 @@ export function parseAheadBehindCount(stdout: string): AheadBehindCounts | null 
   };
 }
 
+/** Parsed branch header from the first line of `git status -sb` output. */
+export type ParsedStatusShortBranch = {
+  branchName: string;
+  isDetached: boolean;
+  upstream: string | null;
+  aheadBehind: AheadBehindCounts | null;
+};
+
+function parseStatusShortTrackCounts(track: string): AheadBehindCounts | null {
+  const aheadMatch = /ahead (\d+)/.exec(track);
+  const behindMatch = /behind (\d+)/.exec(track);
+  if (!aheadMatch && !behindMatch) {
+    return null;
+  }
+
+  return {
+    ahead: aheadMatch ? Number.parseInt(aheadMatch[1], 10) : 0,
+    behind: behindMatch ? Number.parseInt(behindMatch[1], 10) : 0,
+  };
+}
+
+/**
+ * Parse the `## …` branch header from `git status -sb` stdout.
+ * Returns `null` when the line is missing or unrecognizable.
+ */
+export function parseStatusShortBranchHeader(line: string): ParsedStatusShortBranch | null {
+  const match = /^## (.+)$/.exec(line.trim());
+  if (!match) {
+    return null;
+  }
+
+  const body = match[1];
+  if (body === "HEAD (no branch)") {
+    return {
+      branchName: "",
+      isDetached: true,
+      upstream: null,
+      aheadBehind: null,
+    };
+  }
+
+  const bracketMatch = / \[([^\]]+)\]$/.exec(body);
+  const bracketContent = bracketMatch ? bracketMatch[1] : null;
+  const branchPart = bracketMatch ? body.slice(0, bracketMatch.index) : body;
+
+  const ellipsisIndex = branchPart.indexOf("...");
+  const branchName = ellipsisIndex === -1 ? branchPart : branchPart.slice(0, ellipsisIndex);
+  const upstream =
+    ellipsisIndex === -1 ? null : branchPart.slice(ellipsisIndex + 3).trim() || null;
+
+  let aheadBehind: AheadBehindCounts | null = null;
+  if (bracketContent && bracketContent !== "gone") {
+    aheadBehind = parseStatusShortTrackCounts(bracketContent);
+  }
+
+  return {
+    branchName,
+    isDetached: false,
+    upstream,
+    aheadBehind,
+  };
+}
+
 /** Structured NUL-separated `git show --format=…` prefix (phase 2 commit detail). */
 export const GIT_SHOW_FORMAT =
   "%H%x00%P%x00%aN%x00%aE%x00%at%x00%cN%x00%cE%x00%ct%x00%B";

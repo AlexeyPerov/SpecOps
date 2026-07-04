@@ -7,6 +7,7 @@ import {
   parseCommitShow,
   parseLogCommits,
   parseStatusPorcelain,
+  parseStatusShortBranchHeader,
   parseStashList,
   parseTagList,
   splitWorkingTreeStatus,
@@ -46,6 +47,26 @@ describeIfGitInstalled("git integration (temp repo harness)", () => {
         true,
       );
       expect(commits[0]?.refs.some((ref) => ref.type === "currentBranchHead")).toBe(true);
+    });
+  });
+
+  it("status -sb parser round-trip for branch and dirty state", () => {
+    withTempGitRepo("specops-git-integration-status-sb-", (repo) => {
+      repo.writeFile("tracked.txt", "v1");
+      repo.run(["add", "tracked.txt"]);
+      repo.run(["commit", "-m", "init"]);
+      repo.writeFile("dirty.txt", "change");
+
+      const stdout = repo.run(["status", "-sb"]) as string;
+      const headerLine = stdout.split("\n").find((line) => line.startsWith("## "));
+      expect(headerLine).toBeDefined();
+
+      const parsed = parseStatusShortBranchHeader(headerLine!);
+      expect(parsed?.branchName).toBeTruthy();
+      expect(parsed?.isDetached).toBe(false);
+      expect(parsed?.upstream).toBeNull();
+      expect(parsed?.aheadBehind).toBeNull();
+      expect(parseStatusPorcelain(stdout).length).toBeGreaterThan(0);
     });
   });
 

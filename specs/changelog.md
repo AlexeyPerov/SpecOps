@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-04 14:00 — FIX-06 & FIX-07: Per-repo git queue and status performance
+
+- **`app/src/lib/git/gitCommandQueue.ts`** — shared per-repository FIFO queue via `enqueueGitCommandForRepo()`; unrelated repos run concurrently.
+- **`app/src/lib/git/gitService.ts`** — `runGit` and `createCommit` enqueue by normalized repo root; `checkGitAvailable()` cached for 60s with in-flight dedupe and `resetGitAvailabilityCacheForTests()`.
+- **`app/src/lib/git/workspaceManagerGitColumn.ts`** — removed duplicate global queue; bulk column refresh loads workspaces in parallel (per-repo queue still serializes same repo).
+- **`app/src/lib/git/repositoryStatusSummary.ts`** — one `git status -sb` call (plus detached `rev-parse --short HEAD`) replaces prior 3–4 sequential subprocesses per summary.
+- **`app/src/lib/git/gitParse.ts`** — `parseStatusShortBranchHeader()` for `-sb` branch/tracking lines.
+- **`app/src/lib/git/gitErrorUi.ts`** — actionable message for `.git/index.lock` / unable-to-create lock stderr.
+- **Tests** — `gitCommandQueue.test.ts`; extended `gitService.test.ts`, `gitParse.test.ts`, `repositoryStatusSummary.test.ts`, `workspaceManagerGitColumn.test.ts`, `gitIntegration.test.ts`, `gitErrorUi.test.ts`.
+- **`specs/git/execution/fixes/fix-06-per-repo-git-command-queue.md`**, **`fix-07-git-probe-and-status-performance.md`** — marked `[DONE]`.
+
 ## 2026-07-04 13:45 — FIX-04 & FIX-05: Ahead/behind errors and workspace git column refresh
 
 - **`app/src/lib/git/gitService.ts`** — `isNoUpstreamAheadBehindError()` distinguishes missing upstream from real git failures; `queryAheadBehind` throws `GitCommandError` for lock/conflict errors instead of returning null.

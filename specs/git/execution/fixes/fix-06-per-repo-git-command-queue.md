@@ -1,4 +1,4 @@
-# FIX-06 — Per-repo git command queue
+# FIX-06 — Per-repo git command queue [DONE]
 
 **Priority:** P1 · **Score:** 7 · **Agent:** medium · **Estimate:** ~0.75d
 

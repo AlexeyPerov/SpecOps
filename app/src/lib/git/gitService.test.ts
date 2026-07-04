@@ -44,12 +44,14 @@ import {
   queryTags,
   queryWorkingTreeStatus,
   queryWorkingTreeFileDiff,
+  resetGitAvailabilityCacheForTests,
   resolveRepoRoot,
   runGit,
   stageAll,
   stagePaths,
   unstagePaths,
 } from "./gitService";
+import { resetGitCommandQueueForTests } from "./gitCommandQueue";
 import { DEFAULT_COMMIT_LOG_LIMIT, DEFAULT_HISTORY_FILTER_MODE } from "./types";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
 import { isGitError } from "./types";
@@ -90,6 +92,7 @@ function expectRemoteGitInvoke(
 describe("runGit", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    resetGitCommandQueueForTests();
   });
 
   it("invokes run_git with repoRoot and args", async () => {
@@ -143,6 +146,8 @@ describe("runGit", () => {
 describe("checkGitAvailable", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    resetGitAvailabilityCacheForTests();
+    resetGitCommandQueueForTests();
   });
 
   it("invokes git_available and returns the response", async () => {
@@ -157,6 +162,20 @@ describe("checkGitAvailable", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("git_available");
     expect(result).toEqual(response);
+  });
+
+  it("reuses cached availability within the TTL", async () => {
+    const response: GitAvailableResponse = {
+      available: true,
+      version: "git version 2.43.0",
+      error: null,
+    };
+    invokeMock.mockResolvedValue(response);
+
+    await checkGitAvailable();
+    await checkGitAvailable();
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
   });
 });
 

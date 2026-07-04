@@ -77,6 +77,13 @@ export function formatGitErrorPrimaryMessage(error: unknown): string {
       return "Merge conflict or local changes would be overwritten. Resolve conflicts and try again.";
     }
 
+    if (
+      stderr.includes("index.lock") ||
+      (stderr.includes("unable to create") && stderr.includes("lock"))
+    ) {
+      return "Another git operation may still be running. Wait a moment and try again, or remove .git/index.lock if no git process is active.";
+    }
+
     if (stderr.includes("not a git command") || stderr.includes("is not recognized as an internal or external command")) {
       return "Git command failed. Verify git is installed and available on PATH.";
     }

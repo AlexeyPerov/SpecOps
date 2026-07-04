@@ -19,6 +19,7 @@ import {
   resolveDefaultRemote,
   parseShortHeadRef,
   parseStatusPorcelain,
+  parseStatusShortBranchHeader,
   parseStashList,
   parseStashListItem,
   parseTagList,
@@ -174,6 +175,53 @@ describe("parseAheadBehindCount", () => {
   it("returns null for malformed stdout", () => {
     expect(parseAheadBehindCount("")).toBeNull();
     expect(parseAheadBehindCount("ahead 2")).toBeNull();
+  });
+});
+
+describe("parseStatusShortBranchHeader", () => {
+  it("parses tracked branch with ahead/behind counts", () => {
+    expect(parseStatusShortBranchHeader("## main...origin/main [ahead 2, behind 1]")).toEqual({
+      branchName: "main",
+      isDetached: false,
+      upstream: "origin/main",
+      aheadBehind: { ahead: 2, behind: 1 },
+    });
+  });
+
+  it("parses branch without tracking counts", () => {
+    expect(parseStatusShortBranchHeader("## main...origin/main")).toEqual({
+      branchName: "main",
+      isDetached: false,
+      upstream: "origin/main",
+      aheadBehind: null,
+    });
+  });
+
+  it("parses local branch without upstream", () => {
+    expect(parseStatusShortBranchHeader("## feature")).toEqual({
+      branchName: "feature",
+      isDetached: false,
+      upstream: null,
+      aheadBehind: null,
+    });
+  });
+
+  it("parses detached HEAD marker", () => {
+    expect(parseStatusShortBranchHeader("## HEAD (no branch)")).toEqual({
+      branchName: "",
+      isDetached: true,
+      upstream: null,
+      aheadBehind: null,
+    });
+  });
+
+  it("parses gone upstream marker without counts", () => {
+    expect(parseStatusShortBranchHeader("## main...origin/main [gone]")).toEqual({
+      branchName: "main",
+      isDetached: false,
+      upstream: "origin/main",
+      aheadBehind: null,
+    });
   });
 });
 

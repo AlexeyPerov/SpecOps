@@ -21,6 +21,7 @@ import {
 } from "./gitParse";
 import { parseUnifiedDiff } from "./gitDiffParse";
 import { validateGitRefName } from "./gitRefName";
+import { enqueueGitCommandForRepo } from "./gitCommandQueue";
 import { buildNonInteractiveRemoteEnv } from "./gitRemoteEnv";
 import {
   createGitCommandError,
@@ -94,13 +95,7 @@ function isNotARepositoryResponse(response: RunGitResponse): boolean {
   return response.stderr.toLowerCase().includes("not a git repository");
 }
 
-/**
- * Run `git` in `repoRoot` with argv passed directly (no shell interpolation).
- *
- * Tauri validation errors (empty or invalid `repoRoot`) are thrown as typed
- * {@link GitError} values.
- */
-export async function runGit(
+async function invokeRunGit(
   repoRoot: string,
   args: string[],
   env?: Record<string, string>,
@@ -121,6 +116,26 @@ export async function runGit(
   } catch (error) {
     throw mapGitInvokeError(error, repoRoot);
   }
+}
+
+/**
+ * Run `git` in `repoRoot` with argv passed directly (no shell interpolation).
+ *
+ * Commands for the same repository root are serialized via {@link enqueueGitCommandForRepo};
+ * unrelated repositories may run concurrently.
+ *
+ * Tauri validation errors (empty or invalid `repoRoot`) are thrown as typed
+ * {@link GitError} values.
+ */
+export async function runGit(
+  repoRoot: string,
+  args: string[],
+  env?: Record<string, string>,
+  options?: CancellableGitOptions,
+): Promise<RunGitResponse> {
+  return enqueueGitCommandForRepo(repoRoot, () =>
+    invokeRunGit(repoRoot, args, env, options),
+  );
 }
 
 interface RemoteGitInvokeOptions extends CancellableGitOptions {
@@ -149,12 +164,51 @@ export async function cancelGitCommand(commandId: string): Promise<CancelGitComm
   }
 }
 
-/** Probe whether system `git` is available on PATH. */
-export async function checkGitAvailable(): Promise<GitAvailableResponse> {
+const GIT_AVAILABILITY_TTL_MS = 60_000;
+
+let cachedGitAvailability: GitAvailableResponse | null = null;
+let gitAvailabilityExpiresAt = 0;
+let gitAvailabilityProbe: Promise<GitAvailableResponse> | null = null;
+
+/** Clear cached git availability probe results (tests only). */
+export function resetGitAvailabilityCacheForTests(): void {
+  cachedGitAvailability = null;
+  gitAvailabilityExpiresAt = 0;
+  gitAvailabilityProbe = null;
+}
+
+async function probeGitAvailable(): Promise<GitAvailableResponse> {
   try {
-    return await invoke<GitAvailableResponse>("git_available");
+    const response = await invoke<GitAvailableResponse>("git_available");
+    if (response.available) {
+      cachedGitAvailability = response;
+      gitAvailabilityExpiresAt = Date.now() + GIT_AVAILABILITY_TTL_MS;
+    } else {
+      resetGitAvailabilityCacheForTests();
+    }
+    return response;
   } catch (error) {
+    resetGitAvailabilityCacheForTests();
     throw mapGitInvokeError(error, "");
+  }
+}
+
+/** Probe whether system `git` is available on PATH (cached for 60s per session). */
+export async function checkGitAvailable(): Promise<GitAvailableResponse> {
+  const now = Date.now();
+  if (cachedGitAvailability && now < gitAvailabilityExpiresAt) {
+    return cachedGitAvailability;
+  }
+
+  if (gitAvailabilityProbe) {
+    return gitAvailabilityProbe;
+  }
+
+  gitAvailabilityProbe = probeGitAvailable();
+  try {
+    return await gitAvailabilityProbe;
+  } finally {
+    gitAvailabilityProbe = null;
   }
 }
 
@@ -700,21 +754,23 @@ export async function createCommit(repoRoot: string, message: string): Promise<v
     throw new GitCommitValidationError("Commit message cannot be empty.");
   }
 
-  try {
-    const response = await invoke<RunGitResponse>("git_commit_with_message", {
-      repoRoot,
-      message: trimmed,
-    });
-    logGitCommandSummary(repoRoot, ["commit", "-F", "<message-file>"], response);
-    if (response.exitCode !== 0) {
-      throw createGitCommandError(response);
+  return enqueueGitCommandForRepo(repoRoot, async () => {
+    try {
+      const response = await invoke<RunGitResponse>("git_commit_with_message", {
+        repoRoot,
+        message: trimmed,
+      });
+      logGitCommandSummary(repoRoot, ["commit", "-F", "<message-file>"], response);
+      if (response.exitCode !== 0) {
+        throw createGitCommandError(response);
+      }
+    } catch (error) {
+      if (error instanceof GitCommitValidationError || isGitError(error)) {
+        throw error;
+      }
+      throw mapGitInvokeError(error, repoRoot);
     }
-  } catch (error) {
-    if (error instanceof GitCommitValidationError || isGitError(error)) {
-      throw error;
-    }
-    throw mapGitInvokeError(error, repoRoot);
-  }
+  });
 }
 
 /** Switch to an existing local branch (`git checkout <name>`). */

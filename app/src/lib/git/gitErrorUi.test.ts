@@ -61,6 +61,17 @@ describe("formatGitErrorPrimaryMessage", () => {
     expect(formatGitErrorPrimaryMessage(error)).toContain("no upstream");
   });
 
+  it("maps index.lock failures with retry guidance", () => {
+    const error = createGitCommandError({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: Unable to create '/tmp/repo/.git/index.lock': File exists.\n",
+      durationMs: 1,
+    } satisfies RunGitResponse);
+
+    expect(formatGitErrorPrimaryMessage(error)).toContain("index.lock");
+  });
+
   it("maps not-a-git-command failures", () => {
     const error = createGitCommandError({
       exitCode: 1,

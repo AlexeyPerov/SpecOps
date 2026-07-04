@@ -31,6 +31,7 @@ import {
   pushRemote,
   pushTag,
   queryAheadBehind,
+  isNoUpstreamAheadBehindError,
   queryBranches,
   queryCommitDetail,
   queryCommitFileDiff,
@@ -350,6 +351,78 @@ describe("queryAheadBehind", () => {
     const result = await queryAheadBehind("/tmp/repo");
 
     expect(result).toBeNull();
+  });
+
+  it("returns null when upstream revision is unknown", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: ambiguous argument '@{u}': unknown revision or path not in the working tree.\n",
+      durationMs: 2,
+    });
+
+    const result = await queryAheadBehind("/tmp/repo");
+
+    expect(result).toBeNull();
+  });
+
+  it("throws GitCommandError for lock conflicts", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: Unable to create '/tmp/repo/.git/index.lock': File exists.\n",
+      durationMs: 2,
+    });
+
+    await expect(queryAheadBehind("/tmp/repo")).rejects.toMatchObject({
+      kind: "command",
+      exitCode: 128,
+    });
+  });
+
+  it("returns null for unparseable stdout on success", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "unexpected output",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    const result = await queryAheadBehind("/tmp/repo");
+
+    expect(result).toBeNull();
+  });
+});
+
+describe("isNoUpstreamAheadBehindError", () => {
+  it("matches no upstream and unknown revision stderr", () => {
+    expect(
+      isNoUpstreamAheadBehindError({
+        exitCode: 128,
+        stdout: "",
+        stderr: "fatal: no upstream configured for branch 'main'\n",
+        durationMs: 1,
+      }),
+    ).toBe(true);
+    expect(
+      isNoUpstreamAheadBehindError({
+        exitCode: 128,
+        stdout: "",
+        stderr: "fatal: unknown revision or path not in the working tree.\n",
+        durationMs: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not match lock conflicts", () => {
+    expect(
+      isNoUpstreamAheadBehindError({
+        exitCode: 128,
+        stdout: "",
+        stderr: "fatal: Unable to create '/tmp/repo/.git/index.lock': File exists.\n",
+        durationMs: 1,
+      }),
+    ).toBe(false);
   });
 });
 

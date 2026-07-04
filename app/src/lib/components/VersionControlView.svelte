@@ -99,6 +99,7 @@
   let branchHeaderStatus = $state<BranchHeaderStatus>("idle");
   let currentBranch = $state<CurrentBranchInfo | null>(null);
   let aheadBehind = $state<AheadBehindCounts | null>(null);
+  let aheadBehindError = $state<string | null>(null);
   let branchHeaderError = $state<string | null>(null);
   let selectedCommitSha = $state<string | null>(null);
   let refreshBusy = $state(false);
@@ -226,6 +227,9 @@
     if (!currentBranch.upstream) {
       return "No upstream";
     }
+    if (aheadBehindError) {
+      return "Tracking unavailable";
+    }
     if (!aheadBehind) {
       return null;
     }
@@ -242,10 +246,37 @@
     return parts.join(" · ");
   });
 
+  const trackingSummaryTitle = $derived.by(() => {
+    if (aheadBehindError) {
+      return aheadBehindError;
+    }
+    if (branchHeaderStatus !== "ready" || !currentBranch || currentBranch.isDetached) {
+      return "Upstream tracking";
+    }
+    if (!currentBranch.upstream) {
+      return "No upstream configured";
+    }
+    if (!aheadBehind) {
+      return "Upstream tracking";
+    }
+    const parts: string[] = [];
+    if (aheadBehind.ahead > 0) {
+      parts.push(`${aheadBehind.ahead} ahead`);
+    }
+    if (aheadBehind.behind > 0) {
+      parts.push(`${aheadBehind.behind} behind`);
+    }
+    if (parts.length === 0) {
+      return "Up to date with upstream";
+    }
+    return parts.join(" · ");
+  });
+
   function resetBranchHeader(): void {
     branchHeaderStatus = "idle";
     currentBranch = null;
     aheadBehind = null;
+    aheadBehindError = null;
     branchHeaderError = null;
     selectedCommitSha = null;
   }
@@ -329,6 +360,7 @@
   async function refreshBranchHeader(root: string, signal?: AbortSignal): Promise<void> {
     branchHeaderStatus = "loading";
     branchHeaderError = null;
+    aheadBehindError = null;
     currentBranch = null;
     aheadBehind = null;
 
@@ -340,9 +372,17 @@
 
       currentBranch = branch;
       if (!branch.isDetached && branch.upstream) {
-        aheadBehind = await queryAheadBehind(root);
-        if (signal?.aborted) {
-          return;
+        try {
+          aheadBehind = await queryAheadBehind(root);
+          if (signal?.aborted) {
+            return;
+          }
+        } catch (error) {
+          if (signal?.aborted) {
+            return;
+          }
+          aheadBehind = null;
+          aheadBehindError = error instanceof Error ? error.message : String(error);
         }
       }
 
@@ -754,7 +794,11 @@
           {/if}
         </span>
         {#if trackingSummary}
-          <span class="version-control-tracking" title="Upstream tracking">
+          <span
+            class="version-control-tracking"
+            class:version-control-tracking-error={aheadBehindError !== null}
+            title={trackingSummaryTitle}
+          >
             {trackingSummary}
           </span>
         {/if}
@@ -1109,6 +1153,11 @@
     font-size: 0.8125rem;
     color: var(--color-text-secondary);
     white-space: nowrap;
+  }
+
+  .version-control-tracking-error {
+    color: var(--color-text-muted);
+    font-style: italic;
   }
 
   .version-control-branch-error {

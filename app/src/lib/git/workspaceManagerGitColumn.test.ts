@@ -1,12 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { logDiagnostic } from "../services/logging";
 import { checkGitAvailable, resolveRepoRoot } from "./gitService";
 import { queryRepositoryStatusSummary } from "./repositoryStatusSummary";
+import { notifyVersionControlMutation } from "./versionControlRefresh";
 import {
   formatGitColumnDisplayText,
   loadWorkspaceGitColumnCell,
   refreshWorkspaceGitColumnCells,
   resetWorkspaceGitColumnQueueForTests,
+  subscribeWorkspaceGitColumnAutoRefresh,
 } from "./workspaceManagerGitColumn";
+
+vi.mock("../services/logging", () => ({
+  logDiagnostic: vi.fn(),
+}));
 
 vi.mock("./gitService", () => ({
   checkGitAvailable: vi.fn(),
@@ -20,6 +27,7 @@ vi.mock("./repositoryStatusSummary", () => ({
 const checkGitAvailableMock = vi.mocked(checkGitAvailable);
 const resolveRepoRootMock = vi.mocked(resolveRepoRoot);
 const queryRepositoryStatusSummaryMock = vi.mocked(queryRepositoryStatusSummary);
+const logDiagnosticMock = vi.mocked(logDiagnostic);
 
 describe("formatGitColumnDisplayText", () => {
   it("renders branch, ahead/behind, and dirty marker", () => {
@@ -132,6 +140,18 @@ describe("loadWorkspaceGitColumnCell", () => {
       status: "error",
       text: "—",
     });
+
+    expect(logDiagnosticMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "warn",
+        message: "Failed to load workspace git column cell",
+        metadata: expect.objectContaining({
+          workspaceRootPath: "/tmp/repo",
+          operation: "loadWorkspaceGitColumnCell",
+          error: "git failed",
+        }),
+      }),
+    );
   });
 
   it("dedupes in-flight requests for the same workspace path", async () => {
@@ -189,5 +209,36 @@ describe("refreshWorkspaceGitColumnCells", () => {
     expect(results.get("/tmp/a")).toMatchObject({ status: "ready", displayText: "alpha · clean" });
     expect(results.get("/tmp/b")).toMatchObject({ status: "ready", displayText: "beta · clean" });
     expect(queryRepositoryStatusSummaryMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("subscribeWorkspaceGitColumnAutoRefresh", () => {
+  beforeEach(() => {
+    resetWorkspaceGitColumnQueueForTests();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("debounces forced refresh callbacks after version-control mutations", async () => {
+    const refreshCalls: string[] = [];
+    const unsubscribe = subscribeWorkspaceGitColumnAutoRefresh((workspaceRootPath) => {
+      refreshCalls.push(workspaceRootPath);
+    });
+
+    notifyVersionControlMutation("/tmp/a", "stage");
+    notifyVersionControlMutation("/tmp/a", "commit");
+    notifyVersionControlMutation("/tmp/b", "pull");
+
+    expect(refreshCalls).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(refreshCalls).toEqual(["/tmp/a", "/tmp/b"]);
+
+    unsubscribe();
   });
 });

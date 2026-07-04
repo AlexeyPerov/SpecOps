@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-04 13:45 — FIX-04 & FIX-05: Ahead/behind errors and workspace git column refresh
+
+- **`app/src/lib/git/gitService.ts`** — `isNoUpstreamAheadBehindError()` distinguishes missing upstream from real git failures; `queryAheadBehind` throws `GitCommandError` for lock/conflict errors instead of returning null.
+- **`app/src/lib/git/repositoryStatusSummary.ts`** — catches ahead/behind failures, logs diagnostics, and exposes optional `aheadBehindError` while preserving branch/dirty summary.
+- **`VersionControlView.svelte`** — branch header stays ready when tracking query fails; shows subtle “Tracking unavailable” with error tooltip.
+- **`app/src/lib/git/workspaceManagerGitColumn.ts`** — diagnostic logging on probe failure; `subscribeWorkspaceGitColumnAutoRefresh()` debounces VC mutation invalidation (~300ms).
+- **`WorkspaceManagerView.svelte`** — subscribes to git column auto-refresh after VC mutations; tooltip reflects tracking load failures.
+- **Tests** — extended `gitService.test.ts`, `repositoryStatusSummary.test.ts`, `workspaceManagerGitColumn.test.ts`.
+- **`specs/git/execution/fixes/fix-04-ahead-behind-error-handling.md`**, **`fix-05-workspace-manager-git-column-refresh.md`** — marked `[DONE]`.
+
 ## 2026-07-04 12:00 — FIX-03: Remote auth and non-interactive env (D-05)
 
 - **`app/src/lib/git/gitRemoteEnv.ts`** — `buildNonInteractiveRemoteEnv()` sets `GIT_TERMINAL_PROMPT=0` and SSH BatchMode for fail-fast remote ops without a TTY.

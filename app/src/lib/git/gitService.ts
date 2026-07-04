@@ -225,9 +225,24 @@ export async function queryCurrentBranch(repoRoot: string): Promise<CurrentBranc
   };
 }
 
+/** True when `rev-list @{u}...HEAD` failed because upstream is missing or unknown. */
+export function isNoUpstreamAheadBehindError(response: RunGitResponse): boolean {
+  if (response.exitCode === 0) {
+    return false;
+  }
+
+  const stderr = response.stderr.toLowerCase();
+  return (
+    stderr.includes("no upstream configured") ||
+    stderr.includes("unknown revision") ||
+    stderr.includes("no merge base")
+  );
+}
+
 /**
  * Query ahead/behind counts against the current branch upstream.
- * Returns `null` when no upstream is configured.
+ * Returns `null` when no upstream is configured or stdout is unparseable.
+ * Throws {@link GitCommandError} for other git failures (lock conflicts, etc.).
  */
 export async function queryAheadBehind(repoRoot: string): Promise<AheadBehindCounts | null> {
   const response = await runGit(repoRoot, [
@@ -237,10 +252,26 @@ export async function queryAheadBehind(repoRoot: string): Promise<AheadBehindCou
     "@{u}...HEAD",
   ]);
   if (response.exitCode !== 0) {
-    return null;
+    if (isNoUpstreamAheadBehindError(response)) {
+      return null;
+    }
+    throw createGitCommandError(response);
   }
 
-  return parseAheadBehindCount(response.stdout);
+  const parsed = parseAheadBehindCount(response.stdout);
+  if (parsed === null) {
+    void logDiagnostic({
+      level: "warn",
+      source: "frontend",
+      message: "Unparseable ahead/behind stdout from git rev-list",
+      timestamp: new Date().toISOString(),
+      metadata: {
+        repoRoot,
+        stdout: response.stdout,
+      },
+    });
+  }
+  return parsed;
 }
 
 /**

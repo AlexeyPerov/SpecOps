@@ -3,6 +3,7 @@
   import {
     loadWorkspaceGitColumnCell,
     refreshWorkspaceGitColumnCells,
+    subscribeWorkspaceGitColumnAutoRefresh,
     type WorkspaceGitColumnCell,
   } from "../git/workspaceManagerGitColumn";
 
@@ -67,8 +68,9 @@
     if (cell.status === "ready") {
       const summary = cell.summary;
       const branch = summary.isDetached ? `Detached HEAD at ${summary.branchName}` : summary.branchName;
-      const tracking =
-        summary.aheadBehind && (summary.aheadBehind.ahead > 0 || summary.aheadBehind.behind > 0)
+      const tracking = summary.aheadBehindError
+        ? `Could not load tracking: ${summary.aheadBehindError}`
+        : summary.aheadBehind && (summary.aheadBehind.ahead > 0 || summary.aheadBehind.behind > 0)
           ? `${summary.aheadBehind.ahead} ahead, ${summary.aheadBehind.behind} behind`
           : summary.aheadBehind
             ? "Up to date with upstream"
@@ -133,6 +135,22 @@
       gitRefreshBusy = false;
     }
   }
+
+  async function refreshGitColumnCell(workspaceRootPath: string): Promise<void> {
+    gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, { status: "loading" });
+    const cell = await loadWorkspaceGitColumnCell(workspaceRootPath, { force: true });
+    gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, cell);
+  }
+
+  $effect(() => {
+    const paths = new Set(workspaces.map((workspace) => workspace.rootPath));
+    return subscribeWorkspaceGitColumnAutoRefresh((workspaceRootPath) => {
+      if (!paths.has(workspaceRootPath)) {
+        return;
+      }
+      void refreshGitColumnCell(workspaceRootPath);
+    });
+  });
 
   $effect(() => {
     const rows = workspaces;

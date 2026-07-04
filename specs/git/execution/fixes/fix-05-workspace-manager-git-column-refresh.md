@@ -1,4 +1,4 @@
-# FIX-05 — Workspace Manager git column refresh
+# FIX-05 — Workspace Manager git column refresh [DONE]
 
 **Priority:** P1 · **Score:** 7 · **Agent:** medium · **Estimate:** ~0.5d
 

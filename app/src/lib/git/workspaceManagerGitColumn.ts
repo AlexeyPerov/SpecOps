@@ -1,8 +1,13 @@
+import { logDiagnostic } from "../services/logging";
 import { checkGitAvailable, resolveRepoRoot } from "./gitService";
 import {
   queryRepositoryStatusSummary,
   type RepositoryStatusSummary,
 } from "./repositoryStatusSummary";
+import {
+  subscribeVersionControlMutations,
+  type VersionControlMutationScope,
+} from "./versionControlRefresh";
 
 export type WorkspaceGitColumnCell =
   | { status: "loading" }
@@ -13,7 +18,10 @@ export type WorkspaceGitColumnCell =
 const NEUTRAL_CELL: WorkspaceGitColumnCell = { status: "neutral", text: "—" };
 const ERROR_CELL: WorkspaceGitColumnCell = { status: "error", text: "—" };
 
+const GIT_COLUMN_REFRESH_DEBOUNCE_MS = 300;
+
 let gitCommandQueue: Promise<unknown> = Promise.resolve();
+const gitColumnRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function enqueueGitCommand<T>(fn: () => Promise<T>): Promise<T> {
   const next = gitCommandQueue.then(fn, fn);
@@ -68,7 +76,19 @@ async function loadWorkspaceGitColumnCellInternal(
       summary,
       displayText: formatGitColumnDisplayText(summary),
     };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    void logDiagnostic({
+      level: "warn",
+      source: "frontend",
+      message: "Failed to load workspace git column cell",
+      timestamp: new Date().toISOString(),
+      metadata: {
+        workspaceRootPath,
+        operation: "loadWorkspaceGitColumnCell",
+        error: message,
+      },
+    });
     return ERROR_CELL;
   }
 }
@@ -114,4 +134,48 @@ export async function refreshWorkspaceGitColumnCells(
 export function resetWorkspaceGitColumnQueueForTests(): void {
   gitCommandQueue = Promise.resolve();
   inFlightByPath.clear();
+  for (const timer of gitColumnRefreshTimers.values()) {
+    clearTimeout(timer);
+  }
+  gitColumnRefreshTimers.clear();
+}
+
+/** True when a VC mutation should invalidate the workspace git column for that root. */
+export function shouldRefreshGitColumnForMutation(_scope: VersionControlMutationScope): boolean {
+  return true;
+}
+
+/**
+ * Subscribe to version-control mutations and debounce git column reloads per workspace.
+ * Returns an unsubscribe function that clears pending debounce timers.
+ */
+export function subscribeWorkspaceGitColumnAutoRefresh(
+  onRefresh: (workspaceRootPath: string) => void,
+): () => void {
+  const unsubscribeMutations = subscribeVersionControlMutations((workspaceRootPath, scope) => {
+    if (!shouldRefreshGitColumnForMutation(scope)) {
+      return;
+    }
+
+    const existing = gitColumnRefreshTimers.get(workspaceRootPath);
+    if (existing) {
+      clearTimeout(existing);
+    }
+
+    gitColumnRefreshTimers.set(
+      workspaceRootPath,
+      setTimeout(() => {
+        gitColumnRefreshTimers.delete(workspaceRootPath);
+        onRefresh(workspaceRootPath);
+      }, GIT_COLUMN_REFRESH_DEBOUNCE_MS),
+    );
+  });
+
+  return () => {
+    unsubscribeMutations();
+    for (const timer of gitColumnRefreshTimers.values()) {
+      clearTimeout(timer);
+    }
+    gitColumnRefreshTimers.clear();
+  };
 }

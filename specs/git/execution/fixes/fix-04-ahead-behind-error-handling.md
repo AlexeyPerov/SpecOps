@@ -1,4 +1,4 @@
-# FIX-04 — Ahead/behind error handling
+# FIX-04 — Ahead/behind error handling [DONE]
 
 **Priority:** P1 · **Score:** 6 · **Agent:** low · **Estimate:** ~0.25d
 

@@ -19,6 +19,8 @@ import {
   resolveDefaultRemote,
   parseShortHeadRef,
   parseStatusPorcelain,
+  parseStashList,
+  parseStashListItem,
   parseTagList,
   splitWorkingTreeStatus,
   parseUpstreamRef,
@@ -287,6 +289,44 @@ describe("parseTagList", () => {
   it("returns an empty list for blank stdout", () => {
     expect(parseTagList("")).toEqual([]);
     expect(parseTagList("\n\n")).toEqual([]);
+  });
+});
+
+describe("parseStashList", () => {
+  it("parses fixture stash rows in stable newest-first order", () => {
+    expect(parseStashList(readFixture("git-stash-list-z.txt"))).toEqual([
+      {
+        sha: "abc1111111111111111111111111111111111111111",
+        parents: ["def2222222222222222222222222222222222222222"],
+        ref: "stash@{0}",
+        createdAt: 1_700_000_000,
+        message: "WIP on main: first stash",
+      },
+      {
+        sha: "0000000000000000000000000000000000000000",
+        parents: ["fed3333333333333333333333333333333333333333"],
+        ref: "stash@{1}",
+        createdAt: 1_699_900_000,
+        message: "On feature: second stash with\nmultiple message lines",
+      },
+    ]);
+  });
+
+  it("returns an empty list for blank stdout", () => {
+    expect(parseStashList("")).toEqual([]);
+    expect(parseStashList("\n\n")).toEqual([]);
+  });
+
+  it("skips malformed stash entries without throwing", () => {
+    expect(parseStashList("only-one-line\n\0")).toEqual([]);
+    expect(parseStashList("abc\n\0valid-ish\n")).toEqual([]);
+  });
+});
+
+describe("parseStashListItem", () => {
+  it("returns null for incomplete field sets", () => {
+    expect(parseStashListItem("abc123\nparent\n")).toBeNull();
+    expect(parseStashListItem("")).toBeNull();
   });
 });
 

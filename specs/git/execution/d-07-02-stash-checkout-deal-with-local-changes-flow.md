@@ -1,4 +1,4 @@
-# D-07 Task 2 — Stash checkout deal-with-local-changes flow
+# D-07 Task 2 — Stash checkout deal-with-local-changes flow [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

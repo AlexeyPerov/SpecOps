@@ -1,4 +1,4 @@
-# D-07 Task 1 — Stash core git service operations
+# D-07 Task 1 — Stash core git service operations [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

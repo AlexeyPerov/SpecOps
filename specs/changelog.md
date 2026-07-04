@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-04 06:32 — D-07 Tasks 1–2 and D-08 Task 1: stash service, checkout flow, pre-git autosave
+
+- **`app/src/lib/git/types.ts`** — `GitStashSummary` type for structured stash list rows.
+- **`app/src/lib/git/gitParse.ts`** — `GIT_STASH_LIST_FORMAT`, `parseStashList`, and `parseStashListItem` for NUL-delimited `git stash list -z` output.
+- **`app/src/lib/git/gitService.ts`** — `createStash`, `queryStashes`, and `applyStash` with typed conflict/not-found/nothing-to-save errors.
+- **`app/src/lib/git/fixtures/git-stash-list-z.txt`** — sample stash list stdout for parser tests.
+- **`app/src/lib/services/localChangesCheckoutPrompt.ts`**, **`LocalChangesCheckoutPrompt.svelte`** — dialog for dirty-tree checkout: Cancel, Keep changes, or Stash and continue.
+- **`app/src/lib/components/GitBranchesPanel.svelte`** — stash-assisted checkout with independent failure toasts for stash, checkout, and apply stages.
+- **`app/src/lib/services/preGitAutosave.ts`** — `autosaveWorkspaceDirtyDocuments` reusing `saveDocumentKeepingTab`; structured saved/skipped/failure summary and opt-out flag.
+- **Tests** — extended `gitParse.test.ts`, `gitService.test.ts`, `gitIntegration.test.ts`; added `preGitAutosave.test.ts`.
+- **`specs/git/manual-test-checklist.md`** — Branches section extended for stash-assisted dirty checkout flows.
+- **`specs/git/execution/d-07-01-stash-core-git-service-operations.md`**, **`d-07-02-stash-checkout-deal-with-local-changes-flow.md`**, **`d-08-01-autosave-service-for-dirty-documents.md`** — marked `[DONE]`.
+
 ## 2026-07-04 06:30 — D-06 Tasks 1–2: remote picker state, persistence, and toolbar integration
 
 - **`app/src/lib/git/versionControlRemoteSelection.ts`** — toolbar remote selection model with `origin`-then-first fallback, repo-scoped persistence in `version-control-remote-selection.json`, and reconcile helpers after remote list refresh.

@@ -30,7 +30,10 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 
 - [ ] **Branch list:** local branches shown; current branch marked.
 - [ ] **Checkout:** switch to another branch when working tree is clean — history/branches/header update.
-- [ ] **Dirty tree block:** modify a tracked file (do not commit) — checkout shows block message; branch does not change.
+- [ ] **Dirty tree prompt:** modify a tracked file (do not commit) — checkout opens **Local changes detected** dialog with Cancel, Keep changes, and Stash and continue.
+- [ ] **Stash and continue:** choose **Stash and continue** on a dirty tree — checkout succeeds; changes restored on the new branch (or conflict toast if apply fails).
+- [ ] **Dirty tree cancel:** choose **Cancel** — no checkout; working tree unchanged.
+- [ ] **Dirty tree block:** choose **Keep changes** — block message shown; branch does not change.
 - [ ] **Create branch:** create a new branch from prompt — new branch checked out and listed.
 
 ## Tags

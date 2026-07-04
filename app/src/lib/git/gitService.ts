@@ -16,6 +16,8 @@ import {
   parseRemoteVvLines,
   parseLsRemoteTags,
   parseUpstreamRef,
+  parseStashList,
+  GIT_STASH_LIST_FORMAT,
 } from "./gitParse";
 import { parseUnifiedDiff } from "./gitDiffParse";
 import { validateGitRefName } from "./gitRefName";
@@ -35,6 +37,7 @@ import {
   type GitAvailableResponse,
   type GitNotARepositoryError,
   type GitRemote,
+  type GitStashSummary,
   type GitTagSummary,
   type ParsedTextDiff,
   type QueryCommitsOptions,
@@ -862,6 +865,138 @@ export async function createBranch(repoRoot: string, name: string): Promise<void
   }
 }
 
+export class GitStashNothingToSaveError extends Error {
+  readonly kind = "stashNothingToSave" as const;
+
+  constructor(message = "No local changes to save.") {
+    super(message);
+    this.name = "GitStashNothingToSaveError";
+  }
+}
+
+export class GitStashNotFoundError extends Error {
+  readonly kind = "stashNotFound" as const;
+  readonly stashRef: string;
+
+  constructor(stashRef: string, message?: string) {
+    super(message ?? `Stash "${stashRef}" was not found.`);
+    this.name = "GitStashNotFoundError";
+    this.stashRef = stashRef;
+  }
+}
+
+export class GitStashApplyConflictError extends Error {
+  readonly kind = "stashApplyConflict" as const;
+  readonly stashRef: string;
+  readonly stderr: string;
+
+  constructor(stashRef: string, stderr: string) {
+    super(`Could not apply stash "${stashRef}" because of conflicts.`);
+    this.name = "GitStashApplyConflictError";
+    this.stashRef = stashRef;
+    this.stderr = stderr;
+  }
+}
+
+function isStashNothingToSaveResponse(response: RunGitResponse): boolean {
+  const lower = response.stderr.toLowerCase();
+  return lower.includes("no local changes to save");
+}
+
+function isStashNotFoundResponse(stderr: string): boolean {
+  const lower = stderr.toLowerCase();
+  return (
+    lower.includes("is not a valid stash") ||
+    lower.includes("log for 'stash' only has") ||
+    lower.includes("unknown stash")
+  );
+}
+
+function isStashApplyConflictResponse(stderr: string): boolean {
+  const lower = stderr.toLowerCase();
+  return (
+    lower.includes("could not apply") ||
+    lower.includes("merge conflict") ||
+    lower.includes("overwritten by merge") ||
+    lower.includes("conflict in") ||
+    lower.includes("unmerged files")
+  );
+}
+
+/**
+ * Stash working-tree changes (`git stash push`).
+ * When nothing changed, throws {@link GitStashNothingToSaveError}.
+ */
+export async function createStash(
+  repoRoot: string,
+  message?: string,
+  includeUntracked = true,
+): Promise<void> {
+  const args = ["stash", "push"];
+  if (includeUntracked) {
+    args.push("--include-untracked");
+  }
+  const trimmedMessage = message?.trim();
+  if (trimmedMessage) {
+    args.push("-m", trimmedMessage);
+  }
+
+  const response = await runGit(repoRoot, args);
+  if (response.exitCode !== 0) {
+    if (isStashNothingToSaveResponse(response)) {
+      throw new GitStashNothingToSaveError();
+    }
+    throw createGitCommandError(response);
+  }
+}
+
+/** List stashes via structured `git stash list -z --format=…` (newest first). */
+export async function queryStashes(repoRoot: string): Promise<GitStashSummary[]> {
+  const response = await runGit(repoRoot, [
+    "stash",
+    "list",
+    "-z",
+    "--no-show-signature",
+    `--format=${GIT_STASH_LIST_FORMAT}`,
+  ]);
+  if (response.exitCode !== 0) {
+    throw createGitCommandError(response);
+  }
+
+  return parseStashList(response.stdout);
+}
+
+/**
+ * Apply or pop a stash ref (`git stash apply` / `git stash pop --index`).
+ * Conflict and missing-ref failures map to typed errors for UI handling.
+ */
+export async function applyStash(
+  repoRoot: string,
+  stashRef: string,
+  pop = false,
+): Promise<void> {
+  const trimmedRef = stashRef.trim();
+  if (!trimmedRef) {
+    throw new GitStashNotFoundError(stashRef, "Stash ref cannot be empty.");
+  }
+
+  const args = pop
+    ? ["stash", "pop", "-q", "--index", trimmedRef]
+    : ["stash", "apply", "-q", trimmedRef];
+
+  const response = await runGit(repoRoot, args);
+  if (response.exitCode !== 0) {
+    const stderr = response.stderr.trim();
+    if (isStashNotFoundResponse(stderr)) {
+      throw new GitStashNotFoundError(trimmedRef, stderr || undefined);
+    }
+    if (isStashApplyConflictResponse(stderr)) {
+      throw new GitStashApplyConflictError(trimmedRef, stderr);
+    }
+    throw createGitCommandError(response);
+  }
+}
+
 export type {
   AheadBehindCounts,
   BranchSummary,
@@ -878,6 +1013,7 @@ export type {
   GitAvailableResponse,
   GitError,
   GitRemote,
+  GitStashSummary,
   GitTagSummary,
   ParsedTextDiff,
   QueryCommitsOptions,

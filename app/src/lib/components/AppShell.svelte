@@ -3,6 +3,7 @@
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
   import TagPushPrompt from "./TagPushPrompt.svelte";
   import TagDeletePrompt from "./TagDeletePrompt.svelte";
+  import LocalChangesCheckoutPrompt from "./LocalChangesCheckoutPrompt.svelte";
   import RevertPreviewDialog from "./RevertPreviewDialog.svelte";
   import SessionListPanel from "./SessionListPanel.svelte";
   import AddMultipleWorkspacesModal from "./AddMultipleWorkspacesModal.svelte";
@@ -634,6 +635,7 @@
 <EntryNamePrompt onNotify={overlays.notify} />
 <TagPushPrompt />
 <TagDeletePrompt />
+<LocalChangesCheckoutPrompt />
 <RevertPreviewDialog />
 {#if sessionListPanel}
   <SessionListPanel

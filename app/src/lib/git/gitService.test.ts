@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  applyStash,
   checkGitAvailable,
   createBranch,
   createCommit,
+  createStash,
   checkoutBranch,
   createTag,
   deleteLocalTag,
@@ -17,6 +19,9 @@ import {
   GitDiffTooLargeError,
   GitNoUpstreamError,
   GitRefValidationError,
+  GitStashApplyConflictError,
+  GitStashNotFoundError,
+  GitStashNothingToSaveError,
   GitTagPartialDeleteError,
   COMMIT_FILE_DIFF_MAX_BYTES,
   DIFF_CONTEXT_LINES,
@@ -33,6 +38,7 @@ import {
   queryIsBareRepository,
   queryRemotes,
   queryRemoteTags,
+  queryStashes,
   queryTags,
   queryWorkingTreeStatus,
   queryWorkingTreeFileDiff,
@@ -1600,6 +1606,168 @@ describe("git command logging", () => {
           command: ["status"],
         }),
       }),
+    );
+  });
+});
+
+describe("createStash", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("invokes git stash push with include-untracked and message", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 3,
+    });
+
+    await createStash("/tmp/repo", "WIP before checkout", true);
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["stash", "push", "--include-untracked", "-m", "WIP before checkout"],
+    });
+  });
+
+  it("omits include-untracked when disabled", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await createStash("/tmp/repo", undefined, false);
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["stash", "push"],
+    });
+  });
+
+  it("throws GitStashNothingToSaveError when git reports no changes", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 1,
+      stdout: "",
+      stderr: "No local changes to save\n",
+      durationMs: 1,
+    });
+
+    await expect(createStash("/tmp/repo")).rejects.toBeInstanceOf(GitStashNothingToSaveError);
+  });
+});
+
+describe("queryStashes", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("invokes structured stash list and parses rows", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout:
+        "abc1111111111111111111111111111111111111111\ndef2222222222222222222222222222222222222222\n1700000000\nstash@{0}\nWIP on main\0",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    const rows = await queryStashes("/tmp/repo");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: [
+        "stash",
+        "list",
+        "-z",
+        "--no-show-signature",
+        "--format=%H%n%P%n%ct%n%gd%n%B",
+      ],
+    });
+    expect(rows).toEqual([
+      {
+        sha: "abc1111111111111111111111111111111111111111",
+        parents: ["def2222222222222222222222222222222222222222"],
+        ref: "stash@{0}",
+        createdAt: 1_700_000_000,
+        message: "WIP on main",
+      },
+    ]);
+  });
+
+  it("returns an empty list for blank stdout", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await expect(queryStashes("/tmp/repo")).resolves.toEqual([]);
+  });
+});
+
+describe("applyStash", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("invokes git stash apply by default", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await applyStash("/tmp/repo", "stash@{0}");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["stash", "apply", "-q", "stash@{0}"],
+    });
+  });
+
+  it("invokes git stash pop --index when pop is true", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await applyStash("/tmp/repo", "stash@{1}", true);
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["stash", "pop", "-q", "--index", "stash@{1}"],
+    });
+  });
+
+  it("throws GitStashNotFoundError for missing stash refs", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 1,
+      stdout: "",
+      stderr: "fatal: log for 'stash' only has 1 entries\n",
+      durationMs: 1,
+    });
+
+    await expect(applyStash("/tmp/repo", "stash@{9}")).rejects.toBeInstanceOf(
+      GitStashNotFoundError,
+    );
+  });
+
+  it("throws GitStashApplyConflictError when apply conflicts", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 1,
+      stdout: "",
+      stderr: "error: could not apply stash@{0}\nCONFLICT (content): Merge conflict in file.txt\n",
+      durationMs: 2,
+    });
+
+    await expect(applyStash("/tmp/repo", "stash@{0}")).rejects.toBeInstanceOf(
+      GitStashApplyConflictError,
     );
   });
 });

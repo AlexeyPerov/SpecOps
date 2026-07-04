@@ -7,6 +7,7 @@ import type {
   CommitFileStatus,
   CommitSummary,
   GitRemote,
+  GitStashSummary,
   GitTagSummary,
   WorkingTreeFileEntry,
   WorkingTreeStatus,
@@ -402,6 +403,82 @@ export function parseTagList(stdout: string): string[] {
     .filter(Boolean);
 
   return tags.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+}
+
+/** NUL-separated `git stash list --format=…` field layout (D-07). */
+export const GIT_STASH_LIST_FORMAT = "%H%n%P%n%ct%n%gd%n%B";
+
+/**
+ * Parse one NUL-delimited stash entry from `git stash list -z --format=…`.
+ * Expects `%H`, `%P`, `%ct`, `%gd`, then `%B` message body.
+ */
+export function parseStashListItem(item: string): GitStashSummary | null {
+  const trimmed = item.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const fieldLines: string[] = [];
+  let start = 0;
+  for (let fieldIndex = 0; fieldIndex < 4; fieldIndex += 1) {
+    const end = trimmed.indexOf("\n", start);
+    if (end === -1) {
+      if (fieldIndex < 3) {
+        return null;
+      }
+      fieldLines.push(trimmed.slice(start));
+      start = trimmed.length;
+      break;
+    }
+    fieldLines.push(trimmed.slice(start, end));
+    start = end + 1;
+  }
+
+  if (fieldLines.length < 4) {
+    return null;
+  }
+
+  const sha = fieldLines[0]?.trim() ?? "";
+  const parentsRaw = fieldLines[1]?.trim() ?? "";
+  const createdAtRaw = fieldLines[2]?.trim() ?? "";
+  const ref = fieldLines[3]?.trim() ?? "";
+  if (!sha || !ref) {
+    return null;
+  }
+
+  const createdAt = Number.parseInt(createdAtRaw, 10);
+  if (Number.isNaN(createdAt)) {
+    return null;
+  }
+
+  const parents =
+    parentsRaw.length > 0 ? parentsRaw.split(/\s+/).filter(Boolean) : [];
+  const message =
+    start < trimmed.length ? trimmed.slice(start).replace(/^\n/, "").trimEnd() : "";
+
+  return {
+    sha,
+    parents,
+    ref,
+    createdAt,
+    message,
+  };
+}
+
+/** Parse `git stash list -z --format=…` stdout into rows (newest first). */
+export function parseStashList(stdout: string): GitStashSummary[] {
+  if (!stdout.trim()) {
+    return [];
+  }
+
+  const rows: GitStashSummary[] = [];
+  for (const item of stdout.split("\0")) {
+    const parsed = parseStashListItem(item);
+    if (parsed) {
+      rows.push(parsed);
+    }
+  }
+  return rows;
 }
 
 export interface ParsedRemoteVvLine {

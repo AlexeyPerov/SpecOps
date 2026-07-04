@@ -1,10 +1,13 @@
 <script lang="ts">
   import { message } from "@tauri-apps/plugin-dialog";
-  import { reportGitError } from "../git/gitErrorUi";
+  import { reportGitError, formatGitErrorPrimaryMessage } from "../git/gitErrorUi";
   import {
+    applyStash,
     checkoutBranch,
     createBranch,
+    createStash,
     GitRefValidationError,
+    GitStashApplyConflictError,
     isWorkingTreeDirty,
     queryBranches,
   } from "../git/gitService";
@@ -12,6 +15,7 @@
   import type { BranchSummary } from "../git/types";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { promptEntryName } from "../services/entryNamePrompt";
+  import { promptLocalChangesCheckout } from "../services/localChangesCheckoutPrompt";
   import { assertNoUnsavedDocuments } from "../services/unsavedDocumentGuard";
 
   interface Props {
@@ -100,6 +104,9 @@
     actionBusy = true;
     actionError = null;
 
+    const branchName = selectedSummary.name;
+    let stashedRef: string | null = null;
+
     try {
       const unsavedOk = await assertNoUnsavedDocuments(workspaceRootPath);
       if (!unsavedOk) {
@@ -108,17 +115,59 @@
 
       const dirty = await isWorkingTreeDirty(repoRoot);
       if (dirty) {
-        await message(
-          "Checkout is blocked while the working tree has uncommitted changes. Commit, stash, or discard your changes first.",
-          {
-            title: "Working tree not clean",
-            kind: "warning",
-          },
-        );
+        const choice = await promptLocalChangesCheckout({ branchName });
+        if (!choice || choice.type === "cancel") {
+          return;
+        }
+        if (choice.type === "block") {
+          await message(
+            "Checkout is blocked while the working tree has uncommitted changes. Commit, stash, or discard your changes first.",
+            {
+              title: "Working tree not clean",
+              kind: "warning",
+            },
+          );
+          return;
+        }
+
+        try {
+          await createStash(repoRoot, `WIP before checkout to ${branchName}`);
+          stashedRef = "stash@{0}";
+        } catch (error) {
+          actionError = reportGitError(error, { operation: "Stash", repoRoot, notify });
+          return;
+        }
+      }
+
+      try {
+        await checkoutBranch(repoRoot, branchName);
+      } catch (error) {
+        actionError = reportGitError(error, { operation: "Checkout", repoRoot, notify });
+        if (stashedRef) {
+          notify(
+            "Checkout failed. Your changes were stashed — apply the latest stash to restore them.",
+          );
+        }
         return;
       }
 
-      await checkoutBranch(repoRoot, selectedSummary.name);
+      if (stashedRef) {
+        try {
+          await applyStash(repoRoot, stashedRef, true);
+        } catch (error) {
+          const detail = formatGitErrorPrimaryMessage(error);
+          if (error instanceof GitStashApplyConflictError) {
+            notify(
+              `Checked out ${branchName}, but stashed changes conflicted on apply. Resolve conflicts, then apply ${stashedRef} manually.`,
+            );
+          } else {
+            notify(
+              `Checked out ${branchName}, but could not restore stashed changes: ${detail}. Apply ${stashedRef} manually if needed.`,
+            );
+          }
+        }
+      }
+
       await loadBranches(repoRoot);
       await onMutation("checkout");
     } catch (error) {

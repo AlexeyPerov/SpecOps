@@ -249,6 +249,17 @@ export interface DiffHunk {
   lines: DiffLine[];
 }
 
+/** One stash row from `git stash list -z --format=…` (D-07). */
+export interface GitStashSummary {
+  sha: string;
+  parents: string[];
+  /** Stash ref such as `stash@{0}` (newest first in list order). */
+  ref: string;
+  /** Committer time as Unix seconds when available. */
+  createdAt: number;
+  message: string;
+}
+
 /** Parsed text diff for one file from `git diff` / `git show` patch output (D-02). */
 export interface ParsedTextDiff {
   path: string;

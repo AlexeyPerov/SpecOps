@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   GIT_LOG_FORMAT,
   GIT_SHOW_FORMAT,
+  GIT_STASH_LIST_FORMAT,
   parseBranchVvLines,
   parseCommitShow,
   parseLogCommits,
   parseStatusPorcelain,
+  parseStashList,
   parseTagList,
   splitWorkingTreeStatus,
 } from "./gitParse";
@@ -96,5 +98,29 @@ describeIfGitInstalled("git integration (temp repo harness)", () => {
     } finally {
       repo.cleanup();
     }
+  });
+
+  it("stash list format round-trip", () => {
+    withTempGitRepo("specops-git-integration-stash-", (repo) => {
+      repo.writeFile("tracked.txt", "v1");
+      repo.run(["add", "tracked.txt"]);
+      repo.run(["commit", "-m", "init"]);
+      repo.writeFile("tracked.txt", "v2");
+      repo.run(["stash", "push", "--include-untracked", "-m", "integration stash"]);
+
+      const stdout = repo.run([
+        "stash",
+        "list",
+        "-z",
+        "--no-show-signature",
+        `--format=${GIT_STASH_LIST_FORMAT}`,
+      ]) as string;
+
+      const rows = parseStashList(stdout);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.ref).toBe("stash@{0}");
+      expect(rows[0]?.message).toContain("integration stash");
+      expect(rows[0]?.createdAt).toBeGreaterThan(0);
+    });
   });
 });

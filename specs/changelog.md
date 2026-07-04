@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-04 12:00 — FIX-03: Remote auth and non-interactive env (D-05)
+
+- **`app/src/lib/git/gitRemoteEnv.ts`** — `buildNonInteractiveRemoteEnv()` sets `GIT_TERMINAL_PROMPT=0` and SSH BatchMode for fail-fast remote ops without a TTY.
+- **`app/src/lib/git/gitService.ts`** — remote fetch/pull/push and tag/ls-remote wrappers use non-interactive env plus per-command in-app askpass; tag push/delete accept `commandId`.
+- **`app/src-tauri/src/git_askpass.rs`**, **`git.rs`**, **`lib.rs`** — askpass session scripts, prompt watcher, `respond_git_askpass` Tauri command, and per-command env lifecycle (no leak after command completes).
+- **`app/src/lib/git/gitAskpass.ts`**, **`app/src/lib/services/askpassPrompt.ts`**, **`AskpassPrompt.svelte`** — event bridge, single-prompt mutex, credential dialog UI mounted in `AppShell`.
+- **`app/src/lib/git/gitErrorUi.ts`** — expanded auth/SSH/credential stderr classification with actionable guidance.
+- **`VersionControlView.svelte`**, **`GitTagsPanel.svelte`** — toolbar Cancel covers tag push/delete remote commands via shared command-id registration.
+- **Tests** — `gitRemoteEnv.test.ts`, `askpassPrompt.test.ts`; updated `gitService.test.ts`, `gitCancel.test.ts`, `gitErrorUi.test.ts`.
+- **`specs/git/execution/fixes/fix-03-remote-auth-and-non-interactive-env.md`**, **D-05 tasks** — marked `[DONE]`.
+
 ## 2026-07-04 10:45 — FIX-01: Autosave before working-tree mutations
 
 - **`app/src/lib/components/GitChangesPanel.svelte`** — stage, unstage, and commit handlers call `prepareWorkspaceForGitOperation` before git mutations; accepts `workspaceRootPath` and `preGitSaveDeps` props (mirrors `GitBranchesPanel`).

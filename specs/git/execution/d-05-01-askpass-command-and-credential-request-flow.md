@@ -1,4 +1,4 @@
-# D-05 Task 1 — Askpass command and credential request flow
+# D-05 Task 1 — Askpass command and credential request flow [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 
@@ -32,10 +32,10 @@ Define a secure askpass request/response contract between git subprocess executi
 
 ## Acceptance checklist
 
-- [ ] Pull/push/fetch path can emit a structured askpass request instead of hanging on tty prompt.
-- [ ] Askpass env injection is per-command and does not leak across subsequent git commands.
-- [ ] Timeout/abort surfaces clear UI-facing error and clears busy state.
-- [ ] Unit tests cover env-building and request parsing edge cases (empty prompt, multiline prompt).
+- [x] Pull/push/fetch path can emit a structured askpass request instead of hanging on tty prompt.
+- [x] Askpass env injection is per-command and does not leak across subsequent git commands.
+- [x] Timeout/abort surfaces clear UI-facing error and clears busy state.
+- [x] Unit tests cover env-building and request parsing edge cases (empty prompt, multiline prompt).
 
 ## Dependencies
 

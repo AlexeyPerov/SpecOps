@@ -74,6 +74,12 @@ describe("cancellable remote operations", () => {
       repoRoot: "/tmp/repo",
       args: ["fetch"],
       commandId: "fetch-1",
+      askpassEnabled: true,
+      askpassOperation: "fetch",
+      env: {
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
+      },
     });
   });
 

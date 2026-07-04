@@ -2,6 +2,7 @@
   import ConsolePanel from "./ConsolePanel.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
   import TagPushPrompt from "./TagPushPrompt.svelte";
+  import AskpassPrompt from "./AskpassPrompt.svelte";
   import TagDeletePrompt from "./TagDeletePrompt.svelte";
   import LocalChangesCheckoutPrompt from "./LocalChangesCheckoutPrompt.svelte";
   import PreGitAutosavePrompt from "./PreGitAutosavePrompt.svelte";
@@ -634,6 +635,7 @@
 </main>
 
 <EntryNamePrompt onNotify={overlays.notify} />
+<AskpassPrompt />
 <TagPushPrompt />
 <TagDeletePrompt />
 <LocalChangesCheckoutPrompt />

@@ -26,6 +26,44 @@ export interface CancelGitCommandResponse {
 /** Optional cancellation handle for long-running git subprocesses. */
 export interface CancellableGitOptions {
   commandId?: string;
+  /** Enable in-app GIT_ASKPASS for credential prompts during this command. */
+  askpass?: boolean;
+  /** Operation context for askpass prompts. */
+  askpassOperation?: GitAskpassOperation;
+  /** Optional askpass request timeout in milliseconds. */
+  askpassTimeoutMs?: number;
+}
+
+/** Remote git operation context surfaced in askpass prompts. */
+export type GitAskpassOperation =
+  | "fetch"
+  | "pull"
+  | "push"
+  | "tagPush"
+  | "tagDelete"
+  | "lsRemote";
+
+/** Credential input mode for an askpass request. */
+export type GitAskpassInputKind = "username" | "password" | "passphrase";
+
+/** Structured askpass request emitted while a remote git command runs. */
+export interface GitAskpassRequest {
+  sessionId: string;
+  requestId: string;
+  prompt: string;
+  hostHint: string | null;
+  usernameHint: string | null;
+  inputKind: GitAskpassInputKind;
+  operation: GitAskpassOperation | null;
+  timeoutMs: number;
+}
+
+/** User response to an askpass request. */
+export interface GitAskpassResponse {
+  sessionId: string;
+  requestId: string;
+  value: string;
+  cancelled?: boolean;
 }
 
 /** Workspace path is not inside a git repository. */

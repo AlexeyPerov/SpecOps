@@ -21,6 +21,7 @@ import {
 } from "./gitParse";
 import { parseUnifiedDiff } from "./gitDiffParse";
 import { validateGitRefName } from "./gitRefName";
+import { buildNonInteractiveRemoteEnv } from "./gitRemoteEnv";
 import {
   createGitCommandError,
   createGitInvalidPathError,
@@ -37,6 +38,7 @@ import {
   type CommitDetail,
   type CommitSummary,
   type CurrentBranchInfo,
+  type GitAskpassOperation,
   type GitAvailableResponse,
   type GitNotARepositoryError,
   type GitRemote,
@@ -110,12 +112,32 @@ export async function runGit(
       args,
       ...(env ? { env } : {}),
       ...(options?.commandId ? { commandId: options.commandId } : {}),
+      ...(options?.askpass ? { askpassEnabled: true } : {}),
+      ...(options?.askpassOperation ? { askpassOperation: options.askpassOperation } : {}),
+      ...(options?.askpassTimeoutMs ? { askpassTimeoutMs: options.askpassTimeoutMs } : {}),
     });
     logGitCommandSummary(repoRoot, args, response);
     return response;
   } catch (error) {
     throw mapGitInvokeError(error, repoRoot);
   }
+}
+
+interface RemoteGitInvokeOptions extends CancellableGitOptions {
+  operation: GitAskpassOperation;
+}
+
+async function runRemoteGit(
+  repoRoot: string,
+  args: string[],
+  options?: RemoteGitInvokeOptions,
+): Promise<RunGitResponse> {
+  const env = buildNonInteractiveRemoteEnv();
+  return runGit(repoRoot, args, env, {
+    ...options,
+    askpass: true,
+    askpassOperation: options?.operation,
+  });
 }
 
 /** Terminate an in-flight cancellable git command by id. */
@@ -535,13 +557,19 @@ export async function queryRemotes(repoRoot: string): Promise<GitRemote[]> {
 export async function queryRemoteTags(
   repoRoot: string,
   remoteName: string,
+  options?: CancellableGitOptions,
 ): Promise<string[]> {
   const trimmedRemote = remoteName.trim();
   if (!trimmedRemote) {
     throw new GitRefValidationError("Remote name cannot be empty.");
   }
 
-  const response = await runGit(repoRoot, ["ls-remote", "--tags", trimmedRemote]);
+  const response = await runRemoteGit(
+    repoRoot,
+    ["ls-remote", "--tags", trimmedRemote],
+    { ...options, operation: "lsRemote" },
+  );
+  assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -703,7 +731,10 @@ export async function fetchRemote(
   target?: RemoteOperationTarget,
   options?: CancellableGitOptions,
 ): Promise<void> {
-  const response = await runGit(repoRoot, buildFetchArgs(target), undefined, options);
+  const response = await runRemoteGit(repoRoot, buildFetchArgs(target), {
+    ...options,
+    operation: "fetch",
+  });
   assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
@@ -716,7 +747,10 @@ export async function pullRemote(
   target?: RemoteOperationTarget,
   options?: CancellableGitOptions,
 ): Promise<void> {
-  const response = await runGit(repoRoot, buildPullArgs(target), undefined, options);
+  const response = await runRemoteGit(repoRoot, buildPullArgs(target), {
+    ...options,
+    operation: "pull",
+  });
   assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
@@ -769,7 +803,10 @@ export async function pushRemote(
   target?: RemoteOperationTarget,
   options?: CancellableGitOptions,
 ): Promise<void> {
-  const response = await runGit(repoRoot, buildPushArgs(target), undefined, options);
+  const response = await runRemoteGit(repoRoot, buildPushArgs(target), {
+    ...options,
+    operation: "push",
+  });
   assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     if (isNoUpstreamPushError(response.stderr)) {
@@ -821,6 +858,7 @@ export async function pushTag(
   repoRoot: string,
   remoteName: string,
   tagName: string,
+  options?: CancellableGitOptions,
 ): Promise<void> {
   validateRemoteName(remoteName);
 
@@ -830,11 +868,12 @@ export async function pushTag(
   }
 
   const trimmedTag = tagName.trim();
-  const response = await runGit(repoRoot, [
-    "push",
-    remoteName.trim(),
-    `refs/tags/${trimmedTag}`,
-  ]);
+  const response = await runRemoteGit(
+    repoRoot,
+    ["push", remoteName.trim(), `refs/tags/${trimmedTag}`],
+    { ...options, operation: "tagPush" },
+  );
+  assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -847,6 +886,7 @@ export async function deleteRemoteTag(
   repoRoot: string,
   remoteName: string,
   tagName: string,
+  options?: CancellableGitOptions,
 ): Promise<void> {
   validateRemoteName(remoteName);
 
@@ -856,12 +896,12 @@ export async function deleteRemoteTag(
   }
 
   const trimmedTag = tagName.trim();
-  const response = await runGit(repoRoot, [
-    "push",
-    "--delete",
-    remoteName.trim(),
-    `refs/tags/${trimmedTag}`,
-  ]);
+  const response = await runRemoteGit(
+    repoRoot,
+    ["push", "--delete", remoteName.trim(), `refs/tags/${trimmedTag}`],
+    { ...options, operation: "tagDelete" },
+  );
+  assertGitCommandNotCancelled(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -879,7 +919,7 @@ export class GitTagPartialDeleteError extends Error {
   }
 }
 
-export interface DeleteTagOptions {
+export interface DeleteTagOptions extends CancellableGitOptions {
   /** When provided, delete the tag on each remote after local delete. */
   remoteNames?: string[];
 }
@@ -903,7 +943,7 @@ export async function deleteTag(
   const failedRemotes: Array<{ remoteName: string; message: string }> = [];
   for (const remoteName of remoteNames) {
     try {
-      await deleteRemoteTag(repoRoot, remoteName, tagName);
+      await deleteRemoteTag(repoRoot, remoteName, tagName, options);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failedRemotes.push({ remoteName, message });

@@ -1,4 +1,4 @@
-# D-05 Task 2 — Askpass UI and git service wiring
+# D-05 Task 2 — Askpass UI and git service wiring [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 
@@ -34,10 +34,10 @@ Implement credential prompt UI and hook it into remote git operations so users c
 
 ## Acceptance checklist
 
-- [ ] Pull/push/fetch that requires credentials opens in-app prompt and resumes command after submit.
-- [ ] Canceling prompt aborts operation and clears busy states.
-- [ ] Prompt supports repeated challenge cycles (wrong password then retry) until git command exits.
-- [ ] No plaintext credentials appear in logs, toasts, or persisted stores.
+- [x] Pull/push/fetch that requires credentials opens in-app prompt and resumes command after submit.
+- [x] Canceling prompt aborts operation and clears busy states.
+- [x] Prompt supports repeated challenge cycles (wrong password then retry) until git command exits.
+- [x] No plaintext credentials appear in logs, toasts, or persisted stores.
 
 ## Dependencies
 

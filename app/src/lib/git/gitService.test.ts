@@ -65,6 +65,27 @@ vi.mock("../services/logging", () => ({
 
 const invokeMock = vi.mocked(invoke);
 
+const REMOTE_GIT_ENV = {
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
+};
+
+function expectRemoteGitInvoke(
+  repoRoot: string,
+  args: string[],
+  operation: string,
+  extra: Record<string, unknown> = {},
+): void {
+  expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    repoRoot,
+    args,
+    askpassEnabled: true,
+    askpassOperation: operation,
+    env: REMOTE_GIT_ENV,
+    ...extra,
+  });
+}
+
 describe("runGit", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -1168,10 +1189,7 @@ describe("fetchRemote", () => {
 
     await fetchRemote("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["fetch"],
-    });
+    expectRemoteGitInvoke("/tmp/repo", ["fetch"], "fetch");
   });
 
   it("runs git fetch for an explicit remote", async () => {
@@ -1184,10 +1202,7 @@ describe("fetchRemote", () => {
 
     await fetchRemote("/tmp/repo", { remoteName: "upstream" });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["fetch", "upstream"],
-    });
+    expectRemoteGitInvoke("/tmp/repo", ["fetch", "upstream"], "fetch");
   });
 
   it("throws GitCommandError when git fetch fails", async () => {
@@ -1253,10 +1268,7 @@ describe("pullRemote", () => {
 
     await pullRemote("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["pull"],
-    });
+    expectRemoteGitInvoke("/tmp/repo", ["pull"], "pull");
   });
 
   it("runs git pull for an explicit remote and branch", async () => {
@@ -1269,10 +1281,7 @@ describe("pullRemote", () => {
 
     await pullRemote("/tmp/repo", { remoteName: "origin", branchName: "main" });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["pull", "origin", "main"],
-    });
+    expectRemoteGitInvoke("/tmp/repo", ["pull", "origin", "main"], "pull");
   });
 
   it("throws GitCommandError on merge conflict", async () => {
@@ -1304,10 +1313,7 @@ describe("pushRemote", () => {
 
     await pushRemote("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["push"],
-    });
+    expectRemoteGitInvoke("/tmp/repo", ["push"], "push");
   });
 
   it("runs git push for an explicit remote", async () => {
@@ -1320,10 +1326,7 @@ describe("pushRemote", () => {
 
     await pushRemote("/tmp/repo", { remoteName: "upstream" });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["push", "upstream", "HEAD"],
-    });
+    expectRemoteGitInvoke("/tmp/repo", ["push", "upstream", "HEAD"], "push");
   });
 
   it("throws GitNoUpstreamError when branch has no upstream", async () => {
@@ -1470,10 +1473,7 @@ describe("queryRemoteTags", () => {
     });
 
     await expect(queryRemoteTags("/tmp/repo", "origin")).resolves.toEqual(["v1.0.0"]);
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["ls-remote", "--tags", "origin"],
-    });
+    expectRemoteGitInvoke("/tmp/repo", ["ls-remote", "--tags", "origin"], "lsRemote");
   });
 
   it("rejects empty remote names before invoking git", async () => {
@@ -1499,10 +1499,7 @@ describe("pushTag", () => {
 
     await pushTag("/tmp/repo", "origin", "v1.0.0");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["push", "origin", "refs/tags/v1.0.0"],
-    });
+    expectRemoteGitInvoke("/tmp/repo", ["push", "origin", "refs/tags/v1.0.0"], "tagPush");
   });
 
   it("rejects invalid tag names before invoking git", async () => {
@@ -1535,10 +1532,11 @@ describe("deleteRemoteTag", () => {
 
     await deleteRemoteTag("/tmp/repo", "origin", "v1.0.0");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["push", "--delete", "origin", "refs/tags/v1.0.0"],
-    });
+    expectRemoteGitInvoke(
+      "/tmp/repo",
+      ["push", "--delete", "origin", "refs/tags/v1.0.0"],
+      "tagDelete",
+    );
   });
 });
 
@@ -1582,10 +1580,16 @@ describe("deleteTag", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
       repoRoot: "/tmp/repo",
       args: ["push", "--delete", "origin", "refs/tags/v1.0.0"],
+      askpassEnabled: true,
+      askpassOperation: "tagDelete",
+      env: REMOTE_GIT_ENV,
     });
     expect(invokeMock).toHaveBeenNthCalledWith(3, "run_git", {
       repoRoot: "/tmp/repo",
       args: ["push", "--delete", "upstream", "refs/tags/v1.0.0"],
+      askpassEnabled: true,
+      askpassOperation: "tagDelete",
+      env: REMOTE_GIT_ENV,
     });
   });
 

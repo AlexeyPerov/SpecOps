@@ -20,6 +20,39 @@ function commandErrorStderr(error: GitCommandError): string {
   return error.stderr.trim();
 }
 
+function isAuthRelatedStderr(stderr: string): boolean {
+  const lower = stderr.toLowerCase();
+  return (
+    lower.includes("authentication failed") ||
+    lower.includes("permission denied") ||
+    lower.includes("could not read username") ||
+    lower.includes("could not read password") ||
+    lower.includes("terminal prompts disabled") ||
+    lower.includes("could not authenticate") ||
+    lower.includes("invalid username or password") ||
+    lower.includes("access denied") ||
+    lower.includes("host key verification failed") ||
+    lower.includes("publickey") ||
+    lower.includes("no supported authentication methods") ||
+    lower.includes("failed to authenticate") ||
+    lower.includes("credential")
+  );
+}
+
+function authFailureGuidance(stderr: string): string {
+  const lower = stderr.toLowerCase();
+  if (lower.includes("publickey") || lower.includes("permission denied (publickey")) {
+    return "SSH authentication failed. Check your SSH key, agent, and remote access.";
+  }
+  if (lower.includes("host key verification failed")) {
+    return "SSH host key verification failed. Verify the remote host fingerprint.";
+  }
+  if (lower.includes("terminal prompts disabled")) {
+    return "Git could not prompt for credentials. Sign in via the credential prompt or configure a credential helper.";
+  }
+  return "Authentication failed. Check your credentials, SSH agent, or credential helper and try again.";
+}
+
 /**
  * Map common git failures to a short, human-readable primary message.
  */
@@ -31,8 +64,8 @@ export function formatGitErrorPrimaryMessage(error: unknown): string {
   if (isGitError(error) && error.kind === "command") {
     const stderr = commandErrorStderr(error).toLowerCase();
 
-    if (stderr.includes("authentication failed") || stderr.includes("permission denied")) {
-      return "Authentication failed. Check your credentials and try again.";
+    if (isAuthRelatedStderr(stderr)) {
+      return authFailureGuidance(stderr);
     }
 
     if (

@@ -1,5 +1,6 @@
 mod file_watcher;
 mod git;
+mod git_askpass;
 mod opencode_sidecar;
 
 #[cfg(target_os = "macos")]
@@ -48,6 +49,7 @@ pub fn run() {
         .manage(FileWatcherState::new())
         .manage(OpencodeSidecarState::new())
         .setup(|app| {
+            git_askpass::set_git_askpass_app_handle(app.handle().clone());
             if let Some(watcher_state) = app.try_state::<FileWatcherState>() {
                 watcher_state.set_app_handle(app.handle().clone());
             }
@@ -59,6 +61,7 @@ pub fn run() {
             take_pending_opened_paths,
             git::git_available,
             git::run_git,
+            git::respond_git_askpass,
             git::cancel_git_command,
             git::git_commit_with_message,
             file_watcher::sync_file_watcher_paths,

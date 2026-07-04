@@ -105,6 +105,7 @@
   let pullBusy = $state(false);
   let pushBusy = $state(false);
   let activeRemoteCommandId = $state<string | null>(null);
+  let panelRemoteCommand = $state<{ id: string; label: string } | null>(null);
   let remoteCancelRequested = $state(false);
   let remotesLoading = $state(false);
   let remotes = $state<GitRemote[]>([]);
@@ -135,7 +136,11 @@
   );
 
   const remoteOperationBusy = $derived(
-    isRemoteGitOperationBusy({ fetchBusy, pullBusy, pushBusy }),
+    isRemoteGitOperationBusy({ fetchBusy, pullBusy, pushBusy }) || panelRemoteCommand !== null,
+  );
+
+  const cancellableRemoteCommandId = $derived(
+    activeRemoteCommandId ?? panelRemoteCommand?.id ?? null,
   );
 
   const activeRemoteOperationLabel = $derived.by(() => {
@@ -147,6 +152,9 @@
     }
     if (pushBusy) {
       return "Push";
+    }
+    if (panelRemoteCommand) {
+      return panelRemoteCommand.label;
     }
     return "Remote operation";
   });
@@ -504,14 +512,18 @@
     return crypto.randomUUID();
   }
 
+  function registerPanelRemoteCommand(command: { id: string; label: string } | null): void {
+    panelRemoteCommand = command;
+  }
+
   async function handleCancelRemoteOperation(): Promise<void> {
-    if (!activeRemoteCommandId || remoteCancelRequested) {
+    if (!cancellableRemoteCommandId || remoteCancelRequested) {
       return;
     }
 
     remoteCancelRequested = true;
     try {
-      const response = await cancelGitCommand(activeRemoteCommandId);
+      const response = await cancelGitCommand(cancellableRemoteCommandId);
       if (response.outcome === "cancelled") {
         notifyGitCancellation(activeRemoteOperationLabel, {
           repoRoot: repoRoot ?? undefined,
@@ -909,6 +921,7 @@
             remoteOpBusy={toolbarBusy}
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}
+            onRemoteCommandChange={registerPanelRemoteCommand}
             {notify}
           />
         {:else if activeSection === "changes" && repoRoot && workspaceRootPath}

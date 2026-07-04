@@ -1,4 +1,4 @@
-# FIX-03 — Remote auth and non-interactive env
+# FIX-03 — Remote auth and non-interactive env [DONE]
 
 **Priority:** P1 · **Score:** 8 · **Agent:** medium · **Estimate:** ~1.5d
 
@@ -44,11 +44,11 @@ Make remote git operations fail predictably without tty hangs, and wire in-app c
 
 ## Acceptance checklist
 
-- [ ] Remote operations without credentials fail within bounded time (no indefinite tty wait).
-- [ ] Auth failures show user-facing guidance (check credentials, SSH agent, etc.).
-- [ ] In-app askpass prompt appears when git requests credentials (HTTPS/SSH as supported).
-- [ ] Askpass env does not leak to subsequent unrelated git commands.
-- [ ] Tag push can be cancelled when invoked during a cancellable remote flow.
+- [x] Remote operations without credentials fail within bounded time (no indefinite tty wait).
+- [x] Auth failures show user-facing guidance (check credentials, SSH agent, etc.).
+- [x] In-app askpass prompt appears when git requests credentials (HTTPS/SSH as supported).
+- [x] Askpass env does not leak to subsequent unrelated git commands.
+- [x] Tag push can be cancelled when invoked during a cancellable remote flow.
 
 ## Dependencies
 

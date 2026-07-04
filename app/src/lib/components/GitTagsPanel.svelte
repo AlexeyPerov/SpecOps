@@ -6,6 +6,7 @@
     deleteTag,
     GitRefValidationError,
     GitTagPartialDeleteError,
+    isGitCommandCancelledError,
     pushTag,
     queryRemotes,
     queryRemoteTags,
@@ -26,6 +27,7 @@
     remoteOpBusy?: boolean;
     refreshToken?: number;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
+    onRemoteCommandChange?: (command: { id: string; label: string } | null) => void;
     notify?: (message: string) => void;
   }
 
@@ -35,6 +37,7 @@
     remoteOpBusy = false,
     refreshToken = 0,
     onMutation = () => {},
+    onRemoteCommandChange = () => {},
     notify = () => {},
   }: Props = $props();
 
@@ -177,6 +180,10 @@
     }
   }
 
+  function createGitCommandId(): string {
+    return crypto.randomUUID();
+  }
+
   async function handlePushTag(): Promise<void> {
     if (!selectedTag || !canPush) {
       return;
@@ -204,10 +211,12 @@
 
     actionBusy = true;
     actionError = null;
+    const commandId = createGitCommandId();
+    onRemoteCommandChange({ id: commandId, label: "Push tag" });
 
     try {
       for (const remoteName of result.remoteNames) {
-        await pushTag(repoRoot, remoteName, selectedTag);
+        await pushTag(repoRoot, remoteName, selectedTag, { commandId });
       }
       await loadTags(repoRoot);
       await onMutation("tag");
@@ -215,9 +224,14 @@
         result.remoteNames.length === 1 ? result.remoteNames[0] : `${result.remoteNames.length} remotes`;
       notify(`Pushed tag "${selectedTag}" to ${remoteLabel}.`);
     } catch (error) {
-      actionError = reportGitError(error, { operation: "Push tag", repoRoot, notify });
+      if (isGitCommandCancelledError(error)) {
+        notify("Push tag cancelled.");
+      } else {
+        actionError = reportGitError(error, { operation: "Push tag", repoRoot, notify });
+      }
     } finally {
       actionBusy = false;
+      onRemoteCommandChange(null);
     }
   }
 
@@ -242,16 +256,24 @@
 
     actionBusy = true;
     actionError = null;
+    const commandId = createGitCommandId();
+    const hasRemoteDeletes = result.deleteFromRemotes && remoteRows.length > 0;
+    if (hasRemoteDeletes) {
+      onRemoteCommandChange({ id: commandId, label: "Delete remote tag" });
+    }
 
     try {
       await deleteTag(repoRoot, selectedTag, {
         remoteNames: result.deleteFromRemotes ? remoteRows.map((remote) => remote.name) : undefined,
+        commandId: hasRemoteDeletes ? commandId : undefined,
       });
       await loadTags(repoRoot);
       await onMutation("tag");
       notify(`Deleted tag "${selectedTag}".`);
     } catch (error) {
-      if (error instanceof GitTagPartialDeleteError) {
+      if (isGitCommandCancelledError(error)) {
+        notify("Delete remote tag cancelled.");
+      } else if (error instanceof GitTagPartialDeleteError) {
         const remoteList = error.failedRemotes.map((entry) => entry.remoteName).join(", ");
         notify(
           `Tag "${selectedTag}" deleted locally, but remote delete failed on: ${remoteList}.`,
@@ -263,6 +285,9 @@
       }
     } finally {
       actionBusy = false;
+      if (hasRemoteDeletes) {
+        onRemoteCommandChange(null);
+      }
     }
   }
 </script>

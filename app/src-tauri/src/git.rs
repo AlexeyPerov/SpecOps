@@ -1,3 +1,4 @@
+use crate::git_askpass;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -19,6 +20,15 @@ pub struct RunGitRequest {
     /// When set, the command is registered for user-initiated cancellation.
     #[serde(default)]
     pub command_id: Option<String>,
+    /// When true, wire in-app GIT_ASKPASS for credential prompts during this command.
+    #[serde(default)]
+    pub askpass_enabled: bool,
+    /// Operation context for askpass prompts (`fetch`, `pull`, `push`, etc.).
+    #[serde(default)]
+    pub askpass_operation: Option<String>,
+    /// Optional askpass request timeout in milliseconds.
+    #[serde(default)]
+    pub askpass_timeout_ms: Option<u64>,
 }
 
 /// Result of a `git` subprocess invocation.
@@ -270,6 +280,25 @@ pub struct GitCommitRequest {
     pub message: String,
 }
 
+fn merge_env_maps(
+    base: Option<&HashMap<String, String>>,
+    extra: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    let mut merged = base.cloned().unwrap_or_default();
+    merged.extend(extra.iter().map(|(key, value)| (key.clone(), value.clone())));
+    merged
+}
+
+struct AskpassSessionGuard(Option<String>);
+
+impl Drop for AskpassSessionGuard {
+    fn drop(&mut self) {
+        if let Some(session_id) = self.0.take() {
+            git_askpass::end_askpass_session(&session_id);
+        }
+    }
+}
+
 fn build_git_command(
     repo_root: &Path,
     args: &[String],
@@ -301,17 +330,72 @@ pub fn execute_git(
 }
 
 /// Run `git` with optional cancellation registration.
+pub struct ExecuteGitOptions<'a> {
+    pub env: Option<&'a HashMap<String, String>>,
+    pub command_id: Option<&'a str>,
+    pub askpass_enabled: bool,
+    pub askpass_operation: Option<&'a str>,
+    pub askpass_timeout_ms: Option<u64>,
+}
+
 pub fn execute_git_with_options(
     repo_root: &Path,
     args: &[String],
     env: Option<&HashMap<String, String>>,
     command_id: Option<&str>,
 ) -> RunGitResponse {
-    let start = Instant::now();
-    let normalized_command_id = command_id.and_then(normalize_command_id);
+    execute_git_with_full_options(
+        repo_root,
+        args,
+        ExecuteGitOptions {
+            env,
+            command_id,
+            askpass_enabled: false,
+            askpass_operation: None,
+            askpass_timeout_ms: None,
+        },
+    )
+}
 
-    if let Some(id) = normalized_command_id.as_deref() {
-        let mut command = build_git_command(repo_root, args, env);
+pub fn execute_git_with_full_options(
+    repo_root: &Path,
+    args: &[String],
+    options: ExecuteGitOptions<'_>,
+) -> RunGitResponse {
+    let start = Instant::now();
+    let normalized_command_id = options.command_id.and_then(normalize_command_id);
+
+    let askpass_session_id = if options.askpass_enabled {
+        match git_askpass::build_askpass_env_for_operation(
+            options.askpass_operation,
+            options.askpass_timeout_ms,
+        ) {
+            Ok((askpass_env, session_id)) => {
+                let merged_env = merge_env_maps(options.env, &askpass_env);
+                Some((session_id, merged_env))
+            }
+            Err(error) => {
+                return RunGitResponse {
+                    exit_code: -1,
+                    stdout: String::new(),
+                    stderr: error,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    cancelled: false,
+                };
+            }
+        }
+    } else {
+        None
+    };
+    let _askpass_guard = AskpassSessionGuard(askpass_session_id.as_ref().map(|(id, _)| id.clone()));
+
+    let effective_env = askpass_session_id
+        .as_ref()
+        .map(|(_, env)| env as &HashMap<String, String>)
+        .or(options.env);
+
+    let response = if let Some(id) = normalized_command_id.as_deref() {
+        let mut command = build_git_command(repo_root, args, effective_env);
         let child = match command.spawn() {
             Ok(child) => child,
             Err(error) => {
@@ -354,31 +438,33 @@ pub fn execute_git_with_options(
         let cancelled = active_git_command_was_cancelled(id);
         unregister_active_git_command(id);
 
-        return RunGitResponse {
+        RunGitResponse {
             exit_code: output.status.code().unwrap_or(-1),
             stdout: decode_utf8(&output.stdout),
             stderr: decode_utf8(&output.stderr),
             duration_ms: start.elapsed().as_millis() as u64,
             cancelled,
-        };
-    }
+        }
+    } else {
+        match build_git_command(repo_root, args, effective_env).output() {
+            Ok(output) => RunGitResponse {
+                exit_code: output.status.code().unwrap_or(-1),
+                stdout: decode_utf8(&output.stdout),
+                stderr: decode_utf8(&output.stderr),
+                duration_ms: start.elapsed().as_millis() as u64,
+                cancelled: false,
+            },
+            Err(error) => RunGitResponse {
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: error.to_string(),
+                duration_ms: start.elapsed().as_millis() as u64,
+                cancelled: false,
+            },
+        }
+    };
 
-    match build_git_command(repo_root, args, env).output() {
-        Ok(output) => RunGitResponse {
-            exit_code: output.status.code().unwrap_or(-1),
-            stdout: decode_utf8(&output.stdout),
-            stderr: decode_utf8(&output.stderr),
-            duration_ms: start.elapsed().as_millis() as u64,
-            cancelled: false,
-        },
-        Err(error) => RunGitResponse {
-            exit_code: -1,
-            stdout: String::new(),
-            stderr: error.to_string(),
-            duration_ms: start.elapsed().as_millis() as u64,
-            cancelled: false,
-        },
-    }
+    response
 }
 
 /// Probe whether system `git` is available.
@@ -441,12 +527,23 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
 #[tauri::command]
 pub fn run_git(request: RunGitRequest) -> Result<RunGitResponse, String> {
     let repo_root = normalize_repo_root(&request.repo_root)?;
-    Ok(execute_git_with_options(
+    Ok(execute_git_with_full_options(
         &repo_root,
         &request.args,
-        request.env.as_ref(),
-        request.command_id.as_deref(),
+        ExecuteGitOptions {
+            env: request.env.as_ref(),
+            command_id: request.command_id.as_deref(),
+            askpass_enabled: request.askpass_enabled,
+            askpass_operation: request.askpass_operation.as_deref(),
+            askpass_timeout_ms: request.askpass_timeout_ms,
+        },
     ))
+}
+
+/// Write a credential response for an in-flight askpass session.
+#[tauri::command]
+pub fn respond_git_askpass(request: git_askpass::RespondGitAskpassRequest) -> Result<(), String> {
+    git_askpass::respond_git_askpass(request)
 }
 
 /// Terminate an in-flight cancellable git command by id.

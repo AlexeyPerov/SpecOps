@@ -23,6 +23,28 @@ describe("formatGitErrorPrimaryMessage", () => {
     expect(formatGitErrorPrimaryMessage(error)).toContain("Authentication failed");
   });
 
+  it("maps SSH publickey failures", () => {
+    const error = createGitCommandError({
+      exitCode: 128,
+      stdout: "",
+      stderr: "git@github.com: Permission denied (publickey).\n",
+      durationMs: 1,
+    } satisfies RunGitResponse);
+
+    expect(formatGitErrorPrimaryMessage(error)).toContain("SSH authentication failed");
+  });
+
+  it("maps terminal prompt disabled failures", () => {
+    const error = createGitCommandError({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: could not read Username for 'https://example.com': terminal prompts disabled\n",
+      durationMs: 1,
+    } satisfies RunGitResponse);
+
+    expect(formatGitErrorPrimaryMessage(error)).toContain("could not prompt for credentials");
+  });
+
   it("maps merge conflicts", () => {
     const error = createGitCommandError({
       exitCode: 1,

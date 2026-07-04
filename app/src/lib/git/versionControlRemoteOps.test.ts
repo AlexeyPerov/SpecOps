@@ -25,6 +25,10 @@ describe("versionControlRemoteOps", () => {
     expect(canStartRemoteGitOperation({ ...idle, refreshBusy: true })).toBe(false);
   });
 
+  it("blocks remote operations while remotes are loading", () => {
+    expect(canStartRemoteGitOperation({ ...idle, remotesLoading: true })).toBe(false);
+  });
+
   it("treats toolbar as busy when refresh or any remote op is active", () => {
     expect(isVersionControlToolbarBusy(idle)).toBe(false);
     expect(isVersionControlToolbarBusy({ ...idle, refreshBusy: true })).toBe(true);

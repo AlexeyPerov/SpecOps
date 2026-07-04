@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-04 06:30 — D-06 Tasks 1–2: remote picker state, persistence, and toolbar integration
+
+- **`app/src/lib/git/versionControlRemoteSelection.ts`** — toolbar remote selection model with `origin`-then-first fallback, repo-scoped persistence in `version-control-remote-selection.json`, and reconcile helpers after remote list refresh.
+- **`app/src/lib/git/gitService.ts`** — optional `RemoteOperationTarget` on `fetchRemote`, `pullRemote`, and `pushRemote` for explicit remote (and optional branch) argv.
+- **`app/src/lib/git/versionControlRemoteOps.ts`** — toolbar busy guard includes remotes-loading state.
+- **`app/src/lib/components/VersionControlView.svelte`** — compact remote `<select>` in toolbar (writable repos with remotes), fetch/pull/push wired to selected remote, disabled states and hints when no remotes, selection persisted without panel refresh.
+- **Tests** — `versionControlRemoteSelection.test.ts`; extended `gitService.test.ts` and `versionControlRemoteOps.test.ts`.
+- **`specs/git/manual-test-checklist.md`** — Remote operations section extended for picker, persistence, fallback, and selection-stability flows.
+- **`specs/git/execution/d-06-01-remote-picker-state-model-and-persistence.md`**, **`d-06-02-remote-picker-toolbar-integration.md`** — marked `[DONE]`.
+
 ## 2026-07-03 22:30 — Archived D-01–D-04 execution plans; added D-05–D-12 execution plans
 
 - **`specs/archive/git/execution/`** — moved all previously completed execution plans (22 files) from `specs/git/execution/` into archive.

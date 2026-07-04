@@ -15,8 +15,10 @@
     pushRemote,
     queryAheadBehind,
     queryCurrentBranch,
+    queryRemotes,
+    type RemoteOperationTarget,
   } from "../git/gitService";
-  import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo } from "../git/types";
+  import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo, GitRemote } from "../git/types";
   import { normalizeGitOutputPath } from "../git/types";
   import {
     mutationChangesHead,
@@ -31,6 +33,14 @@
     probeVersionControlContext,
     workspaceUsesParentRepository,
   } from "../git/versionControlProbe";
+  import {
+    emptyRemoteSelection,
+    readPersistedRemoteSelection,
+    reconcileRemoteSelection,
+    remoteOperationTarget,
+    writePersistedRemoteSelection,
+    type VersionControlRemoteSelection,
+  } from "../git/versionControlRemoteSelection";
   import { assertNoUnsavedDocuments } from "../services/unsavedDocumentGuard";
 
   /**
@@ -82,6 +92,9 @@
   let fetchBusy = $state(false);
   let pullBusy = $state(false);
   let pushBusy = $state(false);
+  let remotesLoading = $state(false);
+  let remotes = $state<GitRemote[]>([]);
+  let remoteSelection = $state<VersionControlRemoteSelection>(emptyRemoteSelection());
   let panelRefreshToken = $state(0);
   let lastRefreshAt = 0;
 
@@ -104,10 +117,30 @@
   });
 
   const toolbarBusy = $derived(
-    isVersionControlToolbarBusy({ fetchBusy, pullBusy, pushBusy, refreshBusy }),
+    isVersionControlToolbarBusy({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading }),
   );
 
   const isReadOnlyRepository = $derived(isBareRepository);
+
+  const selectedRemoteName = $derived(
+    reconcileRemoteSelection(remoteSelection, remotes).remoteName,
+  );
+
+  const showRemotePicker = $derived(!isReadOnlyRepository && remotes.length > 0);
+
+  const remoteActionsDisabled = $derived(
+    toolbarBusy || remotesLoading || remotes.length === 0,
+  );
+
+  const remotePickerTitle = $derived.by(() => {
+    if (remotesLoading) {
+      return "Loading remotes…";
+    }
+    if (remotes.length === 0) {
+      return "No remotes configured";
+    }
+    return "Remote for fetch, pull, and push";
+  });
 
   const placeholderCopy = $derived.by(() => {
     return "Select a section.";
@@ -177,6 +210,78 @@
     selectedCommitSha = null;
   }
 
+  function resetRemotePicker(): void {
+    remotesLoading = false;
+    remotes = [];
+    remoteSelection = emptyRemoteSelection();
+  }
+
+  function buildRemoteOperationTarget(): RemoteOperationTarget | undefined {
+    const target = remoteOperationTarget(remoteSelection, remotes);
+    if (!target) {
+      return undefined;
+    }
+    return {
+      remoteName: target.remoteName,
+      branchName: target.remoteBranch,
+    };
+  }
+
+  async function loadRemotePicker(root: string, signal?: AbortSignal): Promise<void> {
+    remotesLoading = true;
+    try {
+      const [remoteRows, persisted] = await Promise.all([
+        queryRemotes(root),
+        readPersistedRemoteSelection(root),
+      ]);
+      if (signal?.aborted) {
+        return;
+      }
+
+      remotes = remoteRows;
+      remoteSelection = reconcileRemoteSelection(persisted, remoteRows);
+    } catch (error) {
+      if (signal?.aborted) {
+        return;
+      }
+      remotes = [];
+      remoteSelection = emptyRemoteSelection();
+      reportGitError(error, { operation: "Load remotes", repoRoot: root, notify });
+    } finally {
+      if (!signal?.aborted) {
+        remotesLoading = false;
+      }
+    }
+  }
+
+  async function handleRemoteSelectionChange(event: Event): Promise<void> {
+    const select = event.currentTarget as HTMLSelectElement;
+    const nextRemoteName = select.value.trim() || null;
+    if (nextRemoteName === selectedRemoteName) {
+      return;
+    }
+
+    const nextSelection: VersionControlRemoteSelection = {
+      remoteName: nextRemoteName,
+      remoteBranch: null,
+    };
+    remoteSelection = nextSelection;
+
+    if (!repoRoot) {
+      return;
+    }
+
+    try {
+      await writePersistedRemoteSelection(repoRoot, nextSelection);
+    } catch (error) {
+      reportGitError(error, {
+        operation: "Save remote selection",
+        repoRoot,
+        notify,
+      });
+    }
+  }
+
   function handleSelectCommit(commit: CommitSummary): void {
     selectedCommitSha = commit.sha;
   }
@@ -223,6 +328,7 @@
       probeError = null;
       initError = null;
       resetBranchHeader();
+      resetRemotePicker();
       return;
     }
 
@@ -257,17 +363,23 @@
           isBareRepository = false;
           probeError = result.error;
           resetBranchHeader();
+          resetRemotePicker();
           break;
         case "notARepository":
           probeStatus = "notARepository";
           repoRoot = null;
           isBareRepository = false;
           resetBranchHeader();
+          resetRemotePicker();
           break;
         case "ready":
           probeStatus = "ready";
           repoRoot = result.repoRoot;
           isBareRepository = result.isBareRepository;
+          await loadRemotePicker(result.repoRoot, signal);
+          if (signal?.aborted) {
+            return;
+          }
           if (shouldRefreshBranchHeader) {
             await refreshBranchHeader(result.repoRoot, signal);
           }
@@ -282,6 +394,7 @@
       isBareRepository = false;
       probeError = error instanceof Error ? error.message : String(error);
       resetBranchHeader();
+      resetRemotePicker();
     }
   }
 
@@ -357,14 +470,17 @@
   }
 
   async function handleFetch(): Promise<void> {
-    if (!repoRoot || !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy })) {
+    if (
+      !repoRoot ||
+      !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
+    ) {
       return;
     }
 
     fetchBusy = true;
 
     try {
-      await fetchRemote(repoRoot);
+      await fetchRemote(repoRoot, buildRemoteOperationTarget());
       await refreshAfterMutation("fetch");
     } catch (error) {
       reportGitError(error, { operation: "Fetch", repoRoot, notify });
@@ -374,7 +490,10 @@
   }
 
   async function handlePull(): Promise<void> {
-    if (!repoRoot || !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy })) {
+    if (
+      !repoRoot ||
+      !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
+    ) {
       return;
     }
 
@@ -400,7 +519,7 @@
         return;
       }
 
-      await pullRemote(repoRoot);
+      await pullRemote(repoRoot, buildRemoteOperationTarget());
       await refreshAfterMutation("pull");
     } catch (error) {
       reportGitError(error, { operation: "Pull", repoRoot, notify });
@@ -410,14 +529,17 @@
   }
 
   async function handlePush(): Promise<void> {
-    if (!repoRoot || !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy })) {
+    if (
+      !repoRoot ||
+      !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
+    ) {
       return;
     }
 
     pushBusy = true;
 
     try {
-      await pushRemote(repoRoot);
+      await pushRemote(repoRoot, buildRemoteOperationTarget());
       await refreshAfterMutation("push");
     } catch (error) {
       reportGitError(error, { operation: "Push", repoRoot, notify });
@@ -447,7 +569,10 @@
 
       if (probeStatus === "ready" && repoRoot) {
         panelRefreshToken += 1;
-        await refreshBranchHeader(repoRoot, controller.signal);
+        await Promise.all([
+          refreshBranchHeader(repoRoot, controller.signal),
+          loadRemotePicker(repoRoot, controller.signal),
+        ]);
       }
     } finally {
       refreshBusy = false;
@@ -535,6 +660,24 @@
         {/if}
       </div>
       <div class="version-control-header-actions">
+        {#if showRemotePicker}
+          <label class="version-control-remote-picker">
+            <span class="version-control-remote-picker-label">Remote</span>
+            <select
+              class="version-control-remote-select"
+              disabled={toolbarBusy || remotesLoading}
+              title={remotePickerTitle}
+              value={selectedRemoteName ?? ""}
+              onchange={handleRemoteSelectionChange}
+            >
+              {#each remotes as remote (remote.name)}
+                <option value={remote.name}>{remote.name}</option>
+              {/each}
+            </select>
+          </label>
+        {:else if probeStatus === "ready" && !isReadOnlyRepository}
+          <span class="version-control-remote-hint" title={remotePickerTitle}>No remotes</span>
+        {/if}
         <button
           type="button"
           class="version-control-action"
@@ -547,8 +690,8 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={toolbarBusy}
-          title="Fetch from remote"
+          disabled={remoteActionsDisabled}
+          title={remotes.length === 0 ? "Fetch (no remotes configured)" : "Fetch from selected remote"}
           onclick={handleFetch}
         >
           {fetchBusy ? "Fetching…" : "Fetch"}
@@ -556,8 +699,12 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={toolbarBusy || isReadOnlyRepository}
-          title={isReadOnlyRepository ? "Pull is unavailable for bare repositories" : "Pull from upstream"}
+          disabled={remoteActionsDisabled || isReadOnlyRepository}
+          title={isReadOnlyRepository
+            ? "Pull is unavailable for bare repositories"
+            : remotes.length === 0
+              ? "Pull (no remotes configured)"
+              : "Pull from selected remote"}
           onclick={handlePull}
         >
           {pullBusy ? "Pulling…" : "Pull"}
@@ -565,8 +712,8 @@
         <button
           type="button"
           class="version-control-action"
-          disabled={toolbarBusy}
-          title="Push to upstream"
+          disabled={remoteActionsDisabled}
+          title={remotes.length === 0 ? "Push (no remotes configured)" : "Push to selected remote"}
           onclick={handlePush}
         >
           {pushBusy ? "Pushing…" : "Push"}
@@ -859,6 +1006,43 @@
     align-items: center;
     gap: var(--space-2);
     flex-shrink: 0;
+  }
+
+  .version-control-remote-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+  }
+
+  .version-control-remote-picker-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .version-control-remote-select {
+    min-width: 6.5rem;
+    max-width: 10rem;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font-size: 0.8125rem;
+  }
+
+  .version-control-remote-select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .version-control-remote-hint {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    white-space: nowrap;
   }
 
   .version-control-action {

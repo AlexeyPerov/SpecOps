@@ -1086,6 +1086,22 @@ describe("fetchRemote", () => {
     });
   });
 
+  it("runs git fetch for an explicit remote", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 120,
+    });
+
+    await fetchRemote("/tmp/repo", { remoteName: "upstream" });
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["fetch", "upstream"],
+    });
+  });
+
   it("throws GitCommandError when git fetch fails", async () => {
     invokeMock.mockResolvedValue({
       exitCode: 128,
@@ -1155,6 +1171,22 @@ describe("pullRemote", () => {
     });
   });
 
+  it("runs git pull for an explicit remote and branch", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "Already up to date.\n",
+      stderr: "",
+      durationMs: 80,
+    });
+
+    await pullRemote("/tmp/repo", { remoteName: "origin", branchName: "main" });
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["pull", "origin", "main"],
+    });
+  });
+
   it("throws GitCommandError on merge conflict", async () => {
     invokeMock.mockResolvedValue({
       exitCode: 1,
@@ -1187,6 +1219,22 @@ describe("pushRemote", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", {
       repoRoot: "/tmp/repo",
       args: ["push"],
+    });
+  });
+
+  it("runs git push for an explicit remote", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 120,
+    });
+
+    await pushRemote("/tmp/repo", { remoteName: "upstream" });
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["push", "upstream", "HEAD"],
     });
   });
 

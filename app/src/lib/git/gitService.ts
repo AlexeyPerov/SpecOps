@@ -625,17 +625,54 @@ export async function checkoutBranch(repoRoot: string, branchName: string): Prom
   }
 }
 
-/** Fetch from default remotes (`git fetch`). */
-export async function fetchRemote(repoRoot: string): Promise<void> {
-  const response = await runGit(repoRoot, ["fetch"]);
+/** Optional explicit remote/branch target for fetch, pull, or push. */
+export interface RemoteOperationTarget {
+  remoteName: string;
+  branchName?: string | null;
+}
+
+function buildFetchArgs(target?: RemoteOperationTarget): string[] {
+  if (!target?.remoteName?.trim()) {
+    return ["fetch"];
+  }
+  return ["fetch", target.remoteName.trim()];
+}
+
+function buildPullArgs(target?: RemoteOperationTarget): string[] {
+  if (!target?.remoteName?.trim()) {
+    return ["pull"];
+  }
+  const remoteName = target.remoteName.trim();
+  const branchName = target.branchName?.trim();
+  return branchName ? ["pull", remoteName, branchName] : ["pull", remoteName];
+}
+
+function buildPushArgs(target?: RemoteOperationTarget): string[] {
+  if (!target?.remoteName?.trim()) {
+    return ["push"];
+  }
+  const remoteName = target.remoteName.trim();
+  const branchName = target.branchName?.trim();
+  return branchName ? ["push", remoteName, branchName] : ["push", remoteName, "HEAD"];
+}
+
+/** Fetch from all remotes, or a single remote when `target` is set. */
+export async function fetchRemote(
+  repoRoot: string,
+  target?: RemoteOperationTarget,
+): Promise<void> {
+  const response = await runGit(repoRoot, buildFetchArgs(target));
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
 }
 
-/** Pull from default upstream (`git pull`). */
-export async function pullRemote(repoRoot: string): Promise<void> {
-  const response = await runGit(repoRoot, ["pull"]);
+/** Pull from upstream, or from an explicit remote (and optional branch). */
+export async function pullRemote(
+  repoRoot: string,
+  target?: RemoteOperationTarget,
+): Promise<void> {
+  const response = await runGit(repoRoot, buildPullArgs(target));
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -662,9 +699,12 @@ function isNoUpstreamPushError(stderr: string): boolean {
   return lower.includes("no upstream branch") || lower.includes("set-upstream");
 }
 
-/** Push to default upstream (`git push`). */
-export async function pushRemote(repoRoot: string): Promise<void> {
-  const response = await runGit(repoRoot, ["push"]);
+/** Push to upstream, or to an explicit remote (and optional branch). */
+export async function pushRemote(
+  repoRoot: string,
+  target?: RemoteOperationTarget,
+): Promise<void> {
+  const response = await runGit(repoRoot, buildPushArgs(target));
   if (response.exitCode !== 0) {
     if (isNoUpstreamPushError(response.stderr)) {
       const branchName = parseNoUpstreamBranch(response.stderr);

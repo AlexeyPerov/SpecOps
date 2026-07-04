@@ -13,8 +13,9 @@ export function isVersionControlToolbarBusy(state: {
   pullBusy: boolean;
   pushBusy: boolean;
   refreshBusy: boolean;
+  remotesLoading?: boolean;
 }): boolean {
-  return state.refreshBusy || isRemoteGitOperationBusy(state);
+  return state.refreshBusy || state.remotesLoading === true || isRemoteGitOperationBusy(state);
 }
 
 /** Guard for starting fetch/pull/push — blocks parallel remote operations. */
@@ -23,6 +24,7 @@ export function canStartRemoteGitOperation(state: {
   pullBusy: boolean;
   pushBusy: boolean;
   refreshBusy: boolean;
+  remotesLoading?: boolean;
 }): boolean {
   return !isVersionControlToolbarBusy(state);
 }

@@ -55,9 +55,13 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 ## Remote operations
 
 - [ ] **Upstream display:** when tracking branch exists, ahead/behind counts shown in header.
-- [ ] **Fetch:** **Fetch** completes (or shows readable error + stderr in console on failure).
-- [ ] **Pull:** **Pull** on clean tree succeeds or shows merge/auth error in toast + console.
-- [ ] **Push:** **Push** succeeds when upstream configured, or shows no-upstream / auth message.
+- [ ] **Remote picker:** when remotes exist, toolbar shows a **Remote** dropdown (hidden for bare repos); selection persists after closing and reopening the Version Control tab for the same repository.
+- [ ] **Remote fallback:** remove the selected remote with `git remote remove` — picker falls back to `origin` or the first remaining remote without errors.
+- [ ] **No remotes:** repository with no remotes shows **No remotes** hint; Fetch/Pull/Push disabled with explanatory tooltips.
+- [ ] **Fetch:** **Fetch** uses the selected remote (verify with `git fetch <remote>` in console log when only one remote should update).
+- [ ] **Pull:** **Pull** on clean tree uses selected remote and succeeds or shows merge/auth error in toast + console.
+- [ ] **Push:** **Push** uses selected remote; succeeds when upstream configured or shows no-upstream / auth message.
+- [ ] **Selection stability:** changing the remote dropdown does not reload history/changes panels (no unnecessary refresh).
 - [ ] **Parallel guard:** double-click **Push** (or Fetch/Pull) — only one operation runs; buttons re-enable after completion or error.
 
 ## Guards (unsaved editor + read-only)

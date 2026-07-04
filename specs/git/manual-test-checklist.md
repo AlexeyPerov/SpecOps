@@ -2,7 +2,7 @@
 
 **Spec:** [version-control-idea.md](./version-control-idea.md) §7.1  
 **Platforms:** macOS and Windows (required before MVP sign-off)  
-**Last reviewed:** 2026-07-02
+**Last reviewed:** 2026-07-04
 
 Use a disposable folder as the workspace root. Confirm system `git` is on PATH before starting.
 
@@ -22,6 +22,9 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 ## History
 
 - [ ] **Commit list:** flat list shows SHA, author, date, subject for current branch.
+- [ ] **History scope:** History panel toolbar offers **Branch**, **All branches**, and **All + remotes** scope modes; switching modes reloads the commit list and graph together with a loading state.
+- [ ] **Scope persistence:** selected history scope persists after closing and reopening the Version Control tab for the same repository.
+- [ ] **Scope selection fallback:** with a commit selected, switch to a scope that excludes it — detail pane selects the first visible commit instead of staying on a missing SHA.
 - [ ] **Commit detail:** select a commit — metadata and changed-files list appear; selecting a file shows an inline unified diff in the right pane.
 - [ ] **Binary / large diff:** select a commit that changes a binary file (or a very large text diff) — diff pane shows a clear placeholder instead of garbled text or UI freeze.
 - [ ] **Refresh:** toolbar **Refresh** reloads history without errors.

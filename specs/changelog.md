@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-04 07:15 — D-10 Task 2: history filter UI and branch/remote scopes
+
+- **`app/src/lib/git/versionControlHistoryFilter.ts`** — repo-scoped history filter mode persistence in `version-control-history-filter.json`, reconcile helpers, and toolbar option labels.
+- **`app/src/lib/components/GitHistoryPanel.svelte`** — segmented history scope control (Branch / All branches / All + remotes), loads commits via `queryCommits({ filterMode })` with abort/cancel on rapid toggles, deterministic selection fallback, and current-branch graph highlighting via ref decoration in wider scopes.
+- **Tests** — added `versionControlHistoryFilter.test.ts`.
+- **`specs/git/manual-test-checklist.md`** — History section extended for scope switching, persistence, and selection fallback.
+- **`specs/git/execution/d-10-02-history-filter-ui-and-branch-remote-scopes.md`** — marked `[DONE]`.
+
 ## 2026-07-04 06:47 — D-10 Task 1: history filter mode query contract
 
 - **`app/src/lib/git/types.ts`** — `HistoryFilterMode` type (`current-branch`, `all-branches`, `all-branches-and-remotes`) and `DEFAULT_HISTORY_FILTER_MODE`; extended `QueryCommitsOptions` with optional `filterMode`.

@@ -1,4 +1,4 @@
-# D-10 Task 2 — History filter UI and branch/remote scopes
+# D-10 Task 2 — History filter UI and branch/remote scopes [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 
@@ -31,10 +31,10 @@ Expose selectable history scope controls in the History panel and refresh commit
 
 ## Acceptance checklist
 
-- [ ] User can switch between current branch and all-history scopes in History panel.
-- [ ] Mode change updates both commit list and graph column consistently.
-- [ ] Rapid mode toggles do not leave stale/overlapping request state.
-- [ ] Selection fallback behavior is deterministic.
+- [x] User can switch between current branch and all-history scopes in History panel.
+- [x] Mode change updates both commit list and graph column consistently.
+- [x] Rapid mode toggles do not leave stale/overlapping request state.
+- [x] Selection fallback behavior is deterministic.
 
 ## Dependencies
 

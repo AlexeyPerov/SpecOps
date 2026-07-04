@@ -17,10 +17,14 @@
     findWorkingTreeEntryForDiff,
     resolveWorkingTreeDiffSelection,
   } from "../git/workingTreeDiffSelection";
+  import type { SaveDocumentDeps } from "../services/documentSave";
+  import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
   import GitTextDiffView from "./GitTextDiffView.svelte";
 
   interface Props {
     repoRoot: string;
+    workspaceRootPath: string;
+    preGitSaveDeps?: SaveDocumentDeps | null;
     readOnly?: boolean;
     refreshToken?: number;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
@@ -29,6 +33,8 @@
 
   let {
     repoRoot,
+    workspaceRootPath,
+    preGitSaveDeps = null,
     readOnly = false,
     refreshToken = 0,
     onMutation = () => {},
@@ -240,6 +246,13 @@
     actionBusy = true;
     actionError = null;
     try {
+      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        deps: preGitSaveDeps,
+      });
+      if (!canProceed) {
+        return;
+      }
+
       await stagePaths(repoRoot, [...selectedUnstaged]);
       await refreshAfterAction();
     } catch (error) {
@@ -256,6 +269,13 @@
     actionBusy = true;
     actionError = null;
     try {
+      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        deps: preGitSaveDeps,
+      });
+      if (!canProceed) {
+        return;
+      }
+
       await stageAll(repoRoot);
       await refreshAfterAction();
     } catch (error) {
@@ -272,6 +292,13 @@
     actionBusy = true;
     actionError = null;
     try {
+      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        deps: preGitSaveDeps,
+      });
+      if (!canProceed) {
+        return;
+      }
+
       await unstagePaths(repoRoot, [...selectedStaged]);
       await refreshAfterAction();
     } catch (error) {
@@ -295,6 +322,13 @@
     actionBusy = true;
     actionError = null;
     try {
+      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        deps: preGitSaveDeps,
+      });
+      if (!canProceed) {
+        return;
+      }
+
       await createCommit(repoRoot, trimmed);
       commitMessage = "";
       commitError = null;

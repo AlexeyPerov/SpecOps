@@ -71,6 +71,8 @@ Run these checks once per target Linux environment before manual sign-off. Recor
 - [ ] **Partial stage:** modify a file, stage part of it (or stage then edit again) — file appears in both lists; selecting from unstaged vs staged shows different diffs and subtitles.
 - [ ] **Untracked file:** new untracked file shows all-added diff with **Untracked file** subtitle.
 - [ ] **Diff refresh:** with a file diff open, stage/unstage/commit or toolbar **Refresh** — diff pane updates without re-clicking the row; commit on last staged file clears diff when tree is clean.
+- [ ] **Autosave before stage/commit:** open a file, edit without saving — **Stage selected**, **Stage all**, **Unstage selected**, or **Commit** saves dirty buffers silently, then proceeds when save succeeds.
+- [ ] **Autosave cancel on stage/commit:** simulate a save failure — **Cancel** on the autosave dialog never runs the stage/unstage/commit git command.
 
 ## Remote operations
 
@@ -95,10 +97,10 @@ Quick pass on Linux after automated CI is green. Covers busy-state guards and re
 
 ## Guards (unsaved editor + read-only)
 
-- [ ] **Autosave before git ops:** open a file, edit without saving — **Pull** or **Checkout** saves dirty buffers silently, then proceeds when save succeeds.
+- [ ] **Autosave before git ops:** open a file, edit without saving — **Pull**, **Checkout**, or Changes **Stage** / **Commit** saves dirty buffers silently, then proceeds when save succeeds.
 - [ ] **Autosave partial failure:** simulate a save failure (e.g. read-only file on disk) — dialog lists failed files with **Cancel** (default) and **Continue anyway**; **Cancel** never runs the git command.
 - [ ] **Autosave continue anyway:** choose **Continue anyway** after partial failure — git operation proceeds despite remaining unsaved buffers.
-- [ ] **Unsaved fallback:** when autosave is unavailable, checkout / pull / create branch still blocked with “N unsaved files” dialog (Cancel only).
+- [ ] **Unsaved fallback:** when autosave is unavailable, checkout / pull / create branch / stage / commit still blocked with “N unsaved files” dialog (Cancel only).
 - [ ] **Bare repository:** open a bare repo — read-only banner; stage/commit/pull disabled.
 - [ ] **Detached HEAD:** checkout a tag or commit — detached banner visible; read-only history still works; checkout branch allowed when clean.
 

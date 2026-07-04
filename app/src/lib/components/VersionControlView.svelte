@@ -911,9 +911,11 @@
             onMutation={refreshAfterMutation}
             {notify}
           />
-        {:else if activeSection === "changes" && repoRoot}
+        {:else if activeSection === "changes" && repoRoot && workspaceRootPath}
           <GitChangesPanel
             repoRoot={repoRoot}
+            workspaceRootPath={workspaceRootPath}
+            preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}

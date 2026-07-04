@@ -1,4 +1,4 @@
-# FIX-01 — Autosave before working-tree mutations
+# FIX-01 — Autosave before working-tree mutations [DONE]
 
 **Priority:** P0 · **Score:** 8 · **Agent:** medium · **Estimate:** ~0.5d
 
@@ -35,10 +35,10 @@ Ensure all working-tree mutations attempt autosave (and respect the unsaved-docu
 
 ## Acceptance checklist
 
-- [ ] Stage selected, stage all, unstage selected, and commit all call the pre-git guard when deps are available.
-- [ ] Cancel path never executes git after autosave failure prompt.
-- [ ] Continue-anyway path still respects unsaved-document guard semantics.
-- [ ] No regression to pull/checkout/create-branch guard behavior.
+- [x] Stage selected, stage all, unstage selected, and commit all call the pre-git guard when deps are available.
+- [x] Cancel path never executes git after autosave failure prompt.
+- [x] Continue-anyway path still respects unsaved-document guard semantics.
+- [x] No regression to pull/checkout/create-branch guard behavior.
 
 ## Dependencies
 

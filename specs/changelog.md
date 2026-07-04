@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-04 10:45 — FIX-01: Autosave before working-tree mutations
+
+- **`app/src/lib/components/GitChangesPanel.svelte`** — stage, unstage, and commit handlers call `prepareWorkspaceForGitOperation` before git mutations; accepts `workspaceRootPath` and `preGitSaveDeps` props (mirrors `GitBranchesPanel`).
+- **`app/src/lib/components/VersionControlView.svelte`** — passes autosave deps into `GitChangesPanel`.
+- **Tests** — added `gitChangesPreGitGuard.test.ts` documenting guard call sites in working-tree mutation handlers.
+- **`specs/git/manual-test-checklist.md`** — Changes and Guards sections extended for autosave before stage/commit flows.
+- **`specs/git/execution/fixes/fix-01-autosave-before-working-tree-mutations.md`** — marked `[DONE]`.
+
 ## 2026-07-04 10:30 — Git integration review: FIX execution plans
 
 - **`specs/git/execution/fixes/`** — added 14 prioritized execution plans from the 2026-07-04 git integration code review:

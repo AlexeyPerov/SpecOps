@@ -32,6 +32,7 @@ Parser **unit** tests use the fixture stdout files above and do not require `git
 |---|---|
 | **Local dev** | Run `npm test` with `git` installed (recommended). Integration suites exercise real `git log`, `git status`, and `git show` output against temp repos. |
 | **CI without git** | TypeScript integration suites use `describeIfGitInstalled` from `test/gitTempRepoHarness.ts` and register as **skipped** when `git --version` fails — the job stays green. |
-| **CI / release with git** | macOS and Windows release runners include git; integration tests run normally. Rust `cargo test` in `src-tauri` also requires git for subprocess tests. |
+| **CI with git (all platforms)** | `.github/workflows/test.yml` runs `npm test` on `ubuntu-latest`, `macos-latest`, and `windows-latest`. All three runners include git on PATH; integration suites execute fully. |
+| **Release builds** | macOS and Windows release runners include git; integration tests run normally. Rust `cargo test` in `src-tauri` also requires git for subprocess tests. |
 
 To require git in CI later, replace `describeIfGitInstalled` with plain `describe` and add an explicit `git --version` setup step to the workflow.

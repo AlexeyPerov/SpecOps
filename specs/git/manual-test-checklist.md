@@ -1,10 +1,23 @@
 # Version Control — Manual Test Checklist
 
 **Spec:** [version-control-idea.md](./version-control-idea.md) §7.1  
-**Platforms:** macOS and Windows (required before MVP sign-off)  
+**Platforms:** macOS, Windows, and Linux (Linux co-equal launch readiness)  
 **Last reviewed:** 2026-07-04
 
 Use a disposable folder as the workspace root. Confirm system `git` is on PATH before starting.
+
+## Linux environment matrix
+
+Run these checks once per target Linux environment before manual sign-off. Record results in the sign-off table.
+
+| Check | Ubuntu / Debian | Fedora / RHEL | Notes |
+|---|---|---|---|
+| **Git install path** | `which git` → `/usr/bin/git` (from `git` package) | same pattern via `dnf install git` | App resolves `git` from PATH only; no bundled git binary. |
+| **Git version** | `git --version` ≥ 2.30 | same | Matches CI runners (`ubuntu-latest` ships git 2.x). |
+| **Credential helper** | `git config --global credential.helper` often `cache` or unset; libsecret helper available after `git-credential-libsecret` package | `store` or `cache` common | Push/pull auth uses OS helper until in-app askpass lands (see **Known Linux gaps**). |
+| **File mode tracking** | `git config core.filemode` defaults to `true` | same | Executable-bit-only changes may appear as modified on Linux; verify VC Changes list matches `git status --porcelain`. |
+| **Locale / UTF-8** | `locale` shows `UTF-8` | same | Required for paths with non-ASCII characters in workspace folders. |
+| **Temp dir** | `$TMPDIR` or `/tmp` writable | same | Commit message temp files use `std::env::temp_dir()`. |
 
 ## Setup
 
@@ -53,6 +66,7 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 - [ ] **Commit:** enter message and **Commit** — commit succeeds; staged list clears; history shows new commit.
 - [ ] **Empty commit blocked:** commit button disabled when nothing staged or message empty.
 - [ ] **Path display:** files in nested folders show forward slashes in UI (no broken `\\` mixes on Windows).
+- [ ] **Non-ASCII paths:** create or modify a file whose name contains non-ASCII characters (e.g. `café.txt`, `nested/文件.txt`) — file appears in Changes list with correct path; stage/commit succeeds.
 - [ ] **Working-tree diff:** select an unstaged file — inline diff appears with **Unstaged changes** subtitle; select a staged file — **Staged changes** subtitle.
 - [ ] **Partial stage:** modify a file, stage part of it (or stage then edit again) — file appears in both lists; selecting from unstaged vs staged shows different diffs and subtitles.
 - [ ] **Untracked file:** new untracked file shows all-added diff with **Untracked file** subtitle.
@@ -69,6 +83,15 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 - [ ] **Push:** **Push** uses selected remote; succeeds when upstream configured or shows no-upstream / auth message.
 - [ ] **Selection stability:** changing the remote dropdown does not reload history/changes panels (no unnecessary refresh).
 - [ ] **Parallel guard:** double-click **Push** (or Fetch/Pull) — only one operation runs; buttons re-enable after completion or error.
+
+## Linux smoke run (VC core flows)
+
+Quick pass on Linux after automated CI is green. Covers busy-state guards and remote operations that differ from macOS/Windows credential wiring.
+
+- [ ] **Busy toolbar:** start **Fetch** — Fetch/Pull/Push/Refresh disabled until completion; second click does not start a parallel remote op.
+- [ ] **Fetch / Pull / Push:** with a configured remote (HTTPS or SSH), each action uses the selected remote; errors surface in toast + console (auth failures may invoke system credential helper — no in-app askpass yet).
+- [ ] **Credential prompt:** HTTPS push/pull to a private remote triggers OS credential helper or clear auth error (not a hung terminal prompt).
+- [ ] **Spaces + UTF-8 repo path:** open a workspace whose path contains spaces and/or non-ASCII segments — VC resolves repo root, lists changes, and commits without shell quoting errors.
 
 ## Guards (unsaved editor + read-only)
 
@@ -98,11 +121,25 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 - [ ] Version Control tab still probes repo, shows history, and runs stage/commit/checkout.
 - [ ] Project tree **M/A/D** badges (OpenCode `file.status`) may still appear — that is expected and separate from VC.
 
+## Known Linux gaps
+
+Documented residual issues after automated parity work (D-11). Severity: **blocker** prevents Linux launch sign-off; **medium** needs follow-up before co-equal launch; **low** acceptable with documented workaround.
+
+| ID | Severity | Issue | Workaround / notes |
+|---|---|---|---|
+| L-01 | medium | No Linux desktop build in release workflow (`.github/workflows/release.yml` is macOS + Windows only) | Run from source on Linux; add Linux matrix when packaging is ready. |
+| L-02 | medium | Custom in-app `GIT_ASKPASS` not implemented ([D-05](../execution/d-05-01-askpass-command-and-credential-request-flow.md)) | Rely on system credential helper (`libsecret`, `cache`, or SSH agent). |
+| L-03 | low | Git install hint copy is generic on Linux (no distro-specific package command) | Install `git` via distro package manager; link points to git-scm.com downloads. |
+| L-04 | low | `core.filemode` may surface executable-bit-only changes as dirty | Expected git behavior; confirm with `git status --porcelain` before filing bugs. |
+
+**Platform-specific test skips:** none. Integration suites use `describeIfGitInstalled` and skip only when `git` is absent from PATH (not Linux-specific).
+
 ## Sign-off
 
 | Platform | Tester | Date | Pass |
 |---|---|---|---|
 | macOS | | | [ ] |
 | Windows | | | [ ] |
+| Linux | | | [ ] |
 
-When both platform rows pass, record MVP sign-off in `specs/changelog.md`.
+When all platform rows pass, record launch sign-off in `specs/changelog.md`.

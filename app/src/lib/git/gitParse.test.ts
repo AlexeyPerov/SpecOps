@@ -270,6 +270,17 @@ describe("parseCommitShow", () => {
       },
     ]);
   });
+
+  it("decodes octal-quoted non-ASCII paths in name-status lines", () => {
+    const stdout =
+      'abc123\x00\x00Author\x00author@example.com\x001700000000\x00Author\x00author@example.com\x001700000000\x00Unicode paths\n\nA\t"nested/caf\\303\\251.txt"\nA\tspaces file.txt\n';
+    const detail = parseCommitShow(stdout);
+
+    expect(detail?.files.map((file) => file.path).sort()).toEqual([
+      "nested/café.txt",
+      "spaces file.txt",
+    ]);
+  });
 });
 
 describe("parseTagList", () => {
@@ -448,6 +459,16 @@ describe("parseStatusPorcelain", () => {
       indexStatus: "?",
       workTreeStatus: "?",
       path: "path with spaces.txt",
+    });
+  });
+
+  it("decodes octal-quoted non-ASCII porcelain paths from git status", () => {
+    const lines = parseStatusPorcelain([' M "nested/caf\\303\\251.txt"'].join("\n"));
+
+    expect(lines.find((line) => line.path === "nested/café.txt")).toEqual({
+      indexStatus: " ",
+      workTreeStatus: "M",
+      path: "nested/café.txt",
     });
   });
 

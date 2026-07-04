@@ -256,7 +256,7 @@ function parseUpstreamBracket(content: string): { upstream: string | null; track
 }
 
 function normalizeRepoRelativePath(path: string): string {
-  return normalizeGitOutputPath(path);
+  return normalizeGitOutputPath(unquotePorcelainPath(path));
 }
 
 function parseNameStatusLine(line: string): CommitFileChange | null {
@@ -595,27 +595,57 @@ export function mergeTagRemotePresence(
   }));
 }
 
+function decodeGitQuotedPath(inner: string): string {
+  const bytes: number[] = [];
+  for (let index = 0; index < inner.length; index += 1) {
+    const char = inner[index]!;
+    if (char !== "\\" || index + 1 >= inner.length) {
+      bytes.push(char.charCodeAt(0));
+      continue;
+    }
+
+    const next = inner[index + 1]!;
+    switch (next) {
+      case "n":
+        bytes.push(0x0a);
+        index += 1;
+        continue;
+      case "t":
+        bytes.push(0x09);
+        index += 1;
+        continue;
+      case "r":
+        bytes.push(0x0d);
+        index += 1;
+        continue;
+      case '"':
+        bytes.push(0x22);
+        index += 1;
+        continue;
+      case "\\":
+        bytes.push(0x5c);
+        index += 1;
+        continue;
+      default: {
+        const octalMatch = /^[0-7]{1,3}/.exec(inner.slice(index + 1));
+        if (octalMatch) {
+          bytes.push(Number.parseInt(octalMatch[0], 8));
+          index += octalMatch[0].length;
+          continue;
+        }
+        bytes.push(0x5c);
+        continue;
+      }
+    }
+  }
+
+  return new TextDecoder("utf-8").decode(new Uint8Array(bytes));
+}
+
 function unquotePorcelainPath(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed
-      .slice(1, -1)
-      .replace(/\\([\\"nrt])/g, (_match, char: string) => {
-        switch (char) {
-          case "n":
-            return "\n";
-          case "t":
-            return "\t";
-          case "r":
-            return "\r";
-          case '"':
-            return '"';
-          case "\\":
-            return "\\";
-          default:
-            return char;
-        }
-      });
+    return decodeGitQuotedPath(trimmed.slice(1, -1));
   }
   return trimmed;
 }

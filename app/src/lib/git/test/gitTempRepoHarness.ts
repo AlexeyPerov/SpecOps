@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe } from "vitest";
 
 let gitAvailable: boolean | null = null;
@@ -63,7 +63,9 @@ export function createTempGitRepo(prefix = "specops-git-"): TempGitRepo {
       return runGitInRepo(dir, args, options?.encoding ?? "utf8");
     },
     writeFile(relativePath, contents) {
-      writeFileSync(join(dir, relativePath), contents);
+      const absolutePath = join(dir, relativePath);
+      mkdirSync(dirname(absolutePath), { recursive: true });
+      writeFileSync(absolutePath, contents);
     },
     cleanup() {
       rmSync(dir, { recursive: true, force: true });

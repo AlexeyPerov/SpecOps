@@ -1,4 +1,4 @@
-# D-11 Task 1 — Linux launch readiness plan
+# D-11 Task 1 — Linux launch readiness plan [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 
@@ -30,10 +30,10 @@ Prepare and execute a Linux parity plan for Version Control workflows, covering 
 
 ## Acceptance checklist
 
-- [ ] Linux runner executes git integration suite without unexpected failures.
-- [ ] Manual checklist includes Linux-specific verification steps.
-- [ ] Any known Linux-only issues are documented with severity and follow-up IDs.
-- [ ] No regressions introduced for macOS/Windows pipelines.
+- [x] Linux runner executes git integration suite without unexpected failures.
+- [x] Manual checklist includes Linux-specific verification steps.
+- [x] Any known Linux-only issues are documented with severity and follow-up IDs.
+- [x] No regressions introduced for macOS/Windows pipelines.
 
 ## Dependencies
 

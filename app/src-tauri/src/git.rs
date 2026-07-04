@@ -449,6 +449,43 @@ mod tests {
     }
 
     #[test]
+    fn run_git_add_paths_with_spaces_and_non_ascii_as_single_argv() {
+        if skip_if_git_unavailable() {
+            return;
+        }
+        let repo_root = create_temp_git_repo();
+        let spaces_path = repo_root.join("spaces file.txt");
+        let unicode_path = repo_root.join("nested").join("café.txt");
+        fs::create_dir_all(unicode_path.parent().expect("unicode parent dir"))
+            .expect("create nested dir");
+        fs::write(&spaces_path, "space").expect("write spaces file");
+        fs::write(&unicode_path, "unicode").expect("write unicode file");
+
+        let add = execute_git(
+            &repo_root,
+            &[
+                "add".to_string(),
+                "--".to_string(),
+                "spaces file.txt".to_string(),
+                "nested/café.txt".to_string(),
+            ],
+            None,
+        );
+        assert_eq!(add.exit_code, 0, "git add failed: {}", add.stderr);
+
+        let status = execute_git(
+            &repo_root,
+            &["status".to_string(), "--porcelain".to_string()],
+            None,
+        );
+        assert_eq!(status.exit_code, 0);
+        assert!(status.stdout.contains("spaces file.txt"));
+        assert!(status.stdout.contains("nested/café.txt"));
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
     fn run_git_not_a_repository_returns_exit_code_128() {
         if skip_if_git_unavailable() {
             return;

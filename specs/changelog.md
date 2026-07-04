@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-04 07:25 — D-11 Task 1: Linux launch readiness plan
+
+- **`.github/workflows/test.yml`** — cross-platform CI job (`ubuntu-latest`, `macos-latest`, `windows-latest`) runs the full vitest suite with git on PATH; Linux integration tests validated locally and in workflow.
+- **`app/src/lib/git/gitParse.ts`** — decode git's octal-quoted UTF-8 path escapes in porcelain and name-status output (`core.quotepath` default on Linux).
+- **Tests** — extended `gitParse.test.ts` for octal-quoted paths; `gitTempRepoHarness.ts` creates parent dirs for nested file paths.
+- **`app/src-tauri/src/git.rs`** — Rust subprocess test for `git add` with spaced and non-ASCII path argv entries.
+- **`specs/git/manual-test-checklist.md`** — Linux environment matrix (install path, credential helper, file mode, locale), non-ASCII path check, Linux smoke run (busy-state, fetch/pull/push, credential helper), known gaps table (L-01–L-04), and Linux sign-off row.
+- **`app/src/lib/git/fixtures/README.md`** — documents three-platform test workflow strategy.
+- **`specs/git/execution/d-11-01-linux-launch-readiness-plan.md`** — marked `[DONE]`.
+
 ## 2026-07-04 07:15 — D-10 Task 2: history filter UI and branch/remote scopes
 
 - **`app/src/lib/git/versionControlHistoryFilter.ts`** — repo-scoped history filter mode persistence in `version-control-history-filter.json`, reconcile helpers, and toolbar option labels.

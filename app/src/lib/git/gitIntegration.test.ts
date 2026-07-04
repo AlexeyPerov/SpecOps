@@ -100,6 +100,38 @@ describeIfGitInstalled("git integration (temp repo harness)", () => {
     }
   });
 
+  it("handles paths with spaces and non-ASCII characters on real git", () => {
+    withTempGitRepo("specops-git-integration-paths-", (repo) => {
+      repo.writeFile("spaces file.txt", "space");
+      repo.writeFile("nested/café.txt", "unicode");
+      repo.run(["add", "spaces file.txt", "nested/café.txt"]);
+      repo.run(["commit", "-m", "paths with spaces and non-ASCII"]);
+
+      repo.writeFile("spaces file.txt", "changed");
+      repo.writeFile("nested/café.txt", "changed");
+
+      const stdout = repo.run(["status", "--porcelain"]) as string;
+      const status = splitWorkingTreeStatus(parseStatusPorcelain(stdout));
+
+      expect(status.unstaged.map((entry) => entry.path).sort()).toEqual([
+        "nested/café.txt",
+        "spaces file.txt",
+      ]);
+
+      const showStdout = repo.run([
+        "show",
+        "--name-status",
+        `--format=${GIT_SHOW_FORMAT}`,
+        "HEAD",
+      ]) as string;
+      const detail = parseCommitShow(showStdout);
+      expect(detail?.files.map((file) => file.path).sort()).toEqual([
+        "nested/café.txt",
+        "spaces file.txt",
+      ]);
+    });
+  });
+
   it("stash list format round-trip", () => {
     withTempGitRepo("specops-git-integration-stash-", (repo) => {
       repo.writeFile("tracked.txt", "v1");

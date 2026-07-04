@@ -1,0 +1,38 @@
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  git-integration:
+    name: git tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Verify git on PATH
+        run: git --version
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Run vitest suite
+        working-directory: app
+        run: npm test

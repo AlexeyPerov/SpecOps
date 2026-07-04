@@ -137,6 +137,15 @@ export interface AheadBehindCounts {
 /** Default cap for `git log` queries (phase 2). */
 export const DEFAULT_COMMIT_LOG_LIMIT = 500;
 
+/** History scope for commit queries (D-10). */
+export type HistoryFilterMode =
+  | "current-branch"
+  | "all-branches"
+  | "all-branches-and-remotes";
+
+/** Default history scope — current branch only (D-10). */
+export const DEFAULT_HISTORY_FILTER_MODE: HistoryFilterMode = "current-branch";
+
 /** Branch/tag ref decoration on a commit from `git log --decorate=full`. */
 export type CommitDecoratorType =
   | "currentBranchHead"
@@ -166,6 +175,8 @@ export interface CommitSummary {
 
 export interface QueryCommitsOptions {
   limit?: number;
+  /** History scope; defaults to {@link DEFAULT_HISTORY_FILTER_MODE}. */
+  filterMode?: HistoryFilterMode;
 }
 
 /** Status letter from `git show --name-status` file rows. */

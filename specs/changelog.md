@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-04 06:47 — D-10 Task 1: history filter mode query contract
+
+- **`app/src/lib/git/types.ts`** — `HistoryFilterMode` type (`current-branch`, `all-branches`, `all-branches-and-remotes`) and `DEFAULT_HISTORY_FILTER_MODE`; extended `QueryCommitsOptions` with optional `filterMode`.
+- **`app/src/lib/git/gitService.ts`** — `buildQueryCommitsArgs` maps filter modes to `git log` scope flags (`--branches`, `--remotes`); `queryCommits` uses the builder while preserving default current-branch behavior and pagination.
+- **`app/src/lib/git/gitService.test.ts`** — unit tests for argv construction in each filter mode and default fallback.
+- **`specs/git/execution/d-10-01-history-filter-mode-query-contract.md`** — marked `[DONE]`.
+
 ## 2026-07-04 06:40 — D-08 Task 2 and D-09 Task 1: pre-git autosave integration and Workspace Manager git column
 
 - **`app/src/lib/services/preGitOperationGuard.ts`** — `prepareWorkspaceForGitOperation` orchestrates autosave, partial-failure prompt, and legacy unsaved-document guard fallback.

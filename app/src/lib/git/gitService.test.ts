@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
   applyStash,
+  buildQueryCommitsArgs,
   checkGitAvailable,
   createBranch,
   createCommit,
@@ -48,7 +49,7 @@ import {
   stagePaths,
   unstagePaths,
 } from "./gitService";
-import { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
+import { DEFAULT_COMMIT_LOG_LIMIT, DEFAULT_HISTORY_FILTER_MODE } from "./types";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
 import { isGitError } from "./types";
 import { describeIfGitInstalled, createTempGitRepo, withTempGitRepo } from "./test/gitTempRepoHarness";
@@ -331,6 +332,61 @@ describe("queryAheadBehind", () => {
   });
 });
 
+describe("buildQueryCommitsArgs", () => {
+  it("defaults to current-branch scope with default limit", () => {
+    expect(buildQueryCommitsArgs()).toEqual([
+      "log",
+      "--no-show-signature",
+      "--decorate=full",
+      `--format=${GIT_LOG_FORMAT}`,
+      `-${DEFAULT_COMMIT_LOG_LIMIT}`,
+    ]);
+  });
+
+  it("adds --branches for all-branches mode", () => {
+    expect(buildQueryCommitsArgs({ filterMode: "all-branches", limit: 100 })).toEqual([
+      "log",
+      "--no-show-signature",
+      "--decorate=full",
+      `--format=${GIT_LOG_FORMAT}`,
+      "--branches",
+      "-100",
+    ]);
+  });
+
+  it("adds --branches and --remotes for all-branches-and-remotes mode", () => {
+    expect(
+      buildQueryCommitsArgs({ filterMode: "all-branches-and-remotes", limit: 50 }),
+    ).toEqual([
+      "log",
+      "--no-show-signature",
+      "--decorate=full",
+      `--format=${GIT_LOG_FORMAT}`,
+      "--branches",
+      "--remotes",
+      "-50",
+    ]);
+  });
+
+  it("omits scope flags for explicit current-branch mode", () => {
+    expect(buildQueryCommitsArgs({ filterMode: "current-branch" })).toEqual([
+      "log",
+      "--no-show-signature",
+      "--decorate=full",
+      `--format=${GIT_LOG_FORMAT}`,
+      `-${DEFAULT_COMMIT_LOG_LIMIT}`,
+    ]);
+  });
+
+  it("uses DEFAULT_HISTORY_FILTER_MODE when filterMode is omitted", () => {
+    expect(DEFAULT_HISTORY_FILTER_MODE).toBe("current-branch");
+    const args = buildQueryCommitsArgs({ limit: 10 });
+    expect(args).not.toContain("--branches");
+    expect(args).not.toContain("--remotes");
+    expect(args).not.toContain("--all");
+  });
+});
+
 describe("queryCommits", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -376,13 +432,39 @@ describe("queryCommits", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", {
       repoRoot: "/tmp/repo",
-      args: [
-        "log",
-        "--no-show-signature",
-        "--decorate=full",
-        `--format=${GIT_LOG_FORMAT}`,
-        "-25",
-      ],
+      args: buildQueryCommitsArgs({ limit: 25 }),
+    });
+  });
+
+  it("passes all-branches scope flags to git log", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await queryCommits("/tmp/repo", { filterMode: "all-branches" });
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: buildQueryCommitsArgs({ filterMode: "all-branches" }),
+    });
+  });
+
+  it("passes all-branches-and-remotes scope flags to git log", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 1,
+    });
+
+    await queryCommits("/tmp/repo", { filterMode: "all-branches-and-remotes", limit: 200 });
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: buildQueryCommitsArgs({ filterMode: "all-branches-and-remotes", limit: 200 }),
     });
   });
 

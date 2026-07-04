@@ -26,6 +26,7 @@ import {
   createGitInvalidPathError,
   createGitNotARepositoryError,
   DEFAULT_COMMIT_LOG_LIMIT,
+  DEFAULT_HISTORY_FILTER_MODE,
   isGitError,
   mapGitInvokeError,
   normalizeGitOutputPath,
@@ -39,6 +40,7 @@ import {
   type GitRemote,
   type GitStashSummary,
   type GitTagSummary,
+  type HistoryFilterMode,
   type ParsedTextDiff,
   type QueryCommitsOptions,
   type ResolveRepoRootResult,
@@ -207,21 +209,44 @@ export async function queryAheadBehind(repoRoot: string): Promise<AheadBehindCou
 }
 
 /**
- * Query commit history for the current branch using structured `git log` output.
+ * Build argv for `git log` commit history queries.
+ * Scope flags follow reference behavior: local branches only, or branches plus remotes.
+ */
+export function buildQueryCommitsArgs(options: QueryCommitsOptions = {}): string[] {
+  const limit = options.limit ?? DEFAULT_COMMIT_LOG_LIMIT;
+  const filterMode = options.filterMode ?? DEFAULT_HISTORY_FILTER_MODE;
+
+  const args = [
+    "log",
+    "--no-show-signature",
+    "--decorate=full",
+    `--format=${GIT_LOG_FORMAT}`,
+  ];
+
+  switch (filterMode) {
+    case "all-branches":
+      args.push("--branches");
+      break;
+    case "all-branches-and-remotes":
+      args.push("--branches", "--remotes");
+      break;
+    case "current-branch":
+      break;
+  }
+
+  args.push(`-${limit}`);
+  return args;
+}
+
+/**
+ * Query commit history using structured `git log` output.
  * Returns commits newest-first (default `git log` order).
  */
 export async function queryCommits(
   repoRoot: string,
   options: QueryCommitsOptions = {},
 ): Promise<CommitSummary[]> {
-  const limit = options.limit ?? DEFAULT_COMMIT_LOG_LIMIT;
-  const response = await runGit(repoRoot, [
-    "log",
-    "--no-show-signature",
-    "--decorate=full",
-    `--format=${GIT_LOG_FORMAT}`,
-    `-${limit}`,
-  ]);
+  const response = await runGit(repoRoot, buildQueryCommitsArgs(options));
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -1015,6 +1040,7 @@ export type {
   GitRemote,
   GitStashSummary,
   GitTagSummary,
+  HistoryFilterMode,
   ParsedTextDiff,
   QueryCommitsOptions,
   RunGitResponse,
@@ -1022,7 +1048,7 @@ export type {
   WorkingTreeFileEntry,
   WorkingTreeStatus,
 } from "./types";
-export { DEFAULT_COMMIT_LOG_LIMIT } from "./types";
+export { DEFAULT_COMMIT_LOG_LIMIT, DEFAULT_HISTORY_FILTER_MODE } from "./types";
 export { GIT_LOG_FORMAT, GIT_SHOW_FORMAT } from "./gitParse";
 export {
   createGitCommandError,

@@ -1,4 +1,4 @@
-# D-10 Task 1 — History filter mode query contract
+# D-10 Task 1 — History filter mode query contract [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 
@@ -33,10 +33,10 @@ Extend commit query layer with explicit history scope modes (current branch, all
 
 ## Acceptance checklist
 
-- [ ] `queryCommits` supports filter mode without breaking existing callers.
-- [ ] Current default remains current-branch mode.
-- [ ] All mode variants are test-covered for argv generation.
-- [ ] No regressions in commit parse behavior.
+- [x] `queryCommits` supports filter mode without breaking existing callers.
+- [x] Current default remains current-branch mode.
+- [x] All mode variants are test-covered for argv generation.
+- [x] No regressions in commit parse behavior.
 
 ## Dependencies
 

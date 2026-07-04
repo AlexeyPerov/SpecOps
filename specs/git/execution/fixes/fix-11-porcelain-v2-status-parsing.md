@@ -1,4 +1,4 @@
-# FIX-11 — Porcelain v2 status parsing
+# FIX-11 — Porcelain v2 status parsing [DONE]
 
 **Priority:** P2 · **Score:** 5 · **Agent:** medium · **Estimate:** ~0.75d
 
@@ -31,10 +31,10 @@ Migrate to `git status --porcelain=v2 -z` (or v2 with documented delimiter strat
 
 ## Acceptance checklist
 
-- [ ] `queryWorkingTreeStatus` uses porcelain v2 -z.
-- [ ] All existing porcelain fixture tests pass or fixtures updated with equivalent v2 samples.
-- [ ] Rename and conflict entries appear correctly in staged/unstaged lists.
-- [ ] No regression in FIX-02 badge mapping if complete.
+- [x] `queryWorkingTreeStatus` uses porcelain v2 -z.
+- [x] All existing porcelain fixture tests pass or fixtures updated with equivalent v2 samples.
+- [x] Rename and conflict entries appear correctly in staged/unstaged lists.
+- [x] No regression in FIX-02 badge mapping if complete.
 
 ## Dependencies
 

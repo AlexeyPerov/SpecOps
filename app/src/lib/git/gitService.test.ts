@@ -1098,10 +1098,13 @@ describe("queryWorkingTreeStatus", () => {
     invokeMock.mockReset();
   });
 
-  it("runs git status --porcelain and splits staged vs unstaged", async () => {
+  it("runs git status --porcelain=v2 -z and splits staged vs unstaged", async () => {
     invokeMock.mockResolvedValue({
       exitCode: 0,
-      stdout: " M README.md\nM  staged.txt\n?? untracked.txt\n",
+      stdout:
+        "1 .M N... 100644 100644 100644 abc abc README.md\x00" +
+        "1 M. N... 100644 100644 100644 abc abc staged.txt\x00" +
+        "? untracked.txt\x00",
       stderr: "",
       durationMs: 2,
     });
@@ -1110,7 +1113,7 @@ describe("queryWorkingTreeStatus", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", {
       repoRoot: "/tmp/repo",
-      args: ["status", "--porcelain"],
+      args: ["status", "--porcelain=v2", "-z"],
     });
     expect(result.staged.map((entry) => entry.path)).toEqual(["staged.txt"]);
     expect(result.unstaged.map((entry) => entry.path).sort()).toEqual([
@@ -1139,7 +1142,7 @@ describe("isWorkingTreeDirty", () => {
   it("returns true when porcelain has entries", async () => {
     invokeMock.mockResolvedValue({
       exitCode: 0,
-      stdout: "?? file.txt\n",
+      stdout: "? file.txt\x00",
       stderr: "",
       durationMs: 1,
     });

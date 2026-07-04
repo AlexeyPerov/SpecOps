@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-04 14:38 — FIX-10 & FIX-11: gitService modularization and porcelain v2 status
+
+- **`gitRun.ts`**, **`gitRepo.ts`**, **`gitHistory.ts`**, **`gitWorkingTree.ts`**, **`gitRemotes.ts`**, **`gitTagsStash.ts`**, **`gitErrors.ts`** — split `gitService.ts` (~1200 lines) into focused modules; largest module under ~250 lines; no circular imports.
+- **`gitService.ts`** — thin re-export barrel preserving the stable import path and public API.
+- **`gitParse.ts`** — `parseStatusPorcelainV2Z()` for NUL-delimited porcelain v2 records (ordinary, rename, unmerged, untracked); v1 parser retained for `-sb` tail parsing and regression.
+- **`gitWorkingTree.ts`** — `queryWorkingTreeStatus` and `isWorkingTreeDirty` now invoke `git status --porcelain=v2 -z`.
+- **`fixtures/git-status-porcelain-v2-z.txt`** — v2 fixture equivalent to the v1 porcelain sample.
+- **Tests** — extended `gitParse.test.ts` (v2 unit + integration) and `gitService.test.ts` (v2 argv); full git vitest suite passes.
+- **`specs/git/execution/fixes/fix-10-gitservice-modularization.md`**, **`fix-11-porcelain-v2-status-parsing.md`** — marked `[DONE]`.
+
 ## 2026-07-04 14:15 — FIX-08 & FIX-09: Pull dirty-tree UX and git cancellation/timeout
 
 - **`LocalChangesPullPrompt.svelte`**, **`localChangesPullPrompt.ts`** — dirty-tree pull dialog with Cancel, Keep changes, and Stash and pull options.

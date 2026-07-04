@@ -13,7 +13,8 @@ Sample `stdout` captured from real `git` invocations for parser tests. Regenerat
 | `git-tag-list.txt` | `git tag -l` |
 | `git-remote-vv.txt` | `git remote -v` |
 | `git-ls-remote-tags.txt` | `git ls-remote --tags <remote>` |
-| `git-status-porcelain.txt` | `git status --porcelain` |
+| `git-status-porcelain.txt` | `git status --porcelain` (v1; kept for `-sb` tail parsing and regression) |
+| `git-status-porcelain-v2-z.txt` | `git status --porcelain=v2 -z` (NUL-delimited v2 records) |
 | `git-diff-unified-single-file.txt` | `git diff --no-color --no-ext-diff --patch --unified=3 HEAD -- <file>` |
 | `git-diff-binary.txt` | `git diff --no-color --no-ext-diff --patch --unified=3 <parent>..<sha> -- <binary>` |
 | `git-diff-multi-file.txt` | `git diff --no-color --no-ext-diff --patch --unified=3 <parent>..<sha>` (two files) |

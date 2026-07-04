@@ -19,6 +19,7 @@ import {
   resolveDefaultRemote,
   parseShortHeadRef,
   parseStatusPorcelain,
+  parseStatusPorcelainV2Z,
   parseStatusShortBranchHeader,
   parseStashList,
   parseStashListItem,
@@ -549,6 +550,89 @@ describe("parseStatusPorcelain", () => {
       indexStatus: "?",
       workTreeStatus: "?",
       path: "nested/folder/spaces file.txt",
+    });
+  });
+});
+
+describe("parseStatusPorcelainV2Z", () => {
+  it("parses v2 fixture rows equivalent to the v1 porcelain fixture", () => {
+    const v1Lines = parseStatusPorcelain(readFixture("git-status-porcelain.txt"));
+    const v2Lines = parseStatusPorcelainV2Z(readFixture("git-status-porcelain-v2-z.txt"));
+
+    const sortByPath = (left: { path: string }, right: { path: string }) =>
+      left.path.localeCompare(right.path, undefined, { sensitivity: "base" });
+
+    expect(v2Lines.toSorted(sortByPath)).toEqual(v1Lines.toSorted(sortByPath));
+  });
+
+  it("parses rename records using the destination path", () => {
+    const stdout =
+      "2 R. N... 100644 100644 100644 abc abc R100 new-name.txt\x00old-name.txt\x00";
+    expect(parseStatusPorcelainV2Z(stdout)).toEqual([
+      { indexStatus: "R", workTreeStatus: " ", path: "new-name.txt" },
+    ]);
+  });
+
+  it("parses unmerged conflict records", () => {
+    const stdout =
+      "u UU N... 100644 100644 100644 100644 abc def ghi conflict.txt\x00";
+    expect(parseStatusPorcelainV2Z(stdout)).toEqual([
+      { indexStatus: "U", workTreeStatus: "U", path: "conflict.txt" },
+    ]);
+  });
+
+  it("decodes octal-quoted non-ASCII paths", () => {
+    const stdout = '1 .M N... 100644 100644 100644 abc abc "nested/caf\\303\\251.txt"\x00';
+    expect(parseStatusPorcelainV2Z(stdout)).toEqual([
+      { indexStatus: " ", workTreeStatus: "M", path: "nested/café.txt" },
+    ]);
+  });
+
+  it("normalizes Windows backslashes in v2 paths", () => {
+    const stdout =
+      "1 .M N... 100644 100644 100644 abc abc src\\components\\App.svelte\x00" +
+      "? nested\\folder\\new.txt\x00" +
+      "2 R. N... 100644 100644 100644 abc abc R100 new\\name.txt\x00old\\name.txt\x00";
+    const lines = parseStatusPorcelainV2Z(stdout);
+
+    expect(lines.find((line) => line.path === "src/components/App.svelte")).toEqual({
+      indexStatus: " ",
+      workTreeStatus: "M",
+      path: "src/components/App.svelte",
+    });
+    expect(lines.find((line) => line.path === "nested/folder/new.txt")).toEqual({
+      indexStatus: "?",
+      workTreeStatus: "?",
+      path: "nested/folder/new.txt",
+    });
+    expect(lines.find((line) => line.path === "new/name.txt")).toEqual({
+      indexStatus: "R",
+      workTreeStatus: " ",
+      path: "new/name.txt",
+    });
+  });
+});
+
+describeIfGitInstalled("parseStatusPorcelainV2Z integration", () => {
+  it("parses real git status --porcelain=v2 -z output from a temp repository", () => {
+    withTempGitRepo("specops-git-status-v2-", (repo) => {
+      repo.writeFile("tracked.txt", "v1");
+      repo.run(["add", "tracked.txt"]);
+      repo.run(["commit", "-m", "init"]);
+
+      repo.writeFile("tracked.txt", "v2");
+      repo.writeFile("new.txt", "new");
+      repo.writeFile("spaces file.txt", "space");
+
+      const stdout = repo.run(["status", "--porcelain=v2", "-z"]) as string;
+      const status = splitWorkingTreeStatus(parseStatusPorcelainV2Z(stdout));
+
+      expect(status.unstaged.map((entry) => entry.path).sort()).toEqual([
+        "new.txt",
+        "spaces file.txt",
+        "tracked.txt",
+      ]);
+      expect(status.staged).toEqual([]);
     });
   });
 });

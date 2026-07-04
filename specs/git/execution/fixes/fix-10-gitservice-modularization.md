@@ -1,4 +1,4 @@
-# FIX-10 — gitService modularization
+# FIX-10 — gitService modularization [DONE]
 
 **Priority:** P2 · **Score:** 4 · **Agent:** medium · **Estimate:** ~1d
 
@@ -42,10 +42,10 @@ Split implementation into focused modules while preserving the public API surfac
 
 ## Acceptance checklist
 
-- [ ] All existing exports from `gitService.ts` remain available at same paths.
-- [ ] Full vitest suite passes without behavior changes.
-- [ ] No new circular imports between git modules.
-- [ ] Largest new module is under ~400 lines.
+- [x] All existing exports from `gitService.ts` remain available at same paths.
+- [x] Full vitest suite passes without behavior changes.
+- [x] No new circular imports between git modules.
+- [x] Largest new module is under ~400 lines.
 
 ## Dependencies
 

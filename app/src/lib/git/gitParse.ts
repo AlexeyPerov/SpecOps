@@ -752,6 +752,87 @@ export function parseStatusPorcelain(stdout: string): ParsedStatusLine[] {
   return lines;
 }
 
+function mapPorcelainV2StatusChar(char: string): string {
+  return char === "." ? " " : char;
+}
+
+function mapPorcelainV2XY(xy: string): { indexStatus: string; workTreeStatus: string } {
+  return {
+    indexStatus: mapPorcelainV2StatusChar(xy[0] ?? " "),
+    workTreeStatus: mapPorcelainV2StatusChar(xy[1] ?? " "),
+  };
+}
+
+function pushParsedStatusLine(
+  lines: ParsedStatusLine[],
+  xy: string,
+  path: string,
+): void {
+  const normalizedPath = normalizeRepoRelativePath(unquotePorcelainPath(path));
+  if (!normalizedPath) {
+    return;
+  }
+
+  const { indexStatus, workTreeStatus } = mapPorcelainV2XY(xy);
+  lines.push({ indexStatus, workTreeStatus, path: normalizedPath });
+}
+
+/**
+ * Parse `git status --porcelain=v2 -z` stdout into working-tree rows.
+ *
+ * Record types:
+ * - `1 XY … path` — ordinary changed entry
+ * - `2 XY … score newpath` + NUL + `oldpath` — rename/copy (uses new path)
+ * - `u XY … path` — unmerged/conflict entry
+ * - `? path` — untracked
+ * - `! path` — ignored (skipped; v1 default porcelain omits these)
+ *
+ * v2 uses `.` for unchanged index/worktree slots; mapped to space for v1 parity.
+ */
+export function parseStatusPorcelainV2Z(stdout: string): ParsedStatusLine[] {
+  const lines: ParsedStatusLine[] = [];
+  const segments = stdout.split("\0").filter((segment) => segment.length > 0);
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    const recordType = segment[0];
+
+    if (recordType === "?") {
+      const path = segment.slice(2);
+      if (path) {
+        lines.push({
+          indexStatus: "?",
+          workTreeStatus: "?",
+          path: normalizeRepoRelativePath(unquotePorcelainPath(path)),
+        });
+      }
+      continue;
+    }
+
+    if (recordType === "!") {
+      continue;
+    }
+
+    if (recordType === "1" || recordType === "u") {
+      const fields = segment.split(" ");
+      const xy = fields[1] ?? "..";
+      const path = fields[fields.length - 1] ?? "";
+      pushParsedStatusLine(lines, xy, path);
+      continue;
+    }
+
+    if (recordType === "2") {
+      const fields = segment.split(" ");
+      const xy = fields[1] ?? "..";
+      const newPath = fields[fields.length - 1] ?? "";
+      pushParsedStatusLine(lines, xy, newPath);
+      index += 1;
+    }
+  }
+
+  return lines;
+}
+
 /** Split parsed porcelain rows into staged and unstaged file lists. */
 export function splitWorkingTreeStatus(lines: ParsedStatusLine[]): WorkingTreeStatus {
   const staged: WorkingTreeFileEntry[] = [];

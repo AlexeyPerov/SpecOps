@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-04 14:52 — FIX-12 & FIX-13: Stash panel UI and Windows git PATH fallback
+
+- **`GitStashesPanel.svelte`**, **`VersionControlView.svelte`** — new **Stashes** section tab listing stash ref, date, and message; apply, drop, and create actions with bare-repo read-only mode.
+- **`LocalChangesStashApplyPrompt.svelte`**, **`localChangesStashApplyPrompt.ts`** — dirty-tree apply dialog (Cancel, Keep changes, Stash and continue) with pre-git autosave.
+- **`StashDropPrompt.svelte`**, **`stashDropPrompt.ts`** — drop-stash confirmation dialog.
+- **`gitTagsStash.ts`**, **`gitService.ts`** — `dropStash` with typed not-found errors.
+- **`versionControlRefresh.ts`** — `stash` mutation scope for VC refresh after stash operations.
+- **`app/src-tauri/src/git.rs`** — `resolve_git_binary()` with Windows fallback paths (`Program Files`, `Program Files (x86)`, `LocalAppData`); optional `resolvedPath` on `GitAvailableResponse`.
+- **`types.ts`**, **`gitInstallHints.ts`** — optional `resolvedPath` field; Windows install hint mentions default-location discovery.
+- **Tests** — `dropStash` unit tests in `gitService.test.ts`; Rust tests for PATH resolution and Windows candidate order.
+- **`specs/git/manual-test-checklist.md`** — stashes section manual checks.
+- **`specs/git/execution/fixes/fix-12-stash-panel-ui.md`**, **`fix-13-windows-git-path-fallback.md`** — marked `[DONE]`.
+
 ## 2026-07-04 14:38 — FIX-10 & FIX-11: gitService modularization and porcelain v2 status
 
 - **`gitRun.ts`**, **`gitRepo.ts`**, **`gitHistory.ts`**, **`gitWorkingTree.ts`**, **`gitRemotes.ts`**, **`gitTagsStash.ts`**, **`gitErrors.ts`** — split `gitService.ts` (~1200 lines) into focused modules; largest module under ~250 lines; no circular imports.

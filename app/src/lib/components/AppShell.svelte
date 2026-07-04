@@ -6,6 +6,8 @@
   import TagDeletePrompt from "./TagDeletePrompt.svelte";
   import LocalChangesCheckoutPrompt from "./LocalChangesCheckoutPrompt.svelte";
   import LocalChangesPullPrompt from "./LocalChangesPullPrompt.svelte";
+  import LocalChangesStashApplyPrompt from "./LocalChangesStashApplyPrompt.svelte";
+  import StashDropPrompt from "./StashDropPrompt.svelte";
   import PreGitAutosavePrompt from "./PreGitAutosavePrompt.svelte";
   import RevertPreviewDialog from "./RevertPreviewDialog.svelte";
   import SessionListPanel from "./SessionListPanel.svelte";
@@ -641,6 +643,8 @@
 <TagDeletePrompt />
 <LocalChangesCheckoutPrompt />
 <LocalChangesPullPrompt />
+<LocalChangesStashApplyPrompt />
+<StashDropPrompt />
 <PreGitAutosavePrompt />
 <RevertPreviewDialog />
 {#if sessionListPanel}

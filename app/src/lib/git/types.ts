@@ -15,6 +15,8 @@ export interface GitAvailableResponse {
   available: boolean;
   version: string | null;
   error: string | null;
+  /** Absolute path when git was resolved outside PATH (e.g. Windows default install). */
+  resolvedPath?: string;
 }
 
 /** Outcome of a `cancel_git_command` Tauri request. */

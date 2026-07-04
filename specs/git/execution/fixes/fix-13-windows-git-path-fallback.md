@@ -1,4 +1,4 @@
-# FIX-13 — Windows git PATH fallback
+# FIX-13 — [DONE] Windows git PATH fallback
 
 **Priority:** P2 · **Score:** 4 · **Agent:** low · **Estimate:** ~0.25d
 
@@ -34,10 +34,10 @@ Resolve git executable on Windows using common install locations when PATH looku
 
 ## Acceptance checklist
 
-- [ ] When git is installed in default Git for Windows location but not on PATH, probe returns `available: true`.
-- [ ] When git is truly absent, probe still returns `available: false` with helpful error.
-- [ ] Non-Windows platforms unchanged.
-- [ ] All existing `git.rs` tests pass on Linux CI.
+- [x] When git is installed in default Git for Windows location but not on PATH, probe returns `available: true`.
+- [x] When git is truly absent, probe still returns `available: false` with helpful error.
+- [x] Non-Windows platforms unchanged.
+- [x] All existing `git.rs` tests pass on Linux CI.
 
 ## Dependencies
 

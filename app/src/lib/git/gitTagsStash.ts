@@ -240,4 +240,21 @@ export async function applyStash(
   }
 }
 
+/** Drop a stash ref (`git stash drop`). Missing refs map to {@link GitStashNotFoundError}. */
+export async function dropStash(repoRoot: string, stashRef: string): Promise<void> {
+  const trimmedRef = stashRef.trim();
+  if (!trimmedRef) {
+    throw new GitStashNotFoundError(stashRef, "Stash ref cannot be empty.");
+  }
+
+  const response = await runGit(repoRoot, ["stash", "drop", "-q", trimmedRef]);
+  if (response.exitCode !== 0) {
+    const stderr = response.stderr.trim();
+    if (isStashNotFoundResponse(stderr)) {
+      throw new GitStashNotFoundError(trimmedRef, stderr || undefined);
+    }
+    throw createGitCommandError(response);
+  }
+}
+
 export { GIT_STASH_LIST_FORMAT };

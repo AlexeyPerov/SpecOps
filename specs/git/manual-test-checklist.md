@@ -12,7 +12,7 @@ Run these checks once per target Linux environment before manual sign-off. Recor
 
 | Check | Ubuntu / Debian | Fedora / RHEL | Notes |
 |---|---|---|---|
-| **Git install path** | `which git` → `/usr/bin/git` (from `git` package) | same pattern via `dnf install git` | App resolves `git` from PATH only; no bundled git binary. |
+| **Git install path** | `which git` → `/usr/bin/git` (from `git` package) | same pattern via `dnf install git` | App resolves `git` from PATH; Windows also checks default Git for Windows install locations. |
 | **Git version** | `git --version` ≥ 2.30 | same | Matches CI runners (`ubuntu-latest` ships git 2.x). |
 | **Credential helper** | `git config --global credential.helper` often `cache` or unset; libsecret helper available after `git-credential-libsecret` package | `store` or `cache` common | Push/pull auth uses OS helper until in-app askpass lands (see **Known Linux gaps**). |
 | **File mode tracking** | `git config core.filemode` defaults to `true` | same | Executable-bit-only changes may appear as modified on Linux; verify VC Changes list matches `git status --porcelain`. |
@@ -57,6 +57,16 @@ Run these checks once per target Linux environment before manual sign-off. Recor
 - [ ] **Tag list:** existing tags listed (or empty state).
 - [ ] **Create tag:** create a lightweight tag — appears in list and on history decorations when applicable.
 - [ ] **Delete tag:** delete a local tag with confirmation — removed from list (`git tag -d` only).
+
+## Stashes
+
+- [ ] **Stash list:** existing stashes listed with ref, date, and message (or empty state).
+- [ ] **Create stash:** create a stash from uncommitted changes — appears in list; Changes panel reflects stashed tree.
+- [ ] **Apply stash:** apply selected stash on a clean tree — working tree updates; toast confirms success.
+- [ ] **Dirty tree prompt:** modify a tracked file (do not commit) — **Apply stash** opens **Local changes detected** dialog with Cancel, Keep changes, and Stash and continue.
+- [ ] **Stash and continue apply:** choose **Stash and continue** on a dirty tree — selected stash applies after current changes are stashed.
+- [ ] **Drop stash:** drop selected stash with confirmation — removed from list.
+- [ ] **Bare repository:** stash list visible read-only; apply, drop, and create disabled with explanation.
 
 ## Changes (stage / commit)
 

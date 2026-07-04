@@ -5,6 +5,7 @@
   import GitBranchesPanel from "./GitBranchesPanel.svelte";
   import GitChangesPanel from "./GitChangesPanel.svelte";
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
+  import GitStashesPanel from "./GitStashesPanel.svelte";
   import GitTagsPanel from "./GitTagsPanel.svelte";
   import { notifyGitCancellation, reportGitError, isGitCancellationError, formatGitErrorPrimaryMessage } from "../git/gitErrorUi";
   import { gitInstallHint } from "../git/gitInstallHints";
@@ -74,7 +75,7 @@
     return { getWindowId: () => windowId, notify };
   });
 
-  type Section = "history" | "branches" | "tags" | "changes";
+  type Section = "history" | "branches" | "tags" | "stashes" | "changes";
   type ProbeStatus =
     | "loading"
     | "noWorkspace"
@@ -88,6 +89,7 @@
     { id: "history", label: "History" },
     { id: "branches", label: "Branches" },
     { id: "tags", label: "Tags" },
+    { id: "stashes", label: "Stashes" },
     { id: "changes", label: "Changes" },
   ];
 
@@ -977,6 +979,7 @@
           activeSection === "history" ||
           activeSection === "branches" ||
           activeSection === "tags" ||
+          activeSection === "stashes" ||
           activeSection === "changes"
         }
         role="tabpanel"
@@ -1019,6 +1022,16 @@
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}
             onRemoteCommandChange={registerPanelRemoteCommand}
+            {notify}
+          />
+        {:else if activeSection === "stashes" && repoRoot && workspaceRootPath}
+          <GitStashesPanel
+            repoRoot={repoRoot}
+            workspaceRootPath={workspaceRootPath}
+            preGitSaveDeps={preGitSaveDeps}
+            readOnly={isReadOnlyRepository}
+            refreshToken={panelRefreshToken}
+            onMutation={refreshAfterMutation}
             {notify}
           />
         {:else if activeSection === "changes" && repoRoot && workspaceRootPath}

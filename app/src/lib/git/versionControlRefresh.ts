@@ -7,7 +7,8 @@ export type VersionControlMutationScope =
   | "fetch"
   | "pull"
   | "push"
-  | "tag";
+  | "tag"
+  | "stash";
 
 export type VersionControlMutationListener = (
   workspaceRootPath: string,

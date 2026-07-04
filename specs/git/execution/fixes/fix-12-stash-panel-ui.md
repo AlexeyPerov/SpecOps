@@ -1,4 +1,4 @@
-# FIX-12 — Stash panel UI
+# FIX-12 — [DONE] Stash panel UI
 
 **Priority:** P2 · **Score:** 5 · **Agent:** medium · **Estimate:** ~0.75d
 
@@ -37,10 +37,10 @@ Add a Stashes section (or sub-panel) to Version Control for list, apply, and dro
 
 ## Acceptance checklist
 
-- [ ] User can view stash list for a repo from Version Control UI.
-- [ ] Apply stash respects dirty-tree prompts and pre-git autosave.
-- [ ] Drop stash requires confirmation and refreshes list.
-- [ ] Bare repository: stash list read-only or hidden with explanation.
+- [x] User can view stash list for a repo from Version Control UI.
+- [x] Apply stash respects dirty-tree prompts and pre-git autosave.
+- [x] Drop stash requires confirmation and refreshes list.
+- [x] Bare repository: stash list read-only or hidden with explanation.
 
 ## Dependencies
 

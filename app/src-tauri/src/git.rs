@@ -10,6 +10,86 @@ use std::time::{Duration, Instant};
 
 const GIT_BINARY: &str = "git";
 
+static GIT_EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
+
+fn git_executable() -> &'static Path {
+    GIT_EXECUTABLE.get_or_init(resolve_git_binary)
+}
+
+/// Resolve the `git` executable: PATH first, then common Windows install locations.
+fn resolve_git_binary() -> PathBuf {
+    if git_version_probe(PathBuf::from(GIT_BINARY)).is_some() {
+        return PathBuf::from(GIT_BINARY);
+    }
+
+    #[cfg(windows)]
+    {
+        for candidate in windows_git_install_candidates() {
+            if git_version_probe(candidate.clone()).is_some() {
+                return candidate;
+            }
+        }
+    }
+
+    PathBuf::from(GIT_BINARY)
+}
+
+fn git_version_probe(binary: PathBuf) -> Option<String> {
+    match Command::new(&binary).arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            Some(decode_utf8(&output.stdout).trim().to_string())
+        }
+        _ => None,
+    }
+}
+
+#[cfg(windows)]
+fn windows_git_install_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        candidates.push(PathBuf::from(program_files).join("Git").join("cmd").join("git.exe"));
+    }
+    if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+        candidates.push(
+            PathBuf::from(program_files_x86)
+                .join("Git")
+                .join("cmd")
+                .join("git.exe"),
+        );
+    }
+    if let Ok(local_app_data) = std::env::var("LocalAppData") {
+        candidates.push(
+            PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("Git")
+                .join("cmd")
+                .join("git.exe"),
+        );
+    }
+
+    candidates
+}
+
+fn git_not_found_error_message() -> String {
+    #[cfg(windows)]
+    {
+        "git executable not found on PATH or in common Git for Windows install locations".to_string()
+    }
+    #[cfg(not(windows))]
+    {
+        "git executable not found on PATH".to_string()
+    }
+}
+
+fn git_resolved_path_for_response(binary: &Path) -> Option<String> {
+    if binary.as_os_str() == std::ffi::OsStr::new(GIT_BINARY) {
+        None
+    } else {
+        Some(binary.display().to_string())
+    }
+}
+
 /// Request payload for the `run_git` Tauri command.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -287,6 +367,9 @@ pub struct GitAvailableResponse {
     pub available: bool,
     pub version: Option<String>,
     pub error: Option<String>,
+    /// Absolute path when git was resolved outside PATH (e.g. Windows default install).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_path: Option<String>,
 }
 
 fn decode_utf8(bytes: &[u8]) -> String {
@@ -320,19 +403,17 @@ fn normalize_repo_root(repo_root: &str) -> Result<PathBuf, String> {
     }
 }
 
-/// Probe whether `git` is installed and readable from PATH.
-///
-/// On Windows, this relies on PATH resolution first. Common install locations
-/// (e.g. `C:\Program Files\Git\cmd\git.exe`) can be added as a fallback later
-/// if PATH-only lookup proves insufficient in the field.
+/// Probe whether `git` is installed and readable from PATH (with Windows fallbacks).
 pub fn probe_git_available() -> GitAvailableResponse {
-    match Command::new(GIT_BINARY).arg("--version").output() {
+    let binary = git_executable();
+    match Command::new(binary).arg("--version").output() {
         Ok(output) if output.status.success() => {
             let version = decode_utf8(&output.stdout).trim().to_string();
             GitAvailableResponse {
                 available: true,
                 version: Some(version),
                 error: None,
+                resolved_path: git_resolved_path_for_response(binary),
             }
         }
         Ok(output) => {
@@ -346,17 +427,20 @@ pub fn probe_git_available() -> GitAvailableResponse {
                 } else {
                     stderr
                 }),
+                resolved_path: None,
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => GitAvailableResponse {
             available: false,
             version: None,
-            error: Some("git executable not found on PATH".to_string()),
+            error: Some(git_not_found_error_message()),
+            resolved_path: None,
         },
         Err(error) => GitAvailableResponse {
             available: false,
             version: None,
             error: Some(format!("Failed to run git --version: {error}")),
+            resolved_path: None,
         },
     }
 }
@@ -396,7 +480,7 @@ fn build_git_command(
     args: &[String],
     env: Option<&HashMap<String, String>>,
 ) -> Command {
-    let mut command = Command::new(GIT_BINARY);
+    let mut command = Command::new(git_executable());
     command
         .current_dir(repo_root)
         .args(args)
@@ -678,7 +762,7 @@ mod tests {
     fn create_temp_git_repo() -> PathBuf {
         let dir = next_test_dir("repo");
         fs::create_dir_all(&dir).expect("create temp repo dir");
-        let init = StdCommand::new(GIT_BINARY)
+        let init = StdCommand::new(git_executable())
             .args(["init"])
             .current_dir(&dir)
             .output()
@@ -1080,5 +1164,44 @@ mod tests {
         assert!(response.stderr.contains("timed out"));
 
         unregister_active_git_command(&command_id);
+    }
+
+    #[test]
+    fn resolve_git_binary_uses_path_git_when_available() {
+        if skip_if_git_unavailable() {
+            return;
+        }
+        let resolved = resolve_git_binary();
+        assert_eq!(resolved, PathBuf::from(GIT_BINARY));
+        assert_eq!(git_executable(), Path::new(GIT_BINARY));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_git_install_candidates_follow_expected_order() {
+        let candidates = windows_git_install_candidates();
+        assert!(!candidates.is_empty());
+
+        if let Ok(program_files) = std::env::var("ProgramFiles") {
+            assert_eq!(
+                candidates[0],
+                PathBuf::from(program_files).join("Git").join("cmd").join("git.exe")
+            );
+        }
+        if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+            let expected = PathBuf::from(program_files_x86)
+                .join("Git")
+                .join("cmd")
+                .join("git.exe");
+            assert!(candidates.contains(&expected));
+        }
+        if let Ok(local_app_data) = std::env::var("LocalAppData") {
+            let expected = PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("Git")
+                .join("cmd")
+                .join("git.exe");
+            assert!(candidates.contains(&expected));
+        }
     }
 }

@@ -57,6 +57,7 @@ export {
   deleteLocalTag,
   deleteRemoteTag,
   deleteTag,
+  dropStash,
   pushTag,
   queryStashes,
   queryTags,

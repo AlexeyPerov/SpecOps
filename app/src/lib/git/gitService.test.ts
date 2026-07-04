@@ -12,6 +12,7 @@ import {
   deleteLocalTag,
   deleteRemoteTag,
   deleteTag,
+  dropStash,
   fetchRemote,
   GIT_LOG_FORMAT,
   GIT_SHOW_FORMAT,
@@ -1986,5 +1987,45 @@ describe("applyStash", () => {
     await expect(applyStash("/tmp/repo", "stash@{0}")).rejects.toBeInstanceOf(
       GitStashApplyConflictError,
     );
+  });
+});
+
+describe("dropStash", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("invokes git stash drop for the selected ref", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await dropStash("/tmp/repo", "stash@{0}");
+
+    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+      repoRoot: "/tmp/repo",
+      args: ["stash", "drop", "-q", "stash@{0}"],
+    });
+  });
+
+  it("throws GitStashNotFoundError for missing stash refs", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 1,
+      stdout: "",
+      stderr: "fatal: log for 'stash' only has 1 entries\n",
+      durationMs: 1,
+    });
+
+    await expect(dropStash("/tmp/repo", "stash@{9}")).rejects.toBeInstanceOf(
+      GitStashNotFoundError,
+    );
+  });
+
+  it("throws GitStashNotFoundError for empty ref", async () => {
+    await expect(dropStash("/tmp/repo", "   ")).rejects.toBeInstanceOf(GitStashNotFoundError);
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });

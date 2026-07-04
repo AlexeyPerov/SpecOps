@@ -1,4 +1,4 @@
-# D-09 Task 1 — Workspace Manager git column foundation
+# D-09 Task 1 — Workspace Manager git column foundation [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

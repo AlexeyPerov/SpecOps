@@ -1,5 +1,10 @@
 <script lang="ts">
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
+  import {
+    loadWorkspaceGitColumnCell,
+    refreshWorkspaceGitColumnCells,
+    type WorkspaceGitColumnCell,
+  } from "../git/workspaceManagerGitColumn";
 
   /**
    * Workspace Manager — a chrome-less editor-pane view tab (kind
@@ -31,6 +36,9 @@
     onOpenWorkspaceSettings?: (workspaceId: ContextId) => void;
   } = $props();
 
+  let gitCellsByPath = $state<Map<string, WorkspaceGitColumnCell>>(new Map());
+  let gitRefreshBusy = $state(false);
+
   function workspaceName(workspace: WorkspaceEntry): string {
     const normalized = workspace.rootPath.replaceAll("\\", "/");
     const parts = normalized.split("/").filter(Boolean);
@@ -40,6 +48,96 @@
   function isHidden(workspace: WorkspaceEntry): boolean {
     return hiddenRootPaths.has(workspace.rootPath);
   }
+
+  function gitCellForWorkspace(workspace: WorkspaceEntry): WorkspaceGitColumnCell {
+    return gitCellsByPath.get(workspace.rootPath) ?? { status: "loading" };
+  }
+
+  function gitCellDisplayText(cell: WorkspaceGitColumnCell): string {
+    if (cell.status === "ready") {
+      return cell.displayText;
+    }
+    if (cell.status === "loading") {
+      return "…";
+    }
+    return cell.text;
+  }
+
+  function gitCellTitle(cell: WorkspaceGitColumnCell): string {
+    if (cell.status === "ready") {
+      const summary = cell.summary;
+      const branch = summary.isDetached ? `Detached HEAD at ${summary.branchName}` : summary.branchName;
+      const tracking =
+        summary.aheadBehind && (summary.aheadBehind.ahead > 0 || summary.aheadBehind.behind > 0)
+          ? `${summary.aheadBehind.ahead} ahead, ${summary.aheadBehind.behind} behind`
+          : summary.aheadBehind
+            ? "Up to date with upstream"
+            : "No upstream";
+      const tree = summary.isDirty ? "Working tree has uncommitted changes" : "Working tree clean";
+      return `${branch} · ${tracking} · ${tree}`;
+    }
+    if (cell.status === "neutral") {
+      return "Not a git repository";
+    }
+    if (cell.status === "error") {
+      return "Could not load git status";
+    }
+    return "Loading git status…";
+  }
+
+  async function loadGitCellsForWorkspaces(
+    rows: WorkspaceEntry[],
+    options?: { force?: boolean },
+  ): Promise<void> {
+    if (rows.length === 0) {
+      gitCellsByPath = new Map();
+      return;
+    }
+
+    const pending = new Map(gitCellsByPath);
+    for (const workspace of rows) {
+      if (!options?.force && pending.has(workspace.rootPath)) {
+        continue;
+      }
+      pending.set(workspace.rootPath, { status: "loading" });
+    }
+    gitCellsByPath = pending;
+
+    const results = options?.force
+      ? await refreshWorkspaceGitColumnCells(rows.map((workspace) => workspace.rootPath))
+      : new Map(
+          await Promise.all(
+            rows.map(async (workspace) => {
+              const cell = await loadWorkspaceGitColumnCell(workspace.rootPath);
+              return [workspace.rootPath, cell] as const;
+            }),
+          ),
+        );
+
+    const next = new Map(gitCellsByPath);
+    for (const [path, cell] of results) {
+      next.set(path, cell);
+    }
+    gitCellsByPath = next;
+  }
+
+  async function handleRefreshGitColumn(): Promise<void> {
+    if (gitRefreshBusy || workspaces.length === 0) {
+      return;
+    }
+
+    gitRefreshBusy = true;
+    try {
+      await loadGitCellsForWorkspaces(workspaces, { force: true });
+    } finally {
+      gitRefreshBusy = false;
+    }
+  }
+
+  $effect(() => {
+    const rows = workspaces;
+    void loadGitCellsForWorkspaces(rows);
+  });
 </script>
 
 <div class="workspace-manager-view" role="tabpanel" aria-label="Workspace Manager">
@@ -51,6 +149,15 @@
       </p>
     </div>
     <div class="workspace-manager-actions">
+      <button
+        type="button"
+        class="wm-button"
+        disabled={gitRefreshBusy || workspaces.length === 0}
+        title="Refresh git status column"
+        onclick={handleRefreshGitColumn}
+      >
+        {gitRefreshBusy ? "Refreshing…" : "Refresh git"}
+      </button>
       <button type="button" class="wm-button" onclick={onAddWorkspace}>Add workspace</button>
       <button type="button" class="wm-button" onclick={onAddMultiple}>Add multiple…</button>
     </div>
@@ -70,12 +177,14 @@
         <tr>
           <th scope="col">Name</th>
           <th scope="col">Path</th>
+          <th scope="col">Git</th>
           <th scope="col" class="wm-action-col"><span class="sr-only">Actions</span></th>
         </tr>
       </thead>
       <tbody>
         {#each workspaces as workspace (workspace.id)}
           {@const hidden = isHidden(workspace)}
+          {@const gitCell = gitCellForWorkspace(workspace)}
           <tr
             class="wm-row"
             class:wm-row-active={activeContextId === workspace.id}
@@ -95,6 +204,16 @@
               {#if hidden}
                 <span class="wm-hidden-hint">(hidden from sidebar)</span>
               {/if}
+            </td>
+            <td class="wm-git">
+              <span
+                class="wm-git-text"
+                class:wm-git-dirty={gitCell.status === "ready" && gitCell.summary.isDirty}
+                class:wm-git-clean={gitCell.status === "ready" && !gitCell.summary.isDirty}
+                title={gitCellTitle(gitCell)}
+              >
+                {gitCellDisplayText(gitCell)}
+              </span>
             </td>
             <td class="wm-action-col">
               <button
@@ -150,6 +269,8 @@
     display: flex;
     gap: var(--space-3);
     flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .wm-button {
@@ -164,8 +285,13 @@
     transition: background-color var(--motion-fast) var(--easing-standard);
   }
 
-  .wm-button:hover {
+  .wm-button:hover:not(:disabled) {
     background: var(--color-surface-3, var(--color-surface-2));
+  }
+
+  .wm-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   .wm-button-secondary {
@@ -243,6 +369,28 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .wm-git {
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+
+  .wm-git-text {
+    display: inline-block;
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8125rem;
+  }
+
+  .wm-git-dirty {
+    color: var(--color-text);
+  }
+
+  .wm-git-clean {
+    color: var(--color-text-secondary);
   }
 
   .wm-hidden-hint {

@@ -1,4 +1,4 @@
-# D-08 Task 2 — Autosave before git operations integration
+# D-08 Task 2 — Autosave before git operations integration [DONE]
 
 **Branch policy:** Agents must **not** create a new branch for this task; commit and push directly to `master` unless the user explicitly requests otherwise.
 

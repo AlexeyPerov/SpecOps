@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-04 06:40 — D-08 Task 2 and D-09 Task 1: pre-git autosave integration and Workspace Manager git column
+
+- **`app/src/lib/services/preGitOperationGuard.ts`** — `prepareWorkspaceForGitOperation` orchestrates autosave, partial-failure prompt, and legacy unsaved-document guard fallback.
+- **`app/src/lib/services/preGitAutosavePrompt.ts`**, **`PreGitAutosavePrompt.svelte`** — dialog listing failed saves with Cancel (default) and Continue anyway.
+- **`app/src/lib/components/VersionControlView.svelte`**, **`GitBranchesPanel.svelte`** — pull, checkout, and create branch call the pre-git guard before git commands start.
+- **`app/src/lib/components/AppShell.svelte`**, **`EditorPaneContent.svelte`** — register autosave prompt and pass `windowId` save deps into version control.
+- **`app/src/lib/git/repositoryStatusSummary.ts`** — `queryRepositoryStatusSummary` composes branch, ahead/behind, and dirty state for one repo root.
+- **`app/src/lib/git/workspaceManagerGitColumn.ts`** — lazy/sequential git column loader with neutral and error placeholders.
+- **`app/src/lib/components/WorkspaceManagerView.svelte`** — Git column with branch/tracking/dirty summary and **Refresh git** toolbar action.
+- **Tests** — added `preGitOperationGuard.test.ts`, `preGitAutosavePrompt.test.ts`, `repositoryStatusSummary.test.ts`, `workspaceManagerGitColumn.test.ts`.
+- **`specs/git/manual-test-checklist.md`** — Guards section extended for autosave success/failure flows; added Workspace Manager git column section.
+- **`specs/git/execution/d-08-02-autosave-before-git-operations-integration.md`**, **`d-09-01-workspace-manager-git-column-foundation.md`** — marked `[DONE]`.
+
 ## 2026-07-04 06:32 — D-07 Tasks 1–2 and D-08 Task 1: stash service, checkout flow, pre-git autosave
 
 - **`app/src/lib/git/types.ts`** — `GitStashSummary` type for structured stash list rows.

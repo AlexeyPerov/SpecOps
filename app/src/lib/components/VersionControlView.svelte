@@ -41,7 +41,8 @@
     writePersistedRemoteSelection,
     type VersionControlRemoteSelection,
   } from "../git/versionControlRemoteSelection";
-  import { assertNoUnsavedDocuments } from "../services/unsavedDocumentGuard";
+  import type { SaveDocumentDeps } from "../services/documentSave";
+  import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
 
   /**
    * Per-workspace version control view, rendered as a chrome-less editor-pane
@@ -51,11 +52,20 @@
    */
   let {
     workspaceRootPath,
+    windowId = "main",
     notify = () => {},
   }: {
     workspaceRootPath: string | null;
+    windowId?: string;
     notify?: (message: string) => void;
   } = $props();
+
+  const preGitSaveDeps = $derived.by((): SaveDocumentDeps | null => {
+    if (!workspaceRootPath) {
+      return null;
+    }
+    return { getWindowId: () => windowId, notify };
+  });
 
   type Section = "history" | "branches" | "tags" | "changes";
   type ProbeStatus =
@@ -501,8 +511,10 @@
 
     try {
       if (workspaceRootPath) {
-        const unsavedOk = await assertNoUnsavedDocuments(workspaceRootPath);
-        if (!unsavedOk) {
+        const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+          deps: preGitSaveDeps,
+        });
+        if (!canProceed) {
           return;
         }
       }
@@ -799,6 +811,7 @@
           <GitBranchesPanel
             repoRoot={repoRoot}
             workspaceRootPath={workspaceRootPath}
+            preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
             onMutation={refreshAfterMutation}

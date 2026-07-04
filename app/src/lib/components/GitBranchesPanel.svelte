@@ -16,11 +16,13 @@
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { promptEntryName } from "../services/entryNamePrompt";
   import { promptLocalChangesCheckout } from "../services/localChangesCheckoutPrompt";
-  import { assertNoUnsavedDocuments } from "../services/unsavedDocumentGuard";
+  import type { SaveDocumentDeps } from "../services/documentSave";
+  import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
 
   interface Props {
     repoRoot: string;
     workspaceRootPath: string;
+    preGitSaveDeps?: SaveDocumentDeps | null;
     readOnly?: boolean;
     refreshToken?: number;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
@@ -30,6 +32,7 @@
   let {
     repoRoot,
     workspaceRootPath,
+    preGitSaveDeps = null,
     readOnly = false,
     refreshToken = 0,
     onMutation = () => {},
@@ -108,8 +111,10 @@
     let stashedRef: string | null = null;
 
     try {
-      const unsavedOk = await assertNoUnsavedDocuments(workspaceRootPath);
-      if (!unsavedOk) {
+      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        deps: preGitSaveDeps,
+      });
+      if (!canProceed) {
         return;
       }
 
@@ -201,8 +206,10 @@
     actionError = null;
 
     try {
-      const unsavedOk = await assertNoUnsavedDocuments(workspaceRootPath);
-      if (!unsavedOk) {
+      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        deps: preGitSaveDeps,
+      });
+      if (!canProceed) {
         return;
       }
 

@@ -69,9 +69,20 @@ Use a disposable folder as the workspace root. Confirm system `git` is on PATH b
 
 ## Guards (unsaved editor + read-only)
 
-- [ ] **Unsaved documents:** open a file, edit without saving — checkout / pull / create branch blocked with “N unsaved files” dialog (Cancel only).
+- [ ] **Autosave before git ops:** open a file, edit without saving — **Pull** or **Checkout** saves dirty buffers silently, then proceeds when save succeeds.
+- [ ] **Autosave partial failure:** simulate a save failure (e.g. read-only file on disk) — dialog lists failed files with **Cancel** (default) and **Continue anyway**; **Cancel** never runs the git command.
+- [ ] **Autosave continue anyway:** choose **Continue anyway** after partial failure — git operation proceeds despite remaining unsaved buffers.
+- [ ] **Unsaved fallback:** when autosave is unavailable, checkout / pull / create branch still blocked with “N unsaved files” dialog (Cancel only).
 - [ ] **Bare repository:** open a bare repo — read-only banner; stage/commit/pull disabled.
 - [ ] **Detached HEAD:** checkout a tag or commit — detached banner visible; read-only history still works; checkout branch allowed when clean.
+
+## Workspace Manager git column
+
+- [ ] **Git column visible:** Workspace Manager table shows a **Git** column for each workspace row.
+- [ ] **Git-backed workspace:** row shows branch name (or detached label), ahead/behind when upstream exists, and dirty/clean marker.
+- [ ] **Non-git workspace:** row shows neutral **—** placeholder without errors.
+- [ ] **Refresh git:** **Refresh git** toolbar button reloads the column without switching to Version Control tab.
+- [ ] **Probe failure:** simulate git probe failure — cell shows **—** and table remains usable.
 
 ## Errors and logging
 

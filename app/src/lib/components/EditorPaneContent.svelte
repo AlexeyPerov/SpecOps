@@ -213,7 +213,7 @@
       onOpenWorkspaceSettings={onWorkspaceManagerOpenSettings}
     />
   {:else if isVersionControlViewActive}
-    <VersionControlView workspaceRootPath={workspaceRootPath} {notify} />
+    <VersionControlView workspaceRootPath={workspaceRootPath} {windowId} {notify} />
   {:else if isChatHttpActive || isSessionTabActive}
     <ChatPanel
       chatContextKind={isChatHttpActive ? "chat-http" : "workspace"}

@@ -178,7 +178,12 @@ describe("initRepositoryAtWorkspaceRoot", () => {
     expect(result).toEqual(initResponse);
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",
-      expect.objectContaining({ args: ["init"], repoRoot: "/tmp/new-repo" }),
+      expect.objectContaining({
+        repoRoot: "/tmp/new-repo",
+        args: ["init"],
+        commandId: expect.any(String),
+        timeoutMs: LOCAL_GIT_OPERATION_TIMEOUT_MS,
+      }),
     );
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",

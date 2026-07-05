@@ -4,6 +4,7 @@
  */
 
 export {
+  LOCAL_GIT_OPERATION_TIMEOUT_MS,
   REMOTE_GIT_OPERATION_TIMEOUT_MS,
   cancelGitCommand,
   checkGitAvailable,

@@ -7,6 +7,7 @@ import {
   GitCommandTimedOutError,
   isGitCommandCancelledError,
   isGitCommandTimedOutError,
+  LOCAL_GIT_OPERATION_TIMEOUT_MS,
   pullRemote,
   pushRemote,
   REMOTE_GIT_OPERATION_TIMEOUT_MS,
@@ -23,6 +24,11 @@ vi.mock("../services/logging", () => ({
 }));
 
 const invokeMock = vi.mocked(invoke);
+
+const REMOTE_GIT_ENV = {
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes",
+};
 
 describe("cancelGitCommand", () => {
   beforeEach(() => {
@@ -73,18 +79,18 @@ describe("cancellable remote operations", () => {
 
     await fetchRemote("/tmp/repo", undefined, { commandId: "fetch-1" });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["fetch"],
-      commandId: "fetch-1",
-      askpassEnabled: true,
-      askpassOperation: "fetch",
-      timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
-      env: {
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
-      },
-    });
+    expect(invokeMock).toHaveBeenCalledWith(
+      "run_git",
+      expect.objectContaining({
+        repoRoot: "/tmp/repo",
+        args: ["fetch"],
+        commandId: "fetch-1",
+        askpassEnabled: true,
+        askpassOperation: "fetch",
+        timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
+        env: REMOTE_GIT_ENV,
+      }),
+    );
   });
 
   it("throws GitCommandCancelledError when fetch response is cancelled", async () => {
@@ -142,11 +148,15 @@ describe("cancellable remote operations", () => {
 
     await runGit("/tmp/repo", ["status"], undefined, { commandId: "status-1" });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["status"],
-      commandId: "status-1",
-    });
+    expect(invokeMock).toHaveBeenCalledWith(
+      "run_git",
+      expect.objectContaining({
+        repoRoot: "/tmp/repo",
+        args: ["status"],
+        commandId: "status-1",
+        timeoutMs: LOCAL_GIT_OPERATION_TIMEOUT_MS,
+      }),
+    );
   });
 
   it("passes default timeoutMs for remote fetch operations", async () => {
@@ -160,18 +170,18 @@ describe("cancellable remote operations", () => {
 
     await fetchRemote("/tmp/repo", undefined, { commandId: "fetch-4" });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["fetch"],
-      commandId: "fetch-4",
-      askpassEnabled: true,
-      askpassOperation: "fetch",
-      timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
-      env: {
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
-      },
-    });
+    expect(invokeMock).toHaveBeenCalledWith(
+      "run_git",
+      expect.objectContaining({
+        repoRoot: "/tmp/repo",
+        args: ["fetch"],
+        commandId: "fetch-4",
+        askpassEnabled: true,
+        askpassOperation: "fetch",
+        timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
+        env: REMOTE_GIT_ENV,
+      }),
+    );
   });
 
   it("throws GitCommandTimedOutError when fetch response is timed out", async () => {

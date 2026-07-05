@@ -669,8 +669,7 @@
         }
 
         try {
-          await createStash(repoRoot, "WIP before pull");
-          stashedRef = "stash@{0}";
+          stashedRef = await createStash(repoRoot, "WIP before pull");
         } catch (error) {
           reportGitError(error, { operation: "Stash", repoRoot, notify });
           return;

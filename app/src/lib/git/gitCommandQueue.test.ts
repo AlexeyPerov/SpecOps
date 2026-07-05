@@ -71,6 +71,28 @@ describe("enqueueGitCommandForRepo", () => {
     expect(maxActive).toBe(1);
   });
 
+  it("treats Windows drive-letter casing as the same queue key", async () => {
+    vi.stubGlobal("navigator", { platform: "Win32" });
+
+    let active = 0;
+    let maxActive = 0;
+
+    const run = async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      active -= 1;
+    };
+
+    await Promise.all([
+      enqueueGitCommandForRepo("C:/tmp/repo", run),
+      enqueueGitCommandForRepo("c:/tmp/repo/", run),
+    ]);
+
+    expect(maxActive).toBe(1);
+    vi.unstubAllGlobals();
+  });
+
   it("propagates errors without breaking the queue chain", async () => {
     await expect(
       enqueueGitCommandForRepo("/tmp/repo", async () => {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { resetGitAvailabilityCacheForTests } from "./gitService";
+import { resetGitAvailabilityCacheForTests, LOCAL_GIT_OPERATION_TIMEOUT_MS } from "./gitService";
 import { resetGitCommandQueueForTests } from "./gitCommandQueue";
 import {
   initRepositoryAtWorkspaceRoot,
@@ -151,10 +151,15 @@ describe("initRepositoryAtWorkspaceRoot", () => {
 
     const result = await initRepositoryAtWorkspaceRoot("/tmp/new-repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/new-repo",
-      args: ["init"],
-    });
+    expect(invokeMock).toHaveBeenCalledWith(
+      "run_git",
+      expect.objectContaining({
+        repoRoot: "/tmp/new-repo",
+        args: ["init"],
+        commandId: expect.any(String),
+        timeoutMs: LOCAL_GIT_OPERATION_TIMEOUT_MS,
+      }),
+    );
     expect(result).toEqual(response);
   });
 });

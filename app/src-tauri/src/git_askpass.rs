@@ -153,10 +153,12 @@ rm -f "$dir/response"
 
 fn write_windows_askpass_script(path: &Path) -> Result<(), String> {
     let script = r#"@echo off
-setlocal
-set "PROMPT_TEXT=%~1"
+setlocal EnableExtensions
+set "SPECOPS_GIT_ASKPASS_PROMPT=%~1"
 if not defined SPECOPS_GIT_ASKPASS_DIR exit /b 1
-> "%SPECOPS_GIT_ASKPASS_DIR%\prompt" echo %PROMPT_TEXT%
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "[IO.File]::WriteAllText((Join-Path $env:SPECOPS_GIT_ASKPASS_DIR 'prompt'), $env:SPECOPS_GIT_ASKPASS_PROMPT)" ^
+  || exit /b 1
 set /a COUNT=0
 :wait_loop
 if exist "%SPECOPS_GIT_ASKPASS_DIR%\response" goto respond

@@ -42,7 +42,12 @@ export async function createTag(repoRoot: string, name: string): Promise<void> {
 
 /** Delete a local tag (`git tag -d <name>`). Does not delete remote tags. */
 export async function deleteLocalTag(repoRoot: string, name: string): Promise<void> {
-  const response = await runGit(repoRoot, ["tag", "-d", name]);
+  const validation = validateGitRefName(name);
+  if (!validation.ok) {
+    throw new GitRefValidationError(validation.message);
+  }
+
+  const response = await runGit(repoRoot, ["tag", "-d", name.trim()]);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }

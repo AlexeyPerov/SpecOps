@@ -82,7 +82,7 @@
       return "Not a git repository";
     }
     if (cell.status === "error") {
-      return "Could not load git status";
+      return cell.message;
     }
     return "Loading git status…";
   }

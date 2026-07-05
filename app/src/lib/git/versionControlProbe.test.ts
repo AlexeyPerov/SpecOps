@@ -140,27 +140,54 @@ describe("initRepositoryAtWorkspaceRoot", () => {
     resetGitCommandQueueForTests();
   });
 
-  it("runs git init at the workspace root", async () => {
-    const response: RunGitResponse = {
+  it("runs git init and configures local identity when unset", async () => {
+    const initResponse: RunGitResponse = {
       exitCode: 0,
       stdout: "Initialized empty Git repository in /tmp/new-repo/.git/\n",
       stderr: "",
       durationMs: 6,
     };
-    invokeMock.mockResolvedValue(response);
+    invokeMock.mockImplementation(async (_command, request) => {
+      const payload = request as { args: string[] };
+      const [subcommand, ...rest] = payload.args;
+      if (subcommand === "init") {
+        return initResponse;
+      }
+      if (subcommand === "rev-parse" && rest[0] === "--show-toplevel") {
+        return {
+          exitCode: 0,
+          stdout: "/tmp/new-repo\n",
+          stderr: "",
+          durationMs: 1,
+        };
+      }
+      if (subcommand === "config" && rest[0] === "--get") {
+        return { exitCode: 1, stdout: "", stderr: "", durationMs: 1 };
+      }
+      if (subcommand === "config" && rest[0] === "user.name") {
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      }
+      if (subcommand === "config" && rest[0] === "user.email") {
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      }
+      return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+    });
 
     const result = await initRepositoryAtWorkspaceRoot("/tmp/new-repo");
 
+    expect(result).toEqual(initResponse);
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",
-      expect.objectContaining({
-        repoRoot: "/tmp/new-repo",
-        args: ["init"],
-        commandId: expect.any(String),
-        timeoutMs: LOCAL_GIT_OPERATION_TIMEOUT_MS,
-      }),
+      expect.objectContaining({ args: ["init"], repoRoot: "/tmp/new-repo" }),
     );
-    expect(result).toEqual(response);
+    expect(invokeMock).toHaveBeenCalledWith(
+      "run_git",
+      expect.objectContaining({ args: ["config", "user.name", "SpecOps User"] }),
+    );
+    expect(invokeMock).toHaveBeenCalledWith(
+      "run_git",
+      expect.objectContaining({ args: ["config", "user.email", "specops@localhost"] }),
+    );
   });
 });
 

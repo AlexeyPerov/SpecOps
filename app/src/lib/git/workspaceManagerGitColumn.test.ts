@@ -138,7 +138,8 @@ describe("loadWorkspaceGitColumnCell", () => {
 
     await expect(loadWorkspaceGitColumnCell("/tmp/repo")).resolves.toEqual({
       status: "error",
-      text: "—",
+      text: "Git error",
+      message: "git failed",
     });
 
     expect(logDiagnosticMock).toHaveBeenCalledWith(

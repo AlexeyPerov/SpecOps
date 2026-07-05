@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-05 06:26 — Git integration low-priority polish
+
+- **`gitRepo.ts`** — `checkoutBranch` passes branch name after `--` and rejects empty names.
+- **`gitTagsStash.ts`** — `deleteLocalTag` validates ref names via `validateGitRefName`.
+- **`repositoryStatusSummary.ts`** — probe failures throw typed `GitCommandError` instead of generic `Error`.
+- **`workspaceManagerGitColumn.ts`**, **`WorkspaceManagerView.svelte`** — git column error cells expose `{ text: "Git error", message }` with tooltip on the message.
+- **`versionControlProbe.ts`** — after `git init`, sets local `user.name` / `user.email` when missing so commits work without global config.
+- **`app/src-tauri/src/git.rs`** — allow `config` subcommand for local identity setup.
+- **`app/src-tauri/src/git_askpass.rs`** — Windows askpass script writes via PowerShell `WriteAllText` (env var) instead of `echo` for special characters.
+- **`gitDiagnosticSanitize.ts`**, **`gitRun.ts`** — redact credentials in diagnostic stderr logs (assignments, Authorization header, URL userinfo).
+- **`fixtures/git-branch-vv.txt`**, **`gitParse.test.ts`** — branch parser edge-case fixtures.
+- **Tests** — checkout `--` argv, invalid tag delete, init local identity, workspace error cell, sanitizer unit tests.
+
 ## 2026-07-05 06:16 — FIX-14: Git integration polish
 
 - **`gitParse.ts`** — hash-anchored `parseBranchVvLine` parsing for branch names with symbols, dots, or spaces outside app validation.

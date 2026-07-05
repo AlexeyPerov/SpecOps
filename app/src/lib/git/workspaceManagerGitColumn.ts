@@ -13,10 +13,17 @@ export type WorkspaceGitColumnCell =
   | { status: "loading" }
   | { status: "neutral"; text: "—" }
   | { status: "ready"; summary: RepositoryStatusSummary; displayText: string }
-  | { status: "error"; text: "—" };
+  | { status: "error"; text: "Git error"; message: string };
 
 const NEUTRAL_CELL: WorkspaceGitColumnCell = { status: "neutral", text: "—" };
-const ERROR_CELL: WorkspaceGitColumnCell = { status: "error", text: "—" };
+
+function errorGitColumnCell(message: string): WorkspaceGitColumnCell {
+  return {
+    status: "error",
+    text: "Git error",
+    message,
+  };
+}
 
 const GIT_COLUMN_REFRESH_DEBOUNCE_MS = 300;
 
@@ -78,7 +85,7 @@ async function loadWorkspaceGitColumnCellInternal(
         error: message,
       },
     });
-    return ERROR_CELL;
+    return errorGitColumnCell(message);
   }
 }
 

@@ -7,6 +7,7 @@ import {
   parseUpstreamRef,
 } from "./gitParse";
 import { runGit } from "./gitRun";
+import { GitRefValidationError } from "./gitErrors";
 import { validateGitRefName } from "./gitRefName";
 import {
   createGitCommandError,
@@ -19,7 +20,6 @@ import {
   type ResolveRepoRootResult,
   type RunGitResponse,
 } from "./types";
-import { GitRefValidationError } from "./gitErrors";
 
 const NOT_A_REPOSITORY_EXIT_CODE = 128;
 
@@ -165,9 +165,14 @@ export async function queryIsBareRepository(repoRoot: string): Promise<boolean> 
   return response.stdout.trim().toLowerCase() === "true";
 }
 
-/** Switch to an existing local branch (`git checkout <name>`). */
+/** Switch to an existing local branch (`git checkout -- <name>`). */
 export async function checkoutBranch(repoRoot: string, branchName: string): Promise<void> {
-  const response = await runGit(repoRoot, ["checkout", branchName]);
+  const trimmed = branchName.trim();
+  if (!trimmed) {
+    throw new GitRefValidationError("Branch name cannot be empty.");
+  }
+
+  const response = await runGit(repoRoot, ["checkout", "--", trimmed]);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }

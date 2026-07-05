@@ -36,12 +36,20 @@ export async function queryRepositoryStatusSummary(
     .map((line) => line.replace(/\r$/, ""))
     .find((line) => line.startsWith("## "));
   if (!headerLine) {
-    throw new Error("Missing branch header in git status -sb output");
+    throw createGitCommandError({
+      ...response,
+      exitCode: response.exitCode || 1,
+      stderr: response.stderr || "Missing branch header in git status -sb output",
+    });
   }
 
   const parsed = parseStatusShortBranchHeader(headerLine);
   if (!parsed) {
-    throw new Error("Unparseable branch header in git status -sb output");
+    throw createGitCommandError({
+      ...response,
+      exitCode: response.exitCode || 1,
+      stderr: response.stderr || "Unparseable branch header in git status -sb output",
+    });
   }
 
   let branchName = parsed.branchName;

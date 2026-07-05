@@ -295,9 +295,10 @@ describe("parseBranchVvLines", () => {
   it("parses all fixture branches and flags the current branch", () => {
     const branches = parseBranchVvLines(readFixture("git-branch-vv.txt"));
 
-    expect(branches).toHaveLength(2);
+    expect(branches).toHaveLength(4);
     expect(branches.find((branch) => branch.isCurrent)?.name).toBe("master");
     expect(branches.find((branch) => branch.name === "feature/login")?.isCurrent).toBe(false);
+    expect(branches.find((branch) => branch.name === "release 2024-q1")?.head).toBe("deadbeef0");
   });
 });
 

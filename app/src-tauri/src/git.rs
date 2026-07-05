@@ -18,6 +18,7 @@ const ALLOWED_GIT_SUBCOMMANDS: &[&str] = &[
     "add",
     "branch",
     "checkout",
+    "config",
     "diff",
     "fetch",
     "init",

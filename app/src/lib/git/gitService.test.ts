@@ -1320,7 +1320,7 @@ describe("checkoutBranch", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
-      args: ["checkout", "feature/login"],
+      args: ["checkout", "--", "feature/login"],
     }));
   });
 });
@@ -1573,6 +1573,13 @@ describe("deleteLocalTag", () => {
       repoRoot: "/tmp/repo",
       args: ["tag", "-d", "v1.0.0"],
     }));
+  });
+
+  it("rejects invalid tag names before invoking git", async () => {
+    await expect(deleteLocalTag("/tmp/repo", "bad tag")).rejects.toBeInstanceOf(
+      GitRefValidationError,
+    );
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });
 

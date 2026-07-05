@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { logDiagnostic } from "../services/logging";
 import { enqueueGitCommandForRepo } from "./gitCommandQueue";
+import { sanitizeGitStderrForDiagnosticLog } from "./gitDiagnosticSanitize";
 import { buildNonInteractiveRemoteEnv } from "./gitRemoteEnv";
 import {
   mapGitInvokeError,
@@ -54,6 +55,7 @@ export function logGitCommandSummary(
 ): void {
   const command = `git ${args.join(" ")}`;
   const stderr = response.stderr.trim();
+  const sanitizedStderr = stderr ? sanitizeGitStderrForDiagnosticLog(stderr) : "";
   void logDiagnostic({
     level: response.exitCode === 0 ? "info" : "warn",
     source: "frontend",
@@ -64,7 +66,7 @@ export function logGitCommandSummary(
       exitCode: response.exitCode,
       durationMs: response.durationMs,
       repoRoot,
-      ...(response.exitCode !== 0 && stderr ? { stderr } : {}),
+      ...(response.exitCode !== 0 && sanitizedStderr ? { stderr: sanitizedStderr } : {}),
     },
   });
 }

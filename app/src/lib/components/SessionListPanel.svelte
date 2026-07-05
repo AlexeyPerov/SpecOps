@@ -11,6 +11,7 @@
     type SessionListItem,
     type SessionListSort,
   } from "../ai/backends/opencodeSessionList";
+  import { emptySet } from "../collections/emptyCollections";
 
   /**
    * M2-T2 — unified per-workspace session list. Shows every OpenCode session
@@ -37,7 +38,7 @@
 
   let {
     open,
-    openSessionIds = new Set<string>(),
+    openSessionIds = emptySet<string>(),
     activeSessionId = null,
     sessions = [],
     loading = false,

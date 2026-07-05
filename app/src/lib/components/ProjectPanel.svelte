@@ -10,12 +10,13 @@
     MIN_PANEL_WIDTH_PX,
     normalizePanelWidthPx,
   } from "../services/panelLayout";
+  import { emptyMap, emptySet } from "../collections/emptyCollections";
 
   export let workspaceRoot: string;
   export let rootNodes: ProjectTreeNode[] = [];
-  export let expandedPaths = new Set<string>();
-  export let childrenByPath = new Map<string, ProjectTreeNode[]>();
-  export let loadingPaths = new Set<string>();
+  export let expandedPaths = emptySet<string>();
+  export let childrenByPath = emptyMap<string, ProjectTreeNode[]>();
+  export let loadingPaths = emptySet<string>();
   export let activeFilePath: string | null = null;
   /** M5-T3 — git change status badges (absolute path → status). */
   export let statusByPath: ReadonlyMap<string, OpencodeFileChangeStatus> | null = null;

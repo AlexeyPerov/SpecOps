@@ -65,7 +65,6 @@
 
   const resolvedSlots = $derived(effectiveLayoutSlots(layout));
   const maxRowWidth = $derived(Math.max(1, ...resolvedSlots.map((row) => row.length)));
-  const rowCount = $derived(Math.max(1, resolvedSlots.length));
 
   interface PaneCell {
     pane: EditorPane;
@@ -122,6 +121,17 @@
       }
     }
     return out;
+  });
+
+  /** Explicit row tracks for every placed pane (implicit rows collapse to thin strips). */
+  const rowCount = $derived.by(() => {
+    let maxRow = resolvedSlots.length;
+    for (const cell of cells) {
+      if (cell.gridRow > maxRow) {
+        maxRow = cell.gridRow;
+      }
+    }
+    return Math.max(1, maxRow);
   });
 
   const gridStyle = $derived(

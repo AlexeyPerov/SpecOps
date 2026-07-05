@@ -25,6 +25,7 @@
   } from "../domain/contracts";
   import { deriveAppShellDocumentView } from "../services/appShellDocumentView";
   import type { EditorCommandRunner } from "../types/editor";
+  import { emptySet } from "../collections/emptyCollections";
 
   let {
     paneId,
@@ -39,7 +40,7 @@
     /** Active context id, used by the workspace-manager view tab. */
     workspaceManagerActiveContextId = "notepad",
     /** Normalized root paths hidden from the activity rail. */
-    workspaceManagerHiddenRootPaths = new Set<string>(),
+    workspaceManagerHiddenRootPaths = emptySet<string>(),
     /** Callbacks for the workspace-manager view tab. */
     onWorkspaceManagerAddWorkspace = () => {},
     onWorkspaceManagerAddMultiple = () => {},

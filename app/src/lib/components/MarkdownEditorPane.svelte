@@ -9,6 +9,7 @@
     describeMarkdownPreviewLinkResult,
     handleMarkdownPreviewLinkClick,
   } from "../services/markdownPreviewLinks";
+  import { emptySet, emptyWeakSet } from "../collections/emptyCollections";
 
   export let content = "";
   export let documentId: string | null = null;
@@ -35,7 +36,7 @@
   let standalonePreviewEl: HTMLDivElement | null = null;
   let splitScrollCleanup: (() => void) | null = null;
   /** Object URLs we created as image fallbacks, revoked when the doc changes. */
-  let fallbackObjectUrls = new Set<string>();
+  let fallbackObjectUrls = emptySet<string>();
 
   $: markdownViewMode = !markdownEnabled
     ? "edit"
@@ -61,7 +62,7 @@
   async function wireImageFallbacks(): Promise<void> {
     await tick();
     const panes = [markdownPreviewPaneEl, standalonePreviewEl];
-    const handled = new WeakSet<HTMLImageElement>();
+    const handled = emptyWeakSet<HTMLImageElement>();
     for (const pane of panes) {
       if (!pane) continue;
       for (const img of pane.querySelectorAll<HTMLImageElement>("img[data-md-local-path]")) {
@@ -100,7 +101,7 @@
     for (const url of fallbackObjectUrls) {
       URL.revokeObjectURL(url);
     }
-    fallbackObjectUrls = new Set();
+    fallbackObjectUrls.clear();
   }
 
   function teardownSplitScrollSync(): void {
@@ -180,33 +181,31 @@
 </script>
 
 <div class="markdown-layout">
-  {#if markdownEnabled}
-    <div class="markdown-mode-bar">
-      <div class="markdown-mode-actions">
-        <button
-          class={`mode-button ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
-          type="button"
-          onclick={() => onMarkdownViewModeChange("edit")}
-        >
-          edit
-        </button>
-        <button
-          class={`mode-button ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
-          type="button"
-          onclick={() => onMarkdownViewModeChange("split")}
-        >
-          split
-        </button>
-        <button
-          class={`mode-button ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
-          type="button"
-          onclick={() => onMarkdownViewModeChange("preview")}
-        >
-          preview
-        </button>
-      </div>
+  <div class="markdown-mode-bar" hidden={!markdownEnabled}>
+    <div class="markdown-mode-actions">
+      <button
+        class={`mode-button ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
+        type="button"
+        onclick={() => onMarkdownViewModeChange("edit")}
+      >
+        edit
+      </button>
+      <button
+        class={`mode-button ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
+        type="button"
+        onclick={() => onMarkdownViewModeChange("split")}
+      >
+        split
+      </button>
+      <button
+        class={`mode-button ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
+        type="button"
+        onclick={() => onMarkdownViewModeChange("preview")}
+      >
+        preview
+      </button>
     </div>
-  {/if}
+  </div>
 
   {#if markdownEnabled && markdownViewMode === "preview"}
     <!-- svelte-ignore a11y_click_events_have_key_events -->

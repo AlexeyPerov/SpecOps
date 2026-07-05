@@ -1,5 +1,6 @@
 import type { AppDomainState, ContextSnapshot, EditorLayout } from "../../domain/contracts";
 import {
+  effectiveLayoutSlots,
   moveTabBetweenPanes,
   reflowAfterClose,
   setActivePaneInLayout,
@@ -63,7 +64,8 @@ export function createEditorLayoutSlice(deps: { update: AppStateUpdate }) {
     setActiveEditorPaneBySlot(slotOneBased: number): void {
       update((state) =>
         patchActiveContext(state, (ctx) => {
-          const { panes, slots } = ctx.session.editorLayout;
+          const { panes } = ctx.session.editorLayout;
+          const slots = effectiveLayoutSlots(ctx.session.editorLayout);
           const orderedIds: string[] = [];
           const seen = new Set<number>();
           for (const row of slots) {

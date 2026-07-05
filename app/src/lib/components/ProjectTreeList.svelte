@@ -4,6 +4,7 @@
   import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import ProjectTreeNode from "./ProjectTreeNode.svelte";
   import Self from "./ProjectTreeList.svelte";
+  import { emptyMap, emptySet } from "../collections/emptyCollections";
 
   interface Props {
     nodes?: ProjectTreeNodeModel[];
@@ -26,9 +27,9 @@
   let {
     nodes = [],
     depth = 0,
-    expandedPaths = new Set<string>(),
-    childrenByPath = new Map<string, ProjectTreeNodeModel[]>(),
-    loadingPaths = new Set<string>(),
+    expandedPaths = emptySet<string>(),
+    childrenByPath = emptyMap<string, ProjectTreeNodeModel[]>(),
+    loadingPaths = emptySet<string>(),
     activeFilePath = null,
     dragState = null,
     statusByPath = null,

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-06 02:06 — Fix editor grid/row layout equal sizing
+
+- **`editorLayout.ts`** — `effectiveLayoutSlots` validates stored `slots` against pane count and layout kind; stale geometry (e.g. single-row slots with four panes) no longer renders extra panes in implicit grid rows that collapse to thin strips.
+- **`EditorGridLayout.svelte`** — row track count follows the highest placed pane so every layout group gets an explicit `minmax(0, 1fr)` row.
+- **`editorLayoutSlice.ts`** — pane focus by slot uses `effectiveLayoutSlots` for reading order.
+
+## 2026-07-06 02:00 — Silence Rollup `@__PURE__` build warnings
+
+- **`emptyCollections.ts`** — shared `emptySet` / `emptyMap` / `emptyWeakSet` factories for Svelte prop defaults and component init (inline `new Set()` / `new Map()` / `new WeakSet()` triggered Rollup annotation warnings).
+- **Project tree / workspace / session components** — use collection factories instead of inline `new` in `$props()` and `export let` defaults.
+- **`MarkdownEditorPane.svelte`** — use collection factories and `.clear()` for blob URL tracking; replace `{#if markdownEnabled}` mode bar with `hidden={!markdownEnabled}` to avoid an SSR `@__PURE__` placement bug on bare prop `{#if}` blocks.
+
 ## 2026-07-06 01:52 — Fix version control probe stuck on loading
 
 - **`gitRun.ts`** — pass `commandId` and `timeoutMs` only for cancellable/remote git commands; local probe/status commands use the fast non-registered Rust path again. Remote commands still auto-assign `commandId` via `runRemoteGit`.

@@ -8,6 +8,7 @@
     type ProjectTreeDragState,
   } from "./projectTreeDrag";
   import type { PaneDropTargetElements } from "./paneDropTargets";
+  import { emptyMap, emptySet } from "../collections/emptyCollections";
 
   interface Props {
     nodes?: ProjectTreeNode[];
@@ -35,9 +36,9 @@
   let {
     nodes = [],
     workspaceRoot = "",
-    expandedPaths = new Set<string>(),
-    childrenByPath = new Map<string, ProjectTreeNode[]>(),
-    loadingPaths = new Set<string>(),
+    expandedPaths = emptySet<string>(),
+    childrenByPath = emptyMap<string, ProjectTreeNode[]>(),
+    loadingPaths = emptySet<string>(),
     activeFilePath = null,
     statusByPath = null,
     onToggleDirectory = () => {},

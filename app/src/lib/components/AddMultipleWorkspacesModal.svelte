@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ImmediateSubfolder } from "../services/workspaceSubfolders";
+  import { emptySet } from "../collections/emptyCollections";
 
   /**
    * Add-multiple modal (decision 8): a centered dialog listing the immediate
@@ -12,7 +13,7 @@
     loading = false,
     errorMessage = null,
     entries = [],
-    selected = new Set<string>(),
+    selected = emptySet<string>(),
     parentPath = null,
     onToggleEntry,
     onConfirm,

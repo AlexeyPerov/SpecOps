@@ -80,19 +80,47 @@ function slotsMatchPreset(slots: number[][], kind: Exclude<LayoutKind, "custom">
   return slotsEqual(slots, presetSlots(kind));
 }
 
+/** True when every pane index appears exactly once with valid bounds. */
+function slotsReferenceAllPanes(slots: number[][], paneCount: number): boolean {
+  if (paneCount <= 0) {
+    return false;
+  }
+  const seen = new Set<number>();
+  for (const row of slots) {
+    for (const paneIndex of row) {
+      if (paneIndex < 0 || paneIndex >= paneCount || seen.has(paneIndex)) {
+        return false;
+      }
+      seen.add(paneIndex);
+    }
+  }
+  return seen.size === paneCount;
+}
+
 /**
  * Resolve the grid geometry to render. Falls back to the preset template for
- * non-custom kinds when `slots` is missing/empty, and to the close-reflow
+ * non-custom kinds when `slots` is missing/empty/stale, and to the close-reflow
  * count template for custom layouts with stale slots.
  */
 export function effectiveLayoutSlots(layout: EditorLayout): number[][] {
-  if (Array.isArray(layout.slots) && layout.slots.length > 0) {
-    return layout.slots;
+  const paneCount = layout.panes.length;
+  const stored = layout.slots;
+
+  if (Array.isArray(stored) && stored.length > 0 && slotsReferenceAllPanes(stored, paneCount)) {
+    if (layout.kind === "custom") {
+      return templateForCount(paneCount).slots;
+    }
+    const preset = presetSlots(layout.kind);
+    if (slotsEqual(stored, preset)) {
+      return stored;
+    }
+    return preset;
   }
+
   if (layout.kind !== "custom") {
     return presetSlots(layout.kind);
   }
-  return templateForCount(layout.panes.length).slots;
+  return templateForCount(paneCount).slots;
 }
 
 /** Canonical slot templates per preset (pane-count is implied by the kind). */

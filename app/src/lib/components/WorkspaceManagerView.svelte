@@ -6,6 +6,7 @@
     subscribeWorkspaceGitColumnAutoRefresh,
     type WorkspaceGitColumnCell,
   } from "../git/workspaceManagerGitColumn";
+  import { emptySet } from "../collections/emptyCollections";
 
   /**
    * Workspace Manager — a chrome-less editor-pane view tab (kind
@@ -21,7 +22,7 @@
   let {
     workspaces = [],
     activeContextId = "notepad",
-    hiddenRootPaths = new Set<string>(),
+    hiddenRootPaths = emptySet<string>(),
     onAddWorkspace = () => {},
     onAddMultiple = () => {},
     onSelectWorkspace = (_workspaceId: ContextId) => {},

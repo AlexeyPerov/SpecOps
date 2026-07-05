@@ -346,6 +346,39 @@ describe("effectiveLayoutSlots", () => {
     );
     expect(effectiveLayoutSlots(layout)).toEqual([[0, 1], [2]]);
   });
+
+  it("ignores stale preset slots that omit panes", () => {
+    const layout = buildLayout(
+      "grid-2x2",
+      [pane("p1", []), pane("p2", []), pane("p3", []), pane("p4", [])],
+      [[0]],
+      "p1",
+    );
+    expect(effectiveLayoutSlots(layout)).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+  });
+
+  it("ignores preset slots whose geometry does not match the layout kind", () => {
+    const layout = buildLayout(
+      "rows-2",
+      [pane("p1", []), pane("p2", [])],
+      [[0, 1]],
+      "p1",
+    );
+    expect(effectiveLayoutSlots(layout)).toEqual([[0], [1]]);
+  });
+
+  it("re-templates custom slots that do not match the close-reflow shape", () => {
+    const layout = buildLayout(
+      "custom",
+      [pane("p1", []), pane("p2", []), pane("p3", [])],
+      [[0], [1], [2]],
+      "p1",
+    );
+    expect(effectiveLayoutSlots(layout)).toEqual([[0, 1], [2]]);
+  });
 });
 
 describe("slotsEqual", () => {

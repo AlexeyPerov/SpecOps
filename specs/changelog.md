@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-06 01:52 — Fix version control probe stuck on loading
+
+- **`gitRun.ts`** — pass `commandId` and `timeoutMs` only for cancellable/remote git commands; local probe/status commands use the fast non-registered Rust path again. Remote commands still auto-assign `commandId` via `runRemoteGit`.
+- **`VersionControlView.svelte`** — probe generation guard so aborted stale probes do not leave the view stuck on "Checking git repository…".
+
+## 2026-07-06 01:48 — Restore post-merge git IPC and error display fixes
+
+- **`gitRun.ts`** — restore `{ request: … }` wrapping for `run_git`; export `runGitInvokeArgs` / `gitCommitInvokeArgs`.
+- **`gitWorkingTree.ts`**, **`gitAskpass.ts`** — same `{ request: … }` wrapping for commit and askpass commands.
+- **`gitErrorUi.ts`** — format typed `invalidPath` / `notARepository` errors; include non-command git errors in diagnostic stderr extraction.
+- **`VersionControlView.svelte`** — probe/branch/init errors use `formatGitErrorPrimaryMessage`; failed probes log to the app console.
+- **`fileStatusTracker.ts`**, **`workspaceManagerGitColumn.ts`** — readable git error text in diagnostics.
+- **Git unit tests** — invoke expectations and integration mock unwrap `request`.
+
+## 2026-07-06 01:44 — Silence dev build warnings
+
+- **`app/src-tauri/src/git.rs`** — gate test-only `execute_git` / `execute_git_with_options` helpers with `#[cfg(test)]`.
+- **`ChatModePicker.svelte`** — wrap `Select` in a scopable container (matches `ChatConnectionPicker`) to clear vite-plugin-svelte global-styles warning.
+
+## 2026-07-06 01:40 — Fix post-merge Rust compile error
+
+- **`app/src-tauri/src/git.rs`** — mark `child` mutable in `register_active_git_command` so duplicate command-id cleanup can terminate the orphan process.
+
 ## 2026-07-05 06:26 — Git integration low-priority polish
 
 - **`gitRepo.ts`** — `checkoutBranch` passes branch name after `--` and rejects empty names.

@@ -1,4 +1,5 @@
 import { writable, type Readable, type Writable } from "svelte/store";
+import { formatGitErrorPrimaryMessage } from "../git/gitErrorUi";
 import { logDiagnostic } from "./logging";
 import { createOpencodeBackendFromAppState } from "../ai/backends/opencodeBackendFactory";
 import {
@@ -97,7 +98,7 @@ function emitDiagnostic(input: {
       reason: input.reason,
       workspaceRootPath: input.workspaceRootPath,
       source: input.source,
-      error: input.error instanceof Error ? input.error.message : undefined,
+      error: input.error ? formatGitErrorPrimaryMessage(input.error) : undefined,
     },
   });
 }
@@ -231,7 +232,7 @@ export async function refreshFileStatuses(input: {
       });
       return state;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "file status failed.";
+      const message = formatGitErrorPrimaryMessage(error);
       const errorState: FileStatusTrackerState = {
         ...copyEmptyState(),
         status: "error",

@@ -8,6 +8,7 @@
   import GitStashesPanel from "./GitStashesPanel.svelte";
   import GitTagsPanel from "./GitTagsPanel.svelte";
   import { notifyGitCancellation, reportGitError, isGitCancellationError, formatGitErrorPrimaryMessage } from "../git/gitErrorUi";
+  import { logDiagnostic } from "../services/logging";
   import { gitInstallHint } from "../git/gitInstallHints";
   import {
     applyStash,
@@ -119,6 +120,7 @@
   let remotes = $state<GitRemote[]>([]);
   let remoteSelection = $state<VersionControlRemoteSelection>(emptyRemoteSelection());
   let panelRefreshToken = $state(0);
+  let probeGeneration = 0;
   let lastRefreshAt = 0;
 
   const workspaceName = $derived.by(() => {
@@ -388,7 +390,7 @@
             return;
           }
           aheadBehind = null;
-          aheadBehindError = error instanceof Error ? error.message : String(error);
+          aheadBehindError = formatGitErrorPrimaryMessage(error);
         }
       }
 
@@ -398,15 +400,19 @@
         return;
       }
       branchHeaderStatus = "error";
-      branchHeaderError = error instanceof Error ? error.message : String(error);
+      branchHeaderError = formatGitErrorPrimaryMessage(error);
     }
   }
 
   async function refreshProbe(
     signal?: AbortSignal,
-    options?: { silent?: boolean; refreshBranchHeader?: boolean },
+    options?: { silent?: boolean; refreshBranchHeader?: boolean; generation?: number },
   ): Promise<void> {
     const root = workspaceRootPath;
+    const generation = options?.generation;
+    const isStale = (): boolean =>
+      signal?.aborted === true ||
+      (generation !== undefined && generation !== probeGeneration);
     if (!root) {
       probeStatus = "noWorkspace";
       repoRoot = null;
@@ -433,7 +439,7 @@
 
     try {
       const result = await probeVersionControlContext(root);
-      if (signal?.aborted) {
+      if (isStale()) {
         return;
       }
 
@@ -463,7 +469,7 @@
           repoRoot = result.repoRoot;
           isBareRepository = result.isBareRepository;
           await loadRemotePicker(result.repoRoot, signal);
-          if (signal?.aborted) {
+          if (isStale()) {
             return;
           }
           if (shouldRefreshBranchHeader) {
@@ -472,22 +478,35 @@
           break;
       }
     } catch (error) {
-      if (signal?.aborted) {
+      if (isStale()) {
         return;
       }
       probeStatus = "error";
       repoRoot = null;
       isBareRepository = false;
-      probeError = error instanceof Error ? error.message : String(error);
+      probeError = formatGitErrorPrimaryMessage(error);
+      void logDiagnostic({
+        level: "warn",
+        source: "frontend",
+        message: "Version control probe failed",
+        timestamp: new Date().toISOString(),
+        metadata: {
+          workspaceRootPath: root,
+          operation: "probeVersionControlContext",
+          error: probeError,
+        },
+      });
       resetBranchHeader();
       resetRemotePicker();
     }
   }
 
   $effect(() => {
-    const root = workspaceRootPath;
+    workspaceRootPath;
+    probeGeneration += 1;
+    const generation = probeGeneration;
     const controller = new AbortController();
-    void refreshProbe(controller.signal);
+    void refreshProbe(controller.signal, { generation });
     return () => {
       controller.abort();
     };
@@ -533,7 +552,7 @@
       await refreshProbe();
       notifyVersionControlMutation(workspaceRootPath, "branch");
     } catch (error) {
-      initError = error instanceof Error ? error.message : String(error);
+      initError = formatGitErrorPrimaryMessage(error);
     } finally {
       initBusy = false;
     }

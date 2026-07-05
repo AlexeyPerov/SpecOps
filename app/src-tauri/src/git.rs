@@ -212,7 +212,7 @@ fn terminate_child_process(child: &mut Child) {
     let _ = child.wait();
 }
 
-fn register_active_git_command(command_id: &str, child: Child) -> Result<(), String> {
+fn register_active_git_command(command_id: &str, mut child: Child) -> Result<(), String> {
     let registry = git_command_registry();
     let mut commands = registry
         .commands
@@ -605,6 +605,7 @@ fn build_git_command(
 }
 
 /// Run `git` in `repo_root` with argv passed directly (no shell interpolation).
+#[cfg(test)]
 pub fn execute_git(
     repo_root: &Path,
     args: &[String],
@@ -623,6 +624,7 @@ pub struct ExecuteGitOptions<'a> {
     pub timeout_ms: Option<u64>,
 }
 
+#[cfg(test)]
 pub fn execute_git_with_options(
     repo_root: &Path,
     args: &[String],

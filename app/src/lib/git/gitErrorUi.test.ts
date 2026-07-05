@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { GitCommandTimedOutError, GitNoUpstreamError } from "./gitService";
 import { formatGitErrorPrimaryMessage, reportGitError } from "./gitErrorUi";
-import { createGitCommandError, type RunGitResponse } from "./types";
+import {
+  createGitCommandError,
+  createGitInvalidPathError,
+  createGitNotARepositoryError,
+  type RunGitResponse,
+} from "./types";
 
 vi.mock("../services/logging", () => ({
   logDiagnostic: vi.fn(),
@@ -86,6 +91,16 @@ describe("formatGitErrorPrimaryMessage", () => {
     } satisfies RunGitResponse);
 
     expect(formatGitErrorPrimaryMessage(error)).toContain("Git command failed");
+  });
+
+  it("maps invalidPath git errors without [object Object]", () => {
+    const error = createGitInvalidPathError("/tmp/ws", "repo_root must be an absolute path");
+    expect(formatGitErrorPrimaryMessage(error)).toBe("repo_root must be an absolute path");
+  });
+
+  it("maps notARepository git errors without [object Object]", () => {
+    const error = createGitNotARepositoryError("/tmp/ws", "fatal: not a git repository\n");
+    expect(formatGitErrorPrimaryMessage(error)).toContain("not a git repository");
   });
 });
 

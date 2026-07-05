@@ -15,10 +15,14 @@ vi.mock("../services/logging", () => ({
   logDiagnostic: vi.fn(),
 }));
 
-vi.mock("./gitService", () => ({
-  checkGitAvailable: vi.fn(),
-  resolveRepoRoot: vi.fn(),
-}));
+vi.mock("./gitService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./gitService")>();
+  return {
+    ...actual,
+    checkGitAvailable: vi.fn(),
+    resolveRepoRoot: vi.fn(),
+  };
+});
 
 vi.mock("./repositoryStatusSummary", () => ({
   queryRepositoryStatusSummary: vi.fn(),

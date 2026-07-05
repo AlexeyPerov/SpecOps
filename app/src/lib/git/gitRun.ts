@@ -48,6 +48,36 @@ function resolveGitCommandTimeout(options?: CancellableGitOptions): number {
   return LOCAL_GIT_OPERATION_TIMEOUT_MS;
 }
 
+/** Tauri IPC payload for `run_git` (Rust handler takes a single `request` arg). */
+export function runGitInvokeArgs(
+  repoRoot: string,
+  args: string[],
+  extra: Record<string, unknown> = {},
+): { request: Record<string, unknown> } {
+  return {
+    request: {
+      repoRoot,
+      args,
+      ...extra,
+    },
+  };
+}
+
+/** Tauri IPC payload for `git_commit_with_message`. */
+export function gitCommitInvokeArgs(
+  repoRoot: string,
+  message: string,
+  extra: Record<string, unknown> = {},
+): { request: Record<string, unknown> } {
+  return {
+    request: {
+      repoRoot,
+      message,
+      ...extra,
+    },
+  };
+}
+
 export function logGitCommandSummary(
   repoRoot: string,
   args: string[],
@@ -71,23 +101,44 @@ export function logGitCommandSummary(
   });
 }
 
+function buildRunGitInvokePayload(
+  repoRoot: string,
+  args: string[],
+  env: Record<string, string> | undefined,
+  options?: CancellableGitOptions,
+): { request: Record<string, unknown> } {
+  const extra: Record<string, unknown> = {};
+  if (env) {
+    extra.env = env;
+  }
+  if (options?.commandId) {
+    extra.commandId = options.commandId;
+  }
+  if (options?.askpass) {
+    extra.askpassEnabled = true;
+    if (options.askpassOperation) {
+      extra.askpassOperation = options.askpassOperation;
+    }
+    if (options.askpassTimeoutMs !== undefined) {
+      extra.askpassTimeoutMs = options.askpassTimeoutMs;
+    }
+  }
+  if (options?.commandId || options?.askpass || options?.timeoutMs !== undefined) {
+    extra.timeoutMs = resolveGitCommandTimeout(options);
+  }
+  return runGitInvokeArgs(repoRoot, args, extra);
+}
+
 async function invokeRunGitOnce(
   repoRoot: string,
   args: string[],
   env: Record<string, string> | undefined,
-  commandId: string,
-  options: CancellableGitOptions | undefined,
+  options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
-  const response = await invoke<RunGitResponse>("run_git", {
-    repoRoot,
-    args,
-    ...(env ? { env } : {}),
-    commandId,
-    ...(options?.askpass ? { askpassEnabled: true } : {}),
-    ...(options?.askpassOperation ? { askpassOperation: options.askpassOperation } : {}),
-    ...(options?.askpassTimeoutMs ? { askpassTimeoutMs: options.askpassTimeoutMs } : {}),
-    timeoutMs: resolveGitCommandTimeout(options),
-  });
+  const response = await invoke<RunGitResponse>(
+    "run_git",
+    buildRunGitInvokePayload(repoRoot, args, env, options),
+  );
   logGitCommandSummary(repoRoot, args, response);
   return response;
 }
@@ -98,14 +149,12 @@ async function invokeRunGit(
   env?: Record<string, string>,
   options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
-  const commandId = options?.commandId ?? crypto.randomUUID();
-
   try {
-    let response = await invokeRunGitOnce(repoRoot, args, env, commandId, options);
+    let response = await invokeRunGitOnce(repoRoot, args, env, options);
 
     for (let attempt = 0; attempt < INDEX_LOCK_MAX_RETRIES && isIndexLockResponse(response); attempt += 1) {
       await sleep(INDEX_LOCK_RETRY_BASE_DELAY_MS * (attempt + 1));
-      response = await invokeRunGitOnce(repoRoot, args, env, crypto.randomUUID(), options);
+      response = await invokeRunGitOnce(repoRoot, args, env, options);
     }
 
     return response;
@@ -147,6 +196,7 @@ export async function runRemoteGit(
     askpass: true,
     askpassOperation: options?.operation,
     timeoutMs: options?.timeoutMs ?? REMOTE_GIT_OPERATION_TIMEOUT_MS,
+    commandId: options?.commandId ?? crypto.randomUUID(),
   });
 }
 

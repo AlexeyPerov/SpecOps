@@ -52,17 +52,21 @@ async function handleAskpassRequest(payload: Record<string, unknown>): Promise<v
   const response = await promptGitCredentials(request);
   try {
     await invoke("respond_git_askpass", {
-      sessionId: response.sessionId,
-      requestId: response.requestId,
-      value: response.value,
-      cancelled: response.cancelled ?? false,
+      request: {
+        sessionId: response.sessionId,
+        requestId: response.requestId,
+        value: response.value,
+        cancelled: response.cancelled ?? false,
+      },
     });
   } catch {
     await invoke("respond_git_askpass", {
-      sessionId: response.sessionId,
-      requestId: response.requestId,
-      value: "",
-      cancelled: true,
+      request: {
+        sessionId: response.sessionId,
+        requestId: response.requestId,
+        value: "",
+        cancelled: true,
+      },
     }).catch(() => {});
   }
 }

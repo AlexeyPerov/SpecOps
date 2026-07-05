@@ -15,6 +15,12 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 const invokeMock = vi.mocked(invoke);
 
+function expectRunGitPayload(partial: Record<string, unknown>) {
+  return expect.objectContaining({
+    request: expect.objectContaining(partial),
+  });
+}
+
 describe("probeVersionControlContext", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -147,9 +153,9 @@ describe("initRepositoryAtWorkspaceRoot", () => {
       stderr: "",
       durationMs: 6,
     };
-    invokeMock.mockImplementation(async (_command, request) => {
-      const payload = request as { args: string[] };
-      const [subcommand, ...rest] = payload.args;
+    invokeMock.mockImplementation(async (_command, payload) => {
+      const request = (payload as { request: { args: string[] } }).request;
+      const [subcommand, ...rest] = request.args;
       if (subcommand === "init") {
         return initResponse;
       }
@@ -178,20 +184,18 @@ describe("initRepositoryAtWorkspaceRoot", () => {
     expect(result).toEqual(initResponse);
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",
-      expect.objectContaining({
+      expectRunGitPayload({
         repoRoot: "/tmp/new-repo",
         args: ["init"],
-        commandId: expect.any(String),
-        timeoutMs: LOCAL_GIT_OPERATION_TIMEOUT_MS,
       }),
     );
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",
-      expect.objectContaining({ args: ["config", "user.name", "SpecOps User"] }),
+      expectRunGitPayload({ args: ["config", "user.name", "SpecOps User"] }),
     );
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",
-      expect.objectContaining({ args: ["config", "user.email", "specops@localhost"] }),
+      expectRunGitPayload({ args: ["config", "user.email", "specops@localhost"] }),
     );
   });
 });

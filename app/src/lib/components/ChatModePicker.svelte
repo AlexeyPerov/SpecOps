@@ -21,16 +21,22 @@
   );
 </script>
 
-<Select
-  options={selectOptions}
-  value={activeMode}
-  {disabled}
-  onchange={(value) => onSelectMode(value as ChatModeId)}
-  ariaLabel="Select chat mode"
-  class="chat-mode-select"
-/>
+<div class="chat-mode-picker">
+  <Select
+    options={selectOptions}
+    value={activeMode}
+    {disabled}
+    onchange={(value) => onSelectMode(value as ChatModeId)}
+    ariaLabel="Select chat mode"
+    class="chat-mode-select"
+  />
+</div>
 
 <style>
+  .chat-mode-picker {
+    min-width: 0;
+  }
+
   :global(.chat-mode-select) {
     min-width: 88px;
     max-width: 140px;

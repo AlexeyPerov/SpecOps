@@ -7,7 +7,7 @@ import {
 } from "./gitParse";
 import { enqueueGitCommandForRepo } from "./gitCommandQueue";
 import { COMMIT_FILE_DIFF_MAX_BYTES, DIFF_CONTEXT_LINES } from "./gitHistory";
-import { logGitCommandSummary, runGit } from "./gitRun";
+import { gitCommitInvokeArgs, logGitCommandSummary, runGit } from "./gitRun";
 import {
   assertGitCommandCompleted,
   GitCommitFileDiffNotFoundError,
@@ -208,11 +208,12 @@ export async function createCommit(
 
   return enqueueGitCommandForRepo(repoRoot, async () => {
     try {
-      const response = await invoke<RunGitResponse>("git_commit_with_message", {
-        repoRoot,
-        message: trimmed,
-        ...(options?.commandId ? { commandId: options.commandId } : {}),
-      });
+      const response = await invoke<RunGitResponse>(
+        "git_commit_with_message",
+        gitCommitInvokeArgs(repoRoot, trimmed, {
+          ...(options?.commandId ? { commandId: options.commandId } : {}),
+        }),
+      );
       logGitCommandSummary(repoRoot, ["commit", "-F", "<message-file>"], response);
       assertGitCommandCompleted(response);
       if (response.exitCode !== 0) {

@@ -100,6 +100,10 @@ export function formatGitErrorPrimaryMessage(error: unknown): string {
     return error.message;
   }
 
+  if (isGitError(error)) {
+    return error.message.trim() || "Git operation failed.";
+  }
+
   if (error instanceof Error) {
     const message = error.message.trim();
     if (message.toLowerCase().includes("not a git command")) {
@@ -147,6 +151,9 @@ function extractStderr(error: unknown): string | undefined {
   if (isGitError(error) && error.kind === "command") {
     const stderr = commandErrorStderr(error);
     return stderr || undefined;
+  }
+  if (isGitError(error)) {
+    return error.message.trim() || undefined;
   }
   if (error instanceof Error) {
     return error.message || undefined;

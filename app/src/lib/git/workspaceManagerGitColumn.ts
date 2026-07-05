@@ -1,3 +1,4 @@
+import { formatGitErrorPrimaryMessage } from "./gitErrorUi";
 import { logDiagnostic } from "../services/logging";
 import { checkGitAvailable, resolveRepoRoot } from "./gitService";
 import {
@@ -73,7 +74,7 @@ async function loadWorkspaceGitColumnCellInternal(
       displayText: formatGitColumnDisplayText(summary),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatGitErrorPrimaryMessage(error);
     void logDiagnostic({
       level: "warn",
       source: "frontend",

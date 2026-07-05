@@ -30,6 +30,12 @@ const REMOTE_GIT_ENV = {
   GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes",
 };
 
+function expectRunGitPayload(partial: Record<string, unknown>) {
+  return expect.objectContaining({
+    request: expect.objectContaining(partial),
+  });
+}
+
 describe("cancelGitCommand", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -81,7 +87,7 @@ describe("cancellable remote operations", () => {
 
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",
-      expect.objectContaining({
+      expectRunGitPayload({
         repoRoot: "/tmp/repo",
         args: ["fetch"],
         commandId: "fetch-1",
@@ -150,7 +156,7 @@ describe("cancellable remote operations", () => {
 
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",
-      expect.objectContaining({
+      expectRunGitPayload({
         repoRoot: "/tmp/repo",
         args: ["status"],
         commandId: "status-1",
@@ -172,7 +178,7 @@ describe("cancellable remote operations", () => {
 
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",
-      expect.objectContaining({
+      expectRunGitPayload({
         repoRoot: "/tmp/repo",
         args: ["fetch"],
         commandId: "fetch-4",

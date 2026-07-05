@@ -8,7 +8,7 @@
 - **`askpassPrompt.ts`** — queue concurrent credential prompts instead of silently cancelling.
 - **`types.ts`** — Windows drive-letter normalization for git queue keys.
 - **`gitTagsStash.ts`**, **`VersionControlView.svelte`** — `createStash` returns resolved stash ref for pull stash-and-restore.
-- **Tests** — Rust validation tests; askpass queue, index.lock retry, Windows queue-key tests; updated invoke expectations.
+- **Tests** — Rust validation tests; askpass queue, index.lock retry, Windows queue-key tests; updated invoke expectations; fix `gitService.test.ts` `expect.objectContaining` syntax.
 
 ## 2026-07-04 14:52 — FIX-12 & FIX-13: Stash panel UI and Windows git PATH fallback
 

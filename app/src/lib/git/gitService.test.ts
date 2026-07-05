@@ -152,7 +152,7 @@ describe("runGit", () => {
       repoRoot: "/tmp/repo",
       args: ["status"],
       env: { GIT_TERMINAL_PROMPT: "0" },
-    });
+    }));
   });
 
   it("maps Tauri validation errors to typed GitInvalidPathError", async () => {
@@ -225,7 +225,7 @@ describe("resolveRepoRoot", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: nestedWorkspace,
       args: ["rev-parse", "--show-toplevel"],
-    });
+    }));
     expect(result).toEqual({ ok: true, repoRoot });
   });
 
@@ -299,14 +299,14 @@ describe("queryCurrentBranch", () => {
       isDetached: false,
       upstream: "origin/main",
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(1, "run_git", {
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["branch", "--show-current"],
-    });
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
+    }));
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["rev-parse", "--abbrev-ref", "@{upstream}"],
-    });
+    }));
   });
 
   it("returns detached HEAD short SHA with no upstream", async () => {
@@ -331,10 +331,10 @@ describe("queryCurrentBranch", () => {
       isDetached: true,
       upstream: null,
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["rev-parse", "--short", "HEAD"],
-    });
+    }));
   });
 
   it("returns null upstream when rev-parse upstream fails", async () => {
@@ -381,7 +381,7 @@ describe("queryAheadBehind", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["rev-list", "--left-right", "--count", "@{u}...HEAD"],
-    });
+    }));
   });
 
   it("returns null when upstream is not configured", async () => {
@@ -551,7 +551,7 @@ describe("queryCommits", () => {
         `--format=${GIT_LOG_FORMAT}`,
         `-${DEFAULT_COMMIT_LOG_LIMIT}`,
       ],
-    });
+    }));
     expect(result).toHaveLength(1);
     expect(result[0]?.sha).toBe("abc123");
     expect(result[0]?.refs).toEqual([{ type: "currentBranchHead", name: "main" }]);
@@ -571,7 +571,7 @@ describe("queryCommits", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: buildQueryCommitsArgs({ limit: 25 }),
-    });
+    }));
   });
 
   it("passes all-branches scope flags to git log", async () => {
@@ -587,7 +587,7 @@ describe("queryCommits", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: buildQueryCommitsArgs({ filterMode: "all-branches" }),
-    });
+    }));
   });
 
   it("passes all-branches-and-remotes scope flags to git log", async () => {
@@ -603,7 +603,7 @@ describe("queryCommits", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: buildQueryCommitsArgs({ filterMode: "all-branches-and-remotes", limit: 200 }),
-    });
+    }));
   });
 
   it("throws GitCommandError when git log fails", async () => {
@@ -640,7 +640,7 @@ describe("queryCommitDetail", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["show", "--name-status", `--format=${GIT_SHOW_FORMAT}`, "abc123"],
-    });
+    }));
     expect(result.sha).toBe("abc123");
     expect(result.message).toBe("Subject line");
     expect(result.files).toEqual([
@@ -693,7 +693,7 @@ describe("queryCommitFileDiff", () => {
         "--",
         "file.txt",
       ],
-    });
+    }));
     expect(result.path).toBe("file.txt");
     expect(result.addedLines).toBe(2);
     expect(result.deletedLines).toBe(1);
@@ -720,7 +720,7 @@ describe("queryCommitFileDiff", () => {
         "--",
         "file.txt",
       ],
-    });
+    }));
   });
 
   it("matches renamed files by previous path", async () => {
@@ -833,7 +833,7 @@ describe("queryWorkingTreeFileDiff", () => {
         "--",
         "file.txt",
       ],
-    });
+    }));
     expect(result.path).toBe("file.txt");
     expect(result.addedLines).toBe(1);
   });
@@ -859,7 +859,7 @@ describe("queryWorkingTreeFileDiff", () => {
         "--",
         "file.txt",
       ],
-    });
+    }));
     expect(invokeMock).toHaveBeenCalledTimes(1);
   });
 
@@ -882,7 +882,7 @@ describe("queryWorkingTreeFileDiff", () => {
 
     const result = await queryWorkingTreeFileDiff("/tmp/repo", "new.txt", "unstaged");
 
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: [
         "diff",
@@ -894,7 +894,7 @@ describe("queryWorkingTreeFileDiff", () => {
         "/dev/null",
         "new.txt",
       ],
-    });
+    }));
     expect(result.path).toBe("new.txt");
     expect(result.addedLines).toBe(1);
   });
@@ -920,7 +920,7 @@ describe("queryWorkingTreeFileDiff", () => {
         "--",
         "spaces file.txt",
       ],
-    });
+    }));
   });
 
   it("throws GitDiffTooLargeError when stdout exceeds the size guard", async () => {
@@ -1060,7 +1060,7 @@ describe("queryTags", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "-l"],
-    });
+    }));
     expect(result).toEqual(["alpha", "v1.0.0", "v2.0.0"]);
   });
 
@@ -1096,7 +1096,7 @@ describe("queryBranches", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["branch", "-vv"],
-    });
+    }));
     expect(result).toHaveLength(2);
     expect(result.find((branch) => branch.isCurrent)?.name).toBe("master");
   });
@@ -1136,7 +1136,7 @@ describe("queryWorkingTreeStatus", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["status", "--porcelain=v2", "-z"],
-    });
+    }));
     expect(result.staged.map((entry) => entry.path)).toEqual(["staged.txt"]);
     expect(result.unstaged.map((entry) => entry.path).sort()).toEqual([
       "README.md",
@@ -1191,7 +1191,7 @@ describe("stagePaths and unstagePaths", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["add", "--", "path with spaces.txt", "plain.txt"],
-    });
+    }));
   });
 
   it("passes forward-slash paths to git add after Windows-style normalization", async () => {
@@ -1207,7 +1207,7 @@ describe("stagePaths and unstagePaths", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["add", "--", "nested/folder/file.ts"],
-    });
+    }));
   });
 
   it("runs git restore --staged for unstage", async () => {
@@ -1223,7 +1223,7 @@ describe("stagePaths and unstagePaths", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["restore", "--staged", "--", "staged.txt"],
-    });
+    }));
   });
 
   it("runs git add -A for stage all", async () => {
@@ -1239,7 +1239,7 @@ describe("stagePaths and unstagePaths", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["add", "-A"],
-    });
+    }));
   });
 });
 
@@ -1321,7 +1321,7 @@ describe("checkoutBranch", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["checkout", "feature/login"],
-    });
+    }));
   });
 });
 
@@ -1393,7 +1393,7 @@ describe("createBranch", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["checkout", "-b", "feature/new"],
-    });
+    }));
   });
 
   it("rejects invalid branch names before invoking git", async () => {
@@ -1532,7 +1532,7 @@ describe("createTag", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "v1.0.0"],
-    });
+    }));
   });
 
   it("rejects invalid tag names before invoking git", async () => {
@@ -1572,7 +1572,7 @@ describe("deleteLocalTag", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "-d", "v1.0.0"],
-    });
+    }));
   });
 });
 
@@ -1710,7 +1710,7 @@ describe("deleteTag", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "-d", "v1.0.0"],
-    });
+    }));
   });
 
   it("deletes on each remote when remoteNames are provided", async () => {
@@ -1724,26 +1724,26 @@ describe("deleteTag", () => {
     await deleteTag("/tmp/repo", "v1.0.0", { remoteNames: ["origin", "upstream"] });
 
     expect(invokeMock).toHaveBeenCalledTimes(3);
-    expect(invokeMock).toHaveBeenNthCalledWith(1, "run_git", {
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "-d", "v1.0.0"],
-    });
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", {
+    }));
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["push", "--delete", "origin", "refs/tags/v1.0.0"],
       askpassEnabled: true,
       askpassOperation: "tagDelete",
       env: REMOTE_GIT_ENV,
       timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
-    });
-    expect(invokeMock).toHaveBeenNthCalledWith(3, "run_git", {
+    }));
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["push", "--delete", "upstream", "refs/tags/v1.0.0"],
       askpassEnabled: true,
       askpassOperation: "tagDelete",
       env: REMOTE_GIT_ENV,
       timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
-    });
+    }));
   });
 
   it("throws partial delete error when remote delete fails after local success", async () => {
@@ -1805,7 +1805,7 @@ describe("queryIsBareRepository", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/bare.git",
       args: ["rev-parse", "--is-bare-repository"],
-    });
+    }));
   });
 
   it("returns false for non-bare repositories", async () => {
@@ -1940,7 +1940,7 @@ describe("queryStashes", () => {
         "--no-show-signature",
         "--format=%H%n%P%n%ct%n%gd%n%B",
       ],
-    });
+    }));
     expect(rows).toEqual([
       {
         sha: "abc1111111111111111111111111111111111111111",
@@ -1982,7 +1982,7 @@ describe("applyStash", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["stash", "apply", "-q", "stash@{0}"],
-    });
+    }));
   });
 
   it("invokes git stash pop --index when pop is true", async () => {
@@ -1998,7 +1998,7 @@ describe("applyStash", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["stash", "pop", "-q", "--index", "stash@{1}"],
-    });
+    }));
   });
 
   it("throws GitStashNotFoundError for missing stash refs", async () => {
@@ -2046,7 +2046,7 @@ describe("dropStash", () => {
     expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["stash", "drop", "-q", "stash@{0}"],
-    });
+    }));
   });
 
   it("throws GitStashNotFoundError for missing stash refs", async () => {

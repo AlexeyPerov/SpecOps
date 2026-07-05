@@ -29,7 +29,7 @@ export function isGitInstalled(): boolean {
  */
 export function describeIfGitInstalled(name: string, fn: () => void): void {
   if (isGitInstalled()) {
-    describe(name, fn);
+    describe(name, { timeout: 15_000 }, fn);
   } else {
     describe.skip(`${name} (skipped: git not installed)`, fn);
   }

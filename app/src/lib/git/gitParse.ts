@@ -406,21 +406,46 @@ export function parseBranchVvLine(line: string): ParsedBranchLine | null {
     return null;
   }
 
-  const match =
-    /^(\*|\s)\s(\S+)\s+([0-9a-fA-F]+)(?:\s+\[([^\]]*)\])?(?:\s+(.*))?$/.exec(trimmed);
-  if (!match) {
+  const markerMatch = /^(\*|\s)\s/.exec(trimmed);
+  if (!markerMatch) {
     return null;
   }
 
-  const upstreamInfo = match[4] ? parseUpstreamBracket(match[4]) : { upstream: null, track: null };
+  const body = trimmed.slice(markerMatch[0].length);
+  const hashMatch = /\s([0-9a-fA-F]{7,40})(?=\s+\[|\s+[^\s\[]|\s*$)/.exec(body);
+  if (!hashMatch || hashMatch.index === undefined) {
+    return null;
+  }
+
+  const name = body.slice(0, hashMatch.index).trimEnd();
+  if (!name) {
+    return null;
+  }
+
+  const head = hashMatch[1];
+  let tail = body.slice(hashMatch.index + hashMatch[0].length).trimStart();
+
+  let upstream: string | null = null;
+  let upstreamTrack: string | null = null;
+
+  if (tail.startsWith("[")) {
+    const closingBracket = tail.indexOf("]");
+    if (closingBracket === -1) {
+      return null;
+    }
+    const upstreamInfo = parseUpstreamBracket(tail.slice(1, closingBracket));
+    upstream = upstreamInfo.upstream;
+    upstreamTrack = upstreamInfo.track;
+    tail = tail.slice(closingBracket + 1).trimStart();
+  }
 
   return {
-    isCurrent: match[1] === "*",
-    name: match[2],
-    head: match[3],
-    upstream: upstreamInfo.upstream,
-    upstreamTrack: upstreamInfo.track,
-    subject: match[5]?.trim() ?? "",
+    isCurrent: markerMatch[1] === "*",
+    name,
+    head,
+    upstream,
+    upstreamTrack,
+    subject: tail.trim(),
   };
 }
 

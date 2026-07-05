@@ -1,6 +1,6 @@
 <script lang="ts">
   import { reportGitError } from "../git/gitErrorUi";
-  import { formatWorkingTreeDiffSubtitle, formatWorkingTreeStatusCode } from "../git/gitStatusFormat";
+  import { formatWorkingTreeDiffSubtitle, formatWorkingTreeDiffSubtitleHelp, formatWorkingTreeStatusCode } from "../git/gitStatusFormat";
   import {
     createCommit,
     GitCommitValidationError,
@@ -77,6 +77,12 @@
       return undefined;
     }
     return formatWorkingTreeDiffSubtitle(activeDiffSource, activeDiffEntry);
+  });
+  const activeDiffSubtitleHelp = $derived.by(() => {
+    if (!activeDiffSource) {
+      return undefined;
+    }
+    return formatWorkingTreeDiffSubtitleHelp(activeDiffSource, activeDiffEntry);
   });
   const canCommit = $derived(
     hasStagedChanges && !actionBusy && !readOnly && commitMessage.trim().length > 0,
@@ -378,7 +384,13 @@
       <div class="git-changes-lists">
         <section class="git-changes-section" aria-labelledby="git-changes-unstaged-heading">
           <div class="git-changes-section-header">
-            <h3 id="git-changes-unstaged-heading" class="git-changes-section-title">Unstaged</h3>
+            <h3
+              id="git-changes-unstaged-heading"
+              class="git-changes-section-title"
+              title="Unstaged diffs compare the working tree to the last commit (HEAD), not the staging index."
+            >
+              Unstaged
+            </h3>
             <div class="git-changes-section-actions">
               <button
                 type="button"
@@ -512,6 +524,7 @@
           diff={readOnly ? null : fileDiff}
           title={activeDiffPath ?? undefined}
           subtitle={readOnly ? undefined : activeDiffSubtitle}
+          subtitleHelp={readOnly ? undefined : activeDiffSubtitleHelp}
           loading={!readOnly && diffLoading}
           error={readOnly ? null : diffError}
         />

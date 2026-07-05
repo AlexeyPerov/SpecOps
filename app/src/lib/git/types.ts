@@ -206,6 +206,12 @@ export interface AheadBehindCounts {
 /** Default cap for `git log` queries (phase 2). */
 export const DEFAULT_COMMIT_LOG_LIMIT = 500;
 
+/** Increment when loading more history in the UI. */
+export const COMMIT_LOG_PAGE_SIZE = 500;
+
+/** Hard cap for in-panel history depth before requiring external tools. */
+export const MAX_COMMIT_LOG_LIMIT = 5000;
+
 /** History scope for commit queries (D-10). */
 export type HistoryFilterMode =
   | "current-branch"

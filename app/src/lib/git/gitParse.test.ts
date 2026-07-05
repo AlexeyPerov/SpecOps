@@ -260,6 +260,35 @@ describe("parseBranchVvLine", () => {
       subject: "Latest commit",
     });
   });
+
+  it("parses branch names with slashes, symbols, and spaces outside app validation", () => {
+    expect(
+      parseBranchVvLine("  feature/weird@name#1 abc1234 [origin/x: gone] Fix things"),
+    ).toEqual({
+      isCurrent: false,
+      name: "feature/weird@name#1",
+      head: "abc1234",
+      upstream: "origin/x",
+      upstreamTrack: "gone",
+      subject: "Fix things",
+    });
+    expect(parseBranchVvLine("* release 2024-q1 deadbeef0 Release prep")).toEqual({
+      isCurrent: true,
+      name: "release 2024-q1",
+      head: "deadbeef0",
+      upstream: null,
+      upstreamTrack: null,
+      subject: "Release prep",
+    });
+    expect(parseBranchVvLine("  .hidden-branch 0123456")).toEqual({
+      isCurrent: false,
+      name: ".hidden-branch",
+      head: "0123456",
+      upstream: null,
+      upstreamTrack: null,
+      subject: "",
+    });
+  });
 });
 
 describe("parseBranchVvLines", () => {

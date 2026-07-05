@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-05 06:16 — FIX-14: Git integration polish
+
+- **`gitParse.ts`** — hash-anchored `parseBranchVvLine` parsing for branch names with symbols, dots, or spaces outside app validation.
+- **`gitParse.test.ts`** — branch name edge-case unit tests.
+- **`types.ts`** — `COMMIT_LOG_PAGE_SIZE` (500) and `MAX_COMMIT_LOG_LIMIT` (5000) for history pagination.
+- **`GitHistoryPanel.svelte`** — **Load more commits** button with scroll-position preservation and selection kept on append; cap at 5000 commits.
+- **`gitStatusFormat.ts`**, **`GitChangesPanel.svelte`**, **`GitTextDiffView.svelte`** — unstaged diff subtitle **(vs last commit)** plus help tooltip explaining HEAD-based semantics (not index-based).
+- **`gitStatusFormat.test.ts`** — subtitle and help text tests.
+- **`specs/git/execution/fixes/fix-14-git-integration-polish.md`** — marked `[DONE]` (14a–14f; 14d–14f completed in prior hardening pass).
+
 ## 2026-07-05 05:40 — Git integration hardening (review follow-up)
 
 - **`app/src-tauri/src/git.rs`** — fail fast when `repo_root` is missing; argv subcommand allowlist; strip blocked `GIT_*` env overrides; 16 MiB stdout/stderr cap; fix duplicate `commandId` registration (terminate orphan child, do not unregister in-flight command).

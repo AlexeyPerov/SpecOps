@@ -14,7 +14,10 @@
   } from "../git/gitHistoryFormat";
   import { queryCommits } from "../git/gitService";
   import {
+    COMMIT_LOG_PAGE_SIZE,
+    DEFAULT_COMMIT_LOG_LIMIT,
     DEFAULT_HISTORY_FILTER_MODE,
+    MAX_COMMIT_LOG_LIMIT,
     type CommitDecorator,
     type CommitSummary,
     type HistoryFilterMode,
@@ -45,6 +48,8 @@
   let loadStatus = $state<LoadStatus>("idle");
   let commits = $state<CommitSummary[]>([]);
   let loadError = $state<string | null>(null);
+  let commitLimit = $state(DEFAULT_COMMIT_LOG_LIMIT);
+  let loadingMore = $state(false);
   let filterMode = $state<HistoryFilterMode>(DEFAULT_HISTORY_FILTER_MODE);
   let filterModeReady = $state(false);
   let scrollContainer = $state<HTMLDivElement | null>(null);
@@ -86,6 +91,12 @@
     return commitGraphColumnWidth(graphLayout.laneCount);
   });
   const graphHeight = $derived(commits.length * ROW_HEIGHT);
+  const canLoadMore = $derived(
+    loadStatus === "ready" &&
+      !loadingMore &&
+      commits.length >= commitLimit &&
+      commitLimit < MAX_COMMIT_LOG_LIMIT,
+  );
 
   $effect(() => {
     const container = scrollContainer;
@@ -118,6 +129,7 @@
   async function loadCommits(
     root: string,
     mode: HistoryFilterMode,
+    limit: number,
     previousSha: string | null,
     signal?: AbortSignal,
   ): Promise<void> {
@@ -126,7 +138,7 @@
     commits = [];
 
     try {
-      const rows = await queryCommits(root, { filterMode: mode });
+      const rows = await queryCommits(root, { filterMode: mode, limit });
       if (signal?.aborted) {
         return;
       }
@@ -139,6 +151,36 @@
       }
       loadStatus = "error";
       loadError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  async function handleLoadMore(): Promise<void> {
+    if (!canLoadMore || loadingMore) {
+      return;
+    }
+
+    const nextLimit = Math.min(commitLimit + COMMIT_LOG_PAGE_SIZE, MAX_COMMIT_LOG_LIMIT);
+    if (nextLimit <= commitLimit) {
+      return;
+    }
+
+    const savedScrollTop = scrollContainer?.scrollTop ?? 0;
+    loadingMore = true;
+    loadError = null;
+
+    try {
+      const rows = await queryCommits(repoRoot, { filterMode, limit: nextLimit });
+      commits = rows;
+      commitLimit = nextLimit;
+      requestAnimationFrame(() => {
+        if (scrollContainer) {
+          scrollContainer.scrollTop = savedScrollTop;
+        }
+      });
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : String(error);
+    } finally {
+      loadingMore = false;
     }
   }
 
@@ -174,7 +216,8 @@
     const mode = filterMode;
     const previousSha = untrack(() => selectedSha);
     const controller = new AbortController();
-    void loadCommits(root, mode, previousSha, controller.signal);
+    commitLimit = DEFAULT_COMMIT_LOG_LIMIT;
+    void loadCommits(root, mode, DEFAULT_COMMIT_LOG_LIMIT, previousSha, controller.signal);
     return () => {
       controller.abort();
     };
@@ -184,6 +227,7 @@
     if (nextMode === filterMode) {
       return;
     }
+    commitLimit = DEFAULT_COMMIT_LOG_LIMIT;
     filterMode = nextMode;
     try {
       await writePersistedHistoryFilterMode(repoRoot, nextMode);
@@ -322,6 +366,18 @@
             </li>
           {/each}
         </ul>
+        {#if canLoadMore || loadingMore}
+          <div class="git-history-load-more">
+            <button
+              type="button"
+              class="git-history-load-more-button"
+              disabled={loadingMore}
+              onclick={() => void handleLoadMore()}
+            >
+              {loadingMore ? "Loading more commits…" : "Load more commits"}
+            </button>
+          </div>
+        {/if}
       </div>
     </div>
   {/if}
@@ -540,5 +596,32 @@
   .git-history-ref-tag {
     background: color-mix(in srgb, #c9a227 18%, transparent);
     color: color-mix(in srgb, #c9a227 85%, var(--color-text));
+  }
+
+  .git-history-load-more {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-4) var(--space-12);
+  }
+
+  .git-history-load-more-button {
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    padding: var(--space-2) var(--space-6);
+    cursor: pointer;
+  }
+
+  .git-history-load-more-button:hover:not(:disabled) {
+    background: var(--color-surface-3, var(--color-surface-2));
+    color: var(--color-text-primary);
+  }
+
+  .git-history-load-more-button:disabled {
+    cursor: wait;
+    opacity: 0.75;
   }
 </style>

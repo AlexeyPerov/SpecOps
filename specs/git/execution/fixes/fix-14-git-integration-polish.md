@@ -1,4 +1,4 @@
-# FIX-14 — Git integration polish
+# FIX-14 — Git integration polish `[DONE]`
 
 **Priority:** P3 · **Score:** 3 · **Agent:** low · **Estimate:** ~0.75d (split optional)
 
@@ -24,18 +24,18 @@ Address polish items incrementally in one or more small PRs; each sub-item can b
 
 ## Implementation steps
 
-### 14a — Branch name parsing
+### 14a — Branch name parsing `[DONE]`
 
 1. Relax `parseBranchVvLine` regex or use structured `git for-each-ref` for branch list queries.
 2. Add fixture for branch name edge cases created outside app validation.
 
-### 14b — History pagination
+### 14b — History pagination `[DONE]`
 
 1. Add “Load more” to `GitHistoryPanel` passing increased `limit` to `queryCommits`.
 2. Preserve selection and scroll position on append.
 3. Cap max limit or virtualize if performance degrades.
 
-### 14c — Diff model documentation
+### 14c — Diff model documentation `[DONE]`
 
 1. Add user-visible subtitle or help tooltip on unstaged diff explaining “vs last commit” semantics.
 2. Optional future: toggle for index-based unstaged diff (`git diff` without HEAD).
@@ -56,9 +56,9 @@ Address polish items incrementally in one or more small PRs; each sub-item can b
 
 ## Acceptance checklist
 
-- [ ] Each sub-item (14a–14f) has tests or documented manual verification when implemented.
-- [ ] Sub-items can ship independently; mark `[DONE]` sub-bullets in this file when complete.
-- [ ] No breaking changes to public `gitService` API without changelog note.
+- [x] Each sub-item (14a–14f) has tests or documented manual verification when implemented.
+- [x] Sub-items can ship independently; mark `[DONE]` sub-bullets in this file when complete.
+- [x] No breaking changes to public `gitService` API without changelog note.
 
 ## Dependencies
 

@@ -10,11 +10,12 @@
     diff: ParsedTextDiff | null;
     title?: string;
     subtitle?: string;
+    subtitleHelp?: string;
     loading?: boolean;
     error?: string | null;
   }
 
-  let { diff = null, title, subtitle, loading = false, error = null }: Props = $props();
+  let { diff = null, title, subtitle, subtitleHelp, loading = false, error = null }: Props = $props();
 
   const displayTitle = $derived(title ?? diff?.path ?? "");
   const displaySubtitle = $derived(subtitle ?? "");
@@ -73,7 +74,7 @@
     <div class="git-text-diff-heading">
       <p class="git-text-diff-title" title={displayTitle}>{displayTitle || "Diff"}</p>
       {#if displaySubtitle}
-        <p class="git-text-diff-subtitle">{displaySubtitle}</p>
+        <p class="git-text-diff-subtitle" title={subtitleHelp}>{displaySubtitle}</p>
       {/if}
     </div>
     {#if diff && !isBinary && !hasNoHunks}

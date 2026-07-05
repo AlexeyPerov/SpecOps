@@ -1,59 +1,54 @@
-import { describe, expect, it, vi } from "vitest";
-import { promptGitCredentials, registerAskpassPromptRunner } from "../services/askpassPrompt";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GitAskpassRequest } from "../git/types";
+import {
+  promptGitCredentials,
+  registerAskpassPromptRunner,
+  resetAskpassPromptQueueForTests,
+} from "./askpassPrompt";
 
-describe("askpassPrompt", () => {
-  it("returns cancelled when no runner is registered", async () => {
+function makeRequest(id: string): GitAskpassRequest {
+  return {
+    sessionId: "session-1",
+    requestId: id,
+    prompt: `Password for ${id}:`,
+    hostHint: "example.com",
+    usernameHint: null,
+    inputKind: "password",
+    operation: "fetch",
+    timeoutMs: 120_000,
+  };
+}
+
+describe("promptGitCredentials", () => {
+  beforeEach(() => {
+    resetAskpassPromptQueueForTests();
     registerAskpassPromptRunner(null);
-    const request: GitAskpassRequest = {
-      sessionId: "session-1",
-      requestId: "req-1",
-      prompt: "Password for 'https://example.com':",
-      hostHint: "example.com",
-      usernameHint: null,
-      inputKind: "password",
-      operation: "push",
-      timeoutMs: 120_000,
-    };
-
-    const response = await promptGitCredentials(request);
-    expect(response).toEqual({
-      sessionId: "session-1",
-      requestId: "req-1",
-      value: "",
-      cancelled: true,
-    });
   });
 
-  it("serializes concurrent prompts to a single active request", async () => {
-    const runner = vi.fn(async () => ({ type: "submit" as const, value: "secret" }));
-    registerAskpassPromptRunner(runner);
+  it("queues concurrent askpass requests instead of cancelling them", async () => {
+    const order: string[] = [];
+    registerAskpassPromptRunner(async (request) => {
+      order.push(`start:${request.requestId}`);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      order.push(`end:${request.requestId}`);
+      return { type: "submit", value: request.requestId };
+    });
 
-    const first: GitAskpassRequest = {
-      sessionId: "session-1",
-      requestId: "req-1",
-      prompt: "Username for 'https://example.com':",
-      hostHint: "example.com",
-      usernameHint: null,
-      inputKind: "username",
-      operation: "fetch",
-      timeoutMs: 120_000,
-    };
-    const second: GitAskpassRequest = {
-      ...first,
-      requestId: "req-2",
-    };
-
-    const [firstResponse, secondResponse] = await Promise.all([
-      promptGitCredentials(first),
-      promptGitCredentials(second),
+    const [first, second] = await Promise.all([
+      promptGitCredentials(makeRequest("req-1")),
+      promptGitCredentials(makeRequest("req-2")),
     ]);
 
-    expect(firstResponse.cancelled).toBeUndefined();
-    expect(firstResponse.value).toBe("secret");
-    expect(secondResponse.cancelled).toBe(true);
-    expect(runner).toHaveBeenCalledTimes(1);
-
-    registerAskpassPromptRunner(null);
+    expect(first).toEqual({
+      sessionId: "session-1",
+      requestId: "req-1",
+      value: "req-1",
+    });
+    expect(second).toEqual({
+      sessionId: "session-1",
+      requestId: "req-2",
+      value: "req-2",
+    });
+    expect(order).toEqual(["start:req-1", "end:req-1", "start:req-2", "end:req-2"]);
   });
 });

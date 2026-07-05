@@ -330,7 +330,7 @@ pub fn prepare_askpass_session(
     );
     env.insert(
         "GIT_SSH_COMMAND".to_string(),
-        "ssh -o StrictHostKeyChecking=accept-new".to_string(),
+        "ssh -o StrictHostKeyChecking=yes".to_string(),
     );
 
     Ok(PreparedAskpassSession { session_id, env })

@@ -32,7 +32,6 @@ import {
   pullRemote,
   pushRemote,
   pushTag,
-  REMOTE_GIT_OPERATION_TIMEOUT_MS,
   queryAheadBehind,
   isNoUpstreamAheadBehindError,
   queryBranches,
@@ -54,6 +53,10 @@ import {
   stagePaths,
   unstagePaths,
 } from "./gitService";
+import {
+  LOCAL_GIT_OPERATION_TIMEOUT_MS,
+  REMOTE_GIT_OPERATION_TIMEOUT_MS,
+} from "./gitRun";
 import { resetGitCommandQueueForTests } from "./gitCommandQueue";
 import { DEFAULT_COMMIT_LOG_LIMIT, DEFAULT_HISTORY_FILTER_MODE } from "./types";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
@@ -73,8 +76,25 @@ const invokeMock = vi.mocked(invoke);
 
 const REMOTE_GIT_ENV = {
   GIT_TERMINAL_PROMPT: "0",
-  GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
+  GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes",
 };
+
+function expectLocalGitInvoke(
+  repoRoot: string,
+  args: string[],
+  extra: Record<string, unknown> = {},
+): void {
+  expect(invokeMock).toHaveBeenCalledWith(
+    "run_git",
+    expect.objectContaining({
+      repoRoot,
+      args,
+      commandId: expect.any(String),
+      timeoutMs: LOCAL_GIT_OPERATION_TIMEOUT_MS,
+      ...extra,
+    }),
+  );
+}
 
 function expectRemoteGitInvoke(
   repoRoot: string,
@@ -82,15 +102,19 @@ function expectRemoteGitInvoke(
   operation: string,
   extra: Record<string, unknown> = {},
 ): void {
-  expect(invokeMock).toHaveBeenCalledWith("run_git", {
-    repoRoot,
-    args,
-    askpassEnabled: true,
-    askpassOperation: operation,
-    env: REMOTE_GIT_ENV,
-    timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
-    ...extra,
-  });
+  expect(invokeMock).toHaveBeenCalledWith(
+    "run_git",
+    expect.objectContaining({
+      repoRoot,
+      args,
+      askpassEnabled: true,
+      askpassOperation: operation,
+      env: REMOTE_GIT_ENV,
+      commandId: expect.any(String),
+      timeoutMs: REMOTE_GIT_OPERATION_TIMEOUT_MS,
+      ...extra,
+    }),
+  );
 }
 
 describe("runGit", () => {
@@ -110,10 +134,7 @@ describe("runGit", () => {
 
     const result = await runGit("/tmp/repo", ["status"]);
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["status"],
-    });
+    expectLocalGitInvoke("/tmp/repo", ["status"]);
     expect(result).toEqual(response);
   });
 
@@ -127,7 +148,7 @@ describe("runGit", () => {
 
     await runGit("/tmp/repo", ["status"], { GIT_TERMINAL_PROMPT: "0" });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["status"],
       env: { GIT_TERMINAL_PROMPT: "0" },
@@ -201,7 +222,7 @@ describe("resolveRepoRoot", () => {
 
     const result = await resolveRepoRoot(nestedWorkspace);
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: nestedWorkspace,
       args: ["rev-parse", "--show-toplevel"],
     });
@@ -357,7 +378,7 @@ describe("queryAheadBehind", () => {
     const result = await queryAheadBehind("/tmp/repo");
 
     expect(result).toEqual({ behind: 2, ahead: 3 });
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["rev-list", "--left-right", "--count", "@{u}...HEAD"],
     });
@@ -521,7 +542,7 @@ describe("queryCommits", () => {
 
     const result = await queryCommits("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: [
         "log",
@@ -547,7 +568,7 @@ describe("queryCommits", () => {
 
     await queryCommits("/tmp/repo", { limit: 25 });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: buildQueryCommitsArgs({ limit: 25 }),
     });
@@ -563,7 +584,7 @@ describe("queryCommits", () => {
 
     await queryCommits("/tmp/repo", { filterMode: "all-branches" });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: buildQueryCommitsArgs({ filterMode: "all-branches" }),
     });
@@ -579,7 +600,7 @@ describe("queryCommits", () => {
 
     await queryCommits("/tmp/repo", { filterMode: "all-branches-and-remotes", limit: 200 });
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: buildQueryCommitsArgs({ filterMode: "all-branches-and-remotes", limit: 200 }),
     });
@@ -616,7 +637,7 @@ describe("queryCommitDetail", () => {
 
     const result = await queryCommitDetail("/tmp/repo", "abc123");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["show", "--name-status", `--format=${GIT_SHOW_FORMAT}`, "abc123"],
     });
@@ -660,7 +681,7 @@ describe("queryCommitFileDiff", () => {
 
     const result = await queryCommitFileDiff("/tmp/repo", "child", "file.txt", "parent");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: [
         "diff",
@@ -688,7 +709,7 @@ describe("queryCommitFileDiff", () => {
 
     await queryCommitFileDiff("/tmp/repo", "root", "file.txt");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: [
         "show",
@@ -801,7 +822,7 @@ describe("queryWorkingTreeFileDiff", () => {
 
     const result = await queryWorkingTreeFileDiff("/tmp/repo", "file.txt", "staged");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: [
         "diff",
@@ -827,7 +848,7 @@ describe("queryWorkingTreeFileDiff", () => {
 
     await queryWorkingTreeFileDiff("/tmp/repo", "file.txt", "unstaged");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: [
         "diff",
@@ -888,7 +909,7 @@ describe("queryWorkingTreeFileDiff", () => {
 
     await queryWorkingTreeFileDiff("/tmp/repo", "spaces file.txt", "staged");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: [
         "diff",
@@ -1036,7 +1057,7 @@ describe("queryTags", () => {
 
     const result = await queryTags("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "-l"],
     });
@@ -1072,7 +1093,7 @@ describe("queryBranches", () => {
 
     const result = await queryBranches("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["branch", "-vv"],
     });
@@ -1112,7 +1133,7 @@ describe("queryWorkingTreeStatus", () => {
 
     const result = await queryWorkingTreeStatus("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["status", "--porcelain=v2", "-z"],
     });
@@ -1167,7 +1188,7 @@ describe("stagePaths and unstagePaths", () => {
 
     await stagePaths("/tmp/repo", ["path with spaces.txt", "plain.txt"]);
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["add", "--", "path with spaces.txt", "plain.txt"],
     });
@@ -1183,7 +1204,7 @@ describe("stagePaths and unstagePaths", () => {
 
     await stagePaths("/tmp/repo", ["nested/folder/file.ts"]);
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["add", "--", "nested/folder/file.ts"],
     });
@@ -1199,7 +1220,7 @@ describe("stagePaths and unstagePaths", () => {
 
     await unstagePaths("/tmp/repo", ["staged.txt"]);
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["restore", "--staged", "--", "staged.txt"],
     });
@@ -1215,7 +1236,7 @@ describe("stagePaths and unstagePaths", () => {
 
     await stageAll("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["add", "-A"],
     });
@@ -1297,7 +1318,7 @@ describe("checkoutBranch", () => {
 
     await checkoutBranch("/tmp/repo", "feature/login");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["checkout", "feature/login"],
     });
@@ -1369,7 +1390,7 @@ describe("createBranch", () => {
 
     await createBranch("/tmp/repo", "feature/new");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["checkout", "-b", "feature/new"],
     });
@@ -1508,7 +1529,7 @@ describe("createTag", () => {
 
     await createTag("/tmp/repo", "v1.0.0");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "v1.0.0"],
     });
@@ -1548,7 +1569,7 @@ describe("deleteLocalTag", () => {
 
     await deleteLocalTag("/tmp/repo", "v1.0.0");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "-d", "v1.0.0"],
     });
@@ -1686,7 +1707,7 @@ describe("deleteTag", () => {
     await deleteTag("/tmp/repo", "v1.0.0");
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["tag", "-d", "v1.0.0"],
     });
@@ -1781,7 +1802,7 @@ describe("queryIsBareRepository", () => {
     });
 
     await expect(queryIsBareRepository("/tmp/bare.git")).resolves.toBe(true);
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/bare.git",
       args: ["rev-parse", "--is-bare-repository"],
     });
@@ -1834,35 +1855,52 @@ describe("createStash", () => {
   });
 
   it("invokes git stash push with include-untracked and message", async () => {
-    invokeMock.mockResolvedValue({
-      exitCode: 0,
-      stdout: "",
-      stderr: "",
-      durationMs: 3,
-    });
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        durationMs: 3,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "abc123\n",
+        stderr: "",
+        durationMs: 1,
+      });
 
-    await createStash("/tmp/repo", "WIP before checkout", true);
+    const stashRef = await createStash("/tmp/repo", "WIP before checkout", true);
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["stash", "push", "--include-untracked", "-m", "WIP before checkout"],
-    });
+    expectLocalGitInvoke("/tmp/repo", [
+      "stash",
+      "push",
+      "--include-untracked",
+      "-m",
+      "WIP before checkout",
+    ]);
+    expectLocalGitInvoke("/tmp/repo", ["rev-parse", "--verify", "stash@{0}"]);
+    expect(stashRef).toBe("abc123");
   });
 
   it("omits include-untracked when disabled", async () => {
-    invokeMock.mockResolvedValue({
-      exitCode: 0,
-      stdout: "",
-      stderr: "",
-      durationMs: 2,
-    });
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        durationMs: 2,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "def456\n",
+        stderr: "",
+        durationMs: 1,
+      });
 
-    await createStash("/tmp/repo", undefined, false);
+    const stashRef = await createStash("/tmp/repo", undefined, false);
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
-      repoRoot: "/tmp/repo",
-      args: ["stash", "push"],
-    });
+    expectLocalGitInvoke("/tmp/repo", ["stash", "push"]);
+    expect(stashRef).toBe("def456");
   });
 
   it("throws GitStashNothingToSaveError when git reports no changes", async () => {
@@ -1893,7 +1931,7 @@ describe("queryStashes", () => {
 
     const rows = await queryStashes("/tmp/repo");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: [
         "stash",
@@ -1941,7 +1979,7 @@ describe("applyStash", () => {
 
     await applyStash("/tmp/repo", "stash@{0}");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["stash", "apply", "-q", "stash@{0}"],
     });
@@ -1957,7 +1995,7 @@ describe("applyStash", () => {
 
     await applyStash("/tmp/repo", "stash@{1}", true);
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["stash", "pop", "-q", "--index", "stash@{1}"],
     });
@@ -2005,7 +2043,7 @@ describe("dropStash", () => {
 
     await dropStash("/tmp/repo", "stash@{0}");
 
-    expect(invokeMock).toHaveBeenCalledWith("run_git", {
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expect.objectContaining({
       repoRoot: "/tmp/repo",
       args: ["stash", "drop", "-q", "stash@{0}"],
     });

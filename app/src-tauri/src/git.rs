@@ -10,6 +10,43 @@ use std::time::{Duration, Instant};
 
 const GIT_BINARY: &str = "git";
 
+/// Maximum combined stdout/stderr size returned from a git subprocess (16 MiB).
+const MAX_GIT_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
+
+/// Git subcommands the app may invoke via `run_git` (argv allowlist).
+const ALLOWED_GIT_SUBCOMMANDS: &[&str] = &[
+    "add",
+    "branch",
+    "checkout",
+    "diff",
+    "fetch",
+    "init",
+    "log",
+    "ls-remote",
+    "pull",
+    "push",
+    "remote",
+    "restore",
+    "rev-list",
+    "rev-parse",
+    "show",
+    "stash",
+    "status",
+    "tag",
+];
+
+/// Environment variables that must not be overridden by IPC callers.
+const BLOCKED_GIT_ENV_VARS: &[&str] = &[
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_GRAFT_FILE",
+    "GIT_QUARANTINE_PATH",
+];
+
 static GIT_EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
 
 fn git_executable() -> &'static Path {
@@ -182,6 +219,7 @@ fn register_active_git_command(command_id: &str, child: Child) -> Result<(), Str
         .map_err(|_| "git command registry lock poisoned".to_string())?;
 
     if commands.contains_key(command_id) {
+        terminate_child_process(&mut child);
         return Err(format!("git command id already in use: {command_id}"));
     }
 
@@ -260,20 +298,20 @@ fn wait_for_registered_git_command(
                 let mut child = take_registered_git_command_child(command_id)
                     .ok_or_else(|| format!("git command child already finished: {command_id}"))?;
                 let exit_code = status.code().unwrap_or(-1);
-                let mut stdout_bytes = Vec::new();
-                let mut stderr_bytes = Vec::new();
+                let mut stdout_text = String::new();
+                let mut stderr_text = String::new();
                 if let Some(mut stdout) = child.stdout.take() {
-                    let _ = stdout.read_to_end(&mut stdout_bytes);
+                    stdout_text = read_limited_stream(&mut stdout, MAX_GIT_OUTPUT_BYTES)?;
                 }
                 if let Some(mut stderr) = child.stderr.take() {
-                    let _ = stderr.read_to_end(&mut stderr_bytes);
+                    stderr_text = read_limited_stream(&mut stderr, MAX_GIT_OUTPUT_BYTES)?;
                 }
                 let _ = child.wait();
 
                 return Ok(RegisteredCommandOutput {
                     exit_code,
-                    stdout: decode_utf8(&stdout_bytes),
-                    stderr: decode_utf8(&stderr_bytes),
+                    stdout: stdout_text,
+                    stderr: stderr_text,
                     timed_out: false,
                 });
             }
@@ -395,12 +433,79 @@ fn normalize_repo_root(repo_root: &str) -> Result<PathBuf, String> {
         return Err("repo_root must be an absolute path".to_string());
     }
 
-    if path.exists() {
-        path.canonicalize()
-            .map_err(|error| format!("Failed to resolve repo_root path: {error}"))
-    } else {
-        Ok(path)
+    if !path.exists() {
+        return Err(format!("repo_root path does not exist: {trimmed}"));
     }
+
+    path.canonicalize()
+        .map_err(|error| format!("Failed to resolve repo_root path: {error}"))
+}
+
+fn is_blocked_git_env_var(key: &str) -> bool {
+    BLOCKED_GIT_ENV_VARS
+        .iter()
+        .any(|blocked| key.eq_ignore_ascii_case(blocked))
+}
+
+fn sanitize_git_env(env: Option<&HashMap<String, String>>) -> HashMap<String, String> {
+    let Some(env_map) = env else {
+        return HashMap::new();
+    };
+
+    env_map
+        .iter()
+        .filter(|(key, _)| !is_blocked_git_env_var(key))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
+}
+
+fn validate_git_args(args: &[String]) -> Result<(), String> {
+    let Some(subcommand) = args.first() else {
+        return Err("git args must include a subcommand".to_string());
+    };
+
+    if !ALLOWED_GIT_SUBCOMMANDS
+        .iter()
+        .any(|allowed| allowed == subcommand)
+    {
+        return Err(format!("git subcommand not allowed: {subcommand}"));
+    }
+
+    Ok(())
+}
+
+fn string_exceeds_output_limit(value: &str) -> bool {
+    value.len() > MAX_GIT_OUTPUT_BYTES
+}
+
+fn apply_output_limit(response: &mut RunGitResponse) -> Result<(), String> {
+    if string_exceeds_output_limit(&response.stdout) || string_exceeds_output_limit(&response.stderr)
+    {
+        return Err(format!(
+            "git output exceeded limit of {MAX_GIT_OUTPUT_BYTES} bytes"
+        ));
+    }
+    Ok(())
+}
+
+fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<String, String> {
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 8192];
+
+    loop {
+        let read = reader
+            .read(&mut chunk)
+            .map_err(|error| format!("Failed to read git output: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        if buf.len() + read > max_bytes {
+            return Err(format!("git output exceeded limit of {max_bytes} bytes"));
+        }
+        buf.extend_from_slice(&chunk[..read]);
+    }
+
+    Ok(decode_utf8(&buf))
 }
 
 /// Probe whether `git` is installed and readable from PATH (with Windows fallbacks).
@@ -460,8 +565,12 @@ fn merge_env_maps(
     base: Option<&HashMap<String, String>>,
     extra: &HashMap<String, String>,
 ) -> HashMap<String, String> {
-    let mut merged = base.cloned().unwrap_or_default();
-    merged.extend(extra.iter().map(|(key, value)| (key.clone(), value.clone())));
+    let mut merged = sanitize_git_env(base);
+    for (key, value) in extra {
+        if !is_blocked_git_env_var(key) {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
     merged
 }
 
@@ -487,10 +596,8 @@ fn build_git_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    if let Some(env_map) = env {
-        for (key, value) in env_map {
-            command.env(key, value);
-        }
+    for (key, value) in sanitize_git_env(env) {
+        command.env(key, value);
     }
 
     command
@@ -573,7 +680,7 @@ pub fn execute_git_with_full_options(
         .map(|(_, env)| env as &HashMap<String, String>)
         .or(options.env);
 
-    let response = if let Some(id) = normalized_command_id.as_deref() {
+    if let Some(id) = normalized_command_id.as_deref() {
         let mut command = build_git_command(repo_root, args, effective_env);
         let child = match command.spawn() {
             Ok(child) => child,
@@ -590,7 +697,6 @@ pub fn execute_git_with_full_options(
         };
 
         if let Err(error) = register_active_git_command(id, child) {
-            unregister_active_git_command(id);
             return RunGitResponse {
                 exit_code: -1,
                 stdout: String::new(),
@@ -620,24 +726,48 @@ pub fn execute_git_with_full_options(
         let cancelled = active_git_command_was_cancelled(id) && !output.timed_out;
         unregister_active_git_command(id);
 
-        RunGitResponse {
+        let mut response = RunGitResponse {
             exit_code: output.exit_code,
             stdout: output.stdout,
             stderr: output.stderr,
             duration_ms: start.elapsed().as_millis() as u64,
             cancelled,
             timed_out: output.timed_out,
-        }
-    } else {
-        match build_git_command(repo_root, args, effective_env).output() {
-            Ok(output) => RunGitResponse {
-                exit_code: output.status.code().unwrap_or(-1),
-                stdout: decode_utf8(&output.stdout),
-                stderr: decode_utf8(&output.stderr),
+        };
+        if let Err(error) = apply_output_limit(&mut response) {
+            return RunGitResponse {
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: error,
                 duration_ms: start.elapsed().as_millis() as u64,
                 cancelled: false,
                 timed_out: false,
-            },
+            };
+        }
+        response
+    } else {
+        match build_git_command(repo_root, args, effective_env).output() {
+            Ok(output) => {
+                let mut response = RunGitResponse {
+                    exit_code: output.status.code().unwrap_or(-1),
+                    stdout: decode_utf8(&output.stdout),
+                    stderr: decode_utf8(&output.stderr),
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    cancelled: false,
+                    timed_out: false,
+                };
+                if let Err(error) = apply_output_limit(&mut response) {
+                    return RunGitResponse {
+                        exit_code: -1,
+                        stdout: String::new(),
+                        stderr: error,
+                        duration_ms: start.elapsed().as_millis() as u64,
+                        cancelled: false,
+                        timed_out: false,
+                    };
+                }
+                response
+            }
             Err(error) => RunGitResponse {
                 exit_code: -1,
                 stdout: String::new(),
@@ -647,9 +777,7 @@ pub fn execute_git_with_full_options(
                 timed_out: false,
             },
         }
-    };
-
-    response
+    }
 }
 
 /// Probe whether system `git` is available.
@@ -716,8 +844,15 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
 ///
 /// If future work moved git spawn to the shell plugin, add a scoped `shell:allow-execute`
 /// permission for the resolved `git` binary path and argv patterns.
+///
+/// ## Environment and argv policy
+///
+/// Caller-supplied `env` is merged into the subprocess after stripping dangerous git
+/// variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, etc.). Only subcommands in
+/// `ALLOWED_GIT_SUBCOMMANDS` are permitted via this IPC entry point.
 #[tauri::command]
 pub fn run_git(request: RunGitRequest) -> Result<RunGitResponse, String> {
+    validate_git_args(&request.args)?;
     let repo_root = normalize_repo_root(&request.repo_root)?;
     Ok(execute_git_with_full_options(
         &repo_root,
@@ -1164,6 +1299,105 @@ mod tests {
         assert!(response.stderr.contains("timed out"));
 
         unregister_active_git_command(&command_id);
+    }
+
+    #[test]
+    fn run_git_rejects_nonexistent_repo_root() {
+        let error = run_git(RunGitRequest {
+            repo_root: "/tmp/spec-ops-git-missing-repo-path".to_string(),
+            args: vec!["status".to_string()],
+            env: None,
+            command_id: None,
+            askpass_enabled: false,
+            askpass_operation: None,
+            askpass_timeout_ms: None,
+            timeout_ms: None,
+        })
+        .expect_err("missing repo_root should fail");
+
+        assert!(error.contains("repo_root path does not exist"));
+    }
+
+    #[test]
+    fn run_git_rejects_disallowed_subcommand() {
+        if skip_if_git_unavailable() {
+            return;
+        }
+        let repo_root = create_temp_git_repo();
+        let error = run_git(RunGitRequest {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+            args: vec!["clean".to_string(), "-fdx".to_string()],
+            env: None,
+            command_id: None,
+            askpass_enabled: false,
+            askpass_operation: None,
+            askpass_timeout_ms: None,
+            timeout_ms: None,
+        })
+        .expect_err("disallowed subcommand should fail");
+
+        assert!(error.contains("git subcommand not allowed"));
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn run_git_strips_blocked_env_vars() {
+        if skip_if_git_unavailable() {
+            return;
+        }
+        let repo_root = create_temp_git_repo();
+        let mut env = HashMap::new();
+        env.insert("GIT_DIR".to_string(), "/tmp/evil".to_string());
+        env.insert("GIT_TERMINAL_PROMPT".to_string(), "0".to_string());
+
+        let response = run_git(RunGitRequest {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+            args: vec!["status".to_string()],
+            env: Some(env),
+            command_id: None,
+            askpass_enabled: false,
+            askpass_operation: None,
+            askpass_timeout_ms: None,
+            timeout_ms: None,
+        })
+        .expect("status should succeed when blocked env is stripped");
+
+        assert_eq!(response.exit_code, 0);
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn duplicate_command_id_does_not_unregister_in_flight_command() {
+        let first_id = format!(
+            "duplicate-first-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let first_child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        register_active_git_command(&first_id, first_child).expect("register first command");
+
+        let duplicate_child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn duplicate sleep");
+        let duplicate_error =
+            register_active_git_command(&first_id, duplicate_child).expect_err("duplicate id");
+        assert!(duplicate_error.contains("already in use"));
+
+        assert!(git_command_registry()
+            .commands
+            .lock()
+            .expect("registry lock")
+            .contains_key(&first_id));
+
+        cancel_git_command_by_id(&first_id);
+        unregister_active_git_command(&first_id);
     }
 
     #[test]

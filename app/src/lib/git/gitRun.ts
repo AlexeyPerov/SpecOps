@@ -14,11 +14,38 @@ import {
 /** Default ceiling for remote git network operations (10 minutes). */
 export const REMOTE_GIT_OPERATION_TIMEOUT_MS = 10 * 60 * 1000;
 
+/** Default ceiling for local git subprocess operations (5 minutes). */
+export const LOCAL_GIT_OPERATION_TIMEOUT_MS = 5 * 60 * 1000;
+
 const GIT_AVAILABILITY_TTL_MS = 60_000;
+const INDEX_LOCK_MAX_RETRIES = 3;
+const INDEX_LOCK_RETRY_BASE_DELAY_MS = 200;
 
 let cachedGitAvailability: GitAvailableResponse | null = null;
 let gitAvailabilityExpiresAt = 0;
 let gitAvailabilityProbe: Promise<GitAvailableResponse> | null = null;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isIndexLockResponse(response: RunGitResponse): boolean {
+  const stderr = response.stderr.toLowerCase();
+  return (
+    stderr.includes("index.lock") ||
+    (stderr.includes("unable to create") && stderr.includes("lock"))
+  );
+}
+
+function resolveGitCommandTimeout(options?: CancellableGitOptions): number {
+  if (options?.timeoutMs !== undefined) {
+    return options.timeoutMs;
+  }
+  if (options?.askpass) {
+    return REMOTE_GIT_OPERATION_TIMEOUT_MS;
+  }
+  return LOCAL_GIT_OPERATION_TIMEOUT_MS;
+}
 
 export function logGitCommandSummary(
   repoRoot: string,
@@ -42,24 +69,43 @@ export function logGitCommandSummary(
   });
 }
 
+async function invokeRunGitOnce(
+  repoRoot: string,
+  args: string[],
+  env: Record<string, string> | undefined,
+  commandId: string,
+  options: CancellableGitOptions | undefined,
+): Promise<RunGitResponse> {
+  const response = await invoke<RunGitResponse>("run_git", {
+    repoRoot,
+    args,
+    ...(env ? { env } : {}),
+    commandId,
+    ...(options?.askpass ? { askpassEnabled: true } : {}),
+    ...(options?.askpassOperation ? { askpassOperation: options.askpassOperation } : {}),
+    ...(options?.askpassTimeoutMs ? { askpassTimeoutMs: options.askpassTimeoutMs } : {}),
+    timeoutMs: resolveGitCommandTimeout(options),
+  });
+  logGitCommandSummary(repoRoot, args, response);
+  return response;
+}
+
 async function invokeRunGit(
   repoRoot: string,
   args: string[],
   env?: Record<string, string>,
   options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
+  const commandId = options?.commandId ?? crypto.randomUUID();
+
   try {
-    const response = await invoke<RunGitResponse>("run_git", {
-      repoRoot,
-      args,
-      ...(env ? { env } : {}),
-      ...(options?.commandId ? { commandId: options.commandId } : {}),
-      ...(options?.askpass ? { askpassEnabled: true } : {}),
-      ...(options?.askpassOperation ? { askpassOperation: options.askpassOperation } : {}),
-      ...(options?.askpassTimeoutMs ? { askpassTimeoutMs: options.askpassTimeoutMs } : {}),
-      ...(options?.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
-    });
-    logGitCommandSummary(repoRoot, args, response);
+    let response = await invokeRunGitOnce(repoRoot, args, env, commandId, options);
+
+    for (let attempt = 0; attempt < INDEX_LOCK_MAX_RETRIES && isIndexLockResponse(response); attempt += 1) {
+      await sleep(INDEX_LOCK_RETRY_BASE_DELAY_MS * (attempt + 1));
+      response = await invokeRunGitOnce(repoRoot, args, env, crypto.randomUUID(), options);
+    }
+
     return response;
   } catch (error) {
     throw mapGitInvokeError(error, repoRoot);

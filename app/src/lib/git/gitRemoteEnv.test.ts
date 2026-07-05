@@ -5,7 +5,7 @@ describe("buildNonInteractiveRemoteEnv", () => {
   it("disables terminal prompts and uses SSH batch mode", () => {
     expect(buildNonInteractiveRemoteEnv()).toEqual({
       GIT_TERMINAL_PROMPT: "0",
-      GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
+      GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes",
     });
   });
 });

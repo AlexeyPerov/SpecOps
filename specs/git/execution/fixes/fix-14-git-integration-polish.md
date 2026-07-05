@@ -40,17 +40,17 @@ Address polish items incrementally in one or more small PRs; each sub-item can b
 1. Add user-visible subtitle or help tooltip on unstaged diff explaining “vs last commit” semantics.
 2. Optional future: toggle for index-based unstaged diff (`git diff` without HEAD).
 
-### 14d — Rust cancellation register cleanup
+### 14d — Rust cancellation register cleanup `[DONE]`
 
 1. On `register_active_git_command` failure after spawn, kill orphaned child before return.
 2. Do not call `unregister_active_git_command` for unrelated in-flight id on duplicate-id failure.
 
-### 14e — Env blocklist
+### 14e — Env blocklist `[DONE]`
 
 1. Block or strip dangerous env keys in Rust (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, etc.) unless explicitly allowlisted for tests.
 2. Document allowed env in `git.rs` module comment.
 
-### 14f — Repo root validation
+### 14f — Repo root validation `[DONE]`
 
 1. When `repo_root` path does not exist, fail fast with clear error instead of passing through to git.
 

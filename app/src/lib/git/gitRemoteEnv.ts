@@ -12,7 +12,7 @@
 export function buildNonInteractiveRemoteEnv(): Record<string, string> {
   return {
     GIT_TERMINAL_PROMPT: "0",
-    GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
+    GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes",
   };
 }
 

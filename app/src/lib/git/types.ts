@@ -1,3 +1,5 @@
+import { isWindows } from "../services/platform";
+
 /** Result of a `run_git` Tauri command. */
 export interface RunGitResponse {
   exitCode: number;
@@ -163,7 +165,8 @@ export function mapGitInvokeError(error: unknown, workspaceRootPath: string): Gi
   if (
     message.includes("repo_root must not be empty") ||
     message.includes("absolute path") ||
-    message.includes("Failed to resolve repo_root path")
+    message.includes("Failed to resolve repo_root path") ||
+    message.includes("repo_root path does not exist")
   ) {
     return createGitInvalidPathError(workspaceRootPath, message);
   }
@@ -177,7 +180,14 @@ export function mapGitInvokeError(error: unknown, workspaceRootPath: string): Gi
 }
 
 export function normalizeGitOutputPath(path: string): string {
-  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  let normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (isWindows()) {
+    normalized = normalized.replace(
+      /^([A-Za-z]):\//,
+      (_, drive: string) => `${drive.toLowerCase()}:/`,
+    );
+  }
+  return normalized;
 }
 
 /** Current branch metadata from `git branch --show-current` (+ upstream when attached). */

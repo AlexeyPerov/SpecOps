@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-05 05:40 — Git integration hardening (review follow-up)
+
+- **`app/src-tauri/src/git.rs`** — fail fast when `repo_root` is missing; argv subcommand allowlist; strip blocked `GIT_*` env overrides; 16 MiB stdout/stderr cap; fix duplicate `commandId` registration (terminate orphan child, do not unregister in-flight command).
+- **`app/src-tauri/src/git_askpass.rs`**, **`gitRemoteEnv.ts`** — SSH uses `StrictHostKeyChecking=yes` instead of `accept-new`.
+- **`gitRun.ts`** — local git ops get 5-minute default timeout and auto `commandId`; retry on `.git/index.lock` (3 attempts).
+- **`askpassPrompt.ts`** — queue concurrent credential prompts instead of silently cancelling.
+- **`types.ts`** — Windows drive-letter normalization for git queue keys.
+- **`gitTagsStash.ts`**, **`VersionControlView.svelte`** — `createStash` returns resolved stash ref for pull stash-and-restore.
+- **Tests** — Rust validation tests; askpass queue, index.lock retry, Windows queue-key tests; updated invoke expectations.
+
 ## 2026-07-04 14:52 — FIX-12 & FIX-13: Stash panel UI and Windows git PATH fallback
 
 - **`GitStashesPanel.svelte`**, **`VersionControlView.svelte`** — new **Stashes** section tab listing stash ref, date, and message; apply, drop, and create actions with bare-repo read-only mode.

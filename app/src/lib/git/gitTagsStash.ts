@@ -174,7 +174,7 @@ export async function createStash(
   repoRoot: string,
   message?: string,
   includeUntracked = true,
-): Promise<void> {
+): Promise<string> {
   const args = ["stash", "push"];
   if (includeUntracked) {
     args.push("--include-untracked");
@@ -191,6 +191,22 @@ export async function createStash(
     }
     throw createGitCommandError(response);
   }
+
+  const refResponse = await runGit(repoRoot, ["rev-parse", "--verify", "stash@{0}"]);
+  if (refResponse.exitCode !== 0) {
+    throw createGitCommandError(refResponse);
+  }
+
+  const stashRef = refResponse.stdout.trim();
+  if (!stashRef) {
+    throw createGitCommandError({
+      ...refResponse,
+      exitCode: refResponse.exitCode || 1,
+      stderr: refResponse.stderr || "Failed to resolve stash ref after push",
+    });
+  }
+
+  return stashRef;
 }
 
 /** List stashes via structured `git stash list -z --format=…` (newest first). */

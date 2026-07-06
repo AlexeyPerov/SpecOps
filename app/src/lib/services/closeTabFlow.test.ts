@@ -4,6 +4,7 @@ import { appState } from "../state/appState";
 import {
   closeOtherTabsWithUnsavedPrompt,
   closeTabWithUnsavedPrompt,
+  closeTabsToLeftWithUnsavedPrompt,
   closeTabsToRightWithUnsavedPrompt,
 } from "./closeTabFlow";
 import { saveDocumentForClose } from "./documentSave";
@@ -155,6 +156,48 @@ describe("closeOtherTabsWithUnsavedPrompt", () => {
     const before = getSessionTabs(appState.getActiveSession()).map((tab) => tab.id);
 
     const closed = await closeOtherTabsWithUnsavedPrompt(contextTabId!, deps);
+
+    expect(closed).toBe(false);
+    expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual(before);
+  });
+});
+
+describe("closeTabsToLeftWithUnsavedPrompt", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+    vi.mocked(promptUnsavedClose).mockReset();
+    vi.mocked(saveDocumentForClose).mockReset();
+  });
+
+  it("closes only unpinned tabs to the left of the context tab", async () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.openFileInTab("/tmp/c.txt", "c");
+    appState.openFileInTab("/tmp/d.txt", "d");
+    applyPinnedTabs();
+
+    const closed = await closeTabsToLeftWithUnsavedPrompt("tab-3", deps);
+
+    expect(closed).toBe(true);
+    expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual([
+      "tab-3",
+      "tab-4",
+    ]);
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-3");
+  });
+
+  it("aborts when a dirty left-side tab is cancelled", async () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.openFileInTab("/tmp/c.txt", "c");
+    appState.openFileInTab("/tmp/d.txt", "d");
+    const contextTabId = getSessionTabs(appState.getActiveSession()).find((tab) => tab.kind === "file" && tab.documentId === "doc-3")?.id;
+    const dirtyDocId = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/a.txt")?.id;
+    appState.setDocumentContent(dirtyDocId!, "dirty");
+    vi.mocked(promptUnsavedClose).mockResolvedValue("cancel");
+    const before = getSessionTabs(appState.getActiveSession()).map((tab) => tab.id);
+
+    const closed = await closeTabsToLeftWithUnsavedPrompt(contextTabId!, deps);
 
     expect(closed).toBe(false);
     expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual(before);

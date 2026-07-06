@@ -34,6 +34,7 @@ import {
   missingTabIdsToClose,
   reopenTabForDocument,
   tabIdsToCloseOtherThan,
+  tabIdsToCloseToLeftOf,
   tabIdsToCloseToRightOf,
 } from "./tabHelpers";
 
@@ -251,6 +252,30 @@ export function createDocumentTabsLifecycleSlice(deps: {
       const snapshot = getSnapshot();
       const tabs = getSessionTabs(getActiveSession(snapshot));
       const tabIds = tabIdsToCloseToRightOf(tabs, contextTabId);
+      if (tabIds.length === 0) {
+        return false;
+      }
+
+      for (const tabId of tabIds) {
+        const tab = tabs
+          .map((rawTab) => normalizeTabState(rawTab))
+          .find((entry) => entry.id === tabId);
+        if (!tab || !isFileTab(tab)) {
+          continue;
+        }
+        const doc = getActiveDocuments(snapshot).find((documentState) => documentState.id === tab.documentId);
+        if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
+          return false;
+        }
+      }
+
+      update((state) => closeTabsForce(state, tabIds, contextTabId));
+      return true;
+    },
+    closeTabsToLeft(contextTabId: string, confirm: (message: string) => boolean): boolean {
+      const snapshot = getSnapshot();
+      const tabs = getSessionTabs(getActiveSession(snapshot));
+      const tabIds = tabIdsToCloseToLeftOf(tabs, contextTabId);
       if (tabIds.length === 0) {
         return false;
       }

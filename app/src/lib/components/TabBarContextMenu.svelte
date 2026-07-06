@@ -8,6 +8,7 @@
   import {
     canCloseMissingFileTabs,
     canCloseOtherTabs,
+    canCloseTabsToLeft,
     canCloseTabsToRight,
     canCopyRelativePath,
     canCopyTabPath,
@@ -123,6 +124,7 @@
     canDeleteTabFile(contextMenuTab, contextMenuTabDoc, contextMenuWorkspaceRoot),
   );
   const contextMenuCanCloseOtherTabs = $derived(canCloseOtherTabs(openTabs, contextMenuTab));
+  const contextMenuCanCloseTabsToLeft = $derived(canCloseTabsToLeft(openTabs, contextMenuTab));
   const contextMenuCanCloseTabsToRight = $derived(canCloseTabsToRight(openTabs, contextMenuTab));
   const contextMenuCanCloseMissingFileTabs = $derived(canCloseMissingFileTabs(openTabs, documents));
   const contextMenuCanOpenNearby = $derived(canOpenNearbyFiles(contextMenuTabDoc));
@@ -169,6 +171,20 @@
 
     <div class="tab-context-separator" role="separator"></div>
 
+    <button
+      class="tab-context-item"
+      type="button"
+      role="menuitem"
+      disabled={!contextMenuCanCloseTabsToLeft}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (contextMenuCanCloseTabsToLeft) {
+          menuHandlers.closeTabsToLeftWithPrompt();
+        }
+      }}
+    >
+      Close Tabs to the Left
+    </button>
     <button
       class="tab-context-item"
       type="button"

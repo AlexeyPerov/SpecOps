@@ -4,6 +4,7 @@ import { createFileTab } from "../domain/contracts";
 import {
   canCloseMissingFileTabs,
   canCloseOtherTabs,
+  canCloseTabsToLeft,
   canCloseTabsToRight,
   canCopyRelativePath,
   canCopyTabPath,
@@ -72,12 +73,14 @@ describe("tabContextMenuActions", () => {
     expect(canOpenNearbyFiles(withoutPath)).toBe(false);
   });
 
-  it("gates close-other and close-to-right actions around pinned tabs", () => {
+  it("gates close-other, close-to-left, and close-to-right actions around pinned tabs", () => {
     const openTabs = tabs();
     const contextTab = openTabs[1];
 
     expect(canCloseOtherTabs(openTabs, contextTab)).toBe(true);
+    expect(canCloseTabsToLeft(openTabs, contextTab)).toBe(true);
     expect(canCloseTabsToRight(openTabs, contextTab)).toBe(true);
+    expect(canCloseTabsToLeft(openTabs, openTabs[0])).toBe(false);
     expect(canCloseTabsToRight(openTabs, openTabs[3])).toBe(false);
     expect(canCloseOtherTabs(openTabs, null)).toBe(false);
   });

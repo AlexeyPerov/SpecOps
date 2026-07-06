@@ -47,6 +47,20 @@ export function tabIdsToCloseOtherThan(
     .map((tab) => tab.id);
 }
 
+export function tabIdsToCloseToLeftOf(
+  openTabs: TabState[],
+  contextTabId: string,
+): string[] {
+  const contextIndex = openTabs.findIndex((tab) => tab.id === contextTabId);
+  if (contextIndex < 0) {
+    return [];
+  }
+  return openTabs
+    .slice(0, contextIndex)
+    .filter((tab) => !tab.pinned)
+    .map((tab) => tab.id);
+}
+
 export function tabIdsToCloseToRightOf(
   openTabs: TabState[],
   contextTabId: string,

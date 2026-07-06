@@ -4,6 +4,7 @@ import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import {
   tabIdsToCloseOtherThan,
+  tabIdsToCloseToLeftOf,
   tabIdsToCloseToRightOf,
 } from "../state/appState/tabHelpers";
 import { saveDocumentForClose, saveDocumentKeepingTab, type SaveDocumentDeps } from "./documentSave";
@@ -107,6 +108,15 @@ export async function closeOtherTabsWithUnsavedPrompt(
     return false;
   }
   const tabIds = tabIdsToCloseOtherThan(tabs, contextTabId);
+  return closeTabsWithUnsavedPrompt(tabIds, deps, contextTabId);
+}
+
+export async function closeTabsToLeftWithUnsavedPrompt(
+  contextTabId: string,
+  deps: CloseTabFlowDeps,
+): Promise<boolean> {
+  const snapshot = appState.getSnapshot();
+  const tabIds = tabIdsToCloseToLeftOf(getSessionTabs(getActiveSession(snapshot)), contextTabId);
   return closeTabsWithUnsavedPrompt(tabIds, deps, contextTabId);
 }
 

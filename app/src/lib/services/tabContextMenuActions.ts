@@ -12,6 +12,7 @@ import { deleteProjectEntry } from "./projectFileOps";
 import {
   closeOtherTabsWithUnsavedPrompt,
   closeTabWithUnsavedPrompt,
+  closeTabsToLeftWithUnsavedPrompt,
   closeTabsToRightWithUnsavedPrompt,
   type CloseTabFlowDeps,
 } from "./closeTabFlow";
@@ -53,6 +54,20 @@ export function canCloseOtherTabs(
 ): boolean {
   return Boolean(
     contextTab && openTabs.some((tab) => tab.id !== contextTab.id && !tab.pinned),
+  );
+}
+
+export function canCloseTabsToLeft(
+  openTabs: TabState[],
+  contextTab: TabState | null,
+): boolean {
+  if (!contextTab) {
+    return false;
+  }
+  const contextIndex = openTabs.findIndex((tab) => tab.id === contextTab.id);
+  return (
+    contextIndex > 0 &&
+    openTabs.slice(0, contextIndex).some((tab) => !tab.pinned)
   );
 }
 
@@ -294,6 +309,15 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
     deps.closeContextMenu();
   }
 
+  async function closeTabsToLeftWithPrompt(): Promise<void> {
+    const contextTab = deps.getContextTab();
+    if (!contextTab) {
+      return;
+    }
+    await closeTabsToLeftWithUnsavedPrompt(contextTab.id, closeTabDeps);
+    deps.closeContextMenu();
+  }
+
   function closeMissingFileTabs(): void {
     appState.closeMissingFileTabs();
     deps.closeContextMenu();
@@ -309,6 +333,7 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
     openAllNearbyFiles,
     closeContextTabWithPrompt,
     closeOtherTabsWithPrompt,
+    closeTabsToLeftWithPrompt,
     closeTabsToRightWithPrompt,
     closeMissingFileTabs,
   };

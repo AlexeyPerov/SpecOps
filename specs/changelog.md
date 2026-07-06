@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-06 22:20 — Add "Close Tabs to the Left" context-menu action
+
+- **`tabHelpers.ts`** — new `tabIdsToCloseToLeftOf` pure helper (mirrors `tabIdsToCloseToRightOf`, slicing `0..contextIndex`).
+- **`closeTabFlow.ts`** — new `closeTabsToLeftWithUnsavedPrompt` that prompts for unsaved changes before bulk-closing left-side tabs; the context tab stays selected.
+- **`tabContextMenuActions.ts`** — new `canCloseTabsToLeft` enabled-flag and `closeTabsToLeftWithPrompt` handler; registered on the handler factory.
+- **`TabBarContextMenu.svelte`** — new "Close Tabs to the Left" menu item placed immediately before "Close Tabs to the Right".
+- **`documentTabsSlice.ts`** — parallel synchronous `closeTabsToLeft` appState action.
+- Tests extended across `closeTabFlow.test.ts`, `tabContextMenuActions.test.ts`, and `documentTabsSlice.test.ts`.
+
 ## 2026-07-06 02:06 — Fix editor grid/row layout equal sizing
 
 - **`editorLayout.ts`** — `effectiveLayoutSlots` validates stored `slots` against pane count and layout kind; stale geometry (e.g. single-row slots with four panes) no longer renders extra panes in implicit grid rows that collapse to thin strips.

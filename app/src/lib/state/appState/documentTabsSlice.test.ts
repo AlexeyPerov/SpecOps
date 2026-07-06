@@ -236,6 +236,43 @@ describe("appState tabs and selection", () => {
     expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual(before);
   });
 
+  it("closeTabsToLeft closes only left-side unpinned tabs", () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    appState.openFileInTab("/tmp/c.txt", "c");
+    appState.openFileInTab("/tmp/d.txt", "d");
+
+    appState.applyWindowSession({
+      ...appState.getWindowSessionSnapshot(),
+      notepad: {
+        ...appState.getWindowSessionSnapshot().notepad,
+        session: {
+          ...appState.getWindowSessionSnapshot().notepad.session,
+          editorLayout: createSinglePaneLayout(
+            [
+              createFileTab("tab-1", "doc-1"),
+              createFileTab("tab-2", "doc-2", true),
+              createFileTab("tab-3", "doc-3"),
+              createFileTab("tab-4", "doc-4"),
+              createFileTab("tab-5", "doc-5"),
+            ],
+            "tab-3",
+          ),
+        },
+      },
+    });
+
+    const closed = appState.closeTabsToLeft("tab-4", () => true);
+
+    expect(closed).toBe(true);
+    expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual([
+      "tab-2",
+      "tab-4",
+      "tab-5",
+    ]);
+    expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-4");
+  });
+
   it("closeTabsToRight closes only right-side unpinned tabs", () => {
     appState.openFileInTab("/tmp/a.txt", "a");
     appState.openFileInTab("/tmp/b.txt", "b");

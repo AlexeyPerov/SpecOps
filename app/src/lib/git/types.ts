@@ -29,6 +29,14 @@ export interface CancelGitCommandResponse {
   outcome: CancelGitCommandOutcome;
 }
 
+/** Outcome of a `remove_stale_index_lock` Tauri request. */
+export type RemoveStaleIndexLockOutcome = "removed" | "absent" | "busy" | "error";
+
+/** Result of the `remove_stale_index_lock` Tauri command. */
+export interface RemoveStaleIndexLockResponse {
+  outcome: RemoveStaleIndexLockOutcome;
+}
+
 /** Optional cancellation handle for long-running git subprocesses. */
 export interface CancellableGitOptions {
   commandId?: string;

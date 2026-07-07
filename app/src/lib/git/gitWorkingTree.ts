@@ -7,7 +7,12 @@ import {
 } from "./gitParse";
 import { enqueueGitCommandForRepo } from "./gitCommandQueue";
 import { COMMIT_FILE_DIFF_MAX_BYTES, DIFF_CONTEXT_LINES } from "./gitHistory";
-import { gitCommitInvokeArgs, logGitCommandSummary, runGit } from "./gitRun";
+import {
+  gitCommitInvokeArgs,
+  LOCAL_GIT_OPERATION_TIMEOUT_MS,
+  logGitCommandSummary,
+  runGit,
+} from "./gitRun";
 import {
   assertGitCommandCompleted,
   GitCommitFileDiffNotFoundError,
@@ -208,10 +213,15 @@ export async function createCommit(
 
   return enqueueGitCommandForRepo(repoRoot, async () => {
     try {
+      // Auto-register the commit so it is drainable on app exit (a mid-flight commit
+      // holds `.git/index.lock`; quitting must reap it, not orphan it). Callers may
+      // still pass an explicit commandId to make it user-cancellable.
+      const commandId = options?.commandId ?? crypto.randomUUID();
       const response = await invoke<RunGitResponse>(
         "git_commit_with_message",
         gitCommitInvokeArgs(repoRoot, trimmed, {
-          ...(options?.commandId ? { commandId: options.commandId } : {}),
+          commandId,
+          timeoutMs: LOCAL_GIT_OPERATION_TIMEOUT_MS,
         }),
       );
       logGitCommandSummary(repoRoot, ["commit", "-F", "<message-file>"], response);

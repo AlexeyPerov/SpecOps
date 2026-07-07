@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-07 18:10 — Make local git writes drainable and recover stale locks
+
+Follow-up to the earlier index.lock fix. Two remaining gaps caused locks to survive even after quitting SpecOps, and left no recovery for locks from other sources:
+
+- **`app/src/lib/git/gitRun.ts`** — local write operations (`add`, `commit`, `restore`, `checkout`, `stash`, `tag`, `branch` mutating, `config` set, `init`) were running on the non-registered Rust `.output()` path because they had no `commandId`. That made them invisible to the app-exit drain — quitting mid-`add`/`commit`/`stash` orphaned the child and its `.git/index.lock`. `runGit` now auto-registers write ops (assigns a `commandId` + local timeout) so the exit drain can reap them; read-only commands (`status`, `diff`, `log`, `show`, `rev-parse`, listings) stay on the fast non-registered path (registering them caused the "stuck on loading" probe bug). A new `isWriteGitCommand` classifier distinguishes the two, including the listing-vs-mutating cases for `branch`/`tag`/`stash`/`config`.
+- **`app/src/lib/git/gitWorkingTree.ts`** — `createCommit` now auto-assigns a `commandId` + `timeoutMs` for the `git_commit_with_message` IPC (previously only forwarded when the caller passed one), so commits are drainable on exit.
+- **`app/src-tauri/src/git.rs`** — new `remove_stale_index_lock` Tauri command that best-effort removes `<repo_root>/.git/index.lock`, but **refuses when an in-flight SpecOps git command for that repo is registered** (the lock may be legitimately held). This is the recovery path for locks orphaned by a crash, force-quit, or an external writer (e.g. the OpenCode sidecar) — it never clobbers a lock a tracked process owns. `GitCommitRequest` gained a `timeout_ms` field so the commit path can be registered with a deadline.
+- **`app/src/lib/git/gitRun.ts`** — the index.lock retry loop now calls `remove_stale_index_lock` on the first failure before retrying, so a genuinely stale lock is cleared and the retry succeeds instead of failing all 3 attempts and telling the user to delete the file manually.
+- **`app/src-tauri/src/lib.rs`** — register the new `remove_stale_index_lock` IPC command.
+- **`app/src/lib/git/types.ts`** — `RemoveStaleIndexLockResponse` / `RemoveStaleIndexLockOutcome` types.
+- **Tests** — Rust: `remove_stale_index_lock` removes an orphaned lock, reports `absent` when none exists, and refuses (`busy`) while a command for the repo is active. TS: updated `gitRun`/`gitService` assertions for the new `commandId`/`timeoutMs` payload fields and the `remove_stale_index_lock` retry call.
+
 ## 2026-07-07 11:30 — Fix `.git/index.lock` left behind by git integration
 
 The git integration frequently left a stale `.git/index.lock` behind, blocking all other git tools (and the app's own retries). Three root causes, all in the Rust backend:

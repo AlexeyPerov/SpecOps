@@ -1264,6 +1264,10 @@ describe("createCommit", () => {
       request: {
         repoRoot: "/tmp/repo",
         message: "Subject line",
+        // Commits auto-register with a commandId + timeout so they are drainable
+        // on app exit (a mid-flight commit holds .git/index.lock).
+        commandId: expect.any(String),
+        timeoutMs: 5 * 60 * 1000,
       },
     });
   });
@@ -1283,6 +1287,7 @@ describe("createCommit", () => {
         repoRoot: "/tmp/repo",
         message: "Subject",
         commandId: "commit-1",
+        timeoutMs: 5 * 60 * 1000,
       },
     });
   });

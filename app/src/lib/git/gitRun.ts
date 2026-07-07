@@ -9,6 +9,7 @@ import {
   type CancellableGitOptions,
   type GitAskpassOperation,
   type GitAvailableResponse,
+  type RemoveStaleIndexLockResponse,
   type RunGitResponse,
 } from "./types";
 
@@ -21,6 +22,65 @@ export const LOCAL_GIT_OPERATION_TIMEOUT_MS = 5 * 60 * 1000;
 const GIT_AVAILABILITY_TTL_MS = 60_000;
 const INDEX_LOCK_MAX_RETRIES = 3;
 const INDEX_LOCK_RETRY_BASE_DELAY_MS = 200;
+
+/**
+ * Local git subcommands that mutate the repository and may hold `.git/index.lock`.
+ *
+ * These are registered with the Rust backend (assigned a `commandId` + local timeout)
+ * so they can be drained on app exit — quitting SpecOps mid-`add`/`commit`/`stash`/
+ * `checkout` reaps the child and cleans up its index lock instead of orphaning it.
+ *
+ * Read-only commands (`status`, `diff`, `log`, `show`, `rev-parse`, `rev-list`,
+ * `ls-remote`, `remote`, `branch` listing, `tag` listing, `stash list`) stay on the
+ * fast non-registered Rust path; they never hold the index lock and registering them
+ * caused the "stuck on loading" probe bug (commit be12c58).
+ */
+const WRITE_GIT_SUBCOMMANDS = new Set<string>([
+  "add",
+  "commit",
+  "restore",
+  "checkout",
+  "stash",
+  "fetch",
+  "pull",
+  "push",
+  "tag",
+  "branch",
+  "init",
+  "config",
+]);
+
+function isWriteGitCommand(args: string[]): boolean {
+  const subcommand = args[0];
+  if (!subcommand || !WRITE_GIT_SUBCOMMANDS.has(subcommand)) {
+    return false;
+  }
+  // `branch` and `tag` with no destructive flag are reads; only register when they
+  // actually mutate. Listing forms (`-l`, `--list`, `-v`, `-vv`, no args) stay fast.
+  if (subcommand === "branch" || subcommand === "tag") {
+    const rest = args.slice(1);
+    const isListing = rest.length === 0
+      || rest.some((arg) => arg === "-l" || arg === "--list" || arg === "-v" || arg === "-vv");
+    return !isListing;
+  }
+  // `config` without a value is a read (`config --get <key>`); with a value it's a write.
+  if (subcommand === "config") {
+    const rest = args.slice(1);
+    const isGet = rest.some((arg) => arg === "--get" || arg === "--get-all");
+    if (isGet) {
+      return false;
+    }
+    // `config <key> <value>` (two non-flag operands) is a write.
+    const operands = rest.filter((arg) => !arg.startsWith("-"));
+    return operands.length >= 2;
+  }
+  // `stash list` is a read; other stash subcommands mutate.
+  if (subcommand === "stash") {
+    const action = args[1];
+    return action !== "list";
+  }
+  return true;
+}
 
 let cachedGitAvailability: GitAvailableResponse | null = null;
 let gitAvailabilityExpiresAt = 0;
@@ -143,6 +203,23 @@ async function invokeRunGitOnce(
   return response;
 }
 
+/**
+ * Ask the backend to remove a stale `.git/index.lock` for `repo_root`.
+ *
+ * The backend refuses when an in-flight SpecOps git command for this repo is
+ * registered (the lock may be legitimately held), so this is safe to call
+ * speculatively — it only ever removes a lock that no tracked process owns.
+ */
+async function removeStaleIndexLock(repoRoot: string): Promise<void> {
+  try {
+    await invoke<RemoveStaleIndexLockResponse>("remove_stale_index_lock", {
+      request: { repoRoot },
+    });
+  } catch {
+    // Best-effort: if the IPC fails, the retry loop below still runs.
+  }
+}
+
 async function invokeRunGit(
   repoRoot: string,
   args: string[],
@@ -153,6 +230,13 @@ async function invokeRunGit(
     let response = await invokeRunGitOnce(repoRoot, args, env, options);
 
     for (let attempt = 0; attempt < INDEX_LOCK_MAX_RETRIES && isIndexLockResponse(response); attempt += 1) {
+      // On the first index-lock failure, ask the backend to remove a stale lock
+      // left by a crash, force-quit, or an external writer (e.g. the OpenCode
+      // sidecar). The backend only removes it when no SpecOps git command is
+      // active for this repo, so a genuinely held lock is left untouched.
+      if (attempt === 0) {
+        await removeStaleIndexLock(repoRoot);
+      }
       await sleep(INDEX_LOCK_RETRY_BASE_DELAY_MS * (attempt + 1));
       response = await invokeRunGitOnce(repoRoot, args, env, options);
     }
@@ -168,6 +252,12 @@ async function invokeRunGit(
  *
  * Commands for the same repository root are serialized via {@link enqueueGitCommandForRepo};
  * unrelated repositories may run concurrently.
+ *
+ * Write operations (see {@link isWriteGitCommand}) are auto-registered with the Rust
+ * backend so they can be drained on app exit — a mid-flight `add`/`commit`/`stash`/
+ * `checkout` is reaped and its `.git/index.lock` cleaned up instead of orphaned.
+ * Callers may still pass an explicit `commandId` to make a command user-cancellable.
+ * Read-only commands stay on the fast non-registered Rust path.
  */
 export async function runGit(
   repoRoot: string,
@@ -175,8 +265,19 @@ export async function runGit(
   env?: Record<string, string>,
   options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
+  // Register write operations so they are drainable on app exit. Callers that
+  // already pass a commandId (user-cancellable remote ops) keep their options.
+  // Read-only commands stay unregistered (fast Rust path).
+  const effectiveOptions: CancellableGitOptions | undefined =
+    options?.commandId || isWriteGitCommand(args)
+      ? {
+          ...(options ?? {}),
+          commandId: options?.commandId ?? crypto.randomUUID(),
+          timeoutMs: options?.timeoutMs ?? LOCAL_GIT_OPERATION_TIMEOUT_MS,
+        }
+      : options;
   return enqueueGitCommandForRepo(repoRoot, () =>
-    invokeRunGit(repoRoot, args, env, options),
+    invokeRunGit(repoRoot, args, env, effectiveOptions),
   );
 }
 

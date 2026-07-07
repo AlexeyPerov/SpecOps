@@ -167,6 +167,13 @@ pub struct RunGitResponse {
     pub timed_out: bool,
 }
 
+/// Request payload for the `remove_stale_index_lock` Tauri command.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveStaleIndexLockRequest {
+    pub repo_root: String,
+}
+
 /// Outcome of a `cancel_git_command` request.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -664,6 +671,10 @@ pub struct GitCommitRequest {
     /// When set, the commit subprocess is registered for user-initiated cancellation.
     #[serde(default)]
     pub command_id: Option<String>,
+    /// Optional subprocess timeout in milliseconds. Defaults to the local-op ceiling
+    /// when a `command_id` is present (registered commands are polled with a timeout).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 fn merge_env_maps(
@@ -928,7 +939,7 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
             askpass_enabled: false,
             askpass_operation: None,
             askpass_timeout_ms: None,
-            timeout_ms: None,
+            timeout_ms: request.timeout_ms,
         },
     );
 
@@ -985,6 +996,88 @@ pub fn respond_git_askpass(request: git_askpass::RespondGitAskpassRequest) -> Re
 #[tauri::command]
 pub fn cancel_git_command(command_id: String) -> CancelGitCommandResponse {
     cancel_git_command_by_id(&command_id)
+}
+
+/// Outcome of a `remove_stale_index_lock` request.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveStaleIndexLockResponse {
+    /// `removed` — the lock file existed and was deleted.
+    /// `absent` — no lock file was present (nothing to clean up).
+    /// `busy` — an in-flight git command for this repo is registered, so the lock
+    ///          may be legitimately held; it was left untouched.
+    /// `error` — the lock existed but could not be removed (permissions, or still
+    ///           held by a process the registry does not track).
+    pub outcome: RemoveStaleIndexLockOutcome,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoveStaleIndexLockOutcome {
+    Removed,
+    Absent,
+    Busy,
+    Error,
+}
+
+/// Returns true if any registered (in-flight) git command targets `repo_root`.
+fn has_active_git_command_for_repo(repo_root: &Path) -> bool {
+    let Ok(commands) = git_command_registry().commands.lock() else {
+        return false;
+    };
+    commands
+        .values()
+        .any(|entry| entry.repo_root == repo_root)
+}
+
+/// Best-effort removal of a stale `.git/index.lock` for `repo_root`.
+///
+/// Refuses to touch the lock when an in-flight SpecOps git command for this repo is
+/// registered (the lock may be legitimately held by that command). This is the
+/// recovery path for locks orphaned by a crash, force-quit, or an external writer
+/// (e.g. the OpenCode sidecar) — not the path used after reaping our own child (that
+/// happens inside `terminate_child_process_gracefully`).
+#[tauri::command]
+pub fn remove_stale_index_lock(request: RemoveStaleIndexLockRequest) -> RemoveStaleIndexLockResponse {
+    let repo_root = match normalize_repo_root(&request.repo_root) {
+        Ok(path) => path,
+        Err(_) => {
+            return RemoveStaleIndexLockResponse {
+                outcome: RemoveStaleIndexLockOutcome::Error,
+            };
+        }
+    };
+
+    if has_active_git_command_for_repo(&repo_root) {
+        return RemoveStaleIndexLockResponse {
+            outcome: RemoveStaleIndexLockOutcome::Busy,
+        };
+    }
+
+    let lock_path = repo_root.join(".git").join("index.lock");
+    match std::fs::remove_file(&lock_path) {
+        Ok(()) => {
+            log::info!("Removed stale git index lock at {}", lock_path.display());
+            RemoveStaleIndexLockResponse {
+                outcome: RemoveStaleIndexLockOutcome::Removed,
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            RemoveStaleIndexLockResponse {
+                outcome: RemoveStaleIndexLockOutcome::Absent,
+            }
+        }
+        Err(error) => {
+            log::debug!(
+                "Could not remove git index lock at {}: {}",
+                lock_path.display(),
+                error
+            );
+            RemoveStaleIndexLockResponse {
+                outcome: RemoveStaleIndexLockOutcome::Error,
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1193,6 +1286,7 @@ mod tests {
             repo_root: "/tmp/repo".to_string(),
             message: "   ".to_string(),
             command_id: None,
+            timeout_ms: None,
         })
         .expect_err("empty message should fail");
 
@@ -1233,6 +1327,7 @@ mod tests {
             repo_root: repo_root.to_string_lossy().into_owned(),
             message: "Initial commit\n\nBody paragraph.".to_string(),
             command_id: None,
+            timeout_ms: None,
         })
         .expect("commit should succeed");
 
@@ -1650,5 +1745,69 @@ mod tests {
                 .contains_key(&command_id),
             "registry should be empty after drain"
         );
+    }
+
+    #[test]
+    fn remove_stale_index_lock_removes_an_orphaned_lock() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        let repo_root = create_temp_git_repo();
+        let lock_path = repo_root.join(".git").join("index.lock");
+        std::fs::write(&lock_path, b"stale").expect("write index.lock");
+
+        let response = remove_stale_index_lock(RemoveStaleIndexLockRequest {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+        });
+        assert_eq!(response.outcome, RemoveStaleIndexLockOutcome::Removed);
+        assert!(!lock_path.exists());
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn remove_stale_index_lock_reports_absent_when_no_lock_exists() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        let repo_root = create_temp_git_repo();
+
+        let response = remove_stale_index_lock(RemoveStaleIndexLockRequest {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+        });
+        assert_eq!(response.outcome, RemoveStaleIndexLockOutcome::Absent);
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn remove_stale_index_lock_refuses_when_a_command_is_active_for_the_repo() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        let repo_root = create_temp_git_repo();
+        let lock_path = repo_root.join(".git").join("index.lock");
+        std::fs::write(&lock_path, b"held").expect("write index.lock");
+
+        let command_id = format!(
+            "lock-busy-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        register_active_git_command(&command_id, repo_root.clone(), child)
+            .expect("register command");
+
+        let response = remove_stale_index_lock(RemoveStaleIndexLockRequest {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+        });
+        assert_eq!(
+            response.outcome,
+            RemoveStaleIndexLockOutcome::Busy,
+            "must not remove a lock while a command for this repo is registered"
+        );
+        assert!(lock_path.exists(), "lock must be left in place when busy");
+
+        cancel_git_command_by_id(&command_id);
+        unregister_active_git_command(&command_id);
+        let _ = fs::remove_dir_all(repo_root);
     }
 }

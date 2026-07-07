@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-07 08:20 — Fix Workspace Manager freezing the whole app on open
+
+- **`WorkspaceManagerView.svelte`** — the git-column load `$effect` triggered Svelte's `effect_update_depth_exceeded` (an infinite update loop) because `loadGitCellsForWorkspaces` read the `gitCellsByPath` state synchronously inside the effect while also writing it, registering a self-dependency. The loop jammed the Svelte runtime for the whole component tree: every click across the app (sidebar mode-switch, tab close, ⚙ settings, console toggle) silently failed, while native OS dialogs (Add workspace) still worked because they bypass JS reactivity. Reads of `gitCellsByPath` inside `loadGitCellsForWorkspaces` are now wrapped in `untrack(...)` so the effect depends only on `workspaces`.
+- **`WorkspaceManagerView.test.ts`** — new component-mount regression test asserting the view mounts without looping and that the ⚙ Settings button click reaches its handler.
+
 ## 2026-07-06 22:20 — Add "Close Tabs to the Left" context-menu action
 
 - **`tabHelpers.ts`** — new `tabIdsToCloseToLeftOf` pure helper (mirrors `tabIdsToCloseToRightOf`, slicing `0..contextIndex`).

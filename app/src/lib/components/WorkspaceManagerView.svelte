@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
   import {
     loadWorkspaceGitColumnCell,
@@ -97,7 +98,7 @@
       return;
     }
 
-    const pending = new Map(gitCellsByPath);
+    const pending = new Map(untrack(() => gitCellsByPath));
     for (const workspace of rows) {
       if (!options?.force && pending.has(workspace.rootPath)) {
         continue;
@@ -117,7 +118,7 @@
           ),
         );
 
-    const next = new Map(gitCellsByPath);
+    const next = new Map(untrack(() => gitCellsByPath));
     for (const [path, cell] of results) {
       next.set(path, cell);
     }

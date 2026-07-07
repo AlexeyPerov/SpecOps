@@ -30,6 +30,11 @@ ureq = { version = "2", default-features = false, features = ["json"] }
 notify = "6.1"
 notify-debouncer-full = "0.3.1"
 
+[target.'cfg(unix)'.dependencies]
+# Used to send SIGTERM to git subprocesses for graceful shutdown (SIGKILL leaves
+# `.git/index.lock` behind because git cannot run its cleanup/rollback handler).
+nix = { version = "0.29", default-features = false, features = ["signal"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSMenu", "NSMenuItem", "NSApplication"] }

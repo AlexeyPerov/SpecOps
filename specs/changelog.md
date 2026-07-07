@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-07 11:30 — Fix `.git/index.lock` left behind by git integration
+
+The git integration frequently left a stale `.git/index.lock` behind, blocking all other git tools (and the app's own retries). Three root causes, all in the Rust backend:
+
+- **`app/src-tauri/src/git.rs`** — `terminate_child_process` used `child.kill()` (SIGKILL on Unix), so a cancelled or timed-out git write (`commit`, `pull` with stash/merge, `stash`, `add`, `restore --staged`) never got to release `.git/index.lock` or roll back partial state. Replaced with `terminate_child_process_gracefully`: on Unix it sends SIGTERM (via the new `nix` dependency) and waits a 1.5s grace window for git to clean up, escalating to SIGKILL only if still alive; on Windows it keeps `TerminateProcess` (no graceful option). After the child is reaped it best-effort removes `<repo_root>/.git/index.lock` — safe because removal fails atomically if the lock is still held by a live process (e.g. the OpenCode sidecar or an external tool), so it never clobbers a lock a running process depends on.
+- **`app/src-tauri/src/git.rs`** — `ActiveGitCommand` now carries the `repo_root` so the cleanup knows which lock to target; threaded through `register_active_git_command`, the cancel path, the timeout path, and the duplicate-command-id guard.
+- **`app/src-tauri/src/git.rs`** — new `drain_all_active_git_commands()` terminates and reaps every in-flight registered git command (gracefully) and clears the registry; called from `lib.rs` `RunEvent::ExitRequested` so quitting the app while a git write is mid-flight no longer orphans a child and its lock.
+- **`app/src-tauri/Cargo.toml`** — add Unix-only `nix` crate (`signal` feature) for SIGTERM.
+- **`app/src-tauri/src/lib.rs`** — call `git::drain_all_active_git_commands()` in `ExitRequested` alongside the existing sidecar stop.
+- **Git unit tests** — new regression tests: cancelling a registered command removes its repo's stale `index.lock`; `drain_all_active_git_commands` terminates children and empties the registry. Also fixed pre-existing broken test struct literals (`RunGitRequest` / `GitCommitRequest` missing `#[serde(default)]` fields) that prevented the Rust test suite from compiling, and serialized registry-mutating tests via a shared mutex so the global `GitCommandRegistry` isn't observed across parallel tests.
+
+Out of scope (deliberately): the TS-side `index.lock` retry loop in `gitRun.ts` is unchanged — it remains useful for transient contention and now rarely sees stale locks since the backend cleans them. No coordination with the OpenCode sidecar's independent git writes.
+
 ## 2026-07-07 08:20 — Fix Workspace Manager freezing the whole app on open
 
 - **`WorkspaceManagerView.svelte`** — the git-column load `$effect` triggered Svelte's `effect_update_depth_exceeded` (an infinite update loop) because `loadGitCellsForWorkspaces` read the `gitCellsByPath` state synchronously inside the effect while also writing it, registering a self-dependency. The loop jammed the Svelte runtime for the whole component tree: every click across the app (sidebar mode-switch, tab close, ⚙ settings, console toggle) silently failed, while native OS dialogs (Add workspace) still worked because they bypass JS reactivity. Reads of `gitCellsByPath` inside `loadGitCellsForWorkspaces` are now wrapped in `untrack(...)` so the effect depends only on `workspaces`.

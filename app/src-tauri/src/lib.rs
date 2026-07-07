@@ -98,6 +98,10 @@ pub fn run() {
             if let Some(sidecar_state) = app_handle.try_state::<OpencodeSidecarState>() {
                 sidecar_state.stop_sync();
             }
+            // Terminate any in-flight git subprocesses so a mid-flight write does not
+            // orphan a `.git/index.lock`. Each child is reaped and its index lock
+            // cleaned up before the process exits.
+            git::drain_all_active_git_commands();
         }
 
         #[cfg(target_os = "macos")]

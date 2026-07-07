@@ -185,6 +185,9 @@ pub enum CancelGitCommandOutcome {
 struct ActiveGitCommand {
     child: Mutex<Option<Child>>,
     cancelled: AtomicBool,
+    /// Repo root this command runs in, so a terminated subprocess can clean up its
+    /// stale `.git/index.lock` once the process is confirmed dead.
+    repo_root: PathBuf,
 }
 
 struct GitCommandRegistry {
@@ -207,12 +210,89 @@ fn normalize_command_id(command_id: &str) -> Option<String> {
     }
 }
 
-fn terminate_child_process(child: &mut Child) {
-    let _ = child.kill();
-    let _ = child.wait();
+/// Grace period given to a git subprocess to shut down on SIGTERM before we escalate
+/// to SIGKILL. Git uses this window to release `.git/index.lock` and roll back partial
+/// state (e.g. `MERGE_HEAD` from a cancelled pull). SIGKILL alone leaves both behind.
+const GIT_GRACEFUL_SHUTDOWN_TIMEOUT_MS: u64 = 1500;
+
+/// Send SIGTERM to a process (Unix). On Windows there is no equivalent of "ask the
+/// process to clean up"; we fall back to `Child::kill` (TerminateProcess) there.
+#[cfg(unix)]
+fn send_terminate_signal(child: &Child) {
+    use nix::sys::signal::{kill, Signal};
+    use nix::unistd::Pid;
+    if let Some(pid) = child.id().try_into().ok().map(Pid::from_raw) {
+        // Ignore errors: the process may already have exited between the caller's
+        // last `try_wait()` and here. The caller always reaps afterwards.
+        let _ = kill(pid, Signal::SIGTERM);
+    }
 }
 
-fn register_active_git_command(command_id: &str, mut child: Child) -> Result<(), String> {
+/// Terminate a git subprocess, giving it a chance to release `.git/index.lock`.
+///
+/// On Unix this sends SIGTERM and waits up to
+/// [`GIT_GRACEFUL_SHUTDOWN_TIMEOUT_MS`] for the process to exit, escalating to
+/// SIGKILL only if it is still alive. On Windows SIGTERM is unavailable, so it goes
+/// straight to `Child::kill` (TerminateProcess).
+///
+/// After the process is reaped, any stale `.git/index.lock` for `repo_root` is
+/// removed. The removal is best-effort and ignored if the file is still held by a
+/// live process (e.g. another git the app did not spawn), so it is safe to call
+/// even when other writers may be active in the same repo.
+fn terminate_child_process_gracefully(child: &mut Child, repo_root: &Path) {
+    #[cfg(unix)]
+    {
+        send_terminate_signal(child);
+        let deadline = Instant::now() + Duration::from_millis(GIT_GRACEFUL_SHUTDOWN_TIMEOUT_MS);
+        while Instant::now() < deadline {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                Err(_) => break,
+            }
+        }
+    }
+
+    // Either we're on Windows, the grace window expired, or the process exited on
+    // SIGTERM — ensure it is fully gone and reaped either way.
+    let _ = child.kill();
+    let _ = child.wait();
+
+    cleanup_stale_index_lock_if_unowned(repo_root);
+}
+
+/// Best-effort removal of `<repo_root>/.git/index.lock`.
+///
+/// Only called after the app has confirmed one of *its own* git subprocesses has
+/// been reaped. If the lock is still held by a live process belonging to something
+/// else (the OpenCode sidecar, an external git tool), the `remove_file` fails and we
+/// leave it alone — we never want to clobber a lock a running process depends on.
+fn cleanup_stale_index_lock_if_unowned(repo_root: &Path) {
+    let lock_path = repo_root.join(".git").join("index.lock");
+    match std::fs::remove_file(&lock_path) {
+        Ok(()) => log::info!(
+            "Removed stale git index lock at {}",
+            lock_path.display()
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // Nothing to clean up — the process released the lock cleanly. Expected.
+        }
+        Err(error) => {
+            // Likely still held by a live process; do not treat as fatal.
+            log::debug!(
+                "Did not remove git index lock at {}: {}",
+                lock_path.display(),
+                error
+            );
+        }
+    }
+}
+
+fn register_active_git_command(
+    command_id: &str,
+    repo_root: PathBuf,
+    mut child: Child,
+) -> Result<(), String> {
     let registry = git_command_registry();
     let mut commands = registry
         .commands
@@ -220,7 +300,7 @@ fn register_active_git_command(command_id: &str, mut child: Child) -> Result<(),
         .map_err(|_| "git command registry lock poisoned".to_string())?;
 
     if commands.contains_key(command_id) {
-        terminate_child_process(&mut child);
+        terminate_child_process_gracefully(&mut child, &repo_root);
         return Err(format!("git command id already in use: {command_id}"));
     }
 
@@ -229,6 +309,7 @@ fn register_active_git_command(command_id: &str, mut child: Child) -> Result<(),
         ActiveGitCommand {
             child: Mutex::new(Some(child)),
             cancelled: AtomicBool::new(false),
+            repo_root,
         },
     );
     Ok(())
@@ -296,8 +377,9 @@ fn wait_for_registered_git_command(
 
         match wait_status {
             Ok(Some(status)) => {
-                let mut child = take_registered_git_command_child(command_id)
+                let child = take_registered_git_command_child(command_id)
                     .ok_or_else(|| format!("git command child already finished: {command_id}"))?;
+                let mut child = child.0;
                 let exit_code = status.code().unwrap_or(-1);
                 let mut stdout_text = String::new();
                 let mut stderr_text = String::new();
@@ -331,7 +413,7 @@ struct RegisteredCommandOutput {
     timed_out: bool,
 }
 
-fn take_registered_git_command_child(command_id: &str) -> Option<Child> {
+fn take_registered_git_command_child(command_id: &str) -> Option<(Child, PathBuf)> {
     let Ok(commands) = git_command_registry().commands.lock() else {
         return None;
     };
@@ -339,12 +421,12 @@ fn take_registered_git_command_child(command_id: &str) -> Option<Child> {
     let Ok(mut child_guard) = entry.child.lock() else {
         return None;
     };
-    child_guard.take()
+    Some((child_guard.take()?, entry.repo_root.clone()))
 }
 
 fn terminate_registered_git_command_child(command_id: &str) {
-    if let Some(mut child) = take_registered_git_command_child(command_id) {
-        terminate_child_process(&mut child);
+    if let Some((mut child, repo_root)) = take_registered_git_command_child(command_id) {
+        terminate_child_process_gracefully(&mut child, &repo_root);
     }
 }
 
@@ -378,6 +460,7 @@ pub fn cancel_git_command_by_id(command_id: &str) -> CancelGitCommandResponse {
     };
 
     entry.cancelled.store(true, Ordering::SeqCst);
+    let repo_root = entry.repo_root.clone();
 
     let Ok(mut child_guard) = entry.child.lock() else {
         return CancelGitCommandResponse {
@@ -391,11 +474,32 @@ pub fn cancel_git_command_by_id(command_id: &str) -> CancelGitCommandResponse {
         };
     };
 
-    terminate_child_process(child);
+    terminate_child_process_gracefully(child, &repo_root);
     *child_guard = None;
 
     CancelGitCommandResponse {
         outcome: CancelGitCommandOutcome::Cancelled,
+    }
+}
+
+/// Terminate every in-flight registered git command and clean up their index locks.
+///
+/// Called on app exit so a git write that was mid-flight when the user quit the app
+/// does not orphan its `.git/index.lock`. Each command is cancelled and reaped via
+/// the graceful SIGTERM-first path; the registry is cleared afterwards.
+pub fn drain_all_active_git_commands() {
+    let command_ids: Vec<String> = {
+        let Ok(commands) = git_command_registry().commands.lock() else {
+            return;
+        };
+        commands.keys().cloned().collect()
+    };
+
+    for command_id in command_ids {
+        // Reuse the public cancel path: marks cancelled, terminates the child
+        // gracefully, and removes the repo's index.lock once the child is reaped.
+        let _ = cancel_git_command_by_id(&command_id);
+        unregister_active_git_command(&command_id);
     }
 }
 
@@ -699,7 +803,7 @@ pub fn execute_git_with_full_options(
             }
         };
 
-        if let Err(error) = register_active_git_command(id, child) {
+        if let Err(error) = register_active_git_command(id, repo_root.to_path_buf(), child) {
             return RunGitResponse {
                 exit_code: -1,
                 stdout: String::new(),
@@ -892,6 +996,18 @@ mod tests {
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+    /// Serializes tests that touch the process-wide `GitCommandRegistry`.
+    ///
+    /// Rust runs unit tests in parallel by default; these tests register/terminate
+    /// commands in a shared global registry, so two such tests running concurrently
+    /// (or one draining the registry while another relies on an entry surviving)
+    /// would observe each other's state. Lock this at the start of each
+    /// registry-mutating test.
+    fn registry_test_mutex() -> &'static std::sync::Mutex<()> {
+        static MUTEX: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        MUTEX.get_or_init(|| std::sync::Mutex::new(()))
+    }
+
     fn next_test_dir(name: &str) -> PathBuf {
         let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir().join(format!("spec-ops-git-{name}-{id}-{}", std::process::id()))
@@ -1015,6 +1131,10 @@ mod tests {
             args: vec!["status".to_string()],
             env: None,
             command_id: None,
+            askpass_enabled: false,
+            askpass_operation: None,
+            askpass_timeout_ms: None,
+            timeout_ms: None,
         })
         .expect_err("empty repo_root should fail");
 
@@ -1028,6 +1148,10 @@ mod tests {
             args: vec!["status".to_string()],
             env: None,
             command_id: None,
+            askpass_enabled: false,
+            askpass_operation: None,
+            askpass_timeout_ms: None,
+            timeout_ms: None,
         })
         .expect_err("relative repo_root should fail");
 
@@ -1068,6 +1192,7 @@ mod tests {
         let error = git_commit_with_message(GitCommitRequest {
             repo_root: "/tmp/repo".to_string(),
             message: "   ".to_string(),
+            command_id: None,
         })
         .expect_err("empty message should fail");
 
@@ -1107,6 +1232,7 @@ mod tests {
         let response = git_commit_with_message(GitCommitRequest {
             repo_root: repo_root.to_string_lossy().into_owned(),
             message: "Initial commit\n\nBody paragraph.".to_string(),
+            command_id: None,
         })
         .expect("commit should succeed");
 
@@ -1210,6 +1336,7 @@ mod tests {
 
     #[test]
     fn cancel_git_command_terminates_in_flight_process() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
         let command_id = format!(
             "in-flight-command-{}",
             TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -1221,7 +1348,8 @@ mod tests {
             .spawn()
             .expect("spawn sleep");
 
-        register_active_git_command(&command_id, child).expect("register command");
+        register_active_git_command(&command_id, PathBuf::from("/tmp/spec-ops-test"), child)
+            .expect("register command");
 
         let wait_id = command_id.clone();
         let wait_handle = std::thread::spawn(move || wait_for_registered_git_command(&wait_id, None));
@@ -1250,6 +1378,7 @@ mod tests {
         if skip_if_git_unavailable() {
             return;
         }
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
         let repo_root = create_temp_git_repo();
         let command_id = format!(
             "duplicate-command-{}",
@@ -1262,13 +1391,18 @@ mod tests {
             .spawn()
             .expect("spawn sleep");
 
-        register_active_git_command(&command_id, child).expect("register command");
+        register_active_git_command(&command_id, PathBuf::from("/tmp/spec-ops-test"), child)
+            .expect("register command");
 
         let response = run_git(RunGitRequest {
             repo_root: repo_root.to_string_lossy().into_owned(),
             args: vec!["status".to_string()],
             env: None,
             command_id: Some(command_id.clone()),
+            askpass_enabled: false,
+            askpass_operation: None,
+            askpass_timeout_ms: None,
+            timeout_ms: None,
         })
         .expect("run_git should return response");
 
@@ -1281,6 +1415,7 @@ mod tests {
 
     #[test]
     fn run_git_timeout_terminates_in_flight_process() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
         let command_id = format!(
             "timeout-command-{}",
             TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -1292,7 +1427,8 @@ mod tests {
             .spawn()
             .expect("spawn sleep");
 
-        register_active_git_command(&command_id, child).expect("register command");
+        register_active_git_command(&command_id, PathBuf::from("/tmp/spec-ops-test"), child)
+            .expect("register command");
 
         let response =
             wait_for_registered_git_command(&command_id, Some(150)).expect("wait should return");
@@ -1371,6 +1507,7 @@ mod tests {
 
     #[test]
     fn duplicate_command_id_does_not_unregister_in_flight_command() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
         let first_id = format!(
             "duplicate-first-{}",
             TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -1381,7 +1518,8 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("spawn sleep");
-        register_active_git_command(&first_id, first_child).expect("register first command");
+        register_active_git_command(&first_id, PathBuf::from("/tmp/spec-ops-test"), first_child)
+            .expect("register first command");
 
         let duplicate_child = Command::new("sleep")
             .arg("30")
@@ -1389,8 +1527,12 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("spawn duplicate sleep");
-        let duplicate_error =
-            register_active_git_command(&first_id, duplicate_child).expect_err("duplicate id");
+        let duplicate_error = register_active_git_command(
+            &first_id,
+            PathBuf::from("/tmp/spec-ops-test"),
+            duplicate_child,
+        )
+        .expect_err("duplicate id");
         assert!(duplicate_error.contains("already in use"));
 
         assert!(git_command_registry()
@@ -1440,5 +1582,73 @@ mod tests {
                 .join("git.exe");
             assert!(candidates.contains(&expected));
         }
+    }
+
+    #[test]
+    fn cancel_git_command_removes_stale_index_lock_for_its_repo() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        // Cancellation reaps the child and must clear the stale `.git/index.lock`
+        // for the repo the command was registered with.
+        let repo_root = create_temp_git_repo();
+        let lock_path = repo_root.join(".git").join("index.lock");
+        std::fs::write(&lock_path, b"stale").expect("write index.lock");
+        assert!(lock_path.exists(), "lock should exist before cancel");
+
+        let command_id = format!(
+            "lock-cleanup-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        register_active_git_command(&command_id, repo_root.clone(), child)
+            .expect("register command");
+
+        let outcome = cancel_git_command_by_id(&command_id);
+        assert_eq!(outcome.outcome, CancelGitCommandOutcome::Cancelled);
+
+        assert!(
+            !lock_path.exists(),
+            "stale index.lock should be removed after the child is reaped"
+        );
+
+        unregister_active_git_command(&command_id);
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn drain_all_active_git_commands_terminates_children_and_clears_registry() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        let command_id = format!(
+            "drain-command-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        register_active_git_command(&command_id, PathBuf::from("/tmp/spec-ops-test"), child)
+            .expect("register command");
+        assert!(git_command_registry()
+            .commands
+            .lock()
+            .expect("registry lock")
+            .contains_key(&command_id));
+
+        drain_all_active_git_commands();
+
+        assert!(
+            !git_command_registry()
+                .commands
+                .lock()
+                .expect("registry lock")
+                .contains_key(&command_id),
+            "registry should be empty after drain"
+        );
     }
 }

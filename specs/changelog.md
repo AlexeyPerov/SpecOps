@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-08 13:50 — New file/folder/rename popup no longer covers the whole app
+
+- **`components/EntryNamePrompt.svelte`** — the shared entry-name prompt (used by New File / New Folder / Rename from the project tree, plus git branch/stash/tag naming) rendered a full-screen `position: fixed` backdrop with a 76%-opaque `--color-surface-overlay` background, which visually hid the entire app behind a near-solid layer while the small naming popup was open. The backdrop element is kept (it still captures outside-clicks to cancel and centers the dialog), but its background is now `transparent` so only the popup is visible.
+
 ## 2026-07-08 12:35 — Version Control settings section
 
 - **`domain/settings.ts`** — new `GitIntegrationSettings` with master `enabled` toggle plus `autosaveBeforeOperations`, `showProjectTreeBadges`, and `showWorkspaceManagerGitColumn` (all default on).

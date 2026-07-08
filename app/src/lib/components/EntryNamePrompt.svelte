@@ -126,7 +126,7 @@
     z-index: 1200;
     display: grid;
     place-items: center;
-    background: var(--color-surface-overlay);
+    background: transparent;
   }
 
   .entry-name-prompt {

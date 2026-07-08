@@ -15,10 +15,16 @@ vi.mock("../git/gitService", () => ({
   queryWorkingTreeStatus: vi.fn(),
 }));
 
+vi.mock("../git/gitIntegrationGating", () => ({
+  shouldLoadProjectTreeGitBadges: vi.fn(() => true),
+}));
+
 import { queryWorkingTreeStatus, resolveRepoRoot } from "../git/gitService";
+import { shouldLoadProjectTreeGitBadges } from "../git/gitIntegrationGating";
 
 const resolveRepoRootMock = vi.mocked(resolveRepoRoot);
 const queryWorkingTreeStatusMock = vi.mocked(queryWorkingTreeStatus);
+const shouldLoadProjectTreeGitBadgesMock = vi.mocked(shouldLoadProjectTreeGitBadges);
 
 describe("fileStatusTracker git integration", () => {
   beforeEach(() => {
@@ -78,6 +84,20 @@ describe("fileStatusTracker git integration", () => {
     await vi.runAllTicks();
 
     expect(queryWorkingTreeStatusMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips git probes when project-tree git badges are disabled", async () => {
+    shouldLoadProjectTreeGitBadgesMock.mockReturnValue(false);
+
+    const state = await refreshFileStatuses({
+      workspaceRootPath: "/repo",
+      allowOpencode: false,
+    });
+
+    expect(resolveRepoRootMock).not.toHaveBeenCalled();
+    expect(queryWorkingTreeStatusMock).not.toHaveBeenCalled();
+    expect(state.source).toBeNull();
+    expect(state.statusByPath.size).toBe(0);
   });
 });
 

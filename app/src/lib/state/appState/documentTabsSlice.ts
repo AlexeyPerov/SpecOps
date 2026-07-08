@@ -15,6 +15,7 @@ import {
   tabDocumentId,
 } from "../../domain/contracts";
 import { findNextOpenSessionTabAfterClose } from "../../services/workspaceAgentSession";
+import { isGitIntegrationEnabled } from "../../services/gitIntegrationSettings";
 import {
   findDocumentByPath,
   findDocumentByPathInContext,
@@ -115,6 +116,12 @@ export function createDocumentTabsLifecycleSlice(deps: {
       subTab?: string,
     ) {
       update((state) => {
+        if (
+          view === "version-control" &&
+          !isGitIntegrationEnabled(state.settings.gitIntegration)
+        ) {
+          return state;
+        }
         const existingTab = getSessionTabs(getActiveSession(state))
           .map((rawTab) => normalizeTabState(rawTab))
           .find((tab) => isViewTab(tab) && tab.view === view);

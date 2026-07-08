@@ -10,6 +10,7 @@ import {
   resetWorkspaceGitColumnQueueForTests,
   subscribeWorkspaceGitColumnAutoRefresh,
 } from "./workspaceManagerGitColumn";
+import { shouldLoadWorkspaceManagerGitColumn } from "./gitIntegrationGating";
 
 vi.mock("../services/logging", () => ({
   logDiagnostic: vi.fn(),
@@ -28,10 +29,15 @@ vi.mock("./repositoryStatusSummary", () => ({
   queryRepositoryStatusSummary: vi.fn(),
 }));
 
+vi.mock("./gitIntegrationGating", () => ({
+  shouldLoadWorkspaceManagerGitColumn: vi.fn(() => true),
+}));
+
 const checkGitAvailableMock = vi.mocked(checkGitAvailable);
 const resolveRepoRootMock = vi.mocked(resolveRepoRoot);
 const queryRepositoryStatusSummaryMock = vi.mocked(queryRepositoryStatusSummary);
 const logDiagnosticMock = vi.mocked(logDiagnostic);
+const shouldLoadWorkspaceManagerGitColumnMock = vi.mocked(shouldLoadWorkspaceManagerGitColumn);
 
 describe("formatGitColumnDisplayText", () => {
   it("renders branch, ahead/behind, and dirty marker", () => {
@@ -61,6 +67,17 @@ describe("loadWorkspaceGitColumnCell", () => {
   beforeEach(() => {
     resetWorkspaceGitColumnQueueForTests();
     vi.clearAllMocks();
+    shouldLoadWorkspaceManagerGitColumnMock.mockReturnValue(true);
+  });
+
+  it("returns neutral placeholder when git column is disabled", async () => {
+    shouldLoadWorkspaceManagerGitColumnMock.mockReturnValue(false);
+
+    await expect(loadWorkspaceGitColumnCell("/tmp/plain")).resolves.toEqual({
+      status: "neutral",
+      text: "—",
+    });
+    expect(checkGitAvailableMock).not.toHaveBeenCalled();
   });
 
   it("returns neutral placeholder for non-git workspaces", async () => {

@@ -1,16 +1,20 @@
-import type { AppDomainState, DocumentState, TabState } from "../../domain/contracts";
+import type { AppDomainState, ContextSnapshot, DocumentState, TabState } from "../../domain/contracts";
 import {
+  allTabs,
   createFileTab,
   findTabOwner,
   getSessionTabs,
   isFileTab,
+  isViewTab,
   normalizeTabState,
   recomputeSelectedTabId,
   setActivePaneTabs,
+  type ViewTabState,
 } from "../../domain/contracts";
+import { removeTabFromPane } from "../../domain/editorLayout";
 import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
 import { createImplicitDraftPair } from "../../services/implicitDraftTab";
-import { isChatHttpContext, nextDocAndTabIds, nextTabId, patchActiveContext } from "./contextHelpers";
+import { isChatHttpContext, nextDocAndTabIds, nextTabId, patchActiveContext, patchContextById } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 import { closeTabInPaneForceOnContext } from "./closeTabInPane";
 import { selectTabAcrossPanes } from "./closeTabInPane";
@@ -171,4 +175,56 @@ export function nextSelectedTabAfterBulkClose(
   preferredTabId: string | null = null,
 ): string | null {
   return recomputeSelectedTabId(previousTabs, remainingTabs, previousSelectedTabId, preferredTabId);
+}
+
+/** Remove every view tab of the given kind from one workspace/notepad/chat context. */
+export function closeViewTabsInContext(
+  ctx: ContextSnapshot,
+  view: ViewTabState["view"],
+): ContextSnapshot {
+  const tabIdsToClose = allTabs(ctx.session.editorLayout)
+    .map((tab) => normalizeTabState(tab))
+    .filter((tab) => isViewTab(tab) && tab.view === view)
+    .map((tab) => tab.id);
+
+  if (tabIdsToClose.length === 0) {
+    return ctx;
+  }
+
+  let layout = ctx.session.editorLayout;
+  for (const tabId of tabIdsToClose) {
+    for (const pane of layout.panes) {
+      if (pane.tabs.some((tab) => tab.id === tabId)) {
+        layout = removeTabFromPane(layout, pane.id, tabId);
+        break;
+      }
+    }
+  }
+
+  if (layout === ctx.session.editorLayout) {
+    return ctx;
+  }
+
+  return {
+    ...ctx,
+    session: {
+      ...ctx.session,
+      editorLayout: layout,
+    },
+  };
+}
+
+/** Close matching view tabs in every workspace context. */
+export function closeAllViewTabsInState(
+  state: AppDomainState,
+  view: ViewTabState["view"],
+): AppDomainState {
+  let next = state;
+  for (const workspace of state.contexts.workspaces) {
+    const patched = closeViewTabsInContext(workspace.snapshot, view);
+    if (patched !== workspace.snapshot) {
+      next = patchContextById(next, workspace.id, () => patched);
+    }
+  }
+  return next;
 }

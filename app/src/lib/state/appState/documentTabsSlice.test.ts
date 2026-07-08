@@ -75,6 +75,36 @@ describe("appState tabs and selection", () => {
     expect(themesTabs).toHaveLength(1);
   });
 
+  it("openOrFocusViewTab does not open version-control when git integration is disabled", () => {
+    appState.setGitIntegrationEnabled(false);
+    appState.openOrFocusViewTab("version-control");
+    const versionControlTabs = getSessionTabs(appState.getActiveSession()).filter(
+      (tab) => isViewTab(tab) && tab.view === "version-control",
+    );
+    expect(versionControlTabs).toHaveLength(0);
+  });
+
+  it("setGitIntegrationEnabled(false) closes version-control tabs across workspaces", () => {
+    const workspaceId = appState.addWorkspace("/tmp/ws-a");
+    expect(workspaceId).not.toBeNull();
+    appState.switchContext(workspaceId!);
+    appState.openOrFocusViewTab("version-control");
+
+    const workspaceId2 = appState.addWorkspace("/tmp/ws-b");
+    expect(workspaceId2).not.toBeNull();
+    appState.switchContext(workspaceId2!);
+    appState.openOrFocusViewTab("version-control");
+
+    appState.setGitIntegrationEnabled(false);
+
+    for (const workspace of appState.getSnapshot().contexts.workspaces) {
+      const tabs = getSessionTabs(workspace.snapshot.session).filter(
+        (tab) => isViewTab(tab) && tab.view === "version-control",
+      );
+      expect(tabs).toHaveLength(0);
+    }
+  });
+
   it("openOrFocusViewTab opens a singleton version-control tab and focuses an existing one", () => {
     appState.openOrFocusViewTab("version-control");
     const versionControlTabs = () =>

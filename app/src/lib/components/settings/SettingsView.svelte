@@ -23,6 +23,7 @@
   import EditorSettingsPanel from "./EditorSettingsPanel.svelte";
   import AppearancePanel from "./AppearancePanel.svelte";
   import LogsSettingsPanel from "./LogsSettingsPanel.svelte";
+  import VersionControlSettingsPanel from "./VersionControlSettingsPanel.svelte";
 
   /**
    * Width of the settings section sidebar. Carried over from the legacy
@@ -76,6 +77,8 @@
     <KeyboardShortcutsSettings />
   {:else if tabId === "appearance"}
     <AppearancePanel />
+  {:else if tabId === "versionControl"}
+    <VersionControlSettingsPanel />
   {:else if tabId === "dev"}
     <DevSettingsPanel dialogOpen={true} />
   {:else if tabId === "connections"}

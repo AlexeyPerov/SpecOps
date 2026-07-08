@@ -232,6 +232,7 @@ export async function startAppShellRuntime(
         restrictFilesToContext: persistedSettings.restrictFilesToContext,
         opencode: persistedSettings.opencode,
         chatHttp: persistedSettings.chatHttp,
+        gitIntegration: persistedSettings.gitIntegration,
         providerSettings: persistedSettings.providerSettings,
         providerModelCatalogs: persistedSettings.providerModelCatalogs,
         commandBindingOverrides: persistedSettings.commandBindingOverrides,

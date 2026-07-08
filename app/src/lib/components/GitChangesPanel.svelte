@@ -21,6 +21,7 @@
   } from "../git/workingTreeDiffSelection";
   import type { SaveDocumentDeps } from "../services/documentSave";
   import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
+  import { shouldRunAutosaveBeforeGitOperations } from "../git/gitIntegrationGating";
   import GitTextDiffView from "./GitTextDiffView.svelte";
 
   interface Props {
@@ -257,6 +258,7 @@
     actionError = null;
     try {
       const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
       if (!canProceed) {
@@ -280,6 +282,7 @@
     actionError = null;
     try {
       const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
       if (!canProceed) {
@@ -303,6 +306,7 @@
     actionError = null;
     try {
       const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
       if (!canProceed) {
@@ -336,6 +340,7 @@
 
     try {
       const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
       if (!canProceed) {

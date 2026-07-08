@@ -63,6 +63,7 @@ pub fn run() {
             git::run_git,
             git::respond_git_askpass,
             git::cancel_git_command,
+            git::drain_git_commands,
             git::git_commit_with_message,
             git::remove_stale_index_lock,
             file_watcher::sync_file_watcher_paths,

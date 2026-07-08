@@ -6,6 +6,7 @@ export type SettingsDialogTab =
   | "editor"
   | "shortcuts"
   | "appearance"
+  | "versionControl"
   | "dev"
   | "connections"
   | "chatModes"
@@ -47,6 +48,12 @@ const APPEARANCE_TAB = {
   id: "appearance",
   label: "Appearance",
   panelAriaLabel: "Appearance and feedback settings",
+} as const satisfies SettingsTabDefinition;
+
+const VERSION_CONTROL_TAB = {
+  id: "versionControl",
+  label: "Version Control",
+  panelAriaLabel: "Version control and git integration settings",
 } as const satisfies SettingsTabDefinition;
 
 const DEV_TAB = {
@@ -167,6 +174,7 @@ const ALL_TABS = [
   EDITOR_TAB,
   SHORTCUTS_TAB,
   APPEARANCE_TAB,
+  VERSION_CONTROL_TAB,
   DEV_TAB,
   CONNECTIONS_TAB,
   CHAT_MODES_TAB,
@@ -216,6 +224,7 @@ export function buildSettingsSidebar(
     { kind: "tab", tab: EDITOR_TAB },
     { kind: "tab", tab: SHORTCUTS_TAB },
     { kind: "tab", tab: APPEARANCE_TAB },
+    { kind: "tab", tab: VERSION_CONTROL_TAB },
     { kind: "section", label: "Dev", tabs: devTabs },
     {
       kind: "section",

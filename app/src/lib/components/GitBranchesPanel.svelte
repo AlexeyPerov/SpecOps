@@ -18,6 +18,7 @@
   import { promptLocalChangesCheckout } from "../services/localChangesCheckoutPrompt";
   import type { SaveDocumentDeps } from "../services/documentSave";
   import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
+  import { shouldRunAutosaveBeforeGitOperations } from "../git/gitIntegrationGating";
 
   interface Props {
     repoRoot: string;
@@ -112,6 +113,7 @@
 
     try {
       const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
       if (!canProceed) {
@@ -207,6 +209,7 @@
 
     try {
       const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+        enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
       if (!canProceed) {

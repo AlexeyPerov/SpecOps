@@ -998,6 +998,12 @@ pub fn cancel_git_command(command_id: String) -> CancelGitCommandResponse {
     cancel_git_command_by_id(&command_id)
 }
 
+/// Terminate all in-flight registered git subprocesses (best-effort).
+#[tauri::command]
+pub fn drain_git_commands() {
+    drain_all_active_git_commands();
+}
+
 /// Outcome of a `remove_stale_index_lock` request.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

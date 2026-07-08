@@ -1,4 +1,5 @@
 import { formatGitErrorPrimaryMessage } from "./gitErrorUi";
+import { shouldLoadWorkspaceManagerGitColumn } from "./gitIntegrationGating";
 import { logDiagnostic } from "../services/logging";
 import { checkGitAvailable, resolveRepoRoot } from "./gitService";
 import {
@@ -95,6 +96,10 @@ export async function loadWorkspaceGitColumnCell(
   workspaceRootPath: string,
   options?: { force?: boolean },
 ): Promise<WorkspaceGitColumnCell> {
+  if (!shouldLoadWorkspaceManagerGitColumn()) {
+    return NEUTRAL_CELL;
+  }
+
   if (options?.force) {
     inFlightByPath.delete(workspaceRootPath);
   }
@@ -115,6 +120,10 @@ export async function loadWorkspaceGitColumnCell(
 export async function refreshWorkspaceGitColumnCells(
   workspaceRootPaths: readonly string[],
 ): Promise<Map<string, WorkspaceGitColumnCell>> {
+  if (!shouldLoadWorkspaceManagerGitColumn()) {
+    return new Map(workspaceRootPaths.map((workspaceRootPath) => [workspaceRootPath, NEUTRAL_CELL]));
+  }
+
   const entries = await Promise.all(
     workspaceRootPaths.map(async (workspaceRootPath) => [
       workspaceRootPath,

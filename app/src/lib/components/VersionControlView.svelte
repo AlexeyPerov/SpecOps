@@ -51,6 +51,7 @@
   } from "../git/versionControlRemoteSelection";
   import type { SaveDocumentDeps } from "../services/documentSave";
   import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
+  import { shouldRunAutosaveBeforeGitOperations } from "../git/gitIntegrationGating";
   import { promptLocalChangesPull } from "../services/localChangesPullPrompt";
 
   /**
@@ -663,6 +664,7 @@
     try {
       if (workspaceRootPath) {
         const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+          enabled: shouldRunAutosaveBeforeGitOperations(),
           deps: preGitSaveDeps,
         });
         if (!canProceed) {

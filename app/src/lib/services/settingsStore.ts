@@ -15,6 +15,7 @@ import type {
   CommandBindingOverrides,
   ExternalFilesSettings,
   FontSettings,
+  GitIntegrationSettings,
   LogSettings,
   MarkdownViewMode,
   OpencodeSettings,
@@ -44,6 +45,10 @@ import {
   normalizeChatHttpSettings,
 } from "./chatHttpSettings";
 import {
+  defaultGitIntegrationSettings,
+  normalizeGitIntegrationSettings,
+} from "./gitIntegrationSettings";
+import {
   defaultFontSettings,
   normalizeFontSettings,
 } from "./fontSettings";
@@ -68,6 +73,7 @@ export interface PersistedSettings {
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
+  gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
@@ -98,6 +104,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
   chatHttp: defaultChatHttpSettings,
+  gitIntegration: defaultGitIntegrationSettings,
   logSettings: defaultLogSettings,
   chatModes: defaultChatModesSettings,
   providerSettings: defaultAppProviderSettings,
@@ -174,6 +181,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
           : defaultPersistedSettings.restrictFilesToContext,
         opencode: normalizeOpencodeSettings(parsed.opencode),
         chatHttp: normalizeChatHttpSettings(parsed.chatHttp),
+        gitIntegration: normalizeGitIntegrationSettings(parsed.gitIntegration),
         logSettings: normalizeLogSettings(parsed.logSettings),
         chatModes: normalizeChatModesSettings(parsed.chatModes),
         providerSettings,
@@ -223,6 +231,7 @@ export function toPersistedSettings(input: {
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
+  gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
   providerSettings: AppProviderSettings;
@@ -248,6 +257,7 @@ export function toPersistedSettings(input: {
       : defaultPersistedSettings.restrictFilesToContext,
     opencode: normalizeOpencodeSettings(input.opencode),
     chatHttp: normalizeChatHttpSettings(input.chatHttp),
+    gitIntegration: normalizeGitIntegrationSettings(input.gitIntegration),
     logSettings: normalizeLogSettings(input.logSettings),
     chatModes: normalizeChatModesSettings(input.chatModes),
     providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),

@@ -3,6 +3,7 @@ import { logDiagnostic } from "../services/logging";
 import { enqueueGitCommandForRepo } from "./gitCommandQueue";
 import { sanitizeGitStderrForDiagnosticLog } from "./gitDiagnosticSanitize";
 import { buildNonInteractiveRemoteEnv } from "./gitRemoteEnv";
+import { isGitIntegrationEnabledInApp } from "./gitIntegrationGating";
 import {
   mapGitInvokeError,
   type CancelGitCommandResponse,
@@ -18,6 +19,21 @@ export const REMOTE_GIT_OPERATION_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Default ceiling for local git subprocess operations (5 minutes). */
 export const LOCAL_GIT_OPERATION_TIMEOUT_MS = 5 * 60 * 1000;
+
+const GIT_INTEGRATION_DISABLED_MESSAGE = "Git integration is disabled in Settings.";
+
+const GIT_INTEGRATION_DISABLED_RESPONSE: RunGitResponse = {
+  exitCode: 1,
+  stdout: "",
+  stderr: GIT_INTEGRATION_DISABLED_MESSAGE,
+  durationMs: 0,
+};
+
+const GIT_INTEGRATION_DISABLED_AVAILABILITY: GitAvailableResponse = {
+  available: false,
+  version: null,
+  error: GIT_INTEGRATION_DISABLED_MESSAGE,
+};
 
 const GIT_AVAILABILITY_TTL_MS = 60_000;
 const INDEX_LOCK_MAX_RETRIES = 3;
@@ -265,6 +281,9 @@ export async function runGit(
   env?: Record<string, string>,
   options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
+  if (!isGitIntegrationEnabledInApp()) {
+    return GIT_INTEGRATION_DISABLED_RESPONSE;
+  }
   // Register write operations so they are drainable on app exit. Callers that
   // already pass a commandId (user-cancellable remote ops) keep their options.
   // Read-only commands stay unregistered (fast Rust path).
@@ -335,6 +354,10 @@ async function probeGitAvailable(): Promise<GitAvailableResponse> {
 
 /** Probe whether system `git` is available on PATH (cached for 60s per session). */
 export async function checkGitAvailable(): Promise<GitAvailableResponse> {
+  if (!isGitIntegrationEnabledInApp()) {
+    return GIT_INTEGRATION_DISABLED_AVAILABILITY;
+  }
+
   const now = Date.now();
   if (cachedGitAvailability && now < gitAvailabilityExpiresAt) {
     return cachedGitAvailability;
@@ -350,4 +373,14 @@ export async function checkGitAvailable(): Promise<GitAvailableResponse> {
   } finally {
     gitAvailabilityProbe = null;
   }
+}
+
+/** Terminate all in-flight registered git subprocesses (best-effort). */
+export async function drainGitCommands(): Promise<void> {
+  try {
+    await invoke("drain_git_commands");
+  } catch {
+    // Best-effort when integration is being disabled.
+  }
+  resetGitAvailabilityCacheForTests();
 }

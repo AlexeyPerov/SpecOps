@@ -72,7 +72,14 @@ vi.mock("../services/logging", () => ({
   logDiagnostic: vi.fn(),
 }));
 
+vi.mock("./gitIntegrationGating", () => ({
+  isGitIntegrationEnabledInApp: vi.fn(() => true),
+}));
+
+import { isGitIntegrationEnabledInApp } from "./gitIntegrationGating";
+
 const invokeMock = vi.mocked(invoke);
+const isGitIntegrationEnabledInAppMock = vi.mocked(isGitIntegrationEnabledInApp);
 
 const REMOTE_GIT_ENV = {
   GIT_TERMINAL_PROMPT: "0",
@@ -125,6 +132,17 @@ describe("runGit", () => {
   beforeEach(() => {
     invokeMock.mockReset();
     resetGitCommandQueueForTests();
+    isGitIntegrationEnabledInAppMock.mockReturnValue(true);
+  });
+
+  it("returns a disabled response without invoking Tauri when git integration is off", async () => {
+    isGitIntegrationEnabledInAppMock.mockReturnValue(false);
+
+    const result = await runGit("/tmp/repo", ["status"]);
+
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("disabled");
   });
 
   it("invokes run_git with repoRoot and args", async () => {
@@ -177,6 +195,17 @@ describe("checkGitAvailable", () => {
     invokeMock.mockReset();
     resetGitAvailabilityCacheForTests();
     resetGitCommandQueueForTests();
+    isGitIntegrationEnabledInAppMock.mockReturnValue(true);
+  });
+
+  it("returns unavailable without invoking Tauri when git integration is off", async () => {
+    isGitIntegrationEnabledInAppMock.mockReturnValue(false);
+
+    const result = await checkGitAvailable();
+
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(result.available).toBe(false);
+    expect(result.error).toContain("disabled");
   });
 
   it("invokes git_available and returns the response", async () => {

@@ -38,6 +38,7 @@
     TabState,
     WorkspaceEntry,
   } from "../domain/contracts";
+  import { appState } from "../state/appState";
   import "../styles/app-shell.css";
 
   export interface AppShellActivityRailProps {
@@ -370,6 +371,7 @@
     workspaceContextMenuEl?: HTMLDivElement | null;
   } = $props();
 
+  const gitIntegrationEnabled = $derived($appState.settings.gitIntegration.enabled);
   const activePaneId = $derived(editor.session.editorLayout.activePaneId);
 
   // F3-B: each pane keeps a stable editor host; only the active pane registers
@@ -638,6 +640,7 @@
 </main>
 
 <EntryNamePrompt onNotify={overlays.notify} />
+{#if gitIntegrationEnabled}
 <AskpassPrompt />
 <TagPushPrompt />
 <TagDeletePrompt />
@@ -646,6 +649,7 @@
 <LocalChangesStashApplyPrompt />
 <StashDropPrompt />
 <PreGitAutosavePrompt />
+{/if}
 <RevertPreviewDialog />
 {#if sessionListPanel}
   <SessionListPanel
@@ -715,6 +719,7 @@
     >
       Settings
     </button>
+    {#if gitIntegrationEnabled}
     <button
       class="workspace-context-item"
       type="button"
@@ -729,6 +734,7 @@
     >
       Version Control
     </button>
+    {/if}
     <button
       class="workspace-context-item"
       type="button"

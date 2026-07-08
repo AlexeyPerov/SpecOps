@@ -135,6 +135,23 @@ export interface ChatHttpSettings {
   enabled: boolean;
 }
 
+/**
+ * Master and behavioral toggles for system-git version control integration.
+ *
+ * When {@link GitIntegrationSettings.enabled} is false, no git subprocesses
+ * run and Version Control UI entry points are hidden.
+ */
+export interface GitIntegrationSettings {
+  /** Master switch — when false, no git subprocesses or VC UI. */
+  enabled: boolean;
+  /** Autosave dirty editor buffers before VC mutations. */
+  autosaveBeforeOperations: boolean;
+  /** Use system git for project-tree M/A/D badges. */
+  showProjectTreeBadges: boolean;
+  /** Load git status cells in Workspace Manager. */
+  showWorkspaceManagerGitColumn: boolean;
+}
+
 export type OpencodeHealthStatus = "unknown" | "checking" | "healthy" | "degraded" | "error";
 
 export type OpencodeHealthSource = "sidecar" | "url" | null;
@@ -196,6 +213,7 @@ export interface AppSettingsState {
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
   chatHttp: ChatHttpSettings;
+  gitIntegration: GitIntegrationSettings;
   opencodeHealth: OpencodeHealthState;
   commandBindingOverrides: CommandBindingOverrides;
   logSettings: LogSettings;

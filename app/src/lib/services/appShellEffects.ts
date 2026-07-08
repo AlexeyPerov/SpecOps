@@ -237,6 +237,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       restrictFilesToContext: snapshot.settings.restrictFilesToContext,
       opencode: snapshot.settings.opencode,
       chatHttp: snapshot.settings.chatHttp,
+      gitIntegration: snapshot.settings.gitIntegration,
       logSettings: snapshot.settings.logSettings,
       chatModes: snapshot.settings.chatModes,
       providerSettings: snapshot.settings.providerSettings,

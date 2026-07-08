@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-08 12:35 — Version Control settings section
+
+- **`domain/settings.ts`** — new `GitIntegrationSettings` with master `enabled` toggle plus `autosaveBeforeOperations`, `showProjectTreeBadges`, and `showWorkspaceManagerGitColumn` (all default on).
+- **`services/gitIntegrationSettings.ts`** — normalize/defaults and helper predicates for gating.
+- **`services/settingsStore.ts`**, **`state/appState/settingsSlice.ts`**, **`appShellRuntime.ts`**, **`appShellEffects.ts`** — persist and load `gitIntegration`; `setGitIntegrationEnabled` / `updateGitIntegrationSettings` close all `version-control` tabs across workspaces and drain in-flight git subprocesses when disabled.
+- **`git/gitRun.ts`**, **`git/gitIntegrationGating.ts`** — hard-stop `runGit` / `checkGitAvailable` when integration is off; new `drainGitCommands()` IPC wrapper.
+- **`src-tauri/src/git.rs`**, **`src-tauri/src/lib.rs`** — expose `drain_git_commands` Tauri command.
+- **`components/settings/VersionControlSettingsPanel.svelte`**, **`services/settingsDialogUi.ts`**, **`SettingsView.svelte`** — top-level **Version Control** settings tab with master toggle, git binary info probe, and sub-option toggles.
+- **`AppShell.svelte`**, **`workspaceContextMenuController.ts`**, **`EditorPaneContent.svelte`**, **`documentTabsSlice.ts`** — hide Version Control menu entry and block tab open/render when disabled.
+- **`fileStatusTracker.ts`**, **`workspaceManagerGitColumn.ts`**, **`WorkspaceManagerView.svelte`** — gate background git probes and hide the Workspace Manager git column per settings.
+- **VC panels** — wire autosave-before-git setting into `prepareWorkspaceForGitOperation`.
+- **Tests** — `gitIntegrationSettings.test.ts`; extended `gitService.test.ts`, `documentTabsSlice.test.ts`, `fileStatusTracker.git.test.ts`, `workspaceManagerGitColumn.test.ts`, `settingsDialogUi.test.ts`.
+
 ## 2026-07-07 18:10 — Make local git writes drainable and recover stale locks
 
 Follow-up to the earlier index.lock fix. Two remaining gaps caused locks to survive even after quitting SpecOps, and left no recovery for locks from other sources:

@@ -24,6 +24,7 @@
     type WorkspaceEntry,
   } from "../domain/contracts";
   import { deriveAppShellDocumentView } from "../services/appShellDocumentView";
+  import { appState } from "../state/appState";
   import type { EditorCommandRunner } from "../types/editor";
   import { emptySet } from "../collections/emptyCollections";
 
@@ -156,7 +157,9 @@
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
   const isWorkspaceSettingsViewActive = $derived(activeViewTabKind === "workspace-settings");
   const isWorkspaceManagerViewActive = $derived(activeViewTabKind === "workspace-manager");
-  const isVersionControlViewActive = $derived(activeViewTabKind === "version-control");
+  const isVersionControlViewActive = $derived(
+    activeViewTabKind === "version-control" && $appState.settings.gitIntegration.enabled,
+  );
 
   const paneDocument = $derived.by(() => {
     const docId = selectedTab ? tabDocumentId(selectedTab) : null;

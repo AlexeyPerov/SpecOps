@@ -1,11 +1,13 @@
 import type {
   AppCommandId,
+  AppDomainState,
   AppProviderSettings,
   AppSettingsState,
   ChatHttpSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
   FontSettings,
+  GitIntegrationSettings,
   LogSettings,
   MarkdownViewMode,
   OpencodeHealthState,
@@ -50,6 +52,12 @@ import {
   defaultChatHttpSettings,
   normalizeChatHttpSettings,
 } from "../../services/chatHttpSettings";
+import {
+  defaultGitIntegrationSettings,
+  normalizeGitIntegrationSettings,
+} from "../../services/gitIntegrationSettings";
+import { drainGitCommands } from "../../git/gitRun";
+import { closeAllViewTabsInState } from "./tabHelpers";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -77,6 +85,7 @@ export const defaultSettings: AppSettingsState = {
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
   chatHttp: defaultChatHttpSettings,
+  gitIntegration: defaultGitIntegrationSettings,
   opencodeHealth: {
     status: "unknown",
     source: null,
@@ -107,6 +116,57 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
           }),
         },
       }));
+    },
+    setGitIntegrationEnabled(enabled: boolean) {
+      let shouldDrain = false;
+      update((state) => {
+        if (state.settings.gitIntegration.enabled && !enabled) {
+          shouldDrain = true;
+        }
+        let next: AppDomainState = {
+          ...state,
+          settings: {
+            ...state.settings,
+            gitIntegration: normalizeGitIntegrationSettings({
+              ...state.settings.gitIntegration,
+              enabled,
+            }),
+          },
+        };
+        if (!enabled) {
+          next = closeAllViewTabsInState(next, "version-control");
+        }
+        return next;
+      });
+      if (shouldDrain) {
+        void drainGitCommands();
+      }
+    },
+    updateGitIntegrationSettings(patch: Partial<GitIntegrationSettings>) {
+      let shouldDrain = false;
+      update((state) => {
+        const nextSettings = normalizeGitIntegrationSettings({
+          ...state.settings.gitIntegration,
+          ...patch,
+        });
+        if (state.settings.gitIntegration.enabled && !nextSettings.enabled) {
+          shouldDrain = true;
+        }
+        let next: AppDomainState = {
+          ...state,
+          settings: {
+            ...state.settings,
+            gitIntegration: nextSettings,
+          },
+        };
+        if (!nextSettings.enabled) {
+          next = closeAllViewTabsInState(next, "version-control");
+        }
+        return next;
+      });
+      if (shouldDrain) {
+        void drainGitCommands();
+      }
     },
     setRestrictFilesToContext(restrictFilesToContext: boolean) {
       update((state) => ({
@@ -169,6 +229,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       restrictFilesToContext?: boolean;
       opencode?: Partial<OpencodeSettings>;
       chatHttp?: Partial<ChatHttpSettings>;
+      gitIntegration?: Partial<GitIntegrationSettings>;
       opencodeHealth?: Partial<OpencodeHealthState>;
       logSettings?: Partial<LogSettings>;
       chatModes?: Partial<AppSettingsState["chatModes"]>;
@@ -251,6 +312,18 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
               chatHttp: normalizeChatHttpSettings({
                 ...next.settings.chatHttp,
                 ...partial.chatHttp,
+              }),
+            },
+          };
+        }
+        if (partial.gitIntegration) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              gitIntegration: normalizeGitIntegrationSettings({
+                ...next.settings.gitIntegration,
+                ...partial.gitIntegration,
               }),
             },
           };

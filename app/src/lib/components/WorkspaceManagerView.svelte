@@ -7,6 +7,7 @@
     subscribeWorkspaceGitColumnAutoRefresh,
     type WorkspaceGitColumnCell,
   } from "../git/workspaceManagerGitColumn";
+  import { shouldLoadWorkspaceManagerGitColumn } from "../git/gitIntegrationGating";
   import { emptySet } from "../collections/emptyCollections";
 
   /**
@@ -41,6 +42,7 @@
 
   let gitCellsByPath = $state<Map<string, WorkspaceGitColumnCell>>(new Map());
   let gitRefreshBusy = $state(false);
+  const showGitColumn = $derived(shouldLoadWorkspaceManagerGitColumn());
 
   function workspaceName(workspace: WorkspaceEntry): string {
     const normalized = workspace.rootPath.replaceAll("\\", "/");
@@ -93,6 +95,10 @@
     rows: WorkspaceEntry[],
     options?: { force?: boolean },
   ): Promise<void> {
+    if (!showGitColumn) {
+      gitCellsByPath = new Map();
+      return;
+    }
     if (rows.length === 0) {
       gitCellsByPath = new Map();
       return;
@@ -169,6 +175,7 @@
       </p>
     </div>
     <div class="workspace-manager-actions">
+      {#if showGitColumn}
       <button
         type="button"
         class="wm-button"
@@ -178,6 +185,7 @@
       >
         {gitRefreshBusy ? "Refreshing…" : "Refresh git"}
       </button>
+      {/if}
       <button type="button" class="wm-button" onclick={onAddWorkspace}>Add workspace</button>
       <button type="button" class="wm-button" onclick={onAddMultiple}>Add multiple…</button>
     </div>
@@ -197,7 +205,9 @@
         <tr>
           <th scope="col">Name</th>
           <th scope="col">Path</th>
+          {#if showGitColumn}
           <th scope="col">Git</th>
+          {/if}
           <th scope="col" class="wm-action-col"><span class="sr-only">Actions</span></th>
         </tr>
       </thead>
@@ -225,6 +235,7 @@
                 <span class="wm-hidden-hint">(hidden from sidebar)</span>
               {/if}
             </td>
+            {#if showGitColumn}
             <td class="wm-git">
               <span
                 class="wm-git-text"
@@ -235,6 +246,7 @@
                 {gitCellDisplayText(gitCell)}
               </span>
             </td>
+            {/if}
             <td class="wm-action-col">
               <button
                 type="button"

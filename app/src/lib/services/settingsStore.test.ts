@@ -55,8 +55,10 @@ describe("settings mapping", () => {
       },
       decoratePlaintextSymbols: false,
       defaultMarkdownViewMode: "split",
+      restrictFilesToContext: false,
       opencode: defaultOpencodeSettings,
       chatHttp: { enabled: false },
+      gitIntegration: defaultPersistedSettings.gitIntegration,
       logSettings: { ...defaultLogSettings, verboseProviderLogging: false },
       chatModes: defaultChatModesSettings,
       providerSettings: {

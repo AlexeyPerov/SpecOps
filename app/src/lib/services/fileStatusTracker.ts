@@ -7,6 +7,7 @@ import {
   type OpencodeFileStatusEntry,
 } from "../ai/backends/workspaceAgentBackend";
 import { mapWorkingTreeStatusToAbsoluteBadges } from "../git/projectTreeFileStatusMap";
+import { shouldLoadProjectTreeGitBadges } from "../git/gitIntegrationGating";
 import { queryWorkingTreeStatus, resolveRepoRoot } from "../git/gitService";
 import {
   subscribeVersionControlMutations,
@@ -174,6 +175,13 @@ async function fetchFileStatuses(input: {
   workspaceRootPath: string;
   allowOpencode?: boolean;
 }): Promise<FileStatusTrackerState> {
+  if (!shouldLoadProjectTreeGitBadges()) {
+    if (input.allowOpencode === false) {
+      return copyEmptyState();
+    }
+    return fetchOpencodeFileStatuses(input.workspaceRootPath);
+  }
+
   const gitState = await fetchGitFileStatuses(input.workspaceRootPath);
   if (gitState) {
     return gitState;

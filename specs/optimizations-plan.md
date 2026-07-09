@@ -168,7 +168,7 @@ Dependencies: Task P1.
 
 ---
 
-#### Task P5: Tab/render hot-path lookup optimization [Score:6] [Agent:easy] [~0.5d]
+#### Task P5: Tab/render hot-path lookup optimization [Score:6] [Agent:easy] [~0.5d] [DONE]
 
 **Required context**
 

@@ -93,11 +93,13 @@
     }
   });
 
+  const documentById = $derived(new Map(documents.map((doc) => [doc.id, doc])));
+
   function tabDocument(tab: TabState): DocumentState | undefined {
     if (!isFileTab(tab)) {
       return undefined;
     }
-    return documents.find((doc) => doc.id === tab.documentId);
+    return documentById.get(tab.documentId);
   }
 
   const visibleTabs = $derived(

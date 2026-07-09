@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-09 12:18 — P5 tab/render hot-path lookup optimization
+
+- **`TabBar.svelte`** — precomputes a `$derived` `documentById` Map; `tabDocument` uses O(1) map lookup for visibility, titles, tooltips, and aria-labels.
+- **`EditorPaneView.svelte`** — same `documentById` / `tabDocument` pattern for `visibleTabCount`.
+- **`specs/optimizations-plan.md`** — Task P5 marked `[DONE]`.
+
 ## 2026-07-09 10:40 — P4 startup external checks deferral
 
 - **`runStartupExternalChecks`** — checks the active file tab first (blocking), then drains remaining open file tabs in background batches (`mapWithConcurrency`, concurrency 4, batch size 8 with event-loop yields). Dirty buffers still defer without dialogs; individual check failures do not abort the drain.

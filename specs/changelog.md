@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-08 23:00 — Add app performance optimization execution plan
+
+- **`specs/optimizations-plan.md`** — new execution plan for startup, tab switching, and workspace switching optimizations using the existing phase-plan template structure. Includes assumptions, risk profile, task breakdown (P1–P7), dependencies, acceptance checklists, and exit criteria focused on incremental session hydration, project-tree trigger narrowing, startup external-check deferral, tab hot-path lookup optimization, and watcher-sync memoization.
+
 ## 2026-07-08 13:50 — New file/folder/rename popup no longer covers the whole app
 
 - **`components/EntryNamePrompt.svelte`** — the shared entry-name prompt (used by New File / New Folder / Rename from the project tree, plus git branch/stash/tag naming) rendered a full-screen `position: fixed` backdrop with a 76%-opaque `--color-surface-overlay` background, which visually hid the entire app behind a near-solid layer while the small naming popup was open. The backdrop element is kept (it still captures outside-clicks to cancel and centers the dialog), but its background is now `transparent` so only the popup is visible.

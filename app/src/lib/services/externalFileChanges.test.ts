@@ -7,11 +7,13 @@ import { appState } from "../state/appState";
 import { flushMicrotasks } from "../test/sessionMock";
 import { statDiskFingerprint } from "./diskFingerprint";
 import {
+  awaitStartupExternalChecksBackgroundForTests,
   checkDocumentExternalChanges,
   checkDocumentIfDeferred,
   recordWriteFingerprint,
   reloadActiveDocumentFromDisk,
   resetExternalFileChangesForTests,
+  runStartupExternalChecks,
   runWatcherExternalCheck,
 } from "./externalFileChanges";
 
@@ -319,6 +321,160 @@ describe("runWatcherExternalCheck", () => {
     );
     expect(appState.getActiveDocuments().find((doc) => doc.id === "doc-3")?.content).toBe(
       "other",
+    );
+  });
+});
+
+describe("runStartupExternalChecks", () => {
+  beforeEach(() => {
+    resetExternalFileChangesForTests();
+    appState.resetAppState();
+    setExternalFiles();
+    confirmMock.mockReset();
+    readTextFileMock.mockReset();
+    statMock.mockReset();
+  });
+
+  it("checks the active file tab before returning and defers the rest", async () => {
+    const firstId = prepareSavedFile("/tmp/startup-a.txt", "a", fp1);
+    const secondId = prepareSavedFile("/tmp/startup-b.txt", "b", fp1);
+    const thirdId = prepareSavedFile("/tmp/startup-c.txt", "c", fp1);
+    const secondTab = getSessionTabs(appState.getActiveSession()).find(
+      (tab) => tab.kind === "file" && tab.documentId === secondId,
+    );
+    if (!secondTab) {
+      throw new Error("second tab missing");
+    }
+    appState.selectTab(secondTab.id);
+
+    let releaseActive!: () => void;
+    const activeGate = new Promise<void>((resolve) => {
+      releaseActive = resolve;
+    });
+    let releaseBackground!: () => void;
+    const backgroundGate = new Promise<void>((resolve) => {
+      releaseBackground = resolve;
+    });
+
+    const checkedOrder: string[] = [];
+    statMock.mockImplementation(async (path: string) => {
+      checkedOrder.push(path);
+      if (path.endsWith("startup-b.txt")) {
+        await activeGate;
+      } else {
+        await backgroundGate;
+      }
+      return fp1;
+    });
+
+    const startupPromise = runStartupExternalChecks();
+    await flushMicrotasks();
+    expect(checkedOrder).toEqual(["/tmp/startup-b.txt"]);
+
+    releaseActive();
+    await startupPromise;
+    // Background may have started, but must not have finished while gated.
+    expect(checkedOrder[0]).toBe("/tmp/startup-b.txt");
+    expect(checkedOrder.length).toBeGreaterThanOrEqual(1);
+    expect(checkedOrder.length).toBeLessThanOrEqual(3);
+
+    releaseBackground();
+    await awaitStartupExternalChecksBackgroundForTests();
+
+    expect(checkedOrder).toEqual([
+      "/tmp/startup-b.txt",
+      "/tmp/startup-a.txt",
+      "/tmp/startup-c.txt",
+    ]);
+    expect(appState.getActiveDocuments().find((doc) => doc.id === firstId)?.content).toBe("a");
+    expect(appState.getActiveDocuments().find((doc) => doc.id === thirdId)?.content).toBe("c");
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("reloads clean non-active tabs in the background without dialogs", async () => {
+    const activeId = prepareSavedFile("/tmp/startup-clean-active.txt", "old-active", fp1);
+    const backgroundId = prepareSavedFile("/tmp/startup-clean-bg.txt", "old-bg", fp1);
+    const activeTab = getSessionTabs(appState.getActiveSession()).find(
+      (tab) => tab.kind === "file" && tab.documentId === activeId,
+    );
+    if (!activeTab) {
+      throw new Error("active file tab missing");
+    }
+    appState.selectTab(activeTab.id);
+
+    statMock.mockResolvedValue(fp2);
+    readTextFileMock.mockImplementation(async (path: string) =>
+      path.endsWith("startup-clean-bg.txt") ? "new-bg" : "new-active",
+    );
+
+    await runStartupExternalChecks();
+    expect(appState.getActiveDocuments().find((doc) => doc.id === activeId)?.content).toBe(
+      "new-active",
+    );
+    expect(appState.getActiveDocuments().find((doc) => doc.id === backgroundId)?.content).toBe(
+      "old-bg",
+    );
+
+    await awaitStartupExternalChecksBackgroundForTests();
+    expect(appState.getActiveDocuments().find((doc) => doc.id === backgroundId)?.content).toBe(
+      "new-bg",
+    );
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("defers dirty startup checks without prompting during priority or background", async () => {
+    const dirtyActive = prepareSavedFile("/tmp/startup-dirty-active.txt", "local", fp1, true);
+    const dirtyBg = prepareSavedFile("/tmp/startup-dirty-bg.txt", "local", fp1, true);
+    const activeTab = getSessionTabs(appState.getActiveSession()).find(
+      (tab) => tab.kind === "file" && tab.documentId === dirtyActive,
+    );
+    if (!activeTab) {
+      throw new Error("active dirty tab missing");
+    }
+    appState.selectTab(activeTab.id);
+    statMock.mockResolvedValue(fp2);
+
+    await runStartupExternalChecks();
+    await awaitStartupExternalChecksBackgroundForTests();
+
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(
+      appState.getActiveDocuments().find((doc) => doc.id === dirtyActive)?.content,
+    ).toBe("local edited");
+    expect(appState.getActiveDocuments().find((doc) => doc.id === dirtyBg)?.content).toBe(
+      "local edited",
+    );
+  });
+
+  it("continues background drain when an individual check fails", async () => {
+    prepareSavedFile("/tmp/startup-fail-a.txt", "a", fp1);
+    const okId = prepareSavedFile("/tmp/startup-fail-b.txt", "b", fp1);
+    prepareSavedFile("/tmp/startup-fail-c.txt", "c", fp1);
+    const firstTab = getSessionTabs(appState.getActiveSession())[0];
+    if (!firstTab || firstTab.kind !== "file") {
+      throw new Error("expected file tab");
+    }
+    appState.selectTab(firstTab.id);
+
+    let failCCalls = 0;
+    statMock.mockImplementation(async (path: string) => {
+      if (path.endsWith("startup-fail-c.txt")) {
+        failCCalls += 1;
+        throw new Error("simulated stat failure");
+      }
+      if (path.endsWith("startup-fail-b.txt")) {
+        return fp2;
+      }
+      return fp1;
+    });
+    readTextFileMock.mockResolvedValue("reloaded-b");
+
+    await runStartupExternalChecks();
+    await awaitStartupExternalChecksBackgroundForTests();
+
+    expect(failCCalls).toBeGreaterThan(0);
+    expect(appState.getActiveDocuments().find((doc) => doc.id === okId)?.content).toBe(
+      "reloaded-b",
     );
   });
 });

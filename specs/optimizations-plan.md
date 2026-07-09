@@ -144,7 +144,7 @@ Dependencies: Task P1.
 
 ---
 
-#### Task P4: Startup external checks deferral strategy [Score:7] [Agent:medium] [~1d]
+#### Task P4: Startup external checks deferral strategy [Score:7] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 

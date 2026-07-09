@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-09 10:40 — P4 startup external checks deferral
+
+- **`runStartupExternalChecks`** — checks the active file tab first (blocking), then drains remaining open file tabs in background batches (`mapWithConcurrency`, concurrency 4, batch size 8 with event-loop yields). Dirty buffers still defer without dialogs; individual check failures do not abort the drain.
+- **Perf diagnostics** — `startup.phase` labels `startup-external-checks-priority` and `startup-external-checks-background` report priority vs deferred counts/durations.
+- **Tests** — active-first ordering, background clean reload, dirty no-dialog, and failure-isolation coverage in `externalFileChanges.test.ts`.
+- **`specs/optimizations-plan.md`** — Task P4 marked `[DONE]`.
+
 ## 2026-07-09 10:15 — P3 project tree reload trigger narrowing
 
 - **`syncProjectTreeWatcherEffect`** — memoizes root-load and watcher sync keys so tab/session churn that re-invokes the effect is a no-op. Root load runs on workspace-root transition; watcher clears on leave/chat-http and restarts when re-entering an active workspace with `runtimeReady`. Leaving the workspace clears the root memo so re-entry reloads once; chat-http toggles keep the loaded root.

@@ -14,6 +14,7 @@ import { shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 import { confirmLargeFileOpen } from "./openFileGate";
 import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
 import { logDiagnostic } from "./logging";
+import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { SettingsDialogTab } from "./settingsDialogUi";
 
 export interface AppShellCommandHandlersDeps {
@@ -103,15 +104,38 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
   }
 
   async function onTabActivated(tabId: string): Promise<void> {
+    const sideEffectsStartedAt = nowMs();
     if (!deps.getRuntimeReady()) {
       return;
     }
     const snapshot = appState.getSnapshot();
     if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "tab")) {
+      void logPerfTiming(
+        "tab activation side-effects skipped",
+        {
+          metric: "tab.activationSideEffects",
+          durationMs: elapsedMs(sideEffectsStartedAt),
+          tabId,
+          skipped: true,
+          reason: "checks-disabled",
+        },
+        "debug",
+      );
       return;
     }
     const tab = getSessionTabs(appState.getActiveSession()).find((entry) => entry.id === tabId);
     if (!tab || !isFileTab(tab)) {
+      void logPerfTiming(
+        "tab activation side-effects skipped",
+        {
+          metric: "tab.activationSideEffects",
+          durationMs: elapsedMs(sideEffectsStartedAt),
+          tabId,
+          skipped: true,
+          reason: "non-file-tab",
+        },
+        "debug",
+      );
       return;
     }
     const now = Date.now();
@@ -120,6 +144,18 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
       lastTabActivationCheck.documentId === tab.documentId &&
       now - lastTabActivationCheck.checkedAtMs < TAB_ACTIVATION_CHECK_COOLDOWN_MS
     ) {
+      void logPerfTiming(
+        "tab activation side-effects skipped",
+        {
+          metric: "tab.activationSideEffects",
+          durationMs: elapsedMs(sideEffectsStartedAt),
+          tabId,
+          documentId: tab.documentId,
+          skipped: true,
+          reason: "cooldown",
+        },
+        "debug",
+      );
       return;
     }
     lastTabActivationCheck = {
@@ -127,6 +163,14 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
       checkedAtMs: now,
     };
     await checkDocumentIfDeferred(tab.documentId, "tab");
+    void logPerfTiming("tab activation side-effects complete", {
+      metric: "tab.activationSideEffects",
+      durationMs: elapsedMs(sideEffectsStartedAt),
+      tabId,
+      documentId: tab.documentId,
+      skipped: false,
+      reason: "external-check",
+    });
   }
 
   return {

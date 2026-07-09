@@ -58,6 +58,8 @@ TODO.md
 # Specs (default ignore; allowlisted paths are tracked)
 /specs/*
 !/specs/changelog.md
+!/specs/optimizations-plan.md
+!/specs/optimizations-baseline.json
 !/specs/git/
 !/specs/git/**
 !/specs/text-editor/

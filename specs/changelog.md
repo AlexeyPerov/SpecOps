@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-09 09:55 — P1 baseline perf diagnostics and success metrics
+
+- **`app/src/lib/services/perfDiagnostics.ts`** — shared lightweight timing helpers (`nowMs` / `elapsedMs` / `logPerfTiming` / `measureAsync`) that emit Console diagnostics with `metadata.kind === "perf"` and stable metric names for startup, workspace restore, session load, project-tree root load, and tab-activation side-effects.
+- **Instrumentation** — wired into `appShellRuntime` (startup phases + total), `chatStore/sessions.loadWorkspaceSessions` (index vs thread hydrate split), `restoreWorkspaceSession`, workspace-switch restore in `appShellEffects`, `loadProjectTreeRoot`, `onTabActivated`, and the tab/workspace shell effect in `+page.svelte`.
+- **`specs/optimizations-plan.md`** — Task P1 marked `[DONE]`; documented p50/p95 success thresholds and how to filter/reproduce timings.
+- **`specs/optimizations-baseline.json`** — before-change baseline for a small workspace (`~/Documents/notes`) and a large workspace (`~/Projects/Unity-AI-Hub`), plus serial session-hydration IO proxies.
+- **Tests** — `perfDiagnostics.test.ts`; existing app-shell handler/effect tests still pass.
+
 ## 2026-07-08 23:00 — Add app performance optimization execution plan
 
 - **`specs/optimizations-plan.md`** — new execution plan for startup, tab switching, and workspace switching optimizations using the existing phase-plan template structure. Includes assumptions, risk profile, task breakdown (P1–P7), dependencies, acceptance checklists, and exit criteria focused on incremental session hydration, project-tree trigger narrowing, startup external-check deferral, tab hot-path lookup optimization, and watcher-sync memoization.

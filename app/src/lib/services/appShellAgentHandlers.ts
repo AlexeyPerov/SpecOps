@@ -28,6 +28,7 @@ import { promptEntryName } from "./entryNamePrompt";
 import { promptRevertPreview } from "./revertPreviewPrompt";
 import { saveFileAs } from "./fileSystem";
 import { logDiagnostic } from "./logging";
+import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import {
   buildSessionTranscriptMarkdown,
   suggestExportFileName,
@@ -220,20 +221,11 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       return;
     }
     const session = appState.getActiveSession();
-    const loadSessionsStartedAt = Date.now();
+    const restoreStartedAt = nowMs();
+    const loadSessionsStartedAt = nowMs();
     await chatStore.loadWorkspaceSessions(normalizedRoot);
     const sessionIndex = chatStore.getSessionIndex();
-    void logDiagnostic({
-      level: "info",
-      source: "frontend",
-      timestamp: new Date().toISOString(),
-      message: "restoreWorkspaceSession: sessions loaded",
-      metadata: {
-        workspaceRoot: normalizedRoot,
-        durationMs: Date.now() - loadSessionsStartedAt,
-        sessionCount: sessionIndex.length,
-      },
-    });
+    const loadSessionsDurationMs = elapsedMs(loadSessionsStartedAt);
     chatStore.mergeSessionDrafts(normalizedRoot, openSessionTabIds(getSessionTabs(session)));
 
     const restored = resolveRestoredActiveSession(session, sessionIndex);
@@ -252,6 +244,16 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
         appState.selectTab(nextSelected);
       }
     }
+
+    void logPerfTiming("restoreWorkspaceSession complete", {
+      metric: "workspace.restore",
+      durationMs: elapsedMs(restoreStartedAt),
+      workspaceRoot: normalizedRoot,
+      sessionCount: sessionIndex.length,
+      loadSessionsDurationMs,
+      skipOpencodeReconcile: Boolean(options?.skipOpencodeReconcile),
+      focusedSessionTab: Boolean(restored.shouldFocusSessionTab && restored.activeSessionId),
+    });
 
     if (options?.skipOpencodeReconcile) {
       return;

@@ -28,6 +28,7 @@
     chatStore,
   } from "../lib/state/chatStore";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
+  import { elapsedMs, logPerfTiming, nowMs } from "../lib/services/perfDiagnostics";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
   import { registerSettingsDialogOpener } from "../lib/services/settingsDialogUi";
@@ -936,6 +937,9 @@
   });
 
   $effect(() => {
+    // Tab / workspace context churn re-runs this effect (sidecar + project tree).
+    // Time the synchronous scheduling cost; async work is timed inside handlers.
+    const effectStartedAt = nowMs();
     runtimeReady;
     isWorkspaceLifecycleActive();
     activeWorkspaceRoot;
@@ -965,6 +969,19 @@
       projectTreeController,
       loadProjectTreeRoot,
     });
+    void logPerfTiming(
+      "tab/workspace shell effect scheduled",
+      {
+        metric: "tab.activationSideEffects",
+        durationMs: elapsedMs(effectStartedAt),
+        label: "shell-sidecar-project-tree-effect",
+        runtimeReady,
+        isChatHttpActive,
+        isSessionTabActive,
+        hasWorkspaceRoot: Boolean(activeWorkspaceRoot),
+      },
+      "debug",
+    );
   });
 
   $effect(() => {

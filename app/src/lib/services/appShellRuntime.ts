@@ -8,6 +8,7 @@ import { subscribeSystemColorScheme } from "../state/appState/themeController";
 import { applyFontSettingsToDom } from "../state/appState/fontSettingsSlice";
 import { chatStore } from "../state/chatStore";
 import { initializeLogging, logDiagnostic } from "./logging";
+import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import { listenForRecentFilesChanges } from "./recentFilesSync";
 import {
   initializeAppMenu,
@@ -177,24 +178,32 @@ export async function startAppShellRuntime(
 
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
 
-  const startupStartedAt = Date.now();
+  const startupStartedAt = nowMs();
 
   async function runSafeStartupPhase(phase: string, action: () => Promise<void>): Promise<void> {
-    const phaseStartedAt = Date.now();
+    const phaseStartedAt = nowMs();
     try {
       await action();
-      await logDiagnostic({
-        level: "info",
-        source: "frontend",
-        timestamp: new Date().toISOString(),
-        message: "app shell startup phase complete",
-        metadata: {
-          phase,
-          durationMs: Date.now() - phaseStartedAt,
-          windowId,
-        },
+      await logPerfTiming("app shell startup phase complete", {
+        metric: "startup.phase",
+        label: phase,
+        durationMs: elapsedMs(phaseStartedAt),
+        windowId,
+        ok: true,
       });
     } catch (error: unknown) {
+      await logPerfTiming(
+        "app shell startup phase failed",
+        {
+          metric: "startup.phase",
+          label: phase,
+          durationMs: elapsedMs(phaseStartedAt),
+          windowId,
+          ok: false,
+          error: getErrorMessage(error, String(error)),
+        },
+        "info",
+      );
       await logDiagnostic({
         level: "warn",
         source: "frontend",
@@ -202,7 +211,7 @@ export async function startAppShellRuntime(
         message: "app shell startup phase failed",
         metadata: {
           phase,
-          durationMs: Date.now() - phaseStartedAt,
+          durationMs: elapsedMs(phaseStartedAt),
           windowId,
           error: getErrorMessage(error, String(error)),
         },
@@ -412,15 +421,10 @@ export async function startAppShellRuntime(
   });
   cleanupCallbacks.push(unlistenWindowMoved);
 
-  await logDiagnostic({
-    level: "info",
-    source: "frontend",
-    timestamp: new Date().toISOString(),
-    message: "app shell initialized",
-    metadata: {
-      windowId,
-      durationMs: Date.now() - startupStartedAt,
-    },
+  await logPerfTiming("app shell initialized", {
+    metric: "startup.total",
+    durationMs: elapsedMs(startupStartedAt),
+    windowId,
   });
 
   return {

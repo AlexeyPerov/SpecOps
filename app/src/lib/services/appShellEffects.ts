@@ -44,6 +44,7 @@ import type { createProjectTreeController } from "./projectTreeController";
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { logDiagnostic } from "./logging";
+import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import { scheduleSessionPersistence } from "./sessionManager";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { savePersistedSettings, toPersistedSettings } from "./settingsStore";
@@ -132,25 +133,29 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
     markWorkspaceLifecycleActive();
     void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
     chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
-    const restoreStartedAt = Date.now();
+    const restoreStartedAt = nowMs();
     void restoreWorkspaceSession(normalizedWorkspaceRoot, {
       skipOpencodeReconcile: !isSessionTabActive,
     })
       .then(() =>
-        logDiagnostic({
-          level: "info",
-          source: "frontend",
-          timestamp: new Date().toISOString(),
-          message: "workspace switch restore complete",
-          metadata: {
-            workspaceRoot: normalizedWorkspaceRoot,
-            durationMs: Date.now() - restoreStartedAt,
-            isSessionTabActive,
-            skipOpencodeReconcile: !isSessionTabActive,
-          },
+        logPerfTiming("workspace switch restore complete", {
+          metric: "workspace.switchRestore",
+          durationMs: elapsedMs(restoreStartedAt),
+          workspaceRoot: normalizedWorkspaceRoot,
+          isSessionTabActive,
+          skipOpencodeReconcile: !isSessionTabActive,
+          ok: true,
         }),
       )
       .catch(() => {
+        void logPerfTiming("workspace switch restore failed", {
+          metric: "workspace.switchRestore",
+          durationMs: elapsedMs(restoreStartedAt),
+          workspaceRoot: normalizedWorkspaceRoot,
+          isSessionTabActive,
+          skipOpencodeReconcile: !isSessionTabActive,
+          ok: false,
+        });
         void logDiagnostic({
           level: "warn",
           source: "frontend",
@@ -158,7 +163,7 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
           message: "workspace switch restore failed",
           metadata: {
             workspaceRoot: normalizedWorkspaceRoot,
-            durationMs: Date.now() - restoreStartedAt,
+            durationMs: elapsedMs(restoreStartedAt),
           },
         });
         if (isSessionTabActive) {

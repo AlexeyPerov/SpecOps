@@ -15,7 +15,7 @@ import {
   openActivePathInPane,
 } from "./openActivePath";
 import { promptEntryName } from "./entryNamePrompt";
-import { logDiagnostic } from "./logging";
+import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { createProjectTreeController } from "./projectTreeController";
 
 export interface AppShellProjectTreeHandlersDeps {
@@ -36,7 +36,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
   } = deps;
 
   async function loadProjectTreeRoot(): Promise<void> {
-    const startedAt = Date.now();
+    const startedAt = nowMs();
     const workspaceRoot = getActiveWorkspaceRoot();
     await projectTreeController.loadProjectTreeRoot({
       workspaceRoot,
@@ -45,15 +45,10 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
         void chatStore.runAccessPreflight();
       },
     });
-    void logDiagnostic({
-      level: "info",
-      source: "frontend",
-      timestamp: new Date().toISOString(),
-      message: "project tree root load complete",
-      metadata: {
-        workspaceRoot,
-        durationMs: Date.now() - startedAt,
-      },
+    void logPerfTiming("project tree root load complete", {
+      metric: "projectTree.rootLoad",
+      durationMs: elapsedMs(startedAt),
+      workspaceRoot,
     });
   }
 

@@ -5,6 +5,7 @@ import {
   readSessionThreadFileSnapshot,
   readWorkspaceSessionsIndexSnapshot,
 } from "../../services/chatPersistence";
+import { elapsedMs, logPerfTiming, nowMs } from "../../services/perfDiagnostics";
 import type { ChatStoreState, WorkspaceSessionsState } from "./types";
 import {
   getOrCreateWorkspaceState,
@@ -444,19 +445,22 @@ export function createSessionsSlice(deps: {
       };
     },
     async loadWorkspaceSessions(normalizedRootPath: string): Promise<void> {
+      const loadStartedAt = nowMs();
+      const indexStartedAt = nowMs();
       const index = await readWorkspaceSessionsIndexSnapshot(normalizedRootPath);
+      const indexDurationMs = elapsedMs(indexStartedAt);
       const threadsBySessionId: Record<string, import("../../domain/contracts").ChatThreadSnapshot | null> =
         {};
-      for (const entry of index.sessions) {
-        if (entry.isDraft) {
-          continue;
-        }
+      const persistedEntries = index.sessions.filter((entry) => !entry.isDraft);
+      const threadsStartedAt = nowMs();
+      for (const entry of persistedEntries) {
         const thread = await readSessionThreadFileSnapshot(normalizedRootPath, entry.id);
         threadsBySessionId[entry.id] = normalizeThreadForScope(
           normalizedRootPath,
           cloneThread(thread),
         );
       }
+      const threadsDurationMs = elapsedMs(threadsStartedAt);
 
       update((state) => {
         const existing = state.workspaces[normalizedRootPath];
@@ -499,6 +503,16 @@ export function createSessionsSlice(deps: {
             },
           },
         };
+      });
+
+      void logPerfTiming("workspace sessions load complete", {
+        metric: "workspace.sessionLoad",
+        durationMs: elapsedMs(loadStartedAt),
+        workspaceRoot: normalizedRootPath,
+        sessionCount: index.sessions.length,
+        hydratedThreadCount: persistedEntries.length,
+        indexDurationMs,
+        threadsDurationMs,
       });
     },
     mergeSessionDrafts(normalizedRootPath: string, sessionIds: readonly string[]): void {

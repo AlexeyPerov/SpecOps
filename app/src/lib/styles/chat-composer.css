@@ -1,9 +1,9 @@
 .chat-inline-error {
   margin: 0;
   padding: var(--space-4) var(--space-6);
-  border: 1px solid color-mix(in srgb, #e06c75 48%, var(--color-border-subtle));
+  border: 1px solid color-mix(in srgb, var(--color-danger) 48%, var(--color-border-subtle));
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, #e06c75 9%, var(--color-surface-1));
+  background: color-mix(in srgb, var(--color-danger) 9%, var(--color-surface-1));
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -86,7 +86,7 @@
 }
 
 .chat-context-budget--over {
-  color: color-mix(in srgb, #e06c75 78%, var(--color-text-secondary));
+  color: color-mix(in srgb, var(--color-danger) 78%, var(--color-text-secondary));
 }
 
 .chat-composer-actions .chat-assistant-status {
@@ -95,44 +95,10 @@
 
 .chat-send-button {
   min-height: 26px;
-  padding: 0 var(--space-8);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-subtle);
-  background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface-1));
-  color: var(--color-text-primary);
-  font-size: 12px;
-  line-height: 1;
 }
 
 .chat-retry-button {
   min-height: 26px;
-  padding: 0 var(--space-8);
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, #e06c75 40%, var(--color-border-subtle));
-  background: color-mix(in srgb, #e06c75 9%, var(--color-surface-1));
-  color: var(--color-text-primary);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.chat-retry-button:hover:not(:disabled) {
-  background: color-mix(in srgb, #e06c75 16%, var(--color-surface-1));
-  cursor: pointer;
-}
-
-.chat-retry-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.chat-send-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 26%, var(--color-surface-1));
-  cursor: pointer;
-}
-
-.chat-send-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .chat-assistant-status {
@@ -223,7 +189,7 @@
 }
 
 .chat-mention-chip-remove:hover {
-  background: color-mix(in srgb, #e06c75 22%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 22%, transparent);
   color: var(--color-text-primary);
 }
 
@@ -335,6 +301,6 @@
 }
 
 .chat-queued-prompt-remove:hover {
-  background: color-mix(in srgb, #e06c75 22%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 22%, transparent);
   color: var(--color-text-primary);
 }

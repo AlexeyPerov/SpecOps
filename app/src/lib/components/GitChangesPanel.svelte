@@ -399,7 +399,7 @@
             <div class="git-changes-section-actions">
               <button
                 type="button"
-                class="git-changes-action-button"
+                class="btn btn-secondary btn-compact"
                 disabled={selectedUnstaged.size === 0 || actionBusy || readOnly}
                 onclick={handleStageSelected}
               >
@@ -407,7 +407,7 @@
               </button>
               <button
                 type="button"
-                class="git-changes-action-button"
+                class="btn btn-secondary btn-compact"
                 disabled={unstaged.length === 0 || actionBusy || readOnly}
                 onclick={handleStageAll}
               >
@@ -467,7 +467,7 @@
             <div class="git-changes-section-actions">
               <button
                 type="button"
-                class="git-changes-action-button"
+                class="btn btn-secondary btn-compact"
                 disabled={selectedStaged.size === 0 || actionBusy || readOnly}
                 onclick={handleUnstageSelected}
               >
@@ -560,7 +560,7 @@
       {/if}
       <button
         type="button"
-        class="git-changes-commit-button"
+        class="btn btn-primary git-changes-commit-button"
         disabled={!canCommit}
         onclick={handleCommit}
       >
@@ -686,25 +686,6 @@
     gap: var(--space-2);
   }
 
-  .git-changes-action-button {
-    padding: var(--space-2) var(--space-4);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-2);
-    color: var(--color-text);
-    font-size: 0.8125rem;
-    cursor: pointer;
-  }
-
-  .git-changes-action-button:hover:not(:disabled) {
-    background: var(--color-surface-3, var(--color-surface-2));
-  }
-
-  .git-changes-action-button:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
   .git-changes-empty {
     margin: 0;
     font-size: 0.875rem;
@@ -809,17 +790,6 @@
   .git-changes-commit-button {
     align-self: flex-start;
     padding: var(--space-3) var(--space-6);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-accent);
-    color: var(--color-on-accent, #fff);
     font-size: 0.875rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .git-changes-commit-button:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
   }
 </style>

@@ -1,0 +1,107 @@
+/* Shared button variants (M1). Imported globally from +layout.svelte. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--easing-standard),
+    border-color var(--motion-fast) var(--easing-standard),
+    color var(--motion-fast) var(--easing-standard);
+}
+
+.btn:focus-visible,
+.toolbar-button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  padding: var(--space-2) var(--space-6);
+  font-size: 0.85rem;
+}
+
+.btn-secondary:not(:disabled):hover {
+  background: var(--color-surface-3);
+}
+
+.btn-secondary:not(:disabled):active {
+  background: color-mix(in srgb, var(--color-surface-3) 88%, var(--color-text-secondary));
+}
+
+.btn-secondary.btn-compact {
+  padding: var(--space-1) var(--space-4);
+  font-size: 0.8125rem;
+}
+
+.btn-primary {
+  padding: var(--space-2) var(--space-6);
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-surface-1, #fff);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--color-accent) 88%, #000);
+}
+
+.btn-primary:not(:disabled):active {
+  background: color-mix(in srgb, var(--color-accent) 78%, #000);
+  border-color: color-mix(in srgb, var(--color-accent) 78%, #000);
+}
+
+.btn-danger {
+  padding: var(--space-2) var(--space-6);
+  border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-danger) 9%, var(--color-surface-1));
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+.btn-danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-surface-1));
+}
+
+.btn-danger:not(:disabled):active {
+  background: color-mix(in srgb, var(--color-danger) 22%, var(--color-surface-1));
+}
+
+.btn-ghost,
+.toolbar-button {
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+}
+
+.btn-ghost:not(:disabled):hover,
+.toolbar-button:not(:disabled):hover {
+  background: var(--color-hover);
+}
+
+.btn-ghost:not(:disabled):active,
+.toolbar-button:not(:disabled):active {
+  background: var(--color-pressed);
+}
+
+/* Chat composer: size-specific send button uses shared primary colors. */
+.chat-send-button.btn-primary {
+  min-height: 26px;
+  padding: 0 var(--space-8);
+  font-size: 12px;
+  font-weight: 400;
+}

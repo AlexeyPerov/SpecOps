@@ -74,9 +74,12 @@
   /* Structural surface/border/selection tokens used by phase-3.5 components. */
   --color-surface-0: color-mix(in srgb, var(--color-bg-root-solid) 60%, var(--color-surface-1-solid));
   --color-surface-2: color-mix(in srgb, var(--color-surface-1-solid) 88%, var(--color-text-secondary));
+  --color-surface-3: color-mix(in srgb, var(--color-surface-1-solid) 72%, var(--color-text-secondary));
   --color-border-strong: rgb(4 14 26 / 26%);
   --color-selection: color-mix(in srgb, var(--color-accent) 22%, transparent);
   --color-danger: #d92d20;
+  --color-text: var(--color-text-primary);
+  --color-text-muted: var(--color-text-secondary);
 
   /* Fallbacks before theme JS runs; overridden by applyThemeSyntaxPalette */
   --syntax-keyword: var(--color-accent);
@@ -118,9 +121,12 @@
   /* Structural surface/border/selection tokens used by phase-3.5 components. */
   --color-surface-0: color-mix(in srgb, var(--color-bg-root-solid) 70%, var(--color-surface-1-solid));
   --color-surface-2: color-mix(in srgb, var(--color-surface-1-solid) 82%, var(--color-text-secondary));
+  --color-surface-3: color-mix(in srgb, var(--color-surface-1-solid) 76%, var(--color-text-secondary));
   --color-border-strong: rgb(215 227 248 / 34%);
   --color-selection: color-mix(in srgb, var(--color-accent) 32%, transparent);
   --color-danger: #f97066;
+  --color-text: var(--color-text-primary);
+  --color-text-muted: var(--color-text-secondary);
 
   /* Fallbacks before theme JS runs; overridden by applyThemeSyntaxPalette */
   --syntax-keyword: var(--color-accent);

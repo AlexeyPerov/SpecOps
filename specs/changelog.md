@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-09 22:53 — UI / UX milestone M1 (tokens + shared buttons)
+
+- **`app/src/lib/styles/tokens.css`** — added `--color-text`, `--color-text-muted`, and `--color-surface-3` aliases for light and dark (derived via `color-mix` from existing surface/text tokens; no theme schema changes).
+- **`app/src/lib/styles/buttons.css`** — new global button variants (`.btn-secondary`, `.btn-primary`, `.btn-danger`, `.btn-ghost`, `.btn-compact`); `.toolbar-button` shares ghost interaction rules.
+- **`app/src/routes/+layout.svelte`** — imports `buttons.css` globally alongside tokens.
+- **`app/src/lib/styles/app-shell.css`** — toolbar hover/focus/active moved to shared button stylesheet.
+- **Chat** — `ChatBlockedState.svelte` and `chat-composer.css` route danger UI through `--color-danger`; setup/retry/send use shared button classes.
+- **Workspace Manager / Add Multiple / Git Changes** — migrated off duplicated `.wm-button` / `.git-changes-*` styles onto shared variants; removed dead scoped button CSS.
+- **`specs/improvements/ui-m-1-execution-plan.md`** — all tasks marked `[DONE]`, status set to Done.
+
 ## 2026-07-09 21:56 — UI / UX improvement execution plans
 
 - **`specs/improvements/`** — new planning folder for visual consistency and interaction polish (from the UI/UX audit).

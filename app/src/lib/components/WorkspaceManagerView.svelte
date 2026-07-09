@@ -178,7 +178,7 @@
       {#if showGitColumn}
       <button
         type="button"
-        class="wm-button"
+        class="btn btn-secondary"
         disabled={gitRefreshBusy || workspaces.length === 0}
         title="Refresh git status column"
         onclick={handleRefreshGitColumn}
@@ -186,8 +186,8 @@
         {gitRefreshBusy ? "Refreshing…" : "Refresh git"}
       </button>
       {/if}
-      <button type="button" class="wm-button" onclick={onAddWorkspace}>Add workspace</button>
-      <button type="button" class="wm-button" onclick={onAddMultiple}>Add multiple…</button>
+      <button type="button" class="btn btn-secondary" onclick={onAddWorkspace}>Add workspace</button>
+      <button type="button" class="btn btn-secondary" onclick={onAddMultiple}>Add multiple…</button>
     </div>
   </header>
 
@@ -195,8 +195,8 @@
     <div class="workspace-manager-empty">
       <p>No workspaces open in this window yet.</p>
       <div class="workspace-manager-actions">
-        <button type="button" class="wm-button" onclick={onAddWorkspace}>Add workspace</button>
-        <button type="button" class="wm-button" onclick={onAddMultiple}>Add multiple…</button>
+        <button type="button" class="btn btn-secondary" onclick={onAddWorkspace}>Add workspace</button>
+        <button type="button" class="btn btn-secondary" onclick={onAddMultiple}>Add multiple…</button>
       </div>
     </div>
   {:else}
@@ -250,7 +250,7 @@
             <td class="wm-action-col">
               <button
                 type="button"
-                class="wm-button wm-button-secondary"
+                class="btn btn-secondary btn-compact"
                 title="Workspace settings"
                 onclick={(event) => {
                   event.stopPropagation();
@@ -303,32 +303,6 @@
     flex-shrink: 0;
     flex-wrap: wrap;
     justify-content: flex-end;
-  }
-
-  .wm-button {
-    padding: var(--space-2) var(--space-6);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-2);
-    color: var(--color-text-primary);
-    font: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: background-color var(--motion-fast) var(--easing-standard);
-  }
-
-  .wm-button:hover:not(:disabled) {
-    background: var(--color-surface-3, var(--color-surface-2));
-  }
-
-  .wm-button:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
-  .wm-button-secondary {
-    padding: var(--space-1) var(--space-4);
-    font-size: 0.8125rem;
   }
 
   .workspace-manager-empty {

@@ -1099,7 +1099,7 @@
       {#if canRetryLastTurn}
         <button
           type="button"
-          class="chat-retry-button"
+          class="btn btn-danger chat-retry-button"
           onclick={() => void retryLastTurn()}
           disabled={isRetryDisabled}
         >
@@ -1116,7 +1116,7 @@
       </span>
       <button
         type="button"
-        class="chat-send-button"
+        class="btn btn-primary chat-send-button"
         onclick={() => void submitOrEnqueue()}
         disabled={isSendDisabled}
       >

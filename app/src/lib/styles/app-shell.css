@@ -332,21 +332,18 @@
   gap: var(--space-6);
 }
 
-.toolbar-button:hover,
 .status-segment:hover,
 .menu-action:hover {
   background: var(--color-hover);
   cursor: pointer;
 }
 
-.toolbar-button:focus-visible,
 .status-segment:focus-visible,
 .menu-action:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
 }
 
-.toolbar-button:active,
 .status-segment:active,
 .menu-action:active {
   background: var(--color-pressed);

@@ -119,12 +119,12 @@
       {/if}
 
       <footer class="add-multiple-actions">
-        <button type="button" class="wm-button" onclick={() => onCancel?.()} disabled={loading}>
+        <button type="button" class="btn btn-secondary" onclick={() => onCancel?.()} disabled={loading}>
           Cancel
         </button>
         <button
           type="button"
-          class="wm-button wm-button-primary"
+          class="btn btn-primary"
           onclick={() => onConfirm?.()}
           disabled={loading || selected.size === 0}
         >
@@ -267,36 +267,5 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--space-3);
-  }
-
-  .wm-button {
-    padding: var(--space-2) var(--space-6);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-2);
-    color: var(--color-text-primary);
-    font: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: background-color var(--motion-fast) var(--easing-standard);
-  }
-
-  .wm-button:hover:not(:disabled) {
-    background: var(--color-surface-3, var(--color-surface-2));
-  }
-
-  .wm-button:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  .wm-button-primary {
-    background: var(--color-accent);
-    border-color: var(--color-accent);
-    color: var(--color-surface-1, #fff);
-  }
-
-  .wm-button-primary:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-accent) 88%, #000);
   }
 </style>

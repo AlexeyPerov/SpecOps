@@ -49,7 +49,7 @@
     <p class="chat-blocked-hint">
       Enable Chat (beta) in Settings → Dev, then configure HTTP providers or Debug Provider under Chats.
     </p>
-    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("dev")}>
+    <button type="button" class="btn btn-primary chat-setup-button" onclick={() => openSettingsDialog("dev")}>
       Open Settings → Dev
     </button>
   </div>
@@ -66,7 +66,7 @@
     <p class="chat-blocked-title">{httpBlockedCopy.title}</p>
     <p class="chat-blocked-message">{httpBlockedCopy.message}</p>
     <p class="chat-blocked-hint">{httpBlockedCopy.recoveryHint}</p>
-    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("connections")}>
+    <button type="button" class="btn btn-primary chat-setup-button" onclick={() => openSettingsDialog("connections")}>
       Open Providers settings
     </button>
   </div>
@@ -77,7 +77,7 @@
     <p class="chat-blocked-hint">{debugBlockedCopy.recoveryHint}</p>
     <button
       type="button"
-      class="chat-setup-button"
+      class="btn btn-primary chat-setup-button"
       onclick={() => openSettingsDialog(debugSettingsTab)}
     >
       Open {debugSettingsLabel} settings
@@ -88,7 +88,7 @@
     <p class="chat-blocked-title">{modelBlockedCopy.title}</p>
     <p class="chat-blocked-message">{modelBlockedCopy.message}</p>
     <p class="chat-blocked-hint">{modelBlockedCopy.recoveryHint}</p>
-    <button type="button" class="chat-setup-button" onclick={() => openSettingsDialog("connections")}>
+    <button type="button" class="btn btn-primary chat-setup-button" onclick={() => openSettingsDialog("connections")}>
       Open Providers settings
     </button>
   </div>
@@ -96,9 +96,9 @@
 
 <style>
   .chat-blocked-state {
-    border: 1px solid color-mix(in srgb, #e06c75 48%, var(--color-border-subtle));
+    border: 1px solid color-mix(in srgb, var(--color-danger) 48%, var(--color-border-subtle));
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, #e06c75 9%, var(--color-surface-1));
+    background: color-mix(in srgb, var(--color-danger) 9%, var(--color-surface-1));
     padding: var(--space-6);
     display: flex;
     flex-direction: column;
@@ -126,21 +126,6 @@
     min-height: 26px;
     margin-top: var(--space-2);
     padding: 0 var(--space-8);
-    border-radius: var(--radius-sm);
-    border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle));
-    background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface-1));
-    color: var(--color-text-primary);
     font-size: 12px;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .chat-setup-button:hover {
-    background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface-1));
-  }
-
-  .chat-setup-button:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 1px;
   }
 </style>

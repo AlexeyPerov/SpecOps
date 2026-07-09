@@ -1,5 +1,6 @@
 <script lang="ts">
   import "../lib/styles/tokens.css";
+  import "../lib/styles/buttons.css";
   import "../lib/styles/chatProse.css";
   // Shared settings stylesheets are imported once globally. They use flat
   // global classes (`.settings-*` / `.connection-row-*` / `.required-section-*`

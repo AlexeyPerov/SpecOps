@@ -1,5 +1,6 @@
 <script lang="ts">
   import { consoleLogs } from "../services/appConsole";
+  import EmptyState from "./EmptyState.svelte";
 
   const DISPLAY_MAX_ENTRIES = 250;
 
@@ -36,7 +37,7 @@
     tabindex="-1"
   >
     {#if entries.length === 0}
-      <p class="console-empty">No log entries yet.</p>
+      <EmptyState variant="inline" title="No log entries yet." />
     {:else}
       {#if hiddenEntryCount > 0}
         <p class="console-truncated">
@@ -70,7 +71,6 @@
     -webkit-user-select: text;
   }
 
-  .console-empty,
   .console-truncated {
     margin: 0 0 var(--space-4);
     color: var(--color-text-secondary);
@@ -82,11 +82,11 @@
   }
 
   .console-line[data-level="error"] {
-    color: #e06c75;
+    color: var(--color-danger);
   }
 
   .console-line[data-level="warn"] {
-    color: #e5c07b;
+    color: color-mix(in srgb, var(--color-danger) 50%, var(--color-text-secondary));
   }
 
   .console-line[data-level="debug"],

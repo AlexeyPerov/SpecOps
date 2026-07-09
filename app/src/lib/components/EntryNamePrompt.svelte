@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { registerEntryNamePromptRunner, type EntryNamePromptRequest } from "../services/entryNamePrompt";
+  import DialogShell from "./DialogShell.svelte";
 
   interface Props {
     onNotify?: (message: string) => void;
@@ -13,7 +14,6 @@
   let value = $state("");
   let confirmLabel = $state("OK");
   let inputEl = $state<HTMLInputElement | null>(null);
-  let backdropEl = $state<HTMLDivElement | null>(null);
 
   let resolvePrompt: ((value: string | null) => void) | null = null;
 
@@ -54,19 +54,8 @@
     finish(null);
   }
 
-  function handleBackdropPointerDown(event: PointerEvent): void {
-    if (event.target === backdropEl) {
-      cancel();
-    }
-  }
-
-  function handleDialogKeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      cancel();
-      return;
-    }
+  function handleInputKeydown(event: KeyboardEvent): void {
+    // Enter confirms; Escape is handled by DialogShell (→ cancel).
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
@@ -80,77 +69,31 @@
   });
 </script>
 
-{#if open}
-  <div
-    bind:this={backdropEl}
-    class="entry-name-prompt-backdrop"
-    role="presentation"
-    onpointerdown={handleBackdropPointerDown}
+<DialogShell {open} {title} width={360} onDismiss={cancel}>
+  <form
+    class="entry-name-prompt-form"
+    onsubmit={(event) => {
+      event.preventDefault();
+      submit();
+    }}
   >
-    <div
-      class="entry-name-prompt"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="entry-name-prompt-title"
-      tabindex="-1"
-      onkeydown={handleDialogKeydown}
-    >
-      <form
-        onsubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <h2 id="entry-name-prompt-title" class="entry-name-prompt-title">{title}</h2>
-        <input
-          bind:this={inputEl}
-          class="entry-name-prompt-input"
-          type="text"
-          bind:value
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <div class="entry-name-prompt-actions">
-          <button type="button" class="toolbar-button" onclick={cancel}>Cancel</button>
-          <button type="submit" class="toolbar-button">{confirmLabel}</button>
-        </div>
-      </form>
-    </div>
-  </div>
-{/if}
+    <input
+      bind:this={inputEl}
+      class="entry-name-prompt-input"
+      type="text"
+      bind:value
+      autocomplete="off"
+      spellcheck="false"
+      onkeydown={handleInputKeydown}
+    />
+  </form>
+  {#snippet actions()}
+    <button type="button" class="btn btn-secondary" onclick={cancel}>Cancel</button>
+    <button type="button" class="btn btn-primary" onclick={submit}>{confirmLabel}</button>
+  {/snippet}
+</DialogShell>
 
 <style>
-  .entry-name-prompt-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 1200;
-    display: grid;
-    place-items: center;
-    background: transparent;
-  }
-
-  .entry-name-prompt {
-    width: min(360px, calc(100vw - 2 * var(--space-12)));
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--color-surface-1);
-    box-shadow: var(--shadow-overlay);
-    padding: var(--space-10);
-  }
-
-  .entry-name-prompt form {
-    display: grid;
-    gap: var(--space-8);
-    margin: 0;
-  }
-
-  .entry-name-prompt-title {
-    margin: 0;
-    font-size: var(--font-size-status);
-    font-weight: 600;
-    color: var(--color-text-primary);
-  }
-
   .entry-name-prompt-input {
     height: 32px;
     border-radius: var(--radius-sm);
@@ -159,11 +102,11 @@
     color: var(--color-text-primary);
     padding: 0 var(--space-8);
     font: inherit;
+    width: 100%;
   }
 
-  .entry-name-prompt-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-6);
+  .entry-name-prompt-input:focus {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
   }
 </style>

@@ -15,6 +15,7 @@
   } from "../services/sessionsSidebarController";
   import { DEFAULT_PANEL_WIDTH_PX } from "../services/panelLayout";
   import SessionSidebarRow from "./SessionSidebarRow.svelte";
+  import EmptyState from "./EmptyState.svelte";
 
   interface Props {
     sessions?: SessionIndexEntry[];
@@ -249,11 +250,13 @@
 
       <div class="sessions-list">
         {#if filteredSessions.length === 0}
-          <p class="sessions-empty" role="status">
-            {searchQuery.trim()
+          <EmptyState
+            class="sessions-empty"
+            variant="inline"
+            title={searchQuery.trim()
               ? `No ${entryPluralLabel} match your search.`
               : `No ${entryPluralLabel} yet.`}
-          </p>
+          />
         {:else}
           {#each groupsWithSessions() as group (group)}
             <section class="sessions-group" aria-label={SESSION_DATE_GROUP_LABELS[group]}>

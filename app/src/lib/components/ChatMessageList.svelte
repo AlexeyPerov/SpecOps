@@ -18,6 +18,7 @@
   } from "../ai/chatSteps";
   import { cacheTotal, formatCost, formatTokenCount } from "../ai/chatTokenFormat";
   import type { ChatMessage } from "../domain/contracts";
+  import EmptyState from "./EmptyState.svelte";
   import ToolCard from "./ToolCard.svelte";
   import ReasoningBlock from "./ReasoningBlock.svelte";
   import SubtaskCard from "./SubtaskCard.svelte";
@@ -360,12 +361,12 @@
 
 <div class="chat-panel-body">
   {#if isEmpty}
-    <div class="chat-empty-state">
-      <p class="chat-title">Start chat</p>
-      <p class="chat-hint">
-        {emptyHint}
-      </p>
-    </div>
+    <EmptyState
+      class="chat-empty"
+      variant="inline"
+      title="Start chat"
+      description={emptyHint}
+    />
   {:else}
     <div class="chat-message-scroll" bind:this={scrollContainerEl}>
       {#if hasAnyReasoning}
@@ -563,11 +564,17 @@
     justify-content: flex-end;
   }
 
-  .chat-empty-state {
-    display: flex;
-    flex-direction: column;
+  /*
+   * M2-2 — chat empty uses the shared EmptyState primitive. The panel body
+   * is a flex column justified to flex-end so the empty block sits at the
+   * bottom of the panel (matching the previous inline placement). We only
+   * constrain alignment/spacing here; typography comes from EmptyState.
+   */
+  .chat-empty {
+    align-items: flex-start;
+    text-align: left;
+    padding: 0;
     gap: var(--space-2);
-    color: var(--color-text-secondary);
   }
 
   .chat-compaction-notice {
@@ -832,20 +839,6 @@
     100% {
       opacity: 0;
     }
-  }
-
-  .chat-title {
-    margin: 0;
-    color: var(--color-text-primary);
-    font-size: 12px;
-    line-height: 1.4;
-    font-weight: 600;
-  }
-
-  .chat-hint {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.5;
   }
 
   /*

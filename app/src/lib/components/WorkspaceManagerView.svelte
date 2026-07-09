@@ -9,6 +9,7 @@
   } from "../git/workspaceManagerGitColumn";
   import { shouldLoadWorkspaceManagerGitColumn } from "../git/gitIntegrationGating";
   import { emptySet } from "../collections/emptyCollections";
+  import EmptyState from "./EmptyState.svelte";
 
   /**
    * Workspace Manager — a chrome-less editor-pane view tab (kind
@@ -192,13 +193,18 @@
   </header>
 
   {#if workspaces.length === 0}
-    <div class="workspace-manager-empty">
-      <p>No workspaces open in this window yet.</p>
-      <div class="workspace-manager-actions">
-        <button type="button" class="btn btn-secondary" onclick={onAddWorkspace}>Add workspace</button>
-        <button type="button" class="btn btn-secondary" onclick={onAddMultiple}>Add multiple…</button>
-      </div>
-    </div>
+    <EmptyState
+      class="workspace-manager-empty"
+      title="No workspaces open"
+      description="No workspaces open in this window yet."
+    >
+      {#snippet actions()}
+        <div class="workspace-manager-actions">
+          <button type="button" class="btn btn-secondary" onclick={onAddWorkspace}>Add workspace</button>
+          <button type="button" class="btn btn-secondary" onclick={onAddMultiple}>Add multiple…</button>
+        </div>
+      {/snippet}
+    </EmptyState>
   {:else}
     <table class="workspace-manager-table">
       <thead>
@@ -305,13 +311,23 @@
     justify-content: flex-end;
   }
 
-  .workspace-manager-empty {
-    display: flex;
-    flex-direction: column;
+  /*
+   * M2-2 — workspace-manager empty uses the shared EmptyState primitive. The
+   * class is forwarded to EmptyState's root, so these overrides target it via
+   * :global to escape Svelte's scoped-CSS boundary. The centered variant
+   * fills the pane; here we keep the content left-aligned and reset EmptyState's
+   * centered padding so it matches the view's own vertical rhythm.
+   */
+  :global(.workspace-manager-empty) {
     align-items: flex-start;
-    gap: var(--space-6);
+    text-align: left;
     padding: var(--space-12) 0;
-    color: var(--color-text-secondary);
+    max-width: none;
+    margin: 0;
+  }
+
+  :global(.workspace-manager-empty .workspace-manager-actions) {
+    margin-top: var(--space-2);
   }
 
   .workspace-manager-table {

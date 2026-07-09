@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-09 23:39 — UI / UX milestone M2 (empty states + dialog shell)
+
+- **`app/src/lib/components/EmptyState.svelte`** — new shared empty-state primitive (R3). Title + optional description + optional actions slot; `centered` variant fills the pane (Version Control vocabulary) and `inline` variant is a compact block (list/panel vocabulary). Theme text/surface tokens only.
+- **`app/src/lib/components/EmptyState.test.ts`** — smoke tests (title-only, title+description+inline, alert role, class hook, null role).
+- **`app/src/lib/components/DialogShell.svelte`** — new shared dialog chrome (R4). Fixed backdrop + centered panel, `role="dialog"` / `aria-modal="true"` / `aria-labelledby`, Escape + optional backdrop dismiss, title/body/actions regions, focus move-in on open + restore on close. Presentational shell only (promise-based confirm API is M3).
+- **`app/src/lib/components/DialogShell.test.ts`** — smoke tests (closed renders nothing, title/body/aria wiring, Escape dismiss, no-dismiss when `onDismiss` omitted, backdrop dismiss on/off, width + panel class).
+- **Empty-state migrations (R3):**
+  - `ChatMessageList.svelte` — chat "Start chat" empty → `EmptyState` (inline); removed now-orphaned `.chat-title` / `.chat-hint` / `.chat-empty-state` CSS.
+  - `SessionsSidebar.svelte` + `sessions-sidebar.css` — sessions list empty → `EmptyState` (inline).
+  - `TodoPanel.svelte` — loading / empty / error todos → `EmptyState` (inline); routed error + cancelled-marker + high-priority colors through `--color-danger` (M1-2 follow-up, removing hardcoded `#e06c75`).
+  - `ConsoleLogsPanel.svelte` — "No log entries yet." → `EmptyState` (inline); routed error/warn log colors through `--color-danger` (removing hardcoded `#e06c75` / `#e5c07b`).
+  - `WorkspaceManagerView.svelte` — no-workspaces empty → `EmptyState` (centered) with the Add workspace / Add multiple CTAs in the actions slot.
+- **Dialog migrations (R4), no behavior change:**
+  - `EntryNamePrompt.svelte` — onto `DialogShell` (360px); Enter still submits, Escape cancels; Cancel/OK use shared `.btn` variants; removed duplicated backdrop/panel CSS.
+  - `TagDeletePrompt.svelte` — onto `DialogShell` (420px); checkbox + hint body preserved; Cancel/Delete use shared `.btn` variants; `dismissOnBackdrop` suppressed while submitting; removed duplicated backdrop/panel CSS.
+- **`specs/improvements/ui-m-2-execution-plan.md`** — all tasks marked `[DONE]`, status set to Done.
+
 ## 2026-07-09 22:53 — UI / UX milestone M1 (tokens + shared buttons)
 
 - **`app/src/lib/styles/tokens.css`** — added `--color-text`, `--color-text-muted`, and `--color-surface-3` aliases for light and dark (derived via `color-mix` from existing surface/text tokens; no theme schema changes).

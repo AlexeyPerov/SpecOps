@@ -169,11 +169,13 @@
   letter-spacing: 0.04em;
 }
 
+/*
+ * M2-2 — sessions empty uses the shared EmptyState primitive. Reset
+ * EmptyState's default inline padding so it flows with the list gap.
+ */
 .sessions-empty {
-  margin: 0;
-  padding: var(--space-4);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-status);
+  text-align: left;
+  padding: var(--space-4) 0;
 }
 
 .sessions-context-menu {

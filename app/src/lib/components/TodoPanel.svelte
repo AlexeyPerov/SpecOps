@@ -9,6 +9,7 @@
     OpencodeTodoEntry,
     OpencodeTodoStatus,
   } from "../ai/backends/workspaceAgentBackend";
+  import EmptyState from "./EmptyState.svelte";
 
   /**
    * M5-T1 — TODO panel. Renders the agent's `session.todo` list as a
@@ -87,11 +88,20 @@
 
   <div class="todo-body">
     {#if todoState.status === "error"}
-      <p class="todo-empty todo-error" role="alert">{todoState.lastErrorMessage}</p>
+      <EmptyState
+        class="todo-error"
+        variant="inline"
+        role="alert"
+        title={todoState.lastErrorMessage ?? "Could not load todos."}
+      />
     {:else if todoState.status === "loading" && todoState.todos.length === 0}
-      <p class="todo-empty">Loading todos…</p>
+      <EmptyState variant="inline" title="Loading todos…" />
     {:else if isEmpty}
-      <p class="todo-empty">No todos yet. The agent will list tasks here as it works.</p>
+      <EmptyState
+        variant="inline"
+        title="No todos yet"
+        description="The agent will list tasks here as it works."
+      />
     {:else}
       <ul class="todo-list">
         {#each sorted as todo (todo.content + todo.status)}
@@ -172,16 +182,17 @@
     padding: var(--space-4) var(--space-6);
   }
 
-  .todo-empty {
-    margin: 0;
-    padding: var(--space-10) var(--space-4);
-    text-align: center;
-    color: var(--color-text-secondary);
-    font-size: 12px;
+  /*
+   * Error empty state tints the shared EmptyState title with the danger token
+   * (M1-2 follow-up: replaces a hardcoded danger red). Layout/typography come
+   * from EmptyState.
+   */
+  .todo-error {
+    color: var(--color-danger);
   }
 
-  .todo-error {
-    color: #e06c75;
+  .todo-error :global(.empty-state-title) {
+    color: var(--color-danger);
   }
 
   .todo-list {
@@ -237,8 +248,8 @@
   }
 
   .todo-marker-cancelled {
-    color: #e06c75;
-    border-color: color-mix(in srgb, #e06c75 50%, var(--color-border-subtle));
+    color: var(--color-danger);
+    border-color: color-mix(in srgb, var(--color-danger) 50%, var(--color-border-subtle));
   }
 
   .todo-content {
@@ -287,7 +298,7 @@
   }
 
   .todo-priority-high {
-    color: #e06c75;
+    color: var(--color-danger);
   }
 
   .todo-priority-medium {

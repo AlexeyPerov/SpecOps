@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-09 10:15 — P3 project tree reload trigger narrowing
+
+- **`syncProjectTreeWatcherEffect`** — memoizes root-load and watcher sync keys so tab/session churn that re-invokes the effect is a no-op. Root load runs on workspace-root transition; watcher clears on leave/chat-http and restarts when re-entering an active workspace with `runtimeReady`. Leaving the workspace clears the root memo so re-entry reloads once; chat-http toggles keep the loaded root.
+- **`+page.svelte`** — split sidecar and project-tree shell effects so `isSessionTabActive` no longer re-triggers project-tree sync.
+- **Tests** — `syncProjectTreeWatcherEffect` coverage in `appShellEffects.test.ts`; controller skip/force coverage in `projectTreeController.test.ts`.
+- **`specs/optimizations-plan.md`** — Task P3 marked `[DONE]`.
+
 ## 2026-07-09 10:10 — P2 incremental workspace session hydration
 
 - **`chatStore/sessions.loadWorkspaceSessions`** — loads the session index first, hydrates priority/visible session threads before resolving (bounded concurrency via `mapWithConcurrency`, default 6), and defers remaining thread-file reads to a background pass. Draft merge semantics unchanged. Generation tokens cancel stale background hydrates after a newer load for the same scope.

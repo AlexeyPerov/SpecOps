@@ -168,4 +168,29 @@ describe("createProjectTreeController", () => {
     expect(lastState.expandedPaths.size).toBe(0);
     expect(lastState.loadingPaths.size).toBe(0);
   });
+
+  it("skips directory IO when root is already loaded for the same workspace", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async () => [
+      makeNode("src", "/repo/src", "directory"),
+    ]);
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: true });
+
+    expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads root when force is set", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async () => [
+      makeNode("src", "/repo/src", "directory"),
+    ]);
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+    await controller.refreshProjectTree("/repo", false);
+
+    expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(2);
+  });
 });

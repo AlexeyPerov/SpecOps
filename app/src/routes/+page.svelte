@@ -937,8 +937,7 @@
   });
 
   $effect(() => {
-    // Tab / workspace context churn re-runs this effect (sidecar + project tree).
-    // Time the synchronous scheduling cost; async work is timed inside handlers.
+    // Sidecar health depends on session-tab active; keep that dep here only.
     const effectStartedAt = nowMs();
     runtimeReady;
     isWorkspaceLifecycleActive();
@@ -962,6 +961,27 @@
       opencodeEnabled,
       opencodeMode,
     });
+    void logPerfTiming(
+      "tab/workspace shell effect scheduled",
+      {
+        metric: "tab.activationSideEffects",
+        durationMs: elapsedMs(effectStartedAt),
+        label: "shell-sidecar-effect",
+        runtimeReady,
+        isChatHttpActive,
+        isSessionTabActive,
+        hasWorkspaceRoot: Boolean(activeWorkspaceRoot),
+      },
+      "debug",
+    );
+  });
+
+  $effect(() => {
+    // Project tree: workspace-root / chat-http / runtimeReady only — not tab churn.
+    const effectStartedAt = nowMs();
+    runtimeReady;
+    activeWorkspaceRoot;
+    isChatHttpActive;
     syncProjectTreeWatcherEffect({
       runtimeReady,
       activeWorkspaceRoot,
@@ -970,14 +990,13 @@
       loadProjectTreeRoot,
     });
     void logPerfTiming(
-      "tab/workspace shell effect scheduled",
+      "project tree shell effect scheduled",
       {
         metric: "tab.activationSideEffects",
         durationMs: elapsedMs(effectStartedAt),
-        label: "shell-sidecar-project-tree-effect",
+        label: "shell-project-tree-effect",
         runtimeReady,
         isChatHttpActive,
-        isSessionTabActive,
         hasWorkspaceRoot: Boolean(activeWorkspaceRoot),
       },
       "debug",

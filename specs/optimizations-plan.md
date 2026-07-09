@@ -122,7 +122,7 @@ Dependencies: Task P1.
 
 ---
 
-#### Task P3: Project tree reload trigger narrowing [Score:7] [Agent:medium] [~1d]
+#### Task P3: Project tree reload trigger narrowing [Score:7] [Agent:medium] [~1d] [DONE]
 
 **Required context**
 

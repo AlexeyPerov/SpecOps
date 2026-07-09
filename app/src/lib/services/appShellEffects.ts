@@ -5,7 +5,8 @@
  * 1. Session/chat scope (syncSessionTabEffect) should run before session persistence
  *    so lastActiveAgentId reflects the current agent tab selection.
  * 2. Project tree watcher (syncProjectTreeWatcherEffect) depends on runtimeReady
- *    and activeWorkspaceRoot; load root before starting the watcher.
+ *    and activeWorkspaceRoot (not tab/session churn); load root before starting
+ *    the watcher. Memoized so redundant effect re-runs are no-ops.
  * 3. Settings persistence (syncSettingsPersistenceEffect) is independent but
  *    shares the same snapshot read as session persistence — keep both in the
  *    same $effect wrapper to avoid duplicate debounced writes.
@@ -586,6 +587,14 @@ async function probeSidecarStatusAfterRefresh(
   }
 }
 
+/**
+ * Memoized project-tree sync. Root load runs on workspace-root transition;
+ * watcher sync runs when entering an active workspace with runtimeReady.
+ * Tab/session churn that re-invokes this effect is a no-op.
+ */
+let lastProjectTreeRootKey: string | null = null;
+let lastProjectTreeWatcherKey: string | null = null;
+
 export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffectInput): void {
   const {
     runtimeReady,
@@ -595,15 +604,29 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
     loadProjectTreeRoot,
   } = input;
 
+  // Gate on workspace presence and chat-http overlay — not tab/session selection.
   if (!activeWorkspaceRoot || isChatHttpActive) {
+    if (lastProjectTreeWatcherKey === "inactive") {
+      return;
+    }
+    lastProjectTreeWatcherKey = "inactive";
+    if (!activeWorkspaceRoot) {
+      // Left workspace entirely — allow a fresh root load on next entry.
+      lastProjectTreeRootKey = null;
+    }
     void syncProjectTreeWatcher(null);
     projectTreeController.clearFilesystemChangeDebounce();
     return;
   }
 
-  void loadProjectTreeRoot();
+  const rootKey = normalizePathSync(activeWorkspaceRoot);
+  if (rootKey !== lastProjectTreeRootKey) {
+    lastProjectTreeRootKey = rootKey;
+    void loadProjectTreeRoot();
+  }
 
-  if (runtimeReady) {
+  if (runtimeReady && lastProjectTreeWatcherKey !== rootKey) {
+    lastProjectTreeWatcherKey = rootKey;
     void syncProjectTreeWatcher(activeWorkspaceRoot);
   }
 }
@@ -663,6 +686,8 @@ export function resetAppShellEffectsForTests(): void {
   }
   pendingActiveFileExpandRequest = null;
   lastAppliedActiveFileExpandKey = null;
+  lastProjectTreeRootKey = null;
+  lastProjectTreeWatcherKey = null;
 }
 
 export function syncActiveFileTreeExpandEffect(input: SyncActiveFileTreeExpandEffectInput): void {

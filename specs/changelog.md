@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-09 19:10 — Editor minimap review fixes
+
+- **`editor/editorMinimap.ts`** — removed `pointer-events: none` from the minimap host so the overlay's click/drag-to-scroll handlers fire (was blocking the exit-criteria jump navigation). Renamed the unused `view` param to `_view`. Switched `showMinimap.compute(["doc"], …)` to `compute([], …)` so the constant config isn't recomputed on every document change.
+
 ## 2026-07-09 18:45 — Editor minimap (M1–M5)
 
 - **`app/package.json`** — added the CodeMirror 6 minimap extension dependency.

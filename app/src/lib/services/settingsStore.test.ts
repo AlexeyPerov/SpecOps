@@ -521,6 +521,7 @@ describe("showMinimap persistence", () => {
     expect(result?.showMinimap).toBe(true);
   });
 });
+
 describe("defaultMarkdownViewMode persistence", () => {
   it("defaults to preview", () => {
     expect(defaultPersistedSettings.defaultMarkdownViewMode).toBe("preview");

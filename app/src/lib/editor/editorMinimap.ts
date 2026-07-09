@@ -4,17 +4,13 @@ import { showMinimap, type MinimapConfig } from "@replit/codemirror-minimap";
 
 /**
  * Minimap container factory: returns a host `<div>` for the package to render
- * the scaled content + viewport overlay into. Kept separate from {@link
- * minimapExtension} so the compartment can be reconfigured without recreating
- * the host element shape.
+ * the scaled content + viewport overlay into. The overlay subtree handles
+ * click/drag-to-scroll, so the host must stay pointer-interactive.
  */
-function createMinimapHost(view: EditorView): { dom: HTMLElement } {
+function createMinimapHost(_view: EditorView): { dom: HTMLElement } {
   const dom = document.createElement("div");
   dom.className = "cm-minimap-host";
   dom.setAttribute("aria-hidden", "true");
-  // Avoid focus stealing / interactive cursor on the scaled overview; the
-  // overlay plugin handles drag-to-scroll on its own container.
-  dom.style.pointerEvents = "none";
   return { dom };
 }
 
@@ -36,5 +32,8 @@ const MINIMAP_CONFIG: MinimapConfig = {
  * and be reconfigured with a new `enabled` value without remounting the editor.
  */
 export function minimapExtension(enabled: boolean): Extension {
-  return showMinimap.compute(["doc"], () => (enabled ? MINIMAP_CONFIG : null));
+  // The config does not depend on editor state, so `[]` avoids recomputing it
+  // on every document change. Returning `null` makes the package render no
+  // minimap (see `showMinimap.combine`).
+  return showMinimap.compute([], () => (enabled ? MINIMAP_CONFIG : null));
 }

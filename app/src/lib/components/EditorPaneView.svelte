@@ -2,8 +2,8 @@
   import { onDestroy } from "svelte";
   import TabBar from "./TabBar.svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
-  import { isFileTab } from "../domain/contracts";
   import { isTabVisibleInStrip } from "../services/implicitDraftTab";
+  import { buildDocumentByIdMap, tabDocumentFromMap } from "../services/tabDocumentLookup";
   import type { PaneDropTargetElements } from "./paneDropTargets";
 
   /**
@@ -77,13 +77,10 @@
   const isTabDropTarget = $derived(tabDropTargetPaneId === paneId);
   const isFileDropTarget = $derived(fileDropTargetPaneId === paneId);
 
-  const documentById = $derived(new Map(documents.map((doc) => [doc.id, doc])));
+  const documentById = $derived(buildDocumentByIdMap(documents));
 
   function tabDocument(tab: TabState): DocumentState | undefined {
-    if (!isFileTab(tab)) {
-      return undefined;
-    }
-    return documentById.get(tab.documentId);
+    return tabDocumentFromMap(tab, documentById);
   }
 
   const visibleTabCount = $derived(

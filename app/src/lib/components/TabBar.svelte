@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
-  import { isFileTab, isSessionTab, isViewTab } from "../domain/contracts";
+  import { isSessionTab, isViewTab } from "../domain/contracts";
   import { appState } from "../state/appState";
   import { chatSessionIndex } from "../state/chatStore";
   import { draftEntryTitleForScope } from "../services/chatSessions";
   import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import { DEFAULT_UNTITLED_TITLE } from "../services/untitledTitle";
   import { isTabVisibleInStrip } from "../services/implicitDraftTab";
+  import { buildDocumentByIdMap, tabDocumentFromMap } from "../services/tabDocumentLookup";
   import TabBarContextMenu from "./TabBarContextMenu.svelte";
   import {
     createTabDragController,
@@ -93,13 +94,10 @@
     }
   });
 
-  const documentById = $derived(new Map(documents.map((doc) => [doc.id, doc])));
+  const documentById = $derived(buildDocumentByIdMap(documents));
 
   function tabDocument(tab: TabState): DocumentState | undefined {
-    if (!isFileTab(tab)) {
-      return undefined;
-    }
-    return documentById.get(tab.documentId);
+    return tabDocumentFromMap(tab, documentById);
   }
 
   const visibleTabs = $derived(

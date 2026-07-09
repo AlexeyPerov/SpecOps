@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-09 13:30 — P7 validation pass and regression guardrails
+
+- **`tabDocumentLookup`** — shared `buildDocumentByIdMap` / `tabDocumentFromMap` used by `TabBar`, `EditorPaneView`, and `watchedPathsFromState` so the P5 O(1) lookup path is unit-testable and consistent.
+- **Regression tests** — `optimizationsP7.validation.test.ts` covers hydration concurrency ordering, project-tree root-load memoization across tab churn / workspace transitions, tab lookup parity vs `find`, and watcher sync-key / effect memoization; `tabDocumentLookup.test.ts` covers visibility/title/missing markers and large tab counts.
+- **Perf comparison** — `specs/optimizations-p7-validation.json` records before/after host proxies vs P1 baseline and plan targets (priority hydrate, map vs find, watcher collect).
+- **`specs/optimizations-plan.md`** — Task P7 marked `[DONE]`; exit criteria checked off.
+
 ## 2026-07-09 13:20 — P6 external watcher sync memoization
 
 - **`watchedPathsFromState`** — builds a document-id Map once per call instead of repeated `documents.find` lookups when collecting watched file paths.

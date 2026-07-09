@@ -1,6 +1,7 @@
 import type { AppDomainState, WorkspaceLayoutState } from "../domain/contracts";
 import { getSessionTabs, isFileTab } from "../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
+import { buildDocumentByIdMap } from "./tabDocumentLookup";
 
 export const DEFAULT_MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
 
@@ -14,7 +15,7 @@ export function watchedPathsFromState(state: AppDomainState): string[] {
   const paths = new Set<string>();
   const session = getActiveSession(state);
   const documents = getActiveDocuments(state);
-  const documentById = new Map(documents.map((doc) => [doc.id, doc] as const));
+  const documentById = buildDocumentByIdMap(documents);
   for (const tab of getSessionTabs(session)) {
     if (!isFileTab(tab)) {
       continue;

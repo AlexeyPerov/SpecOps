@@ -60,6 +60,7 @@ TODO.md
 !/specs/changelog.md
 !/specs/optimizations-plan.md
 !/specs/optimizations-baseline.json
+!/specs/optimizations-p7-validation.json
 !/specs/git/
 !/specs/git/**
 !/specs/text-editor/

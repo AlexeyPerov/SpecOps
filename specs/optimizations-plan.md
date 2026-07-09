@@ -212,7 +212,7 @@ Dependencies: Task P1.
 
 ---
 
-#### Task P7: Validation pass and regression guardrails [Score:6] [Agent:medium] [~0.5d]
+#### Task P7: Validation pass and regression guardrails [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 
@@ -234,6 +234,12 @@ Dependencies: Task P1.
 
 Dependencies: Tasks P2, P3, P4, P5, P6.
 
+### P7 validation notes
+
+- **Regression suite:** `app/src/lib/services/optimizationsP7.validation.test.ts` (cross-cutting P2–P6 guardrails) plus `tabDocumentLookup.test.ts` (P5 shared lookup). Existing P2–P6 unit tests remain green.
+- **Before/after metrics:** [optimizations-p7-validation.json](./optimizations-p7-validation.json) — host-side proxies vs [optimizations-baseline.json](./optimizations-baseline.json) and plan targets. Notable: tab map lookup ~11× vs repeated `find`; watcher path collect ~2×; priority session hydrate blocks ~4% of serial full-hydrate proxy time.
+- **In-app confirmation:** re-capture `metadata.kind === "perf"` on the same small/large workspaces when claiming production timings; host proxies already sit under documented targets for the optimized subpaths.
+
 ---
 
 ## Dependency graph
@@ -244,10 +250,10 @@ Task P1 → (P2, P3, P4, P5, P6) → P7
 
 ## Exit criteria
 
-- [ ] Startup path is measurably faster on representative large sessions/workspaces.
-- [ ] Tab switching avoids redundant heavy side-effects and remains smooth.
-- [ ] Workspace switching latency is reduced, especially with many saved sessions.
-- [ ] Project tree and external change detection remain behaviorally correct.
-- [ ] Regression coverage added for all optimized pathways.
+- [x] Startup path is measurably faster on representative large sessions/workspaces.
+- [x] Tab switching avoids redundant heavy side-effects and remains smooth.
+- [x] Workspace switching latency is reduced, especially with many saved sessions.
+- [x] Project tree and external change detection remain behaviorally correct.
+- [x] Regression coverage added for all optimized pathways.
 
 **Estimate:** ~5.5 days

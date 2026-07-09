@@ -1,0 +1,331 @@
+{
+  "capturedAt": "2026-07-09T10:27:10.055Z",
+  "method": "Host-side algorithmic proxies for P2/P5/P6 hot paths + baseline IO proxies from P1. In-app metadata.kind=perf remains the source of truth for UI timings; these proxies quantify the optimized code paths vs pre-optimization patterns.",
+  "targetsMs": {
+    "startup.total": {
+      "p50": 1500,
+      "p95": 3000
+    },
+    "workspace.switchRestore": {
+      "p50": 400,
+      "p95": 1200
+    },
+    "workspace.sessionLoad": {
+      "p50": 150,
+      "p95": 500
+    },
+    "tab.activationSideEffects": {
+      "p50": 50,
+      "p95": 150
+    },
+    "projectTree.rootLoad": {
+      "p50": 100,
+      "p95": 300
+    }
+  },
+  "baselineRef": "specs/optimizations-baseline.json",
+  "baselineHostProxies": {
+    "projectTreeRootLoad": {
+      "small": {
+        "rootEntryCount": 15,
+        "samplesMs": [
+          0.043,
+          0.026,
+          0.029,
+          0.023,
+          0.023,
+          0.022,
+          0.025
+        ],
+        "p50Ms": 0.025,
+        "p95Ms": 0.029
+      },
+      "large": {
+        "rootEntryCount": 17,
+        "samplesMs": [
+          0.033,
+          0.019,
+          0.018,
+          0.017,
+          0.017,
+          0.02,
+          0.017
+        ],
+        "p50Ms": 0.018,
+        "p95Ms": 0.02
+      },
+      "vsTarget": "well under projectTree.rootLoad p50/p95 targets"
+    },
+    "tabActivationStat": {
+      "small": {
+        "existingFileCount": 13,
+        "documentCount": 21,
+        "samplesMs": [
+          0.053,
+          0.055,
+          0.056,
+          0.045,
+          0.047,
+          0.051,
+          0.053
+        ],
+        "p50Ms": 0.053,
+        "p95Ms": 0.055
+      },
+      "large": {
+        "existingFileCount": 3,
+        "documentCount": 4,
+        "samplesMs": [
+          0.017,
+          0.014,
+          0.011,
+          0.011,
+          0.011,
+          0.011,
+          0.015
+        ],
+        "p50Ms": 0.011,
+        "p95Ms": 0.015
+      },
+      "vsTarget": "well under tab.activationSideEffects p50/p95 targets (stat portion only)"
+    },
+    "sessionHydrationSerial": {
+      "small_2": {
+        "threadCount": 2,
+        "totalBytes": 8489,
+        "samplesMs": [
+          0.146,
+          0.108,
+          0.1,
+          0.102,
+          0.2,
+          0.148,
+          0.097
+        ],
+        "p50Ms": 0.108,
+        "p95Ms": 0.148
+      },
+      "medium_10": {
+        "threadCount": 10,
+        "totalBytes": 38023,
+        "samplesMs": [
+          0.428,
+          0.367,
+          0.349,
+          0.348,
+          0.345,
+          0.338,
+          0.34
+        ],
+        "p50Ms": 0.348,
+        "p95Ms": 0.367
+      },
+      "large_40": {
+        "threadCount": 40,
+        "totalBytes": 147758,
+        "samplesMs": [
+          1.441,
+          1.404,
+          1.312,
+          1.297,
+          1.401,
+          1.356,
+          1.364
+        ],
+        "p50Ms": 1.364,
+        "p95Ms": 1.404
+      },
+      "large_40_inflated_8kb": {
+        "threadCount": 40,
+        "totalBytes": 468398,
+        "samplesMs": [
+          1.79,
+          1.759,
+          1.748,
+          1.877,
+          1.835,
+          1.653,
+          1.63
+        ],
+        "p50Ms": 1.759,
+        "p95Ms": 1.835
+      }
+    }
+  },
+  "afterOptimizations": {
+    "p2_sessionHydration": {
+      "threadCount": 40,
+      "serialFullProxy": {
+        "samplesMs": [
+          0.724,
+          0.541,
+          0.545,
+          0.573,
+          0.548,
+          0.768,
+          0.532
+        ],
+        "p50Ms": 0.548,
+        "p95Ms": 0.768
+      },
+      "incrementalPriorityOnlyProxy": {
+        "samplesMs": [
+          0.082,
+          0.02,
+          0.028,
+          0.025,
+          0.021,
+          0.018,
+          0.017
+        ],
+        "p50Ms": 0.021,
+        "p95Ms": 0.082
+      },
+      "incrementalFullConcurrentProxy": {
+        "samplesMs": [
+          0.207,
+          0.172,
+          0.194,
+          0.154,
+          0.14,
+          0.18,
+          0.154
+        ],
+        "p50Ms": 0.172,
+        "p95Ms": 0.207
+      },
+      "note": "Priority-only path is what blocks workspace.sessionLoad / switchRestore; deferred threads hydrate in background (P2).",
+      "improvement": {
+        "priorityVsSerialP50Ratio": 0.038,
+        "fullConcurrentVsSerialP50Ratio": 0.314
+      }
+    },
+    "p3_projectTreeTriggerNarrowing": {
+      "behavioral": "Tab/session churn no longer re-invokes root load (memoized syncProjectTreeWatcherEffect). Validated by unit tests; root-load IO count drops from O(tab switches) to O(workspace transitions).",
+      "baselineRootLoadStillUnderTarget": true
+    },
+    "p4_startupExternalChecksDeferral": {
+      "behavioral": "Active tab checked before interactive; remaining tabs drain in background batches. Startup blocking work scales with 1 active file instead of N open tabs."
+    },
+    "p5_tabDocumentLookup": {
+      "tabCount": 200,
+      "lookupsPerPass": 400,
+      "findPerTab": {
+        "samplesMs": [
+          0.834,
+          0.338,
+          0.34,
+          0.329,
+          0.347,
+          0.352,
+          0.323
+        ],
+        "p50Ms": 0.34,
+        "p95Ms": 0.834
+      },
+      "mapLookup": {
+        "samplesMs": [
+          0.072,
+          0.031,
+          0.038,
+          0.027,
+          0.444,
+          0.027,
+          0.025
+        ],
+        "p50Ms": 0.031,
+        "p95Ms": 0.444
+      },
+      "improvement": {
+        "p50Speedup": 10.97
+      }
+    },
+    "p6_watcherPathMemoization": {
+      "tabCount": 80,
+      "findPerTab": {
+        "samplesMs": [
+          0.114,
+          0.039,
+          0.037,
+          0.044,
+          0.037,
+          0.037,
+          0.036
+        ],
+        "p50Ms": 0.037,
+        "p95Ms": 0.114
+      },
+      "mapOnce": {
+        "samplesMs": [
+          0.052,
+          0.018,
+          0.015,
+          0.015,
+          0.017,
+          0.017,
+          0.018
+        ],
+        "p50Ms": 0.017,
+        "p95Ms": 0.052
+      },
+      "effectMemoization": "syncExternalFileWatcherEffect skips when externalFileWatcherSyncKey unchanged (non-path churn).",
+      "improvement": {
+        "p50Speedup": 2.18
+      }
+    }
+  },
+  "targetAssessment": [
+    {
+      "metric": "workspace.sessionLoad (≥20 sessions)",
+      "target": {
+        "p50": 150,
+        "p95": 500
+      },
+      "assessment": "Incremental priority hydrate reduces blocking work from all threads to priority set; baseline serial 40-thread proxy was already << 150ms host-side; P2 further cuts interactive wait to priority-only.",
+      "meetsTarget": true
+    },
+    {
+      "metric": "projectTree.rootLoad",
+      "target": {
+        "p50": 100,
+        "p95": 300
+      },
+      "assessment": "Baseline root-load proxies already meet targets; P3 eliminates redundant loads on tab switch (functional win + lower cumulative cost).",
+      "meetsTarget": true
+    },
+    {
+      "metric": "tab.activationSideEffects",
+      "target": {
+        "p50": 50,
+        "p95": 150
+      },
+      "assessment": "Baseline stat proxies meet targets; P5/P6 reduce render/watcher work on activation-adjacent updates.",
+      "meetsTarget": true
+    },
+    {
+      "metric": "startup.total / workspace.switchRestore",
+      "target": {
+        "startup": {
+          "p50": 1500,
+          "p95": 3000
+        },
+        "switchRestore": {
+          "p50": 400,
+          "p95": 1200
+        }
+      },
+      "assessment": "P2+P4 reduce blocking phases (session hydrate + external checks). Full in-app p50/p95 should be re-captured via Console metadata.kind=perf on the same small/large workspaces; host proxies show the optimized subpaths are well under targets.",
+      "meetsTarget": "host-proxy-pass; reconfirm in-app"
+    }
+  ],
+  "regressionCoverage": [
+    "optimizationsP7.validation.test.ts",
+    "tabDocumentLookup.test.ts",
+    "threadMessages.test.ts (incremental hydrate)",
+    "appShellAgentHandlers.test.ts (priority restore)",
+    "appShellEffects.test.ts (P3/P6 effects)",
+    "externalFileChanges.test.ts (P4 startup deferral)",
+    "projectTreeController.test.ts (root skip/force)",
+    "mapWithConcurrency.test.ts"
+  ]
+}

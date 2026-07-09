@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-09 10:10 — P2 incremental workspace session hydration
+
+- **`chatStore/sessions.loadWorkspaceSessions`** — loads the session index first, hydrates priority/visible session threads before resolving (bounded concurrency via `mapWithConcurrency`, default 6), and defers remaining thread-file reads to a background pass. Draft merge semantics unchanged. Generation tokens cancel stale background hydrates after a newer load for the same scope.
+- **`ensureSessionThreadHydrated` / `isSessionThreadHydrated`** — on-demand load for deferred threads when selecting a session or restoring the active tab; shares in-flight reads with the background pass.
+- **`restoreWorkspaceSession` / session select / tab sync** — pass open + last-active session ids as priority; ensure the restored/selected thread is hydrated before access preflight.
+- **Perf diagnostics** — `workspace.sessionLoad` reports `incremental`, `deferredThreadCount`, and a separate background-hydrate timing; `workspace.restore` includes `prioritySessionCount`.
+- **Tests** — incremental hydrate / ensure / draft-preservation coverage in `threadMessages.test.ts`; restore priority wiring in `appShellAgentHandlers.test.ts`; `mapWithConcurrency.test.ts`.
+- **`specs/optimizations-plan.md`** — Task P2 marked `[DONE]`.
+
 ## 2026-07-09 09:55 — P1 baseline perf diagnostics and success metrics
 
 - **`app/src/lib/services/perfDiagnostics.ts`** — shared lightweight timing helpers (`nowMs` / `elapsedMs` / `logPerfTiming` / `measureAsync`) that emit Console diagnostics with `metadata.kind === "perf"` and stable metric names for startup, workspace restore, session load, project-tree root load, and tab-activation side-effects.

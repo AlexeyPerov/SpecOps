@@ -97,7 +97,7 @@ Filter Console / plugin logs with `metadata.kind === "perf"`. Metrics:
 
 ---
 
-#### Task P2: Incremental workspace session hydration [Score:8] [Agent:heavy] [~1.5d]
+#### Task P2: Incremental workspace session hydration [Score:8] [Agent:heavy] [~1.5d] [DONE]
 
 **Required context**
 

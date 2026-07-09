@@ -274,6 +274,150 @@ describe("chatStore", () => {
     expect(chatStore.getMessages()).toEqual(threadA.messages);
   });
 
+  it("hydrates priority sessions first and defers the rest in background", async () => {
+    const threadA: ChatThreadSnapshot = {
+      metadata: {
+        sessionId: "agent-a",
+        threadId: "agent-a",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+      },
+      messages: [
+        {
+          id: "a-1",
+          role: "user",
+          content: "A",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        },
+      ],
+    };
+    const threadB: ChatThreadSnapshot = {
+      metadata: {
+        sessionId: "agent-b",
+        threadId: "agent-b",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:01.000Z",
+        updatedAt: "2026-05-25T00:00:01.000Z",
+      },
+      messages: [
+        {
+          id: "b-1",
+          role: "user",
+          content: "B",
+          createdAt: "2026-05-25T00:00:01.000Z",
+        },
+      ],
+    };
+
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      sessions: [
+        { id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" },
+        { id: "agent-b", title: "B", lastUsedAt: "2026-05-25T00:00:01.000Z" },
+      ],
+    });
+    readSessionThreadFileSnapshotMock.mockImplementation(async (_root, sessionId) => {
+      if (sessionId === "agent-a") {
+        return threadA;
+      }
+      if (sessionId === "agent-b") {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return threadB;
+      }
+      return null;
+    });
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    await chatStore.loadWorkspaceSessions("/work/a", { prioritySessionIds: ["agent-a"] });
+
+    expect(chatStore.getSessionIndex().map((entry) => entry.id)).toEqual(["agent-a", "agent-b"]);
+    expect(chatStore.isSessionThreadHydrated("agent-a")).toBe(true);
+    expect(chatStore.isSessionThreadHydrated("agent-b")).toBe(false);
+    chatStore.setActiveSessionId("agent-a");
+    expect(chatStore.getMessages()).toEqual(threadA.messages);
+
+    await vi.waitFor(() => {
+      expect(chatStore.isSessionThreadHydrated("agent-b")).toBe(true);
+    });
+    chatStore.setActiveSessionId("agent-b");
+    expect(chatStore.getMessages()).toEqual(threadB.messages);
+  });
+
+  it("ensureSessionThreadHydrated loads a deferred thread on demand", async () => {
+    const threadB: ChatThreadSnapshot = {
+      metadata: {
+        sessionId: "agent-b",
+        threadId: "agent-b",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:01.000Z",
+        updatedAt: "2026-05-25T00:00:01.000Z",
+      },
+      messages: [
+        {
+          id: "b-1",
+          role: "user",
+          content: "B",
+          createdAt: "2026-05-25T00:00:01.000Z",
+        },
+      ],
+    };
+    let releaseB!: () => void;
+    const bGate = new Promise<void>((resolve) => {
+      releaseB = resolve;
+    });
+
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      sessions: [
+        { id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" },
+        { id: "agent-b", title: "B", lastUsedAt: "2026-05-25T00:00:01.000Z" },
+      ],
+    });
+    readSessionThreadFileSnapshotMock.mockImplementation(async (_root, sessionId) => {
+      if (sessionId === "agent-b") {
+        await bGate;
+        return threadB;
+      }
+      return null;
+    });
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    await chatStore.loadWorkspaceSessions("/work/a", { prioritySessionIds: ["agent-a"] });
+    expect(chatStore.isSessionThreadHydrated("agent-b")).toBe(false);
+
+    const ensurePromise = chatStore.ensureSessionThreadHydrated("agent-b");
+    releaseB();
+    const hydrated = await ensurePromise;
+    expect(hydrated?.messages).toEqual(threadB.messages);
+    expect(chatStore.isSessionThreadHydrated("agent-b")).toBe(true);
+    chatStore.setActiveSessionId("agent-b");
+    expect(chatStore.getMessages()).toEqual(threadB.messages);
+  });
+
+  it("preserves in-memory draft sessions across incremental load", async () => {
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      sessions: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+    });
+    readSessionThreadFileSnapshotMock.mockResolvedValue(null);
+
+    chatStore.setActiveWorkspaceRoot("/work/a");
+    const draftId = chatStore.createDraftSession();
+    expect(draftId).toBeTruthy();
+
+    await chatStore.loadWorkspaceSessions("/work/a", { prioritySessionIds: ["agent-a"] });
+
+    expect(chatStore.getActiveSessionId()).toBe(draftId);
+    expect(chatStore.getSessionIndex().some((entry) => entry.id === draftId && entry.isDraft)).toBe(
+      true,
+    );
+    expect(chatStore.getSessionIndex().some((entry) => entry.id === "agent-a")).toBe(true);
+  });
+
   it("mergeSessionDrafts adds draft entries for open tab ids missing from disk index", async () => {
     readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
       version: 1,

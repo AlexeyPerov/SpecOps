@@ -42,6 +42,7 @@ vi.mock("../state/chatStore", () => ({
     getSessionLink: vi.fn(),
     forkSession: vi.fn(),
     setActiveSessionId: vi.fn(),
+    ensureSessionThreadHydrated: vi.fn(),
     runAccessPreflight: vi.fn(),
     clearSessionLink: vi.fn(),
     setThreadMessages: vi.fn(),
@@ -102,6 +103,7 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
     chatStoreMock.loadWorkspaceSessions.mockResolvedValue(undefined);
     chatStoreMock.mergeSessionDrafts.mockImplementation(() => {});
     chatStoreMock.setActiveSessionId.mockImplementation(() => {});
+    chatStoreMock.ensureSessionThreadHydrated.mockResolvedValue(null);
     chatStoreMock.setThreadMessages.mockImplementation(() => true);
     chatStoreMock.runAccessPreflight.mockResolvedValue({
       status: "ready",
@@ -186,6 +188,10 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
     // reconcile to run.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(chatStoreMock.loadWorkspaceSessions).toHaveBeenCalledWith("/repo/ws-a", {
+      prioritySessionIds: ["agent-a"],
+    });
+    expect(chatStoreMock.ensureSessionThreadHydrated).toHaveBeenCalledWith("agent-a", "/repo/ws-a");
     expect(chatStoreMock.clearSessionLink).toHaveBeenCalledTimes(1);
     expect(chatStoreMock.clearSessionLink).toHaveBeenCalledWith("agent-a", "/repo/ws-a");
   });

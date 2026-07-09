@@ -85,7 +85,9 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
     if (chatStore.getActiveSessionId() !== activeTab.sessionId) {
       chatStore.setActiveSessionId(activeTab.sessionId);
       appState.setLastActiveSessionId(activeTab.sessionId);
-      void chatStore.runAccessPreflight();
+      void chatStore.ensureSessionThreadHydrated(activeTab.sessionId).finally(() => {
+        void chatStore.runAccessPreflight();
+      });
     }
   }
 

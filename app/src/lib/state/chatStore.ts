@@ -6,6 +6,7 @@ import { createAccessSlice } from "./chatStore/access";
 import {
   createSessionsSlice,
   resetSessionIdCounterForTests,
+  resetSessionHydrationForTests,
   createSessionId,
 } from "./chatStore/sessions";
 import { createRuntimeSlice, activeRuntime } from "./chatStore/runtime";
@@ -55,6 +56,7 @@ export {
   formatCompactionNotice,
   setDefaultThreadConnectionResolver,
   resetSessionIdCounterForTests,
+  resetSessionHydrationForTests,
   setDefaultChatProviderResolver,
 };
 
@@ -116,6 +118,7 @@ function createChatStore() {
     reset() {
       set(initialState);
       resetSessionIdCounterForTests();
+      resetSessionHydrationForTests();
     },
     getSnapshot,
     setActiveChatScopeKey(scopeKey: ChatScopeKey | null): void {

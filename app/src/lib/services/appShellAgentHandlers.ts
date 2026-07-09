@@ -97,7 +97,9 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     chatStore.setActiveSessionId(sessionId);
     appState.setLastActiveSessionId(sessionId);
     appState.openOrFocusSessionTab(sessionId);
-    void chatStore.runAccessPreflight();
+    void chatStore.ensureSessionThreadHydrated(sessionId).finally(() => {
+      void chatStore.runAccessPreflight();
+    });
   }
 
   async function handleDeleteSession(sessionId: string): Promise<void> {
@@ -221,15 +223,21 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       return;
     }
     const session = appState.getActiveSession();
+    const openTabSessionIds = openSessionTabIds(getSessionTabs(session));
+    const prioritySessionIds = [
+      ...openTabSessionIds,
+      ...(session.lastActiveSessionId ? [session.lastActiveSessionId] : []),
+    ];
     const restoreStartedAt = nowMs();
     const loadSessionsStartedAt = nowMs();
-    await chatStore.loadWorkspaceSessions(normalizedRoot);
+    await chatStore.loadWorkspaceSessions(normalizedRoot, { prioritySessionIds });
     const sessionIndex = chatStore.getSessionIndex();
     const loadSessionsDurationMs = elapsedMs(loadSessionsStartedAt);
-    chatStore.mergeSessionDrafts(normalizedRoot, openSessionTabIds(getSessionTabs(session)));
+    chatStore.mergeSessionDrafts(normalizedRoot, openTabSessionIds);
 
     const restored = resolveRestoredActiveSession(session, sessionIndex);
     if (restored.shouldFocusSessionTab && restored.activeSessionId) {
+      await chatStore.ensureSessionThreadHydrated(restored.activeSessionId, normalizedRoot);
       chatStore.setActiveSessionId(restored.activeSessionId);
       appState.setLastActiveSessionId(restored.activeSessionId);
       appState.openOrFocusSessionTab(restored.activeSessionId);
@@ -251,6 +259,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       workspaceRoot: normalizedRoot,
       sessionCount: sessionIndex.length,
       loadSessionsDurationMs,
+      prioritySessionCount: new Set(prioritySessionIds).size,
       skipOpencodeReconcile: Boolean(options?.skipOpencodeReconcile),
       focusedSessionTab: Boolean(restored.shouldFocusSessionTab && restored.activeSessionId),
     });

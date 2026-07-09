@@ -1,10 +1,11 @@
-import type { SessionIndexEntry } from "../../domain/contracts";
+import type { ChatThreadSnapshot, SessionIndexEntry } from "../../domain/contracts";
 import { draftEntryTitleForScope, deriveSessionTitle } from "../../services/chatSessions";
 import {
   deleteSessionPersistence,
   readSessionThreadFileSnapshot,
   readWorkspaceSessionsIndexSnapshot,
 } from "../../services/chatPersistence";
+import { mapWithConcurrency } from "../../services/mapWithConcurrency";
 import { elapsedMs, logPerfTiming, nowMs } from "../../services/perfDiagnostics";
 import type { ChatStoreState, WorkspaceSessionsState } from "./types";
 import {
@@ -15,7 +16,43 @@ import {
 import { normalizeThreadSnapshotForScope } from "../../ai/providers/threadScopeNormalization";
 import { cloneThread } from "./threadHelpers";
 
+/** Max concurrent thread-file reads during workspace session hydration. */
+export const SESSION_THREAD_HYDRATE_CONCURRENCY = 6;
+
 let sessionIdCounter = 0;
+
+/** Generation token so background hydrates abort after a newer load for the same scope. */
+const hydrateGenerationByScope = new Map<string, number>();
+/** In-flight ensure/hydrate promises keyed by `scopeKey\\0sessionId`. */
+const inFlightThreadHydrates = new Map<string, Promise<ChatThreadSnapshot | null>>();
+
+function threadHydrateKey(scopeKey: string, sessionId: string): string {
+  return `${scopeKey}\x00${sessionId}`;
+}
+
+function bumpHydrateGeneration(scopeKey: string): number {
+  const next = (hydrateGenerationByScope.get(scopeKey) ?? 0) + 1;
+  hydrateGenerationByScope.set(scopeKey, next);
+  return next;
+}
+
+function isHydrateGenerationCurrent(scopeKey: string, generation: number): boolean {
+  return hydrateGenerationByScope.get(scopeKey) === generation;
+}
+
+/** Clears incremental-hydration bookkeeping between unit tests. */
+export function resetSessionHydrationForTests(): void {
+  hydrateGenerationByScope.clear();
+  inFlightThreadHydrates.clear();
+}
+
+export interface LoadWorkspaceSessionsOptions {
+  /**
+   * Session ids that must be thread-hydrated before `loadWorkspaceSessions` resolves
+   * (active / open / visible tabs). Remaining persisted sessions hydrate in background.
+   */
+  prioritySessionIds?: readonly string[];
+}
 
 function parseSessionCounterFromId(sessionId: string): number | null {
   const match = /^session-(\d+)$/.exec(sessionId);
@@ -444,23 +481,133 @@ export function createSessionsSlice(deps: {
         runtimeBySessionId: { ...workspace.runtimeBySessionId },
       };
     },
-    async loadWorkspaceSessions(normalizedRootPath: string): Promise<void> {
+    /**
+     * True when a persisted session's thread file has been read into memory
+     * (including a null/empty result). Drafts and missing index entries count as ready.
+     */
+    isSessionThreadHydrated(sessionId: string, rootOverride?: string | null): boolean {
+      const root = rootOverride ?? getActiveChatScopeKey();
+      if (!root) {
+        return false;
+      }
+      const workspace = getSnapshot().workspaces[root];
+      if (!workspace) {
+        return false;
+      }
+      const entry = findSessionIndexEntry(workspace, sessionId);
+      if (!entry) {
+        return true;
+      }
+      if (entry.isDraft) {
+        return true;
+      }
+      return Object.prototype.hasOwnProperty.call(workspace.threadsBySessionId, sessionId);
+    },
+    /**
+     * Ensure a session thread is loaded from disk. No-op when already hydrated or draft.
+     * Used when selecting a session whose thread was deferred during incremental load.
+     */
+    async ensureSessionThreadHydrated(
+      sessionId: string,
+      rootOverride?: string | null,
+    ): Promise<ChatThreadSnapshot | null> {
+      const root = rootOverride ?? getActiveChatScopeKey();
+      if (!root) {
+        return null;
+      }
+      if (this.isSessionThreadHydrated(sessionId, root)) {
+        return cloneThread(getSnapshot().workspaces[root]?.threadsBySessionId[sessionId] ?? null);
+      }
+
+      const key = threadHydrateKey(root, sessionId);
+      let readPromise = inFlightThreadHydrates.get(key);
+      if (!readPromise) {
+        readPromise = readSessionThreadFileSnapshot(root, sessionId).then((raw) =>
+          normalizeThreadForScope(root, cloneThread(raw)),
+        );
+        inFlightThreadHydrates.set(key, readPromise);
+        void readPromise.finally(() => {
+          if (inFlightThreadHydrates.get(key) === readPromise) {
+            inFlightThreadHydrates.delete(key);
+          }
+        });
+      }
+
+      const thread = await readPromise;
+      if (this.isSessionThreadHydrated(sessionId, root)) {
+        return cloneThread(getSnapshot().workspaces[root]?.threadsBySessionId[sessionId] ?? null);
+      }
+
+      update((state) => {
+        const workspace = state.workspaces[root];
+        if (!workspace) {
+          return state;
+        }
+        if (Object.prototype.hasOwnProperty.call(workspace.threadsBySessionId, sessionId)) {
+          return state;
+        }
+        if (!findSessionIndexEntry(workspace, sessionId)) {
+          return state;
+        }
+        return patchWorkspaceState(state, root, {
+          ...workspace,
+          threadsBySessionId: {
+            ...workspace.threadsBySessionId,
+            [sessionId]: thread,
+          },
+        });
+      });
+      return cloneThread(thread);
+    },
+    async loadWorkspaceSessions(
+      normalizedRootPath: string,
+      options?: LoadWorkspaceSessionsOptions,
+    ): Promise<void> {
       const loadStartedAt = nowMs();
+      const generation = bumpHydrateGeneration(normalizedRootPath);
       const indexStartedAt = nowMs();
       const index = await readWorkspaceSessionsIndexSnapshot(normalizedRootPath);
       const indexDurationMs = elapsedMs(indexStartedAt);
-      const threadsBySessionId: Record<string, import("../../domain/contracts").ChatThreadSnapshot | null> =
-        {};
-      const persistedEntries = index.sessions.filter((entry) => !entry.isDraft);
-      const threadsStartedAt = nowMs();
-      for (const entry of persistedEntries) {
-        const thread = await readSessionThreadFileSnapshot(normalizedRootPath, entry.id);
-        threadsBySessionId[entry.id] = normalizeThreadForScope(
-          normalizedRootPath,
-          cloneThread(thread),
-        );
+      if (!isHydrateGenerationCurrent(normalizedRootPath, generation)) {
+        return;
       }
-      const threadsDurationMs = elapsedMs(threadsStartedAt);
+
+      const persistedEntries = index.sessions.filter((entry) => !entry.isDraft);
+      // Omit `prioritySessionIds` → hydrate all before resolve (compat + concurrency).
+      // Provide the option (even `[]`) → hydrate only those first; defer the rest.
+      const prioritySessionIds = options?.prioritySessionIds;
+      const incremental = prioritySessionIds !== undefined;
+      const priorityIdSet = incremental
+        ? new Set(prioritySessionIds.filter((id) => id.length > 0))
+        : null;
+      const priorityEntries = priorityIdSet
+        ? persistedEntries.filter((entry) => priorityIdSet.has(entry.id))
+        : persistedEntries;
+      const deferredEntries = priorityIdSet
+        ? persistedEntries.filter((entry) => !priorityIdSet.has(entry.id))
+        : [];
+
+      const threadsStartedAt = nowMs();
+      const priorityThreads = await mapWithConcurrency(
+        priorityEntries,
+        SESSION_THREAD_HYDRATE_CONCURRENCY,
+        async (entry) => {
+          const thread = normalizeThreadForScope(
+            normalizedRootPath,
+            cloneThread(await readSessionThreadFileSnapshot(normalizedRootPath, entry.id)),
+          );
+          return [entry.id, thread] as const;
+        },
+      );
+      const priorityThreadsDurationMs = elapsedMs(threadsStartedAt);
+      if (!isHydrateGenerationCurrent(normalizedRootPath, generation)) {
+        return;
+      }
+
+      const priorityThreadsBySessionId: Record<string, ChatThreadSnapshot | null> = {};
+      for (const [sessionId, thread] of priorityThreads) {
+        priorityThreadsBySessionId[sessionId] = thread;
+      }
 
       update((state) => {
         const existing = state.workspaces[normalizedRootPath];
@@ -470,7 +617,9 @@ export function createSessionsSlice(deps: {
         );
         const mergedIndex = [...index.sessions, ...sessionDrafts];
         const mergedIds = new Set(mergedIndex.map((entry) => entry.id));
-        const mergedThreadsBySessionId = { ...threadsBySessionId };
+        const mergedThreadsBySessionId: Record<string, ChatThreadSnapshot | null> = {
+          ...priorityThreadsBySessionId,
+        };
         const mergedRuntimeBySessionId = { ...(existing?.runtimeBySessionId ?? {}) };
         for (const draft of sessionDrafts) {
           if (existing?.threadsBySessionId[draft.id]) {
@@ -510,10 +659,83 @@ export function createSessionsSlice(deps: {
         durationMs: elapsedMs(loadStartedAt),
         workspaceRoot: normalizedRootPath,
         sessionCount: index.sessions.length,
-        hydratedThreadCount: persistedEntries.length,
+        hydratedThreadCount: priorityEntries.length,
+        deferredThreadCount: deferredEntries.length,
         indexDurationMs,
-        threadsDurationMs,
+        threadsDurationMs: priorityThreadsDurationMs,
+        incremental,
       });
+
+      if (deferredEntries.length === 0) {
+        return;
+      }
+
+      void (async () => {
+        const backgroundStartedAt = nowMs();
+        const deferredThreads = await mapWithConcurrency(
+          deferredEntries,
+          SESSION_THREAD_HYDRATE_CONCURRENCY,
+          async (entry) => {
+            const key = threadHydrateKey(normalizedRootPath, entry.id);
+            const inFlight = inFlightThreadHydrates.get(key);
+            if (inFlight) {
+              const thread = await inFlight;
+              return [entry.id, thread] as const;
+            }
+            const promise = readSessionThreadFileSnapshot(normalizedRootPath, entry.id).then(
+              (raw) => normalizeThreadForScope(normalizedRootPath, cloneThread(raw)),
+            );
+            inFlightThreadHydrates.set(key, promise);
+            try {
+              const thread = await promise;
+              return [entry.id, thread] as const;
+            } finally {
+              if (inFlightThreadHydrates.get(key) === promise) {
+                inFlightThreadHydrates.delete(key);
+              }
+            }
+          },
+        );
+        if (!isHydrateGenerationCurrent(normalizedRootPath, generation)) {
+          return;
+        }
+
+        update((state) => {
+          const workspace = state.workspaces[normalizedRootPath];
+          if (!workspace) {
+            return state;
+          }
+          let changed = false;
+          const nextThreads = { ...workspace.threadsBySessionId };
+          for (const [sessionId, thread] of deferredThreads) {
+            if (Object.prototype.hasOwnProperty.call(nextThreads, sessionId)) {
+              continue;
+            }
+            if (!findSessionIndexEntry(workspace, sessionId)) {
+              continue;
+            }
+            nextThreads[sessionId] = thread;
+            changed = true;
+          }
+          if (!changed) {
+            return state;
+          }
+          return patchWorkspaceState(state, normalizedRootPath, {
+            ...workspace,
+            threadsBySessionId: nextThreads,
+          });
+        });
+
+        void logPerfTiming("workspace sessions background hydrate complete", {
+          metric: "workspace.sessionLoad",
+          durationMs: elapsedMs(backgroundStartedAt),
+          workspaceRoot: normalizedRootPath,
+          hydratedThreadCount: deferredEntries.length,
+          deferredThreadCount: 0,
+          background: true,
+          incremental: true,
+        });
+      })();
     },
     mergeSessionDrafts(normalizedRootPath: string, sessionIds: readonly string[]): void {
       if (sessionIds.length === 0) {

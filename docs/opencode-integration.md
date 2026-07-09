@@ -82,6 +82,18 @@ Internal code uses **session** for conversations (post-[M16](../specs/ops/phase-
 - **Workspace UX panels:** TODO, changes/diff viewer, file status badges, status popover.
 - **Configuration management:** OpenCode config, providers, MCP servers, agents, permissions, commands, instructions.
 
+## First session (quick path)
+
+1. **Install OpenCode** (development builds expect `opencode` on `PATH`; release builds bundle a sidecar):
+   ```sh
+   curl -fsSL https://opencode.ai/install | bash
+   ```
+2. Open a **workspace folder** in SpecOps (activity rail → add folder).
+3. SpecOps starts the sidecar **lazily** — on the first **Send** in a session tab, or via **Settings → Workspaces → OpenCode → Check connection**. Editing files does not require OpenCode.
+4. **Connect a provider** in OpenCode (see [Provider setup](#provider-setup-openrouter-glm-coding-plan-) below). Workspace agents do not use SpecOps **Dev → Providers** HTTP keys.
+5. In SpecOps: **Refresh model list** (Settings → Workspaces → OpenCode), then pick agent, provider, and model in the session composer.
+6. Use the **Sessions** sidebar: create a session tab and send a prompt.
+
 ## Setup OpenCode in SpecOps
 
 1. Open **Settings -> Workspaces -> OpenCode**.
@@ -93,11 +105,82 @@ Internal code uses **session** for conversations (post-[M16](../specs/ops/phase-
      is shown read-only below the input — it tracks the port so the URL
      probe and SDK wiring stay consistent. Change the port only when
      `4096` is already in use locally.
-   - **URL:** enter your OpenCode server URL (`http://` or `https://`).
-4. If your server requires auth, set **Server password** (stored in `provider-secrets.json`, not in `settings.json`).
+   - **URL:** run OpenCode yourself, then enter the server base URL:
+     ```sh
+     cd /path/to/your/project
+     opencode serve
+     ```
+     Example URL: `http://127.0.0.1:4096`.
+4. If your server requires auth, set **Server password** (stored in `provider-secrets.json`, not in `settings.json`). Use the same value as `OPENCODE_SERVER_PASSWORD` on the server when set.
 5. Click **Check connection** to verify health.
 6. Click **Refresh model list** to load current server models.
 7. Open a workspace and start or select a session.
+
+## Provider setup (OpenRouter, GLM Coding Plan, …)
+
+API keys and model catalogs for **workspace agents** live in **OpenCode**, not in SpecOps `settings.json`. After you connect a provider, use **Refresh model list** in SpecOps so the composer picks up models from the running server.
+
+Configure providers once with the OpenCode CLI (auth is shared with the sidecar SpecOps starts):
+
+```sh
+cd /path/to/your/project
+opencode
+```
+
+### OpenRouter
+
+1. Create an API key at [openrouter.ai/keys](https://openrouter.ai/keys).
+2. In the OpenCode TUI, run `/connect`, choose **OpenRouter**, and paste the key.
+3. Run `/models` and select a model (many OpenRouter models are preloaded).
+
+Alternatively, set the key in `~/.local/share/opencode/auth.json`:
+
+```json
+{
+  "openrouter": {
+    "type": "api",
+    "key": "sk-or-your-key-here"
+  }
+}
+```
+
+Optional: pin or add models in `opencode.json` (project root or OpenCode config path):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openrouter": {
+      "models": {
+        "anthropic/claude-sonnet-4": {},
+        "google/gemini-2.5-flash": {}
+      }
+    }
+  }
+}
+```
+
+See [OpenRouter + OpenCode](https://openrouter.ai/docs/cookbook/coding-agents/opencode-integration) and [OpenCode providers](https://opencode.ai/docs/providers/) for model IDs and routing options.
+
+### GLM Coding Plan (Z.AI)
+
+1. Get an API key from the [Z.AI API Console](https://docs.z.ai/scenario-example/develop-tools/opencode) (see Z.AI docs for your plan).
+2. Authenticate OpenCode — use either `/connect` in the TUI or:
+   ```sh
+   opencode auth login
+   ```
+   Search for **Z.AI** and choose **Z.AI Coding Plan** (not the generic **Z.AI** provider; they use different endpoints and model IDs).
+3. Enter your API key, then run `/models` and pick a model such as **GLM-4.7**.
+
+Details: [Z.AI + OpenCode](https://docs.z.ai/scenario-example/develop-tools/opencode), [OpenCode providers — Z.AI](https://opencode.ai/docs/providers/#zai).
+
+## Troubleshooting
+
+- **Health not “Healthy”** — Confirm `opencode` is installed (`which opencode`) or use URL mode against a running `opencode serve`.
+- **Empty model list** — Connect a provider in OpenCode first, then **Refresh model list** in SpecOps settings.
+- **Auth errors** — Re-run `/connect` or fix `auth.json`; workspace sends never read HTTP keys from SpecOps **Dev → Providers**.
+- **Legacy workspace chat** — Threads from the pre–phase-3 HTTP workspace provider are not migrated into OpenCode sessions.
+- **Chat (beta) / HTTP chat context** — Experimental. Disabled by default; see [beta/chat-http-providers.md](./beta/chat-http-providers.md). Enable under **Settings → Dev → Chat (beta)**.
 
 ## Sidecar notes
 

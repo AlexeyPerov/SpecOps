@@ -253,4 +253,4 @@ When adding features, keep the adapter thin:
 3. For streaming, implement **`streamMessage`** with SSE parsing and keep `sendMessage` as fallback; update `streamProviderMessage` consumers and UX copy.
 4. Never persist API keys outside **`providerSecretsStore`**.
 
-See [architecture.md](./architecture.md) for overall layering and agent conventions. Product migration context lives in [ops roadmap](../specs/ops/roadmap.md).
+See [architecture.md](../architecture.md) for overall layering and agent conventions. Product migration context lives in [ops roadmap](../../specs/ops/roadmap.md).

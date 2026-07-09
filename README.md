@@ -1,139 +1,69 @@
-# <img src="app/static/favicon.png" alt="" width="32" height="32" align="top"> SpecOps (Under Active Development)
+# <img src="app/static/favicon.png" alt="" width="32" height="32" align="top"> SpecOps
 
-Building text and markdown files editor with support of workspace AI. Tech: [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
+Desktop workspace for notes, specs, and project files — with a built-in editor and **OpenCode**-powered workspace agents. Built with [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
+
+> Under active development. APIs, settings, and on-disk formats may change without migration.
 
 ## What works today
 
-- **Notepad** with syntax highlighting for .md and code files
-- **Markdown** viewer and editor
-- **Folders as workspaces**
-- **Project panel** — file tree (all files), drag-and-drop move, context menu (new/rename/delete), live refresh, open in tabs, show/hide hidden files
-- **Themes**
-- **Multi-Window**
-- **Images** preview
-- **Console** — resizable bottom panel with **Logs**
-- **AI chat**
-  - **Workspace agents** powered by [OpenCode](https://opencode.ai/) (tools, permissions, streaming) — the recommended AI story
-  - **Chat (beta)** — experimental HTTP chat context, disabled by default; enable in **Settings → Dev → Chat (beta)**. See [`docs/beta/`](./docs/beta/) for setup.
+- **Editor** — syntax highlighting for Markdown and common code languages; optional **minimap**
+- **Markdown** preview and edit
+- **Folders as workspaces** — multi-root activity rail
+- **Project panel** — file tree, drag-and-drop move, context menu (new/rename/delete), live refresh, tabs, show/hide hidden files
+- **Version Control** — per-workspace git tab (history, branches, tags, changes, fetch/pull/push) via system `git`
+- **Themes**, **multi-window**, **image** preview
+- **Console** — resizable bottom panel with logs
+- **Workspace agents** — sessions powered by [OpenCode](https://opencode.ai/) (tools, permissions, streaming)
+- **Chat (beta)** — experimental HTTP chat context, off by default; see [`docs/beta/`](./docs/beta/)
 
----
+## Screenshots
 
-| ![SpecOps main screen](screenshots/main-screen.png) | ![SpecOps main screen](screenshots/main-screen-split-view.png)|
-|------------------------------------------|-------------------------------------------------|
-| ![SpecOps main screen](screenshots/main-screen-themes.png) | ![SpecOps main screen](screenshots/main-screen-logs.png) |
+| ![Main editor](screenshots/main-screen.png) | ![Split view](screenshots/main-screen-split-view.png) |
+|---------------------------------------------|-------------------------------------------------------|
+| ![Themes](screenshots/main-screen-themes.png) | ![Logs console](screenshots/main-screen-logs.png) |
 
+## Install
 
-## What is planned
-
-- UI / UX improvements
-- **Git** module
-- Extended **AI Support**
+- **Releases** — download macOS / Windows installers from [GitHub Releases](https://github.com/AlexeyPerov/spec-ops/releases) (published when a semver tag is pushed; see [CI releases](#ci-releases)).
+- **From source** — see [Development](#development) below.
 
 ## Workspace agents (OpenCode)
 
-Workspace folders use **OpenCode** as the agent runtime. SpecOps is the UI; OpenCode runs the model, tools, and session logic on disk.
+SpecOps is the UI; **OpenCode** runs models, tools, and session logic. Configure providers and API keys in OpenCode — not in SpecOps HTTP settings.
 
-| Context | Runtime | Where to configure models/API keys |
+| Context | Runtime | Configure models / keys |
 | --- | --- | --- |
-| Workspace agents (`ws-*`) | OpenCode server | OpenCode (`/connect`, `opencode.json`, `auth.json`) |
-| Chat (beta) — `chat-http` | OpenAI-compatible HTTP (experimental, off by default) | **Settings → Dev → Chat (beta)** → Providers; see [`docs/beta/chat-http-providers.md`](./docs/beta/chat-http-providers.md) |
+| Workspace agents (`ws-*`) | OpenCode (sidecar or URL) | OpenCode (`/connect`, `opencode.json`, `auth.json`) |
+| Chat (beta) — `chat-http` | OpenAI-compatible HTTP (off by default) | **Settings → Dev → Chat (beta)** → Providers |
 
 ### Quick start
 
-1. **Install OpenCode** (development builds expect `opencode` on your `PATH`; release builds bundle a sidecar binary):
+1. **Install OpenCode** (dev builds expect `opencode` on `PATH`; release builds bundle a sidecar):
    ```sh
    curl -fsSL https://opencode.ai/install | bash
    ```
 2. **Open a workspace folder** in SpecOps (activity rail → add folder).
-3. By default, **SpecOps starts the OpenCode sidecar lazily** — not on folder open, but on the first **Send** in a session tab (or via **Settings → Workspaces → OpenCode → Check connection**). File editing does not require OpenCode. You can disable this via **Settings → Workspaces → OpenCode → Use OpenCode for workspace sessions** to use the folder as a plain editor without sessions.
-4. When enabled, health is shown under **Settings → Workspaces → OpenCode**.
-4. **Configure a provider** in OpenCode (see below) — workspace agents do not use the HTTP connections in SpecOps settings.
-5. In SpecOps, click **Refresh model list** (Settings → Workspaces → OpenCode), then pick an agent, provider, and model from the OpenCode catalog in the session composer.
-6. Use the **Sessions** sidebar: create a session tab, send a prompt. Tool calls, permission prompts, and question prompts appear in the chat panel.
+3. SpecOps starts the OpenCode sidecar **lazily** — on the first **Send** in a session tab, or via **Settings → Workspaces → OpenCode → Check connection**. File editing does not require OpenCode. Disable workspace sessions under **Settings → Workspaces → OpenCode → Use OpenCode for workspace sessions** to use the folder as a plain editor.
+4. **Connect a provider** in OpenCode (TUI `/connect`, or see [docs/opencode-integration.md](./docs/opencode-integration.md)).
+5. In SpecOps: **Refresh model list** (Settings → Workspaces → OpenCode), then pick agent / provider / model in the session composer.
+6. Use the **Sessions** sidebar: create a session, send a prompt. Tool calls and permission prompts appear in the chat panel.
 
-### OpenCode server modes
+**Sidecar (default)** — port `4096` by default (**Settings → Workspaces → OpenCode → Sidecar port**). **URL mode** — run `opencode serve` yourself and point SpecOps at the base URL.
 
-**Sidecar (default)** — SpecOps launches the OpenCode sidecar **on the first session Send** (or via **Settings → Workspaces → OpenCode → Check connection**), not when the workspace opens. The sidecar process and port (`4096` by default; configurable in **Settings → Workspaces → OpenCode → Sidecar port**) are reused across workspaces until you toggle OpenCode off or stop it. No extra setup unless you set `OPENCODE_SERVER_PASSWORD` on the server (enter the same value under **Server password** in settings).
+Troubleshooting, provider examples (OpenRouter, GLM Coding Plan), and integration details: **[docs/opencode-integration.md](./docs/opencode-integration.md)**.  
+Chat (beta): **[docs/beta/chat-http-providers.md](./docs/beta/chat-http-providers.md)**.
 
-**URL** — Run OpenCode yourself, for example:
-```sh
-cd /path/to/your/project
-opencode serve
-```
-Then in SpecOps: **Settings → Workspaces → OpenCode → URL**, set the base URL (for example `http://127.0.0.1:4096`), and use **Check connection**.
+## What is planned
 
-### Provider setup (OpenRouter, GLM Coding Plan, …)
-
-API keys and model catalogs for **workspace agents** live in **OpenCode**, not in SpecOps `settings.json`. After you connect a provider, use **Refresh model list** in SpecOps so the composer picks up models from the running server.
-
-Configure providers once with the OpenCode CLI (auth is shared with the sidecar SpecOps starts):
-
-```sh
-cd /path/to/your/project
-opencode
-```
-
-#### OpenRouter
-
-1. Create an API key at [openrouter.ai/keys](https://openrouter.ai/keys).
-2. In the OpenCode TUI, run `/connect`, choose **OpenRouter**, and paste the key.
-3. Run `/models` and select a model (many OpenRouter models are preloaded).
-
-Alternatively, set the key in `~/.local/share/opencode/auth.json`:
-
-```json
-{
-  "openrouter": {
-    "type": "api",
-    "key": "sk-or-your-key-here"
-  }
-}
-```
-
-Optional: pin or add models in `opencode.json` (project root or OpenCode config path):
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "openrouter": {
-      "models": {
-        "anthropic/claude-sonnet-4": {},
-        "google/gemini-2.5-flash": {}
-      }
-    }
-  }
-}
-```
-
-See [OpenRouter + OpenCode](https://openrouter.ai/docs/cookbook/coding-agents/opencode-integration) and [OpenCode providers](https://opencode.ai/docs/providers/) for model IDs and routing options.
-
-#### GLM Coding Plan (Z.AI)
-
-1. Get an API key from the [Z.AI API Console](https://docs.z.ai/scenario-example/develop-tools/opencode) (see Z.AI docs for your plan).
-2. Authenticate OpenCode — use either `/connect` in the TUI or:
-   ```sh
-   opencode auth login
-   ```
-   Search for **Z.AI** and choose **Z.AI Coding Plan** (not the generic **Z.AI** provider; they use different endpoints and model IDs).
-3. Enter your API key, then run `/models` and pick a model such as **GLM-4.7**.
-
-Details: [Z.AI + OpenCode](https://docs.z.ai/scenario-example/develop-tools/opencode), [OpenCode providers — Z.AI](https://opencode.ai/docs/providers/#zai).
-
-### Troubleshooting
-
-- **Health not “Healthy”** — Confirm `opencode` is installed (`which opencode`) or use URL mode against a running `opencode serve`.
-- **Empty model list** — Connect a provider in OpenCode first, then **Refresh model list** in SpecOps settings.
-- **Auth errors** — Re-run `/connect` or fix `auth.json`; workspace sends never read HTTP keys from SpecOps **Dev → Providers**.
-- **Legacy workspace chat** — Threads from the pre–phase-3 HTTP workspace provider are not migrated into OpenCode sessions.
-- **Chat (beta) / HTTP chat context** — Experimental. Disabled by default; see [`docs/beta/chat-http-providers.md`](./docs/beta/chat-http-providers.md). Enable under **Settings → Dev → Chat (beta)**.
-
-More detail: `docs/opencode-integration.md` (OpenCode), `docs/beta/chat-http-providers.md` (HTTP chat beta), `specs/ops/phase-3/phase-3.md`.
+- Further UI / UX polish
+- Extended AI support
+- Git post-MVP features (see [`specs/git/backlog.md`](./specs/git/backlog.md))
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) (LTS)
 - [Rust](https://www.rust-lang.org/tools/install) (stable toolchain, required by Tauri)
+- System [`git`](https://git-scm.com/) on `PATH` for Version Control
 
 ## Development
 
@@ -158,13 +88,13 @@ From the `app/` directory:
 npm test
 ```
 
-Run tests in watch mode while developing:
+Watch mode:
 
 ```sh
 npm run test:watch
 ```
 
-Tests live next to source as `*.test.ts` files under `app/src/`. Rust backend tests run from `app/src-tauri/`:
+Tests live next to source as `*.test.ts` under `app/src/`. Rust backend tests from `app/src-tauri/`:
 
 ```sh
 cargo test
@@ -191,3 +121,20 @@ Installers and bundles are written to `app/src-tauri/target/release/bundle/`.
 ### CI releases
 
 Pushing a semver tag (for example `v1.0.0`) triggers the [Release](.github/workflows/release.yml) workflow. It builds macOS (universal binary) and Windows installers and publishes them as assets on the GitHub release for that tag.
+
+## Docs
+
+| Doc | Audience |
+| --- | --- |
+| [docs/README.md](./docs/README.md) | Index — users vs contributors |
+| [docs/opencode-integration.md](./docs/opencode-integration.md) | Workspace agents / OpenCode setup |
+| [docs/architecture.md](./docs/architecture.md) | Codebase map for contributors |
+| [docs/beta/](./docs/beta/) | Experimental Chat (HTTP) lane |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute |
+| [AGENTS.md](./AGENTS.md) | Rules for coding agents working in this repo |
+
+Product plans and the changelog live under [`specs/`](./specs/) (development material, not end-user docs).
+
+## License
+
+[MIT](./LICENSE)

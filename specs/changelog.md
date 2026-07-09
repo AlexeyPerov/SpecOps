@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-09 21:56 — UI / UX improvement execution plans
+
+- **`specs/improvements/`** — new planning folder for visual consistency and interaction polish (from the UI/UX audit).
+- **`ui-ux-requirements.md`** — source of truth (R1–R6): tokens, shared buttons, empty states, dialog/confirm shell, VC/chat discoverability, polish.
+- **`ui-m-1` … `ui-m-5` execution plans** — M1 tokens+buttons; M2 empty states+dialog shell; M3 in-app confirms (replace `window.confirm`); M4 VC command/WM entry + chat empty CTAs; M5 spacing/icons/settings polish.
+- **`README.md`** — milestone index and suggested order (M1→M2→M3; M4 parallel; M5 last).
+
+## 2026-07-09 21:51 — Public docs refresh (README + docs/)
+
+- **`README.md`** — shortened for a public entry point: clearer product pitch, current feature list (Version Control, minimap, sessions), install/releases link, slim OpenCode quick start; deep provider setup and troubleshooting moved to docs. Planned section no longer lists Git as unimplemented. Added Docs / License footer; stopped linking phase specs from the README.
+- **`docs/opencode-integration.md`** — first-session path, provider setup (OpenRouter, GLM Coding Plan), URL `opencode serve` example, and troubleshooting (content relocated from README).
+- **`docs/architecture.md`** — fixed broken `providers.md` links → `beta/chat-http-providers.md`; added `git/` / editor / docs vs specs layout; sessions terminology; settings inventory deferred to `settingsDialogUi.ts`; contributor guidance for VC ↔ OpenCode isolation.
+- **`docs/README.md`** — new index (users vs contributors; docs vs specs).
+- **`CONTRIBUTING.md`**, **`LICENSE`** (MIT) — contributor onboarding and license file matching `package.json`.
+- **`docs/beta/chat-http-providers.md`** — corrected relative links after the beta move.
+- **`docs/beta/README.md`** — pointer back to the docs index for the non-beta AI path.
+
 ## 2026-07-09 19:10 — Editor minimap review fixes
 
 - **`editor/editorMinimap.ts`** — removed `pointer-events: none` from the minimap host so the overlay's click/drag-to-scroll handlers fire (was blocking the exit-criteria jump navigation). Renamed the unused `view` param to `_view`. Switched `showMinimap.compute(["doc"], …)` to `compute([], …)` so the constant config isn't recomputed on every document change.

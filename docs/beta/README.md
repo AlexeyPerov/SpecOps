@@ -22,3 +22,5 @@ new users; see the [main README](../../README.md) for the current AI story.
 
 Beta features accept feedback through normal channels. Please note the
 version and which beta feature is in use.
+
+See also the [docs index](../README.md) for the recommended (non-beta) AI path.

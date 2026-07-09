@@ -11,12 +11,15 @@ SpecOps is a desktop workspace app for specs, notes, and project files. The UI i
 | `app/src/lib/domain/` | Shared types and pure helpers (`contracts.ts` barrel over `document.ts`, `workspace.ts`, `settings.ts`, `chat.ts`, `commands.ts`, `persistence.ts`) |
 | `app/src/lib/state/` | Writable stores and domain orchestration (`appState`, `chatStore`) |
 | `app/src/lib/services/` | I/O, persistence, platform, file watching, session |
-| `app/src/lib/ai/` | Chat providers, modes, send pipeline |
-| `app/src/lib/components/` | UI components |
+| `app/src/lib/ai/` | Chat providers, modes, send pipeline, OpenCode workspace backend |
+| `app/src/lib/git/` | Version Control (system `git` via Tauri) — independent of OpenCode |
+| `app/src/lib/editor/` | Editor helpers (e.g. minimap extension) |
+| `app/src/lib/components/` | UI components (including `Git*` panels) |
 | `app/src/lib/commands/` | Menu and keyboard command registry |
-| `app/src-tauri/` | Rust: file watcher, macOS open-with, logging plugins |
-| `specs/` | Product specs, execution plans, changelog |
-| `docs/` | Architecture and integration docs (this folder) |
+| `app/src-tauri/` | Rust: file watcher, git subprocess, macOS open-with, logging plugins |
+| `docs/` | Stable product / integration docs (this folder) — see [README.md](./README.md) |
+| `specs/` | Product specs, execution plans, changelog (development material) |
+| `CONTRIBUTING.md` / `AGENTS.md` | Human and agent contribution rules |
 
 Unit tests are colocated as `*.test.ts` next to source. Run them from `app/` with `npm test`.
 
@@ -98,7 +101,7 @@ File open/save flows go through `appState` and services (`fileSystem`, `openFile
 - Threads persist under the app data dir (see [Persistence](#persistence)).
 - Modes: **`ask`** and **`review`** (system prompts in `app/src/lib/ai/modes/builtins.ts`).
 
-Provider integration is documented in [providers.md](./providers.md).
+HTTP Chat (beta) provider integration is documented in [beta/chat-http-providers.md](./beta/chat-http-providers.md). Workspace agents use OpenCode — see [opencode-integration.md](./opencode-integration.md).
 
 ## State layer
 
@@ -184,27 +187,37 @@ Session and chat writes are debounced. The project **does not** add backward-com
 
 - Plugins: dialog, fs, log, opener
 - **`file_watcher`** — sync watch paths with frontend
+- **`git`** — system `git` subprocess layer for Version Control (askpass, cancel, commit helpers)
 - macOS **`RunEvent::Opened`** — open files/folders from Finder; emits `spec-ops/app/opened-paths`
 
-Custom commands: `take_pending_opened_paths`, `sync_file_watcher_paths`.
+Custom commands include `take_pending_opened_paths`, `sync_file_watcher_paths`, and the `git::*` command set.
 
 ## UI composition
 
 `+page.svelte` wires (Svelte 5 runes: `$state`, `$derived`, `$effect`):
 
 - Activity rail (notepad / workspaces)
-- Project panel, editor + tab bar, agents sidebar, chat panel
+- Project panel, editor + tab bar, **sessions** sidebar, chat panel
+- Version Control view tab (per workspace; system `git`)
 - Settings dialog, theme pane, console (logs only)
 
-### Settings dialog tab registry
+### Settings dialog
 
-Tab ids and sidebar labels live in **`SETTINGS_TABS`** (`app/src/lib/services/settingsDialogUi.ts`), not as hardcoded unions scattered across the dialog. Each entry is a `SettingsTabDefinition` (`id`, `label`, `panelAriaLabel`). Current tabs: `editor`, `shortcuts`, `appearance`, `dev`, `connections`, `chatModes`, `debugAi`, `opencode`, `openCodeConfig`, `providers`, `mcp`, `agents`, `permissions`, `commands`, `instructions`, `debugAgent`, `logs`. Sidebar sections are built dynamically by `buildSettingsSidebar(settings.chatHttp)`: top-level tabs (**Editor**, **Shortcuts**, **Appearance**); **Dev** always contains the Chat (beta) master toggle and **Logs**; the **Chats** subtree (`connections`, `chatModes`, `debugAi`) appears only when `chatHttp.enabled` is `true`. **Workspaces** holds the OpenCode tabs (incl. workspace Debug Provider). `openSettingsDialog(tab)` resolves the requested tab against the chat-http beta gate — gated tabs redirect to `dev` when the beta is off; otherwise the opener is called with the resolved tab.
+Tab ids and sidebar labels live in **`SETTINGS_TABS`** / `buildSettingsSidebar` (`app/src/lib/services/settingsDialogUi.ts`). Treat that module as the source of truth for tab inventory — do not duplicate the full list here.
 
-Routing helpers: `editorRouting.ts` (file vs session tab), `workspaceAgentSession.ts` (session tab lifecycle).
+High-level layout:
 
-Editor: CodeMirror via `EditorSurface.svelte` (Svelte 5 runes), language detection in `editorLanguage.ts`. `TabBar.svelte` and `TabBarContextMenu.svelte` also use runes.
+- Top-level: **Editor**, **Shortcuts**, **Appearance**, **Version Control**
+- **Dev** — Chat (beta) master toggle, **Logs**; **Chats** subtree only when `chatHttp.enabled`
+- **Workspaces** — OpenCode (connection, config, providers, MCP, agents, permissions, …)
 
-Chat panel subcomponents (extracted from `ChatPanel.svelte`):
+`openSettingsDialog(tab)` resolves the requested tab against the chat-http beta gate — gated tabs redirect to `dev` when the beta is off.
+
+Routing helpers: `editorRouting.ts` (file vs session vs view tabs), `workspaceAgentSession.ts` (session tab lifecycle).
+
+Editor: CodeMirror via `EditorSurface.svelte` (Svelte 5 runes), language detection in `editorLanguage.ts`, optional minimap via `editor/editorMinimap.ts`.
+
+Chat panel subcomponents:
 
 | Component | Role |
 | --- | --- |
@@ -212,12 +225,7 @@ Chat panel subcomponents (extracted from `ChatPanel.svelte`):
 | `ChatComposer.svelte` | Draft input, send/retry, provider/mode/model selectors |
 | `ChatBlockedState.svelte` | Access blocked and provider config alarm UI |
 
-Tab bar subcomponents (extracted from `TabBar.svelte`):
-
-| Component / module | Role |
-| --- | --- |
-| `TabBarContextMenu.svelte` | Tab context menu UI and actions |
-| `tabDragController.ts` | Pointer drag state machine, reorder, tear-off threshold |
+Tab bar: `TabBarContextMenu.svelte`, `tabDragController.ts` (reorder / tear-off).
 
 ## Testing conventions
 
@@ -243,27 +251,34 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 | --- | --- |
 | New persisted field | `contracts.ts` → normalize in store/service → tests |
 | New menu action | `AppCommandId` + `registry.ts` + handler in `+page.svelte` or `appState` |
-| Chat behavior | `sendChatMessage.ts`, `chatStore.ts`, provider adapter under `ai/providers/` |
-| New LLM provider | Implement `ChatProvider`, register in `bootstrap.ts`, settings UI, catalog in `providerModelCatalog.ts` |
+| Workspace session / OpenCode | `workspaceAgentBackend.ts`, `chatStore`, `opencodeSidecar.ts` |
+| Chat (beta) HTTP behavior | `sendChatMessage.ts`, `chatStore.ts`, provider adapter under `ai/providers/` |
+| New HTTP LLM provider (beta) | Implement `ChatProvider`, register in `bootstrap.ts`, settings UI, catalog in `providerModelCatalog.ts` |
+| Version Control / git | `app/src/lib/git/`, `Git*` components; keep **zero** OpenCode coupling |
 | File on disk | `services/fileSystem.ts` or Tauri FS; keep paths normalized via `diskFingerprint` / workspace paths helpers |
 
 ### Patterns to preserve
 
 1. **Domain types in `contracts.ts`** — Avoid duplicating shapes in components.
-2. **Provider-agnostic prompts** — Build `ProviderRequestPayload` once; adapters map to vendor APIs (see `openAiChatMessages.ts`).
+2. **Provider-agnostic prompts (Chat beta)** — Build `ProviderRequestPayload` once; adapters map to vendor APIs (see `openAiChatMessages.ts`).
 3. **Secrets separate from settings** — API keys go in `provider-secrets.json`, not `settings.json` or chat thread files.
 4. **User-facing errors** — Throw `ChatProviderError` with `userMessage` in providers; map HTTP/status in one place per provider.
 5. **Svelte 5** — Shell components (`+page.svelte`, `TabBar`, `EditorSurface`) use runes; match that style in new `.svelte` work. Load Svelte skills/MCP when editing `.svelte` files.
-6. **Minimal Rust** — Prefer implementing features in TypeScript unless OS integration requires native code.
+6. **Minimal Rust** — Prefer TypeScript unless OS integration requires native code (file watcher, git subprocess, open-with).
+7. **Git ↔ OpenCode isolation** — Version Control must not depend on the OpenCode sidecar or workspace-agent backend.
 
 ### Avoid
 
-- Attaching editor selection or console logs to AI context (not in MVP scope per README).
-- Implementing `cursor` provider without a full plan (id exists in types/catalog for future work).
+- Attaching editor selection or console logs to AI context unless a planned feature explicitly requires it.
+- Implementing a `cursor` provider without a full plan (id may exist in types/catalog for future work).
 - Enabling HTTP streaming in the UI without implementing provider `streamMessage` and SSE parsing end-to-end.
+- Coupling Version Control UI or git commands to OpenCode health / `file.status`.
 
 ### Related docs
 
-- [providers.md](./providers.md) — HTTP provider integration, used vs unused endpoints
-- [README.md](../README.md) — product scope and dev commands
-- `specs/` — execution plans and requirements
+- [README.md](./README.md) — docs index (users vs contributors)
+- [opencode-integration.md](./opencode-integration.md) — workspace agents / OpenCode
+- [beta/chat-http-providers.md](./beta/chat-http-providers.md) — HTTP Chat (beta) providers
+- [../README.md](../README.md) — product scope and dev commands
+- [../CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
+- `specs/` — execution plans, backlog, changelog

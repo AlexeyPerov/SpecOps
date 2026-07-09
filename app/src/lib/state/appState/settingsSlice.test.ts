@@ -154,6 +154,14 @@ describe("appState settings and editor chrome", () => {
     expect(appState.getSnapshot().settings.restrictFilesToContext).toBe(false);
   });
 
+  it("showMinimap defaults to true and the setter / apply path update it", () => {
+    expect(appState.getSnapshot().settings.showMinimap).toBe(true);
+    appState.setShowMinimap(false);
+    expect(appState.getSnapshot().settings.showMinimap).toBe(false);
+    appState.applyPersistedSettings({ showMinimap: true });
+    expect(appState.getSnapshot().settings.showMinimap).toBe(true);
+  });
+
   it("applyWindowSession preserves the active theme", () => {
     appState.setLightTheme({ kind: "preset", id: "github" });
     appState.applyWindowSession({

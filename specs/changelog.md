@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-09 18:45 — Editor minimap (M1–M5)
+
+- **`app/package.json`** — added the CodeMirror 6 minimap extension dependency.
+- **`editor/editorMinimap.ts`** — pure `minimapExtension(enabled)` factory wrapping the `showMinimap` facet (`displayText: "characters"`, `showOverlay: "always"`); returns `null` when disabled so the package renders nothing without remounting the editor. Extracted so the compartment config is unit-testable.
+- **`EditorSurface.svelte`** — added a `minimapCompartment`, registered in `EditorState.create` extensions, and reconfigured on `showMinimap` changes (toggled without remount). Themed the minimap gutter border / overlay via `EditorView.theme` using `--color-border-subtle` / `--color-hover` so light/dark both read well.
+- **`settingsStore.ts` / `settings.ts` / `settingsSlice.ts` / `appState.ts`** — added `showMinimap: boolean` to persisted settings (`defaultPersistedSettings` + `PersistedSettings`) and `AppSettingsState`; normalize missing/non-boolean values to `true` on load (no migration shim); `setShowMinimap` setter + `applyPersistedSettings` path mirroring `decoratePlaintextSymbols`.
+- **`appShellRuntime.ts` / `appShellEffects.ts`** — wired `showMinimap` through settings load and the `syncSettingsPersistenceEffect` save path.
+- **Prop plumbing** — `+page.svelte` → `AppShell.svelte` → `EditorPaneContent.svelte` → `MarkdownEditorPane.svelte` → `DocumentEditor.svelte` → `EditorSurface.svelte`. Markdown preview HTML pane is untouched; the minimap renders on the CodeMirror side only.
+- **`settings/EditorSettingsPanel.svelte`** — new **Show minimap** toggle under an "Editor" section with SpecOps-native copy; updates open editors immediately via the compartment.
+- **Tests** — `editorMinimap.test.ts` (facet config when enabled/disabled); `settingsStore.test.ts` `showMinimap persistence` (default, round-trip, missing-field fallback, non-boolean normalization); `settingsSlice.test.ts` (default + setter + apply path).
+- **`specs/minimap/minimap.md`** — exit criteria checked off; status → implemented.
+- **`specs/minimap/execution-plan.md`** — Tasks M1–M5 marked `[DONE]`.
+
+## 2026-07-09 18:25 — Editor minimap execution plan
+
+- **`specs/minimap/minimap.md`** — feature spec for a Sublime/VS Code-style CodeMirror minimap (`@replit/codemirror-minimap`), locked decisions, workstreams, and exit criteria.
+- **`specs/minimap/execution-plan.md`** — agent task breakdown (M1–M5): dependency wiring, persisted `showMinimap`, settings toggle, theme polish, tests/verification.
+
 ## 2026-07-09 13:30 — P7 validation pass and regression guardrails
 
 - **`tabDocumentLookup`** — shared `buildDocumentByIdMap` / `tabDocumentFromMap` used by `TabBar`, `EditorPaneView`, and `watchedPathsFromState` so the P5 O(1) lookup path is unit-testable and consistent.

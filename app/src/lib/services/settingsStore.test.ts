@@ -55,6 +55,7 @@ describe("settings mapping", () => {
       },
       decoratePlaintextSymbols: false,
       defaultMarkdownViewMode: "split",
+      showMinimap: false,
       restrictFilesToContext: false,
       opencode: defaultOpencodeSettings,
       chatHttp: { enabled: false },
@@ -484,6 +485,40 @@ describe("restrictFilesToContext persistence", () => {
     );
     const result = await loadPersistedSettings();
     expect(result?.restrictFilesToContext).toBe(false);
+  });
+});
+
+describe("showMinimap persistence", () => {
+  it("defaults to true", () => {
+    expect(defaultPersistedSettings.showMinimap).toBe(true);
+  });
+
+  it("preserves the setting through the round-trip", () => {
+    const persisted = toPersistedSettings({
+      ...defaultPersistedSettings,
+      externalFiles: toExternalFilesSettings(defaultPersistedSettings),
+      showMinimap: false,
+    });
+    expect(persisted.showMinimap).toBe(false);
+  });
+
+  it("falls back to true when the field is missing (legacy settings)", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.showMinimap).toBe(true);
+  });
+
+  it("normalizes a non-boolean persisted value back to true", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...defaultPersistedSettings, showMinimap: "yes" }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.showMinimap).toBe(true);
   });
 });
 describe("defaultMarkdownViewMode persistence", () => {

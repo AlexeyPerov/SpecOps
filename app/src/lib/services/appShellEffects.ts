@@ -243,6 +243,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       zoomPercent: snapshot.editor.zoomPercent,
       externalFiles: snapshot.settings.externalFiles,
       decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
+      showMinimap: snapshot.settings.showMinimap,
       defaultMarkdownViewMode: snapshot.settings.defaultMarkdownViewMode,
       restrictFilesToContext: snapshot.settings.restrictFilesToContext,
       opencode: snapshot.settings.opencode,

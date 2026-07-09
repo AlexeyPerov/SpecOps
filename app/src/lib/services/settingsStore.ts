@@ -69,6 +69,7 @@ export interface PersistedSettings {
   maxBinaryOpenAsTextBytes: number;
   maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
+  showMinimap: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
@@ -100,6 +101,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
+  showMinimap: true,
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
@@ -171,6 +173,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         decoratePlaintextSymbols: isBoolean(parsed.decoratePlaintextSymbols)
           ? parsed.decoratePlaintextSymbols
           : defaultPersistedSettings.decoratePlaintextSymbols,
+        showMinimap: isBoolean(parsed.showMinimap)
+          ? parsed.showMinimap
+          : defaultPersistedSettings.showMinimap,
         defaultMarkdownViewMode: MARKDOWN_VIEW_MODES.includes(
           parsed.defaultMarkdownViewMode as MarkdownViewMode,
         )
@@ -227,6 +232,7 @@ export function toPersistedSettings(input: {
   zoomPercent: number;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
+  showMinimap: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
@@ -247,6 +253,9 @@ export function toPersistedSettings(input: {
     zoomPercent: input.zoomPercent,
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
+    showMinimap: isBoolean(input.showMinimap)
+      ? input.showMinimap
+      : defaultPersistedSettings.showMinimap,
     defaultMarkdownViewMode: MARKDOWN_VIEW_MODES.includes(
       input.defaultMarkdownViewMode as MarkdownViewMode,
     )

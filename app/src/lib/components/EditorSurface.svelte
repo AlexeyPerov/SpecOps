@@ -14,6 +14,7 @@
   import { getLanguageSupport, loadLanguageSupport } from "../editor/editorLanguage";
   import type { EditorLanguageId } from "../editor/editorLanguage";
   import { createPlaintextSymbolDecorations } from "../editor/plaintextDecorations";
+  import { minimapExtension } from "../editor/editorMinimap";
   import {
     applyWrap,
     applyZoom,
@@ -30,6 +31,7 @@
     zoomPercent?: number;
     language?: EditorLanguageId;
     decoratePlaintextSymbols?: boolean;
+    showMinimap?: boolean;
     onStatusMessage?: (message: string) => void;
     onDocumentDirty?: (nextContent: string) => void;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
@@ -44,6 +46,7 @@
     zoomPercent = 100,
     language = "plaintext",
     decoratePlaintextSymbols = true,
+    showMinimap = true,
     onStatusMessage = () => {},
     onDocumentDirty = () => {},
     onScrollTopChange = () => {},
@@ -57,6 +60,7 @@
   const languageCompartment = new Compartment();
   const highlightCompartment = new Compartment();
   const decorationCompartment = new Compartment();
+  const minimapCompartment = new Compartment();
   let muted = $state(false);
 
   let trackedDocumentId = $state<string | null>(null);
@@ -163,6 +167,7 @@
         highlightCompartment.of(createSyntaxHighlightExtension()),
         decorationCompartment.of([]),
         searchHighlightCompartment.of([]),
+        minimapCompartment.of(minimapExtension(showMinimap)),
         EditorView.theme({
           "&": {
             height: "100%",
@@ -192,6 +197,17 @@
           ".cm-cursor, .cm-dropCursor": {
             borderLeftColor: "var(--color-text-primary)",
           },
+          ".cm-minimap-gutter": {
+            // Subtle separator between the editor content and the minimap
+            // column; mirrors the gutter border so light/dark both read well.
+            borderLeft: "1px solid var(--color-border-subtle)",
+            backgroundColor: "var(--color-surface-1)",
+          },
+          ".cm-minimap-overlay-container .cm-minimap-overlay": {
+            // Viewport indicator: tinted with the accent hover token so it
+            // tracks the active theme instead of the package's fixed grey.
+            background: "var(--color-hover)",
+          },
         }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !muted) {
@@ -215,6 +231,7 @@
     attachScrollListener();
     trackedDocumentId = documentId;
     currentEditorLanguage = language;
+    lastMinimapEnabled = showMinimap;
     applyScrollTop(scrollTop);
 
     publishCommandRunner();
@@ -311,6 +328,20 @@
         ),
       });
     }
+  });
+
+  let lastMinimapEnabled = $state<boolean | null>(null);
+  $effect(() => {
+    if (!view) {
+      return;
+    }
+    if (showMinimap === lastMinimapEnabled) {
+      return;
+    }
+    lastMinimapEnabled = showMinimap;
+    view.dispatch({
+      effects: minimapCompartment.reconfigure(minimapExtension(showMinimap)),
+    });
   });
 </script>
 

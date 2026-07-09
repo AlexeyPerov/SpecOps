@@ -387,6 +387,15 @@ function createStateStore() {
         },
       }));
     },
+    setShowMinimap(value: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          showMinimap: value,
+        },
+      }));
+    },
     setDefaultMarkdownViewMode(value: MarkdownViewMode) {
       update((state) => ({
         ...state,

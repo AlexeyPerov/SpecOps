@@ -236,6 +236,7 @@ export async function startAppShellRuntime(
         zoomPercent: persistedSettings.zoomPercent,
         externalFiles: toExternalFilesSettings(persistedSettings),
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
+        showMinimap: persistedSettings.showMinimap,
         defaultMarkdownViewMode: persistedSettings.defaultMarkdownViewMode,
         restrictFilesToContext: persistedSettings.restrictFilesToContext,
         opencode: persistedSettings.opencode,

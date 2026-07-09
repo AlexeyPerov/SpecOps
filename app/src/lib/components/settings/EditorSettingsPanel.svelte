@@ -143,6 +143,23 @@
 </section>
 
 <section class="settings-section">
+  <h3>Editor</h3>
+  <label class="settings-toggle">
+    <input
+      type="checkbox"
+      checked={snapshot.settings.showMinimap}
+      onchange={(event) =>
+        appState.setShowMinimap((event.currentTarget as HTMLInputElement).checked)}
+    />
+    Show minimap
+  </label>
+  <p class="settings-section-note">
+    Display a scaled overview of the current file beside the editor. Click or drag it to jump around
+    long documents. Applies to code and text editors, not the markdown preview.
+  </p>
+</section>
+
+<section class="settings-section">
   <h3>Markdown</h3>
   <p class="settings-section-note">
     Initial view applied when opening a markdown file. Each document remembers its own mode after

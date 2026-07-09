@@ -157,6 +157,7 @@
     cursorLine: number;
     cursorColumn: number;
     decoratePlaintextSymbols: boolean;
+    showMinimap: boolean;
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
     largeFileConfirming: boolean;
@@ -463,6 +464,7 @@
             wrapLines={editor.wrapLines}
             zoomPercent={editor.zoomPercent}
             decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
+            showMinimap={editor.showMinimap}
             maxBinaryOpenAsTextBytes={editor.maxBinaryOpenAsTextBytes}
             maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
             largeFileConfirming={editor.largeFileConfirming}

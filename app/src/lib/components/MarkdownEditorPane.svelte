@@ -19,6 +19,7 @@
   export let wrapLines = false;
   export let zoomPercent = 100;
   export let decoratePlaintextSymbols = true;
+  export let showMinimap = true;
   export let markdownEnabled = true;
   export let markdownHtml = "";
   export let storedMarkdownViewMode: "edit" | "split" | "preview" = "edit";
@@ -228,6 +229,7 @@
           {zoomPercent}
           {language}
           {decoratePlaintextSymbols}
+          {showMinimap}
           {onStatusMessage}
           {onUntitledTitleRefresh}
           {onScrollTopChange}

@@ -81,6 +81,7 @@ export const defaultSettings: AppSettingsState = {
   statusBarVisible: true,
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
+  showMinimap: true,
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
@@ -225,6 +226,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       zoomPercent?: number;
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
+      showMinimap?: boolean;
       defaultMarkdownViewMode?: MarkdownViewMode;
       restrictFilesToContext?: boolean;
       opencode?: Partial<OpencodeSettings>;
@@ -269,6 +271,15 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             settings: {
               ...next.settings,
               decoratePlaintextSymbols: partial.decoratePlaintextSymbols,
+            },
+          };
+        }
+        if (typeof partial.showMinimap === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              showMinimap: partial.showMinimap,
             },
           };
         }

@@ -11,6 +11,7 @@
   export let zoomPercent = 100;
   export let language: EditorLanguageId = "plaintext";
   export let decoratePlaintextSymbols = true;
+  export let showMinimap = true;
   export let onStatusMessage: (message: string) => void = () => {};
   export let onUntitledTitleRefresh: ((documentId: string) => void) | undefined = undefined;
   export let onScrollTopChange: (documentId: string, scrollTop: number) => void = () => {};
@@ -34,6 +35,7 @@
   {zoomPercent}
   {language}
   {decoratePlaintextSymbols}
+  {showMinimap}
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
   {onScrollTopChange}

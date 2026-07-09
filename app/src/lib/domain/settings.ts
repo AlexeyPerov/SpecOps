@@ -201,6 +201,11 @@ export interface AppSettingsState {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   /**
+   * When true, text/code editors render a scaled minimap column on the right
+   * side of the CodeMirror surface. Global editor preference (not per-document).
+   */
+  showMinimap: boolean;
+  /**
    * Initial view mode applied to newly opened markdown documents. Each
    * document remembers its own mode after open; this only seeds the first.
    */

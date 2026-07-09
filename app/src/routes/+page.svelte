@@ -1358,6 +1358,7 @@
     cursorLine: snapshot.editor.cursorLine,
     cursorColumn: snapshot.editor.cursorColumn,
     decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
+    showMinimap: snapshot.settings.showMinimap,
     maxBinaryOpenAsTextBytes: snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes,
     maxOpenWithoutConfirmBytes: snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes,
     largeFileConfirming,

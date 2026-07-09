@@ -53,6 +53,7 @@
     wrapLines = false,
     zoomPercent = 100,
     decoratePlaintextSymbols = true,
+    showMinimap = true,
     maxBinaryOpenAsTextBytes = 0,
     maxOpenWithoutConfirmBytes = 0,
     largeFileConfirming = false,
@@ -109,6 +110,7 @@
     wrapLines: boolean;
     zoomPercent: number;
     decoratePlaintextSymbols: boolean;
+    showMinimap: boolean;
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
     largeFileConfirming: boolean;
@@ -277,6 +279,7 @@
       {wrapLines}
       {zoomPercent}
       {decoratePlaintextSymbols}
+      {showMinimap}
       markdownHtml={documentView.markdownHtml}
       storedMarkdownViewMode={paneDocument?.markdownViewMode ?? "edit"}
       canFitSplit={canFitMarkdownSplit}

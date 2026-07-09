@@ -14,16 +14,23 @@ export function watchedPathsFromState(state: AppDomainState): string[] {
   const paths = new Set<string>();
   const session = getActiveSession(state);
   const documents = getActiveDocuments(state);
+  const documentById = new Map(documents.map((doc) => [doc.id, doc] as const));
   for (const tab of getSessionTabs(session)) {
     if (!isFileTab(tab)) {
       continue;
     }
-    const documentState = documents.find((doc) => doc.id === tab.documentId);
+    const documentState = documentById.get(tab.documentId);
     if (documentState?.filePath) {
       paths.add(documentState.filePath);
     }
   }
   return [...paths];
+}
+
+/** Stable dedupe key for external file-watcher sync (watch flag + watched paths). */
+export function externalFileWatcherSyncKey(state: AppDomainState): string {
+  const paths = watchedPathsFromState(state);
+  return `${state.settings.externalFiles.watchExternalChanges}:${paths.join("\0")}`;
 }
 
 export function formatStatusPath(

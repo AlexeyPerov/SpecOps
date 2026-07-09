@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import {
@@ -85,6 +85,7 @@
     syncSettingsPersistenceEffect,
     syncWorkspaceContextEffect,
   } from "../lib/services/appShellEffects";
+  import { externalFileWatcherSyncKey } from "../lib/services/appShellHelpers";
   import { refreshSessionTodos, clearSessionTodos } from "../lib/ai/opencodeTodoStore";
   import { refreshSessionDiffs, clearSessionDiffs } from "../lib/ai/opencodeDiffStore";
   import {
@@ -204,6 +205,8 @@
   const activeContext = $derived(getActiveContextSnapshot(snapshot));
   const session = $derived(activeContext.session);
   const documents = $derived(activeContext.documents);
+  /** Stable key for external file-watcher sync; ignores non-path snapshot churn. */
+  const externalWatcherSyncKey = $derived(externalFileWatcherSyncKey(snapshot));
   const activeContextId = $derived(snapshot.contexts.activeContextId);
   const isChatHttpActive = $derived(activeContextId === CHAT_HTTP_CONTEXT_ID);
   const workspaces = $derived(snapshot.contexts.workspaces);
@@ -1056,28 +1059,36 @@
   });
 
   $effect(() => {
+    // External file watcher: only path-affecting state (watch flag + open file paths).
     runtimeReady;
-    snapshot;
     runtimeSyncExternalFileWatcher;
+    externalWatcherSyncKey;
+    syncExternalFileWatcherEffect({
+      runtimeReady,
+      snapshot: untrack(() => snapshot),
+      syncExternalFileWatcher: runtimeSyncExternalFileWatcher,
+    });
+  });
+
+  $effect(() => {
+    runtimeReady;
     isSessionTabActive;
     activeWorkspaceRoot;
     isChatHttpActive;
-    activeContextId;
-    shellMainRowWidth;
-    editorPaneWidth;
-    workspaceLayout;
-    consoleOpen;
-    syncExternalFileWatcherEffect({
-      runtimeReady,
-      snapshot,
-      syncExternalFileWatcher: runtimeSyncExternalFileWatcher,
-    });
     syncChatAccessMonitorEffect({
       runtimeReady,
       isSessionTabActive,
       activeWorkspaceRoot,
       isChatHttpActive,
     });
+  });
+
+  $effect(() => {
+    activeContextId;
+    shellMainRowWidth;
+    editorPaneWidth;
+    workspaceLayout;
+    consoleOpen;
     syncWorkspaceContextEffect({
       activeContextId,
       handleActiveContextSwitch,

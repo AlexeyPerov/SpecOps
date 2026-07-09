@@ -4,6 +4,7 @@ import { createSessionTab, createFileTab, createSinglePaneLayout } from "../doma
 import {
   canFitMarkdownSplit,
   computeResponsiveLayoutFlags,
+  externalFileWatcherSyncKey,
   formatStatusPath,
   watchedPathsFromState,
 } from "./appShellHelpers";
@@ -11,6 +12,7 @@ import {
 function domainState(overrides: {
   openTabs?: TabState[];
   documents?: AppDomainState["contexts"]["notepad"]["documents"];
+  watchExternalChanges?: boolean;
 }): AppDomainState {
   const snapshot = {
     documents: overrides.documents ?? [],
@@ -27,7 +29,11 @@ function domainState(overrides: {
       chatHttp: snapshot,
       workspaces: [],
     },
-    settings: {} as AppDomainState["settings"],
+    settings: {
+      externalFiles: {
+        watchExternalChanges: overrides.watchExternalChanges ?? true,
+      },
+    } as AppDomainState["settings"],
     theme: {} as AppDomainState["theme"],
     recentFiles: [],
     editor: {} as AppDomainState["editor"],
@@ -84,6 +90,63 @@ describe("watchedPathsFromState", () => {
     });
 
     expect(watchedPathsFromState(state)).toEqual([]);
+  });
+
+  it("resolves many file tabs via document id map without missing paths", () => {
+    const openTabs = Array.from({ length: 40 }, (_, index) =>
+      createFileTab(`tab-${index}`, `doc-${index}`),
+    );
+    const documents = Array.from({ length: 40 }, (_, index) =>
+      emptyDocument(`doc-${index}`, `/tmp/file-${index}.txt`),
+    );
+    const state = domainState({ openTabs, documents });
+
+    expect(watchedPathsFromState(state).sort()).toEqual(
+      documents.map((doc) => doc.filePath!).sort(),
+    );
+  });
+});
+
+describe("externalFileWatcherSyncKey", () => {
+  it("changes when watched paths change", () => {
+    const withA = domainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [emptyDocument("doc-1", "/tmp/a.txt")],
+    });
+    const withB = domainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [emptyDocument("doc-1", "/tmp/b.txt")],
+    });
+
+    expect(externalFileWatcherSyncKey(withA)).not.toBe(externalFileWatcherSyncKey(withB));
+  });
+
+  it("changes when watchExternalChanges toggles", () => {
+    const enabled = domainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [emptyDocument("doc-1", "/tmp/a.txt")],
+      watchExternalChanges: true,
+    });
+    const disabled = domainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [emptyDocument("doc-1", "/tmp/a.txt")],
+      watchExternalChanges: false,
+    });
+
+    expect(externalFileWatcherSyncKey(enabled)).not.toBe(externalFileWatcherSyncKey(disabled));
+  });
+
+  it("stays stable when only non-path document fields change", () => {
+    const base = domainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [emptyDocument("doc-1", "/tmp/a.txt")],
+    });
+    const contentEdited = domainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [{ ...emptyDocument("doc-1", "/tmp/a.txt"), content: "edited", isDirty: true }],
+    });
+
+    expect(externalFileWatcherSyncKey(base)).toBe(externalFileWatcherSyncKey(contentEdited));
   });
 });
 

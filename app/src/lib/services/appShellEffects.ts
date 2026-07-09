@@ -11,7 +11,8 @@
  *    shares the same snapshot read as session persistence — keep both in the
  *    same $effect wrapper to avoid duplicate debounced writes.
  * 4. External file watcher (syncExternalFileWatcherEffect) requires runtimeReady
- *    and the sync function injected by startAppShellRuntime.
+ *    and the sync function injected by startAppShellRuntime. Memoized on the
+ *    watch-flag + watched-paths key so non-path UI updates are no-ops.
  * 5. Active file tree expand (syncActiveFileTreeExpandEffect) runs after the
  *    project tree root is loaded for the current workspace.
  *
@@ -49,6 +50,7 @@ import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import { scheduleSessionPersistence } from "./sessionManager";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { savePersistedSettings, toPersistedSettings } from "./settingsStore";
+import { externalFileWatcherSyncKey } from "./appShellHelpers";
 
 export interface SyncSessionTabEffectInput {
   activeTab: TabState | undefined | null;
@@ -652,11 +654,24 @@ export interface SyncExternalFileWatcherEffectInput {
   syncExternalFileWatcher: ((state: AppDomainState) => Promise<void>) | null;
 }
 
+/**
+ * Memoized external file-watcher sync. Recomputes watched paths only when the
+ * watch flag or open file paths change; redundant effect re-runs are no-ops.
+ */
+let lastExternalFileWatcherSyncKey: string | null = null;
+
 export function syncExternalFileWatcherEffect(input: SyncExternalFileWatcherEffectInput): void {
   const { runtimeReady, snapshot, syncExternalFileWatcher } = input;
   if (!runtimeReady || !syncExternalFileWatcher) {
+    // Allow a fresh sync after the next runtimeReady / sync-fn injection.
+    lastExternalFileWatcherSyncKey = null;
     return;
   }
+  const syncKey = externalFileWatcherSyncKey(snapshot);
+  if (syncKey === lastExternalFileWatcherSyncKey) {
+    return;
+  }
+  lastExternalFileWatcherSyncKey = syncKey;
   void syncExternalFileWatcher(snapshot);
 }
 
@@ -688,6 +703,7 @@ export function resetAppShellEffectsForTests(): void {
   lastAppliedActiveFileExpandKey = null;
   lastProjectTreeRootKey = null;
   lastProjectTreeWatcherKey = null;
+  lastExternalFileWatcherSyncKey = null;
 }
 
 export function syncActiveFileTreeExpandEffect(input: SyncActiveFileTreeExpandEffectInput): void {

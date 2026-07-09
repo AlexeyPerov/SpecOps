@@ -8,10 +8,15 @@ import { syncProjectTreeWatcher } from "./fileWatcher";
 import {
   resetAppShellEffectsForTests,
   syncActiveFileTreeExpandEffect,
+  syncExternalFileWatcherEffect,
   syncProjectTreeWatcherEffect,
   type SyncActiveFileTreeExpandEffectInput,
+  type SyncExternalFileWatcherEffectInput,
   type SyncProjectTreeWatcherEffectInput,
 } from "./appShellEffects";
+import type { AppDomainState, TabState } from "../domain/contracts";
+import { createFileTab, createSessionTab, createSinglePaneLayout } from "../domain/contracts";
+import { externalFileWatcherSyncKey } from "./appShellHelpers";
 
 describe("syncActiveFileTreeExpandEffect", () => {
   beforeEach(() => {
@@ -214,5 +219,185 @@ describe("syncProjectTreeWatcherEffect", () => {
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
     expect(syncWatcher).toHaveBeenCalledWith(null);
     expect(syncWatcher).toHaveBeenLastCalledWith("/repo");
+  });
+});
+
+function watcherDomainState(overrides: {
+  openTabs?: TabState[];
+  documents?: AppDomainState["contexts"]["notepad"]["documents"];
+  watchExternalChanges?: boolean;
+}): AppDomainState {
+  const snapshot = {
+    documents: overrides.documents ?? [],
+    session: {
+      editorLayout: createSinglePaneLayout(overrides.openTabs ?? [], null),
+      lastActiveWindowId: "main",
+      windowBounds: null,
+    },
+  };
+  return {
+    contexts: {
+      activeContextId: "notepad",
+      notepad: snapshot,
+      chatHttp: snapshot,
+      workspaces: [],
+    },
+    settings: {
+      externalFiles: {
+        watchExternalChanges: overrides.watchExternalChanges ?? true,
+      },
+    } as AppDomainState["settings"],
+    theme: {} as AppDomainState["theme"],
+    recentFiles: [],
+    editor: {} as AppDomainState["editor"],
+    activityRailWidthPx: 48,
+  };
+}
+
+function watcherDocument(id: string, filePath: string | null) {
+  return {
+    id,
+    filePath,
+    title: "title",
+    content: "",
+    savedContent: "",
+    isDirty: false,
+    contentKind: "text" as const,
+    language: "plaintext",
+    encoding: "utf-8" as const,
+    lineEnding: "lf" as const,
+    diskFingerprint: null,
+    dismissedFingerprint: null,
+    fileMissing: false,
+    scrollTop: 0,
+    markdownViewMode: "edit" as const,
+  };
+}
+
+describe("syncExternalFileWatcherEffect", () => {
+  beforeEach(() => {
+    resetAppShellEffectsForTests();
+  });
+
+  function makeInput(
+    overrides: Partial<SyncExternalFileWatcherEffectInput> & {
+      syncExternalFileWatcher: (state: AppDomainState) => Promise<void>;
+      snapshot?: AppDomainState;
+    },
+  ): SyncExternalFileWatcherEffectInput {
+    return {
+      runtimeReady: true,
+      snapshot:
+        overrides.snapshot ??
+        watcherDomainState({
+          openTabs: [createFileTab("tab-1", "doc-1")],
+          documents: [watcherDocument("doc-1", "/tmp/a.txt")],
+        }),
+      ...overrides,
+    };
+  }
+
+  it("syncs once for a stable watch key and skips redundant re-runs", () => {
+    const syncExternalFileWatcher = vi.fn(async () => {});
+    const input = makeInput({ syncExternalFileWatcher });
+
+    syncExternalFileWatcherEffect(input);
+    syncExternalFileWatcherEffect(input);
+    syncExternalFileWatcherEffect({ ...input });
+
+    expect(syncExternalFileWatcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not sync when only non-path document fields change", () => {
+    const syncExternalFileWatcher = vi.fn(async () => {});
+    const base = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [watcherDocument("doc-1", "/tmp/a.txt")],
+    });
+    const edited = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [{ ...watcherDocument("doc-1", "/tmp/a.txt"), content: "edited", isDirty: true }],
+    });
+
+    expect(externalFileWatcherSyncKey(base)).toBe(externalFileWatcherSyncKey(edited));
+
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: base }));
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: edited }));
+
+    expect(syncExternalFileWatcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-syncs when a watched path changes", () => {
+    const syncExternalFileWatcher = vi.fn(async () => {});
+    const withA = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [watcherDocument("doc-1", "/tmp/a.txt")],
+    });
+    const withB = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [watcherDocument("doc-1", "/tmp/b.txt")],
+    });
+
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: withA }));
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: withB }));
+
+    expect(syncExternalFileWatcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-syncs when watchExternalChanges toggles", () => {
+    const syncExternalFileWatcher = vi.fn(async () => {});
+    const enabled = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [watcherDocument("doc-1", "/tmp/a.txt")],
+      watchExternalChanges: true,
+    });
+    const disabled = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [watcherDocument("doc-1", "/tmp/a.txt")],
+      watchExternalChanges: false,
+    });
+
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: enabled }));
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: disabled }));
+
+    expect(syncExternalFileWatcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-syncs when a file tab is opened or closed", () => {
+    const syncExternalFileWatcher = vi.fn(async () => {});
+    const oneTab = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [watcherDocument("doc-1", "/tmp/a.txt"), watcherDocument("doc-2", "/tmp/b.txt")],
+    });
+    const twoTabs = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1"), createFileTab("tab-2", "doc-2")],
+      documents: [watcherDocument("doc-1", "/tmp/a.txt"), watcherDocument("doc-2", "/tmp/b.txt")],
+    });
+    const agentOnly = watcherDomainState({
+      openTabs: [createSessionTab("tab-agent", "agent-1")],
+      documents: [watcherDocument("doc-1", "/tmp/a.txt")],
+    });
+
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: oneTab }));
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: twoTabs }));
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot: agentOnly }));
+
+    expect(syncExternalFileWatcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("skips when runtime is not ready and syncs after ready", () => {
+    const syncExternalFileWatcher = vi.fn(async () => {});
+    const snapshot = watcherDomainState({
+      openTabs: [createFileTab("tab-1", "doc-1")],
+      documents: [watcherDocument("doc-1", "/tmp/a.txt")],
+    });
+
+    syncExternalFileWatcherEffect(
+      makeInput({ syncExternalFileWatcher, snapshot, runtimeReady: false }),
+    );
+    expect(syncExternalFileWatcher).not.toHaveBeenCalled();
+
+    syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot }));
+    expect(syncExternalFileWatcher).toHaveBeenCalledTimes(1);
   });
 });

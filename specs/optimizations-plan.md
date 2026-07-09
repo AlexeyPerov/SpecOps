@@ -189,7 +189,7 @@ Dependencies: Task P1.
 
 ---
 
-#### Task P6: External watcher sync memoization [Score:6] [Agent:medium] [~0.5d]
+#### Task P6: External watcher sync memoization [Score:6] [Agent:medium] [~0.5d] [DONE]
 
 **Required context**
 

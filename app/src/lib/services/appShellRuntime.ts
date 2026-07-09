@@ -54,7 +54,7 @@ import { initializeChatProviders } from "../ai/providers/bootstrap";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { readConsoleHeightPreference } from "./consoleTabPrefs";
-import { watchedPathsFromState } from "./appShellHelpers";
+import { externalFileWatcherSyncKey, watchedPathsFromState } from "./appShellHelpers";
 import { loadWorkspacePreferences } from "./workspacePreferences";
 
 const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
@@ -98,8 +98,7 @@ export async function startAppShellRuntime(
     if (!runtimeReady) {
       return;
     }
-    const paths = watchedPathsFromState(state);
-    const syncKey = `${state.settings.externalFiles.watchExternalChanges}:${paths.join("\0")}`;
+    const syncKey = externalFileWatcherSyncKey(state);
     if (syncKey === lastWatcherSyncKey) {
       return;
     }
@@ -109,7 +108,7 @@ export async function startAppShellRuntime(
       await clearFileWatcherPaths();
       return;
     }
-    await syncFileWatcherPaths(paths);
+    await syncFileWatcherPaths(watchedPathsFromState(state));
   }
 
   function scheduleWindowBoundsPersistence(): void {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-09 13:20 — P6 external watcher sync memoization
+
+- **`watchedPathsFromState`** — builds a document-id Map once per call instead of repeated `documents.find` lookups when collecting watched file paths.
+- **`externalFileWatcherSyncKey`** — shared watch-flag + paths dedupe key used by runtime sync and the shell effect.
+- **`syncExternalFileWatcherEffect`** — memoizes on that key so redundant effect re-runs (and non-path document churn) are no-ops; resets when runtime is not ready.
+- **`+page.svelte`** — splits watcher sync into its own `$effect` keyed by `externalWatcherSyncKey` (snapshot read via `untrack`), separate from chat-access / layout effects.
+- **Tests** — sync-key stability and effect memoization coverage in `appShellHelpers.test.ts` / `appShellEffects.test.ts`.
+- **`specs/optimizations-plan.md`** — Task P6 marked `[DONE]`.
+
 ## 2026-07-09 12:18 — P5 tab/render hot-path lookup optimization
 
 - **`TabBar.svelte`** — precomputes a `$derived` `documentById` Map; `tabDocument` uses O(1) map lookup for visibility, titles, tooltips, and aria-labels.

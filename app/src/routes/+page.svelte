@@ -717,6 +717,10 @@
     openSettingsFromContextMenu(workspaceId);
   }
 
+  function handleOpenVersionControlFromManager(workspaceId: ContextId): void {
+    openVersionControlFromContextMenu(workspaceId);
+  }
+
   /** Switches to the notepad context and selects the given tab. */
   function handleSelectNotepadTab(tabId: string): void {
     appState.switchContext("notepad");
@@ -1332,6 +1336,7 @@
       onAddMultiple: handleOpenAddMultipleWorkspaces,
       onSelectWorkspace: handleSelectContext,
       onOpenWorkspaceSettings: handleOpenWorkspaceSettingsFromManager,
+      onOpenVersionControl: handleOpenVersionControlFromManager,
     },
     isSessionTabActive,
     isSettingsViewActive,

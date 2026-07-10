@@ -5,6 +5,8 @@
     getDebugProviderDisabledCopy,
     getHttpMissingConfigCopy,
     getLocalInvalidModelBlockedCopy,
+    OPENCODE_DISABLED_RECOVERY,
+    PROVIDER_MISSING_CONFIG_RECOVERY,
     PROVIDER_REQUEST_FAILURE_RECOVERY,
     isComposerConfigurationError,
   } from "../ai/chatErrorCopy";
@@ -37,6 +39,7 @@
   import { draftEntryTitleForScope } from "../services/chatSessions";
   import { getOpencodeCatalog, refreshOpencodeCatalog } from "../ai/opencodeCatalog";
   import { isOpencodeEnabled } from "../services/opencodeSettings";
+  import { openSettingsDialog } from "../services/settingsDialogUi";
   import { requestConfirm } from "../services/confirmDialogUi";
   import { extractSessionTotals } from "../ai/chatSteps";
   import { abortTurn } from "../ai/chatSendPipeline";
@@ -172,7 +175,41 @@
     accessState.status === "blocked" &&
       accessState.reason !== WorkspaceAccessReason.MissingProviderConfig,
   );
+  const isMissingProviderConfig = $derived(
+    accessState.status === "blocked" &&
+      accessState.reason === WorkspaceAccessReason.MissingProviderConfig,
+  );
+  const isChatBlockedVisible = $derived(
+    (isChatHttpScope && !$appState.settings.chatHttp.enabled) ||
+      isBlocked ||
+      isHttpSendBlocked ||
+      isDebugSendBlocked ||
+      isModelSendBlocked,
+  );
+  const isOpencodeDisabledForWorkspace = $derived(
+    !isChatHttpScope && !isOpencodeEnabled($appState.settings.opencode),
+  );
   const isEmpty = $derived(messages.length === 0);
+  const emptySetupAction = $derived.by(() => {
+    if (!isEmpty || isChatBlockedVisible) {
+      return null;
+    }
+    if (isMissingProviderConfig) {
+      return {
+        hint: PROVIDER_MISSING_CONFIG_RECOVERY,
+        label: "Open Providers settings",
+        onClick: () => openSettingsDialog("connections"),
+      };
+    }
+    if (isOpencodeDisabledForWorkspace) {
+      return {
+        hint: OPENCODE_DISABLED_RECOVERY,
+        label: "Open OpenCode settings",
+        onClick: () => openSettingsDialog("opencode"),
+      };
+    }
+    return null;
+  });
   /**
    * Cumulative cost / token totals across all assistant messages. Workspace
    * agent tabs hydrate from `session.messages` so assistant messages carry
@@ -537,10 +574,13 @@
       onForkFromMessage={(messageId) => void onForkSession?.(messageId)}
       onRevertFromMessage={(messageId) => void onRevertSession?.(messageId)}
       emptyHint={
-        isChatHttpScope
+        emptySetupAction?.hint ??
+        (isChatHttpScope
           ? "Send messages with your configured connection. Pick a provider, mode, and model, then send."
-          : "Send a prompt to this session. Select an OpenCode agent and model, then send."
+          : "Send a prompt to this session. Select an OpenCode agent and model, then send.")
       }
+      emptyActionLabel={emptySetupAction?.label}
+      onEmptyAction={emptySetupAction?.onClick}
     />
 
     <ChatComposer

@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-07-10 10:04 — UI / UX milestone M4 (discoverability)
+
+- **`app/src/lib/services/versionControlNavigation.ts`** — shared open-VC helper (R5). `openVersionControlForWorkspace` switches to a workspace, gates on git integration, and opens/focuses the singleton `version-control` view tab; notifies when git is off or the target is not a workspace. `openVersionControlForActiveContext` is the command/shortcut entry point.
+- **`app.openVersionControl` command** — new app command with default binding `Cmd+Shift+G` / `Ctrl+Shift+G`; registered in command definitions, `app.ts` handler, SpecOps menu, and Keyboard Shortcuts settings list.
+- **`app/src/lib/services/workspaceContextMenuController.ts`** — context-menu “Version Control” now delegates to the shared helper and notifies when git integration is disabled (no silent no-op).
+- **Workspace Manager → Version Control** — `WorkspaceManagerView.svelte` row action opens VC for that workspace (visible when git column is shown); wired through `EditorPaneContent`, `AppShell`, and `+page.svelte`.
+- **Chat empty-state next steps (R5)** — `ChatPanel.svelte` / `ChatMessageList.svelte`: ready empty sessions keep title + short hint; soft setup gaps (`MissingProviderConfig`, OpenCode disabled) show recovery copy and a settings CTA via `EmptyState` actions without duplicating `ChatBlockedState`.
+- **Tests:** `versionControlNavigation.test.ts`, `appViewHandlers.test.ts` (command gating + singleton), `WorkspaceManagerView.test.ts` (VC row callback); `commitGraphLayout.test.ts` default-branch checkout fix for `main`-initialized repos.
+- **`specs/improvements/ui-m-4-execution-plan.md`** — all tasks marked DONE; milestone status Done.
+
+## 2026-07-10 09:58 — Chrome-less editor view tab pattern moved to backlog
+
+- **`specs/backlog/chrome-less-editor-view-tabs.md`** — new doc for the chrome-less editor view tab pattern, with Version Control as the primary example (`openOrFocusViewTab("version-control")`, git gating, singleton semantics, existing view kinds table).
+- **`specs/backlog/README.md`** — index entry for the new doc.
+- **`specs/improvements/ui-m-4-execution-plan.md`** — removed inline assumption; M4 now links to the backlog doc instead.
+
+## 2026-07-10 09:55 — Backlog docs reorganized into `specs/backlog/`
+
+- **`specs/backlog/`** — new folder for deferred follow-ups and tech debt; replaces the flat `specs/backlog.md`.
+- **`specs/backlog/README.md`** — index linking topic docs and the git post-MVP backlog in `specs/archive/git/backlog.md`.
+- **Split topic docs (from former `specs/backlog.md`):**
+  - `chat-context-window-budgeting.md`
+  - `chat-prompt-summary-quality.md`
+  - `chat-estimate-observability.md`
+  - `phase-3-5-deferred-appearance-workspace-ux.md`
+- **Removed:** `specs/backlog.md`.
+- **`docs/architecture.md`** — backlog pointer updated to `specs/backlog/`.
+
 ## 2026-07-10 07:45 — UI / UX milestone M3 (in-app confirms)
 
 - **`app/src/lib/services/confirmDialogUi.ts`** — new promise-based confirm API (R4). `requestConfirm({ title?, message, confirmLabel?, cancelLabel?, danger? })` returns `Promise<boolean>`; self-registering dialog host supplies the runner, with a `window.confirm` fallback for minimal mounts/tests. Single-flight policy: a new request displaces a pending one (resolved `false`). Also exports a `confirmDialog(message, danger?)` convenience wrapper and `registerConfirmRunner` for the host.

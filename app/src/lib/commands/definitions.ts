@@ -20,6 +20,12 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "none", windows: "none" },
   },
   {
+    id: "app.openVersionControl",
+    label: "Version Control",
+    menuPath: "SpecOps/Version Control",
+    binding: { mac: "Cmd+Shift+G", windows: "Ctrl+Shift+G" },
+  },
+  {
     id: "app.newWindow",
     label: "New Window",
     menuPath: "File/New Window",

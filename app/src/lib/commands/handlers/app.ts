@@ -1,4 +1,5 @@
 import { appState } from "../../state/appState";
+import { openVersionControlForActiveContext } from "../../services/versionControlNavigation";
 import { createNewWindowWithTransfer } from "../../services/windowManager";
 import { getSessionActiveTab, tabDocumentId } from "../../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../../state/appState/contextHelpers";
@@ -14,6 +15,9 @@ export const appHandlers: CommandHandlerMap = {
   "app.openWorkspaceManager": () => {
     appState.switchContext("notepad");
     appState.openOrFocusViewTab("workspace-manager");
+  },
+  "app.openVersionControl": ({ notify }) => {
+    openVersionControlForActiveContext(notify);
   },
   "app.newWindow": async ({ getState, notify }) => {
     const createdWindowId = await createNewWindowWithTransfer(getState(), null);

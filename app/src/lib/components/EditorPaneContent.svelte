@@ -47,6 +47,7 @@
     onWorkspaceManagerAddMultiple = () => {},
     onWorkspaceManagerSelectWorkspace = (_workspaceId: ContextId) => {},
     onWorkspaceManagerOpenSettings = (_workspaceId: ContextId) => {},
+    onWorkspaceManagerOpenVersionControl = (_workspaceId: ContextId) => {},
     previewMode = "editor",
     findReplaceOpen = false,
     goToOpen = false,
@@ -104,6 +105,7 @@
     onWorkspaceManagerAddMultiple?: () => void;
     onWorkspaceManagerSelectWorkspace?: (workspaceId: ContextId) => void;
     onWorkspaceManagerOpenSettings?: (workspaceId: ContextId) => void;
+    onWorkspaceManagerOpenVersionControl?: (workspaceId: ContextId) => void;
     previewMode: "editor" | "markdown" | "diff";
     findReplaceOpen: boolean;
     goToOpen: boolean;
@@ -217,6 +219,7 @@
       onAddMultiple={onWorkspaceManagerAddMultiple}
       onSelectWorkspace={onWorkspaceManagerSelectWorkspace}
       onOpenWorkspaceSettings={onWorkspaceManagerOpenSettings}
+      onOpenVersionControl={onWorkspaceManagerOpenVersionControl}
     />
   {:else if isVersionControlViewActive}
     <VersionControlView workspaceRootPath={workspaceRootPath} {windowId} {notify} />

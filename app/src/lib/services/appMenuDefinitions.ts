@@ -353,6 +353,13 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
     commandId: "app.openWorkspaceManager",
     runCommand,
   });
+  const versionControlItem = await commandItem({
+    id: "cmd.app.versionControl",
+    text: "Version Control",
+    accelerator: "CmdOrCtrl+Shift+G",
+    commandId: "app.openVersionControl",
+    runCommand,
+  });
 
   return Submenu.new({
     text: "SpecOps",
@@ -368,6 +375,7 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
       themesItem,
       settingsItem,
       workspaceManagerItem,
+      versionControlItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       await PredefinedMenuItem.new({ item: "Quit" }),
     ],

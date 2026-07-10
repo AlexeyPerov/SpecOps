@@ -270,6 +270,10 @@ describe("view.toggleDiffPreview command", () => {
 });
 
 describe("app shell toggle commands", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
   it("app.toggleThemePane opens a themes view tab", () => {
     const { context } = createCommandContext();
 
@@ -320,6 +324,66 @@ describe("app shell toggle commands", () => {
       (tab) => tab.kind === "view" && tab.view === "workspace-manager",
     );
     expect(managerTabs).toHaveLength(1);
+  });
+
+  it("app.openVersionControl opens version-control for the active workspace", () => {
+    const { context } = createCommandContext();
+    const workspaceId = appState.addWorkspace("/tmp/ws-vc-cmd");
+    expect(workspaceId).not.toBeNull();
+    appState.switchContext(workspaceId!);
+
+    dispatchCommand("app.openVersionControl", context);
+
+    expect(appState.getActiveContext().id).toBe(workspaceId);
+    const tabs = getSessionTabs(appState.getActiveSession()).filter(
+      (tab) => tab.kind === "view" && tab.view === "version-control",
+    );
+    expect(tabs).toHaveLength(1);
+  });
+
+  it("app.openVersionControl notifies on notepad without opening a tab", () => {
+    const { context, notify } = createCommandContext();
+
+    dispatchCommand("app.openVersionControl", context);
+
+    expect(notify).toHaveBeenCalledWith("Open a workspace to use Version Control.");
+    const tabs = getSessionTabs(appState.getActiveSession()).filter(
+      (tab) => tab.kind === "view" && tab.view === "version-control",
+    );
+    expect(tabs).toHaveLength(0);
+  });
+
+  it("app.openVersionControl notifies when git integration is disabled", () => {
+    const { context, notify } = createCommandContext();
+    const workspaceId = appState.addWorkspace("/tmp/ws-vc-git-off");
+    expect(workspaceId).not.toBeNull();
+    appState.switchContext(workspaceId!);
+    appState.setGitIntegrationEnabled(false);
+
+    dispatchCommand("app.openVersionControl", context);
+
+    expect(notify).toHaveBeenCalledWith(
+      "Git integration is disabled in Settings. Enable it under Settings → Version Control.",
+    );
+    const tabs = getSessionTabs(appState.getActiveSession()).filter(
+      (tab) => tab.kind === "view" && tab.view === "version-control",
+    );
+    expect(tabs).toHaveLength(0);
+  });
+
+  it("app.openVersionControl focuses the existing tab instead of duplicating", () => {
+    const { context } = createCommandContext();
+    const workspaceId = appState.addWorkspace("/tmp/ws-vc-singleton");
+    expect(workspaceId).not.toBeNull();
+    appState.switchContext(workspaceId!);
+
+    dispatchCommand("app.openVersionControl", context);
+    dispatchCommand("app.openVersionControl", context);
+
+    const versionControlTabs = getSessionTabs(appState.getActiveSession()).filter(
+      (tab) => tab.kind === "view" && tab.view === "version-control",
+    );
+    expect(versionControlTabs).toHaveLength(1);
   });
 
   it("app.newWindow notifies on success and failure", async () => {
@@ -586,6 +650,7 @@ describe("command dispatch coverage", () => {
       "app.toggleThemePane",
       "app.toggleSettings",
       "app.openWorkspaceManager",
+      "app.openVersionControl",
       "app.newWindow",
       "view.cycleTheme",
       "app.toggleFindReplace",

@@ -191,13 +191,15 @@ describeIfGitInstalled("buildCommitGraphLayout integration (temp repo)", () => {
       repo.run(["add", "README.md"]);
       repo.run(["commit", "-m", "Main advance"]);
 
+      const defaultBranch = (repo.run(["rev-parse", "--abbrev-ref", "HEAD"]) as string).trim();
+
       repo.run(["branch", "feature"]);
       repo.run(["checkout", "feature"]);
       repo.writeFile("feature.txt", "work");
       repo.run(["add", "feature.txt"]);
       repo.run(["commit", "-m", "Feature work"]);
 
-      repo.run(["checkout", "master"]);
+      repo.run(["checkout", defaultBranch]);
       repo.writeFile("README.md", "main again");
       repo.run(["add", "README.md"]);
       repo.run(["commit", "-m", "Parallel main"]);

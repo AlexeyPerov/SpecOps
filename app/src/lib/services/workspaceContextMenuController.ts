@@ -1,6 +1,6 @@
 import { CHAT_HTTP_CONTEXT_ID, type ContextId } from "../domain/contracts";
 import { appState } from "../state/appState";
-import { isGitIntegrationEnabled } from "./gitIntegrationSettings";
+import { openVersionControlForWorkspace } from "./versionControlNavigation";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { closeWorkspaceWithConfirm } from "./workspaceCloseFlow";
 
@@ -156,15 +156,7 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
    * the workspace session, so re-invoking focuses the existing tab.
    */
   function openVersionControl(workspaceId: ContextId): void {
-    if (!isGitIntegrationEnabled(appState.getSnapshot().settings.gitIntegration)) {
-      close();
-      return;
-    }
-    const switched = appState.switchContext(workspaceId);
-    if (switched && isWorkspaceContextId(workspaceId)) {
-      markWorkspaceLifecycleActive();
-    }
-    appState.openOrFocusViewTab("version-control");
+    openVersionControlForWorkspace(workspaceId, deps.notify);
     close();
   }
 

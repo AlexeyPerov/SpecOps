@@ -36,6 +36,8 @@
     activeModeRequiredSections?: readonly string[];
     compactionNotice?: string;
     emptyHint?: string;
+    emptyActionLabel?: string;
+    onEmptyAction?: () => void;
     /** M2-T6: agent-generated session summary, shown as a collapsible banner. */
     sessionSummary?: string;
     /** M2-T3: enables per-message "Fork from here" action. */
@@ -53,6 +55,8 @@
     activeModeRequiredSections = [],
     compactionNotice = "",
     emptyHint = "Send a message to start.",
+    emptyActionLabel,
+    onEmptyAction,
     sessionSummary = "",
     canForkFromMessage = false,
     canRevertFromMessage = false,
@@ -366,7 +370,15 @@
       variant="inline"
       title="Start chat"
       description={emptyHint}
-    />
+    >
+      {#if emptyActionLabel && onEmptyAction}
+        {#snippet actions()}
+          <button type="button" class="btn btn-primary chat-setup-button" onclick={onEmptyAction}>
+            {emptyActionLabel}
+          </button>
+        {/snippet}
+      {/if}
+    </EmptyState>
   {:else}
     <div class="chat-message-scroll" bind:this={scrollContainerEl}>
       {#if hasAnyReasoning}
@@ -575,6 +587,14 @@
     text-align: left;
     padding: 0;
     gap: var(--space-2);
+  }
+
+  :global(.chat-empty .chat-setup-button) {
+    align-self: flex-start;
+    min-height: 26px;
+    margin-top: var(--space-2);
+    padding: 0 var(--space-8);
+    font-size: 12px;
   }
 
   .chat-compaction-notice {

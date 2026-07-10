@@ -30,6 +30,7 @@
     onAddMultiple = () => {},
     onSelectWorkspace = (_workspaceId: ContextId) => {},
     onOpenWorkspaceSettings = (_workspaceId: ContextId) => {},
+    onOpenVersionControl = (_workspaceId: ContextId) => {},
   }: {
     workspaces?: WorkspaceEntry[];
     activeContextId?: ContextId;
@@ -39,6 +40,7 @@
     onAddMultiple?: () => void;
     onSelectWorkspace?: (workspaceId: ContextId) => void;
     onOpenWorkspaceSettings?: (workspaceId: ContextId) => void;
+    onOpenVersionControl?: (workspaceId: ContextId) => void;
   } = $props();
 
   let gitCellsByPath = $state<Map<string, WorkspaceGitColumnCell>>(new Map());
@@ -254,17 +256,32 @@
             </td>
             {/if}
             <td class="wm-action-col">
-              <button
-                type="button"
-                class="btn btn-secondary btn-compact"
-                title="Workspace settings"
-                onclick={(event) => {
-                  event.stopPropagation();
-                  onOpenWorkspaceSettings(workspace.id);
-                }}
-              >
-                ⚙ Settings
-              </button>
+              <div class="wm-row-actions">
+                {#if showGitColumn}
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-compact"
+                    title="Version Control"
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      onOpenVersionControl(workspace.id);
+                    }}
+                  >
+                    Version Control
+                  </button>
+                {/if}
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-compact"
+                  title="Workspace settings"
+                  onclick={(event) => {
+                    event.stopPropagation();
+                    onOpenWorkspaceSettings(workspace.id);
+                  }}
+                >
+                  ⚙ Settings
+                </button>
+              </div>
             </td>
           </tr>
         {/each}
@@ -426,6 +443,14 @@
   .wm-action-col {
     text-align: right;
     white-space: nowrap;
+  }
+
+  .wm-row-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
 
   .sr-only {

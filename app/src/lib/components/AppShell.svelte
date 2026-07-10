@@ -128,6 +128,7 @@
     onAddMultiple: () => void;
     onSelectWorkspace: (workspaceId: ContextId) => void;
     onOpenWorkspaceSettings: (workspaceId: ContextId) => void;
+    onOpenVersionControl: (workspaceId: ContextId) => void;
   }
 
   export interface AppShellEditorChromeProps {
@@ -459,6 +460,7 @@
             onWorkspaceManagerAddMultiple={editor.workspaceManager?.onAddMultiple ?? (() => {})}
             onWorkspaceManagerSelectWorkspace={editor.workspaceManager?.onSelectWorkspace ?? (() => {})}
             onWorkspaceManagerOpenSettings={editor.workspaceManager?.onOpenWorkspaceSettings ?? (() => {})}
+            onWorkspaceManagerOpenVersionControl={editor.workspaceManager?.onOpenVersionControl ?? (() => {})}
             previewMode={editor.previewMode}
             findReplaceOpen={editor.findReplaceOpen}
             goToOpen={editor.goToOpen}

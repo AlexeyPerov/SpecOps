@@ -281,4 +281,4 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 - [beta/chat-http-providers.md](./beta/chat-http-providers.md) — HTTP Chat (beta) providers
 - [../README.md](../README.md) — product scope and dev commands
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
-- `specs/` — execution plans, backlog, changelog
+- `specs/` — execution plans, [`specs/backlog/`](../specs/backlog/) (deferred items), changelog

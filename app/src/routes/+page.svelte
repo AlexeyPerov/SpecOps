@@ -672,6 +672,9 @@
       projectSearchFocusReplace = focusReplace;
       projectSearchNonce += 1;
     },
+    setConsoleOpen: (open) => {
+      consoleOpen = open;
+    },
   });
 
   const { openAndActivatePath, consumeOpenedPaths, onTabActivated } = createAppShellFileHandlers({

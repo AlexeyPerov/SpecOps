@@ -85,7 +85,7 @@
 <style>
   .confirm-dialog-message {
     margin: 0;
-    font-size: 0.875rem;
+    font-size: var(--font-size-ui);
     line-height: 1.5;
     color: var(--color-text-primary);
     word-break: break-word;

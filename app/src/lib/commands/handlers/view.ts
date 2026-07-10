@@ -37,6 +37,23 @@ export const viewHandlers: CommandHandlerMap = {
   "view.focusPane2": () => appState.setActiveEditorPaneBySlot(2),
   "view.focusPane3": () => appState.setActiveEditorPaneBySlot(3),
   "view.focusPane4": () => appState.setActiveEditorPaneBySlot(4),
+  "view.focusEditor": ({ notify, setConsoleOpen }) => {
+    const layout = appState.getActiveWorkspaceLayout();
+    const enteringFocus =
+      !layout.projectPanelCollapsed || !layout.sessionsSidebarCollapsed;
+
+    if (enteringFocus) {
+      appState.setProjectPanelCollapsed(true);
+      appState.setSessionsSidebarCollapsed(true);
+      setConsoleOpen?.(false);
+      notify("Editor focused.");
+      return;
+    }
+
+    appState.setProjectPanelCollapsed(false);
+    appState.setSessionsSidebarCollapsed(false);
+    notify("Side panels restored.");
+  },
 };
 
 /** Preset → command id map, used to mark the active layout in the View menu. */

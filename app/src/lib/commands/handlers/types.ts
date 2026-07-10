@@ -10,6 +10,8 @@ export type CommandContext = {
   getEditorRunner: () => EditorCommandRunner | null;
   /** Opens (or focuses) the Find-in-Project panel. No-op when not registered. */
   openProjectSearch?: (focusReplace: boolean) => void;
+  /** Sets console panel visibility. No-op when not registered. */
+  setConsoleOpen?: (open: boolean) => void;
 };
 
 export type CommandHandler = (

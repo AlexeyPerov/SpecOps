@@ -92,7 +92,7 @@
   }
 
   .empty-state-centered .empty-state-title {
-    font-size: 1rem;
+    font-size: var(--font-size-ui);
     line-height: 1.4;
   }
 
@@ -103,7 +103,7 @@
 
   .empty-state-description {
     margin: 0;
-    font-size: 0.875rem;
+    font-size: var(--font-size-ui);
     line-height: 1.5;
   }
 

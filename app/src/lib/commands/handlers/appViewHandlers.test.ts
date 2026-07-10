@@ -192,10 +192,12 @@ function createCommandContext(overrides?: {
   confirm?: (message: string) => Promise<boolean>;
   editorRunner?: EditorCommandRunner | null;
   openProjectSearch?: (focusReplace: boolean) => void;
+  setConsoleOpen?: (open: boolean) => void;
 }) {
   const notify = vi.fn();
   const editorRunner = overrides?.editorRunner ?? null;
   const openProjectSearch = overrides?.openProjectSearch ?? vi.fn();
+  const setConsoleOpen = overrides?.setConsoleOpen ?? vi.fn();
   return {
     context: {
       notify,
@@ -204,10 +206,12 @@ function createCommandContext(overrides?: {
       confirm: vi.fn(overrides?.confirm ?? (() => Promise.resolve(true))),
       getEditorRunner: vi.fn(() => editorRunner),
       openProjectSearch,
+      setConsoleOpen,
     },
     notify,
     editorRunner,
     openProjectSearch,
+    setConsoleOpen,
   };
 }
 
@@ -642,6 +646,34 @@ describe("view layout commands", () => {
     dispatchCommand("view.focusPane4", context);
     expect(appState.getActiveSession().editorLayout.activePaneId).toBe(panes[3].id);
   });
+
+  it("view.focusEditor collapses side panels and closes the console", () => {
+    appState.addWorkspace("/tmp/ws-focus");
+    appState.setProjectPanelCollapsed(false);
+    appState.setSessionsSidebarCollapsed(false);
+    const setConsoleOpen = vi.fn();
+    const { context, notify } = createCommandContext({ setConsoleOpen });
+
+    dispatchCommand("view.focusEditor", context);
+
+    expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
+    expect(appState.getActiveWorkspaceLayout().sessionsSidebarCollapsed).toBe(true);
+    expect(setConsoleOpen).toHaveBeenCalledWith(false);
+    expect(notify).toHaveBeenCalledWith("Editor focused.");
+  });
+
+  it("view.focusEditor restores side panels when both are already collapsed", () => {
+    appState.addWorkspace("/tmp/ws-focus-restore");
+    appState.setProjectPanelCollapsed(true);
+    appState.setSessionsSidebarCollapsed(true);
+    const { context, notify } = createCommandContext();
+
+    dispatchCommand("view.focusEditor", context);
+
+    expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(false);
+    expect(appState.getActiveWorkspaceLayout().sessionsSidebarCollapsed).toBe(false);
+    expect(notify).toHaveBeenCalledWith("Side panels restored.");
+  });
 });
 
 describe("command dispatch coverage", () => {
@@ -697,6 +729,7 @@ describe("command dispatch coverage", () => {
       "view.focusPane2",
       "view.focusPane3",
       "view.focusPane4",
+      "view.focusEditor",
     ]);
 
     const missing = commandDefinitions

@@ -30,7 +30,7 @@
 
 .btn-secondary {
   padding: var(--space-2) var(--space-6);
-  font-size: 0.85rem;
+  font-size: var(--font-size-ui);
 }
 
 .btn-secondary:not(:disabled):hover {
@@ -43,7 +43,7 @@
 
 .btn-secondary.btn-compact {
   padding: var(--space-1) var(--space-4);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-ui);
 }
 
 .btn-primary {
@@ -51,7 +51,7 @@
   border-color: var(--color-accent);
   background: var(--color-accent);
   color: var(--color-surface-1, #fff);
-  font-size: 0.85rem;
+  font-size: var(--font-size-ui);
   font-weight: 600;
 }
 
@@ -70,7 +70,7 @@
   border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border-subtle));
   background: color-mix(in srgb, var(--color-danger) 9%, var(--color-surface-1));
   color: var(--color-text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-status);
 }
 
 .btn-danger:not(:disabled):hover {
@@ -102,6 +102,6 @@
 .chat-send-button.btn-primary {
   min-height: 26px;
   padding: 0 var(--space-8);
-  font-size: 12px;
+  font-size: var(--font-size-status);
   font-weight: 400;
 }

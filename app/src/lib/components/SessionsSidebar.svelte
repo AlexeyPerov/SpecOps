@@ -16,6 +16,7 @@
   import { DEFAULT_PANEL_WIDTH_PX } from "../services/panelLayout";
   import SessionSidebarRow from "./SessionSidebarRow.svelte";
   import EmptyState from "./EmptyState.svelte";
+  import AddIcon from "./icons/AddIcon.svelte";
 
   interface Props {
     sessions?: SessionIndexEntry[];
@@ -211,7 +212,8 @@
         onpointerdown={sidebarController.handleNewSessionPointerDown}
         onclick={sidebarController.handleNewSessionClick}
       >
-        {newEntryLabel}
+        <AddIcon size={12} />
+        <span>{newEntryLabel}</span>
       </button>
     {:else}
       <button

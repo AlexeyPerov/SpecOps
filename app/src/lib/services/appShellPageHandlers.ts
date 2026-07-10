@@ -24,6 +24,7 @@ export interface AppShellCommandHandlersDeps {
   getCurrentWindowId: () => string;
   getEditorRunner: () => EditorCommandRunner | null;
   openProjectSearch: (focusReplace: boolean) => void;
+  setConsoleOpen: (open: boolean) => void;
 }
 
 export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps) {
@@ -35,6 +36,7 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
       confirm: (message) => requestConfirm({ message }),
       getEditorRunner: deps.getEditorRunner,
       openProjectSearch: deps.openProjectSearch,
+      setConsoleOpen: deps.setConsoleOpen,
     });
   }
 

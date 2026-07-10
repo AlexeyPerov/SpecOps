@@ -2,6 +2,7 @@
   import { appState } from "../../state/appState";
   import {
     buildSettingsSidebar,
+    filterSettingsSidebar,
     getSettingsTabDefinition,
     resolveOpenSettingsDialogTab,
     SETTINGS_TABS,
@@ -34,8 +35,14 @@
 
   let { subTab }: { subTab?: string } = $props();
 
+  let activeTab = $state<SettingsDialogTab>("editor");
+  let filterQuery = $state("");
+
   const settingsSidebar = $derived(
     buildSettingsSidebar($appState.settings.chatHttp),
+  );
+  const filteredSettingsSidebar = $derived(
+    filterSettingsSidebar(settingsSidebar, filterQuery),
   );
   const visibleTabIds = $derived(
     new Set(
@@ -45,8 +52,6 @@
     ),
   );
 
-  let activeTab = $state<SettingsDialogTab>("editor");
-
   // Honour a deep-link target carried by the view tab (e.g. openSettingsDialog("connections")).
   $effect(() => {
     if (subTab) {
@@ -55,6 +60,7 @@
         $appState.settings.chatHttp,
       );
       activeTab = resolved;
+      filterQuery = "";
     }
   });
 
@@ -129,7 +135,14 @@
     role="tablist"
     aria-label="Settings sections"
   >
-    {#each settingsSidebar as entry (entry.kind === "tab" ? entry.tab.id : entry.label)}
+    <input
+      class="settings-view-filter"
+      type="search"
+      placeholder="Filter"
+      aria-label="Filter settings"
+      bind:value={filterQuery}
+    />
+    {#each filteredSettingsSidebar as entry (entry.kind === "tab" ? entry.tab.id : entry.label)}
       {#if entry.kind === "tab"}
         <button
           type="button"
@@ -186,6 +199,26 @@
     padding: var(--space-8) var(--space-4) var(--space-12);
     border-right: 1px solid var(--color-border-subtle);
     overflow-y: auto;
+  }
+
+  .settings-view-filter {
+    width: 100%;
+    margin-bottom: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-0);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-status);
+  }
+
+  .settings-view-filter::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  .settings-view-filter:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
   }
 
   .settings-view-section-label {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSettingsSidebar,
   CHAT_HTTP_GATED_TABS,
+  filterSettingsSidebar,
   isChatHttpGatedTab,
   openSettingsDialog,
   registerSettingsDialogOpener,
@@ -230,5 +231,44 @@ describe("settingsDialogUi", () => {
   it("treats missing chatHttp settings as the default (beta disabled)", () => {
     expect(resolveOpenSettingsDialogTab("connections", null)).toBe("dev");
     expect(resolveOpenSettingsDialogTab("connections", undefined)).toBe("dev");
+  });
+
+  it("filterSettingsSidebar returns all entries for an empty query", () => {
+    const sidebar = buildSettingsSidebar({ enabled: true });
+    expect(filterSettingsSidebar(sidebar, "")).toEqual(sidebar);
+    expect(filterSettingsSidebar(sidebar, "   ")).toEqual(sidebar);
+  });
+
+  it("filterSettingsSidebar matches tab labels case-insensitively and keeps section headers", () => {
+    const sidebar = buildSettingsSidebar({ enabled: true });
+    const filtered = filterSettingsSidebar(sidebar, "prov");
+
+    expect(filtered).toEqual([
+      {
+        kind: "section",
+        label: "Dev",
+        tabs: [
+          expect.objectContaining({ id: "connections", label: "Providers" }),
+          expect.objectContaining({ id: "debugAi", label: "Debug Provider" }),
+        ],
+      },
+      {
+        kind: "section",
+        label: "Workspaces",
+        tabs: [
+          expect.objectContaining({ id: "providers", label: "Providers" }),
+          expect.objectContaining({ id: "debugAgent", label: "Debug Provider" }),
+        ],
+      },
+    ]);
+  });
+
+  it("filterSettingsSidebar omits sections with no matching tabs", () => {
+    const sidebar = buildSettingsSidebar({ enabled: false });
+    const filtered = filterSettingsSidebar(sidebar, "shortcuts");
+
+    expect(filtered).toEqual([
+      { kind: "tab", tab: expect.objectContaining({ id: "shortcuts", label: "Shortcuts" }) },
+    ]);
   });
 });

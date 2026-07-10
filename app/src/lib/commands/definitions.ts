@@ -301,4 +301,10 @@ export const commandDefinitions: CommandDefinition[] = [
     menuPath: "Hidden/Focus Pane 4",
     binding: { mac: "Cmd+Alt+4", windows: "Ctrl+Alt+4" },
   },
+  {
+    id: "view.focusEditor",
+    label: "Focus Editor",
+    menuPath: "View/Focus Editor",
+    binding: { mac: "Cmd+Shift+E", windows: "Ctrl+Shift+E" },
+  },
 ];

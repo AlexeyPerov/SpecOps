@@ -246,6 +246,43 @@ export function buildSettingsSidebar(
 
 export const SETTINGS_SIDEBAR = buildSettingsSidebar({ enabled: false });
 
+function tabMatchesSettingsFilter(tab: SettingsTabDefinition, normalizedQuery: string): boolean {
+  return tab.label.toLowerCase().includes(normalizedQuery);
+}
+
+/**
+ * Client-side filter for the settings sidebar. Matches tab labels only; section
+ * headers are kept when at least one tab in the section matches. Empty query
+ * returns the input unchanged.
+ */
+export function filterSettingsSidebar(
+  entries: readonly SettingsSidebarEntry[],
+  query: string,
+): readonly SettingsSidebarEntry[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return entries;
+  }
+
+  const filtered: SettingsSidebarEntry[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "tab") {
+      if (tabMatchesSettingsFilter(entry.tab, normalizedQuery)) {
+        filtered.push(entry);
+      }
+      continue;
+    }
+
+    const matchingTabs = entry.tabs.filter((tab) =>
+      tabMatchesSettingsFilter(tab, normalizedQuery),
+    );
+    if (matchingTabs.length > 0) {
+      filtered.push({ kind: "section", label: entry.label, tabs: matchingTabs });
+    }
+  }
+  return filtered;
+}
+
 type SettingsDialogOpener = (tab: SettingsDialogTab) => void;
 
 let opener: SettingsDialogOpener | null = null;

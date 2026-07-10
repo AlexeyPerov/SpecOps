@@ -19,6 +19,8 @@
     normalizeActivityRailWidthPx,
   } from "../services/panelLayout";
   import NotepadIcon from "./icons/NotepadIcon.svelte";
+  import AddIcon from "./icons/AddIcon.svelte";
+  import ListIcon from "./icons/ListIcon.svelte";
 
   /** A notepad tab shown in the expanded notepad card's "last opened" list. */
   export interface NotepadRailTab {
@@ -415,7 +417,7 @@
         aria-label="Add Workspace"
         onclick={onAddWorkspace}
       >
-        +
+        <AddIcon size={16} />
       </button>
     </HoverTooltip>
     <HoverTooltip label="Workspace Manager">
@@ -425,19 +427,9 @@
         aria-label="Workspace Manager"
         onclick={onOpenWorkspaceManager}
       >
-        <svg
-          class="rail-manager-icon"
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <line x1="3" y1="4.5" x2="13" y2="4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-          <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-          <line x1="3" y1="11.5" x2="13" y2="11.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-        </svg>
+        <span class="rail-manager-icon">
+          <ListIcon size={16} />
+        </span>
       </button>
     </HoverTooltip>
   </div>
@@ -588,7 +580,9 @@
   }
 
   .rail-button-add {
-    font-size: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .rail-button-manager {

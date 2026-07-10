@@ -314,11 +314,20 @@ export async function buildViewMenu(runCommand: (commandId: AppCommandId) => voi
     commandId: "view.zoomReset",
     runCommand,
   });
+  const focusEditorItem = await commandItem({
+    id: "cmd.view.focusEditor",
+    text: "Focus Editor",
+    accelerator: "CmdOrCtrl+Shift+E",
+    commandId: "view.focusEditor",
+    runCommand,
+  });
 
   return Submenu.new({
     text: "View",
     items: [
       layoutSubmenu,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      focusEditorItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       themeItem,
       await PredefinedMenuItem.new({ item: "Separator" }),

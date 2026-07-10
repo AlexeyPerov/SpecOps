@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-10 14:00 — UI / UX milestone M5 (visual polish)
+
+- **M5-1 spacing/typography (bounded)** — `app-shell.css`: `.editor-pane` padding `5px` → `var(--space-3)`. Typography tokens in `buttons.css` (`--font-size-ui` / `--font-size-status`), `EmptyState.svelte`, `ConfirmDialog.svelte`. No app-wide rem sweep.
+- **M5-2 shared chrome icons** — new `AddIcon.svelte`, `RefreshIcon.svelte`, `ListIcon.svelte` under `app/src/lib/components/icons/`. Wired into `ActivityRail.svelte` (add + workspace manager), `ProjectPanel.svelte` (refresh), `SessionsSidebar.svelte` (new session/chat button prefix). SVG + `currentColor` approach.
+- **M5-3 settings filter (option A)** — `filterSettingsSidebar()` in `settingsDialogUi.ts`; compact search input in `SettingsView.svelte`. Deep-link `openSettingsDialog(tab)` clears filter and still selects the tab. Unit tests in `settingsDialogUi.test.ts`.
+- **M5-4 focus editor command** — `view.focusEditor` (`Cmd+Shift+E` / `Ctrl+Shift+E`): toggles project panel + sessions sidebar collapse and closes console; restores panels on second invoke. Handler in `view.ts`; menu entry in `appMenuDefinitions.ts`; `setConsoleOpen` wired through command context. Tests in `appViewHandlers.test.ts`.
+- **`specs/improvements/ui-m-5-execution-plan.md`** — all tasks marked DONE; milestone status Done.
+- **Validation:** `npm test` passes (2535 tests).
+
 ## 2026-07-10 10:04 — UI / UX milestone M4 (discoverability)
 
 - **`app/src/lib/services/versionControlNavigation.ts`** — shared open-VC helper (R5). `openVersionControlForWorkspace` switches to a workspace, gates on git integration, and opens/focuses the singleton `version-control` view tab; notifies when git is off or the target is not a workspace. `openVersionControlForActiveContext` is the command/shortcut entry point.

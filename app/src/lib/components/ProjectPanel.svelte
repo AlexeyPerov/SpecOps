@@ -11,6 +11,7 @@
     normalizePanelWidthPx,
   } from "../services/panelLayout";
   import { emptyMap, emptySet } from "../collections/emptyCollections";
+  import RefreshIcon from "./icons/RefreshIcon.svelte";
 
   export let workspaceRoot: string;
   export let rootNodes: ProjectTreeNode[] = [];
@@ -149,7 +150,9 @@
   <header class="project-panel-header">
     {#if !collapsed}
       <div class="project-panel-title" title={workspaceRoot}>{basename(workspaceRoot)}</div>
-      <button class="project-panel-button" type="button" onclick={onRefresh} title="Refresh tree">↻</button>
+      <button class="project-panel-button" type="button" onclick={onRefresh} title="Refresh tree">
+        <RefreshIcon size={14} />
+      </button>
       <button
         class="project-panel-button"
         type="button"
@@ -260,6 +263,9 @@
   }
 
   .project-panel-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     background: transparent;

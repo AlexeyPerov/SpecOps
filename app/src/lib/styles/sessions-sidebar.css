@@ -80,6 +80,9 @@
 }
 
 .sessions-sidebar-new {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   border-color: var(--color-border-subtle);
   background: var(--color-bg-root);
 }

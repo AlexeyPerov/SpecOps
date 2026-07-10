@@ -1,36 +1,17 @@
-import { CHAT_HTTP_CONTEXT_ID, type ContextId, type DocumentState } from "../domain/contracts";
+import { CHAT_HTTP_CONTEXT_ID, type ContextId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { isGitIntegrationEnabled } from "./gitIntegrationSettings";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
+import { closeWorkspaceWithConfirm } from "./workspaceCloseFlow";
 
 function isWorkspaceContextId(contextId: ContextId): boolean {
   return contextId.startsWith("ws-");
 }
 
-export type CloseWorkspaceAction = "save-all" | "discard-all" | "cancel";
-
 export interface WorkspaceContextMenuState {
   workspaceId: ContextId;
   x: number;
   y: number;
-}
-
-export interface CloseWorkspacePrompts {
-  confirmSaveAll: (dirtyCount: number) => boolean;
-  confirmDiscardAll: () => boolean;
-}
-
-export function resolveCloseWorkspaceAction(
-  dirtyDocumentCount: number,
-  prompts: CloseWorkspacePrompts,
-): CloseWorkspaceAction {
-  if (dirtyDocumentCount === 0) {
-    return "discard-all";
-  }
-  if (prompts.confirmSaveAll(dirtyDocumentCount)) {
-    return "save-all";
-  }
-  return prompts.confirmDiscardAll() ? "discard-all" : "cancel";
 }
 
 export function findWorkspaceIndex(
@@ -66,8 +47,6 @@ export interface WorkspaceContextMenuActionsDeps {
   setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
   loadProjectTreeRoot: () => Promise<void>;
   notify: (message: string) => void;
-  confirmSaveAll: (count: number) => boolean;
-  confirmDiscardAll: () => boolean;
 }
 
 export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActionsDeps) {
@@ -101,13 +80,6 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     deps.setMenu({ workspaceId, x, y });
     window.addEventListener("pointerdown", onWindowPointerDown);
     window.addEventListener("keydown", onWindowKeydown);
-  }
-
-  function resolveCloseAction(dirtyDocuments: DocumentState[]): CloseWorkspaceAction {
-    return resolveCloseWorkspaceAction(dirtyDocuments.length, {
-      confirmSaveAll: deps.confirmSaveAll,
-      confirmDiscardAll: deps.confirmDiscardAll,
-    });
   }
 
   function menuIndex(): number {
@@ -197,24 +169,14 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
   }
 
   function closeWorkspace(workspaceId: ContextId): void {
-    const closed = appState.closeWorkspace(workspaceId, {
-      resolveAction: resolveCloseAction,
-      saveAllDirtyDocuments: (dirtyDocuments) => {
-        for (const doc of dirtyDocuments) {
-          if (!doc.filePath) {
-            continue;
-          }
-          appState.markDocumentSaved(doc.id, doc.filePath, doc.content);
-        }
-      },
+    void closeWorkspaceWithConfirm(workspaceId, deps.notify).then((closed) => {
+      if (closed) {
+        deps.setConsoleOpen(false);
+        deps.setMarkdownViewMode("edit");
+        void deps.loadProjectTreeRoot();
+      }
+      close();
     });
-    if (closed) {
-      deps.notify("Workspace closed.");
-      deps.setConsoleOpen(false);
-      deps.setMarkdownViewMode("edit");
-      void deps.loadProjectTreeRoot();
-    }
-    close();
   }
 
   return {

@@ -3,6 +3,7 @@ import type { WorkspaceReorderPayload } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { ensureWorkspaceReadAccess, openFolderDialog } from "../../services/fileSystem";
 import { markWorkspaceLifecycleActive } from "../../services/workspaceLifecycle";
+import { closeWorkspaceWithConfirm } from "../../services/workspaceCloseFlow";
 import type { CommandHandlerMap } from "./types";
 
 function isWorkspaceReorderPayload(payload: unknown): payload is WorkspaceReorderPayload {
@@ -39,36 +40,13 @@ export const workspaceHandlers: CommandHandlerMap = {
     markWorkspaceLifecycleActive();
     notify("Workspace added.");
   },
-  "workspace.close": ({ notify }) => {
+  "workspace.close": async ({ notify }) => {
     const activeContext = appState.getActiveContext();
     if (activeContext.kind !== "workspace") {
       notify("No active workspace to close.");
       return;
     }
-    const closed = appState.closeWorkspace(activeContext.id, {
-      resolveAction: (dirtyDocuments) => {
-        const fileCount = dirtyDocuments.length;
-        const shouldSave = window.confirm(
-          `Workspace has ${fileCount} unsaved file(s). Press OK to Save All, or Cancel for more options.`,
-        );
-        if (shouldSave) {
-          return "save-all";
-        }
-        const shouldDiscard = window.confirm("Discard all unsaved changes and close workspace?");
-        return shouldDiscard ? "discard-all" : "cancel";
-      },
-      saveAllDirtyDocuments: (dirtyDocuments) => {
-        for (const documentState of dirtyDocuments) {
-          if (!documentState.filePath) {
-            continue;
-          }
-          appState.markDocumentSaved(documentState.id, documentState.filePath, documentState.content);
-        }
-      },
-    });
-    if (closed) {
-      notify("Workspace closed.");
-    }
+    await closeWorkspaceWithConfirm(activeContext.id, notify);
   },
   "workspace.reorder": (_context, payload) => {
     if (!isWorkspaceReorderPayload(payload)) {

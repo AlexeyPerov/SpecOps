@@ -660,12 +660,6 @@
     setMarkdownViewMode,
     loadProjectTreeRoot,
     notify,
-    confirmSaveAll: (count) =>
-      window.confirm(
-        `This workspace has ${count} unsaved file(s). Press OK to Save All, or Cancel for more options.`,
-      ),
-    confirmDiscardAll: () =>
-      window.confirm("Discard all unsaved changes and close this workspace?"),
   });
 
   const { runCommand, handleKeydown } = createAppShellCommandHandlers({

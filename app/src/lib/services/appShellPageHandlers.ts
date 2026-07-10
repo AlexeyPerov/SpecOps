@@ -11,6 +11,7 @@ import {
 import { getErrorMessage } from "../commands/commandErrors";
 import { checkDocumentIfDeferred } from "./externalFileChanges";
 import { shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
+import { requestConfirm } from "./confirmDialogUi";
 import { confirmLargeFileOpen } from "./openFileGate";
 import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
 import { logDiagnostic } from "./logging";
@@ -31,7 +32,7 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
       notify: deps.notify,
       getState: deps.getSnapshot,
       getWindowId: deps.getCurrentWindowId,
-      confirm: (message) => window.confirm(message),
+      confirm: (message) => requestConfirm({ message }),
       getEditorRunner: deps.getEditorRunner,
       openProjectSearch: deps.openProjectSearch,
     });

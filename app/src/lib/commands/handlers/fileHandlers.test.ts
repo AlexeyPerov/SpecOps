@@ -189,7 +189,7 @@ function createEditorRunnerMock(): EditorCommandRunner {
 }
 
 function createCommandContext(overrides?: {
-  confirm?: (message: string) => boolean;
+  confirm?: (message: string) => Promise<boolean>;
   editorRunner?: EditorCommandRunner | null;
 }) {
   const notify = vi.fn();
@@ -199,7 +199,7 @@ function createCommandContext(overrides?: {
       notify,
       getState: () => appState.getSnapshot(),
       getWindowId: () => "main",
-      confirm: vi.fn(overrides?.confirm ?? (() => true)),
+      confirm: vi.fn(overrides?.confirm ?? (() => Promise.resolve(true))),
       getEditorRunner: vi.fn(() => editorRunner),
     },
     notify,
@@ -477,7 +477,7 @@ describe("file.openAllInFolder command", () => {
   });
 
   it("aborts when the user declines a large-folder confirmation", async () => {
-    const { context, notify } = createCommandContext({ confirm: () => false });
+    const { context, notify } = createCommandContext({ confirm: () => Promise.resolve(false) });
     vi.mocked(openFolderDialog).mockResolvedValue("/tmp/large");
     collectOpenableFolderFilesMock.mockResolvedValue(
       Array.from({ length: 25 }, (_, index) => `/tmp/large/file-${index}.ts`),

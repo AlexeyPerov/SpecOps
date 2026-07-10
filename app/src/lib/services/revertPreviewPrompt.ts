@@ -5,6 +5,8 @@
  * resolves it when the user confirms or cancels.
  */
 
+import { requestConfirm } from "./confirmDialogUi";
+
 export interface RevertPreviewRequest {
   /** Message the revert will undo back to. */
   messageId: string;
@@ -28,13 +30,14 @@ export function registerRevertPreviewRunner(next: RevertPreviewRunner | null): v
  */
 export function promptRevertPreview(request: RevertPreviewRequest): Promise<boolean> {
   if (!runner) {
-    // Without a mounted dialog, fall back to a plain confirm so the action
-    // still works (e.g. in tests or minimal mounts).
-    return Promise.resolve(
-      window.confirm(
-        `Revert this session back to "${request.messageLabel}"? File changes after this message will be undone.`,
-      ),
-    );
+    // Without a mounted revert dialog, fall back to the shared in-app
+    // confirm so the action still works (e.g. in tests or minimal mounts).
+    return requestConfirm({
+      title: "Revert session",
+      message: `Revert this session back to "${request.messageLabel}"? File changes after this message will be undone.`,
+      confirmLabel: "Revert",
+      danger: true,
+    });
   }
   return runner(request);
 }

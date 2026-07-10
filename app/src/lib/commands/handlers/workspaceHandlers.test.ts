@@ -188,7 +188,7 @@ function createEditorRunnerMock(): EditorCommandRunner {
 }
 
 function createCommandContext(overrides?: {
-  confirm?: (message: string) => boolean;
+  confirm?: (message: string) => Promise<boolean>;
   editorRunner?: EditorCommandRunner | null;
 }) {
   const notify = vi.fn();
@@ -198,7 +198,7 @@ function createCommandContext(overrides?: {
       notify,
       getState: () => appState.getSnapshot(),
       getWindowId: () => "main",
-      confirm: vi.fn(overrides?.confirm ?? (() => true)),
+      confirm: vi.fn(overrides?.confirm ?? (() => Promise.resolve(true))),
       getEditorRunner: vi.fn(() => editorRunner),
     },
     notify,
@@ -267,17 +267,18 @@ describe("workspace.close command", () => {
     vi.unstubAllGlobals();
   });
 
-  it("closes a clean workspace", () => {
+  it("closes a clean workspace", async () => {
     const { context, notify } = createCommandContext();
     appState.addWorkspace("/tmp/ws");
 
     dispatchCommand("workspace.close", context);
+    await flushCommandQueue();
 
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(0);
     expect(notify).toHaveBeenCalledWith("Workspace closed.");
   });
 
-  it("cancels close when dirty workspace prompts are declined", () => {
+  it("cancels close when dirty workspace prompts are declined", async () => {
     const { context, notify } = createCommandContext();
     appState.addWorkspace("/tmp/ws-dirty");
     const activeDocumentId = appState.getActiveDocuments()[0]?.id;
@@ -286,12 +287,13 @@ describe("workspace.close command", () => {
     confirmMock.mockReturnValueOnce(false).mockReturnValueOnce(false);
 
     dispatchCommand("workspace.close", context);
+    await flushCommandQueue();
 
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
     expect(notify).not.toHaveBeenCalledWith("Workspace closed.");
   });
 
-  it("discards dirty changes when the user confirms discard", () => {
+  it("discards dirty changes when the user confirms discard", async () => {
     const { context, notify } = createCommandContext();
     appState.addWorkspace("/tmp/ws-discard");
     const activeDocumentId = appState.getActiveDocuments()[0]?.id;
@@ -300,6 +302,7 @@ describe("workspace.close command", () => {
     confirmMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     dispatchCommand("workspace.close", context);
+    await flushCommandQueue();
 
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(0);
     expect(notify).toHaveBeenCalledWith("Workspace closed.");

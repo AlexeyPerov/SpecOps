@@ -5,7 +5,8 @@ export type CommandContext = {
   notify: (message: string) => void;
   getState: () => AppDomainState;
   getWindowId: () => string;
-  confirm: (message: string) => boolean;
+  /** Promise-based confirm (in-app dialog; M3). Resolves true on confirm. */
+  confirm: (message: string) => Promise<boolean>;
   getEditorRunner: () => EditorCommandRunner | null;
   /** Opens (or focuses) the Find-in-Project panel. No-op when not registered. */
   openProjectSearch?: (focusReplace: boolean) => void;

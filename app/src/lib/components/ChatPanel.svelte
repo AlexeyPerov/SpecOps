@@ -37,6 +37,7 @@
   import { draftEntryTitleForScope } from "../services/chatSessions";
   import { getOpencodeCatalog, refreshOpencodeCatalog } from "../ai/opencodeCatalog";
   import { isOpencodeEnabled } from "../services/opencodeSettings";
+  import { requestConfirm } from "../services/confirmDialogUi";
   import { extractSessionTotals } from "../ai/chatSteps";
   import { abortTurn } from "../ai/chatSendPipeline";
   import ChatBlockedState from "./ChatBlockedState.svelte";
@@ -362,9 +363,12 @@
       return;
     }
     const targetLabel = isChatHttpScope ? "chat" : "session";
-    const confirmed = window.confirm(
-      `Delete ${targetLabel} "${activeAgentTitle}"? This removes the ${targetLabel} and its history. This cannot be undone.`,
-    );
+    const confirmed = await requestConfirm({
+      title: `Delete ${targetLabel}`,
+      message: `Delete ${targetLabel} "${activeAgentTitle}"? This removes the ${targetLabel} and its history. This cannot be undone.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
     if (!confirmed) {
       return;
     }

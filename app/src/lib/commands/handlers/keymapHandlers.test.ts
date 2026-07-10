@@ -188,7 +188,7 @@ function createEditorRunnerMock(): EditorCommandRunner {
 }
 
 function createCommandContext(overrides?: {
-  confirm?: (message: string) => boolean;
+  confirm?: (message: string) => Promise<boolean>;
   editorRunner?: EditorCommandRunner | null;
 }) {
   const notify = vi.fn();
@@ -198,7 +198,7 @@ function createCommandContext(overrides?: {
       notify,
       getState: () => appState.getSnapshot(),
       getWindowId: () => "main",
-      confirm: vi.fn(overrides?.confirm ?? (() => true)),
+      confirm: vi.fn(overrides?.confirm ?? (() => Promise.resolve(true))),
       getEditorRunner: vi.fn(() => editorRunner),
     },
     notify,

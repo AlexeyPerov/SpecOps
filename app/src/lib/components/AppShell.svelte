@@ -1,6 +1,7 @@
 <script lang="ts">
   import ConsolePanel from "./ConsolePanel.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
+  import ConfirmDialog from "./ConfirmDialog.svelte";
   import TagPushPrompt from "./TagPushPrompt.svelte";
   import AskpassPrompt from "./AskpassPrompt.svelte";
   import TagDeletePrompt from "./TagDeletePrompt.svelte";
@@ -686,6 +687,7 @@
 {/if}
 <PermissionPrompt />
 <QuestionPrompt />
+<ConfirmDialog />
 
 {#if timelineDialog}
   <SessionTimelineDialog

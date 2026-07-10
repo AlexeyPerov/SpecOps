@@ -248,32 +248,26 @@ export function createWorkspaceContextsSlice(deps: {
       });
       return createdId;
     },
-    closeWorkspace(
-      workspaceId: ContextId,
-      options?: {
-        resolveAction?: (dirtyDocuments: DocumentState[]) => "save-all" | "discard-all" | "cancel";
-        saveAllDirtyDocuments?: (dirtyDocuments: DocumentState[]) => void;
-      },
-    ): boolean {
+    getWorkspaceDirtyDocuments(workspaceId: ContextId): DocumentState[] {
+      const state = getSnapshot();
+      const workspace = state.contexts.workspaces.find((entry) => entry.id === workspaceId);
+      if (!workspace) {
+        return [];
+      }
+      return workspace.snapshot.documents.filter((documentState) => documentState.isDirty);
+    },
+    /**
+     * Remove a workspace from the app state. Confirmation and save-all
+     * persistence are the caller's responsibility — this is a pure state
+     * transition (no side-effecting callbacks). Returns `true` when the
+     * workspace existed and was removed.
+     */
+    closeWorkspace(workspaceId: ContextId): boolean {
       let closed = false;
       update((state) => {
         const targetWorkspace = state.contexts.workspaces.find((workspace) => workspace.id === workspaceId);
         if (!targetWorkspace) {
           return state;
-        }
-        const dirtyDocuments = targetWorkspace.snapshot.documents.filter((documentState) => documentState.isDirty);
-        let action: "save-all" | "discard-all" | "cancel" = "discard-all";
-        if (dirtyDocuments.length > 0) {
-          action = options?.resolveAction?.(dirtyDocuments) ?? "cancel";
-        }
-        if (action === "cancel") {
-          return state;
-        }
-        if (action === "save-all") {
-          if (!options?.saveAllDirtyDocuments) {
-            return state;
-          }
-          options.saveAllDirtyDocuments(dirtyDocuments);
         }
         closed = true;
         return {

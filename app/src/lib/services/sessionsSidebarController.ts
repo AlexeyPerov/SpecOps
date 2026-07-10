@@ -3,6 +3,7 @@ import {
   MIN_PANEL_WIDTH_PX,
   normalizePanelWidthPx,
 } from "./panelLayout";
+import { requestConfirm } from "./confirmDialogUi";
 
 export type SessionsSidebarControllerDeps = {
   getCollapsed: () => boolean;
@@ -95,14 +96,17 @@ export function createSessionsSidebarController(deps: SessionsSidebarControllerD
     deps.onNewSession();
   }
 
-  function confirmDeleteSession(
+  async function confirmDeleteSession(
     sessionId: string,
     title: string,
     entrySingularLabel: string,
-  ): void {
-    const confirmed = window.confirm(
-      `Delete ${entrySingularLabel} "${title}"? This cannot be undone.`,
-    );
+  ): Promise<void> {
+    const confirmed = await requestConfirm({
+      title: `Delete ${entrySingularLabel}`,
+      message: `Delete ${entrySingularLabel} "${title}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
     if (!confirmed) {
       return;
     }

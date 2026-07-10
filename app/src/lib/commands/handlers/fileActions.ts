@@ -60,7 +60,7 @@ export async function handleFileOpenAllInFolder(context: CommandContext): Promis
 
     let pathsToOpen = matchedPaths;
     if (matchedPaths.length > FOLDER_OPEN_MAX_FILES) {
-      const confirmed = confirm(
+      const confirmed = await confirm(
         `Found ${matchedPaths.length} openable files. Open the first ${FOLDER_OPEN_MAX_FILES} alphabetically?`,
       );
       if (!confirmed) {

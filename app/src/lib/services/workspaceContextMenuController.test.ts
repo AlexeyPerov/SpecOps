@@ -3,7 +3,6 @@ import {
   computeWorkspaceReorderTarget,
   createWorkspaceContextMenuActions,
   findWorkspaceIndex,
-  resolveCloseWorkspaceAction,
   type WorkspaceContextMenuState,
 } from "./workspaceContextMenuController";
 
@@ -13,6 +12,9 @@ vi.mock("../state/appState", () => ({
     openOrFocusViewTab: vi.fn(),
     reorderWorkspaces: vi.fn(),
     closeWorkspace: vi.fn(() => true),
+    getSnapshot: vi.fn(() => ({
+      settings: { gitIntegration: { enabled: true } },
+    })),
   },
 }));
 
@@ -20,51 +22,12 @@ vi.mock("./workspaceLifecycle", () => ({
   markWorkspaceLifecycleActive: vi.fn(),
 }));
 
+vi.mock("./workspaceCloseFlow", () => ({
+  closeWorkspaceWithConfirm: vi.fn().mockResolvedValue(true),
+}));
+
 import { appState } from "../state/appState";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
-
-describe("resolveCloseWorkspaceAction", () => {
-  it("returns discard-all when there are no dirty documents", () => {
-    expect(
-      resolveCloseWorkspaceAction(0, {
-        confirmSaveAll: () => true,
-        confirmDiscardAll: () => true,
-      }),
-    ).toBe("discard-all");
-  });
-
-  it("returns save-all when the user accepts save all", () => {
-    expect(
-      resolveCloseWorkspaceAction(2, {
-        confirmSaveAll: (count) => {
-          expect(count).toBe(2);
-          return true;
-        },
-        confirmDiscardAll: () => {
-          throw new Error("discard prompt should not run");
-        },
-      }),
-    ).toBe("save-all");
-  });
-
-  it("returns discard-all when save all is declined and discard is accepted", () => {
-    expect(
-      resolveCloseWorkspaceAction(1, {
-        confirmSaveAll: () => false,
-        confirmDiscardAll: () => true,
-      }),
-    ).toBe("discard-all");
-  });
-
-  it("returns cancel when both prompts are declined", () => {
-    expect(
-      resolveCloseWorkspaceAction(3, {
-        confirmSaveAll: () => false,
-        confirmDiscardAll: () => false,
-      }),
-    ).toBe("cancel");
-  });
-});
 
 describe("findWorkspaceIndex", () => {
   it("returns the index of a workspace id", () => {
@@ -120,8 +83,6 @@ describe("createWorkspaceContextMenuActions", () => {
       setMarkdownViewMode: () => {},
       loadProjectTreeRoot: async () => {},
       notify: () => {},
-      confirmSaveAll: () => true,
-      confirmDiscardAll: () => true,
     });
     return { actions, getMenu: () => menu };
   }

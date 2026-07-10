@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-10 07:45 — UI / UX milestone M3 (in-app confirms)
+
+- **`app/src/lib/services/confirmDialogUi.ts`** — new promise-based confirm API (R4). `requestConfirm({ title?, message, confirmLabel?, cancelLabel?, danger? })` returns `Promise<boolean>`; self-registering dialog host supplies the runner, with a `window.confirm` fallback for minimal mounts/tests. Single-flight policy: a new request displaces a pending one (resolved `false`). Also exports a `confirmDialog(message, danger?)` convenience wrapper and `registerConfirmRunner` for the host.
+- **`app/src/lib/components/ConfirmDialog.svelte`** — new self-registering confirm host. Wraps `DialogShell` (M2); registers/unregisters via `$effect`; primary button uses `.btn-primary` or `.btn-danger` (M1) based on the `danger` flag; Cancel uses `.btn-secondary`; Escape/backdrop → cancel (`false`).
+- **`app/src/lib/components/AppShell.svelte`** — mounts `<ConfirmDialog />` alongside the other self-registering prompts.
+- **Workspace close flow (R4):**
+  - `app/src/lib/services/workspaceCloseFlow.ts` — new shared `closeWorkspaceWithConfirm(id, notify)` that drives save / discard / cancel via the in-app confirm (two-step: save-all → discard), preserving the prior save-vs-discard-vs-cancel semantics without native dialogs.
+  - `app/src/lib/state/appState/workspaceContextsSlice.ts` — simplified `closeWorkspace(id)` to a pure state transition (removed the callback-based `resolveAction` / `saveAllDirtyDocuments` seam); added `getWorkspaceDirtyDocuments(id)` helper so callers can read dirty docs before deciding.
+  - `app/src/lib/commands/handlers/workspace.ts` — `workspace.close` now async, delegates to `closeWorkspaceWithConfirm`.
+  - `app/src/lib/services/workspaceContextMenuController.ts` — removed `confirmSaveAll` / `confirmDiscardAll` deps and the pure `resolveCloseWorkspaceAction` / `CloseWorkspaceAction` / `CloseWorkspacePrompts` exports (logic moved into `workspaceCloseFlow`); `closeWorkspace` now awaits the shared flow.
+  - `app/src/routes/+page.svelte` — dropped the two `window.confirm`-backed confirm deps passed to the context-menu controller.
+- **`app/src/lib/commands/handlers/types.ts`** — `CommandContext.confirm` is now `(message: string) => Promise<boolean>` (was sync `boolean`); `appShellPageHandlers.ts` injects `requestConfirm` instead of `window.confirm`; `fileActions.ts` awaits the confirm in the large-folder open path.
+- **Session / chat confirms (R4):**
+  - `app/src/lib/services/sessionsSidebarController.ts` — `confirmDeleteSession` is async, uses `requestConfirm` with danger styling.
+  - `app/src/lib/components/ChatPanel.svelte` — `deleteSession` uses `requestConfirm` with danger styling.
+  - `app/src/lib/services/revertPreviewPrompt.ts` — fallback (no mounted preview dialog) now routes through `requestConfirm` instead of `window.confirm`.
+- **Tests:**
+  - `app/src/lib/services/confirmDialogUi.test.ts` — new: fallback delegation, runner resolve true/false, per-request forwarding, unregister→fallback, convenience wrapper.
+  - `app/src/lib/components/ConfirmDialog.test.ts` — new: confirm/cancel resolve, danger styling, single-flight displacement.
+  - `app/src/lib/services/workspaceContextMenuController.test.ts` — removed `resolveCloseWorkspaceAction` suite (logic moved); added `workspaceCloseFlow` + `getSnapshot` mocks.
+  - `app/src/lib/commands/handlers/{appViewHandlers,fileHandlers,keymapHandlers,workspaceHandlers}.test.ts` — `confirm` mock signature + override type updated to `Promise<boolean>`; `workspace.close` tests made async with `flushCommandQueue`.
+- **`specs/improvements/ui-m-3-execution-plan.md`** — all tasks marked `[DONE]`, status set to Done.
+
 ## 2026-07-09 23:39 — UI / UX milestone M2 (empty states + dialog shell)
 
 - **`app/src/lib/components/EmptyState.svelte`** — new shared empty-state primitive (R3). Title + optional description + optional actions slot; `centered` variant fills the pane (Version Control vocabulary) and `inline` variant is a compact block (list/panel vocabulary). Theme text/surface tokens only.

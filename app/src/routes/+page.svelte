@@ -49,6 +49,7 @@
     tabDocumentId,
   } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
+  import { createWorkspaceFileCatalog } from "../lib/services/workspaceFileCatalog";
   import { collectPaneElementsFromDom } from "../lib/components/paneDropTargets";
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
@@ -86,6 +87,7 @@
     syncOpencodeSidecarEffect,
     syncOpencodeToggleEffect,
     syncProjectTreeWatcherEffect,
+    syncWorkspaceFileCatalogEffect,
     syncResponsiveLayoutEffect,
     syncSessionPersistenceEffect,
     syncSettingsPersistenceEffect,
@@ -198,6 +200,7 @@
     },
     { probeWorkspaceReadAccessFn: probeWorkspaceReadAccess },
   );
+  const workspaceFileCatalog = createWorkspaceFileCatalog();
   let autoProjectPanelCollapsed = $state(false);
   let autoSessionsSidebarCollapsed = $state(false);
   let lastChatScopeKey = $state<string | null>(null);
@@ -358,6 +361,7 @@
     editorWorkbench.dispose();
     editorSessionCache.clear();
     editorTools.dispose();
+    workspaceFileCatalog.dispose();
   });
 
   $effect(() => {
@@ -506,6 +510,9 @@
     getCurrentWindowId: () => currentWindowId,
     notify,
     projectTreeController,
+    onFilesystemChange: (path) => {
+      workspaceFileCatalog.notifyFilesystemChange(path);
+    },
   });
 
   const {
@@ -608,6 +615,7 @@
     try {
       const results = await searchInProject(root, query, {
         caseSensitive: projectSearchCaseSensitive,
+        files: workspaceFileCatalog.getOpenablePaths() ?? undefined,
       });
       projectSearchResults = results;
       const files = results.length;
@@ -1095,6 +1103,16 @@
       },
       "debug",
     );
+  });
+
+  $effect(() => {
+    activeWorkspaceRoot;
+    isChatHttpActive;
+    syncWorkspaceFileCatalogEffect({
+      activeWorkspaceRoot,
+      isChatHttpActive,
+      catalog: workspaceFileCatalog,
+    });
   });
 
   $effect(() => {

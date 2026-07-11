@@ -2,8 +2,9 @@ import { normalizePathSync } from "./diskFingerprint";
 import {
   shouldSkipDirectoryEntry,
   shouldSkipFileEntry,
-  type FolderListEntry,
-} from "./folderOpenableFiles";
+  shouldSkipHeavyDirectoryName,
+  type WorkspaceListEntry,
+} from "./workspaceTraversal";
 import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
 
 export interface ProjectTreeNode {
@@ -22,26 +23,17 @@ function isPathUnderRoot(path: string, workspaceRoot: string): boolean {
   return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
 }
 
-function shouldKeepDirectoryEntry(entry: FolderListEntry, showHidden: boolean): boolean {
+function shouldKeepDirectoryEntry(entry: WorkspaceListEntry, showHidden: boolean): boolean {
   if (!entry.isDirectory) {
     return false;
   }
   if (!showHidden) {
     return !shouldSkipDirectoryEntry(entry);
   }
-  const lower = entry.name.toLowerCase();
-  const skippedHeavy =
-    lower === ".git" ||
-    lower === "node_modules" ||
-    lower === "target" ||
-    lower === "dist" ||
-    lower === "build" ||
-    lower === ".venv" ||
-    lower === "__pycache__";
-  return !entry.isHidden && !skippedHeavy;
+  return !entry.isHidden && !shouldSkipHeavyDirectoryName(entry.name);
 }
 
-function shouldKeepFileEntry(entry: FolderListEntry, showHidden: boolean): boolean {
+function shouldKeepFileEntry(entry: WorkspaceListEntry, showHidden: boolean): boolean {
   if (entry.isDirectory) {
     return false;
   }
@@ -78,7 +70,7 @@ export async function loadDirectoryChildren(
   const base = dirPath.replace(/[\\/]+$/, "");
   const nodes: ProjectTreeNode[] = [];
   for (const rawEntry of entries) {
-    const entry = rawEntry as FolderListEntry & { isSymlink?: boolean };
+    const entry = rawEntry as WorkspaceListEntry;
     if (entry.isSymlink) {
       continue;
     }

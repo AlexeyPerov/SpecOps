@@ -10,6 +10,7 @@ import {
   syncActiveFileTreeExpandEffect,
   syncExternalFileWatcherEffect,
   syncProjectTreeWatcherEffect,
+  syncWorkspaceFileCatalogEffect,
   type SyncActiveFileTreeExpandEffectInput,
   type SyncExternalFileWatcherEffectInput,
   type SyncProjectTreeWatcherEffectInput,
@@ -399,5 +400,34 @@ describe("syncExternalFileWatcherEffect", () => {
 
     syncExternalFileWatcherEffect(makeInput({ syncExternalFileWatcher, snapshot }));
     expect(syncExternalFileWatcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("syncWorkspaceFileCatalogEffect", () => {
+  beforeEach(() => {
+    resetAppShellEffectsForTests();
+  });
+
+  it("sets the catalog root once per workspace and clears when inactive", () => {
+    const setWorkspaceRoot = vi.fn();
+    syncWorkspaceFileCatalogEffect({
+      activeWorkspaceRoot: "/repo",
+      isChatHttpActive: false,
+      catalog: { setWorkspaceRoot },
+    });
+    syncWorkspaceFileCatalogEffect({
+      activeWorkspaceRoot: "/repo",
+      isChatHttpActive: false,
+      catalog: { setWorkspaceRoot },
+    });
+    expect(setWorkspaceRoot).toHaveBeenCalledTimes(1);
+    expect(setWorkspaceRoot).toHaveBeenCalledWith("/repo");
+
+    syncWorkspaceFileCatalogEffect({
+      activeWorkspaceRoot: null,
+      isChatHttpActive: false,
+      catalog: { setWorkspaceRoot },
+    });
+    expect(setWorkspaceRoot).toHaveBeenCalledWith(null);
   });
 });

@@ -1,57 +1,21 @@
-import { join } from "@tauri-apps/api/path";
-import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
+/**
+ * Openable-folder helpers. Traversal policy lives in `workspaceTraversal.ts`;
+ * this module keeps the historical API for open-all-in-folder and tests.
+ */
+
 import { isOpenableFilePath } from "../editor/editorLanguage";
+import {
+  enumerateOpenableWorkspaceFiles,
+  joinDirectoryPath,
+  shouldSkipDirectoryEntry,
+  shouldSkipFileEntry,
+  SKIPPED_DIRECTORY_NAMES,
+  type WorkspaceListEntry,
+} from "./workspaceTraversal";
 
-export const SKIPPED_DIRECTORY_NAMES = new Set([
-  ".git",
-  "node_modules",
-  "target",
-  "dist",
-  "build",
-  ".venv",
-  "__pycache__",
-]);
+export { SKIPPED_DIRECTORY_NAMES, shouldSkipDirectoryEntry, shouldSkipFileEntry, joinDirectoryPath };
 
-export type FolderListEntry = Pick<DirEntry, "name" | "isDirectory" | "isFile"> & {
-  isHidden?: boolean;
-};
-
-function entryIsHidden(entry: FolderListEntry): boolean {
-  return entry.isHidden === true;
-}
-
-export function shouldSkipDirectoryEntry(entry: FolderListEntry): boolean {
-  if (!entry.isDirectory) {
-    return false;
-  }
-  const name = entry.name;
-  if (name.startsWith(".")) {
-    return true;
-  }
-  if (entryIsHidden(entry)) {
-    return true;
-  }
-  return SKIPPED_DIRECTORY_NAMES.has(name.toLowerCase());
-}
-
-export function shouldSkipFileEntry(entry: FolderListEntry): boolean {
-  if (entry.isDirectory) {
-    return false;
-  }
-  const name = entry.name;
-  if (name.startsWith(".")) {
-    return true;
-  }
-  if (entryIsHidden(entry)) {
-    return true;
-  }
-  return false;
-}
-
-export function joinDirectoryPath(directoryPath: string, name: string): string {
-  const base = directoryPath.replace(/[\\/]+$/, "");
-  return `${base}/${name}`;
-}
+export type FolderListEntry = WorkspaceListEntry;
 
 export function collectOpenablePathsFromEntries(
   entries: FolderListEntry[],
@@ -73,35 +37,8 @@ export function collectOpenablePathsFromEntries(
   return paths.sort((a, b) => a.localeCompare(b));
 }
 
-async function walkDirectory(directoryPath: string, paths: string[]): Promise<void> {
-  let entries: DirEntry[];
-  try {
-    entries = await readDir(directoryPath);
-  } catch {
-    return;
-  }
-
-  for (const entry of entries) {
-    const folderEntry = entry as FolderListEntry;
-    if (folderEntry.isDirectory) {
-      if (shouldSkipDirectoryEntry(folderEntry)) {
-        continue;
-      }
-      await walkDirectory(await join(directoryPath, entry.name), paths);
-      continue;
-    }
-    if (shouldSkipFileEntry(folderEntry)) {
-      continue;
-    }
-    const path = await join(directoryPath, entry.name);
-    if (isOpenableFilePath(path)) {
-      paths.push(path);
-    }
-  }
-}
-
+/** One-shot recursive walk; prefer the workspace file catalog when available. */
 export async function collectOpenableFolderFiles(rootPath: string): Promise<string[]> {
-  const paths: string[] = [];
-  await walkDirectory(rootPath.replace(/[\\/]+$/, ""), paths);
-  return paths.sort((a, b) => a.localeCompare(b));
+  const result = await enumerateOpenableWorkspaceFiles(rootPath);
+  return result.cancelled ? [] : result.paths;
 }

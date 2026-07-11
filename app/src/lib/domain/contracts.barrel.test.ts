@@ -52,6 +52,8 @@ describe("domain/contracts barrel", () => {
       id: command,
       label: "Save",
       menuPath: "File/Save",
+      category: "File",
+      paletteIntent: "palette",
     };
     const document: DocumentState = {
       id: "doc-1",

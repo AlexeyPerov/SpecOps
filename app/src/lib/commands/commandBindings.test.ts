@@ -19,6 +19,8 @@ describe("commandBindings", () => {
       id: "file.save",
       label: "Save",
       menuPath: "File/Save",
+      category: "File",
+      paletteIntent: "palette",
       binding: { mac: "Cmd+S", windows: "Ctrl+S" },
     };
     expect(getEffectiveBinding(definition, { "file.save": { mac: "Cmd+Shift+S" } })).toEqual({

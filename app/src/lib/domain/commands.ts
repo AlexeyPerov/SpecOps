@@ -63,9 +63,48 @@ export interface CommandBinding {
 
 export type CommandBindingOverrides = Partial<Record<AppCommandId, Partial<CommandBinding>>>;
 
+/** SpecOps-native command category for menus and future palette grouping. */
+export type CommandCategory =
+  | "App"
+  | "File"
+  | "Edit"
+  | "View"
+  | "Tab"
+  | "Workspace"
+  | "Navigation";
+
+/**
+ * Explicit discoverability intent. Every command must declare one:
+ * - `palette` — searchable in the future command palette
+ * - `exclude` — intentionally omitted (reason required)
+ */
+export type CommandPaletteIntent = "palette" | "exclude";
+
+/**
+ * Named availability policy shared by menu, shortcuts, and palette.
+ * Resolved purely via `commands/availability.ts` (no I/O).
+ */
+export type CommandAvailabilityKey =
+  | "always"
+  | "workspace"
+  | "document"
+  | "dirty"
+  | "markdown"
+  | "hidden";
+
 export interface CommandDefinition {
   id: AppCommandId;
   label: string;
+  /** Native menu placement path; `Hidden/...` means not in the native menu bar. */
   menuPath: string;
+  category: CommandCategory;
+  /** Extra fuzzy-search terms (aliases); label and id are always searchable. */
+  searchTerms?: readonly string[];
+  /** Required discoverability intent for palette consistency tests. */
+  paletteIntent: CommandPaletteIntent;
+  /** Required when `paletteIntent` is `exclude`. */
+  paletteExcludeReason?: string;
+  /** Availability policy key; defaults to `always` when omitted. */
+  availability?: CommandAvailabilityKey;
   binding?: CommandBinding;
 }

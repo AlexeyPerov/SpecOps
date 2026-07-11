@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-11 19:20 — M0.6 searchable picker and workspace index foundations
+
+- **M0.6-1 Fuzzy / list navigation** — `picker/fuzzyRank.ts` (contiguous/word-boundary/basename/recent scoring, match ranges, bounded results, empty-query order preserve) and `picker/listNavigation.ts` (arrows, paging, Home/End, clamp, result-change).
+- **M0.6-2 Picker shell** — `SearchablePickerShell.svelte` + `SearchablePickerOption.svelte` on `EditorOverlayHost` (combobox/listbox, activedescendant, keyboard/pointer/Enter, focus restore, token + reduced-motion styles). `EditorListboxChrome` is a thin alias. Autofixer-clean.
+- **M0.6-3 Command catalog** — `CommandDefinition` gains `category`, `searchTerms`, required `paletteIntent` (+ exclude reason), and `availability` keys. Pure resolvers in `commands/availability.ts`; display catalog in `commands/catalog.ts`. Consistency tests fail when discoverability intent is missing.
+- **M0.6-4 Workspace catalog** — Shared `workspaceTraversal.ts` (hidden/heavy dirs, symlinks, partial dir errors, cancellation). `workspaceFileCatalog.ts` with generation guards, debounce invalidation, dispose. Wired via `syncWorkspaceFileCatalogEffect`; project search prefers catalog paths. No quick-open/palette UI shipped.
+- **Tests:** fuzzy/list nav, picker shell harness, catalog/availability, workspace catalog cancellation/partial errors, effect memoization.
+- **`specs/…/m0-6-…-execution-plan.md`** — all tasks `[DONE]`, status Done.
+- **Validation:** `npm test` passes (2668 tests). `npm run check` has no new errors in M0.6 files (pre-existing errors elsewhere unchanged). Svelte autofixer clean on picker components.
+
 ## 2026-07-11 18:16 — M0.5 Svelte editor chrome refactor
 
 - **M0.5-1 Runes conversion** — `MarkdownEditorPane.svelte` migrated from `export let`/`$:` to `$props`/`$derived`/`$effect`. `DocumentEditor.svelte` and `FindReplacePanel.svelte` already used runes; find panel no longer touches `appState` (closes via `onClose`).

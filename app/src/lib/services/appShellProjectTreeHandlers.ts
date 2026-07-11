@@ -24,6 +24,8 @@ export interface AppShellProjectTreeHandlersDeps {
   getCurrentWindowId: () => string;
   notify: (message: string) => void;
   projectTreeController: ReturnType<typeof createProjectTreeController>;
+  /** Optional extra listener (e.g. workspace file catalog invalidation). */
+  onFilesystemChange?: (path: string) => void;
 }
 
 export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandlersDeps) {
@@ -33,6 +35,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     getCurrentWindowId,
     notify,
     projectTreeController,
+    onFilesystemChange,
   } = deps;
 
   async function loadProjectTreeRoot(): Promise<void> {
@@ -85,6 +88,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
 
   function notifyProjectTreeFilesystemChange(path: string): void {
     projectTreeController.handleFilesystemChange(getActiveWorkspaceRoot(), path);
+    onFilesystemChange?.(path);
   }
 
   async function refreshProjectTreeDirectories(directoryPaths: string[]): Promise<void> {

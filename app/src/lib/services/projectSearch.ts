@@ -25,6 +25,11 @@ export interface SearchInProjectOptions {
   caseSensitive: boolean;
   /** Invoked once per file as it is scanned; return false to abort early. */
   onProgress?: (path: string) => boolean;
+  /**
+   * Precomputed openable-file list (e.g. workspace catalog snapshot).
+   * When provided, skips a duplicate workspace walk.
+   */
+  files?: readonly string[];
 }
 
 /**
@@ -90,10 +95,8 @@ export function totalMatchCount(results: readonly ProjectSearchResult[]): number
 }
 
 /**
- * Walk the whole workspace tree (reusing `collectOpenableFolderFiles`, which
- * skips heavy/hidden directories such as node_modules/.git) and return only the
- * files that contain at least one match. Each file is read and scanned
- * independently so a single unreadable file never aborts the whole search.
+ * Search openable workspace files. Prefers a catalog snapshot via `options.files`
+ * to avoid a duplicate tree walk; falls back to a one-shot enumeration.
  */
 export async function searchInProject(
   workspaceRoot: string,
@@ -103,7 +106,10 @@ export async function searchInProject(
   if (!query) {
     return [];
   }
-  const files = await collectOpenableFolderFiles(workspaceRoot);
+  const files =
+    options.files !== undefined
+      ? options.files
+      : await collectOpenableFolderFiles(workspaceRoot);
   const results: ProjectSearchResult[] = [];
   for (const path of files) {
     if (options.onProgress?.(path) === false) {

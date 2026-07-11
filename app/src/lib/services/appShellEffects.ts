@@ -705,6 +705,7 @@ export function resetAppShellEffectsForTests(): void {
   lastProjectTreeRootKey = null;
   lastProjectTreeWatcherKey = null;
   lastExternalFileWatcherSyncKey = null;
+  lastWorkspaceFileCatalogKey = null;
 }
 
 export function syncActiveFileTreeExpandEffect(input: SyncActiveFileTreeExpandEffectInput): void {
@@ -764,4 +765,36 @@ export interface SyncResponsiveLayoutEffectInput {
 
 export function syncResponsiveLayoutEffect(_input: SyncResponsiveLayoutEffectInput): void {
   _input.applyResponsiveLayoutRules();
+}
+
+export interface SyncWorkspaceFileCatalogEffectInput {
+  activeWorkspaceRoot: string | null;
+  isChatHttpActive: boolean;
+  catalog: {
+    setWorkspaceRoot: (root: string | null) => void;
+  };
+}
+
+let lastWorkspaceFileCatalogKey: string | null = null;
+
+/**
+ * Keep the workspace file catalog scoped to the active workspace.
+ * Clears on workspace leave / chat-http overlay.
+ */
+export function syncWorkspaceFileCatalogEffect(input: SyncWorkspaceFileCatalogEffectInput): void {
+  const { activeWorkspaceRoot, isChatHttpActive, catalog } = input;
+  if (!activeWorkspaceRoot || isChatHttpActive) {
+    if (lastWorkspaceFileCatalogKey === "inactive") {
+      return;
+    }
+    lastWorkspaceFileCatalogKey = "inactive";
+    catalog.setWorkspaceRoot(null);
+    return;
+  }
+  const rootKey = normalizePathSync(activeWorkspaceRoot);
+  if (lastWorkspaceFileCatalogKey === rootKey) {
+    return;
+  }
+  lastWorkspaceFileCatalogKey = rootKey;
+  catalog.setWorkspaceRoot(activeWorkspaceRoot);
 }

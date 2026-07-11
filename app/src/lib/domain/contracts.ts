@@ -140,9 +140,12 @@ export type {
 export { DEBUG_CHAT_PROVIDER_IDS, isDebugChatProviderId, PRODUCT_CHAT_PROVIDER_IDS } from "./chat";
 export type {
   AppCommandId,
+  CommandAvailabilityKey,
   CommandBinding,
   CommandBindingOverrides,
+  CommandCategory,
   CommandDefinition,
+  CommandPaletteIntent,
   WorkspaceReorderPayload,
 } from "./commands";
 export type {

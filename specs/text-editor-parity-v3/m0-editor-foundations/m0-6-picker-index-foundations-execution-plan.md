@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M0.5](./m0-5-svelte-editor-chrome-refactor-execution-plan.md) complete  
 **Next:** [M1 fuzzy file open](../m1-fuzzy-file-open/m1-1-workspace-file-catalog-execution-plan.md) and [M3 command palette](../m3-command-palette/m3-1-command-catalog-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Heavy — Score 8
 
 How to use this plan: assign to one agent. Build reusable picker mechanics, command availability, and workspace enumeration contracts without exposing a file picker or command palette yet.
@@ -22,7 +22,7 @@ Avoid duplicate palette implementations and repeated full workspace walks. Estab
 
 ## Task breakdown
 
-#### Task M0.6-1: Implement pure fuzzy ranking and list navigation [Score:6] [Agent:medium]
+#### Task M0.6-1: Implement pure fuzzy ranking and list navigation [Score:6] [Agent:medium] [DONE]
 
 - Add generic fuzzy scoring with deterministic tie-breaks and match ranges.
 - Prefer contiguous, word-boundary, basename/label-start, and caller-supplied recent matches.
@@ -39,7 +39,7 @@ Dependencies: M0.5.
 
 ---
 
-#### Task M0.6-2: Add an accessible searchable-picker shell [Score:7] [Agent:heavy]
+#### Task M0.6-2: Add an accessible searchable-picker shell [Score:7] [Agent:heavy] [DONE]
 
 - Build a reusable Svelte 5 shell for query, state, rows, active descendant, footer hints, and focus restoration.
 - Support controlled query/index, keyboard navigation, Enter, Escape, pointer interaction, and active-row scrolling.
@@ -56,7 +56,7 @@ Dependencies: M0.6-1.
 
 ---
 
-#### Task M0.6-3: Unify command catalog and availability [Score:7] [Agent:heavy]
+#### Task M0.6-3: Unify command catalog and availability [Score:7] [Agent:heavy] [DONE]
 
 - Extend command metadata with category, search terms, palette intent, and availability resolver.
 - Keep handlers/dispatch separate from display.
@@ -73,7 +73,7 @@ Dependencies: M0.6-1.
 
 ---
 
-#### Task M0.6-4: Define shared workspace file catalog [Score:8] [Agent:heavy]
+#### Task M0.6-4: Define shared workspace file catalog [Score:8] [Agent:heavy] [DONE]
 
 - Extract one traversal policy for hidden/heavy directories, symlinks, and openable files.
 - Implement a workspace-scoped catalog with normalized absolute/relative paths, generation cancellation, loading/error state, disposal, and watcher invalidation.
@@ -91,14 +91,13 @@ Dependencies: M0.6-1.
 
 ## Plan exit criteria
 
-- [ ] Fuzzy/list navigation is pure and tested.
-- [ ] Shared picker shell is accessible.
-- [ ] Command availability/discoverability is unified.
-- [ ] Cancellable workspace catalog replaces duplicate enumeration boundaries.
-- [ ] No quick-open or palette command is user-visible.
-- [ ] `npm test`, `npm run check`, and Svelte autofixer pass.
+- [x] Fuzzy/list navigation is pure and tested.
+- [x] Shared picker shell is accessible.
+- [x] Command availability/discoverability is unified.
+- [x] Cancellable workspace catalog replaces duplicate enumeration boundaries.
+- [x] No quick-open or palette command is user-visible.
+- [x] `npm test`, `npm run check`, and Svelte autofixer pass.
 
 ## Changelog instructions
 
 Mark tasks `[DONE]`; log structural foundations, scale/cancellation tests, and validation.
-

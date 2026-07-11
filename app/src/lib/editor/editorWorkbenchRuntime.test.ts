@@ -13,6 +13,10 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
       selection: {
         indent: () => ({ ok: true }),
         outdent: () => ({ ok: true }),
+        selectNextOccurrence: () => ({ ok: true }),
+        selectAllOccurrences: () => ({ ok: true }),
+        skipOccurrence: () => ({ ok: true }),
+        undoOccurrence: () => ({ ok: true }),
       },
       lines: {
         moveLineUp: () => ({ ok: true }),
@@ -190,19 +194,46 @@ describe("createEditorWorkbenchRuntime", () => {
     const listener = vi.fn();
     const unsubscribe = runtime.subscribeCursorStatus(listener);
 
-    runtime.publishCursorStatus(identityB, 9, 2);
+    runtime.publishCursorStatus(identityB, 9, 2, 1);
     expect(listener).not.toHaveBeenCalled();
 
-    runtime.publishCursorStatus(identityA, 3, 4);
+    runtime.publishCursorStatus(identityA, 3, 4, 1);
     expect(listener).toHaveBeenCalledWith({
       identity: identityA,
       line: 3,
       column: 4,
+      selectionCount: 1,
     });
 
     unsubscribe();
-    runtime.publishCursorStatus(identityA, 5, 6);
+    runtime.publishCursorStatus(identityA, 5, 6, 1);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("publishes selection count for multi-cursor", () => {
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => "doc-1",
+    });
+    dispose = () => runtime.dispose();
+
+    const identity: EditorHostIdentity = {
+      paneId: "pane-a",
+      documentId: "doc-1",
+      generation: 1,
+    };
+    runtime.registerHost(makeHost(identity));
+
+    const listener = vi.fn();
+    runtime.subscribeCursorStatus(listener);
+
+    runtime.publishCursorStatus(identity, 5, 3, 4);
+    expect(listener).toHaveBeenCalledWith({
+      identity,
+      line: 5,
+      column: 3,
+      selectionCount: 4,
+    });
   });
 
   it("dispose clears hosts and ignores further registrations", () => {

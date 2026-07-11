@@ -14,6 +14,8 @@ export type EditorCursorStatus = {
   identity: EditorHostIdentity;
   line: number;
   column: number;
+  /** Number of active selection ranges (1 for single cursor; >1 for multi-cursor). */
+  selectionCount: number;
 };
 
 export type EditorWorkbenchRuntimeDeps = {
@@ -35,6 +37,7 @@ export type EditorWorkbenchRuntime = {
     identity: EditorHostIdentity,
     line: number,
     column: number,
+    selectionCount: number,
   ) => void;
   subscribeCursorStatus: (listener: (status: EditorCursorStatus) => void) => () => void;
   focusActive: () => void;
@@ -115,6 +118,7 @@ export function createEditorWorkbenchRuntime(
     identity: EditorHostIdentity,
     line: number,
     column: number,
+    selectionCount: number,
   ): void {
     if (disposed) {
       return;
@@ -123,7 +127,7 @@ export function createEditorWorkbenchRuntime(
     if (!active || !identitiesEqual(active.identity, identity)) {
       return;
     }
-    const status: EditorCursorStatus = { identity, line, column };
+    const status: EditorCursorStatus = { identity, line, column, selectionCount };
     for (const listener of cursorListeners) {
       listener(status);
     }

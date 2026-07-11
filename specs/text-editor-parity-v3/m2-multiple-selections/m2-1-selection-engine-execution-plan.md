@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M0.4](../m0-editor-foundations/m0-4-codemirror-composition-execution-plan.md) complete; recommended after M1  
 **Next:** [M2.2 selection UX](./m2-2-selection-ux-execution-plan.md)  
-**Status:** Planned  
+**Status:** DONE  
 **Complexity:** Heavy — Score 7
 
 How to use this plan: assign to one CodeMirror-focused agent. Use CodeMirror selection primitives; do not build a parallel selection model.
@@ -22,7 +22,7 @@ Enable robust multiple selections and cursors across all text/Markdown editor pa
 
 ## Task breakdown
 
-#### Task M2.1-1: Enable native multiple and rectangular selections [Score:6] [Agent:medium]
+#### Task M2.1-1: Enable native multiple and rectangular selections [Score:6] [Agent:medium] [DONE]
 
 - Add `EditorState.allowMultipleSelections.of(true)`.
 - Add CodeMirror rectangular/column-selection support and visible selection drawing if needed by the current theme.
@@ -39,7 +39,7 @@ Dependencies: M0.4.
 
 ---
 
-#### Task M2.1-2: Add occurrence-selection actions [Score:7] [Agent:heavy]
+#### Task M2.1-2: Add occurrence-selection actions [Score:7] [Agent:heavy] [DONE]
 
 - Add select-next occurrence using CodeMirror’s maintained search command.
 - Define and implement select-all occurrences, skip current occurrence, and remove most recently added occurrence where supported.
@@ -58,7 +58,7 @@ Dependencies: M2.1-1.
 
 ---
 
-#### Task M2.1-3: Make existing line operations multi-range safe [Score:8] [Agent:heavy]
+#### Task M2.1-3: Make existing line operations multi-range safe [Score:8] [Agent:heavy] [DONE]
 
 - Audit indent/outdent, move line, duplicate line, join lines, find/replace, external content replacement, and cursor status against multiple ranges.
 - Replace full-document single-main-range transforms where necessary with CodeMirror transactions/change mapping.
@@ -76,10 +76,10 @@ Dependencies: M2.1-2.
 
 ## Plan exit criteria
 
-- [ ] Native multiple/column selections work.
-- [ ] Occurrence-selection actions are available through editor actions.
-- [ ] Existing editor commands are audited and multi-range safe.
-- [ ] `npm test` and `npm run check` pass.
+- [x] Native multiple/column selections work.
+- [x] Occurrence-selection actions are available through editor actions.
+- [x] Existing editor commands are audited and multi-range safe.
+- [x] `npm test` and `npm run check` pass.
 
 ## Changelog instructions
 

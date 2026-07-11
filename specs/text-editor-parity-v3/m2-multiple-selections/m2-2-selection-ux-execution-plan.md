@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M2.1](./m2-1-selection-engine-execution-plan.md) complete  
 **Next:** [M3 command palette](../m3-command-palette/m3-1-command-catalog-execution-plan.md)  
-**Status:** Planned  
+**Status:** DONE  
 **Complexity:** Medium — Score 5
 
 How to use this plan: assign to one agent. Expose and validate the selection engine through SpecOps commands, shortcuts, status, and discoverability.
@@ -22,7 +22,7 @@ Make multiple selections practical for routine repeated edits without requiring 
 
 ## Task breakdown
 
-#### Task M2.2-1: Register selection commands and resolve binding conflict [Score:5] [Agent:medium]
+#### Task M2.2-1: Register selection commands and resolve binding conflict [Score:5] [Agent:medium] [DONE]
 
 - Add commands for select next occurrence, select all occurrences, skip occurrence, and remove last occurrence.
 - Change `Cmd/Ctrl+D` from duplicate line to select next occurrence.
@@ -39,7 +39,7 @@ Dependencies: M2.1.
 
 ---
 
-#### Task M2.2-2: Selection count and feedback [Score:4] [Agent:medium]
+#### Task M2.2-2: Selection count and feedback [Score:4] [Agent:medium] [DONE]
 
 - Extend editor cursor reporting with selection/range count.
 - Show a compact status segment only when more than one selection exists.
@@ -56,7 +56,7 @@ Dependencies: M2.2-1.
 
 ---
 
-#### Task M2.2-3: Cross-feature validation [Score:5] [Agent:medium]
+#### Task M2.2-3: Cross-feature validation [Score:5] [Agent:medium] [DONE]
 
 - Smoke test multi-cursor with Markdown split/edit modes, find panel, minimap, wrapping, tabs/panes, external reload, save, undo/redo, and snippets/completion placeholders reserved for later milestones.
 - Test shortcut handling while CodeMirror has focus.
@@ -72,10 +72,10 @@ Dependencies: M2.2-2.
 
 ## Plan exit criteria
 
-- [ ] Multiple-selection commands are discoverable and correctly bound.
-- [ ] Status shows active selection count.
-- [ ] The duplicate-line binding transition is documented.
-- [ ] Cross-feature validation passes.
+- [x] Multiple-selection commands are discoverable and correctly bound.
+- [x] Status shows active selection count.
+- [x] The duplicate-line binding transition is documented.
+- [x] Cross-feature validation passes.
 
 ## Changelog instructions
 

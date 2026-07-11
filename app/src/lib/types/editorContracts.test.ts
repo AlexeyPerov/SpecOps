@@ -35,6 +35,10 @@ describe("editor host contracts", () => {
       selection: {
         indent: unavailable,
         outdent: unavailable,
+        selectNextOccurrence: unavailable,
+        selectAllOccurrences: unavailable,
+        skipOccurrence: unavailable,
+        undoOccurrence: unavailable,
       },
       lines: {
         moveLineUp: unavailable,
@@ -109,8 +113,11 @@ describe("editor host contracts", () => {
 
   it("documents the M2 Cmd/Ctrl+D ownership transfer", () => {
     expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.chord.mac).toBe("Cmd+D");
-    expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.currentOwner).toBe(
+    expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.previousOwner).toBe(
       "edit.duplicateLine",
+    );
+    expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.owner).toBe(
+      "edit.selectNextOccurrence",
     );
   });
 });

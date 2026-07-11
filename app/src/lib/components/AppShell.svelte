@@ -156,6 +156,7 @@
     zoomPercent: number;
     cursorLine: number;
     cursorColumn: number;
+    selectionCount: number;
     decoratePlaintextSymbols: boolean;
     showMinimap: boolean;
     maxBinaryOpenAsTextBytes: number;
@@ -581,6 +582,14 @@
           <span class="status-segment optional-segment optional-cursor">
             Ln {editor.cursorLine}, Col {editor.cursorColumn}
           </span>
+          {#if editor.selectionCount > 1}
+            <span
+              class="status-segment optional-segment optional-selections"
+              aria-label={`${editor.selectionCount} selections`}
+            >
+              {editor.selectionCount} selections
+            </span>
+          {/if}
           <span class="status-segment optional-segment optional-encoding">
             {#if editor.isImageDocument}
               Image

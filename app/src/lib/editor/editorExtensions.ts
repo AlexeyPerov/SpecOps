@@ -5,22 +5,30 @@
  * editor controller owns its own compartment instances so simultaneous panes
  * never share mutable configuration slots (especially search highlight).
  *
- * Keymap precedence (first match wins inside `keymap.of`):
+ * Base keymap precedence (first match wins inside `keymap.of`):
  * 1. `indentWithTab` — Tab / Shift-Tab indent
- * 2. `defaultKeymap` — movement, delete, select-all, etc.
+ * 2. `defaultKeymap` — movement, delete, select-all, add-cursor, etc.
  * 3. `historyKeymap` — Mod-z / Mod-y (and platform variants)
+ *
+ * Selection keymap precedence (separate `keymap.of`, ordered before base in
+ * the extension list so its bindings win over `defaultKeymap` when overlapped):
+ * 1. `searchKeymap` — occurrence selection (Mod-d, Mod-Shift-l)
+ *
+ * `allowMultipleSelections` enables native multi-cursor / column selection so
+ * modifier-click, column-drag, and occurrence commands work across all panes.
  *
  * Reserved empty compartments (`fold`, `completion`, `snippets`, `landmarks`)
  * are seams for M4–M7; reconfigure them later without rebuilding base/theme.
  */
-import { Compartment, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   defaultKeymap,
   history,
   historyKeymap,
   indentWithTab,
 } from "@codemirror/commands";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { search, searchKeymap } from "@codemirror/search";
+import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
 import { createSyntaxHighlightExtension } from "./editorHighlight";
 import {
   getLanguageSupport,
@@ -44,10 +52,15 @@ export type EditorExtensionGroupName =
   | "updateListener";
 
 /**
- * Documented base keymap order. Tests assert this sequence so future
- * feature keymaps can be inserted intentionally rather than by accident.
+ * Documented keymap order. Tests assert this sequence so future feature
+ * keymaps can be inserted intentionally rather than by accident.
+ *
+ * `searchKeymap` runs first so occurrence-selection bindings (Mod-d) win over
+ * any overlapping entry in `defaultKeymap`. The remaining three mirror the
+ * original base precedence.
  */
 export const BASE_KEYMAP_PRECEDENCE = [
+  "searchKeymap",
   "indentWithTab",
   "defaultKeymap",
   "historyKeymap",
@@ -133,6 +146,9 @@ function editorSurfaceTheme(): Extension {
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "var(--color-text-primary)",
     },
+    ".cm-selectionBackground, .cm-content ::selection": {
+      backgroundColor: "var(--color-selection, rgba(48, 100, 180, 0.3))",
+    },
     ".cm-minimap-gutter": {
       borderLeft: "1px solid var(--color-border-subtle)",
       backgroundColor: "var(--color-surface-1)",
@@ -160,6 +176,11 @@ export function buildNamedExtensionGroups(
       extensions: [
         lineNumbers(),
         history(),
+        EditorState.allowMultipleSelections.of(true),
+        drawSelection(),
+        search(),
+        // Selection keymap (occurrence commands) — wins over defaultKeymap overlaps.
+        keymap.of([...searchKeymap]),
         keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
         compartments.lineWrap.of([]),
         compartments.fontSize.of(baseFontSizeExtension()),

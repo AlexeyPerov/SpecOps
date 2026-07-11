@@ -153,19 +153,24 @@ describe("resolveAppShellKeyRouting", () => {
 });
 
 describe("SELECT_NEXT_OCCURRENCE_BINDING_DECISION (M2)", () => {
-  it("records Cmd/Ctrl+D move from duplicateLine to select-next without changing bindings now", () => {
-    expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.currentOwner).toBe(
+  it("records the completed Cmd/Ctrl+D transfer to select-next occurrence", () => {
+    expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.previousOwner).toBe(
       "edit.duplicateLine",
     );
-    expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.futureOwner).toBe(
+    expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.owner).toBe(
       "edit.selectNextOccurrence",
     );
     expect(SELECT_NEXT_OCCURRENCE_BINDING_DECISION.duplicateLineNeedsNewDefault).toBe(
-      true,
+      false,
     );
+    // Cmd+D now maps to selectNextOccurrence, not duplicateLine.
     expect(keymapCommandForEvent(keyboardEvent({ key: "d", metaKey: true }))).toBe(
-      "edit.duplicateLine",
+      "edit.selectNextOccurrence",
     );
+    // Duplicate line moved to Cmd+Alt+D.
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "d", metaKey: true, altKey: true })),
+    ).toBe("edit.duplicateLine");
   });
 });
 
@@ -300,7 +305,7 @@ describe("createAppShellCommandHandlers.handleKeydown", () => {
     const event = keyEvent({ key: "d", metaKey: true }, content);
     handleKeydown(event);
     expect(dispatchMenuCommandMock).toHaveBeenCalledWith(
-      "edit.duplicateLine",
+      "edit.selectNextOccurrence",
       expect.any(Object),
     );
   });

@@ -96,6 +96,7 @@ export function createEditorViewController(
       hostRegistration.identity,
       line.number,
       pos - line.from + 1,
+      view.state.selection.ranges.length,
     );
   }
 

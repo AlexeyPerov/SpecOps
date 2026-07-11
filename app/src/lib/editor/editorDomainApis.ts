@@ -25,6 +25,12 @@ import {
   editorReplaceCurrent,
   editorSetSearchQuery,
 } from "./editorSearchOps";
+import {
+  selectAllOccurrencesOp,
+  selectNextOccurrenceOp,
+  skipOccurrenceOp,
+  undoOccurrenceOp,
+} from "./editorSelectionOps";
 
 export type CreateEditorDomainApisOptions = {
   getView: () => EditorView | undefined;
@@ -88,6 +94,10 @@ const CORE_ACTIONS = new Set<EditorActionName>([
   "redo",
   "indent",
   "outdent",
+  "selectNextOccurrence",
+  "selectAllOccurrences",
+  "skipOccurrence",
+  "undoOccurrence",
   "moveLineUp",
   "moveLineDown",
   "duplicateLine",
@@ -156,6 +166,66 @@ export function createEditorDomainApis(
         }
         indentLess(view);
         return ok();
+      },
+      selectNextOccurrence: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        const result = selectNextOccurrenceOp(view);
+        if (result.ok) {
+          updateCursor();
+          return ok();
+        }
+        if (result.message) {
+          onStatusMessage(result.message);
+        }
+        return disabled();
+      },
+      selectAllOccurrences: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        const result = selectAllOccurrencesOp(view);
+        if (result.ok) {
+          updateCursor();
+          return ok();
+        }
+        if (result.message) {
+          onStatusMessage(result.message);
+        }
+        return disabled();
+      },
+      skipOccurrence: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        const result = skipOccurrenceOp(view);
+        if (result.ok) {
+          updateCursor();
+          return ok();
+        }
+        if (result.message) {
+          onStatusMessage(result.message);
+        }
+        return disabled();
+      },
+      undoOccurrence: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        const result = undoOccurrenceOp(view);
+        if (result.ok) {
+          updateCursor();
+          return ok();
+        }
+        if (result.message) {
+          onStatusMessage(result.message);
+        }
+        return disabled();
       },
     },
     lines: {

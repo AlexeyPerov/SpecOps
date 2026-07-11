@@ -206,7 +206,7 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
   const duplicateLineItem = await commandItem({
     id: "cmd.edit.duplicateLine",
     text: "Duplicate Line",
-    accelerator: "CmdOrCtrl+D",
+    accelerator: "CmdOrCtrl+Alt+D",
     commandId: "edit.duplicateLine",
     runCommand,
   });
@@ -215,6 +215,32 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
     text: "Join Lines",
     accelerator: "CmdOrCtrl+J",
     commandId: "edit.joinLines",
+    runCommand,
+  });
+  const selectNextOccurrenceItem = await commandItem({
+    id: "cmd.edit.selectNextOccurrence",
+    text: "Select Next Occurrence",
+    accelerator: "CmdOrCtrl+D",
+    commandId: "edit.selectNextOccurrence",
+    runCommand,
+  });
+  const selectAllOccurrencesItem = await commandItem({
+    id: "cmd.edit.selectAllOccurrences",
+    text: "Select All Occurrences",
+    accelerator: "CmdOrCtrl+Shift+L",
+    commandId: "edit.selectAllOccurrences",
+    runCommand,
+  });
+  const skipOccurrenceItem = await commandItem({
+    id: "cmd.edit.skipOccurrence",
+    text: "Skip Occurrence",
+    commandId: "edit.skipOccurrence",
+    runCommand,
+  });
+  const undoOccurrenceItem = await commandItem({
+    id: "cmd.edit.undoOccurrence",
+    text: "Remove Last Occurrence",
+    commandId: "edit.undoOccurrence",
     runCommand,
   });
 
@@ -240,6 +266,11 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
       moveLineDownItem,
       duplicateLineItem,
       joinLinesItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      selectNextOccurrenceItem,
+      selectAllOccurrencesItem,
+      skipOccurrenceItem,
+      undoOccurrenceItem,
     ],
   });
 }

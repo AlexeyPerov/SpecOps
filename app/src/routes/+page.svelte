@@ -240,8 +240,8 @@
   // editorTools is created after modal state declarations below.
 
   $effect(() => {
-    return editorWorkbench.subscribeCursorStatus(({ line, column }) => {
-      appState.setCursor(line, column);
+    return editorWorkbench.subscribeCursorStatus(({ line, column, selectionCount }) => {
+      appState.setCursor(line, column, selectionCount);
     });
   });
 
@@ -1549,6 +1549,7 @@
     zoomPercent: snapshot.editor.zoomPercent,
     cursorLine: snapshot.editor.cursorLine,
     cursorColumn: snapshot.editor.cursorColumn,
+    selectionCount: snapshot.editor.selectionCount,
     decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
     showMinimap: snapshot.settings.showMinimap,
     maxBinaryOpenAsTextBytes: snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes,

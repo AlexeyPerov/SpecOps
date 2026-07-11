@@ -66,6 +66,7 @@ const initialState: AppDomainState = {
   editor: {
     cursorLine: 1,
     cursorColumn: 1,
+    selectionCount: 1,
     zoomPercent: 100,
     wrapLines: true,
     previewMode: "editor",
@@ -302,13 +303,14 @@ function createStateStore() {
       this.replaceRecentFiles(recentFiles);
       void syncRecentFiles(recentFiles);
     },
-    setCursor(line: number, column: number) {
+    setCursor(line: number, column: number, selectionCount: number = 1) {
       update((state) => ({
         ...state,
         editor: {
           ...state.editor,
           cursorLine: line,
           cursorColumn: column,
+          selectionCount,
         },
       }));
     },

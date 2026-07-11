@@ -140,4 +140,70 @@ describe("editorLineTransactions", () => {
     expect(op.changes).toHaveLength(0);
     expect(op.message).toBe("Already at first line");
   });
+
+  // --- M2.1-3: multi-range line-op coverage ---
+
+  it("preserves secondary selections when moving lines down", () => {
+    const text = "a\nb\nc\nd";
+    // cursors on "a" (pos 0) and "c" (pos 4)
+    const state = stateWithDoc(text, [{ from: 0 }, { from: 4 }], true);
+    const result = applyOp(state, "moveDown");
+    expect(result.doc).toBe("b\na\nd\nc");
+    expect(result.selection.ranges).toHaveLength(2);
+    // "a" moves to position 2, "c" moves to position 6.
+    expect(result.selection.ranges.map((r) => r.from).sort((a, b) => a - b)).toEqual([
+      2, 6,
+    ]);
+  });
+
+  it("preserves multiple selections when joining lines", () => {
+    const text = "a\nb\nc\nd";
+    // cursors on "a" (pos 0) and "c" (pos 4)
+    const state = stateWithDoc(text, [{ from: 0 }, { from: 4 }], true);
+    const result = applyOp(state, "join");
+    // "a b" and "c d" — both newlines replaced with spaces.
+    expect(result.doc).toBe("a b\nc d");
+    expect(result.selection.ranges).toHaveLength(2);
+  });
+
+  it("deduplicates two cursors on the same line for move up", () => {
+    const text = "alpha\nbeta\ngamma";
+    // two cursors on "beta" (positions 6 and 8)
+    const state = stateWithDoc(text, [{ from: 6 }, { from: 8 }], true);
+    const result = applyOp(state, "moveUp");
+    // Only one swap for "beta" (deduped), not two.
+    expect(result.doc).toBe("beta\nalpha\ngamma");
+    expect(result.changeCount).toBe(1);
+    expect(result.selection.ranges).toHaveLength(2);
+  });
+
+  it("deduplicates two cursors on the same line for move down", () => {
+    const text = "alpha\nbeta\ngamma";
+    // two cursors on "beta" (positions 6 and 8)
+    const state = stateWithDoc(text, [{ from: 6 }, { from: 8 }], true);
+    const result = applyOp(state, "moveDown");
+    expect(result.doc).toBe("alpha\ngamma\nbeta");
+    expect(result.changeCount).toBe(1);
+    expect(result.selection.ranges).toHaveLength(2);
+  });
+
+  it("handles non-adjacent multi-cursor duplicate", () => {
+    const text = "one\ntwo\nthree";
+    // cursors on "one" (pos 0) and "three" (pos 8)
+    const state = stateWithDoc(text, [{ from: 0 }, { from: 8 }], true);
+    const result = applyOp(state, "duplicate");
+    // "three" is at EOF so its duplicate gets a trailing newline.
+    expect(result.doc).toBe("one\none\ntwo\nthree\nthree\n");
+    expect(result.changeCount).toBe(2);
+    expect(result.selection.ranges).toHaveLength(2);
+  });
+
+  it("emits all changes in a single transaction (one undo step)", () => {
+    const text = "a\nb\nc\nd";
+    const state = stateWithDoc(text, [{ from: 0 }, { from: 4 }], true);
+    const op = buildLineOpTransaction(state, "duplicate");
+    // Both duplicates in one changes array → one dispatch → one undo step.
+    expect(op.changes.length).toBe(2);
+    expect(op.selection.ranges).toHaveLength(2);
+  });
 });

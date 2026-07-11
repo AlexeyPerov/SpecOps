@@ -25,4 +25,16 @@ export const editHandlers: CommandHandlerMap = {
   "edit.joinLines": ({ getEditorRunner }) => {
     getEditorRunner()?.joinLines();
   },
+  "edit.selectNextOccurrence": ({ getEditorRunner }) => {
+    getEditorRunner()?.selectNextOccurrence();
+  },
+  "edit.selectAllOccurrences": ({ getEditorRunner }) => {
+    getEditorRunner()?.selectAllOccurrences();
+  },
+  "edit.skipOccurrence": ({ getEditorRunner }) => {
+    getEditorRunner()?.skipOccurrence();
+  },
+  "edit.undoOccurrence": ({ getEditorRunner }) => {
+    getEditorRunner()?.undoOccurrence();
+  },
 };

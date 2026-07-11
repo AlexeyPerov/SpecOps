@@ -212,6 +212,7 @@ describe("syncOpenFileRegistryForWindow", () => {
       editor: {
         cursorLine: 1,
         cursorColumn: 1,
+        selectionCount: 1,
         zoomPercent: 100,
         wrapLines: true,
         previewMode: "editor",
@@ -313,6 +314,7 @@ describe("syncOpenFileRegistryForWindow", () => {
       editor: {
         cursorLine: 1,
         cursorColumn: 1,
+        selectionCount: 1,
         zoomPercent: 100,
         wrapLines: true,
         previewMode: "editor",
@@ -445,6 +447,7 @@ describe("syncOpenFileRegistryForWindow", () => {
       editor: {
         cursorLine: 1,
         cursorColumn: 1,
+        selectionCount: 1,
         zoomPercent: 100,
         wrapLines: true,
         previewMode: "editor",

@@ -47,6 +47,10 @@ export function editorHostToCommandRunner(host: EditorHost): EditorCommandRunner
     joinLines: () => {
       host.actions.lines.joinLines();
     },
+    selectNextOccurrence: () => host.actions.selection.selectNextOccurrence().ok,
+    selectAllOccurrences: () => host.actions.selection.selectAllOccurrences().ok,
+    skipOccurrence: () => host.actions.selection.skipOccurrence().ok,
+    undoOccurrence: () => host.actions.selection.undoOccurrence().ok,
     setWrap: (value) => {
       host.actions.view.setWrap(value);
     },

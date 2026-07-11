@@ -63,11 +63,12 @@ export type EditorActionName =
   | "replaceAll"
   | "setSearchQuery"
   | "goToLine"
-  // Extension points (implemented in later milestones):
+  // Occurrence-selection actions (M2):
   | "selectNextOccurrence"
   | "selectAllOccurrences"
   | "skipOccurrence"
   | "undoOccurrence"
+  // Extension points (implemented in later milestones):
   | "fold"
   | "unfold"
   | "foldAll"
@@ -98,12 +99,22 @@ export type EditorHistoryActions = {
 };
 
 /**
- * Selection-domain edits (indent) plus reserved M2 occurrence-selection seams.
- * Occurrence actions are reported unavailable via `capability` until M2.
+ * Selection-domain edits (indent, outdent) and occurrence-selection actions.
+ * Occurrence actions return `{ ok: false, reason: "disabled" }` when there is
+ * no further match (e.g. wrap exhausted); handlers surface the message via the
+ * status bar without firing a noisy notification.
  */
 export type EditorSelectionActions = {
   indent: () => EditorActionResult;
   outdent: () => EditorActionResult;
+  /** Select the next occurrence of the current selection (seeds from word at cursor when empty). */
+  selectNextOccurrence: () => EditorActionResult;
+  /** Select all occurrences of the currently selected text. */
+  selectAllOccurrences: () => EditorActionResult;
+  /** Advance the main selection to the next match without adding a range. */
+  skipOccurrence: () => EditorActionResult;
+  /** Remove the most recently added secondary occurrence selection. */
+  undoOccurrence: () => EditorActionResult;
 };
 
 /** Line-oriented transforms. */
@@ -266,6 +277,10 @@ export type EditorCommandRunner = {
   moveLineDown: () => void;
   duplicateLine: () => void;
   joinLines: () => void;
+  selectNextOccurrence: () => boolean;
+  selectAllOccurrences: () => boolean;
+  skipOccurrence: () => boolean;
+  undoOccurrence: () => boolean;
   setWrap: (value: boolean) => void;
   setZoom: (zoom: number) => void;
   findNext: (query: string, caseSensitive: boolean) => boolean;
@@ -291,13 +306,15 @@ export type EditorCommandRunner = {
 };
 
 /**
- * M2 binding decision (no user-visible change in M0.1):
- * `edit.duplicateLine` currently owns Cmd/Ctrl+D. Select-next occurrence will
- * become the default for that chord; duplicate line receives a new default binding.
+ * M2 binding decision (resolved in M2.2):
+ * `Cmd/Ctrl+D` was reassigned from `edit.duplicateLine` to
+ * `edit.selectNextOccurrence`. Duplicate line received `Cmd/Ctrl+Alt+D`
+ * (Cmd+Shift+D was unavailable — owned by `view.toggleDiffPreview`).
  */
 export const SELECT_NEXT_OCCURRENCE_BINDING_DECISION = {
   chord: { mac: "Cmd+D", windows: "Ctrl+D" },
-  currentOwner: "edit.duplicateLine",
-  futureOwner: "edit.selectNextOccurrence",
-  duplicateLineNeedsNewDefault: true,
+  previousOwner: "edit.duplicateLine",
+  owner: "edit.selectNextOccurrence",
+  duplicateLineNewDefault: { mac: "Cmd+Alt+D", windows: "Ctrl+Alt+D" },
+  duplicateLineNeedsNewDefault: false,
 } as const;

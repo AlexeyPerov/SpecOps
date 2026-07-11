@@ -176,6 +176,10 @@ function createEditorRunnerMock(): EditorCommandRunner {
     moveLineDown: vi.fn(),
     duplicateLine: vi.fn(),
     joinLines: vi.fn(),
+    selectNextOccurrence: vi.fn(() => false),
+    selectAllOccurrences: vi.fn(() => false),
+    skipOccurrence: vi.fn(() => false),
+    undoOccurrence: vi.fn(() => false),
     setWrap: vi.fn(),
     setZoom: vi.fn(),
     findNext: vi.fn(() => false),
@@ -549,6 +553,10 @@ describe("edit commands", () => {
     dispatchCommand("edit.moveLineDown", context);
     dispatchCommand("edit.duplicateLine", context);
     dispatchCommand("edit.joinLines", context);
+    dispatchCommand("edit.selectNextOccurrence", context);
+    dispatchCommand("edit.selectAllOccurrences", context);
+    dispatchCommand("edit.skipOccurrence", context);
+    dispatchCommand("edit.undoOccurrence", context);
 
     expect(editorRunner.undo).toHaveBeenCalled();
     expect(editorRunner.redo).toHaveBeenCalled();
@@ -558,6 +566,10 @@ describe("edit commands", () => {
     expect(editorRunner.moveLineDown).toHaveBeenCalled();
     expect(editorRunner.duplicateLine).toHaveBeenCalled();
     expect(editorRunner.joinLines).toHaveBeenCalled();
+    expect(editorRunner.selectNextOccurrence).toHaveBeenCalled();
+    expect(editorRunner.selectAllOccurrences).toHaveBeenCalled();
+    expect(editorRunner.skipOccurrence).toHaveBeenCalled();
+    expect(editorRunner.undoOccurrence).toHaveBeenCalled();
   });
 
   it("no-ops when no editor runner is available", () => {
@@ -746,6 +758,10 @@ describe("command dispatch coverage", () => {
       "edit.moveLineDown",
       "edit.duplicateLine",
       "edit.joinLines",
+      "edit.selectNextOccurrence",
+      "edit.selectAllOccurrences",
+      "edit.skipOccurrence",
+      "edit.undoOccurrence",
       "view.toggleWrap",
       "view.zoomIn",
       "view.zoomOut",

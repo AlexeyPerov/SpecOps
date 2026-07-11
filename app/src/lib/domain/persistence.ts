@@ -16,6 +16,8 @@ export interface AppDomainState {
   editor: {
     cursorLine: number;
     cursorColumn: number;
+    /** Number of active selection ranges (1 = single cursor; >1 = multi-cursor). */
+    selectionCount: number;
     zoomPercent: number;
     wrapLines: boolean;
     previewMode: "editor" | "markdown" | "diff";

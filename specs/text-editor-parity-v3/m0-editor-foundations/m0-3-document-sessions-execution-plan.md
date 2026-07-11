@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M0.2](./m0-2-editor-host-refactor-execution-plan.md) complete  
 **Next:** [M0.4 CodeMirror composition](./m0-4-codemirror-composition-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Heavy — Score 8
 
 How to use this plan: assign to one CodeMirror lifecycle agent. Preserve one mounted view per pane while making history, selection, and future extension fields document-scoped.
@@ -24,7 +24,7 @@ Prevent undo history, selections, folds, completion sessions, and bookmarks from
 
 ## Task breakdown
 
-#### Task M0.3-1: Extract an imperative editor view controller [Score:8] [Agent:heavy]
+#### Task M0.3-1: Extract an imperative editor view controller [DONE] [Score:8] [Agent:heavy]
 
 - Move `EditorView` create/destroy, document switching, content synchronization, scroll ownership, and async language-load guarding out of Svelte.
 - Use one narrow Svelte lifecycle bridge; keep `EditorView`, timers, and cleanup handles as ordinary/raw references.
@@ -42,7 +42,7 @@ Dependencies: M0.2.
 
 ---
 
-#### Task M0.3-2: Add a document editor-session cache [Score:8] [Agent:heavy]
+#### Task M0.3-2: Add a document editor-session cache [DONE] [Score:8] [Agent:heavy]
 
 - Cache an `EditorState` or equivalent document-session snapshot for each open document identity.
 - Save state before switching a pane’s document; restore it when returning.
@@ -62,7 +62,7 @@ Dependencies: M0.3-1.
 
 ---
 
-#### Task M0.3-3: Integrate external changes and lifecycle validation [Score:7] [Agent:heavy]
+#### Task M0.3-3: Integrate external changes and lifecycle validation [DONE] [Score:7] [Agent:heavy]
 
 - Apply clean external reloads as explicit document-targeted transactions.
 - Ensure inactive cached sessions receive or invalidate against the latest document content.
@@ -79,10 +79,10 @@ Dependencies: M0.3-2.
 
 ## Plan exit criteria
 
-- [ ] Editor session state belongs to documents, not pane history.
-- [ ] One imperative controller owns CodeMirror lifecycle.
-- [ ] External reload and cache eviction are safe/tested.
-- [ ] No new persisted fields or migration paths are added.
+- [x] Editor session state belongs to documents, not pane history.
+- [x] One imperative controller owns CodeMirror lifecycle.
+- [x] External reload and cache eviction are safe/tested.
+- [x] No new persisted fields or migration paths are added.
 
 ## Risks
 
@@ -94,3 +94,12 @@ Dependencies: M0.3-2.
 
 Mark tasks `[DONE]`; log session-isolation policy, memory bounds, and validation.
 
+## Session isolation policy (implemented)
+
+- Sessions are keyed by `{ paneId, documentId }` — independent view sessions when the same document is open in multiple panes.
+- One `EditorView` remains mounted per pane; inactive document sessions are cached as `EditorState` snapshots.
+- Scroll stays in `DocumentState.scrollTop` only (no new persisted editor fields).
+- Memory bound: default max **32** inactive sessions; LRU eviction.
+- Pane teardown invalidates that pane’s cached states (compartments are view-bound).
+- Document close / context document set retention drops orphaned sessions.
+- Disk reload notifies subscribers to invalidate cached sessions for that document; restore also rejects content mismatch.

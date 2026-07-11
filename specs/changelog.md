@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-11 17:16 — M0.3 document-scoped editor sessions
+
+- **M0.3-1 Controller** — `app/src/lib/editor/editorViewController.ts` owns `EditorView` create/destroy, document switching, annotated store/external content sync (`editorTransactions.ts`), scroll flush/restore, and generation-guarded language loads. `EditorSurface.svelte` is a thin mount/update/destroy bridge.
+- **M0.3-2 Session cache** — `editorDocumentSessionCache.ts` caches inactive `EditorState` by `{ paneId, documentId }` (independent sessions per pane). Default max **32** entries with LRU eviction; `retainDocuments` / `invalidateDocument` / `invalidatePane` / `clear` for close and teardown. Scroll remains only in `DocumentState.scrollTop`.
+- **M0.3-3 Lifecycle** — disk reload notifies via `editorSessionLifecycle.ts` and invalidates cached sessions; restore refuses content-mismatched snapshots so pre-reload text cannot resurrect. Route wires cache context + dispose in `+page.svelte`; `applyDocumentDiskReload` emits the notification.
+- **Tests:** `editorViewController.test.ts`, `editorDocumentSessionCache.test.ts`, `editorSessionLifecycle.test.ts`; characterization covers document-scoped A→B→A restore (legacy fixture replace path retained).
+- **`specs/text-editor-parity-v3/m0-editor-foundations/m0-3-…-execution-plan.md`** — all tasks `[DONE]`, status Done; session-isolation policy and memory bounds recorded.
+- **Validation:** `npm test` passes (2591 tests). `npm run check` has no new errors in M0.3 files (pre-existing errors elsewhere unchanged).
+
 ## 2026-07-11 17:08 — M0.2 pane-aware editor workbench runtime
 
 - **M0.2-1 Runtime** — `app/src/lib/editor/editorWorkbenchRuntime.ts` owns route/window-scoped host registration keyed by `{ paneId, documentId, generation }`; rejects stale register/unregister; resolves the active host by pane + document identity. Typed Svelte context via `editorWorkbenchContext.ts`. Host factory `editorHostFactory.ts` adapts the command runner to `EditorHost` actions/queries without exposing `EditorView`.

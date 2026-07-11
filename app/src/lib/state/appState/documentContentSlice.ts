@@ -22,6 +22,7 @@ import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
 import { deriveUntitledTitle } from "../../services/untitledTitle";
 import { bumpRecentFile } from "../../services/recentFiles";
 import { syncRecentFiles } from "../../services/recentFilesSync";
+import { notifyDocumentDiskReload } from "../../editor/editorSessionLifecycle";
 import {
   findDocumentByPath,
   getActiveSession,
@@ -445,6 +446,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           }),
         })),
       );
+      notifyDocumentDiskReload(documentId);
     },
     applyDocumentKeepLocal(
       documentId: string,

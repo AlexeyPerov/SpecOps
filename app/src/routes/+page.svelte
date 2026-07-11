@@ -17,6 +17,9 @@
   import { createAppShellProjectTreeHandlers } from "../lib/services/appShellProjectTreeHandlers";
   import { createEditorWorkbenchRuntime } from "../lib/editor/editorWorkbenchRuntime";
   import { setEditorWorkbenchRuntime } from "../lib/editor/editorWorkbenchContext";
+  import { createEditorDocumentSessionCache } from "../lib/editor/editorDocumentSessionCache";
+  import { setEditorDocumentSessionCache } from "../lib/editor/editorDocumentSessionContext";
+  import { subscribeDocumentDiskReload } from "../lib/editor/editorSessionLifecycle";
   import { appState } from "../lib/state/appState";
   import {
     findDocumentByPath,
@@ -218,14 +221,29 @@
   });
   setEditorWorkbenchRuntime(editorWorkbench);
 
+  const editorSessionCache = createEditorDocumentSessionCache();
+  setEditorDocumentSessionCache(editorSessionCache);
+
   onDestroy(() => {
     editorWorkbench.dispose();
+    editorSessionCache.clear();
   });
 
   $effect(() => {
     return editorWorkbench.subscribeCursorStatus(({ line, column }) => {
       appState.setCursor(line, column);
     });
+  });
+
+  $effect(() => {
+    return subscribeDocumentDiskReload((documentId) => {
+      editorSessionCache.invalidateDocument(documentId);
+    });
+  });
+
+  $effect(() => {
+    const openIds = new Set(documents.map((document) => document.id));
+    editorSessionCache.retainDocuments(openIds);
   });
 
   /** Stable key for external file-watcher sync; ignores non-path snapshot churn. */

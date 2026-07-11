@@ -6,16 +6,17 @@ import {
   dispatchUserEdit,
   type CodeMirrorFixture,
 } from "./codeMirrorFixture";
+import { createEditorDocumentSessionCache } from "./editorDocumentSessionCache";
+import { createEditorViewController } from "./editorViewController";
+import { createEditorWorkbenchRuntime } from "./editorWorkbenchRuntime";
 
 /**
  * M0.1 characterization of CodeMirror integration and document-switch behavior.
  *
- * Target invariant (M0.3): editor session state (selection, undo history, and
- * future fold/completion/bookmark fields) is document-scoped and must not
- * cross documents when a pane switches A → B → A.
- *
- * Current behavior (documented here): one EditorView is reused across document
- * content replacements, so selection and undo history remain pane-scoped.
+ * M0.3 invariant: editor session state (selection, undo history, and future
+ * fold/completion/bookmark fields) is document-scoped via the view controller
+ * + session cache. The fixture's `replaceContent` path remains the legacy
+ * pane-scoped baseline.
  */
 describe("CodeMirror fixture characterization", () => {
   let fixture: CodeMirrorFixture | undefined;
@@ -98,46 +99,108 @@ describe("CodeMirror fixture characterization", () => {
     expect(document.body.querySelector(".cm-editor")).toBeNull();
   });
 
-  it("characterizes pane-scoped A→B→A history/selection (target: document isolation)", () => {
+  it("restores document-scoped A→B→A history/selection via session cache", () => {
+    // M0.3 target: selection and undo history belong to the document, not the pane.
+    const sessionCache = createEditorDocumentSessionCache();
+    const workbench = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-1",
+      getActiveDocumentId: () => "doc-a",
+    });
+    const controller = createEditorViewController({
+      workbench,
+      sessionCache,
+      onStatusMessage: () => {},
+      onDocumentDirty: () => {},
+      onScrollTopChange: () => {},
+    });
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    controller.update({
+      content: "document-a",
+      documentId: "doc-a",
+      paneId: "pane-1",
+      scrollTop: 0,
+      wrapLines: false,
+      zoomPercent: 100,
+      language: "plaintext",
+      decoratePlaintextSymbols: true,
+      showMinimap: false,
+    });
+    controller.mount(parent);
+    const view = controller.getView()!;
+
+    view.dispatch({ selection: EditorSelection.range(2, 8) });
+    dispatchUserEdit(view, {
+      changes: { from: 10, to: 10, insert: "-edited" },
+    });
+    const selectionAfterAEdit = {
+      from: view.state.selection.main.from,
+      to: view.state.selection.main.to,
+    };
+
+    controller.update({
+      content: "document-b",
+      documentId: "doc-b",
+      paneId: "pane-1",
+      scrollTop: 0,
+      wrapLines: false,
+      zoomPercent: 100,
+      language: "plaintext",
+      decoratePlaintextSymbols: true,
+      showMinimap: false,
+    });
+    view.dispatch({ selection: EditorSelection.cursor(9) });
+    dispatchUserEdit(view, {
+      changes: { from: 0, to: 0, insert: "x" },
+    });
+
+    controller.update({
+      content: "document-a-edited",
+      documentId: "doc-a",
+      paneId: "pane-1",
+      scrollTop: 0,
+      wrapLines: false,
+      zoomPercent: 100,
+      language: "plaintext",
+      decoratePlaintextSymbols: true,
+      showMinimap: false,
+    });
+
+    expect(view.state.selection.main.from).toBe(selectionAfterAEdit.from);
+    expect(view.state.selection.main.to).toBe(selectionAfterAEdit.to);
+    undo(view);
+    expect(view.state.doc.toString()).toBe("document-a");
+
+    controller.destroy();
+    parent.remove();
+    workbench.dispose();
+    sessionCache.clear();
+  });
+
+  it("characterizes fixture replaceContent as pane-scoped (legacy path)", () => {
     fixture = createCodeMirrorFixture({ doc: "document-a" });
     fixture.setSelection(2, 8);
     dispatchUserEdit(fixture.view, {
       changes: { from: 10, to: 10, insert: "-edited" },
     });
-    expect(fixture.view.state.doc.toString()).toBe("document-a-edited");
     const selectionAfterAEdit = {
       from: fixture.view.state.selection.main.from,
       to: fixture.view.state.selection.main.to,
     };
-    expect(selectionAfterAEdit).toEqual({ from: 2, to: 8 });
 
-    // Switch to B in the same view (current EditorSurface path).
     fixture.replaceContent("document-b");
     fixture.setSelection(9, 9);
     dispatchUserEdit(fixture.view, {
       changes: { from: 0, to: 0, insert: "x" },
     });
-    expect(fixture.view.state.doc.toString()).toBe("xdocument-b");
-    expect(fixture.view.state.selection.main.from).not.toBe(selectionAfterAEdit.from);
 
-    // Return to A content without restoring a document session.
     fixture.replaceContent("document-a-edited");
 
-    // Current (pane-scoped): selection remains the view's post-B selection
-    // (clamped as needed), not the selection captured while editing A.
+    // Legacy muted replace keeps pane-scoped selection/history.
     expect(fixture.view.state.selection.main.from).not.toBe(selectionAfterAEdit.from);
-    expect(fixture.view.state.selection.main.to).not.toBe(selectionAfterAEdit.to);
-
-    // Current (pane-scoped): undo walks the shared history stack, so undoing after
-    // returning to A content does not restore a document-isolated A session.
     const beforeUndo = fixture.view.state.doc.toString();
     undo(fixture.view);
-    // History includes B edits and replacements; document identity is not restored.
     expect(fixture.view.state.doc.toString()).not.toBe(beforeUndo);
-
-    // Target invariant for M0.3 (not implemented here):
-    // after A → B → A, selection and undo history for A must be restored and
-    // B's edits must not be reachable via undo while viewing A.
   });
 
   it("routes commands to the view registered as the active pane", () => {

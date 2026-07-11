@@ -1,23 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { Compartment, EditorState } from "@codemirror/state";
-  import {
-    defaultKeymap,
-    history,
-    historyKeymap,
-    indentWithTab,
-  } from "@codemirror/commands";
-  import { EditorView, keymap, lineNumbers } from "@codemirror/view";
-  import type { EditorHostRegistration } from "../types/editor";
-  import { createSyntaxHighlightExtension } from "../editor/editorHighlight";
-  import { getLanguageSupport, loadLanguageSupport } from "../editor/editorLanguage";
   import type { EditorLanguageId } from "../editor/editorLanguage";
-  import { createPlaintextSymbolDecorations } from "../editor/plaintextDecorations";
-  import { minimapExtension } from "../editor/editorMinimap";
-  import { applyWrap, applyZoom } from "../editor/editorCommandRunner";
-  import { createEditorHost } from "../editor/editorHostFactory";
+  import { getEditorDocumentSessionCache } from "../editor/editorDocumentSessionContext";
+  import {
+    createEditorViewController,
+    type EditorViewController,
+  } from "../editor/editorViewController";
   import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
-  import { searchHighlightCompartment } from "../editor/searchHighlight";
   import { logDiagnostic } from "../services/logging";
 
   interface Props {
@@ -51,210 +40,35 @@
   }: Props = $props();
 
   const workbench = getEditorWorkbenchRuntime();
+  const sessionCache = getEditorDocumentSessionCache();
 
   let hostEl = $state<HTMLDivElement | undefined>(undefined);
-  let view = $state<EditorView | undefined>(undefined);
-  const lineWrapCompartment = new Compartment();
-  const fontSizeCompartment = new Compartment();
-  const languageCompartment = new Compartment();
-  const highlightCompartment = new Compartment();
-  const decorationCompartment = new Compartment();
-  const minimapCompartment = new Compartment();
-  let muted = $state(false);
-
-  let trackedDocumentId = $state<string | null>(null);
-  let currentEditorLanguage = $state<EditorLanguageId>("plaintext");
-  let lastDecoState = $state("");
-  let applyingScroll = $state(false);
-  let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  let detachScrollListener: (() => void) | null = null;
-  let hostGeneration = 0;
-  let hostRegistration: EditorHostRegistration | null = null;
-
-  function updateCursor(): void {
-    if (!view || !hostRegistration) {
-      return;
-    }
-    const pos = view.state.selection.main.head;
-    const line = view.state.doc.lineAt(pos);
-    workbench.publishCursorStatus(
-      hostRegistration.identity,
-      line.number,
-      pos - line.from + 1,
-    );
-  }
-
-  function applyScrollTop(nextScrollTop: number): void {
-    if (!view) {
-      return;
-    }
-    applyingScroll = true;
-    view.scrollDOM.scrollTop = nextScrollTop;
-    requestAnimationFrame(() => {
-      applyingScroll = false;
-    });
-  }
-
-  function scheduleScrollTopSave(documentIdForSave: string, nextScrollTop: number): void {
-    if (scrollSaveTimer) {
-      clearTimeout(scrollSaveTimer);
-    }
-    scrollSaveTimer = setTimeout(() => {
-      onScrollTopChange(documentIdForSave, nextScrollTop);
-    }, 150);
-  }
-
-  function flushScrollTopSave(): void {
-    if (!view || !trackedDocumentId || applyingScroll) {
-      return;
-    }
-    if (scrollSaveTimer) {
-      clearTimeout(scrollSaveTimer);
-      scrollSaveTimer = null;
-    }
-    onScrollTopChange(trackedDocumentId, view.scrollDOM.scrollTop);
-  }
-
-  function attachScrollListener(): void {
-    detachScrollListener?.();
-    if (!view) {
-      return;
-    }
-    const scroller = view.scrollDOM;
-    const onScroll = (): void => {
-      if (applyingScroll || !trackedDocumentId) {
-        return;
-      }
-      scheduleScrollTopSave(trackedDocumentId, scroller.scrollTop);
-    };
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    detachScrollListener = () => {
-      scroller.removeEventListener("scroll", onScroll);
-    };
-  }
-
-  function unregisterHost(): void {
-    hostRegistration?.unregister();
-    hostRegistration = null;
-  }
-
-  function registerHost(): void {
-    if (!view) {
-      return;
-    }
-    unregisterHost();
-    hostGeneration += 1;
-    const identity = {
-      paneId,
-      documentId,
-      generation: hostGeneration,
-    };
-    const host = createEditorHost({
-      identity,
-      getView: () => view,
-      lineWrapCompartment,
-      fontSizeCompartment,
-      searchHighlightCompartment,
-      onStatusMessage,
-      updateCursor,
-      focus: () => {
-        view?.focus();
-      },
-    });
-    hostRegistration = workbench.registerHost(host);
-  }
+  let controller: EditorViewController | undefined;
 
   onMount(() => {
     if (!hostEl) {
       return;
     }
 
-    const state = EditorState.create({
-      doc: content,
-      extensions: [
-        lineNumbers(),
-        history(),
-        keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
-        lineWrapCompartment.of([]),
-        fontSizeCompartment.of(
-          EditorView.theme({
-            "&": {
-              fontSize: "var(--font-size-editor, 13px)",
-            },
-          }),
-        ),
-        languageCompartment.of(getLanguageSupport(language) ?? []),
-        highlightCompartment.of(createSyntaxHighlightExtension()),
-        decorationCompartment.of([]),
-        searchHighlightCompartment.of([]),
-        minimapCompartment.of(minimapExtension(showMinimap)),
-        EditorView.theme({
-          "&": {
-            height: "100%",
-            width: "100%",
-            maxWidth: "100%",
-            fontFamily: "var(--font-family-ui)",
-            color: "var(--color-text-primary)",
-            backgroundColor: "var(--color-surface-1)",
-          },
-          ".cm-content, .cm-gutter": {
-            minHeight: "100%",
-          },
-          ".cm-content": {
-            caretColor: "var(--color-text-primary)",
-          },
-          ".cm-gutters": {
-            backgroundColor: "var(--color-surface-1)",
-            color: "var(--color-text-secondary)",
-            borderRight: "1px solid var(--color-border-subtle)",
-          },
-          "&.cm-focused": {
-            outline: "none",
-          },
-          ".cm-activeLine, .cm-activeLineGutter": {
-            backgroundColor: "var(--color-hover)",
-          },
-          ".cm-cursor, .cm-dropCursor": {
-            borderLeftColor: "var(--color-text-primary)",
-          },
-          ".cm-minimap-gutter": {
-            // Subtle separator between the editor content and the minimap
-            // column; mirrors the gutter border so light/dark both read well.
-            borderLeft: "1px solid var(--color-border-subtle)",
-            backgroundColor: "var(--color-surface-1)",
-          },
-          ".cm-minimap-overlay-container .cm-minimap-overlay": {
-            // Viewport indicator: tinted with the accent hover token so it
-            // tracks the active theme instead of the package's fixed grey.
-            background: "var(--color-hover)",
-          },
-        }),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged && !muted) {
-            onDocumentDirty(update.state.doc.toString());
-          }
-          if (update.selectionSet) {
-            updateCursor();
-          }
-        }),
-      ],
+    controller = createEditorViewController({
+      workbench,
+      sessionCache,
+      onStatusMessage: (message) => onStatusMessage(message),
+      onDocumentDirty: (nextContent) => onDocumentDirty(nextContent),
+      onScrollTopChange: (id, nextScrollTop) => onScrollTopChange(id, nextScrollTop),
     });
-
-    view = new EditorView({
-      state,
-      parent: hostEl,
+    controller.update({
+      content,
+      documentId,
+      paneId,
+      scrollTop,
+      wrapLines,
+      zoomPercent,
+      language,
+      decoratePlaintextSymbols,
+      showMinimap,
     });
-
-    applyWrap(view, lineWrapCompartment, wrapLines);
-    applyZoom(view, fontSizeCompartment, zoomPercent);
-    attachScrollListener();
-    trackedDocumentId = documentId;
-    currentEditorLanguage = language;
-    lastMinimapEnabled = showMinimap;
-    applyScrollTop(scrollTop);
-
-    registerHost();
-    updateCursor();
+    controller.mount(hostEl);
 
     void logDiagnostic({
       level: "debug",
@@ -266,13 +80,9 @@
   });
 
   onDestroy(() => {
-    flushScrollTopSave();
-    if (scrollSaveTimer) {
-      clearTimeout(scrollSaveTimer);
-    }
-    detachScrollListener?.();
-    unregisterHost();
-    view?.destroy();
+    controller?.destroy();
+    controller = undefined;
+
     void logDiagnostic({
       level: "debug",
       source: "frontend",
@@ -283,82 +93,16 @@
   });
 
   $effect(() => {
-    if (!view || documentId === trackedDocumentId) {
-      return;
-    }
-    flushScrollTopSave();
-    trackedDocumentId = documentId;
-    applyScrollTop(scrollTop);
-    registerHost();
-    updateCursor();
-  });
-
-  $effect(() => {
-    if (!view) {
-      return;
-    }
-    applyWrap(view, lineWrapCompartment, wrapLines);
-  });
-
-  $effect(() => {
-    if (!view || !zoomPercent) {
-      return;
-    }
-    applyZoom(view, fontSizeCompartment, zoomPercent);
-  });
-
-  $effect(() => {
-    if (!view || content === view.state.doc.toString()) {
-      return;
-    }
-    muted = true;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: content },
-    });
-    muted = false;
-  });
-
-  $effect(() => {
-    if (!view || language === undefined || language === currentEditorLanguage) {
-      return;
-    }
-    currentEditorLanguage = language;
-    void loadLanguageSupport(language).then((support) => {
-      if (view) {
-        view.dispatch({
-          effects: languageCompartment.reconfigure(support ?? []),
-        });
-      }
-    });
-  });
-
-  $effect(() => {
-    if (!view) {
-      return;
-    }
-    const key = `${language}:${decoratePlaintextSymbols}`;
-    if (key !== lastDecoState) {
-      lastDecoState = key;
-      const shouldDecorate = language === "plaintext" && decoratePlaintextSymbols;
-      view.dispatch({
-        effects: decorationCompartment.reconfigure(
-          shouldDecorate ? [createPlaintextSymbolDecorations()] : [],
-        ),
-      });
-    }
-  });
-
-  let lastMinimapEnabled = $state<boolean | null>(null);
-  $effect(() => {
-    if (!view) {
-      return;
-    }
-    if (showMinimap === lastMinimapEnabled) {
-      return;
-    }
-    lastMinimapEnabled = showMinimap;
-    view.dispatch({
-      effects: minimapCompartment.reconfigure(minimapExtension(showMinimap)),
+    controller?.update({
+      content,
+      documentId,
+      paneId,
+      scrollTop,
+      wrapLines,
+      zoomPercent,
+      language,
+      decoratePlaintextSymbols,
+      showMinimap,
     });
   });
 </script>

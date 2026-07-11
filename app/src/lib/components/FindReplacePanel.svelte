@@ -3,32 +3,44 @@
   import type { EditorCommandRunner } from "../types/editor";
   import { appState } from "../state/appState";
 
-  export let findQuery = "";
-  export let replaceValue = "";
-  export let findCaseSensitive = false;
-  export let editorRunner: EditorCommandRunner | null = null;
-  export let notify: (message: string) => void = () => {};
-  export let documentId: string | null = null;
+  let {
+    findQuery = $bindable(""),
+    replaceValue = $bindable(""),
+    findCaseSensitive = $bindable(false),
+    getEditorRunner = (() => null) as () => EditorCommandRunner | null,
+    notify = (_message: string) => {},
+    documentId = null as string | null,
+  }: {
+    findQuery?: string;
+    replaceValue?: string;
+    findCaseSensitive?: boolean;
+    /** Resolves the active pane host at call time (workbench runtime). */
+    getEditorRunner?: () => EditorCommandRunner | null;
+    notify?: (message: string) => void;
+    documentId?: string | null;
+  } = $props();
 
-  let findInputEl: HTMLInputElement | undefined;
-  let replaceInputEl: HTMLInputElement | undefined;
-  let panelEl: HTMLElement | undefined;
-  let matchCount = 0;
-  let currentMatch = 0;
+  let findInputEl = $state<HTMLInputElement | undefined>(undefined);
+  let replaceInputEl = $state<HTMLInputElement | undefined>(undefined);
+  let panelEl = $state<HTMLElement | undefined>(undefined);
+  let matchCount = $state(0);
+  let currentMatch = $state(0);
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
-  let showReplace = true;
-  let mounted = false;
+  let showReplace = $state(true);
+  let mounted = $state(false);
 
-  $: matchCountText = findQuery
-    ? matchCount === 0
-      ? "No results"
-      : currentMatch === 0
-        ? `${matchCount} found`
-        : `${currentMatch}/${matchCount}`
-    : "";
+  const matchCountText = $derived(
+    findQuery
+      ? matchCount === 0
+        ? "No results"
+        : currentMatch === 0
+          ? `${matchCount} found`
+          : `${currentMatch}/${matchCount}`
+      : "",
+  );
 
   function close(): void {
-    editorRunner?.setSearchQuery("", false);
+    getEditorRunner()?.setSearchQuery("", false);
     appState.setFindReplaceOpen(false);
   }
 
@@ -37,14 +49,15 @@
       clearTimeout(searchTimer);
       searchTimer = null;
     }
+    const runner = getEditorRunner();
     if (!findQuery) {
       matchCount = 0;
       currentMatch = 0;
-      editorRunner?.setSearchQuery("", false);
+      runner?.setSearchQuery("", false);
       return;
     }
-    editorRunner?.setSearchQuery(findQuery, findCaseSensitive);
-    editorRunner?.findNext(findQuery, findCaseSensitive);
+    runner?.setSearchQuery(findQuery, findCaseSensitive);
+    runner?.findNext(findQuery, findCaseSensitive);
     updateMatchInfo();
   }
 
@@ -55,32 +68,33 @@
   }
 
   function updateMatchInfo(): void {
-    if (!findQuery || !editorRunner) {
+    const runner = getEditorRunner();
+    if (!findQuery || !runner) {
       matchCount = 0;
       currentMatch = 0;
       return;
     }
-    const info = editorRunner.getMatchInfo(findQuery, findCaseSensitive);
+    const info = runner.getMatchInfo(findQuery, findCaseSensitive);
     matchCount = info.total;
     currentMatch = info.current;
   }
 
   function findNext(): void {
     if (!findQuery.trim()) return;
-    editorRunner?.findNext(findQuery, findCaseSensitive);
+    getEditorRunner()?.findNext(findQuery, findCaseSensitive);
     updateMatchInfo();
   }
 
   function findPrev(): void {
     if (!findQuery.trim()) return;
-    editorRunner?.findPrevious(findQuery, findCaseSensitive);
+    getEditorRunner()?.findPrevious(findQuery, findCaseSensitive);
     updateMatchInfo();
   }
 
   function replaceCurrent(): void {
     if (!findQuery.trim()) return;
     const replaced =
-      editorRunner?.replaceAndFindNext(
+      getEditorRunner()?.replaceAndFindNext(
         findQuery,
         replaceValue,
         findCaseSensitive,
@@ -94,10 +108,11 @@
 
   function replaceAll(): void {
     if (!findQuery.trim()) return;
+    const runner = getEditorRunner();
     const count =
-      editorRunner?.replaceAll(findQuery, replaceValue, findCaseSensitive) ?? 0;
+      runner?.replaceAll(findQuery, replaceValue, findCaseSensitive) ?? 0;
     notify(`Replaced ${count} occurrence(s).`);
-    editorRunner?.setSearchQuery(findQuery, findCaseSensitive);
+    runner?.setSearchQuery(findQuery, findCaseSensitive);
     updateMatchInfo();
   }
 
@@ -175,15 +190,19 @@
       clearTimeout(searchTimer);
       searchTimer = null;
     }
-    editorRunner?.setSearchQuery("", false);
+    getEditorRunner()?.setSearchQuery("", false);
   });
 
-  $: if (mounted && documentId) {
-    if (findQuery && editorRunner) {
-      editorRunner.setSearchQuery(findQuery, findCaseSensitive);
+  $effect(() => {
+    if (!mounted || !documentId) {
+      return;
+    }
+    const runner = getEditorRunner();
+    if (findQuery && runner) {
+      runner.setSearchQuery(findQuery, findCaseSensitive);
       updateMatchInfo();
     }
-  }
+  });
 </script>
 
 <search bind:this={panelEl} class="find-replace-panel" aria-label="Find and Replace">

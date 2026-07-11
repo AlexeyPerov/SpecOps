@@ -8,24 +8,22 @@
     indentWithTab,
   } from "@codemirror/commands";
   import { EditorView, keymap, lineNumbers } from "@codemirror/view";
-  import { appState } from "../state/appState";
-  import type { EditorCommandRunner } from "../types/editor";
+  import type { EditorHostRegistration } from "../types/editor";
   import { createSyntaxHighlightExtension } from "../editor/editorHighlight";
   import { getLanguageSupport, loadLanguageSupport } from "../editor/editorLanguage";
   import type { EditorLanguageId } from "../editor/editorLanguage";
   import { createPlaintextSymbolDecorations } from "../editor/plaintextDecorations";
   import { minimapExtension } from "../editor/editorMinimap";
-  import {
-    applyWrap,
-    applyZoom,
-    createEditorCommandRunner,
-  } from "../editor/editorCommandRunner";
+  import { applyWrap, applyZoom } from "../editor/editorCommandRunner";
+  import { createEditorHost } from "../editor/editorHostFactory";
+  import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
   import { searchHighlightCompartment } from "../editor/searchHighlight";
   import { logDiagnostic } from "../services/logging";
 
   interface Props {
     content?: string;
     documentId?: string | null;
+    paneId: string;
     scrollTop?: number;
     wrapLines?: boolean;
     zoomPercent?: number;
@@ -35,12 +33,12 @@
     onStatusMessage?: (message: string) => void;
     onDocumentDirty?: (nextContent: string) => void;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
-    registerEditorCommandRunner?: ((runner: EditorCommandRunner) => void) | undefined;
   }
 
   let {
     content = "",
     documentId = null,
+    paneId,
     scrollTop = 0,
     wrapLines = false,
     zoomPercent = 100,
@@ -50,8 +48,9 @@
     onStatusMessage = () => {},
     onDocumentDirty = () => {},
     onScrollTopChange = () => {},
-    registerEditorCommandRunner = undefined,
   }: Props = $props();
+
+  const workbench = getEditorWorkbenchRuntime();
 
   let hostEl = $state<HTMLDivElement | undefined>(undefined);
   let view = $state<EditorView | undefined>(undefined);
@@ -69,14 +68,20 @@
   let applyingScroll = $state(false);
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let detachScrollListener: (() => void) | null = null;
+  let hostGeneration = 0;
+  let hostRegistration: EditorHostRegistration | null = null;
 
   function updateCursor(): void {
-    if (!view) {
+    if (!view || !hostRegistration) {
       return;
     }
     const pos = view.state.selection.main.head;
     const line = view.state.doc.lineAt(pos);
-    appState.setCursor(line.number, pos - line.from + 1);
+    workbench.publishCursorStatus(
+      hostRegistration.identity,
+      line.number,
+      pos - line.from + 1,
+    );
   }
 
   function applyScrollTop(nextScrollTop: number): void {
@@ -128,20 +133,35 @@
     };
   }
 
-  function publishCommandRunner(): void {
-    if (!view || !registerEditorCommandRunner) {
+  function unregisterHost(): void {
+    hostRegistration?.unregister();
+    hostRegistration = null;
+  }
+
+  function registerHost(): void {
+    if (!view) {
       return;
     }
-    registerEditorCommandRunner(
-      createEditorCommandRunner({
-        getView: () => view,
-        lineWrapCompartment,
-        fontSizeCompartment,
-        searchHighlightCompartment,
-        onStatusMessage,
-        updateCursor,
-      }),
-    );
+    unregisterHost();
+    hostGeneration += 1;
+    const identity = {
+      paneId,
+      documentId,
+      generation: hostGeneration,
+    };
+    const host = createEditorHost({
+      identity,
+      getView: () => view,
+      lineWrapCompartment,
+      fontSizeCompartment,
+      searchHighlightCompartment,
+      onStatusMessage,
+      updateCursor,
+      focus: () => {
+        view?.focus();
+      },
+    });
+    hostRegistration = workbench.registerHost(host);
   }
 
   onMount(() => {
@@ -227,21 +247,21 @@
 
     applyWrap(view, lineWrapCompartment, wrapLines);
     applyZoom(view, fontSizeCompartment, zoomPercent);
-    updateCursor();
     attachScrollListener();
     trackedDocumentId = documentId;
     currentEditorLanguage = language;
     lastMinimapEnabled = showMinimap;
     applyScrollTop(scrollTop);
 
-    publishCommandRunner();
+    registerHost();
+    updateCursor();
 
     void logDiagnostic({
       level: "debug",
       source: "frontend",
       timestamp: new Date().toISOString(),
       message: "EditorSurface mounted",
-      metadata: { documentId },
+      metadata: { documentId, paneId },
     });
   });
 
@@ -251,19 +271,15 @@
       clearTimeout(scrollSaveTimer);
     }
     detachScrollListener?.();
+    unregisterHost();
     view?.destroy();
     void logDiagnostic({
       level: "debug",
       source: "frontend",
       timestamp: new Date().toISOString(),
       message: "EditorSurface destroyed",
-      metadata: { documentId },
+      metadata: { documentId, paneId },
     });
-  });
-
-  $effect(() => {
-    registerEditorCommandRunner;
-    publishCommandRunner();
   });
 
   $effect(() => {
@@ -273,6 +289,8 @@
     flushScrollTopSave();
     trackedDocumentId = documentId;
     applyScrollTop(scrollTop);
+    registerHost();
+    updateCursor();
   });
 
   $effect(() => {

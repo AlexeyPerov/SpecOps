@@ -1,0 +1,223 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { EditorHost, EditorHostIdentity } from "../types/editor";
+import { createEditorWorkbenchRuntime } from "./editorWorkbenchRuntime";
+
+function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
+  return {
+    identity,
+    actions: {
+      undo: () => ({ ok: true }),
+      redo: () => ({ ok: true }),
+      indent: () => ({ ok: true }),
+      outdent: () => ({ ok: true }),
+      moveLineUp: () => ({ ok: true }),
+      moveLineDown: () => ({ ok: true }),
+      duplicateLine: () => ({ ok: true }),
+      joinLines: () => ({ ok: true }),
+      setWrap: () => ({ ok: true }),
+      setZoom: () => ({ ok: true }),
+      findNext: () => ({ ok: true }),
+      findPrevious: () => ({ ok: true }),
+      replaceCurrent: () => ({ ok: true }),
+      replaceAndFindNext: () => ({ ok: true }),
+      replaceAll: () => ({ ok: true, value: 0 }),
+      setSearchQuery: () => ({ ok: true }),
+      goToLine: () => ({ ok: true }),
+    },
+    queries: {
+      getMatchInfo: () => ({ ok: true, value: { total: 0, current: 0 } }),
+      getSelection: () => ({
+        ok: true,
+        value: { from: 0, to: 0, head: 0, empty: true },
+      }),
+      getDocumentContent: () => ({ ok: true, value: label }),
+      canUndo: () => ({ ok: true, value: false }),
+      canRedo: () => ({ ok: true, value: false }),
+    },
+    capability: () => ({ state: "available" }),
+    focus: vi.fn(),
+  };
+}
+
+describe("createEditorWorkbenchRuntime", () => {
+  let dispose: (() => void) | undefined;
+
+  afterEach(() => {
+    dispose?.();
+    dispose = undefined;
+  });
+
+  it("resolves the active host by pane and document identity", () => {
+    let activePaneId = "pane-a";
+    let activeDocumentId: string | null = "doc-1";
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => activePaneId,
+      getActiveDocumentId: () => activeDocumentId,
+    });
+    dispose = () => runtime.dispose();
+
+    const hostA = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }, "a");
+    const hostB = makeHost({ paneId: "pane-b", documentId: "doc-2", generation: 1 }, "b");
+    runtime.registerHost(hostA);
+    runtime.registerHost(hostB);
+
+    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+      ok: true,
+      value: "a",
+    });
+
+    activePaneId = "pane-b";
+    activeDocumentId = "doc-2";
+    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+      ok: true,
+      value: "b",
+    });
+  });
+
+  it("rejects late registration from an older generation", () => {
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => "doc-2",
+    });
+    dispose = () => runtime.dispose();
+
+    const newer = makeHost({ paneId: "pane-a", documentId: "doc-2", generation: 2 }, "newer");
+    const older = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }, "older");
+    runtime.registerHost(newer);
+    const rejected = runtime.registerHost(older);
+
+    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+      ok: true,
+      value: "newer",
+    });
+
+    rejected.unregister();
+    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+      ok: true,
+      value: "newer",
+    });
+  });
+
+  it("does not clear a newer host when an older registration unregisters", () => {
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => "doc-2",
+    });
+    dispose = () => runtime.dispose();
+
+    const first = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }, "first");
+    const firstReg = runtime.registerHost(first);
+    const second = makeHost({ paneId: "pane-a", documentId: "doc-2", generation: 2 }, "second");
+    runtime.registerHost(second);
+
+    firstReg.unregister();
+
+    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+      ok: true,
+      value: "second",
+    });
+  });
+
+  it("makes unregister idempotent", () => {
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => "doc-1",
+    });
+    dispose = () => runtime.dispose();
+
+    const host = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 });
+    const reg = runtime.registerHost(host);
+    reg.unregister();
+    reg.unregister();
+    expect(runtime.getActiveHost()).toBeNull();
+  });
+
+  it("returns null when the active document does not match the registered host", () => {
+    let activeDocumentId: string | null = "doc-1";
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => activeDocumentId,
+    });
+    dispose = () => runtime.dispose();
+
+    runtime.registerHost(
+      makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }, "doc-1"),
+    );
+    activeDocumentId = "doc-2";
+    expect(runtime.getActiveHost()).toBeNull();
+  });
+
+  it("publishes cursor status only for the active matching host", () => {
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => "doc-1",
+    });
+    dispose = () => runtime.dispose();
+
+    const identityA: EditorHostIdentity = {
+      paneId: "pane-a",
+      documentId: "doc-1",
+      generation: 1,
+    };
+    const identityB: EditorHostIdentity = {
+      paneId: "pane-b",
+      documentId: "doc-2",
+      generation: 1,
+    };
+    runtime.registerHost(makeHost(identityA));
+    runtime.registerHost(makeHost(identityB));
+
+    const listener = vi.fn();
+    const unsubscribe = runtime.subscribeCursorStatus(listener);
+
+    runtime.publishCursorStatus(identityB, 9, 2);
+    expect(listener).not.toHaveBeenCalled();
+
+    runtime.publishCursorStatus(identityA, 3, 4);
+    expect(listener).toHaveBeenCalledWith({
+      identity: identityA,
+      line: 3,
+      column: 4,
+    });
+
+    unsubscribe();
+    runtime.publishCursorStatus(identityA, 5, 6);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispose clears hosts and ignores further registrations", () => {
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => "doc-1",
+    });
+    runtime.registerHost(
+      makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }),
+    );
+    runtime.dispose();
+    dispose = undefined;
+
+    expect(runtime.getActiveHost()).toBeNull();
+    runtime.registerHost(
+      makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 2 }),
+    );
+    expect(runtime.getActiveHost()).toBeNull();
+  });
+
+  it("exposes an active command runner for find/go-to style callers", () => {
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => "doc-1",
+    });
+    dispose = () => runtime.dispose();
+
+    const host = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }, "body");
+    const goToLine = vi.fn(() => ({ ok: true as const }));
+    host.actions.goToLine = goToLine;
+    runtime.registerHost(host);
+
+    const runner = runtime.getActiveRunner();
+    expect(runner).not.toBeNull();
+    expect(runner?.goToLine(12)).toBe(true);
+    expect(goToLine).toHaveBeenCalledWith(12);
+  });
+});

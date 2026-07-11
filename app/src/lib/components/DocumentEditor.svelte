@@ -2,21 +2,36 @@
   import EditorSurface from "./EditorSurface.svelte";
   import { appState } from "../state/appState";
   import type { EditorLanguageId } from "../editor/editorLanguage";
-  import type { EditorCommandRunner } from "../types/editor";
 
-  export let content = "";
-  export let documentId: string | null = null;
-  export let scrollTop = 0;
-  export let wrapLines = false;
-  export let zoomPercent = 100;
-  export let language: EditorLanguageId = "plaintext";
-  export let decoratePlaintextSymbols = true;
-  export let showMinimap = true;
-  export let onStatusMessage: (message: string) => void = () => {};
-  export let onUntitledTitleRefresh: ((documentId: string) => void) | undefined = undefined;
-  export let onScrollTopChange: (documentId: string, scrollTop: number) => void = () => {};
-  export let registerEditorCommandRunner: ((runner: EditorCommandRunner) => void) | undefined =
-    undefined;
+  let {
+    content = "",
+    documentId = null,
+    paneId,
+    scrollTop = 0,
+    wrapLines = false,
+    zoomPercent = 100,
+    language = "plaintext" as EditorLanguageId,
+    decoratePlaintextSymbols = true,
+    showMinimap = true,
+    onStatusMessage = () => {},
+    onUntitledTitleRefresh = undefined as
+      | ((documentId: string) => void)
+      | undefined,
+    onScrollTopChange = (_documentId: string, _scrollTop: number) => {},
+  }: {
+    content?: string;
+    documentId?: string | null;
+    paneId: string;
+    scrollTop?: number;
+    wrapLines?: boolean;
+    zoomPercent?: number;
+    language?: EditorLanguageId;
+    decoratePlaintextSymbols?: boolean;
+    showMinimap?: boolean;
+    onStatusMessage?: (message: string) => void;
+    onUntitledTitleRefresh?: ((documentId: string) => void) | undefined;
+    onScrollTopChange?: (documentId: string, scrollTop: number) => void;
+  } = $props();
 
   function handleDocumentDirty(nextContent: string): void {
     if (!documentId) {
@@ -30,6 +45,7 @@
 <EditorSurface
   {content}
   {documentId}
+  {paneId}
   {scrollTop}
   {wrapLines}
   {zoomPercent}
@@ -39,5 +55,4 @@
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
   {onScrollTopChange}
-  {registerEditorCommandRunner}
 />

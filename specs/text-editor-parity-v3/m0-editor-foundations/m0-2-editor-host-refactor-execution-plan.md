@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M0.1](./m0-1-characterization-and-contracts-execution-plan.md) complete  
 **Next:** [M0.3 document sessions](./m0-3-document-sessions-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Heavy — Score 8
 
 How to use this plan: assign to one strong editor-integration agent. Replace the single mutable runner prop chain with a route/window-scoped, identity-safe runtime. Do not change editor features.
@@ -26,7 +26,7 @@ Guarantee that editor commands target the active pane/document and that late reg
 
 ## Task breakdown
 
-#### Task M0.2-1: Implement a route-scoped editor workbench runtime [Score:7] [Agent:heavy]
+#### Task M0.2-1: Implement a route-scoped editor workbench runtime [DONE] [Score:7] [Agent:heavy]
 
 - Create one runtime per window/route, passed directly to route-level command handlers and shared with descendants through typed Svelte context.
 - Register hosts with `{ paneId, documentId, generation }` and return an idempotent unregister callback/token.
@@ -45,7 +45,7 @@ Dependencies: M0.1.
 
 ---
 
-#### Task M0.2-2: Replace the mutable runner prop chain [Score:8] [Agent:heavy]
+#### Task M0.2-2: Replace the mutable runner prop chain [DONE] [Score:8] [Agent:heavy]
 
 - Remove `bind:editorRunner` and `registerEditorCommandRunner` plumbing across route, shell, pane, Markdown, and document wrappers.
 - Make commands resolve the active host from the runtime at execution time.
@@ -63,7 +63,7 @@ Dependencies: M0.2-1.
 
 ---
 
-#### Task M0.2-3: Normalize focus and key ownership [Score:6] [Agent:medium]
+#### Task M0.2-3: Normalize focus and key ownership [DONE] [Score:6] [Agent:medium]
 
 - Encode precedence: active modal/picker → editor overlay → focused CodeMirror keymap → permitted global command.
 - Keep palette/quick-open chords globally available while protecting ordinary inputs and IME composition.
@@ -79,14 +79,13 @@ Dependencies: M0.2-2.
 
 ## Plan exit criteria
 
-- [ ] A route/window-scoped pane-aware runtime owns editor registration.
-- [ ] The mutable runner prop chain is removed.
-- [ ] Commands and status resolve by active pane/document identity.
-- [ ] No user-facing behavior or persistence change lands.
-- [ ] `npm test` and `npm run check` pass.
-- [ ] Touched Svelte components pass the autofixer.
+- [x] A route/window-scoped pane-aware runtime owns editor registration.
+- [x] The mutable runner prop chain is removed.
+- [x] Commands and status resolve by active pane/document identity.
+- [x] No user-facing behavior or persistence change lands.
+- [x] `npm test` and `npm run check` pass.
+- [x] Touched Svelte components pass the autofixer.
 
 ## Changelog instructions
 
 Mark tasks `[DONE]`; add a dated structural entry with routing/lifecycle tests.
-

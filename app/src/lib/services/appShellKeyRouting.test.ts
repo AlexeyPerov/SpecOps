@@ -3,7 +3,9 @@ import { keyboardEvent } from "../test/helpers";
 import { keymapCommandForEvent } from "../commands/registry";
 import {
   isAlwaysRunShellCommand,
+  isTargetInCodeMirror,
   isTargetInEditable,
+  isTargetInOrdinaryInput,
   resolveAppShellKeyRouting,
   SELECT_NEXT_OCCURRENCE_BINDING_DECISION,
 } from "./appShellKeyRouting";
@@ -29,9 +31,20 @@ describe("resolveAppShellKeyRouting", () => {
       resolveAppShellKeyRouting({
         commandId: "file.save",
         overlayOpen: true,
-        targetInEditable: false,
+        targetInOrdinaryInput: false,
       }),
     ).toEqual({ action: "ignore", reason: "overlay-open" });
+  });
+
+  it("ignores events during IME composition", () => {
+    expect(
+      resolveAppShellKeyRouting({
+        commandId: "edit.duplicateLine",
+        overlayOpen: false,
+        targetInOrdinaryInput: false,
+        composing: true,
+      }),
+    ).toEqual({ action: "ignore", reason: "ime-composing" });
   });
 
   it("ignores unmapped chords (browser/default layer)", () => {
@@ -39,7 +52,7 @@ describe("resolveAppShellKeyRouting", () => {
       resolveAppShellKeyRouting({
         commandId: null,
         overlayOpen: false,
-        targetInEditable: false,
+        targetInOrdinaryInput: false,
       }),
     ).toEqual({ action: "ignore", reason: "no-command" });
   });
@@ -49,7 +62,7 @@ describe("resolveAppShellKeyRouting", () => {
       resolveAppShellKeyRouting({
         commandId: "file.save",
         overlayOpen: false,
-        targetInEditable: true,
+        targetInOrdinaryInput: true,
       }),
     ).toEqual({
       action: "run-command",
@@ -58,12 +71,12 @@ describe("resolveAppShellKeyRouting", () => {
     });
   });
 
-  it("blocks non-global commands when focus is in a protected editable", () => {
+  it("blocks non-global commands when focus is in a protected ordinary input", () => {
     expect(
       resolveAppShellKeyRouting({
         commandId: "edit.duplicateLine",
         overlayOpen: false,
-        targetInEditable: true,
+        targetInOrdinaryInput: true,
       }),
     ).toEqual({ action: "ignore", reason: "protected-input" });
 
@@ -71,17 +84,17 @@ describe("resolveAppShellKeyRouting", () => {
       resolveAppShellKeyRouting({
         commandId: "view.zoomIn",
         overlayOpen: false,
-        targetInEditable: true,
+        targetInOrdinaryInput: true,
       }),
     ).toEqual({ action: "ignore", reason: "protected-input" });
   });
 
-  it("runs non-global commands when focus is not in an editable", () => {
+  it("runs non-global commands when focus is in CodeMirror (not ordinary input)", () => {
     expect(
       resolveAppShellKeyRouting({
         commandId: "edit.duplicateLine",
         overlayOpen: false,
-        targetInEditable: false,
+        targetInOrdinaryInput: false,
       }),
     ).toEqual({
       action: "run-command",
@@ -90,7 +103,21 @@ describe("resolveAppShellKeyRouting", () => {
     });
   });
 
-  it("always-run shell commands bypass the editable guard", () => {
+  it("runs non-global commands when focus is not in an editable", () => {
+    expect(
+      resolveAppShellKeyRouting({
+        commandId: "edit.duplicateLine",
+        overlayOpen: false,
+        targetInOrdinaryInput: false,
+      }),
+    ).toEqual({
+      action: "run-command",
+      commandId: "edit.duplicateLine",
+      preventDefault: true,
+    });
+  });
+
+  it("always-run shell commands bypass the ordinary-input guard", () => {
     for (const commandId of [
       "app.toggleFindReplace",
       "app.findInProject",
@@ -101,7 +128,7 @@ describe("resolveAppShellKeyRouting", () => {
         resolveAppShellKeyRouting({
           commandId,
           overlayOpen: false,
-          targetInEditable: true,
+          targetInOrdinaryInput: true,
           alwaysRunWhenMapped: true,
         }),
       ).toEqual({
@@ -117,7 +144,7 @@ describe("resolveAppShellKeyRouting", () => {
       resolveAppShellKeyRouting({
         commandId: "app.toggleFindReplace",
         overlayOpen: true,
-        targetInEditable: false,
+        targetInOrdinaryInput: false,
         alwaysRunWhenMapped: true,
       }),
     ).toEqual({ action: "ignore", reason: "overlay-open" });
@@ -141,31 +168,50 @@ describe("SELECT_NEXT_OCCURRENCE_BINDING_DECISION (M2)", () => {
   });
 });
 
-describe("isTargetInEditable", () => {
+describe("editable target helpers", () => {
   afterEach(() => {
     document.body.replaceChildren();
   });
 
-  it("detects input, textarea, and contenteditable (CodeMirror-style) hosts", () => {
+  it("detects ordinary inputs and non-CM contenteditable", () => {
     const editable = document.createElement("div");
     editable.setAttribute("contenteditable", "true");
     document.body.appendChild(editable);
+    expect(isTargetInOrdinaryInput(editable)).toBe(true);
     expect(isTargetInEditable(editable)).toBe(true);
+    expect(isTargetInCodeMirror(editable)).toBe(false);
 
     const input = document.createElement("input");
     document.body.appendChild(input);
-    expect(isTargetInEditable(input)).toBe(true);
+    expect(isTargetInOrdinaryInput(input)).toBe(true);
 
     const plain = document.createElement("div");
     document.body.appendChild(plain);
-    expect(isTargetInEditable(plain)).toBe(false);
+    expect(isTargetInOrdinaryInput(plain)).toBe(false);
+  });
+
+  it("treats CodeMirror hosts as editor focus, not ordinary input", () => {
+    const cm = document.createElement("div");
+    cm.className = "cm-editor";
+    const content = document.createElement("div");
+    content.className = "cm-content";
+    content.setAttribute("contenteditable", "true");
+    cm.appendChild(content);
+    document.body.appendChild(cm);
+
+    expect(isTargetInCodeMirror(content)).toBe(true);
+    expect(isTargetInOrdinaryInput(content)).toBe(false);
+    expect(isTargetInEditable(content)).toBe(true);
   });
 });
 
 describe("createAppShellCommandHandlers.handleKeydown", () => {
+  let overlayOpen = false;
+
   beforeEach(() => {
     dispatchMenuCommandMock.mockReset();
     document.body.replaceChildren();
+    overlayOpen = false;
   });
 
   afterEach(() => {
@@ -178,6 +224,7 @@ describe("createAppShellCommandHandlers.handleKeydown", () => {
       getSnapshot: () => ({}) as never,
       getCurrentWindowId: () => "win-1",
       getEditorRunner: () => null,
+      getOverlayOpen: () => overlayOpen,
       openProjectSearch: () => {},
       setConsoleOpen: () => {},
     });
@@ -222,12 +269,38 @@ describe("createAppShellCommandHandlers.handleKeydown", () => {
     );
   });
 
-  it("does not run non-global commands while focus is in contenteditable", () => {
+  it("does not run non-global commands while focus is in ordinary contenteditable", () => {
     const editable = document.createElement("div");
     editable.setAttribute("contenteditable", "true");
     document.body.appendChild(editable);
     const { handleKeydown } = createHandlers();
     const event = keyEvent({ key: "d", metaKey: true }, editable);
+    handleKeydown(event);
+    expect(dispatchMenuCommandMock).not.toHaveBeenCalled();
+  });
+
+  it("runs editor app commands while focus is in CodeMirror", () => {
+    const cm = document.createElement("div");
+    cm.className = "cm-editor";
+    const content = document.createElement("div");
+    content.className = "cm-content";
+    content.setAttribute("contenteditable", "true");
+    cm.appendChild(content);
+    document.body.appendChild(cm);
+
+    const { handleKeydown } = createHandlers();
+    const event = keyEvent({ key: "d", metaKey: true }, content);
+    handleKeydown(event);
+    expect(dispatchMenuCommandMock).toHaveBeenCalledWith(
+      "edit.duplicateLine",
+      expect.any(Object),
+    );
+  });
+
+  it("ignores mapped commands while a modal overlay is open", () => {
+    overlayOpen = true;
+    const { handleKeydown } = createHandlers();
+    const event = keyEvent({ key: "s", metaKey: true });
     handleKeydown(event);
     expect(dispatchMenuCommandMock).not.toHaveBeenCalled();
   });

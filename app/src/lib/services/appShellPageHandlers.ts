@@ -15,7 +15,7 @@ import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { SettingsDialogTab } from "./settingsDialogUi";
 import {
   isAlwaysRunShellCommand,
-  isTargetInEditable,
+  isTargetInOrdinaryInput,
   resolveAppShellKeyRouting,
 } from "./appShellKeyRouting";
 
@@ -24,6 +24,8 @@ export interface AppShellCommandHandlersDeps {
   getSnapshot: () => AppDomainState;
   getCurrentWindowId: () => string;
   getEditorRunner: () => EditorCommandRunner | null;
+  /** True when a modal/picker owns the keyboard (session list, project search, …). */
+  getOverlayOpen?: () => boolean;
   openProjectSearch: (focusReplace: boolean) => void;
   setConsoleOpen: (open: boolean) => void;
 }
@@ -45,10 +47,9 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
     const command = keymapCommandForEvent(event);
     const decision = resolveAppShellKeyRouting({
       commandId: command,
-      // Overlay ownership is characterized in appShellKeyRouting tests; M0.2
-      // will pass the live overlay/picker state here.
-      overlayOpen: false,
-      targetInEditable: isTargetInEditable(event.target),
+      overlayOpen: deps.getOverlayOpen?.() ?? false,
+      targetInOrdinaryInput: isTargetInOrdinaryInput(event.target),
+      composing: event.isComposing,
       alwaysRunWhenMapped: command ? isAlwaysRunShellCommand(command) : false,
     });
     if (decision.action !== "run-command") {

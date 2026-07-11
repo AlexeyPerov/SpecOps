@@ -1,7 +1,7 @@
 /**
  * Editor host / action / query / capability contracts for the M0 foundations
- * series. Production still uses the flat `EditorCommandRunner` facade; M0.2
- * migrates callers onto these types incrementally.
+ * series. M0.2 routes commands through a pane-aware workbench runtime; the flat
+ * `EditorCommandRunner` remains a thin adapter for handlers and find/replace.
  *
  * SpecOps-native naming only — do not expose raw CodeMirror `EditorView`
  * outside `app/src/lib/editor/`.
@@ -158,8 +158,8 @@ export type EditorHost = {
 };
 
 /**
- * Compatibility facade used by today's command handlers and Svelte prop chain.
- * Prefer `EditorHost` actions/queries once M0.2 replaces the mutable runner.
+ * Compatibility facade used by command handlers and FindReplacePanel.
+ * Prefer `EditorHost` actions/queries; `editorHostToCommandRunner` adapts.
  * Kept as an adapter shape only for this refactor series (no persisted-data compat).
  */
 export type EditorCommandRunner = {

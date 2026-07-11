@@ -3,21 +3,25 @@ import { isEditorGlobalCommand } from "../commands/registry";
 import { SELECT_NEXT_OCCURRENCE_BINDING_DECISION } from "../types/editor";
 
 /**
- * Keyboard routing layers for the app shell (target precedence for M0.2+):
+ * Keyboard routing layers for the app shell:
  *   1. active modal / picker / overlay
- *   2. focused editor CodeMirror keymap (editor-local)
- *   3. permitted global / editor-global app command
- *   4. browser / default behavior
+ *   2. editor overlay (find/replace, go-to) — focus in their inputs uses ordinary-input guard
+ *   3. focused CodeMirror keymap (editor-local; app commands still resolve via workbench)
+ *   4. permitted global / editor-global app command
+ *   5. browser / default behavior
  *
- * M0.1 characterizes current production behavior and documents the target.
- * Overlay gating is encoded here for tests; production still passes
- * `overlayOpen: false` until M0.2 wires overlay ownership.
+ * Ordinary inputs and IME composition stay protected; CodeMirror `.cm-content`
+ * is not treated as a protected ordinary input so app editor commands can run.
  */
 
 export type AppShellKeyRoutingDecision =
   | {
       action: "ignore";
-      reason: "overlay-open" | "no-command" | "protected-input";
+      reason:
+        | "overlay-open"
+        | "no-command"
+        | "protected-input"
+        | "ime-composing";
     }
   | {
       action: "run-command";
@@ -30,12 +34,14 @@ export type AppShellKeyRoutingInput = {
   /** True when a modal, picker, or dialog should own Escape / chords. */
   overlayOpen: boolean;
   /**
-   * True when the event target is inside `input`, `textarea`, or
-   * `[contenteditable=true]` (CodeMirror's `.cm-content` matches this today).
+   * True when focus is in an ordinary `input` / `textarea` / `select` /
+   * non-CodeMirror contenteditable — not inside `.cm-editor`.
    */
-  targetInEditable: boolean;
+  targetInOrdinaryInput: boolean;
+  /** True while an IME composition session is active. */
+  composing?: boolean;
   /**
-   * Commands that always run even when the target is an editable
+   * Commands that always run even when the target is an ordinary editable
    * (find/replace and project search chords).
    */
   alwaysRunWhenMapped?: boolean;
@@ -48,11 +54,20 @@ export type AppShellKeyRoutingInput = {
 export function resolveAppShellKeyRouting(
   input: AppShellKeyRoutingInput,
 ): AppShellKeyRoutingDecision {
-  const { commandId, overlayOpen, targetInEditable, alwaysRunWhenMapped = false } =
-    input;
+  const {
+    commandId,
+    overlayOpen,
+    targetInOrdinaryInput,
+    composing = false,
+    alwaysRunWhenMapped = false,
+  } = input;
 
   if (overlayOpen) {
     return { action: "ignore", reason: "overlay-open" };
+  }
+
+  if (composing) {
+    return { action: "ignore", reason: "ime-composing" };
   }
 
   if (!commandId) {
@@ -63,18 +78,14 @@ export function resolveAppShellKeyRouting(
     return { action: "run-command", commandId, preventDefault: true };
   }
 
-  if (targetInEditable && !isEditorGlobalCommand(commandId)) {
-    // Current production: treating CodeMirror as contenteditable blocks
-    // non-global app commands (including edit.*). Editor-native CM keymaps
-    // still handle their own chords. M0.2 will distinguish CM focus so
-    // permitted editor app commands can run while ordinary inputs stay protected.
+  if (targetInOrdinaryInput && !isEditorGlobalCommand(commandId)) {
     return { action: "ignore", reason: "protected-input" };
   }
 
   return { action: "run-command", commandId, preventDefault: true };
 }
 
-/** Find/replace and project-search chords bypass the editable guard today. */
+/** Find/replace and project-search chords bypass the ordinary-input guard. */
 export function isAlwaysRunShellCommand(commandId: AppCommandId): boolean {
   return (
     commandId === "app.toggleFindReplace" ||
@@ -83,11 +94,37 @@ export function isAlwaysRunShellCommand(commandId: AppCommandId): boolean {
   );
 }
 
+/** True when the event target is inside a CodeMirror editor host. */
+export function isTargetInCodeMirror(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return Boolean(target.closest(".cm-editor"));
+}
+
+/**
+ * Ordinary inputs that should block non-global app commands.
+ * CodeMirror contenteditable is excluded so editor app commands can run.
+ */
+export function isTargetInOrdinaryInput(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  if (isTargetInCodeMirror(target)) {
+    return false;
+  }
+  return Boolean(target.closest("input, textarea, select, [contenteditable=true]"));
+}
+
+/**
+ * @deprecated Prefer `isTargetInOrdinaryInput` + `isTargetInCodeMirror`.
+ * Kept for characterization of the broader editable surface (includes CM).
+ */
 export function isTargetInEditable(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false;
   }
-  return Boolean(target.closest("input, textarea, [contenteditable=true]"));
+  return Boolean(target.closest("input, textarea, select, [contenteditable=true]"));
 }
 
 /** Re-export for tests and M2 planning without pulling the full editor types. */

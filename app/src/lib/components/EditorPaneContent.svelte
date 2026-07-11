@@ -25,8 +25,8 @@
   } from "../domain/contracts";
   import { deriveAppShellDocumentView } from "../services/appShellDocumentView";
   import { appState } from "../state/appState";
-  import type { EditorCommandRunner } from "../types/editor";
   import { emptySet } from "../collections/emptyCollections";
+  import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
 
   let {
     paneId,
@@ -64,7 +64,6 @@
     replaceValue = $bindable(""),
     findCaseSensitive = $bindable(false),
     goToLineValue = $bindable(""),
-    editorRunner = null,
     onActivePaneElement,
     onConfirmLargeFile,
     onMarkdownViewModeChange,
@@ -89,7 +88,6 @@
     onOpenTimeline,
     onGoToLine,
     onCloseGoTo,
-    onRegisterEditorCommandRunner,
     notify,
   }: {
     paneId: string;
@@ -122,7 +120,6 @@
     replaceValue?: string;
     findCaseSensitive?: boolean;
     goToLineValue?: string;
-    editorRunner?: EditorCommandRunner | null;
     onActivePaneElement?: (element: HTMLElement | null) => void;
     onConfirmLargeFile: () => void | Promise<void>;
     onMarkdownViewModeChange: (mode: "edit" | "split" | "preview") => void;
@@ -147,9 +144,11 @@
     onOpenTimeline?: () => void;
     onGoToLine: () => void;
     onCloseGoTo: () => void;
-    onRegisterEditorCommandRunner?: (runner: EditorCommandRunner) => void;
     notify: (message: string) => void;
   } = $props();
+
+  const workbench = getEditorWorkbenchRuntime();
+  const getActiveEditorRunner = () => workbench.getActiveRunner();
 
   let paneSectionEl = $state<HTMLElement | null>(null);
 
@@ -276,6 +275,7 @@
       markdownEnabled={documentView.isMarkdownDocument}
       content={paneDocument?.content ?? ""}
       documentId={paneDocument?.id ?? null}
+      {paneId}
       documentFilePath={paneDocument?.filePath ?? null}
       scrollTop={paneDocument?.scrollTop ?? 0}
       language={paneDocument?.language ?? "plaintext"}
@@ -291,7 +291,6 @@
       {onMarkdownViewModeChange}
       {onUntitledTitleRefresh}
       {onScrollTopChange}
-      registerEditorCommandRunner={isActivePane ? onRegisterEditorCommandRunner : undefined}
     />
   {/if}
 
@@ -300,7 +299,7 @@
       bind:findQuery
       bind:replaceValue
       bind:findCaseSensitive
-      {editorRunner}
+      getEditorRunner={getActiveEditorRunner}
       {notify}
       documentId={paneDocument?.id ?? null}
     />

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import AppShell from "../lib/components/AppShell.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import {
@@ -15,7 +15,8 @@
     setupAppShellMount,
   } from "../lib/services/appShellPageHandlers";
   import { createAppShellProjectTreeHandlers } from "../lib/services/appShellProjectTreeHandlers";
-  import type { EditorCommandRunner } from "../lib/types/editor";
+  import { createEditorWorkbenchRuntime } from "../lib/editor/editorWorkbenchRuntime";
+  import { setEditorWorkbenchRuntime } from "../lib/editor/editorWorkbenchContext";
   import { appState } from "../lib/state/appState";
   import {
     findDocumentByPath,
@@ -152,7 +153,6 @@
   let addMultipleEntries = $state<ReadonlyArray<{ path: string; name: string; exists: boolean }>>([]);
   let addMultipleSelected = $state<Set<string>>(new Set());
   let statusMessage = $state("Ready");
-  let editorRunner = $state<EditorCommandRunner | null>(null);
   let currentWindowId = $state("main");
   let findQuery = $state("");
   let replaceValue = $state("");
@@ -205,6 +205,29 @@
   const activeContext = $derived(getActiveContextSnapshot(snapshot));
   const session = $derived(activeContext.session);
   const documents = $derived(activeContext.documents);
+
+  const editorWorkbench = createEditorWorkbenchRuntime({
+    getActivePaneId: () =>
+      getActiveContextSnapshot(appState.getSnapshot()).session.editorLayout.activePaneId,
+    getActiveDocumentId: () => {
+      const active = getSessionActiveTab(
+        getActiveContextSnapshot(appState.getSnapshot()).session,
+      );
+      return active ? tabDocumentId(active) : null;
+    },
+  });
+  setEditorWorkbenchRuntime(editorWorkbench);
+
+  onDestroy(() => {
+    editorWorkbench.dispose();
+  });
+
+  $effect(() => {
+    return editorWorkbench.subscribeCursorStatus(({ line, column }) => {
+      appState.setCursor(line, column);
+    });
+  });
+
   /** Stable key for external file-watcher sync; ignores non-path snapshot churn. */
   const externalWatcherSyncKey = $derived(externalFileWatcherSyncKey(snapshot));
   const activeContextId = $derived(snapshot.contexts.activeContextId);
@@ -586,7 +609,7 @@
     await openAndActivatePath(path);
     if (line > 0) {
       await tick();
-      editorRunner?.goToLine(line);
+      editorWorkbench.getActiveRunner()?.goToLine(line);
     }
   }
 
@@ -666,7 +689,13 @@
     notify,
     getSnapshot: () => snapshot,
     getCurrentWindowId: () => currentWindowId,
-    getEditorRunner: () => editorRunner,
+    getEditorRunner: () => editorWorkbench.getActiveRunner(),
+    getOverlayOpen: () =>
+      sessionListOpen ||
+      addMultipleOpen ||
+      projectSearchOpen ||
+      timelineOpen ||
+      Boolean(workspaceContextMenu),
     openProjectSearch: (focusReplace) => {
       projectSearchOpen = true;
       projectSearchFocusReplace = focusReplace;
@@ -696,7 +725,7 @@
       largeFileConfirming = value;
     },
     getGoToLineValue: () => goToLineValue,
-    getEditorRunner: () => editorRunner,
+    getEditorRunner: () => editorWorkbench.getActiveRunner(),
     getUntitledTitleDebounceTimer: () => untitledTitleDebounceTimer,
     setUntitledTitleDebounceTimer: (timer) => {
       untitledTitleDebounceTimer = timer;
@@ -1222,7 +1251,6 @@
   bind:editorPaneEl
   bind:workspaceContextMenuEl
   bind:consoleHeightPx
-  bind:editorRunner
   bind:findQuery
   bind:replaceValue
   bind:findCaseSensitive

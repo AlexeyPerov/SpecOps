@@ -3,7 +3,6 @@
   import { readFile } from "@tauri-apps/plugin-fs";
   import DocumentEditor from "./DocumentEditor.svelte";
   import type { EditorLanguageId } from "../editor/editorLanguage";
-  import type { EditorCommandRunner } from "../types/editor";
   import { mimeTypeForImagePath } from "../services/imagePreviewSrc";
   import {
     describeMarkdownPreviewLinkResult,
@@ -13,6 +12,7 @@
 
   export let content = "";
   export let documentId: string | null = null;
+  export let paneId: string;
   export let documentFilePath: string | null = null;
   export let scrollTop = 0;
   export let language: EditorLanguageId = "markdown";
@@ -29,8 +29,6 @@
   export let onMarkdownViewModeChange: (mode: "edit" | "split" | "preview") => void = () => {};
   export let onUntitledTitleRefresh: ((documentId: string) => void) | undefined = undefined;
   export let onScrollTopChange: (documentId: string, scrollTop: number) => void = () => {};
-  export let registerEditorCommandRunner: ((runner: EditorCommandRunner) => void) | undefined =
-    undefined;
 
   let markdownEditorPaneEl: HTMLDivElement | null = null;
   let markdownPreviewPaneEl: HTMLDivElement | null = null;
@@ -224,6 +222,7 @@
         <DocumentEditor
           {content}
           {documentId}
+          {paneId}
           {scrollTop}
           {wrapLines}
           {zoomPercent}
@@ -233,7 +232,6 @@
           {onStatusMessage}
           {onUntitledTitleRefresh}
           {onScrollTopChange}
-          {registerEditorCommandRunner}
         />
       </div>
       {#if markdownEnabled && markdownViewMode === "split"}

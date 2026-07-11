@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-11 17:08 — M0.2 pane-aware editor workbench runtime
+
+- **M0.2-1 Runtime** — `app/src/lib/editor/editorWorkbenchRuntime.ts` owns route/window-scoped host registration keyed by `{ paneId, documentId, generation }`; rejects stale register/unregister; resolves the active host by pane + document identity. Typed Svelte context via `editorWorkbenchContext.ts`. Host factory `editorHostFactory.ts` adapts the command runner to `EditorHost` actions/queries without exposing `EditorView`.
+- **M0.2-2 Prop chain removed** — dropped `bind:editorRunner` / `registerEditorCommandRunner` across `+page`, `AppShell`, `EditorPaneContent`, `MarkdownEditorPane`, `DocumentEditor`, `EditorSurface`. Every mounted text pane registers with the workbench; menu/shortcut/find/go-to/project-search resolve `getActiveRunner()` at call time. Cursor status publishes through runtime subscriptions (inactive panes cannot overwrite the status bar).
+- **M0.2-3 Key ownership** — `appShellKeyRouting` distinguishes CodeMirror vs ordinary inputs, ignores IME composition, and wires live modal/picker overlay state from `+page`. App editor commands run while focus is in `.cm-editor`; ordinary inputs stay protected.
+- **Tests:** `editorWorkbenchRuntime.test.ts` (stale generation, active-pane/document match, cursor gating, runner adapter); expanded `appShellKeyRouting.test.ts` (CM vs input, overlay, IME).
+- **`specs/text-editor-parity-v3/m0-editor-foundations/m0-2-…-execution-plan.md`** — all tasks `[DONE]`, status Done.
+- **Validation:** `npm test` passes (2573 tests). `npm run check` has no new errors in M0.2 files (pre-existing errors elsewhere unchanged).
+
 ## 2026-07-11 15:52 — M0.1 editor characterization and contracts
 
 - **M0.1-1 CodeMirror fixture** — `app/src/lib/editor/codeMirrorFixture.ts` mounts an `EditorView` in jsdom without a Svelte harness (history, wrap/zoom compartments, muted content replace, search highlight, command-runner factory). Characterization suite `editorCharacterization.test.ts` covers dirty reporting, non-empty selection, muted external replace, wrap/zoom, search marks, destroy cleanup, active-pane `getView` routing, and pane-scoped A→B→A history/selection (documents M0.3 document-isolation target).

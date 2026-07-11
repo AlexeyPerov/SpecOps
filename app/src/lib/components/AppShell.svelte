@@ -29,7 +29,6 @@
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import TitleBar from "./TitleBar.svelte";
-  import type { EditorCommandRunner } from "../types/editor";
   import type {
     SessionIndexEntry,
     AppCommandId,
@@ -337,7 +336,6 @@
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
-    editorRunner = $bindable<EditorCommandRunner | null>(null),
     findQuery = $bindable(""),
     replaceValue = $bindable(""),
     findCaseSensitive = $bindable(false),
@@ -363,7 +361,6 @@
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
-    editorRunner?: EditorCommandRunner | null;
     findQuery?: string;
     replaceValue?: string;
     findCaseSensitive?: boolean;
@@ -376,19 +373,6 @@
 
   const gitIntegrationEnabled = $derived($appState.settings.gitIntegration.enabled);
   const activePaneId = $derived(editor.session.editorLayout.activePaneId);
-
-  // F3-B: each pane keeps a stable editor host; only the active pane registers
-  // the command runner. Clear on pane switch so the new active pane re-registers.
-  $effect(() => {
-    void activePaneId;
-    editorRunner = null;
-  });
-
-  $effect(() => {
-    if (!editor.isTextEditorDocument) {
-      editorRunner = null;
-    }
-  });
 </script>
 
 <main class="shell">
@@ -477,7 +461,6 @@
             bind:replaceValue
             bind:findCaseSensitive
             bind:goToLineValue
-            {editorRunner}
             onActivePaneElement={(element) => {
               editorPaneEl = element;
             }}
@@ -504,9 +487,6 @@
             onOpenTimeline={timelineDialog?.onToggle}
             onGoToLine={editor.onGoToLine}
             onCloseGoTo={editor.onCloseGoTo}
-            onRegisterEditorCommandRunner={(runner) => {
-              editorRunner = runner;
-            }}
             notify={editor.notify}
           />
         {/snippet}

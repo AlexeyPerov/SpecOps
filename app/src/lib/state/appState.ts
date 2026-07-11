@@ -68,8 +68,6 @@ const initialState: AppDomainState = {
     cursorColumn: 1,
     zoomPercent: 100,
     wrapLines: true,
-    findReplaceOpen: false,
-    goToOpen: false,
     previewMode: "editor",
   },
   activityRailWidthPx: DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
@@ -328,36 +326,6 @@ function createStateStore() {
       update((state) => ({
         ...state,
         editor: { ...state.editor, previewMode: normalizedPreviewMode },
-      }));
-    },
-    toggleFindReplace() {
-      update((state) => ({
-        ...state,
-        editor: {
-          ...state.editor,
-          findReplaceOpen: !state.editor.findReplaceOpen,
-        },
-      }));
-    },
-    setFindReplaceOpen(findReplaceOpen: boolean) {
-      update((state) => ({
-        ...state,
-        editor: { ...state.editor, findReplaceOpen },
-      }));
-    },
-    toggleGoTo() {
-      update((state) => ({
-        ...state,
-        editor: {
-          ...state.editor,
-          goToOpen: !state.editor.goToOpen,
-        },
-      }));
-    },
-    setGoToOpen(goToOpen: boolean) {
-      update((state) => ({
-        ...state,
-        editor: { ...state.editor, goToOpen },
       }));
     },
     toggleWrap() {

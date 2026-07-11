@@ -1,181 +1,101 @@
 <script lang="ts">
-  import { onDestroy, tick } from "svelte";
-  import { readFile } from "@tauri-apps/plugin-fs";
+  import { tick } from "svelte";
   import DocumentEditor from "./DocumentEditor.svelte";
   import type { EditorLanguageId } from "../editor/editorLanguage";
-  import { mimeTypeForImagePath } from "../services/imagePreviewSrc";
-  import {
-    describeMarkdownPreviewLinkResult,
-    handleMarkdownPreviewLinkClick,
-  } from "../services/markdownPreviewLinks";
-  import { emptySet, emptyWeakSet } from "../collections/emptyCollections";
+  import { createMarkdownSplitScrollSync } from "../services/markdownSplitScrollSync";
+  import { createMarkdownPreviewImageFallbacks } from "../services/markdownPreviewImageFallbacks";
+  import { markdownPreviewLinkAttachment } from "../services/markdownPreviewLinkAttachment";
 
-  export let content = "";
-  export let documentId: string | null = null;
-  export let paneId: string;
-  export let documentFilePath: string | null = null;
-  export let scrollTop = 0;
-  export let language: EditorLanguageId = "markdown";
-  export let wrapLines = false;
-  export let zoomPercent = 100;
-  export let decoratePlaintextSymbols = true;
-  export let showMinimap = true;
-  export let markdownEnabled = true;
-  export let markdownHtml = "";
-  export let storedMarkdownViewMode: "edit" | "split" | "preview" = "edit";
-  export let canFitSplit = true;
-  export let windowId = "main";
-  export let onStatusMessage: (message: string) => void = () => {};
-  export let onMarkdownViewModeChange: (mode: "edit" | "split" | "preview") => void = () => {};
-  export let onUntitledTitleRefresh: ((documentId: string) => void) | undefined = undefined;
-  export let onScrollTopChange: (documentId: string, scrollTop: number) => void = () => {};
+  let {
+    content = "",
+    documentId = null as string | null,
+    paneId,
+    documentFilePath = null as string | null,
+    scrollTop = 0,
+    language = "markdown" as EditorLanguageId,
+    wrapLines = false,
+    zoomPercent = 100,
+    decoratePlaintextSymbols = true,
+    showMinimap = true,
+    markdownEnabled = true,
+    markdownHtml = "",
+    storedMarkdownViewMode = "edit" as "edit" | "split" | "preview",
+    canFitSplit = true,
+    windowId = "main",
+    onStatusMessage = (_message: string) => {},
+    onMarkdownViewModeChange = (_mode: "edit" | "split" | "preview") => {},
+    onUntitledTitleRefresh = undefined as ((documentId: string) => void) | undefined,
+    onScrollTopChange = (_documentId: string, _scrollTop: number) => {},
+  }: {
+    content?: string;
+    documentId?: string | null;
+    paneId: string;
+    documentFilePath?: string | null;
+    scrollTop?: number;
+    language?: EditorLanguageId;
+    wrapLines?: boolean;
+    zoomPercent?: number;
+    decoratePlaintextSymbols?: boolean;
+    showMinimap?: boolean;
+    markdownEnabled?: boolean;
+    markdownHtml?: string;
+    storedMarkdownViewMode?: "edit" | "split" | "preview";
+    canFitSplit?: boolean;
+    windowId?: string;
+    onStatusMessage?: (message: string) => void;
+    onMarkdownViewModeChange?: (mode: "edit" | "split" | "preview") => void;
+    onUntitledTitleRefresh?: ((documentId: string) => void) | undefined;
+    onScrollTopChange?: (documentId: string, scrollTop: number) => void;
+  } = $props();
 
-  let markdownEditorPaneEl: HTMLDivElement | null = null;
-  let markdownPreviewPaneEl: HTMLDivElement | null = null;
-  let standalonePreviewEl: HTMLDivElement | null = null;
-  let splitScrollCleanup: (() => void) | null = null;
-  /** Object URLs we created as image fallbacks, revoked when the doc changes. */
-  let fallbackObjectUrls = emptySet<string>();
+  // Imperative DOM handles — `$state.raw` so bind:this reassignments notify
+  // effects without deep-proxying the element.
+  let markdownEditorPaneEl = $state.raw<HTMLDivElement | null>(null);
+  let markdownPreviewPaneEl = $state.raw<HTMLDivElement | null>(null);
+  let standalonePreviewEl = $state.raw<HTMLDivElement | null>(null);
 
-  $: markdownViewMode = !markdownEnabled
-    ? "edit"
-    : storedMarkdownViewMode === "split" && !canFitSplit
+  const imageFallbacks = createMarkdownPreviewImageFallbacks({
+    waitForLayout: () => tick(),
+  });
+
+  const markdownViewMode = $derived(
+    !markdownEnabled
       ? "edit"
-      : storedMarkdownViewMode;
+      : storedMarkdownViewMode === "split" && !canFitSplit
+        ? "edit"
+        : storedMarkdownViewMode,
+  );
 
-  // Revoke blob fallbacks from the previous document before wiring the new one.
-  $: documentId, revokeFallbackUrls();
+  const previewLinkAttach = $derived(
+    markdownPreviewLinkAttachment({
+      getDocumentFilePath: () => documentFilePath,
+      getWindowId: () => windowId,
+      onStatusMessage,
+    }),
+  );
 
-  $: if (markdownViewMode === "split") {
-    void setupSplitScrollSync();
-  } else {
-    teardownSplitScrollSync();
-  }
-
-  // After the preview HTML is (re)injected, wire a blob fallback onto every
-  // local image so it still renders if the asset-protocol `src` fails to load
-  // (mirrors ImagePreviewPane.svelte's readFile → blob: onerror path). Attaching
-  // via addEventListener is CSP-safe (script-src has no 'unsafe-inline').
-  $: markdownHtml, markdownViewMode, void wireImageFallbacks();
-
-  async function wireImageFallbacks(): Promise<void> {
-    await tick();
-    const panes = [markdownPreviewPaneEl, standalonePreviewEl];
-    const handled = emptyWeakSet<HTMLImageElement>();
-    for (const pane of panes) {
-      if (!pane) continue;
-      for (const img of pane.querySelectorAll<HTMLImageElement>("img[data-md-local-path]")) {
-        if (handled.has(img)) continue;
-        handled.add(img);
-        attachImageFallback(img);
-      }
+  $effect(() => {
+    if (markdownViewMode !== "split") {
+      return;
     }
-  }
-
-  function attachImageFallback(img: HTMLImageElement): void {
-    const localPath = img.getAttribute("data-md-local-path");
-    if (!localPath || img.dataset.mdFallbackWired === "1") return;
-    img.dataset.mdFallbackWired = "1";
-    img.addEventListener("error", () => {
-      void loadBlobFallback(img, localPath);
+    const sync = createMarkdownSplitScrollSync({
+      getEditorRoot: () => markdownEditorPaneEl,
+      getPreviewScroller: () => markdownPreviewPaneEl,
+      waitForLayout: () => tick(),
     });
-  }
-
-  async function loadBlobFallback(img: HTMLImageElement, localPath: string): Promise<void> {
-    // Already swapped to a blob URL for this image.
-    if (img.src.startsWith("blob:")) return;
-    try {
-      const bytes = await readFile(localPath);
-      const url = URL.createObjectURL(
-        new Blob([bytes], { type: mimeTypeForImagePath(localPath) }),
-      );
-      fallbackObjectUrls.add(url);
-      img.src = url;
-    } catch {
-      // Leave the broken asset-protocol src; nothing more we can do.
-    }
-  }
-
-  function revokeFallbackUrls(): void {
-    for (const url of fallbackObjectUrls) {
-      URL.revokeObjectURL(url);
-    }
-    fallbackObjectUrls.clear();
-  }
-
-  function teardownSplitScrollSync(): void {
-    splitScrollCleanup?.();
-    splitScrollCleanup = null;
-  }
-
-  function syncByRatio(source: HTMLElement, target: HTMLElement): void {
-    const sourceScrollable = source.scrollHeight - source.clientHeight;
-    const targetScrollable = target.scrollHeight - target.clientHeight;
-    if (sourceScrollable <= 0 || targetScrollable <= 0) {
-      if (target.scrollTop !== 0) {
-        target.scrollTop = 0;
-      }
-      return;
-    }
-    const ratio = source.scrollTop / sourceScrollable;
-    const nextScrollTop = Math.round(ratio * targetScrollable);
-    if (Math.abs(target.scrollTop - nextScrollTop) <= 1) {
-      return;
-    }
-    target.scrollTop = nextScrollTop;
-  }
-
-  async function setupSplitScrollSync(): Promise<void> {
-    teardownSplitScrollSync();
-    await tick();
-
-    const editorScroller = markdownEditorPaneEl?.querySelector(".cm-scroller") as HTMLElement | null;
-    const previewScroller = markdownPreviewPaneEl;
-    if (!editorScroller || !previewScroller) {
-      return;
-    }
-
-    const onEditorScroll = (event: Event): void => {
-      if (!event.isTrusted) {
-        return;
-      }
-      syncByRatio(editorScroller, previewScroller);
+    return () => {
+      sync.dispose();
     };
+  });
 
-    const onPreviewScroll = (event: Event): void => {
-      if (!event.isTrusted) {
-        return;
-      }
-      syncByRatio(previewScroller, editorScroller);
+  $effect(() => {
+    documentId;
+    markdownHtml;
+    markdownViewMode;
+    void imageFallbacks.wire([markdownPreviewPaneEl, standalonePreviewEl]);
+    return () => {
+      imageFallbacks.dispose();
     };
-
-    editorScroller.addEventListener("scroll", onEditorScroll, { passive: true });
-    previewScroller.addEventListener("scroll", onPreviewScroll, { passive: true });
-    syncByRatio(editorScroller, previewScroller);
-
-    splitScrollCleanup = () => {
-      editorScroller.removeEventListener("scroll", onEditorScroll);
-      previewScroller.removeEventListener("scroll", onPreviewScroll);
-    };
-  }
-
-  async function onMarkdownPreviewClick(event: MouseEvent): Promise<void> {
-    const result = await handleMarkdownPreviewLinkClick(event, {
-      documentFilePath,
-      windowId,
-    });
-    if (!result) {
-      return;
-    }
-    const message = describeMarkdownPreviewLinkResult(result);
-    if (message) {
-      onStatusMessage(message);
-    }
-  }
-
-  onDestroy(() => {
-    teardownSplitScrollSync();
-    revokeFallbackUrls();
   });
 </script>
 
@@ -212,7 +132,7 @@
     <div
       class="markdown-preview markdown-preview-standalone"
       bind:this={standalonePreviewEl}
-      onclick={onMarkdownPreviewClick}
+      {@attach previewLinkAttach}
     >
       {@html markdownHtml}
     </div>
@@ -240,7 +160,7 @@
         <div
           class="markdown-preview markdown-preview-pane"
           bind:this={markdownPreviewPaneEl}
-          onclick={onMarkdownPreviewClick}
+          {@attach previewLinkAttach}
         >
           {@html markdownHtml}
         </div>

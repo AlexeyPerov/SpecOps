@@ -131,8 +131,6 @@ export function createWorkspaceContextsSlice(deps: {
         editor: {
           ...getInitialEditor(),
           ...snapshot.editorPreferences,
-          findReplaceOpen: false,
-          goToOpen: false,
           previewMode: "editor",
         },
         activityRailWidthPx: railWidth,
@@ -205,8 +203,6 @@ export function createWorkspaceContextsSlice(deps: {
           },
           editor: {
             ...state.editor,
-            findReplaceOpen: false,
-            goToOpen: false,
             previewMode: "editor",
           },
         };
@@ -240,8 +236,6 @@ export function createWorkspaceContextsSlice(deps: {
           },
           editor: {
             ...state.editor,
-            findReplaceOpen: false,
-            goToOpen: false,
             previewMode: "editor",
           },
         };
@@ -279,8 +273,6 @@ export function createWorkspaceContextsSlice(deps: {
           },
           editor: {
             ...state.editor,
-            findReplaceOpen: false,
-            goToOpen: false,
             previewMode: "editor",
           },
         };

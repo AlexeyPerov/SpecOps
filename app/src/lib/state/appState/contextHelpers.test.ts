@@ -81,8 +81,6 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
       cursorColumn: 1,
       zoomPercent: 100,
       wrapLines: true,
-      findReplaceOpen: false,
-      goToOpen: false,
       previewMode: "editor",
     },
     activityRailWidthPx: 48,

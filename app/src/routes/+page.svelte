@@ -19,6 +19,8 @@
   import { setEditorWorkbenchRuntime } from "../lib/editor/editorWorkbenchContext";
   import { createEditorDocumentSessionCache } from "../lib/editor/editorDocumentSessionCache";
   import { setEditorDocumentSessionCache } from "../lib/editor/editorDocumentSessionContext";
+  import { createEditorToolController } from "../lib/editor/editorToolController";
+  import { setEditorToolController } from "../lib/editor/editorToolContext";
   import { subscribeDocumentDiskReload } from "../lib/editor/editorSessionLifecycle";
   import { appState } from "../lib/state/appState";
   import {
@@ -157,10 +159,6 @@
   let addMultipleSelected = $state<Set<string>>(new Set());
   let statusMessage = $state("Ready");
   let currentWindowId = $state("main");
-  let findQuery = $state("");
-  let replaceValue = $state("");
-  let findCaseSensitive = $state(false);
-  let goToLineValue = $state("");
   let shellMainRowEl = $state<HTMLDivElement | null>(null);
   let editorShellEl = $state<HTMLElement | null>(null);
   let editorPaneEl = $state<HTMLElement | null>(null);
@@ -224,10 +222,7 @@
   const editorSessionCache = createEditorDocumentSessionCache();
   setEditorDocumentSessionCache(editorSessionCache);
 
-  onDestroy(() => {
-    editorWorkbench.dispose();
-    editorSessionCache.clear();
-  });
+  // editorTools is created after modal state declarations below.
 
   $effect(() => {
     return editorWorkbench.subscribeCursorStatus(({ line, column }) => {
@@ -331,6 +326,53 @@
    */
   let timelineOpen = $state(false);
   let timelineSearch = $state("");
+
+  const editorTools = createEditorToolController({
+    getActiveBinding: () => {
+      const active = getSessionActiveTab(
+        getActiveContextSnapshot(appState.getSnapshot()).session,
+      );
+      const documentId = active ? tabDocumentId(active) : null;
+      if (!documentId) {
+        return null;
+      }
+      return {
+        paneId: getActiveContextSnapshot(appState.getSnapshot()).session.editorLayout
+          .activePaneId,
+        documentId,
+      };
+    },
+    focusEditor: () => {
+      editorWorkbench.focusActive();
+    },
+    isModalOpen: () =>
+      sessionListOpen ||
+      addMultipleOpen ||
+      projectSearchOpen ||
+      timelineOpen ||
+      Boolean(workspaceContextMenu),
+  });
+  setEditorToolController(editorTools);
+
+  onDestroy(() => {
+    editorWorkbench.dispose();
+    editorSessionCache.clear();
+    editorTools.dispose();
+  });
+
+  $effect(() => {
+    // Close editor tools on pane/document/context changes or when a modal opens.
+    activeContextId;
+    session.editorLayout.activePaneId;
+    getSessionActiveTab(session);
+    sessionListOpen;
+    addMultipleOpen;
+    projectSearchOpen;
+    timelineOpen;
+    workspaceContextMenu;
+    editorTools.syncToEnvironment();
+  });
+
   const activeMessages = $derived(chatStore.getMessages());
   const openSessionIds = $derived(
     new Set(
@@ -708,6 +750,7 @@
     getSnapshot: () => snapshot,
     getCurrentWindowId: () => currentWindowId,
     getEditorRunner: () => editorWorkbench.getActiveRunner(),
+    getEditorTools: () => editorTools,
     getOverlayOpen: () =>
       sessionListOpen ||
       addMultipleOpen ||
@@ -742,7 +785,7 @@
     setLargeFileConfirming: (value) => {
       largeFileConfirming = value;
     },
-    getGoToLineValue: () => goToLineValue,
+    getGoToLineValue: () => editorTools.getSnapshot().goToLineValue,
     getEditorRunner: () => editorWorkbench.getActiveRunner(),
     getUntitledTitleDebounceTimer: () => untitledTitleDebounceTimer,
     setUntitledTitleDebounceTimer: (timer) => {
@@ -1269,10 +1312,6 @@
   bind:editorPaneEl
   bind:workspaceContextMenuEl
   bind:consoleHeightPx
-  bind:findQuery
-  bind:replaceValue
-  bind:findCaseSensitive
-  bind:goToLineValue
   {consoleOpen}
   onConsoleHeightCommit={persistConsoleHeightNow}
   projectSearch={{
@@ -1399,8 +1438,6 @@
     previewFileSizeBytes: documentView.previewFileSizeBytes,
     markdownHtml: documentView.markdownHtml,
     previewMode: snapshot.editor.previewMode,
-    findReplaceOpen: snapshot.editor.findReplaceOpen,
-    goToOpen: snapshot.editor.goToOpen,
     wrapLines: snapshot.editor.wrapLines,
     zoomPercent: snapshot.editor.zoomPercent,
     cursorLine: snapshot.editor.cursorLine,
@@ -1430,7 +1467,6 @@
     onScrollTopChange: handleDocumentScrollTop,
     onDeleteSessionFromChat: handleDeleteSessionFromChat,
     onGoToLine: runGoToLine,
-    onCloseGoTo: () => appState.setGoToOpen(false),
     notify,
     onForkSession: (messageId?: string) => {
       const sessionId = chatStore.getActiveSessionId();

@@ -117,6 +117,7 @@ import { openAllInFolder } from "../../services/openAllInFolder";
 import { dirname } from "@tauri-apps/api/path";
 import { moveTabToNewWindow } from "../../services/tabWindowTransfer";
 import type { EditorCommandRunner } from "../../types/editor";
+import { createEditorToolController } from "../../editor/editorToolController";
 
 const closeTabWithUnsavedPromptMock = vi.mocked(closeTabWithUnsavedPrompt);
 const requestOpenPathMock = vi.mocked(requestOpenPath);
@@ -194,6 +195,11 @@ function createCommandContext(overrides?: {
 }) {
   const notify = vi.fn();
   const editorRunner = overrides?.editorRunner ?? null;
+  const editorTools = createEditorToolController({
+    getActiveBinding: () => ({ paneId: "pane-1", documentId: "doc-1" }),
+    focusEditor: () => {},
+    isModalOpen: () => false,
+  });
   return {
     context: {
       notify,
@@ -201,6 +207,7 @@ function createCommandContext(overrides?: {
       getWindowId: () => "main",
       confirm: vi.fn(overrides?.confirm ?? (() => Promise.resolve(true))),
       getEditorRunner: vi.fn(() => editorRunner),
+      getEditorTools: () => editorTools,
     },
     notify,
     editorRunner,

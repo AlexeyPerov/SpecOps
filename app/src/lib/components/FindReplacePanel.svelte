@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import type { EditorCommandRunner } from "../types/editor";
-  import { appState } from "../state/appState";
 
   let {
     findQuery = $bindable(""),
@@ -10,6 +9,7 @@
     getEditorRunner = (() => null) as () => EditorCommandRunner | null,
     notify = (_message: string) => {},
     documentId = null as string | null,
+    onClose = () => {},
   }: {
     findQuery?: string;
     replaceValue?: string;
@@ -18,6 +18,7 @@
     getEditorRunner?: () => EditorCommandRunner | null;
     notify?: (message: string) => void;
     documentId?: string | null;
+    onClose?: () => void;
   } = $props();
 
   let findInputEl = $state<HTMLInputElement | undefined>(undefined);
@@ -25,9 +26,10 @@
   let panelEl = $state<HTMLElement | undefined>(undefined);
   let matchCount = $state(0);
   let currentMatch = $state(0);
+  // Imperative timer — not reactive state.
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let showReplace = $state(true);
-  let mounted = $state(false);
+  let mounted = false;
 
   const matchCountText = $derived(
     findQuery
@@ -41,7 +43,7 @@
 
   function close(): void {
     getEditorRunner()?.setSearchQuery("", false);
-    appState.setFindReplaceOpen(false);
+    onClose();
   }
 
   function runIncrementalSearch(): void {

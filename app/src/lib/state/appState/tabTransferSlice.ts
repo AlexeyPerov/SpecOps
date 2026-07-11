@@ -186,8 +186,6 @@ export function createTabTransferSlice(deps: {
             },
             editor: {
               ...state.editor,
-              findReplaceOpen: false,
-              goToOpen: false,
               previewMode: "editor",
             },
           };
@@ -219,8 +217,6 @@ export function createTabTransferSlice(deps: {
           },
           editor: {
             ...state.editor,
-            findReplaceOpen: false,
-            goToOpen: false,
             previewMode: "editor",
           },
         };

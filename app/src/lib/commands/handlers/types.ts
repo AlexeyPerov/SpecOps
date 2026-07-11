@@ -1,5 +1,6 @@
 import type { AppCommandId, AppDomainState } from "../../domain/contracts";
 import type { EditorCommandRunner } from "../../types/editor";
+import type { EditorToolController } from "../../editor/editorToolController";
 
 export type CommandContext = {
   notify: (message: string) => void;
@@ -8,6 +9,8 @@ export type CommandContext = {
   /** Promise-based confirm (in-app dialog; M3). Resolves true on confirm. */
   confirm: (message: string) => Promise<boolean>;
   getEditorRunner: () => EditorCommandRunner | null;
+  /** Window-local editor chrome tools (find/replace, go-to). */
+  getEditorTools: () => EditorToolController;
   /** Opens (or focuses) the Find-in-Project panel. No-op when not registered. */
   openProjectSearch?: (focusReplace: boolean) => void;
   /** Sets console panel visibility. No-op when not registered. */

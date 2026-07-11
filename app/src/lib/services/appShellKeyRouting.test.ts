@@ -10,6 +10,7 @@ import {
   SELECT_NEXT_OCCURRENCE_BINDING_DECISION,
 } from "./appShellKeyRouting";
 import { createAppShellCommandHandlers } from "./appShellPageHandlers";
+import { createEditorToolController } from "../editor/editorToolController";
 
 vi.mock("../commands/registry", async () => {
   const actual = await vi.importActual<typeof import("../commands/registry")>(
@@ -224,6 +225,12 @@ describe("createAppShellCommandHandlers.handleKeydown", () => {
       getSnapshot: () => ({}) as never,
       getCurrentWindowId: () => "win-1",
       getEditorRunner: () => null,
+      getEditorTools: () =>
+        createEditorToolController({
+          getActiveBinding: () => null,
+          focusEditor: () => {},
+          isModalOpen: () => false,
+        }),
       getOverlayOpen: () => overlayOpen,
       openProjectSearch: () => {},
       setConsoleOpen: () => {},

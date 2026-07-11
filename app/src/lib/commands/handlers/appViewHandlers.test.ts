@@ -117,6 +117,7 @@ import { openAllInFolder } from "../../services/openAllInFolder";
 import { dirname } from "@tauri-apps/api/path";
 import { moveTabToNewWindow } from "../../services/tabWindowTransfer";
 import type { EditorCommandRunner } from "../../types/editor";
+import { createEditorToolController } from "../../editor/editorToolController";
 
 const closeTabWithUnsavedPromptMock = vi.mocked(closeTabWithUnsavedPrompt);
 const requestOpenPathMock = vi.mocked(requestOpenPath);
@@ -198,6 +199,11 @@ function createCommandContext(overrides?: {
   const editorRunner = overrides?.editorRunner ?? null;
   const openProjectSearch = overrides?.openProjectSearch ?? vi.fn();
   const setConsoleOpen = overrides?.setConsoleOpen ?? vi.fn();
+  const editorTools = createEditorToolController({
+    getActiveBinding: () => ({ paneId: "pane-1", documentId: "doc-1" }),
+    focusEditor: () => {},
+    isModalOpen: () => false,
+  });
   return {
     context: {
       notify,
@@ -205,11 +211,13 @@ function createCommandContext(overrides?: {
       getWindowId: () => "main",
       confirm: vi.fn(overrides?.confirm ?? (() => Promise.resolve(true))),
       getEditorRunner: vi.fn(() => editorRunner),
+      getEditorTools: () => editorTools,
       openProjectSearch,
       setConsoleOpen,
     },
     notify,
     editorRunner,
+    editorTools,
     openProjectSearch,
     setConsoleOpen,
   };
@@ -420,22 +428,30 @@ describe("app shell toggle commands", () => {
   });
 
   it("app.toggleFindReplace toggles find/replace panel state", () => {
-    const { context } = createCommandContext();
-    expect(appState.getSnapshot().editor.findReplaceOpen).toBe(false);
+    const { context, editorTools } = createCommandContext();
+    expect(editorTools.getSnapshot().activeTool).toBe(null);
 
     dispatchCommand("app.toggleFindReplace", context);
-    expect(appState.getSnapshot().editor.findReplaceOpen).toBe(true);
+    expect(editorTools.getSnapshot().activeTool).toBe("find");
 
     dispatchCommand("app.toggleFindReplace", context);
-    expect(appState.getSnapshot().editor.findReplaceOpen).toBe(false);
+    expect(editorTools.getSnapshot().activeTool).toBe(null);
   });
 
   it("app.toggleGoTo toggles go-to panel state", () => {
-    const { context } = createCommandContext();
-    expect(appState.getSnapshot().editor.goToOpen).toBe(false);
+    const { context, editorTools } = createCommandContext();
+    expect(editorTools.getSnapshot().activeTool).toBe(null);
 
     dispatchCommand("app.toggleGoTo", context);
-    expect(appState.getSnapshot().editor.goToOpen).toBe(true);
+    expect(editorTools.getSnapshot().activeTool).toBe("go-to");
+  });
+
+  it("app.toggleFindReplace and app.toggleGoTo enforce one tool at a time", () => {
+    const { context, editorTools } = createCommandContext();
+
+    dispatchCommand("app.toggleFindReplace", context);
+    dispatchCommand("app.toggleGoTo", context);
+    expect(editorTools.getSnapshot().activeTool).toBe("go-to");
   });
 
   it("app.findInProject opens the project search panel focused on find", () => {

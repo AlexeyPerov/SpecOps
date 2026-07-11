@@ -3,6 +3,7 @@ import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { getSessionSelectedTabId, getSessionTabs, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import type { EditorCommandRunner } from "../types/editor";
+import type { EditorToolController } from "../editor/editorToolController";
 import { dispatchMenuCommand, keymapCommandForEvent } from "../commands/registry";
 import { getErrorMessage } from "../commands/commandErrors";
 import { checkDocumentIfDeferred } from "./externalFileChanges";
@@ -24,6 +25,7 @@ export interface AppShellCommandHandlersDeps {
   getSnapshot: () => AppDomainState;
   getCurrentWindowId: () => string;
   getEditorRunner: () => EditorCommandRunner | null;
+  getEditorTools: () => EditorToolController;
   /** True when a modal/picker owns the keyboard (session list, project search, …). */
   getOverlayOpen?: () => boolean;
   openProjectSearch: (focusReplace: boolean) => void;
@@ -38,6 +40,7 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
       getWindowId: deps.getCurrentWindowId,
       confirm: (message) => requestConfirm({ message }),
       getEditorRunner: deps.getEditorRunner,
+      getEditorTools: deps.getEditorTools,
       openProjectSearch: deps.openProjectSearch,
       setConsoleOpen: deps.setConsoleOpen,
     });

@@ -151,8 +151,6 @@
     previewFileSizeBytes: number;
     markdownHtml: string;
     previewMode: "editor" | "markdown" | "diff";
-    findReplaceOpen: boolean;
-    goToOpen: boolean;
     wrapLines: boolean;
     zoomPercent: number;
     cursorLine: number;
@@ -172,7 +170,6 @@
     onScrollTopChange: (documentId: string, scrollTop: number) => void;
     onDeleteSessionFromChat: () => void | Promise<void>;
     onGoToLine: () => void;
-    onCloseGoTo: () => void;
     notify: (message: string) => void;
     onSelectTab: (tabId: string) => void;
     onClosePane: (paneId: string) => void;
@@ -336,10 +333,6 @@
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
-    findQuery = $bindable(""),
-    replaceValue = $bindable(""),
-    findCaseSensitive = $bindable(false),
-    goToLineValue = $bindable(""),
     shellMainRowEl = $bindable<HTMLDivElement | null>(null),
     editorShellEl = $bindable<HTMLElement | null>(null),
     editorPaneEl = $bindable<HTMLElement | null>(null),
@@ -361,10 +354,6 @@
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
-    findQuery?: string;
-    replaceValue?: string;
-    findCaseSensitive?: boolean;
-    goToLineValue?: string;
     shellMainRowEl?: HTMLDivElement | null;
     editorShellEl?: HTMLElement | null;
     editorPaneEl?: HTMLElement | null;
@@ -446,8 +435,6 @@
             onWorkspaceManagerOpenSettings={editor.workspaceManager?.onOpenWorkspaceSettings ?? (() => {})}
             onWorkspaceManagerOpenVersionControl={editor.workspaceManager?.onOpenVersionControl ?? (() => {})}
             previewMode={editor.previewMode}
-            findReplaceOpen={editor.findReplaceOpen}
-            goToOpen={editor.goToOpen}
             wrapLines={editor.wrapLines}
             zoomPercent={editor.zoomPercent}
             decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
@@ -457,10 +444,6 @@
             largeFileConfirming={editor.largeFileConfirming}
             canFitMarkdownSplit={editor.canFitMarkdownSplit}
             windowId={editor.currentWindowId}
-            bind:findQuery
-            bind:replaceValue
-            bind:findCaseSensitive
-            bind:goToLineValue
             onActivePaneElement={(element) => {
               editorPaneEl = element;
             }}
@@ -486,7 +469,6 @@
             onToggleDiffPanel={() => diffPanel?.onToggle?.()}
             onOpenTimeline={timelineDialog?.onToggle}
             onGoToLine={editor.onGoToLine}
-            onCloseGoTo={editor.onCloseGoTo}
             notify={editor.notify}
           />
         {/snippet}

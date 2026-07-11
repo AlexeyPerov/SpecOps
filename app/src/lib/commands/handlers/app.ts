@@ -30,11 +30,11 @@ export const appHandlers: CommandHandlerMap = {
   "view.cycleTheme": () => {
     appState.cycleTheme();
   },
-  "app.toggleFindReplace": () => {
-    appState.toggleFindReplace();
+  "app.toggleFindReplace": ({ getEditorTools }) => {
+    getEditorTools().toggle("find");
   },
-  "app.toggleGoTo": () => {
-    appState.toggleGoTo();
+  "app.toggleGoTo": ({ getEditorTools }) => {
+    getEditorTools().toggle("go-to");
   },
   "app.findInProject": ({ openProjectSearch }) => {
     openProjectSearch?.(false);

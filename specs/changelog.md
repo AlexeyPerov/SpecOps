@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-11 18:16 — M0.5 Svelte editor chrome refactor
+
+- **M0.5-1 Runes conversion** — `MarkdownEditorPane.svelte` migrated from `export let`/`$:` to `$props`/`$derived`/`$effect`. `DocumentEditor.svelte` and `FindReplacePanel.svelte` already used runes; find panel no longer touches `appState` (closes via `onClose`).
+- **M0.5-2 Markdown lifecycles** — `markdownSplitScrollSync.ts` (generation-guarded split scroll), `markdownPreviewImageFallbacks.ts` (blob URL ownership + stale async guards), `markdownPreviewLinkAttachment.ts` (`{@attach}` link clicks). Pane effects dispose listeners/URLs on document/mode/unmount.
+- **M0.5-3 Editor tool controller** — window-local `editorToolController.ts` owns active tool (`find` | `go-to`), find/go-to fields, binding identity, one-tool-at-a-time, modal precedence, and focus restore via workbench. Removed `findReplaceOpen`/`goToOpen` from `appState` and route-local query prop chains through `AppShell`. `EditorOverlayHost.svelte` + `EditorListboxChrome.svelte` provide focus/Escape/listbox foundation for future pickers; `GoToLinePanel.svelte` uses the host.
+- **Tests:** `editorToolController.test.ts`, `markdownSplitScrollSync.test.ts`, `markdownPreviewImageFallbacks.test.ts`; command/key-routing handlers updated for `getEditorTools`.
+- **`specs/text-editor-parity-v3/m0-editor-foundations/m0-5-…-execution-plan.md`** — all tasks `[DONE]`, status Done.
+- **Validation:** `npm test` passes (2621 tests). `npm run check` has no new errors in M0.5 files (pre-existing errors elsewhere unchanged). Svelte autofixer reports no issues on new chrome components.
+
 ## 2026-07-11 18:05 — M0.4 CodeMirror extension and action composition
 
 - **M0.4-1 Extension assembly** — `editorExtensions.ts` owns named groups (base, language, highlight, decorations, search, minimap, theme, plus reserved fold/completion/snippets/landmarks seams). Compartments are instance-owned per controller; removed module-global `searchHighlightCompartment`. Documented `BASE_KEYMAP_PRECEDENCE` (indentWithTab → defaultKeymap → historyKeymap). `EditorSurface` remains a thin mount/update/destroy bridge.

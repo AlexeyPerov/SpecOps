@@ -18,8 +18,6 @@ export interface AppDomainState {
     cursorColumn: number;
     zoomPercent: number;
     wrapLines: boolean;
-    findReplaceOpen: boolean;
-    goToOpen: boolean;
     previewMode: "editor" | "markdown" | "diff";
   };
   /**

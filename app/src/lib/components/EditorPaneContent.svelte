@@ -11,6 +11,7 @@
   import ThemesView from "./ThemesView.svelte";
   import ChatPanel from "./ChatPanel.svelte";
   import FindReplacePanel from "./FindReplacePanel.svelte";
+  import GoToLinePanel from "./GoToLinePanel.svelte";
   import {
     activeViewKindInPane,
     isSessionTabActiveInPane,
@@ -27,6 +28,8 @@
   import { appState } from "../state/appState";
   import { emptySet } from "../collections/emptyCollections";
   import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
+  import { getEditorToolController } from "../editor/editorToolContext";
+  import type { EditorToolSnapshot } from "../editor/editorToolController";
 
   let {
     paneId,
@@ -49,8 +52,6 @@
     onWorkspaceManagerOpenSettings = (_workspaceId: ContextId) => {},
     onWorkspaceManagerOpenVersionControl = (_workspaceId: ContextId) => {},
     previewMode = "editor",
-    findReplaceOpen = false,
-    goToOpen = false,
     wrapLines = false,
     zoomPercent = 100,
     decoratePlaintextSymbols = true,
@@ -60,10 +61,6 @@
     largeFileConfirming = false,
     canFitMarkdownSplit = true,
     windowId = "main",
-    findQuery = $bindable(""),
-    replaceValue = $bindable(""),
-    findCaseSensitive = $bindable(false),
-    goToLineValue = $bindable(""),
     onActivePaneElement,
     onConfirmLargeFile,
     onMarkdownViewModeChange,
@@ -87,7 +84,6 @@
     onToggleDiffPanel,
     onOpenTimeline,
     onGoToLine,
-    onCloseGoTo,
     notify,
   }: {
     paneId: string;
@@ -105,8 +101,6 @@
     onWorkspaceManagerOpenSettings?: (workspaceId: ContextId) => void;
     onWorkspaceManagerOpenVersionControl?: (workspaceId: ContextId) => void;
     previewMode: "editor" | "markdown" | "diff";
-    findReplaceOpen: boolean;
-    goToOpen: boolean;
     wrapLines: boolean;
     zoomPercent: number;
     decoratePlaintextSymbols: boolean;
@@ -116,10 +110,6 @@
     largeFileConfirming: boolean;
     canFitMarkdownSplit: boolean;
     windowId: string;
-    findQuery?: string;
-    replaceValue?: string;
-    findCaseSensitive?: boolean;
-    goToLineValue?: string;
     onActivePaneElement?: (element: HTMLElement | null) => void;
     onConfirmLargeFile: () => void | Promise<void>;
     onMarkdownViewModeChange: (mode: "edit" | "split" | "preview") => void;
@@ -143,12 +133,45 @@
     onToggleDiffPanel?: () => void;
     onOpenTimeline?: () => void;
     onGoToLine: () => void;
-    onCloseGoTo: () => void;
     notify: (message: string) => void;
   } = $props();
 
   const workbench = getEditorWorkbenchRuntime();
+  const editorTools = getEditorToolController();
   const getActiveEditorRunner = () => workbench.getActiveRunner();
+
+  let toolSnapshot = $state<EditorToolSnapshot>(editorTools.getSnapshot());
+  $effect(() => editorTools.subscribe((next) => {
+    toolSnapshot = next;
+  }));
+
+  const findReplaceOpen = $derived(toolSnapshot.activeTool === "find");
+  const goToOpen = $derived(toolSnapshot.activeTool === "go-to");
+
+  let findQuery = $state("");
+  let replaceValue = $state("");
+  let findCaseSensitive = $state(false);
+  let goToLineValue = $state("");
+
+  $effect(() => {
+    findQuery = toolSnapshot.find.query;
+    replaceValue = toolSnapshot.find.replace;
+    findCaseSensitive = toolSnapshot.find.caseSensitive;
+    goToLineValue = toolSnapshot.goToLineValue;
+  });
+
+  $effect(() => {
+    editorTools.setFindQuery(findQuery);
+  });
+  $effect(() => {
+    editorTools.setFindReplace(replaceValue);
+  });
+  $effect(() => {
+    editorTools.setFindCaseSensitive(findCaseSensitive);
+  });
+  $effect(() => {
+    editorTools.setGoToLineValue(goToLineValue);
+  });
 
   let paneSectionEl = $state<HTMLElement | null>(null);
 
@@ -302,18 +325,16 @@
       getEditorRunner={getActiveEditorRunner}
       {notify}
       documentId={paneDocument?.id ?? null}
+      onClose={() => editorTools.close({ restoreFocus: true })}
     />
   {/if}
 
   {#if isActivePane && documentView.isTextEditorDocument && !isSessionTabActive && !isChatHttpActive && goToOpen}
-    <div class="floating-tool goto-tool">
-      <h3>Go To Line</h3>
-      <input placeholder="Line number..." bind:value={goToLineValue} />
-      <div class="tool-actions">
-        <button type="button" class="toolbar-button" onclick={onGoToLine}>Go</button>
-        <button type="button" class="toolbar-button" onclick={onCloseGoTo}>Close</button>
-      </div>
-    </div>
+    <GoToLinePanel
+      bind:lineValue={goToLineValue}
+      onGo={onGoToLine}
+      onClose={() => editorTools.close({ restoreFocus: true })}
+    />
   {/if}
 </section>
 

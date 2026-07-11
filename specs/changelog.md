@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-11 15:52 — M0.1 editor characterization and contracts
+
+- **M0.1-1 CodeMirror fixture** — `app/src/lib/editor/codeMirrorFixture.ts` mounts an `EditorView` in jsdom without a Svelte harness (history, wrap/zoom compartments, muted content replace, search highlight, command-runner factory). Characterization suite `editorCharacterization.test.ts` covers dirty reporting, non-empty selection, muted external replace, wrap/zoom, search marks, destroy cleanup, active-pane `getView` routing, and pane-scoped A→B→A history/selection (documents M0.3 document-isolation target).
+- **M0.1-2 host contracts** — `app/src/lib/types/editor.ts` adds SpecOps-native `EditorHostIdentity`, `EditorHost`, `EditorActions`, `EditorQueries`, `EditorActionResult` / capability types, and action-name extension points (selection, fold, completion, snippet, bookmark). Flat `EditorCommandRunner` retained as the migration adapter. Smoke coverage in `editorContracts.test.ts`.
+- **M0.1-3 key routing** — `app/src/lib/services/appShellKeyRouting.ts` encodes overlay → editor keymap → permitted global → browser precedence; `createAppShellCommandHandlers.handleKeydown` delegates without behavior change (`overlayOpen` still false until M0.2). Tests cover contenteditable/input guards, always-run find chords, and globals. `SELECT_NEXT_OCCURRENCE_BINDING_DECISION` records M2 `Cmd/Ctrl+D` ownership transfer (no shortcut change now).
+- **Deferred gaps (intentional):** live overlay ownership not wired into production keydown; document-scoped sessions (M0.3); CM vs ordinary-input distinction for app editor commands (M0.2).
+- **`specs/text-editor-parity-v3/m0-editor-foundations/m0-1-…-execution-plan.md`** — all tasks `[DONE]`, status Done.
+- **Validation:** `npm test` passes (2560 tests). `npm run check` has no new errors in M0.1 files (pre-existing errors elsewhere unchanged).
+
+## 2026-07-10 22:05 — Text editor parity v3 roadmap
+
+- Added `specs/text-editor-parity-v3/` with a nine-milestone roadmap for making SpecOps sufficient for routine notes/specs and general text-editing work without pursuing full IDE/editor parity.
+- Added the upfront **M0 editor foundations** refactoring milestone: characterization/contracts, pane-aware runtime, document-scoped editor sessions, CodeMirror composition, Svelte editor-chrome modernization, and shared searchable-picker/workspace-index foundations.
+- Split fuzzy file open, multiple selections, command palette, folding/Markdown outline, typing assistance, Markdown snippets, document landmarks, and find/replace polish into 22 agent-sized execution plans with complexity scores, dependencies, acceptance criteria, risks, and validation gates.
+- Allowlisted `specs/text-editor-parity-v3/**` in `.gitignore` so the roadmap is tracked with the repository.
+
 ## 2026-07-10 14:00 — UI / UX milestone M5 (visual polish)
 
 - **M5-1 spacing/typography (bounded)** — `app-shell.css`: `.editor-pane` padding `5px` → `var(--space-3)`. Typography tokens in `buttons.css` (`--font-size-ui` / `--font-size-status`), `EmptyState.svelte`, `ConfirmDialog.svelte`. No app-wide rem sweep.

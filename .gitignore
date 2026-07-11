@@ -65,6 +65,8 @@ TODO.md
 !/specs/git/**
 !/specs/text-editor/
 !/specs/text-editor/**
+!/specs/text-editor-parity-v3/
+!/specs/text-editor-parity-v3/**
 /references/
 
 # Test files

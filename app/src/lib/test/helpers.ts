@@ -21,6 +21,7 @@ export function keyboardEvent(partial: {
   ctrlKey?: boolean;
   shiftKey?: boolean;
   altKey?: boolean;
+  target?: EventTarget | null;
 }): KeyboardEvent {
   return {
     key: partial.key,
@@ -28,6 +29,7 @@ export function keyboardEvent(partial: {
     ctrlKey: partial.ctrlKey ?? false,
     shiftKey: partial.shiftKey ?? false,
     altKey: partial.altKey ?? false,
+    target: partial.target ?? null,
     length: partial.key.length,
   } as unknown as KeyboardEvent;
 }

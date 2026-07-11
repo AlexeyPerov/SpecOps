@@ -3,11 +3,7 @@ import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { getSessionSelectedTabId, getSessionTabs, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import type { EditorCommandRunner } from "../types/editor";
-import {
-  dispatchMenuCommand,
-  isEditorGlobalCommand,
-  keymapCommandForEvent,
-} from "../commands/registry";
+import { dispatchMenuCommand, keymapCommandForEvent } from "../commands/registry";
 import { getErrorMessage } from "../commands/commandErrors";
 import { checkDocumentIfDeferred } from "./externalFileChanges";
 import { shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
@@ -17,6 +13,11 @@ import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
 import { logDiagnostic } from "./logging";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { SettingsDialogTab } from "./settingsDialogUi";
+import {
+  isAlwaysRunShellCommand,
+  isTargetInEditable,
+  resolveAppShellKeyRouting,
+} from "./appShellKeyRouting";
 
 export interface AppShellCommandHandlersDeps {
   notify: (message: string) => void;
@@ -42,34 +43,19 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
 
   function handleKeydown(event: KeyboardEvent): void {
     const command = keymapCommandForEvent(event);
-    if (command === "app.toggleFindReplace") {
-      event.preventDefault();
-      runCommand(command);
+    const decision = resolveAppShellKeyRouting({
+      commandId: command,
+      // Overlay ownership is characterized in appShellKeyRouting tests; M0.2
+      // will pass the live overlay/picker state here.
+      overlayOpen: false,
+      targetInEditable: isTargetInEditable(event.target),
+      alwaysRunWhenMapped: command ? isAlwaysRunShellCommand(command) : false,
+    });
+    if (decision.action !== "run-command") {
       return;
     }
-    if (
-      command === "app.findInProject" ||
-      command === "app.replaceInProject"
-    ) {
-      event.preventDefault();
-      runCommand(command);
-      return;
-    }
-    if (
-      command &&
-      !isEditorGlobalCommand(command) &&
-      (event.target as HTMLElement | null)?.closest(
-        "input, textarea, [contenteditable=true]",
-      )
-    ) {
-      return;
-    }
-    if (!command) {
-      return;
-    }
-
     event.preventDefault();
-    runCommand(command);
+    runCommand(decision.commandId);
   }
 
   return { runCommand, handleKeydown };

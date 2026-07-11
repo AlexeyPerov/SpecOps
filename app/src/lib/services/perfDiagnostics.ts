@@ -16,7 +16,10 @@ export type PerfMetric =
   | "workspace.restore"
   | "workspace.switchRestore"
   | "projectTree.rootLoad"
-  | "tab.activationSideEffects";
+  | "tab.activationSideEffects"
+  | "workspaceCatalog.build"
+  | "workspaceCatalog.rebuild"
+  | "workspaceCatalog.rank";
 
 export interface PerfTimingMetadata {
   metric: PerfMetric;

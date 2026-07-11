@@ -17,6 +17,7 @@ import {
 import { promptEntryName } from "./entryNamePrompt";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { createProjectTreeController } from "./projectTreeController";
+import type { FileWatcherEventKind } from "./fileWatcher";
 
 export interface AppShellProjectTreeHandlersDeps {
   getActiveWorkspaceRoot: () => string | null;
@@ -25,7 +26,7 @@ export interface AppShellProjectTreeHandlersDeps {
   notify: (message: string) => void;
   projectTreeController: ReturnType<typeof createProjectTreeController>;
   /** Optional extra listener (e.g. workspace file catalog invalidation). */
-  onFilesystemChange?: (path: string) => void;
+  onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;
 }
 
 export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandlersDeps) {
@@ -86,9 +87,12 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     await projectTreeController.refreshProjectTree(getActiveWorkspaceRoot(), getIsSessionTabActive());
   }
 
-  function notifyProjectTreeFilesystemChange(path: string): void {
+  function notifyProjectTreeFilesystemChange(
+    path: string,
+    kind: FileWatcherEventKind = "other",
+  ): void {
     projectTreeController.handleFilesystemChange(getActiveWorkspaceRoot(), path);
-    onFilesystemChange?.(path);
+    onFilesystemChange?.(path, kind);
   }
 
   async function refreshProjectTreeDirectories(directoryPaths: string[]): Promise<void> {

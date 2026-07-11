@@ -47,6 +47,7 @@ import {
   FILE_CHANGED_EVENT,
   syncFileWatcherPaths,
   syncProjectTreeWatcher,
+  type FileWatcherEventKind,
 } from "./fileWatcher";
 import { stopOpencodeSidecar } from "./opencodeSidecar";
 import { selectTabForNormalizedPath } from "./openFileGate";
@@ -62,6 +63,26 @@ const DOCK_NEW_WINDOW_EVENT = "spec-ops/dock/new-window";
 const DOCK_OPEN_RECENT_EVENT = "spec-ops/dock/open-recent";
 const DOCK_CLEAR_RECENT_EVENT = "spec-ops/dock/clear-recent";
 
+const FILE_WATCHER_KIND_VALUES = new Set<FileWatcherEventKind>([
+  "create",
+  "remove",
+  "modify",
+  "rename",
+  "other",
+]);
+
+/**
+ * Normalize the raw payload kind to a known {@link FileWatcherEventKind}.
+ * Falls back to `other` when missing or unrecognized so catalog invalidation
+ * debounces safely instead of misclassifying the event.
+ */
+export function normalizeFileWatcherKind(raw: unknown): FileWatcherEventKind {
+  if (typeof raw === "string" && FILE_WATCHER_KIND_VALUES.has(raw as FileWatcherEventKind)) {
+    return raw as FileWatcherEventKind;
+  }
+  return "other";
+}
+
 export interface AppShellRuntimeOptions {
   notify: (message: string) => void;
   runCommand: (commandId: AppCommandId) => void;
@@ -72,7 +93,7 @@ export interface AppShellRuntimeOptions {
     options?: { skipOpencodeReconcile?: boolean },
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
-  onFilesystemChange?: (path: string) => void;
+  onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;
   syncProjectTreeWatcher?: (root: string | null) => Promise<void>;
   setConsoleHeightPx: (heightPx: number) => void;
 }
@@ -351,13 +372,17 @@ export async function startAppShellRuntime(
   });
   cleanupCallbacks.push(unlistenFocusChanged);
 
-  const unlistenFileChanged = await listen<{ path: string }>(FILE_CHANGED_EVENT, async (event) => {
-    if (!runtimeReady) {
-      return;
-    }
-    options.onFilesystemChange?.(event.payload.path);
-    await runWatcherExternalCheck(event.payload.path);
-  });
+  const unlistenFileChanged = await listen<{ path: string; kind?: string }>(
+    FILE_CHANGED_EVENT,
+    async (event) => {
+      if (!runtimeReady) {
+        return;
+      }
+      const kind = normalizeFileWatcherKind(event.payload.kind);
+      options.onFilesystemChange?.(event.payload.path, kind);
+      await runWatcherExternalCheck(event.payload.path);
+    },
+  );
   cleanupCallbacks.push(unlistenFileChanged);
 
   const unlistenRecentFiles = await listenForRecentFilesChanges((recentFiles) => {

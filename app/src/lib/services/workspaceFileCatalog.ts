@@ -11,6 +11,14 @@ import {
   relativePathFromRoot,
   type EnumerateOpenableFilesResult,
 } from "./workspaceTraversal";
+import { isOpenableFilePath } from "../editor/editorLanguage";
+import type { FileWatcherEventKind } from "./fileWatcher";
+
+/**
+ * Coarse change kind accepted by {@link WorkspaceFileCatalog.notifyFilesystemChange}.
+ * Local alias so callers need not import the watcher module to pass `undefined`.
+ */
+export type CatalogFileChangeKind = FileWatcherEventKind | undefined;
 
 export interface WorkspaceFileEntry {
   /** Normalized absolute path. */
@@ -52,9 +60,27 @@ export interface WorkspaceFileCatalog {
   setWorkspaceRoot(root: string | null): void;
   /** Force a rebuild of the current workspace. */
   refresh(): void;
-  /** Watcher hint — debounced rebuild of the current workspace. */
-  notifyFilesystemChange(changedPath?: string): void;
+  /**
+   * Watcher hint. When `kind` is supplied, applies a safe incremental update
+   * (remove the deleted entry, add a newly created openable file); otherwise
+   * (or for rename/modify/other/directory events) schedules a debounced
+   * rebuild. Repeated bursts collapse into at most one rebuild.
+   */
+  notifyFilesystemChange(changedPath?: string, kind?: FileWatcherEventKind): void;
+  /** Non-fatal diagnostics counters (no file contents). */
+  getDiagnostics(): WorkspaceFileCatalogDiagnostics;
   dispose(): void;
+}
+
+export interface WorkspaceFileCatalogDiagnostics {
+  workspaceRoot: string | null;
+  generation: number;
+  status: WorkspaceFileCatalogStatus;
+  entryCount: number;
+  partialErrorCount: number;
+  incrementalAdds: number;
+  incrementalRemoves: number;
+  debouncedRebuilds: number;
 }
 
 function basenameOf(path: string): string {
@@ -72,17 +98,19 @@ function directoryOf(path: string): string {
   return normalized.slice(0, slash);
 }
 
+function toEntry(root: string, absolutePath: string): WorkspaceFileEntry {
+  const normalized = normalizePathSync(absolutePath);
+  return {
+    absolutePath: normalized,
+    relativePath: relativePathFromRoot(normalized, root),
+    basename: basenameOf(normalized),
+    directory: directoryOf(normalized),
+    key: normalized,
+  };
+}
+
 function toEntries(root: string, paths: readonly string[]): WorkspaceFileEntry[] {
-  return paths.map((absolutePath) => {
-    const normalized = normalizePathSync(absolutePath);
-    return {
-      absolutePath: normalized,
-      relativePath: relativePathFromRoot(normalized, root),
-      basename: basenameOf(normalized),
-      directory: directoryOf(normalized),
-      key: normalized,
-    };
-  });
+  return paths.map((absolutePath) => toEntry(root, absolutePath));
 }
 
 const DEFAULT_INVALIDATE_DEBOUNCE_MS = 400;
@@ -103,6 +131,11 @@ export function createWorkspaceFileCatalog(
   let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
   const listeners = new Set<() => void>();
 
+  // Diagnostics counters for incremental invalidation. No file contents.
+  let incrementalAdds = 0;
+  let incrementalRemoves = 0;
+  let debouncedRebuilds = 0;
+
   function emit(): void {
     for (const listener of listeners) {
       listener();
@@ -114,6 +147,57 @@ export function createWorkspaceFileCatalog(
       clearTimeout(invalidateTimer);
       invalidateTimer = null;
     }
+  }
+
+  function scheduleRebuild(): void {
+    clearInvalidateTimer();
+    invalidateTimer = setTimeout(() => {
+      invalidateTimer = null;
+      if (!disposed && workspaceRoot) {
+        debouncedRebuilds += 1;
+        beginEnumerate(workspaceRoot);
+      }
+    }, invalidateDebounceMs);
+  }
+
+  /** True when `path` is the root or nested under it (post-normalization). */
+  function pathIsUnderRoot(normalizedPath: string, root: string): boolean {
+    return normalizedPath === root || normalizedPath.startsWith(`${root}/`);
+  }
+
+  /**
+   * Synchronously remove an entry by normalized key. Returns true when the
+   * entry set changed (caller emits + bumps diagnostics).
+   */
+  function removeEntry(normalizedPath: string): boolean {
+    const next = entries.filter((entry) => entry.key !== normalizedPath);
+    if (next.length === entries.length) {
+      return false;
+    }
+    entries = next;
+    incrementalRemoves += 1;
+    return true;
+  }
+
+  /**
+   * Synchronously add an entry for a newly created openable file. Returns true
+   * when a new entry was inserted (caller emits + bumps diagnostics). No-ops
+   * when the path is a directory (handled by debounced rebuild) or already
+   * present, and never reads file contents.
+   */
+  function addEntry(root: string, normalizedPath: string): boolean {
+    if (!isOpenableFilePath(normalizedPath)) {
+      return false;
+    }
+    const existing = entries.find((entry) => entry.key === normalizedPath);
+    if (existing) {
+      return false;
+    }
+    const next = [...entries, toEntry(root, normalizedPath)];
+    next.sort((a, b) => a.absolutePath.localeCompare(b.absolutePath));
+    entries = next;
+    incrementalAdds += 1;
+    return true;
   }
 
   function snapshot(): WorkspaceFileCatalogSnapshot {
@@ -213,27 +297,40 @@ export function createWorkspaceFileCatalog(
       beginEnumerate(workspaceRoot);
     },
 
-    notifyFilesystemChange(changedPath) {
+    notifyFilesystemChange(changedPath, kind) {
       if (disposed || !workspaceRoot) {
         return;
       }
+      const root = workspaceRoot;
+      // Skip events entirely outside the workspace root.
       if (changedPath) {
         const normalizedChanged = normalizePathSync(changedPath);
-        const root = workspaceRoot;
-        if (
-          normalizedChanged !== root &&
-          !normalizedChanged.startsWith(`${root}/`)
-        ) {
+        if (!pathIsUnderRoot(normalizedChanged, root)) {
           return;
         }
-      }
-      clearInvalidateTimer();
-      invalidateTimer = setTimeout(() => {
-        invalidateTimer = null;
-        if (!disposed && workspaceRoot) {
-          beginEnumerate(workspaceRoot);
+        // Only apply incremental updates once the initial build is ready.
+        // During loading, every event collapses into a single deferred rebuild.
+        if (status === "ready" && kind) {
+          if (kind === "remove") {
+            if (removeEntry(normalizedChanged)) {
+              emit();
+            }
+            return;
+          }
+          if (kind === "create") {
+            if (addEntry(root, normalizedChanged)) {
+              emit();
+            }
+            // If the created path is a directory, addEntry no-ops (the file
+            // predicate rejects it) — fall through to a debounced rebuild so
+            // nested new files are picked up.
+            if (entries.some((entry) => entry.key === normalizedChanged)) {
+              return;
+            }
+          }
         }
-      }, invalidateDebounceMs);
+      }
+      scheduleRebuild();
     },
 
     dispose() {
@@ -245,7 +342,23 @@ export function createWorkspaceFileCatalog(
       entries = [];
       partialErrors = [];
       errorMessage = null;
+      incrementalAdds = 0;
+      incrementalRemoves = 0;
+      debouncedRebuilds = 0;
       listeners.clear();
+    },
+
+    getDiagnostics() {
+      return {
+        workspaceRoot,
+        generation,
+        status,
+        entryCount: entries.length,
+        partialErrorCount: partialErrors.length,
+        incrementalAdds,
+        incrementalRemoves,
+        debouncedRebuilds,
+      };
     },
   };
 }

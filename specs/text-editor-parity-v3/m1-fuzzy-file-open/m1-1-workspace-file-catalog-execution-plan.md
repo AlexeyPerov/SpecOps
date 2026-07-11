@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M0.6](../m0-editor-foundations/m0-6-picker-index-foundations-execution-plan.md) complete  
 **Next:** [M1.2 quick-open UI](./m1-2-quick-open-ui-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Heavy — Score 7
 
 How to use this plan: assign to one agent. Deliver a production-ready file catalog and ranking model; do not add the visible picker yet.
@@ -23,7 +23,7 @@ Provide fast, deterministic workspace-file candidates for quick open without res
 
 ## Task breakdown
 
-#### Task M1.1-1: Implement per-workspace catalog lifecycle [Score:7] [Agent:heavy]
+#### Task M1.1-1: Implement per-workspace catalog lifecycle [Score:7] [Agent:heavy] [DONE]
 
 - Enumerate openable files on workspace activation in the background.
 - Store absolute path, normalized relative path, basename, directory, and stable key.
@@ -42,7 +42,7 @@ Dependencies: M0.6.
 
 ---
 
-#### Task M1.1-2: Rank and present file candidates [Score:6] [Agent:medium]
+#### Task M1.1-2: Rank and present file candidates [Score:6] [Agent:medium] [DONE]
 
 - Add a file-specific ranking adapter over shared fuzzy scoring.
 - Rank basename matches before equivalent directory-only matches.
@@ -60,7 +60,7 @@ Dependencies: M1.1-1.
 
 ---
 
-#### Task M1.1-3: Catalog diagnostics and integration tests [Score:5] [Agent:medium]
+#### Task M1.1-3: Catalog diagnostics and integration tests [Score:5] [Agent:medium] [DONE]
 
 - Add debug/performance diagnostics for initial build, rebuild, entry count, partial errors, and ranking duration.
 - Add integration tests with mocked Tauri directory reads and watcher changes.
@@ -76,10 +76,10 @@ Dependencies: M1.1-2.
 
 ## Plan exit criteria
 
-- [ ] Active workspaces expose a cancellable, cached file catalog.
-- [ ] File ranking is deterministic, tested, and bounded.
-- [ ] Watcher-driven refresh is debounced and workspace-safe.
-- [ ] No visible quick-open UI ships in this plan.
+- [x] Active workspaces expose a cancellable, cached file catalog.
+- [x] File ranking is deterministic, tested, and bounded.
+- [x] Watcher-driven refresh is debounced and workspace-safe.
+- [x] No visible quick-open UI ships in this plan.
 
 ## Changelog instructions
 

@@ -50,6 +50,10 @@
   } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
   import { createWorkspaceFileCatalog } from "../lib/services/workspaceFileCatalog";
+  import {
+    createWorkspaceFileCatalogRegistry,
+    type WorkspaceFileCatalogRegistry,
+  } from "../lib/services/workspaceFileCatalogRegistry";
   import { collectPaneElementsFromDom } from "../lib/components/paneDropTargets";
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
@@ -201,6 +205,8 @@
     { probeWorkspaceReadAccessFn: probeWorkspaceReadAccess },
   );
   const workspaceFileCatalog = createWorkspaceFileCatalog();
+  const workspaceFileCatalogRegistry: WorkspaceFileCatalogRegistry =
+    createWorkspaceFileCatalogRegistry();
   let autoProjectPanelCollapsed = $state(false);
   let autoSessionsSidebarCollapsed = $state(false);
   let lastChatScopeKey = $state<string | null>(null);
@@ -362,6 +368,7 @@
     editorSessionCache.clear();
     editorTools.dispose();
     workspaceFileCatalog.dispose();
+    workspaceFileCatalogRegistry.dispose();
   });
 
   $effect(() => {
@@ -510,8 +517,9 @@
     getCurrentWindowId: () => currentWindowId,
     notify,
     projectTreeController,
-    onFilesystemChange: (path) => {
-      workspaceFileCatalog.notifyFilesystemChange(path);
+    onFilesystemChange: (path, kind) => {
+      workspaceFileCatalog.notifyFilesystemChange(path, kind);
+      workspaceFileCatalogRegistry.notifyFilesystemChange(path, kind);
     },
   });
 
@@ -615,7 +623,10 @@
     try {
       const results = await searchInProject(root, query, {
         caseSensitive: projectSearchCaseSensitive,
-        files: workspaceFileCatalog.getOpenablePaths() ?? undefined,
+        files:
+          workspaceFileCatalogRegistry.getActive()?.getOpenablePaths() ??
+          workspaceFileCatalog.getOpenablePaths() ??
+          undefined,
       });
       projectSearchResults = results;
       const files = results.length;
@@ -1112,6 +1123,7 @@
       activeWorkspaceRoot,
       isChatHttpActive,
       catalog: workspaceFileCatalog,
+      registry: workspaceFileCatalogRegistry,
     });
   });
 

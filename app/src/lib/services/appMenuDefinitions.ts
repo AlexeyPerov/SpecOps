@@ -35,6 +35,13 @@ export async function buildFileMenu(params: {
     commandId: "file.open",
     runCommand,
   });
+  const quickOpenItem = await commandItem({
+    id: "cmd.file.quickOpen",
+    text: "Quick Open",
+    accelerator: "CmdOrCtrl+P",
+    commandId: "app.quickOpenFile",
+    runCommand,
+  });
   const openAllInFolderItem = await commandItem({
     id: "cmd.file.openAllInFolder",
     text: "Open all in Folder",
@@ -106,6 +113,7 @@ export async function buildFileMenu(params: {
     items: [
       newTabItem,
       openItem,
+      quickOpenItem,
       openRecentSubmenu,
       openAllInFolderItem,
       addWorkspaceItem,

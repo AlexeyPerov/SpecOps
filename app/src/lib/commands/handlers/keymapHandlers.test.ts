@@ -253,6 +253,18 @@ describe("keymapCommandForEvent", () => {
     ).toBe("file.save");
   });
 
+  it("maps Meta+P to app.quickOpenFile", () => {
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "p", metaKey: true })),
+    ).toBe("app.quickOpenFile");
+  });
+
+  it("maps Ctrl+P to app.quickOpenFile", () => {
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "p", ctrlKey: true })),
+    ).toBe("app.quickOpenFile");
+  });
+
   it("maps Ctrl+S to file.save", () => {
     expect(
       keymapCommandForEvent(keyboardEvent({ key: "s", ctrlKey: true })),

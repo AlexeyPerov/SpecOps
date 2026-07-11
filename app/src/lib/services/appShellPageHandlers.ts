@@ -29,6 +29,7 @@ export interface AppShellCommandHandlersDeps {
   /** True when a modal/picker owns the keyboard (session list, project search, …). */
   getOverlayOpen?: () => boolean;
   openProjectSearch: (focusReplace: boolean) => void;
+  openQuickOpen: () => void;
   setConsoleOpen: (open: boolean) => void;
 }
 
@@ -42,6 +43,7 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
       getEditorRunner: deps.getEditorRunner,
       getEditorTools: deps.getEditorTools,
       openProjectSearch: deps.openProjectSearch,
+      openQuickOpen: deps.openQuickOpen,
       setConsoleOpen: deps.setConsoleOpen,
     });
   }

@@ -233,6 +233,7 @@ describe("createAppShellCommandHandlers.handleKeydown", () => {
         }),
       getOverlayOpen: () => overlayOpen,
       openProjectSearch: () => {},
+      openQuickOpen: () => {},
       setConsoleOpen: () => {},
     });
   }

@@ -58,6 +58,12 @@
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
+  import { rankFiles, type RankedFilesResult } from "../lib/picker/fileRanking";
+  import { collectTabOpenPaths } from "../lib/services/tabContextMenuActions";
+  import {
+    describeOpenActivePathResult,
+    openActivePathInPane,
+  } from "../lib/services/openActivePath";
   import { DEFAULT_CONSOLE_HEIGHT_PX } from "../lib/services/consoleTabPrefs";
   import {
     searchInProject,
@@ -335,6 +341,15 @@
    */
   let timelineOpen = $state(false);
   let timelineSearch = $state("");
+  /**
+   * M1.2 — Quick Open file picker state. `quickOpenOpen` gates the overlay;
+   * `quickOpenQuery` holds the live query; `quickOpenOpenerPaneId` captures the
+   * active pane at invocation so the selected file opens into the pane the user
+   * was focused on (falling back to the current active pane if it closed).
+   */
+  let quickOpenOpen = $state(false);
+  let quickOpenQuery = $state("");
+  let quickOpenOpenerPaneId = $state<string | null>(null);
 
   const editorTools = createEditorToolController({
     getActiveBinding: () => {
@@ -359,9 +374,29 @@
       addMultipleOpen ||
       projectSearchOpen ||
       timelineOpen ||
+      quickOpenOpen ||
       Boolean(workspaceContextMenu),
   });
   setEditorToolController(editorTools);
+
+  /**
+   * M1.2 — Quick Open ranking. Derives open/recent file paths from the active
+   * context for recency boosts, then ranks the active workspace catalog against
+   * the live query. The result is recomputed reactively when the catalog
+   * snapshot, query, or open/recent paths change.
+   */
+  const quickOpenCatalogSnapshot = $derived(
+    workspaceFileCatalogRegistry.getActiveSnapshot(),
+  );
+  const quickOpenRecencyInputs = $derived.by(() => {
+    const ctx = getActiveContextSnapshot(snapshot);
+    const openPaths = collectTabOpenPaths(getSessionTabs(ctx.session), ctx.documents);
+    const recentPaths = snapshot.recentFiles;
+    return { openPaths, recentPaths };
+  });
+  const quickOpenResults: RankedFilesResult = $derived(
+    rankFiles(quickOpenCatalogSnapshot, quickOpenQuery, quickOpenRecencyInputs),
+  );
 
   onDestroy(() => {
     editorWorkbench.dispose();
@@ -380,6 +415,7 @@
     addMultipleOpen;
     projectSearchOpen;
     timelineOpen;
+    quickOpenOpen;
     workspaceContextMenu;
     editorTools.syncToEnvironment();
   });
@@ -603,6 +639,32 @@
   }
 
   /**
+   * M1.2 — Quick Open selection handler. Opens the chosen file through the
+   * existing gated pipeline (`openActivePathInPane` targeting the pane captured
+   * at invocation, falling back to the active pane if the captured pane closed).
+   * The picker closes only after a successful handoff; failures keep the picker
+   * open with a status message so the user can try another file.
+   */
+  async function handleQuickOpenSelect(path: string): Promise<void> {
+    const targetPaneId = quickOpenOpenerPaneId ?? session.editorLayout.activePaneId;
+    const result = await openActivePathInPane(path, currentWindowId, targetPaneId);
+    notify(describeOpenActivePathResult(result));
+    if (result.kind === "failed" || result.kind === "missing") {
+      // Keep the picker open so the user sees the failure and can retry.
+      return;
+    }
+    quickOpenOpen = false;
+  }
+
+  function closeQuickOpen(): void {
+    quickOpenOpen = false;
+  }
+
+  function refreshQuickOpenCatalog(): void {
+    workspaceFileCatalogRegistry.refresh();
+  }
+
+  /**
    * Find-in-Project panel height is not persisted yet (no dedicated pref store);
    * the commit hook is a no-op so the resize handle still works in-session.
    */
@@ -775,11 +837,20 @@
       addMultipleOpen ||
       projectSearchOpen ||
       timelineOpen ||
+      quickOpenOpen ||
       Boolean(workspaceContextMenu),
     openProjectSearch: (focusReplace) => {
       projectSearchOpen = true;
       projectSearchFocusReplace = focusReplace;
       projectSearchNonce += 1;
+    },
+    openQuickOpen: () => {
+      // Capture the active pane at invocation so the selected file opens into
+      // the pane the user was focused on. If that pane is gone by selection
+      // time, the open pipeline falls back to the current active pane.
+      quickOpenOpenerPaneId = session.editorLayout.activePaneId;
+      // Query is reset by the picker component on open (via onQueryInput).
+      quickOpenOpen = true;
     },
     setConsoleOpen: (open) => {
       consoleOpen = open;
@@ -1125,6 +1196,12 @@
       catalog: workspaceFileCatalog,
       registry: workspaceFileCatalogRegistry,
     });
+    // M1.2 — close the Quick Open picker on workspace switch so no path from a
+    // prior workspace can be opened after a switch. The catalog retargets
+    // asynchronously; closing is the simplest safe behavior.
+    if (quickOpenOpen) {
+      quickOpenOpen = false;
+    }
   });
 
   $effect(() => {
@@ -1641,6 +1718,18 @@
     },
     onSearchChange: (query) => {
       timelineSearch = query;
+    },
+  }}
+  quickOpen={{
+    open: quickOpenOpen,
+    results: quickOpenResults,
+    onSelect: (path) => {
+      void handleQuickOpenSelect(path);
+    },
+    onClose: closeQuickOpen,
+    onRefresh: refreshQuickOpenCatalog,
+    onQueryInput: (value) => {
+      quickOpenQuery = value;
     },
   }}
 />

@@ -26,6 +26,7 @@
   import DiffViewerPanel from "./DiffViewerPanel.svelte";
   import ProjectSearchPanel from "./ProjectSearchPanel.svelte";
   import SessionTimelineDialog from "./SessionTimelineDialog.svelte";
+  import QuickOpenPicker from "./QuickOpenPicker.svelte";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import TitleBar from "./TitleBar.svelte";
@@ -316,6 +317,21 @@
     onOpenFile?: (filePath: string) => void;
   }
 
+  /**
+   * M1.2 — Quick Open file picker props. The picker reuses the shared
+   * `SearchablePickerShell` and renders ranked catalog results. `open` gates
+   * visibility; `results` carries the ranked matches + catalog metadata;
+   * `onSelect` opens a file through the existing gated pipeline.
+   */
+  export interface AppShellQuickOpenProps {
+    open: boolean;
+    results: import("../picker/fileRanking").RankedFilesResult;
+    onSelect: (path: string) => void;
+    onClose: () => void;
+    onRefresh?: () => void;
+    onQueryInput?: (query: string) => void;
+  }
+
   let {
     activityRail,
     sessionsSidebar,
@@ -330,6 +346,7 @@
     todoPanel,
     diffPanel,
     timelineDialog,
+    quickOpen,
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
@@ -351,6 +368,7 @@
     todoPanel?: AppShellTodoPanelProps;
     diffPanel?: AppShellDiffPanelProps;
     timelineDialog?: AppShellTimelineDialogProps;
+    quickOpen?: AppShellQuickOpenProps;
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
@@ -652,6 +670,17 @@
 <PermissionPrompt />
 <QuestionPrompt />
 <ConfirmDialog />
+
+{#if quickOpen}
+  <QuickOpenPicker
+    open={quickOpen.open}
+    results={quickOpen.results}
+    onSelect={quickOpen.onSelect}
+    onClose={quickOpen.onClose}
+    onRefresh={quickOpen.onRefresh}
+    onQueryInput={quickOpen.onQueryInput}
+  />
+{/if}
 
 {#if timelineDialog}
   <SessionTimelineDialog

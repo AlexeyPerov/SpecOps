@@ -8,6 +8,7 @@ export type AppCommandId =
   | "app.toggleGoTo"
   | "app.findInProject"
   | "app.replaceInProject"
+  | "app.quickOpenFile"
   | "view.cycleTheme"
   | "view.toggleMarkdownPreview"
   | "view.toggleDiffPreview"

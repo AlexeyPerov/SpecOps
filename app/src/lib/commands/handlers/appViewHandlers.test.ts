@@ -193,11 +193,13 @@ function createCommandContext(overrides?: {
   confirm?: (message: string) => Promise<boolean>;
   editorRunner?: EditorCommandRunner | null;
   openProjectSearch?: (focusReplace: boolean) => void;
+  openQuickOpen?: () => void;
   setConsoleOpen?: (open: boolean) => void;
 }) {
   const notify = vi.fn();
   const editorRunner = overrides?.editorRunner ?? null;
   const openProjectSearch = overrides?.openProjectSearch ?? vi.fn();
+  const openQuickOpen = overrides?.openQuickOpen ?? vi.fn();
   const setConsoleOpen = overrides?.setConsoleOpen ?? vi.fn();
   const editorTools = createEditorToolController({
     getActiveBinding: () => ({ paneId: "pane-1", documentId: "doc-1" }),
@@ -213,12 +215,14 @@ function createCommandContext(overrides?: {
       getEditorRunner: vi.fn(() => editorRunner),
       getEditorTools: () => editorTools,
       openProjectSearch,
+      openQuickOpen,
       setConsoleOpen,
     },
     notify,
     editorRunner,
     editorTools,
     openProjectSearch,
+    openQuickOpen,
     setConsoleOpen,
   };
 }
@@ -471,6 +475,15 @@ describe("app shell toggle commands", () => {
 
     expect(openProjectSearch).toHaveBeenCalledWith(true);
   });
+
+  it("app.quickOpenFile opens the quick open picker", () => {
+    const openQuickOpen = vi.fn();
+    const { context } = createCommandContext({ openQuickOpen });
+
+    dispatchCommand("app.quickOpenFile", context);
+
+    expect(openQuickOpen).toHaveBeenCalledOnce();
+  });
 });
 
 describe("tab navigation commands", () => {
@@ -705,6 +718,7 @@ describe("command dispatch coverage", () => {
       "app.toggleGoTo",
       "app.findInProject",
       "app.replaceInProject",
+      "app.quickOpenFile",
       "view.toggleMarkdownPreview",
       "view.toggleDiffPreview",
       "file.new",

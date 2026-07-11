@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M1.1](./m1-1-workspace-file-catalog-execution-plan.md) complete  
 **Next:** [M2 multiple selections](../m2-multiple-selections/m2-1-selection-engine-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Medium — Score 6
 
 How to use this plan: assign to one agent. Wire the M1.1 catalog into the shared picker shell and existing file-open pipeline.
@@ -23,7 +23,7 @@ Add `Cmd+P` / `Ctrl+P` quick open for the active workspace, with responsive fuzz
 
 ## Task breakdown
 
-#### Task M1.2-1: Add quick-open command and controller [Score:5] [Agent:medium]
+#### Task M1.2-1: Add quick-open command and controller [Score:5] [Agent:medium] [DONE]
 
 - Add `app.quickOpenFile` with `Cmd+P` / `Ctrl+P`.
 - Open only for an active folder-backed workspace; expose a disabled reason otherwise.
@@ -40,7 +40,7 @@ Dependencies: M1.1.
 
 ---
 
-#### Task M1.2-2: Build and mount the file picker [Score:6] [Agent:medium]
+#### Task M1.2-2: Build and mount the file picker [Score:6] [Agent:medium] [DONE]
 
 - Render basename as primary text and relative directory as secondary text.
 - Highlight fuzzy match ranges accessibly without fragmenting screen-reader labels.
@@ -59,7 +59,7 @@ Dependencies: M1.2-1.
 
 ---
 
-#### Task M1.2-3: Validation and UX hardening [Score:4] [Agent:medium]
+#### Task M1.2-3: Validation and UX hardening [Score:4] [Agent:medium] [DONE]
 
 - Test command availability, selection routing, stale catalog updates, focus restoration, and open failures.
 - Smoke test multi-pane, multi-window, workspace switch while open, and 10,000-entry filtering.
@@ -75,10 +75,10 @@ Dependencies: M1.2-2.
 
 ## Plan exit criteria
 
-- [ ] `Cmd/Ctrl+P` reliably opens active-workspace files.
-- [ ] Picker is keyboard accessible and responsive at target scale.
-- [ ] Existing file-open gates and pane semantics are reused.
-- [ ] All validation passes.
+- [x] `Cmd/Ctrl+P` reliably opens active-workspace files.
+- [x] Picker is keyboard accessible and responsive at target scale.
+- [x] Existing file-open gates and pane semantics are reused.
+- [x] All validation passes.
 
 ## Changelog instructions
 

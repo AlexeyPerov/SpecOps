@@ -95,6 +95,16 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "Cmd+Shift+R", windows: "Ctrl+Shift+R" },
   },
   {
+    id: "app.quickOpenFile",
+    label: "Quick Open",
+    menuPath: "File/Quick Open",
+    category: "File",
+    searchTerms: ["go to file", "fuzzy", "find file"],
+    paletteIntent: "palette",
+    availability: "workspace",
+    binding: { mac: "Cmd+P", windows: "Ctrl+P" },
+  },
+  {
     id: "view.toggleMarkdownPreview",
     label: "Markdown Preview",
     menuPath: "Hidden/Markdown Preview",

@@ -42,6 +42,9 @@ export const appHandlers: CommandHandlerMap = {
   "app.replaceInProject": ({ openProjectSearch }) => {
     openProjectSearch?.(true);
   },
+  "app.quickOpenFile": ({ openQuickOpen }) => {
+    openQuickOpen?.();
+  },
   "view.toggleMarkdownPreview": ({ getState, notify }) => {
     const state = getState();
     if (state.editor.previewMode === "markdown") {

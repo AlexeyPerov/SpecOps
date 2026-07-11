@@ -6,33 +6,53 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
   return {
     identity,
     actions: {
-      undo: () => ({ ok: true }),
-      redo: () => ({ ok: true }),
-      indent: () => ({ ok: true }),
-      outdent: () => ({ ok: true }),
-      moveLineUp: () => ({ ok: true }),
-      moveLineDown: () => ({ ok: true }),
-      duplicateLine: () => ({ ok: true }),
-      joinLines: () => ({ ok: true }),
-      setWrap: () => ({ ok: true }),
-      setZoom: () => ({ ok: true }),
-      findNext: () => ({ ok: true }),
-      findPrevious: () => ({ ok: true }),
-      replaceCurrent: () => ({ ok: true }),
-      replaceAndFindNext: () => ({ ok: true }),
-      replaceAll: () => ({ ok: true, value: 0 }),
-      setSearchQuery: () => ({ ok: true }),
-      goToLine: () => ({ ok: true }),
+      history: {
+        undo: () => ({ ok: true }),
+        redo: () => ({ ok: true }),
+      },
+      selection: {
+        indent: () => ({ ok: true }),
+        outdent: () => ({ ok: true }),
+      },
+      lines: {
+        moveLineUp: () => ({ ok: true }),
+        moveLineDown: () => ({ ok: true }),
+        duplicateLine: () => ({ ok: true }),
+        joinLines: () => ({ ok: true }),
+      },
+      navigation: {
+        goToLine: () => ({ ok: true }),
+      },
+      search: {
+        findNext: () => ({ ok: true }),
+        findPrevious: () => ({ ok: true }),
+        replaceCurrent: () => ({ ok: true }),
+        replaceAndFindNext: () => ({ ok: true }),
+        replaceAll: () => ({ ok: true, value: 0 }),
+        setSearchQuery: () => ({ ok: true }),
+      },
+      view: {
+        setWrap: () => ({ ok: true }),
+        setZoom: () => ({ ok: true }),
+      },
     },
     queries: {
-      getMatchInfo: () => ({ ok: true, value: { total: 0, current: 0 } }),
-      getSelection: () => ({
-        ok: true,
-        value: { from: 0, to: 0, head: 0, empty: true },
-      }),
-      getDocumentContent: () => ({ ok: true, value: label }),
-      canUndo: () => ({ ok: true, value: false }),
-      canRedo: () => ({ ok: true, value: false }),
+      history: {
+        canUndo: () => ({ ok: true, value: false }),
+        canRedo: () => ({ ok: true, value: false }),
+      },
+      selection: {
+        getSelection: () => ({
+          ok: true,
+          value: { from: 0, to: 0, head: 0, empty: true },
+        }),
+      },
+      document: {
+        getDocumentContent: () => ({ ok: true, value: label }),
+      },
+      search: {
+        getMatchInfo: () => ({ ok: true, value: { total: 0, current: 0 } }),
+      },
     },
     capability: () => ({ state: "available" }),
     focus: vi.fn(),
@@ -61,14 +81,14 @@ describe("createEditorWorkbenchRuntime", () => {
     runtime.registerHost(hostA);
     runtime.registerHost(hostB);
 
-    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
       ok: true,
       value: "a",
     });
 
     activePaneId = "pane-b";
     activeDocumentId = "doc-2";
-    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
       ok: true,
       value: "b",
     });
@@ -86,13 +106,13 @@ describe("createEditorWorkbenchRuntime", () => {
     runtime.registerHost(newer);
     const rejected = runtime.registerHost(older);
 
-    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
       ok: true,
       value: "newer",
     });
 
     rejected.unregister();
-    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
       ok: true,
       value: "newer",
     });
@@ -112,7 +132,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
     firstReg.unregister();
 
-    expect(runtime.getActiveHost()?.queries.getDocumentContent()).toEqual({
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
       ok: true,
       value: "second",
     });
@@ -212,7 +232,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
     const host = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }, "body");
     const goToLine = vi.fn(() => ({ ok: true as const }));
-    host.actions.goToLine = goToLine;
+    host.actions.navigation.goToLine = goToLine;
     runtime.registerHost(host);
 
     const runner = runtime.getActiveRunner();

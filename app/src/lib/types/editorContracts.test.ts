@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type {
   EditorActionName,
-  EditorActions,
   EditorCommandCapability,
+  EditorDomainActions,
+  EditorDomainQueries,
   EditorHost,
   EditorHostIdentity,
-  EditorQueries,
 } from "../types/editor";
 import { SELECT_NEXT_OCCURRENCE_BINDING_DECISION } from "../types/editor";
 
 /**
- * Compile-time / smoke coverage for M0.1 editor host contracts.
- * Ensures extension-point action names and host shape stay typecheckable
- * without requiring a live workbench runtime (M0.2).
+ * Compile-time / smoke coverage for M0.1/M0.4 editor host contracts.
+ * Ensures grouped domain APIs and extension-point action names stay
+ * typecheckable without requiring a live workbench runtime.
  */
 describe("editor host contracts", () => {
-  it("accepts a typed host with capability reporting", () => {
+  it("accepts a typed host with grouped domain actions and capability reporting", () => {
     const identity: EditorHostIdentity = {
       paneId: "pane-1",
       documentId: "doc-1",
@@ -28,32 +28,52 @@ describe("editor host contracts", () => {
     });
 
     const actions = {
-      undo: unavailable,
-      redo: unavailable,
-      indent: unavailable,
-      outdent: unavailable,
-      moveLineUp: unavailable,
-      moveLineDown: unavailable,
-      duplicateLine: unavailable,
-      joinLines: unavailable,
-      setWrap: () => unavailable(),
-      setZoom: () => unavailable(),
-      findNext: () => unavailable(),
-      findPrevious: () => unavailable(),
-      replaceCurrent: () => unavailable(),
-      replaceAndFindNext: () => unavailable(),
-      replaceAll: () => unavailable(),
-      setSearchQuery: () => unavailable(),
-      goToLine: () => unavailable(),
-    } satisfies EditorActions;
+      history: {
+        undo: unavailable,
+        redo: unavailable,
+      },
+      selection: {
+        indent: unavailable,
+        outdent: unavailable,
+      },
+      lines: {
+        moveLineUp: unavailable,
+        moveLineDown: unavailable,
+        duplicateLine: unavailable,
+        joinLines: unavailable,
+      },
+      navigation: {
+        goToLine: () => unavailable(),
+      },
+      search: {
+        findNext: () => unavailable(),
+        findPrevious: () => unavailable(),
+        replaceCurrent: () => unavailable(),
+        replaceAndFindNext: () => unavailable(),
+        replaceAll: () => unavailable(),
+        setSearchQuery: () => unavailable(),
+      },
+      view: {
+        setWrap: () => unavailable(),
+        setZoom: () => unavailable(),
+      },
+    } satisfies EditorDomainActions;
 
     const queries = {
-      getMatchInfo: () => unavailable(),
-      getSelection: () => unavailable(),
-      getDocumentContent: () => unavailable(),
-      canUndo: () => unavailable(),
-      canRedo: () => unavailable(),
-    } satisfies EditorQueries;
+      history: {
+        canUndo: () => unavailable(),
+        canRedo: () => unavailable(),
+      },
+      selection: {
+        getSelection: () => unavailable(),
+      },
+      document: {
+        getDocumentContent: () => unavailable(),
+      },
+      search: {
+        getMatchInfo: () => unavailable(),
+      },
+    } satisfies EditorDomainQueries;
 
     const capability = (action: EditorActionName): EditorCommandCapability => ({
       state: "unavailable",
@@ -73,7 +93,18 @@ describe("editor host contracts", () => {
     expect(host.capability("fold").state).toBe("unavailable");
     expect(host.capability("insertSnippet").state).toBe("unavailable");
     expect(host.capability("toggleBookmark").state).toBe("unavailable");
-    expect(host.actions.undo()).toEqual({ ok: false, reason: "unavailable" });
+    expect(host.actions.history.undo()).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    expect(host.actions.lines.duplicateLine()).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    expect(host.queries.search.getMatchInfo("x", false)).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
   });
 
   it("documents the M2 Cmd/Ctrl+D ownership transfer", () => {

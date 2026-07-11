@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-11 18:05 — M0.4 CodeMirror extension and action composition
+
+- **M0.4-1 Extension assembly** — `editorExtensions.ts` owns named groups (base, language, highlight, decorations, search, minimap, theme, plus reserved fold/completion/snippets/landmarks seams). Compartments are instance-owned per controller; removed module-global `searchHighlightCompartment`. Documented `BASE_KEYMAP_PRECEDENCE` (indentWithTab → defaultKeymap → historyKeymap). `EditorSurface` remains a thin mount/update/destroy bridge.
+- **M0.4-2 Domain actions/queries** — `EditorHost` exposes grouped `actions`/`queries` (`history`, `selection`, `lines`, `navigation`, `search`, `view` / `document`). Implementation in `editorDomainApis.ts` returns typed `EditorActionResult` availability. Flat `EditorCommandRunner` is a thin adapter via `editorHostToCommandRunner` for handlers and find/replace.
+- **M0.4-3 Line transactions** — `editorLineTransactions.ts` replaces full-document `withEditorSelection` rewrites with region ChangeSpecs, merged overlapping/adjacent line blocks, multi-selection preservation, and one undo step. Pure `editorLineOps` helpers retained for characterization.
+- **Tests:** `editorExtensions.test.ts`, `editorLineTransactions.test.ts`, `editorComposition.test.ts` (per-pane search independence); updated contracts + workbench runtime hosts for grouped APIs.
+- **`specs/text-editor-parity-v3/m0-editor-foundations/m0-4-…-execution-plan.md`** — all tasks `[DONE]`, status Done.
+- **Validation:** `npm test` passes (2603 tests). `npm run check` has no new errors in M0.4 files (pre-existing errors elsewhere unchanged).
+
 ## 2026-07-11 17:16 — M0.3 document-scoped editor sessions
 
 - **M0.3-1 Controller** — `app/src/lib/editor/editorViewController.ts` owns `EditorView` create/destroy, document switching, annotated store/external content sync (`editorTransactions.ts`), scroll flush/restore, and generation-guarded language loads. `EditorSurface.svelte` is a thin mount/update/destroy bridge.

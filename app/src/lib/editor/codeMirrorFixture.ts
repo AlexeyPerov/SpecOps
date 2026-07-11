@@ -12,10 +12,7 @@ import {
 import { history, historyKeymap } from "@codemirror/commands";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { createEditorCommandRunner } from "./editorCommandRunner";
-import {
-  createSearchHighlightExtension,
-  searchHighlightCompartment,
-} from "./searchHighlight";
+import { createSearchHighlightExtension } from "./searchHighlight";
 import type { EditorCommandRunner } from "../types/editor";
 
 export type CodeMirrorFixtureOptions = {
@@ -66,6 +63,7 @@ export function createCodeMirrorFixture(
 
   const lineWrapCompartment = new Compartment();
   const fontSizeCompartment = new Compartment();
+  const searchHighlightCompartment = new Compartment();
   let muted = false;
 
   const state = EditorState.create({

@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M0.3](./m0-3-document-sessions-execution-plan.md) complete  
 **Next:** [M0.5 Svelte editor chrome](./m0-5-svelte-editor-chrome-refactor-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Heavy — Score 7
 
 How to use this plan: assign to one editor-integration agent. Centralize instance-owned extensions and migrate full-document operations before feature extensions arrive.
@@ -22,7 +22,7 @@ Make CodeMirror capabilities composable without adding one compartment, effect, 
 
 ## Task breakdown
 
-#### Task M0.4-1: Extract instance-owned extension assembly [Score:7] [Agent:heavy]
+#### Task M0.4-1: Extract instance-owned extension assembly [DONE] [Score:7] [Agent:heavy]
 
 - Add named extension groups for base behavior, theme, language, search, minimap, decorations, and future parity features.
 - Centralize compartment ownership per view/session; remove module-global mutable compartments.
@@ -31,16 +31,16 @@ Make CodeMirror capabilities composable without adding one compartment, effect, 
 
 **Acceptance checklist**
 
-- `EditorSurface.svelte` no longer assembles extensions or declares compartments.
-- Reconfiguring one group does not rebuild unrelated groups.
-- Two simultaneous panes have independent search/configuration compartments.
-- Extension order and toggles have tests.
+- [x] `EditorSurface.svelte` no longer assembles extensions or declares compartments.
+- [x] Reconfiguring one group does not rebuild unrelated groups.
+- [x] Two simultaneous panes have independent search/configuration compartments.
+- [x] Extension order and toggles have tests.
 
 Dependencies: M0.3.
 
 ---
 
-#### Task M0.4-2: Split actions and queries by editor domain [Score:6] [Agent:medium]
+#### Task M0.4-2: Split actions and queries by editor domain [DONE] [Score:6] [Agent:medium]
 
 - Implement grouped APIs (`history`, `selection`, `lines`, `navigation`, `search`, `view`) over the runtime host.
 - Replace the conceptual flat `EditorCommandRunner`.
@@ -49,15 +49,15 @@ Dependencies: M0.3.
 
 **Acceptance checklist**
 
-- Existing undo/redo, indent, line, go-to, wrap/zoom, and search commands use grouped APIs.
-- M2/M4–M8 have reserved extension/action seams without changing this lifecycle again.
-- No component outside the editor layer imports `EditorView`.
+- [x] Existing undo/redo, indent, line, go-to, wrap/zoom, and search commands use grouped APIs.
+- [x] M2/M4–M8 have reserved extension/action seams without changing this lifecycle again.
+- [x] No component outside the editor layer imports `EditorView`.
 
 Dependencies: M0.4-1.
 
 ---
 
-#### Task M0.4-3: Replace full-document single-selection line operations [Score:8] [Agent:heavy]
+#### Task M0.4-3: Replace full-document single-selection line operations [DONE] [Score:8] [Agent:heavy]
 
 - Replace `withEditorSelection` full-document rewrites with mapped CodeMirror changes.
 - Preserve all selection ranges and one undo transaction.
@@ -66,22 +66,21 @@ Dependencies: M0.4-1.
 
 **Acceptance checklist**
 
-- Existing line-op edge cases pass.
-- Secondary selections are not discarded.
-- Large-document commands avoid replacing unchanged text.
-- Transaction tests cover adjacent and duplicate selected lines.
+- [x] Existing line-op edge cases pass.
+- [x] Secondary selections are not discarded.
+- [x] Large-document commands avoid replacing unchanged text.
+- [x] Transaction tests cover adjacent and duplicate selected lines.
 
 Dependencies: M0.4-2.
 
 ## Plan exit criteria
 
-- [ ] Extension/compartment ownership is per editor instance.
-- [ ] Grouped actions/queries replace flat runner growth.
-- [ ] Line operations are transaction-based and selection-safe.
-- [ ] `EditorSurface.svelte` is a thin lifecycle adapter.
-- [ ] `npm test` and `npm run check` pass.
+- [x] Extension/compartment ownership is per editor instance.
+- [x] Grouped actions/queries replace flat runner growth.
+- [x] Line operations are transaction-based and selection-safe.
+- [x] `EditorSurface.svelte` is a thin lifecycle adapter.
+- [x] `npm test` and `npm run check` pass.
 
 ## Changelog instructions
 
 Mark tasks `[DONE]`; add a dated entry describing extension/action boundaries and tests.
-

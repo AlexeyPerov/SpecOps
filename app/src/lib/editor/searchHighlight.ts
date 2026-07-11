@@ -1,4 +1,3 @@
-import { Compartment } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin } from "@codemirror/view";
 import type { DecorationSet, ViewUpdate } from "@codemirror/view";
 
@@ -69,5 +68,3 @@ export function createSearchHighlightExtension(
     { decorations: (v) => v.decorations },
   );
 }
-
-export const searchHighlightCompartment = new Compartment();

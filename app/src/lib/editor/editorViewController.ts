@@ -3,19 +3,17 @@
  * Owns EditorView create/destroy, document switching, content sync, scroll
  * ownership, and generation-aware language loads. Svelte only bridges props.
  */
-import { Compartment, EditorState, Transaction } from "@codemirror/state";
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  indentWithTab,
-} from "@codemirror/commands";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { EditorState, Transaction } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import type { EditorHostRegistration } from "../types/editor";
-import { applyWrap, applyZoom } from "./editorCommandRunner";
 import type { EditorDocumentSessionCache } from "./editorDocumentSessionCache";
+import {
+  applyWrap,
+  applyZoom,
+  buildEditorExtensions,
+  createEditorExtensionCompartments,
+} from "./editorExtensions";
 import { createEditorHost } from "./editorHostFactory";
-import { createSyntaxHighlightExtension } from "./editorHighlight";
 import {
   getLanguageSupport,
   loadLanguageSupport,
@@ -23,7 +21,6 @@ import {
 } from "./editorLanguage";
 import { minimapExtension } from "./editorMinimap";
 import { createPlaintextSymbolDecorations } from "./plaintextDecorations";
-import { searchHighlightCompartment } from "./searchHighlight";
 import {
   storeOriginAnnotation,
   transactionHasStoreOrigin,
@@ -59,6 +56,8 @@ export type EditorViewController = {
   getTrackedDocumentId: () => string | null;
   /** Test/diagnostics: current document generation. */
   getDocumentGeneration: () => number;
+  /** Test/diagnostics: instance-owned extension compartments. */
+  getCompartments: () => ReturnType<typeof createEditorExtensionCompartments>;
 };
 
 const SCROLL_SAVE_DEBOUNCE_MS = 150;
@@ -66,12 +65,7 @@ const SCROLL_SAVE_DEBOUNCE_MS = 150;
 export function createEditorViewController(
   deps: EditorViewControllerDeps,
 ): EditorViewController {
-  const lineWrapCompartment = new Compartment();
-  const fontSizeCompartment = new Compartment();
-  const languageCompartment = new Compartment();
-  const highlightCompartment = new Compartment();
-  const decorationCompartment = new Compartment();
-  const minimapCompartment = new Compartment();
+  const compartments = createEditorExtensionCompartments();
 
   let view: EditorView | undefined;
   let destroyed = false;
@@ -177,9 +171,9 @@ export function createEditorViewController(
     const host = createEditorHost({
       identity,
       getView: () => (destroyed ? undefined : view),
-      lineWrapCompartment,
-      fontSizeCompartment,
-      searchHighlightCompartment,
+      lineWrapCompartment: compartments.lineWrap,
+      fontSizeCompartment: compartments.fontSize,
+      searchHighlightCompartment: compartments.searchHighlight,
       onStatusMessage: deps.onStatusMessage,
       updateCursor,
       focus: () => {
@@ -190,61 +184,11 @@ export function createEditorViewController(
   }
 
   function buildExtensions(language: EditorLanguageId, showMinimap: boolean) {
-    return [
-      lineNumbers(),
-      history(),
-      keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
-      lineWrapCompartment.of([]),
-      fontSizeCompartment.of(
-        EditorView.theme({
-          "&": {
-            fontSize: "var(--font-size-editor, 13px)",
-          },
-        }),
-      ),
-      languageCompartment.of(getLanguageSupport(language) ?? []),
-      highlightCompartment.of(createSyntaxHighlightExtension()),
-      decorationCompartment.of([]),
-      searchHighlightCompartment.of([]),
-      minimapCompartment.of(minimapExtension(showMinimap)),
-      EditorView.theme({
-        "&": {
-          height: "100%",
-          width: "100%",
-          maxWidth: "100%",
-          fontFamily: "var(--font-family-ui)",
-          color: "var(--color-text-primary)",
-          backgroundColor: "var(--color-surface-1)",
-        },
-        ".cm-content, .cm-gutter": {
-          minHeight: "100%",
-        },
-        ".cm-content": {
-          caretColor: "var(--color-text-primary)",
-        },
-        ".cm-gutters": {
-          backgroundColor: "var(--color-surface-1)",
-          color: "var(--color-text-secondary)",
-          borderRight: "1px solid var(--color-border-subtle)",
-        },
-        "&.cm-focused": {
-          outline: "none",
-        },
-        ".cm-activeLine, .cm-activeLineGutter": {
-          backgroundColor: "var(--color-hover)",
-        },
-        ".cm-cursor, .cm-dropCursor": {
-          borderLeftColor: "var(--color-text-primary)",
-        },
-        ".cm-minimap-gutter": {
-          borderLeft: "1px solid var(--color-border-subtle)",
-          backgroundColor: "var(--color-surface-1)",
-        },
-        ".cm-minimap-overlay-container .cm-minimap-overlay": {
-          background: "var(--color-hover)",
-        },
-      }),
-      EditorView.updateListener.of((update) => {
+    return buildEditorExtensions({
+      compartments,
+      language,
+      showMinimap,
+      updateListener: EditorView.updateListener.of((update) => {
         if (destroyed) {
           return;
         }
@@ -255,7 +199,7 @@ export function createEditorViewController(
           updateCursor();
         }
       }),
-    ];
+    });
   }
 
   function createState(content: string, language: EditorLanguageId, showMinimap: boolean): EditorState {
@@ -306,7 +250,7 @@ export function createEditorViewController(
     const syncSupport = getLanguageSupport(language);
     if (syncSupport) {
       view.dispatch({
-        effects: languageCompartment.reconfigure(syncSupport),
+        effects: compartments.language.reconfigure(syncSupport),
       });
     }
     void loadLanguageSupport(language).then((support) => {
@@ -319,7 +263,7 @@ export function createEditorViewController(
         return;
       }
       view.dispatch({
-        effects: languageCompartment.reconfigure(support ?? []),
+        effects: compartments.language.reconfigure(support ?? []),
       });
     });
   }
@@ -338,7 +282,7 @@ export function createEditorViewController(
     lastDecoKey = key;
     const shouldDecorate = language === "plaintext" && decoratePlaintextSymbols;
     view.dispatch({
-      effects: decorationCompartment.reconfigure(
+      effects: compartments.decoration.reconfigure(
         shouldDecorate ? [createPlaintextSymbolDecorations()] : [],
       ),
     });
@@ -350,7 +294,7 @@ export function createEditorViewController(
     }
     lastMinimapEnabled = showMinimap;
     view.dispatch({
-      effects: minimapCompartment.reconfigure(minimapExtension(showMinimap)),
+      effects: compartments.minimap.reconfigure(minimapExtension(showMinimap)),
     });
   }
 
@@ -387,13 +331,13 @@ export function createEditorViewController(
 
     trackedDocumentId = next.documentId;
     // Force language/decoration/minimap reconfigure against possibly restored state.
-    currentEditorLanguage = "";
+    currentEditorLanguage = "" as EditorLanguageId;
     lastDecoKey = "";
     lastMinimapEnabled = null;
 
     // Re-apply pane-level chrome that may differ from a restored session.
-    applyWrap(view, lineWrapCompartment, next.wrapLines);
-    applyZoom(view, fontSizeCompartment, next.zoomPercent);
+    applyWrap(view, compartments.lineWrap, next.wrapLines);
+    applyZoom(view, compartments.fontSize, next.zoomPercent);
     syncLanguage(next.language);
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
@@ -422,11 +366,11 @@ export function createEditorViewController(
     const state = createState(initial.content, initial.language, initial.showMinimap);
     view = new EditorView({ state, parent });
 
-    applyWrap(view, lineWrapCompartment, initial.wrapLines);
-    applyZoom(view, fontSizeCompartment, initial.zoomPercent);
+    applyWrap(view, compartments.lineWrap, initial.wrapLines);
+    applyZoom(view, compartments.fontSize, initial.zoomPercent);
     attachScrollListener();
     trackedDocumentId = initial.documentId;
-    currentEditorLanguage = "";
+    currentEditorLanguage = "" as EditorLanguageId;
     lastMinimapEnabled = null;
     documentGeneration = 1;
     applyScrollTop(initial.scrollTop);
@@ -462,9 +406,9 @@ export function createEditorViewController(
       applyExternalContent(next.content, "reload");
     }
 
-    applyWrap(view, lineWrapCompartment, next.wrapLines);
+    applyWrap(view, compartments.lineWrap, next.wrapLines);
     if (next.zoomPercent) {
-      applyZoom(view, fontSizeCompartment, next.zoomPercent);
+      applyZoom(view, compartments.fontSize, next.zoomPercent);
     }
     syncLanguage(next.language);
     syncDecorations(next.language, next.decoratePlaintextSymbols);
@@ -516,5 +460,6 @@ export function createEditorViewController(
     getView: () => (destroyed ? undefined : view),
     getTrackedDocumentId: () => trackedDocumentId,
     getDocumentGeneration: () => documentGeneration,
+    getCompartments: () => compartments,
   };
 }

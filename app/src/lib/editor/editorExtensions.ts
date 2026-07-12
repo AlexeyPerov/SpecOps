@@ -40,6 +40,7 @@ import {
 import { foldExtension } from "./editorFold";
 import { minimapExtension } from "./editorMinimap";
 import { completionExtension } from "./editorCompletion";
+import { bookmarkExtension } from "./editorBookmarks";
 
 /** Named groups assembled into the editor state. */
 export type EditorExtensionGroupName =
@@ -249,7 +250,7 @@ export function buildNamedExtensionGroups(
     },
     {
       name: "landmarks",
-      extensions: [compartments.landmarks.of([])],
+      extensions: [compartments.landmarks.of(bookmarkExtension())],
     },
     {
       name: "theme",

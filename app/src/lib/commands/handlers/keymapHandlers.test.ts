@@ -188,6 +188,10 @@ function createEditorRunnerMock(): EditorCommandRunner {
     unfoldAll: vi.fn(() => false),
     jumpToHeading: vi.fn(() => false),
     completeWord: vi.fn(() => false),
+    toggleBookmark: vi.fn(() => false),
+    nextBookmark: vi.fn(() => false),
+    previousBookmark: vi.fn(() => false),
+    clearBookmarks: vi.fn(),
     setWrap: vi.fn(),
     setZoom: vi.fn(),
     findNext: vi.fn(() => false),
@@ -312,6 +316,24 @@ describe("keymapCommandForEvent", () => {
     expect(
       keymapCommandForEvent(keyboardEvent({ key: " ", ctrlKey: true })),
     ).toBe("edit.triggerCompletion");
+  });
+
+  it("maps Meta+F2 / Ctrl+F2 to edit.toggleBookmark", () => {
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "F2", metaKey: true })),
+    ).toBe("edit.toggleBookmark");
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "F2", ctrlKey: true })),
+    ).toBe("edit.toggleBookmark");
+  });
+
+  it("maps F2 to edit.nextBookmark and Shift+F2 to edit.previousBookmark", () => {
+    expect(keymapCommandForEvent(keyboardEvent({ key: "F2" }))).toBe(
+      "edit.nextBookmark",
+    );
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "F2", shiftKey: true })),
+    ).toBe("edit.previousBookmark");
   });
 
   it("maps Ctrl+Shift+M to view.toggleMarkdownPreview", () => {

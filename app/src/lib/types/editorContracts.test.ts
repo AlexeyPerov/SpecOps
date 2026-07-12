@@ -72,6 +72,12 @@ describe("editor host contracts", () => {
       completion: {
         trigger: unavailable,
       },
+      bookmarks: {
+        toggle: unavailable,
+        next: unavailable,
+        previous: unavailable,
+        clearAll: unavailable,
+      },
     } satisfies EditorDomainActions;
 
     const queries = {
@@ -92,6 +98,9 @@ describe("editor host contracts", () => {
         getHeadings: () => unavailable(),
         getActiveHeadingKey: () => unavailable(),
         isHeadingFolded: () => unavailable(),
+      },
+      bookmarks: {
+        list: () => unavailable(),
       },
     } satisfies EditorDomainQueries;
 
@@ -114,6 +123,9 @@ describe("editor host contracts", () => {
     expect(host.capability("completeWord").state).toBe("unavailable");
     expect(host.capability("insertSnippet").state).toBe("unavailable");
     expect(host.capability("toggleBookmark").state).toBe("unavailable");
+    expect(host.capability("nextBookmark").state).toBe("unavailable");
+    expect(host.capability("clearBookmarks").state).toBe("unavailable");
+    expect(host.capability("listBookmarks").state).toBe("unavailable");
     expect(host.actions.history.undo()).toEqual({
       ok: false,
       reason: "unavailable",

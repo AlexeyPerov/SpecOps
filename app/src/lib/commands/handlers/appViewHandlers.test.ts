@@ -188,6 +188,10 @@ function createEditorRunnerMock(): EditorCommandRunner {
     unfoldAll: vi.fn(() => false),
     jumpToHeading: vi.fn(() => false),
     completeWord: vi.fn(() => false),
+    toggleBookmark: vi.fn(() => false),
+    nextBookmark: vi.fn(() => false),
+    previousBookmark: vi.fn(() => false),
+    clearBookmarks: vi.fn(),
     setWrap: vi.fn(),
     setZoom: vi.fn(),
     findNext: vi.fn(() => false),
@@ -206,6 +210,8 @@ function createCommandContext(overrides?: {
   editorRunner?: EditorCommandRunner | null;
   openProjectSearch?: (focusReplace: boolean) => void;
   openQuickOpen?: () => void;
+  openHeadingJump?: () => void;
+  openBookmarkList?: () => void;
   openCommandPalette?: () => void;
   setConsoleOpen?: (open: boolean) => void;
 }) {
@@ -213,6 +219,8 @@ function createCommandContext(overrides?: {
   const editorRunner = overrides?.editorRunner ?? null;
   const openProjectSearch = overrides?.openProjectSearch ?? vi.fn();
   const openQuickOpen = overrides?.openQuickOpen ?? vi.fn();
+  const openHeadingJump = overrides?.openHeadingJump ?? vi.fn();
+  const openBookmarkList = overrides?.openBookmarkList ?? vi.fn();
   const openCommandPalette = overrides?.openCommandPalette ?? vi.fn();
   const setConsoleOpen = overrides?.setConsoleOpen ?? vi.fn();
   const editorTools = createEditorToolController({
@@ -230,6 +238,8 @@ function createCommandContext(overrides?: {
       getEditorTools: () => editorTools,
       openProjectSearch,
       openQuickOpen,
+      openHeadingJump,
+      openBookmarkList,
       openCommandPalette,
       setConsoleOpen,
     },
@@ -238,6 +248,8 @@ function createCommandContext(overrides?: {
     editorTools,
     openProjectSearch,
     openQuickOpen,
+    openHeadingJump,
+    openBookmarkList,
     openCommandPalette,
     setConsoleOpen,
   };
@@ -476,6 +488,48 @@ describe("app shell toggle commands", () => {
     expect(editorTools.getSnapshot().activeTool).toBe("outline");
     dispatchCommand("app.toggleMarkdownOutline", context);
     expect(editorTools.getSnapshot().activeTool).toBe(null);
+  });
+
+  it("app.goToHeading opens the heading-jump picker", () => {
+    const { context, openHeadingJump } = createCommandContext();
+    dispatchCommand("app.goToHeading", context);
+    expect(openHeadingJump).toHaveBeenCalledTimes(1);
+  });
+
+  it("edit.toggleBookmark toggles a bookmark and notifies", () => {
+    const editorRunner = createEditorRunnerMock();
+    (editorRunner.toggleBookmark as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    const { context, notify } = createCommandContext({ editorRunner });
+    dispatchCommand("edit.toggleBookmark", context);
+    expect(editorRunner.toggleBookmark).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith("Bookmark toggled.");
+  });
+
+  it("edit.nextBookmark / previous / clear / list dispatch to the runner", () => {
+    const editorRunner = createEditorRunnerMock();
+    (editorRunner.nextBookmark as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (editorRunner.previousBookmark as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    const { context, openBookmarkList } = createCommandContext({ editorRunner });
+
+    dispatchCommand("edit.nextBookmark", context);
+    expect(editorRunner.nextBookmark).toHaveBeenCalledTimes(1);
+
+    dispatchCommand("edit.previousBookmark", context);
+    expect(editorRunner.previousBookmark).toHaveBeenCalledTimes(1);
+
+    dispatchCommand("edit.clearBookmarks", context);
+    expect(editorRunner.clearBookmarks).toHaveBeenCalledTimes(1);
+
+    dispatchCommand("edit.listBookmarks", context);
+    expect(openBookmarkList).toHaveBeenCalledTimes(1);
+  });
+
+  it("edit.nextBookmark notifies when there are no bookmarks", () => {
+    const editorRunner = createEditorRunnerMock();
+    (editorRunner.nextBookmark as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    const { context, notify } = createCommandContext({ editorRunner });
+    dispatchCommand("edit.nextBookmark", context);
+    expect(notify).toHaveBeenCalledWith("No bookmarks.");
   });
 
   it("app.toggleFindReplace and app.toggleGoTo enforce one tool at a time", () => {
@@ -777,6 +831,7 @@ describe("command dispatch coverage", () => {
       "app.toggleGoTo",
       "app.toggleMarkdownOutline",
       "app.focusMarkdownOutline",
+      "app.goToHeading",
       "app.findInProject",
       "app.replaceInProject",
       "app.quickOpenFile",
@@ -818,6 +873,11 @@ describe("command dispatch coverage", () => {
       "edit.foldAll",
       "edit.unfoldAll",
       "edit.triggerCompletion",
+      "edit.toggleBookmark",
+      "edit.nextBookmark",
+      "edit.previousBookmark",
+      "edit.clearBookmarks",
+      "edit.listBookmarks",
       "view.toggleWrap",
       "view.zoomIn",
       "view.zoomOut",

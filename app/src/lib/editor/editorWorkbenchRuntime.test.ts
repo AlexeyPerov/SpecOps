@@ -50,6 +50,12 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
       completion: {
         trigger: () => ({ ok: true }),
       },
+      bookmarks: {
+        toggle: () => ({ ok: true }),
+        next: () => ({ ok: true }),
+        previous: () => ({ ok: true }),
+        clearAll: () => ({ ok: true }),
+      },
     },
     queries: {
       history: {
@@ -72,6 +78,9 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
         getHeadings: () => ({ ok: true, value: [] }),
         getActiveHeadingKey: () => ({ ok: true, value: null }),
         isHeadingFolded: () => ({ ok: true, value: false }),
+      },
+      bookmarks: {
+        list: () => ({ ok: true, value: [] }),
       },
     },
     capability: () => ({ state: "available" }),

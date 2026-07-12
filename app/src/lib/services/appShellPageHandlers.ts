@@ -30,6 +30,8 @@ export interface AppShellCommandHandlersDeps {
   getOverlayOpen?: () => boolean;
   openProjectSearch: (focusReplace: boolean) => void;
   openQuickOpen: () => void;
+  openHeadingJump?: () => void;
+  openBookmarkList?: () => void;
   openCommandPalette: () => void;
   setConsoleOpen: (open: boolean) => void;
 }
@@ -45,6 +47,8 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
       getEditorTools: deps.getEditorTools,
       openProjectSearch: deps.openProjectSearch,
       openQuickOpen: deps.openQuickOpen,
+      openHeadingJump: deps.openHeadingJump,
+      openBookmarkList: deps.openBookmarkList,
       openCommandPalette: deps.openCommandPalette,
       setConsoleOpen: deps.setConsoleOpen,
     });

@@ -55,4 +55,29 @@ export const editHandlers: CommandHandlerMap = {
   "edit.triggerCompletion": ({ getEditorRunner }) => {
     getEditorRunner()?.completeWord();
   },
+  "edit.toggleBookmark": ({ getEditorRunner, notify }) => {
+    const toggled = getEditorRunner()?.toggleBookmark() ?? false;
+    if (toggled) {
+      notify("Bookmark toggled.");
+    }
+  },
+  "edit.nextBookmark": ({ getEditorRunner, notify }) => {
+    const moved = getEditorRunner()?.nextBookmark() ?? false;
+    if (!moved) {
+      notify("No bookmarks.");
+    }
+  },
+  "edit.previousBookmark": ({ getEditorRunner, notify }) => {
+    const moved = getEditorRunner()?.previousBookmark() ?? false;
+    if (!moved) {
+      notify("No bookmarks.");
+    }
+  },
+  "edit.clearBookmarks": ({ getEditorRunner, notify }) => {
+    getEditorRunner()?.clearBookmarks();
+    notify("Bookmarks cleared.");
+  },
+  "edit.listBookmarks": ({ openBookmarkList }) => {
+    openBookmarkList?.();
+  },
 };

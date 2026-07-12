@@ -292,6 +292,45 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
     commandId: "edit.triggerCompletion",
     runCommand,
   });
+  const goToHeadingItem = await commandItem({
+    id: "cmd.edit.goToHeading",
+    text: "Go to Heading",
+    commandId: "app.goToHeading",
+    runCommand,
+  });
+  const toggleBookmarkItem = await commandItem({
+    id: "cmd.edit.toggleBookmark",
+    text: "Toggle Bookmark",
+    accelerator: "CmdOrCtrl+F2",
+    commandId: "edit.toggleBookmark",
+    runCommand,
+  });
+  const nextBookmarkItem = await commandItem({
+    id: "cmd.edit.nextBookmark",
+    text: "Next Bookmark",
+    accelerator: "F2",
+    commandId: "edit.nextBookmark",
+    runCommand,
+  });
+  const previousBookmarkItem = await commandItem({
+    id: "cmd.edit.previousBookmark",
+    text: "Previous Bookmark",
+    accelerator: "Shift+F2",
+    commandId: "edit.previousBookmark",
+    runCommand,
+  });
+  const clearBookmarksItem = await commandItem({
+    id: "cmd.edit.clearBookmarks",
+    text: "Clear All Bookmarks",
+    commandId: "edit.clearBookmarks",
+    runCommand,
+  });
+  const listBookmarksItem = await commandItem({
+    id: "cmd.edit.listBookmarks",
+    text: "List Bookmarks",
+    commandId: "edit.listBookmarks",
+    runCommand,
+  });
 
   return Submenu.new({
     text: "Edit",
@@ -309,6 +348,7 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
       findInProjectItem,
       replaceInProjectItem,
       goToItem,
+      goToHeadingItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       indentItem,
       outdentItem,
@@ -328,6 +368,12 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
       foldAllItem,
       unfoldAllItem,
       triggerCompletionItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      toggleBookmarkItem,
+      nextBookmarkItem,
+      previousBookmarkItem,
+      clearBookmarksItem,
+      listBookmarksItem,
     ],
   });
 }
@@ -534,6 +580,12 @@ export const NATIVE_MENU_COMMAND_IDS: readonly AppCommandId[] = [
   "edit.foldAll",
   "edit.unfoldAll",
   "edit.triggerCompletion",
+  "app.goToHeading",
+  "edit.toggleBookmark",
+  "edit.nextBookmark",
+  "edit.previousBookmark",
+  "edit.clearBookmarks",
+  "edit.listBookmarks",
   "view.layoutSingle",
   "view.layoutCols2",
   "view.layoutRows2",

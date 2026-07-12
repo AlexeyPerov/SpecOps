@@ -9,6 +9,7 @@ import type { EditorView } from "@codemirror/view";
 import type {
   EditorActionName,
   EditorActionResult,
+  EditorBookmarkSnapshot,
   EditorCommandCapability,
   EditorDomainActions,
   EditorDomainQueries,
@@ -45,6 +46,13 @@ import {
   skipOccurrenceOp,
   undoOccurrenceOp,
 } from "./editorSelectionOps";
+import {
+  bookmarkField,
+  bookmarkSnapshots,
+  clearAllBookmarksEffect,
+  nextBookmarkLine,
+  toggleBookmarkEffect,
+} from "./editorBookmarks";
 
 export type CreateEditorDomainApisOptions = {
   getView: () => EditorView | undefined;
@@ -131,6 +139,11 @@ const CORE_ACTIONS = new Set<EditorActionName>([
   "unfoldAll",
   "jumpToHeading",
   "completeWord",
+  "toggleBookmark",
+  "nextBookmark",
+  "previousBookmark",
+  "clearBookmarks",
+  "listBookmarks",
 ]);
 
 export type EditorDomainApis = {
@@ -450,6 +463,69 @@ export function createEditorDomainApis(
         return startCompletion(view) ? ok() : disabled();
       },
     },
+    bookmarks: {
+      toggle: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        // Toggle a bookmark on each selection's main line. Dedup happens in
+        // the state field reducer (multiple selections on the same line merge).
+        const positions = view.state.selection.ranges.map((range) => range.head);
+        view.dispatch({
+          effects: toggleBookmarkEffect.of({ positions }),
+        });
+        return ok();
+      },
+      next: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        const positions = view.state.field(bookmarkField, false) ?? [];
+        const cursor = view.state.selection.main.head;
+        const line = nextBookmarkLine(view.state.doc, positions, cursor, "next");
+        if (line == null) {
+          return disabled();
+        }
+        const target = view.state.doc.line(line);
+        unfoldAroundPosition(view, target.from);
+        view.dispatch({
+          selection: EditorSelection.cursor(target.from),
+          scrollIntoView: true,
+        });
+        updateCursor();
+        return ok();
+      },
+      previous: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        const positions = view.state.field(bookmarkField, false) ?? [];
+        const cursor = view.state.selection.main.head;
+        const line = nextBookmarkLine(view.state.doc, positions, cursor, "previous");
+        if (line == null) {
+          return disabled();
+        }
+        const target = view.state.doc.line(line);
+        unfoldAroundPosition(view, target.from);
+        view.dispatch({
+          selection: EditorSelection.cursor(target.from),
+          scrollIntoView: true,
+        });
+        updateCursor();
+        return ok();
+      },
+      clearAll: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        view.dispatch({ effects: clearAllBookmarksEffect.of(null) });
+        return ok();
+      },
+    },
   };
 
   const queries: EditorDomainQueries = {
@@ -536,6 +612,16 @@ export function createEditorDomainApis(
           return { ok: true, value: false };
         }
         return { ok: true, value: isLineFolded(view, heading.line) };
+      },
+    },
+    bookmarks: {
+      list: (): EditorQueryResult<EditorBookmarkSnapshot[]> => {
+        const view = getView();
+        if (!view) {
+          return { ok: false, reason: "unavailable" };
+        }
+        const positions = view.state.field(bookmarkField, false) ?? [];
+        return { ok: true, value: bookmarkSnapshots(view.state.doc, positions) };
       },
     },
   };

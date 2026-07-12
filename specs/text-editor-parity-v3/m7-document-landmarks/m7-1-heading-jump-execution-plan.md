@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** M4.2 and M6 complete  
 **Next:** [M7.2 bookmarks](./m7-2-bookmarks-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Medium — Score 5
 
 How to use this plan: assign to one agent. Reuse the Markdown outline model and picker shell; do not create a second heading parser.
@@ -21,7 +21,7 @@ Provide a fast keyboard-first heading jump for users who do not want the outline
 
 ## Task breakdown
 
-#### Task M7.1-1: Add heading-jump command and ranking [Score:4] [Agent:medium]
+#### Task M7.1-1: Add heading-jump command and ranking [Score:4] [Agent:medium] [DONE]
 
 - Add `editor.goToHeading`, available only for editable Markdown with headings.
 - Choose a conflict-free default binding after command-catalog validation; leaving it palette-only is acceptable if no standard binding is safe.
@@ -38,7 +38,7 @@ Dependencies: M4.2.
 
 ---
 
-#### Task M7.1-2: Build heading picker and validate navigation [Score:5] [Agent:medium]
+#### Task M7.1-2: Build heading picker and validate navigation [Score:5] [Agent:medium] [DONE]
 
 - Render heading level/hierarchy, label, and line number.
 - Enter reveals/unfolds the heading and restores editor focus.
@@ -56,10 +56,10 @@ Dependencies: M7.1-1.
 
 ## Plan exit criteria
 
-- [ ] Users can fuzzy-jump to any Markdown heading.
-- [ ] No duplicate heading parser/model exists.
-- [ ] Fold reveal and focus behavior are correct.
-- [ ] Validation passes.
+- [x] Users can fuzzy-jump to any Markdown heading.
+- [x] No duplicate heading parser/model exists.
+- [x] Fold reveal and focus behavior are correct.
+- [x] Validation passes.
 
 ## Changelog instructions
 

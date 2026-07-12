@@ -42,6 +42,9 @@ export const appHandlers: CommandHandlerMap = {
   "app.focusMarkdownOutline": ({ getEditorTools }) => {
     getEditorTools().open("outline");
   },
+  "app.goToHeading": ({ openHeadingJump }) => {
+    openHeadingJump?.();
+  },
   "app.findInProject": ({ openProjectSearch }) => {
     openProjectSearch?.(false);
   },

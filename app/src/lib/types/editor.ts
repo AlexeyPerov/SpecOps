@@ -78,7 +78,9 @@ export type EditorActionName =
   | "jumpToHeading"
   | "toggleBookmark"
   | "nextBookmark"
-  | "previousBookmark";
+  | "previousBookmark"
+  | "clearBookmarks"
+  | "listBookmarks";
 
 export type MatchInfo = {
   total: number;
@@ -150,6 +152,35 @@ export type EditorCompletionActions = {
   trigger: () => EditorActionResult;
 };
 
+/**
+ * Bookmark snapshot row for the list picker. `preview` is bounded and trimmed;
+ * bookmarks never log full document content.
+ */
+export type EditorBookmarkSnapshot = {
+  line: number;
+  from: number;
+  to: number;
+  /** Trimmed, bounded preview of the bookmarked line (never the full document). */
+  preview: string;
+};
+
+/** Bookmark actions (M7.2). Ephemeral per editor document view. */
+export type EditorBookmarkActions = {
+  /** Toggle a bookmark on each selection's main line (deduped per line). */
+  toggle: () => EditorActionResult;
+  /** Jump to the next bookmark after the cursor; wraps within the document. */
+  next: () => EditorActionResult;
+  /** Jump to the previous bookmark before the cursor; wraps within the document. */
+  previous: () => EditorActionResult;
+  /** Remove every bookmark in this editor document view. */
+  clearAll: () => EditorActionResult;
+};
+
+/** Bookmark queries (M7.2). */
+export type EditorBookmarkQueries = {
+  list: () => EditorQueryResult<EditorBookmarkSnapshot[]>;
+};
+
 /** Find/replace and search-highlight configuration. */
 export type EditorSearchActions = {
   findNext: (query: string, caseSensitive: boolean) => EditorActionResult;
@@ -192,6 +223,7 @@ export type EditorDomainActions = {
   view: EditorViewActions;
   folding: EditorFoldingActions;
   completion: EditorCompletionActions;
+  bookmarks: EditorBookmarkActions;
 };
 
 export type EditorHistoryQueries = {
@@ -233,6 +265,7 @@ export type EditorDomainQueries = {
   document: EditorDocumentQueries;
   search: EditorSearchQueries;
   markdown: EditorMarkdownQueries;
+  bookmarks: EditorBookmarkQueries;
 };
 
 /**
@@ -348,6 +381,10 @@ export type EditorCommandRunner = {
   unfoldAll: () => boolean;
   jumpToHeading: (headingKey: string) => boolean;
   completeWord: () => boolean;
+  toggleBookmark: () => boolean;
+  nextBookmark: () => boolean;
+  previousBookmark: () => boolean;
+  clearBookmarks: () => void;
 };
 
 /**

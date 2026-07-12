@@ -28,6 +28,8 @@
   import SessionTimelineDialog from "./SessionTimelineDialog.svelte";
   import QuickOpenPicker from "./QuickOpenPicker.svelte";
   import CommandPalettePicker from "./CommandPalettePicker.svelte";
+  import HeadingJumpPicker from "./HeadingJumpPicker.svelte";
+  import BookmarkListPicker from "./BookmarkListPicker.svelte";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import TitleBar from "./TitleBar.svelte";
@@ -345,6 +347,22 @@
     onQueryInput?: (query: string) => void;
   }
 
+  export interface AppShellHeadingJumpProps {
+    open: boolean;
+    results: import("../picker/headingRanking").RankedHeadingsResult;
+    onSelect: (headingKey: string) => void;
+    onClose: () => void;
+    onQueryInput?: (query: string) => void;
+  }
+
+  export interface AppShellBookmarkListProps {
+    open: boolean;
+    bookmarks: readonly import("../types/editor").EditorBookmarkSnapshot[];
+    onSelect: (line: number) => void;
+    onClose: () => void;
+    onQueryInput?: (query: string) => void;
+  }
+
   let {
     activityRail,
     sessionsSidebar,
@@ -361,6 +379,8 @@
     timelineDialog,
     quickOpen,
     commandPalette,
+    headingJump,
+    bookmarkList,
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
@@ -384,6 +404,8 @@
     timelineDialog?: AppShellTimelineDialogProps;
     quickOpen?: AppShellQuickOpenProps;
     commandPalette?: AppShellCommandPaletteProps;
+    headingJump?: AppShellHeadingJumpProps;
+    bookmarkList?: AppShellBookmarkListProps;
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
@@ -715,6 +737,26 @@
     onClose={quickOpen.onClose}
     onRefresh={quickOpen.onRefresh}
     onQueryInput={quickOpen.onQueryInput}
+  />
+{/if}
+
+{#if headingJump}
+  <HeadingJumpPicker
+    open={headingJump.open}
+    results={headingJump.results}
+    onSelect={headingJump.onSelect}
+    onClose={headingJump.onClose}
+    onQueryInput={headingJump.onQueryInput}
+  />
+{/if}
+
+{#if bookmarkList}
+  <BookmarkListPicker
+    open={bookmarkList.open}
+    bookmarks={bookmarkList.bookmarks}
+    onSelect={bookmarkList.onSelect}
+    onClose={bookmarkList.onClose}
+    onQueryInput={bookmarkList.onQueryInput}
   />
 {/if}
 

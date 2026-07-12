@@ -1,9 +1,10 @@
 /**
- * Window-local editor chrome tools (find/replace, go-to, future outline/bookmarks).
- * One tool at a time; closes on stale pane/document binding or modal precedence.
+ * Window-local editor chrome tools (find/replace, go-to, outline, heading-jump,
+ * bookmark list). One tool at a time; closes on stale pane/document binding or
+ * modal precedence.
  */
 
-export type EditorToolId = "find" | "go-to" | "outline";
+export type EditorToolId = "find" | "go-to" | "outline" | "heading-jump" | "bookmark-list";
 
 export type EditorToolBinding = {
   paneId: string;

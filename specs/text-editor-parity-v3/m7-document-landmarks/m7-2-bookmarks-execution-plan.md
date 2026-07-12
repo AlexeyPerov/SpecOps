@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M7.1](./m7-1-heading-jump-execution-plan.md) complete  
 **Next:** [M8 find/replace polish](../m8-find-replace-polish/m8-1-search-model-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Medium — Score 6
 
 How to use this plan: assign to one CodeMirror-focused agent. Bookmarks are ephemeral in v1; do not add session persistence.
@@ -22,7 +22,7 @@ Let users mark and revisit important lines in any text document, complementing M
 
 ## Task breakdown
 
-#### Task M7.2-1: Implement bookmark state and markers [Score:7] [Agent:heavy]
+#### Task M7.2-1: Implement bookmark state and markers [Score:7] [Agent:heavy] [DONE]
 
 - Add a CodeMirror state field/effects for toggling bookmark on the main cursor line, clearing one/all, and mapping bookmarks through document changes.
 - Render bookmark markers in a gutter that coexists with line numbers and fold controls.
@@ -40,7 +40,7 @@ Dependencies: M7.1 and M4.
 
 ---
 
-#### Task M7.2-2: Add commands and bookmark navigation [Score:6] [Agent:medium]
+#### Task M7.2-2: Add commands and bookmark navigation [Score:6] [Agent:medium] [DONE]
 
 - Add toggle bookmark, next, previous, clear all, and list bookmarks commands.
 - Assign conflict-free defaults only for toggle/next/previous if conventions fit; keep others palette-visible.
@@ -57,7 +57,7 @@ Dependencies: M7.2-1.
 
 ---
 
-#### Task M7.2-3: Validation [Score:5] [Agent:medium]
+#### Task M7.2-3: Validation [Score:5] [Agent:medium] [DONE]
 
 - Test edits, undo/redo, external replacement, folds, multi-cursor, tab/pane switch, document close, and large bookmark counts.
 - Confirm no persistence/schema change.
@@ -72,10 +72,10 @@ Dependencies: M7.2-2.
 
 ## Plan exit criteria
 
-- [ ] Any text document supports ephemeral bookmarks.
-- [ ] Marker, next/previous, and list workflows work.
-- [ ] Folding/multi-cursor interactions are tested.
-- [ ] No persisted-data change is introduced.
+- [x] Any text document supports ephemeral bookmarks.
+- [x] Marker, next/previous, and list workflows work.
+- [x] Folding/multi-cursor interactions are tested.
+- [x] No persisted-data change is introduced.
 
 ## Changelog instructions
 

@@ -60,6 +60,11 @@
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
   import { rankFiles, type RankedFilesResult } from "../lib/picker/fileRanking";
   import { rankCommands, type RankedCommandsResult } from "../lib/picker/commandRanking";
+  import { rankHeadings, type RankedHeadingsResult } from "../lib/picker/headingRanking";
+  import type {
+    EditorBookmarkSnapshot,
+    MarkdownHeadingSnapshot,
+  } from "../lib/types/editor";
   import { buildCommandAvailabilitySnapshot } from "../lib/commands/availability";
   import { buildPaletteSnapshot } from "../lib/commands/catalog";
   import type { AppCommandId } from "../lib/domain/contracts";
@@ -359,6 +364,16 @@
    */
   let commandPaletteOpen = $state(false);
   let commandPaletteQuery = $state("");
+  /**
+   * M7.1 — Heading-jump picker state. Ephemeral and window-local.
+   */
+  let headingJumpOpen = $state(false);
+  let headingJumpQuery = $state("");
+  /**
+   * M7.2 — Bookmark list picker state. Ephemeral and window-local.
+   */
+  let bookmarkListOpen = $state(false);
+  let bookmarkListQuery = $state("");
 
   const editorTools = createEditorToolController({
     getActiveBinding: () => {
@@ -385,6 +400,8 @@
       timelineOpen ||
       quickOpenOpen ||
       commandPaletteOpen ||
+      headingJumpOpen ||
+      bookmarkListOpen ||
       Boolean(workspaceContextMenu),
   });
   setEditorToolController(editorTools);
@@ -557,6 +574,62 @@
     rankCommands(commandPaletteEntries, commandPaletteQuery),
   );
 
+  /**
+   * M7.1 / M7.2 pickers read from the live editor host queries. Host queries
+   * are not Svelte-reactive, so while a picker is open we refresh on a short
+   * interval (mirrors the MarkdownOutlinePanel polling approach).
+   */
+  let landmarkPickerTick = $state(0);
+  $effect(() => {
+    if (!headingJumpOpen && !bookmarkListOpen) {
+      return;
+    }
+    const interval = setInterval(() => {
+      landmarkPickerTick += 1;
+    }, 200);
+    return () => clearInterval(interval);
+  });
+
+  const headingJumpHeadings = $derived.by((): MarkdownHeadingSnapshot[] => {
+    void landmarkPickerTick;
+    if (!headingJumpOpen) {
+      return [];
+    }
+    const host = editorWorkbench.getActiveHost();
+    if (!host) {
+      return [];
+    }
+    const result = host.queries.markdown.getHeadings();
+    return result.ok ? result.value : [];
+  });
+
+  const headingJumpCursorPos = $derived.by((): number => {
+    void landmarkPickerTick;
+    const host = editorWorkbench.getActiveHost();
+    if (!host) {
+      return 0;
+    }
+    const selection = host.queries.selection.getSelection();
+    return selection.ok ? selection.value.head : 0;
+  });
+
+  const headingJumpResults: RankedHeadingsResult = $derived(
+    rankHeadings(headingJumpHeadings, headingJumpQuery, headingJumpCursorPos),
+  );
+
+  const bookmarkListSnapshots = $derived.by((): EditorBookmarkSnapshot[] => {
+    void landmarkPickerTick;
+    if (!bookmarkListOpen) {
+      return [];
+    }
+    const host = editorWorkbench.getActiveHost();
+    if (!host) {
+      return [];
+    }
+    const result = host.queries.bookmarks.list();
+    return result.ok ? result.value : [];
+  });
+
   const shouldRenderMarkdownPreview = $derived.by(() => {
     if (!activeDocument || activeDocument.language !== "markdown") {
       return false;
@@ -698,6 +771,34 @@
 
   function closeCommandPalette(): void {
     commandPaletteOpen = false;
+  }
+
+  function closeHeadingJump(): void {
+    headingJumpOpen = false;
+  }
+
+  function closeBookmarkList(): void {
+    bookmarkListOpen = false;
+  }
+
+  function handleHeadingJumpSelect(headingKey: string): void {
+    // Preview-only: switch to edit so the CodeMirror host can reveal the heading.
+    if (activeDocument?.markdownViewMode === "preview") {
+      setMarkdownViewMode("edit");
+    }
+    const host = editorWorkbench.getActiveHost();
+    host?.actions.navigation.jumpToHeading(headingKey);
+    host?.focus();
+    headingJumpOpen = false;
+  }
+
+  function handleBookmarkListSelect(line: number): void {
+    const host = editorWorkbench.getActiveHost();
+    if (host) {
+      host.actions.navigation.goToLine(line);
+      host.focus();
+    }
+    bookmarkListOpen = false;
   }
 
   function refreshQuickOpenCatalog(): void {
@@ -879,6 +980,8 @@
       timelineOpen ||
       quickOpenOpen ||
       commandPaletteOpen ||
+      headingJumpOpen ||
+      bookmarkListOpen ||
       Boolean(workspaceContextMenu),
     openProjectSearch: (focusReplace) => {
       projectSearchOpen = true;
@@ -889,6 +992,12 @@
       if (commandPaletteOpen) {
         commandPaletteOpen = false;
       }
+      if (headingJumpOpen) {
+        headingJumpOpen = false;
+      }
+      if (bookmarkListOpen) {
+        bookmarkListOpen = false;
+      }
       // Capture the active pane at invocation so the selected file opens into
       // the pane the user was focused on. If that pane is gone by selection
       // time, the open pipeline falls back to the current active pane.
@@ -896,9 +1005,43 @@
       // Query is reset by the picker component on open (via onQueryInput).
       quickOpenOpen = true;
     },
+    openHeadingJump: () => {
+      if (quickOpenOpen) {
+        quickOpenOpen = false;
+      }
+      if (commandPaletteOpen) {
+        commandPaletteOpen = false;
+      }
+      if (bookmarkListOpen) {
+        bookmarkListOpen = false;
+      }
+      editorTools.close({ restoreFocus: false });
+      headingJumpQuery = "";
+      headingJumpOpen = true;
+    },
+    openBookmarkList: () => {
+      if (quickOpenOpen) {
+        quickOpenOpen = false;
+      }
+      if (commandPaletteOpen) {
+        commandPaletteOpen = false;
+      }
+      if (headingJumpOpen) {
+        headingJumpOpen = false;
+      }
+      editorTools.close({ restoreFocus: false });
+      bookmarkListQuery = "";
+      bookmarkListOpen = true;
+    },
     openCommandPalette: () => {
       if (quickOpenOpen) {
         quickOpenOpen = false;
+      }
+      if (headingJumpOpen) {
+        headingJumpOpen = false;
+      }
+      if (bookmarkListOpen) {
+        bookmarkListOpen = false;
       }
       editorTools.close({ restoreFocus: false });
       commandPaletteQuery = "";
@@ -1251,11 +1394,31 @@
     // M1.2 — close the Quick Open picker on workspace switch so no path from a
     // prior workspace can be opened after a switch. The catalog retargets
     // asynchronously; closing is the simplest safe behavior.
+    // M7.1/M7.2 — close the heading-jump and bookmark-list pickers too: their
+    // host-scoped data belongs to the previous context's active editor.
     if (quickOpenOpen) {
       quickOpenOpen = false;
     }
     if (commandPaletteOpen) {
       commandPaletteOpen = false;
+    }
+    if (headingJumpOpen) {
+      headingJumpOpen = false;
+    }
+    if (bookmarkListOpen) {
+      bookmarkListOpen = false;
+    }
+  });
+
+  // M7.1/M7.2 — close the heading-jump picker when the active document is no
+  // longer Markdown-editable (it is markdownEdit-only), and close both landmark
+  // pickers when the active document identity changes (stale host data).
+  $effect(() => {
+    const docId = activeDocument?.id;
+    const language = activeDocument?.language;
+    void docId;
+    if (headingJumpOpen && language !== "markdown") {
+      headingJumpOpen = false;
     }
   });
 
@@ -1801,6 +1964,24 @@
     onClose: closeCommandPalette,
     onQueryInput: (value) => {
       commandPaletteQuery = value;
+    },
+  }}
+  headingJump={{
+    open: headingJumpOpen,
+    results: headingJumpResults,
+    onSelect: handleHeadingJumpSelect,
+    onClose: closeHeadingJump,
+    onQueryInput: (value) => {
+      headingJumpQuery = value;
+    },
+  }}
+  bookmarkList={{
+    open: bookmarkListOpen,
+    bookmarks: bookmarkListSnapshots,
+    onSelect: handleBookmarkListSelect,
+    onClose: closeBookmarkList,
+    onQueryInput: (value) => {
+      bookmarkListQuery = value;
     },
   }}
 />

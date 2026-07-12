@@ -69,6 +69,9 @@ describe("editor host contracts", () => {
         foldAll: unavailable,
         unfoldAll: unavailable,
       },
+      completion: {
+        trigger: unavailable,
+      },
     } satisfies EditorDomainActions;
 
     const queries = {
@@ -108,6 +111,7 @@ describe("editor host contracts", () => {
     expect(host.identity.generation).toBe(1);
     expect(host.capability("selectNextOccurrence").state).toBe("unavailable");
     expect(host.capability("fold").state).toBe("unavailable");
+    expect(host.capability("completeWord").state).toBe("unavailable");
     expect(host.capability("insertSnippet").state).toBe("unavailable");
     expect(host.capability("toggleBookmark").state).toBe("unavailable");
     expect(host.actions.history.undo()).toEqual({

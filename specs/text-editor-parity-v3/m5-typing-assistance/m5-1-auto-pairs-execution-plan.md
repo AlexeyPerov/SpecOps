@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** M4 complete  
 **Next:** [M5.2 document-word completion](./m5-2-document-word-completion-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Medium — Score 5
 
 How to use this plan: assign to one agent. Use CodeMirror language-aware close-bracket support with conservative Markdown behavior.
@@ -22,7 +22,7 @@ Reduce routine typing friction for brackets, quotes, backticks, and Markdown del
 
 ## Task breakdown
 
-#### Task M5.1-1: Add language-aware close pairs [Score:5] [Agent:medium]
+#### Task M5.1-1: Add language-aware close pairs [DONE] [Score:5] [Agent:medium]
 
 - Add `@codemirror/autocomplete` as a direct dependency.
 - Enable standard close brackets and close-bracket keymap through the editor extension registry.
@@ -40,7 +40,7 @@ Dependencies: M4 and M2.
 
 ---
 
-#### Task M5.1-2: Configuration and edge cases [Score:5] [Agent:medium]
+#### Task M5.1-2: Configuration and edge cases [DONE] [Score:5] [Agent:medium]
 
 - Add an Editor setting to enable auto-close pairs (default on).
 - Reconfigure live without rebuilding the editor.
@@ -58,11 +58,11 @@ Dependencies: M5.1-1.
 
 ## Plan exit criteria
 
-- [ ] Auto-close pairs work for routine Markdown and code typing.
-- [ ] Behavior is language-aware, configurable, and multi-cursor safe.
-- [ ] Direct dependency is declared.
-- [ ] `npm test` and `npm run check` pass.
-- [ ] Touched Svelte files pass the autofixer.
+- [x] Auto-close pairs work for routine Markdown and code typing.
+- [x] Behavior is language-aware, configurable, and multi-cursor safe.
+- [x] Direct dependency is declared.
+- [x] `npm test` and `npm run check` pass.
+- [x] Touched Svelte files pass the autofixer.
 
 ## Non-goals
 

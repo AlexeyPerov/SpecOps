@@ -47,6 +47,9 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
         foldAll: () => ({ ok: true }),
         unfoldAll: () => ({ ok: true }),
       },
+      completion: {
+        trigger: () => ({ ok: true }),
+      },
     },
     queries: {
       history: {

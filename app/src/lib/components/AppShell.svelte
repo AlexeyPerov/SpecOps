@@ -161,6 +161,8 @@
     decoratePlaintextSymbols: boolean;
     showMinimap: boolean;
     showFoldGutter: boolean;
+    autoClosePairs: boolean;
+    autoSuggest: boolean;
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
     largeFileConfirming: boolean;
@@ -471,6 +473,8 @@
             decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
             showMinimap={editor.showMinimap}
             showFoldGutter={editor.showFoldGutter}
+            autoClosePairs={editor.autoClosePairs}
+            autoSuggest={editor.autoSuggest}
             maxBinaryOpenAsTextBytes={editor.maxBinaryOpenAsTextBytes}
             maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
             largeFileConfirming={editor.largeFileConfirming}

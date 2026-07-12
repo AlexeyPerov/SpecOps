@@ -28,6 +28,8 @@ function baseProps(
     decoratePlaintextSymbols: true,
     showMinimap: false,
     showFoldGutter: true,
+    autoClosePairs: true,
+    autoSuggest: false,
     ...overrides,
   };
 }
@@ -247,5 +249,30 @@ describe("createEditorViewController", () => {
       userEvent: "input",
     });
     expect(transactionHasStoreOrigin([userTr])).toBe(false);
+  });
+
+  it("reconfigures the completion compartment when autoClosePairs/autoSuggest change", () => {
+    mountController();
+    const view = controller!.getView()!;
+    const compartments = controller!.getCompartments();
+    const before = compartments.completion.get(view.state);
+
+    // Flip autoClosePairs off and autoSuggest on.
+    controller!.update(baseProps({ autoClosePairs: false, autoSuggest: true }));
+
+    const after = compartments.completion.get(view.state);
+    expect(after).not.toBe(before);
+  });
+
+  it("is idempotent when completion settings do not change", () => {
+    mountController();
+    const view = controller!.getView()!;
+    const compartments = controller!.getCompartments();
+    const before = compartments.completion.get(view.state);
+
+    controller!.update(baseProps({ autoClosePairs: true, autoSuggest: false }));
+
+    const after = compartments.completion.get(view.state);
+    expect(after).toBe(before);
   });
 });

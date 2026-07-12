@@ -4,6 +4,7 @@
  */
 import { EditorSelection, type Compartment } from "@codemirror/state";
 import { indentLess, indentMore, redo, undo } from "@codemirror/commands";
+import { startCompletion } from "@codemirror/autocomplete";
 import type { EditorView } from "@codemirror/view";
 import type {
   EditorActionName,
@@ -129,6 +130,7 @@ const CORE_ACTIONS = new Set<EditorActionName>([
   "foldAll",
   "unfoldAll",
   "jumpToHeading",
+  "completeWord",
 ]);
 
 export type EditorDomainApis = {
@@ -435,6 +437,17 @@ export function createEditorDomainApis(
         }
         unfoldAllRanges(view);
         return ok();
+      },
+    },
+    completion: {
+      trigger: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        // startCompletion returns false when a completion is already open or
+        // the context is unsuitable; treat both as disabled (not an error).
+        return startCompletion(view) ? ok() : disabled();
       },
     },
   };

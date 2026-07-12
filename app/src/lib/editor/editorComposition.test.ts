@@ -51,6 +51,8 @@ describe("editor composition — per-pane search compartments", () => {
         decoratePlaintextSymbols: false,
         showMinimap: false,
         showFoldGutter: true,
+        autoClosePairs: true,
+        autoSuggest: false,
       });
       controller.mount(parent);
       controllers.push(controller);

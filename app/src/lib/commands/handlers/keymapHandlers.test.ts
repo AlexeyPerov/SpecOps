@@ -160,6 +160,7 @@ function keyboardEventFromBinding(binding: string, platform: "mac" | "windows"):
     Up: "ArrowUp",
     Down: "ArrowDown",
     Tab: "Tab",
+    Space: " ",
   };
   const key = keyByToken[keyToken] ?? keyToken;
 
@@ -186,6 +187,7 @@ function createEditorRunnerMock(): EditorCommandRunner {
     foldAll: vi.fn(() => false),
     unfoldAll: vi.fn(() => false),
     jumpToHeading: vi.fn(() => false),
+    completeWord: vi.fn(() => false),
     setWrap: vi.fn(),
     setZoom: vi.fn(),
     findNext: vi.fn(() => false),
@@ -304,6 +306,12 @@ describe("keymapCommandForEvent", () => {
     expect(
       keymapCommandForEvent(keyboardEvent({ key: "w", ctrlKey: true })),
     ).toBe("tab.close");
+  });
+
+  it("maps Ctrl+Space to edit.triggerCompletion", () => {
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: " ", ctrlKey: true })),
+    ).toBe("edit.triggerCompletion");
   });
 
   it("maps Ctrl+Shift+M to view.toggleMarkdownPreview", () => {

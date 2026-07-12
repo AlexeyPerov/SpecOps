@@ -83,6 +83,8 @@ export const defaultSettings: AppSettingsState = {
   decoratePlaintextSymbols: true,
   showMinimap: true,
   showFoldGutter: true,
+  autoClosePairs: true,
+  autoSuggest: false,
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
@@ -229,6 +231,8 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       decoratePlaintextSymbols?: boolean;
       showMinimap?: boolean;
       showFoldGutter?: boolean;
+      autoClosePairs?: boolean;
+      autoSuggest?: boolean;
       defaultMarkdownViewMode?: MarkdownViewMode;
       restrictFilesToContext?: boolean;
       opencode?: Partial<OpencodeSettings>;
@@ -291,6 +295,24 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             settings: {
               ...next.settings,
               showFoldGutter: partial.showFoldGutter,
+            },
+          };
+        }
+        if (typeof partial.autoClosePairs === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              autoClosePairs: partial.autoClosePairs,
+            },
+          };
+        }
+        if (typeof partial.autoSuggest === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              autoSuggest: partial.autoSuggest,
             },
           };
         }

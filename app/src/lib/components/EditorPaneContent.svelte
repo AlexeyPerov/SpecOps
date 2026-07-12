@@ -58,6 +58,8 @@
     decoratePlaintextSymbols = true,
     showMinimap = true,
     showFoldGutter = true,
+    autoClosePairs = true,
+    autoSuggest = false,
     maxBinaryOpenAsTextBytes = 0,
     maxOpenWithoutConfirmBytes = 0,
     largeFileConfirming = false,
@@ -108,6 +110,8 @@
     decoratePlaintextSymbols: boolean;
     showMinimap: boolean;
     showFoldGutter: boolean;
+    autoClosePairs: boolean;
+    autoSuggest: boolean;
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
     largeFileConfirming: boolean;
@@ -319,6 +323,8 @@
           {decoratePlaintextSymbols}
           {showMinimap}
           {showFoldGutter}
+          {autoClosePairs}
+          {autoSuggest}
           markdownHtml={documentView.markdownHtml}
           storedMarkdownViewMode={paneDocument?.markdownViewMode ?? "edit"}
           canFitSplit={canFitMarkdownSplit}

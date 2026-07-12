@@ -20,6 +20,8 @@
     decoratePlaintextSymbols?: boolean;
     showMinimap?: boolean;
     showFoldGutter?: boolean;
+    autoClosePairs?: boolean;
+    autoSuggest?: boolean;
     onStatusMessage?: (message: string) => void;
     onDocumentDirty?: (nextContent: string) => void;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
@@ -36,6 +38,8 @@
     decoratePlaintextSymbols = true,
     showMinimap = true,
     showFoldGutter = true,
+    autoClosePairs = true,
+    autoSuggest = false,
     onStatusMessage = () => {},
     onDocumentDirty = () => {},
     onScrollTopChange = () => {},
@@ -70,6 +74,8 @@
       decoratePlaintextSymbols,
       showMinimap,
       showFoldGutter,
+      autoClosePairs,
+      autoSuggest,
     });
     controller.mount(hostEl);
 
@@ -107,6 +113,8 @@
       decoratePlaintextSymbols,
       showMinimap,
       showFoldGutter,
+      autoClosePairs,
+      autoSuggest,
     });
   });
 </script>

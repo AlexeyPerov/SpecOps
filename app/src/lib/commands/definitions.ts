@@ -460,6 +460,16 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "Ctrl+Alt+]", windows: "Ctrl+Alt+]" },
   },
   {
+    id: "edit.triggerCompletion",
+    label: "Trigger Completion",
+    menuPath: "Edit/Trigger Completion",
+    category: "Edit",
+    searchTerms: ["complete", "autocomplete", "words", "suggest"],
+    paletteIntent: "palette",
+    availability: "document",
+    binding: { mac: "Ctrl+Space", windows: "Ctrl+Space" },
+  },
+  {
     id: "view.toggleWrap",
     label: "Toggle Wrap",
     menuPath: "View/Toggle Wrap",

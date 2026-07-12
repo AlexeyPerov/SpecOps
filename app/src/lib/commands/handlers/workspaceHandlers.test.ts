@@ -186,6 +186,7 @@ function createEditorRunnerMock(): EditorCommandRunner {
     foldAll: vi.fn(() => false),
     unfoldAll: vi.fn(() => false),
     jumpToHeading: vi.fn(() => false),
+    completeWord: vi.fn(() => false),
     setWrap: vi.fn(),
     setZoom: vi.fn(),
     findNext: vi.fn(() => false),

@@ -1608,6 +1608,8 @@
     decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
     showMinimap: snapshot.settings.showMinimap,
     showFoldGutter: snapshot.settings.showFoldGutter,
+    autoClosePairs: snapshot.settings.autoClosePairs,
+    autoSuggest: snapshot.settings.autoSuggest,
     maxBinaryOpenAsTextBytes: snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes,
     maxOpenWithoutConfirmBytes: snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes,
     largeFileConfirming,

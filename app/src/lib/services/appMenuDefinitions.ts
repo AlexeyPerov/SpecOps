@@ -285,6 +285,13 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
     commandId: "edit.unfoldAll",
     runCommand,
   });
+  const triggerCompletionItem = await commandItem({
+    id: "cmd.edit.triggerCompletion",
+    text: "Trigger Completion",
+    accelerator: "Ctrl+Space",
+    commandId: "edit.triggerCompletion",
+    runCommand,
+  });
 
   return Submenu.new({
     text: "Edit",
@@ -320,6 +327,7 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
       unfoldItem,
       foldAllItem,
       unfoldAllItem,
+      triggerCompletionItem,
     ],
   });
 }
@@ -525,6 +533,7 @@ export const NATIVE_MENU_COMMAND_IDS: readonly AppCommandId[] = [
   "edit.unfold",
   "edit.foldAll",
   "edit.unfoldAll",
+  "edit.triggerCompletion",
   "view.layoutSingle",
   "view.layoutCols2",
   "view.layoutRows2",

@@ -14,6 +14,8 @@
     decoratePlaintextSymbols = true,
     showMinimap = true,
     showFoldGutter = true,
+    autoClosePairs = true,
+    autoSuggest = false,
     onStatusMessage = () => {},
     onUntitledTitleRefresh = undefined as
       | ((documentId: string) => void)
@@ -30,6 +32,8 @@
     decoratePlaintextSymbols?: boolean;
     showMinimap?: boolean;
     showFoldGutter?: boolean;
+    autoClosePairs?: boolean;
+    autoSuggest?: boolean;
     onStatusMessage?: (message: string) => void;
     onUntitledTitleRefresh?: ((documentId: string) => void) | undefined;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
@@ -55,6 +59,8 @@
   {decoratePlaintextSymbols}
   {showMinimap}
   {showFoldGutter}
+  {autoClosePairs}
+  {autoSuggest}
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
   {onScrollTopChange}

@@ -52,4 +52,7 @@ export const editHandlers: CommandHandlerMap = {
   "edit.unfoldAll": ({ getEditorRunner }) => {
     getEditorRunner()?.unfoldAll();
   },
+  "edit.triggerCompletion": ({ getEditorRunner }) => {
+    getEditorRunner()?.completeWord();
+  },
 };

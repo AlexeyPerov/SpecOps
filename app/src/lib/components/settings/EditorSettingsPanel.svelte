@@ -169,6 +169,33 @@
   <p class="settings-section-note">
     Show fold markers beside line numbers. Fold commands remain available when the gutter is hidden.
   </p>
+  <label class="settings-toggle">
+    <input
+      type="checkbox"
+      checked={snapshot.settings.autoClosePairs}
+      onchange={(event) =>
+        appState.setAutoClosePairs((event.currentTarget as HTMLInputElement).checked)}
+    />
+    Auto-close brackets and quotes
+  </label>
+  <p class="settings-section-note">
+    Typing an opener (brackets, parentheses, quotes, backticks) inserts the matching closer and leaves
+    the cursor inside. Typing an existing closer steps over it. Emphasis markers are not auto-closed.
+  </p>
+  <label class="settings-toggle">
+    <input
+      type="checkbox"
+      checked={snapshot.settings.autoSuggest}
+      onchange={(event) =>
+        appState.setAutoSuggest((event.currentTarget as HTMLInputElement).checked)}
+    />
+    Suggest words as I type
+  </label>
+  <p class="settings-section-note">
+    When on, completion suggestions appear automatically while typing from words already in the active
+    document. Manual completion (Ctrl+Space) works either way. Suggestions never read other files or
+    network sources.
+  </p>
 </section>
 
 <section class="settings-section">

@@ -17,9 +17,11 @@
  * `allowMultipleSelections` enables native multi-cursor / column selection so
  * modifier-click, column-drag, and occurrence commands work across all panes.
  *
- * Reserved empty compartments (`completion`, `snippets`, `landmarks`)
- * are seams for M5–M7; reconfigure them later without rebuilding base/theme.
- * The `fold` compartment is owned by M4 (`foldExtension`).
+ * Reserved empty compartments (`snippets`, `landmarks`) are seams for
+ * M6–M7; reconfigure them later without rebuilding base/theme. The `fold`
+ * compartment is owned by M4 (`foldExtension`); the `completion` compartment
+ * is owned by M5 (`completionExtension` — auto-close pairs + document-word
+ * completion, reconfigured via `autoClosePairs`/`autoSuggest`).
  */
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
@@ -37,6 +39,7 @@ import {
 } from "./editorLanguage";
 import { foldExtension } from "./editorFold";
 import { minimapExtension } from "./editorMinimap";
+import { completionExtension } from "./editorCompletion";
 
 /** Named groups assembled into the editor state. */
 export type EditorExtensionGroupName =
@@ -78,7 +81,7 @@ export type EditorExtensionCompartments = {
   minimap: Compartment;
   /** M4 — folding (gutter + keymap); reconfigured via showFoldGutter. */
   fold: Compartment;
-  /** M5 seam — autocomplete. */
+  /** M5 — auto-close pairs + document-word completion; reconfigured via the two flags. */
   completion: Compartment;
   /** M6 seam — snippet expansion. */
   snippets: Compartment;
@@ -92,6 +95,16 @@ export type BuildEditorExtensionsOptions = {
   showMinimap: boolean;
   /** Fold gutter visibility (default on). Fold commands work even when hidden. */
   showFoldGutter?: boolean;
+  /**
+   * Auto-close bracket/quote pairs (default on). Reconfigures the completion
+   * compartment live via `completionExtension`.
+   */
+  autoClosePairs?: boolean;
+  /**
+   * Automatic completion suggestions while typing (default off). Manual
+   * completion (`Ctrl+Space` / `edit.triggerCompletion`) works either way.
+   */
+  autoSuggest?: boolean;
   /** Optional update listener (dirty reporting, cursor). */
   updateListener?: Extension;
 };
@@ -177,6 +190,8 @@ export function buildNamedExtensionGroups(
     language,
     showMinimap,
     showFoldGutter = true,
+    autoClosePairs = true,
+    autoSuggest = false,
     updateListener,
   } = options;
 
@@ -222,7 +237,11 @@ export function buildNamedExtensionGroups(
     },
     {
       name: "completion",
-      extensions: [compartments.completion.of([])],
+      extensions: [
+        compartments.completion.of(
+          completionExtension({ autoClosePairs, autoSuggest }),
+        ),
+      ],
     },
     {
       name: "snippets",

@@ -12,12 +12,14 @@ const BINDING_KEY_TO_KEYMAP_TOKEN: Record<string, string> = {
   Up: "arrowup",
   Down: "arrowdown",
   Tab: "tab",
+  Space: " ",
 };
 
 const KEYMAP_TOKEN_TO_BINDING_KEY: Record<string, string> = {
   arrowup: "Up",
   arrowdown: "Down",
   tab: "Tab",
+  " ": "Space",
 };
 
 const MODIFIER_ONLY_KEYS = new Set(["Control", "Shift", "Alt", "Meta"]);

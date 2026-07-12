@@ -187,6 +187,7 @@ function createEditorRunnerMock(): EditorCommandRunner {
     foldAll: vi.fn(() => false),
     unfoldAll: vi.fn(() => false),
     jumpToHeading: vi.fn(() => false),
+    completeWord: vi.fn(() => false),
     setWrap: vi.fn(),
     setZoom: vi.fn(),
     findNext: vi.fn(() => false),
@@ -594,6 +595,7 @@ describe("edit commands", () => {
     dispatchCommand("edit.unfold", context);
     dispatchCommand("edit.foldAll", context);
     dispatchCommand("edit.unfoldAll", context);
+    dispatchCommand("edit.triggerCompletion", context);
     dispatchCommand("app.toggleMarkdownOutline", context);
     dispatchCommand("app.focusMarkdownOutline", context);
 
@@ -614,6 +616,7 @@ describe("edit commands", () => {
     expect(editorRunner.unfold).toHaveBeenCalled();
     expect(editorRunner.foldAll).toHaveBeenCalled();
     expect(editorRunner.unfoldAll).toHaveBeenCalled();
+    expect(editorRunner.completeWord).toHaveBeenCalled();
   });
 
   it("no-ops when no editor runner is available", () => {
@@ -814,6 +817,7 @@ describe("command dispatch coverage", () => {
       "edit.unfold",
       "edit.foldAll",
       "edit.unfoldAll",
+      "edit.triggerCompletion",
       "view.toggleWrap",
       "view.zoomIn",
       "view.zoomOut",

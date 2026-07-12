@@ -57,6 +57,8 @@ describe("settings mapping", () => {
       defaultMarkdownViewMode: "split",
       showMinimap: false,
       showFoldGutter: true,
+      autoClosePairs: true,
+      autoSuggest: false,
       restrictFilesToContext: false,
       opencode: defaultOpencodeSettings,
       chatHttp: { enabled: false },
@@ -121,6 +123,8 @@ describe("settings mapping", () => {
       maxBinaryOpenAsTextBytes: 200 * 1024,
       maxOpenWithoutConfirmBytes: 512 * 1024,
     });
+    expect(persisted.autoClosePairs).toBe(true);
+    expect(persisted.autoSuggest).toBe(false);
   });
 });
 

@@ -141,6 +141,15 @@ export type EditorFoldingActions = {
   unfoldAll: () => EditorActionResult;
 };
 
+/** Completion actions (M5). */
+export type EditorCompletionActions = {
+  /**
+   * Explicitly open the completion UI at the main cursor. Works regardless of
+   * the automatic-suggestion setting.
+   */
+  trigger: () => EditorActionResult;
+};
+
 /** Find/replace and search-highlight configuration. */
 export type EditorSearchActions = {
   findNext: (query: string, caseSensitive: boolean) => EditorActionResult;
@@ -182,6 +191,7 @@ export type EditorDomainActions = {
   search: EditorSearchActions;
   view: EditorViewActions;
   folding: EditorFoldingActions;
+  completion: EditorCompletionActions;
 };
 
 export type EditorHistoryQueries = {
@@ -337,6 +347,7 @@ export type EditorCommandRunner = {
   foldAll: () => boolean;
   unfoldAll: () => boolean;
   jumpToHeading: (headingKey: string) => boolean;
+  completeWord: () => boolean;
 };
 
 /**

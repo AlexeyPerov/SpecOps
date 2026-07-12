@@ -170,6 +170,22 @@ describe("appState settings and editor chrome", () => {
     expect(appState.getSnapshot().settings.showFoldGutter).toBe(true);
   });
 
+  it("autoClosePairs defaults to true and the setter / apply path update it", () => {
+    expect(appState.getSnapshot().settings.autoClosePairs).toBe(true);
+    appState.setAutoClosePairs(false);
+    expect(appState.getSnapshot().settings.autoClosePairs).toBe(false);
+    appState.applyPersistedSettings({ autoClosePairs: true });
+    expect(appState.getSnapshot().settings.autoClosePairs).toBe(true);
+  });
+
+  it("autoSuggest defaults to false and the setter / apply path update it", () => {
+    expect(appState.getSnapshot().settings.autoSuggest).toBe(false);
+    appState.setAutoSuggest(true);
+    expect(appState.getSnapshot().settings.autoSuggest).toBe(true);
+    appState.applyPersistedSettings({ autoSuggest: false });
+    expect(appState.getSnapshot().settings.autoSuggest).toBe(false);
+  });
+
   it("applyWindowSession preserves the active theme", () => {
     appState.setLightTheme({ kind: "preset", id: "github" });
     appState.applyWindowSession({

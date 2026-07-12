@@ -46,6 +46,7 @@ export type AppCommandId =
   | "edit.unfold"
   | "edit.foldAll"
   | "edit.unfoldAll"
+  | "edit.triggerCompletion"
   | "view.toggleWrap"
   | "view.zoomIn"
   | "view.zoomOut"

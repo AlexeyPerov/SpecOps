@@ -89,6 +89,7 @@ export function editorHostToCommandRunner(host: EditorHost): EditorCommandRunner
     unfoldAll: () => host.actions.folding.unfoldAll().ok,
     jumpToHeading: (headingKey) =>
       host.actions.navigation.jumpToHeading(headingKey).ok,
+    completeWord: () => host.actions.completion.trigger().ok,
   };
 }
 

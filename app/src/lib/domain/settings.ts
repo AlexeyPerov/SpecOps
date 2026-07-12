@@ -212,6 +212,21 @@ export interface AppSettingsState {
    */
   showFoldGutter: boolean;
   /**
+   * When true (default), typing an opener (bracket, paren, quote, backtick)
+   * inserts the matching closer and leaves the cursor inside; typing an
+   * existing closer steps over it. Emphasis markers are intentionally not
+   * auto-closed (their behavior is not predictable). Reconfigures live.
+   */
+  autoClosePairs: boolean;
+  /**
+   * When true, completion suggestions appear automatically while typing.
+   * Default off (opt-in). Manual completion (`Ctrl+Space` /
+   * `edit.triggerCompletion`) works regardless of this setting. The source
+   * reads only the active document — never other files, AI context, or
+   * network sources.
+   */
+  autoSuggest: boolean;
+  /**
    * Initial view mode applied to newly opened markdown documents. Each
    * document remembers its own mode after open; this only seeds the first.
    */

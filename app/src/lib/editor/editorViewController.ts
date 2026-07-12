@@ -21,6 +21,7 @@ import {
 } from "./editorLanguage";
 import { minimapExtension } from "./editorMinimap";
 import { foldExtension } from "./editorFold";
+import { completionExtension } from "./editorCompletion";
 import { createPlaintextSymbolDecorations } from "./plaintextDecorations";
 import {
   storeOriginAnnotation,
@@ -39,6 +40,8 @@ export type EditorViewControllerProps = {
   decoratePlaintextSymbols: boolean;
   showMinimap: boolean;
   showFoldGutter: boolean;
+  autoClosePairs: boolean;
+  autoSuggest: boolean;
 };
 
 export type EditorViewControllerDeps = {
@@ -81,6 +84,7 @@ export function createEditorViewController(
   let lastDecoKey = "";
   let lastMinimapEnabled: boolean | null = null;
   let lastFoldGutterEnabled: boolean | null = null;
+  let lastCompletionKey = "";
 
   let applyingScroll = false;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -191,12 +195,16 @@ export function createEditorViewController(
     language: EditorLanguageId,
     showMinimap: boolean,
     showFoldGutter: boolean,
+    autoClosePairs: boolean,
+    autoSuggest: boolean,
   ) {
     return buildEditorExtensions({
       compartments,
       language,
       showMinimap,
       showFoldGutter,
+      autoClosePairs,
+      autoSuggest,
       updateListener: EditorView.updateListener.of((update) => {
         if (destroyed) {
           return;
@@ -216,10 +224,12 @@ export function createEditorViewController(
     language: EditorLanguageId,
     showMinimap: boolean,
     showFoldGutter: boolean,
+    autoClosePairs: boolean,
+    autoSuggest: boolean,
   ): EditorState {
     return EditorState.create({
       doc: content,
-      extensions: buildExtensions(language, showMinimap, showFoldGutter),
+      extensions: buildExtensions(language, showMinimap, showFoldGutter, autoClosePairs, autoSuggest),
     });
   }
 
@@ -239,9 +249,11 @@ export function createEditorViewController(
     language: EditorLanguageId,
     showMinimap: boolean,
     showFoldGutter: boolean,
+    autoClosePairs: boolean,
+    autoSuggest: boolean,
   ): EditorState {
     if (!documentId || !props) {
-      return createState(content, language, showMinimap, showFoldGutter);
+      return createState(content, language, showMinimap, showFoldGutter, autoClosePairs, autoSuggest);
     }
     const cached = deps.sessionCache.take({
       paneId: props.paneId,
@@ -251,7 +263,7 @@ export function createEditorViewController(
     if (cached && cached.doc.toString() === content) {
       return cached;
     }
-    return createState(content, language, showMinimap, showFoldGutter);
+    return createState(content, language, showMinimap, showFoldGutter, autoClosePairs, autoSuggest);
   }
 
   function syncLanguage(language: EditorLanguageId): void {
@@ -325,6 +337,22 @@ export function createEditorViewController(
     });
   }
 
+  function syncCompletion(autoClosePairs: boolean, autoSuggest: boolean): void {
+    if (!view) {
+      return;
+    }
+    const key = `${autoClosePairs ? "1" : "0"}:${autoSuggest ? "1" : "0"}`;
+    if (key === lastCompletionKey) {
+      return;
+    }
+    lastCompletionKey = key;
+    view.dispatch({
+      effects: compartments.completion.reconfigure(
+        completionExtension({ autoClosePairs, autoSuggest }),
+      ),
+    });
+  }
+
   function applyExternalContent(content: string, kind: "sync" | "reload"): void {
     if (!view || content === view.state.doc.toString()) {
       return;
@@ -354,15 +382,18 @@ export function createEditorViewController(
       next.language,
       next.showMinimap,
       next.showFoldGutter,
+      next.autoClosePairs,
+      next.autoSuggest,
     );
     view.setState(nextState);
 
     trackedDocumentId = next.documentId;
-    // Force language/decoration/minimap/fold reconfigure against possibly restored state.
+    // Force language/decoration/minimap/fold/completion reconfigure against possibly restored state.
     currentEditorLanguage = "" as EditorLanguageId;
     lastDecoKey = "";
     lastMinimapEnabled = null;
     lastFoldGutterEnabled = null;
+    lastCompletionKey = "";
 
     // Re-apply pane-level chrome that may differ from a restored session.
     applyWrap(view, compartments.lineWrap, next.wrapLines);
@@ -371,6 +402,7 @@ export function createEditorViewController(
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
     syncFoldGutter(next.showFoldGutter);
+    syncCompletion(next.autoClosePairs, next.autoSuggest);
     applyScrollTop(next.scrollTop);
     registerHost();
     updateCursor();
@@ -392,6 +424,8 @@ export function createEditorViewController(
       decoratePlaintextSymbols: true,
       showMinimap: true,
       showFoldGutter: true,
+      autoClosePairs: true,
+      autoSuggest: false,
     };
 
     const state = createState(
@@ -399,6 +433,8 @@ export function createEditorViewController(
       initial.language,
       initial.showMinimap,
       initial.showFoldGutter,
+      initial.autoClosePairs,
+      initial.autoSuggest,
     );
     view = new EditorView({ state, parent });
 
@@ -409,12 +445,14 @@ export function createEditorViewController(
     currentEditorLanguage = "" as EditorLanguageId;
     lastMinimapEnabled = null;
     lastFoldGutterEnabled = null;
+    lastCompletionKey = "";
     documentGeneration = 1;
     applyScrollTop(initial.scrollTop);
     syncLanguage(initial.language);
     syncDecorations(initial.language, initial.decoratePlaintextSymbols);
     syncMinimap(initial.showMinimap);
     syncFoldGutter(initial.showFoldGutter);
+    syncCompletion(initial.autoClosePairs, initial.autoSuggest);
     registerHost();
     updateCursor();
   }
@@ -452,6 +490,7 @@ export function createEditorViewController(
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
     syncFoldGutter(next.showFoldGutter);
+    syncCompletion(next.autoClosePairs, next.autoSuggest);
 
     // Scroll from store only when document identity is unchanged and the
     // prop changed externally (e.g. restore). Avoid fighting user scroll.

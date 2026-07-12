@@ -375,6 +375,24 @@ function createStateStore() {
         },
       }));
     },
+    setAutoClosePairs(value: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          autoClosePairs: value,
+        },
+      }));
+    },
+    setAutoSuggest(value: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          autoSuggest: value,
+        },
+      }));
+    },
     setDefaultMarkdownViewMode(value: MarkdownViewMode) {
       update((state) => ({
         ...state,

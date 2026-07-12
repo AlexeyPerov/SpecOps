@@ -71,6 +71,8 @@ export interface PersistedSettings {
   decoratePlaintextSymbols: boolean;
   showMinimap: boolean;
   showFoldGutter: boolean;
+  autoClosePairs: boolean;
+  autoSuggest: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
@@ -104,6 +106,8 @@ export const defaultPersistedSettings: PersistedSettings = {
   decoratePlaintextSymbols: true,
   showMinimap: true,
   showFoldGutter: true,
+  autoClosePairs: true,
+  autoSuggest: false,
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
@@ -181,6 +185,12 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         showFoldGutter: isBoolean(parsed.showFoldGutter)
           ? parsed.showFoldGutter
           : defaultPersistedSettings.showFoldGutter,
+        autoClosePairs: isBoolean(parsed.autoClosePairs)
+          ? parsed.autoClosePairs
+          : defaultPersistedSettings.autoClosePairs,
+        autoSuggest: isBoolean(parsed.autoSuggest)
+          ? parsed.autoSuggest
+          : defaultPersistedSettings.autoSuggest,
         defaultMarkdownViewMode: MARKDOWN_VIEW_MODES.includes(
           parsed.defaultMarkdownViewMode as MarkdownViewMode,
         )
@@ -239,6 +249,8 @@ export function toPersistedSettings(input: {
   decoratePlaintextSymbols: boolean;
   showMinimap: boolean;
   showFoldGutter: boolean;
+  autoClosePairs: boolean;
+  autoSuggest: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
@@ -265,6 +277,12 @@ export function toPersistedSettings(input: {
     showFoldGutter: isBoolean(input.showFoldGutter)
       ? input.showFoldGutter
       : defaultPersistedSettings.showFoldGutter,
+    autoClosePairs: isBoolean(input.autoClosePairs)
+      ? input.autoClosePairs
+      : defaultPersistedSettings.autoClosePairs,
+    autoSuggest: isBoolean(input.autoSuggest)
+      ? input.autoSuggest
+      : defaultPersistedSettings.autoSuggest,
     defaultMarkdownViewMode: MARKDOWN_VIEW_MODES.includes(
       input.defaultMarkdownViewMode as MarkdownViewMode,
     )

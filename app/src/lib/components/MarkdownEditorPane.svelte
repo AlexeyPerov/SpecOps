@@ -18,6 +18,8 @@
     decoratePlaintextSymbols = true,
     showMinimap = true,
     showFoldGutter = true,
+    autoClosePairs = true,
+    autoSuggest = false,
     markdownEnabled = true,
     markdownHtml = "",
     storedMarkdownViewMode = "edit" as "edit" | "split" | "preview",
@@ -39,6 +41,8 @@
     decoratePlaintextSymbols?: boolean;
     showMinimap?: boolean;
     showFoldGutter?: boolean;
+    autoClosePairs?: boolean;
+    autoSuggest?: boolean;
     markdownEnabled?: boolean;
     markdownHtml?: string;
     storedMarkdownViewMode?: "edit" | "split" | "preview";
@@ -152,6 +156,8 @@
           {decoratePlaintextSymbols}
           {showMinimap}
           {showFoldGutter}
+          {autoClosePairs}
+          {autoSuggest}
           {onStatusMessage}
           {onUntitledTitleRefresh}
           {onScrollTopChange}

@@ -45,6 +45,9 @@ export const appHandlers: CommandHandlerMap = {
   "app.quickOpenFile": ({ openQuickOpen }) => {
     openQuickOpen?.();
   },
+  "app.openCommandPalette": ({ openCommandPalette }) => {
+    openCommandPalette?.();
+  },
   "view.toggleMarkdownPreview": ({ getState, notify }) => {
     const state = getState();
     if (state.editor.previewMode === "markdown") {

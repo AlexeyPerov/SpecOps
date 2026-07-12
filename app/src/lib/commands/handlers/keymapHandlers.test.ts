@@ -263,10 +263,22 @@ describe("keymapCommandForEvent", () => {
     ).toBe("app.quickOpenFile");
   });
 
+  it("maps Meta+Shift+P to app.openCommandPalette", () => {
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "p", metaKey: true, shiftKey: true })),
+    ).toBe("app.openCommandPalette");
+  });
+
   it("maps Ctrl+P to app.quickOpenFile", () => {
     expect(
       keymapCommandForEvent(keyboardEvent({ key: "p", ctrlKey: true })),
     ).toBe("app.quickOpenFile");
+  });
+
+  it("maps Ctrl+Shift+P to app.openCommandPalette", () => {
+    expect(
+      keymapCommandForEvent(keyboardEvent({ key: "p", ctrlKey: true, shiftKey: true })),
+    ).toBe("app.openCommandPalette");
   });
 
   it("maps Ctrl+S to file.save", () => {

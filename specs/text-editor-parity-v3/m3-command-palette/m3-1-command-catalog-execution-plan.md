@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M0.6](../m0-editor-foundations/m0-6-picker-index-foundations-execution-plan.md) complete  
 **Next:** [M3.2 palette UI](./m3-2-command-palette-ui-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Medium — Score 6
 
 How to use this plan: assign to one agent. Build a complete searchable command model before rendering the palette.
@@ -24,7 +24,7 @@ Make the existing command registry the single source of truth for labels, catego
 
 ## Task breakdown
 
-#### Task M3.1-1: Complete command metadata [Score:6] [Agent:medium]
+#### Task M3.1-1: Complete command metadata [DONE] [Score:6] [Agent:medium]
 
 - Assign every user-invokable command a category and optional search aliases.
 - Separate menu placement from palette visibility; hidden menu commands may still be palette-visible.
@@ -41,7 +41,7 @@ Dependencies: M0.6.
 
 ---
 
-#### Task M3.1-2: Build searchable palette entries [Score:5] [Agent:medium]
+#### Task M3.1-2: Build searchable palette entries [DONE] [Score:5] [Agent:medium]
 
 - Merge effective platform bindings with command metadata.
 - Rank label first, then category/aliases/id as lower-weight terms.
@@ -59,7 +59,7 @@ Dependencies: M3.1-1.
 
 ---
 
-#### Task M3.1-3: Registry consistency validation [Score:4] [Agent:medium]
+#### Task M3.1-3: Registry consistency validation [DONE] [Score:4] [Agent:medium]
 
 - Add tests that compare `AppCommandId`, definitions, handlers, app menu inclusion policy, and palette policy.
 - Fail tests for duplicate labels in the same category or duplicate default bindings.
@@ -75,12 +75,11 @@ Dependencies: M3.1-2.
 
 ## Plan exit criteria
 
-- [ ] A complete, tested command catalog exists.
-- [ ] Availability and disabled reasons are centralized.
-- [ ] Effective shortcut display is shared with Shortcuts settings.
-- [ ] No visible palette ships in this plan.
+- [x] A complete, tested command catalog exists.
+- [x] Availability and disabled reasons are centralized.
+- [x] Effective shortcut display is shared with Shortcuts settings.
+- [x] No visible palette ships in this plan.
 
 ## Changelog instructions
 
 Mark tasks `[DONE]`; log catalog/availability changes and consistency-test results.
-

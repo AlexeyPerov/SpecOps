@@ -15,6 +15,7 @@ export type CommandContext = {
   openProjectSearch?: (focusReplace: boolean) => void;
   /** Opens (or focuses) the Quick Open file picker. No-op when not registered. */
   openQuickOpen?: () => void;
+  openCommandPalette?: () => void;
   /** Sets console panel visibility. No-op when not registered. */
   setConsoleOpen?: (open: boolean) => void;
 };

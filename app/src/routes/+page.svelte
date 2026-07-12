@@ -59,6 +59,10 @@
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
   import { rankFiles, type RankedFilesResult } from "../lib/picker/fileRanking";
+  import { rankCommands, type RankedCommandsResult } from "../lib/picker/commandRanking";
+  import { buildCommandAvailabilitySnapshot } from "../lib/commands/availability";
+  import { buildPaletteSnapshot } from "../lib/commands/catalog";
+  import type { AppCommandId } from "../lib/domain/contracts";
   import { collectTabOpenPaths } from "../lib/services/tabContextMenuActions";
   import {
     describeOpenActivePathResult,
@@ -350,6 +354,11 @@
   let quickOpenOpen = $state(false);
   let quickOpenQuery = $state("");
   let quickOpenOpenerPaneId = $state<string | null>(null);
+  /**
+   * M3.2 — Command palette state. Ephemeral and window-local like Quick Open.
+   */
+  let commandPaletteOpen = $state(false);
+  let commandPaletteQuery = $state("");
 
   const editorTools = createEditorToolController({
     getActiveBinding: () => {
@@ -375,6 +384,7 @@
       projectSearchOpen ||
       timelineOpen ||
       quickOpenOpen ||
+      commandPaletteOpen ||
       Boolean(workspaceContextMenu),
   });
   setEditorToolController(editorTools);
@@ -416,6 +426,7 @@
     projectSearchOpen;
     timelineOpen;
     quickOpenOpen;
+    commandPaletteOpen;
     workspaceContextMenu;
     editorTools.syncToEnvironment();
   });
@@ -521,6 +532,30 @@
     }
     return documents.find((documentState) => documentState.id === docId);
   });
+
+  /**
+   * M3.2 — Command palette ranking. Availability and effective bindings refresh
+   * reactively when workspace, document, layout, or shortcut overrides change.
+   */
+  const commandAvailabilitySnapshot = $derived(
+    buildCommandAvailabilitySnapshot({
+      hasWorkspace: Boolean(activeWorkspaceRoot),
+      hasActiveDocument: Boolean(activeDocument),
+      isDirty: activeDocument?.isDirty ?? false,
+      paneCount: session.editorLayout.panes.length,
+      markdownPreviewAvailable: activeDocument?.language === "markdown",
+    }),
+  );
+  const commandPaletteEntries = $derived(
+    buildPaletteSnapshot({
+      snapshot: commandAvailabilitySnapshot,
+      bindingOverrides: snapshot.settings.commandBindingOverrides,
+    }),
+  );
+  const commandPaletteResults: RankedCommandsResult = $derived(
+    rankCommands(commandPaletteEntries, commandPaletteQuery),
+  );
+
   const shouldRenderMarkdownPreview = $derived.by(() => {
     if (!activeDocument || activeDocument.language !== "markdown") {
       return false;
@@ -658,6 +693,10 @@
 
   function closeQuickOpen(): void {
     quickOpenOpen = false;
+  }
+
+  function closeCommandPalette(): void {
+    commandPaletteOpen = false;
   }
 
   function refreshQuickOpenCatalog(): void {
@@ -838,6 +877,7 @@
       projectSearchOpen ||
       timelineOpen ||
       quickOpenOpen ||
+      commandPaletteOpen ||
       Boolean(workspaceContextMenu),
     openProjectSearch: (focusReplace) => {
       projectSearchOpen = true;
@@ -845,12 +885,23 @@
       projectSearchNonce += 1;
     },
     openQuickOpen: () => {
+      if (commandPaletteOpen) {
+        commandPaletteOpen = false;
+      }
       // Capture the active pane at invocation so the selected file opens into
       // the pane the user was focused on. If that pane is gone by selection
       // time, the open pipeline falls back to the current active pane.
       quickOpenOpenerPaneId = session.editorLayout.activePaneId;
       // Query is reset by the picker component on open (via onQueryInput).
       quickOpenOpen = true;
+    },
+    openCommandPalette: () => {
+      if (quickOpenOpen) {
+        quickOpenOpen = false;
+      }
+      editorTools.close({ restoreFocus: false });
+      commandPaletteQuery = "";
+      commandPaletteOpen = true;
     },
     setConsoleOpen: (open) => {
       consoleOpen = open;
@@ -1201,6 +1252,9 @@
     // asynchronously; closing is the simplest safe behavior.
     if (quickOpenOpen) {
       quickOpenOpen = false;
+    }
+    if (commandPaletteOpen) {
+      commandPaletteOpen = false;
     }
   });
 
@@ -1731,6 +1785,18 @@
     onRefresh: refreshQuickOpenCatalog,
     onQueryInput: (value) => {
       quickOpenQuery = value;
+    },
+  }}
+  commandPalette={{
+    open: commandPaletteOpen,
+    results: commandPaletteResults,
+    onSelect: (commandId) => {
+      commandPaletteOpen = false;
+      runCommand(commandId as AppCommandId);
+    },
+    onClose: closeCommandPalette,
+    onQueryInput: (value) => {
+      commandPaletteQuery = value;
     },
   }}
 />

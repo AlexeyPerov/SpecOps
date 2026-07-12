@@ -198,12 +198,14 @@ function createCommandContext(overrides?: {
   editorRunner?: EditorCommandRunner | null;
   openProjectSearch?: (focusReplace: boolean) => void;
   openQuickOpen?: () => void;
+  openCommandPalette?: () => void;
   setConsoleOpen?: (open: boolean) => void;
 }) {
   const notify = vi.fn();
   const editorRunner = overrides?.editorRunner ?? null;
   const openProjectSearch = overrides?.openProjectSearch ?? vi.fn();
   const openQuickOpen = overrides?.openQuickOpen ?? vi.fn();
+  const openCommandPalette = overrides?.openCommandPalette ?? vi.fn();
   const setConsoleOpen = overrides?.setConsoleOpen ?? vi.fn();
   const editorTools = createEditorToolController({
     getActiveBinding: () => ({ paneId: "pane-1", documentId: "doc-1" }),
@@ -220,6 +222,7 @@ function createCommandContext(overrides?: {
       getEditorTools: () => editorTools,
       openProjectSearch,
       openQuickOpen,
+      openCommandPalette,
       setConsoleOpen,
     },
     notify,
@@ -227,6 +230,7 @@ function createCommandContext(overrides?: {
     editorTools,
     openProjectSearch,
     openQuickOpen,
+    openCommandPalette,
     setConsoleOpen,
   };
 }
@@ -488,6 +492,15 @@ describe("app shell toggle commands", () => {
 
     expect(openQuickOpen).toHaveBeenCalledOnce();
   });
+
+  it("app.openCommandPalette opens the command palette", () => {
+    const openCommandPalette = vi.fn();
+    const { context } = createCommandContext({ openCommandPalette });
+
+    dispatchCommand("app.openCommandPalette", context);
+
+    expect(openCommandPalette).toHaveBeenCalledOnce();
+  });
 });
 
 describe("tab navigation commands", () => {
@@ -731,6 +744,7 @@ describe("command dispatch coverage", () => {
       "app.findInProject",
       "app.replaceInProject",
       "app.quickOpenFile",
+      "app.openCommandPalette",
       "view.toggleMarkdownPreview",
       "view.toggleDiffPreview",
       "file.new",

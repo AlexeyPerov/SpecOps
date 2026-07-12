@@ -105,6 +105,16 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "Cmd+P", windows: "Ctrl+P" },
   },
   {
+    id: "app.openCommandPalette",
+    label: "Command Palette",
+    menuPath: "Hidden/Command Palette",
+    category: "Navigation",
+    searchTerms: ["commands", "actions"],
+    paletteIntent: "exclude",
+    paletteExcludeReason: "Already the command palette.",
+    binding: { mac: "Cmd+Shift+P", windows: "Ctrl+Shift+P" },
+  },
+  {
     id: "view.toggleMarkdownPreview",
     label: "Markdown Preview",
     menuPath: "Hidden/Markdown Preview",
@@ -467,6 +477,7 @@ export const commandDefinitions: CommandDefinition[] = [
     menuPath: "Hidden/Focus Pane 2",
     category: "Navigation",
     paletteIntent: "palette",
+    availability: "pane2",
     binding: { mac: "Cmd+Alt+2", windows: "Ctrl+Alt+2" },
   },
   {
@@ -475,6 +486,7 @@ export const commandDefinitions: CommandDefinition[] = [
     menuPath: "Hidden/Focus Pane 3",
     category: "Navigation",
     paletteIntent: "palette",
+    availability: "pane3",
     binding: { mac: "Cmd+Alt+3", windows: "Ctrl+Alt+3" },
   },
   {
@@ -483,6 +495,7 @@ export const commandDefinitions: CommandDefinition[] = [
     menuPath: "Hidden/Focus Pane 4",
     category: "Navigation",
     paletteIntent: "palette",
+    availability: "pane4",
     binding: { mac: "Cmd+Alt+4", windows: "Ctrl+Alt+4" },
   },
   {

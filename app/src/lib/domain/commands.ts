@@ -9,6 +9,7 @@ export type AppCommandId =
   | "app.findInProject"
   | "app.replaceInProject"
   | "app.quickOpenFile"
+  | "app.openCommandPalette"
   | "view.cycleTheme"
   | "view.toggleMarkdownPreview"
   | "view.toggleDiffPreview"
@@ -95,6 +96,9 @@ export type CommandAvailabilityKey =
   | "document"
   | "dirty"
   | "markdown"
+  | "pane2"
+  | "pane3"
+  | "pane4"
   | "hidden";
 
 export interface CommandDefinition {

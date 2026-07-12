@@ -50,6 +50,17 @@ export const requiresMarkdownPreview: CommandAvailabilityResolver = (snapshot) =
     ? { status: "enabled" }
     : { status: "hidden" };
 
+function requiresMinimumPanes(minimum: number, label: string): CommandAvailabilityResolver {
+  return (snapshot) =>
+    snapshot.paneCount >= minimum
+      ? { status: "enabled" }
+      : { status: "disabled", reason: `${label} is not available in the current layout.` };
+}
+
+export const requiresPane2: CommandAvailabilityResolver = requiresMinimumPanes(2, "Pane 2");
+export const requiresPane3: CommandAvailabilityResolver = requiresMinimumPanes(3, "Pane 3");
+export const requiresPane4: CommandAvailabilityResolver = requiresMinimumPanes(4, "Pane 4");
+
 /** Payload-only / internal commands that should not appear as runnable UI actions. */
 export const alwaysHidden: CommandAvailabilityResolver = () => ({ status: "hidden" });
 
@@ -59,6 +70,9 @@ const RESOLVERS: Record<CommandAvailabilityKey, CommandAvailabilityResolver> = {
   document: requiresActiveDocument,
   dirty: requiresDirtyDocument,
   markdown: requiresMarkdownPreview,
+  pane2: requiresPane2,
+  pane3: requiresPane3,
+  pane4: requiresPane4,
   hidden: alwaysHidden,
 };
 
@@ -83,5 +97,22 @@ export function emptyAvailabilitySnapshot(): CommandAvailabilitySnapshot {
     isDirty: false,
     paneCount: 1,
     markdownPreviewAvailable: false,
+  };
+}
+
+/** Build a pure availability snapshot from live UI facts. */
+export function buildCommandAvailabilitySnapshot(params: {
+  hasWorkspace: boolean;
+  hasActiveDocument: boolean;
+  isDirty: boolean;
+  paneCount: number;
+  markdownPreviewAvailable: boolean;
+}): CommandAvailabilitySnapshot {
+  return {
+    hasWorkspace: params.hasWorkspace,
+    hasActiveDocument: params.hasActiveDocument,
+    isDirty: params.isDirty,
+    paneCount: Math.max(1, params.paneCount),
+    markdownPreviewAvailable: params.markdownPreviewAvailable,
   };
 }

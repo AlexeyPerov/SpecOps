@@ -27,6 +27,7 @@
   import ProjectSearchPanel from "./ProjectSearchPanel.svelte";
   import SessionTimelineDialog from "./SessionTimelineDialog.svelte";
   import QuickOpenPicker from "./QuickOpenPicker.svelte";
+  import CommandPalettePicker from "./CommandPalettePicker.svelte";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import TitleBar from "./TitleBar.svelte";
@@ -333,6 +334,14 @@
     onQueryInput?: (query: string) => void;
   }
 
+  export interface AppShellCommandPaletteProps {
+    open: boolean;
+    results: import("../picker/commandRanking").RankedCommandsResult;
+    onSelect: (commandId: string) => void;
+    onClose: () => void;
+    onQueryInput?: (query: string) => void;
+  }
+
   let {
     activityRail,
     sessionsSidebar,
@@ -348,6 +357,7 @@
     diffPanel,
     timelineDialog,
     quickOpen,
+    commandPalette,
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
@@ -370,6 +380,7 @@
     diffPanel?: AppShellDiffPanelProps;
     timelineDialog?: AppShellTimelineDialogProps;
     quickOpen?: AppShellQuickOpenProps;
+    commandPalette?: AppShellCommandPaletteProps;
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
@@ -679,6 +690,16 @@
 <PermissionPrompt />
 <QuestionPrompt />
 <ConfirmDialog />
+
+{#if commandPalette}
+  <CommandPalettePicker
+    open={commandPalette.open}
+    results={commandPalette.results}
+    onSelect={commandPalette.onSelect}
+    onClose={commandPalette.onClose}
+    onQueryInput={commandPalette.onQueryInput}
+  />
+{/if}
 
 {#if quickOpen}
   <QuickOpenPicker

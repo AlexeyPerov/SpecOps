@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M3.1](./m3-1-command-catalog-execution-plan.md) complete  
 **Next:** [M4 folding and outline](../m4-folding-markdown-outline/m4-1-code-folding-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Medium — Score 6
 
 How to use this plan: assign to one Svelte-focused agent. Reuse the M0.6 picker shell and dispatch through the existing registry.
@@ -23,7 +23,7 @@ Add `Cmd/Ctrl+Shift+P` command discovery and execution across all SpecOps contex
 
 ## Task breakdown
 
-#### Task M3.2-1: Add palette command/controller [Score:5] [Agent:medium]
+#### Task M3.2-1: Add palette command/controller [DONE] [Score:5] [Agent:medium]
 
 - Add `app.openCommandPalette` with `Cmd/Ctrl+Shift+P`.
 - Keep palette open/query/active-row state ephemeral and window-local.
@@ -40,7 +40,7 @@ Dependencies: M3.1.
 
 ---
 
-#### Task M3.2-2: Render and dispatch palette entries [Score:6] [Agent:medium]
+#### Task M3.2-2: Render and dispatch palette entries [DONE] [Score:6] [Agent:medium]
 
 - Render label, category, effective shortcut, and disabled reason.
 - Use shared fuzzy highlighting/list navigation.
@@ -58,7 +58,7 @@ Dependencies: M3.2-1.
 
 ---
 
-#### Task M3.2-3: Accessibility and integration validation [Score:4] [Agent:medium]
+#### Task M3.2-3: Accessibility and integration validation [DONE] [Score:4] [Agent:medium]
 
 - Test combobox/listbox semantics, active descendant, disabled description, focus restore, pointer selection, and shortcut display.
 - Verify customized bindings and newly added M1/M2 commands.
@@ -74,12 +74,11 @@ Dependencies: M3.2-2.
 
 ## Plan exit criteria
 
-- [ ] `Cmd/Ctrl+Shift+P` opens a searchable command palette.
-- [ ] Availability and shortcuts are accurate.
-- [ ] Dispatch reuses the command registry.
-- [ ] Accessibility and validation gates pass.
+- [x] `Cmd/Ctrl+Shift+P` opens a searchable command palette.
+- [x] Availability and shortcuts are accurate.
+- [x] Dispatch reuses the command registry.
+- [x] Accessibility and validation gates pass.
 
 ## Changelog instructions
 
 Mark tasks `[DONE]`; add a dated user-facing entry and validation details.
-

@@ -129,10 +129,17 @@ export function listShortcutCommands(
 }
 
 export function formatBindingForDisplay(binding: string): string {
+  return formatBindingForPlatform(binding, isMacOs() ? "mac" : "windows");
+}
+
+export function formatBindingForPlatform(
+  binding: string,
+  platform: "mac" | "windows",
+): string {
   if (binding === "none") {
     return "None";
   }
-  if (isMacOs()) {
+  if (platform === "mac") {
     return binding
       .replaceAll("Cmd+", "⌘")
       .replaceAll("Alt+", "⌥")

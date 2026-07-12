@@ -17,6 +17,7 @@
     zoomPercent = 100,
     decoratePlaintextSymbols = true,
     showMinimap = true,
+    showFoldGutter = true,
     markdownEnabled = true,
     markdownHtml = "",
     storedMarkdownViewMode = "edit" as "edit" | "split" | "preview",
@@ -37,6 +38,7 @@
     zoomPercent?: number;
     decoratePlaintextSymbols?: boolean;
     showMinimap?: boolean;
+    showFoldGutter?: boolean;
     markdownEnabled?: boolean;
     markdownHtml?: string;
     storedMarkdownViewMode?: "edit" | "split" | "preview";
@@ -149,6 +151,7 @@
           {language}
           {decoratePlaintextSymbols}
           {showMinimap}
+          {showFoldGutter}
           {onStatusMessage}
           {onUntitledTitleRefresh}
           {onScrollTopChange}

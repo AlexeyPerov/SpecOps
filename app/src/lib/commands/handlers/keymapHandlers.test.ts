@@ -147,7 +147,8 @@ function keyboardEventFromBinding(binding: string, platform: "mac" | "windows"):
     if (modifier === "Cmd") {
       metaKey = platform === "mac";
     } else if (modifier === "Ctrl") {
-      ctrlKey = platform === "windows";
+      // Literal Ctrl (including macOS Ctrl+… chords that are not Cmd).
+      ctrlKey = true;
     } else if (modifier === "Shift") {
       shiftKey = true;
     } else if (modifier === "Alt") {
@@ -179,6 +180,12 @@ function createEditorRunnerMock(): EditorCommandRunner {
     selectAllOccurrences: vi.fn(() => false),
     skipOccurrence: vi.fn(() => false),
     undoOccurrence: vi.fn(() => false),
+    toggleFold: vi.fn(() => false),
+    fold: vi.fn(() => false),
+    unfold: vi.fn(() => false),
+    foldAll: vi.fn(() => false),
+    unfoldAll: vi.fn(() => false),
+    jumpToHeading: vi.fn(() => false),
     setWrap: vi.fn(),
     setZoom: vi.fn(),
     findNext: vi.fn(() => false),

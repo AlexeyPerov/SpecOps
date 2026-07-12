@@ -3,7 +3,9 @@
  *
  * Policy: sessions are keyed by `{ paneId, documentId }` — the same document
  * shown in multiple panes keeps independent view sessions (selection, undo
- * history, and future fold/completion/bookmark fields).
+ * history, and fold/completion/bookmark fields). Fold state is ephemeral: it
+ * lives in cached EditorState while a pane/document remains mounted and is
+ * never written to app session storage.
  *
  * Only inactive sessions live here; the live EditorView holds the active one.
  * Scroll position stays in `DocumentState.scrollTop` and is not cached.

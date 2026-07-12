@@ -148,7 +148,8 @@ function keyboardEventFromBinding(binding: string, platform: "mac" | "windows"):
     if (modifier === "Cmd") {
       metaKey = platform === "mac";
     } else if (modifier === "Ctrl") {
-      ctrlKey = platform === "windows";
+      // Literal Ctrl (including macOS Ctrl+… chords that are not Cmd).
+      ctrlKey = true;
     } else if (modifier === "Shift") {
       shiftKey = true;
     } else if (modifier === "Alt") {
@@ -180,6 +181,12 @@ function createEditorRunnerMock(): EditorCommandRunner {
     selectAllOccurrences: vi.fn(() => false),
     skipOccurrence: vi.fn(() => false),
     undoOccurrence: vi.fn(() => false),
+    toggleFold: vi.fn(() => false),
+    fold: vi.fn(() => false),
+    unfold: vi.fn(() => false),
+    foldAll: vi.fn(() => false),
+    unfoldAll: vi.fn(() => false),
+    jumpToHeading: vi.fn(() => false),
     setWrap: vi.fn(),
     setZoom: vi.fn(),
     findNext: vi.fn(() => false),
@@ -458,6 +465,18 @@ describe("app shell toggle commands", () => {
     expect(editorTools.getSnapshot().activeTool).toBe("go-to");
   });
 
+  it("app.toggleMarkdownOutline toggles outline tool state", () => {
+    const { context, editorTools } = createCommandContext();
+    expect(editorTools.getSnapshot().activeTool).toBe(null);
+
+    dispatchCommand("app.toggleMarkdownOutline", context);
+    expect(editorTools.getSnapshot().activeTool).toBe("outline");
+    dispatchCommand("app.focusMarkdownOutline", context);
+    expect(editorTools.getSnapshot().activeTool).toBe("outline");
+    dispatchCommand("app.toggleMarkdownOutline", context);
+    expect(editorTools.getSnapshot().activeTool).toBe(null);
+  });
+
   it("app.toggleFindReplace and app.toggleGoTo enforce one tool at a time", () => {
     const { context, editorTools } = createCommandContext();
 
@@ -570,6 +589,13 @@ describe("edit commands", () => {
     dispatchCommand("edit.selectAllOccurrences", context);
     dispatchCommand("edit.skipOccurrence", context);
     dispatchCommand("edit.undoOccurrence", context);
+    dispatchCommand("edit.toggleFold", context);
+    dispatchCommand("edit.fold", context);
+    dispatchCommand("edit.unfold", context);
+    dispatchCommand("edit.foldAll", context);
+    dispatchCommand("edit.unfoldAll", context);
+    dispatchCommand("app.toggleMarkdownOutline", context);
+    dispatchCommand("app.focusMarkdownOutline", context);
 
     expect(editorRunner.undo).toHaveBeenCalled();
     expect(editorRunner.redo).toHaveBeenCalled();
@@ -583,6 +609,11 @@ describe("edit commands", () => {
     expect(editorRunner.selectAllOccurrences).toHaveBeenCalled();
     expect(editorRunner.skipOccurrence).toHaveBeenCalled();
     expect(editorRunner.undoOccurrence).toHaveBeenCalled();
+    expect(editorRunner.toggleFold).toHaveBeenCalled();
+    expect(editorRunner.fold).toHaveBeenCalled();
+    expect(editorRunner.unfold).toHaveBeenCalled();
+    expect(editorRunner.foldAll).toHaveBeenCalled();
+    expect(editorRunner.unfoldAll).toHaveBeenCalled();
   });
 
   it("no-ops when no editor runner is available", () => {
@@ -741,6 +772,8 @@ describe("command dispatch coverage", () => {
       "view.cycleTheme",
       "app.toggleFindReplace",
       "app.toggleGoTo",
+      "app.toggleMarkdownOutline",
+      "app.focusMarkdownOutline",
       "app.findInProject",
       "app.replaceInProject",
       "app.quickOpenFile",
@@ -776,6 +809,11 @@ describe("command dispatch coverage", () => {
       "edit.selectAllOccurrences",
       "edit.skipOccurrence",
       "edit.undoOccurrence",
+      "edit.toggleFold",
+      "edit.fold",
+      "edit.unfold",
+      "edit.foldAll",
+      "edit.unfoldAll",
       "view.toggleWrap",
       "view.zoomIn",
       "view.zoomOut",

@@ -250,6 +250,41 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
     commandId: "edit.undoOccurrence",
     runCommand,
   });
+  const toggleFoldItem = await commandItem({
+    id: "cmd.edit.toggleFold",
+    text: "Toggle Fold",
+    accelerator: "CmdOrCtrl+Alt+.",
+    commandId: "edit.toggleFold",
+    runCommand,
+  });
+  const foldItem = await commandItem({
+    id: "cmd.edit.fold",
+    text: "Fold",
+    accelerator: "CmdOrCtrl+Alt+[",
+    commandId: "edit.fold",
+    runCommand,
+  });
+  const unfoldItem = await commandItem({
+    id: "cmd.edit.unfold",
+    text: "Unfold",
+    accelerator: "CmdOrCtrl+Alt+]",
+    commandId: "edit.unfold",
+    runCommand,
+  });
+  const foldAllItem = await commandItem({
+    id: "cmd.edit.foldAll",
+    text: "Fold All",
+    accelerator: "Ctrl+Alt+[",
+    commandId: "edit.foldAll",
+    runCommand,
+  });
+  const unfoldAllItem = await commandItem({
+    id: "cmd.edit.unfoldAll",
+    text: "Unfold All",
+    accelerator: "Ctrl+Alt+]",
+    commandId: "edit.unfoldAll",
+    runCommand,
+  });
 
   return Submenu.new({
     text: "Edit",
@@ -279,6 +314,12 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
       selectAllOccurrencesItem,
       skipOccurrenceItem,
       undoOccurrenceItem,
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      toggleFoldItem,
+      foldItem,
+      unfoldItem,
+      foldAllItem,
+      unfoldAllItem,
     ],
   });
 }
@@ -340,6 +381,13 @@ export async function buildViewMenu(runCommand: (commandId: AppCommandId) => voi
     commandId: "view.toggleWrap",
     runCommand,
   });
+  const outlineItem = await commandItem({
+    id: "cmd.view.markdownOutline",
+    text: "Markdown Outline",
+    accelerator: "CmdOrCtrl+Shift+O",
+    commandId: "app.toggleMarkdownOutline",
+    runCommand,
+  });
   const zoomInItem = await commandItem({
     id: "cmd.view.zoomIn",
     text: "Zoom In",
@@ -380,6 +428,7 @@ export async function buildViewMenu(runCommand: (commandId: AppCommandId) => voi
       await PredefinedMenuItem.new({ item: "Separator" }),
       diffItem,
       wrapItem,
+      outlineItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       zoomInItem,
       zoomOutItem,
@@ -471,6 +520,11 @@ export const NATIVE_MENU_COMMAND_IDS: readonly AppCommandId[] = [
   "edit.selectAllOccurrences",
   "edit.skipOccurrence",
   "edit.undoOccurrence",
+  "edit.toggleFold",
+  "edit.fold",
+  "edit.unfold",
+  "edit.foldAll",
+  "edit.unfoldAll",
   "view.layoutSingle",
   "view.layoutCols2",
   "view.layoutRows2",
@@ -479,6 +533,7 @@ export const NATIVE_MENU_COMMAND_IDS: readonly AppCommandId[] = [
   "view.cycleTheme",
   "view.toggleDiffPreview",
   "view.toggleWrap",
+  "app.toggleMarkdownOutline",
   "view.zoomIn",
   "view.zoomOut",
   "view.zoomReset",

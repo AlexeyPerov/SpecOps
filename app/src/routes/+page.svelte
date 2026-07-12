@@ -544,6 +544,7 @@
       isDirty: activeDocument?.isDirty ?? false,
       paneCount: session.editorLayout.panes.length,
       markdownPreviewAvailable: activeDocument?.language === "markdown",
+      markdownEditAvailable: activeDocument?.language === "markdown",
     }),
   );
   const commandPaletteEntries = $derived(
@@ -1606,6 +1607,7 @@
     selectionCount: snapshot.editor.selectionCount,
     decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
     showMinimap: snapshot.settings.showMinimap,
+    showFoldGutter: snapshot.settings.showFoldGutter,
     maxBinaryOpenAsTextBytes: snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes,
     maxOpenWithoutConfirmBytes: snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes,
     largeFileConfirming,

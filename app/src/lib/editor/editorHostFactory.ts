@@ -82,6 +82,13 @@ export function editorHostToCommandRunner(host: EditorHost): EditorCommandRunner
       return result.ok ? result.value : { total: 0, current: 0 };
     },
     goToLine: (line) => host.actions.navigation.goToLine(line).ok,
+    toggleFold: () => host.actions.folding.toggle().ok,
+    fold: () => host.actions.folding.fold().ok,
+    unfold: () => host.actions.folding.unfold().ok,
+    foldAll: () => host.actions.folding.foldAll().ok,
+    unfoldAll: () => host.actions.folding.unfoldAll().ok,
+    jumpToHeading: (headingKey) =>
+      host.actions.navigation.jumpToHeading(headingKey).ok,
   };
 }
 

@@ -48,6 +48,7 @@ describe("editor host contracts", () => {
       },
       navigation: {
         goToLine: () => unavailable(),
+        jumpToHeading: () => unavailable(),
       },
       search: {
         findNext: () => unavailable(),
@@ -60,6 +61,13 @@ describe("editor host contracts", () => {
       view: {
         setWrap: () => unavailable(),
         setZoom: () => unavailable(),
+      },
+      folding: {
+        toggle: unavailable,
+        fold: unavailable,
+        unfold: unavailable,
+        foldAll: unavailable,
+        unfoldAll: unavailable,
       },
     } satisfies EditorDomainActions;
 
@@ -76,6 +84,11 @@ describe("editor host contracts", () => {
       },
       search: {
         getMatchInfo: () => unavailable(),
+      },
+      markdown: {
+        getHeadings: () => unavailable(),
+        getActiveHeadingKey: () => unavailable(),
+        isHeadingFolded: () => unavailable(),
       },
     } satisfies EditorDomainQueries;
 

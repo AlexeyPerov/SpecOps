@@ -56,6 +56,7 @@ describe("settings mapping", () => {
       decoratePlaintextSymbols: false,
       defaultMarkdownViewMode: "split",
       showMinimap: false,
+      showFoldGutter: true,
       restrictFilesToContext: false,
       opencode: defaultOpencodeSettings,
       chatHttp: { enabled: false },
@@ -498,6 +499,7 @@ describe("showMinimap persistence", () => {
       ...defaultPersistedSettings,
       externalFiles: toExternalFilesSettings(defaultPersistedSettings),
       showMinimap: false,
+      showFoldGutter: true,
     });
     expect(persisted.showMinimap).toBe(false);
   });

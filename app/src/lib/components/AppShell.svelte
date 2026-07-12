@@ -160,6 +160,7 @@
     selectionCount: number;
     decoratePlaintextSymbols: boolean;
     showMinimap: boolean;
+    showFoldGutter: boolean;
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
     largeFileConfirming: boolean;
@@ -469,6 +470,7 @@
             zoomPercent={editor.zoomPercent}
             decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
             showMinimap={editor.showMinimap}
+            showFoldGutter={editor.showFoldGutter}
             maxBinaryOpenAsTextBytes={editor.maxBinaryOpenAsTextBytes}
             maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
             largeFileConfirming={editor.largeFileConfirming}

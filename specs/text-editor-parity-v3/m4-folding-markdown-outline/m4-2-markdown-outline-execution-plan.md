@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M4.1](./m4-1-code-folding-execution-plan.md) complete  
 **Next:** [M5 typing assistance](../m5-typing-assistance/m5-1-auto-pairs-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Heavy — Score 7
 
 How to use this plan: assign to one agent. Build heading extraction as editor-domain logic, then add a lightweight outline surface for long specs.
@@ -23,7 +23,7 @@ Provide an always-current structural view of Markdown headings and one-click/key
 
 ## Task breakdown
 
-#### Task M4.2-1: Implement heading model and incremental updates [Score:7] [Agent:heavy]
+#### Task M4.2-1: Implement heading model and incremental updates [DONE] [Score:7] [Agent:heavy]
 
 - Extract ATX/setext headings with level, display text, document range, line, and stable-enough key.
 - Prefer CodeMirror syntax tree to regex; keep a pure fallback/parser test surface.
@@ -41,7 +41,7 @@ Dependencies: M4.1.
 
 ---
 
-#### Task M4.2-2: Add outline UI and commands [Score:7] [Agent:heavy]
+#### Task M4.2-2: Add outline UI and commands [DONE] [Score:7] [Agent:heavy]
 
 - Add a collapsible outline panel or editor tool integrated with the grouped chrome controller.
 - Render heading hierarchy with indentation, current-section highlight, and filtering.
@@ -60,7 +60,7 @@ Dependencies: M4.2-1.
 
 ---
 
-#### Task M4.2-3: Folding/outline integration and validation [Score:5] [Agent:medium]
+#### Task M4.2-3: Folding/outline integration and validation [DONE] [Score:5] [Agent:medium]
 
 - Indicate folded sections in the outline where practical.
 - Jumping to a folded heading reveals/unfolds enough content to show the target.
@@ -76,12 +76,11 @@ Dependencies: M4.2-2.
 
 ## Plan exit criteria
 
-- [ ] Markdown heading extraction is syntax-aware and tested.
-- [ ] Outline provides accessible structural navigation.
-- [ ] Folding and outline cooperate.
-- [ ] Validation passes.
+- [x] Markdown heading extraction is syntax-aware and tested.
+- [x] Outline provides accessible structural navigation.
+- [x] Folding and outline cooperate.
+- [x] Validation passes.
 
 ## Changelog instructions
 
 Mark tasks `[DONE]`; add a dated entry with parser/UI behavior and scale validation.
-

@@ -206,6 +206,12 @@ export interface AppSettingsState {
    */
   showMinimap: boolean;
   /**
+   * When true, text/code editors show a fold gutter beside line numbers.
+   * Fold commands remain available when the gutter is hidden. Default on —
+   * the gutter adds ~14px and is therefore user-toggleable.
+   */
+  showFoldGutter: boolean;
+  /**
    * Initial view mode applied to newly opened markdown documents. Each
    * document remembers its own mode after open; this only seeds the first.
    */

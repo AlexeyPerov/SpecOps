@@ -37,4 +37,19 @@ export const editHandlers: CommandHandlerMap = {
   "edit.undoOccurrence": ({ getEditorRunner }) => {
     getEditorRunner()?.undoOccurrence();
   },
+  "edit.toggleFold": ({ getEditorRunner }) => {
+    getEditorRunner()?.toggleFold();
+  },
+  "edit.fold": ({ getEditorRunner }) => {
+    getEditorRunner()?.fold();
+  },
+  "edit.unfold": ({ getEditorRunner }) => {
+    getEditorRunner()?.unfold();
+  },
+  "edit.foldAll": ({ getEditorRunner }) => {
+    getEditorRunner()?.foldAll();
+  },
+  "edit.unfoldAll": ({ getEditorRunner }) => {
+    getEditorRunner()?.unfoldAll();
+  },
 };

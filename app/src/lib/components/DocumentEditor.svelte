@@ -13,6 +13,7 @@
     language = "plaintext" as EditorLanguageId,
     decoratePlaintextSymbols = true,
     showMinimap = true,
+    showFoldGutter = true,
     onStatusMessage = () => {},
     onUntitledTitleRefresh = undefined as
       | ((documentId: string) => void)
@@ -28,6 +29,7 @@
     language?: EditorLanguageId;
     decoratePlaintextSymbols?: boolean;
     showMinimap?: boolean;
+    showFoldGutter?: boolean;
     onStatusMessage?: (message: string) => void;
     onUntitledTitleRefresh?: ((documentId: string) => void) | undefined;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
@@ -52,6 +54,7 @@
   {language}
   {decoratePlaintextSymbols}
   {showMinimap}
+  {showFoldGutter}
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
   {onScrollTopChange}

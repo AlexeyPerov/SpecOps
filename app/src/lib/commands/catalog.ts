@@ -62,6 +62,7 @@ function defaultSnapshot(): CommandAvailabilitySnapshot {
     isDirty: false,
     paneCount: 1,
     markdownPreviewAvailable: false,
+    markdownEditAvailable: false,
   };
 }
 

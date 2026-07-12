@@ -12,6 +12,8 @@ export interface CommandAvailabilitySnapshot {
   isDirty: boolean;
   paneCount: number;
   markdownPreviewAvailable: boolean;
+  /** True when the active document is markdown and edit-capable (edit/split). */
+  markdownEditAvailable: boolean;
 }
 
 export type CommandAvailability =
@@ -50,6 +52,19 @@ export const requiresMarkdownPreview: CommandAvailabilityResolver = (snapshot) =
     ? { status: "enabled" }
     : { status: "hidden" };
 
+export const requiresMarkdownEdit: CommandAvailabilityResolver = (snapshot) => {
+  if (!snapshot.hasActiveDocument) {
+    return { status: "disabled", reason: "No active document." };
+  }
+  if (!snapshot.markdownEditAvailable) {
+    return {
+      status: "disabled",
+      reason: "Available for Markdown documents in edit or split mode.",
+    };
+  }
+  return { status: "enabled" };
+};
+
 function requiresMinimumPanes(minimum: number, label: string): CommandAvailabilityResolver {
   return (snapshot) =>
     snapshot.paneCount >= minimum
@@ -70,6 +85,7 @@ const RESOLVERS: Record<CommandAvailabilityKey, CommandAvailabilityResolver> = {
   document: requiresActiveDocument,
   dirty: requiresDirtyDocument,
   markdown: requiresMarkdownPreview,
+  markdownEdit: requiresMarkdownEdit,
   pane2: requiresPane2,
   pane3: requiresPane3,
   pane4: requiresPane4,
@@ -97,6 +113,7 @@ export function emptyAvailabilitySnapshot(): CommandAvailabilitySnapshot {
     isDirty: false,
     paneCount: 1,
     markdownPreviewAvailable: false,
+    markdownEditAvailable: false,
   };
 }
 
@@ -107,6 +124,7 @@ export function buildCommandAvailabilitySnapshot(params: {
   isDirty: boolean;
   paneCount: number;
   markdownPreviewAvailable: boolean;
+  markdownEditAvailable: boolean;
 }): CommandAvailabilitySnapshot {
   return {
     hasWorkspace: params.hasWorkspace,
@@ -114,5 +132,6 @@ export function buildCommandAvailabilitySnapshot(params: {
     isDirty: params.isDirty,
     paneCount: Math.max(1, params.paneCount),
     markdownPreviewAvailable: params.markdownPreviewAvailable,
+    markdownEditAvailable: params.markdownEditAvailable,
   };
 }

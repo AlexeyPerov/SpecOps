@@ -70,6 +70,7 @@ export interface PersistedSettings {
   maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
   showMinimap: boolean;
+  showFoldGutter: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
@@ -102,6 +103,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   showMinimap: true,
+  showFoldGutter: true,
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
@@ -176,6 +178,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         showMinimap: isBoolean(parsed.showMinimap)
           ? parsed.showMinimap
           : defaultPersistedSettings.showMinimap,
+        showFoldGutter: isBoolean(parsed.showFoldGutter)
+          ? parsed.showFoldGutter
+          : defaultPersistedSettings.showFoldGutter,
         defaultMarkdownViewMode: MARKDOWN_VIEW_MODES.includes(
           parsed.defaultMarkdownViewMode as MarkdownViewMode,
         )
@@ -233,6 +238,7 @@ export function toPersistedSettings(input: {
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
   showMinimap: boolean;
+  showFoldGutter: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
@@ -256,6 +262,9 @@ export function toPersistedSettings(input: {
     showMinimap: isBoolean(input.showMinimap)
       ? input.showMinimap
       : defaultPersistedSettings.showMinimap,
+    showFoldGutter: isBoolean(input.showFoldGutter)
+      ? input.showFoldGutter
+      : defaultPersistedSettings.showFoldGutter,
     defaultMarkdownViewMode: MARKDOWN_VIEW_MODES.includes(
       input.defaultMarkdownViewMode as MarkdownViewMode,
     )

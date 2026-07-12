@@ -20,6 +20,7 @@ import {
   type EditorLanguageId,
 } from "./editorLanguage";
 import { minimapExtension } from "./editorMinimap";
+import { foldExtension } from "./editorFold";
 import { createPlaintextSymbolDecorations } from "./plaintextDecorations";
 import {
   storeOriginAnnotation,
@@ -37,6 +38,7 @@ export type EditorViewControllerProps = {
   language: EditorLanguageId;
   decoratePlaintextSymbols: boolean;
   showMinimap: boolean;
+  showFoldGutter: boolean;
 };
 
 export type EditorViewControllerDeps = {
@@ -78,6 +80,7 @@ export function createEditorViewController(
   let currentEditorLanguage: EditorLanguageId = "plaintext";
   let lastDecoKey = "";
   let lastMinimapEnabled: boolean | null = null;
+  let lastFoldGutterEnabled: boolean | null = null;
 
   let applyingScroll = false;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -184,11 +187,16 @@ export function createEditorViewController(
     hostRegistration = deps.workbench.registerHost(host);
   }
 
-  function buildExtensions(language: EditorLanguageId, showMinimap: boolean) {
+  function buildExtensions(
+    language: EditorLanguageId,
+    showMinimap: boolean,
+    showFoldGutter: boolean,
+  ) {
     return buildEditorExtensions({
       compartments,
       language,
       showMinimap,
+      showFoldGutter,
       updateListener: EditorView.updateListener.of((update) => {
         if (destroyed) {
           return;
@@ -203,10 +211,15 @@ export function createEditorViewController(
     });
   }
 
-  function createState(content: string, language: EditorLanguageId, showMinimap: boolean): EditorState {
+  function createState(
+    content: string,
+    language: EditorLanguageId,
+    showMinimap: boolean,
+    showFoldGutter: boolean,
+  ): EditorState {
     return EditorState.create({
       doc: content,
-      extensions: buildExtensions(language, showMinimap),
+      extensions: buildExtensions(language, showMinimap, showFoldGutter),
     });
   }
 
@@ -225,9 +238,10 @@ export function createEditorViewController(
     content: string,
     language: EditorLanguageId,
     showMinimap: boolean,
+    showFoldGutter: boolean,
   ): EditorState {
     if (!documentId || !props) {
-      return createState(content, language, showMinimap);
+      return createState(content, language, showMinimap, showFoldGutter);
     }
     const cached = deps.sessionCache.take({
       paneId: props.paneId,
@@ -237,7 +251,7 @@ export function createEditorViewController(
     if (cached && cached.doc.toString() === content) {
       return cached;
     }
-    return createState(content, language, showMinimap);
+    return createState(content, language, showMinimap, showFoldGutter);
   }
 
   function syncLanguage(language: EditorLanguageId): void {
@@ -299,6 +313,18 @@ export function createEditorViewController(
     });
   }
 
+  function syncFoldGutter(showFoldGutter: boolean): void {
+    if (!view || showFoldGutter === lastFoldGutterEnabled) {
+      return;
+    }
+    lastFoldGutterEnabled = showFoldGutter;
+    view.dispatch({
+      effects: compartments.fold.reconfigure(
+        foldExtension({ showGutter: showFoldGutter }),
+      ),
+    });
+  }
+
   function applyExternalContent(content: string, kind: "sync" | "reload"): void {
     if (!view || content === view.state.doc.toString()) {
       return;
@@ -327,14 +353,16 @@ export function createEditorViewController(
       next.content,
       next.language,
       next.showMinimap,
+      next.showFoldGutter,
     );
     view.setState(nextState);
 
     trackedDocumentId = next.documentId;
-    // Force language/decoration/minimap reconfigure against possibly restored state.
+    // Force language/decoration/minimap/fold reconfigure against possibly restored state.
     currentEditorLanguage = "" as EditorLanguageId;
     lastDecoKey = "";
     lastMinimapEnabled = null;
+    lastFoldGutterEnabled = null;
 
     // Re-apply pane-level chrome that may differ from a restored session.
     applyWrap(view, compartments.lineWrap, next.wrapLines);
@@ -342,6 +370,7 @@ export function createEditorViewController(
     syncLanguage(next.language);
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
+    syncFoldGutter(next.showFoldGutter);
     applyScrollTop(next.scrollTop);
     registerHost();
     updateCursor();
@@ -362,9 +391,15 @@ export function createEditorViewController(
       language: "plaintext" as EditorLanguageId,
       decoratePlaintextSymbols: true,
       showMinimap: true,
+      showFoldGutter: true,
     };
 
-    const state = createState(initial.content, initial.language, initial.showMinimap);
+    const state = createState(
+      initial.content,
+      initial.language,
+      initial.showMinimap,
+      initial.showFoldGutter,
+    );
     view = new EditorView({ state, parent });
 
     applyWrap(view, compartments.lineWrap, initial.wrapLines);
@@ -373,11 +408,13 @@ export function createEditorViewController(
     trackedDocumentId = initial.documentId;
     currentEditorLanguage = "" as EditorLanguageId;
     lastMinimapEnabled = null;
+    lastFoldGutterEnabled = null;
     documentGeneration = 1;
     applyScrollTop(initial.scrollTop);
     syncLanguage(initial.language);
     syncDecorations(initial.language, initial.decoratePlaintextSymbols);
     syncMinimap(initial.showMinimap);
+    syncFoldGutter(initial.showFoldGutter);
     registerHost();
     updateCursor();
   }
@@ -414,6 +451,7 @@ export function createEditorViewController(
     syncLanguage(next.language);
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
+    syncFoldGutter(next.showFoldGutter);
 
     // Scroll from store only when document identity is unchanged and the
     // prop changed externally (e.g. restore). Avoid fighting user scroll.

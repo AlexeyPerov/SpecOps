@@ -3,7 +3,7 @@
  * One tool at a time; closes on stale pane/document binding or modal precedence.
  */
 
-export type EditorToolId = "find" | "go-to";
+export type EditorToolId = "find" | "go-to" | "outline";
 
 export type EditorToolBinding = {
   paneId: string;

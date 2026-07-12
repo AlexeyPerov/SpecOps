@@ -12,6 +12,7 @@
   import ChatPanel from "./ChatPanel.svelte";
   import FindReplacePanel from "./FindReplacePanel.svelte";
   import GoToLinePanel from "./GoToLinePanel.svelte";
+  import MarkdownOutlinePanel from "./MarkdownOutlinePanel.svelte";
   import {
     activeViewKindInPane,
     isSessionTabActiveInPane,
@@ -56,6 +57,7 @@
     zoomPercent = 100,
     decoratePlaintextSymbols = true,
     showMinimap = true,
+    showFoldGutter = true,
     maxBinaryOpenAsTextBytes = 0,
     maxOpenWithoutConfirmBytes = 0,
     largeFileConfirming = false,
@@ -105,6 +107,7 @@
     zoomPercent: number;
     decoratePlaintextSymbols: boolean;
     showMinimap: boolean;
+    showFoldGutter: boolean;
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
     largeFileConfirming: boolean;
@@ -138,6 +141,7 @@
 
   const workbench = getEditorWorkbenchRuntime();
   const editorTools = getEditorToolController();
+  const getActiveEditorHost = () => workbench.getActiveHost();
   const getActiveEditorRunner = () => workbench.getActiveRunner();
 
   let toolSnapshot = $state<EditorToolSnapshot>(editorTools.getSnapshot());
@@ -147,6 +151,7 @@
 
   const findReplaceOpen = $derived(toolSnapshot.activeTool === "find");
   const goToOpen = $derived(toolSnapshot.activeTool === "go-to");
+  const outlineOpen = $derived(toolSnapshot.activeTool === "outline");
 
   let findQuery = $state("");
   let replaceValue = $state("");
@@ -294,27 +299,53 @@
       onConfirm={onConfirmLargeFile}
     />
   {:else if documentView.isTextEditorDocument}
-    <MarkdownEditorPane
-      markdownEnabled={documentView.isMarkdownDocument}
-      content={paneDocument?.content ?? ""}
-      documentId={paneDocument?.id ?? null}
-      {paneId}
-      documentFilePath={paneDocument?.filePath ?? null}
-      scrollTop={paneDocument?.scrollTop ?? 0}
-      language={paneDocument?.language ?? "plaintext"}
-      {wrapLines}
-      {zoomPercent}
-      {decoratePlaintextSymbols}
-      {showMinimap}
-      markdownHtml={documentView.markdownHtml}
-      storedMarkdownViewMode={paneDocument?.markdownViewMode ?? "edit"}
-      canFitSplit={canFitMarkdownSplit}
-      {windowId}
-      onStatusMessage={notify}
-      {onMarkdownViewModeChange}
-      {onUntitledTitleRefresh}
-      {onScrollTopChange}
-    />
+    <div
+      class="editor-pane-body"
+      class:editor-pane-body-with-outline={isActivePane &&
+        outlineOpen &&
+        documentView.isMarkdownDocument}
+    >
+      <div class="editor-pane-primary">
+        <MarkdownEditorPane
+          markdownEnabled={documentView.isMarkdownDocument}
+          content={paneDocument?.content ?? ""}
+          documentId={paneDocument?.id ?? null}
+          {paneId}
+          documentFilePath={paneDocument?.filePath ?? null}
+          scrollTop={paneDocument?.scrollTop ?? 0}
+          language={paneDocument?.language ?? "plaintext"}
+          {wrapLines}
+          {zoomPercent}
+          {decoratePlaintextSymbols}
+          {showMinimap}
+          {showFoldGutter}
+          markdownHtml={documentView.markdownHtml}
+          storedMarkdownViewMode={paneDocument?.markdownViewMode ?? "edit"}
+          canFitSplit={canFitMarkdownSplit}
+          {windowId}
+          onStatusMessage={notify}
+          {onMarkdownViewModeChange}
+          {onUntitledTitleRefresh}
+          {onScrollTopChange}
+        />
+      </div>
+      {#if isActivePane && outlineOpen && documentView.isMarkdownDocument && !isSessionTabActive && !isChatHttpActive}
+        <MarkdownOutlinePanel
+          getHost={getActiveEditorHost}
+          requestFocus={true}
+          onJump={(headingKey) => {
+            // Preview-only: switch to edit so the CodeMirror host can reveal the heading.
+            if (paneDocument?.markdownViewMode === "preview") {
+              onMarkdownViewModeChange("edit");
+            }
+            const host = getActiveEditorHost();
+            host?.actions.navigation.jumpToHeading(headingKey);
+            host?.focus();
+          }}
+          onClose={() => editorTools.close({ restoreFocus: true })}
+        />
+      {/if}
+    </div>
   {/if}
 
   {#if isActivePane && documentView.isTextEditorDocument && !isSessionTabActive && !isChatHttpActive && findReplaceOpen}
@@ -342,5 +373,21 @@
   .editor-pane-inactive {
     /* Keep mounted editors alive but de-emphasize inactive pane chrome. */
     opacity: 0.92;
+  }
+
+  .editor-pane-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .editor-pane-primary {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
 </style>

@@ -32,6 +32,7 @@ describe("command availability", () => {
       resolveCommandAvailability("markdown", {
         ...emptyAvailabilitySnapshot(),
         markdownPreviewAvailable: true,
+        markdownEditAvailable: false,
       }),
     ).toEqual({ status: "enabled" });
   });
@@ -65,6 +66,7 @@ describe("command availability", () => {
         isDirty: true,
         paneCount: 2,
         markdownPreviewAvailable: false,
+        markdownEditAvailable: false,
       }),
     ).toEqual({
       hasWorkspace: true,
@@ -72,6 +74,7 @@ describe("command availability", () => {
       isDirty: true,
       paneCount: 2,
       markdownPreviewAvailable: false,
+      markdownEditAvailable: false,
     });
   });
 });
@@ -132,6 +135,7 @@ describe("command catalog consistency", () => {
         isDirty: true,
         paneCount: 2,
         markdownPreviewAvailable: true,
+        markdownEditAvailable: false,
       },
     });
     expect(entries.length).toBe(commandDefinitions.length);
@@ -203,6 +207,7 @@ describe("palette snapshot", () => {
     isDirty: false,
     paneCount: 1,
     markdownPreviewAvailable: false,
+    markdownEditAvailable: false,
   });
 
   it("merges binding overrides into display bindings", () => {

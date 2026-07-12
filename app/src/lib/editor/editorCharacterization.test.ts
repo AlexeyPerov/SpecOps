@@ -125,6 +125,7 @@ describe("CodeMirror fixture characterization", () => {
       language: "plaintext",
       decoratePlaintextSymbols: true,
       showMinimap: false,
+      showFoldGutter: true,
     });
     controller.mount(parent);
     const view = controller.getView()!;
@@ -148,6 +149,7 @@ describe("CodeMirror fixture characterization", () => {
       language: "plaintext",
       decoratePlaintextSymbols: true,
       showMinimap: false,
+      showFoldGutter: true,
     });
     view.dispatch({ selection: EditorSelection.cursor(9) });
     dispatchUserEdit(view, {
@@ -164,6 +166,7 @@ describe("CodeMirror fixture characterization", () => {
       language: "plaintext",
       decoratePlaintextSymbols: true,
       showMinimap: false,
+      showFoldGutter: true,
     });
 
     expect(view.state.selection.main.from).toBe(selectionAfterAEdit.from);

@@ -17,8 +17,9 @@
  * `allowMultipleSelections` enables native multi-cursor / column selection so
  * modifier-click, column-drag, and occurrence commands work across all panes.
  *
- * Reserved empty compartments (`fold`, `completion`, `snippets`, `landmarks`)
- * are seams for M4–M7; reconfigure them later without rebuilding base/theme.
+ * Reserved empty compartments (`completion`, `snippets`, `landmarks`)
+ * are seams for M5–M7; reconfigure them later without rebuilding base/theme.
+ * The `fold` compartment is owned by M4 (`foldExtension`).
  */
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
@@ -34,6 +35,7 @@ import {
   getLanguageSupport,
   type EditorLanguageId,
 } from "./editorLanguage";
+import { foldExtension } from "./editorFold";
 import { minimapExtension } from "./editorMinimap";
 
 /** Named groups assembled into the editor state. */
@@ -74,7 +76,7 @@ export type EditorExtensionCompartments = {
   decoration: Compartment;
   searchHighlight: Compartment;
   minimap: Compartment;
-  /** M4 seam — folding. */
+  /** M4 — folding (gutter + keymap); reconfigured via showFoldGutter. */
   fold: Compartment;
   /** M5 seam — autocomplete. */
   completion: Compartment;
@@ -88,6 +90,8 @@ export type BuildEditorExtensionsOptions = {
   compartments: EditorExtensionCompartments;
   language: EditorLanguageId;
   showMinimap: boolean;
+  /** Fold gutter visibility (default on). Fold commands work even when hidden. */
+  showFoldGutter?: boolean;
   /** Optional update listener (dirty reporting, cursor). */
   updateListener?: Extension;
 };
@@ -168,7 +172,13 @@ export type NamedExtensionGroup = {
 export function buildNamedExtensionGroups(
   options: BuildEditorExtensionsOptions,
 ): NamedExtensionGroup[] {
-  const { compartments, language, showMinimap, updateListener } = options;
+  const {
+    compartments,
+    language,
+    showMinimap,
+    showFoldGutter = true,
+    updateListener,
+  } = options;
 
   return [
     {
@@ -208,7 +218,7 @@ export function buildNamedExtensionGroups(
     },
     {
       name: "fold",
-      extensions: [compartments.fold.of([])],
+      extensions: [compartments.fold.of(foldExtension({ showGutter: showFoldGutter }))],
     },
     {
       name: "completion",

@@ -157,6 +157,18 @@
     Display a scaled overview of the current file beside the editor. Click or drag it to jump around
     long documents. Applies to code and text editors, not the markdown preview.
   </p>
+  <label class="settings-toggle">
+    <input
+      type="checkbox"
+      checked={snapshot.settings.showFoldGutter}
+      onchange={(event) =>
+        appState.setShowFoldGutter((event.currentTarget as HTMLInputElement).checked)}
+    />
+    Show fold gutter
+  </label>
+  <p class="settings-section-note">
+    Show fold markers beside line numbers. Fold commands remain available when the gutter is hidden.
+  </p>
 </section>
 
 <section class="settings-section">

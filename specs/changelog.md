@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-12 13:35 — M4 folding and Markdown outline
+
+- **M4.1-1 Fold extension and commands** — Wired the reserved `fold` compartment via `editorFold.ts` (`codeFolding`, `foldGutter`, `foldKeymap`, accessible fold markers). Global setting `showFoldGutter` (default on; ~14px width) through settings persistence, Editor settings UI, and pane prop drill. Domain actions `folding.*` plus flat runner adapters; commands `edit.toggleFold` / `edit.fold` / `edit.unfold` / `edit.foldAll` / `edit.unfoldAll` in palette, Edit menu, and shortcuts (CM-aligned chords).
+- **M4.1-2 Markdown heading folding** — Relies on `@codemirror/lang-markdown` built-in heading fold service (ATX/setext → next equal/higher heading). Pure boundary helpers + foldable integration tests in `markdownFoldBoundaries.ts`; fenced code remains syntax-tree folded.
+- **M4.1-3 Fold lifecycle** — Fold state stays in `EditorState` / session cache only (ephemeral; not session JSON). Documented in `editorDocumentSessionCache.ts`. Replacement/lifecycle coverage in fold tests. No new CodeMirror packages (already direct `@codemirror/language`).
+- **M4.2-1 Heading model** — `markdownHeadings.ts` extracts ATX/setext via Lezer tree (full parse fallback for large docs), ignores fenced/HTML/comment blocks, stable ordinal keys, active-heading + filter helpers. Host queries `markdown.getHeadings` / `getActiveHeadingKey` / `isHeadingFolded`; `navigation.jumpToHeading` unfolds covering folds then reveals.
+- **M4.2-2 Outline UI** — `EditorToolId` `"outline"`; `MarkdownOutlinePanel.svelte` docked beside the editor (filter, indentation, current-section highlight, a11y labels). Commands `app.toggleMarkdownOutline` / `app.focusMarkdownOutline` with `markdownEdit` availability (disabled outside Markdown with reason). Preview-only jump switches to edit mode then focuses the host.
+- **M4.2-3 Fold/outline integration** — Outline marks folded headings; jump unfolds target. Scale test: 2,000 synthetic headings under 1.5s budget.
+- **Tests:** `markdownHeadings.test.ts`, `markdownFoldBoundaries.test.ts`; catalog/handlers/settings/workbench/contracts updated. Keymap test helper now honors literal Ctrl on macOS.
+- **`specs/…/m4-1-…-execution-plan.md`** and **`specs/…/m4-2-…-execution-plan.md`** — all tasks `[DONE]`, status Done.
+- **Validation:** `npm test` passes (2786 tests). `npm run check` has no new errors in M4 files (12 pre-existing errors elsewhere unchanged). Svelte autofixer clean on `MarkdownOutlinePanel.svelte` (suggestions only).
+
 ## 2026-07-12 10:32 — M3 command catalog and palette UI
 
 - **M3.1-1 Command metadata and availability** — Added pane-aware availability keys (`pane2`/`pane3`/`pane4`) in `domain/commands.ts` and `commands/availability.ts` for `view.focusPane2`–`4`. Added `buildCommandAvailabilitySnapshot()` for pure UI-fact snapshots. New `app.openCommandPalette` definition (`Cmd+Shift+P` / `Ctrl+Shift+P`, palette-excluded with reason).

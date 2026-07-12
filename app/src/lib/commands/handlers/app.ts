@@ -36,6 +36,12 @@ export const appHandlers: CommandHandlerMap = {
   "app.toggleGoTo": ({ getEditorTools }) => {
     getEditorTools().toggle("go-to");
   },
+  "app.toggleMarkdownOutline": ({ getEditorTools }) => {
+    getEditorTools().toggle("outline");
+  },
+  "app.focusMarkdownOutline": ({ getEditorTools }) => {
+    getEditorTools().open("outline");
+  },
   "app.findInProject": ({ openProjectSearch }) => {
     openProjectSearch?.(false);
   },

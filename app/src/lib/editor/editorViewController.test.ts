@@ -27,6 +27,7 @@ function baseProps(
     language: "plaintext",
     decoratePlaintextSymbols: true,
     showMinimap: false,
+    showFoldGutter: true,
     ...overrides,
   };
 }

@@ -366,6 +366,15 @@ function createStateStore() {
         },
       }));
     },
+    setShowFoldGutter(value: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          showFoldGutter: value,
+        },
+      }));
+    },
     setDefaultMarkdownViewMode(value: MarkdownViewMode) {
       update((state) => ({
         ...state,

@@ -19,6 +19,7 @@
     language?: EditorLanguageId;
     decoratePlaintextSymbols?: boolean;
     showMinimap?: boolean;
+    showFoldGutter?: boolean;
     onStatusMessage?: (message: string) => void;
     onDocumentDirty?: (nextContent: string) => void;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
@@ -34,6 +35,7 @@
     language = "plaintext",
     decoratePlaintextSymbols = true,
     showMinimap = true,
+    showFoldGutter = true,
     onStatusMessage = () => {},
     onDocumentDirty = () => {},
     onScrollTopChange = () => {},
@@ -67,6 +69,7 @@
       language,
       decoratePlaintextSymbols,
       showMinimap,
+      showFoldGutter,
     });
     controller.mount(hostEl);
 
@@ -103,6 +106,7 @@
       language,
       decoratePlaintextSymbols,
       showMinimap,
+      showFoldGutter,
     });
   });
 </script>

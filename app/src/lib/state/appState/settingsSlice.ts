@@ -82,6 +82,7 @@ export const defaultSettings: AppSettingsState = {
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
   showMinimap: true,
+  showFoldGutter: true,
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
@@ -227,6 +228,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
       showMinimap?: boolean;
+      showFoldGutter?: boolean;
       defaultMarkdownViewMode?: MarkdownViewMode;
       restrictFilesToContext?: boolean;
       opencode?: Partial<OpencodeSettings>;
@@ -280,6 +282,15 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             settings: {
               ...next.settings,
               showMinimap: partial.showMinimap,
+            },
+          };
+        }
+        if (typeof partial.showFoldGutter === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              showFoldGutter: partial.showFoldGutter,
             },
           };
         }

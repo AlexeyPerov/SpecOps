@@ -15,7 +15,20 @@ import type {
   MatchInfo,
 } from "../types/editor";
 import { applyWrap, applyZoom } from "./editorExtensions";
+import {
+  foldAllRanges,
+  foldCurrent,
+  foldToggle,
+  isLineFolded,
+  unfoldAllRanges,
+  unfoldAroundPosition,
+  unfoldCurrent,
+} from "./editorFoldOps";
 import { buildLineOpTransaction, type LineOpKind } from "./editorLineTransactions";
+import {
+  activeMarkdownHeading,
+  extractMarkdownHeadings,
+} from "./markdownHeadings";
 import {
   editorFindNext,
   editorFindPrevious,
@@ -111,6 +124,11 @@ const CORE_ACTIONS = new Set<EditorActionName>([
   "replaceAll",
   "setSearchQuery",
   "goToLine",
+  "fold",
+  "unfold",
+  "foldAll",
+  "unfoldAll",
+  "jumpToHeading",
 ]);
 
 export type EditorDomainApis = {
@@ -270,6 +288,24 @@ export function createEditorDomainApis(
         }
         return goToLine(view, line, updateCursor) ? ok() : disabled();
       },
+      jumpToHeading: (headingKey) => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        const headings = extractMarkdownHeadings(view.state);
+        const heading = headings.find((entry) => entry.key === headingKey);
+        if (!heading) {
+          return disabled();
+        }
+        unfoldAroundPosition(view, heading.from);
+        view.dispatch({
+          selection: EditorSelection.cursor(heading.from),
+          scrollIntoView: true,
+        });
+        updateCursor();
+        return ok();
+      },
     },
     search: {
       findNext: (query, caseSensitive) => {
@@ -362,6 +398,45 @@ export function createEditorDomainApis(
         return ok();
       },
     },
+    folding: {
+      toggle: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        return foldToggle(view) ? ok() : disabled();
+      },
+      fold: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        return foldCurrent(view) ? ok() : disabled();
+      },
+      unfold: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        return unfoldCurrent(view) ? ok() : disabled();
+      },
+      foldAll: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        foldAllRanges(view);
+        return ok();
+      },
+      unfoldAll: () => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        unfoldAllRanges(view);
+        return ok();
+      },
+    },
   };
 
   const queries: EditorDomainQueries = {
@@ -415,6 +490,39 @@ export function createEditorDomainApis(
           ok: true,
           value: editorGetMatchInfo(getView(), query, caseSensitive),
         };
+      },
+    },
+    markdown: {
+      getHeadings: () => {
+        const view = getView();
+        if (!view) {
+          return { ok: false, reason: "unavailable" };
+        }
+        return { ok: true, value: extractMarkdownHeadings(view.state) };
+      },
+      getActiveHeadingKey: () => {
+        const view = getView();
+        if (!view) {
+          return { ok: false, reason: "unavailable" };
+        }
+        const headings = extractMarkdownHeadings(view.state);
+        const active = activeMarkdownHeading(
+          headings,
+          view.state.selection.main.head,
+        );
+        return { ok: true, value: active?.key ?? null };
+      },
+      isHeadingFolded: (headingKey) => {
+        const view = getView();
+        if (!view) {
+          return { ok: false, reason: "unavailable" };
+        }
+        const headings = extractMarkdownHeadings(view.state);
+        const heading = headings.find((entry) => entry.key === headingKey);
+        if (!heading) {
+          return { ok: true, value: false };
+        }
+        return { ok: true, value: isLineFolded(view, heading.line) };
       },
     },
   };

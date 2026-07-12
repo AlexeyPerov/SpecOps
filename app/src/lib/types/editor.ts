@@ -128,6 +128,17 @@ export type EditorLineActions = {
 /** Cursor/navigation actions. */
 export type EditorNavigationActions = {
   goToLine: (line: number) => EditorActionResult;
+  /** Jump to a markdown heading by key; unfolds covering folds. */
+  jumpToHeading: (headingKey: string) => EditorActionResult;
+};
+
+/** Fold / unfold actions (M4). */
+export type EditorFoldingActions = {
+  toggle: () => EditorActionResult;
+  fold: () => EditorActionResult;
+  unfold: () => EditorActionResult;
+  foldAll: () => EditorActionResult;
+  unfoldAll: () => EditorActionResult;
 };
 
 /** Find/replace and search-highlight configuration. */
@@ -170,6 +181,7 @@ export type EditorDomainActions = {
   navigation: EditorNavigationActions;
   search: EditorSearchActions;
   view: EditorViewActions;
+  folding: EditorFoldingActions;
 };
 
 export type EditorHistoryQueries = {
@@ -189,12 +201,28 @@ export type EditorSearchQueries = {
   getMatchInfo: (query: string, caseSensitive: boolean) => EditorQueryResult<MatchInfo>;
 };
 
+export type MarkdownHeadingSnapshot = {
+  key: string;
+  level: number;
+  text: string;
+  from: number;
+  to: number;
+  line: number;
+};
+
+export type EditorMarkdownQueries = {
+  getHeadings: () => EditorQueryResult<MarkdownHeadingSnapshot[]>;
+  getActiveHeadingKey: () => EditorQueryResult<string | null>;
+  isHeadingFolded: (headingKey: string) => EditorQueryResult<boolean>;
+};
+
 /** Grouped read-only queries against the active pane host (M0.4). */
 export type EditorDomainQueries = {
   history: EditorHistoryQueries;
   selection: EditorSelectionQueries;
   document: EditorDocumentQueries;
   search: EditorSearchQueries;
+  markdown: EditorMarkdownQueries;
 };
 
 /**
@@ -303,6 +331,12 @@ export type EditorCommandRunner = {
   setSearchQuery: (query: string, caseSensitive: boolean) => void;
   getMatchInfo: (query: string, caseSensitive: boolean) => MatchInfo;
   goToLine: (line: number) => boolean;
+  toggleFold: () => boolean;
+  fold: () => boolean;
+  unfold: () => boolean;
+  foldAll: () => boolean;
+  unfoldAll: () => boolean;
+  jumpToHeading: (headingKey: string) => boolean;
 };
 
 /**

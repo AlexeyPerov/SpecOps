@@ -26,6 +26,7 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
       },
       navigation: {
         goToLine: () => ({ ok: true }),
+        jumpToHeading: () => ({ ok: true }),
       },
       search: {
         findNext: () => ({ ok: true }),
@@ -38,6 +39,13 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
       view: {
         setWrap: () => ({ ok: true }),
         setZoom: () => ({ ok: true }),
+      },
+      folding: {
+        toggle: () => ({ ok: true }),
+        fold: () => ({ ok: true }),
+        unfold: () => ({ ok: true }),
+        foldAll: () => ({ ok: true }),
+        unfoldAll: () => ({ ok: true }),
       },
     },
     queries: {
@@ -56,6 +64,11 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
       },
       search: {
         getMatchInfo: () => ({ ok: true, value: { total: 0, current: 0 } }),
+      },
+      markdown: {
+        getHeadings: () => ({ ok: true, value: [] }),
+        getActiveHeadingKey: () => ({ ok: true, value: null }),
+        isHeadingFolded: () => ({ ok: true, value: false }),
       },
     },
     capability: () => ({ state: "available" }),

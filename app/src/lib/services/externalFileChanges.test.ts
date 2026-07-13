@@ -8,8 +8,11 @@ import { flushMicrotasks } from "../test/sessionMock";
 import { statDiskFingerprint } from "./diskFingerprint";
 import {
   awaitStartupExternalChecksBackgroundForTests,
+  beginSaveInFlight,
+  cancelStartupExternalChecks,
   checkDocumentExternalChanges,
   checkDocumentIfDeferred,
+  clearSaveInFlight,
   recordWriteFingerprint,
   reloadActiveDocumentFromDisk,
   resetExternalFileChangesForTests,
@@ -476,5 +479,129 @@ describe("runStartupExternalChecks", () => {
     expect(appState.getActiveDocuments().find((doc) => doc.id === okId)?.content).toBe(
       "reloaded-b",
     );
+  });
+});
+
+describe("save/watcher feedback loop", () => {
+  beforeEach(() => {
+    resetExternalFileChangesForTests();
+    appState.resetAppState();
+    setExternalFiles();
+    confirmMock.mockReset();
+    readTextFileMock.mockReset();
+    statMock.mockReset();
+  });
+
+  it("suppresses a watcher check while a save for that path is in flight", async () => {
+    const documentId = prepareSavedFile("/tmp/inflight-save.txt", "buffer", fp1);
+    // Simulate the race window: save has written to disk but the fingerprint
+    // has not been recorded yet. The watcher fires for the path in that window.
+    beginSaveInFlight("/tmp/inflight-save.txt");
+    statMock.mockResolvedValue(fp2);
+    readTextFileMock.mockResolvedValue("from disk");
+
+    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
+    // Buffer was NOT reloaded and no prompt fired.
+    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
+    expect(document?.content).toBe("buffer");
+    expect(confirmMock).not.toHaveBeenCalled();
+
+    clearSaveInFlight("/tmp/inflight-save.txt");
+  });
+
+  it("detects external changes again once the save is no longer in flight", async () => {
+    const documentId = prepareSavedFile("/tmp/after-save.txt", "buffer", fp1);
+    beginSaveInFlight("/tmp/after-save.txt");
+    statMock.mockResolvedValue(fp2);
+    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
+
+    clearSaveInFlight("/tmp/after-save.txt");
+    readTextFileMock.mockResolvedValue("from disk");
+    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("reloaded");
+    expect(appState.getActiveDocuments().find((doc) => doc.id === documentId)?.content).toBe(
+      "from disk",
+    );
+  });
+});
+
+describe("cross-context external checks", () => {
+  beforeEach(() => {
+    resetExternalFileChangesForTests();
+    appState.resetAppState();
+    setExternalFiles();
+    confirmMock.mockReset();
+    readTextFileMock.mockReset();
+    statMock.mockReset();
+  });
+
+  it("runWatcherExternalCheck reloads a file open in an inactive workspace", async () => {
+    // File lives in the first workspace; switch active context to the second
+    // so the first is inactive.
+    const wsAId = appState.addWorkspace("/tmp/ws-a");
+    appState.openFileInTab("/tmp/ws-a/file.txt", "old");
+    const wsADocId = appState.findDocumentIdByPath("/tmp/ws-a/file.txt")!;
+    appState.setDocumentDiskState(wsADocId, {
+      diskFingerprint: fp1,
+      fileMissing: false,
+    });
+
+    appState.addWorkspace("/tmp/ws-b");
+    expect(appState.getSnapshot().contexts.activeContextId).not.toBe(wsAId);
+
+    statMock.mockResolvedValue(fp2);
+    readTextFileMock.mockResolvedValue("updated");
+
+    await runWatcherExternalCheck("/tmp/ws-a/file.txt");
+
+    const wsA = appState.getSnapshot().contexts.workspaces.find((ws) => ws.id === wsAId);
+    expect(wsA?.snapshot.documents.find((doc) => doc.id === wsADocId)?.content).toBe("updated");
+  });
+
+  it("startup checks cover files open in a non-active workspace", async () => {
+    const wsAId = appState.addWorkspace("/tmp/ws-a");
+    appState.openFileInTab("/tmp/ws-a/startup-bg.txt", "old");
+    const wsADocId = appState.findDocumentIdByPath("/tmp/ws-a/startup-bg.txt")!;
+    appState.setDocumentDiskState(wsADocId, { diskFingerprint: fp1, fileMissing: false });
+
+    appState.addWorkspace("/tmp/ws-b");
+    appState.openFileInTab("/tmp/ws-b/startup-active.txt", "old-active");
+    const activeDocId = appState.findDocumentIdByPath("/tmp/ws-b/startup-active.txt")!;
+    appState.setDocumentDiskState(activeDocId, { diskFingerprint: fp1, fileMissing: false });
+
+    statMock.mockResolvedValue(fp2);
+    readTextFileMock.mockResolvedValue("fresh");
+
+    await runStartupExternalChecks();
+    await awaitStartupExternalChecksBackgroundForTests();
+
+    const wsA = appState.getSnapshot().contexts.workspaces.find((ws) => ws.id === wsAId);
+    expect(wsA?.snapshot.documents.find((doc) => doc.id === wsADocId)?.content).toBe("fresh");
+  });
+
+  it("cancels background startup checks without throwing", async () => {
+    appState.addWorkspace("/tmp/ws-a");
+    appState.openFileInTab("/tmp/ws-a/cancel-a.txt", "a", );
+    appState.openFileInTab("/tmp/ws-a/cancel-b.txt", "b");
+    appState.openFileInTab("/tmp/ws-a/cancel-c.txt", "c");
+    const firstTab = appState.getActiveSession().editorLayout.panes[0]?.tabs[0];
+    if (firstTab && firstTab.kind === "file") {
+      appState.selectTab(firstTab.id);
+    }
+
+    let releaseStat!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseStat = resolve;
+    });
+    statMock.mockImplementation(async () => {
+      await gate;
+      return fp1;
+    });
+
+    const startupPromise = runStartupExternalChecks();
+    // Cancel while the background drain is still gated.
+    cancelStartupExternalChecks();
+    releaseStat();
+    await expect(startupPromise).resolves.toBeUndefined();
+    await awaitStartupExternalChecksBackgroundForTests();
   });
 });

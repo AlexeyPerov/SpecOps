@@ -6,7 +6,7 @@ import { join } from "@tauri-apps/api/path";
 import type { DiskFingerprint } from "../domain/contracts";
 import type { WorkspaceAccessStatus } from "../ai/capabilities";
 import { statDiskFingerprint } from "./diskFingerprint";
-import { recordWriteFingerprint } from "./externalFileChanges";
+import { beginSaveInFlight, clearSaveInFlight, recordWriteFingerprint } from "./externalFileChanges";
 import { appState } from "../state/appState";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
@@ -158,10 +158,18 @@ export async function openFolderDialog(defaultPath?: string | null): Promise<str
 }
 
 export async function saveFile(payload: FileSavePayload): Promise<DiskFingerprint> {
-  await writeTextFile(payload.path, payload.content);
-  const fingerprint = await statDiskFingerprint(payload.path);
-  recordWriteFingerprint(payload.path, fingerprint);
-  return fingerprint;
+  // Mark the save as in-flight around the write so a watcher event landing
+  // between the disk write and the fingerprint record is recognized as the
+  // app's own write (self-echo) and does not trigger a reload or prompt.
+  beginSaveInFlight(payload.path);
+  try {
+    await writeTextFile(payload.path, payload.content);
+    const fingerprint = await statDiskFingerprint(payload.path);
+    recordWriteFingerprint(payload.path, fingerprint);
+    return fingerprint;
+  } finally {
+    clearSaveInFlight(payload.path);
+  }
 }
 
 export async function saveFileAs(
@@ -175,10 +183,15 @@ export async function saveFileAs(
   if (!selectedPath) {
     return null;
   }
-  await writeTextFile(selectedPath, content);
-  const fingerprint = await statDiskFingerprint(selectedPath);
-  recordWriteFingerprint(selectedPath, fingerprint);
-  return { path: selectedPath, fingerprint };
+  beginSaveInFlight(selectedPath);
+  try {
+    await writeTextFile(selectedPath, content);
+    const fingerprint = await statDiskFingerprint(selectedPath);
+    recordWriteFingerprint(selectedPath, fingerprint);
+    return { path: selectedPath, fingerprint };
+  } finally {
+    clearSaveInFlight(selectedPath);
+  }
 }
 
 export async function renameFile(oldPath: string): Promise<string | null> {

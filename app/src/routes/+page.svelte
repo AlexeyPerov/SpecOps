@@ -24,7 +24,6 @@
   import { subscribeDocumentDiskReload } from "../lib/editor/editorSessionLifecycle";
   import { appState } from "../lib/state/appState";
   import {
-    findDocumentByPath,
     getActiveContextSnapshot,
   } from "../lib/state/appState/contextHelpers";
   import {
@@ -40,6 +39,7 @@
   import { registerSettingsDialogOpener } from "../lib/services/settingsDialogUi";
   import type { AppDomainState } from "../lib/domain/contracts";
   import {
+    allTabs,
     CHAT_HTTP_CONTEXT_ID,
     getSessionActiveTab,
     getSessionSelectedTabId,
@@ -80,6 +80,10 @@
     type ProjectSearchResult,
   } from "../lib/services/projectSearch";
   import { replaceInProjectFile } from "../lib/services/projectFileOps";
+  import {
+    decideReplaceAllForPath,
+    syncOpenDocumentAfterReplace as syncOpenDocumentAfterReplaceService,
+  } from "../lib/services/projectReplaceSync";
   import { getErrorMessage } from "../lib/commands/commandErrors";
   import { normalizeWorkspaceLayout, normalizeActivityRailWidthPx } from "../lib/services/panelLayout";
   import { deriveAppShellDocumentView } from "../lib/services/appShellDocumentView";
@@ -517,10 +521,10 @@
   // row so the notepad card stays compact and its divider lands near the
   // editor tab-bar bottom line.
   const notepadSession = $derived(snapshot.contexts.notepad.session);
-  const notepadOpenTabCount = $derived(getSessionTabs(notepadSession).length);
+  const notepadOpenTabCount = $derived(allTabs(notepadSession.editorLayout).length);
   const notepadRecentTabs = $derived.by(() => {
     const notepadDocs = snapshot.contexts.notepad.documents;
-    const fileTabs = getSessionTabs(notepadSession)
+    const fileTabs = allTabs(notepadSession.editorLayout)
       .filter(isFileTab)
       .filter((tab) => {
         const doc = notepadDocs.find((documentState) => documentState.id === tab.documentId);
@@ -857,8 +861,16 @@
     let replaced = 0;
     let files = 0;
     let failures = 0;
+    let skippedDirty = 0;
     try {
       for (const result of projectSearchResults) {
+        // Never silently clobber an unsaved buffer: skip files whose open
+        // document is dirty across any context, and count them for status.
+        const decision = decideReplaceAllForPath(result.path);
+        if (decision.kind === "skip-dirty") {
+          skippedDirty += 1;
+          continue;
+        }
         const outcome = await replaceInProjectFile(
           root,
           result.path,
@@ -869,15 +881,19 @@
         if (outcome.ok) {
           replaced += outcome.count;
           files += 1;
-          syncOpenDocumentAfterReplace(result.path, outcome.content);
+          syncOpenDocumentAfterReplaceService(result.path, outcome.content, outcome.fingerprint);
         } else if (outcome.reason !== "No matches.") {
           failures += 1;
         }
       }
       projectSearchStatus = `Replaced ${replaced} occurrence(s) in ${files} file(s)${
         failures > 0 ? `; ${failures} file(s) failed` : ""
-      }`;
-      notify(`Replaced ${replaced} occurrence(s) in ${files} file(s).`);
+      }${skippedDirty > 0 ? `; skipped ${skippedDirty} file(s) with unsaved changes` : ""}`;
+      notify(
+        skippedDirty > 0
+          ? `Replaced ${replaced} occurrence(s) in ${files} file(s); skipped ${skippedDirty} with unsaved changes.`
+          : `Replaced ${replaced} occurrence(s) in ${files} file(s).`,
+      );
       await runProjectSearch();
     } finally {
       projectSearchRunning = false;
@@ -893,19 +909,6 @@
       await tick();
       editorWorkbench.getActiveRunner()?.goToLine(line);
     }
-  }
-
-  /**
-   * After replace-on-disk, refresh any open editor document for that path so the
-   * buffer picks up the new content instead of showing stale (now-dirty) text.
-   */
-  function syncOpenDocumentAfterReplace(path: string, content: string): void {
-    const document = findDocumentByPath(appState.getSnapshot(), path);
-    if (!document) {
-      return;
-    }
-    appState.setDocumentContent(document.id, content);
-    appState.markDocumentSaved(document.id, path, content);
   }
 
   $effect(() => {

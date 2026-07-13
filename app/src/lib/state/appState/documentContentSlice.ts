@@ -1,5 +1,6 @@
 import type {
   AppDomainState,
+  ContextId,
   ContextSnapshot,
   DiskFingerprint,
   DocumentContentKind,
@@ -28,6 +29,7 @@ import {
   getActiveSession,
   nextDocAndTabIds,
   patchActiveContext,
+  patchContextById,
 } from "./contextHelpers";
 import {
   basename,
@@ -110,7 +112,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
                 : documentState,
             ),
           }));
-          const existingTab = getSessionTabs(getActiveSession(upgradedState))
+          const existingTab = allTabs(getActiveSession(upgradedState).editorLayout)
             .map((rawTab) => normalizeTabState(rawTab))
             .find((tab) => isFileTab(tab) && tab.documentId === duplicate.id);
           if (existingTab) {
@@ -558,6 +560,155 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           return { ...ctx, documents };
         }),
       );
+    },
+    /**
+     * Context-aware variant of {@link markDocumentSaved}. Marks a document in a
+     * specific workspace context as saved (used by the workspace-close save-all,
+     * which can target a workspace that is not the active context).
+     */
+    markDocumentSavedForContext(
+      contextId: ContextId,
+      documentId: string,
+      filePath: string | null,
+      content: string,
+    ) {
+      let recentFiles: string[] = [];
+      update((state) => {
+        const nextState = patchContextById(state, contextId, (ctx) => {
+          let nextCtx: ContextSnapshot = {
+            ...ctx,
+            documents: ctx.documents.map((documentState) => {
+              if (documentState.id !== documentId) {
+                return documentState;
+              }
+              return {
+                ...documentState,
+                filePath,
+                title: filePath ? basename(filePath) : documentState.title,
+                savedContent: content,
+                content,
+                lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
+                isDirty: false,
+                language: inferLanguage(filePath),
+                fileMissing: false,
+              };
+            }),
+          };
+          if (filePath !== null) {
+            const nextLayout = revealFileTabsInLayout(nextCtx.session.editorLayout, documentId);
+            if (nextLayout !== nextCtx.session.editorLayout) {
+              nextCtx = {
+                ...nextCtx,
+                session: { ...nextCtx.session, editorLayout: nextLayout },
+              };
+            }
+          }
+          return nextCtx;
+        });
+        recentFiles =
+          filePath === null ? state.recentFiles : bumpRecentFile(state.recentFiles, filePath);
+        return { ...nextState, recentFiles };
+      });
+      if (filePath !== null) {
+        syncRecentFiles(recentFiles);
+      }
+    },
+    /**
+     * Context-aware variant of {@link setDocumentDiskState}. Use this for file
+     * side effects (external-change checks, relocation, Replace All sync) that
+     * target a document living in a workspace which may not be the active
+     * context. Editor-local flows keep using the active-context method.
+     */
+    setDocumentDiskStateForContext(
+      contextId: ContextId,
+      documentId: string,
+      patch: {
+        diskFingerprint: DiskFingerprint | null;
+        fileMissing: boolean;
+      },
+    ) {
+      update((state) =>
+        patchContextById(state, contextId, (ctx) => ({
+          ...ctx,
+          documents: ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            return {
+              ...documentState,
+              diskFingerprint: patch.diskFingerprint,
+              fileMissing: patch.fileMissing,
+            };
+          }),
+        })),
+      );
+    },
+    /**
+     * Context-aware variant of {@link applyDocumentDiskReload}. Reloads a
+     * document's content from an external-change flow targeting a specific
+     * workspace context without switching the active context.
+     */
+    applyDocumentDiskReloadForContext(
+      contextId: ContextId,
+      documentId: string,
+      content: string,
+      diskFingerprint: DiskFingerprint,
+    ) {
+      update((state) =>
+        patchContextById(state, contextId, (ctx) => ({
+          ...ctx,
+          documents: ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId) {
+              return documentState;
+            }
+            return {
+              ...documentState,
+              content,
+              savedContent: content,
+              isDirty: false,
+              diskFingerprint,
+              dismissedFingerprint: null,
+              fileMissing: false,
+              lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
+            };
+          }),
+        })),
+      );
+      notifyDocumentDiskReload(documentId);
+    },
+    /**
+     * Context-aware variant of {@link renameDocument}. Applies a path/title
+     * rename to a document in a specific workspace context (used by the
+     * relocation flow, which may run while another workspace is active).
+     */
+    renameDocumentInContext(
+      contextId: ContextId,
+      documentId: string,
+      filePath: string,
+      title: string,
+    ) {
+      let recentFiles: string[] = [];
+      update((state) => {
+        recentFiles = bumpRecentFile(state.recentFiles, filePath);
+        return {
+          ...patchContextById(state, contextId, (ctx) => ({
+            ...ctx,
+            documents: ctx.documents.map((documentState) => {
+              if (documentState.id !== documentId) {
+                return documentState;
+              }
+              return {
+                ...documentState,
+                filePath,
+                title,
+                language: inferLanguage(filePath),
+              };
+            }),
+          })),
+          recentFiles,
+        };
+      });
+      syncRecentFiles(recentFiles);
     },
   };
 }

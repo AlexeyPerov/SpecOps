@@ -1,9 +1,13 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
-import type { DiskFingerprint } from "../domain/contracts";
+import type { ContextId, DiskFingerprint } from "../domain/contracts";
 import { getSessionActiveTab } from "../domain/contracts";
 import { appState } from "../state/appState";
-import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
+import {
+  findDocumentContext,
+  getActiveDocuments,
+  getActiveSession,
+} from "../state/appState/contextHelpers";
 import {
   diskChanged,
   fingerprintsEqual,
@@ -26,7 +30,13 @@ type RuntimeState = {
   >;
   inFlightCheckByDocument: Map<string, Promise<ExternalCheckResult>>;
   flushingDirtyPrompts: boolean;
+  /** Paths with an app save in flight; see externalFileChanges.beginSaveInFlight. */
+  saveInFlightByPath: Set<string>;
 };
+
+function isSaveInFlight(runtime: RuntimeState, path: string): boolean {
+  return runtime.saveInFlightByPath.has(normalizePathSync(path));
+}
 
 function matchesLastWrite(runtime: RuntimeState, path: string, fingerprint: DiskFingerprint): boolean {
   const lastWrite = runtime.lastWriteFingerprintByPath.get(normalizePathSync(path));
@@ -45,10 +55,14 @@ async function promptReloadOrKeep(title: string): Promise<"reload" | "keep"> {
   return reload ? "reload" : "keep";
 }
 
-async function reloadDocumentFromDisk(documentId: string, filePath: string): Promise<void> {
+async function reloadDocumentFromDisk(
+  contextId: ContextId,
+  documentId: string,
+  filePath: string,
+): Promise<void> {
   const content = await readTextFile(filePath);
   const fingerprint = await statDiskFingerprint(filePath);
-  appState.applyDocumentDiskReload(documentId, content, fingerprint);
+  appState.applyDocumentDiskReloadForContext(contextId, documentId, content, fingerprint);
 }
 
 function scheduleFlushDirtyPrompts(
@@ -76,11 +90,16 @@ export async function flushDirtyPrompts(
       }
 
       const snapshot = appState.getSnapshot();
-      const documentState = getActiveDocuments(snapshot).find((doc) => doc.id === documentId);
-      if (!documentState?.filePath || !documentState.isDirty) {
+      const owner = findDocumentContext(snapshot, documentId);
+      const filePath = owner?.document.filePath ?? null;
+      // Staleness guard: the document may have been closed, renamed, or its
+      // owning context pruned while the prompt was queued. Cancel gracefully
+      // rather than reloading a path that no longer belongs to the document.
+      if (!owner || !filePath || !owner.document.isDirty) {
         runtime.pendingDirtyPromptByDocument.delete(documentId);
         continue;
       }
+      const { contextId, document: documentState } = owner;
 
       if (runtime.dialogOpenForDocument.has(documentId)) {
         continue;
@@ -88,12 +107,12 @@ export async function flushDirtyPrompts(
 
       let currentFingerprint: DiskFingerprint;
       try {
-        currentFingerprint = await statDiskFingerprint(documentState.filePath);
+        currentFingerprint = await statDiskFingerprint(filePath);
       } catch (error: unknown) {
         if (isFileMissingError(error)) {
           runtime.pendingDirtyPromptByDocument.delete(documentId);
           if (!documentState.fileMissing) {
-            appState.setDocumentDiskState(documentId, {
+            appState.setDocumentDiskStateForContext(contextId, documentId, {
               diskFingerprint: documentState.diskFingerprint,
               fileMissing: true,
             });
@@ -102,7 +121,7 @@ export async function flushDirtyPrompts(
         }
         if (isFsScopePermissionError(error)) {
           runtime.pendingDirtyPromptByDocument.delete(documentId);
-          removeInaccessibleDocumentTab(documentId, documentState.filePath, error);
+          removeInaccessibleDocumentTab(documentId, filePath, error);
           continue;
         }
         throw error;
@@ -125,8 +144,16 @@ export async function flushDirtyPrompts(
       runtime.dialogOpenForDocument.add(documentId);
       try {
         const choice = await promptReloadOrKeep(documentState.title);
+        // Re-read after the async dialog: if the tab was closed, the path
+        // renamed, or the context gone, cancel the reload instead of touching
+        // a stale path.
+        const postDialog = findDocumentContext(appState.getSnapshot(), documentId);
+        if (!postDialog || postDialog.document.filePath !== filePath) {
+          deferredDirtyDocumentIds.delete(documentId);
+          continue;
+        }
         if (choice === "reload") {
-          await reloadDocumentFromDisk(documentId, documentState.filePath);
+          await reloadDocumentFromDisk(contextId, documentId, filePath);
           deferredDirtyDocumentIds.delete(documentId);
         } else {
           appState.applyDocumentKeepLocal(documentId, currentFingerprint);
@@ -187,10 +214,12 @@ async function checkDocumentExternalChangesInner(
   trigger: ExternalCheckTrigger,
 ): Promise<ExternalCheckResult> {
   const snapshot = appState.getSnapshot();
-  const documentState = getActiveDocuments(snapshot).find((doc) => doc.id === documentId);
-  if (!documentState?.filePath) {
+  const owner = findDocumentContext(snapshot, documentId);
+  const filePath = owner?.document.filePath ?? null;
+  if (!owner || !filePath) {
     return "skipped";
   }
+  const { contextId, document: documentState } = owner;
 
   if (documentState.contentKind !== "text") {
     return "skipped";
@@ -208,13 +237,20 @@ async function checkDocumentExternalChangesInner(
     return "deferred";
   }
 
+  // Guard the save/watcher race: an app-initiated write may already be in
+  // flight (between the disk write and the fingerprint record). Suppress the
+  // check so the app's own write does not echo back as an external change.
+  if (isSaveInFlight(runtime, filePath)) {
+    return "unchanged";
+  }
+
   let currentFingerprint: DiskFingerprint;
   try {
-    currentFingerprint = await statDiskFingerprint(documentState.filePath);
+    currentFingerprint = await statDiskFingerprint(filePath);
   } catch (error: unknown) {
     if (isFileMissingError(error)) {
       if (!documentState.fileMissing) {
-        appState.setDocumentDiskState(documentId, {
+        appState.setDocumentDiskStateForContext(contextId, documentId, {
           diskFingerprint: documentState.diskFingerprint,
           fileMissing: true,
         });
@@ -222,20 +258,20 @@ async function checkDocumentExternalChangesInner(
       return "missing";
     }
     if (isFsScopePermissionError(error)) {
-      removeInaccessibleDocumentTab(documentId, documentState.filePath, error);
+      removeInaccessibleDocumentTab(documentId, filePath, error);
       return "skipped";
     }
     throw error;
   }
 
   if (documentState.fileMissing) {
-    appState.setDocumentDiskState(documentId, {
+    appState.setDocumentDiskStateForContext(contextId, documentId, {
       diskFingerprint: currentFingerprint,
       fileMissing: false,
     });
   }
 
-  if (matchesLastWrite(runtime, documentState.filePath, currentFingerprint)) {
+  if (matchesLastWrite(runtime, filePath, currentFingerprint)) {
     return "unchanged";
   }
 
@@ -256,7 +292,7 @@ async function checkDocumentExternalChangesInner(
     autoReloadCleanFiles: snapshot.settings.externalFiles.autoReloadCleanFiles,
   });
   if (policy === "reloaded") {
-    await reloadDocumentFromDisk(documentId, documentState.filePath);
+    await reloadDocumentFromDisk(contextId, documentId, filePath);
     return "reloaded";
   }
   if (policy === "skipped") {
@@ -297,7 +333,7 @@ export async function reloadActiveDocumentFromDiskWithRuntime(
 
   if (!documentState.isDirty) {
     try {
-      await reloadDocumentFromDisk(documentState.id, documentState.filePath);
+      await reloadDocumentFromDisk(snapshot.contexts.activeContextId, documentState.id, documentState.filePath);
       return "reloaded";
     } catch (error: unknown) {
       if (isFileMissingError(error)) {

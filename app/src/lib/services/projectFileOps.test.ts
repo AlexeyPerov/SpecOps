@@ -62,7 +62,7 @@ describe("replaceInProjectFile", () => {
   it("replaces all matches and writes the rebuilt content", async () => {
     readTextFileMock.mockResolvedValue("foo bar foo");
     const result = await replaceInProjectFile(root, `${root}/a.txt`, "foo", "baz", false);
-    expect(result).toEqual({ ok: true, path: `${root}/a.txt`, count: 2, content: "baz bar baz" });
+    expect(result).toMatchObject({ ok: true, path: `${root}/a.txt`, count: 2, content: "baz bar baz" });
     expect(writeTextFileMock).toHaveBeenCalledWith(`${root}/a.txt`, "baz bar baz");
   });
 

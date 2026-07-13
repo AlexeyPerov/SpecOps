@@ -36,6 +36,7 @@ import {
 } from "./settingsStore";
 import { loadConnectionApiKeys } from "./providerSecretsStore";
 import {
+  cancelStartupExternalChecks,
   initializeDocumentDiskState,
   runFocusExternalChecks,
   runStartupExternalChecks,
@@ -467,6 +468,9 @@ export async function startAppShellRuntime(
         clearTimeout(windowBoundsTimer);
         windowBoundsTimer = null;
       }
+      // Cancel any in-flight background startup external checks so a closing
+      // window does not keep stat-ing files against a tearing-down store.
+      cancelStartupExternalChecks();
       void clearFileWatcherPaths();
       void stopOpencodeSidecar();
     },

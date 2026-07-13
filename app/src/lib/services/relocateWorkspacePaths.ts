@@ -1,4 +1,5 @@
 import { appState } from "../state/appState";
+import type { ContextId } from "../domain/contracts";
 import { getSessionTabs, isFileTab, normalizeTabState } from "../domain/contracts";
 import { normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
 import { renameOpenFileRegistry } from "./openFileRegistry";
@@ -26,22 +27,34 @@ function basename(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
+/**
+ * Find the workspace id whose root matches `workspaceRoot`, regardless of
+ * whether it is the active context. Relocation side effects must target the
+ * owning workspace even when another workspace (or the notepad) is active.
+ */
+function findWorkspaceIdByRoot(workspaceRoot: string): ContextId | null {
+  const normalizedRoot = normalizePathSync(workspaceRoot);
+  const workspace = appState
+    .getSnapshot()
+    .contexts.workspaces.find(
+      (entry) => normalizePathSync(entry.rootPath) === normalizedRoot,
+    );
+  return workspace?.id ?? null;
+}
+
 export async function syncDocumentsAfterPathRelocation(
   workspaceRoot: string,
   oldPath: string,
   newPath: string,
   windowId: string,
 ): Promise<void> {
+  const workspaceId = findWorkspaceIdByRoot(workspaceRoot);
+  if (!workspaceId) {
+    return;
+  }
   const snapshot = appState.getSnapshot();
-  const activeId = snapshot.contexts.activeContextId;
-  if (activeId === "notepad") {
-    return;
-  }
-  const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === activeId);
+  const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === workspaceId);
   if (!workspace || !isPathUnderRoot(oldPath, workspace.rootPath)) {
-    return;
-  }
-  if (normalizePathSync(workspace.rootPath) !== normalizePathSync(workspaceRoot)) {
     return;
   }
 
@@ -55,16 +68,17 @@ export async function syncDocumentsAfterPathRelocation(
     const updatedPath = relocatedPath(oldPath, newPath, documentState.filePath);
     const title = basename(updatedPath);
     const previousPath = documentState.filePath;
-    appState.renameDocument(documentState.id, updatedPath, title);
+    // Use context-aware APIs so relocation works while another workspace is active.
+    appState.renameDocumentInContext(workspaceId, documentState.id, updatedPath, title);
     await renameOpenFileRegistry(previousPath, updatedPath, windowId, documentState.id);
     try {
       const fingerprint = await statDiskFingerprint(updatedPath);
-      appState.setDocumentDiskState(documentState.id, {
+      appState.setDocumentDiskStateForContext(workspaceId, documentState.id, {
         diskFingerprint: fingerprint,
         fileMissing: false,
       });
     } catch {
-      appState.setDocumentDiskState(documentState.id, {
+      appState.setDocumentDiskStateForContext(workspaceId, documentState.id, {
         diskFingerprint: null,
         fileMissing: true,
       });
@@ -75,15 +89,15 @@ export async function syncDocumentsAfterPathRelocation(
 function documentIdsUnderDeletedPath(
   workspaceRoot: string,
   deletedPath: string,
-): Set<string> {
-  const snapshot = appState.getSnapshot();
-  const activeId = snapshot.contexts.activeContextId;
-  if (activeId === "notepad") {
-    return new Set();
-  }
-  const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === activeId);
+): { workspaceId: ContextId; ids: Set<string> } | null {
+  const normalizedRoot = normalizePathSync(workspaceRoot);
+  const workspace = appState
+    .getSnapshot()
+    .contexts.workspaces.find(
+      (entry) => normalizePathSync(entry.rootPath) === normalizedRoot,
+    );
   if (!workspace) {
-    return new Set();
+    return null;
   }
 
   const deletedDocumentIds = new Set<string>();
@@ -99,12 +113,16 @@ function documentIdsUnderDeletedPath(
     }
     deletedDocumentIds.add(documentState.id);
   }
-  return deletedDocumentIds;
+  return { workspaceId: workspace.id, ids: deletedDocumentIds };
 }
 
 export function markDocumentsMissingUnderPath(workspaceRoot: string, deletedPath: string): void {
-  for (const documentId of documentIdsUnderDeletedPath(workspaceRoot, deletedPath)) {
-    appState.setDocumentDiskState(documentId, {
+  const result = documentIdsUnderDeletedPath(workspaceRoot, deletedPath);
+  if (!result) {
+    return;
+  }
+  for (const documentId of result.ids) {
+    appState.setDocumentDiskStateForContext(result.workspaceId, documentId, {
       diskFingerprint: null,
       fileMissing: true,
     });
@@ -115,17 +133,14 @@ export function closeTabsForDeletedDocumentsUnderPath(
   workspaceRoot: string,
   deletedPath: string,
 ): void {
-  const deletedDocumentIds = documentIdsUnderDeletedPath(workspaceRoot, deletedPath);
-  if (deletedDocumentIds.size === 0) {
+  const result = documentIdsUnderDeletedPath(workspaceRoot, deletedPath);
+  if (!result || result.ids.size === 0) {
     return;
   }
+  const { workspaceId, ids: deletedDocumentIds } = result;
 
   const snapshot = appState.getSnapshot();
-  const activeId = snapshot.contexts.activeContextId;
-  if (activeId === "notepad") {
-    return;
-  }
-  const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === activeId);
+  const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === workspaceId);
   if (!workspace) {
     return;
   }

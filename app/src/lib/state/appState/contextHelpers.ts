@@ -9,7 +9,6 @@ import type {
 import {
   CHAT_HTTP_CONTEXT_ID,
   allTabs,
-  getSessionTabs,
   isFileTab,
 } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
@@ -260,7 +259,7 @@ export function findFileTabForNormalizedPath(
   context: ContextSnapshot,
   normalizedPath: string,
 ): { tabId: string; documentId: string; document: DocumentState } | null {
-  for (const tab of getSessionTabs(context.session)) {
+  for (const tab of allTabs(context.session.editorLayout)) {
     if (!isFileTab(tab)) {
       continue;
     }
@@ -270,6 +269,84 @@ export function findFileTabForNormalizedPath(
       normalizePathSync(documentState.filePath) === normalizedPath
     ) {
       return { tabId: tab.id, documentId: documentState.id, document: documentState };
+    }
+  }
+  return null;
+}
+
+/**
+ * Enumerates every context snapshot in a stable order: active context first
+ * (so first-match lookups prefer it), then notepad, chat-http, and finally the
+ * remaining workspaces. Used by the cross-context document discovery helpers
+ * so file side effects (watcher checks, reload prompts, relocation, Replace All
+ * sync) can find a document that lives in a workspace which is not active.
+ */
+export interface ContextEntry {
+  id: ContextId;
+  snapshot: ContextSnapshot;
+}
+
+export function allContextSnapshots(state: AppDomainState): ContextEntry[] {
+  const { contexts } = state;
+  const entries: ContextEntry[] = [];
+  const seen = new Set<ContextId>();
+  const push = (id: ContextId, snapshot: ContextSnapshot): void => {
+    if (seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    entries.push({ id, snapshot });
+  };
+  push(contexts.activeContextId, getContextSnapshotById(state, contexts.activeContextId) ?? contexts.notepad);
+  push(NOTEPAD_CONTEXT_ID, contexts.notepad);
+  if (!isChatHttpContext(contexts.activeContextId)) {
+    push(CHAT_HTTP_CONTEXT_KEY, contexts.chatHttp);
+  }
+  for (const workspace of contexts.workspaces) {
+    push(workspace.id, workspace.snapshot);
+  }
+  return entries;
+}
+
+/**
+ * Find a document by id across every context. Returns the owning context id
+ * together with the document, because document ids are not guaranteed to be
+ * globally unique (a restore can seed the same id into more than one context),
+ * so callers must target mutations at the returned context rather than the id
+ * alone. Search order prefers the active context via {@link allContextSnapshots}.
+ */
+export function findDocumentContext(
+  state: AppDomainState,
+  documentId: string,
+): { contextId: ContextId; document: DocumentState } | null {
+  for (const entry of allContextSnapshots(state)) {
+    const document = entry.snapshot.documents.find((doc) => doc.id === documentId);
+    if (document) {
+      return { contextId: entry.id, document };
+    }
+  }
+  return null;
+}
+
+/**
+ * Find an open file tab + document by normalized path across every context
+ * (notepad, chat-http, and all workspaces). Returns the owning context id,
+ * the document, and its tab id so side-effect flows can target the correct
+ * workspace without requiring it to be the active context.
+ */
+export function findDocumentByNormalizedPathAllContexts(
+  state: AppDomainState,
+  normalizedPath: string,
+): { contextId: ContextId; documentId: string; tabId: string; document: DocumentState } | null {
+  for (const entry of allContextSnapshots(state)) {
+    const match = findFileTabForNormalizedPath(entry.snapshot, normalizedPath);
+    if (match) {
+      return {
+        contextId: entry.id,
+        documentId: match.documentId,
+        tabId: match.tabId,
+        document: match.document,
+      };
     }
   }
   return null;

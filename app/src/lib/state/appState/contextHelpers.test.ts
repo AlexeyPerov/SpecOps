@@ -131,3 +131,105 @@ describe("contextHelpers chat-http support", () => {
     expect(getSessionSelectedTabId(next.contexts.notepad.session)).toBe("tab-1");
   });
 });
+
+describe("context-aware document lookup", () => {
+  function buildFileSnapshot(docId: string, tabId: string, filePath: string): ContextSnapshot {
+    const snap = buildSnapshot(docId, tabId);
+    return {
+      ...snap,
+      documents: snap.documents.map((doc) =>
+        doc.id === docId
+          ? { ...doc, filePath, title: filePath.split("/").pop() ?? filePath }
+          : doc,
+      ),
+    };
+  }
+
+  function buildWorkspaceState(activeContextId: AppDomainState["contexts"]["activeContextId"]): AppDomainState {
+    return {
+      contexts: {
+        activeContextId,
+        notepad: buildSnapshot("doc-1", "tab-1"),
+        chatHttp: buildSnapshot("doc-2", "tab-2"),
+        workspaces: [
+          {
+            id: "ws-1",
+            rootPath: "/tmp/ws",
+            snapshot: buildFileSnapshot("doc-3", "tab-3", "/tmp/ws/active-in-ws.txt"),
+          },
+          {
+            id: "ws-2",
+            rootPath: "/tmp/other",
+            snapshot: buildFileSnapshot("doc-4", "tab-4", "/tmp/other/inactive.txt"),
+          },
+        ],
+      },
+      settings: {
+        ...defaultSettings,
+        externalFiles: {
+          watchExternalChanges: false,
+          autoReloadCleanFiles: false,
+          checkOnWindowFocus: false,
+          checkOnTabActivate: false,
+          maxBinaryOpenAsTextBytes: 200_000,
+          maxOpenWithoutConfirmBytes: 1024 * 1024,
+        },
+      },
+      theme: {
+        mode: "auto",
+        darkTheme: { kind: "builtin", id: "dark-amber" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
+        manualTheme: { kind: "builtin", id: "dark-amber" },
+        customThemes: [],
+      },
+      recentFiles: [],
+      editor: {
+        cursorLine: 1,
+        cursorColumn: 1,
+        selectionCount: 1,
+        zoomPercent: 100,
+        wrapLines: true,
+        previewMode: "editor",
+      },
+      activityRailWidthPx: 48,
+    };
+  }
+
+  it("findDocumentContext locates a document in an inactive workspace by id", async () => {
+    const { findDocumentContext } = await import("./contextHelpers");
+    // ws-2 is inactive; doc-4 lives there.
+    const state = buildWorkspaceState("ws-1");
+    const result = findDocumentContext(state, "doc-4");
+    expect(result).toEqual({
+      contextId: "ws-2",
+      document: expect.objectContaining({ id: "doc-4", filePath: "/tmp/other/inactive.txt" }),
+    });
+  });
+
+  it("findDocumentByNormalizedPathAllContexts resolves a path in an inactive workspace", async () => {
+    const { findDocumentByNormalizedPathAllContexts } = await import("./contextHelpers");
+    const state = buildWorkspaceState("ws-1");
+    const result = findDocumentByNormalizedPathAllContexts(state, "/tmp/other/inactive.txt");
+    expect(result).toEqual(
+      expect.objectContaining({
+        contextId: "ws-2",
+        documentId: "doc-4",
+        tabId: "tab-4",
+        document: expect.objectContaining({ filePath: "/tmp/other/inactive.txt" }),
+      }),
+    );
+  });
+
+  it("allContextSnapshots includes notepad, chat-http, and every workspace", async () => {
+    const { allContextSnapshots } = await import("./contextHelpers");
+    const state = buildWorkspaceState("ws-1");
+    const ids = allContextSnapshots(state).map((entry) => entry.id);
+    // Active first, then notepad, chat-http, and the two workspaces.
+    expect(ids).toContain("ws-1");
+    expect(ids).toContain("ws-2");
+    expect(ids).toContain("notepad");
+    expect(ids).toContain("chat-http");
+    // No duplicates.
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});

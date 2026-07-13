@@ -1,6 +1,6 @@
 import type { AppDomainState, WorkspaceLayoutState } from "../domain/contracts";
-import { getSessionTabs, isFileTab } from "../domain/contracts";
-import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
+import { allTabs, isFileTab } from "../domain/contracts";
+import { allContextSnapshots } from "../state/appState/contextHelpers";
 import { buildDocumentByIdMap } from "./tabDocumentLookup";
 
 export const DEFAULT_MARKDOWN_SPLIT_MIN_EDITOR_WIDTH = 760;
@@ -11,18 +11,36 @@ export const RESPONSIVE_PANEL_COLLAPSE_WIDTH_SESSION = 1200;
 export const RESPONSIVE_SESSIONS_COLLAPSE_WIDTH = 1320;
 export const RESPONSIVE_SESSIONS_COLLAPSE_WIDTH_SESSION = 1400;
 
+/**
+ * Defensive cap on the number of file paths handed to the native watcher.
+ * Re-subscribing a very large path set on every tab/context churn is costly;
+ * past this bound the watcher sync stops growing and relies on per-file
+ * focus/startup checks instead. Typical sessions stay well under this.
+ */
+export const MAX_WATCHED_PATHS = 500;
+
+/**
+ * Collect file paths from open file tabs across the notepad, chat-http, and
+ * every workspace context — not just the active one. The external file watcher
+ * must observe files that live in a workspace which is not currently active,
+ * otherwise external edits to those background files go undetected until the
+ * user switches back to that workspace.
+ */
 export function watchedPathsFromState(state: AppDomainState): string[] {
   const paths = new Set<string>();
-  const session = getActiveSession(state);
-  const documents = getActiveDocuments(state);
-  const documentById = buildDocumentByIdMap(documents);
-  for (const tab of getSessionTabs(session)) {
-    if (!isFileTab(tab)) {
-      continue;
-    }
-    const documentState = documentById.get(tab.documentId);
-    if (documentState?.filePath) {
-      paths.add(documentState.filePath);
+  for (const entry of allContextSnapshots(state)) {
+    const documentById = buildDocumentByIdMap(entry.snapshot.documents);
+    for (const tab of allTabs(entry.snapshot.session.editorLayout)) {
+      if (!isFileTab(tab)) {
+        continue;
+      }
+      const documentState = documentById.get(tab.documentId);
+      if (documentState?.filePath) {
+        paths.add(documentState.filePath);
+        if (paths.size >= MAX_WATCHED_PATHS) {
+          return [...paths];
+        }
+      }
     }
   }
   return [...paths];

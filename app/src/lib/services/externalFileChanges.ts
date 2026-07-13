@@ -1,7 +1,13 @@
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
-import { getSessionActiveTab, getSessionTabs, isFileTab } from "../domain/contracts";
+import { allTabs, getSessionActiveTab, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
-import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
+import {
+  allContextSnapshots,
+  findDocumentByNormalizedPathAllContexts,
+  findDocumentContext,
+  getActiveDocuments,
+  getActiveSession,
+} from "../state/appState/contextHelpers";
 import { isFileMissingError, isFsScopePermissionError, normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
 import { removeInaccessibleDocumentTab } from "./inaccessibleFileTabs";
 import { shouldAttemptDeferredCheck, shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
@@ -32,9 +38,17 @@ const runtimeState = {
   >(),
   inFlightCheckByDocument: new Map<string, Promise<ExternalCheckResult>>(),
   flushingDirtyPrompts: false,
+  /**
+   * Paths with an app-initiated save in flight (between `writeTextFile` and
+   * `recordWriteFingerprint`). A watcher event that lands in that window must
+   * not trigger a reload or a dirty prompt — it is the app's own write echoing
+   * back before the fingerprint has been recorded.
+   */
+  saveInFlightByPath: new Set<string>(),
 };
 
 let backgroundStartupChecks: Promise<void> | null = null;
+let startupChecksAbort: AbortController | null = null;
 
 /** Clears module-level state between unit tests. */
 export function resetExternalFileChangesForTests(): void {
@@ -44,7 +58,36 @@ export function resetExternalFileChangesForTests(): void {
   runtimeState.inFlightCheckByDocument.clear();
   runtimeState.pendingDirtyPromptByDocument.clear();
   runtimeState.flushingDirtyPrompts = false;
+  runtimeState.saveInFlightByPath.clear();
   backgroundStartupChecks = null;
+  startupChecksAbort = null;
+}
+
+/** Mark `path` as having a save in flight (called before the disk write). */
+export function beginSaveInFlight(path: string): void {
+  runtimeState.saveInFlightByPath.add(normalizePathSync(path));
+}
+
+/** Clear the in-flight marker once the write fingerprint is recorded. */
+export function clearSaveInFlight(path: string): void {
+  runtimeState.saveInFlightByPath.delete(normalizePathSync(path));
+}
+
+/**
+ * Cancel any in-flight background startup external checks. Called from the app
+ * shell teardown so a closing window does not keep stat-ing files and racing
+ * with the store being torn down.
+ */
+export function cancelStartupExternalChecks(): void {
+  startupChecksAbort?.abort();
+  startupChecksAbort = null;
+  backgroundStartupChecks = null;
+}
+
+function assertNotAborted(signal: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw new DOMException("Startup external checks cancelled", "AbortError");
+  }
 }
 
 /** Await deferred startup external checks (tests / diagnostics). */
@@ -122,6 +165,9 @@ export async function checkDocumentIfDeferred(
  * Startup external-change scan: check the active file tab first (blocking),
  * then drain remaining file tabs in background batches so large restored
  * sessions reach interactive sooner. Dirty buffers stay deferred (no dialogs).
+ * Scans every context (notepad + chat-http + all workspaces) so files that
+ * belong to a non-active workspace are checked too. The background drain can
+ * be cancelled via {@link cancelStartupExternalChecks} (app shell teardown).
  */
 export async function runStartupExternalChecks(): Promise<void> {
   const snapshot = appState.getSnapshot();
@@ -131,9 +177,13 @@ export async function runStartupExternalChecks(): Promise<void> {
 
   const session = getActiveSession(snapshot);
   const fileDocumentIds: string[] = [];
-  for (const tab of getSessionTabs(session)) {
-    if (isFileTab(tab)) {
-      fileDocumentIds.push(tab.documentId);
+  const seen = new Set<string>();
+  for (const entry of allContextSnapshots(snapshot)) {
+    for (const tab of allTabs(entry.snapshot.session.editorLayout)) {
+      if (isFileTab(tab) && !seen.has(tab.documentId)) {
+        seen.add(tab.documentId);
+        fileDocumentIds.push(tab.documentId);
+      }
     }
   }
   if (fileDocumentIds.length === 0) {
@@ -177,11 +227,19 @@ export async function runStartupExternalChecks(): Promise<void> {
 
   const deferredStartedAt = nowMs();
   const deferredCount = deferredIds.length;
+  // Fresh controller per scan; cancelStartupExternalChecks aborts it.
+  startupChecksAbort = new AbortController();
+  const signal = startupChecksAbort.signal;
   backgroundStartupChecks = (async () => {
     try {
       for (let offset = 0; offset < deferredIds.length; offset += STARTUP_EXTERNAL_CHECK_BATCH_SIZE) {
+        assertNotAborted(signal);
         const batch = deferredIds.slice(offset, offset + STARTUP_EXTERNAL_CHECK_BATCH_SIZE);
         await mapWithConcurrency(batch, STARTUP_EXTERNAL_CHECK_CONCURRENCY, async (documentId) => {
+          // Skip ids pruned since the scan started (tab closed / context gone).
+          if (!findDocumentContext(appState.getSnapshot(), documentId)) {
+            return;
+          }
           try {
             await checkDocumentExternalChanges(documentId, "startup");
           } catch {
@@ -202,8 +260,9 @@ export async function runStartupExternalChecks(): Promise<void> {
         ok: true,
       });
     } catch (error: unknown) {
+      const aborted = error instanceof DOMException && error.name === "AbortError";
       await logPerfTiming(
-        "startup external checks background failed",
+        aborted ? "startup external checks background cancelled" : "startup external checks background failed",
         {
           metric: "startup.phase",
           label: "startup-external-checks-background",
@@ -223,9 +282,13 @@ export async function runFocusExternalChecks(): Promise<void> {
   if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "focus")) {
     return;
   }
-  for (const tab of getSessionTabs(getActiveSession(snapshot))) {
-    if (isFileTab(tab)) {
-      await checkDocumentIfDeferred(tab.documentId, "focus");
+  const seen = new Set<string>();
+  for (const entry of allContextSnapshots(snapshot)) {
+    for (const tab of allTabs(entry.snapshot.session.editorLayout)) {
+      if (isFileTab(tab) && !seen.has(tab.documentId)) {
+        seen.add(tab.documentId);
+        await checkDocumentIfDeferred(tab.documentId, "focus");
+      }
     }
   }
   await flushDirtyPrompts(runtimeState, deferredDirtyDocumentIds);
@@ -237,23 +300,20 @@ export async function runWatcherExternalCheck(normalizedOrRawPath: string): Prom
     return;
   }
   const normalized = normalizePathSync(normalizedOrRawPath);
-  for (const tab of getSessionTabs(getActiveSession(snapshot))) {
-    if (!isFileTab(tab)) {
-      continue;
-    }
-    const documentState = getActiveDocuments(snapshot).find((doc) => doc.id === tab.documentId);
-    if (documentState?.filePath && normalizePathSync(documentState.filePath) === normalized) {
-      await checkDocumentExternalChanges(documentState.id, "watcher");
-      await flushDirtyPrompts(runtimeState, deferredDirtyDocumentIds);
-      return;
-    }
+  // Resolve the owning context for the watched path so a background-workspace
+  // document is reloaded/marked even when its workspace is not the active
+  // context. The check itself applies disk state via the context-aware API.
+  const match = findDocumentByNormalizedPathAllContexts(snapshot, normalized);
+  if (match) {
+    await checkDocumentExternalChanges(match.documentId, "watcher");
+    await flushDirtyPrompts(runtimeState, deferredDirtyDocumentIds);
   }
 }
 
 export function collectOpenFilePaths(): string[] {
   const snapshot = appState.getSnapshot();
   const paths = new Set<string>();
-  for (const tab of getSessionTabs(getActiveSession(snapshot))) {
+  for (const tab of allTabs(getActiveSession(snapshot).editorLayout)) {
     if (!isFileTab(tab)) {
       continue;
     }

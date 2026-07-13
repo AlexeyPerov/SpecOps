@@ -1,7 +1,8 @@
 import { join } from "@tauri-apps/api/path";
 import { exists, mkdir, readTextFile, remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import type { DiskFingerprint } from "../domain/contracts";
 import { SKIPPED_DIRECTORY_NAMES } from "./folderOpenableFiles";
-import { normalizePathSync } from "./diskFingerprint";
+import { normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
 import { applyReplaceAll } from "../editor/editorSearchOps";
 import {
   closeTabsForDeletedDocumentsUnderPath,
@@ -16,7 +17,7 @@ export type ProjectFileOpResult =
 
 /** Result of replacing all matches inside a single project file. */
 export type ProjectReplaceResult =
-  | { ok: true; path: string; count: number; content: string }
+  | { ok: true; path: string; count: number; content: string; fingerprint: DiskFingerprint }
   | { ok: false; reason: string; count: number };
 
 function basename(path: string): string {
@@ -176,7 +177,16 @@ export async function replaceInProjectFile(
     const reason = error instanceof Error ? error.message : String(error);
     return { ok: false, reason, count: 0 };
   }
-  return { ok: true, path: filePath, count, content: nextContent };
+  // Capture the post-write fingerprint so callers can refresh the disk state
+  // of any open document for this path (suppressing a watcher self-echo and
+  // keeping the buffer in sync without flipping it dirty).
+  let fingerprint: DiskFingerprint;
+  try {
+    fingerprint = await statDiskFingerprint(filePath);
+  } catch {
+    fingerprint = { mtimeMs: 0, sizeBytes: nextContent.length };
+  }
+  return { ok: true, path: filePath, count, content: nextContent, fingerprint };
 }
 
 export async function createProjectFolder(

@@ -11,7 +11,7 @@ import {
   saveFileAs,
 } from "./fileSystem";
 import { statDiskFingerprint } from "./diskFingerprint";
-import { recordWriteFingerprint } from "./externalFileChanges";
+import { beginSaveInFlight, clearSaveInFlight, recordWriteFingerprint } from "./externalFileChanges";
 import { logDiagnostic } from "./logging";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -38,6 +38,8 @@ vi.mock("./diskFingerprint", async (importOriginal) => {
 
 vi.mock("./externalFileChanges", () => ({
   recordWriteFingerprint: vi.fn(),
+  beginSaveInFlight: vi.fn(),
+  clearSaveInFlight: vi.fn(),
 }));
 
 vi.mock("./appDataDir", () => ({

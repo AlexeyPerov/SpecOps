@@ -83,7 +83,7 @@ export function closeTabInPaneForceOnContext(
         selectedTabId = nextSessionTab.id;
       }
     }
-    return withPaneTabs(ctx, paneId, filtered, selectedTabId);
+    return pruneUnreferencedDocuments(withPaneTabs(ctx, paneId, filtered, selectedTabId));
   }
 
   if (!canCreateFileTabs(state)) {

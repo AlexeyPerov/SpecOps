@@ -28,6 +28,7 @@ vi.mock("../../services/openFileGate", () => ({
 
 vi.mock("../../services/openFileRegistry", () => ({
   renameOpenFileRegistry: vi.fn(),
+  claimOpenFile: vi.fn(),
 }));
 
 vi.mock("../../services/externalFileChanges", () => ({
@@ -104,7 +105,7 @@ import {
   saveFile,
   saveFileAs,
 } from "../../services/fileSystem";
-import { renameOpenFileRegistry } from "../../services/openFileRegistry";
+import { claimOpenFile, renameOpenFileRegistry } from "../../services/openFileRegistry";
 import { closeTabWithUnsavedPrompt } from "../../services/closeTabFlow";
 import { completeOpenPath, requestOpenPath } from "../../services/openFileGate";
 import { reloadActiveDocumentFromDisk } from "../../services/externalFileChanges";
@@ -520,6 +521,8 @@ describe("file.saveAs command", () => {
     vi.mocked(saveFileAs).mockReset();
     vi.mocked(renameOpenFileRegistry).mockReset();
     vi.mocked(renameOpenFileRegistry).mockResolvedValue(undefined);
+    vi.mocked(claimOpenFile).mockReset();
+    vi.mocked(claimOpenFile).mockResolvedValue(undefined);
   });
 
   it("saves the active document to a new path", async () => {
@@ -545,6 +548,43 @@ describe("file.saveAs command", () => {
 
     expect(appState.getActiveDocuments()[0]?.filePath).toBeNull();
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("hands a restricted outside-workspace save-as to Notepad using its document id", async () => {
+    const { context } = createCommandContext();
+    appState.addWorkspace("/tmp/ws");
+    appState.setRestrictFilesToContext(true);
+    const workspaceDocumentId = appState.openFileInTab("/tmp/ws/original.txt", "original");
+    appState.setDocumentContent(workspaceDocumentId, "edited");
+    vi.mocked(saveFileAs).mockResolvedValue({
+      path: "/tmp/outside.txt",
+      fingerprint: savedFingerprint,
+    });
+
+    dispatchCommand("file.saveAs", context);
+    await flushCommandQueue();
+
+    const snapshot = appState.getSnapshot();
+    const notepadDocument = snapshot.contexts.notepad.documents.find(
+      (document) => document.filePath === "/tmp/outside.txt",
+    );
+    expect(notepadDocument).toMatchObject({
+      content: "edited",
+      savedContent: "edited",
+      isDirty: false,
+      diskFingerprint: savedFingerprint,
+      fileMissing: false,
+    });
+    expect(snapshot.contexts.workspaces[0]?.snapshot.documents).not.toContainEqual(
+      expect.objectContaining({ id: workspaceDocumentId }),
+    );
+    expect(renameOpenFileRegistry).toHaveBeenCalledWith(
+      "/tmp/ws/original.txt",
+      "/tmp/outside.txt",
+      "main",
+      notepadDocument?.id,
+    );
+    expect(claimOpenFile).toHaveBeenCalledWith("/tmp/outside.txt", "main", notepadDocument?.id);
   });
 });
 

@@ -1,5 +1,5 @@
 import type { DocumentState } from "../domain/contracts";
-import { getSessionTabs } from "../domain/contracts";
+import { allTabs } from "../domain/contracts";
 import { isEditableContentKind } from "./fileContentKind";
 import { appState } from "../state/appState";
 import { saveFile, saveFileAs } from "./fileSystem";
@@ -7,6 +7,7 @@ import { renameOpenFileRegistry } from "./openFileRegistry";
 import { untitledSaveDefaultPath } from "./untitledSavePath";
 import { isFileContextRestricted } from "./fileContextPolicy";
 import { isPathUnderRoot } from "./workspacePaths";
+import { handoffSavedFileToNotepad } from "./savedFileHandoff";
 
 export type SaveDocumentDeps = {
   getWindowId: () => string;
@@ -40,28 +41,30 @@ async function persistDocument(
     fingerprint = await saveFile({ path: targetPath, content: document.content });
   }
 
-  appState.markDocumentSaved(document.id, targetPath, document.content);
   const activeWorkspaceRoot = appState.getWorkspaceRoot();
   const savedOutsideWorkspace =
     activeWorkspaceRoot !== null && !isPathUnderRoot(targetPath, activeWorkspaceRoot);
-  const tabId = getSessionTabs(appState.getActiveSession())
+  const tabId = allTabs(appState.getActiveSession().editorLayout)
     .find((tab) => tab.kind === "file" && tab.documentId === document.id)?.id;
 
   if (options?.allowWorkspaceTabMove && savedOutsideWorkspace && tabId) {
-    appState.closeTabForce(tabId);
-    appState.switchContext("notepad");
-    appState.openTransferredTab({
+    await handoffSavedFileToNotepad({
+      sourceTabId: tabId,
+      previousPath,
       filePath: targetPath,
       content: document.content,
       title: document.title,
+      fingerprint,
+      windowId: deps.getWindowId(),
     });
+  } else {
+    appState.markDocumentSaved(document.id, targetPath, document.content);
+    appState.setDocumentDiskState(document.id, {
+      diskFingerprint: fingerprint,
+      fileMissing: false,
+    });
+    await renameOpenFileRegistry(previousPath, targetPath, deps.getWindowId(), document.id);
   }
-
-  appState.setDocumentDiskState(document.id, {
-    diskFingerprint: fingerprint,
-    fileMissing: false,
-  });
-  await renameOpenFileRegistry(previousPath, targetPath, deps.getWindowId(), document.id);
   deps.notify(`Saved ${targetPath}`);
   return true;
 }

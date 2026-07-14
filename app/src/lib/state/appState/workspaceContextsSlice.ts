@@ -264,16 +264,23 @@ export function createWorkspaceContextsSlice(deps: {
           return state;
         }
         closed = true;
+        const workspaces = state.contexts.workspaces.filter((workspace) => workspace.id !== workspaceId);
+        const closingActiveWorkspace = state.contexts.activeContextId === workspaceId;
+        // Workspace order is user-visible and persisted, so the first remaining
+        // entry is a deterministic successor when the active workspace closes.
+        const activeContextId = closingActiveWorkspace
+          ? (workspaces[0]?.id ?? NOTEPAD_CONTEXT_ID)
+          : state.contexts.activeContextId;
         return {
           ...state,
           contexts: {
             ...state.contexts,
-            activeContextId: NOTEPAD_CONTEXT_ID,
-            workspaces: state.contexts.workspaces.filter((workspace) => workspace.id !== workspaceId),
+            activeContextId,
+            workspaces,
           },
           editor: {
             ...state.editor,
-            previewMode: "editor",
+            previewMode: closingActiveWorkspace ? "editor" : state.editor.previewMode,
           },
         };
       });

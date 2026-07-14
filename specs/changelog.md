@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-14 21:36 — F1.3 Restricted save and context migration
+
+- Restricted Save As and save-on-close handoffs now close and prune the workspace tab before creating the Notepad replacement. Registry ownership, saved content, and disk fingerprints are recorded against the live Notepad document, then claimed for its window.
+- Closing a non-active workspace preserves the current context. Closing the active workspace selects the first remaining workspace in persisted order, or Notepad when none remain.
+- Restricted Notepad-to-workspace migration now removes the source duplicate and finds/focuses an existing workspace tab across all panes.
+- Added regression coverage for saved-file handoff registry/disk identity, active-context selection on workspace close, and inactive-pane migration deduplication.
+- **Validation:** `npm test` passes. `npm run check` has no new F1.3 errors; 12 pre-existing errors remain in unrelated files.
+- **`specs/…/f1-3-…-execution-plan.md`** — all tasks `[DONE]`, status Done, exit criteria checked.
+
 ## 2026-07-14 00:10 — F1.1 Save integrity + F1.2 Context-aware file side effects
 
 Implemented the first two Fixes-v1 execution plans together (they share the file side-effect surface and F1.1 depends on F1.2's context-aware helpers for non-active workspaces). No persisted-data migration or compatibility shim.

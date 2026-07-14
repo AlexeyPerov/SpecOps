@@ -1,9 +1,9 @@
 import { dirname } from "@tauri-apps/api/path";
 import { appState } from "../../state/appState";
 import {
+  allTabs,
   getSessionActiveTab,
   getSessionSelectedTabId,
-  getSessionTabs,
   tabDocumentId,
 } from "../../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../../state/appState/contextHelpers";
@@ -23,6 +23,7 @@ import { runWithRecentFilesBatch } from "../../services/recentFilesSync";
 import { logDiagnostic } from "../../services/logging";
 import { isFileContextRestricted, runOpenInActiveContext } from "../../services/fileContextPolicy";
 import { isPathUnderRoot } from "../../services/workspacePaths";
+import { handoffSavedFileToNotepad } from "../../services/savedFileHandoff";
 import type { CommandContext } from "./types";
 
 export async function handleFileOpenAllInFolder(context: CommandContext): Promise<void> {
@@ -166,21 +167,24 @@ export async function handleFileSaveAs(context: CommandContext): Promise<void> {
     activeWorkspaceRoot !== null && !isPathUnderRoot(saved.path, activeWorkspaceRoot);
   const previousPath = doc.filePath;
   const sourceTabId = selected.id;
-  appState.markDocumentSaved(doc.id, saved.path, doc.content);
   if (savedOutsideWorkspace && isFileContextRestricted()) {
-    appState.closeTabForce(sourceTabId);
-    appState.switchContext("notepad");
-    appState.openTransferredTab({
+    await handoffSavedFileToNotepad({
+      sourceTabId,
+      previousPath,
       filePath: saved.path,
       content: doc.content,
       title: doc.title,
+      fingerprint: saved.fingerprint,
+      windowId: getWindowId(),
     });
+  } else {
+    appState.markDocumentSaved(doc.id, saved.path, doc.content);
+    appState.setDocumentDiskState(doc.id, {
+      diskFingerprint: saved.fingerprint,
+      fileMissing: false,
+    });
+    await renameOpenFileRegistry(previousPath, saved.path, getWindowId(), doc.id);
   }
-  appState.setDocumentDiskState(doc.id, {
-    diskFingerprint: saved.fingerprint,
-    fileMissing: false,
-  });
-  await renameOpenFileRegistry(previousPath, saved.path, getWindowId(), doc.id);
   notify(
     savedOutsideWorkspace && isFileContextRestricted()
       ? `Saved as ${saved.path} and moved tab to Notepad.`

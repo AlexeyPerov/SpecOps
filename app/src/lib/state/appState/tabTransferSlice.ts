@@ -1,5 +1,6 @@
 import type { AppDomainState, ContextId, ContextSnapshot } from "../../domain/contracts";
 import {
+  allTabs,
   createFileTab,
   getSessionTabs,
   isFileTab,
@@ -151,44 +152,38 @@ export function createTabTransferSlice(deps: {
         );
         if (existingInWorkspace) {
           migratedDocumentId = existingInWorkspace.id;
-          const existingTab = getSessionTabs(workspace.snapshot.session).find(
+          const existingTab = allTabs(workspace.snapshot.session.editorLayout).find(
             (tab) => isFileTab(tab) && tab.documentId === existingInWorkspace.id,
           );
-          return {
+          const nextWorkspace = existingTab
+            ? workspace.snapshot
+            : addFileTabWithDocument(workspace.snapshot, existingInWorkspace, nextTabId());
+          const nextState = {
             ...state,
             contexts: {
               ...state.contexts,
               activeContextId: workspaceContextId,
+              notepad: removeFileTabFromSnapshot(
+                state.contexts.notepad,
+                notepadMatch.tabId,
+                notepadMatch.documentId,
+                state.contexts.notepad.session.lastActiveWindowId,
+              ),
               workspaces: state.contexts.workspaces.map((entry) =>
                 entry.id === workspaceContextId
                   ? {
                       ...entry,
-                      snapshot: existingTab
-                        ? {
-                            ...entry.snapshot,
-                            session: {
-                              ...entry.snapshot.session,
-                              editorLayout: setActivePaneTabs(
-                                entry.snapshot.session.editorLayout,
-                                getSessionTabs(entry.snapshot.session),
-                                existingTab.id,
-                              ),
-                            },
-                          }
-                        : addFileTabWithDocument(
-                            entry.snapshot,
-                            existingInWorkspace,
-                            nextTabId(),
-                          ),
+                      snapshot: nextWorkspace,
                     }
                   : entry,
               ),
             },
             editor: {
               ...state.editor,
-              previewMode: "editor",
+              previewMode: "editor" as const,
             },
           };
+          return existingTab ? selectTabInternal(nextState, existingTab.id) : nextState;
         }
 
         migratedDocumentId = notepadMatch.documentId;

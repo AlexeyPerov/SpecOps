@@ -503,8 +503,8 @@ describe("appState tabs and selection", () => {
     expect(getSessionTabs(appState.getActiveSession())).toHaveLength(1);
 
     const documentId = appState.openTransferredTab(transfer!);
-    expect(documentId).toBe("doc-2");
-    expect(getSessionTabs(appState.getActiveSession())).toHaveLength(2);
+    expect(documentId).toBe("doc-3");
+    expect(getSessionTabs(appState.getActiveSession())).toHaveLength(1);
     expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-3");
   });
 });

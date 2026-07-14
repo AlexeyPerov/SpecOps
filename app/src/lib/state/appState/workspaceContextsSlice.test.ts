@@ -411,3 +411,34 @@ describe("appState session restore", () => {
     expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
   });
 });
+
+describe("closeWorkspace active-context selection", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("preserves the active workspace when closing a different workspace", () => {
+    const workspaceA = appState.addWorkspace("/tmp/ws-a")!;
+    const workspaceB = appState.addWorkspace("/tmp/ws-b")!;
+    appState.switchContext(workspaceA);
+
+    expect(appState.closeWorkspace(workspaceB)).toBe(true);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(workspaceA);
+  });
+
+  it("switches an active workspace to the first remaining workspace", () => {
+    const workspaceA = appState.addWorkspace("/tmp/ws-a")!;
+    const workspaceB = appState.addWorkspace("/tmp/ws-b")!;
+
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(workspaceB);
+    expect(appState.closeWorkspace(workspaceB)).toBe(true);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(workspaceA);
+  });
+
+  it("switches to Notepad when closing the last active workspace", () => {
+    const workspace = appState.addWorkspace("/tmp/ws")!;
+
+    expect(appState.closeWorkspace(workspace)).toBe(true);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+  });
+});

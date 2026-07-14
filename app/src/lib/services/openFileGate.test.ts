@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
+import { allTabs, getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { WINDOW_EVENT_SELECT_TAB_FOR_PATH } from "./windowManager";
 import {
@@ -139,6 +139,53 @@ describe("requestOpenPath", () => {
       return doc?.filePath === "/tmp/ws/migrate-me.txt";
     });
     expect(notepadHasTab).toBe(false);
+  });
+
+  it("removes the notepad duplicate and focuses an existing workspace tab in an inactive pane", async () => {
+    readOpenFileRegistryMock.mockResolvedValue({});
+    appState.setRestrictFilesToContext(true);
+    const workspaceId = appState.addWorkspace("/tmp/ws")!;
+    appState.setEditorLayout("cols-2");
+    const workspaceLayout = appState.getActiveSession().editorLayout;
+    const inactivePane = workspaceLayout.panes.find((pane) => pane.id !== workspaceLayout.activePaneId)!;
+    const workspaceDocumentId = appState.openFileInPane(
+      "/tmp/ws/already-open.txt",
+      "workspace copy",
+      inactivePane.id,
+    );
+    const workspaceTab = allTabs(appState.getActiveSession().editorLayout).find(
+      (tab) => tab.kind === "file" && tab.documentId === workspaceDocumentId,
+    )!;
+
+    appState.switchContext("notepad");
+    appState.openFileInTab("/tmp/ws/already-open.txt", "notepad copy");
+    appState.switchContext(workspaceId);
+
+    await expect(requestOpenPath("/tmp/ws/already-open.txt", "win-a")).resolves.toEqual({
+      kind: "existing",
+      path: "/tmp/ws/already-open.txt",
+      documentId: workspaceDocumentId,
+    });
+
+    const snapshot = appState.getSnapshot();
+    const updatedWorkspace = snapshot.contexts.workspaces.find((workspace) => workspace.id === workspaceId)!;
+    expect(updatedWorkspace.snapshot.session.editorLayout.activePaneId).toBe(inactivePane.id);
+    expect(
+      allTabs(updatedWorkspace.snapshot.session.editorLayout).filter(
+        (tab) => tab.kind === "file" && tab.documentId === workspaceDocumentId,
+      ),
+    ).toHaveLength(1);
+    expect(
+      getSessionTabs(snapshot.contexts.notepad.session).some((tab) => {
+        if (tab.kind !== "file") {
+          return false;
+        }
+        return snapshot.contexts.notepad.documents.some(
+          (document) => document.id === tab.documentId && document.filePath === "/tmp/ws/already-open.txt",
+        );
+      }),
+    ).toBe(false);
+    expect(getSessionSelectedTabId(updatedWorkspace.snapshot.session)).toBe(workspaceTab.id);
   });
 
   it("opens outside-root paths in the active workspace when unrestricted", async () => {

@@ -1,6 +1,8 @@
 # OpenCode integration
 
-SpecOps uses OpenCode as the backend for all workspace-agent workflows (`ws-*` contexts). Chat HTTP providers are only used in the `chat-http` context.
+SpecOps uses OpenCode as the backend for all workspace-session workflows
+(`ws-*` is the internal context-id pattern). Chat HTTP providers are only used
+in the internal `chat-http` context.
 
 ## Integration at a glance
 
@@ -27,15 +29,18 @@ sequenceDiagram
 
 ## User-facing terminology
 
-SpecOps aligns with OpenCode Desktop vocabulary in the UI:
+SpecOps uses the following vocabulary in the UI:
 
 | Term | Meaning |
 | --- | --- |
 | **Session** | A workspace conversation — sidebar row, tab, transcript, and lifecycle actions (fork, share, rename, …). |
-| **Agent** | An OpenCode **persona/config** only — Settings → Agents, composer persona picker, `@agent:` mentions, default agent in config. |
-| **Chat** | The experimental `chat-http` lane (Settings → Dev); unrelated to workspace sessions. |
+| **Agent** | An OpenCode **persona/config** only — Settings → Workspaces → Agents, composer persona picker, `@agent:` mentions, default agent in config. |
+| **Chat** | The experimental `chat-http` lane (enabled at Settings → Dev → Enable Chat (beta)); unrelated to workspace sessions. |
 
-Internal code uses **session** for conversations (post-[M16](../specs/ops/phase-3.5/execution-plan-m16.md)): `sessionId`, `SessionIndexEntry`, `SessionsSidebar`, and `chat/{hash}/` (`sessions` envelope). The OpenCode SDK bridges in `workspaceAgentBackend.ts` keep the **agent** module name for the SDK wrapper. Do not confuse with:
+Internal code uses **session** for conversations: `sessionId`,
+`SessionIndexEntry`, `SessionsSidebar`, and `chat/{hash}/` (`sessions`
+envelope). The OpenCode SDK bridges in `workspaceAgentBackend.ts` keep the
+**agent** module name for the SDK wrapper. Do not confuse with:
 
 - **OpenCode session** — server-side conversation object linked via `opencodeSessionId`.
 - **Window session** — `SessionState` in `session.json` (editor tabs, last active context); not a chat session.
@@ -64,7 +69,7 @@ Internal code uses **session** for conversations (post-[M16](../specs/ops/phase-
 
 ### Agent (persona)
 
-- OpenCode agent definitions (`build`, `plan`, custom agents) configured under Settings → Agents.
+- OpenCode agent definitions (`build`, `plan`, custom agents) configured under Settings → Workspaces → Agents.
 - Selected in the composer persona picker; referenced in prompts via `@agent:`.
 
 ## Relationship model
@@ -90,13 +95,13 @@ Internal code uses **session** for conversations (post-[M16](../specs/ops/phase-
    ```
 2. Open a **workspace folder** in SpecOps (activity rail → add folder).
 3. SpecOps starts the sidecar **lazily** — on the first **Send** in a session tab, or via **Settings → Workspaces → OpenCode → Check connection**. Editing files does not require OpenCode.
-4. **Connect a provider** in OpenCode (see [Provider setup](#provider-setup-openrouter-glm-coding-plan-) below). Workspace agents do not use SpecOps **Dev → Providers** HTTP keys.
+4. **Connect a provider** in OpenCode (see [Provider setup](#provider-setup-openrouter-glm-coding-plan-) below). Workspace sessions do not use SpecOps **Dev → Providers** HTTP keys.
 5. In SpecOps: **Refresh model list** (Settings → Workspaces → OpenCode), then pick agent, provider, and model in the session composer.
 6. Use the **Sessions** sidebar: create a session tab and send a prompt.
 
 ## Setup OpenCode in SpecOps
 
-1. Open **Settings -> Workspaces -> OpenCode**.
+1. Open **Settings → Workspaces → OpenCode**.
 2. Ensure **Use OpenCode for workspace sessions** is enabled.
 3. Choose transport mode:
    - **Sidecar (default):** local OpenCode sidecar managed by SpecOps.
@@ -118,7 +123,9 @@ Internal code uses **session** for conversations (post-[M16](../specs/ops/phase-
 
 ## Provider setup (OpenRouter, GLM Coding Plan, …)
 
-API keys and model catalogs for **workspace agents** live in **OpenCode**, not in SpecOps `settings.json`. After you connect a provider, use **Refresh model list** in SpecOps so the composer picks up models from the running server.
+API keys and model catalogs for **workspace sessions** live in **OpenCode**, not
+in SpecOps `settings.json`. After you connect a provider, use **Refresh model
+list** in SpecOps so the composer picks up models from the running server.
 
 Configure providers once with the OpenCode CLI (auth is shared with the sidecar SpecOps starts):
 
@@ -180,7 +187,7 @@ Details: [Z.AI + OpenCode](https://docs.z.ai/scenario-example/develop-tools/open
 - **Empty model list** — Connect a provider in OpenCode first, then **Refresh model list** in SpecOps settings.
 - **Auth errors** — Re-run `/connect` or fix `auth.json`; workspace sends never read HTTP keys from SpecOps **Dev → Providers**.
 - **Legacy workspace chat** — Threads from the pre–phase-3 HTTP workspace provider are not migrated into OpenCode sessions.
-- **Chat (beta) / HTTP chat context** — Experimental. Disabled by default; see [beta/chat-http-providers.md](./beta/chat-http-providers.md). Enable under **Settings → Dev → Chat (beta)**.
+- **Chat (beta) / HTTP chat context** — Experimental. Disabled by default; see [beta/chat-http-providers.md](./beta/chat-http-providers.md). Turn on **Settings → Dev → Enable Chat (beta)**.
 
 ## Sidecar notes
 

@@ -1,6 +1,8 @@
 # <img src="app/static/favicon.png" alt="" width="32" height="32" align="top"> SpecOps
 
-Desktop workspace for notes, specs, and project files — with a built-in editor and **OpenCode**-powered workspace agents. Built with [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
+Desktop workspace for notes, specs, and project files — with a built-in editor
+and **OpenCode**-powered workspace sessions. Built with
+[Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
 
 > Under active development. APIs, settings, and on-disk formats may change without migration.
 
@@ -13,7 +15,7 @@ Desktop workspace for notes, specs, and project files — with a built-in editor
 - **Version Control** — per-workspace git tab (history, branches, tags, changes, fetch/pull/push) via system `git`
 - **Themes**, **multi-window**, **image** preview
 - **Console** — resizable bottom panel with logs
-- **Workspace agents** — sessions powered by [OpenCode](https://opencode.ai/) (tools, permissions, streaming)
+- **Workspace sessions** — OpenCode-powered conversations with tools, permissions, and streaming
 - **Chat (beta)** — experimental HTTP chat context, off by default; see [`docs/beta/`](./docs/beta/)
 
 ## Screenshots
@@ -27,14 +29,14 @@ Desktop workspace for notes, specs, and project files — with a built-in editor
 - **Releases** — download macOS / Windows installers from [GitHub Releases](https://github.com/AlexeyPerov/spec-ops/releases) (published when a semver tag is pushed; see [CI releases](#ci-releases)).
 - **From source** — see [Development](#development) below.
 
-## Workspace agents (OpenCode)
+## Workspace sessions (OpenCode)
 
 SpecOps is the UI; **OpenCode** runs models, tools, and session logic. Configure providers and API keys in OpenCode — not in SpecOps HTTP settings.
 
 | Context | Runtime | Configure models / keys |
 | --- | --- | --- |
-| Workspace agents (`ws-*`) | OpenCode (sidecar or URL) | OpenCode (`/connect`, `opencode.json`, `auth.json`) |
-| Chat (beta) — `chat-http` | OpenAI-compatible HTTP (off by default) | **Settings → Dev → Chat (beta)** → Providers |
+| Workspace sessions | OpenCode (sidecar or URL) | OpenCode (`/connect`, `opencode.json`, `auth.json`) |
+| Chat (beta) — `chat-http` (internal context id) | OpenAI-compatible HTTP (off by default) | Enable at **Settings → Dev → Enable Chat (beta)**, then configure **Settings → Dev → Providers** |
 
 ### Quick start
 
@@ -57,7 +59,7 @@ Chat (beta): **[docs/beta/chat-http-providers.md](./docs/beta/chat-http-provider
 
 - Further UI / UX polish
 - Extended AI support
-- Git post-MVP features (see [`specs/git/backlog.md`](./specs/git/backlog.md))
+- Git post-MVP features
 
 ## Prerequisites
 
@@ -67,12 +69,15 @@ Chat (beta): **[docs/beta/chat-http-providers.md](./docs/beta/chat-http-provider
 
 ## Development
 
-From the `app/` directory:
+From the `app/` directory, use `npm ci` for a reproducible clean-clone setup:
 
 ```sh
-npm install
+npm ci
 npm run tauri dev
 ```
+
+Use `npm install` instead when intentionally changing dependencies or refreshing
+`app/package-lock.json`.
 
 This starts the Vite dev server and opens the desktop app. Type-check the frontend with:
 
@@ -109,25 +114,40 @@ npm run tauri dev
 
 ## Build
 
-From the `app/` directory:
+From the `app/` directory after installing dependencies, ensure the matching
+OpenCode sidecar binary exists (see
+[`app/src-tauri/binaries/README.md`](./app/src-tauri/binaries/README.md)), then:
 
 ```sh
-npm install
 npm run tauri build
 ```
 
 Installers and bundles are written to `app/src-tauri/target/release/bundle/`.
 
+### Platform support
+
+| Platform | GitHub release downloads | Test CI | Local source builds |
+| --- | --- | --- | --- |
+| macOS (Apple silicon and Intel) | Yes — universal build | Yes | Supported |
+| Windows (x64) | Yes | Yes | Supported |
+| Linux | No published installers | Yes | Buildable with Tauri's Linux prerequisites, but not a supported release target |
+
+The test workflow runs the Vitest suite on macOS, Windows, and Linux. The release
+workflow publishes artifacts only for macOS and Windows; Tauri's `targets: "all"`
+controls bundle formats for the current build host and does not add a Linux release job.
+
 ### CI releases
 
-Pushing a semver tag (for example `v1.0.0`) triggers the [Release](.github/workflows/release.yml) workflow. It builds macOS (universal binary) and Windows installers and publishes them as assets on the GitHub release for that tag.
+Pushing any tag beginning with `v` (for example `v1.0.0`) triggers the
+[Release](.github/workflows/release.yml) workflow. It builds a universal macOS
+bundle and Windows x64 installers and publishes them as assets on that GitHub release.
 
 ## Docs
 
 | Doc | Audience |
 | --- | --- |
 | [docs/README.md](./docs/README.md) | Index — users vs contributors |
-| [docs/opencode-integration.md](./docs/opencode-integration.md) | Workspace agents / OpenCode setup |
+| [docs/opencode-integration.md](./docs/opencode-integration.md) | Workspace sessions / OpenCode setup |
 | [docs/architecture.md](./docs/architecture.md) | Codebase map for contributors |
 | [docs/beta/](./docs/beta/) | Experimental Chat (HTTP) lane |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute |

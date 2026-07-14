@@ -47,7 +47,7 @@
       The HTTP chat context is an experimental beta feature and is disabled by default.
     </p>
     <p class="chat-blocked-hint">
-      Enable Chat (beta) in Settings → Dev, then configure HTTP providers or Debug Provider under Chats.
+      Enable Chat (beta), then configure Providers, Chat modes, or Debug Provider under Dev.
     </p>
     <button type="button" class="btn btn-primary chat-setup-button" onclick={() => openSettingsDialog("dev")}>
       Open Settings → Dev

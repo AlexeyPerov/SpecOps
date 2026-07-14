@@ -1,7 +1,10 @@
 # Text Editor Parity v3 — Roadmap
 
-**Status:** Planned  
-**Product position:** SpecOps remains a notes/specs workspace with AI. This roadmap adds enough general-purpose editing capability that users should rarely need a second text editor for routine work; it does not pursue full Sublime Text or IDE parity.
+**Status:** In progress — 7 of 9 milestones complete
+**Product position:** SpecOps remains a notes/specs workspace with AI. This
+roadmap adds enough general-purpose editing capability that users should rarely
+need a second text editor for routine work; it does not pursue full
+general-purpose editor or IDE parity.
 
 ## How to use this roadmap
 
@@ -24,17 +27,17 @@ Scores estimate implementation/review complexity, not elapsed time.
 
 ## Milestones
 
-| Milestone | Outcome | Plans | Complexity |
-|---|---|---:|---|
-| [M0 — Editor foundations](./m0-editor-foundations/) | Refactor editor sessions/runtime/extensions/overlay/indexing boundaries before features | 6 | Heavy (8) |
-| [M1 — Fuzzy file open](./m1-fuzzy-file-open/) | `Cmd/Ctrl+P` workspace file picker with fast fuzzy ranking | 2 | Heavy (7) |
-| [M2 — Multiple selections](./m2-multiple-selections/) | Multi-cursor, select-next occurrence, skip/undo occurrence, column selection | 2 | Medium (6) |
-| [M3 — Command palette](./m3-command-palette/) | Searchable, context-aware command launcher | 2 | Medium (6) |
-| [M4 — Folding and Markdown outline](./m4-folding-markdown-outline/) | Code folding plus heading navigation for long specs | 2 | Heavy (7) |
-| [M5 — Typing assistance](./m5-typing-assistance/) | Auto-close pairs and local document-word completion | 2 | Medium (6) |
-| [M6 — Markdown snippets](./m6-markdown-snippets/) | Built-in and user-defined reusable spec templates | 2 | Medium (6) |
-| [M7 — Document landmarks](./m7-document-landmarks/) | Quick heading jump plus document-local bookmarks | 2 | Medium (6) |
-| [M8 — Find/replace polish](./m8-find-replace-polish/) | Whole-word/regex search, selection seeding, consistent project search | 2 | Heavy (7) |
+| Milestone | Status | Outcome | Plans | Complexity |
+|---|---|---|---:|---|
+| [M0 — Editor foundations](./m0-editor-foundations/) | Complete | Refactor editor sessions/runtime/extensions/overlay/indexing boundaries before features | 6 | Heavy (8) |
+| [M1 — Fuzzy file open](./m1-fuzzy-file-open/) | Complete | `Cmd/Ctrl+P` workspace file picker with fast fuzzy ranking | 2 | Heavy (7) |
+| [M2 — Multiple selections](./m2-multiple-selections/) | Complete | Multi-cursor, select-next occurrence, skip/undo occurrence, column selection | 2 | Medium (6) |
+| [M3 — Command palette](./m3-command-palette/) | Complete | Searchable, context-aware command launcher | 2 | Medium (6) |
+| [M4 — Folding and Markdown outline](./m4-folding-markdown-outline/) | Complete | Code folding plus heading navigation for long specs | 2 | Heavy (7) |
+| [M5 — Typing assistance](./m5-typing-assistance/) | Complete | Auto-close pairs and local document-word completion | 2 | Medium (6) |
+| [M6 — Markdown snippets](./m6-markdown-snippets/) | Planned | Built-in and user-defined reusable spec templates | 2 | Medium (6) |
+| [M7 — Document landmarks](./m7-document-landmarks/) | Complete | Quick heading jump plus document-local bookmarks | 2 | Medium (6) |
+| [M8 — Find/replace polish](./m8-find-replace-polish/) | Planned | Whole-word/regex search, selection seeding, consistent project search | 2 | Heavy (7) |
 
 ## Recommended execution order
 

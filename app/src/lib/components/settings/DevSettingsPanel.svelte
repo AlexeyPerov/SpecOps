@@ -15,8 +15,8 @@
   <h3>Chat (beta)</h3>
   <p class="settings-section-note">
     Experimental HTTP chat context. When enabled, the activity rail shows a
-    Chat button and the Chats subtree appears under Dev for HTTP provider
-    configuration. Workspace agents (OpenCode) are unaffected.
+    Chat button and Dev gains Providers, Chat modes, and Debug Provider tabs
+    for HTTP configuration. Workspace sessions (OpenCode) are unaffected.
   </p>
   <div class="settings-subsection">
     <label class="settings-toggle" title="Enable Chat (beta) for the HTTP chat context">
@@ -31,8 +31,8 @@
     </label>
     {#if !chatHttpEnabled}
       <p class="settings-section-note">
-        Chat (beta) is off. The activity rail Chat button and Chats settings
-        tabs (Providers, Chat modes, Debug Provider) are hidden.
+        Chat (beta) is off. The activity rail Chat button and the Dev tabs for
+        Providers, Chat modes, and Debug Provider are hidden.
       </p>
     {:else}
       <p class="settings-section-note">

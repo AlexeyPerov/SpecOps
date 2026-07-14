@@ -46,10 +46,14 @@ After the script writes new binaries:
 4. Consider aligning `@opencode-ai/sdk` in `app/package.json` to the same
    release version (the script does not touch the SDK lockfile).
 
-## Asset → Tauri triple mapping
+## Sidecar asset → Tauri triple mapping
 
-The script hard-codes the mapping below; if `anomalyco/opencode` publishes
-new asset names, edit `PLATFORM_MAP` in `update-opencode-sidecar.sh` first.
+The script hard-codes the downloadable sidecar mapping below; if the upstream
+project publishes new asset names, edit `PLATFORM_MAP` in
+`update-opencode-sidecar.sh` first. This table describes sidecars that the
+maintainer script can prepare, not SpecOps release targets: GitHub releases
+currently publish SpecOps only for macOS and Windows. Linux is test-CI and
+local-build coverage only.
 
 | Release asset                       | Tauri target triple          |
 | ----------------------------------- | ---------------------------- |

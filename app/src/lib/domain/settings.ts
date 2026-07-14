@@ -19,7 +19,7 @@ export interface ProviderSettingsBase {
   enabled: boolean;
 }
 
-/** Settings-gated development provider; disabled by default (see M5-3). */
+/** Settings-gated development provider; scoped by chat context. */
 export interface DebugProviderSettings extends ProviderSettingsBase {
   simulationSeed: number | null;
   delayMsMin: number;
@@ -127,9 +127,8 @@ export interface OpencodeSettings {
  * Master toggle for the experimental `chat-http` context (phase-3.5 M13).
  *
  * Disabled by default. When false, the activity-rail Chat button is hidden
- * and the Settings → Dev → Chats subtree (Providers, Chat modes, Debug
- * Provider) is removed from the sidebar; persisted provider configuration
- * is untouched.
+ * and the Settings → Dev gated tabs (Providers, Chat modes, Debug Provider)
+ * are removed from the sidebar; persisted provider configuration is untouched.
  */
 export interface ChatHttpSettings {
   enabled: boolean;

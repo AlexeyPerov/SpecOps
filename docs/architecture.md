@@ -25,7 +25,10 @@ Unit tests are colocated as `*.test.ts` next to source. Run them from `app/` wit
 
 ### Module size conventions (M6)
 
-Production modules should stay **≤500 lines** where practical; **≤600** is acceptable for cohesive UI shells (`+page.svelte`, `SettingsDialog.svelte`). Test files should stay **≤600 lines** and mirror the production module they cover.
+Production modules should stay **≤500 lines** where practical; **≤600** is
+acceptable for cohesive UI shells such as `+page.svelte` and
+`SettingsView.svelte`. Test files should stay **≤600 lines** and mirror the
+production module they cover.
 
 When a file grows past those limits, split along existing domain boundaries and colocate new files next to the parent module:
 
@@ -101,7 +104,7 @@ File open/save flows go through `appState` and services (`fileSystem`, `openFile
 - Threads persist under the app data dir (see [Persistence](#persistence)).
 - Modes: **`ask`** and **`review`** (system prompts in `app/src/lib/ai/modes/builtins.ts`).
 
-HTTP Chat (beta) provider integration is documented in [beta/chat-http-providers.md](./beta/chat-http-providers.md). Workspace agents use OpenCode — see [opencode-integration.md](./opencode-integration.md).
+HTTP Chat (beta) provider integration is documented in [beta/chat-http-providers.md](./beta/chat-http-providers.md). Workspace sessions use OpenCode — see [opencode-integration.md](./opencode-integration.md).
 
 ## State layer
 
@@ -110,7 +113,7 @@ HTTP Chat (beta) provider integration is documented in [beta/chat-http-providers
 Single source of truth for:
 
 - Active context, documents, tabs, editor chrome (zoom, wrap, find/replace)
-- **`AppSettingsState`** (including Connections/HTTP settings and in-memory API key)
+- **`AppSettingsState`** (including HTTP provider settings and in-memory API key)
 - Theme (builtin + custom), recent files
 
 Mutations are methods on the exported store object (e.g. `openDocument`, `setProviderApiKey`, workspace close with dirty prompts).
@@ -199,19 +202,33 @@ Custom commands include `take_pending_opened_paths`, `sync_file_watcher_paths`, 
 - Activity rail (notepad / workspaces)
 - Project panel, editor + tab bar, **sessions** sidebar, chat panel
 - Version Control view tab (per workspace; system `git`)
-- Settings dialog, theme pane, console (logs only)
+- Settings view tab, theme pane, console (logs only)
 
-### Settings dialog
+### Settings view
 
 Tab ids and sidebar labels live in **`SETTINGS_TABS`** / `buildSettingsSidebar` (`app/src/lib/services/settingsDialogUi.ts`). Treat that module as the source of truth for tab inventory — do not duplicate the full list here.
 
 High-level layout:
 
 - Top-level: **Editor**, **Shortcuts**, **Appearance**, **Version Control**
-- **Dev** — Chat (beta) master toggle, **Logs**; **Chats** subtree only when `chatHttp.enabled`
-- **Workspaces** — OpenCode (connection, config, providers, MCP, agents, permissions, …)
+- **Dev** — **Enable Chat (beta)** master toggle and **Logs**; **Providers**, **Chat modes**, and **Debug Provider** tabs appear in this section only when `chatHttp.enabled`
+- **Workspaces** — **OpenCode**, **Config**, **Providers**, **MCP servers**, **Agents**, **Permissions**, **Commands**, **Instructions**, and **Debug Provider**
 
 `openSettingsDialog(tab)` resolves the requested tab against the chat-http beta gate — gated tabs redirect to `dev` when the beta is off.
+
+The two **Providers** tabs are distinct: **Settings → Dev → Providers** manages
+HTTP connections for Chat beta, while **Settings → Workspaces → Providers**
+manages OpenCode providers for the active workspace.
+
+#### Settings and context glossary
+
+| Internal id | User-visible term | Location |
+| --- | --- | --- |
+| `chat-http` | Chat (beta) context | Enable at **Settings → Dev → Enable Chat (beta)** |
+| `ws-*` | Workspace context id pattern | Workspace sessions use **Settings → Workspaces → OpenCode** |
+| `connections` | Providers (HTTP) tab | **Settings → Dev → Providers** |
+| `providers` | Providers (OpenCode) tab | **Settings → Workspaces → Providers** |
+| `agents` | Agents (personas/config) tab | **Settings → Workspaces → Agents** |
 
 Routing helpers: `editorRouting.ts` (file vs session vs view tabs), `workspaceAgentSession.ts` (session tab lifecycle).
 
@@ -231,7 +248,10 @@ Tab bar: `TabBarContextMenu.svelte`, `tabDragController.ts` (reorder / tear-off)
 
 - **Vitest** for TypeScript; tests assert real behavior (persistence codecs, send pipeline, provider adapters).
 - Reset helpers exist for global singletons: `resetChatProvidersForTests`, `resetChatProviderRegistryForTests`, `resetSessionManagerForTests`, etc.
-- Validation suites under `app/src/lib/state/chatM*.validation.test.ts` encode milestone acceptance criteria.
+- Milestone-specific validation suites use the `*.validation.test.ts` suffix and
+  are colocated with the relevant source under `app/src/lib/` (for example,
+  `state/chatM5-2.validation.test.ts` and
+  `services/optimizationsP7.validation.test.ts`).
 
 After structural changes, run `npm test` and `npm run check` from `app/`.
 
@@ -277,8 +297,9 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 ### Related docs
 
 - [README.md](./README.md) — docs index (users vs contributors)
-- [opencode-integration.md](./opencode-integration.md) — workspace agents / OpenCode
+- [opencode-integration.md](./opencode-integration.md) — workspace sessions / OpenCode
 - [beta/chat-http-providers.md](./beta/chat-http-providers.md) — HTTP Chat (beta) providers
 - [../README.md](../README.md) — product scope and dev commands
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
-- `specs/` — execution plans, [`specs/backlog/`](../specs/backlog/) (deferred items), changelog
+- [`../specs/text-editor-parity-v3/README.md`](../specs/text-editor-parity-v3/README.md) — current public editor roadmap
+- [`../specs/changelog.md`](../specs/changelog.md) — dated implementation history; other local planning material is not part of a clean clone

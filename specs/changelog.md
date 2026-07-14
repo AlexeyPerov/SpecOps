@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-14 22:10 — D1.5 Documentation accuracy and roadmap freshness
+
+- Updated the public text-editor roadmap to show seven completed milestones and
+  two planned milestones; updated the local Fixes v1 roadmap to show four of six
+  plans complete without claiming unfinished work.
+- Standardized current docs on **Settings → Dev → Enable Chat (beta)**,
+  **Settings → Dev → Providers**, and the visible Workspaces settings hierarchy.
+  Internal context and tab ids are now identified as implementation terms.
+- Corrected the HTTP Chat guide to describe both buffered JSON and streaming
+  SSE requests, removed the contradictory “streaming unused” claim, and aligned
+  its connection schema, defaults, scoped debug ids, secrets, and source-file
+  references with current code.
+- Documented `npm ci` for reproducible setup, `npm install` for dependency
+  changes, actual colocated test patterns, and the macOS/Windows release versus
+  three-platform test-CI and local Linux build distinction.
+- Removed stale links to local-only planning files and retained historical
+  terminology in earlier changelog entries.
+- Updated Chat (beta) recovery/settings copy so Settings paths say
+  **Settings → Dev → Providers** / **Debug Provider**, and prefer
+  “workspace sessions” over “workspace agents” in current user-facing text.
+
 ## 2026-07-14 21:56 — F1.4 Split-pane tab operations
 
 - Session-wide tab discovery now covers every pane for quick-open recency, activity-rail counts, deleted-file cleanup, save handoff, tab transfer, agent-session restore, and missing-tab cleanup. Remaining `getSessionTabs` calls are documented focused-pane operations.

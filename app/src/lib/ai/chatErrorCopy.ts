@@ -38,7 +38,7 @@ export const DEBUG_AI_PROVIDER_DISABLED_MESSAGE =
   "Debug Provider is turned off in Settings.";
 
 export const DEBUG_AI_PROVIDER_DISABLED_RECOVERY =
-  "Open Settings → Dev, enable Chat (beta), then turn on the Debug Provider under Chats.";
+  "Open Settings → Dev, enable Chat (beta), then turn on Debug Provider.";
 
 export const DEBUG_AGENT_PROVIDER_DISABLED_MESSAGE =
   "Debug Provider is turned off in Settings.";
@@ -98,13 +98,13 @@ export const STREAM_TRUNCATED_FAILURE_RECOVERY =
   "The stream ended before completion. Retry now; if this repeats, check provider/proxy stability.";
 
 export const HTTP_UNAUTHORIZED_FAILURE_MESSAGE =
-  "Invalid API key for the configured HTTP provider. Check Settings → Providers.";
+  "Invalid API key for the configured HTTP provider. Check Settings → Dev → Providers.";
 
 export const HTTP_RATE_LIMIT_FAILURE_MESSAGE =
   "HTTP provider rate limit reached. Wait a moment and try again.";
 
 export const HTTP_UNAUTHORIZED_FAILURE_RECOVERY =
-  "Open Settings → Providers, update the API key, and retry.";
+  "Open Settings → Dev → Providers, update the API key, and retry.";
 
 export const HTTP_RATE_LIMIT_FAILURE_RECOVERY =
   "Wait a short time and retry. If this happens often, lower request volume or change provider limits.";

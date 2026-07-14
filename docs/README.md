@@ -7,9 +7,9 @@ Stable documentation for users and contributors. Product plans, execution checkl
 | Doc | When to read it |
 | --- | --- |
 | [../README.md](../README.md) | Product overview, install, quick start |
-| [opencode-integration.md](./opencode-integration.md) | Workspace agents: first session, sidecar/URL, providers, troubleshooting |
+| [opencode-integration.md](./opencode-integration.md) | Workspace sessions (OpenCode): first session, sidecar/URL, providers, troubleshooting |
 | [beta/README.md](./beta/README.md) | Experimental features (opt-in) |
-| [beta/chat-http-providers.md](./beta/chat-http-providers.md) | Chat (beta) HTTP providers — only if you enable **Settings → Dev → Chat (beta)** |
+| [beta/chat-http-providers.md](./beta/chat-http-providers.md) | Chat (beta) HTTP providers — only if you turn on **Settings → Dev → Enable Chat (beta)** |
 
 **Recommended AI path:** Open a workspace folder and use **Sessions** with OpenCode. Do not start with Chat (beta) unless you already need an OpenAI-compatible HTTP lane.
 

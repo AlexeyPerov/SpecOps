@@ -1,13 +1,19 @@
 # Chat providers — HTTP connection integration (beta)
 
-> **Beta feature.** The HTTP chat context (`chat-http`) is an experimental
+> **Beta feature.** The HTTP chat context (internal id `chat-http`) is an experimental
 > beta lane (phase-3.5 M13). It is **disabled by default**. To enable it,
-> open **Settings → Dev** and turn on **Chat (beta)**, then configure HTTP
-> providers or Debug Provider under the **Chats** subtabs.
+> turn on **Settings → Dev → Enable Chat (beta)**, then configure
+> **Settings → Dev → Providers** or **Settings → Dev → Debug Provider**.
 
-SpecOps routes **Chat context** (`chat-http`) AI through a small **provider registry**. Production traffic uses an **OpenAI-compatible HTTP connection** configured in **Settings → Dev → Providers** (after enabling Chat (beta)). **Debug** is a settings-gated local simulator for development.
+SpecOps routes **Chat context** (internal id `chat-http`) AI through a small
+**provider registry**. Production traffic uses an **OpenAI-compatible HTTP
+connection** configured in **Settings → Dev → Providers** (after enabling Chat
+(beta)). **Debug** is a settings-gated local simulator for development.
 
-**Workspace contexts** (`ws-*`) use the **OpenCode** backend exclusively — they do not route through the HTTP provider registry. See [opencode-integration.md](../opencode-integration.md) for integration details and setup, and [phase-3 spec](../../specs/ops/phase-3/phase-3.md) for original implementation context.
+**Workspace contexts** (internal id pattern `ws-*`) use the **OpenCode** backend
+exclusively — they do not route through the HTTP provider registry. See
+[opencode-integration.md](../opencode-integration.md) for setup details and the
+[changelog](../../specs/changelog.md) for implementation history.
 
 ## Provider abstraction
 
@@ -60,60 +66,84 @@ HTTP maps this to OpenAI-style messages in `openAiChatMessages.ts` (single combi
 
 ### Settings (`settings.json`)
 
-Provider-specific blocks live under **`providerSettings`** (`AppProviderSettings` in `contracts.ts`), normalized in `appProviderSettings.ts`. Each provider type extends **`ProviderSettingsBase`** (`enabled: boolean`).
+Provider-specific blocks live under **`providerSettings`**
+(`AppProviderSettings` in `contracts.ts`) and are normalized in
+`appProviderSettings.ts`. HTTP configuration uses named connections, each with
+its own model catalog:
 
 ```json
 {
   "providerSettings": {
-    "http": { "enabled": true, "baseUrl": "https://api.openai.com/v1" },
-    "debug": { "enabled": true, "simulationSeed": null, "delayMsMin": 200, ... }
-  },
-  "providerModelCatalogs": { "http": { "modelIds": ["gpt-4o-mini"], "defaultModelId": "gpt-4o-mini" } }
+    "httpConnections": [
+      {
+        "id": "default",
+        "label": "HTTP",
+        "enabled": false,
+        "baseUrl": "http://localhost:11434/v1",
+        "modelCatalog": {
+          "modelIds": ["gpt-4o-mini"],
+          "defaultModelId": "gpt-4o-mini"
+        }
+      }
+    ],
+    "defaultConnectionId": "default",
+    "debugChat": { "enabled": true, "simulationSeed": null, "delayMsMin": 200 },
+    "debugWorkspace": { "enabled": true, "simulationSeed": null, "delayMsMin": 200 }
+  }
 }
 ```
 
-**Breaking change (phase 1):** legacy `providerSettings.glm` and top-level provider blocks are no longer used; re-save settings or edit `providerSettings.http` in `settings.json`.
+The legacy singleton `providerSettings.http` is accepted only during load-time
+normalization. Current settings and UI use `httpConnections`.
 
-#### HTTP (`providerSettings.http`)
+#### HTTP connections (`providerSettings.httpConnections`)
 
 Normalized in `httpConnectionSettings.ts`:
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| `enabled` | `true` | Provider toggle |
-| `baseUrl` | `https://api.openai.com/v1` | API root (trailing slashes stripped) |
+| `id` | `default` | Internal connection id; also keys its API secret |
+| `label` | `HTTP` | User-visible connection name |
+| `enabled` | `false` | Connection toggle |
+| `baseUrl` | `http://localhost:11434/v1` | API root |
+| `modelCatalog` | `gpt-4o-mini` | Settings-managed model list and default |
 
-#### Debug (`providerSettings.debug`)
+#### Debug (`providerSettings.debugChat` / `debugWorkspace`)
 
-Normalized in `debugProviderSettings.ts` (simulation timing, failure injection, diagnostics). Settings-gated; disabled by default in product builds.
+Normalized in `debugProviderSettings.ts` (simulation timing, failure injection,
+diagnostics). The two scoped simulators are enabled by default, but the Chat
+simulator remains unreachable until **Enable Chat (beta)** is on.
 
-Model lists and per-thread selection use **`providerModelCatalogs.http`** (`providerModelCatalog.ts`), editable in Settings. Default model: `gpt-4o-mini`.
-
-Use `getProviderSettings(settings, "http")` from `appProviderSettings.ts` for typed access when adding providers — extend **`ProviderSettingsById`** once per new configured provider.
+Use `resolveHttpConnection` / `listConfiguredHttpConnections` for connection
+selection and `getProviderSettings` for scoped debug settings. Extend
+`ProviderSettingsById` when adding a configured provider type.
 
 ### Secrets (`provider-secrets.json`)
 
-API keys per provider — `providerSecretsStore.ts`:
+API keys per HTTP connection — `providerSecretsStore.ts`:
 
 - Path: `{appDataDir}/spec-ops/provider-secrets.json`
-- Format: `{ "version": 1, "keys": { "http": "..." } }` (`Partial<Record<ChatProviderId, string>>`)
-- Loaded at startup in `appShellRuntime.ts` → `appState.setProviderApiKey("http", …)`
+- Format: `{ "version": 1, "keys": { "default": "..." } }` (keys are connection ids)
+- Loaded at startup with `loadConnectionApiKeys()` and stored in app state by connection id
 - **Never** written to `settings.json` or chat thread files
-- Legacy `glm-secrets.json` is not used.
+- A legacy `http` key is normalized to the default connection id on read.
 
 ### “Configured” definition
 
-`isHttpConnectionConfigured(settings, apiKey)` — `enabled` and non-empty trimmed API key. Unconfigured HTTP blocks send and shows inline setup CTA in `ChatPanel.svelte` (Settings → Dev → Providers, when Chat (beta) is enabled).
+`isHttpConnectionConfigured(connection, apiKey)` requires an enabled connection,
+a valid HTTP(S) base URL, and a non-empty API key. Unconfigured HTTP blocks send
+and shows an inline setup CTA to **Settings → Dev → Providers**.
 
 ### Default provider selection
 
 `resolveDefaultChatProvider` (`selection.ts`):
 
 1. **HTTP** if configured (settings + key)
-2. Else **debug** if debug provider enabled in Developer Settings
+2. Else **debug-chat** if Debug Provider is enabled under **Settings → Dev**
 3. Else **http** as product fallback (still blocked until key is set)
 
-Product-selectable providers in UI: **`http`** only; debug appears when enabled.
+Product-selectable providers in the Chat UI are **`http`** connections plus
+**`debug-chat`** when the simulator is available.
 
 ## HTTP adapter (`OpenAiCompatibleChatProvider`)
 
@@ -129,7 +159,7 @@ POST {baseUrl}/chat/completions
 
 Resolver: `resolveOpenAiChatCompletionsUrl(baseUrl)` -> `{trimmedBase}/chat/completions`.
 
-### Request
+### Requests
 
 | Aspect | Value |
 | --- | --- |
@@ -137,7 +167,8 @@ Resolver: `resolveOpenAiChatCompletionsUrl(baseUrl)` -> `{trimmedBase}/chat/comp
 | Auth | `Authorization: Bearer {apiKey}` |
 | Content-Type | `application/json` |
 
-JSON body (only these fields are sent):
+Both methods call the same endpoint with the same messages. The `stream` field
+selects the response mode:
 
 ```json
 {
@@ -146,7 +177,7 @@ JSON body (only these fields are sent):
     { "role": "system", "content": "<mode prompt + workspace + optional summary>" },
     { "role": "user|assistant", "content": "..." }
   ],
-  "stream": false
+  "stream": "<false for sendMessage; true for streamMessage>"
 }
 ```
 
@@ -154,10 +185,14 @@ JSON body (only these fields are sent):
 
 ### Response handling
 
-Success (HTTP 2xx): parse JSON, read:
+`sendMessage` uses `stream: false`. On HTTP 2xx it parses JSON and reads:
 
 - `choices[0].message.content` — required non-empty trimmed string
 - Top-level `error.message` — treated as failure even on 200
+
+`streamMessage` uses `stream: true`. On HTTP 2xx it parses OpenAI-compatible
+SSE `data:` records, emits `choices[0].delta.content` text incrementally, and
+finishes on `[DONE]`.
 
 Errors: map status **401**, **403**, **429**, **5xx**, and model rejection messages via `mapHttpError` / `modelValidation.ts`. Bearer tokens in API messages are redacted in user copy.
 
@@ -190,7 +225,7 @@ The app targets an OpenAI-compatible chat-completions surface. Only **one operat
 
 | API | Path (relative to `baseUrl`) | Notes |
 | --- | --- | --- |
-| Chat Completions | `/chat/completions` | Non-streaming; `messages` + `model` only |
+| Chat Completions | `/chat/completions` | Buffered JSON (`stream: false`) and streaming SSE (`stream: true`); text `messages` + `model` only |
 
 ### Not used (no code paths)
 
@@ -198,7 +233,6 @@ These are common on OpenAI-compatible platforms but **absent from the codebase**
 
 | Category | Examples | Notes |
 | --- | --- | --- |
-| Streaming | `stream: true`, SSE chunks | Used by `streamMessage` |
 | Other chat params | `temperature`, `top_p`, `max_tokens`, `stop`, `presence_penalty`, `frequency_penalty`, `tools`, `tool_choice`, `response_format` | Not sent |
 | Multimodal / files | Image, file, or audio content in messages | Text-only `content` strings |
 | Embeddings | `/embeddings` | — |
@@ -215,7 +249,8 @@ These are common on OpenAI-compatible platforms but **absent from the codebase**
 | Id | Status |
 | --- | --- |
 | `http` | Implemented (`openAiCompatibleChatProvider.ts`); **Chat context only** |
-| `debug` | Implemented (`debugChatProvider.ts`); dev-only |
+| `debug-chat` | Implemented (`debugChatProvider.ts`); Chat beta simulator |
+| `debug-workspace` | Implemented (`debugChatProvider.ts`); workspace-session simulator |
 
 ## Error and validation flow
 
@@ -241,7 +276,7 @@ Send blocked reasons include `http_not_configured`, `invalid_model`, `preflight`
 | `providerModelCatalog.ts` | Model lists per provider |
 | `sendChatMessage.ts` | End-to-end turn lifecycle |
 | `chatSend.ts` | Stream vs buffered dispatch |
-| `SettingsDialog.svelte` | Connections base URL, key, catalogs |
+| `ConnectionsSettingsPanel.svelte` | HTTP provider base URL and API key UI; internal tab id `connections`, visible label **Providers** |
 | `ChatPanel.svelte` | Composer, blocked states, model selector |
 
 ## Extending HTTP integration
@@ -250,7 +285,11 @@ When adding features, keep the adapter thin:
 
 1. Extend **`ProviderRequestPayload`** or mode prompts if context changes — not provider-specific fields in the send path.
 2. Add request fields in **`openAiCompatibleChatProvider.ts`** with tests in provider adapter tests.
-3. For streaming, implement **`streamMessage`** with SSE parsing and keep `sendMessage` as fallback; update `streamProviderMessage` consumers and UX copy.
+3. When changing streaming, keep **`streamMessage`** SSE parsing and the
+   buffered `sendMessage` fallback aligned; update `streamProviderMessage`
+   consumers and UX copy together.
 4. Never persist API keys outside **`providerSecretsStore`**.
 
-See [architecture.md](../architecture.md) for overall layering and agent conventions. Product migration context lives in [ops roadmap](../../specs/ops/roadmap.md).
+See [architecture.md](../architecture.md) for overall layering and agent conventions.
+Implementation history is recorded in the
+[changelog](../../specs/changelog.md).

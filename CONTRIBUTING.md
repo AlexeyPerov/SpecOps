@@ -8,9 +8,12 @@ Prerequisites: Node.js (LTS), Rust (stable), and system `git` on `PATH`.
 
 ```sh
 cd app
-npm install
+npm ci
 npm run tauri dev
 ```
+
+Use `npm ci` for a reproducible checkout. Use `npm install` when intentionally
+changing dependencies or updating `package-lock.json`.
 
 See the root [README.md](./README.md) for build, port **1430**, and CI release notes.
 

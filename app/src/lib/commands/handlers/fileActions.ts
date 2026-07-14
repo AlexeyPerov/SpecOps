@@ -1,9 +1,9 @@
 import { dirname } from "@tauri-apps/api/path";
 import { appState } from "../../state/appState";
 import {
-  allTabs,
   getSessionActiveTab,
   getSessionSelectedTabId,
+  getSessionTabs,
   tabDocumentId,
 } from "../../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../../state/appState/contextHelpers";
@@ -306,6 +306,7 @@ export async function handleTabMoveToNewWindow(context: CommandContext): Promise
 
 export function handleTabNext(context: CommandContext): void {
   const state = context.getState();
+  // Tab cycling is pane-local: keyboard navigation stays in the focused pane.
   const tabs = getSessionTabs(getActiveSession(state));
   const index = tabs.findIndex((tab) => tab.id === getSessionSelectedTabId(getActiveSession(state)));
   if (index < 0 || tabs.length < 2) {
@@ -316,6 +317,7 @@ export function handleTabNext(context: CommandContext): void {
 
 export function handleTabPrevious(context: CommandContext): void {
   const state = context.getState();
+  // Tab cycling is pane-local: keyboard navigation stays in the focused pane.
   const tabs = getSessionTabs(getActiveSession(state));
   const index = tabs.findIndex((tab) => tab.id === getSessionSelectedTabId(getActiveSession(state)));
   if (index < 0 || tabs.length < 2) {

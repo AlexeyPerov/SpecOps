@@ -180,6 +180,10 @@
     return paneElementsList;
   }
 
+  function getPaneTabCount(paneId: string): number {
+    return layout.panes.find((pane) => pane.id === paneId)?.tabs.length ?? 0;
+  }
+
   // Tab-drop highlight is driven by each TabBar's cross-pane hover (written
   // back into the bindable `tabDropTargetPaneId`); file-drop highlight is read
   // from the parent (the project-tree drag owns that state).
@@ -208,6 +212,7 @@
         onRegisterElements={registerPaneElements}
         onUnregisterElements={unregisterPaneElements}
         getPaneElements={getPaneElements}
+        getPaneTabCount={getPaneTabCount}
         tabDropTargetPaneId={tabDropTargetPaneId}
         fileDropTargetPaneId={fileDropTargetPaneId}
         onTabDropTargetChange={setTabDropTarget}

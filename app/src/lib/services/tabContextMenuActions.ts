@@ -296,7 +296,7 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
     if (!contextTab) {
       return;
     }
-    await closeOtherTabsWithUnsavedPrompt(contextTab.id, closeTabDeps);
+    await closeOtherTabsWithUnsavedPrompt(contextTab.id, closeTabDeps, deps.getOpenTabs());
     deps.closeContextMenu();
   }
 
@@ -305,7 +305,7 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
     if (!contextTab) {
       return;
     }
-    await closeTabsToRightWithUnsavedPrompt(contextTab.id, closeTabDeps);
+    await closeTabsToRightWithUnsavedPrompt(contextTab.id, closeTabDeps, deps.getOpenTabs());
     deps.closeContextMenu();
   }
 
@@ -314,12 +314,16 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
     if (!contextTab) {
       return;
     }
-    await closeTabsToLeftWithUnsavedPrompt(contextTab.id, closeTabDeps);
+    await closeTabsToLeftWithUnsavedPrompt(contextTab.id, closeTabDeps, deps.getOpenTabs());
     deps.closeContextMenu();
   }
 
   function closeMissingFileTabs(): void {
-    appState.closeMissingFileTabs();
+    const tabIds = deps
+      .getOpenTabs()
+      .filter((tab) => !tab.pinned && Boolean(tabDocumentForTab(tab, deps.getDocuments())?.fileMissing))
+      .map((tab) => tab.id);
+    appState.closeTabsByIds(tabIds, null);
     deps.closeContextMenu();
   }
 

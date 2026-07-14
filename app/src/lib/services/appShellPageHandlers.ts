@@ -1,6 +1,6 @@
 import { tick } from "svelte";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
-import { getSessionSelectedTabId, getSessionTabs, isFileTab } from "../domain/contracts";
+import { allTabs, getSessionSelectedTabId, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import type { EditorCommandRunner } from "../types/editor";
 import type { EditorToolController } from "../editor/editorToolController";
@@ -124,7 +124,7 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
       );
       return;
     }
-    const tab = getSessionTabs(appState.getActiveSession()).find((entry) => entry.id === tabId);
+    const tab = allTabs(appState.getActiveSession().editorLayout).find((entry) => entry.id === tabId);
     if (!tab || !isFileTab(tab)) {
       void logPerfTiming(
         "tab activation side-effects skipped",
@@ -183,7 +183,7 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
 }
 
 export interface AppShellEditorHandlersDeps {
-  getActiveDocument: () =>
+  getDocument: (documentId: string) =>
     | {
         id: string;
         filePath?: string | null;
@@ -200,8 +200,8 @@ export interface AppShellEditorHandlersDeps {
 }
 
 export function createAppShellEditorHandlers(deps: AppShellEditorHandlersDeps) {
-  async function handleConfirmLargeFile(): Promise<void> {
-    const document = deps.getActiveDocument();
+  async function handleConfirmLargeFile(documentId: string): Promise<void> {
+    const document = deps.getDocument(documentId);
     if (
       !document?.filePath ||
       document.contentKind !== "large_pending" ||

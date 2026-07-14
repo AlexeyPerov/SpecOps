@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DocumentState, TabState } from "../domain/contracts";
 import { createFileTab } from "../domain/contracts";
 import {
@@ -13,8 +13,10 @@ import {
   canRenameTab,
   canRevealTabInFileManager,
   collectTabOpenPaths,
+  createTabContextMenuHandlers,
   tabDocumentForTab,
 } from "./tabContextMenuActions";
+import { appState } from "../state/appState";
 
 function doc(overrides: Partial<DocumentState> = {}): DocumentState {
   return {
@@ -98,6 +100,33 @@ describe("tabContextMenuActions", () => {
     expect(canCloseMissingFileTabs([createFileTab("tab-1", "doc-4", true)], documents)).toBe(
       false,
     );
+  });
+
+  it("closes missing tabs only from the pane that opened the menu", () => {
+    const paneTabs = [
+      createFileTab("inactive-missing", "doc-missing"),
+      createFileTab("inactive-clean", "doc-clean"),
+    ];
+    const documents = [
+      doc({ id: "doc-missing", fileMissing: true }),
+      doc({ id: "doc-clean" }),
+      doc({ id: "other-pane-missing", fileMissing: true }),
+    ];
+    const closeTabsSpy = vi.spyOn(appState, "closeTabsByIds").mockImplementation(() => {});
+    const handlers = createTabContextMenuHandlers({
+      getContextTab: () => paneTabs[0]!,
+      getOpenTabs: () => paneTabs,
+      getDocuments: () => documents,
+      getWindowId: () => "main",
+      notify: () => {},
+      closeContextMenu: () => {},
+      getNearbyFiles: () => [],
+    });
+
+    handlers.closeMissingFileTabs();
+
+    expect(closeTabsSpy).toHaveBeenCalledWith(["inactive-missing"], null);
+    closeTabsSpy.mockRestore();
   });
 
   it("enables copy-path and relative-path actions based on workspace membership", () => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFileTab, createSessionTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs, isSessionTab, tabDocumentId } from "../../domain/contracts";
+import { allTabs, createFileTab, createSessionTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs, isSessionTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -174,6 +174,31 @@ describe("appState session restore", () => {
     expect(appState.getActiveDocuments()[0]?.filePath).toBe("/tmp/ws-two/b.ts");
     expect(appState.getActiveWorkspaceLayout().projectPanelCollapsed).toBe(true);
     expect(appState.getActiveWorkspaceLayout().projectPanelWidthPx).toBe(320);
+  });
+
+  it("keeps sibling-pane tabs when the restored active pane is empty", () => {
+    appState.setEditorLayout("cols-2");
+    const layout = appState.getActiveSession().editorLayout;
+    const activePane = layout.panes[0]!;
+    const siblingPane = layout.panes[1]!;
+    const documentId = appState.openFileInPane("/tmp/restore-sibling.txt", "saved", siblingPane.id);
+    const snapshot = appState.getWindowSessionSnapshot();
+    const restoredLayout = snapshot.notepad.session.editorLayout;
+
+    snapshot.notepad.session.editorLayout = {
+      ...restoredLayout,
+      activePaneId: activePane.id,
+      panes: restoredLayout.panes.map((pane) =>
+        pane.id === activePane.id ? { ...pane, tabs: [], selectedTabId: null } : pane,
+      ),
+    };
+
+    appState.applyWindowSession(snapshot);
+
+    const restored = appState.getSnapshot().contexts.notepad;
+    expect(restored.session.editorLayout.panes).toHaveLength(2);
+    expect(allTabs(restored.session.editorLayout).some((tab) => tabDocumentId(tab) === documentId)).toBe(true);
+    expect(restored.documents.some((document) => document.id === documentId)).toBe(true);
   });
 
   it("keeps per-workspace panel layout when switching workspaces", () => {

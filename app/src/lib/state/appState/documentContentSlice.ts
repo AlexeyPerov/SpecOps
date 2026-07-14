@@ -139,6 +139,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
 
         return {
           ...patchActiveContext(state, (ctx) => {
+            // Ordinary file opens are intentionally appended to the focused pane.
             const tabs = getSessionTabs(ctx.session);
             return {
               documents: [...ctx.documents, documentState],

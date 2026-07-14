@@ -604,6 +604,30 @@ describe("tab navigation commands", () => {
     expect(getSessionSelectedTabId(appState.getActiveSession())).toBe(tabs[0]?.id);
   });
 
+  it("tab.next cycles only within the active pane", () => {
+    const { context } = createCommandContext();
+    appState.createTab();
+    appState.setEditorLayout("cols-2");
+    const layout = appState.getActiveSession().editorLayout;
+    const activePaneId = layout.panes[0]!.id;
+    const siblingPaneId = layout.panes[1]!.id;
+    appState.openFileInPane("/tmp/sibling-a.txt", "a", siblingPaneId);
+    appState.openFileInPane("/tmp/sibling-b.txt", "b", siblingPaneId);
+    appState.setActiveEditorPane(activePaneId);
+    const activePaneTabs = appState.getActiveSession().editorLayout.panes[0]!.tabs;
+    const siblingTabIds = appState.getActiveSession().editorLayout.panes[1]!.tabs.map(
+      (tab) => tab.id,
+    );
+    appState.selectTab(activePaneTabs[activePaneTabs.length - 1]!.id);
+
+    dispatchCommand("tab.next", context);
+
+    const nextLayout = appState.getActiveSession().editorLayout;
+    expect(nextLayout.activePaneId).toBe(activePaneId);
+    expect(nextLayout.panes[0]!.selectedTabId).toBe(activePaneTabs[0]!.id);
+    expect(nextLayout.panes[1]!.tabs.map((tab) => tab.id)).toEqual(siblingTabIds);
+  });
+
   it("tab.moveToNewWindow transfers the active tab", async () => {
     const { context, notify } = createCommandContext();
     moveTabToNewWindowMock.mockResolvedValue(true);

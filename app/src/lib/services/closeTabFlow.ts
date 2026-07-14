@@ -1,5 +1,5 @@
 import type { DocumentState, TabState } from "../domain/contracts";
-import { findTabOwner, getSessionTabs, isFileTab, tabDocumentId } from "../domain/contracts";
+import { allTabs, findTabOwner, isFileTab, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import {
@@ -74,7 +74,7 @@ export async function closeTabsWithUnsavedPrompt(
   selectedTabIdAfter: string | null,
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  const openTabs = getSessionTabs(getActiveSession(snapshot));
+  const openTabs = allTabs(getActiveSession(snapshot).editorLayout);
 
   for (const tabId of tabIds) {
     const tab = openTabs.find((entry) => entry.id === tabId);
@@ -101,10 +101,17 @@ export async function closeTabsWithUnsavedPrompt(
 export async function closeOtherTabsWithUnsavedPrompt(
   contextTabId: string,
   deps: CloseTabFlowDeps,
+  paneTabs?: TabState[],
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  const tabs = getSessionTabs(getActiveSession(snapshot));
+  const owner = findTabOwner(getActiveSession(snapshot).editorLayout, contextTabId);
+  if (!owner) {
+    deps.notify("Tab is no longer available.");
+    return false;
+  }
+  const tabs = paneTabs ?? owner.pane.tabs;
   if (!tabs.some((tab) => tab.id === contextTabId)) {
+    deps.notify("Tab is no longer available.");
     return false;
   }
   const tabIds = tabIdsToCloseOtherThan(tabs, contextTabId);
@@ -114,18 +121,40 @@ export async function closeOtherTabsWithUnsavedPrompt(
 export async function closeTabsToLeftWithUnsavedPrompt(
   contextTabId: string,
   deps: CloseTabFlowDeps,
+  paneTabs?: TabState[],
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  const tabIds = tabIdsToCloseToLeftOf(getSessionTabs(getActiveSession(snapshot)), contextTabId);
+  const owner = findTabOwner(getActiveSession(snapshot).editorLayout, contextTabId);
+  if (!owner) {
+    deps.notify("Tab is no longer available.");
+    return false;
+  }
+  const tabs = paneTabs ?? owner.pane.tabs;
+  if (!tabs.some((tab) => tab.id === contextTabId)) {
+    deps.notify("Tab is no longer available.");
+    return false;
+  }
+  const tabIds = tabIdsToCloseToLeftOf(tabs, contextTabId);
   return closeTabsWithUnsavedPrompt(tabIds, deps, contextTabId);
 }
 
 export async function closeTabsToRightWithUnsavedPrompt(
   contextTabId: string,
   deps: CloseTabFlowDeps,
+  paneTabs?: TabState[],
 ): Promise<boolean> {
   const snapshot = appState.getSnapshot();
-  const tabIds = tabIdsToCloseToRightOf(getSessionTabs(getActiveSession(snapshot)), contextTabId);
+  const owner = findTabOwner(getActiveSession(snapshot).editorLayout, contextTabId);
+  if (!owner) {
+    deps.notify("Tab is no longer available.");
+    return false;
+  }
+  const tabs = paneTabs ?? owner.pane.tabs;
+  if (!tabs.some((tab) => tab.id === contextTabId)) {
+    deps.notify("Tab is no longer available.");
+    return false;
+  }
+  const tabIds = tabIdsToCloseToRightOf(tabs, contextTabId);
   return closeTabsWithUnsavedPrompt(tabIds, deps, contextTabId);
 }
 

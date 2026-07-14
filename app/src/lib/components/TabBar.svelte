@@ -34,6 +34,7 @@
      */
     paneId?: string;
     getPaneElements?: () => PaneDropTargetElements[];
+    getPaneTabCount?: (paneId: string) => number;
     onMoveBetweenPanes?: (
       fromPaneId: string,
       tabId: string,
@@ -54,6 +55,7 @@
     notify = () => {},
     paneId = "",
     getPaneElements = () => [],
+    getPaneTabCount = () => openTabs.length,
     onMoveBetweenPanes,
     onDropTargetChange = () => {},
   }: Props = $props();
@@ -109,6 +111,7 @@
     getTabStripEl: () => tabStripEl,
     getPaneId: () => paneId,
     getPaneElements: () => getPaneElements(),
+    getPaneTabCount: (targetPaneId) => getPaneTabCount(targetPaneId),
     onSelect: (tabId) => onSelect(tabId),
     onReorder: (fromVisibleIndex, toVisibleIndex) => {
       const fromTab = visibleTabs[fromVisibleIndex];

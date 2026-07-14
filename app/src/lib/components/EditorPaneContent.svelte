@@ -62,7 +62,6 @@
     autoSuggest = false,
     maxBinaryOpenAsTextBytes = 0,
     maxOpenWithoutConfirmBytes = 0,
-    largeFileConfirming = false,
     canFitMarkdownSplit = true,
     windowId = "main",
     onActivePaneElement,
@@ -114,11 +113,10 @@
     autoSuggest: boolean;
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
-    largeFileConfirming: boolean;
     canFitMarkdownSplit: boolean;
     windowId: string;
     onActivePaneElement?: (element: HTMLElement | null) => void;
-    onConfirmLargeFile: () => void | Promise<void>;
+    onConfirmLargeFile: (documentId: string) => void | Promise<void>;
     onMarkdownViewModeChange: (mode: "edit" | "split" | "preview") => void;
     onUntitledTitleRefresh: (documentId: string) => void;
     onScrollTopChange: (documentId: string, scrollTop: number) => void;
@@ -220,6 +218,23 @@
     }),
   );
 
+  let confirmingDocumentId = $state<string | null>(null);
+
+  async function handleConfirmLargeFile(): Promise<void> {
+    const documentId = paneDocument?.id;
+    if (!documentId || confirmingDocumentId === documentId) {
+      return;
+    }
+    confirmingDocumentId = documentId;
+    try {
+      await onConfirmLargeFile(documentId);
+    } finally {
+      if (confirmingDocumentId === documentId) {
+        confirmingDocumentId = null;
+      }
+    }
+  }
+
   const showDiffPreview = $derived(isActivePane && previewMode === "diff");
 
   $effect(() => {
@@ -299,8 +314,8 @@
       title={paneDocument?.title ?? "Large file"}
       sizeBytes={documentView.previewFileSizeBytes}
       maxOpenWithoutConfirmBytes={maxOpenWithoutConfirmBytes}
-      confirming={isActivePane && largeFileConfirming}
-      onConfirm={onConfirmLargeFile}
+      confirming={confirmingDocumentId === paneDocument?.id}
+      onConfirm={handleConfirmLargeFile}
     />
   {:else if documentView.isTextEditorDocument}
     <div

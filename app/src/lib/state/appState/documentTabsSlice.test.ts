@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFileTab, createSessionTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs, isFileTab, isSessionTab, isViewTab, tabDocumentId } from "../../domain/contracts";
+import { allTabs, createFileTab, createSessionTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs, isFileTab, isSessionTab, isViewTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -73,6 +73,42 @@ describe("appState tabs and selection", () => {
     appState.openOrFocusViewTab("themes");
     const themesTabs = getSessionTabs(appState.getActiveSession()).filter((tab) => isViewTab(tab) && tab.view === "themes");
     expect(themesTabs).toHaveLength(1);
+  });
+
+  it("focuses an existing view tab in another pane instead of duplicating it", () => {
+    appState.openOrFocusViewTab("themes");
+    const themesTab = getSessionTabs(appState.getActiveSession()).find(
+      (tab) => isViewTab(tab) && tab.view === "themes",
+    );
+    expect(themesTab).toBeDefined();
+
+    appState.setEditorLayout("cols-2");
+    const secondPaneId = appState.getActiveSession().editorLayout.panes[1]!.id;
+    appState.setActiveEditorPane(secondPaneId);
+    appState.openOrFocusViewTab("themes");
+
+    const layout = appState.getActiveSession().editorLayout;
+    expect(allTabs(layout).filter((tab) => isViewTab(tab) && tab.view === "themes")).toHaveLength(1);
+    expect(layout.activePaneId).toBe(layout.panes[0]!.id);
+    expect(layout.panes[0]!.selectedTabId).toBe(themesTab!.id);
+  });
+
+  it("focuses an existing file tab in another pane instead of reopening it", () => {
+    appState.setEditorLayout("cols-2");
+    const secondPaneId = appState.getActiveSession().editorLayout.panes[1]!.id;
+    const documentId = appState.openFileInPane("/tmp/one-document.txt", "content", secondPaneId);
+    const firstPaneId = appState.getActiveSession().editorLayout.panes[0]!.id;
+    appState.setActiveEditorPane(firstPaneId);
+
+    appState.selectOrReopenTabForDocument(documentId);
+
+    const layout = appState.getActiveSession().editorLayout;
+    const matchingTabs = allTabs(layout).filter(
+      (tab) => isFileTab(tab) && tab.documentId === documentId,
+    );
+    expect(matchingTabs).toHaveLength(1);
+    expect(layout.activePaneId).toBe(secondPaneId);
+    expect(layout.panes[1]!.selectedTabId).toBe(matchingTabs[0]!.id);
   });
 
   it("openOrFocusViewTab does not open version-control when git integration is disabled", () => {
@@ -372,6 +408,28 @@ describe("appState tabs and selection", () => {
 
     expect(closed).toBe(true);
     expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual(["tab-1", "tab-3"]);
+  });
+
+  it("closeMissingFileTabs finds missing tabs in sibling panes", () => {
+    appState.setEditorLayout("cols-2");
+    const layout = appState.getActiveSession().editorLayout;
+    const activePaneId = layout.panes[0]!.id;
+    const siblingPaneId = layout.panes[1]!.id;
+    const documentId = appState.openFileInPane("/tmp/sibling-missing.txt", "missing", siblingPaneId);
+    appState.setDocumentDiskState(documentId, {
+      diskFingerprint: null,
+      fileMissing: true,
+    });
+    appState.setActiveEditorPane(activePaneId);
+
+    const closed = appState.closeMissingFileTabs();
+
+    expect(closed).toBe(true);
+    expect(
+      allTabs(appState.getActiveSession().editorLayout).some(
+        (tab) => isFileTab(tab) && tab.documentId === documentId,
+      ),
+    ).toBe(false);
   });
 
   it("closeMissingFileTabs keeps one Untitled tab when all tabs close", () => {

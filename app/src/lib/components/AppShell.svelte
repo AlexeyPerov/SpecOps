@@ -167,12 +167,11 @@
     autoSuggest: boolean;
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
-    largeFileConfirming: boolean;
     canFitMarkdownSplit: boolean;
     currentWindowId: string;
     onCloseTab: (paneId: string, tabId: string) => void | Promise<void>;
     onRunCommand: (commandId: AppCommandId) => void;
-    onConfirmLargeFile: () => void | Promise<void>;
+    onConfirmLargeFile: (documentId: string) => void | Promise<void>;
     onMarkdownViewModeChange: (nextMode: "edit" | "split" | "preview") => void;
     onUntitledTitleRefresh: (documentId: string) => void;
     onScrollTopChange: (documentId: string, scrollTop: number) => void;
@@ -499,7 +498,6 @@
             autoSuggest={editor.autoSuggest}
             maxBinaryOpenAsTextBytes={editor.maxBinaryOpenAsTextBytes}
             maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
-            largeFileConfirming={editor.largeFileConfirming}
             canFitMarkdownSplit={editor.canFitMarkdownSplit}
             windowId={editor.currentWindowId}
             onActivePaneElement={(element) => {

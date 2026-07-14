@@ -19,7 +19,7 @@ import {
   markDocumentsMissingUnderPath,
   syncDocumentsAfterPathRelocation,
 } from "./relocateWorkspacePaths";
-import { getSessionTabs, isFileTab, normalizeTabState, tabDocumentId } from "../domain/contracts";
+import { allTabs, getSessionTabs, isFileTab, normalizeTabState, tabDocumentId } from "../domain/contracts";
 
 describe("syncDocumentsAfterPathRelocation", () => {
   beforeEach(() => {
@@ -74,6 +74,24 @@ describe("markDocumentsMissingUnderPath", () => {
 
     expect(
       getSessionTabs(appState.getActiveSession()).some((tab) => isFileTab(normalizeTabState(tab)) && tabDocumentId(tab) === docId),
+    ).toBe(false);
+  });
+
+  it("closes deleted-file tabs owned by a sibling pane", () => {
+    const docId = appState.getActiveDocuments().find((doc) => doc.filePath?.includes("nested.ts"))?.id;
+    const tab = allTabs(appState.getActiveSession().editorLayout).find(
+      (entry) => isFileTab(entry) && entry.documentId === docId,
+    );
+    appState.setEditorLayout("cols-2");
+    const layout = appState.getActiveSession().editorLayout;
+    const sourcePane = layout.panes.find((pane) => pane.tabs.some((entry) => entry.id === tab!.id))!;
+    const activePane = layout.panes.find((pane) => pane.id !== sourcePane.id)!;
+    appState.setActiveEditorPane(activePane.id);
+
+    closeTabsForDeletedDocumentsUnderPath("/tmp/ws-del", "/tmp/ws-del/old/nested.ts");
+
+    expect(
+      allTabs(appState.getActiveSession().editorLayout).some((entry) => entry.id === tab!.id),
     ).toBe(false);
   });
 });

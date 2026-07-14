@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-14 21:56 — F1.4 Split-pane tab operations
+
+- Session-wide tab discovery now covers every pane for quick-open recency, activity-rail counts, deleted-file cleanup, save handoff, tab transfer, agent-session restore, and missing-tab cleanup. Remaining `getSessionTabs` calls are documented focused-pane operations.
+- Tab context-menu bulk close actions use the pane-local tab list that opened the menu. Close Other/Left/Right preserve dirty prompts, missing-tab close stays pane-scoped, and stale context tabs report a notification instead of silently doing nothing.
+- Large-file confirmation carries the pane document id through the editor shell, so pending files in inactive panes confirm the correct document with pane-local progress state.
+- Cross-pane body drops append using the destination pane tab count. Next/previous tab commands now follow the documented pane-local cycling policy.
+- Added split-pane regressions for inactive-pane bulk/missing close, large-file confirmation, destination drop indexing, pane-local cycling, deleted-file cleanup, and window transfer.
+- **Validation:** `npm test` passes (277 files, 2886 tests); focused F1.4 suite passes (119 tests). `npm run check` has no new F1.4 errors; 12 pre-existing errors remain in six unrelated files. Svelte autofixer reports no issues or suggestions in the edited components.
+- **`specs/…/f1-4-…-execution-plan.md`** — all tasks `[DONE]`, status Done; feature exit criteria checked, with the baseline `npm run check` limitation recorded.
+
+## 2026-07-14 21:40 — Documentation v1 execution roadmap
+
+- Added `specs/docs-1/README.md` and six ordered execution plans covering the complete July 2026 public-documentation audit.
+- **D1.1 Public links and specs visibility** — clean-clone link integrity, an explicit tracked/local-only specs policy, and useful roadmap indexes.
+- **D1.2 Contributor, agent, and governance policy** — separate human and coding-agent workflows, consolidated repository rules, and public security/conduct/issue/PR channels.
+- **D1.3 Information architecture and deduplication** — audience-based navigation, a smaller root README, and one canonical source for repeated setup, beta, and persistence content.
+- **D1.4 User guides and technical separation** — non-AI onboarding plus separate user and contributor guides for workspace agents and HTTP chat.
+- **D1.5 Accuracy, terminology, and roadmap freshness** — current roadmap status, UI labels, commands, tests, streaming behavior, and platform expectations.
+- **D1.6 CI, metadata, accessibility, and maintenance checks** — aligned merge gates, release-tag policy, package/toolchain metadata, screenshot alt text, and clean-clone link validation.
+- Recommended order: D1.1 → D1.2 → D1.3 → D1.4 → D1.5 → D1.6.
+
 ## 2026-07-14 21:36 — F1.3 Restricted save and context migration
 
 - Restricted Save As and save-on-close handoffs now close and prune the workspace tab before creating the Notepad replacement. Registry ownership, saved content, and disk fingerprints are recorded against the live Notepad document, then claimed for its window.

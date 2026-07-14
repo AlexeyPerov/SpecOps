@@ -32,6 +32,7 @@
     onRegisterElements,
     onUnregisterElements,
     getPaneElements,
+    getPaneTabCount,
     tabDropTargetPaneId = null,
     fileDropTargetPaneId = null,
     onTabDropTargetChange,
@@ -58,6 +59,7 @@
     ) => void;
     onUnregisterElements: (paneId: string) => void;
     getPaneElements: () => PaneDropTargetElements[];
+    getPaneTabCount: (paneId: string) => number;
     tabDropTargetPaneId: string | null;
     fileDropTargetPaneId: string | null;
     onTabDropTargetChange: (paneId: string | null) => void;
@@ -117,6 +119,7 @@
         {notify}
         {paneId}
         {getPaneElements}
+        {getPaneTabCount}
         onSelect={(tabId) => onSelectTab(tabId)}
         onCloseTab={(closePaneId, tabId) => onCloseTab(closePaneId, tabId)}
         onMoveBetweenPanes={onMoveTabBetweenPanes}

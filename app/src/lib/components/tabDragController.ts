@@ -52,6 +52,8 @@ export interface TabDragControllerDeps {
    * behavior (single-pane / legacy call sites).
    */
   getPaneElements?: () => PaneDropTargetElements[];
+  /** Returns the current tab count for any pane, used to append on body drops. */
+  getPaneTabCount?: (paneId: string) => number;
   onSelect: (tabId: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
   /**
@@ -136,6 +138,13 @@ export function shouldTearOffTab(
   thresholdPx = DRAG_THRESHOLD_PX,
 ): boolean {
   return didDrag || pointerDragDistance(pointerX, pointerY, startX, startY) >= thresholdPx;
+}
+
+export function crossPaneDropIndex(
+  targetIndex: number | null,
+  destinationTabCount: number,
+): number {
+  return targetIndex ?? destinationTabCount;
 }
 
 export function createTabDragController(deps: TabDragControllerDeps) {
@@ -329,7 +338,10 @@ export function createTabDragController(deps: TabDragControllerDeps) {
       state.dropPaneId = crossPaneTarget.paneId;
       // For a strip hit on the other pane, use its computed index; for a body
       // hit (or empty strip), append.
-      state.dropIndex = crossPaneTarget.index ?? deps.getOpenTabs().length;
+      state.dropIndex = crossPaneDropIndex(
+        crossPaneTarget.index,
+        deps.getPaneTabCount?.(crossPaneTarget.paneId) ?? deps.getOpenTabs().length,
+      );
     } else {
       state.dropPaneId = crossPaneTarget ? crossPaneTarget.paneId : null;
       state.dropIndex = nextDropIndex(event.clientX);
@@ -363,6 +375,11 @@ export function createTabDragController(deps: TabDragControllerDeps) {
     if (!target) {
       return;
     }
+
+    // Tab activation must not depend on the later window-level pointerup used
+    // to finish a drag. A layout remount or interrupted pointer sequence should
+    // still make an ordinary click select its tab.
+    deps.onSelect(tab.id);
 
     const dragTabRect = target.getBoundingClientRect();
     state = {

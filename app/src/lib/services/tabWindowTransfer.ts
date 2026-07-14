@@ -1,5 +1,5 @@
 import { emitTo } from "@tauri-apps/api/event";
-import { getSessionTabs } from "../domain/contracts";
+import { allTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { confirmDirtyTabBeforeTransfer } from "./closeTabFlow";
 import { closeCurrentWindowIfEmptyAfterTransfer } from "./emptyWindowLifecycle";
@@ -47,7 +47,7 @@ export async function moveTabToExistingWindow({
     return false;
   }
 
-  const tab = getSessionTabs(appState.getActiveSession()).find((entry) => entry.id === tabId);
+  const tab = allTabs(appState.getActiveSession().editorLayout).find((entry) => entry.id === tabId);
   if (!tab) {
     notify("No active tab to transfer.");
     return false;
@@ -126,7 +126,7 @@ export async function moveTabToNewWindow({
   }
 
   const snapshot = appState.getSnapshot();
-  const tab = getSessionTabs(appState.getActiveSession()).find((entry) => entry.id === tabId);
+  const tab = allTabs(appState.getActiveSession().editorLayout).find((entry) => entry.id === tabId);
   if (!tab) {
     notify("No active tab to transfer.");
     return false;

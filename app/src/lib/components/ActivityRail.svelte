@@ -2,8 +2,8 @@
   import { onDestroy } from "svelte";
   import HoverTooltip from "./HoverTooltip.svelte";
   import {
+    allTabs,
     CHAT_HTTP_CONTEXT_ID,
-    getSessionTabs,
     type ContextId,
     type WorkspaceEntry,
   } from "../domain/contracts";
@@ -163,7 +163,7 @@
     const storeWorkspaces = $chatStore.workspaces;
     for (const workspace of workspaces) {
       const sessions = storeWorkspaces[workspace.rootPath]?.sessionIndex.length ?? 0;
-      const tabs = getSessionTabs(workspace.snapshot.session).length;
+      const tabs = allTabs(workspace.snapshot.session.editorLayout).length;
       map.set(workspace.rootPath, { sessions, tabs });
     }
     return map;

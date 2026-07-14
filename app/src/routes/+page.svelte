@@ -43,7 +43,6 @@
     CHAT_HTTP_CONTEXT_ID,
     getSessionActiveTab,
     getSessionSelectedTabId,
-    getSessionTabs,
     isFileTab,
     type ContextId,
     tabDocumentId,
@@ -421,7 +420,7 @@
   );
   const quickOpenRecencyInputs = $derived.by(() => {
     const ctx = getActiveContextSnapshot(snapshot);
-    const openPaths = collectTabOpenPaths(getSessionTabs(ctx.session), ctx.documents);
+    const openPaths = collectTabOpenPaths(allTabs(ctx.session.editorLayout), ctx.documents);
     const recentPaths = snapshot.recentFiles;
     return { openPaths, recentPaths };
   });
@@ -503,7 +502,6 @@
       snapshot.settings.chatHttp,
     ),
   );
-  const sessionTabs = $derived(getSessionTabs(session));
   const sessionSelectedTabId = $derived(getSessionSelectedTabId(session));
   const activeTab = $derived(getSessionActiveTab(session));
   // Phase 4: routing reads off the ACTIVE pane's selected tab (activePane →
@@ -1068,7 +1066,8 @@
     runGoToLine,
     clearUntitledTitleDebounceTimer,
   } = createAppShellEditorHandlers({
-    getActiveDocument: () => activeDocument,
+    getDocument: (documentId) =>
+      documents.find((documentState) => documentState.id === documentId),
     getLargeFileConfirming: () => largeFileConfirming,
     setLargeFileConfirming: (value) => {
       largeFileConfirming = value;
@@ -1778,7 +1777,6 @@
     autoSuggest: snapshot.settings.autoSuggest,
     maxBinaryOpenAsTextBytes: snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes,
     maxOpenWithoutConfirmBytes: snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes,
-    largeFileConfirming,
     canFitMarkdownSplit: canFitMarkdownSplit(),
     currentWindowId,
     onCloseTab: handleCloseTab,

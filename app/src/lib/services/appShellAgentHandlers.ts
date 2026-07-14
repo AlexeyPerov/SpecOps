@@ -1,4 +1,5 @@
 import {
+  allTabs,
   CHAT_HTTP_CONTEXT_ID,
   getSessionSelectedTabId,
   getSessionTabs,
@@ -132,6 +133,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     chatStore.setActiveSessionId(sessionId);
     appState.setLastActiveSessionId(sessionId);
     const sessionSnapshot = appState.getActiveSession();
+    // Chat routing follows the selected tab in the focused pane.
     const selectedTab = getSessionTabs(sessionSnapshot).find((tab) =>
       tab.id === getSessionSelectedTabId(sessionSnapshot),
     );
@@ -140,7 +142,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     if (selectedMatchesChatSession) {
       return;
     }
-    const fileTabIds = getSessionTabs(sessionSnapshot)
+    const fileTabIds = allTabs(sessionSnapshot.editorLayout)
       .filter((tab) => isFileTab(tab))
       .map((tab) => tab.id);
     if (fileTabIds.length > 0) {
@@ -223,7 +225,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       return;
     }
     const session = appState.getActiveSession();
-    const openTabSessionIds = openSessionTabIds(getSessionTabs(session));
+    const openTabSessionIds = openSessionTabIds(allTabs(session.editorLayout));
     const prioritySessionIds = [
       ...openTabSessionIds,
       ...(session.lastActiveSessionId ? [session.lastActiveSessionId] : []),
@@ -245,6 +247,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     } else {
       chatStore.setActiveSessionId(null);
       appState.setLastActiveSessionId(null);
+      // Recovery selection is intentionally scoped to the focused pane.
       const tabs = getSessionTabs(appState.getActiveSession());
       const selectedTabId = getSessionSelectedTabId(appState.getActiveSession());
       const nextSelected = selectedTabAfterMissingLastSession(tabs, selectedTabId);
@@ -276,7 +279,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
 
   async function handleCloseTab(_paneId: string, tabId: string): Promise<void> {
     const beforeSession = appState.getActiveSession();
-    const beforeTabs = getSessionTabs(beforeSession);
+    const beforeTabs = allTabs(beforeSession.editorLayout);
     const closingTab = beforeTabs.find((tab) => tab.id === tabId);
     const closedSessionId =
       closingTab && isSessionTab(closingTab) ? closingTab.sessionId : null;
@@ -300,6 +303,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
 
     const afterSession = appState.getActiveSession();
+    // Sidebar synchronization follows the focused pane after the close.
     const selectedAfter = getSessionTabs(afterSession).find((tab) =>
       tab.id === getSessionSelectedTabId(afterSession),
     );

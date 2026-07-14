@@ -2,9 +2,9 @@ import type { AppDomainState, ContextId, ContextSnapshot } from "../../domain/co
 import {
   allTabs,
   createFileTab,
+  findTabOwner,
   getSessionTabs,
   isFileTab,
-  layoutFromFlatTabs,
   recomputeSelectedTabId,
   setActivePaneTabs,
   tabDocumentId,
@@ -24,7 +24,6 @@ import {
 } from "./contextHelpers";
 import { buildDocument } from "./documentHelpers";
 import { canCreateFileTabs, reopenTabForDocument, selectTabInternal } from "./tabHelpers";
-import { seedImplicitDraftsInContext } from "./implicitDraftContext";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
@@ -39,41 +38,53 @@ function removeFileTabFromSnapshot(
   documentId: string,
   lastActiveWindowId: string,
 ): ContextSnapshot {
-  const tabs = getSessionTabs(snapshot.session);
-  const idx = tabs.findIndex((tab) => tab.id === tabId);
-  if (idx < 0) {
+  const owner = findTabOwner(snapshot.session.editorLayout, tabId);
+  if (!owner) {
     return snapshot;
   }
-  const filtered = tabs.filter((tab) => tab.id !== tabId);
+  const filtered = owner.pane.tabs.filter((tab) => tab.id !== tabId);
+  const remainingTabs = allTabs(snapshot.session.editorLayout).filter((tab) => tab.id !== tabId);
   const documents = snapshot.documents.filter((doc) => {
     if (doc.id !== documentId) {
       return true;
     }
-    return filtered.some((tab) => isFileTab(tab) && tab.documentId === documentId);
+    return remainingTabs.some((tab) => isFileTab(tab) && tab.documentId === documentId);
   });
-  if (filtered.length === 0) {
+  if (remainingTabs.length === 0) {
     const { tabId: draftTabId, docId: draftDocId } = nextDocAndTabIds();
     const { tab, document: draftDoc } = createImplicitDraftPair(draftTabId, draftDocId);
     return {
+      ...snapshot,
       documents: [...documents, draftDoc],
       session: {
         ...snapshot.session,
-        editorLayout: layoutFromFlatTabs([tab], tab.id),
+        editorLayout: {
+          ...snapshot.session.editorLayout,
+          panes: snapshot.session.editorLayout.panes.map((pane) =>
+            pane.id === owner.pane.id ? { ...pane, tabs: [tab], selectedTabId: tab.id } : pane,
+          ),
+        },
         lastActiveSessionId: null,
         lastActiveWindowId,
       },
     };
   }
   const selectedTabId = recomputeSelectedTabId(
-    tabs,
+    owner.pane.tabs,
     filtered,
-    activePaneSelectedTabId(snapshot),
+    owner.pane.selectedTabId,
   );
   return {
+    ...snapshot,
     documents,
     session: {
       ...snapshot.session,
-      editorLayout: setActivePaneTabs(snapshot.session.editorLayout, filtered, selectedTabId),
+      editorLayout: {
+        ...snapshot.session.editorLayout,
+        panes: snapshot.session.editorLayout.panes.map((pane) =>
+          pane.id === owner.pane.id ? { ...pane, tabs: filtered, selectedTabId } : pane,
+        ),
+      },
     },
   };
 }
@@ -83,6 +94,7 @@ function addFileTabWithDocument(
   document: ContextSnapshot["documents"][number],
   tabId: string,
 ): ContextSnapshot {
+  // Migration destinations intentionally add new tabs to their focused pane.
   const tabs = getSessionTabs(snapshot.session);
   const existingTab = tabs.find(
     (tab) => isFileTab(tab) && tab.documentId === document.id,
@@ -109,6 +121,7 @@ function addFileTabWithDocument(
 
 function isDefaultBootstrapWindow(state: AppDomainState): boolean {
   const ctx = getActiveContextSnapshot(state);
+  // Bootstrap replacement is defined by the focused pane's initial draft.
   const tabs = getSessionTabs(ctx.session);
   if (tabs.length !== 1) {
     return false;
@@ -222,7 +235,7 @@ export function createTabTransferSlice(deps: {
       tabId: string,
     ): { filePath: string | null; content: string; title: string } | null {
       const snapshot = getSnapshot();
-      const tab = getSessionTabs(getActiveSession(snapshot)).find((entry) => entry.id === tabId);
+      const tab = allTabs(getActiveSession(snapshot).editorLayout).find((entry) => entry.id === tabId);
       if (!tab) {
         return null;
       }
@@ -240,42 +253,7 @@ export function createTabTransferSlice(deps: {
       };
     },
     removeTransferredTab(tabId: string): void {
-      update((state) =>
-        patchActiveContext(state, (ctx) => {
-          const tabs = getSessionTabs(ctx.session);
-          const idx = tabs.findIndex((tab) => tab.id === tabId);
-          if (idx < 0) {
-            return ctx;
-          }
-          const filtered = tabs.filter((tab) => tab.id !== tabId);
-          if (filtered.length === 0) {
-            let nextCtx: ContextSnapshot = {
-              ...ctx,
-              session: {
-                ...ctx.session,
-                editorLayout: setActivePaneTabs(ctx.session.editorLayout, [], null),
-                lastActiveSessionId: null,
-              },
-            };
-            if (canCreateFileTabs(state)) {
-              nextCtx = seedImplicitDraftsInContext(nextCtx);
-            }
-            return nextCtx;
-          }
-          const selectedTabId = recomputeSelectedTabId(
-            tabs,
-            filtered,
-            activePaneSelectedTabId(ctx),
-          );
-          return {
-            ...ctx,
-            session: {
-              ...ctx.session,
-              editorLayout: setActivePaneTabs(ctx.session.editorLayout, filtered, selectedTabId),
-            },
-          };
-        }),
-      );
+      closeTabForce(tabId);
     },
     transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
       const snapshot = getSnapshot();
@@ -283,6 +261,7 @@ export function createTabTransferSlice(deps: {
       if (!selectedTabId) {
         return null;
       }
+      // transferActiveTabOut is explicitly a focused-pane command.
       const tab = getSessionTabs(getActiveSession(snapshot)).find((entry) => entry.id === selectedTabId);
       if (!tab) {
         return null;
@@ -316,7 +295,7 @@ export function createTabTransferSlice(deps: {
           const duplicate = findDocumentByPath(state, payload.filePath);
           if (duplicate) {
             documentId = duplicate.id;
-            const existingTab = getSessionTabs(getActiveSession(state)).find(
+            const existingTab = allTabs(getActiveSession(state).editorLayout).find(
               (tab) => isFileTab(tab) && tab.documentId === duplicate.id,
             );
             if (existingTab) {
@@ -348,6 +327,7 @@ export function createTabTransferSlice(deps: {
           }));
         }
         return patchActiveContext(state, (ctx) => {
+          // Incoming transfers are intentionally appended to the focused pane.
           const tabs = getSessionTabs(ctx.session);
           return {
             documents: [...ctx.documents, newDoc],

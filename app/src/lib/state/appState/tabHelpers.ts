@@ -8,6 +8,7 @@ import {
   isViewTab,
   normalizeTabState,
   recomputeSelectedTabId,
+  setActivePaneInLayout,
   setActivePaneTabs,
   type ViewTabState,
 } from "../../domain/contracts";
@@ -106,6 +107,7 @@ export function selectTabInternal(state: AppDomainState, tabId: string): AppDoma
 export function reopenTabForDocument(state: AppDomainState, documentId: string): AppDomainState {
   const tabId = nextTabId();
   return patchActiveContext(state, (ctx) => {
+    // Reopened documents are intentionally placed in the focused pane.
     const tabs = getSessionTabs(ctx.session);
     const nextTabs = [...tabs, createFileTab(tabId, documentId)];
     return {
@@ -124,39 +126,29 @@ export function closeTabsForce(state: AppDomainState, tabIds: string[], preferre
   }
   return patchActiveContext(state, (ctx) => {
     const idsToClose = new Set(tabIds);
-    const activePaneId = ctx.session.editorLayout.activePaneId;
-    const pane = ctx.session.editorLayout.panes.find((entry) => entry.id === activePaneId);
-    if (!pane) {
-      return ctx;
+    let next = ctx;
+    for (const tabId of idsToClose) {
+      const owner = findTabOwner(next.session.editorLayout, tabId);
+      if (owner) {
+        next = closeTabInPaneForceOnContext(state, next, owner.pane.id, tabId);
+      }
     }
-    const tabs = pane.tabs;
-    const filteredTabs = tabs.filter((tab) => !idsToClose.has(tab.id));
-    if (filteredTabs.length === tabs.length) {
-      return ctx;
+    if (!preferredTabId) {
+      return next;
     }
-    if (filteredTabs.length === 0) {
-      return closeTabInPaneForceOnContext(state, ctx, activePaneId, tabs[0]?.id ?? tabIds[0]!);
+    const preferredOwner = findTabOwner(next.session.editorLayout, preferredTabId);
+    if (!preferredOwner) {
+      return next;
     }
-
+    const layout = setActivePaneInLayout(next.session.editorLayout, preferredOwner.pane.id);
     return {
-      ...ctx,
+      ...next,
       session: {
-        ...ctx.session,
+        ...next.session,
         editorLayout: {
-          ...ctx.session.editorLayout,
-          panes: ctx.session.editorLayout.panes.map((entry) =>
-            entry.id === activePaneId
-              ? {
-                  ...entry,
-                  tabs: filteredTabs,
-                  selectedTabId: recomputeSelectedTabId(
-                    tabs,
-                    filteredTabs,
-                    entry.selectedTabId,
-                    preferredTabId,
-                  ),
-                }
-              : entry,
+          ...layout,
+          panes: layout.panes.map((pane) =>
+            pane.id === preferredOwner.pane.id ? { ...pane, selectedTabId: preferredTabId } : pane,
           ),
         },
       },

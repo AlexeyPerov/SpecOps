@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getSessionTabs, isFileTab, type ExternalFilesSettings } from "../domain/contracts";
 import { appState } from "../state/appState";
-import { createAppShellFileHandlers } from "./appShellPageHandlers";
+import { createAppShellEditorHandlers, createAppShellFileHandlers } from "./appShellPageHandlers";
 import { checkDocumentIfDeferred } from "./externalFileChanges";
+import { confirmLargeFileOpen } from "./openFileGate";
 
 vi.mock("./externalFileChanges", () => ({
   checkDocumentIfDeferred: vi.fn(async () => "unchanged"),
+}));
+vi.mock("./openFileGate", () => ({
+  confirmLargeFileOpen: vi.fn(async () => {}),
 }));
 
 const checkDocumentIfDeferredMock = vi.mocked(checkDocumentIfDeferred);
@@ -104,5 +108,40 @@ describe("createAppShellFileHandlers.onTabActivated", () => {
     expect(checkDocumentIfDeferredMock).toHaveBeenCalledTimes(2);
     expect(checkDocumentIfDeferredMock).toHaveBeenNthCalledWith(1, firstDocumentId, "tab");
     expect(checkDocumentIfDeferredMock).toHaveBeenNthCalledWith(2, secondDocumentId, "tab");
+  });
+});
+
+describe("createAppShellEditorHandlers.handleConfirmLargeFile", () => {
+  it("confirms the document requested by an inactive pane", async () => {
+    const notify = vi.fn();
+    let confirming = false;
+    const handlers = createAppShellEditorHandlers({
+      getDocument: (documentId) =>
+        documentId === "inactive-doc"
+          ? {
+              id: "inactive-doc",
+              filePath: "/tmp/inactive-large.txt",
+              contentKind: "large_pending",
+            }
+          : undefined,
+      getLargeFileConfirming: () => confirming,
+      setLargeFileConfirming: (value) => {
+        confirming = value;
+      },
+      getGoToLineValue: () => "",
+      getEditorRunner: () => null,
+      getUntitledTitleDebounceTimer: () => null,
+      setUntitledTitleDebounceTimer: () => {},
+      notify,
+    });
+
+    await handlers.handleConfirmLargeFile("inactive-doc");
+
+    expect(confirmLargeFileOpen).toHaveBeenCalledWith(
+      "inactive-doc",
+      "/tmp/inactive-large.txt",
+    );
+    expect(notify).toHaveBeenCalledWith("Opened /tmp/inactive-large.txt");
+    expect(confirming).toBe(false);
   });
 });

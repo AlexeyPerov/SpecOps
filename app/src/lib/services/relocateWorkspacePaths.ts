@@ -1,6 +1,6 @@
 import { appState } from "../state/appState";
 import type { ContextId } from "../domain/contracts";
-import { getSessionTabs, isFileTab, normalizeTabState } from "../domain/contracts";
+import { allTabs, isFileTab, normalizeTabState } from "../domain/contracts";
 import { normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
 import { renameOpenFileRegistry } from "./openFileRegistry";
 import { isPathUnderRoot } from "./workspacePaths";
@@ -145,7 +145,7 @@ export function closeTabsForDeletedDocumentsUnderPath(
     return;
   }
 
-  const tabIds = getSessionTabs(workspace.snapshot.session)
+  const tabIds = allTabs(workspace.snapshot.session.editorLayout)
     .map((rawTab) => normalizeTabState(rawTab))
     .filter((tab) => isFileTab(tab) && deletedDocumentIds.has(tab.documentId))
     .map((tab) => tab.id);
@@ -157,14 +157,14 @@ export function closeTabsForDeletedDocumentsUnderPath(
 
 export function findFileTabIdForDocument(documentId: string): string | null {
   const snapshot = appState.getSnapshot();
-  for (const tab of getSessionTabs(snapshot.contexts.notepad.session)) {
+  for (const tab of allTabs(snapshot.contexts.notepad.session.editorLayout)) {
     const normalized = normalizeTabState(tab);
     if (isFileTab(normalized) && normalized.documentId === documentId) {
       return normalized.id;
     }
   }
   for (const workspace of snapshot.contexts.workspaces) {
-    for (const tab of getSessionTabs(workspace.snapshot.session)) {
+    for (const tab of allTabs(workspace.snapshot.session.editorLayout)) {
       const normalized = normalizeTabState(tab);
       if (isFileTab(normalized) && normalized.documentId === documentId) {
         return normalized.id;

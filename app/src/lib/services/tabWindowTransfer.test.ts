@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
+import { allTabs, getSessionSelectedTabId, getSessionTabs, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { moveTabToNewWindow } from "./tabWindowTransfer";
 import { createNewWindowWithTransfer } from "./windowManager";
@@ -62,5 +62,39 @@ describe("moveTabToNewWindow", () => {
       "main",
       appState.getSnapshot(),
     );
+  });
+
+  it("transfers a tab owned by an inactive pane", async () => {
+    appState.setEditorLayout("cols-2");
+    const layout = appState.getActiveSession().editorLayout;
+    const activePaneId = layout.panes[0]!.id;
+    const inactivePaneId = layout.panes[1]!.id;
+    const documentId = appState.openFileInPane(
+      "/tmp/inactive-pane-transfer.txt",
+      "payload",
+      inactivePaneId,
+    );
+    appState.setActiveEditorPane(activePaneId);
+    const tab = allTabs(appState.getActiveSession().editorLayout).find(
+      (entry) => isFileTab(entry) && entry.documentId === documentId,
+    );
+    createNewWindowWithTransferMock.mockResolvedValue("window-2");
+
+    await expect(
+      moveTabToNewWindow({
+        tabId: tab!.id,
+        sourceWindowId: "main",
+        notify: vi.fn(),
+      }),
+    ).resolves.toBe(true);
+
+    expect(
+      allTabs(appState.getActiveSession().editorLayout).some((entry) => entry.id === tab!.id),
+    ).toBe(false);
+    expect(createNewWindowWithTransferMock).toHaveBeenCalledWith(expect.anything(), {
+      filePath: "/tmp/inactive-pane-transfer.txt",
+      content: "payload",
+      title: "inactive-pane-transfer.txt",
+    });
   });
 });

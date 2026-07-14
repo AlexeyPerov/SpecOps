@@ -160,6 +160,26 @@ describe("closeOtherTabsWithUnsavedPrompt", () => {
     expect(closed).toBe(false);
     expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual(before);
   });
+
+  it("closes other tabs in an explicitly targeted inactive pane", async () => {
+    appState.setEditorLayout("cols-2");
+    const layout = appState.getActiveSession().editorLayout;
+    const activePaneId = layout.panes[0]!.id;
+    const inactivePaneId = layout.panes[1]!.id;
+    appState.openFileInPane("/tmp/inactive-a.txt", "a", inactivePaneId);
+    appState.openFileInPane("/tmp/inactive-b.txt", "b", inactivePaneId);
+    appState.setActiveEditorPane(activePaneId);
+    const paneTabs = appState.getActiveSession().editorLayout.panes[1]!.tabs;
+    const contextTabId = paneTabs[1]!.id;
+
+    const closed = await closeOtherTabsWithUnsavedPrompt(contextTabId, deps, paneTabs);
+
+    expect(closed).toBe(true);
+    expect(appState.getActiveSession().editorLayout.panes[1]!.tabs.map((tab) => tab.id)).toEqual([
+      contextTabId,
+    ]);
+    expect(appState.getActiveSession().editorLayout.panes[0]!.tabs).toHaveLength(1);
+  });
 });
 
 describe("closeTabsToLeftWithUnsavedPrompt", () => {
@@ -201,6 +221,26 @@ describe("closeTabsToLeftWithUnsavedPrompt", () => {
 
     expect(closed).toBe(false);
     expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual(before);
+  });
+
+  it("closes tabs to the left in an explicitly targeted inactive pane", async () => {
+    appState.setEditorLayout("cols-2");
+    const layout = appState.getActiveSession().editorLayout;
+    const activePaneId = layout.panes[0]!.id;
+    const inactivePaneId = layout.panes[1]!.id;
+    appState.openFileInPane("/tmp/left-a.txt", "a", inactivePaneId);
+    appState.openFileInPane("/tmp/left-b.txt", "b", inactivePaneId);
+    appState.openFileInPane("/tmp/left-c.txt", "c", inactivePaneId);
+    appState.setActiveEditorPane(activePaneId);
+    const paneTabs = appState.getActiveSession().editorLayout.panes[1]!.tabs;
+    const contextTabId = paneTabs[2]!.id;
+    const expectedRemainingIds = paneTabs.slice(2).map((tab) => tab.id);
+
+    await closeTabsToLeftWithUnsavedPrompt(contextTabId, deps, paneTabs);
+
+    expect(appState.getActiveSession().editorLayout.panes[1]!.tabs.map((tab) => tab.id)).toEqual(
+      expectedRemainingIds,
+    );
   });
 });
 
@@ -244,5 +284,24 @@ describe("closeTabsToRightWithUnsavedPrompt", () => {
 
     expect(closed).toBe(false);
     expect(getSessionTabs(appState.getActiveSession()).map((tab) => tab.id)).toEqual(before);
+  });
+
+  it("closes tabs to the right in an explicitly targeted inactive pane", async () => {
+    appState.setEditorLayout("cols-2");
+    const layout = appState.getActiveSession().editorLayout;
+    const activePaneId = layout.panes[0]!.id;
+    const inactivePaneId = layout.panes[1]!.id;
+    appState.openFileInPane("/tmp/right-a.txt", "a", inactivePaneId);
+    appState.openFileInPane("/tmp/right-b.txt", "b", inactivePaneId);
+    appState.openFileInPane("/tmp/right-c.txt", "c", inactivePaneId);
+    appState.setActiveEditorPane(activePaneId);
+    const paneTabs = appState.getActiveSession().editorLayout.panes[1]!.tabs;
+    const contextTabId = paneTabs[0]!.id;
+
+    await closeTabsToRightWithUnsavedPrompt(contextTabId, deps, paneTabs);
+
+    expect(appState.getActiveSession().editorLayout.panes[1]!.tabs.map((tab) => tab.id)).toEqual([
+      contextTabId,
+    ]);
   });
 });

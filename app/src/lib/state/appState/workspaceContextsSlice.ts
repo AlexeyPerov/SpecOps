@@ -9,9 +9,9 @@ import type {
   WorkspaceLayoutState,
 } from "../../domain/contracts";
 import {
+  totalTabCount,
   createFileTab,
   createSinglePaneLayout,
-  getSessionTabs,
 } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { isChatHttpRailVisible } from "../../ai/providers/chatHttpRailGating";
@@ -55,7 +55,10 @@ function fallbackContextSnapshot(lastActiveWindowId: string): ContextSnapshot {
 }
 
 function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot {
-  if (getSessionTabs(snapshot.session).length > 0) {
+  // A split may deliberately leave its active pane empty while another pane
+  // owns open tabs. Checking only the active pane here would replace the whole
+  // restored context with a fresh draft and discard those sibling panes.
+  if (totalTabCount(snapshot.session.editorLayout) > 0) {
     return snapshot;
   }
   return fallbackContextSnapshot(snapshot.session.lastActiveWindowId);

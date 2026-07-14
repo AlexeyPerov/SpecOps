@@ -1,4 +1,4 @@
-import { emitTo } from "@tauri-apps/api/event";
+import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { allTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { confirmDirtyTabBeforeTransfer } from "./closeTabFlow";
@@ -7,9 +7,18 @@ import { syncOpenFileRegistryForWindow } from "./openFileRegistry";
 import {
   createNewWindowWithTransfer,
   WINDOW_EVENT_MERGE_TAB,
+  WINDOW_EVENT_MERGE_TAB_ACK,
+  type MergeTabAckPayload,
   type MergeTabPayload,
 } from "./windowManager";
 import { findWebviewWindowAtScreenPoint, focusWebviewWindow } from "./windowTargeting";
+
+/** How long the source window waits for the target to acknowledge MERGE_TAB. */
+export const MERGE_TAB_ACK_TIMEOUT_MS = 10_000;
+
+const FAILED_TRANSFER_MESSAGE = "Failed to move tab to the target window.";
+const TIMEOUT_TRANSFER_MESSAGE =
+  "Timed out waiting for the target window. The tab was kept in this window.";
 
 type MoveTabInput = {
   tabId: string;
@@ -30,6 +39,64 @@ async function finalizeSourceAfterTransfer(
   if (closed) {
     notify("Closed empty window.");
   }
+}
+
+/**
+ * Emit MERGE_TAB to the target and wait for MERGE_TAB_ACK before removing the
+ * source tab. On timeout/error the source tab is left in place.
+ */
+export async function requestMergeTabAck(
+  targetWindowId: string,
+  payload: MergeTabPayload,
+  timeoutMs: number = MERGE_TAB_ACK_TIMEOUT_MS,
+): Promise<MergeTabAckPayload> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let unlisten: UnlistenFn | null = null;
+    const timeoutId = setTimeout(() => {
+      finish({
+        sourceTabId: payload.sourceTabId,
+        ok: false,
+        error: TIMEOUT_TRANSFER_MESSAGE,
+      });
+    }, timeoutMs);
+
+    function finish(result: MergeTabAckPayload): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      void unlisten?.();
+      resolve(result);
+    }
+
+    void listen<MergeTabAckPayload>(WINDOW_EVENT_MERGE_TAB_ACK, (event) => {
+      if (event.payload.sourceTabId !== payload.sourceTabId) {
+        return;
+      }
+      finish(event.payload);
+    })
+      .then(async (fn) => {
+        unlisten = fn;
+        try {
+          await emitTo<MergeTabPayload>(targetWindowId, WINDOW_EVENT_MERGE_TAB, payload);
+        } catch {
+          finish({
+            sourceTabId: payload.sourceTabId,
+            ok: false,
+            error: FAILED_TRANSFER_MESSAGE,
+          });
+        }
+      })
+      .catch(() => {
+        finish({
+          sourceTabId: payload.sourceTabId,
+          ok: false,
+          error: FAILED_TRANSFER_MESSAGE,
+        });
+      });
+  });
 }
 
 export async function moveTabToExistingWindow({
@@ -67,14 +134,14 @@ export async function moveTabToExistingWindow({
     return false;
   }
 
-  try {
-    await emitTo<MergeTabPayload>(targetWindowId, WINDOW_EVENT_MERGE_TAB, {
-      ...payload,
-      sourceWindowId,
-      sourceTabId: tabId,
-    });
-  } catch {
-    notify("Failed to move tab to the target window.");
+  const ack = await requestMergeTabAck(targetWindowId, {
+    ...payload,
+    sourceWindowId,
+    sourceTabId: tabId,
+  });
+
+  if (!ack.ok) {
+    notify(ack.error ?? FAILED_TRANSFER_MESSAGE);
     return false;
   }
 

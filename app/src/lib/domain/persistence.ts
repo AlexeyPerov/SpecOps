@@ -44,6 +44,11 @@ export interface WindowSessionSnapshot {
    * mode/workspace. Per-window (each window remembers its own rail width).
    */
   activityRailWidthPx?: number;
+  /**
+   * Optional diagnostic stamp set when this window entry is written.
+   * Not used for merge yet; reserved for future cross-window conflict detection.
+   */
+  updatedAt?: string;
 }
 
 export interface AppSessionSnapshot {

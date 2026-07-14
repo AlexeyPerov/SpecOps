@@ -306,7 +306,7 @@ export interface AppShellMountDeps {
   getCurrentWebviewWindowLabel: () => string;
   handleKeydown: (event: KeyboardEvent) => void;
   stopChatAccessMonitor: () => void;
-  flushSessionBeforeUnload: () => void;
+  flushSessionBeforeUnload: () => void | Promise<void>;
   cleanup: AppShellMountCleanup;
 }
 
@@ -384,7 +384,9 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
   window.addEventListener("dragover", preventBrowserDragOver);
 
   function onPageHide(): void {
-    deps.flushSessionBeforeUnload();
+    // Fire-and-forget: pagehide/beforeunload cannot reliably await async work,
+    // but flushSessionPersistence awaits the session write chain internally.
+    void deps.flushSessionBeforeUnload();
   }
 
   window.addEventListener("pagehide", onPageHide);
@@ -403,6 +405,6 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     window.removeEventListener("dragover", preventBrowserDragOver);
     window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("beforeunload", onPageHide);
-    deps.flushSessionBeforeUnload();
+    void deps.flushSessionBeforeUnload();
   };
 }

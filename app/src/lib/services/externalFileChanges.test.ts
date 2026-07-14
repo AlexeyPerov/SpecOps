@@ -599,9 +599,51 @@ describe("cross-context external checks", () => {
 
     const startupPromise = runStartupExternalChecks();
     // Cancel while the background drain is still gated.
-    cancelStartupExternalChecks();
+    await cancelStartupExternalChecks();
     releaseStat();
     await expect(startupPromise).resolves.toBeUndefined();
     await awaitStartupExternalChecksBackgroundForTests();
+  });
+
+  it("skips stale document ids pruned during background drain", async () => {
+    const keepId = prepareSavedFile("/tmp/startup-keep.txt", "keep", fp1);
+    const staleId = prepareSavedFile("/tmp/startup-stale.txt", "stale", fp1);
+    const keepTab = getSessionTabs(appState.getActiveSession()).find(
+      (tab) => tab.kind === "file" && tab.documentId === keepId,
+    );
+    const staleTab = getSessionTabs(appState.getActiveSession()).find(
+      (tab) => tab.kind === "file" && tab.documentId === staleId,
+    );
+    if (!keepTab || !staleTab) {
+      throw new Error("expected keep and stale tabs");
+    }
+    appState.selectTab(keepTab.id);
+
+    let releasePriority!: () => void;
+    const priorityGate = new Promise<void>((resolve) => {
+      releasePriority = resolve;
+    });
+    const checkedPaths: string[] = [];
+    statMock.mockImplementation(async (path: string) => {
+      checkedPaths.push(path);
+      if (path.endsWith("startup-keep.txt")) {
+        await priorityGate;
+      }
+      return fp2;
+    });
+    readTextFileMock.mockResolvedValue("fresh");
+
+    const startupPromise = runStartupExternalChecks();
+    await flushMicrotasks(10);
+    // Prune the deferred document while the priority check is still gated so the
+    // background drain skips it via findDocumentContext.
+    appState.closeTabForce(staleTab.id);
+    releasePriority();
+    await startupPromise;
+    await awaitStartupExternalChecksBackgroundForTests();
+
+    expect(checkedPaths.some((path) => path.endsWith("startup-stale.txt"))).toBe(false);
+    expect(appState.getActiveDocuments().find((doc) => doc.id === keepId)?.content).toBe("fresh");
+    expect(appState.getActiveDocuments().find((doc) => doc.id === staleId)).toBeUndefined();
   });
 });

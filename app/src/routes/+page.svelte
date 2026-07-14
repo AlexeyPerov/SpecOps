@@ -1228,9 +1228,8 @@
       getCurrentWebviewWindowLabel: () => getCurrentWebviewWindow().label,
       handleKeydown,
       stopChatAccessMonitor,
-      flushSessionBeforeUnload: () => {
-        void flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label);
-      },
+      flushSessionBeforeUnload: () =>
+        flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
       cleanup: {
         disconnectLayoutObserver,
         clearUntitledTitleDebounceTimer,

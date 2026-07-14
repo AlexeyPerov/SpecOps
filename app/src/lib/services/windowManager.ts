@@ -13,10 +13,18 @@ export const WINDOW_EVENT_TRANSFER_TAB = "spec-ops/window/transfer-tab";
 export const WINDOW_EVENT_SELECT_TAB_FOR_PATH = "spec-ops/window/select-tab-for-path";
 export const WINDOW_EVENT_WINDOW_READY = "spec-ops/window/ready";
 export const WINDOW_EVENT_MERGE_TAB = "spec-ops/window/merge-tab";
+/** Target → source acknowledgment after adopting (or failing to adopt) a merged tab. */
+export const WINDOW_EVENT_MERGE_TAB_ACK = "spec-ops/window/merge-tab-ack";
 
 export type MergeTabPayload = TabTransferPayload & {
   sourceWindowId: string;
   sourceTabId: string;
+};
+
+export type MergeTabAckPayload = {
+  sourceTabId: string;
+  ok: boolean;
+  error?: string;
 };
 
 export type TabTransferPayload = {

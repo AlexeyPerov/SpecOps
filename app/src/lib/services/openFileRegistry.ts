@@ -15,8 +15,20 @@ import {
 } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
+import { withSessionWriteLock } from "./sessionWriteLock";
 
 const SESSION_FILE = "session.json";
+
+function emptySession(): AppSessionSnapshot {
+  return {
+    version: 2,
+    updatedAt: new Date().toISOString(),
+    lastActiveWindowId: "main",
+    openFileRegistry: {},
+    recentFiles: [],
+    windows: {},
+  };
+}
 
 async function getSessionPath(): Promise<string> {
   const dataDir = await ensureSpecOpsDataDir();
@@ -46,33 +58,12 @@ async function writeSessionSnapshot(snapshot: AppSessionSnapshot): Promise<void>
   await writeTextFile(sessionPath, JSON.stringify(snapshot, null, 2));
 }
 
-export async function readOpenFileRegistry(): Promise<OpenFileRegistry> {
-  const snapshot = await readSessionSnapshot();
-  return snapshot?.openFileRegistry ?? {};
-}
-
-export async function writeOpenFileRegistry(registry: OpenFileRegistry): Promise<void> {
-  const current =
-    (await readSessionSnapshot()) ??
-    ({
-      version: 2,
-      updatedAt: new Date().toISOString(),
-      lastActiveWindowId: "main",
-      openFileRegistry: {},
-      recentFiles: [],
-      windows: {},
-    } satisfies AppSessionSnapshot);
-
-  current.openFileRegistry = registry;
-  current.updatedAt = new Date().toISOString();
-  await writeSessionSnapshot(current);
-}
-
-export async function syncOpenFileRegistryForWindow(
+function buildRegistryForWindow(
+  existing: OpenFileRegistry,
   windowId: string,
   state: AppDomainState,
-): Promise<void> {
-  const registry = await readOpenFileRegistry();
+): OpenFileRegistry {
+  const registry: OpenFileRegistry = { ...existing };
 
   for (const [path, owner] of Object.entries(registry)) {
     if (owner.windowId === windowId) {
@@ -103,7 +94,47 @@ export async function syncOpenFileRegistryForWindow(
     }
   }
 
-  await writeOpenFileRegistry(registry);
+  return registry;
+}
+
+/**
+ * Registry sync without acquiring the session write lock.
+ * Call only from inside {@link withSessionWriteLock} (e.g. persistSessionSnapshot).
+ */
+export async function syncOpenFileRegistryForWindowUnlocked(
+  windowId: string,
+  state: AppDomainState,
+): Promise<void> {
+  const snapshot = await readSessionSnapshot();
+  const current = snapshot ?? emptySession();
+  current.openFileRegistry = buildRegistryForWindow(
+    snapshot?.openFileRegistry ?? {},
+    windowId,
+    state,
+  );
+  current.updatedAt = new Date().toISOString();
+  await writeSessionSnapshot(current);
+}
+
+export async function readOpenFileRegistry(): Promise<OpenFileRegistry> {
+  const snapshot = await readSessionSnapshot();
+  return snapshot?.openFileRegistry ?? {};
+}
+
+export async function writeOpenFileRegistry(registry: OpenFileRegistry): Promise<void> {
+  await withSessionWriteLock(async () => {
+    const current = (await readSessionSnapshot()) ?? emptySession();
+    current.openFileRegistry = registry;
+    current.updatedAt = new Date().toISOString();
+    await writeSessionSnapshot(current);
+  });
+}
+
+export async function syncOpenFileRegistryForWindow(
+  windowId: string,
+  state: AppDomainState,
+): Promise<void> {
+  await withSessionWriteLock(() => syncOpenFileRegistryForWindowUnlocked(windowId, state));
 }
 
 export async function claimOpenFile(
@@ -111,9 +142,16 @@ export async function claimOpenFile(
   windowId: string,
   documentId: string,
 ): Promise<void> {
-  const registry = await readOpenFileRegistry();
-  registry[normalizePathSync(filePath)] = { windowId, documentId };
-  await writeOpenFileRegistry(registry);
+  await withSessionWriteLock(async () => {
+    const snapshot = await readSessionSnapshot();
+    const registry: OpenFileRegistry = { ...(snapshot?.openFileRegistry ?? {}) };
+    registry[normalizePathSync(filePath)] = { windowId, documentId };
+
+    const current = snapshot ?? emptySession();
+    current.openFileRegistry = registry;
+    current.updatedAt = new Date().toISOString();
+    await writeSessionSnapshot(current);
+  });
 }
 
 export function applyRegistryDedupeToWindowSnapshot(
@@ -207,29 +245,43 @@ export async function dedupeWindowSnapshotAgainstRegistry(
   windowId: string,
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
-  const registry = await readOpenFileRegistry();
-  const { registry: nextRegistry, snapshot: nextSnapshot } =
-    applyRegistryDedupeToWindowSnapshot(registry, windowId, snapshot);
+  return withSessionWriteLock(async () => {
+    const session = await readSessionSnapshot();
+    const registry = session?.openFileRegistry ?? {};
+    const { registry: nextRegistry, snapshot: nextSnapshot } =
+      applyRegistryDedupeToWindowSnapshot(registry, windowId, snapshot);
 
-  await writeOpenFileRegistry(nextRegistry);
+    const current = session ?? emptySession();
+    current.openFileRegistry = nextRegistry;
+    current.updatedAt = new Date().toISOString();
+    await writeSessionSnapshot(current);
 
-  return nextSnapshot;
+    return nextSnapshot;
+  });
 }
 
 export async function releaseAllOpenFilesForWindow(windowId: string): Promise<void> {
-  const registry = await readOpenFileRegistry();
-  let changed = false;
-
-  for (const [path, owner] of Object.entries(registry)) {
-    if (owner.windowId === windowId) {
-      delete registry[path];
-      changed = true;
+  await withSessionWriteLock(async () => {
+    const session = await readSessionSnapshot();
+    if (!session) {
+      return;
     }
-  }
+    const registry = { ...session.openFileRegistry };
+    let changed = false;
 
-  if (changed) {
-    await writeOpenFileRegistry(registry);
-  }
+    for (const [path, owner] of Object.entries(registry)) {
+      if (owner.windowId === windowId) {
+        delete registry[path];
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      session.openFileRegistry = registry;
+      session.updatedAt = new Date().toISOString();
+      await writeSessionSnapshot(session);
+    }
+  });
 }
 
 export async function renameOpenFileRegistry(
@@ -238,10 +290,17 @@ export async function renameOpenFileRegistry(
   windowId: string,
   documentId: string,
 ): Promise<void> {
-  const registry = await readOpenFileRegistry();
-  if (oldPath) {
-    delete registry[normalizePathSync(oldPath)];
-  }
-  registry[normalizePathSync(newPath)] = { windowId, documentId };
-  await writeOpenFileRegistry(registry);
+  await withSessionWriteLock(async () => {
+    const session = await readSessionSnapshot();
+    const registry: OpenFileRegistry = { ...(session?.openFileRegistry ?? {}) };
+    if (oldPath) {
+      delete registry[normalizePathSync(oldPath)];
+    }
+    registry[normalizePathSync(newPath)] = { windowId, documentId };
+
+    const current = session ?? emptySession();
+    current.openFileRegistry = registry;
+    current.updatedAt = new Date().toISOString();
+    await writeSessionSnapshot(current);
+  });
 }

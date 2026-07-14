@@ -19,6 +19,7 @@ import {
   renameOpenFileRegistry,
   syncOpenFileRegistryForWindow,
 } from "./openFileRegistry";
+import { resetSessionWriteLockForTests } from "./sessionWriteLock";
 
 const sessionMock = createSessionFsMock();
 
@@ -110,6 +111,8 @@ function emptySession(): AppSessionSnapshot {
 
 describe("readOpenFileRegistry", () => {
   beforeEach(() => {
+    resetSessionWriteLockForTests();
+    sessionMock.restoreFsImplementations();
     sessionMock.setSessionStore(null);
     sessionMock.readTextFile.mockClear();
     sessionMock.writeTextFile.mockClear();
@@ -135,6 +138,8 @@ describe("readOpenFileRegistry", () => {
 
 describe("claimOpenFile", () => {
   beforeEach(() => {
+    resetSessionWriteLockForTests();
+    sessionMock.restoreFsImplementations();
     sessionMock.setSessionStore(emptySession());
   });
 
@@ -148,6 +153,8 @@ describe("claimOpenFile", () => {
 
 describe("syncOpenFileRegistryForWindow", () => {
   beforeEach(() => {
+    resetSessionWriteLockForTests();
+    sessionMock.restoreFsImplementations();
     sessionMock.setSessionStore({
       ...emptySession(),
       openFileRegistry: {
@@ -486,6 +493,8 @@ describe("releaseAllOpenFilesForWindow", () => {
 
 describe("renameOpenFileRegistry", () => {
   beforeEach(() => {
+    resetSessionWriteLockForTests();
+    sessionMock.restoreFsImplementations();
     sessionMock.setSessionStore({
       ...emptySession(),
       openFileRegistry: {

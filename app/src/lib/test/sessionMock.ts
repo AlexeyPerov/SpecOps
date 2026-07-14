@@ -27,6 +27,30 @@ export function createSessionFsMock() {
     diskFiles.set(path, content);
   });
 
+  function restoreFsImplementations(): void {
+    readTextFile.mockReset();
+    writeTextFile.mockReset();
+    readTextFile.mockImplementation(async (path: string) => {
+      if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
+        if (!sessionStore) {
+          throw new Error("no such file or directory");
+        }
+        return JSON.stringify(sessionStore);
+      }
+      if (diskFiles.has(path)) {
+        return diskFiles.get(path)!;
+      }
+      throw new Error(`no such file or directory: ${path}`);
+    });
+    writeTextFile.mockImplementation(async (path: string, content: string) => {
+      if (path.includes("session")) {
+        sessionStore = JSON.parse(content) as AppSessionSnapshot;
+        return;
+      }
+      diskFiles.set(path, content);
+    });
+  }
+
   return {
     diskFiles,
     getSessionStore: () => sessionStore,
@@ -35,6 +59,8 @@ export function createSessionFsMock() {
     },
     readTextFile,
     writeTextFile,
+    /** Clears call history and restores default read/write implementations. */
+    restoreFsImplementations,
   };
 }
 

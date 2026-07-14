@@ -35,6 +35,7 @@ vi.mock("./logging", () => ({
 vi.mock("./openFileRegistry", () => ({
   dedupeWindowSnapshotAgainstRegistry: vi.fn(async (_windowId, snapshot) => snapshot),
   syncOpenFileRegistryForWindow: vi.fn().mockResolvedValue(undefined),
+  syncOpenFileRegistryForWindowUnlocked: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./fileSystem", () => ({
@@ -430,6 +431,7 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
 
 describe("restoreWindowSession", () => {
   beforeEach(() => {
+    sessionMock.restoreFsImplementations();
     sessionMock.setSessionStore(null);
     sessionMock.diskFiles.clear();
   });
@@ -444,14 +446,12 @@ describe("restoreWindowSession", () => {
     expect(restored?.recentFiles).toEqual(["/tmp/restored.txt"]);
   });
 
-  it("falls back to last active window snapshot when current window snapshot is missing", async () => {
+  it("returns null for a new window id instead of hydrating another window's session", async () => {
     const snapshot = windowSnapshot();
     sessionMock.setSessionStore(sessionWithWindow("win-z", snapshot));
     sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
 
-    const restored = await sessionManager.restoreWindowSession("main");
-    expect(restored?.snapshot.notepad.documents[0]?.content).toBe("saved");
-    expect(restored?.snapshot.activeContextId).toBe("notepad");
+    await expect(sessionManager.restoreWindowSession("main")).resolves.toBeNull();
   });
 
   it("preserves chat-http active context during restore sanitization", async () => {
@@ -506,6 +506,8 @@ describe("restoreWindowSession", () => {
 
 describe("persistSessionSnapshot", () => {
   beforeEach(() => {
+    sessionManager.resetSessionManagerForTests();
+    sessionMock.restoreFsImplementations();
     sessionMock.setSessionStore(null);
     appState.resetAppState();
   });
@@ -541,32 +543,67 @@ describe("persistSessionSnapshot", () => {
   });
 
   it("preserves global recent files when persisting a window snapshot", async () => {
-    const initial = {
+    sessionMock.setSessionStore({
       ...sessionWithWindow("win-a", windowSnapshot()),
       recentFiles: ["/tmp/global.txt"],
-    };
-    sessionMock.readTextFile.mockImplementation(async (path: string) => {
-      if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
-        return JSON.stringify(initial);
-      }
-      throw new Error(`unexpected read: ${path}`);
     });
 
     await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
 
     expect(sessionMock.getSessionStore()?.recentFiles).toEqual(["/tmp/global.txt"]);
   });
+
+  it("serializes concurrent persists so both window entries are retained", async () => {
+    sessionMock.setSessionStore(null);
+    sessionMock.writeTextFile.mockClear();
+
+    const winA = appState.getSnapshot();
+    appState.resetAppState();
+    appState.openFileInTab("/tmp/win-b.txt", "b");
+    const winB = appState.getSnapshot();
+
+    await Promise.all([
+      sessionManager.persistSessionSnapshot(winA, "win-a"),
+      sessionManager.persistSessionSnapshot(winB, "win-b"),
+    ]);
+
+    const store = sessionMock.getSessionStore();
+    expect(store?.windows["win-a"]).toBeDefined();
+    expect(store?.windows["win-b"]).toBeDefined();
+    expect(store?.windows["win-a"]?.updatedAt).toEqual(expect.any(String));
+    expect(store?.windows["win-b"]?.updatedAt).toEqual(expect.any(String));
+  });
+
+  it("flush during debounced persist keeps the latest state", async () => {
+    sessionManager.resetSessionManagerForTests();
+    sessionMock.setSessionStore(null);
+    sessionMock.writeTextFile.mockClear();
+
+    appState.openFileInTab("/tmp/first.txt", "first");
+    sessionManager.scheduleSessionPersistence(appState.getSnapshot(), "win-a");
+
+    appState.openFileInTab("/tmp/latest.txt", "latest");
+    await sessionManager.flushSessionPersistence(appState.getSnapshot(), "win-a");
+
+    const notepadDocs = sessionMock.getSessionStore()?.windows["win-a"]?.notepad.documents ?? [];
+    expect(notepadDocs.some((doc) => doc.filePath === "/tmp/latest.txt")).toBe(true);
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1300);
+    });
+    const afterDebounce = sessionMock.getSessionStore()?.windows["win-a"]?.notepad.documents ?? [];
+    expect(afterDebounce.some((doc) => doc.filePath === "/tmp/latest.txt")).toBe(true);
+  });
 });
 
 describe("persistGlobalRecentFiles", () => {
+  beforeEach(() => {
+    sessionMock.restoreFsImplementations();
+  });
+
   it("updates only the global recent file list", async () => {
     const initial = sessionWithWindow("win-a", windowSnapshot());
-    sessionMock.readTextFile.mockImplementation(async (path: string) => {
-      if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
-        return JSON.stringify(initial);
-      }
-      throw new Error(`unexpected read: ${path}`);
-    });
+    sessionMock.setSessionStore(initial);
     sessionMock.writeTextFile.mockClear();
 
     await sessionManager.persistGlobalRecentFiles(["/tmp/a.txt", "/tmp/b.txt"]);
@@ -583,6 +620,7 @@ describe("persistGlobalRecentFiles", () => {
 describe("scheduleSessionPersistence", () => {
   beforeEach(() => {
     sessionManager.resetSessionManagerForTests();
+    sessionMock.restoreFsImplementations();
     sessionMock.setSessionStore(null);
     sessionMock.writeTextFile.mockClear();
     appState.resetAppState();

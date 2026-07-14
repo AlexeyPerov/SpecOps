@@ -77,11 +77,16 @@ export function clearSaveInFlight(path: string): void {
  * Cancel any in-flight background startup external checks. Called from the app
  * shell teardown so a closing window does not keep stat-ing files and racing
  * with the store being torn down.
+ *
+ * Returns a promise that settles when the background drain observes the abort
+ * (or immediately if none is running).
  */
-export function cancelStartupExternalChecks(): void {
+export function cancelStartupExternalChecks(): Promise<void> {
   startupChecksAbort?.abort();
   startupChecksAbort = null;
+  const pending = backgroundStartupChecks;
   backgroundStartupChecks = null;
+  return pending ?? Promise.resolve();
 }
 
 function assertNotAborted(signal: AbortSignal | null): void {

@@ -5,13 +5,12 @@ import type {
   AppDomainState,
   AppSessionSnapshot,
   RestoredWindowSession,
-  WindowSessionSnapshot,
 } from "../domain/contracts";
 import { logDiagnostic } from "./logging";
 import { getErrorMessage } from "../commands/commandErrors";
 import {
   dedupeWindowSnapshotAgainstRegistry,
-  syncOpenFileRegistryForWindow,
+  syncOpenFileRegistryForWindowUnlocked,
 } from "./openFileRegistry";
 import {
   createEmptySessionSnapshot,
@@ -20,10 +19,22 @@ import {
   toWindowSnapshot,
 } from "./sessionSnapshotCodec";
 import { nextNumericId, sanitizeWindowSnapshot } from "./sessionSnapshotSanitizer";
+import {
+  awaitSessionWriteLock,
+  resetSessionWriteLockForTests,
+  withSessionWriteLock,
+} from "./sessionWriteLock";
 export { nextNumericId, sanitizeWindowSnapshot };
 
 const SESSION_FILE = "session.json";
 const SESSION_BACKUP_FILE = "session.backup.json";
+
+/**
+ * When true, a brand-new window with no `windows[windowId]` entry restores a
+ * copy of the last-active window's tabs. Default is false: new windows start
+ * empty (app shell bootstrap untitled / notepad).
+ */
+export const DUPLICATE_LAST_SESSION_ON_NEW_WINDOW = false;
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let tabsChangedFlushHandler: ((state: AppDomainState) => void) | null = null;
@@ -49,6 +60,7 @@ export function resetSessionManagerForTests(): void {
     persistTimer = null;
   }
   resetTabsChangedSessionFlushForTests();
+  resetSessionWriteLockForTests();
 }
 
 async function getSessionPath(fileName: string): Promise<string> {
@@ -79,32 +91,40 @@ async function writeSessionSnapshot(current: AppSessionSnapshot): Promise<void> 
 }
 
 export async function persistGlobalRecentFiles(recentFiles: string[]): Promise<void> {
-  const current = await readSessionSnapshot();
-  current.recentFiles = recentFiles;
-  current.updatedAt = new Date().toISOString();
-  await writeSessionSnapshot(current);
+  await withSessionWriteLock(async () => {
+    const current = await readSessionSnapshot();
+    current.recentFiles = recentFiles;
+    current.updatedAt = new Date().toISOString();
+    await writeSessionSnapshot(current);
+  });
 }
 
 export async function persistSessionSnapshot(
   state: AppDomainState,
   windowId: string,
 ): Promise<void> {
-  const current = await readSessionSnapshot();
+  await withSessionWriteLock(async () => {
+    const current = await readSessionSnapshot();
+    const stampedAt = new Date().toISOString();
 
-  current.windows[windowId] = toWindowSnapshot(state);
-  current.lastActiveWindowId = windowId;
-  current.updatedAt = new Date().toISOString();
+    current.windows[windowId] = {
+      ...toWindowSnapshot(state),
+      updatedAt: stampedAt,
+    };
+    current.lastActiveWindowId = windowId;
+    current.updatedAt = stampedAt;
 
-  await writeSessionSnapshot(current);
+    await writeSessionSnapshot(current);
 
-  await syncOpenFileRegistryForWindow(windowId, state);
+    await syncOpenFileRegistryForWindowUnlocked(windowId, state);
 
-  await logDiagnostic({
-    level: "debug",
-    source: "frontend",
-    timestamp: new Date().toISOString(),
-    message: "session snapshot persisted",
-    metadata: { windowId },
+    await logDiagnostic({
+      level: "debug",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "session snapshot persisted",
+      metadata: { windowId },
+    });
   });
 }
 
@@ -127,6 +147,11 @@ async function restoreWindowSessionFromSnapshot(
   };
 }
 
+/**
+ * Restore this window's session entry. When `windowId` is absent from
+ * `parsed.windows`, returns null (empty editor) unless
+ * {@link DUPLICATE_LAST_SESSION_ON_NEW_WINDOW} is enabled.
+ */
 export async function restoreWindowSession(
   windowId: string,
 ): Promise<RestoredWindowSession | null> {
@@ -143,7 +168,11 @@ export async function restoreWindowSession(
     if (direct) {
       return direct;
     }
-    if (parsed.lastActiveWindowId && parsed.lastActiveWindowId !== windowId) {
+    if (
+      DUPLICATE_LAST_SESSION_ON_NEW_WINDOW &&
+      parsed.lastActiveWindowId &&
+      parsed.lastActiveWindowId !== windowId
+    ) {
       return restoreWindowSessionFromSnapshot(parsed.lastActiveWindowId, parsed);
     }
     return null;
@@ -175,7 +204,11 @@ export async function restoreWindowSession(
     if (direct) {
       return direct;
     }
-    if (parsed.lastActiveWindowId && parsed.lastActiveWindowId !== windowId) {
+    if (
+      DUPLICATE_LAST_SESSION_ON_NEW_WINDOW &&
+      parsed.lastActiveWindowId &&
+      parsed.lastActiveWindowId !== windowId
+    ) {
       return restoreWindowSessionFromSnapshot(parsed.lastActiveWindowId, parsed);
     }
     return null;
@@ -214,6 +247,7 @@ export async function flushSessionPersistence(
     persistTimer = null;
   }
   await persistSessionSnapshot(state, windowId);
+  await awaitSessionWriteLock();
 }
 
 export async function getLastActiveWindowId(): Promise<string | null> {
@@ -231,8 +265,10 @@ export async function getLastActiveWindowId(): Promise<string | null> {
 }
 
 export async function updateLastActiveWindow(windowId: string): Promise<void> {
-  const current = await readSessionSnapshot();
-  current.lastActiveWindowId = windowId;
-  current.updatedAt = new Date().toISOString();
-  await writeSessionSnapshot(current);
+  await withSessionWriteLock(async () => {
+    const current = await readSessionSnapshot();
+    current.lastActiveWindowId = windowId;
+    current.updatedAt = new Date().toISOString();
+    await writeSessionSnapshot(current);
+  });
 }

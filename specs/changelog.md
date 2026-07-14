@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-14 23:14 — F1.5 Persistence and cross-window safety
+
+- Serialized all `session.json` read-modify-write paths through a shared write
+  lock (`sessionWriteLock.ts`) used by session persistence and the open-file
+  registry. Concurrent window persists retain both entries; flush awaits the
+  write chain. Window snapshots may stamp optional `updatedAt` for diagnostics.
+- Cross-window tab merge is ack-based: the source removes the tab and syncs the
+  registry only after the target acknowledges adoption. On failure or timeout the
+  source keeps the tab and shows a toast.
+- New windows no longer hydrate another window’s session by default
+  (`DUPLICATE_LAST_SESSION_ON_NEW_WINDOW = false`); missing `windows[windowId]`
+  restores empty. Startup external-check cancellation returns the pending drain
+  promise; stale document ids are skipped during background drain.
+- **Validation:** `npm test` passes (277 files, 2892 tests). `npm run check`
+  passes with 0 errors.
+- **`specs/…/f1-5-…-execution-plan.md`** — all tasks `[DONE]`, status Done,
+  exit criteria checked.
+
 ## 2026-07-14 22:48 — D1.6 CI, metadata, accessibility, and maintenance checks
 
 - Expanded the Test workflow into frontend (Vitest on macOS/Windows/Linux plus

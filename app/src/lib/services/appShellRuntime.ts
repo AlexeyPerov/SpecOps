@@ -1,4 +1,4 @@
-import { emit, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event";
+import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
@@ -22,8 +22,10 @@ import {
   WINDOW_EVENT_ACTIVATE_FILE,
   WINDOW_EVENT_SELECT_TAB_FOR_PATH,
   WINDOW_EVENT_MERGE_TAB,
+  WINDOW_EVENT_MERGE_TAB_ACK,
   WINDOW_EVENT_TRANSFER_TAB,
   WINDOW_EVENT_WINDOW_READY,
+  type MergeTabAckPayload,
   type MergeTabPayload,
   markWindowActive,
 } from "./windowManager";
@@ -172,12 +174,27 @@ export async function startAppShellRuntime(
   cleanupCallbacks.push(unlistenTransfer);
 
   const unlistenMergeTab = await listen<MergeTabPayload>(WINDOW_EVENT_MERGE_TAB, async (event) => {
-    const { sourceWindowId: _sourceWindowId, sourceTabId: _sourceTabId, ...payload } =
-      event.payload;
-    const documentId = appState.openTransferredTab(payload);
-    if (payload.filePath && documentId) {
-      await claimOpenFile(payload.filePath, windowId, documentId);
-      await initializeDocumentDiskState(documentId, payload.filePath);
+    const { sourceWindowId, sourceTabId, ...payload } = event.payload;
+    try {
+      const documentId = appState.openTransferredTab(payload);
+      if (payload.filePath && documentId) {
+        await claimOpenFile(payload.filePath, windowId, documentId);
+        await initializeDocumentDiskState(documentId, payload.filePath);
+      }
+      await emitTo<MergeTabAckPayload>(sourceWindowId, WINDOW_EVENT_MERGE_TAB_ACK, {
+        sourceTabId,
+        ok: true,
+      });
+    } catch (error: unknown) {
+      try {
+        await emitTo<MergeTabAckPayload>(sourceWindowId, WINDOW_EVENT_MERGE_TAB_ACK, {
+          sourceTabId,
+          ok: false,
+          error: getErrorMessage(error, "Failed to open transferred tab."),
+        });
+      } catch {
+        // Source will time out and keep the tab.
+      }
     }
   });
   cleanupCallbacks.push(unlistenMergeTab);
@@ -470,7 +487,7 @@ export async function startAppShellRuntime(
       }
       // Cancel any in-flight background startup external checks so a closing
       // window does not keep stat-ing files against a tearing-down store.
-      cancelStartupExternalChecks();
+      void cancelStartupExternalChecks();
       void clearFileWatcherPaths();
       void stopOpencodeSidecar();
     },

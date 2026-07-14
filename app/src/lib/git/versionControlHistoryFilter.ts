@@ -64,7 +64,7 @@ export function parsePersistedHistoryFilterMode(value: unknown): HistoryFilterMo
 
 /** Resolve stored mode with default fallback. */
 export function reconcileHistoryFilterMode(
-  stored: HistoryFilterMode | null | undefined,
+  stored: string | null | undefined,
 ): HistoryFilterMode {
   return parsePersistedHistoryFilterMode(stored) ?? DEFAULT_HISTORY_FILTER_MODE;
 }

@@ -128,7 +128,14 @@ describe("countLinesInWorkspace walker", () => {
     readDirMock.mockResolvedValue([
       { name: "main.ts", isDirectory: false, isFile: true, isSymlink: false },
     ]);
-    statMock.mockResolvedValue({ size: 12, mtime: new Date(), atime: new Date(), birthtime: new Date(), readonly: false, fileAttributes: null });
+    statMock.mockResolvedValue({
+      size: 12,
+      mtime: new Date(),
+      atime: new Date(),
+      birthtime: new Date(),
+      readonly: false,
+      fileAttributes: null,
+    } as Awaited<ReturnType<typeof stat>>);
     readFileMock.mockResolvedValue(new TextEncoder().encode("a\nb\n"));
 
     await countLinesInWorkspace("/tmp/project/");
@@ -190,7 +197,7 @@ describe("countLinesInWorkspace walker", () => {
       birthtime: new Date(),
       readonly: false,
       fileAttributes: null,
-    });
+    } as Awaited<ReturnType<typeof stat>>);
 
     const result = await countLinesInWorkspace("/tmp/project");
 

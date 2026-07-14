@@ -9,7 +9,7 @@ export interface GitRefNameValidationError {
 
 export type GitRefNameValidationResult = GitRefNameValidation | GitRefNameValidationError;
 
-const INVALID_BRANCH_CHARS = /[\000-\037\177 ~^:?*[\\]/;
+const INVALID_BRANCH_CHARS = /[\x00-\x1f\x7f ~^:?*[\\]/;
 const INVALID_BRANCH_SEQUENCE = /\.\.|@{/;
 
 /**

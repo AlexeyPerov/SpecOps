@@ -1368,12 +1368,23 @@ mod tests {
 
         let status = execute_git(
             &repo_root,
-            &["status".to_string(), "--porcelain".to_string()],
+            &[
+                "-c".to_string(),
+                "core.quotepath=false".to_string(),
+                "status".to_string(),
+                "--porcelain".to_string(),
+            ],
             None,
         );
         assert_eq!(status.exit_code, 0);
         assert!(status.stdout.contains("spaces file.txt"));
-        assert!(status.stdout.contains("nested/café.txt"));
+        // APFS may return NFD for composed characters; accept NFC or NFD forms.
+        assert!(
+            status.stdout.contains("nested/café.txt")
+                || status.stdout.contains("nested/cafe\u{0301}.txt"),
+            "status missing unicode path: {}",
+            status.stdout
+        );
 
         let _ = fs::remove_dir_all(repo_root);
     }

@@ -7,8 +7,8 @@ on:
     branches: [master]
 
 jobs:
-  git-integration:
-    name: git tests (${{ matrix.os }})
+  frontend:
+    name: frontend (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -36,3 +36,42 @@ jobs:
       - name: Run vitest suite
         working-directory: app
         run: npm test
+
+      - name: Typecheck
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: app
+        run: npm run check
+
+  rust:
+    name: cargo test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: Run Rust tests
+        working-directory: app/src-tauri
+        run: cargo test
+
+  docs:
+    name: markdown links
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Check Markdown links
+        run: node scripts/check-markdown-links.mjs

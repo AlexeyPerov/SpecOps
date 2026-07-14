@@ -406,8 +406,8 @@ describe("runStartupExternalChecks", () => {
     appState.selectTab(activeTab.id);
 
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockImplementation(async (path: string) =>
-      path.endsWith("startup-clean-bg.txt") ? "new-bg" : "new-active",
+    readTextFileMock.mockImplementation(async (path: string | URL) =>
+      String(path).endsWith("startup-clean-bg.txt") ? "new-bg" : "new-active",
     );
 
     await runStartupExternalChecks();

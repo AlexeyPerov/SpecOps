@@ -9,7 +9,7 @@ not present.
 
 ## Updating the bundled binaries
 
-The maintainer script [`../../scripts/update-opencode-sidecar.sh`](../../scripts/update-opencode-sidecar.sh)
+The maintainer script [`../../../scripts/update-opencode-sidecar.sh`](../../../scripts/update-opencode-sidecar.sh)
 downloads the matching CLI release from `anomalyco/opencode`, extracts the
 binary from its `.zip` / `.tar.gz` archive, and writes it to this directory.
 

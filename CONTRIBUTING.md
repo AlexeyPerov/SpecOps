@@ -4,7 +4,7 @@ Thanks for helping improve SpecOps. This project is under active development; pr
 
 ## Setup
 
-Prerequisites: Node.js (LTS), Rust (stable), and system `git` on `PATH`.
+Prerequisites: Node.js 24+ (see [`.nvmrc`](./.nvmrc)), Rust (stable), and system `git` on `PATH`.
 
 ```sh
 cd app
@@ -19,6 +19,10 @@ See the root [README.md](./README.md) for build, port **1430**, and CI release n
 
 ## Checks
 
+These are the merge-gate checks. CI runs all of them on every pull request and
+`master` push (Vitest on macOS/Windows/Linux; typecheck, Rust tests, and the
+Markdown link checker on Linux).
+
 From `app/`:
 
 ```sh
@@ -32,6 +36,13 @@ Rust tests from `app/src-tauri/`:
 cargo test
 ```
 
+Tracked Markdown link check from the repo root (relative links and anchors
+against `git ls-files`; external URLs are skipped):
+
+```sh
+node scripts/check-markdown-links.mjs
+```
+
 ## Documentation
 
 | Audience | Start here |
@@ -41,6 +52,8 @@ cargo test
 | Agent rules | [AGENTS.md](./AGENTS.md) |
 
 Keep user-facing setup in `docs/`. Put plans, milestones, and the dated changelog in `specs/`.
+Do not link public docs at the root or under `docs/` into gitignored / untracked
+`specs/` paths — the Markdown link checker enforces that for clean clones.
 
 ## Changelog
 

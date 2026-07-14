@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount, unmount } from "svelte";
 import WorkspaceManagerView from "./WorkspaceManagerView.svelte";
-import type { WorkspaceEntry } from "../domain/contracts";
+import type { ContextId, WorkspaceEntry } from "../domain/contracts";
 
 // Mock the git column loader so the test never hits Tauri IPC. The view's mount
 // `$effect` calls `loadGitCellsForWorkspaces`, which reads/writes `gitCellsByPath`;
@@ -16,8 +16,8 @@ vi.mock("../git/workspaceManagerGitColumn", () => ({
   subscribeWorkspaceGitColumnAutoRefresh: vi.fn(() => () => {}),
 }));
 
-function makeWorkspace(id: string, rootPath: string): WorkspaceEntry {
-  return { id, rootPath, label: id } as WorkspaceEntry;
+function makeWorkspace(id: ContextId, rootPath: string): WorkspaceEntry {
+  return { id, rootPath, label: id } as unknown as WorkspaceEntry;
 }
 
 describe("WorkspaceManagerView", () => {
@@ -26,8 +26,8 @@ describe("WorkspaceManagerView", () => {
     document.body.appendChild(host);
 
     const workspaces = [
-      makeWorkspace("ws-notes", "/users/alexeyperov/documents/notes"),
-      makeWorkspace("ws-unity", "/users/alexeyperov/projects/unity-ai-hub"),
+      makeWorkspace("ws-1", "/users/alexeyperov/documents/notes"),
+      makeWorkspace("ws-2", "/users/alexeyperov/projects/unity-ai-hub"),
     ];
 
     let instance: Record<string, unknown> | undefined;
@@ -36,7 +36,7 @@ describe("WorkspaceManagerView", () => {
         target: host,
         props: {
           workspaces,
-          activeContextId: "ws-notes",
+          activeContextId: "ws-1",
           hiddenRootPaths: new Set<string>(),
           onAddWorkspace: () => {},
           onAddMultiple: () => {},
@@ -64,14 +64,14 @@ describe("WorkspaceManagerView", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
-    const workspaces = [makeWorkspace("ws-notes", "/users/alexeyperov/documents/notes")];
+    const workspaces = [makeWorkspace("ws-1", "/users/alexeyperov/documents/notes")];
     const onOpenWorkspaceSettings = vi.fn();
 
     const instance = mount(WorkspaceManagerView, {
       target: host,
       props: {
         workspaces,
-        activeContextId: "ws-notes",
+        activeContextId: "ws-1",
         hiddenRootPaths: new Set<string>(),
         onAddWorkspace: () => {},
         onAddMultiple: () => {},
@@ -91,7 +91,7 @@ describe("WorkspaceManagerView", () => {
     settingsBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(onOpenWorkspaceSettings).toHaveBeenCalledWith("ws-notes");
+    expect(onOpenWorkspaceSettings).toHaveBeenCalledWith("ws-1");
 
     unmount(instance as never);
     host.remove();
@@ -101,14 +101,14 @@ describe("WorkspaceManagerView", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
-    const workspaces = [makeWorkspace("ws-notes", "/users/alexeyperov/documents/notes")];
+    const workspaces = [makeWorkspace("ws-1", "/users/alexeyperov/documents/notes")];
     const onOpenVersionControl = vi.fn();
 
     const instance = mount(WorkspaceManagerView, {
       target: host,
       props: {
         workspaces,
-        activeContextId: "ws-notes",
+        activeContextId: "ws-1",
         hiddenRootPaths: new Set<string>(),
         onAddWorkspace: () => {},
         onAddMultiple: () => {},
@@ -127,7 +127,7 @@ describe("WorkspaceManagerView", () => {
     versionControlBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(onOpenVersionControl).toHaveBeenCalledWith("ws-notes");
+    expect(onOpenVersionControl).toHaveBeenCalledWith("ws-1");
 
     unmount(instance as never);
     host.remove();

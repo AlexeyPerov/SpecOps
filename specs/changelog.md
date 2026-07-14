@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-07-14 22:48 — D1.6 CI, metadata, accessibility, and maintenance checks
+
+- Expanded the Test workflow into frontend (Vitest on macOS/Windows/Linux plus
+  Linux `npm run check`), Rust (`cargo test` on Linux), and Markdown link jobs;
+  Node setup now reads `.nvmrc` (24).
+- Release workflow validates semver tags (`vMAJOR.MINOR.PATCH` with optional
+  prerelease/build) before platform builds; README documents the policy and the
+  three version fields to keep in sync.
+- Completed `app/package.json` description/repository/homepage/bugs/engines and
+  Cargo author/license/description metadata; marked the package private.
+- README screenshots now have descriptive alt text; decorative favicon alt stays empty.
+- Added `scripts/check-markdown-links.mjs` for clean-clone relative-link and
+  anchor checks (skips external URLs and archival `specs/ops/`; blocks public
+  docs from linking into untracked `specs/` paths). Documented the command in
+  `CONTRIBUTING.md`.
+- Cleared the previous 12 `svelte-check` errors and fixed a macOS
+  `core.quotepath`/Unicode assertion in Rust git tests so the merge gate is green.
+- **Validation:** `npm test` (2886), `npm run check` (0 errors), `cargo test`
+  (52), and `node scripts/check-markdown-links.mjs` pass.
+- **`specs/docs-1/d1-6-…-execution-plan.md`** — all tasks `[DONE]`, status Done,
+  exit criteria checked.
+
 ## 2026-07-14 22:10 — D1.5 Documentation accuracy and roadmap freshness
 
 - Updated the public text-editor roadmap to show seven completed milestones and

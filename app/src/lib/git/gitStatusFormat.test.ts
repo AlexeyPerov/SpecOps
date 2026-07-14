@@ -6,7 +6,12 @@ import {
 import type { WorkingTreeFileEntry } from "./types";
 
 function entry(path: string, statusCode: string): WorkingTreeFileEntry {
-  return { path, statusCode };
+  return {
+    path,
+    statusCode,
+    indexStatus: statusCode[0] ?? " ",
+    workTreeStatus: statusCode[1] ?? " ",
+  };
 }
 
 describe("formatWorkingTreeDiffSubtitle", () => {

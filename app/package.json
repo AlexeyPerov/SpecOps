@@ -1,8 +1,20 @@
 {
   "name": "spec-ops",
   "version": "0.2.0",
-  "description": "",
+  "description": "Desktop workspace for notes, specs, and project files with OpenCode-powered sessions",
   "type": "module",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexeyPerov/spec-ops.git"
+  },
+  "homepage": "https://github.com/AlexeyPerov/spec-ops#readme",
+  "bugs": {
+    "url": "https://github.com/AlexeyPerov/spec-ops/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "svelte-kit sync && vite build",

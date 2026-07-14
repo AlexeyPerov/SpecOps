@@ -20,9 +20,9 @@ and **OpenCode**-powered workspace sessions. Built with
 
 ## Screenshots
 
-| ![Main editor](screenshots/main-screen.png) | ![Split view](screenshots/main-screen-split-view.png) |
+| ![SpecOps main window with editor, project panel, and activity rail](screenshots/main-screen.png) | ![Editor split into two panes showing side-by-side files](screenshots/main-screen-split-view.png) |
 |---------------------------------------------|-------------------------------------------------------|
-| ![Themes](screenshots/main-screen-themes.png) | ![Logs console](screenshots/main-screen-logs.png) |
+| ![Theme picker open over the main editor](screenshots/main-screen-themes.png) | ![Bottom logs console panel open under the editor](screenshots/main-screen-logs.png) |
 
 ## Install
 
@@ -63,7 +63,7 @@ Chat (beta): **[docs/beta/chat-http-providers.md](./docs/beta/chat-http-provider
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) (LTS)
+- [Node.js](https://nodejs.org/) 24+ (LTS; see [`.nvmrc`](./.nvmrc))
 - [Rust](https://www.rust-lang.org/tools/install) (stable toolchain, required by Tauri)
 - System [`git`](https://git-scm.com/) on `PATH` for Version Control
 
@@ -132,15 +132,23 @@ Installers and bundles are written to `app/src-tauri/target/release/bundle/`.
 | Windows (x64) | Yes | Yes | Supported |
 | Linux | No published installers | Yes | Buildable with Tauri's Linux prerequisites, but not a supported release target |
 
-The test workflow runs the Vitest suite on macOS, Windows, and Linux. The release
+The test workflow runs Vitest on macOS, Windows, and Linux; on Linux it also runs
+`npm run check`, `cargo test`, and the Markdown link checker. The release
 workflow publishes artifacts only for macOS and Windows; Tauri's `targets: "all"`
 controls bundle formats for the current build host and does not add a Linux release job.
 
 ### CI releases
 
-Pushing any tag beginning with `v` (for example `v1.0.0`) triggers the
-[Release](.github/workflows/release.yml) workflow. It builds a universal macOS
-bundle and Windows x64 installers and publishes them as assets on that GitHub release.
+Push a **semver** tag such as `v1.0.0` or `v1.0.0-beta.1` (optional `+build`
+metadata is allowed). The [Release](.github/workflows/release.yml) workflow
+rejects non-semver `v*` tags before building, then publishes a universal macOS
+bundle and Windows x64 installers as assets on that GitHub release.
+
+Before tagging, keep these version fields in sync:
+
+- `app/package.json` → `version`
+- `app/src-tauri/tauri.conf.json` → `version`
+- `app/src-tauri/Cargo.toml` → `package.version`
 
 ## Docs
 

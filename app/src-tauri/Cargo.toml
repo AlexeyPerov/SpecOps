@@ -1,8 +1,9 @@
 [package]
 name = "spec-ops"
 version = "0.2.0"
-description = "spec-ops desktop app"
-authors = ["you"]
+description = "SpecOps desktop workspace for notes, specs, and project files"
+authors = ["Alexey Perov"]
+license = "MIT"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -15,6 +15,8 @@ export type EditorFindState = {
   query: string;
   replace: string;
   caseSensitive: boolean;
+  wholeWord: boolean;
+  regexp: boolean;
 };
 
 export type EditorToolSnapshot = {
@@ -40,6 +42,8 @@ export type EditorToolController = {
   setFindQuery: (query: string) => void;
   setFindReplace: (replace: string) => void;
   setFindCaseSensitive: (value: boolean) => void;
+  setFindWholeWord: (value: boolean) => void;
+  setFindRegexp: (value: boolean) => void;
   setGoToLineValue: (value: string) => void;
   /**
    * Close the active tool when the pane/document binding no longer matches,
@@ -79,7 +83,7 @@ export function createEditorToolController(
   let snapshot: EditorToolSnapshot = {
     activeTool: null,
     binding: null,
-    find: { query: "", replace: "", caseSensitive: false },
+    find: { query: "", replace: "", caseSensitive: false, wholeWord: false, regexp: false },
     goToLineValue: "",
   };
   const listeners = new Set<(next: EditorToolSnapshot) => void>();
@@ -196,6 +200,20 @@ export function createEditorToolController(
       snapshot = { ...snapshot, find: { ...snapshot.find, caseSensitive } };
       emit();
     },
+    setFindWholeWord(wholeWord) {
+      if (disposed || snapshot.find.wholeWord === wholeWord) {
+        return;
+      }
+      snapshot = { ...snapshot, find: { ...snapshot.find, wholeWord } };
+      emit();
+    },
+    setFindRegexp(regexp) {
+      if (disposed || snapshot.find.regexp === regexp) {
+        return;
+      }
+      snapshot = { ...snapshot, find: { ...snapshot.find, regexp } };
+      emit();
+    },
     setGoToLineValue(goToLineValue) {
       if (disposed || snapshot.goToLineValue === goToLineValue) {
         return;
@@ -210,7 +228,7 @@ export function createEditorToolController(
       snapshot = {
         activeTool: null,
         binding: null,
-        find: { query: "", replace: "", caseSensitive: false },
+        find: { query: "", replace: "", caseSensitive: false, wholeWord: false, regexp: false },
         goToLineValue: "",
       };
     },

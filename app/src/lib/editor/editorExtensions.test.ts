@@ -74,7 +74,13 @@ describe("editorExtensions", () => {
     const beforeLanguage = compartments.language.get(view.state);
     view.dispatch({
       effects: compartments.searchHighlight.reconfigure(
-        createSearchHighlightExtension("x", false),
+        createSearchHighlightExtension({
+          text: "x",
+          replacement: "",
+          caseSensitive: false,
+          wholeWord: false,
+          regexp: false,
+        }),
       ),
     });
     expect(compartments.language.get(view.state)).toBe(beforeLanguage);

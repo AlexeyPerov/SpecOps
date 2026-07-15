@@ -137,7 +137,15 @@ describe("editor host contracts", () => {
       ok: false,
       reason: "unavailable",
     });
-    expect(host.queries.search.getMatchInfo("x", false)).toEqual({
+    expect(
+      host.queries.search.getMatchInfo({
+        text: "x",
+        replacement: "",
+        caseSensitive: false,
+        wholeWord: false,
+        regexp: false,
+      }),
+    ).toEqual({
       ok: false,
       reason: "unavailable",
     });

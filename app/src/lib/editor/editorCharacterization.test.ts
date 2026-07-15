@@ -8,6 +8,10 @@ import {
 } from "./codeMirrorFixture";
 import { createEditorDocumentSessionCache } from "./editorDocumentSessionCache";
 import { createEditorViewController } from "./editorViewController";
+import { createSearchQuery } from "./searchQuery";
+
+const literalQuery = (text: string) =>
+  createSearchQuery({ text, regexp: false });
 import { createEditorWorkbenchRuntime } from "./editorWorkbenchRuntime";
 
 /**
@@ -227,14 +231,14 @@ describe("CodeMirror fixture characterization", () => {
     second.setSelection(0, 4);
 
     activeView = second.view;
-    const moved = runner.findNext("two", false);
+    const moved = runner.findNext(literalQuery("two"));
     expect(moved).toBe(true);
     expect(second.view.state.selection.main.from).toBe(5);
     expect(first.view.state.selection.main.from).toBe(0);
 
     // Unregister / teardown: getView returns undefined → commands must not target a stale editor.
     activeView = undefined;
-    expect(runner.findNext("one", false)).toBe(false);
+    expect(runner.findNext(literalQuery("one"))).toBe(false);
     expect(first.view.state.doc.toString()).toBe("pane-one");
 
     first.destroy();

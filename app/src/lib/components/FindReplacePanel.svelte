@@ -1,11 +1,16 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import type { EditorCommandRunner } from "../types/editor";
+  import { createSearchQuery, validateSearchQuery, type SearchQuery } from "../editor/searchQuery";
 
   let {
     findQuery = $bindable(""),
     replaceValue = $bindable(""),
     findCaseSensitive = $bindable(false),
+    findWholeWord = $bindable(false),
+    findRegexp = $bindable(false),
+    /** Non-empty selection text to seed the query with on first open. */
+    seedSelection = "",
     getEditorRunner = (() => null) as () => EditorCommandRunner | null,
     notify = (_message: string) => {},
     documentId = null as string | null,
@@ -14,7 +19,9 @@
     findQuery?: string;
     replaceValue?: string;
     findCaseSensitive?: boolean;
-    /** Resolves the active pane host at call time (workbench runtime). */
+    findWholeWord?: boolean;
+    findRegexp?: boolean;
+    seedSelection?: string;
     getEditorRunner?: () => EditorCommandRunner | null;
     notify?: (message: string) => void;
     documentId?: string | null;
@@ -31,6 +38,24 @@
   let showReplace = $state(true);
   let mounted = false;
 
+  /** The unified query assembled from the panel's toggle state. */
+  const query = $derived(
+    createSearchQuery({
+      text: findQuery,
+      replacement: replaceValue,
+      caseSensitive: findCaseSensitive,
+      wholeWord: findWholeWord,
+      regexp: findRegexp,
+    }),
+  );
+
+  /** Inline validation: invalid regex disables navigation and replacement. */
+  const validation = $derived(validateSearchQuery(query));
+  const queryError = $derived(
+    findQuery && !validation.ok ? validation.reason : "",
+  );
+  const canSearch = $derived(findQuery.trim().length > 0 && validation.ok);
+
   const matchCountText = $derived(
     findQuery
       ? matchCount === 0
@@ -42,7 +67,9 @@
   );
 
   function close(): void {
-    getEditorRunner()?.setSearchQuery("", false);
+    getEditorRunner()?.setSearchQuery(
+      createSearchQuery({ text: "", regexp: false }),
+    );
     onClose();
   }
 
@@ -52,14 +79,14 @@
       searchTimer = null;
     }
     const runner = getEditorRunner();
-    if (!findQuery) {
+    if (!findQuery || !validation.ok) {
       matchCount = 0;
       currentMatch = 0;
-      runner?.setSearchQuery("", false);
+      runner?.setSearchQuery(createSearchQuery({ text: "", regexp: false }));
       return;
     }
-    runner?.setSearchQuery(findQuery, findCaseSensitive);
-    runner?.findNext(findQuery, findCaseSensitive);
+    runner?.setSearchQuery(query);
+    runner?.findNext(query);
     updateMatchInfo();
   }
 
@@ -71,36 +98,31 @@
 
   function updateMatchInfo(): void {
     const runner = getEditorRunner();
-    if (!findQuery || !runner) {
+    if (!findQuery || !runner || !validation.ok) {
       matchCount = 0;
       currentMatch = 0;
       return;
     }
-    const info = runner.getMatchInfo(findQuery, findCaseSensitive);
+    const info = runner.getMatchInfo(query);
     matchCount = info.total;
     currentMatch = info.current;
   }
 
   function findNext(): void {
-    if (!findQuery.trim()) return;
-    getEditorRunner()?.findNext(findQuery, findCaseSensitive);
+    if (!canSearch) return;
+    getEditorRunner()?.findNext(query);
     updateMatchInfo();
   }
 
   function findPrev(): void {
-    if (!findQuery.trim()) return;
-    getEditorRunner()?.findPrevious(findQuery, findCaseSensitive);
+    if (!canSearch) return;
+    getEditorRunner()?.findPrevious(query);
     updateMatchInfo();
   }
 
   function replaceCurrent(): void {
-    if (!findQuery.trim()) return;
-    const replaced =
-      getEditorRunner()?.replaceAndFindNext(
-        findQuery,
-        replaceValue,
-        findCaseSensitive,
-      ) ?? false;
+    if (!canSearch) return;
+    const replaced = getEditorRunner()?.replaceAndFindNext(query) ?? false;
     if (replaced) {
       updateMatchInfo();
     } else {
@@ -109,12 +131,11 @@
   }
 
   function replaceAll(): void {
-    if (!findQuery.trim()) return;
+    if (!canSearch) return;
     const runner = getEditorRunner();
-    const count =
-      runner?.replaceAll(findQuery, replaceValue, findCaseSensitive) ?? 0;
+    const count = runner?.replaceAll(query) ?? 0;
     notify(`Replaced ${count} occurrence(s).`);
-    runner?.setSearchQuery(findQuery, findCaseSensitive);
+    runner?.setSearchQuery(query);
     updateMatchInfo();
   }
 
@@ -175,6 +196,10 @@
   onMount(() => {
     mounted = true;
     panelEl?.addEventListener("keydown", handleKeydown);
+    // Seed the query from a non-empty single selection on first open.
+    if (!findQuery && seedSelection) {
+      findQuery = seedSelection;
+    }
     findInputEl?.focus();
     findInputEl?.select();
     if (findQuery) {
@@ -192,7 +217,7 @@
       clearTimeout(searchTimer);
       searchTimer = null;
     }
-    getEditorRunner()?.setSearchQuery("", false);
+    getEditorRunner()?.setSearchQuery(createSearchQuery({ text: "", regexp: false }));
   });
 
   $effect(() => {
@@ -200,8 +225,8 @@
       return;
     }
     const runner = getEditorRunner();
-    if (findQuery && runner) {
-      runner.setSearchQuery(findQuery, findCaseSensitive);
+    if (findQuery && runner && validation.ok) {
+      runner.setSearchQuery(query);
       updateMatchInfo();
     }
   });
@@ -221,10 +246,13 @@
       <input
         type="text"
         class="fr-input"
+        class:fr-input-error={Boolean(queryError)}
         placeholder="Find..."
         bind:value={findQuery}
         bind:this={findInputEl}
         oninput={scheduleSearch}
+        aria-invalid={Boolean(queryError)}
+        aria-label="Find"
       />
       <span class="fr-counter">{matchCountText}</span>
       <button
@@ -232,6 +260,7 @@
         class="fr-btn"
         class:fr-btn-active={findCaseSensitive}
         title="Match case"
+        aria-pressed={findCaseSensitive}
         onclick={() => {
           findCaseSensitive = !findCaseSensitive;
           scheduleSearch();
@@ -239,10 +268,36 @@
       >
         Aa
       </button>
-      <button type="button" class="fr-btn" title="Previous (Shift+Enter)" onclick={findPrev}>
+      <button
+        type="button"
+        class="fr-btn"
+        class:fr-btn-active={findWholeWord}
+        title="Whole word"
+        aria-pressed={findWholeWord}
+        onclick={() => {
+          findWholeWord = !findWholeWord;
+          scheduleSearch();
+        }}
+      >
+        W
+      </button>
+      <button
+        type="button"
+        class="fr-btn"
+        class:fr-btn-active={findRegexp}
+        title="Regular expression"
+        aria-pressed={findRegexp}
+        onclick={() => {
+          findRegexp = !findRegexp;
+          scheduleSearch();
+        }}
+      >
+        .*
+      </button>
+      <button type="button" class="fr-btn" title="Previous (Shift+Enter)" disabled={!canSearch} onclick={findPrev}>
         &#x25B2;
       </button>
-      <button type="button" class="fr-btn" title="Next (Enter)" onclick={findNext}>
+      <button type="button" class="fr-btn" title="Next (Enter)" disabled={!canSearch} onclick={findNext}>
         &#x25BC;
       </button>
       <button type="button" class="fr-btn fr-btn-close" title="Close (Escape)" onclick={close}>
@@ -250,6 +305,9 @@
       </button>
     </div>
   </div>
+  {#if queryError}
+    <div class="fr-error" role="alert">{queryError}</div>
+  {/if}
   {#if showReplace}
     <div class="fr-row">
       <div class="fr-chevron-spacer"></div>
@@ -260,11 +318,12 @@
           placeholder="Replace..."
           bind:value={replaceValue}
           bind:this={replaceInputEl}
+          aria-label="Replace"
         />
-        <button type="button" class="fr-btn fr-btn-wide" title="Replace current match" onclick={replaceCurrent}>
+        <button type="button" class="fr-btn fr-btn-wide" title="Replace current match" disabled={!canSearch} onclick={replaceCurrent}>
           Replace
         </button>
-        <button type="button" class="fr-btn fr-btn-wide" title="Replace all matches" onclick={replaceAll}>
+        <button type="button" class="fr-btn fr-btn-wide" title="Replace all matches" disabled={!canSearch} onclick={replaceAll}>
           All
         </button>
       </div>
@@ -277,7 +336,9 @@
     position: absolute;
     top: var(--space-8);
     right: var(--space-12);
-    width: 440px;
+    /* Responsive: clamp between a usable minimum and a sensible maximum
+       instead of a fixed width that overflows narrow panes. */
+    width: clamp(320px, 90%, 480px);
     background: var(--color-surface-1);
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-md);
@@ -352,6 +413,10 @@
     border-color: var(--color-accent);
   }
 
+  .fr-input-error {
+    border-color: var(--color-danger, var(--color-accent));
+  }
+
   .fr-counter {
     font-size: var(--font-size-status);
     color: var(--color-text-secondary);
@@ -359,6 +424,15 @@
     min-width: 44px;
     text-align: right;
     flex-shrink: 0;
+  }
+
+  .fr-error {
+    margin-left: calc(20px + var(--space-3));
+    font-size: var(--font-size-status);
+    color: var(--color-danger, var(--color-accent));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .fr-btn {
@@ -382,9 +456,14 @@
       border-color var(--motion-fast) var(--easing-standard);
   }
 
-  .fr-btn:hover {
+  .fr-btn:hover:not(:disabled) {
     background: var(--color-hover);
     color: var(--color-text-primary);
+  }
+
+  .fr-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   .fr-btn-wide {

@@ -1,6 +1,10 @@
 import { collectOpenableFolderFiles } from "./folderOpenableFiles";
 import { readTextFile } from "@tauri-apps/plugin-fs";
-import { findAllMatches } from "../editor/searchHighlight";
+import {
+  findAllRangesInString,
+  validateSearchQuery,
+  type SearchQuery,
+} from "../editor/searchQuery";
 
 /** A single match inside a file. */
 export interface ProjectSearchMatch {
@@ -12,6 +16,10 @@ export interface ProjectSearchMatch {
   lineText: string;
   /** Character offset (0-based) of the match start within the whole document. */
   from: number;
+  /** Character offset (0-based) of the match end within the whole document. */
+  to: number;
+  /** Length of the matched text (`to - from`). */
+  length: number;
 }
 
 /** All matches within one file. */
@@ -22,7 +30,6 @@ export interface ProjectSearchResult {
 }
 
 export interface SearchInProjectOptions {
-  caseSensitive: boolean;
   /** Invoked once per file as it is scanned; return false to abort early. */
   onProgress?: (path: string) => boolean;
   /**
@@ -33,18 +40,26 @@ export interface SearchInProjectOptions {
 }
 
 /**
+ * Result of a project search: either the matched results, or a structured
+ * error when the query itself is invalid (e.g. bad regex).
+ */
+export type ProjectSearchOutcome =
+  | { ok: true; results: ProjectSearchResult[] }
+  | { ok: false; reason: string };
+
+/**
  * Compute line/column/preview for each match in a document string. Pure — no
  * filesystem access — so it can be unit-tested and reused for preview/replace.
+ * Uses the unified query model so project and editor search agree on semantics.
  */
 export function computeFileMatches(
   content: string,
-  query: string,
-  caseSensitive: boolean,
+  query: SearchQuery,
 ): ProjectSearchMatch[] {
-  if (!query) {
+  if (!query.text) {
     return [];
   }
-  const offsets = findAllMatches(content, query, caseSensitive);
+  const offsets = findAllRangesInString(content, query);
   if (offsets.length === 0) {
     return [];
   }
@@ -80,6 +95,8 @@ export function computeFileMatches(
       column,
       lineText,
       from: offset.from,
+      to: offset.to,
+      length: offset.to - offset.from,
     });
   }
   return matches;
@@ -97,14 +114,19 @@ export function totalMatchCount(results: readonly ProjectSearchResult[]): number
 /**
  * Search openable workspace files. Prefers a catalog snapshot via `options.files`
  * to avoid a duplicate tree walk; falls back to a one-shot enumeration.
+ *
+ * The query is validated before traversal; an invalid query returns
+ * `{ ok: false, reason }` without touching any file. Per-file read errors are
+ * isolated (the file is skipped).
  */
 export async function searchInProject(
   workspaceRoot: string,
-  query: string,
-  options: SearchInProjectOptions = { caseSensitive: false },
-): Promise<ProjectSearchResult[]> {
-  if (!query) {
-    return [];
+  query: SearchQuery,
+  options: SearchInProjectOptions = {},
+): Promise<ProjectSearchOutcome> {
+  const validation = validateSearchQuery(query);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
   }
   const files =
     options.files !== undefined
@@ -121,10 +143,10 @@ export async function searchInProject(
     } catch {
       continue;
     }
-    const matches = computeFileMatches(content, query, options.caseSensitive);
+    const matches = computeFileMatches(content, query);
     if (matches.length > 0) {
       results.push({ path, matches });
     }
   }
-  return results;
+  return { ok: true, results };
 }

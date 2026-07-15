@@ -83,6 +83,8 @@
     type ProjectSearchResult,
   } from "../lib/services/projectSearch";
   import { replaceInProjectFile } from "../lib/services/projectFileOps";
+  import { createSearchQuery, validateSearchQuery, type SearchQuery } from "../lib/editor/searchQuery";
+  import { requestConfirm } from "../lib/services/confirmDialogUi";
   import {
     decideReplaceAllForPath,
     syncOpenDocumentAfterReplace as syncOpenDocumentAfterReplaceService,
@@ -167,10 +169,26 @@
   let projectSearchQuery = $state("");
   let projectSearchReplace = $state("");
   let projectSearchCaseSensitive = $state(false);
+  let projectSearchWholeWord = $state(false);
+  let projectSearchRegex = $state(false);
+  /** Inline regex validation error for the project search panel. */
+  const projectSearchQueryError = $derived.by(() => {
+    if (!projectSearchRegex || !projectSearchQuery.trim()) {
+      return "";
+    }
+    try {
+      void new RegExp(projectSearchQuery.trim());
+      return "";
+    } catch (error: unknown) {
+      return error instanceof Error ? error.message : "Invalid regular expression.";
+    }
+  });
   let projectSearchResults = $state<ProjectSearchResult[]>([]);
   let projectSearchRunning = $state(false);
   let projectSearchStatus = $state("");
   let projectSearchNonce = $state(0);
+  /** Monotonic generation to cancel in-flight searches (workspace switch / close). */
+  let projectSearchGeneration = 0;
   /**
    * Normalized workspace root paths hidden from the activity rail (decision 3).
    * Backed by the global `workspacePreferences` store; loaded on startup and
@@ -766,7 +784,13 @@
   }
 
   function closeProjectSearch(): void {
+    // Cancel any in-flight search and clear results so stale results never
+    // open after the panel is dismissed.
+    projectSearchGeneration += 1;
     projectSearchOpen = false;
+    projectSearchResults = [];
+    projectSearchStatus = "";
+    projectSearchRunning = false;
   }
 
   /**
@@ -863,24 +887,53 @@
     // intentionally empty — height resets to default each session.
   }
 
+  /** Build a unified query from the panel's current search options. */
+  function buildProjectSearchQuery(): SearchQuery {
+    return createSearchQuery({
+      text: projectSearchQuery.trim(),
+      replacement: projectSearchReplace,
+      caseSensitive: projectSearchCaseSensitive,
+      wholeWord: projectSearchWholeWord,
+      regexp: projectSearchRegex,
+    });
+  }
+
   async function runProjectSearch(): Promise<void> {
-    const query = projectSearchQuery.trim();
     const root = activeWorkspaceRoot;
-    if (!query || !root) {
+    const query = buildProjectSearchQuery();
+    const validation = validateSearchQuery(query);
+    if (!root) {
       projectSearchResults = [];
-      projectSearchStatus = root ? "Type a search term." : "Open a workspace to search.";
+      projectSearchStatus = "Open a workspace to search.";
+      return;
+    }
+    if (!validation.ok) {
+      projectSearchResults = [];
+      projectSearchStatus = validation.reason;
       return;
     }
     projectSearchRunning = true;
     projectSearchStatus = "Searching…";
+    // Invalidate any in-flight search so stale results never land.
+    projectSearchGeneration += 1;
+    const generation = projectSearchGeneration;
     try {
-      const results = await searchInProject(root, query, {
-        caseSensitive: projectSearchCaseSensitive,
+      const outcome = await searchInProject(root, query, {
         files:
           workspaceFileCatalogRegistry.getActive()?.getOpenablePaths() ??
           workspaceFileCatalog.getOpenablePaths() ??
           undefined,
+        onProgress: () => generation === projectSearchGeneration,
       });
+      if (generation !== projectSearchGeneration) {
+        return;
+      }
+      if (!outcome.ok) {
+        projectSearchResults = [];
+        projectSearchStatus = outcome.reason;
+        return;
+      }
+      const results = outcome.results;
       projectSearchResults = results;
       const files = results.length;
       const matches = totalMatchCount(results);
@@ -889,17 +942,37 @@
           ? "No results"
           : `${matches} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}`;
     } catch (error: unknown) {
-      projectSearchStatus = `Search failed: ${getErrorMessage(error)}`;
+      if (generation === projectSearchGeneration) {
+        projectSearchStatus = `Search failed: ${getErrorMessage(error)}`;
+      }
     } finally {
-      projectSearchRunning = false;
+      if (generation === projectSearchGeneration) {
+        projectSearchRunning = false;
+      }
     }
   }
 
   async function replaceAllInProject(): Promise<void> {
-    const query = projectSearchQuery.trim();
     const root = activeWorkspaceRoot;
-    if (!query || !root || projectSearchResults.length === 0) {
+    if (!root || projectSearchResults.length === 0) {
       notify("Nothing to replace.");
+      return;
+    }
+    const query = buildProjectSearchQuery();
+    const validation = validateSearchQuery(query);
+    if (!validation.ok) {
+      notify(validation.reason);
+      return;
+    }
+    const totalFiles = projectSearchResults.length;
+    const totalMatches = totalMatchCount(projectSearchResults);
+    const confirmed = await requestConfirm({
+      title: "Replace in Project",
+      message: `Replace ${totalMatches} match${totalMatches === 1 ? "" : "es"} in ${totalFiles} file${totalFiles === 1 ? "" : "s"}?`,
+      confirmLabel: "Replace All",
+      danger: true,
+    });
+    if (!confirmed) {
       return;
     }
     projectSearchRunning = true;
@@ -917,13 +990,7 @@
           skippedDirty += 1;
           continue;
         }
-        const outcome = await replaceInProjectFile(
-          root,
-          result.path,
-          query,
-          projectSearchReplace,
-          projectSearchCaseSensitive,
-        );
+        const outcome = await replaceInProjectFile(root, result.path, query);
         if (outcome.ok) {
           replaced += outcome.count;
           files += 1;
@@ -1492,6 +1559,14 @@
     if (snippetInsertOpen) {
       closeSnippetInsert();
     }
+    // M8 — cancel and clear project search on workspace switch so results from
+    // the previous workspace never open after the switch.
+    if (projectSearchOpen) {
+      projectSearchGeneration += 1;
+      projectSearchResults = [];
+      projectSearchStatus = "";
+      projectSearchRunning = false;
+    }
   });
 
   // M6.2/M7.1/M7.2 — close Markdown-only pickers when the active document is no
@@ -1734,6 +1809,9 @@
     query: projectSearchQuery,
     replaceValue: projectSearchReplace,
     caseSensitive: projectSearchCaseSensitive,
+    wholeWord: projectSearchWholeWord,
+    regex: projectSearchRegex,
+    queryError: projectSearchQueryError,
     results: projectSearchResults,
     running: projectSearchRunning,
     status: projectSearchStatus,
@@ -1750,6 +1828,12 @@
     },
     onCaseSensitiveChange: (value) => {
       projectSearchCaseSensitive = value;
+    },
+    onWholeWordChange: (value) => {
+      projectSearchWholeWord = value;
+    },
+    onRegexChange: (value) => {
+      projectSearchRegex = value;
     },
     onRunSearch: () => {
       void runProjectSearch();

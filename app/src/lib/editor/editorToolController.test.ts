@@ -103,6 +103,8 @@ describe("createEditorToolController", () => {
     controller.setFindQuery("hello");
     controller.setFindReplace("world");
     controller.setFindCaseSensitive(true);
+    controller.setFindWholeWord(true);
+    controller.setFindRegexp(true);
     controller.setGoToLineValue("42");
     controller.open("find");
     controller.close();
@@ -112,6 +114,8 @@ describe("createEditorToolController", () => {
       query: "hello",
       replace: "world",
       caseSensitive: true,
+      wholeWord: true,
+      regexp: true,
     });
     expect(snapshot.goToLineValue).toBe("42");
     expect(snapshot.activeTool).toBe(null);

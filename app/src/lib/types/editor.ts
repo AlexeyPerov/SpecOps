@@ -7,6 +7,7 @@
  * SpecOps-native naming only — do not expose raw CodeMirror `EditorView`
  * outside `app/src/lib/editor/`.
  */
+import type { SearchQuery } from "../editor/searchQuery";
 
 /** Identity of a mounted editor host within a window/route workbench. */
 export type EditorHostIdentity = {
@@ -190,26 +191,14 @@ export type EditorBookmarkQueries = {
   list: () => EditorQueryResult<EditorBookmarkSnapshot[]>;
 };
 
-/** Find/replace and search-highlight configuration. */
+/** Find/replace and search-highlight configuration (M8.1 query model). */
 export type EditorSearchActions = {
-  findNext: (query: string, caseSensitive: boolean) => EditorActionResult;
-  findPrevious: (query: string, caseSensitive: boolean) => EditorActionResult;
-  replaceCurrent: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => EditorActionResult;
-  replaceAndFindNext: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => EditorActionResult;
-  replaceAll: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => EditorQueryResult<number>;
-  setSearchQuery: (query: string, caseSensitive: boolean) => EditorActionResult;
+  findNext: (query: SearchQuery) => EditorActionResult;
+  findPrevious: (query: SearchQuery) => EditorActionResult;
+  replaceCurrent: (query: SearchQuery) => EditorActionResult;
+  replaceAndFindNext: (query: SearchQuery) => EditorActionResult;
+  replaceAll: (query: SearchQuery) => EditorQueryResult<number>;
+  setSearchQuery: (query: SearchQuery) => EditorActionResult;
 };
 
 /** View chrome (wrap / zoom). */
@@ -250,7 +239,7 @@ export type EditorDocumentQueries = {
 };
 
 export type EditorSearchQueries = {
-  getMatchInfo: (query: string, caseSensitive: boolean) => EditorQueryResult<MatchInfo>;
+  getMatchInfo: (query: SearchQuery) => EditorQueryResult<MatchInfo>;
 };
 
 export type MarkdownHeadingSnapshot = {
@@ -293,30 +282,18 @@ export type EditorActions = {
   joinLines: () => EditorActionResult;
   setWrap: (value: boolean) => EditorActionResult;
   setZoom: (zoom: number) => EditorActionResult;
-  findNext: (query: string, caseSensitive: boolean) => EditorActionResult;
-  findPrevious: (query: string, caseSensitive: boolean) => EditorActionResult;
-  replaceCurrent: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => EditorActionResult;
-  replaceAndFindNext: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => EditorActionResult;
-  replaceAll: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => EditorQueryResult<number>;
-  setSearchQuery: (query: string, caseSensitive: boolean) => EditorActionResult;
+  findNext: (query: SearchQuery) => EditorActionResult;
+  findPrevious: (query: SearchQuery) => EditorActionResult;
+  replaceCurrent: (query: SearchQuery) => EditorActionResult;
+  replaceAndFindNext: (query: SearchQuery) => EditorActionResult;
+  replaceAll: (query: SearchQuery) => EditorQueryResult<number>;
+  setSearchQuery: (query: SearchQuery) => EditorActionResult;
   goToLine: (line: number) => EditorActionResult;
 };
 
 /** Flat query bag (compat); prefer `EditorDomainQueries` on the live host. */
 export type EditorQueries = {
-  getMatchInfo: (query: string, caseSensitive: boolean) => EditorQueryResult<MatchInfo>;
+  getMatchInfo: (query: SearchQuery) => EditorQueryResult<MatchInfo>;
   getSelection: () => EditorQueryResult<EditorSelectionSnapshot>;
   getDocumentContent: () => EditorQueryResult<string>;
   canUndo: () => EditorQueryResult<boolean>;
@@ -364,25 +341,13 @@ export type EditorCommandRunner = {
   undoOccurrence: () => boolean;
   setWrap: (value: boolean) => void;
   setZoom: (zoom: number) => void;
-  findNext: (query: string, caseSensitive: boolean) => boolean;
-  findPrevious: (query: string, caseSensitive: boolean) => boolean;
-  replaceCurrent: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => boolean;
-  replaceAndFindNext: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => boolean;
-  replaceAll: (
-    query: string,
-    replacement: string,
-    caseSensitive: boolean,
-  ) => number;
-  setSearchQuery: (query: string, caseSensitive: boolean) => void;
-  getMatchInfo: (query: string, caseSensitive: boolean) => MatchInfo;
+  findNext: (query: SearchQuery) => boolean;
+  findPrevious: (query: SearchQuery) => boolean;
+  replaceCurrent: (query: SearchQuery) => boolean;
+  replaceAndFindNext: (query: SearchQuery) => boolean;
+  replaceAll: (query: SearchQuery) => number;
+  setSearchQuery: (query: SearchQuery) => void;
+  getMatchInfo: (query: SearchQuery) => MatchInfo;
   goToLine: (line: number) => boolean;
   toggleFold: () => boolean;
   fold: () => boolean;

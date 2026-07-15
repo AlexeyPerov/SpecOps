@@ -15,6 +15,10 @@
     query?: string;
     replaceValue?: string;
     caseSensitive?: boolean;
+    wholeWord?: boolean;
+    regex?: boolean;
+    /** Inline regex validation error (empty string when the query is valid). */
+    queryError?: string;
     results?: ProjectSearchResult[];
     running?: boolean;
     status?: string;
@@ -24,6 +28,8 @@
     onQueryChange?: (value: string) => void;
     onReplaceValueChange?: (value: string) => void;
     onCaseSensitiveChange?: (value: boolean) => void;
+    onWholeWordChange?: (value: boolean) => void;
+    onRegexChange?: (value: boolean) => void;
     onRunSearch?: () => void;
     onReplaceAll?: () => void;
     onOpenResult?: (path: string, line: number) => void;
@@ -37,6 +43,9 @@
     query = "",
     replaceValue = "",
     caseSensitive = false,
+    wholeWord = false,
+    regex = false,
+    queryError = "",
     results = [],
     running = false,
     status = "",
@@ -45,6 +54,8 @@
     onQueryChange,
     onReplaceValueChange,
     onCaseSensitiveChange,
+    onWholeWordChange,
+    onRegexChange,
     onRunSearch,
     onReplaceAll,
     onOpenResult,
@@ -55,6 +66,10 @@
   let showReplace = $state(false);
   let findInputEl: HTMLInputElement | null = $state(null);
   let replaceInputEl: HTMLInputElement | null = $state(null);
+
+  /** Navigation and replacement are disabled when the query is blank or invalid. */
+  const canSearch = $derived(query.trim().length > 0 && !queryError);
+  const canReplace = $derived(canSearch && results.length > 0);
 
   function clampHeight(next: number): number {
     return normalizeConsoleHeightPx(next);
@@ -146,7 +161,9 @@
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
-      onRunSearch?.();
+      if (canSearch) {
+        onRunSearch?.();
+      }
     }
   }
 </script>
@@ -183,24 +200,48 @@
           bind:this={findInputEl}
           type="text"
           class="ps-input"
+          class:ps-input-error={Boolean(queryError)}
           placeholder="Search in project…"
           value={query}
           oninput={(e) => onQueryChange?.((e.currentTarget as HTMLInputElement).value)}
           onkeydown={handleKeydown}
+          aria-invalid={Boolean(queryError)}
+          aria-label="Search in project"
         />
         <button
           type="button"
           class="ps-btn"
           class:ps-btn-active={caseSensitive}
           title="Match case"
+          aria-pressed={caseSensitive}
           onclick={() => onCaseSensitiveChange?.(!caseSensitive)}
         >
           Aa
         </button>
         <button
           type="button"
+          class="ps-btn"
+          class:ps-btn-active={wholeWord}
+          title="Whole word"
+          aria-pressed={wholeWord}
+          onclick={() => onWholeWordChange?.(!wholeWord)}
+        >
+          W
+        </button>
+        <button
+          type="button"
+          class="ps-btn"
+          class:ps-btn-active={regex}
+          title="Regular expression"
+          aria-pressed={regex}
+          onclick={() => onRegexChange?.(!regex)}
+        >
+          .*
+        </button>
+        <button
+          type="button"
           class="ps-btn ps-btn-primary"
-          disabled={running}
+          disabled={running || !canSearch}
           title="Search (Enter)"
           onclick={() => onRunSearch?.()}
         >
@@ -230,7 +271,7 @@
           <button
             type="button"
             class="ps-btn ps-btn-wide"
-            disabled={running || results.length === 0}
+            disabled={running || !canReplace}
             title="Replace all matches across the workspace"
             onclick={() => onReplaceAll?.()}
           >
@@ -239,6 +280,10 @@
         </div>
       {/if}
     </div>
+
+    {#if queryError}
+      <div class="ps-query-error" role="alert">{queryError}</div>
+    {/if}
 
     <div class="ps-status">{status}</div>
 
@@ -375,6 +420,19 @@
 
   .ps-input:focus {
     border-color: var(--color-accent);
+  }
+
+  .ps-input-error {
+    border-color: var(--color-danger, var(--color-accent));
+  }
+
+  .ps-query-error {
+    flex-shrink: 0;
+    font-size: var(--font-size-status);
+    color: var(--color-danger, var(--color-accent));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .ps-btn {

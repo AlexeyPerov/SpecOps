@@ -144,7 +144,13 @@ export function createCodeMirrorFixture(
 
   function setSearchHighlight(query: string, caseSensitive: boolean): void {
     const next: Extension = query
-      ? createSearchHighlightExtension(query, caseSensitive)
+      ? createSearchHighlightExtension({
+          text: query,
+          replacement: "",
+          caseSensitive,
+          wholeWord: false,
+          regexp: false,
+        })
       : [];
     view.dispatch({
       effects: searchHighlightCompartment.reconfigure(next),

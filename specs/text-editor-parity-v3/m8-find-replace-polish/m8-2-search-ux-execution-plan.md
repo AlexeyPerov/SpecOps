@@ -2,7 +2,7 @@
 
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M8.1](./m8-1-search-model-execution-plan.md) complete  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Heavy — Score 7
 
 How to use this plan: assign to one Svelte-focused agent. Complete the user-facing search experience and run the roadmap-wide editor regression gate.
@@ -22,7 +22,7 @@ Make in-file and project find/replace fast, predictable, keyboard-friendly, and 
 
 ## Task breakdown
 
-#### Task M8.2-1: Upgrade in-file find/replace UI [Score:7] [Agent:heavy]
+#### Task M8.2-1: Upgrade in-file find/replace UI [Score:7] [Agent:heavy] [DONE]
 
 - Add match-case, whole-word, and regex toggles with accessible pressed state and tooltips.
 - Seed query from a non-empty single selection on open; otherwise retain the current window-local query.
@@ -42,7 +42,7 @@ Dependencies: M8.1.
 
 ---
 
-#### Task M8.2-2: Align project search/replace UI [Score:7] [Agent:heavy]
+#### Task M8.2-2: Align project search/replace UI [Score:7] [Agent:heavy] [DONE]
 
 - Add the same query toggles and inline regex validation.
 - Show skipped/changed/dirty file counts after replace.
@@ -61,7 +61,7 @@ Dependencies: M8.2-1.
 
 ---
 
-#### Task M8.2-3: Roadmap-wide regression and documentation gate [Score:7] [Agent:heavy]
+#### Task M8.2-3: Roadmap-wide regression and documentation gate [Score:7] [Agent:heavy] [DONE]
 
 - Run focused scenarios across quick open, command palette, multi-cursor, folding/outline, auto-pairs, completion, snippets, heading jump, bookmarks, and search.
 - Validate active-pane routing, multi-window, Markdown edit/split/preview, minimap, large-file confirmation, binary/image open, external reload, save/undo, and themes.
@@ -79,10 +79,10 @@ Dependencies: M8.2-2 and all earlier milestones.
 
 ## Plan exit criteria
 
-- [ ] In-file and project search expose consistent query controls.
-- [ ] Replacement safety and feedback are complete.
-- [ ] Roadmap-wide regression gate passes.
-- [ ] User-facing documentation reflects shipped behavior.
+- [x] In-file and project search expose consistent query controls.
+- [x] Replacement safety and feedback are complete.
+- [x] Roadmap-wide regression gate passes.
+- [x] User-facing documentation reflects shipped behavior.
 
 ## Changelog instructions
 

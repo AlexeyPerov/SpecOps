@@ -1,5 +1,7 @@
+import { Text } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin } from "@codemirror/view";
 import type { DecorationSet, ViewUpdate } from "@codemirror/view";
+import { findAllRangesInText, type SearchQuery } from "./searchQuery";
 
 export interface MatchPosition {
   from: number;
@@ -9,33 +11,34 @@ export interface MatchPosition {
 const matchDeco = Decoration.mark({ class: "cm-search-match" });
 const currentMatchDeco = Decoration.mark({ class: "cm-search-match-current" });
 
+/**
+ * Find all match ranges in a plain string (literal, case toggle only).
+ * Delegates to the unified query model so editor and project search share one
+ * matching engine. Legacy callers that pass a raw string + case flag are kept
+ * compatible; project search now calls the richer `findAllRangesInString`.
+ */
 export function findAllMatches(
   doc: string,
   query: string,
   caseSensitive: boolean,
 ): MatchPosition[] {
   if (!query) return [];
-  const haystack = caseSensitive ? doc : doc.toLowerCase();
-  const needle = caseSensitive ? query : query.toLowerCase();
-  const matches: MatchPosition[] = [];
-  let pos = 0;
-  while (pos < haystack.length) {
-    const idx = haystack.indexOf(needle, pos);
-    if (idx === -1) break;
-    matches.push({ from: idx, to: idx + query.length });
-    pos = idx + Math.max(1, query.length);
-  }
-  return matches;
+  const sq: SearchQuery = {
+    text: query,
+    replacement: "",
+    caseSensitive,
+    wholeWord: false,
+    regexp: false,
+  };
+  return findAllRangesInText(Text.of(doc.split("\n")), sq);
 }
 
 function buildDecorations(
   view: EditorView,
-  query: string,
-  caseSensitive: boolean,
+  query: SearchQuery,
 ): DecorationSet {
-  if (!query) return Decoration.none;
-  const doc = view.state.doc.toString();
-  const matches = findAllMatches(doc, query, caseSensitive);
+  if (!query.text) return Decoration.none;
+  const matches = findAllRangesInText(view.state.doc, query);
   if (matches.length === 0) return Decoration.none;
 
   const sel = view.state.selection.main;
@@ -46,22 +49,18 @@ function buildDecorations(
   return Decoration.set(ranges, true);
 }
 
-export function createSearchHighlightExtension(
-  query: string,
-  caseSensitive: boolean,
-) {
+export function createSearchHighlightExtension(query: SearchQuery) {
   const q = query;
-  const cs = caseSensitive;
 
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
       constructor(view: EditorView) {
-        this.decorations = buildDecorations(view, q, cs);
+        this.decorations = buildDecorations(view, q);
       }
       update(update: ViewUpdate) {
         if (update.docChanged || update.viewportChanged || update.selectionSet) {
-          this.decorations = buildDecorations(update.view, q, cs);
+          this.decorations = buildDecorations(update.view, q);
         }
       }
     },

@@ -158,12 +158,23 @@
   let findQuery = $state("");
   let replaceValue = $state("");
   let findCaseSensitive = $state(false);
+  let findWholeWord = $state(false);
+  let findRegexp = $state(false);
   let goToLineValue = $state("");
+  /**
+   * Text captured from the editor's main selection at the moment Find opens.
+   * Used to seed the query when the selection is non-empty and single-ranged;
+   * empty when there is nothing useful to seed.
+   */
+  let findReplaceSeedSelection = $state("");
+  let prevFindReplaceOpen = false;
 
   $effect(() => {
     findQuery = toolSnapshot.find.query;
     replaceValue = toolSnapshot.find.replace;
     findCaseSensitive = toolSnapshot.find.caseSensitive;
+    findWholeWord = toolSnapshot.find.wholeWord;
+    findRegexp = toolSnapshot.find.regexp;
     goToLineValue = toolSnapshot.goToLineValue;
   });
 
@@ -177,7 +188,34 @@
     editorTools.setFindCaseSensitive(findCaseSensitive);
   });
   $effect(() => {
+    editorTools.setFindWholeWord(findWholeWord);
+  });
+  $effect(() => {
+    editorTools.setFindRegexp(findRegexp);
+  });
+  $effect(() => {
     editorTools.setGoToLineValue(goToLineValue);
+  });
+
+  // Seed the find query from a non-empty single selection when Find opens.
+  $effect(() => {
+    const isOpen = findReplaceOpen;
+    if (isOpen && !prevFindReplaceOpen) {
+      const host = getActiveEditorHost();
+      const selResult = host?.queries.selection.getSelection();
+      if (host && selResult?.ok && !selResult.value.empty) {
+        const docResult = host.queries.document.getDocumentContent();
+        if (docResult.ok) {
+          findReplaceSeedSelection = docResult.value.slice(
+            selResult.value.from,
+            selResult.value.to,
+          );
+        }
+      } else {
+        findReplaceSeedSelection = "";
+      }
+    }
+    prevFindReplaceOpen = isOpen;
   });
 
   let paneSectionEl = $state<HTMLElement | null>(null);
@@ -387,6 +425,9 @@
       bind:findQuery
       bind:replaceValue
       bind:findCaseSensitive
+      bind:findWholeWord
+      bind:findRegexp
+      seedSelection={findReplaceSeedSelection}
       getEditorRunner={getActiveEditorRunner}
       {notify}
       documentId={paneDocument?.id ?? null}

@@ -227,6 +227,10 @@
     query: string;
     replaceValue: string;
     caseSensitive: boolean;
+    wholeWord: boolean;
+    regex: boolean;
+    /** Inline regex validation error (empty string when the query is valid). */
+    queryError: string;
     results: import("../services/projectSearch").ProjectSearchResult[];
     running: boolean;
     status: string;
@@ -236,6 +240,8 @@
     onQueryChange: (value: string) => void;
     onReplaceValueChange: (value: string) => void;
     onCaseSensitiveChange: (value: boolean) => void;
+    onWholeWordChange: (value: boolean) => void;
+    onRegexChange: (value: boolean) => void;
     onRunSearch: () => void;
     onReplaceAll: () => void;
     onOpenResult: (path: string, line: number) => void;
@@ -596,6 +602,9 @@
         query={projectSearch.query}
         replaceValue={projectSearch.replaceValue}
         caseSensitive={projectSearch.caseSensitive}
+        wholeWord={projectSearch.wholeWord}
+        regex={projectSearch.regex}
+        queryError={projectSearch.queryError}
         results={projectSearch.results}
         running={projectSearch.running}
         status={projectSearch.status}
@@ -604,6 +613,8 @@
         onQueryChange={projectSearch.onQueryChange}
         onReplaceValueChange={projectSearch.onReplaceValueChange}
         onCaseSensitiveChange={projectSearch.onCaseSensitiveChange}
+        onWholeWordChange={projectSearch.onWholeWordChange}
+        onRegexChange={projectSearch.onRegexChange}
         onRunSearch={projectSearch.onRunSearch}
         onReplaceAll={projectSearch.onReplaceAll}
         onOpenResult={projectSearch.onOpenResult}

@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** M7 complete  
 **Next:** [M8.2 search UX](./m8-2-search-ux-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Heavy — Score 8
 
 How to use this plan: assign to one strong editor/search agent. Replace the boolean/string search API with a tested query model shared by editor and project search where semantics match.
@@ -23,7 +23,7 @@ Support literal/regex, case-sensitive, whole-word, selection-seeded search and c
 
 ## Task breakdown
 
-#### Task M8.1-1: Define and validate search query contract [Score:6] [Agent:medium]
+#### Task M8.1-1: Define and validate search query contract [Score:6] [Agent:medium] [DONE]
 
 - Define query text, replacement, case sensitivity, whole word, regex, and optional scope.
 - Return structured validation for invalid regular expressions.
@@ -40,7 +40,7 @@ Dependencies: M7.
 
 ---
 
-#### Task M8.1-2: Implement editor matcher/replacement semantics [Score:8] [Agent:heavy]
+#### Task M8.1-2: Implement editor matcher/replacement semantics [Score:8] [Agent:heavy] [DONE]
 
 - Prefer `@codemirror/search` maintained primitives where they satisfy the contract; add it as a direct dependency.
 - Support next/previous/wrap, all-match highlighting, current/total match info, replace current, and replace all.
@@ -59,7 +59,7 @@ Dependencies: M8.1-1.
 
 ---
 
-#### Task M8.1-3: Align project search semantics safely [Score:8] [Agent:heavy]
+#### Task M8.1-3: Align project search semantics safely [Score:8] [Agent:heavy] [DONE]
 
 - Reuse pure query compilation/match extraction for file contents where feasible.
 - Extend project results with match length/ranges needed for regex replacement.
@@ -78,10 +78,10 @@ Dependencies: M8.1-2.
 
 ## Plan exit criteria
 
-- [ ] One tested query contract drives in-file and project semantics.
-- [ ] Regex/whole-word/capture replacement is correct and safe.
-- [ ] Multi-selection and undo behavior are defined.
-- [ ] `npm test` and `npm run check` pass.
+- [x] One tested query contract drives in-file and project semantics.
+- [x] Regex/whole-word/capture replacement is correct and safe.
+- [x] Multi-selection and undo behavior are defined.
+- [x] `npm test` and `npm run check` pass.
 
 ## Risks
 

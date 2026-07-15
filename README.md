@@ -8,7 +8,9 @@ and **OpenCode**-powered workspace sessions. Built with
 
 ## What works today
 
-- **Editor** — syntax highlighting for Markdown and common code languages; optional **minimap**
+- **Editor** — syntax highlighting for Markdown and common code languages; optional **minimap**;
+  multi-cursor, code folding, Markdown outline; find/replace with regex, whole-word,
+  and case matching in-file and across the project
 - **Markdown** preview and edit
 - **Folders as workspaces** — multi-root activity rail
 - **Project panel** — file tree, drag-and-drop move, context menu (new/rename/delete), live refresh, tabs, show/hide hidden files

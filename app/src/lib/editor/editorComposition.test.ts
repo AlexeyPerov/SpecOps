@@ -74,7 +74,15 @@ describe("editor composition — per-pane search compartments", () => {
     viewA.dispatch({
       effects: a
         .getCompartments()
-        .searchHighlight.reconfigure(createSearchHighlightExtension("alpha", false)),
+        .searchHighlight.reconfigure(
+          createSearchHighlightExtension({
+            text: "alpha",
+            replacement: "",
+            caseSensitive: false,
+            wholeWord: false,
+            regexp: false,
+          }),
+        ),
     });
 
     // Pane B's search compartment content is unchanged.

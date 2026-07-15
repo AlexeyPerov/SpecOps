@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-07-15 19:15 — M8 Find/replace polish (unified search model + UX)
+
+- Added a unified search query model (`searchQuery.ts`) shared by in-file
+  editor search and project-wide search: literal/regex, case-sensitive,
+  whole-word, capture-group replacement (`$1`, `$<name>`, `$&`, `$$`), and
+  structured validation for invalid regular expressions. The matching engine
+  uses `@codemirror/search`'s `RegExpCursor` for both literal and regex
+  queries, correctly handling zero-length matches without infinite loops.
+- Reworked editor find/replace (`editorSearchOps.ts`, `searchHighlight.ts`)
+  to consume `SearchQuery` objects through the full host/domain/runner chain
+  (`editor.ts` types, `editorDomainApis`, `editorHostFactory`). Replace-all
+  dispatches mapped CodeMirror changes as a single undoable transaction;
+  replace-current/replace-and-find-next expand captures from the live
+  selection match.
+- Aligned project search (`projectSearch.ts`) to the same query model:
+  `ProjectSearchMatch` now carries `to`/`length` for regex replacement,
+  `searchInProject` validates the query before traversal and returns a typed
+  outcome, and `replaceInProjectFile` accepts a `SearchQuery`. Dirty open
+  documents remain skipped via the existing `decideReplaceAllForPath` gate;
+  clean open buffers are synced via `syncOpenDocumentAfterReplace`.
+- Upgraded in-file Find/Replace UI (`FindReplacePanel.svelte`): match-case,
+  whole-word, and regex toggles with `aria-pressed` state and tooltips;
+  inline regex error display; navigation/replacement disabled until the query
+  is valid; query seeded from a non-empty single selection on open;
+  responsive width (`clamp(320px, 90%, 480px)`) replacing the fixed 440px;
+  preserved Enter/Shift+Enter, F3/Shift+F3, Escape, and Tab focus cycling.
+- Upgraded project search UI (`ProjectSearchPanel.svelte`): same query
+  toggles and inline regex validation; Search and Replace All disabled on
+  invalid query; in-app confirmation dialog summarising file/match counts
+  before project replace-all (non-destructive cancellation leaves files
+  untouched); search is cancellable via a generation counter on workspace
+  switch and panel close so stale results never open.
+- Editor tool controller holds `wholeWord`/`regexp` state alongside the
+  existing query/replace/case fields.
+- **Safety policy:** project replace-all runs through `requestConfirm` and
+  reports skipped-dirty and failed counts after replace; on-disk replacement
+  never silently clobbers unsaved buffers. Word boundaries use ASCII `\b`
+  (documented JS semantics).
+- **Validation:** `npm test` passes (282 files, 2960 tests). `npm run check`
+  passes with 0 errors. Svelte autofixer reports no issues on touched
+  components.
+- **`specs/…/m8-1-…` and `m8-2-…-execution-plan.md`** — all tasks `[DONE]`,
+  status Done, exit criteria checked. Roadmap marked 9/9 milestones complete.
+
 ## 2026-07-15 10:45 — M6 Markdown snippets (model + UX)
 
 - Added a SpecOps-native Markdown snippet catalog (front matter, requirements,

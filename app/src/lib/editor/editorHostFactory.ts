@@ -57,28 +57,20 @@ export function editorHostToCommandRunner(host: EditorHost): EditorCommandRunner
     setZoom: (zoom) => {
       host.actions.view.setZoom(zoom);
     },
-    findNext: (query, caseSensitive) =>
-      host.actions.search.findNext(query, caseSensitive).ok,
-    findPrevious: (query, caseSensitive) =>
-      host.actions.search.findPrevious(query, caseSensitive).ok,
-    replaceCurrent: (query, replacement, caseSensitive) =>
-      host.actions.search.replaceCurrent(query, replacement, caseSensitive).ok,
-    replaceAndFindNext: (query, replacement, caseSensitive) =>
-      host.actions.search.replaceAndFindNext(query, replacement, caseSensitive)
-        .ok,
-    replaceAll: (query, replacement, caseSensitive) => {
-      const result = host.actions.search.replaceAll(
-        query,
-        replacement,
-        caseSensitive,
-      );
+    findNext: (query) => host.actions.search.findNext(query).ok,
+    findPrevious: (query) => host.actions.search.findPrevious(query).ok,
+    replaceCurrent: (query) => host.actions.search.replaceCurrent(query).ok,
+    replaceAndFindNext: (query) =>
+      host.actions.search.replaceAndFindNext(query).ok,
+    replaceAll: (query) => {
+      const result = host.actions.search.replaceAll(query);
       return result.ok ? result.value : 0;
     },
-    setSearchQuery: (query, caseSensitive) => {
-      host.actions.search.setSearchQuery(query, caseSensitive);
+    setSearchQuery: (query) => {
+      host.actions.search.setSearchQuery(query);
     },
-    getMatchInfo: (query, caseSensitive) => {
-      const result = host.queries.search.getMatchInfo(query, caseSensitive);
+    getMatchInfo: (query) => {
+      const result = host.queries.search.getMatchInfo(query);
       return result.ok ? result.value : { total: 0, current: 0 };
     },
     goToLine: (line) => host.actions.navigation.goToLine(line).ok,

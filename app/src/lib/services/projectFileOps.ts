@@ -3,7 +3,7 @@ import { exists, mkdir, readTextFile, remove, rename, writeTextFile } from "@tau
 import type { DiskFingerprint } from "../domain/contracts";
 import { SKIPPED_DIRECTORY_NAMES } from "./folderOpenableFiles";
 import { normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
-import { applyReplaceAll } from "../editor/editorSearchOps";
+import { replaceAllInString, validateSearchQuery, type SearchQuery } from "../editor/searchQuery";
 import {
   closeTabsForDeletedDocumentsUnderPath,
   markDocumentsMissingUnderPath,
@@ -134,20 +134,21 @@ export async function createProjectFile(
 }
 
 /**
- * Replace every occurrence of `query` with `replacement` inside an existing
- * workspace file and persist the result. The new content is returned so callers
- * can sync any open document for that path. Files outside the workspace or
- * skipped (heavy/hidden) directories are rejected without touching disk.
+ * Replace every occurrence of the query with the query's replacement inside an
+ * existing workspace file and persist the result. The new content is returned
+ * so callers can sync any open document for that path. Files outside the
+ * workspace or skipped (heavy/hidden) directories are rejected without touching
+ * disk. Uses the unified query model so regex/capture/whole-word replacement
+ * agrees with in-file search.
  */
 export async function replaceInProjectFile(
   workspaceRoot: string,
   filePath: string,
-  query: string,
-  replacement: string,
-  caseSensitive: boolean,
+  query: SearchQuery,
 ): Promise<ProjectReplaceResult> {
-  if (!query) {
-    return { ok: false, reason: "Query is empty.", count: 0 };
+  const validation = validateSearchQuery(query);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason, count: 0 };
   }
   if (!isPathUnderRoot(filePath, workspaceRoot)) {
     return { ok: false, reason: "File is outside the workspace.", count: 0 };
@@ -162,12 +163,7 @@ export async function replaceInProjectFile(
     const reason = error instanceof Error ? error.message : String(error);
     return { ok: false, reason, count: 0 };
   }
-  const { text: nextContent, count } = applyReplaceAll(
-    content,
-    query,
-    replacement,
-    caseSensitive,
-  );
+  const { text: nextContent, count } = replaceAllInString(content, query);
   if (count === 0) {
     return { ok: false, reason: "No matches.", count: 0 };
   }

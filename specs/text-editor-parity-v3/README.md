@@ -1,6 +1,6 @@
 # Text Editor Parity v3 — Roadmap
 
-**Status:** In progress — 7 of 9 milestones complete
+**Status:** Complete — 9 of 9 milestones complete
 **Product position:** SpecOps remains a notes/specs workspace with AI. This
 roadmap adds enough general-purpose editing capability that users should rarely
 need a second text editor for routine work; it does not pursue full
@@ -35,9 +35,9 @@ Scores estimate implementation/review complexity, not elapsed time.
 | [M3 — Command palette](./m3-command-palette/) | Complete | Searchable, context-aware command launcher | 2 | Medium (6) |
 | [M4 — Folding and Markdown outline](./m4-folding-markdown-outline/) | Complete | Code folding plus heading navigation for long specs | 2 | Heavy (7) |
 | [M5 — Typing assistance](./m5-typing-assistance/) | Complete | Auto-close pairs and local document-word completion | 2 | Medium (6) |
-| [M6 — Markdown snippets](./m6-markdown-snippets/) | Planned | Built-in and user-defined reusable spec templates | 2 | Medium (6) |
+| [M6 — Markdown snippets](./m6-markdown-snippets/) | Complete | Built-in and user-defined reusable spec templates | 2 | Medium (6) |
 | [M7 — Document landmarks](./m7-document-landmarks/) | Complete | Quick heading jump plus document-local bookmarks | 2 | Medium (6) |
-| [M8 — Find/replace polish](./m8-find-replace-polish/) | Planned | Whole-word/regex search, selection seeding, consistent project search | 2 | Heavy (7) |
+| [M8 — Find/replace polish](./m8-find-replace-polish/) | Complete | Whole-word/regex search, selection seeding, consistent project search | 2 | Heavy (7) |
 
 ## Recommended execution order
 

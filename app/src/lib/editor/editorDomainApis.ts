@@ -333,75 +333,63 @@ export function createEditorDomainApis(
       },
     },
     search: {
-      findNext: (query, caseSensitive) => {
+      findNext: (query) => {
         const view = getView();
         if (!view) {
           return unavailable();
         }
-        const found = editorFindNext(view, query, caseSensitive);
+        const found = editorFindNext(view, query);
         if (found) {
           updateCursor();
         }
         return found ? ok() : disabled();
       },
-      findPrevious: (query, caseSensitive) => {
+      findPrevious: (query) => {
         const view = getView();
         if (!view) {
           return unavailable();
         }
-        const found = editorFindPrevious(view, query, caseSensitive);
+        const found = editorFindPrevious(view, query);
         if (found) {
           updateCursor();
         }
         return found ? ok() : disabled();
       },
-      replaceCurrent: (query, replacement, caseSensitive) => {
+      replaceCurrent: (query) => {
         const view = getView();
         if (!view) {
           return unavailable();
         }
-        return editorReplaceCurrent(view, query, replacement, caseSensitive)
-          ? ok()
-          : disabled();
+        return editorReplaceCurrent(view, query) ? ok() : disabled();
       },
-      replaceAndFindNext: (query, replacement, caseSensitive) => {
+      replaceAndFindNext: (query) => {
         const view = getView();
         if (!view) {
           return unavailable();
         }
-        const found = editorReplaceAndFindNext(
-          view,
-          query,
-          replacement,
-          caseSensitive,
-        );
+        const found = editorReplaceAndFindNext(view, query);
         if (found) {
           updateCursor();
         }
         return found ? ok() : disabled();
       },
-      replaceAll: (query, replacement, caseSensitive): EditorQueryResult<number> => {
+      replaceAll: (query): EditorQueryResult<number> => {
         const view = getView();
         if (!view) {
           return { ok: false, reason: "unavailable" };
         }
-        const count = editorReplaceAll(view, query, replacement, caseSensitive);
+        const count = editorReplaceAll(view, query);
         if (count > 0) {
           updateCursor();
         }
         return { ok: true, value: count };
       },
-      setSearchQuery: (query, caseSensitive) => {
+      setSearchQuery: (query) => {
         const view = getView();
         if (!view) {
           return unavailable();
         }
-        editorSetSearchQuery(
-          view,
-          query,
-          caseSensitive,
-          searchHighlightCompartment,
-        );
+        editorSetSearchQuery(view, query, searchHighlightCompartment);
         return ok();
       },
     },
@@ -610,13 +598,13 @@ export function createEditorDomainApis(
       },
     },
     search: {
-      getMatchInfo: (query, caseSensitive): EditorQueryResult<MatchInfo> => {
+      getMatchInfo: (query): EditorQueryResult<MatchInfo> => {
         if (!getView()) {
           return { ok: false, reason: "unavailable" };
         }
         return {
           ok: true,
-          value: editorGetMatchInfo(getView(), query, caseSensitive),
+          value: editorGetMatchInfo(getView(), query),
         };
       },
     },

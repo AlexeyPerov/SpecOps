@@ -232,4 +232,12 @@ describe("context-aware document lookup", () => {
     // No duplicates.
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it("collectAllOpenDocumentIds includes inactive context documents", async () => {
+    const { collectAllOpenDocumentIds } = await import("./contextHelpers");
+    const state = buildWorkspaceState("ws-1");
+    expect(collectAllOpenDocumentIds(state)).toEqual(
+      new Set(["doc-1", "doc-2", "doc-3", "doc-4"]),
+    );
+  });
 });

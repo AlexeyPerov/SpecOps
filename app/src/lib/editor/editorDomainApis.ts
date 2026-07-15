@@ -582,6 +582,11 @@ export function createEditorDomainApis(
       },
     },
     markdown: {
+      /**
+       * Heading list for the live view bound to this host identity.
+       * UI consumers (outline) must ignore publishes when
+       * `host.identity` no longer matches the active pane/document generation.
+       */
       getHeadings: () => {
         const view = getView();
         if (!view) {

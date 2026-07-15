@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-15 08:15 — F1.6 Editor and outline edge cases
+
+- Outline publishes are generation-bound: `markdownOutlineHostBinding` rejects
+  stale pane/document/generation snapshots; `MarkdownOutlinePanel` clears on tab
+  switch and refreshes from the matching host (500ms poll fallback).
+- Inactive panes use `pointer-events: none` on the editor surface; pane chrome
+  still activates on pointerdown, and focus is blurred when a pane deactivates.
+  Find/replace, go-to, and outline remain active-pane-only.
+- App-icon batch open notifies the successful open count only; failures and
+  cross-window redirects are reported per path.
+- Editor session cache retains undo/fold entries across inactive contexts via
+  `collectAllOpenDocumentIds` (still LRU-bounded at 32).
+- **Validation:** `npm test` passes (279 files, 2902 tests). `npm run check`
+  passes with 0 errors. Svelte autofixer reports no issues on touched
+  components (suggestions only).
+- **`specs/…/f1-6-…-execution-plan.md`** — all tasks `[DONE]`, status Done,
+  exit criteria checked.
+
 ## 2026-07-14 23:14 — F1.5 Persistence and cross-window safety
 
 - Serialized all `session.json` read-modify-write paths through a shared write

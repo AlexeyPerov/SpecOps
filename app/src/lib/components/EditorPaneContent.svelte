@@ -242,6 +242,17 @@
       onActivePaneElement?.(paneSectionEl);
     }
   });
+
+  // Inactive panes must not keep keyboard focus in the editor surface.
+  $effect(() => {
+    if (isActivePane || !paneSectionEl || typeof document === "undefined") {
+      return;
+    }
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && paneSectionEl.contains(active)) {
+      active.blur();
+    }
+  });
 </script>
 
 <section
@@ -353,6 +364,8 @@
       {#if isActivePane && outlineOpen && documentView.isMarkdownDocument && !isSessionTabActive && !isChatHttpActive}
         <MarkdownOutlinePanel
           getHost={getActiveEditorHost}
+          documentId={paneDocument?.id ?? null}
+          {paneId}
           requestFocus={true}
           onJump={(headingKey) => {
             // Preview-only: switch to edit so the CodeMirror host can reveal the heading.
@@ -391,9 +404,15 @@
 </section>
 
 <style>
+  /*
+   * Inactive pane policy (F1.6): keep the editor mounted, but block pointer
+   * interaction on the editor surface. Pane chrome (tabs/header) lives in
+   * EditorPaneView and still receives pointerdown to activate the pane.
+   * Find/replace, go-to, and outline render only when isActivePane is true.
+   */
   .editor-pane-inactive {
-    /* Keep mounted editors alive but de-emphasize inactive pane chrome. */
     opacity: 0.92;
+    pointer-events: none;
   }
 
   .editor-pane-body {

@@ -1,16 +1,25 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
-  import type { EditorHost, MarkdownHeadingSnapshot } from "../types/editor";
+  import type { EditorHost, EditorHostIdentity, MarkdownHeadingSnapshot } from "../types/editor";
   import { filterMarkdownHeadings } from "../editor/markdownHeadings";
+  import {
+    resolveOutlineHostBinding,
+    shouldPublishOutlineSnapshot,
+  } from "../editor/markdownOutlineHostBinding";
 
   let {
     getHost,
+    documentId = null,
+    paneId,
     onJump,
     onClose,
     requestFocus = false,
   }: {
     getHost: () => EditorHost | null;
+    /** Selected document in this pane — drives event-driven refresh on tab switch. */
+    documentId?: string | null;
+    paneId: string;
     onJump: (headingKey: string) => void;
     onClose: () => void;
     /** When true (focus command), focus the filter input once. */
@@ -25,35 +34,60 @@
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
   let selectedIndex = $state(0);
+  /** Binding last successfully published; used to drop stale delayed refreshes. */
+  let publishedBinding = $state.raw<EditorHostIdentity | null>(null);
 
   const filtered = $derived(filterMarkdownHeadings(headings, filterQuery));
   const activeIndex = $derived(
     filtered.length === 0 ? 0 : Math.min(selectedIndex, filtered.length - 1),
   );
 
+  function clearOutline(): void {
+    headings = [];
+    activeKey = null;
+    foldedKeys = new SvelteSet();
+    publishedBinding = null;
+  }
+
   function refreshFromHost(): void {
     if (disposed) {
       return;
     }
     const host = getHost();
-    if (!host) {
-      headings = [];
-      activeKey = null;
-      foldedKeys = new SvelteSet();
+    const expected = resolveOutlineHostBinding(host?.identity ?? null, documentId, paneId);
+    if (!expected || !host) {
+      clearOutline();
       return;
     }
     const list = host.queries.markdown.getHeadings();
     const active = host.queries.markdown.getActiveHeadingKey();
-    headings = list.ok ? list.value : [];
-    activeKey = active.ok ? active.value : null;
+    // Re-read host after queries: ignore if tab/pane generation advanced mid-read.
+    const stillActive = getHost();
+    if (
+      !stillActive ||
+      !shouldPublishOutlineSnapshot(expected, stillActive.identity) ||
+      !shouldPublishOutlineSnapshot(expected, host.identity)
+    ) {
+      return;
+    }
+    const nextHeadings = list.ok ? list.value : [];
+    const nextActive = active.ok ? active.value : null;
     const nextFolded = new SvelteSet<string>();
-    for (const heading of headings) {
+    for (const heading of nextHeadings) {
       const folded = host.queries.markdown.isHeadingFolded(heading.key);
       if (folded.ok && folded.value) {
         nextFolded.add(heading.key);
       }
     }
+    // Final generation check before mutating visible state.
+    const publishHost = getHost();
+    if (!publishHost || !shouldPublishOutlineSnapshot(expected, publishHost.identity)) {
+      return;
+    }
+    headings = nextHeadings;
+    activeKey = nextActive;
     foldedKeys = nextFolded;
+    publishedBinding = expected;
   }
 
   function scheduleRefresh(): void {
@@ -66,9 +100,14 @@
     }, 80);
   }
 
+  // Event-driven refresh on tab/document switch; poll remains a fallback for
+  // cursor/fold updates within the same document (longer than the old 250ms).
   $effect(() => {
+    void documentId;
+    void paneId;
+    clearOutline();
     refreshFromHost();
-    const interval = setInterval(scheduleRefresh, 250);
+    const interval = setInterval(scheduleRefresh, 500);
     return () => {
       clearInterval(interval);
       if (refreshTimer) {
@@ -137,6 +176,8 @@
   aria-label="Markdown outline"
   tabindex="-1"
   onkeydown={handleKeydown}
+  data-outline-document={documentId ?? ""}
+  data-outline-generation={publishedBinding?.generation ?? ""}
 >
   <div class="markdown-outline-header">
     <h3>Outline</h3>

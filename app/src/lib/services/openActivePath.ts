@@ -152,3 +152,12 @@ export function describeOpenActivePathResult(result: OpenActivePathResult): stri
       return "Open failed.";
   }
 }
+
+/** Paths that landed in this window (new, existing, or pending large-file confirm). */
+export function isSuccessfulOpenActivePathResult(result: OpenActivePathResult): boolean {
+  return (
+    result.kind === "opened" ||
+    result.kind === "existing" ||
+    result.kind === "pending_confirm"
+  );
+}

@@ -100,7 +100,9 @@
   });
 </script>
 
-<!-- Pointer-only focus convenience; keyboard focus has its own ⌘⌥1..4 path. -->
+<!-- Pointer-only focus convenience; keyboard focus has its own ⌘⌥1..4 path.
+     Inactive pane editor surfaces use pointer-events: none (EditorPaneContent);
+     clicks still hit this section and activate the pane via onpointerdown. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <section
   class="editor-pane-view"

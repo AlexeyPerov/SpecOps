@@ -24,6 +24,7 @@
   import { subscribeDocumentDiskReload } from "../lib/editor/editorSessionLifecycle";
   import { appState } from "../lib/state/appState";
   import {
+    collectAllOpenDocumentIds,
     getActiveContextSnapshot,
   } from "../lib/state/appState/contextHelpers";
   import {
@@ -264,8 +265,9 @@
   });
 
   $effect(() => {
-    const openIds = new Set(documents.map((document) => document.id));
-    editorSessionCache.retainDocuments(openIds);
+    // Retain undo/fold cache across inactive contexts (LRU-bounded); only drop
+    // entries whose documents no longer exist in any context.
+    editorSessionCache.retainDocuments(collectAllOpenDocumentIds(snapshot));
   });
 
   /** Stable key for external file-watcher sync; ignores non-path snapshot churn. */

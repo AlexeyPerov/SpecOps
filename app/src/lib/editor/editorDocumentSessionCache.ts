@@ -9,6 +9,10 @@
  *
  * Only inactive sessions live here; the live EditorView holds the active one.
  * Scroll position stays in `DocumentState.scrollTop` and is not cached.
+ *
+ * Cross-context retain (F1.6): callers should pass document ids from every
+ * context (not only the active one) so switching workspaces does not drop
+ * undo/fold cache entries; LRU `maxEntries` still bounds memory.
  */
 import type { EditorState } from "@codemirror/state";
 

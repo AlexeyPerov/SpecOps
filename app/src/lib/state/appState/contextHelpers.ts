@@ -308,6 +308,17 @@ export function allContextSnapshots(state: AppDomainState): ContextEntry[] {
   return entries;
 }
 
+/** Document ids across notepad, chat-http, and every workspace (for session-cache retain). */
+export function collectAllOpenDocumentIds(state: AppDomainState): Set<string> {
+  const ids = new Set<string>();
+  for (const entry of allContextSnapshots(state)) {
+    for (const documentState of entry.snapshot.documents) {
+      ids.add(documentState.id);
+    }
+  }
+  return ids;
+}
+
 /**
  * Find a document by id across every context. Returns the owning context id
  * together with the document, because document ids are not guaranteed to be

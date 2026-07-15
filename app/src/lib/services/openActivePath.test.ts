@@ -11,6 +11,7 @@ import { statDiskFingerprint } from "./diskFingerprint";
 import { syncRecentFiles } from "./recentFilesSync";
 import {
   describeOpenActivePathResult,
+  isSuccessfulOpenActivePathResult,
   openActivePath,
   type OpenActivePathResult,
 } from "./openActivePath";
@@ -236,5 +237,21 @@ describe("describeOpenActivePathResult", () => {
 
   it.each(cases)("describes $result.kind", ({ result, expected }) => {
     expect(describeOpenActivePathResult(result)).toBe(expected);
+  });
+});
+
+describe("isSuccessfulOpenActivePathResult", () => {
+  it("treats opened/existing/pending_confirm as success", () => {
+    expect(isSuccessfulOpenActivePathResult({ kind: "opened", path: "/a" })).toBe(true);
+    expect(isSuccessfulOpenActivePathResult({ kind: "existing", path: "/a" })).toBe(true);
+    expect(isSuccessfulOpenActivePathResult({ kind: "pending_confirm", path: "/a" })).toBe(true);
+  });
+
+  it("treats redirected/missing/failed as non-success for batch counts", () => {
+    expect(isSuccessfulOpenActivePathResult({ kind: "redirected", path: "/a" })).toBe(false);
+    expect(isSuccessfulOpenActivePathResult({ kind: "missing", path: "/a" })).toBe(false);
+    expect(
+      isSuccessfulOpenActivePathResult({ kind: "failed", path: "/a", reason: "nope" }),
+    ).toBe(false);
   });
 });

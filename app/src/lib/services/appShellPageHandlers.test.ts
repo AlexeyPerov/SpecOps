@@ -4,6 +4,7 @@ import { appState } from "../state/appState";
 import { createAppShellEditorHandlers, createAppShellFileHandlers } from "./appShellPageHandlers";
 import { checkDocumentIfDeferred } from "./externalFileChanges";
 import { confirmLargeFileOpen } from "./openFileGate";
+import { openActivePath } from "./openActivePath";
 
 vi.mock("./externalFileChanges", () => ({
   checkDocumentIfDeferred: vi.fn(async () => "unchanged"),
@@ -11,8 +12,16 @@ vi.mock("./externalFileChanges", () => ({
 vi.mock("./openFileGate", () => ({
   confirmLargeFileOpen: vi.fn(async () => {}),
 }));
+vi.mock("./openActivePath", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./openActivePath")>();
+  return {
+    ...actual,
+    openActivePath: vi.fn(),
+  };
+});
 
 const checkDocumentIfDeferredMock = vi.mocked(checkDocumentIfDeferred);
+const openActivePathMock = vi.mocked(openActivePath);
 
 const defaultExternalFiles: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -143,5 +152,31 @@ describe("createAppShellEditorHandlers.handleConfirmLargeFile", () => {
     );
     expect(notify).toHaveBeenCalledWith("Opened /tmp/inactive-large.txt");
     expect(confirming).toBe(false);
+  });
+});
+
+describe("createAppShellFileHandlers.consumeOpenedPaths", () => {
+  beforeEach(() => {
+    openActivePathMock.mockReset();
+  });
+
+  it("notifies with successful open count only and reports failures separately", async () => {
+    openActivePathMock
+      .mockResolvedValueOnce({ kind: "opened", path: "/tmp/a.md" })
+      .mockResolvedValueOnce({ kind: "failed", path: "/tmp/b.md", reason: "permission denied" })
+      .mockResolvedValueOnce({ kind: "existing", path: "/tmp/c.md" });
+
+    const notify = vi.fn();
+    const handlers = createAppShellFileHandlers({
+      getCurrentWindowId: () => "win-1",
+      getRuntimeReady: () => true,
+      notify,
+    });
+
+    await handlers.consumeOpenedPaths(["/tmp/a.md", "/tmp/b.md", "/tmp/c.md"]);
+
+    expect(notify).toHaveBeenCalledWith("Failed to open file: permission denied");
+    expect(notify).toHaveBeenCalledWith("Opened 2 file(s) from app icon.");
+    expect(notify).not.toHaveBeenCalledWith("Opened 3 file(s) from app icon.");
   });
 });

@@ -10,7 +10,11 @@ import { checkDocumentIfDeferred } from "./externalFileChanges";
 import { shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 import { requestConfirm } from "./confirmDialogUi";
 import { confirmLargeFileOpen } from "./openFileGate";
-import { describeOpenActivePathResult, openActivePath } from "./openActivePath";
+import {
+  describeOpenActivePathResult,
+  isSuccessfulOpenActivePathResult,
+  openActivePath,
+} from "./openActivePath";
 import { logDiagnostic } from "./logging";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { SettingsDialogTab } from "./settingsDialogUi";
@@ -99,9 +103,26 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
     }
   }
 
+  /**
+   * Batch-open paths from the app icon / OS open-files event.
+   * Notifies with the successful open count only; failures and cross-window
+   * redirects are reported per path via {@link describeOpenActivePathResult}.
+   */
   async function consumeOpenedPaths(paths: string[]): Promise<void> {
-    await openDroppedPaths(paths);
-    deps.notify(`Opened ${paths.length} file(s) from app icon.`);
+    let successCount = 0;
+    for (const path of paths) {
+      try {
+        const result = await openActivePath(path, deps.getCurrentWindowId());
+        if (isSuccessfulOpenActivePathResult(result)) {
+          successCount += 1;
+          continue;
+        }
+        deps.notify(describeOpenActivePathResult(result));
+      } catch (error: unknown) {
+        deps.notify(`Failed to open file: ${getErrorMessage(error)}`);
+      }
+    }
+    deps.notify(`Opened ${successCount} file(s) from app icon.`);
   }
 
   async function onTabActivated(tabId: string): Promise<void> {

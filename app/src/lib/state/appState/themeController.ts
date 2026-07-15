@@ -145,6 +145,33 @@ export function baseModeForRef(
 }
 
 /**
+ * Resolves the full {@link ThemeTokens} for an arbitrary theme ref without
+ * touching the DOM. Builtins are computed procedurally; presets and customs
+ * carry their token maps inline. Unknown ids fall back to the matching-mode
+ * builtin so a duplicate never produces an empty token set.
+ */
+export function resolveTokensForRef(
+  ref: ActiveThemeRef,
+  customThemes: CustomThemeRecord[],
+): ThemeTokens {
+  if (ref.kind === "builtin") {
+    return resolveBuiltinTokens(ref.id);
+  }
+  if (ref.kind === "preset") {
+    const preset = IMPORTED_THEMES.find((p) => p.id === ref.id);
+    if (preset) {
+      return preset.tokens;
+    }
+  } else {
+    const custom = findCustomTheme(customThemes, ref.id);
+    if (custom) {
+      return custom.tokens;
+    }
+  }
+  return resolveBuiltinTokens(fallbackBuiltinForRef(ref, customThemes));
+}
+
+/**
  * Resolves which theme ref is currently effective given the mode and OS color
  * scheme. `manual` pins {@link AppThemeState.manualTheme}; `auto` follows
  * {@link systemPrefersDark} and switches between dark/light slots.
@@ -240,6 +267,35 @@ export function createCustomThemeFromCurrent(theme: AppThemeState): AppThemeStat
   const ref = resolveActiveTheme(theme);
   const baseMode = baseModeForRef(ref, theme.customThemes);
   const tokens = snapshotCurrentThemeTokens(theme);
+  const id = crypto.randomUUID();
+  const custom: CustomThemeRecord = {
+    id,
+    name: nextCustomThemeName(theme.customThemes),
+    baseMode,
+    tokens,
+  };
+
+  const customRef: ActiveThemeRef = { kind: "custom", id };
+  const nextTheme: AppThemeState = {
+    ...theme,
+    customThemes: [...theme.customThemes, custom],
+    darkTheme: baseMode === "dark" ? customRef : theme.darkTheme,
+    lightTheme: baseMode === "light" ? customRef : theme.lightTheme,
+  };
+  applyThemeState(nextTheme);
+  return nextTheme;
+}
+
+/**
+ * Duplicates an arbitrary theme ref (builtin / preset / custom) into a new
+ * editable custom theme seeded from that ref's tokens. Unlike
+ * {@link createCustomThemeFromCurrent} this forks a *specific* theme by ref,
+ * not just the currently effective one, and resolves its tokens purely
+ * (no DOM snapshot).
+ */
+export function duplicateTheme(ref: ActiveThemeRef, theme: AppThemeState): AppThemeState {
+  const baseMode = baseModeForRef(ref, theme.customThemes);
+  const tokens = resolveTokensForRef(ref, theme.customThemes);
   const id = crypto.randomUUID();
   const custom: CustomThemeRecord = {
     id,

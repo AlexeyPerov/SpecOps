@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-07-15 20:18 — Themes: duplicate any theme, mode badges, curated additions
+
+- Added a per-row "Duplicate" action in the Themes view that forks any builtin,
+  preset, or custom theme into a new editable custom theme seeded from that
+  theme's tokens. Previously only the currently active theme could be forked.
+  Backed by a new DOM-free `resolveTokensForRef` resolver and a `duplicateTheme`
+  state action.
+- Added four hand-authored preset themes in a new `curatedThemes.ts`: High
+  Contrast (dark), High Contrast (light), Terminal Green, and Terminal Amber.
+  These live separately from the auto-generated imported-themes catalog and are
+  concatenated into the theme picker and the cycle order.
+- Fixed theme-name inconsistency: only the two builtins carried "(Dark)"/"(Light)"
+  in their names. Renamed them to plain "Amber"/"Blue" and added a uniform
+  dark/light badge to every theme row (manual, light, and dark lists), plus an
+  accessible `{name} {mode}` label per row so the two "High Contrast" entries
+  stay distinguishable in manual mode.
+- Added `.theme-row-duplicate` styling and a tag-spacing rule for rows that
+  carry both a mode badge and the existing "custom" tag.
+- **Validation:** `npm test` passes (283 files, 2973 tests). `npm run check`
+  passes with 0 errors and 0 warnings. Existing `cycleTheme` order tests remain
+  green (curated refs appended after imported presets, before customs).
+
 ## 2026-07-15 19:15 — M8 Find/replace polish (unified search model + UX)
 
 - Added a unified search query model (`searchQuery.ts`) shared by in-file

@@ -7,6 +7,7 @@ import { syncRecentFiles } from "../services/recentFilesSync";
 import { loadThemeFile } from "../services/themeStore";
 import { BUILTIN_THEME_IDS } from "../styles/themeTokens";
 import { IMPORTED_THEMES } from "../styles/importedThemes";
+import { CURATED_THEMES } from "../styles/curatedThemes";
 import type { BuiltinThemeId } from "../styles/themeTokens";
 import {
   findWorkspaceByPath,
@@ -23,6 +24,7 @@ import {
   baseModeForRef,
   createCustomThemeFromCurrent,
   defaultThemeState,
+  duplicateTheme,
   getSystemPrefersDark,
   persistThemeImmediate,
   resetThemePersistenceForTests,
@@ -174,6 +176,7 @@ function createStateStore() {
         const refs: ActiveThemeRef[] = [
           ...BUILTIN_THEME_IDS.map<ActiveThemeRef>((id) => ({ kind: "builtin", id })),
           ...IMPORTED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
+          ...CURATED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
           ...state.theme.customThemes.map<ActiveThemeRef>((custom) => ({
             kind: "custom",
             id: custom.id,
@@ -196,6 +199,13 @@ function createStateStore() {
     createCustomTheme() {
       update((state) => {
         const theme = createCustomThemeFromCurrent(state.theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    duplicateTheme(ref: ActiveThemeRef) {
+      update((state) => {
+        const theme = duplicateTheme(ref, state.theme);
         persistThemeImmediate(theme);
         return { ...state, theme };
       });

@@ -9,6 +9,7 @@ import {
   applyThemeState,
   baseModeForRef,
   resolveActiveTheme,
+  resolveTokensForRef,
   setSystemPrefersDark,
   subscribeSystemColorScheme,
 } from "./themeController";
@@ -191,11 +192,51 @@ describe("subscribeSystemColorScheme", () => {
 
       unlisten();
       expect(removeSpy).toHaveBeenCalledWith("change", expect.any(Function));
-    } finally {
+      } finally {
       if (originalMatchMedia) {
         (globalThis.window as unknown as { matchMedia: unknown }).matchMedia =
           originalMatchMedia;
       }
     }
+  });
+});
+
+describe("resolveTokensForRef", () => {
+  it("returns the procedurally-resolved tokens for a builtin ref", () => {
+    const tokens = resolveTokensForRef({ kind: "builtin", id: "dark-amber" }, []);
+    expect(tokens["accent-color"]).toBe(
+      resolveBuiltinTokens("dark-amber")["accent-color"],
+    );
+    // Builtins resolve a full token map, not an empty object.
+    expect(tokens["color-bg-root"].length).toBeGreaterThan(0);
+  });
+
+  it("returns the inline token map for a preset ref", () => {
+    const darkside = IMPORTED_THEMES.find((p) => p.id === "darkside");
+    if (!darkside) {
+      return;
+    }
+    const tokens = resolveTokensForRef({ kind: "preset", id: "darkside" }, []);
+    expect(tokens).toBe(darkside.tokens);
+  });
+
+  it("returns the inline token map for a custom ref", () => {
+    const customTokens = { ...resolveBuiltinTokens("light-blue"), "accent-color": "#abcdef" };
+    const customThemes = [
+      { id: "c1", name: "Mine", baseMode: "light" as const, tokens: customTokens },
+    ];
+    const tokens = resolveTokensForRef({ kind: "custom", id: "c1" }, customThemes);
+    expect(tokens["accent-color"]).toBe("#abcdef");
+  });
+
+  it("falls back to the matching-mode builtin for an unknown preset id", () => {
+    // Unknown preset → baseModeForRef returns "dark" → fallback builtin dark-amber.
+    const tokens = resolveTokensForRef({ kind: "preset", id: "removed" }, []);
+    expect(tokens["accent-color"]).toBe(resolveBuiltinTokens("dark-amber")["accent-color"]);
+  });
+
+  it("falls back to the matching-mode builtin for an unknown custom id", () => {
+    const tokens = resolveTokensForRef({ kind: "custom", id: "nope" }, []);
+    expect(tokens["accent-color"]).toBe(resolveBuiltinTokens("dark-amber")["accent-color"]);
   });
 });

@@ -2,8 +2,8 @@ import type { BuiltinThemeId, ThemeTokenKey } from "./themeTokenSchema";
 import type { ThemeSyntaxPalette } from "./themeSyntaxTokens";
 
 export const BUILTIN_LABELS: Record<BuiltinThemeId, string> = {
-  "dark-amber": "Amber (Dark)",
-  "light-blue": "Blue (Light)",
+  "dark-amber": "Amber",
+  "light-blue": "Blue",
 };
 
 export const BUILTIN_ACCENT_HEX: Record<BuiltinThemeId, string> = {

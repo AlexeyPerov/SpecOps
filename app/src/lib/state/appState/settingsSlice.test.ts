@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFileTab, createSessionTab, createSinglePaneLayout, isSessionTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
+import { IMPORTED_THEMES } from "../../styles/importedThemes";
 import {
   defaultProviderModelCatalogs,
   getProviderDefaultModelId,
@@ -77,6 +78,36 @@ describe("appState settings and editor chrome", () => {
     // Default mode is auto with OS dark, so a dark custom theme lands in darkTheme.
     expect(snapshot.theme.darkTheme.kind).toBe("custom");
     expect(saveThemeFileMock).toHaveBeenCalled();
+  });
+
+  it("duplicateTheme forks a specific ref into a custom theme seeded from its tokens", () => {
+    // Duplicate the `turnip` preset (the default dark slot) by ref, not by
+    // "currently active". The new custom inherits turnip's tokens and lands in
+    // the dark slot.
+    appState.duplicateTheme({ kind: "preset", id: "turnip" });
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.customThemes).toHaveLength(1);
+    expect(snapshot.theme.customThemes[0]?.name).toBe("Custom 1");
+    expect(snapshot.theme.customThemes[0]?.baseMode).toBe("dark");
+    expect(snapshot.theme.customThemes[0]?.tokens["accent-color"]).toBe(
+      IMPORTED_THEMES.find((p) => p.id === "turnip")!.tokens["accent-color"],
+    );
+    expect(snapshot.theme.darkTheme).toEqual({
+      kind: "custom",
+      id: snapshot.theme.customThemes[0]!.id,
+    });
+    expect(saveThemeFileMock).toHaveBeenCalled();
+  });
+
+  it("duplicateTheme can fork a light ref into the light slot", () => {
+    appState.duplicateTheme({ kind: "preset", id: "github" });
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.theme.customThemes).toHaveLength(1);
+    expect(snapshot.theme.customThemes[0]?.baseMode).toBe("light");
+    expect(snapshot.theme.lightTheme).toEqual({
+      kind: "custom",
+      id: snapshot.theme.customThemes[0]!.id,
+    });
   });
 
   it("renameCustomTheme trims and persists the new name", () => {

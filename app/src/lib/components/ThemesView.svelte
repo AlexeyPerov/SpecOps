@@ -13,6 +13,7 @@
     type ThemeTokenKey,
   } from "../styles/themeTokens";
   import { IMPORTED_THEMES } from "../styles/importedThemes";
+  import { CURATED_THEMES } from "../styles/curatedThemes";
 
   const snapshot = $derived($appState);
 
@@ -40,6 +41,13 @@
       editable: false,
     })),
     ...IMPORTED_THEMES.map<ThemeOption>((preset) => ({
+      ref: { kind: "preset", id: preset.id },
+      name: preset.name,
+      accent: preset.tokens["accent-color"],
+      baseMode: preset.baseMode,
+      editable: false,
+    })),
+    ...CURATED_THEMES.map<ThemeOption>((preset) => ({
       ref: { kind: "preset", id: preset.id },
       name: preset.name,
       accent: preset.tokens["accent-color"],
@@ -205,7 +213,7 @@
         <div class="settings-subsection">
           <h4>Theme</h4>
           {#each allOptions as option (option.ref.kind + ":" + option.ref.id)}
-            <label class="settings-theme-row">
+            <label class="settings-theme-row" aria-label="{option.name} {option.baseMode}">
               <input
                 type="radio"
                 name="manual-theme"
@@ -215,37 +223,59 @@
               />
               <span class="theme-swatch" style="background-color: {option.accent}"></span>
               <span>{option.name}</span>
+              <span class="theme-row-tag theme-mode-tag">{option.baseMode}</span>
               {#if option.editable}
                 <span class="theme-row-tag">custom</span>
               {/if}
+              <button
+                type="button"
+                class="theme-row-duplicate"
+                aria-label="Duplicate {option.name}"
+                onclick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  appState.duplicateTheme(option.ref);
+                }}
+              >Duplicate</button>
             </label>
           {/each}
         </div>
       {:else}
         <div class="settings-subsection">
           <h4>Light theme</h4>
-        {#each lightOptions as option (option.ref.kind + ":" + option.ref.id)}
-          <label class="settings-theme-row">
-            <input
-              type="radio"
-              name="light-theme"
-              value={option.ref.id}
-              checked={isLightActive(option)}
-              onchange={() => appState.setLightTheme(option.ref)}
-            />
-            <span class="theme-swatch" style="background-color: {option.accent}"></span>
-            <span>{option.name}</span>
-            {#if option.editable}
-              <span class="theme-row-tag">custom</span>
-            {/if}
-          </label>
-        {/each}
-      </div>
+          {#each lightOptions as option (option.ref.kind + ":" + option.ref.id)}
+            <label class="settings-theme-row" aria-label="{option.name} {option.baseMode}">
+              <input
+                type="radio"
+                name="light-theme"
+                value={option.ref.id}
+                checked={isLightActive(option)}
+                onchange={() => appState.setLightTheme(option.ref)}
+              />
+              <span class="theme-swatch" style="background-color: {option.accent}"></span>
+              <span>{option.name}</span>
+              <span class="theme-row-tag theme-mode-tag">{option.baseMode}</span>
+              {#if option.editable}
+                <span class="theme-row-tag">custom</span>
+              {/if}
+              <button
+                type="button"
+                class="theme-row-duplicate"
+                aria-label="Duplicate {option.name}"
+                onclick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  appState.duplicateTheme(option.ref);
+                }}
+              >Duplicate</button>
+            </label>
+          {/each}
+        </div>
 
       <div class="settings-subsection">
         <h4>Dark theme</h4>
         {#each darkOptions as option (option.ref.kind + ":" + option.ref.id)}
-          <label class="settings-theme-row">
+          <label class="settings-theme-row" aria-label="{option.name} {option.baseMode}">
             <input
               type="radio"
               name="dark-theme"
@@ -255,9 +285,20 @@
             />
             <span class="theme-swatch" style="background-color: {option.accent}"></span>
             <span>{option.name}</span>
+            <span class="theme-row-tag theme-mode-tag">{option.baseMode}</span>
             {#if option.editable}
               <span class="theme-row-tag">custom</span>
             {/if}
+            <button
+              type="button"
+              class="theme-row-duplicate"
+              aria-label="Duplicate {option.name}"
+              onclick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                appState.duplicateTheme(option.ref);
+              }}
+            >Duplicate</button>
           </label>
         {/each}
       </div>

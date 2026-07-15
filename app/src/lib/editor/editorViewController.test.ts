@@ -30,6 +30,7 @@ function baseProps(
     showFoldGutter: true,
     autoClosePairs: true,
     autoSuggest: false,
+    enabledSnippets: [],
     ...overrides,
   };
 }

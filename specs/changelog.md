@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-15 10:45 — M6 Markdown snippets (model + UX)
+
+- Added a SpecOps-native Markdown snippet catalog (front matter, requirements,
+  acceptance checklist, decision record, callout, fenced block, table) with
+  pure validation for ids, triggers, lengths, and `${…}` / `${SELECTION}` syntax.
+- Persisted `markdownSnippets` settings (enabled built-in ids + user records)
+  with normalize-on-load (drop invalid / resolve duplicates) and store CRUD;
+  no migration of older formats. Snippet bodies are never logged.
+- Wired CodeMirror insertion/completion: tab stops, final cursor, selection
+  wrap, indent adaptation, main-cursor-only multi-cursor policy, ephemeral
+  sessions cleared on document switch. Non-Markdown hosts report disabled.
+- Added unbound `edit.insertSnippet` command + searchable Insert Snippet picker
+  (stale host identity rejected) and Settings → Editor → Markdown snippets
+  management (enable builtins; add/edit/duplicate/delete user snippets with
+  local draft validation and delete confirmation).
+- **Validation:** `npm test` passes (281 files, 2917 tests). `npm run check`
+  passes with 0 errors. Svelte autofixer reports no issues on touched
+  components (suggestions only).
+- **`specs/…/m6-1-…` and `m6-2-…-execution-plan.md`** — all tasks `[DONE]`,
+  status Done, exit criteria checked.
+
 ## 2026-07-15 08:15 — F1.6 Editor and outline edge cases
 
 - Outline publishes are generation-bound: `markdownOutlineHostBinding` rejects

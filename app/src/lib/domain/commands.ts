@@ -48,6 +48,7 @@ export type AppCommandId =
   | "edit.foldAll"
   | "edit.unfoldAll"
   | "edit.triggerCompletion"
+  | "edit.insertSnippet"
   | "edit.toggleBookmark"
   | "edit.nextBookmark"
   | "edit.previousBookmark"

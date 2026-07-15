@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** [M6.1](./m6-1-snippet-model-execution-plan.md) complete  
 **Next:** [M7 document landmarks](../m7-document-landmarks/m7-1-heading-jump-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Medium — Score 6
 
 How to use this plan: assign to one Svelte-focused agent. Add discoverability and safe management around the M6.1 model.
@@ -22,7 +22,7 @@ Let users insert snippets without remembering triggers and manage a modest set o
 
 ## Task breakdown
 
-#### Task M6.2-1: Add Insert Snippet command and picker [Score:5] [Agent:medium]
+#### Task M6.2-1: Add Insert Snippet command and picker [Score:5] [Agent:medium] [DONE]
 
 - Add `editor.insertSnippet`; leave unbound by default unless a conflict-free standard is chosen.
 - Open a searchable picker containing enabled built-ins and user snippets.
@@ -39,7 +39,7 @@ Dependencies: M6.1.
 
 ---
 
-#### Task M6.2-2: Add snippet settings management [Score:6] [Agent:medium]
+#### Task M6.2-2: Add snippet settings management [Score:6] [Agent:medium] [DONE]
 
 - Add an Editor → Markdown snippets settings section/panel.
 - Enable/disable built-ins.
@@ -58,7 +58,7 @@ Dependencies: M6.2-1.
 
 ---
 
-#### Task M6.2-3: Cross-feature validation [Score:5] [Agent:medium]
+#### Task M6.2-3: Cross-feature validation [Score:5] [Agent:medium] [DONE]
 
 - Test snippets with auto-pairs, completions, multi-cursor policy, undo/redo, Markdown split view, line endings, and custom shortcut overrides.
 - Verify placeholders do not persist across tab/pane/document switches.
@@ -73,12 +73,11 @@ Dependencies: M6.2-2.
 
 ## Plan exit criteria
 
-- [ ] Users can discover and insert enabled snippets.
-- [ ] User snippets are safely manageable in settings.
-- [ ] Placeholder/focus lifecycle is robust.
-- [ ] Validation passes.
+- [x] Users can discover and insert enabled snippets.
+- [x] User snippets are safely manageable in settings.
+- [x] Placeholder/focus lifecycle is robust.
+- [x] Validation passes.
 
 ## Changelog instructions
 
 Mark tasks `[DONE]`; add a dated entry describing built-ins, picker, settings, and tests.
-

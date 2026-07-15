@@ -187,6 +187,7 @@ function createEditorRunnerMock(): EditorCommandRunner {
     unfoldAll: vi.fn(() => false),
     jumpToHeading: vi.fn(() => false),
     completeWord: vi.fn(() => false),
+    insertSnippet: vi.fn(() => false),
     toggleBookmark: vi.fn(() => false),
     nextBookmark: vi.fn(() => false),
     previousBookmark: vi.fn(() => false),

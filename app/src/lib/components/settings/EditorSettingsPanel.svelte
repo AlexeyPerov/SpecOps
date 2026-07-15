@@ -5,6 +5,7 @@
     normalizeMaxBinaryOpenAsTextFromKb,
     normalizeMaxOpenWithoutConfirmFromKb,
   } from "./settingsPanelActions";
+  import MarkdownSnippetsSettingsPanel from "./MarkdownSnippetsSettingsPanel.svelte";
 
   const snapshot = $derived($appState);
 
@@ -219,3 +220,5 @@
     </select>
   </label>
 </section>
+
+<MarkdownSnippetsSettingsPanel />

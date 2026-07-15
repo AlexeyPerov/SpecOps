@@ -90,6 +90,7 @@ export function editorHostToCommandRunner(host: EditorHost): EditorCommandRunner
     jumpToHeading: (headingKey) =>
       host.actions.navigation.jumpToHeading(headingKey).ok,
     completeWord: () => host.actions.completion.trigger().ok,
+    insertSnippet: (snippetId) => host.actions.snippets.insert(snippetId).ok,
     toggleBookmark: () => host.actions.bookmarks.toggle().ok,
     nextBookmark: () => host.actions.bookmarks.next().ok,
     previousBookmark: () => host.actions.bookmarks.previous().ok,

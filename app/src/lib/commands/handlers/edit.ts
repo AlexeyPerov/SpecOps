@@ -55,6 +55,9 @@ export const editHandlers: CommandHandlerMap = {
   "edit.triggerCompletion": ({ getEditorRunner }) => {
     getEditorRunner()?.completeWord();
   },
+  "edit.insertSnippet": ({ openSnippetInsert }) => {
+    openSnippetInsert?.();
+  },
   "edit.toggleBookmark": ({ getEditorRunner, notify }) => {
     const toggled = getEditorRunner()?.toggleBookmark() ?? false;
     if (toggled) {

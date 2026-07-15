@@ -51,6 +51,7 @@ function makeHost(
         unfoldAll: () => ({ ok: true }),
       },
       completion: { trigger: () => ({ ok: true }) },
+      snippets: { insert: () => ({ ok: true }) },
       bookmarks: {
         toggle: () => ({ ok: true }),
         next: () => ({ ok: true }),

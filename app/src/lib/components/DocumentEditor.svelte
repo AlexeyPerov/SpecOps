@@ -2,6 +2,7 @@
   import EditorSurface from "./EditorSurface.svelte";
   import { appState } from "../state/appState";
   import type { EditorLanguageId } from "../editor/editorLanguage";
+  import { listEnabledMarkdownSnippets } from "../editor/markdownSnippetSettings";
 
   let {
     content = "",
@@ -39,6 +40,13 @@
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
   } = $props();
 
+  const snapshot = $derived($appState);
+  const enabledSnippets = $derived(
+    language === "markdown"
+      ? listEnabledMarkdownSnippets(snapshot.settings.markdownSnippets)
+      : [],
+  );
+
   function handleDocumentDirty(nextContent: string): void {
     if (!documentId) {
       return;
@@ -61,6 +69,7 @@
   {showFoldGutter}
   {autoClosePairs}
   {autoSuggest}
+  {enabledSnippets}
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
   {onScrollTopChange}

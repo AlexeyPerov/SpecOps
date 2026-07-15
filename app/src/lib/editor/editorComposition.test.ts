@@ -53,6 +53,7 @@ describe("editor composition — per-pane search compartments", () => {
         showFoldGutter: true,
         autoClosePairs: true,
         autoSuggest: false,
+        enabledSnippets: [],
       });
       controller.mount(parent);
       controllers.push(controller);

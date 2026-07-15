@@ -188,6 +188,7 @@ function createEditorRunnerMock(): EditorCommandRunner {
     unfoldAll: vi.fn(() => false),
     jumpToHeading: vi.fn(() => false),
     completeWord: vi.fn(() => false),
+    insertSnippet: vi.fn(() => false),
     toggleBookmark: vi.fn(() => false),
     nextBookmark: vi.fn(() => false),
     previousBookmark: vi.fn(() => false),
@@ -212,6 +213,7 @@ function createCommandContext(overrides?: {
   openQuickOpen?: () => void;
   openHeadingJump?: () => void;
   openBookmarkList?: () => void;
+  openSnippetInsert?: () => void;
   openCommandPalette?: () => void;
   setConsoleOpen?: (open: boolean) => void;
 }) {
@@ -221,6 +223,7 @@ function createCommandContext(overrides?: {
   const openQuickOpen = overrides?.openQuickOpen ?? vi.fn();
   const openHeadingJump = overrides?.openHeadingJump ?? vi.fn();
   const openBookmarkList = overrides?.openBookmarkList ?? vi.fn();
+  const openSnippetInsert = overrides?.openSnippetInsert ?? vi.fn();
   const openCommandPalette = overrides?.openCommandPalette ?? vi.fn();
   const setConsoleOpen = overrides?.setConsoleOpen ?? vi.fn();
   const editorTools = createEditorToolController({
@@ -240,6 +243,7 @@ function createCommandContext(overrides?: {
       openQuickOpen,
       openHeadingJump,
       openBookmarkList,
+      openSnippetInsert,
       openCommandPalette,
       setConsoleOpen,
     },
@@ -250,6 +254,7 @@ function createCommandContext(overrides?: {
     openQuickOpen,
     openHeadingJump,
     openBookmarkList,
+    openSnippetInsert,
     openCommandPalette,
     setConsoleOpen,
   };
@@ -697,6 +702,12 @@ describe("edit commands", () => {
     expect(editorRunner.completeWord).toHaveBeenCalled();
   });
 
+  it("edit.insertSnippet opens the snippet picker", () => {
+    const { context, openSnippetInsert } = createCommandContext();
+    dispatchCommand("edit.insertSnippet", context);
+    expect(openSnippetInsert).toHaveBeenCalledTimes(1);
+  });
+
   it("no-ops when no editor runner is available", () => {
     const { context } = createCommandContext({ editorRunner: null });
 
@@ -897,6 +908,7 @@ describe("command dispatch coverage", () => {
       "edit.foldAll",
       "edit.unfoldAll",
       "edit.triggerCompletion",
+      "edit.insertSnippet",
       "edit.toggleBookmark",
       "edit.nextBookmark",
       "edit.previousBookmark",

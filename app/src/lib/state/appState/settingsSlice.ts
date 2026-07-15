@@ -22,6 +22,10 @@ import {
 } from "../../ai/providers/appProviderSettings";
 import { defaultChatModesSettings, normalizeChatModesSettings } from "../../ai/modes/chatModesSettings";
 import {
+  defaultMarkdownSnippetSettings,
+  normalizeMarkdownSnippetSettings,
+} from "../../editor/markdownSnippetSettings";
+import {
   defaultProviderModelCatalogs,
   normalizeProviderModelCatalogs,
 } from "../../ai/providers/providerModelCatalog";
@@ -47,6 +51,7 @@ import { createFontSettingsSlice } from "./fontSettingsSlice";
 import { createLogSettingsSlice, type SettingsUpdate } from "./logSettingsSlice";
 import { createNotificationSettingsSlice } from "./notificationSettingsSlice";
 import { createProviderSettingsSlice } from "./providerSettingsSlice";
+import { createSnippetSettingsSlice } from "./snippetSettingsSlice";
 import { defaultOpencodeSettings, normalizeOpencodeSettings } from "../../services/opencodeSettings";
 import {
   defaultChatHttpSettings,
@@ -99,6 +104,7 @@ export const defaultSettings: AppSettingsState = {
   commandBindingOverrides: {},
   logSettings: defaultLogSettings,
   chatModes: defaultChatModesSettings,
+  markdownSnippets: defaultMarkdownSnippetSettings,
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
   fontSettings: { ...defaultFontSettings },
@@ -241,6 +247,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       opencodeHealth?: Partial<OpencodeHealthState>;
       logSettings?: Partial<LogSettings>;
       chatModes?: Partial<AppSettingsState["chatModes"]>;
+      markdownSnippets?: Partial<AppSettingsState["markdownSnippets"]>;
       providerSettings?: Partial<AppProviderSettings>;
       providerModelCatalogs?: ProviderModelCatalogs;
       commandBindingOverrides?: CommandBindingOverrides;
@@ -408,6 +415,18 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             },
           };
         }
+        if (partial.markdownSnippets) {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              markdownSnippets: normalizeMarkdownSnippetSettings({
+                ...next.settings.markdownSnippets,
+                ...partial.markdownSnippets,
+              }),
+            },
+          };
+        }
         const providerModelCatalogs = partial.providerModelCatalogs
           ? normalizeProviderModelCatalogs(partial.providerModelCatalogs)
           : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs);
@@ -498,6 +517,7 @@ export function createSettingsSlice(update: SettingsUpdate) {
     ...createGeneralSettingsSlice(update),
     ...createProviderSettingsSlice(update),
     ...createChatModesSettingsSlice(update),
+    ...createSnippetSettingsSlice(update),
     ...createLogSettingsSlice(update),
     ...createFontSettingsSlice(update),
     ...createNotificationSettingsSlice(update),

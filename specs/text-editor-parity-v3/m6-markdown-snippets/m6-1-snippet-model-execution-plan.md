@@ -3,7 +3,7 @@
 **Parent:** [Text Editor Parity v3](../README.md)  
 **Prerequisite:** M5 complete  
 **Next:** [M6.2 snippet UX](./m6-2-snippet-ux-execution-plan.md)  
-**Status:** Planned  
+**Status:** Done  
 **Complexity:** Medium — Score 6
 
 How to use this plan: assign to one agent. Build a safe snippet domain model and CodeMirror insertion path before adding management UI.
@@ -22,7 +22,7 @@ Support reusable Markdown/spec templates with placeholders and tab stops, using 
 
 ## Task breakdown
 
-#### Task M6.1-1: Define snippet schema and built-in catalog [Score:5] [Agent:medium]
+#### Task M6.1-1: Define snippet schema and built-in catalog [Score:5] [Agent:medium] [DONE]
 
 - Define stable id, name, description, trigger, body/template, scope, and source (`builtin`/`user`).
 - Scope v1 to Markdown documents.
@@ -39,7 +39,7 @@ Dependencies: M5.
 
 ---
 
-#### Task M6.1-2: Add user snippet settings and normalization [Score:6] [Agent:medium]
+#### Task M6.1-2: Add user snippet settings and normalization [Score:6] [Agent:medium] [DONE]
 
 - Add snippet settings with enabled built-in ids and user snippet records.
 - Normalize malformed entries by dropping invalid records and resolving duplicates deterministically.
@@ -57,7 +57,7 @@ Dependencies: M6.1-1.
 
 ---
 
-#### Task M6.1-3: Implement snippet insertion/completion source [Score:6] [Agent:medium]
+#### Task M6.1-3: Implement snippet insertion/completion source [Score:6] [Agent:medium] [DONE]
 
 - Expose enabled Markdown snippets as completion entries and as a direct insertion action.
 - Support numbered tab stops, final cursor, selected-text placeholder if safely supported, and indentation adaptation.
@@ -75,12 +75,11 @@ Dependencies: M6.1-2.
 
 ## Plan exit criteria
 
-- [ ] Built-in/user snippet schemas and validation exist.
-- [ ] Snippet settings persist without migration code.
-- [ ] CodeMirror insertion/tab stops work and are tested.
-- [ ] `npm test` and `npm run check` pass.
+- [x] Built-in/user snippet schemas and validation exist.
+- [x] Snippet settings persist without migration code.
+- [x] CodeMirror insertion/tab stops work and are tested.
+- [x] `npm test` and `npm run check` pass.
 
 ## Changelog instructions
 
 Mark tasks `[DONE]`; log schema/defaults/insertion behavior and validation.
-

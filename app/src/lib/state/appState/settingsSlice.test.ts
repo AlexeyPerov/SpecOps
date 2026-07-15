@@ -186,6 +186,45 @@ describe("appState settings and editor chrome", () => {
     expect(appState.getSnapshot().settings.autoSuggest).toBe(false);
   });
 
+  it("markdownSnippets defaults include all builtins and support CRUD", () => {
+    const defaults = appState.getSnapshot().settings.markdownSnippets;
+    expect(defaults.enabledBuiltinIds.length).toBeGreaterThan(0);
+    expect(defaults.userSnippets).toEqual([]);
+
+    appState.setBuiltinSnippetEnabled("table", false);
+    expect(appState.getSnapshot().settings.markdownSnippets.enabledBuiltinIds).not.toContain(
+      "table",
+    );
+
+    const id = appState.createUserSnippetDraft("My snip");
+    expect(
+      appState.getSnapshot().settings.markdownSnippets.userSnippets.some(
+        (entry) => entry.id === id,
+      ),
+    ).toBe(true);
+
+    appState.updateUserSnippet(id, {
+      name: "Renamed",
+      trigger: "mysnip",
+      body: "${1:hi}${0}",
+      enabled: true,
+    });
+    expect(
+      appState.getSnapshot().settings.markdownSnippets.userSnippets.find(
+        (entry) => entry.id === id,
+      )?.name,
+    ).toBe("Renamed");
+
+    const dup = appState.duplicateUserSnippet(id);
+    expect(dup).toBeTruthy();
+    appState.removeUserSnippet(id);
+    expect(
+      appState.getSnapshot().settings.markdownSnippets.userSnippets.some(
+        (entry) => entry.id === id,
+      ),
+    ).toBe(false);
+  });
+
   it("applyWindowSession preserves the active theme", () => {
     appState.setLightTheme({ kind: "preset", id: "github" });
     appState.applyWindowSession({

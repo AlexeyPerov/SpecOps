@@ -1,5 +1,6 @@
 import type { ActiveThemeRef, CustomThemeRecord } from "../services/themeStore";
 import type { ChatModesSettings, ChatProviderId } from "./chat";
+import type { MarkdownSnippetSettings } from "./snippets";
 import type { CommandBindingOverrides } from "./commands";
 import type { MarkdownViewMode } from "./document";
 
@@ -243,6 +244,8 @@ export interface AppSettingsState {
   commandBindingOverrides: CommandBindingOverrides;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
+  /** Markdown snippet catalog preferences (M6). */
+  markdownSnippets: MarkdownSnippetSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   fontSettings: FontSettings;

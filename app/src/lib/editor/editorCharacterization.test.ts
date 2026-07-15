@@ -128,6 +128,7 @@ describe("CodeMirror fixture characterization", () => {
       showFoldGutter: true,
       autoClosePairs: true,
       autoSuggest: false,
+      enabledSnippets: [],
     });
     controller.mount(parent);
     const view = controller.getView()!;
@@ -154,6 +155,7 @@ describe("CodeMirror fixture characterization", () => {
       showFoldGutter: true,
       autoClosePairs: true,
       autoSuggest: false,
+      enabledSnippets: [],
     });
     view.dispatch({ selection: EditorSelection.cursor(9) });
     dispatchUserEdit(view, {
@@ -173,6 +175,7 @@ describe("CodeMirror fixture characterization", () => {
       showFoldGutter: true,
       autoClosePairs: true,
       autoSuggest: false,
+      enabledSnippets: [],
     });
 
     expect(view.state.selection.main.from).toBe(selectionAfterAEdit.from);

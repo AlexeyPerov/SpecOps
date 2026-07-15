@@ -22,6 +22,7 @@
     showFoldGutter?: boolean;
     autoClosePairs?: boolean;
     autoSuggest?: boolean;
+    enabledSnippets?: import("../domain/snippets").ResolvedMarkdownSnippet[];
     onStatusMessage?: (message: string) => void;
     onDocumentDirty?: (nextContent: string) => void;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
@@ -40,6 +41,7 @@
     showFoldGutter = true,
     autoClosePairs = true,
     autoSuggest = false,
+    enabledSnippets = [],
     onStatusMessage = () => {},
     onDocumentDirty = () => {},
     onScrollTopChange = () => {},
@@ -76,6 +78,7 @@
       showFoldGutter,
       autoClosePairs,
       autoSuggest,
+      enabledSnippets,
     });
     controller.mount(hostEl);
 
@@ -115,6 +118,7 @@
       showFoldGutter,
       autoClosePairs,
       autoSuggest,
+      enabledSnippets,
     });
   });
 </script>

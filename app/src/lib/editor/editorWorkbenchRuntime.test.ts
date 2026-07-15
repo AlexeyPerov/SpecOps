@@ -50,6 +50,9 @@ function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
       completion: {
         trigger: () => ({ ok: true }),
       },
+      snippets: {
+        insert: () => ({ ok: true }),
+      },
       bookmarks: {
         toggle: () => ({ ok: true }),
         next: () => ({ ok: true }),

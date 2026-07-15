@@ -19,6 +19,8 @@ export type CommandContext = {
   openHeadingJump?: () => void;
   /** Opens (or focuses) the bookmark list picker. No-op when not registered. */
   openBookmarkList?: () => void;
+  /** Opens (or focuses) the insert-snippet picker. No-op when not registered. */
+  openSnippetInsert?: () => void;
   openCommandPalette?: () => void;
   /** Sets console panel visibility. No-op when not registered. */
   setConsoleOpen?: (open: boolean) => void;

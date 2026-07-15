@@ -6,6 +6,7 @@ import { EditorSelection, type Compartment } from "@codemirror/state";
 import { indentLess, indentMore, redo, undo } from "@codemirror/commands";
 import { startCompletion } from "@codemirror/autocomplete";
 import type { EditorView } from "@codemirror/view";
+import type { ResolvedMarkdownSnippet } from "../domain/snippets";
 import type {
   EditorActionName,
   EditorActionResult,
@@ -16,7 +17,9 @@ import type {
   EditorQueryResult,
   MatchInfo,
 } from "../types/editor";
+import type { EditorLanguageId } from "./editorLanguage";
 import { applyWrap, applyZoom } from "./editorExtensions";
+import { insertMarkdownSnippet } from "./editorSnippets";
 import {
   foldAllRanges,
   foldCurrent,
@@ -61,6 +64,10 @@ export type CreateEditorDomainApisOptions = {
   searchHighlightCompartment: Compartment;
   onStatusMessage: (message: string) => void;
   updateCursor: () => void;
+  /** Active document language for Markdown-only snippet gating. */
+  getLanguage: () => EditorLanguageId;
+  /** Lookup an enabled snippet by id (settings-resolved). */
+  findEnabledSnippet: (snippetId: string) => ResolvedMarkdownSnippet | undefined;
 };
 
 function ok(): EditorActionResult {
@@ -139,6 +146,7 @@ const CORE_ACTIONS = new Set<EditorActionName>([
   "unfoldAll",
   "jumpToHeading",
   "completeWord",
+  "insertSnippet",
   "toggleBookmark",
   "nextBookmark",
   "previousBookmark",
@@ -162,6 +170,8 @@ export function createEditorDomainApis(
     searchHighlightCompartment,
     onStatusMessage,
     updateCursor,
+    getLanguage,
+    findEnabledSnippet,
   } = opts;
 
   const actions: EditorDomainActions = {
@@ -463,6 +473,35 @@ export function createEditorDomainApis(
         return startCompletion(view) ? ok() : disabled();
       },
     },
+    snippets: {
+      insert: (snippetId) => {
+        const view = getView();
+        if (!view) {
+          return unavailable();
+        }
+        if (getLanguage() !== "markdown") {
+          onStatusMessage("Snippets are available only in Markdown documents.");
+          return disabled();
+        }
+        const entry = findEnabledSnippet(snippetId);
+        if (!entry) {
+          onStatusMessage("Snippet is not available.");
+          return disabled();
+        }
+        if (view.state.selection.ranges.length > 1) {
+          onStatusMessage("Snippet inserted at the main cursor only.");
+        }
+        const result = insertMarkdownSnippet(view, entry);
+        if (!result.ok) {
+          if (result.message) {
+            onStatusMessage(result.message);
+          }
+          return disabled();
+        }
+        updateCursor();
+        return ok();
+      },
+    },
     bookmarks: {
       toggle: () => {
         const view = getView();
@@ -637,6 +676,12 @@ export function createEditorDomainApis(
     }
     if (!CORE_ACTIONS.has(action)) {
       return { state: "unavailable", reason: "Action is not implemented yet." };
+    }
+    if (action === "insertSnippet" && getLanguage() !== "markdown") {
+      return {
+        state: "disabled",
+        reason: "Snippets are available only in Markdown documents.",
+      };
     }
     return { state: "available" };
   }

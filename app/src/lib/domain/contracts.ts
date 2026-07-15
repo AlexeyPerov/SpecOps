@@ -139,6 +139,14 @@ export type {
 } from "./chat";
 export { DEBUG_CHAT_PROVIDER_IDS, isDebugChatProviderId, PRODUCT_CHAT_PROVIDER_IDS } from "./chat";
 export type {
+  BuiltinSnippetId,
+  MarkdownSnippetSettings,
+  ResolvedMarkdownSnippet,
+  SnippetScope,
+  SnippetSource,
+  UserSnippetRecord,
+} from "./snippets";
+export type {
   AppCommandId,
   CommandAvailabilityKey,
   CommandBinding,

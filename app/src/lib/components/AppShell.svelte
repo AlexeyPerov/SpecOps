@@ -30,6 +30,7 @@
   import CommandPalettePicker from "./CommandPalettePicker.svelte";
   import HeadingJumpPicker from "./HeadingJumpPicker.svelte";
   import BookmarkListPicker from "./BookmarkListPicker.svelte";
+  import SnippetInsertPicker from "./SnippetInsertPicker.svelte";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import TitleBar from "./TitleBar.svelte";
@@ -362,6 +363,14 @@
     onQueryInput?: (query: string) => void;
   }
 
+  export interface AppShellSnippetInsertProps {
+    open: boolean;
+    results: import("../picker/snippetRanking").RankedSnippetsResult;
+    onSelect: (snippetId: string) => void;
+    onClose: () => void;
+    onQueryInput?: (query: string) => void;
+  }
+
   let {
     activityRail,
     sessionsSidebar,
@@ -380,6 +389,7 @@
     commandPalette,
     headingJump,
     bookmarkList,
+    snippetInsert,
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
@@ -405,6 +415,7 @@
     commandPalette?: AppShellCommandPaletteProps;
     headingJump?: AppShellHeadingJumpProps;
     bookmarkList?: AppShellBookmarkListProps;
+    snippetInsert?: AppShellSnippetInsertProps;
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
@@ -755,6 +766,16 @@
     onSelect={bookmarkList.onSelect}
     onClose={bookmarkList.onClose}
     onQueryInput={bookmarkList.onQueryInput}
+  />
+{/if}
+
+{#if snippetInsert}
+  <SnippetInsertPicker
+    open={snippetInsert.open}
+    results={snippetInsert.results}
+    onSelect={snippetInsert.onSelect}
+    onClose={snippetInsert.onClose}
+    onQueryInput={snippetInsert.onQueryInput}
   />
 {/if}
 

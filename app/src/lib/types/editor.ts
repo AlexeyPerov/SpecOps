@@ -152,6 +152,15 @@ export type EditorCompletionActions = {
   trigger: () => EditorActionResult;
 };
 
+/** Snippet actions (M6). Ephemeral tab-stop sessions; Markdown only. */
+export type EditorSnippetActions = {
+  /**
+   * Insert an enabled Markdown snippet by id at the main selection.
+   * Returns `disabled` for non-Markdown documents or multi-cursor (with status).
+   */
+  insert: (snippetId: string) => EditorActionResult;
+};
+
 /**
  * Bookmark snapshot row for the list picker. `preview` is bounded and trimmed;
  * bookmarks never log full document content.
@@ -223,6 +232,7 @@ export type EditorDomainActions = {
   view: EditorViewActions;
   folding: EditorFoldingActions;
   completion: EditorCompletionActions;
+  snippets: EditorSnippetActions;
   bookmarks: EditorBookmarkActions;
 };
 
@@ -381,6 +391,7 @@ export type EditorCommandRunner = {
   unfoldAll: () => boolean;
   jumpToHeading: (headingKey: string) => boolean;
   completeWord: () => boolean;
+  insertSnippet: (snippetId: string) => boolean;
   toggleBookmark: () => boolean;
   nextBookmark: () => boolean;
   previousBookmark: () => boolean;

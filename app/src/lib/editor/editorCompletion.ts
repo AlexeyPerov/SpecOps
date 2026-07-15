@@ -56,6 +56,12 @@ export type CompletionExtensionOptions = {
    * note-taking.
    */
   autoSuggest: boolean;
+  /**
+   * Optional Markdown snippet completion source (M6). Combined with the
+   * local word source; omitted/empty when snippets are disabled or the
+   * document is not Markdown.
+   */
+  snippetSource?: CompletionSource | null;
 };
 
 /**
@@ -257,15 +263,19 @@ export function completionTheme(): Extension {
  * `indentWithTab`.
  */
 export function completionExtension(options: CompletionExtensionOptions): Extension {
-  const { autoClosePairs, autoSuggest } = options;
+  const { autoClosePairs, autoSuggest, snippetSource = null } = options;
   const groups: Extension[] = [];
   if (autoClosePairs) {
     groups.push(closeBrackets(), keymap.of([...closeBracketsKeymap]));
   }
+  const sources: CompletionSource[] = [localWordSource];
+  if (snippetSource) {
+    sources.push(snippetSource);
+  }
   groups.push(
     autocompletion({
       activateOnTyping: autoSuggest,
-      override: [localWordSource],
+      override: sources,
       defaultKeymap: false,
       maxRenderedOptions: MAX_CANDIDATES,
       optionClass: () => "specops-completion-option",

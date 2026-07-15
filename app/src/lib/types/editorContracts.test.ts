@@ -72,6 +72,9 @@ describe("editor host contracts", () => {
       completion: {
         trigger: unavailable,
       },
+      snippets: {
+        insert: () => unavailable(),
+      },
       bookmarks: {
         toggle: unavailable,
         next: unavailable,

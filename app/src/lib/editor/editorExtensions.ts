@@ -17,13 +17,13 @@
  * `allowMultipleSelections` enables native multi-cursor / column selection so
  * modifier-click, column-drag, and occurrence commands work across all panes.
  *
- * Reserved empty compartments (`snippets`, `landmarks`) are seams for
- * M6–M7; reconfigure them later without rebuilding base/theme. The `fold`
- * compartment is owned by M4 (`foldExtension`); the `completion` compartment
- * is owned by M5 (`completionExtension` — auto-close pairs + document-word
- * completion, reconfigured via `autoClosePairs`/`autoSuggest`).
+ * The `snippets` compartment holds the Tab/Escape snippet keymap (M6);
+ * snippet completion entries are merged into the `completion` compartment.
+ * `landmarks` holds bookmarks (M7.2). The `fold` compartment is owned by M4;
+ * `completion` by M5/M6 (`completionExtension` — pairs, words, snippets).
  */
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import type { CompletionSource } from "@codemirror/autocomplete";
 import {
   defaultKeymap,
   history,
@@ -40,6 +40,7 @@ import {
 import { foldExtension } from "./editorFold";
 import { minimapExtension } from "./editorMinimap";
 import { completionExtension } from "./editorCompletion";
+import { snippetExtension } from "./editorSnippets";
 import { bookmarkExtension } from "./editorBookmarks";
 
 /** Named groups assembled into the editor state. */
@@ -106,6 +107,13 @@ export type BuildEditorExtensionsOptions = {
    * completion (`Ctrl+Space` / `edit.triggerCompletion`) works either way.
    */
   autoSuggest?: boolean;
+  /**
+   * When true (Markdown documents), register the snippet keymap and accept a
+   * snippet completion source. Non-Markdown keeps the compartment empty.
+   */
+  snippetsEnabled?: boolean;
+  /** Optional Markdown snippet completion source (M6). */
+  snippetSource?: CompletionSource | null;
   /** Optional update listener (dirty reporting, cursor). */
   updateListener?: Extension;
 };
@@ -193,6 +201,8 @@ export function buildNamedExtensionGroups(
     showFoldGutter = true,
     autoClosePairs = true,
     autoSuggest = false,
+    snippetsEnabled = false,
+    snippetSource = null,
     updateListener,
   } = options;
 
@@ -240,13 +250,15 @@ export function buildNamedExtensionGroups(
       name: "completion",
       extensions: [
         compartments.completion.of(
-          completionExtension({ autoClosePairs, autoSuggest }),
+          completionExtension({ autoClosePairs, autoSuggest, snippetSource }),
         ),
       ],
     },
     {
       name: "snippets",
-      extensions: [compartments.snippets.of([])],
+      extensions: [
+        compartments.snippets.of(snippetExtension({ enabled: snippetsEnabled })),
+      ],
     },
     {
       name: "landmarks",

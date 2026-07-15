@@ -61,8 +61,11 @@
   import { rankFiles, type RankedFilesResult } from "../lib/picker/fileRanking";
   import { rankCommands, type RankedCommandsResult } from "../lib/picker/commandRanking";
   import { rankHeadings, type RankedHeadingsResult } from "../lib/picker/headingRanking";
+  import { rankSnippets, type RankedSnippetsResult } from "../lib/picker/snippetRanking";
+  import { listEnabledMarkdownSnippets } from "../lib/editor/markdownSnippetSettings";
   import type {
     EditorBookmarkSnapshot,
+    EditorHostIdentity,
     MarkdownHeadingSnapshot,
   } from "../lib/types/editor";
   import { buildCommandAvailabilitySnapshot } from "../lib/commands/availability";
@@ -379,6 +382,13 @@
    */
   let bookmarkListOpen = $state(false);
   let bookmarkListQuery = $state("");
+  /**
+   * M6.2 — Insert-snippet picker state. Ephemeral and window-local.
+   * Captures the invoking host identity so selection cannot target a stale pane.
+   */
+  let snippetInsertOpen = $state(false);
+  let snippetInsertQuery = $state("");
+  let snippetInsertHostIdentity = $state<EditorHostIdentity | null>(null);
 
   const editorTools = createEditorToolController({
     getActiveBinding: () => {
@@ -407,6 +417,7 @@
       commandPaletteOpen ||
       headingJumpOpen ||
       bookmarkListOpen ||
+      snippetInsertOpen ||
       Boolean(workspaceContextMenu),
   });
   setEditorToolController(editorTools);
@@ -634,6 +645,13 @@
     return result.ok ? result.value : [];
   });
 
+  const snippetInsertResults: RankedSnippetsResult = $derived(
+    rankSnippets(
+      listEnabledMarkdownSnippets(snapshot.settings.markdownSnippets),
+      snippetInsertQuery,
+    ),
+  );
+
   const shouldRenderMarkdownPreview = $derived.by(() => {
     if (!activeDocument || activeDocument.language !== "markdown") {
       return false;
@@ -785,6 +803,11 @@
     bookmarkListOpen = false;
   }
 
+  function closeSnippetInsert(): void {
+    snippetInsertOpen = false;
+    snippetInsertHostIdentity = null;
+  }
+
   function handleHeadingJumpSelect(headingKey: string): void {
     // Preview-only: switch to edit so the CodeMirror host can reveal the heading.
     if (activeDocument?.markdownViewMode === "preview") {
@@ -803,6 +826,29 @@
       host.focus();
     }
     bookmarkListOpen = false;
+  }
+
+  function handleSnippetInsertSelect(snippetId: string): void {
+    const captured = snippetInsertHostIdentity;
+    const host = editorWorkbench.getActiveHost();
+    // Reject stale pane/document after a context switch while the picker was open.
+    if (
+      !host ||
+      !captured ||
+      host.identity.paneId !== captured.paneId ||
+      host.identity.documentId !== captured.documentId ||
+      host.identity.generation !== captured.generation
+    ) {
+      notify("Snippet insert cancelled — editor context changed.");
+      closeSnippetInsert();
+      return;
+    }
+    if (activeDocument?.markdownViewMode === "preview") {
+      setMarkdownViewMode("edit");
+    }
+    host.actions.snippets.insert(snippetId);
+    host.focus();
+    closeSnippetInsert();
   }
 
   function refreshQuickOpenCatalog(): void {
@@ -985,6 +1031,7 @@
       commandPaletteOpen ||
       headingJumpOpen ||
       bookmarkListOpen ||
+      snippetInsertOpen ||
       Boolean(workspaceContextMenu),
     openProjectSearch: (focusReplace) => {
       projectSearchOpen = true;
@@ -1000,6 +1047,9 @@
       }
       if (bookmarkListOpen) {
         bookmarkListOpen = false;
+      }
+      if (snippetInsertOpen) {
+        closeSnippetInsert();
       }
       // Capture the active pane at invocation so the selected file opens into
       // the pane the user was focused on. If that pane is gone by selection
@@ -1018,6 +1068,9 @@
       if (bookmarkListOpen) {
         bookmarkListOpen = false;
       }
+      if (snippetInsertOpen) {
+        closeSnippetInsert();
+      }
       editorTools.close({ restoreFocus: false });
       headingJumpQuery = "";
       headingJumpOpen = true;
@@ -1032,9 +1085,31 @@
       if (headingJumpOpen) {
         headingJumpOpen = false;
       }
+      if (snippetInsertOpen) {
+        closeSnippetInsert();
+      }
       editorTools.close({ restoreFocus: false });
       bookmarkListQuery = "";
       bookmarkListOpen = true;
+    },
+    openSnippetInsert: () => {
+      if (quickOpenOpen) {
+        quickOpenOpen = false;
+      }
+      if (commandPaletteOpen) {
+        commandPaletteOpen = false;
+      }
+      if (headingJumpOpen) {
+        headingJumpOpen = false;
+      }
+      if (bookmarkListOpen) {
+        bookmarkListOpen = false;
+      }
+      editorTools.close({ restoreFocus: false });
+      const host = editorWorkbench.getActiveHost();
+      snippetInsertHostIdentity = host ? { ...host.identity } : null;
+      snippetInsertQuery = "";
+      snippetInsertOpen = true;
     },
     openCommandPalette: () => {
       if (quickOpenOpen) {
@@ -1045,6 +1120,9 @@
       }
       if (bookmarkListOpen) {
         bookmarkListOpen = false;
+      }
+      if (snippetInsertOpen) {
+        closeSnippetInsert();
       }
       editorTools.close({ restoreFocus: false });
       commandPaletteQuery = "";
@@ -1411,17 +1489,23 @@
     if (bookmarkListOpen) {
       bookmarkListOpen = false;
     }
+    if (snippetInsertOpen) {
+      closeSnippetInsert();
+    }
   });
 
-  // M7.1/M7.2 — close the heading-jump picker when the active document is no
-  // longer Markdown-editable (it is markdownEdit-only), and close both landmark
-  // pickers when the active document identity changes (stale host data).
+  // M6.2/M7.1/M7.2 — close Markdown-only pickers when the active document is no
+  // longer Markdown-editable, and close host-scoped pickers when document
+  // identity changes (stale host data).
   $effect(() => {
     const docId = activeDocument?.id;
     const language = activeDocument?.language;
     void docId;
     if (headingJumpOpen && language !== "markdown") {
       headingJumpOpen = false;
+    }
+    if (snippetInsertOpen && language !== "markdown") {
+      closeSnippetInsert();
     }
   });
 
@@ -1984,6 +2068,15 @@
     onClose: closeBookmarkList,
     onQueryInput: (value) => {
       bookmarkListQuery = value;
+    },
+  }}
+  snippetInsert={{
+    open: snippetInsertOpen,
+    results: snippetInsertResults,
+    onSelect: handleSnippetInsertSelect,
+    onClose: closeSnippetInsert,
+    onQueryInput: (value) => {
+      snippetInsertQuery = value;
     },
   }}
 />

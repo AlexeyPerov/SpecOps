@@ -254,6 +254,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       gitIntegration: snapshot.settings.gitIntegration,
       logSettings: snapshot.settings.logSettings,
       chatModes: snapshot.settings.chatModes,
+      markdownSnippets: snapshot.settings.markdownSnippets,
       providerSettings: snapshot.settings.providerSettings,
       providerModelCatalogs: snapshot.settings.providerModelCatalogs,
       commandBindingOverrides: snapshot.settings.commandBindingOverrides,

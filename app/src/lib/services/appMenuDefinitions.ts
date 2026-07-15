@@ -292,6 +292,12 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
     commandId: "edit.triggerCompletion",
     runCommand,
   });
+  const insertSnippetItem = await commandItem({
+    id: "cmd.edit.insertSnippet",
+    text: "Insert Snippet",
+    commandId: "edit.insertSnippet",
+    runCommand,
+  });
   const goToHeadingItem = await commandItem({
     id: "cmd.edit.goToHeading",
     text: "Go to Heading",
@@ -368,6 +374,7 @@ export async function buildEditMenu(runCommand: (commandId: AppCommandId) => voi
       foldAllItem,
       unfoldAllItem,
       triggerCompletionItem,
+      insertSnippetItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       toggleBookmarkItem,
       nextBookmarkItem,
@@ -580,6 +587,7 @@ export const NATIVE_MENU_COMMAND_IDS: readonly AppCommandId[] = [
   "edit.foldAll",
   "edit.unfoldAll",
   "edit.triggerCompletion",
+  "edit.insertSnippet",
   "app.goToHeading",
   "edit.toggleBookmark",
   "edit.nextBookmark",

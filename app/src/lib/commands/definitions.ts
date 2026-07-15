@@ -482,6 +482,16 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "Ctrl+Space", windows: "Ctrl+Space" },
   },
   {
+    id: "edit.insertSnippet",
+    label: "Insert Snippet",
+    menuPath: "Edit/Insert Snippet",
+    category: "Edit",
+    searchTerms: ["snippet", "template", "markdown", "placeholder"],
+    paletteIntent: "palette",
+    availability: "markdownEdit",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
     id: "edit.toggleBookmark",
     label: "Toggle Bookmark",
     menuPath: "Edit/Toggle Bookmark",

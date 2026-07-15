@@ -21,7 +21,11 @@ export type CreateEditorCommandRunnerOptions = {
 export function createEditorCommandRunner(
   opts: CreateEditorCommandRunnerOptions,
 ): EditorCommandRunner {
-  const { actions, queries, capability } = createEditorDomainApis(opts);
+  const { actions, queries, capability } = createEditorDomainApis({
+    ...opts,
+    getLanguage: () => "plaintext",
+    findEnabledSnippet: () => undefined,
+  });
   const host: EditorHost = {
     identity: { paneId: "", documentId: null, generation: 0 },
     actions,

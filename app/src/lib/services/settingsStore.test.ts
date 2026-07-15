@@ -65,6 +65,7 @@ describe("settings mapping", () => {
       gitIntegration: defaultPersistedSettings.gitIntegration,
       logSettings: { ...defaultLogSettings, verboseProviderLogging: false },
       chatModes: defaultChatModesSettings,
+      markdownSnippets: defaultPersistedSettings.markdownSnippets,
       providerSettings: {
         httpConnections: [
           {

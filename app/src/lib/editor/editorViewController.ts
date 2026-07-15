@@ -22,6 +22,12 @@ import {
 import { minimapExtension } from "./editorMinimap";
 import { foldExtension } from "./editorFold";
 import { completionExtension } from "./editorCompletion";
+import {
+  createSnippetCompletionSource,
+  snippetCatalogKey,
+  snippetExtension,
+} from "./editorSnippets";
+import type { ResolvedMarkdownSnippet } from "../domain/snippets";
 import { createPlaintextSymbolDecorations } from "./plaintextDecorations";
 import {
   storeOriginAnnotation,
@@ -42,6 +48,8 @@ export type EditorViewControllerProps = {
   showFoldGutter: boolean;
   autoClosePairs: boolean;
   autoSuggest: boolean;
+  /** Enabled Markdown snippets for completion/insert (empty when not Markdown). */
+  enabledSnippets: readonly ResolvedMarkdownSnippet[];
 };
 
 export type EditorViewControllerDeps = {
@@ -85,6 +93,8 @@ export function createEditorViewController(
   let lastMinimapEnabled: boolean | null = null;
   let lastFoldGutterEnabled: boolean | null = null;
   let lastCompletionKey = "";
+  let lastSnippetKey = "";
+  let lastSnippetsEnabled: boolean | null = null;
 
   let applyingScroll = false;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -184,6 +194,9 @@ export function createEditorViewController(
       searchHighlightCompartment: compartments.searchHighlight,
       onStatusMessage: deps.onStatusMessage,
       updateCursor,
+      getLanguage: () => currentEditorLanguage,
+      findEnabledSnippet: (snippetId) =>
+        (props?.enabledSnippets ?? []).find((entry) => entry.id === snippetId),
       focus: () => {
         view?.focus();
       },
@@ -197,7 +210,12 @@ export function createEditorViewController(
     showFoldGutter: boolean,
     autoClosePairs: boolean,
     autoSuggest: boolean,
+    enabledSnippets: readonly ResolvedMarkdownSnippet[],
   ) {
+    const snippetSource =
+      language === "markdown" && enabledSnippets.length > 0
+        ? createSnippetCompletionSource(enabledSnippets)
+        : null;
     return buildEditorExtensions({
       compartments,
       language,
@@ -205,6 +223,8 @@ export function createEditorViewController(
       showFoldGutter,
       autoClosePairs,
       autoSuggest,
+      snippetsEnabled: language === "markdown",
+      snippetSource,
       updateListener: EditorView.updateListener.of((update) => {
         if (destroyed) {
           return;
@@ -226,10 +246,18 @@ export function createEditorViewController(
     showFoldGutter: boolean,
     autoClosePairs: boolean,
     autoSuggest: boolean,
+    enabledSnippets: readonly ResolvedMarkdownSnippet[],
   ): EditorState {
     return EditorState.create({
       doc: content,
-      extensions: buildExtensions(language, showMinimap, showFoldGutter, autoClosePairs, autoSuggest),
+      extensions: buildExtensions(
+        language,
+        showMinimap,
+        showFoldGutter,
+        autoClosePairs,
+        autoSuggest,
+        enabledSnippets,
+      ),
     });
   }
 
@@ -251,9 +279,18 @@ export function createEditorViewController(
     showFoldGutter: boolean,
     autoClosePairs: boolean,
     autoSuggest: boolean,
+    enabledSnippets: readonly ResolvedMarkdownSnippet[],
   ): EditorState {
     if (!documentId || !props) {
-      return createState(content, language, showMinimap, showFoldGutter, autoClosePairs, autoSuggest);
+      return createState(
+        content,
+        language,
+        showMinimap,
+        showFoldGutter,
+        autoClosePairs,
+        autoSuggest,
+        enabledSnippets,
+      );
     }
     const cached = deps.sessionCache.take({
       paneId: props.paneId,
@@ -263,7 +300,15 @@ export function createEditorViewController(
     if (cached && cached.doc.toString() === content) {
       return cached;
     }
-    return createState(content, language, showMinimap, showFoldGutter, autoClosePairs, autoSuggest);
+    return createState(
+      content,
+      language,
+      showMinimap,
+      showFoldGutter,
+      autoClosePairs,
+      autoSuggest,
+      enabledSnippets,
+    );
   }
 
   function syncLanguage(language: EditorLanguageId): void {
@@ -337,19 +382,48 @@ export function createEditorViewController(
     });
   }
 
-  function syncCompletion(autoClosePairs: boolean, autoSuggest: boolean): void {
+  function syncCompletion(
+    autoClosePairs: boolean,
+    autoSuggest: boolean,
+    language: EditorLanguageId,
+    enabledSnippets: readonly ResolvedMarkdownSnippet[],
+  ): void {
     if (!view) {
       return;
     }
-    const key = `${autoClosePairs ? "1" : "0"}:${autoSuggest ? "1" : "0"}`;
+    const snippetKey = snippetCatalogKey(enabledSnippets);
+    const key = `${autoClosePairs ? "1" : "0"}:${autoSuggest ? "1" : "0"}:${language}:${snippetKey}`;
     if (key === lastCompletionKey) {
       return;
     }
     lastCompletionKey = key;
+    const snippetSource =
+      language === "markdown" && enabledSnippets.length > 0
+        ? createSnippetCompletionSource(enabledSnippets)
+        : null;
     view.dispatch({
       effects: compartments.completion.reconfigure(
-        completionExtension({ autoClosePairs, autoSuggest }),
+        completionExtension({ autoClosePairs, autoSuggest, snippetSource }),
       ),
+    });
+  }
+
+  function syncSnippets(
+    language: EditorLanguageId,
+    enabledSnippets: readonly ResolvedMarkdownSnippet[],
+  ): void {
+    if (!view) {
+      return;
+    }
+    const enabled = language === "markdown";
+    const key = `${enabled ? "1" : "0"}:${snippetCatalogKey(enabledSnippets)}`;
+    if (key === lastSnippetKey && lastSnippetsEnabled === enabled) {
+      return;
+    }
+    lastSnippetKey = key;
+    lastSnippetsEnabled = enabled;
+    view.dispatch({
+      effects: compartments.snippets.reconfigure(snippetExtension({ enabled })),
     });
   }
 
@@ -384,6 +458,7 @@ export function createEditorViewController(
       next.showFoldGutter,
       next.autoClosePairs,
       next.autoSuggest,
+      next.enabledSnippets,
     );
     view.setState(nextState);
 
@@ -394,6 +469,8 @@ export function createEditorViewController(
     lastMinimapEnabled = null;
     lastFoldGutterEnabled = null;
     lastCompletionKey = "";
+    lastSnippetKey = "";
+    lastSnippetsEnabled = null;
 
     // Re-apply pane-level chrome that may differ from a restored session.
     applyWrap(view, compartments.lineWrap, next.wrapLines);
@@ -402,7 +479,13 @@ export function createEditorViewController(
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
     syncFoldGutter(next.showFoldGutter);
-    syncCompletion(next.autoClosePairs, next.autoSuggest);
+    syncCompletion(
+      next.autoClosePairs,
+      next.autoSuggest,
+      next.language,
+      next.enabledSnippets,
+    );
+    syncSnippets(next.language, next.enabledSnippets);
     applyScrollTop(next.scrollTop);
     registerHost();
     updateCursor();
@@ -426,6 +509,7 @@ export function createEditorViewController(
       showFoldGutter: true,
       autoClosePairs: true,
       autoSuggest: false,
+      enabledSnippets: [],
     };
 
     const state = createState(
@@ -435,6 +519,7 @@ export function createEditorViewController(
       initial.showFoldGutter,
       initial.autoClosePairs,
       initial.autoSuggest,
+      initial.enabledSnippets,
     );
     view = new EditorView({ state, parent });
 
@@ -446,13 +531,21 @@ export function createEditorViewController(
     lastMinimapEnabled = null;
     lastFoldGutterEnabled = null;
     lastCompletionKey = "";
+    lastSnippetKey = "";
+    lastSnippetsEnabled = null;
     documentGeneration = 1;
     applyScrollTop(initial.scrollTop);
     syncLanguage(initial.language);
     syncDecorations(initial.language, initial.decoratePlaintextSymbols);
     syncMinimap(initial.showMinimap);
     syncFoldGutter(initial.showFoldGutter);
-    syncCompletion(initial.autoClosePairs, initial.autoSuggest);
+    syncCompletion(
+      initial.autoClosePairs,
+      initial.autoSuggest,
+      initial.language,
+      initial.enabledSnippets,
+    );
+    syncSnippets(initial.language, initial.enabledSnippets);
     registerHost();
     updateCursor();
   }
@@ -490,7 +583,13 @@ export function createEditorViewController(
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
     syncFoldGutter(next.showFoldGutter);
-    syncCompletion(next.autoClosePairs, next.autoSuggest);
+    syncCompletion(
+      next.autoClosePairs,
+      next.autoSuggest,
+      next.language,
+      next.enabledSnippets,
+    );
+    syncSnippets(next.language, next.enabledSnippets);
 
     // Scroll from store only when document identity is unchanged and the
     // prop changed externally (e.g. restore). Avoid fighting user scroll.

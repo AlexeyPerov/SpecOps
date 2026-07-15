@@ -12,6 +12,7 @@ import type {
   AppProviderSettings,
   ChatHttpSettings,
   ChatModesSettings,
+  MarkdownSnippetSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
   FontSettings,
@@ -24,6 +25,7 @@ import type {
   SoundSettings,
 } from "../domain/contracts";
 import { normalizeChatModesSettings } from "../ai/modes/chatModesSettings";
+import { normalizeMarkdownSnippetSettings } from "../editor/markdownSnippetSettings";
 import { normalizeCommandBindingOverrides } from "../commands/commandBindings";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import {
@@ -36,6 +38,7 @@ import {
 } from "./largeFileOpen";
 import { defaultLogSettings, normalizeLogSettings } from "./logSettings";
 import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
+import { defaultMarkdownSnippetSettings } from "../editor/markdownSnippetSettings";
 import {
   defaultOpencodeSettings,
   normalizeOpencodeSettings,
@@ -80,6 +83,7 @@ export interface PersistedSettings {
   gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
+  markdownSnippets: MarkdownSnippetSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
@@ -115,6 +119,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   gitIntegration: defaultGitIntegrationSettings,
   logSettings: defaultLogSettings,
   chatModes: defaultChatModesSettings,
+  markdownSnippets: defaultMarkdownSnippetSettings,
   providerSettings: defaultAppProviderSettings,
   providerModelCatalogs: defaultProviderModelCatalogs,
   commandBindingOverrides: {},
@@ -204,6 +209,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         gitIntegration: normalizeGitIntegrationSettings(parsed.gitIntegration),
         logSettings: normalizeLogSettings(parsed.logSettings),
         chatModes: normalizeChatModesSettings(parsed.chatModes),
+        markdownSnippets: normalizeMarkdownSnippetSettings(parsed.markdownSnippets),
         providerSettings,
         providerModelCatalogs,
         commandBindingOverrides: normalizeCommandBindingOverrides(
@@ -258,6 +264,7 @@ export function toPersistedSettings(input: {
   gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
   chatModes: ChatModesSettings;
+  markdownSnippets: MarkdownSnippetSettings;
   providerSettings: AppProviderSettings;
   providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
@@ -296,6 +303,7 @@ export function toPersistedSettings(input: {
     gitIntegration: normalizeGitIntegrationSettings(input.gitIntegration),
     logSettings: normalizeLogSettings(input.logSettings),
     chatModes: normalizeChatModesSettings(input.chatModes),
+    markdownSnippets: normalizeMarkdownSnippetSettings(input.markdownSnippets),
     providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),
     providerModelCatalogs,
     commandBindingOverrides: normalizeCommandBindingOverrides(input.commandBindingOverrides),

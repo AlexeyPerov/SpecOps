@@ -289,6 +289,7 @@ export async function startAppShellRuntime(
         commandBindingOverrides: persistedSettings.commandBindingOverrides,
         logSettings: persistedSettings.logSettings,
         chatModes: persistedSettings.chatModes,
+        markdownSnippets: persistedSettings.markdownSnippets,
         fontSettings: persistedSettings.fontSettings,
         soundSettings: persistedSettings.soundSettings,
         osNotificationSettings: persistedSettings.osNotificationSettings,

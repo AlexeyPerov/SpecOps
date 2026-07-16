@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-07-16 22:50 — U3.1: Unify button & control vocabulary
+
+Consolidated the 8+ parallel button classes doing the same "small secondary
+action" job into a small shared vocabulary, and merged the duplicated
+find/replace + project-search controls into one shared search-control class.
+Sizing is now token-driven instead of bespoke px literals.
+
+- **Shared vocabulary** (`app/src/lib/styles/buttons.css`):
+  - Added `.btn-sm` — compact bordered secondary (`padding: var(--space-2)
+    var(--space-4)`, `font-size: var(--font-size-status)`) for dense panel rows.
+  - Added `.btn-sm-danger` — destructive text variant (color-only override).
+  - Added `.search-control-btn` (+ `-active` / `-primary` / `-wide` / `-close`
+    modifiers) — unified search-control button shared by find/replace and
+    project search (height `24px`, disabled opacity `0.4`).
+  - Documented the full vocabulary in a comment block. No new raw px values.
+- **Deleted bespoke button classes** (0 references remain):
+  - `.version-control-action` → `.btn .btn-sm` (cancel action keeps a danger
+    border via `.version-control-action-cancel` + `.btn-sm-danger`).
+  - `.project-panel-button` → `.btn .btn-sm .btn-ghost` (muted color folded
+    into `.project-panel-header .btn`).
+  - `.chat-session-actions-toggle` → `.btn .btn-sm` (muted/active color folded
+    into `.chat-panel-header-actions .btn`).
+  - `.mode-button` → `.btn .btn-sm .btn-ghost` (active state kept as
+    `.mode-button-active`); mode-bar height tokenized to `--space-12`.
+  - `.settings-action` / `.settings-action-danger` → `.btn .btn-sm` /
+    `.btn-sm-danger` across 12 settings panels + dialogs.
+- **Merged search controls** (`.fr-btn` / `.ps-btn` deleted, 0 references):
+  - `FindReplacePanel.svelte` and `ProjectSearchPanel.svelte` now share
+    `.search-control-btn`. Both panels' inputs/chevrons aligned to the unified
+    `--space-12` (24px) control height. Layouts unchanged.
+- Side cleanup: dropped inconsistent `var(--color-danger, #c0392b)` fallbacks in
+  `VersionControlView` (token is always defined).
+- Validation: `npm run check` → 0 errors / 0 warnings (no unused-selector
+  warnings from deleted CSS); `npm test` → 2973 passed.
+
 ## 2026-07-16 21:15 — UI audit: moderate border/separator cleanup + improvement roadmaps
 
 - Read-only UI audit (compared to Cursor/Zed Editor) found the dominant visual

@@ -110,7 +110,7 @@
       <p class="settings-section-note provider-error">
         {store.lastErrorMessage ?? "Failed to load providers."}
       </p>
-      <button type="button" class="settings-action" onclick={handleReload}>Retry</button>
+      <button type="button" class="btn btn-sm" onclick={handleReload}>Retry</button>
     {:else if providersOf().length === 0}
       <p class="settings-section-note">No providers available. Configure one in your OpenCode config.</p>
     {:else}
@@ -133,7 +133,7 @@
               {#if provider.connected}
                 <button
                   type="button"
-                  class="settings-action settings-action-danger"
+                  class="btn btn-sm btn-sm-danger"
                   onclick={() => handleDisconnect(provider.id)}
                 >
                   Disconnect
@@ -149,10 +149,10 @@
                   oninput={(event) =>
                     setApiKeyDraft(provider.id, (event.currentTarget as HTMLInputElement).value)}
                 />
-                <button type="button" class="settings-action" onclick={() => handleConnect(provider.id)}>
+                <button type="button" class="btn btn-sm" onclick={() => handleConnect(provider.id)}>
                   Connect
                 </button>
-                <button type="button" class="settings-action" onclick={() => handleOAuth(provider.id)}>
+                <button type="button" class="btn btn-sm" onclick={() => handleOAuth(provider.id)}>
                   OAuth
                 </button>
               {/if}
@@ -163,7 +163,7 @@
       {#if actionMessage}
         <p class="settings-section-note provider-action-message">{actionMessage}</p>
       {/if}
-      <button type="button" class="settings-action" onclick={handleReload}>Refresh</button>
+      <button type="button" class="btn btn-sm" onclick={handleReload}>Refresh</button>
     {/if}
   </section>
 {/if}

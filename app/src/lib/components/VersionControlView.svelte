@@ -897,7 +897,7 @@
         {/if}
         <button
           type="button"
-          class="version-control-action"
+          class="btn btn-sm"
           disabled={toolbarBusy}
           title="Refresh repository state"
           onclick={handleRefresh}
@@ -906,7 +906,7 @@
         </button>
         <button
           type="button"
-          class="version-control-action"
+          class="btn btn-sm"
           disabled={remoteActionsDisabled}
           title={remotes.length === 0 ? "Fetch (no remotes configured)" : "Fetch from selected remote"}
           onclick={handleFetch}
@@ -915,7 +915,7 @@
         </button>
         <button
           type="button"
-          class="version-control-action"
+          class="btn btn-sm"
           disabled={remoteActionsDisabled || isReadOnlyRepository}
           title={isReadOnlyRepository
             ? "Pull is unavailable for bare repositories"
@@ -928,7 +928,7 @@
         </button>
         <button
           type="button"
-          class="version-control-action"
+          class="btn btn-sm"
           disabled={remoteActionsDisabled}
           title={remotes.length === 0 ? "Push (no remotes configured)" : "Push to selected remote"}
           onclick={handlePush}
@@ -938,7 +938,7 @@
         {#if remoteOperationBusy}
           <button
             type="button"
-            class="version-control-action version-control-action-cancel"
+            class="btn btn-sm btn-sm-danger version-control-action-cancel"
             disabled={remoteCancelRequested}
             title={`Cancel ${activeRemoteOperationLabel.toLowerCase()}`}
             onclick={handleCancelRemoteOperation}
@@ -1294,32 +1294,14 @@
     white-space: nowrap;
   }
 
-  .version-control-action {
-    padding: var(--space-2) var(--space-4);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-2);
-    color: var(--color-text);
-    font-size: 0.8125rem;
-    cursor: pointer;
-  }
-
-  .version-control-action:hover:not(:disabled) {
-    background: var(--color-surface-3, var(--color-surface-2));
-  }
-
-  .version-control-action:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
+  /* Cancel action keeps a danger-tinted border/hover on top of the shared
+     .btn .btn-sm .btn-sm-danger base (U3.1). */
   .version-control-action-cancel {
-    border-color: color-mix(in srgb, var(--color-danger, #c0392b) 35%, var(--color-border-subtle));
-    color: var(--color-danger, #c0392b);
+    border-color: color-mix(in srgb, var(--color-danger) 35%, var(--color-border-subtle));
   }
 
   .version-control-action-cancel:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-danger, #c0392b) 10%, var(--color-surface-2));
+    background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface-2));
   }
 
   .version-control-main {

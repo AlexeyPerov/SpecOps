@@ -117,7 +117,7 @@
       <p class="settings-section-note command-error">
         {store.lastErrorMessage ?? "Failed to load config."}
       </p>
-      <button type="button" class="settings-action" onclick={handleReload}>Retry</button>
+      <button type="button" class="btn btn-sm" onclick={handleReload}>Retry</button>
     {:else}
       {@const commands = commandsOf()}
       {#if Object.keys(commands).length === 0}
@@ -131,7 +131,7 @@
                 {#if entry.description}<span class="command-row-desc">{entry.description}</span>{/if}
                 {#if entry.agent}<span class="command-row-meta">agent: {entry.agent}</span>{/if}
               </div>
-              <button type="button" class="settings-action" onclick={() => startEdit(name, entry)}>
+              <button type="button" class="btn btn-sm" onclick={() => startEdit(name, entry)}>
                 Edit
               </button>
             </div>
@@ -140,8 +140,8 @@
       {/if}
       {#if actionError}<p class="settings-section-note command-error">{actionError}</p>{/if}
       <div class="command-actions">
-        <button type="button" class="settings-action" onclick={startCreate}>New command</button>
-        <button type="button" class="settings-action" onclick={handleReload}>Refresh</button>
+        <button type="button" class="btn btn-sm" onclick={startCreate}>New command</button>
+        <button type="button" class="btn btn-sm" onclick={handleReload}>Refresh</button>
       </div>
 
       {#if editing}
@@ -224,11 +224,11 @@
             Run as subtask
           </label>
           <div class="command-editor-actions">
-            <button type="button" class="settings-action" onclick={() => (editing = null)}>Cancel</button>
+            <button type="button" class="btn btn-sm" onclick={() => (editing = null)}>Cancel</button>
             {#if draft.name}
               <button
                 type="button"
-                class="settings-action settings-action-danger"
+                class="btn btn-sm btn-sm-danger"
                 onclick={() => handleDelete(draft.name)}
               >
                 Delete
@@ -236,7 +236,7 @@
             {/if}
             <button
               type="button"
-              class="settings-action"
+              class="btn btn-sm"
               onclick={() => handleSave(draft.name, draft.name, draft.entry)}
             >
               Save
@@ -291,7 +291,7 @@
     flex-wrap: wrap;
   }
 
-  .command-editor-actions .settings-action-danger {
+  .command-editor-actions .btn-sm-danger {
     margin-right: auto;
   }
 

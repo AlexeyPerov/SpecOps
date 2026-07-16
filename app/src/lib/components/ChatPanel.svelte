@@ -435,7 +435,7 @@
       {#if canToggleTodoPanel}
         <button
           type="button"
-          class="chat-session-actions-toggle"
+          class="btn btn-sm"
           class:chat-todo-toggle-active={todoPanelOpen}
           onclick={() => onToggleTodoPanel?.()}
           aria-pressed={todoPanelOpen}
@@ -447,7 +447,7 @@
       {#if canToggleDiffPanel}
         <button
           type="button"
-          class="chat-session-actions-toggle"
+          class="btn btn-sm"
           class:chat-todo-toggle-active={diffPanelOpen}
           onclick={() => onToggleDiffPanel?.()}
           aria-pressed={diffPanelOpen}
@@ -460,7 +460,7 @@
         <div class="chat-session-actions" bind:this={sessionActionsEl}>
           <button
             type="button"
-            class="chat-session-actions-toggle"
+            class="btn btn-sm"
             onclick={toggleSessionActions}
             aria-haspopup="menu"
             aria-expanded={sessionActionsOpen}
@@ -690,26 +690,15 @@
     display: inline-flex;
   }
 
-  .chat-session-actions-toggle {
-    min-height: 24px;
-    padding: 0 var(--space-6);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
+  /* Header toggle buttons built on .btn .btn-sm (U3.1); only the resting
+     muted color and the active state are specific to this area. */
+  .chat-panel-header-actions .btn {
     color: var(--color-text-secondary);
-    font-size: 11px;
-    line-height: 1;
-    cursor: pointer;
   }
 
-  .chat-session-actions-toggle:hover:not(:disabled) {
+  .chat-panel-header-actions .btn:hover:not(:disabled) {
     color: var(--color-text-primary);
     border-color: var(--color-border-strong);
-  }
-
-  .chat-session-actions-toggle:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .chat-todo-toggle-active {

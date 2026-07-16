@@ -154,7 +154,7 @@
       <p class="settings-section-note agent-error">
         {store.lastErrorMessage ?? "Failed to load agents."}
       </p>
-      <button type="button" class="settings-action" onclick={handleReload}>Retry</button>
+      <button type="button" class="btn btn-sm" onclick={handleReload}>Retry</button>
     {:else}
       <div class="connection-list">
         {#each agentsOf() as agent (agent.name)}
@@ -167,7 +167,7 @@
               {#if agent.description}<span class="agent-row-desc">{agent.description}</span>{/if}
             </div>
             <div class="agent-row-actions">
-              <button type="button" class="settings-action" onclick={() => startEdit(agent)}>
+              <button type="button" class="btn btn-sm" onclick={() => startEdit(agent)}>
                 {agent.builtin ? "View" : "Edit"}
               </button>
             </div>
@@ -176,8 +176,8 @@
       </div>
       {#if actionError}<p class="settings-section-note agent-error">{actionError}</p>{/if}
       <div class="agent-create-actions">
-        <button type="button" class="settings-action" onclick={startCreate}>New custom agent</button>
-        <button type="button" class="settings-action" onclick={handleReload}>Refresh</button>
+        <button type="button" class="btn btn-sm" onclick={startCreate}>New custom agent</button>
+        <button type="button" class="btn btn-sm" onclick={handleReload}>Refresh</button>
       </div>
       <p class="settings-section-note">
         {agentsOf().length} agent(s) · {customAgentNames().length} custom

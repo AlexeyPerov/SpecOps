@@ -230,15 +230,15 @@
         {#if !readonly && name}
           <button
             type="button"
-            class="settings-action settings-action-danger"
+            class="btn btn-sm btn-sm-danger"
             onclick={() => onDelete(name)}
           >
             Delete agent
           </button>
         {/if}
-        <button type="button" class="settings-action" onclick={onClose}>Cancel</button>
+        <button type="button" class="btn btn-sm" onclick={onClose}>Cancel</button>
         {#if !readonly}
-          <button type="button" class="settings-action" onclick={handleSave}>Save</button>
+          <button type="button" class="btn btn-sm" onclick={handleSave}>Save</button>
         {/if}
       </footer>
     </div>
@@ -332,7 +332,7 @@
     flex-shrink: 0;
   }
 
-  .agent-editor-footer .settings-action-danger {
+  .agent-editor-footer .btn-sm-danger {
     margin-right: auto;
   }
 

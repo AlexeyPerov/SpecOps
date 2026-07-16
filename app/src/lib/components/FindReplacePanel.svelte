@@ -257,8 +257,8 @@
       <span class="fr-counter">{matchCountText}</span>
       <button
         type="button"
-        class="fr-btn"
-        class:fr-btn-active={findCaseSensitive}
+        class="search-control-btn"
+        class:search-control-btn-active={findCaseSensitive}
         title="Match case"
         aria-pressed={findCaseSensitive}
         onclick={() => {
@@ -270,8 +270,8 @@
       </button>
       <button
         type="button"
-        class="fr-btn"
-        class:fr-btn-active={findWholeWord}
+        class="search-control-btn"
+        class:search-control-btn-active={findWholeWord}
         title="Whole word"
         aria-pressed={findWholeWord}
         onclick={() => {
@@ -283,8 +283,8 @@
       </button>
       <button
         type="button"
-        class="fr-btn"
-        class:fr-btn-active={findRegexp}
+        class="search-control-btn"
+        class:search-control-btn-active={findRegexp}
         title="Regular expression"
         aria-pressed={findRegexp}
         onclick={() => {
@@ -294,13 +294,13 @@
       >
         .*
       </button>
-      <button type="button" class="fr-btn" title="Previous (Shift+Enter)" disabled={!canSearch} onclick={findPrev}>
+      <button type="button" class="search-control-btn" title="Previous (Shift+Enter)" disabled={!canSearch} onclick={findPrev}>
         &#x25B2;
       </button>
-      <button type="button" class="fr-btn" title="Next (Enter)" disabled={!canSearch} onclick={findNext}>
+      <button type="button" class="search-control-btn" title="Next (Enter)" disabled={!canSearch} onclick={findNext}>
         &#x25BC;
       </button>
-      <button type="button" class="fr-btn fr-btn-close" title="Close (Escape)" onclick={close}>
+      <button type="button" class="search-control-btn search-control-btn-close" title="Close (Escape)" onclick={close}>
         &times;
       </button>
     </div>
@@ -320,10 +320,10 @@
           bind:this={replaceInputEl}
           aria-label="Replace"
         />
-        <button type="button" class="fr-btn fr-btn-wide" title="Replace current match" disabled={!canSearch} onclick={replaceCurrent}>
+        <button type="button" class="search-control-btn search-control-btn-wide" title="Replace current match" disabled={!canSearch} onclick={replaceCurrent}>
           Replace
         </button>
-        <button type="button" class="fr-btn fr-btn-wide" title="Replace all matches" disabled={!canSearch} onclick={replaceAll}>
+        <button type="button" class="search-control-btn search-control-btn-wide" title="Replace all matches" disabled={!canSearch} onclick={replaceAll}>
           All
         </button>
       </div>
@@ -368,7 +368,7 @@
 
   .fr-chevron {
     width: 20px;
-    height: 24px;
+    height: var(--space-12);
     border: none;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -398,7 +398,7 @@
        panel instead of being pushed past the rounded right edge. */
     flex: 1 1 160px;
     min-width: 0;
-    height: 26px;
+    height: var(--space-12);
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-sm);
     background: var(--color-bg-root);
@@ -435,49 +435,5 @@
     white-space: nowrap;
   }
 
-  .fr-btn {
-    height: 24px;
-    min-width: 24px;
-    padding: 0 var(--space-4);
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-secondary);
-    font-size: 11px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-family: var(--font-family-ui);
-    transition:
-      background-color var(--motion-fast) var(--easing-standard),
-      color var(--motion-fast) var(--easing-standard),
-      border-color var(--motion-fast) var(--easing-standard);
-  }
-
-  .fr-btn:hover:not(:disabled) {
-    background: var(--color-hover);
-    color: var(--color-text-primary);
-  }
-
-  .fr-btn:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-
-  .fr-btn-wide {
-    padding: 0 var(--space-6);
-  }
-
-  .fr-btn-active {
-    background: var(--color-hover);
-    color: var(--color-accent);
-    border-color: var(--color-accent);
-  }
-
-  .fr-btn-close {
-    font-size: 15px;
-    font-weight: 600;
-  }
+  /* Search controls use the shared .search-control-btn vocabulary (U3.1). */
 </style>

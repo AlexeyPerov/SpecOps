@@ -150,11 +150,11 @@
   <header class="project-panel-header">
     {#if !collapsed}
       <div class="project-panel-title" title={workspaceRoot}>{basename(workspaceRoot)}</div>
-      <button class="project-panel-button" type="button" onclick={onRefresh} title="Refresh tree">
+      <button class="btn btn-sm btn-ghost" type="button" onclick={onRefresh} title="Refresh tree">
         <RefreshIcon size={14} />
       </button>
       <button
-        class="project-panel-button"
+        class="btn btn-sm btn-ghost"
         type="button"
         onclick={() => onToggleHidden(!showHidden)}
         title={showHidden ? "Hide hidden files" : "Show hidden files"}
@@ -163,7 +163,7 @@
       </button>
     {/if}
     <button
-      class="project-panel-button"
+      class="btn btn-sm btn-ghost"
       type="button"
       onclick={() => onToggleCollapsed(!collapsed)}
       title={collapsed ? "Expand panel" : "Collapse panel"}
@@ -262,23 +262,14 @@
     color: var(--color-text-secondary);
   }
 
-  .project-panel-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
+  /* Muted ghost header buttons built on the shared .btn .btn-sm .btn-ghost
+     base (U3.1); the resting color is muted to match the panel-title tone. */
+  .project-panel-header .btn {
     color: var(--color-text-secondary);
-    font: inherit;
-    height: 22px;
-    padding: 0 var(--space-6);
   }
 
-  .project-panel-button:hover {
-    background: var(--color-hover);
+  .project-panel-header .btn:hover:not(:disabled) {
     color: var(--color-text-primary);
-    cursor: pointer;
   }
 
   .project-panel-body {

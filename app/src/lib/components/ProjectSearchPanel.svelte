@@ -210,8 +210,8 @@
         />
         <button
           type="button"
-          class="ps-btn"
-          class:ps-btn-active={caseSensitive}
+          class="search-control-btn"
+          class:search-control-btn-active={caseSensitive}
           title="Match case"
           aria-pressed={caseSensitive}
           onclick={() => onCaseSensitiveChange?.(!caseSensitive)}
@@ -220,8 +220,8 @@
         </button>
         <button
           type="button"
-          class="ps-btn"
-          class:ps-btn-active={wholeWord}
+          class="search-control-btn"
+          class:search-control-btn-active={wholeWord}
           title="Whole word"
           aria-pressed={wholeWord}
           onclick={() => onWholeWordChange?.(!wholeWord)}
@@ -230,8 +230,8 @@
         </button>
         <button
           type="button"
-          class="ps-btn"
-          class:ps-btn-active={regex}
+          class="search-control-btn"
+          class:search-control-btn-active={regex}
           title="Regular expression"
           aria-pressed={regex}
           onclick={() => onRegexChange?.(!regex)}
@@ -240,7 +240,7 @@
         </button>
         <button
           type="button"
-          class="ps-btn ps-btn-primary"
+          class="search-control-btn search-control-btn-primary"
           disabled={running || !canSearch}
           title="Search (Enter)"
           onclick={() => onRunSearch?.()}
@@ -249,7 +249,7 @@
         </button>
         <button
           type="button"
-          class="ps-btn"
+          class="search-control-btn"
           title="Close (Escape)"
           onclick={() => onClose?.()}
         >
@@ -270,7 +270,7 @@
           />
           <button
             type="button"
-            class="ps-btn ps-btn-wide"
+            class="search-control-btn search-control-btn-wide"
             disabled={running || !canReplace}
             title="Replace all matches across the workspace"
             onclick={() => onReplaceAll?.()}
@@ -386,7 +386,7 @@
   }
 
   .ps-chevron {
-    height: 26px;
+    height: var(--space-12);
     border: none;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -407,7 +407,7 @@
   .ps-input {
     flex: 1 1 240px;
     min-width: 0;
-    height: 26px;
+    height: var(--space-12);
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-sm);
     background: var(--color-bg-root);
@@ -435,53 +435,7 @@
     white-space: nowrap;
   }
 
-  .ps-btn {
-    height: 26px;
-    min-width: 26px;
-    padding: 0 var(--space-4);
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-secondary);
-    font-size: 11px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-family: var(--font-family-ui);
-  }
-
-  .ps-btn:hover:not(:disabled) {
-    background: var(--color-hover);
-    color: var(--color-text-primary);
-  }
-
-  .ps-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  .ps-btn-wide {
-    padding: 0 var(--space-6);
-  }
-
-  .ps-btn-active {
-    background: var(--color-hover);
-    color: var(--color-accent);
-    border-color: var(--color-accent);
-  }
-
-  .ps-btn-primary {
-    background: var(--color-accent);
-    color: var(--color-bg-root);
-    border-color: var(--color-accent);
-  }
-
-  .ps-btn-primary:hover:not(:disabled) {
-    color: var(--color-bg-root);
-    opacity: 0.9;
-  }
+  /* Search controls use the shared .search-control-btn vocabulary (U3.1). */
 
   .ps-status {
     flex-shrink: 0;

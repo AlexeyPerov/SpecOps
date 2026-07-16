@@ -192,7 +192,7 @@
       <p class="settings-section-note mcp-error">
         {store.lastErrorMessage ?? "Failed to load MCP servers."}
       </p>
-      <button type="button" class="settings-action" onclick={handleReload}>Retry</button>
+      <button type="button" class="btn btn-sm" onclick={handleReload}>Retry</button>
     {:else}
       {#if (store?.mcpServers ?? []).length === 0}
         <p class="settings-section-note">No MCP servers configured.</p>
@@ -214,11 +214,11 @@
               </div>
               <div class="mcp-row-actions">
                 {#if server.status === "connected"}
-                  <button type="button" class="settings-action" onclick={() => handleDisconnect(server.name)}>
+                  <button type="button" class="btn btn-sm" onclick={() => handleDisconnect(server.name)}>
                     Disconnect
                   </button>
                 {:else if server.status !== "disabled"}
-                  <button type="button" class="settings-action" onclick={() => handleConnect(server.name)}>
+                  <button type="button" class="btn btn-sm" onclick={() => handleConnect(server.name)}>
                     Connect
                   </button>
                 {/if}
@@ -293,19 +293,19 @@
           {/if}
           {#if addError}<p class="settings-section-note mcp-error">{addError}</p>{/if}
           <div class="mcp-add-actions">
-            <button type="button" class="settings-action" onclick={cancelAdd} disabled={addingServer}>Cancel</button>
-            <button type="button" class="settings-action" onclick={handleAdd} disabled={addingServer}>
+            <button type="button" class="btn btn-sm" onclick={cancelAdd} disabled={addingServer}>Cancel</button>
+            <button type="button" class="btn btn-sm" onclick={handleAdd} disabled={addingServer}>
               {addingServer ? "Adding…" : "Add server"}
             </button>
           </div>
         </div>
       {:else}
         <div class="mcp-add-buttons">
-          <button type="button" class="settings-action" onclick={() => startAdd("local")}>Add local server</button>
-          <button type="button" class="settings-action" onclick={() => startAdd("remote")}>Add remote server</button>
+          <button type="button" class="btn btn-sm" onclick={() => startAdd("local")}>Add local server</button>
+          <button type="button" class="btn btn-sm" onclick={() => startAdd("remote")}>Add remote server</button>
         </div>
       {/if}
-      <button type="button" class="settings-action" onclick={handleReload}>Refresh</button>
+      <button type="button" class="btn btn-sm" onclick={handleReload}>Refresh</button>
     {/if}
   </section>
 {/if}

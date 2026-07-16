@@ -219,7 +219,7 @@
 
           <div class="settings-subsection">
             <h4>Required sections</h4>
-            <button type="button" class="settings-action" onclick={addRequiredSection}>Add section</button>
+            <button type="button" class="btn btn-sm" onclick={addRequiredSection}>Add section</button>
             {#if current.requiredSections.length === 0}
               <p class="settings-section-note">
                 No required sections. Responses are rendered as conversational markdown.
@@ -241,7 +241,7 @@
                     <div class="required-section-actions">
                       <button
                         type="button"
-                        class="settings-action"
+                        class="btn btn-sm"
                         disabled={sectionIndex === 0}
                         onclick={() => moveRequiredSection(sectionIndex, -1)}
                       >
@@ -249,7 +249,7 @@
                       </button>
                       <button
                         type="button"
-                        class="settings-action"
+                        class="btn btn-sm"
                         disabled={sectionIndex === current.requiredSections.length - 1}
                         onclick={() => moveRequiredSection(sectionIndex, 1)}
                       >
@@ -257,7 +257,7 @@
                       </button>
                       <button
                         type="button"
-                        class="settings-action settings-action-danger"
+                        class="btn btn-sm btn-sm-danger"
                         onclick={() => removeRequiredSection(sectionIndex)}
                       >
                         Remove
@@ -292,13 +292,13 @@
         {#if !isBuiltin}
           <button
             type="button"
-            class="settings-action settings-action-danger"
+            class="btn btn-sm btn-sm-danger"
             onclick={onDelete}
           >
             Delete mode
           </button>
         {/if}
-        <button type="button" class="settings-action" onclick={onClose}>Done</button>
+        <button type="button" class="btn btn-sm" onclick={onClose}>Done</button>
       </footer>
     </div>
   </div>
@@ -380,7 +380,7 @@
     flex-shrink: 0;
   }
 
-  .chat-mode-editor-footer .settings-action-danger {
+  .chat-mode-editor-footer .btn-sm-danger {
     margin-right: auto;
   }
 </style>

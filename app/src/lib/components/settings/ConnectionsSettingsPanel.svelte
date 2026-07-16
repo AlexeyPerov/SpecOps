@@ -159,7 +159,7 @@
   </p>
   <div class="settings-subsection">
     <h4>Connection list</h4>
-    <button type="button" class="settings-action" onclick={addHttpConnection}>Add connection</button>
+    <button type="button" class="btn btn-sm" onclick={addHttpConnection}>Add connection</button>
     {#if httpConnections().length === 0}
       <p class="settings-section-note">No providers configured yet. Add one to enable Chat context.</p>
     {:else}
@@ -183,7 +183,7 @@
             </button>
             <button
               type="button"
-              class="connection-row-remove settings-action settings-action-danger"
+              class="connection-row-remove btn btn-sm btn-sm-danger"
               disabled={httpConnections().length <= 1}
               aria-label={`Remove ${connection.label}`}
               onclick={() => void confirmRemoveHttpConnection(connection.id)}

@@ -232,7 +232,7 @@
     <p class="settings-section-note opencode-config-error">
       {store.lastErrorMessage ?? "Failed to load OpenCode config."}
     </p>
-    <button type="button" class="settings-action" onclick={handleReload}>Retry</button>
+    <button type="button" class="btn btn-sm" onclick={handleReload}>Retry</button>
   </section>
 {:else}
   <section class="settings-section">
@@ -507,10 +507,10 @@
         <p class="settings-section-note opencode-config-error">{saveError}</p>
       {/if}
       <div class="opencode-config-actions">
-        <button type="button" class="settings-action" onclick={handleReload} disabled={saving}>
+        <button type="button" class="btn btn-sm" onclick={handleReload} disabled={saving}>
           Reload
         </button>
-        <button type="button" class="settings-action" onclick={handleSave} disabled={saving}>
+        <button type="button" class="btn btn-sm" onclick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </button>
       </div>

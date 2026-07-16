@@ -323,7 +323,7 @@
       {/if}
       <button
         type="button"
-        class="settings-action"
+        class="btn btn-sm"
         onclick={checkOpencodeConnection}
         title="Check OpenCode connection status"
       >
@@ -337,7 +337,7 @@
       </p>
       <button
         type="button"
-        class="settings-action"
+        class="btn btn-sm"
         onclick={refreshOpencodeModels}
         title="Reload models from OpenCode"
       >

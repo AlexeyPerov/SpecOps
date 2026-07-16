@@ -1,5 +1,26 @@
-/* Shared button variants (M1). Imported globally from +layout.svelte. */
-
+/*
+ * Shared button & control vocabulary (U3.1). Imported globally from
+ * +layout.svelte. Prefer these classes over bespoke per-panel button styles:
+ *
+ *   .btn              — base control: border, radius, transitions, disabled state.
+ *   .btn .btn-primary — accent-filled primary action.
+ *   .btn .btn-danger  — danger-tinted destructive action (filled).
+ *   .btn .btn-secondary      — standard bordered secondary action.
+ *   .btn .btn-secondary.btn-compact — slightly tighter secondary (legacy density).
+ *   .btn .btn-sm      — compact bordered secondary for dense panel rows (settings
+ *                       actions, version-control toolbar). Sizing is token-driven;
+ *                       pair with .btn-sm-danger for a destructive text variant.
+ *   .btn .btn-sm.btn-ghost   — compact transparent icon/text toggle (project panel,
+ *                       markdown mode). Replaces bespoke ghost button classes.
+ *
+ * Standalone (no .btn base required):
+ *   .toolbar-button   — transparent ghost action for header/icon toolbars. Height
+ *                       is set per-context (the app shell pins header buttons to
+ *                       the tab-header height); do not add a raw px height here.
+ *
+ * Search controls (find/replace + project search) share .search-control-btn,
+ * defined below so the two panels render identical controls.
+ */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -44,6 +65,28 @@
 .btn-secondary.btn-compact {
   padding: var(--space-1) var(--space-4);
   font-size: var(--font-size-ui);
+}
+
+/* Compact bordered secondary for dense panel rows. Replaces the former
+   .settings-action / .version-control-action bespoke classes. Sizing is fully
+   token-driven (no raw px). */
+.btn-sm {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-status);
+}
+
+.btn-sm:not(:disabled):hover {
+  background: var(--color-surface-3);
+}
+
+.btn-sm:not(:disabled):active {
+  background: color-mix(in srgb, var(--color-surface-3) 88%, var(--color-text-secondary));
+}
+
+/* Destructive text variant of the compact secondary. Replaces the former
+   .settings-action-danger modifier (color-only override). */
+.btn-sm-danger {
+  color: var(--color-text-danger);
 }
 
 .btn-primary {
@@ -104,4 +147,71 @@
   padding: 0 var(--space-8);
   font-size: var(--font-size-status);
   font-weight: 400;
+}
+
+/*
+ * Shared search-control button (U3.1). Unifies the former .fr-btn (find/replace)
+ * and .ps-btn (project search) controls so both panels render identical buttons.
+ * The control height is fixed (not a raw px elsewhere): 24px, the smaller of the
+ * two former values, so dense option toggles in both panels line up. The active
+ * and primary modifiers cover the option-toggle and run-search states.
+ */
+.search-control-btn {
+  height: 24px;
+  min-width: 24px;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-status);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: var(--font-family-ui);
+  transition:
+    background-color var(--motion-fast) var(--easing-standard),
+    color var(--motion-fast) var(--easing-standard),
+    border-color var(--motion-fast) var(--easing-standard);
+}
+
+.search-control-btn:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.search-control-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.search-control-btn-wide {
+  padding: 0 var(--space-6);
+}
+
+/* Active (pressed) option toggle, e.g. match-case / whole-word / regex. */
+.search-control-btn-active {
+  background: var(--color-hover);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* Primary run action (project-search "Search"). */
+.search-control-btn-primary {
+  background: var(--color-accent);
+  color: var(--color-bg-root);
+  border-color: var(--color-accent);
+}
+
+.search-control-btn-primary:hover:not(:disabled) {
+  color: var(--color-bg-root);
+  opacity: 0.9;
+}
+
+/* Larger close affordance for the dismiss control. */
+.search-control-btn-close {
+  font-size: 15px;
+  font-weight: 600;
 }

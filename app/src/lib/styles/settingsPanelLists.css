@@ -58,19 +58,8 @@
   cursor: not-allowed;
 }
 
-.settings-action {
-  align-self: flex-start;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-primary);
-  padding: var(--space-3) var(--space-6);
-  cursor: pointer;
-}
-
-.settings-action-danger {
-  color: var(--color-text-danger);
-}
+/* Settings actions use the shared .btn .btn-sm vocabulary (U3.1); these rules
+   only adjust alignment within list rows. */
 
 .required-section-input {
   flex: 1;
@@ -84,11 +73,11 @@
   flex-shrink: 0;
 }
 
-.connection-row .settings-action,
-.required-section-actions .settings-action {
+.connection-row .btn-sm,
+.required-section-actions .btn-sm {
   align-self: center;
 }
 
-.required-section-actions .settings-action-danger {
+.required-section-actions .btn-sm-danger {
   margin-inline: var(--space-4);
 }

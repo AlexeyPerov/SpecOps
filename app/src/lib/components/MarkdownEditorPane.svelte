@@ -109,21 +109,21 @@
   <div class="markdown-mode-bar" hidden={!markdownEnabled}>
     <div class="markdown-mode-actions">
       <button
-        class={`mode-button ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
+        class={`btn btn-sm btn-ghost ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
         type="button"
         onclick={() => onMarkdownViewModeChange("edit")}
       >
         edit
       </button>
       <button
-        class={`mode-button ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
+        class={`btn btn-sm btn-ghost ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
         type="button"
         onclick={() => onMarkdownViewModeChange("split")}
       >
         split
       </button>
       <button
-        class={`mode-button ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
+        class={`btn btn-sm btn-ghost ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
         type="button"
         onclick={() => onMarkdownViewModeChange("preview")}
       >
@@ -188,7 +188,7 @@
   }
 
   .markdown-mode-bar {
-    height: 22px;
+    min-height: var(--space-12);
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -204,15 +204,11 @@
     gap: var(--space-4);
   }
 
-  .mode-button {
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
+  /* Segmented mode toggle built on .btn .btn-sm .btn-ghost (U3.1); the resting
+     muted color and the active state are specific to this control. */
+  .markdown-mode-actions .btn {
     color: var(--color-text-secondary);
-    height: 18px;
-    font-size: 11px;
     text-transform: lowercase;
-    padding: 0 var(--space-6);
   }
 
   .mode-button-active {

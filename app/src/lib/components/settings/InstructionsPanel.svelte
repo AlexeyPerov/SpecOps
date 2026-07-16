@@ -106,7 +106,7 @@
     <p class="settings-section-note instructions-error">
       {store.lastErrorMessage ?? "Failed to load config."}
     </p>
-    <button type="button" class="settings-action" onclick={handleReload}>Retry</button>
+    <button type="button" class="btn btn-sm" onclick={handleReload}>Retry</button>
   </section>
 {:else}
   <section class="settings-section">
@@ -170,10 +170,10 @@
 
     {#if saveError}<p class="settings-section-note instructions-error">{saveError}</p>{/if}
     <div class="instructions-actions">
-      <button type="button" class="settings-action" onclick={handleSave} disabled={saving || !dirty}>
+      <button type="button" class="btn btn-sm" onclick={handleSave} disabled={saving || !dirty}>
         {saving ? "Saving…" : "Save"}
       </button>
-      <button type="button" class="settings-action" onclick={handleReload}>Reload</button>
+      <button type="button" class="btn btn-sm" onclick={handleReload}>Reload</button>
     </div>
   </section>
 {/if}

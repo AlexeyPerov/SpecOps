@@ -124,6 +124,134 @@
   let probeGeneration = 0;
   let lastRefreshAt = 0;
 
+  // Overflow-menu state for the de-densified toolbar (U3.3). Refresh, Fetch,
+  // and the Remote <select> live behind a "…" popover; Pull and Push stay
+  // inline as primary actions. Cancel appears inline only while a remote
+  // operation is active.
+  let overflowOpen = $state(false);
+  let overflowEl = $state<HTMLDivElement | null>(null);
+  let overflowButtonEl = $state<HTMLButtonElement | null>(null);
+  let overflowRefreshEl = $state<HTMLButtonElement | null>(null);
+  let overflowFetchEl = $state<HTMLButtonElement | null>(null);
+  let overflowFocusIndex = $state(-1);
+
+  const overflowButtons = $derived.by(() => {
+    const buttons: HTMLButtonElement[] = [];
+    if (overflowRefreshEl) {
+      buttons.push(overflowRefreshEl);
+    }
+    if (overflowFetchEl) {
+      buttons.push(overflowFetchEl);
+    }
+    return buttons;
+  });
+
+  function openOverflow(): void {
+    if (overflowOpen) {
+      return;
+    }
+    overflowOpen = true;
+    overflowFocusIndex = -1;
+    window.addEventListener("pointerdown", onOverflowPointerDown);
+    window.addEventListener("keydown", onOverflowKeydown);
+  }
+
+  function closeOverflow(): void {
+    if (!overflowOpen) {
+      return;
+    }
+    overflowOpen = false;
+    overflowFocusIndex = -1;
+    window.removeEventListener("pointerdown", onOverflowPointerDown);
+    window.removeEventListener("keydown", onOverflowKeydown);
+  }
+
+  function toggleOverflow(): void {
+    if (overflowOpen) {
+      closeOverflow();
+    } else {
+      openOverflow();
+    }
+  }
+
+  function onOverflowPointerDown(event: PointerEvent): void {
+    if (!overflowOpen) {
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Node && overflowEl?.contains(target)) {
+      return;
+    }
+    if (target instanceof Node && overflowButtonEl?.contains(target)) {
+      return;
+    }
+    closeOverflow();
+  }
+
+  function focusOverflowButton(index: number): void {
+    overflowFocusIndex = index;
+    const buttons = overflowButtons;
+    if (index >= 0 && index < buttons.length) {
+      buttons[index].focus();
+    }
+  }
+
+  function onOverflowKeydown(event: KeyboardEvent): void {
+    if (!overflowOpen) {
+      return;
+    }
+    const buttons = overflowButtons;
+    const count = buttons.length;
+    const current = overflowFocusIndex;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeOverflow();
+      overflowButtonEl?.focus();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (count === 0) {
+        return;
+      }
+      const next = current < 0 ? 0 : current + 1;
+      focusOverflowButton(next >= count ? 0 : next);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (count === 0) {
+        return;
+      }
+      const next = current < 0 ? count - 1 : current - 1;
+      focusOverflowButton(next < 0 ? count - 1 : next);
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      if (count > 0) {
+        focusOverflowButton(0);
+      }
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      if (count > 0) {
+        focusOverflowButton(count - 1);
+      }
+      return;
+    }
+  }
+
+  // Closing the overflow menu when a remote operation starts keeps the
+  // transient inline Cancel control visible.
+  $effect(() => {
+    if (remoteOperationBusy && overflowOpen) {
+      closeOverflow();
+    }
+  });
+
   const workspaceName = $derived.by(() => {
     if (!workspaceRootPath) {
       return "Workspace";
@@ -877,42 +1005,14 @@
         {/if}
       </div>
       <div class="version-control-header-actions">
-        {#if showRemotePicker}
-          <label class="version-control-remote-picker">
-            <span class="version-control-remote-picker-label">Remote</span>
-            <select
-              class="version-control-remote-select"
-              disabled={toolbarBusy || remotesLoading}
-              title={remotePickerTitle}
-              value={selectedRemoteName ?? ""}
-              onchange={handleRemoteSelectionChange}
-            >
-              {#each remotes as remote (remote.name)}
-                <option value={remote.name}>{remote.name}</option>
-              {/each}
-            </select>
-          </label>
-        {:else if probeStatus === "ready" && !isReadOnlyRepository}
-          <span class="version-control-remote-hint" title={remotePickerTitle}>No remotes</span>
-        {/if}
-        <button
-          type="button"
-          class="btn btn-sm"
-          disabled={toolbarBusy}
-          title="Refresh repository state"
-          onclick={handleRefresh}
-        >
-          {refreshBusy ? "Refreshing…" : "Refresh"}
-        </button>
-        <button
-          type="button"
-          class="btn btn-sm"
-          disabled={remoteActionsDisabled}
-          title={remotes.length === 0 ? "Fetch (no remotes configured)" : "Fetch from selected remote"}
-          onclick={handleFetch}
-        >
-          {fetchBusy ? "Fetching…" : "Fetch"}
-        </button>
+        <span class="version-control-remote-indicator" title={remotePickerTitle}>
+          {#if showRemotePicker}
+            <span class="version-control-remote-indicator-label">Remote</span>
+            <span class="version-control-remote-indicator-value">{selectedRemoteName ?? "—"}</span>
+          {:else if probeStatus === "ready" && !isReadOnlyRepository}
+            <span class="version-control-remote-indicator-value">No remotes</span>
+          {/if}
+        </span>
         <button
           type="button"
           class="btn btn-sm"
@@ -946,28 +1046,100 @@
             {remoteCancelRequested ? "Cancelling…" : "Cancel"}
           </button>
         {/if}
+        <div class="version-control-overflow">
+          <button
+            type="button"
+            class="btn btn-sm version-control-overflow-button"
+            bind:this={overflowButtonEl}
+            aria-haspopup="menu"
+            aria-expanded={overflowOpen}
+            aria-label="More version control actions"
+            title="Refresh, fetch, and remote selection"
+            onclick={toggleOverflow}
+          >
+            <span class="version-control-overflow-glyph" aria-hidden="true">⋯</span>
+          </button>
+          {#if overflowOpen}
+            <div
+              class="version-control-overflow-menu"
+              role="menu"
+              tabindex="-1"
+              aria-label="More version control actions"
+              bind:this={overflowEl}
+              onpointerdown={(event) => event.stopPropagation()}
+            >
+              {#if showRemotePicker}
+                <label class="version-control-overflow-remote">
+                  <span class="version-control-overflow-remote-label">Remote</span>
+                  <select
+                    class="version-control-remote-select"
+                    disabled={toolbarBusy || remotesLoading}
+                    title={remotePickerTitle}
+                    value={selectedRemoteName ?? ""}
+                    onchange={handleRemoteSelectionChange}
+                  >
+                    {#each remotes as remote (remote.name)}
+                      <option value={remote.name}>{remote.name}</option>
+                    {/each}
+                  </select>
+                </label>
+              {/if}
+              <div class="ui-rule version-control-overflow-separator" role="separator"></div>
+              <button
+                type="button"
+                class="version-control-overflow-item"
+                role="menuitem"
+                bind:this={overflowRefreshEl}
+                disabled={toolbarBusy}
+                title="Refresh repository state"
+                onclick={() => {
+                  closeOverflow();
+                  void handleRefresh();
+                }}
+              >
+                <span class="version-control-overflow-item-label">Refresh</span>
+                <span class="version-control-overflow-item-hint">{refreshBusy ? "Refreshing…" : "Update state"}</span>
+              </button>
+              <button
+                type="button"
+                class="version-control-overflow-item"
+                role="menuitem"
+                bind:this={overflowFetchEl}
+                disabled={remoteActionsDisabled}
+                title={remotes.length === 0 ? "Fetch (no remotes configured)" : "Fetch from selected remote"}
+                onclick={() => {
+                  closeOverflow();
+                  void handleFetch();
+                }}
+              >
+                <span class="version-control-overflow-item-label">Fetch</span>
+                <span class="version-control-overflow-item-hint">{fetchBusy ? "Fetching…" : remotes.length === 0 ? "No remotes" : "Download updates"}</span>
+              </button>
+            </div>
+          {/if}
+        </div>
       </div>
     </header>
 
     {#if usesParentRepository && repoRoot}
-      <p class="version-control-scope-note" role="note">
+      <p class="version-control-note" role="note">
         This workspace folder is inside the git repository at
-        <span class="version-control-scope-path">{formatRepoRoot(repoRoot)}</span>. Version control
+        <span class="version-control-note-path">{formatRepoRoot(repoRoot)}</span>. Version control
         actions apply to that repository — you do not need to initialize a new repository here.
       </p>
     {/if}
 
     {#if isBareRepository}
-      <p class="version-control-scope-note version-control-readonly-note" role="note">
+      <p class="version-control-note version-control-note-danger" role="note">
         This is a bare repository with no working tree. History and fetch are available; staging,
         committing, and other write actions are disabled.
       </p>
     {/if}
 
     {#if currentBranch?.isDetached}
-      <p class="version-control-scope-note version-control-detached-note" role="note">
+      <p class="version-control-note" role="note">
         You are in a detached HEAD state at
-        <span class="version-control-scope-path">{currentBranch.name}</span>. You can browse history
+        <span class="version-control-note-path">{currentBranch.name}</span>. You can browse history
         and check out a branch when the working tree is clean.
       </p>
     {/if}
@@ -1152,7 +1324,10 @@
     cursor: not-allowed;
   }
 
-  .version-control-scope-note {
+  /* Unified tinted note banner (U3.3). The view previously used three classes
+     with different accent/danger/muted tints; they now collapse to one class
+     with an optional severity modifier. */
+  .version-control-note {
     flex-shrink: 0;
     margin: 0;
     padding: var(--space-4) var(--space-8);
@@ -1163,17 +1338,13 @@
     background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface-1));
   }
 
-  .version-control-scope-path {
-    font-family: var(--font-mono, ui-monospace, monospace);
-    color: var(--color-text);
-  }
-
-  .version-control-readonly-note {
+  .version-control-note-danger {
     background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface-1));
   }
 
-  .version-control-detached-note {
-    background: color-mix(in srgb, var(--color-text-muted) 10%, var(--color-surface-1));
+  .version-control-note-path {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    color: var(--color-text);
   }
 
   .version-control-header {
@@ -1257,14 +1428,15 @@
     flex-shrink: 0;
   }
 
-  .version-control-remote-picker {
+  .version-control-remote-indicator {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
     margin: 0;
+    white-space: nowrap;
   }
 
-  .version-control-remote-picker-label {
+  .version-control-remote-indicator-label {
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--color-text-muted);
@@ -1272,9 +1444,16 @@
     letter-spacing: 0.04em;
   }
 
+  .version-control-remote-indicator-value {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 9rem;
+  }
+
   .version-control-remote-select {
-    min-width: 6.5rem;
-    max-width: 10rem;
+    min-width: 100%;
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-sm);
@@ -1288,10 +1467,98 @@
     cursor: not-allowed;
   }
 
-  .version-control-remote-hint {
-    font-size: 0.75rem;
+  /* Overflow affordance (U3.3): "⋯" opens a popover holding the less-frequent
+     remote actions (Refresh, Fetch) and the Remote <select>. Anchored under
+     the trigger, dismisses on outside pointer / Escape. */
+  .version-control-overflow {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .version-control-overflow-button {
+    min-width: 1.75rem;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .version-control-overflow-glyph {
+    font-size: 1rem;
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  .version-control-overflow-menu {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    z-index: var(--z-popover, 40);
+    min-width: 14rem;
+    padding: var(--space-2);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    box-shadow: var(--shadow-popover);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .version-control-overflow-remote {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .version-control-overflow-remote-label {
+    font-size: 0.7rem;
+    font-weight: 600;
     color: var(--color-text-muted);
-    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .version-control-overflow-separator {
+    margin: var(--space-1) 0;
+  }
+
+  .version-control-overflow-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-primary);
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    transition:
+      background-color var(--motion-fast) var(--easing-standard),
+      border-color var(--motion-fast) var(--easing-standard);
+  }
+
+  .version-control-overflow-item:hover:not(:disabled),
+  .version-control-overflow-item:focus-visible {
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 32%, transparent);
+    outline: none;
+  }
+
+  .version-control-overflow-item:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .version-control-overflow-item-label {
+    font-size: var(--font-size-ui);
+    color: var(--color-text-primary);
+  }
+
+  .version-control-overflow-item-hint {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
   }
 
   /* Cancel action keeps a danger-tinted border/hover on top of the shared

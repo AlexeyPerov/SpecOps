@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-07-16 23:50 — U3.3 + U3.4: De-dense Version Control toolbar & status-bar grouping
+
+Both remaining UI Improvements v3 plans shipped together — both target the two
+most crowded toolbars in the app and reduce them from "every control inline"
+to primary actions + an overflow affordance.
+
+- **U3.3 — Version Control toolbar** (`VersionControlView.svelte`):
+  - Collapsed the dense header row (formerly Branch + Remote `<select>` +
+    Refresh + Fetch + Pull + Push + Cancel — up to 7 controls + a select) into
+    a compact set of inline actions: a **Remote indicator** + **Pull** +
+    **Push** + an overflow (**⋯**) button.
+  - **Refresh**, **Fetch**, and the **Remote `<select>`** moved into the
+    overflow popover (anchored under the trigger, keyboard-accessible:
+    Enter/Space to open, arrow/Home/End navigation, Escape to close, outside
+    pointer to dismiss). Disabled states keep their tooltip text (no remotes
+    → Fetch disabled).
+  - **Cancel** stays inline only while a remote operation is active — a
+    transient control, not permanent. The overflow menu auto-closes when an
+    operation starts so the Cancel button is visible.
+  - Removed the bespoke `.version-control-remote-picker` / `.version-control-remote-hint`
+    markup in favor of a `.version-control-remote-indicator` and a
+    `.version-control-overflow` menu.
+  - **Three tinted note banners** (`version-control-scope-note` +
+    readonly/detached variants, with accent/danger/muted tints) collapsed to
+    one `.version-control-note` class with an optional
+    `.version-control-note-danger` modifier for the bare-repository case.
+- **U3.4 — Status bar grouping** (`AppShell.svelte`, `app-shell.css`):
+  - Grouped the 9 peer segments into ≤4 visual **clusters** (primary:
+    Ln/Col + selections; document: encoding + line ending + wrap; view:
+    zoom; file: Modified/Saved + File missing) separated by subtle dividers,
+    instead of nine independently hoverable segments.
+  - Replaced the **five responsive hide-breakpoints** (1100/900/760/620/480px
+    `@media` blocks that silently dropped segments) with a single overflow
+    strategy: a `ResizeObserver` collapses the document/view clusters into a
+    **«** overflow button (narrow widths, < 760px) whose popover lists the
+    hidden values (Encoding, Line ending, Wrap, Zoom).
+  - The primary cluster (Ln/Col + selections) and the right-side
+    file/message/path always remain visible. The popover escapes the bar's
+    clipped height while open; the bar reserves right-edge space so the path
+    never runs under the overflow button.
+  - Console-toggle click behavior preserved (the whole bar still toggles the
+    console).
+- Validation: `npm run check` → 0 errors / 0 warnings; `npm test` → 2983
+  passed; `npm run build` → succeeds.
+
 ## 2026-07-16 23:15 — U3.2: Token hygiene
 
 Closed the gaps that let semantic states bypass the theme system. Success,

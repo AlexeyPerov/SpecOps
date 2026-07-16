@@ -433,6 +433,88 @@
 
   const gitIntegrationEnabled = $derived($appState.settings.gitIntegration.enabled);
   const activePaneId = $derived(editor.session.editorLayout.activePaneId);
+
+  // Status-bar overflow (U3.4): when the bar is too narrow, the secondary
+  // document/view clusters collapse into a popover listing the hidden values
+  // — replacing the old responsive hide-breakpoints that silently dropped info.
+  let statusOverflowOpen = $state(false);
+  let statusOverflowEl = $state<HTMLDivElement | null>(null);
+  let statusOverflowButtonEl = $state<HTMLButtonElement | null>(null);
+  let statusBarEl = $state<HTMLElement | null>(null);
+  let statusOverflowNeeded = $state(false);
+
+  // Width (px) below which the document/view clusters collapse into the
+  // overflow popover. Mirrors the old 760px hide-breakpoint — the narrowest
+  // width at which document info was still shown.
+  const RO_THRESHOLD_PX = 760;
+
+  $effect(() => {
+    const el = statusBarEl;
+    if (!el) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        // Overflow is needed when the bar is narrow enough that the document
+        // and view clusters would crowd the primary cluster + right side.
+        const needed = entry.contentRect.width < RO_THRESHOLD_PX;
+        statusOverflowNeeded = needed;
+        if (!needed && statusOverflowOpen) {
+          closeStatusOverflow();
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  });
+
+  function openStatusOverflow(): void {
+    if (statusOverflowOpen) {
+      return;
+    }
+    statusOverflowOpen = true;
+    window.addEventListener("pointerdown", onStatusOverflowPointerDown);
+    window.addEventListener("keydown", onStatusOverflowKeydown);
+  }
+
+  function closeStatusOverflow(): void {
+    if (!statusOverflowOpen) {
+      return;
+    }
+    statusOverflowOpen = false;
+    window.removeEventListener("pointerdown", onStatusOverflowPointerDown);
+    window.removeEventListener("keydown", onStatusOverflowKeydown);
+  }
+
+  function toggleStatusOverflow(): void {
+    if (statusOverflowOpen) {
+      closeStatusOverflow();
+    } else {
+      openStatusOverflow();
+    }
+  }
+
+  function onStatusOverflowPointerDown(event: PointerEvent): void {
+    if (!statusOverflowOpen) {
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Node && statusOverflowEl?.contains(target)) {
+      return;
+    }
+    if (target instanceof Node && statusOverflowButtonEl?.contains(target)) {
+      return;
+    }
+    closeStatusOverflow();
+  }
+
+  function onStatusOverflowKeydown(event: KeyboardEvent): void {
+    if (statusOverflowOpen && event.key === "Escape") {
+      event.preventDefault();
+      closeStatusOverflow();
+      statusOverflowButtonEl?.focus();
+    }
+  }
 </script>
 
 <main class="shell">
@@ -624,11 +706,17 @@
       <ConsolePanel bind:heightPx={consoleHeightPx} onHeightCommit={onConsoleHeightCommit} />
     {/if}
 
-    <footer class="status-bar" class:status-bar-console-open={consoleOpen}>
+    <footer
+      class="status-bar"
+      class:status-bar-console-open={consoleOpen}
+      class:status-bar-overflow-open={statusOverflowOpen}
+      bind:this={statusBarEl}
+    >
       <button
         type="button"
         class="status-bar-button"
         class:status-bar-button-static={!statusBar.canOpenLogsPanel}
+        class:status-bar-button-overflow={statusOverflowNeeded && !editor.isSessionTabActive && !editor.isChatHttpActive && !editor.isViewTabActive}
         disabled={!statusBar.canOpenLogsPanel}
         title={statusBar.canOpenLogsPanel
           ? consoleOpen
@@ -638,47 +726,55 @@
         onclick={statusBar.onToggleConsole}
       >
         {#if !editor.isSessionTabActive && !editor.isChatHttpActive && !editor.isViewTabActive}
-          <span class="status-segment optional-segment optional-cursor">
-            Ln {editor.cursorLine}, Col {editor.cursorColumn}
-          </span>
-          {#if editor.selectionCount > 1}
-            <span
-              class="status-segment optional-segment optional-selections"
-              aria-label={`${editor.selectionCount} selections`}
-            >
-              {editor.selectionCount} selections
+          <span class="status-cluster status-cluster-primary">
+            <span class="status-segment">
+              Ln {editor.cursorLine}, Col {editor.cursorColumn}
             </span>
-          {/if}
-          <span class="status-segment optional-segment optional-encoding">
-            {#if editor.isImageDocument}
-              Image
-            {:else if editor.isBinaryDocument}
-              Binary
-            {:else if editor.isLargePendingDocument}
-              Large file
-            {:else}
-              {editor.activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+            {#if editor.selectionCount > 1}
+              <span
+                class="status-segment"
+                aria-label={`${editor.selectionCount} selections`}
+              >
+                {editor.selectionCount} selections
+              </span>
             {/if}
           </span>
-          <span class="status-segment optional-segment optional-line-ending">
-            {editor.activeDocument?.lineEnding.toUpperCase() ?? "LF"}
-          </span>
-          <span class="status-segment optional-segment optional-zoom">
-            {editor.zoomPercent}%
-          </span>
-          <span class="status-segment optional-segment optional-wrap">
-            {editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
-          </span>
-          <span class="status-segment">
-            {editor.activeDocument?.isDirty ? "Modified" : "Saved"}
-          </span>
-          {#if editor.activeDocument?.fileMissing}
-            <span class="status-segment status-missing" title="File no longer exists on disk">
-              File missing
+          {#if !statusOverflowNeeded}
+            <span class="status-cluster status-cluster-document">
+              <span class="status-segment">
+                {#if editor.isImageDocument}
+                  Image
+                {:else if editor.isBinaryDocument}
+                  Binary
+                {:else if editor.isLargePendingDocument}
+                  Large file
+                {:else}
+                  {editor.activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+                {/if}
+              </span>
+              <span class="status-segment">
+                {editor.activeDocument?.lineEnding.toUpperCase() ?? "LF"}
+              </span>
+              <span class="status-segment">
+                {editor.wrapLines ? "Wrap: On" : "Wrap: Off"}
+              </span>
+            </span>
+            <span class="status-cluster status-cluster-view">
+              <span class="status-segment">{editor.zoomPercent}%</span>
             </span>
           {/if}
+          <span class="status-cluster status-cluster-file">
+            <span class="status-segment">
+              {editor.activeDocument?.isDirty ? "Modified" : "Saved"}
+            </span>
+            {#if editor.activeDocument?.fileMissing}
+              <span class="status-segment status-missing" title="File no longer exists on disk">
+                File missing
+              </span>
+            {/if}
+          </span>
         {/if}
-        <span class="status-segment status-message optional-segment optional-message">
+        <span class="status-segment status-message">
           {statusBar.statusMessage}
         </span>
         <span
@@ -688,6 +784,63 @@
           {statusBar.statusPath}
         </span>
       </button>
+      {#if statusOverflowNeeded && !editor.isSessionTabActive && !editor.isChatHttpActive && !editor.isViewTabActive}
+        <div class="status-overflow">
+          <button
+            type="button"
+            class="status-overflow-button"
+            bind:this={statusOverflowButtonEl}
+            aria-haspopup="menu"
+            aria-expanded={statusOverflowOpen}
+            aria-label="More status information"
+            title="Hidden status details"
+            onclick={toggleStatusOverflow}
+          >
+            «
+          </button>
+          {#if statusOverflowOpen}
+            <div
+              class="status-overflow-menu"
+              role="menu"
+              tabindex="-1"
+              aria-label="More status information"
+              bind:this={statusOverflowEl}
+              onpointerdown={(event) => event.stopPropagation()}
+            >
+              <div class="status-overflow-row">
+                <span class="status-overflow-label">Encoding</span>
+                <span class="status-overflow-value">
+                  {#if editor.isImageDocument}
+                    Image
+                  {:else if editor.isBinaryDocument}
+                    Binary
+                  {:else if editor.isLargePendingDocument}
+                    Large file
+                  {:else}
+                    {editor.activeDocument?.encoding.toUpperCase() ?? "UTF-8"}
+                  {/if}
+                </span>
+              </div>
+              <div class="status-overflow-row">
+                <span class="status-overflow-label">Line ending</span>
+                <span class="status-overflow-value">
+                  {editor.activeDocument?.lineEnding.toUpperCase() ?? "LF"}
+                </span>
+              </div>
+              <div class="status-overflow-row">
+                <span class="status-overflow-label">Wrap</span>
+                <span class="status-overflow-value">
+                  {editor.wrapLines ? "On" : "Off"}
+                </span>
+              </div>
+              <div class="status-overflow-row">
+                <span class="status-overflow-label">Zoom</span>
+                <span class="status-overflow-value">{editor.zoomPercent}%</span>
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/if}
     </footer>
   </div>
 </main>

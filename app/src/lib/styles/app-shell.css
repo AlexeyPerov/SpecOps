@@ -177,11 +177,23 @@
 }
 
 .status-bar {
+  position: relative;
   flex-shrink: 0;
   height: var(--statusbar-height);
   overflow: hidden;
   background: var(--color-statusbar-bg);
   border-top: 1px solid var(--color-border-subtle);
+}
+
+/* Let the overflow popover escape the bar's clipped height while open. */
+.status-bar.status-bar-overflow-open {
+  overflow: visible;
+}
+
+/* Reserve space at the right edge so the path segment doesn't run under the
+   overflow button when it is shown. */
+.status-bar-button-overflow {
+  padding-right: 2rem;
 }
 
 .status-bar-button {
@@ -237,6 +249,34 @@
   flex-shrink: 0;
 }
 
+/* Cluster wrapper (U3.4): related segments read as one group rather than as
+   nine independent hover targets. Separators are drawn between clusters, not
+   between every segment, so the bar reads as a few clusters. */
+.status-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 100%;
+  flex-shrink: 0;
+}
+
+.status-cluster + .status-cluster {
+  position: relative;
+  padding-left: var(--space-6);
+}
+
+.status-cluster + .status-cluster::before {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: calc(var(--statusbar-height) - var(--space-6));
+  background: var(--color-border-subtle);
+  opacity: 0.6;
+}
+
 .status-missing {
   color: var(--color-error);
   border-color: color-mix(in srgb, var(--color-error) 35%, transparent);
@@ -256,53 +296,88 @@
   text-overflow: clip;
 }
 
+/* Overflow affordance (U3.4): replaces the five responsive hide-breakpoints.
+   When the bar is narrow, the document/view clusters collapse and a « button
+   surfaces their values in a popover. Anchored at the right edge of the bar. */
+.status-overflow {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  z-index: 20;
+}
+
+.status-overflow-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-width: 1.75rem;
+  padding: 0 var(--space-3);
+  border: none;
+  border-left: 1px solid var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-status);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--easing-standard);
+}
+
+.status-overflow-button:hover {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.status-overflow-button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.status-overflow-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  right: 0;
+  min-width: 16rem;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  box-shadow: var(--shadow-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.status-overflow-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.status-overflow-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status-overflow-value {
+  font-size: var(--font-size-status);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
 .add-file-button {
   min-width: 32px;
   width: 32px;
   padding: 0;
   font-size: 16px;
   line-height: 1;
-}
-
-@media (max-width: 1100px) {
-  .optional-message {
-    display: none;
-  }
-}
-
-@media (max-width: 900px) {
-  .optional-wrap,
-  .optional-zoom {
-    display: none;
-  }
-}
-
-@media (max-width: 760px) {
-  .optional-line-ending,
-  .optional-encoding {
-    display: none;
-  }
-}
-
-@media (max-width: 620px) {
-  .optional-cursor {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .status-segment:not(.path-segment) {
-    display: none;
-  }
-
-  .optional-segment {
-    display: none;
-  }
-
-  .path-segment {
-    margin-left: 0;
-    max-width: 100%;
-  }
 }
 
 .tab-header {

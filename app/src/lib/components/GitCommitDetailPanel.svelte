@@ -460,7 +460,6 @@
   .git-commit-detail-section {
     flex-shrink: 0;
     padding: var(--space-6) var(--space-12);
-    border-bottom: 1px solid var(--color-border-subtle);
   }
 
   .git-commit-detail-meta-section {
@@ -518,6 +517,7 @@
     min-height: 0;
     display: flex;
     align-items: stretch;
+    border-top: 1px solid var(--color-border-subtle);
   }
 
   .git-commit-detail-changes-resizing {

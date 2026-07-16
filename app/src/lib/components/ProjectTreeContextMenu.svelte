@@ -170,7 +170,7 @@
       </button>
     {/if}
     {#if hasNode && nodePath}
-      <div class="project-tree-context-separator" role="separator"></div>
+      <div class="ui-rule" role="separator"></div>
       <button
         class="project-tree-context-item"
         type="button"
@@ -203,7 +203,7 @@
       {/if}
     {/if}
     {#if hasNode && nodePath && nodeKind}
-      <div class="project-tree-context-separator" role="separator"></div>
+      <div class="ui-rule" role="separator"></div>
       <button
         class="project-tree-context-item"
         type="button"
@@ -228,7 +228,7 @@
       >
         Delete
       </button>
-      <div class="project-tree-context-separator" role="separator"></div>
+      <div class="ui-rule" role="separator"></div>
       <button
         class="project-tree-context-item"
         type="button"
@@ -285,11 +285,5 @@
 
   .project-tree-context-item:disabled:hover {
     background: var(--color-surface-1);
-  }
-
-  .project-tree-context-separator {
-    height: 1px;
-    margin: var(--space-4) var(--space-2);
-    background: var(--color-border-subtle);
   }
 </style>

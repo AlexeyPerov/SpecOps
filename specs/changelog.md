@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-07-16 21:15 — UI audit: moderate border/separator cleanup + improvement roadmaps
+
+- Read-only UI audit (compared to Cursor/Zed Editor) found the dominant visual
+  gap to be hairline saturation: 175 instances of `1px solid var(--color-border-subtle)`,
+  with the worst clutter from per-item boxing and double delineation rather than
+  the main structural panel edges (which already have `surface-1` vs `bg-root`
+  contrast to lean on).
+- Shipped the **moderate** border/separator cleanup:
+  - Removed double delineation in the Git changes list (`GitChangesPanel.svelte`):
+    the list had both an outer border and a per-item `border-top`. Dropped the
+    outer border + `overflow:hidden`; kept the inter-item divider. Other lists
+    (`SessionListPanel`, `GitHistoryPanel`, `GitTagsPanel`) were scanned and do
+    not have this pattern.
+  - Relaxed per-item boxing in chat messages (`ChatMessageList.svelte`): user
+    and assistant messages now use background contrast instead of a full border;
+    only stateful messages (system, system-event) keep a self-contained dashed
+    border. This also fixed a latent CSS specificity bug where the
+    `:not(.chat-message-assistant)` base border overrode the intended accent/dashed
+    border-color on user/system messages. Removed a dead
+    `.chat-message-streaming:not(.chat-message-assistant)` rule.
+  - Removed a redundant `border-bottom` on `.diff-filters` (`DiffViewerPanel`)
+    that stacked directly under the `.diff-header` divider.
+  - Collapsed three stacked section dividers in the commit detail view
+    (`GitCommitDetailPanel`) into one clean divider before the changes block.
+  - Unified the duplicated 1px menu-separator implementations
+    (`.tab-context-separator`, `.project-tree-context-separator`) into a single
+    shared `.ui-rule` utility in `tokens.css` and migrated all call sites
+    (`TabBarContextMenu`, `TabBarNearbySubmenu`, `ProjectTreeContextMenu`).
+- Structural panel edges, the editor split-grid `gap:1px` trick, and the
+  title/tab/status-bar single hairlines were intentionally kept at this tier
+  (they mark real boundaries).
+- Added two planning roadmaps (no implementation):
+  - `specs/ui-improvements-3/` — moderate plans for button/control vocabulary,
+    token hygiene (semantic color/type/shadow tokens), Version Control toolbar
+    de-densification, and status-bar grouping. 4 execution plans + README index.
+  - `specs/ui-improvements-v3/` — directional plan for the aggressive redesign
+    tier (structural dividers by surface contrast, unified control scale, chrome
+    layer reduction). References the `ui-improvements-3` plans as prerequisites.
+- **Validation:** `npm test` passes (283 files, 2973 tests). `npm run check`
+  passes with 0 errors and 0 warnings.
+
 ## 2026-07-15 20:18 — Themes: duplicate any theme, mode badges, curated additions
 
 - Added a per-row "Duplicate" action in the Themes view that forks any builtin,

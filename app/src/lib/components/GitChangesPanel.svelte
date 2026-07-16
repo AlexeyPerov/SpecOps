@@ -696,9 +696,6 @@
     margin: 0;
     padding: 0;
     list-style: none;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
   }
 
   .git-changes-item + .git-changes-item {

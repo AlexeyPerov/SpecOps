@@ -88,7 +88,7 @@
         {/each}
       {/if}
 
-      <div class="tab-context-separator" role="separator"></div>
+      <div class="ui-rule" role="separator"></div>
 
       <button
         class="tab-context-item"

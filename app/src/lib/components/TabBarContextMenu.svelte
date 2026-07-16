@@ -169,7 +169,7 @@
       Close Other Tabs
     </button>
 
-    <div class="tab-context-separator" role="separator"></div>
+    <div class="ui-rule" role="separator"></div>
 
     <button
       class="tab-context-item"
@@ -214,7 +214,7 @@
       Close Missing File Tabs
     </button>
 
-    <div class="tab-context-separator" role="separator"></div>
+    <div class="ui-rule" role="separator"></div>
 
     <TabBarNearbySubmenu
       open={nearbySubmenuOpen}
@@ -233,7 +233,7 @@
       }}
     />
 
-    <div class="tab-context-separator" role="separator"></div>
+    <div class="ui-rule" role="separator"></div>
 
     <button
       class="tab-context-item"
@@ -267,7 +267,7 @@
     {/if}
 
     {#if contextMenuCanRename}
-      <div class="tab-context-separator" role="separator"></div>
+      <div class="ui-rule" role="separator"></div>
       <button
         class="tab-context-item"
         type="button"
@@ -295,7 +295,7 @@
       </button>
     {/if}
 
-    <div class="tab-context-separator" role="separator"></div>
+    <div class="ui-rule" role="separator"></div>
 
     <button
       class="tab-context-item"

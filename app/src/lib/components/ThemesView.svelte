@@ -43,14 +43,14 @@
     ...IMPORTED_THEMES.map<ThemeOption>((preset) => ({
       ref: { kind: "preset", id: preset.id },
       name: preset.name,
-      accent: preset.tokens["accent-color"],
+      accent: preset.tokens["accent-color"] ?? "#000000",
       baseMode: preset.baseMode,
       editable: false,
     })),
     ...CURATED_THEMES.map<ThemeOption>((preset) => ({
       ref: { kind: "preset", id: preset.id },
       name: preset.name,
-      accent: preset.tokens["accent-color"],
+      accent: preset.tokens["accent-color"] ?? "#000000",
       baseMode: preset.baseMode,
       editable: false,
     })),
@@ -436,7 +436,7 @@
   .theme-mode-option.active {
     background: var(--color-surface-1);
     color: var(--color-text-primary);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-sm);
   }
 
   .theme-mode-option:hover:not(.active) {

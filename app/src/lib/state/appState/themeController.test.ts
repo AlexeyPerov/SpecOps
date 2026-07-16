@@ -211,13 +211,18 @@ describe("resolveTokensForRef", () => {
     expect(tokens["color-bg-root"].length).toBeGreaterThan(0);
   });
 
-  it("returns the inline token map for a preset ref", () => {
+  it("returns the preset tokens merged over the matching-mode builtin defaults", () => {
     const darkside = IMPORTED_THEMES.find((p) => p.id === "darkside");
     if (!darkside) {
       return;
     }
     const tokens = resolveTokensForRef({ kind: "preset", id: "darkside" }, []);
-    expect(tokens).toBe(darkside.tokens);
+    // Preset-provided keys override the builtin base…
+    expect(tokens["color-bg-root"]).toBe(darkside.tokens["color-bg-root"]);
+    expect(tokens["accent-color"]).toBe(darkside.tokens["accent-color"]);
+    // …and state tokens the preset omits are inherited from the dark builtin.
+    expect(tokens["color-danger"]).toBe(resolveBuiltinTokens("dark-amber")["color-danger"]);
+    expect(tokens["color-success"]).toBe(resolveBuiltinTokens("dark-amber")["color-success"]);
   });
 
   it("returns the inline token map for a custom ref", () => {

@@ -182,7 +182,7 @@
   }
 
   .add-multiple-error {
-    color: var(--color-danger, var(--color-text-secondary));
+    color: var(--color-danger);
   }
 
   .add-multiple-toolbar {

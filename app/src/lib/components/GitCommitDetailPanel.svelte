@@ -621,7 +621,7 @@
   }
 
   .git-commit-detail-file-added {
-    color: #2d8a4e;
+    color: var(--color-diff-added);
   }
 
   .git-commit-detail-file-modified {
@@ -629,7 +629,7 @@
   }
 
   .git-commit-detail-file-deleted {
-    color: var(--color-danger, #c0392b);
+    color: var(--color-danger);
   }
 
   .git-commit-detail-file-renamed {

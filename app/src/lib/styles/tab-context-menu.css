@@ -62,5 +62,5 @@
 }
 
 .tab-context-item-danger {
-  color: var(--color-danger, #c44);
+  color: var(--color-danger);
 }

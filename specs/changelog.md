@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-07-16 23:15 — U3.2: Token hygiene
+
+Closed the gaps that let semantic states bypass the theme system. Success,
+failure, diff, and warning states are now CSS-variable tokens, so custom
+themes can recolor them instead of being locked to the dark-mode syntax
+palette. Typography and elevation gained shared scales.
+
+- **Semantic state tokens** (`tokens.css`, both light + dark blocks):
+  - Added `--color-success`, `--color-warning`, `--color-error`,
+    `--color-diff-added`, `--color-diff-removed`. `--color-error` aliases
+    `--color-danger` for intent-readable call sites.
+  - Registered `color-danger` / `color-success` / `color-warning` /
+    `color-diff-added` / `color-diff-removed` in `THEME_TOKEN_KEYS` (now 34
+    keys) under a new `state` group (`themeTokenSchema.ts`), with per-mode
+    defaults in `MODE_UI_TOKENS` (`themeTokenDefaults.ts`). Custom themes can
+    now override every state color.
+- **Raw color migration** (0 raw `#e06c75` / `#98c379` / `#c53030` / `#2d8a4e`
+  remain in `lib/`):
+  - Diff contexts → `--color-diff-removed` / `--color-diff-added`:
+    `DiffViewerPanel`, `DiffViewer`, `DiffPreviewPane`, `ProjectTreeNode`,
+    `GitTextDiffView`, `GitCommitDetailPanel`.
+  - Error/failure contexts → `--color-error`: `ToolCard`, `SubtaskCard`,
+    `StepSeparator`, `SlashCommandPopover`, `WorkspaceCatalogPicker`,
+    `MentionPicker`, `ChatPanel`, `RevertPreviewDialog`, `ChatMessageList`,
+    `AttachmentTray`, `DiffViewerPanel.diff-error`, `app-shell.status-missing`.
+  - Success contexts → `--color-success`: `ToolCard`, `SubtaskCard`.
+  - The three "deletion reds" (`#e06c75` / `#c53030` / `var(--color-danger,
+    #c0392b)`) collapse to one token. Syntax-palette data
+    (`importedThemes.ts`, `--syntax-heading`) and the commit-graph lane
+    palette (`GitCommitGraphColumn`) are intentionally left as raw values —
+    they are visualization colors, not semantic state.
+- **`--color-danger` fallbacks normalized**: collapsed all 27
+  `var(--color-danger, <fallback>)` variants (`#c0392b`, `#c44`, `#b42318`,
+  nested `var(...)` chains) to the canonical `var(--color-danger)`.
+- **Typographic scale** (`tokens.css :root`): added `--font-size-xs` (10px),
+  `--font-size-sm` (11px), `--font-size-md` (12px), `--font-size-base` (13px).
+  Migrated the chat + diff micro-label hotspots (`chat-composer.css`,
+  `ChatMessageList`, `DiffViewerPanel`, `ProjectSearchPanel`) off raw px.
+  Settings `rem` system deferred to a follow-up.
+- **Elevation tiers** (`tokens.css :root`): added `--shadow-sm` and
+  `--shadow-popover` alongside `--shadow-overlay`. Migrated the 6 hardcoded
+  shadows (`ThemesView`, `SlashCommandPopover`, `MentionPicker`,
+  `sessions-sidebar`, `ImageAttachment`, `ImagePreviewPane`).
+- **Preset theme compatibility**: `PresetThemeRecord.tokens` is now
+  `Partial<ThemeTokens>` — presets omit state tokens and inherit the per-mode
+  defaults. `applyCustomTheme` skips empty values (instead of overwriting the
+  default with `""`), and `resolveTokensForRef` merges preset tokens over the
+  matching-mode builtin so duplicating a preset yields a complete editable
+  set. Added `PRESET_REQUIRED_TOKEN_KEYS` to keep the preset-completeness
+  tests stable as new state tokens are added.
+- Validation: `npm run check` → 0 errors / 0 warnings; `npm test` → 2983
+  passed. Extended `structuralTokens.test.ts` (semantic state, typographic
+  scale, elevation tokens) and `themes.test.ts` (34 keys, skip-empty apply).
+
 ## 2026-07-16 22:50 — U3.1: Unify button & control vocabulary
 
 Consolidated the 8+ parallel button classes doing the same "small secondary

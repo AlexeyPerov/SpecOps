@@ -35,7 +35,12 @@ export type { ThemeSyntaxPalette };
 
 export interface CustomThemeApplyInput {
   baseMode: "dark" | "light";
-  tokens: ThemeTokens;
+  /**
+   * Tokens to apply. State/diff tokens may be absent — presets inherit them
+   * from the per-mode defaults in tokens.css. Custom themes are always
+   * complete (ThemeTokens); presets are Partial.
+   */
+  tokens: Partial<ThemeTokens>;
 }
 
 /**
@@ -192,6 +197,13 @@ export function applyCustomTheme(custom: CustomThemeApplyInput, root: HTMLElemen
 
   for (const key of THEME_TOKEN_KEYS) {
     const value = custom.tokens[key];
+    // Skip keys the theme object doesn't provide (e.g. preset themes generated
+    // before a token was added to the schema) so the per-mode default in
+    // tokens.css is inherited instead of being overwritten with an empty string.
+    if (!value) {
+      root.style.removeProperty(cssVarName(key));
+      continue;
+    }
     root.style.setProperty(cssVarName(key), value);
     if (GRADIENT_CAPABLE_KEYS.has(key)) {
       root.style.setProperty(`${cssVarName(key)}-solid`, extractSolidColor(value));
@@ -199,7 +211,9 @@ export function applyCustomTheme(custom: CustomThemeApplyInput, root: HTMLElemen
   }
 
   const accent = custom.tokens["accent-color"];
-  root.style.setProperty("--color-accent", accent);
+  if (accent) {
+    root.style.setProperty("--color-accent", accent);
+  }
 }
 
 export function snapshotThemeTokens(

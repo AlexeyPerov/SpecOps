@@ -414,7 +414,7 @@
   }
 
   .fr-input-error {
-    border-color: var(--color-danger, var(--color-accent));
+    border-color: var(--color-danger);
   }
 
   .fr-counter {
@@ -429,7 +429,7 @@
   .fr-error {
     margin-left: calc(20px + var(--space-3));
     font-size: var(--font-size-status);
-    color: var(--color-danger, var(--color-accent));
+    color: var(--color-danger);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

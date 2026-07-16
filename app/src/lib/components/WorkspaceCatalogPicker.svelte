@@ -116,7 +116,7 @@
   }
 
   .ws-catalog-hint--error {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   @container (max-width: 520px) {

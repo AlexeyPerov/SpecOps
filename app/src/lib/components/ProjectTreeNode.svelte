@@ -188,7 +188,7 @@
   }
 
   .project-tree-status-deleted {
-    color: #e06c75;
-    background: color-mix(in srgb, #e06c75 16%, transparent);
+    color: var(--color-diff-removed);
+    background: color-mix(in srgb, var(--color-diff-removed) 16%, transparent);
   }
 </style>

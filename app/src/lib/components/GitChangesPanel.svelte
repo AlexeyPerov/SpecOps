@@ -607,7 +607,7 @@
   .git-changes-action-error {
     margin: 0;
     font-size: 0.8125rem;
-    color: var(--color-danger, #c0392b);
+    color: var(--color-danger);
   }
 
   .git-changes-main {
@@ -654,7 +654,7 @@
     font-size: 0.8125rem;
     line-height: 1.5;
     color: var(--color-text-secondary);
-    background: color-mix(in srgb, var(--color-danger, #c0392b) 8%, var(--color-surface-1));
+    background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface-1));
   }
 
   .git-changes-section {
@@ -775,13 +775,13 @@
   }
 
   .git-changes-message-invalid {
-    border-color: var(--color-danger, #c0392b);
+    border-color: var(--color-danger);
   }
 
   .git-changes-commit-error {
     margin: 0;
     font-size: 0.8125rem;
-    color: var(--color-danger, #c0392b);
+    color: var(--color-danger);
   }
 
   .git-changes-commit-button {

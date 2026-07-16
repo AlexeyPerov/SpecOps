@@ -168,6 +168,6 @@
   }
 
   .stash-drop-prompt-danger {
-    color: var(--color-danger, #c0392b);
+    color: var(--color-danger);
   }
 </style>

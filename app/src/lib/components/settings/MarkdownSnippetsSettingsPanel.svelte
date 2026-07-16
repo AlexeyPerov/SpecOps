@@ -391,7 +391,7 @@
     display: block;
     margin-top: 2px;
     font-size: var(--font-size-status);
-    color: var(--color-danger, #b42318);
+    color: var(--color-danger);
   }
 
   .snippet-settings-actions {

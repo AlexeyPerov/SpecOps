@@ -102,7 +102,7 @@
   }
 
   .step-status-failed {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   @keyframes step-dot-pulse {
@@ -157,7 +157,7 @@
   }
 
   .step-separator-failed .step-rule {
-    background: color-mix(in srgb, #e06c75 35%, var(--color-border-subtle));
+    background: color-mix(in srgb, var(--color-error) 35%, var(--color-border-subtle));
   }
 
   @media (prefers-reduced-motion: reduce) {

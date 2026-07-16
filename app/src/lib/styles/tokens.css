@@ -10,6 +10,14 @@
   --font-size-body: 13px;
   --font-weight-normal: 400;
 
+  /* U3.2-4 — Typographic scale. px-based micro-labels share this scale so the
+     chat/diff micro-labels and the settings rem system stop diverging. The
+     runtime ui/editor/chat sizes below are still driven by fontSettingsSlice. */
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-md: 12px;
+  --font-size-base: 13px;
+
   /* M11-T1 — Spacing scale. Monotonic and duplicate-free so the numeric
      suffix implies ordering (a larger N is always >= the previous step).
      Steps: 2, 4, 6, 8, 10, 12, 16, 20, 24. */
@@ -41,6 +49,11 @@
 
   --radius-sm: 6px;
   --radius-md: 10px;
+  /* U3.2-5 — Elevation tiers. --shadow-sm for raised surfaces (active tabs,
+     image previews), --shadow-popover for floating menus/popovers, and the
+     existing --shadow-overlay for full-screen modal dialogs. */
+  --shadow-sm: 0 1px 4px rgb(0 0 0 / 12%);
+  --shadow-popover: 0 4px 16px rgb(0 0 0 / 18%);
   --shadow-overlay: 0 16px 44px rgb(0 0 0 / 28%);
   --blur-overlay: 22px;
   --opacity-overlay-tint: 0.76;
@@ -78,6 +91,15 @@
   --color-border-strong: rgb(4 14 26 / 26%);
   --color-selection: color-mix(in srgb, var(--color-accent) 22%, transparent);
   --color-danger: #d92d20;
+  /* U3.2-1 — Semantic state colors. --color-error aliases danger so call sites
+     read as intent (error/failure) rather than the shared danger token. Diff
+     tokens are distinct from success/warning so a custom theme can recolor
+     diff views independently of success badges. */
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-error: var(--color-danger);
+  --color-diff-added: #15803d;
+  --color-diff-removed: #d92d20;
   --color-text: var(--color-text-primary);
   --color-text-muted: var(--color-text-secondary);
 
@@ -125,6 +147,12 @@
   --color-border-strong: rgb(215 227 248 / 34%);
   --color-selection: color-mix(in srgb, var(--color-accent) 32%, transparent);
   --color-danger: #f97066;
+  /* U3.2-1 — Semantic state colors. See light block for rationale. */
+  --color-success: #98c379;
+  --color-warning: #d19a66;
+  --color-error: var(--color-danger);
+  --color-diff-added: #98c379;
+  --color-diff-removed: #f97066;
   --color-text: var(--color-text-primary);
   --color-text-muted: var(--color-text-secondary);
 

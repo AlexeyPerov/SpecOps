@@ -275,7 +275,7 @@
   }
 
   .project-tree-context-item-danger {
-    color: var(--color-danger, #c44);
+    color: var(--color-danger);
   }
 
   .project-tree-context-item:disabled {

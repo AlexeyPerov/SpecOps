@@ -135,7 +135,7 @@
   .shortcuts-conflict {
     margin: 0;
     font-size: 0.75rem;
-    color: var(--color-danger, #c44);
+    color: var(--color-danger);
   }
 
   .shortcuts-list {

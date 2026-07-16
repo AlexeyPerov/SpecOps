@@ -1118,7 +1118,7 @@
   .version-control-empty-error {
     margin: 0;
     font-size: 0.8125rem;
-    color: var(--color-danger, #c0392b);
+    color: var(--color-danger);
   }
 
   .version-control-empty-link {
@@ -1169,7 +1169,7 @@
   }
 
   .version-control-readonly-note {
-    background: color-mix(in srgb, var(--color-danger, #c0392b) 8%, var(--color-surface-1));
+    background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface-1));
   }
 
   .version-control-detached-note {
@@ -1244,7 +1244,7 @@
 
   .version-control-branch-error {
     font-size: 0.8125rem;
-    color: var(--color-danger, #c0392b);
+    color: var(--color-danger);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

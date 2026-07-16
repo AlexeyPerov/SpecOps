@@ -188,7 +188,7 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   background: var(--color-surface-1);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+  box-shadow: var(--shadow-popover);
   padding: var(--space-4) 0;
 }
 
@@ -209,5 +209,5 @@
 }
 
 .sessions-context-item-danger {
-  color: var(--color-danger, #c44);
+  color: var(--color-danger);
 }

@@ -105,7 +105,7 @@
   }
 
   .subtask-card-failed {
-    border-color: color-mix(in srgb, #e06c75 40%, var(--color-border-subtle));
+    border-color: color-mix(in srgb, var(--color-error) 40%, var(--color-border-subtle));
   }
 
   .subtask-header {
@@ -138,11 +138,11 @@
   }
 
   .subtask-card-completed .subtask-status-icon {
-    color: #98c379;
+    color: var(--color-success);
   }
 
   .subtask-card-failed .subtask-status-icon {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   .subtask-card-running .subtask-status-icon {
@@ -167,11 +167,11 @@
   }
 
   .subtask-card-completed .subtask-status-label {
-    color: #98c379;
+    color: var(--color-success);
   }
 
   .subtask-card-failed .subtask-status-label {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   .subtask-summary {
@@ -244,7 +244,7 @@
   }
 
   .subtask-section-error .subtask-section-label {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   .subtask-pre {

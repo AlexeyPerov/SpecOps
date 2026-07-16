@@ -103,7 +103,7 @@
   }
 
   .tool-card-failure {
-    border-color: color-mix(in srgb, #e06c75 40%, var(--color-border-subtle));
+    border-color: color-mix(in srgb, var(--color-error) 40%, var(--color-border-subtle));
   }
 
   .tool-card-header {
@@ -132,11 +132,11 @@
   }
 
   .tool-card-success .tool-card-status-icon {
-    color: #98c379;
+    color: var(--color-success);
   }
 
   .tool-card-failure .tool-card-status-icon {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   .tool-card-pending .tool-card-status-icon {
@@ -161,11 +161,11 @@
   }
 
   .tool-card-success .tool-card-status-label {
-    color: #98c379;
+    color: var(--color-success);
   }
 
   .tool-card-failure .tool-card-status-label {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   .tool-card-chevron {

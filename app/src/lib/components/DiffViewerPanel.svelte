@@ -221,7 +221,7 @@
   .diff-totals {
     display: inline-flex;
     gap: var(--space-3);
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     font-family: var(--font-mono, ui-monospace, monospace);
   }
 
@@ -230,7 +230,7 @@
   }
 
   .diff-totals-del {
-    color: #e06c75;
+    color: var(--color-diff-removed);
   }
 
   .diff-header-controls {
@@ -250,7 +250,7 @@
     border: none;
     background: transparent;
     color: var(--color-text-secondary);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     padding: 2px var(--space-5);
     cursor: pointer;
   }
@@ -262,7 +262,7 @@
 
   .diff-refresh {
     min-height: 24px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
   }
 
   .diff-body {
@@ -292,7 +292,7 @@
     color: var(--color-text-secondary);
     border-radius: var(--radius-sm);
     padding: 2px var(--space-4);
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     cursor: pointer;
   }
 
@@ -307,11 +307,11 @@
     padding: var(--space-10) var(--space-4);
     text-align: center;
     color: var(--color-text-secondary);
-    font-size: 12px;
+    font-size: var(--font-size-md);
   }
 
   .diff-error {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   .diff-files {
@@ -335,7 +335,7 @@
     background: transparent;
     color: var(--color-text-primary);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     text-align: left;
     cursor: pointer;
   }
@@ -361,7 +361,7 @@
   }
 
   .diff-file-status-deleted {
-    color: #e06c75;
+    color: var(--color-diff-removed);
   }
 
   .diff-file-status-modified {
@@ -402,7 +402,7 @@
   }
 
   .diff-file-del {
-    color: #e06c75;
+    color: var(--color-diff-removed);
   }
 
   .diff-viewer {
@@ -423,7 +423,7 @@
 
   .diff-viewer-path {
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -431,7 +431,7 @@
 
   .diff-viewer-open {
     min-height: 22px;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
   }
 
   .diff-viewer-scroll {

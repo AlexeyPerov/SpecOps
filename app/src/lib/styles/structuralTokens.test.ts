@@ -57,6 +57,27 @@ const STRUCTURAL_COLOR_TOKENS = [
   "--color-danger",
 ] as const;
 
+/** U3.2-1 — Semantic state tokens must exist in both theme blocks so custom
+ * themes can recolor success/failure/diff states. */
+const SEMANTIC_STATE_TOKENS = [
+  "--color-success",
+  "--color-warning",
+  "--color-error",
+  "--color-diff-added",
+  "--color-diff-removed",
+] as const;
+
+/** U3.2-4 — Typographic scale (theme-independent, on :root). */
+const TYPOGRAPHIC_SCALE_TOKENS = [
+  "--font-size-xs",
+  "--font-size-sm",
+  "--font-size-md",
+  "--font-size-base",
+] as const;
+
+/** U3.2-5 — Elevation tiers (theme-independent, on :root). */
+const SHADOW_TOKENS = ["--shadow-sm", "--shadow-popover", "--shadow-overlay"] as const;
+
 /** Extracts the body of a CSS rule for a given selector, or null if absent. */
 function ruleBodyFor(source: string, selector: string): string | null {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -126,5 +147,31 @@ describe("tokens.css structural color tokens per theme", () => {
     for (const token of STRUCTURAL_COLOR_TOKENS) {
       expect(body).toContain(`${token}:`);
     }
+  });
+
+  it.each(["light", "dark"])("defines semantic state tokens for %s theme", (mode) => {
+    const body = ruleBodyFor(TOKENS_CSS, `:root[data-theme="${mode}"]`);
+    expect(body).not.toBeNull();
+    for (const token of SEMANTIC_STATE_TOKENS) {
+      expect(body).toContain(`${token}:`);
+    }
+  });
+});
+
+describe("tokens.css typographic scale", () => {
+  const rootBody = ruleBodyFor(TOKENS_CSS, ":root");
+  expect(rootBody).not.toBeNull();
+
+  it.each(TYPOGRAPHIC_SCALE_TOKENS)("defines %s on :root", (token) => {
+    expect(rootBody).toContain(`${token}:`);
+  });
+});
+
+describe("tokens.css elevation tokens", () => {
+  const rootBody = ruleBodyFor(TOKENS_CSS, ":root");
+  expect(rootBody).not.toBeNull();
+
+  it.each(SHADOW_TOKENS)("defines %s on :root", (token) => {
+    expect(rootBody).toContain(`${token}:`);
   });
 });

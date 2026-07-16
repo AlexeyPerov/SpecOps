@@ -152,12 +152,12 @@
   }
 
   .diff-line-removed {
-    background: color-mix(in srgb, #e06c75 14%, transparent);
+    background: color-mix(in srgb, var(--color-diff-removed) 14%, transparent);
   }
 
   .diff-line-removed .diff-text,
   .diff-line-removed .diff-gutter {
-    color: #e06c75;
+    color: var(--color-diff-removed);
   }
 
   .diff-line-hunk {

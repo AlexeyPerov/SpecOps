@@ -160,7 +160,12 @@ export function resolveTokensForRef(
   if (ref.kind === "preset") {
     const preset = IMPORTED_THEMES.find((p) => p.id === ref.id);
     if (preset) {
-      return preset.tokens;
+      // Presets may omit state/diff tokens; inherit them from the matching-mode
+      // builtin so duplicating a preset yields a complete, editable token set.
+      const base = resolveBuiltinTokens(
+        preset.baseMode === "dark" ? "dark-amber" : "light-blue",
+      );
+      return { ...base, ...preset.tokens };
     }
   } else {
     const custom = findCustomTheme(customThemes, ref.id);

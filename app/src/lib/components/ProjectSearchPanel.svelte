@@ -392,7 +392,7 @@
     background: transparent;
     color: var(--color-text-secondary);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -423,13 +423,13 @@
   }
 
   .ps-input-error {
-    border-color: var(--color-danger, var(--color-accent));
+    border-color: var(--color-danger);
   }
 
   .ps-query-error {
     flex-shrink: 0;
     font-size: var(--font-size-status);
-    color: var(--color-danger, var(--color-accent));
+    color: var(--color-danger);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -470,7 +470,7 @@
     background: transparent;
     color: var(--color-text-secondary);
     cursor: pointer;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     padding: 0;
     flex-shrink: 0;
   }

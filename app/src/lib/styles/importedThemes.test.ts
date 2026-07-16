@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IMPORTED_THEMES } from "./importedThemes";
-import { THEME_TOKEN_KEYS } from "./themeTokenSchema";
+import { PRESET_REQUIRED_TOKEN_KEYS } from "./themeTokenSchema";
 
 const EXPECTED_IDS = [
   "zacks",
@@ -29,11 +29,11 @@ describe("IMPORTED_THEMES", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("every preset has all 29 tokens, a valid baseMode, and a non-empty name", () => {
+  it("every preset has all required tokens, a valid baseMode, and a non-empty name", () => {
     for (const preset of IMPORTED_THEMES) {
       expect(preset.name.trim().length).toBeGreaterThan(0);
       expect(preset.baseMode === "dark" || preset.baseMode === "light").toBe(true);
-      for (const key of THEME_TOKEN_KEYS) {
+      for (const key of PRESET_REQUIRED_TOKEN_KEYS) {
         expect(preset.tokens[key], `${preset.id} missing ${key}`).toBeTruthy();
       }
     }
@@ -47,7 +47,7 @@ describe("IMPORTED_THEMES", () => {
   });
 
   it("accents are distinct and not the shared daylerees template cyan #00a8c6", () => {
-    const accents = IMPORTED_THEMES.map((p) => p.tokens["accent-color"].toLowerCase());
+    const accents = IMPORTED_THEMES.map((p) => p.tokens["accent-color"]!.toLowerCase());
     // The shared template color must never leak through as a theme accent.
     for (const accent of accents) {
       expect(accent).not.toBe("#00a8c6");

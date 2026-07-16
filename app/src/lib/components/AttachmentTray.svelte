@@ -234,7 +234,7 @@
   }
 
   .attachment-chip-remove:hover:not(:disabled) {
-    background: color-mix(in srgb, #e06c75 22%, transparent);
+    background: color-mix(in srgb, var(--color-error) 22%, transparent);
     color: var(--color-text-primary);
   }
 

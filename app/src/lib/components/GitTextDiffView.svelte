@@ -190,11 +190,11 @@
   }
 
   .git-text-diff-added {
-    color: #2d8a4e;
+    color: var(--color-diff-added);
   }
 
   .git-text-diff-deleted {
-    color: var(--color-danger, #c0392b);
+    color: var(--color-danger);
   }
 
   .git-text-diff-body {
@@ -283,23 +283,23 @@
   }
 
   .git-text-diff-line-added {
-    background: color-mix(in srgb, #2d8a4e 14%, transparent);
+    background: color-mix(in srgb, var(--color-diff-added) 14%, transparent);
   }
 
   .git-text-diff-line-added .git-text-diff-content,
   .git-text-diff-line-added .git-text-diff-gutter,
   .git-text-diff-line-added .git-text-diff-prefix {
-    color: #2d8a4e;
+    color: var(--color-diff-added);
   }
 
   .git-text-diff-line-deleted {
-    background: color-mix(in srgb, var(--color-danger, #c0392b) 14%, transparent);
+    background: color-mix(in srgb, var(--color-danger) 14%, transparent);
   }
 
   .git-text-diff-line-deleted .git-text-diff-content,
   .git-text-diff-line-deleted .git-text-diff-gutter,
   .git-text-diff-line-deleted .git-text-diff-prefix {
-    color: var(--color-danger, #c0392b);
+    color: var(--color-danger);
   }
 
   .git-text-diff-line-hunk {

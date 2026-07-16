@@ -17,6 +17,11 @@ export const THEME_TOKEN_KEYS = [
   "color-hover",
   "color-pressed",
   "color-focus-ring",
+  "color-danger",
+  "color-success",
+  "color-warning",
+  "color-diff-added",
+  "color-diff-removed",
   "color-search-match",
   "color-search-match-current",
   "scrollbar-track",
@@ -39,10 +44,29 @@ export const THEME_TOKEN_KEYS = [
 export type ThemeTokenKey = (typeof THEME_TOKEN_KEYS)[number];
 export type ThemeTokens = Record<ThemeTokenKey, string>;
 
+/**
+ * Keys that preset themes (imported vscode conversions + curated presets) must
+ * provide explicitly. State/diff tokens (success/warning/danger/diff-*) are
+ * intentionally excluded: presets inherit them from the per-mode defaults in
+ * tokens.css via applyCustomTheme's skip-empty path. This keeps the preset
+ * data stable as new state tokens are added to the schema.
+ */
+export const PRESET_REQUIRED_TOKEN_KEYS: readonly ThemeTokenKey[] = THEME_TOKEN_KEYS.filter(
+  (key) =>
+    !(
+      key === "color-danger" ||
+      key === "color-success" ||
+      key === "color-warning" ||
+      key === "color-diff-added" ||
+      key === "color-diff-removed"
+    ),
+);
+
 export type ThemeTokenGroupId =
   | "background"
   | "text"
   | "accent"
+  | "state"
   | "text-accent"
   | "syntax"
   | "search"
@@ -82,6 +106,17 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       "color-hover",
       "color-pressed",
       "color-focus-ring",
+    ],
+  },
+  {
+    id: "state",
+    label: "State & diff colors",
+    keys: [
+      "color-danger",
+      "color-success",
+      "color-warning",
+      "color-diff-added",
+      "color-diff-removed",
     ],
   },
   {
@@ -126,6 +161,11 @@ export const THEME_TOKEN_LABELS: Record<ThemeTokenKey, string> = {
   "color-hover": "Hover",
   "color-pressed": "Pressed",
   "color-focus-ring": "Focus ring",
+  "color-danger": "Danger / error",
+  "color-success": "Success",
+  "color-warning": "Warning",
+  "color-diff-added": "Diff added",
+  "color-diff-removed": "Diff removed",
   "color-search-match": "Search match",
   "color-search-match-current": "Current search match",
   "scrollbar-track": "Scrollbar track",

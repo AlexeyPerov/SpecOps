@@ -79,6 +79,6 @@
   }
 
   .row-removed {
-    background: color-mix(in srgb, #c53030 18%, transparent);
+    background: color-mix(in srgb, var(--color-diff-removed) 18%, transparent);
   }
 </style>

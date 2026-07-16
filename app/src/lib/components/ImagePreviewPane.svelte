@@ -119,7 +119,7 @@
     max-height: 100%;
     object-fit: contain;
     border-radius: var(--radius-sm);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+    box-shadow: var(--shadow-sm);
   }
 
   .preview-message {

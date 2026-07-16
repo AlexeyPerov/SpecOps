@@ -751,7 +751,7 @@
     min-height: 24px;
     padding: 0 var(--space-6);
     border-radius: var(--radius-sm);
-    border: 1px solid color-mix(in srgb, #e06c75 40%, var(--color-border-subtle));
+    border: 1px solid color-mix(in srgb, var(--color-error) 40%, var(--color-border-subtle));
     background: var(--color-surface-1);
     color: var(--color-text-secondary);
     font-size: 11px;
@@ -760,7 +760,7 @@
 
   .chat-delete-button:hover:not(:disabled) {
     color: var(--color-text-primary);
-    border-color: color-mix(in srgb, #e06c75 55%, var(--color-border-subtle));
+    border-color: color-mix(in srgb, var(--color-error) 55%, var(--color-border-subtle));
     cursor: pointer;
   }
 

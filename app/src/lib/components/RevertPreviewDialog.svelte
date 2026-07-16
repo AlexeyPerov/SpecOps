@@ -176,7 +176,7 @@
   }
 
   .revert-preview-confirm {
-    border-color: color-mix(in srgb, #e06c75 55%, var(--color-border-subtle));
-    color: #e06c75;
+    border-color: color-mix(in srgb, var(--color-error) 55%, var(--color-border-subtle));
+    color: var(--color-error);
   }
 </style>

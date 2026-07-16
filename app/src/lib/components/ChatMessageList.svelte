@@ -594,7 +594,7 @@
     min-height: 26px;
     margin-top: var(--space-2);
     padding: 0 var(--space-8);
-    font-size: 12px;
+    font-size: var(--font-size-md);
   }
 
   .chat-compaction-notice {
@@ -610,7 +610,7 @@
 
   .chat-compaction-notice-title {
     margin: 0;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     line-height: 1.4;
     font-weight: 600;
     color: var(--color-text-primary);
@@ -620,7 +620,7 @@
 
   .chat-compaction-notice-body {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     line-height: 1.5;
     color: var(--color-text-secondary);
   }
@@ -646,7 +646,7 @@
     background: transparent;
     color: var(--color-text-secondary);
     padding: var(--space-2) var(--space-4);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     line-height: 1.4;
     cursor: pointer;
     transition:
@@ -676,7 +676,7 @@
     position: absolute;
     right: var(--space-3);
     bottom: var(--space-2);
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     line-height: 1.4;
     color: var(--color-text-secondary);
     opacity: 0.65;
@@ -711,7 +711,7 @@
 
   .chat-message-role {
     margin: 0 0 var(--space-2) 0;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     line-height: 1.4;
     color: var(--color-text-secondary);
     text-transform: uppercase;
@@ -750,7 +750,7 @@
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--color-text-secondary);
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     line-height: 1.4;
     cursor: pointer;
   }
@@ -762,13 +762,13 @@
   }
 
   .chat-message-action-danger:hover {
-    color: #e06c75;
-    border-color: color-mix(in srgb, #e06c75 55%, var(--color-border-subtle));
+    color: var(--color-error);
+    border-color: color-mix(in srgb, var(--color-error) 55%, var(--color-border-subtle));
   }
 
   .chat-message-content {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
@@ -802,7 +802,7 @@
 
   .chat-review-section-heading {
     margin: 0;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     line-height: 1.4;
     font-weight: 600;
     color: var(--color-text-primary);
@@ -812,7 +812,7 @@
 
   .chat-review-section-body {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
@@ -895,7 +895,7 @@
     margin-top: var(--space-3);
     padding-top: var(--space-3);
     border-top: 1px dashed var(--color-border-subtle);
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     line-height: 1.4;
     color: var(--color-text-secondary);
     /* Leave room for the absolutely-positioned bottom-right timestamp label. */

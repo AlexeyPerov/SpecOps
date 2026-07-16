@@ -75,7 +75,7 @@
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-sm);
     background: var(--color-surface-1);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-popover);
     padding: var(--space-2);
     display: flex;
     flex-direction: column;
@@ -90,7 +90,7 @@
   }
 
   .slash-popover-state--error {
-    color: #e06c75;
+    color: var(--color-error);
   }
 
   .slash-popover-list {

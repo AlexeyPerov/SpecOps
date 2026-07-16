@@ -67,7 +67,14 @@ export interface PresetThemeRecord {
   id: string;
   name: string;
   baseMode: "dark" | "light";
-  tokens: ThemeTokens;
+  /**
+   * Tokens the preset overrides explicitly. State/diff tokens
+   * (success/warning/danger/diff-*) are optional: when absent the preset
+   * inherits the per-mode default from tokens.css via applyCustomTheme's
+   * skip-empty path, so adding new state tokens to the schema doesn't require
+   * regenerating every preset.
+   */
+  tokens: Partial<ThemeTokens>;
 }
 
 /** Picks the most saturated hex among a list; used to guess an accent color. */

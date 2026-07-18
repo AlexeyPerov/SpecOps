@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-07-18 19:30 — Performance: quick wins (6 low-risk optimizations)
+
+Six isolated, low-risk optimizations that compound with the prior launch/tab/reactive pass.
+
+- **#2 Avoid settings.json re-read during theme migration** (`themeStore.ts`,
+  `appState.ts`, `appShellRuntime.ts`): `loadThemeFile` and `loadTheme` now
+  accept an optional `legacySettings` (the already-parsed settings contents).
+  The startup path passes the parsed settings through, so the legacy-theme
+  fallback no longer re-reads `settings.json` from disk. Only matters on first
+  launch after an upgrade that predates `theme.json`, but it removes a disk
+  hop from that path.
+- **#4 Batch connection-key restores into one store update**
+  (`providerSettingsSlice.ts`, `appShellRuntime.ts`): added
+  `setConnectionApiKeys` (plural) that restores all persisted keys in a single
+  `update()` instead of N per-key updates, collapsing N subscriber cascades
+  into one on the startup path.
+- **#6 Debounce session persistence on tab changes** (`+page.svelte`): the
+  tab-changed flush handler now uses `scheduleSessionPersistence` (1200ms
+  debounce) instead of `flushSessionPersistence` (immediate), so rapid tab
+  switching coalesces into one `session.json` write instead of one per click.
+  The immediate flush is retained for window-close/unload.
+- **#16 Eliminate the double OpenCode health probe per workspace switch**
+  (`+page.svelte`): `requestOpencodeHealthRefresh` (the settings-driven, may-
+  spawn probe) no longer treats `activeWorkspaceRoot` as a reactive dependency.
+  The per-workspace status probe is handled by `syncOpencodeSidecarEffect`;
+  removing the root dependency stops both effects from firing on every
+  workspace switch. `activeWorkspaceRoot` is still passed through as a value
+  via an untracked `appState.getWorkspaceRoot()` read.
+- **#20 Index workspace context lookups** (`contextHelpers.ts`):
+  `getContextSnapshotById` now memoizes its result per state object via a
+  `WeakMap`, so repeated lookups for the same contextId within a tick are O(1)
+  instead of a linear scan over `workspaces`. The cache auto-invalidates when
+  state changes (new state object → new WeakMap entry). This is a hot path —
+  called from cursor moves, tab lookups, and pane queries several times per tick.
+- **#21 Memoize the cycleable theme list** (`appState.ts`): `cycleTheme` no
+  longer rebuilds the full theme list (builtins + imported + curated + customs)
+  on every call. The static prefix is computed once at module load; the full
+  list is memoized by the `customThemes` array reference via a `WeakMap`.
+
 ## 2026-07-18 19:00 — Performance: faster launch, editor tab switches, and reactive churn
 
 Three independent work stages targeting app launch, file-tab switching, and

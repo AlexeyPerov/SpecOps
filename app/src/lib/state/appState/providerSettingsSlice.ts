@@ -42,6 +42,29 @@ export function createProviderSettingsSlice(update: SettingsUpdate) {
     });
   }
 
+  /**
+   * Batch-set multiple connection API keys in a single store update. Equivalent
+   * to calling {@link setConnectionApiKey} per entry, but produces one
+   * subscriber cascade instead of N. Used by the startup path, which restores
+   * all persisted keys at once.
+   */
+  function setConnectionApiKeys(entries: Record<string, string>): void {
+    const normalized: Record<string, string> = {};
+    for (const [connectionId, apiKey] of Object.entries(entries)) {
+      const trimmed = apiKey.trim();
+      if (trimmed.length > 0) {
+        normalized[connectionId] = trimmed;
+      }
+    }
+    update((state) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        providerApiKeys: normalized,
+      },
+    }));
+  }
+
   return {
     setDebugChatProviderSettings(debugProvider: DebugProviderSettings) {
       update((state) => ({
@@ -268,6 +291,7 @@ export function createProviderSettingsSlice(update: SettingsUpdate) {
       });
     },
     setConnectionApiKey,
+    setConnectionApiKeys,
     setProviderApiKey(providerId: string, apiKey: string) {
       // Temporary compatibility for legacy call sites in milestones prior to full M4 migration.
       setConnectionApiKey(providerId, apiKey);

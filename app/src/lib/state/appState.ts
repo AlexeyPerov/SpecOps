@@ -5,6 +5,7 @@ import { bumpRecentFile } from "../services/recentFiles";
 import { DEFAULT_ACTIVITY_RAIL_WIDTH_PX, normalizeActivityRailWidthPx } from "../services/panelLayout";
 import { syncRecentFiles } from "../services/recentFilesSync";
 import { loadThemeFile } from "../services/themeStore";
+import type { CustomThemeRecord } from "../services/themeStore";
 import { BUILTIN_THEME_IDS } from "../styles/themeTokens";
 import { IMPORTED_THEMES } from "../styles/importedThemes";
 import { CURATED_THEMES } from "../styles/curatedThemes";
@@ -75,6 +76,29 @@ const initialState: AppDomainState = {
   },
   activityRailWidthPx: DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
 };
+
+/**
+ * Static prefix of the cycleable theme list: builtins, then imported presets,
+ * then curated presets. These are module-level constants that never change at
+ * runtime, so the prefix is computed once. Only the custom-themes suffix
+ * varies with state; {@link cycleTheme} appends it lazily and caches the full
+ * list by the customThemes array reference.
+ */
+const STATIC_THEME_REFS: ActiveThemeRef[] = [
+  ...BUILTIN_THEME_IDS.map<ActiveThemeRef>((id) => ({ kind: "builtin", id })),
+  ...IMPORTED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
+  ...CURATED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
+];
+
+/**
+ * Memo of the full cycleable theme list, keyed by the customThemes array
+ * reference. The customThemes array is replaced (not mutated) whenever the
+ * user adds/removes/edits a custom theme, so a WeakMap keyed by it
+ * auto-invalidates on real changes while returning the same list across
+ * unrelated state updates (e.g. cursor moves that trigger cycleTheme
+ * re-evaluation).
+ */
+const cycleThemeRefsCache = new WeakMap<CustomThemeRecord[], ActiveThemeRef[]>();
 
 function createStateStore() {
   const { subscribe, update: rawUpdate, set } = writable<AppDomainState>(initialState);
@@ -175,18 +199,25 @@ function createStateStore() {
      * Quick-toggle: cycles to the next available theme (builtins → presets →
      * customs, in stable order) and switches to `manual` mode so the ⌘U
      * shortcut immediately renders a different theme.
+     *
+     * The full theme list is memoized by the customThemes array reference so
+     * the static prefix (builtins + imported + curated) is not reallocated on
+     * every press.
      */
     cycleTheme() {
       update((state) => {
-        const refs: ActiveThemeRef[] = [
-          ...BUILTIN_THEME_IDS.map<ActiveThemeRef>((id) => ({ kind: "builtin", id })),
-          ...IMPORTED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
-          ...CURATED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
-          ...state.theme.customThemes.map<ActiveThemeRef>((custom) => ({
-            kind: "custom",
-            id: custom.id,
-          })),
-        ];
+        // Reuse the cached full list when customThemes hasn't changed.
+        let refs = cycleThemeRefsCache.get(state.theme.customThemes);
+        if (!refs) {
+          refs = [
+            ...STATIC_THEME_REFS,
+            ...state.theme.customThemes.map<ActiveThemeRef>((custom) => ({
+              kind: "custom",
+              id: custom.id,
+            })),
+          ];
+          cycleThemeRefsCache.set(state.theme.customThemes, refs);
+        }
         if (refs.length === 0) {
           return state;
         }
@@ -280,8 +311,13 @@ function createStateStore() {
         return state;
       });
     },
-    async loadTheme(): Promise<void> {
-      const file = await loadThemeFile();
+    async loadTheme(options?: {
+      legacySettings?: Record<string, unknown> | null;
+    }): Promise<void> {
+      // When the caller already has the parsed settings.json contents, pass
+      // them through so the legacy-theme migration path does not re-read
+      // settings.json from disk.
+      const file = await loadThemeFile(options);
       const theme: AppThemeState = {
         mode: file.mode,
         darkTheme: file.darkTheme,

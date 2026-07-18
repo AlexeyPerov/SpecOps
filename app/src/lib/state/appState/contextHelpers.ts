@@ -114,15 +114,44 @@ export function normalizeWorkspaceEntries(entries: WorkspaceEntry[]): WorkspaceE
   }));
 }
 
-export function getContextSnapshotById(state: AppDomainState, contextId: ContextId): ContextSnapshot | null {
+/**
+ * Per-state lookup cache for workspace context snapshots. The state object is
+ * replaced on every mutation (immutable updates), so keying the cache by the
+ * state reference via WeakMap auto-invalidates it when state changes. Within a
+ * single state revision, repeated `getContextSnapshotById` calls for the same
+ * contextId are O(1) instead of a linear scan over `workspaces`.
+ *
+ * `getContextSnapshotById` is called from many hot paths (cursor moves, tab
+ * lookups, pane queries) several times per tick; the linear `workspaces.find`
+ * dominated the cost for users with many workspaces open.
+ */
+const contextSnapshotCache = new WeakMap<AppDomainState, Map<ContextId, ContextSnapshot | null>>();
+
+export function getContextSnapshotById(
+  state: AppDomainState,
+  contextId: ContextId,
+): ContextSnapshot | null {
   if (contextId === NOTEPAD_CONTEXT_ID) {
     return state.contexts.notepad;
   }
   if (contextId === CHAT_HTTP_CONTEXT_KEY) {
     return state.contexts.chatHttp;
   }
+  let cache = contextSnapshotCache.get(state);
+  if (cache) {
+    const cached = cache.get(contextId);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
   const workspace = state.contexts.workspaces.find((entry) => entry.id === contextId);
-  return workspace?.snapshot ?? null;
+  const snapshot = workspace?.snapshot ?? null;
+  if (!cache) {
+    cache = new Map();
+    contextSnapshotCache.set(state, cache);
+  }
+  cache.set(contextId, snapshot);
+  return snapshot;
 }
 
 export function isChatHttpContext(contextId: ContextId): boolean {

@@ -267,18 +267,21 @@ export async function startAppShellRuntime(
 
   await runSafeStartupPhase("load-settings", async () => {
     setThemeSaveErrorNotifier(options.notify);
-    // These five reads touch independent files (settings.json,
-    // provider-secrets.json, theme.json, the console-height preference, and the
-    // workspace hide-from-rail preferences). Running them concurrently cuts
-    // several serialized IPC/disk hops off the startup critical path. The
-    // synchronous apply steps below depend on their results, so they run after.
-    const [persistedSettings, connectionApiKeys, , consoleHeightPx] = await Promise.all([
+    // Four independent file reads run concurrently: settings.json,
+    // provider-secrets.json, the console-height preference, and the workspace
+    // hide-from-rail preferences. Theme is loaded in a second step so the
+    // legacy-theme migration fallback can reuse the already-parsed settings
+    // instead of re-reading settings.json (only matters on first launch after
+    // an upgrade that predates theme.json).
+    const [persistedSettings, connectionApiKeys, consoleHeightPx] = await Promise.all([
       loadPersistedSettings(),
       loadConnectionApiKeys(),
-      appState.loadTheme(),
       readConsoleHeightPreference(),
       loadWorkspacePreferences().catch(() => {}),
     ]);
+    await appState.loadTheme({
+      legacySettings: (persistedSettings as Record<string, unknown> | null) ?? null,
+    });
     // Subscribe to OS color-scheme changes so `auto` theme mode re-resolves
     // when the user flips their system light/dark preference. Only re-applies
     // when mode === "auto" (dark/light are pinned); see applySystemPrefersDark.
@@ -316,9 +319,9 @@ export async function startAppShellRuntime(
       // touch the DOM; only setFontSettings does at change time).
       applyFontSettingsToDom(persistedSettings.fontSettings);
     }
-    for (const [connectionId, apiKey] of Object.entries(connectionApiKeys)) {
-      appState.setConnectionApiKey(connectionId, apiKey);
-    }
+    // Batch all connection keys into one store update (one subscriber cascade)
+    // instead of N per-key updates on the startup path.
+    appState.setConnectionApiKeys(connectionApiKeys);
     initializeChatProviders();
     options.setConsoleHeightPx(consoleHeightPx);
     await initializeLogging();

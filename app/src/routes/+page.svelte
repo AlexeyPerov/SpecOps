@@ -104,6 +104,7 @@
   import {
     flushSessionPersistence,
     registerTabsChangedSessionFlush,
+    scheduleSessionPersistence,
   } from "../lib/services/sessionManager";
   import { isWorkspaceLifecycleActive, markWorkspaceLifecycleActive } from "../lib/services/workspaceLifecycle";
   import {
@@ -1334,8 +1335,12 @@
   }
 
   onMount(() => {
+    // Tab changes schedule a debounced persist (coalescing rapid switching into
+    // one write) rather than flushing synchronously on every change. The
+    // immediate flush path is reserved for window-close / unload, where
+    // durability matters more than batching.
     registerTabsChangedSessionFlush((state) => {
-      void flushSessionPersistence(state, getCurrentWebviewWindow().label);
+      scheduleSessionPersistence(state, getCurrentWebviewWindow().label);
     });
 
     // Reflect the global workspace hide-from-rail preferences (loaded during
@@ -1597,12 +1602,18 @@
   });
 
   $effect(() => {
+    // This effect handles *settings-driven* health refreshes (mode/url/port
+    // toggle changes). It deliberately does NOT depend on `activeWorkspaceRoot`
+    // — the per-workspace status probe is handled by syncOpencodeSidecarEffect
+    // above. Without this guard the two effects would both fire on every
+    // workspace switch and double-probe the sidecar. activeWorkspaceRoot is
+    // still passed through as a value (ensureOpencodeSidecar needs it), read
+    // untracked via appState.getSnapshot() so it does not become a dep.
     runtimeReady;
     opencodeEnabled;
     opencodeMode;
     opencodeBaseUrl;
     opencodeSidecarPort;
-    activeWorkspaceRoot;
     if (!runtimeReady) {
       return;
     }
@@ -1611,7 +1622,7 @@
       opencodeMode,
       opencodeBaseUrl,
       opencodeSidecarPort,
-      activeWorkspaceRoot,
+      activeWorkspaceRoot: appState.getWorkspaceRoot(),
       setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
     });
   });

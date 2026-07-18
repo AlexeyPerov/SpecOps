@@ -282,18 +282,27 @@ async function readLegacySettingsTheme(): Promise<string | undefined> {
   try {
     const path = await getSettingsFilePath();
     const raw = await readTextFile(path);
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed.theme === "string") {
-      return parsed.theme;
-    }
-    if (
-      (parsed.themeMode === "dark" || parsed.themeMode === "light") &&
-      typeof parsed.accent === "string"
-    ) {
-      return `${parsed.themeMode}-${parsed.accent}`;
-    }
+    return extractLegacyThemeRef(JSON.parse(raw));
   } catch {
     // settings.json missing or unreadable
+  }
+  return undefined;
+}
+
+/**
+ * Extracts the legacy theme reference from an already-parsed settings object,
+ * avoiding a second disk read when the caller has already loaded settings.json.
+ * Accepts the old `theme` string form and the `themeMode`+`accent` pair form.
+ */
+function extractLegacyThemeRef(parsed: Record<string, unknown>): string | undefined {
+  if (typeof parsed.theme === "string") {
+    return parsed.theme;
+  }
+  if (
+    (parsed.themeMode === "dark" || parsed.themeMode === "light") &&
+    typeof parsed.accent === "string"
+  ) {
+    return `${parsed.themeMode}-${parsed.accent}`;
   }
   return undefined;
 }
@@ -302,9 +311,18 @@ async function readLegacySettingsTheme(): Promise<string | undefined> {
  * Defensive seeding from a legacy `settings.json` (pre-theme.json era). Not a
  * migration: maps the old `theme`/`themeMode`+`accent` to a builtin, slots it
  * into dark or light, and writes a fresh V2 file.
+ *
+ * When `legacySettings` is provided (the already-parsed contents of
+ * settings.json), the file is not re-read — this lets the startup path reuse
+ * the settings load and avoid a second disk hop.
  */
-async function tryMigrateFromSettings(): Promise<ThemeFileV2 | null> {
-  const legacyTheme = await readLegacySettingsTheme();
+async function tryMigrateFromSettings(
+  legacySettings?: Record<string, unknown>,
+): Promise<ThemeFileV2 | null> {
+  const legacyTheme =
+    legacySettings !== undefined
+      ? extractLegacyThemeRef(legacySettings)
+      : await readLegacySettingsTheme();
   const activeTheme = migrateFromLegacySettings(legacyTheme);
   if (activeTheme === null) {
     return null;
@@ -333,7 +351,9 @@ async function readThemeFileRaw(): Promise<string | null> {
   }
 }
 
-export async function loadThemeFile(): Promise<ThemeFileV2> {
+export async function loadThemeFile(
+  options?: { legacySettings?: Record<string, unknown> | null },
+): Promise<ThemeFileV2> {
   const raw = await readThemeFileRaw();
   if (raw !== null) {
     const parsed = parseThemeFile(raw);
@@ -343,7 +363,7 @@ export async function loadThemeFile(): Promise<ThemeFileV2> {
     return defaultThemeFile;
   }
 
-  const migrated = await tryMigrateFromSettings();
+  const migrated = await tryMigrateFromSettings(options?.legacySettings ?? undefined);
   if (migrated !== null) {
     return migrated;
   }

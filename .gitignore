@@ -58,6 +58,7 @@ TODO.md
 # Specs (default ignore; allowlisted paths are tracked)
 /specs/*
 !/specs/changelog.md
+!/specs/issues-18-07.md
 !/specs/optimizations-plan.md
 !/specs/optimizations-baseline.json
 !/specs/optimizations-p7-validation.json

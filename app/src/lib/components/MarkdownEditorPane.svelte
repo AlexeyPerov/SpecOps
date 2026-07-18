@@ -10,6 +10,7 @@
     content = "",
     documentId = null as string | null,
     paneId,
+    contextId,
     documentFilePath = null as string | null,
     scrollTop = 0,
     language = "markdown" as EditorLanguageId,
@@ -33,6 +34,7 @@
     content?: string;
     documentId?: string | null;
     paneId: string;
+    contextId: import("../domain/contracts").ContextId;
     documentFilePath?: string | null;
     scrollTop?: number;
     language?: EditorLanguageId;
@@ -149,6 +151,7 @@
           {content}
           {documentId}
           {paneId}
+          {contextId}
           {scrollTop}
           {wrapLines}
           {zoomPercent}

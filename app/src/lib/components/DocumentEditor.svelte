@@ -8,6 +8,7 @@
     content = "",
     documentId = null,
     paneId,
+    contextId,
     scrollTop = 0,
     wrapLines = false,
     zoomPercent = 100,
@@ -26,6 +27,7 @@
     content?: string;
     documentId?: string | null;
     paneId: string;
+    contextId: import("../domain/contracts").ContextId;
     scrollTop?: number;
     wrapLines?: boolean;
     zoomPercent?: number;
@@ -60,6 +62,7 @@
   {content}
   {documentId}
   {paneId}
+  {contextId}
   {scrollTop}
   {wrapLines}
   {zoomPercent}

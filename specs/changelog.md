@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-07-18 23:00 — Performance: remove workspace-switch editor grid remount (L10)
+
+Eliminated the full editor-grid remount on every workspace / notepad / chat-http
+context switch. Previously, `{#key editor.contextId}` destroyed and rebuilt all
+panes, all CodeMirror `EditorView`s, and re-ran every mount effect on each
+switch — because pane/tab/document ids are context-local (two restored
+workspaces can both have `pane-1`), so the `{#key}` was the safeguard against
+cross-context identity collisions.
+
+The fix namespaces every editor identity surface by `contextId`, then removes
+the `{#key}`. Editor trees for all contexts now stay mounted; switching is a
+prop/DOM swap with no remount.
+
+- **Threaded `contextId` through the full editor component stack**
+  (`AppShell` → `EditorGridLayout` → `EditorPaneView` → `EditorPaneContent` →
+  `MarkdownEditorPane` → `DocumentEditor` → `EditorSurface` →
+  `EditorViewController`). Every editor surface now knows its context.
+- **Namespaced the workbench host registry by contextId**
+  (`editorWorkbenchRuntime.ts`, `types/editor.ts`): `EditorHostIdentity` gained
+  a required `contextId`; the registry's outer key is now `${contextId}:${paneId}`
+  so two contexts with `pane-1` no longer clobber each other. Added a
+  `getActiveContextId` dep so `getActiveHost` resolves to the active context's
+  host. The `editorCommandRunner` fallback identity gets a placeholder context.
+- **Namespaced the editor session cache by contextId**
+  (`editorDocumentSessionCache.ts`): `EditorSessionKey` gained a required
+  `contextId`; `sessionKeyId` is now `${contextId}\0${paneId}\0${documentId}` so
+  the wrong `EditorState` cannot be resurrected for a same-content document in
+  another context. `invalidateDocument` / `retainDocuments` still scan by
+  documentId (correct; over-invalidation across same-id docs is benign).
+- **Reset EditorPaneContent keep-alive state on context change**
+  (`EditorPaneContent.svelte`): `visitedEditorTabIds` and `confirmingDocumentId`
+  reset when `contextId` changes, so the keep-alive set never carries tab ids
+  from a previous context into the new one.
+- **Namespaced DOM pane attributes by contextId**
+  (`EditorPaneView.svelte`, `paneDropTargets.ts`): `data-pane-id` /
+  `data-pane-strip` / `data-pane-body` are stamped as `${contextId}:${paneId}`
+  so the external file-drag walker (`collectPaneElementsFromDom`) cannot return
+  the wrong pane during a transition. The collector strips the context prefix
+  and returns bare pane ids, so all downstream callsites are unchanged.
+- **Included `contextId` in outline host binding equality**
+  (`markdownOutlineHostBinding.ts`): `outlineHostBindingsEqual` now compares
+  `contextId` too, so a snapshot from one context cannot be published against
+  another's binding.
+- **Removed `{#key editor.contextId}`** (`AppShell.svelte`): the
+  `EditorGridLayout` + `renderPaneContent` snippet are now direct children of
+  the editor shell. Context switching no longer destroys the editor tree.
+- **Tests**: updated all 8 test files that construct `EditorHostIdentity` /
+  `EditorSessionKey` literals to include `contextId`; added two new cross-context
+  coexistence tests (workbench hosts from two contexts with overlapping
+  `pane-1`/`doc-1` resolve independently; session cache keys with same
+  pane/document but different context are distinct). 2988 tests pass.
+
+The `tab.activationSideEffects` perf metric should no longer spike on context
+switch — the editor slots are not remounting.
+
 ## 2026-07-18 19:30 — Performance: quick wins (6 low-risk optimizations)
 
 Six isolated, low-risk optimizations that compound with the prior launch/tab/reactive pass.

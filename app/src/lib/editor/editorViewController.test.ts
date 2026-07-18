@@ -20,6 +20,7 @@ function baseProps(
   return {
     content: "document-a",
     documentId: "doc-a",
+    contextId: "notepad",
     paneId: "pane-1",
     scrollTop: 0,
     wrapLines: false,
@@ -59,6 +60,7 @@ describe("createEditorViewController", () => {
       maxEntries: options.maxEntries,
     });
     const workbench = createEditorWorkbenchRuntime({
+      getActiveContextId: () => props.contextId,
       getActivePaneId: () => props.paneId,
       getActiveDocumentId: () => props.documentId,
     });
@@ -153,7 +155,7 @@ describe("createEditorViewController", () => {
     controller!.update(
       baseProps({ content: "document-b", documentId: "doc-b" }),
     );
-    expect(sessionCache.has({ paneId: "pane-1", documentId: "doc-a" })).toBe(true);
+    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
 
     // Simulate disk reload invalidation for inactive A.
     sessionCache.invalidateDocument("doc-a");
@@ -227,11 +229,11 @@ describe("createEditorViewController", () => {
     controller!.update(
       baseProps({ content: "document-b", documentId: "doc-b" }),
     );
-    expect(sessionCache.has({ paneId: "pane-1", documentId: "doc-a" })).toBe(true);
+    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
 
     controller!.destroy();
     controller!.destroy();
-    expect(sessionCache.has({ paneId: "pane-1", documentId: "doc-a" })).toBe(false);
+    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(false);
     expect(controller!.getView()).toBeUndefined();
     controller = undefined;
   });

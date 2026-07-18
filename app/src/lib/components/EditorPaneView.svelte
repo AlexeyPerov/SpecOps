@@ -20,6 +20,7 @@
     tabs,
     selectedTabId,
     documents,
+    contextId,
     isActive = false,
     canClose = false,
     useChatTerminology = false,
@@ -44,6 +45,10 @@
     tabs: TabState[];
     selectedTabId: string | null;
     documents: DocumentState[];
+    /** Editor context id — used to namespace the data-pane-* DOM attributes so
+     *  two mounted contexts with the same pane id cannot collide during a
+     *  context-switch transition. */
+    contextId: import("../domain/contracts").ContextId;
     isActive: boolean;
     canClose: boolean;
     useChatTerminology: boolean;
@@ -104,13 +109,18 @@
      Inactive pane editor surfaces use pointer-events: none (EditorPaneContent);
      clicks still hit this section and activate the pane via onpointerdown. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- The data-pane-* values are namespaced by contextId so two mounted contexts
+     with the same pane id cannot collide in the DOM during a context-switch
+     transition. The DOM collector (paneDropTargets.collectPaneElementsFromDom)
+     strips the context prefix and returns bare pane ids. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <section
   class="editor-pane-view"
   class:pane-drop-target={isTabDropTarget || isFileDropTarget}
-  data-pane-id={paneId}
+  data-pane-id={`${contextId}:${paneId}`}
   onpointerdown={() => onFocus(paneId)}
 >
-  <header class="pane-header" data-pane-strip={paneId}>
+  <header class="pane-header" data-pane-strip={`${contextId}:${paneId}`}>
     <div class="pane-tab-bar" class:pane-tab-bar-empty={visibleTabCount === 0} bind:this={tabStripEl}>
       <TabBar
         openTabs={tabs}
@@ -144,7 +154,7 @@
     {/if}
   </header>
 
-  <div class="pane-body" data-pane-body={paneId} bind:this={paneBodyEl}>
+  <div class="pane-body" data-pane-body={`${contextId}:${paneId}`} bind:this={paneBodyEl}>
     {#if selectedTabId}
       {@render children?.()}
     {:else}

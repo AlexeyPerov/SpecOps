@@ -258,6 +258,7 @@
   const documents = $derived(activeContext.documents);
 
   const editorWorkbench = createEditorWorkbenchRuntime({
+    getActiveContextId: () => appState.getSnapshot().contexts.activeContextId,
     getActivePaneId: () =>
       getActiveContextSnapshot(appState.getSnapshot()).session.editorLayout.activePaneId,
     getActiveDocumentId: () => {

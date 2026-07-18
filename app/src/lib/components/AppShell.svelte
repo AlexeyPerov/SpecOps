@@ -559,10 +559,10 @@
       />
     {/if}
     <section class="editor-shell" bind:this={editorShellEl}>
-      {#key editor.contextId}
-        <EditorGridLayout
-          layout={editor.session.editorLayout}
-          documents={editor.documents}
+      <EditorGridLayout
+        layout={editor.session.editorLayout}
+        documents={editor.documents}
+        contextId={editor.contextId}
           useChatTerminology={editor.isChatHttpActive}
           windowId={editor.currentWindowId}
           notify={editor.notify}
@@ -580,6 +580,7 @@
               isActivePane={paneId === activePaneId}
               session={editor.session}
               documents={editor.documents}
+              contextId={editor.contextId}
               isChatHttpActive={editor.isChatHttpActive}
               workspaceRootPath={editor.workspaceRootPath ?? null}
               workspaceManagerWorkspaces={editor.workspaceManager?.workspaces ?? []}
@@ -630,8 +631,7 @@
               notify={editor.notify}
             />
           {/snippet}
-        </EditorGridLayout>
-      {/key}
+      </EditorGridLayout>
     </section>
     {#if projectTree.workspaceRoot}
       <ProjectPanel

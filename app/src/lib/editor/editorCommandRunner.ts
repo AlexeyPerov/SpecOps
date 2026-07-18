@@ -27,7 +27,7 @@ export function createEditorCommandRunner(
     findEnabledSnippet: () => undefined,
   });
   const host: EditorHost = {
-    identity: { paneId: "", documentId: null, generation: 0 },
+    identity: { contextId: "notepad", paneId: "", documentId: null, generation: 0 },
     actions,
     queries,
     capability,

@@ -41,6 +41,10 @@
     isActivePane = false,
     session,
     documents,
+    /** Editor context id — namespaces the editor host/session cache and
+     *  scopes the keep-alive set so contexts with overlapping pane/tab ids do
+     *  not collide when multiple editor trees stay mounted. */
+    contextId,
     isChatHttpActive = false,
     /** Active workspace root path, used by the workspace-settings view tab. */
     workspaceRootPath = null,
@@ -97,6 +101,7 @@
     isActivePane: boolean;
     session: SessionState;
     documents: DocumentState[];
+    contextId: ContextId;
     isChatHttpActive: boolean;
     workspaceRootPath?: string | null;
     workspaceManagerWorkspaces?: WorkspaceEntry[];
@@ -284,6 +289,16 @@
   );
   const paneFileTabIds = $derived(new Set(paneFileTabs.map((tab) => tab.id)));
   let visitedEditorTabIds = $state<Set<string>>(new Set());
+
+  // Reset keep-alive state when the editor context changes. Tab ids are
+  // context-local, so a carry-over set would render stale slots (with the wrong
+  // document / cached CodeMirror state) when the same EditorPaneContent instance
+  // receives a different context's session/documents after the {#key} is removed.
+  $effect(() => {
+    contextId;
+    visitedEditorTabIds = new Set();
+    confirmingDocumentId = null;
+  });
 
   $effect(() => {
     // Capture the reactive reads so this re-runs when the active tab or the
@@ -497,6 +512,7 @@
               content={entry.document.content}
               documentId={entry.document.id}
               {paneId}
+              {contextId}
               documentFilePath={entry.document.filePath}
               scrollTop={entry.document.scrollTop}
               language={entry.document.language}

@@ -174,19 +174,36 @@ export function hitTestPaneElements(
  * matching `[data-pane-strip]` header and `[data-pane-body]` body. Used by the
  * project-tree file drag (Phase 6), which lives outside the editor grid and so
  * can't read the grid's in-memory element registry.
+ *
+ * The stamped values are namespaced as `${contextId}:${paneId}` so two mounted
+ * contexts with the same pane id cannot collide during a context-switch
+ * transition. The context prefix is stripped here so callers continue to
+ * receive bare pane ids (matching layout state and the grid's in-memory
+ * registry).
  */
 export function collectPaneElementsFromDom(root: ParentNode = document): PaneDropTargetElements[] {
   const out: PaneDropTargetElements[] = [];
   for (const node of root.querySelectorAll<HTMLElement>("[data-pane-id]")) {
-    const paneId = node.dataset.paneId;
-    if (!paneId) {
+    const namespaced = node.dataset.paneId;
+    if (!namespaced) {
       continue;
     }
-    const stripEl = root.querySelector<HTMLElement>(`[data-pane-strip="${cssEscape(paneId)}"]`);
-    const bodyEl = root.querySelector<HTMLElement>(`[data-pane-body="${cssEscape(paneId)}"]`);
+    const paneId = stripContextPrefix(namespaced);
+    const stripEl = root.querySelector<HTMLElement>(`[data-pane-strip="${cssEscape(namespaced)}"]`);
+    const bodyEl = root.querySelector<HTMLElement>(`[data-pane-body="${cssEscape(namespaced)}"]`);
     out.push({ paneId, stripEl, bodyEl });
   }
   return out;
+}
+
+/**
+ * Strip the `${contextId}:` prefix from a namespaced data-pane-* value. Context
+ * ids are opaque strings without a colon separator today; if that ever changes,
+ * this must use the last colon (pane ids themselves never contain colons).
+ */
+function stripContextPrefix(namespaced: string): string {
+  const index = namespaced.indexOf(":");
+  return index === -1 ? namespaced : namespaced.slice(index + 1);
 }
 
 function cssEscape(value: string): string {

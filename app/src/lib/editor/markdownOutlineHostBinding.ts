@@ -13,6 +13,7 @@ export function outlineHostBindingsEqual(
     return false;
   }
   return (
+    a.contextId === b.contextId &&
     a.paneId === b.paneId &&
     a.documentId === b.documentId &&
     a.generation === b.generation

@@ -8,6 +8,7 @@ import type {
   EditorHostIdentity,
   EditorHostRegistration,
 } from "../types/editor";
+import type { ContextId } from "../domain/contracts";
 import { editorHostToCommandRunner } from "./editorHostFactory";
 
 export type EditorCursorStatus = {
@@ -19,9 +20,20 @@ export type EditorCursorStatus = {
 };
 
 export type EditorWorkbenchRuntimeDeps = {
+  getActiveContextId: () => ContextId;
   getActivePaneId: () => string;
   getActiveDocumentId: () => string | null;
 };
+
+/**
+ * Composite outer-map key for the host registry. Pane ids are context-local
+ * (two restored workspaces can both have `pane-1`), so the contextId namespaces
+ * them — this is what lets multiple contexts' editor trees stay mounted across
+ * a context switch without their hosts colliding.
+ */
+function paneKey(contextId: ContextId, paneId: string): string {
+  return `${contextId}:${paneId}`;
+}
 
 type HostEntry = {
   identity: EditorHostIdentity;
@@ -56,24 +68,27 @@ function identitiesEqual(a: EditorHostIdentity, b: EditorHostIdentity): boolean 
 export function createEditorWorkbenchRuntime(
   deps: EditorWorkbenchRuntimeDeps,
 ): EditorWorkbenchRuntime {
-  // Hosts are keyed by (paneId, documentId). A pane may hold several live hosts
-  // at once when the editor surface keeps multiple document tabs mounted (tab
-  // keep-alive); only the host matching the active pane + active document is
-  // surfaced via getActiveHost(). The inner Map is keyed by documentId and
-  // holds at most one entry per document (the latest generation wins).
+  // Hosts are keyed by ((contextId, paneId), documentId). A pane may hold
+  // several live hosts at once when the editor surface keeps multiple document
+  // tabs mounted (tab keep-alive), and multiple contexts may be mounted at once
+  // when the editor grid is not remounted on context switch. The contextId in
+  // the outer key namespaces contexts whose pane ids overlap. Only the host
+  // matching the active context + active pane + active document is surfaced via
+  // getActiveHost(). The inner Map is keyed by documentId and holds at most one
+  // entry per document (the latest generation wins).
   const hostsByPaneDocument = new Map<string, Map<string, HostEntry>>();
   const cursorListeners = new Set<(status: EditorCursorStatus) => void>();
   let disposed = false;
 
-  function getDocumentMap(paneId: string): Map<string, HostEntry> | undefined {
-    return hostsByPaneDocument.get(paneId);
+  function getDocumentMap(key: string): Map<string, HostEntry> | undefined {
+    return hostsByPaneDocument.get(key);
   }
 
-  function ensureDocumentMap(paneId: string): Map<string, HostEntry> {
-    let map = hostsByPaneDocument.get(paneId);
+  function ensureDocumentMap(key: string): Map<string, HostEntry> {
+    let map = hostsByPaneDocument.get(key);
     if (!map) {
       map = new Map();
-      hostsByPaneDocument.set(paneId, map);
+      hostsByPaneDocument.set(key, map);
     }
     return map;
   }
@@ -82,12 +97,13 @@ export function createEditorWorkbenchRuntime(
     if (disposed) {
       return null;
     }
+    const contextId = deps.getActiveContextId();
     const paneId = deps.getActivePaneId();
     const documentId = deps.getActiveDocumentId();
     if (!documentId) {
       return null;
     }
-    const entry = getDocumentMap(paneId)?.get(documentId);
+    const entry = getDocumentMap(paneKey(contextId, paneId))?.get(documentId);
     return entry ? entry.host : null;
   }
 
@@ -103,7 +119,8 @@ export function createEditorWorkbenchRuntime(
       return { identity, unregister: () => {} };
     }
 
-    const docMap = ensureDocumentMap(identity.paneId);
+    const key = paneKey(identity.contextId, identity.paneId);
+    const docMap = ensureDocumentMap(key);
     const existing = docMap.get(identity.documentId);
     if (existing && existing.identity.generation > identity.generation) {
       // Late registration from an older generation of the same document — reject.
@@ -121,7 +138,7 @@ export function createEditorWorkbenchRuntime(
       if (!identity.documentId) {
         return;
       }
-      const current = getDocumentMap(identity.paneId);
+      const current = getDocumentMap(key);
       if (!current) {
         return;
       }
@@ -130,7 +147,7 @@ export function createEditorWorkbenchRuntime(
       if (entry && identitiesEqual(entry.identity, identity)) {
         current.delete(identity.documentId);
         if (current.size === 0) {
-          hostsByPaneDocument.delete(identity.paneId);
+          hostsByPaneDocument.delete(key);
         }
       }
     };

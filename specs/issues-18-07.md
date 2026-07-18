@@ -112,14 +112,12 @@ moderate risk), **L** = large (1+ days, invasive).
 
 ### Workspace switching
 
-#### L10. `{#key editor.contextId}` tears down the whole editor grid on every switch
-- Every workspace/notepad/chat-http context switch destroys and rebuilds all
-  panes and all CodeMirror views. The single largest workspace-switch cost.
-- **Files:** `app/src/lib/components/AppShell.svelte:562-634`.
-- **Complexity: L.**
-- **Fix sketch:** Either incremental context swap (preserve panes that exist
-  in both contexts) or finer keying (per-pane instead of the whole grid). High
-  regression risk — needs careful testing of split-pane state across switches.
+#### L10. ~~`{#key editor.contextId}` tears down the whole editor grid on every switch~~ ✅ Resolved
+- **Status:** Shipped. The `{#key}` was removed by namespacing every editor
+  identity surface (host registry, session cache, keep-alive state, DOM pane
+  attributes, active-context bias) by `contextId` and threading `contextId`
+  through the full editor component stack. Editor trees for all contexts now
+  stay mounted across a switch. See the 2026-07-18 23:00 changelog entry.
 
 #### L11. Two concurrent filesystem walks fire per switch (no shared traversal)
 - The project-tree root `readDir` and the catalog's recursive
@@ -194,16 +192,15 @@ moderate risk), **L** = large (1+ days, invasive).
 | #16 | Double OpenCode health probe per switch eliminated | `4e7a0f1` |
 | #20 | Workspace context lookups indexed via WeakMap | `4e7a0f1` |
 | #21 | cycleTheme theme list memoized | `4e7a0f1` |
+| L10 | `{#key editor.contextId}` workspace grid remount removed via full context-namespacing | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L10** — workspace grid remount. Biggest remaining perceived-latency item;
-   every workspace switch still fully rebuilds the editor grid.
-2. **L1** — bundle code-splitting. Cuts initial load size materially
+1. **L1** — bundle code-splitting. Cuts initial load size materially
    (highlight.js alone is ~2.3 MB).
-3. **L12** + **L13** — workspace-switch disk re-reads and linear scans.
-4. **L4** + **L5** — chat-tab mount cost (preflight + totals).
-5. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
-6. **L7, L8, L16, L17** — small cleanups.
+2. **L12** + **L13** — workspace-switch disk re-reads and linear scans.
+3. **L4** + **L5** — chat-tab mount cost (preflight + totals).
+4. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
+5. **L7, L8, L16, L17** — small cleanups.

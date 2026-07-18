@@ -1,11 +1,14 @@
 /**
  * Document-scoped editor session cache.
  *
- * Policy: sessions are keyed by `{ paneId, documentId }` — the same document
- * shown in multiple panes keeps independent view sessions (selection, undo
- * history, and fold/completion/bookmark fields). Fold state is ephemeral: it
- * lives in cached EditorState while a pane/document remains mounted and is
- * never written to app session storage.
+ * Policy: sessions are keyed by `{ contextId, paneId, documentId }`. The
+ * contextId namespaces contexts whose pane/document ids overlap (two restored
+ * workspaces can both have `pane-1`/`doc-1`); without it the wrong EditorState
+ * could be resurrected for a same-content document in another context. The
+ * same document shown in multiple panes of one context keeps independent view
+ * sessions (selection, undo history, fold/completion/bookmark fields). Fold
+ * state is ephemeral: it lives in cached EditorState while a pane/document
+ * remains mounted and is never written to app session storage.
  *
  * Only inactive sessions live here; the live EditorView holds the active one.
  * Scroll position stays in `DocumentState.scrollTop` and is not cached.
@@ -15,8 +18,10 @@
  * undo/fold cache entries; LRU `maxEntries` still bounds memory.
  */
 import type { EditorState } from "@codemirror/state";
+import type { ContextId } from "../domain/contracts";
 
 export type EditorSessionKey = {
+  contextId: ContextId;
   paneId: string;
   documentId: string;
 };
@@ -51,7 +56,7 @@ type CacheEntry = {
 export const DEFAULT_EDITOR_SESSION_CACHE_MAX = 32;
 
 export function sessionKeyId(key: EditorSessionKey): string {
-  return `${key.paneId}\0${key.documentId}`;
+  return `${key.contextId}\0${key.paneId}\0${key.documentId}`;
 }
 
 export function createEditorDocumentSessionCache(

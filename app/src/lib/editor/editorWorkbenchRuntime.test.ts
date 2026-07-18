@@ -1,8 +1,27 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EditorHost, EditorHostIdentity } from "../types/editor";
+import type { ContextId } from "../domain/contracts";
 import { createEditorWorkbenchRuntime } from "./editorWorkbenchRuntime";
 
-function makeHost(identity: EditorHostIdentity, label = "host"): EditorHost {
+/**
+ * Build a test host. `contextId` defaults to "notepad" so existing tests that
+ * don't care about cross-context behavior stay terse; tests that exercise
+ * context namespacing pass an explicit contextId.
+ */
+function makeHost(
+  identity: Omit<EditorHostIdentity, "contextId"> & { contextId?: ContextId },
+  label = "host",
+): EditorHost {
+  const fullIdentity: EditorHostIdentity = {
+    contextId: identity.contextId ?? "notepad",
+    paneId: identity.paneId,
+    documentId: identity.documentId,
+    generation: identity.generation,
+  };
+  return makeHostWithIdentity(fullIdentity, label);
+}
+
+function makeHostWithIdentity(identity: EditorHostIdentity, label = "host"): EditorHost {
   return {
     identity,
     actions: {
@@ -103,6 +122,7 @@ describe("createEditorWorkbenchRuntime", () => {
     let activePaneId = "pane-a";
     let activeDocumentId: string | null = "doc-1";
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => activePaneId,
       getActiveDocumentId: () => activeDocumentId,
     });
@@ -128,6 +148,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("rejects late registration from an older generation of the same document", () => {
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
@@ -153,6 +174,7 @@ describe("createEditorWorkbenchRuntime", () => {
   it("keeps multiple documents in the same pane coexisting (tab keep-alive)", () => {
     let activeDocumentId: string | null = "doc-1";
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => activeDocumentId,
     });
@@ -183,6 +205,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("does not clear a newer host when an older registration unregisters", () => {
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-2",
     });
@@ -203,6 +226,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("makes unregister idempotent", () => {
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
@@ -218,6 +242,7 @@ describe("createEditorWorkbenchRuntime", () => {
   it("returns null when the active document does not match the registered host", () => {
     let activeDocumentId: string | null = "doc-1";
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => activeDocumentId,
     });
@@ -232,17 +257,20 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("publishes cursor status only for the active matching host", () => {
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
     dispose = () => runtime.dispose();
 
     const identityA: EditorHostIdentity = {
+      contextId: "notepad",
       paneId: "pane-a",
       documentId: "doc-1",
       generation: 1,
     };
     const identityB: EditorHostIdentity = {
+      contextId: "notepad",
       paneId: "pane-b",
       documentId: "doc-2",
       generation: 1,
@@ -271,12 +299,14 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("publishes selection count for multi-cursor", () => {
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
     dispose = () => runtime.dispose();
 
     const identity: EditorHostIdentity = {
+      contextId: "notepad",
       paneId: "pane-a",
       documentId: "doc-1",
       generation: 1,
@@ -297,6 +327,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("dispose clears hosts and ignores further registrations", () => {
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
@@ -315,6 +346,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("exposes an active command runner for find/go-to style callers", () => {
     const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => "notepad",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
@@ -329,5 +361,48 @@ describe("createEditorWorkbenchRuntime", () => {
     expect(runner).not.toBeNull();
     expect(runner?.goToLine(12)).toBe(true);
     expect(goToLine).toHaveBeenCalledWith(12);
+  });
+
+  it("keeps hosts from different contexts with overlapping pane/document ids separate", () => {
+    // Two contexts (e.g. two workspaces restored from disk) can both have
+    // pane-1/doc-1. Without contextId namespacing the second register would
+    // clobber the first and getActiveHost could return the wrong context's host.
+    let activeContextId: ContextId = "ws-1";
+    let activeDocumentId: string | null = "doc-1";
+    const runtime = createEditorWorkbenchRuntime({
+      getActiveContextId: () => activeContextId,
+      getActivePaneId: () => "pane-1",
+      getActiveDocumentId: () => activeDocumentId,
+    });
+    dispose = () => runtime.dispose();
+
+    const hostA = makeHost(
+      { contextId: "ws-1", paneId: "pane-1", documentId: "doc-1", generation: 1 },
+      "workspace-a",
+    );
+    const hostB = makeHost(
+      { contextId: "ws-2", paneId: "pane-1", documentId: "doc-1", generation: 1 },
+      "workspace-b",
+    );
+    runtime.registerHost(hostA);
+    runtime.registerHost(hostB);
+
+    // Both hosts are live; each context resolves its own.
+    activeContextId = "ws-1";
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
+      ok: true,
+      value: "workspace-a",
+    });
+    activeContextId = "ws-2";
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
+      ok: true,
+      value: "workspace-b",
+    });
+    // Switching back still resolves correctly (no clobbering).
+    activeContextId = "ws-1";
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
+      ok: true,
+      value: "workspace-a",
+    });
   });
 });

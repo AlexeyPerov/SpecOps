@@ -8,9 +8,14 @@
  * outside `app/src/lib/editor/`.
  */
 import type { SearchQuery } from "../editor/searchQuery";
+import type { ContextId } from "../domain/contracts";
 
 /** Identity of a mounted editor host within a window/route workbench. */
 export type EditorHostIdentity = {
+  /** Editor context (workspace / notepad / chat-http). Pane and document ids are
+   * context-local and may overlap across contexts, so the contextId namespaces
+   * the host registry and lets multiple contexts' editor trees stay mounted. */
+  contextId: ContextId;
   paneId: string;
   documentId: string | null;
   /** Monotonic generation; late register/unregister with a lower generation is rejected (M0.2). */

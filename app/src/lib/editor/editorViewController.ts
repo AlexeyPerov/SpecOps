@@ -28,6 +28,7 @@ import {
   snippetExtension,
 } from "./editorSnippets";
 import type { ResolvedMarkdownSnippet } from "../domain/snippets";
+import type { ContextId } from "../domain/contracts";
 import { createPlaintextSymbolDecorations } from "./plaintextDecorations";
 import {
   storeOriginAnnotation,
@@ -39,6 +40,10 @@ export type EditorViewControllerProps = {
   content: string;
   documentId: string | null;
   paneId: string;
+  /** Editor context id — namespaces the host identity and session cache so
+   *  contexts with overlapping pane/document ids cannot collide when multiple
+   *  editor trees stay mounted across a context switch. */
+  contextId: ContextId;
   scrollTop: number;
   wrapLines: boolean;
   zoomPercent: number;
@@ -188,6 +193,7 @@ export function createEditorViewController(
     unregisterHost();
     hostGeneration += 1;
     const identity = {
+      contextId: props.contextId,
       paneId: props.paneId,
       documentId: props.documentId,
       generation: hostGeneration,
@@ -272,7 +278,7 @@ export function createEditorViewController(
       return;
     }
     deps.sessionCache.save(
-      { paneId: props.paneId, documentId: trackedDocumentId },
+      { contextId: props.contextId, paneId: props.paneId, documentId: trackedDocumentId },
       view.state,
     );
     cachedDocumentIds.add(trackedDocumentId);
@@ -300,6 +306,7 @@ export function createEditorViewController(
       );
     }
     const cached = deps.sessionCache.take({
+      contextId: props.contextId,
       paneId: props.paneId,
       documentId,
     });

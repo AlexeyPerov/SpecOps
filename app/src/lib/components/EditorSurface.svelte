@@ -8,11 +8,16 @@
   } from "../editor/editorViewController";
   import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
   import { logDiagnostic } from "../services/logging";
+  import type { ContextId } from "../domain/contracts";
 
   interface Props {
     content?: string;
     documentId?: string | null;
     paneId: string;
+    /** Active context id — namespaces the editor host/session cache so contexts
+     *  with overlapping pane/document ids do not collide when multiple editor
+     *  trees stay mounted across a context switch. */
+    contextId: ContextId;
     scrollTop?: number;
     wrapLines?: boolean;
     zoomPercent?: number;
@@ -32,6 +37,7 @@
     content = "",
     documentId = null,
     paneId,
+    contextId,
     scrollTop = 0,
     wrapLines = false,
     zoomPercent = 100,
@@ -69,6 +75,7 @@
       content,
       documentId,
       paneId,
+      contextId,
       scrollTop,
       wrapLines,
       zoomPercent,
@@ -109,6 +116,7 @@
       content,
       documentId,
       paneId,
+      contextId,
       scrollTop,
       wrapLines,
       zoomPercent,

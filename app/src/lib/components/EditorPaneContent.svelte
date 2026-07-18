@@ -18,15 +18,19 @@
     isSessionTabActiveInPane,
   } from "./editorRouting";
   import {
+    findPane,
+    isFileTab,
     paneActiveTab,
     tabDocumentId,
     type ContextId,
     type DocumentState,
     type SessionState,
+    type TabState,
     type WorkspaceEntry,
   } from "../domain/contracts";
   import { deriveAppShellDocumentView } from "../services/appShellDocumentView";
   import { appState } from "../state/appState";
+  import { logPerfTiming } from "../services/perfDiagnostics";
   import { emptySet } from "../collections/emptyCollections";
   import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
   import { getEditorToolController } from "../editor/editorToolContext";
@@ -258,6 +262,110 @@
 
   let confirmingDocumentId = $state<string | null>(null);
 
+  // ---- Editor tab keep-alive -------------------------------------------------
+  // File-tab content (CodeMirror) is kept mounted across tab switches within
+  // this pane so that switching editor tabs is a CSS visibility toggle instead
+  // of a full EditorView destroy/recreate. Without this, every editor tab
+  // switch destroyed the CodeMirror view and invalidated the pane's editor
+  // session cache (undo history, folds, selection were lost), and the view had
+  // to be rebuilt from scratch on return.
+  //
+  // Scope: only text-editor file tabs are kept alive. Session/chat/view tabs
+  // and non-text documents (image/binary/large-pending) keep using the
+  // single-branch {#if} chain below; they are singletons or cheap to remount.
+  // The set grows as tabs are visited and is pruned when tabs are closed so it
+  // does not accumulate forever.
+  const activeTabId = $derived(selectedTab?.id ?? null);
+  const paneFileTabs = $derived(
+    (findPane(layout, paneId)?.tabs.filter((tab) => isFileTab(tab)) ?? []) as Extract<
+      TabState,
+      { kind: "file" }
+    >[],
+  );
+  const paneFileTabIds = $derived(new Set(paneFileTabs.map((tab) => tab.id)));
+  let visitedEditorTabIds = $state<Set<string>>(new Set());
+
+  $effect(() => {
+    // Capture the reactive reads so this re-runs when the active tab or the
+    // pane's file-tab set changes.
+    const activeId = activeTabId;
+    const openIds = paneFileTabIds;
+    // Prune ids that have been closed.
+    let next = visitedEditorTabIds;
+    let changed = false;
+    for (const id of visitedEditorTabIds) {
+      if (!openIds.has(id)) {
+        if (next === visitedEditorTabIds) {
+          next = new Set(visitedEditorTabIds);
+          changed = true;
+        }
+        next.delete(id);
+      }
+    }
+    // Add the active tab if it is currently a text-editor document. We rely on
+    // `documentView.isTextEditorDocument` (derived from the active tab's
+    // document) to decide; that flag already excludes image/binary/large docs.
+    if (activeId && documentView.isTextEditorDocument && !visitedEditorTabIds.has(activeId)) {
+      if (next === visitedEditorTabIds) {
+        next = new Set(visitedEditorTabIds);
+      }
+      next.add(activeId);
+      changed = true;
+      // Observable signal: a one-time mount cost per tab. Repeat visits to an
+      // already-kept-alive tab produce no such log, which is the keep-alive win
+      // (file→file tab switches become CSS visibility toggles, not remounts).
+      void logPerfTiming(
+        "editor tab keep-alive slot mounted",
+        {
+          metric: "tab.activationSideEffects",
+          durationMs: 0,
+          label: "editor-keepalive-mount",
+          paneId,
+          tabId: activeId,
+          liveSlotCount: next.size,
+        },
+        "debug",
+      );
+    }
+    if (changed) {
+      visitedEditorTabIds = next;
+    }
+  });
+
+  /**
+   * Entries to keep alive: visited file tabs that are still open AND still
+   * resolve to a text-editor document. Each entry carries its own document so
+   * the per-tab MarkdownEditorPane binds to the right content. A tab whose
+   * document became non-text (e.g. the file changed to binary on disk) is
+   * dropped here and falls back to the active-tab {#if} branch.
+   */
+  const keepAliveEntries = $derived.by(() => {
+    const entries: Array<{
+      tabId: string;
+      document: DocumentState;
+    }> = [];
+    for (const tab of paneFileTabs) {
+      if (!visitedEditorTabIds.has(tab.id)) {
+        continue;
+      }
+      const document = documents.find((d) => d.id === tab.documentId);
+      if (!document) {
+        continue;
+      }
+      const view = deriveAppShellDocumentView(document, {
+        renderMarkdownHtml:
+          document.language === "markdown"
+            ? document.markdownViewMode === "preview" ||
+              (document.markdownViewMode === "split" && canFitMarkdownSplit)
+            : false,
+      });
+      if (view.isTextEditorDocument) {
+        entries.push({ tabId: tab.id, document });
+      }
+    }
+    return entries;
+  });
+
   async function handleConfirmLargeFile(): Promise<void> {
     const documentId = paneDocument?.id;
     if (!documentId || confirmingDocumentId === documentId) {
@@ -374,30 +482,42 @@
         documentView.isMarkdownDocument}
     >
       <div class="editor-pane-primary">
-        <MarkdownEditorPane
-          markdownEnabled={documentView.isMarkdownDocument}
-          content={paneDocument?.content ?? ""}
-          documentId={paneDocument?.id ?? null}
-          {paneId}
-          documentFilePath={paneDocument?.filePath ?? null}
-          scrollTop={paneDocument?.scrollTop ?? 0}
-          language={paneDocument?.language ?? "plaintext"}
-          {wrapLines}
-          {zoomPercent}
-          {decoratePlaintextSymbols}
-          {showMinimap}
-          {showFoldGutter}
-          {autoClosePairs}
-          {autoSuggest}
-          markdownHtml={documentView.markdownHtml}
-          storedMarkdownViewMode={paneDocument?.markdownViewMode ?? "edit"}
-          canFitSplit={canFitMarkdownSplit}
-          {windowId}
-          onStatusMessage={notify}
-          {onMarkdownViewModeChange}
-          {onUntitledTitleRefresh}
-          {onScrollTopChange}
-        />
+        {#each keepAliveEntries as entry (entry.tabId)}
+          {@const entryView = deriveAppShellDocumentView(entry.document, {
+            renderMarkdownHtml:
+              entry.document.language === "markdown"
+                ? entry.document.markdownViewMode === "preview" ||
+                  (entry.document.markdownViewMode === "split" && canFitMarkdownSplit)
+                : false,
+          })}
+          {@const isEntryActive = entry.tabId === activeTabId}
+          <div class="editor-tab-slot" class:editor-tab-slot-hidden={!isEntryActive}>
+            <MarkdownEditorPane
+              markdownEnabled={entryView.isMarkdownDocument}
+              content={entry.document.content}
+              documentId={entry.document.id}
+              {paneId}
+              documentFilePath={entry.document.filePath}
+              scrollTop={entry.document.scrollTop}
+              language={entry.document.language}
+              {wrapLines}
+              {zoomPercent}
+              {decoratePlaintextSymbols}
+              {showMinimap}
+              {showFoldGutter}
+              {autoClosePairs}
+              {autoSuggest}
+              markdownHtml={entryView.markdownHtml}
+              storedMarkdownViewMode={entry.document.markdownViewMode ?? "edit"}
+              canFitSplit={canFitMarkdownSplit}
+              {windowId}
+              onStatusMessage={notify}
+              {onMarkdownViewModeChange}
+              {onUntitledTitleRefresh}
+              {onScrollTopChange}
+            />
+          </div>
+        {/each}
       </div>
       {#if isActivePane && outlineOpen && documentView.isMarkdownDocument && !isSessionTabActive && !isChatHttpActive}
         <MarkdownOutlinePanel
@@ -470,5 +590,25 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    position: relative;
+  }
+
+  /*
+   * Editor tab keep-alive: each visited file tab renders its MarkdownEditorPane
+   * inside a slot. Only the active tab's slot is visible and fills the primary
+   * area; the rest are taken out of flow via display:none so they neither paint
+   * nor receive pointer events, while their CodeMirror EditorView (and thus
+   * undo history, folds, scroll) is preserved across tab switches.
+   */
+  .editor-tab-slot {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .editor-tab-slot-hidden {
+    display: none;
   }
 </style>

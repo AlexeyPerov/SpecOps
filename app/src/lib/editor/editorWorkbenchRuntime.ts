@@ -56,9 +56,27 @@ function identitiesEqual(a: EditorHostIdentity, b: EditorHostIdentity): boolean 
 export function createEditorWorkbenchRuntime(
   deps: EditorWorkbenchRuntimeDeps,
 ): EditorWorkbenchRuntime {
-  const hostsByPaneId = new Map<string, HostEntry>();
+  // Hosts are keyed by (paneId, documentId). A pane may hold several live hosts
+  // at once when the editor surface keeps multiple document tabs mounted (tab
+  // keep-alive); only the host matching the active pane + active document is
+  // surfaced via getActiveHost(). The inner Map is keyed by documentId and
+  // holds at most one entry per document (the latest generation wins).
+  const hostsByPaneDocument = new Map<string, Map<string, HostEntry>>();
   const cursorListeners = new Set<(status: EditorCursorStatus) => void>();
   let disposed = false;
+
+  function getDocumentMap(paneId: string): Map<string, HostEntry> | undefined {
+    return hostsByPaneDocument.get(paneId);
+  }
+
+  function ensureDocumentMap(paneId: string): Map<string, HostEntry> {
+    let map = hostsByPaneDocument.get(paneId);
+    if (!map) {
+      map = new Map();
+      hostsByPaneDocument.set(paneId, map);
+    }
+    return map;
+  }
 
   function getActiveHost(): EditorHost | null {
     if (disposed) {
@@ -66,14 +84,11 @@ export function createEditorWorkbenchRuntime(
     }
     const paneId = deps.getActivePaneId();
     const documentId = deps.getActiveDocumentId();
-    const entry = hostsByPaneId.get(paneId);
-    if (!entry) {
+    if (!documentId) {
       return null;
     }
-    if (entry.identity.documentId !== documentId) {
-      return null;
-    }
-    return entry.host;
+    const entry = getDocumentMap(paneId)?.get(documentId);
+    return entry ? entry.host : null;
   }
 
   function registerHost(host: EditorHost): EditorHostRegistration {
@@ -82,13 +97,20 @@ export function createEditorWorkbenchRuntime(
       return { identity, unregister: () => {} };
     }
 
-    const existing = hostsByPaneId.get(identity.paneId);
-    if (existing && existing.identity.generation > identity.generation) {
-      // Late registration from an older document generation — reject.
+    // Hosts without a document id (defensive: editor surfaces always carry one
+    // today) cannot be indexed by document, so skip registration entirely.
+    if (!identity.documentId) {
       return { identity, unregister: () => {} };
     }
 
-    hostsByPaneId.set(identity.paneId, { identity, host });
+    const docMap = ensureDocumentMap(identity.paneId);
+    const existing = docMap.get(identity.documentId);
+    if (existing && existing.identity.generation > identity.generation) {
+      // Late registration from an older generation of the same document — reject.
+      return { identity, unregister: () => {} };
+    }
+
+    docMap.set(identity.documentId, { identity, host });
 
     let unregistered = false;
     const unregister = (): void => {
@@ -96,13 +118,20 @@ export function createEditorWorkbenchRuntime(
         return;
       }
       unregistered = true;
-      const current = hostsByPaneId.get(identity.paneId);
+      if (!identity.documentId) {
+        return;
+      }
+      const current = getDocumentMap(identity.paneId);
       if (!current) {
         return;
       }
-      // Stale unregister must not clear a newer active/registered host.
-      if (identitiesEqual(current.identity, identity)) {
-        hostsByPaneId.delete(identity.paneId);
+      const entry = current.get(identity.documentId);
+      // Stale unregister must not clear a newer host for the same document.
+      if (entry && identitiesEqual(entry.identity, identity)) {
+        current.delete(identity.documentId);
+        if (current.size === 0) {
+          hostsByPaneDocument.delete(identity.paneId);
+        }
       }
     };
 
@@ -148,7 +177,7 @@ export function createEditorWorkbenchRuntime(
 
   function dispose(): void {
     disposed = true;
-    hostsByPaneId.clear();
+    hostsByPaneDocument.clear();
     cursorListeners.clear();
   }
 

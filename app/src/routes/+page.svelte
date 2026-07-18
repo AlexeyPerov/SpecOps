@@ -1907,6 +1907,7 @@
     notify,
   }}
   editor={{
+    contextId: activeContextId,
     session,
     documents,
     activeDocument,

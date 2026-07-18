@@ -218,8 +218,13 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     normalizedRoot: string,
     options?: { skipOpencodeReconcile?: boolean },
   ): Promise<void> {
+    const isRestoreTargetActive = (): boolean =>
+      appState.getWorkspaceRoot() === normalizedRoot;
     const snapshot = appState.getSnapshot();
     if (!isOpencodeEnabled(snapshot.settings.opencode)) {
+      if (!isRestoreTargetActive()) {
+        return;
+      }
       chatStore.setActiveSessionId(null);
       appState.setLastActiveSessionId(null);
       return;
@@ -233,6 +238,9 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     const restoreStartedAt = nowMs();
     const loadSessionsStartedAt = nowMs();
     await chatStore.loadWorkspaceSessions(normalizedRoot, { prioritySessionIds });
+    if (!isRestoreTargetActive()) {
+      return;
+    }
     const sessionIndex = chatStore.getSessionIndex();
     const loadSessionsDurationMs = elapsedMs(loadSessionsStartedAt);
     chatStore.mergeSessionDrafts(normalizedRoot, openTabSessionIds);
@@ -240,6 +248,9 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     const restored = resolveRestoredActiveSession(session, sessionIndex);
     if (restored.shouldFocusSessionTab && restored.activeSessionId) {
       await chatStore.ensureSessionThreadHydrated(restored.activeSessionId, normalizedRoot);
+      if (!isRestoreTargetActive()) {
+        return;
+      }
       chatStore.setActiveSessionId(restored.activeSessionId);
       appState.setLastActiveSessionId(restored.activeSessionId);
       appState.openOrFocusSessionTab(restored.activeSessionId);

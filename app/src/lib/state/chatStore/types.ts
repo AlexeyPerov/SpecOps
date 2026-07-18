@@ -8,6 +8,10 @@ import type {
 } from "../../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
 
+// Re-export so consumers of the chatStore types can import SessionIndexEntry
+// alongside the other chat-store types without reaching into domain/contracts.
+export type { SessionIndexEntry };
+
 /** Chat persistence/runtime scope: normalized workspace root or a chat context id. */
 export type ChatScopeKey = typeof CHAT_HTTP_CONTEXT_ID | string;
 

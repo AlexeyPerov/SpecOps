@@ -1,5 +1,105 @@
 # Changelog
 
+## 2026-07-18 19:00 — Performance: faster launch, editor tab switches, and reactive churn
+
+Three independent work stages targeting app launch, file-tab switching, and
+derived-store recomputation. All changes are instrumented via the existing
+`perfDiagnostics` helpers so before/after numbers appear in the Console.
+
+### Launch (startup waterfall)
+
+- **Parallelized window/dock listener setup** — the five `listen()` calls in
+  `startAppShellRuntime` (transfer-tab, merge-tab, dock new-window, dock
+  open-recent, dock clear-recent) ran as five sequential IPC round-trips
+  before any startup phase could begin. They are now registered with a single
+  `Promise.all`. Wrapped with a `register-listeners` startup-phase perf log.
+- **Parallelized the independent JSON reads** in the `load-settings` phase —
+  `settings.json`, `provider-secrets.json`, `theme.json`, the console-height
+  preference, and the workspace hide-from-rail preferences all read
+  concurrently via one `Promise.all` instead of serially.
+- **Moved non-blocking phases off the readiness gate** —
+  `initialize-app-menu`, `load-project-tree`, and `startup-external-checks`
+  now run as fire-and-forget background tasks. `runtimeReady` flips as soon as
+  the session and chat scope are restored, so the ~17 readiness-gated `$effect`
+  blocks start running sooner. Each background phase still emits its own
+  `startup.phase` timing and error capture. Added a `startup.total`
+  "runtime ready" log distinct from the existing "app shell initialized" log
+  so time-to-interactive is measurable separately from full initialization.
+- **Skipped the redundant `session.backup.json` write on launch** — the
+  `mark-window-active` phase wrote both `session.json` and its backup, then
+  the immediately-following `restore-session` phase read `session.json` back.
+  The launch-time informational update now skips the backup write
+  (`writeSessionSnapshot({ skipBackup: true })`); the next real session
+  mutation re-writes both files.
+
+### Editor tab switching (keep-alive)
+
+- **Per-tab keep-alive for file/editor content** (`EditorPaneContent.svelte`):
+  the text-editor branch previously used a single `{#if}` that destroyed and
+  recreated the CodeMirror `EditorView` on every file-tab switch, wiping
+  undo history, folds, and selection. File tabs are now mounted once per tab
+  and toggled via CSS (`display: none`) on switch — the dominant remount cost
+  is gone. The `visitedEditorTabIds` set grows as tabs are visited and prunes
+  on tab close, so memory is bounded by open-tab count.
+- **Editor workbench runtime now supports multiple hosts per pane**
+  (`editorWorkbenchRuntime.ts`): previously `hostsByPaneId` held a single host
+  per pane, so two live `EditorView`s for the same pane clobbered each other.
+  Hosts are now keyed by `(paneId, documentId)`, which is what enables
+  keep-alive. Added a coexistence test; updated the "late registration" test
+  to reflect that different documents in the same pane no longer reject each
+  other (only older generations of the *same* document do).
+- **Targeted editor session-cache invalidation** (`editorViewController.ts`):
+  `destroy()` previously called `invalidatePane(paneId)`, which wiped the
+  cached state for every document in the pane. It now invalidates only the
+  documents this controller cached (tracked via a new `cachedDocumentIds`
+  set), so closing one tab no longer destroys sibling tabs' undo/fold cache.
+- **Memoized the Version Control git probe across mounts**
+  (`VersionControlView.svelte`): a module-level probe cache (5s TTL) skips the
+  mount-time git shell-out when the user switched away and back within the
+  window. Explicit refreshes via `panelRefreshToken` bypass the cache.
+- **Defensive chat scroll restore** (`ChatMessageList.svelte`): a
+  module-level scroll cache keyed by session id captures scroll position on
+  scroll and restores it on remount, so re-entering a chat tab returns to the
+  last-read position instead of jumping to the top.
+
+### Derived store memoization (reactive churn)
+
+- **Stabilized `chatMessages`, `chatSessionIndex`** empty-collection
+  references so downstream `derived`/`$derived` consumers short-circuit on
+  referential equality instead of re-running on every chatStore emit.
+- **Stabilized `chatActiveRuntimeBySessionId` and `chatSessionSubtitleById`**
+  (`chatStore.ts`): both previously allocated a fresh wrapper object / `Map`
+  on every chatStore emit (the runtime map's comment explicitly admitted it).
+  They now cache their output and only re-allocate when the underlying
+  `runtimeBySessionId` / `threadsBySessionId` reference actually changes.
+  This stops the notification observer effect and subtitle rebuild from
+  firing on every token streamed during chat generation.
+- **Replaced the `getSnapshot()` subscribe/unsubscribe dance**
+  (`appState.ts`, `chatStore.ts`): both stores read the current state via a
+  subscribe→capture→unsubscribe pattern on every call. They now maintain the
+  latest state via a single long-lived subscription, eliminating per-call
+  subscriber-walk overhead in dozens of hot-path handlers (cursor moves, tab
+  lookups, pane queries).
+
+### Notes
+
+- The `{#key editor.contextId}` grid remount on workspace switch, the
+  `loadWorkspaceSessions` disk re-reads when the in-memory cache is fresh,
+  and bundle code-splitting (highlight.js / CodeMirror language packs /
+  picker lazy-loading) were intentionally deferred to a follow-up pass.
+
+
+- Keyed the editor grid by the active context so switching between Notepad and
+  workspaces atomically replaces the previous context's pane tree.
+- Guarded delayed workspace-session loading and thread hydration so completion
+  after a context switch cannot focus tabs or update session state in the newly
+  active context.
+- Prevented context-local pane, tab, and document identifiers from causing
+  Svelte to reuse stale editor hosts or grid geometry across modes.
+- Notepad now restores its own single-pane layout instead of temporarily
+  retaining a workspace grid with empty cells.
+- Added regression coverage for switching away during both async restore stages.
+
 ## 2026-07-16 23:50 — U3.3 + U3.4: De-dense Version Control toolbar & status-bar grouping
 
 Both remaining UI Improvements v3 plans shipped together — both target the two

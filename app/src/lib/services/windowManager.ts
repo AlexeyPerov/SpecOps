@@ -37,8 +37,11 @@ const WINDOW_READY_TIMEOUT_MS = 10_000;
 
 let windowCounter = 1;
 
-export async function markWindowActive(windowId: string): Promise<void> {
-  await updateLastActiveWindow(windowId);
+export async function markWindowActive(
+  windowId: string,
+  options?: { skipBackup?: boolean },
+): Promise<void> {
+  await updateLastActiveWindow(windowId, options);
 }
 
 export async function resolveActivationWindow(

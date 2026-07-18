@@ -1,3 +1,32 @@
+<script lang="ts" module>
+  // Cross-mount probe cache: remembers when each workspace root was last
+  // probed. The Version Control view re-mounts on every tab switch into it
+  // (see EditorPaneContent {#if} chain), and without this cache the mount-time
+  // $effect re-shells-out to git on every visit. The cache is consulted only
+  // on mount; explicit user-initiated refreshes (panelRefreshToken bumps) and
+  // workspace-root changes always re-probe regardless of the cache.
+  const PROBE_CACHE_TTL_MS = 5000;
+  const probeCacheByRoot = new Map<string, number>();
+
+  /**
+   * Returns true if `root` was probed within the TTL window. Callers should
+   * still perform their own freshness check — this is a hint to skip redundant
+   * mount-time probes, not a guarantee the cached data is still valid.
+   */
+  export function isVersionControlProbeCached(root: string): boolean {
+    const last = probeCacheByRoot.get(root);
+    if (last === undefined) {
+      return false;
+    }
+    return Date.now() - last < PROBE_CACHE_TTL_MS;
+  }
+
+  /** Records that `root` was probed now. */
+  export function markVersionControlProbePerformed(root: string): void {
+    probeCacheByRoot.set(root, Date.now());
+  }
+</script>
+
 <script lang="ts">
   import { confirm, message } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
@@ -572,6 +601,12 @@
         return;
       }
 
+      // Record a successful probe so a quick tab away-and-back within the TTL
+      // does not re-shell-out to git. Covers all non-error outcomes (ready,
+      // notARepository, gitUnavailable, noWorkspace) since each is a valid
+      // resolution that doesn't need immediate re-probing.
+      markVersionControlProbePerformed(root);
+
       switch (result.kind) {
         case "noWorkspace":
           probeStatus = "noWorkspace";
@@ -635,6 +670,15 @@
     probeGeneration += 1;
     const generation = probeGeneration;
     const controller = new AbortController();
+    // Skip the mount-time probe if this root was probed very recently (e.g.
+    // the user switched away and back within the TTL). Explicit refreshes via
+    // panelRefreshToken still re-probe regardless of the cache. This avoids
+    // re-shelling-out to git on every tab visit.
+    if (workspaceRootPath && isVersionControlProbeCached(workspaceRootPath)) {
+      return () => {
+        controller.abort();
+      };
+    }
     void refreshProbe(controller.signal, { generation });
     return () => {
       controller.abort();

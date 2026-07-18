@@ -566,6 +566,7 @@
       {messages}
       {isEmpty}
       {isGenerating}
+      sessionId={activeSessionId}
       activeModeRequiredSections={activeResolvedMode.requiredSections}
       {compactionNotice}
       sessionSummary={metadata?.summary ?? ""}

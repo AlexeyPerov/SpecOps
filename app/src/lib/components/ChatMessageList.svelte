@@ -29,10 +29,19 @@
   import MarkdownRenderer from "./MarkdownRenderer.svelte";
   import SessionSummary from "./SessionSummary.svelte";
 
+  // Module-level scroll cache: remembers the last scroll position per session
+  // so re-entering a chat tab (which remounts this component) restores scroll
+  // instead of jumping to the top. The map grows with the number of distinct
+  // sessions visited; entries are overwritten on revisit and never exceed the
+  // number of sessions the user has opened in this window's lifetime.
+  const chatScrollBySessionId = new Map<string, number>();
+
   interface Props {
     messages: ChatMessage[];
     isEmpty: boolean;
     isGenerating: boolean;
+    /** Active session id, used to key the scroll-restore cache. */
+    sessionId?: string | null;
     activeModeRequiredSections?: readonly string[];
     compactionNotice?: string;
     emptyHint?: string;
@@ -52,6 +61,7 @@
     messages,
     isEmpty,
     isGenerating,
+    sessionId = null,
     activeModeRequiredSections = [],
     compactionNotice = "",
     emptyHint = "Send a message to start.",
@@ -90,12 +100,46 @@
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  let scrollPersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function handleScrollCapture(): void {
+    if (!scrollContainerEl || !sessionId) {
+      return;
+    }
+    // Debounce writes so rapid scroll events don't thrash the map.
+    if (scrollPersistTimer) {
+      clearTimeout(scrollPersistTimer);
+    }
+    const captured = sessionId;
+    const top = scrollContainerEl.scrollTop;
+    scrollPersistTimer = setTimeout(() => {
+      chatScrollBySessionId.set(captured, top);
+    }, 120);
+  }
+
   onMount(() => {
     window.addEventListener("specops:scroll-to-message", handleScrollToMessage);
+    // Restore the last-known scroll position for this session, if any. Runs
+    // after the DOM is painted so the scroll target height is correct. When a
+    // fresh turn is actively generating, the list auto-scrolls to the bottom
+    // anyway (see the generation-tracking effect below), which takes precedence.
+    if (sessionId && scrollContainerEl) {
+      const saved = chatScrollBySessionId.get(sessionId);
+      if (saved !== undefined) {
+        const el = scrollContainerEl;
+        requestAnimationFrame(() => {
+          el.scrollTop = saved;
+        });
+      }
+    }
   });
 
   onDestroy(() => {
     window.removeEventListener("specops:scroll-to-message", handleScrollToMessage);
+    if (scrollPersistTimer) {
+      clearTimeout(scrollPersistTimer);
+      scrollPersistTimer = null;
+    }
   });
 
   /**
@@ -380,7 +424,7 @@
       {/if}
     </EmptyState>
   {:else}
-    <div class="chat-message-scroll" bind:this={scrollContainerEl}>
+    <div class="chat-message-scroll" bind:this={scrollContainerEl} onscroll={handleScrollCapture}>
       {#if hasAnyReasoning}
         <div class="chat-reasoning-toolbar">
           <button

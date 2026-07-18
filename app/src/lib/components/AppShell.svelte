@@ -136,6 +136,8 @@
   }
 
   export interface AppShellEditorChromeProps {
+    /** Context-local editor identities may overlap, so context changes remount the grid. */
+    contextId: ContextId;
     session: SessionState;
     documents: DocumentState[];
     activeDocument: DocumentState | undefined;
@@ -557,77 +559,79 @@
       />
     {/if}
     <section class="editor-shell" bind:this={editorShellEl}>
-      <EditorGridLayout
-        layout={editor.session.editorLayout}
-        documents={editor.documents}
-        useChatTerminology={editor.isChatHttpActive}
-        windowId={editor.currentWindowId}
-        notify={editor.notify}
-        onSelectTab={editor.onSelectTab}
-        onCloseTab={editor.onCloseTab}
-        onClosePane={editor.onClosePane}
-        onFocusPane={editor.onFocusPane}
-        onMoveTabBetweenPanes={editor.onMoveTabBetweenPanes}
-        onOpenFileInPane={editor.onOpenFileInPane}
-        fileDropTargetPaneId={editor.fileDropTargetPaneId ?? null}
-      >
-        {#snippet renderPaneContent(paneId)}
-          <EditorPaneContent
-            {paneId}
-            isActivePane={paneId === activePaneId}
-            session={editor.session}
-            documents={editor.documents}
-            isChatHttpActive={editor.isChatHttpActive}
-            workspaceRootPath={editor.workspaceRootPath ?? null}
-            workspaceManagerWorkspaces={editor.workspaceManager?.workspaces ?? []}
-            workspaceManagerActiveContextId={editor.workspaceManager?.activeContextId ?? "notepad"}
-            workspaceManagerHiddenRootPaths={editor.workspaceManager?.hiddenRootPaths ?? new Set()}
-            onWorkspaceManagerAddWorkspace={editor.workspaceManager?.onAddWorkspace ?? (() => {})}
-            onWorkspaceManagerAddMultiple={editor.workspaceManager?.onAddMultiple ?? (() => {})}
-            onWorkspaceManagerSelectWorkspace={editor.workspaceManager?.onSelectWorkspace ?? (() => {})}
-            onWorkspaceManagerOpenSettings={editor.workspaceManager?.onOpenWorkspaceSettings ?? (() => {})}
-            onWorkspaceManagerOpenVersionControl={editor.workspaceManager?.onOpenVersionControl ?? (() => {})}
-            previewMode={editor.previewMode}
-            wrapLines={editor.wrapLines}
-            zoomPercent={editor.zoomPercent}
-            decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
-            showMinimap={editor.showMinimap}
-            showFoldGutter={editor.showFoldGutter}
-            autoClosePairs={editor.autoClosePairs}
-            autoSuggest={editor.autoSuggest}
-            maxBinaryOpenAsTextBytes={editor.maxBinaryOpenAsTextBytes}
-            maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
-            canFitMarkdownSplit={editor.canFitMarkdownSplit}
-            windowId={editor.currentWindowId}
-            onActivePaneElement={(element) => {
-              editorPaneEl = element;
-            }}
-            onConfirmLargeFile={editor.onConfirmLargeFile}
-            onMarkdownViewModeChange={editor.onMarkdownViewModeChange}
-            onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
-            onScrollTopChange={editor.onScrollTopChange}
-            onDeleteSessionFromChat={editor.onDeleteSessionFromChat}
-            onForkSession={editor.onForkSession}
-            onRevertSession={editor.onRevertSession}
-            onUnrevertSession={editor.onUnrevertSession}
-            onShareSession={editor.onShareSession}
-            onUnshareSession={editor.onUnshareSession}
-            onSummarizeSession={editor.onSummarizeSession}
-            onExportSession={editor.onExportSession}
-            activeShareUrl={editor.activeShareUrl}
-            activeParentSessionId={editor.activeParentSessionId}
-            canToggleTodoPanel={Boolean(todoPanel)}
-            todoPanelOpen={Boolean(todoPanel?.open)}
-            onToggleTodoPanel={() => todoPanel?.onToggle?.()}
-            canToggleDiffPanel={Boolean(diffPanel)}
-            diffPanelOpen={Boolean(diffPanel?.open)}
-            onToggleDiffPanel={() => diffPanel?.onToggle?.()}
-            onOpenTimeline={timelineDialog?.onToggle}
-            onGoToLine={editor.onGoToLine}
-            notify={editor.notify}
-          />
-        {/snippet}
-      </EditorGridLayout>
+      {#key editor.contextId}
+        <EditorGridLayout
+          layout={editor.session.editorLayout}
+          documents={editor.documents}
+          useChatTerminology={editor.isChatHttpActive}
+          windowId={editor.currentWindowId}
+          notify={editor.notify}
+          onSelectTab={editor.onSelectTab}
+          onCloseTab={editor.onCloseTab}
+          onClosePane={editor.onClosePane}
+          onFocusPane={editor.onFocusPane}
+          onMoveTabBetweenPanes={editor.onMoveTabBetweenPanes}
+          onOpenFileInPane={editor.onOpenFileInPane}
+          fileDropTargetPaneId={editor.fileDropTargetPaneId ?? null}
+        >
+          {#snippet renderPaneContent(paneId)}
+            <EditorPaneContent
+              {paneId}
+              isActivePane={paneId === activePaneId}
+              session={editor.session}
+              documents={editor.documents}
+              isChatHttpActive={editor.isChatHttpActive}
+              workspaceRootPath={editor.workspaceRootPath ?? null}
+              workspaceManagerWorkspaces={editor.workspaceManager?.workspaces ?? []}
+              workspaceManagerActiveContextId={editor.workspaceManager?.activeContextId ?? "notepad"}
+              workspaceManagerHiddenRootPaths={editor.workspaceManager?.hiddenRootPaths ?? new Set()}
+              onWorkspaceManagerAddWorkspace={editor.workspaceManager?.onAddWorkspace ?? (() => {})}
+              onWorkspaceManagerAddMultiple={editor.workspaceManager?.onAddMultiple ?? (() => {})}
+              onWorkspaceManagerSelectWorkspace={editor.workspaceManager?.onSelectWorkspace ?? (() => {})}
+              onWorkspaceManagerOpenSettings={editor.workspaceManager?.onOpenWorkspaceSettings ?? (() => {})}
+              onWorkspaceManagerOpenVersionControl={editor.workspaceManager?.onOpenVersionControl ?? (() => {})}
+              previewMode={editor.previewMode}
+              wrapLines={editor.wrapLines}
+              zoomPercent={editor.zoomPercent}
+              decoratePlaintextSymbols={editor.decoratePlaintextSymbols}
+              showMinimap={editor.showMinimap}
+              showFoldGutter={editor.showFoldGutter}
+              autoClosePairs={editor.autoClosePairs}
+              autoSuggest={editor.autoSuggest}
+              maxBinaryOpenAsTextBytes={editor.maxBinaryOpenAsTextBytes}
+              maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
+              canFitMarkdownSplit={editor.canFitMarkdownSplit}
+              windowId={editor.currentWindowId}
+              onActivePaneElement={(element) => {
+                editorPaneEl = element;
+              }}
+              onConfirmLargeFile={editor.onConfirmLargeFile}
+              onMarkdownViewModeChange={editor.onMarkdownViewModeChange}
+              onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
+              onScrollTopChange={editor.onScrollTopChange}
+              onDeleteSessionFromChat={editor.onDeleteSessionFromChat}
+              onForkSession={editor.onForkSession}
+              onRevertSession={editor.onRevertSession}
+              onUnrevertSession={editor.onUnrevertSession}
+              onShareSession={editor.onShareSession}
+              onUnshareSession={editor.onUnshareSession}
+              onSummarizeSession={editor.onSummarizeSession}
+              onExportSession={editor.onExportSession}
+              activeShareUrl={editor.activeShareUrl}
+              activeParentSessionId={editor.activeParentSessionId}
+              canToggleTodoPanel={Boolean(todoPanel)}
+              todoPanelOpen={Boolean(todoPanel?.open)}
+              onToggleTodoPanel={() => todoPanel?.onToggle?.()}
+              canToggleDiffPanel={Boolean(diffPanel)}
+              diffPanelOpen={Boolean(diffPanel?.open)}
+              onToggleDiffPanel={() => diffPanel?.onToggle?.()}
+              onOpenTimeline={timelineDialog?.onToggle}
+              onGoToLine={editor.onGoToLine}
+              notify={editor.notify}
+            />
+          {/snippet}
+        </EditorGridLayout>
+      {/key}
     </section>
     {#if projectTree.workspaceRoot}
       <ProjectPanel

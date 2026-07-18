@@ -86,6 +86,12 @@ export function createEditorViewController(
   let props: EditorViewControllerProps | null = null;
 
   let trackedDocumentId: string | null = null;
+  // Documents this controller has written to the session cache. Cached
+  // EditorStates bind to this controller's Compartment instances, so on
+  // destroy we invalidate exactly these — not the whole pane. With per-tab
+  // keep-alive multiple controllers share a pane; pane-level invalidation
+  // would wipe undo/fold state for still-open sibling tabs.
+  const cachedDocumentIds = new Set<string>();
   let documentGeneration = 0;
   let languageLoadGeneration = 0;
   let currentEditorLanguage: EditorLanguageId = "plaintext";
@@ -269,6 +275,7 @@ export function createEditorViewController(
       { paneId: props.paneId, documentId: trackedDocumentId },
       view.state,
     );
+    cachedDocumentIds.add(trackedDocumentId);
   }
 
   function restoreOrCreateState(
@@ -612,9 +619,17 @@ export function createEditorViewController(
     }
     destroyed = true;
     flushScrollTopSave(true);
-    // Cached EditorStates bind to this controller's Compartment instances.
-    // Drop pane sessions on teardown so a remount cannot restore incompatible state.
-    if (props?.paneId) {
+    // Cached EditorStates bind to this controller's Compartment instances, so
+    // every document this controller cached must be invalidated on teardown.
+    // We invalidate by document (not pane) so that per-tab keep-alive sibling
+    // controllers — which may share this pane — keep their undo/fold cache.
+    // The fallback to pane-level invalidation only runs when no document was
+    // ever tracked by this controller.
+    if (cachedDocumentIds.size > 0) {
+      for (const documentId of cachedDocumentIds) {
+        deps.sessionCache.invalidateDocument(documentId);
+      }
+    } else if (props?.paneId) {
       deps.sessionCache.invalidatePane(props.paneId);
     }
     if (scrollSaveTimer) {

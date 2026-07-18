@@ -126,14 +126,14 @@ describe("createEditorWorkbenchRuntime", () => {
     });
   });
 
-  it("rejects late registration from an older generation", () => {
+  it("rejects late registration from an older generation of the same document", () => {
     const runtime = createEditorWorkbenchRuntime({
       getActivePaneId: () => "pane-a",
-      getActiveDocumentId: () => "doc-2",
+      getActiveDocumentId: () => "doc-1",
     });
     dispose = () => runtime.dispose();
 
-    const newer = makeHost({ paneId: "pane-a", documentId: "doc-2", generation: 2 }, "newer");
+    const newer = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 2 }, "newer");
     const older = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }, "older");
     runtime.registerHost(newer);
     const rejected = runtime.registerHost(older);
@@ -147,6 +147,37 @@ describe("createEditorWorkbenchRuntime", () => {
     expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
       ok: true,
       value: "newer",
+    });
+  });
+
+  it("keeps multiple documents in the same pane coexisting (tab keep-alive)", () => {
+    let activeDocumentId: string | null = "doc-1";
+    const runtime = createEditorWorkbenchRuntime({
+      getActivePaneId: () => "pane-a",
+      getActiveDocumentId: () => activeDocumentId,
+    });
+    dispose = () => runtime.dispose();
+
+    const hostOne = makeHost({ paneId: "pane-a", documentId: "doc-1", generation: 1 }, "one");
+    const hostTwo = makeHost({ paneId: "pane-a", documentId: "doc-2", generation: 1 }, "two");
+    runtime.registerHost(hostOne);
+    runtime.registerHost(hostTwo);
+
+    // Both hosts are live; switching the active document surfaces the right one.
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
+      ok: true,
+      value: "one",
+    });
+    activeDocumentId = "doc-2";
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
+      ok: true,
+      value: "two",
+    });
+    // Going back to the first document still works (its host was retained).
+    activeDocumentId = "doc-1";
+    expect(runtime.getActiveHost()?.queries.document.getDocumentContent()).toEqual({
+      ok: true,
+      value: "one",
     });
   });
 

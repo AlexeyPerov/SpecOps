@@ -82,11 +82,17 @@ async function readSessionSnapshot(): Promise<AppSessionSnapshot> {
   return createEmptySessionSnapshot();
 }
 
-async function writeSessionSnapshot(current: AppSessionSnapshot): Promise<void> {
+async function writeSessionSnapshot(
+  current: AppSessionSnapshot,
+  options?: { skipBackup?: boolean },
+): Promise<void> {
   const sessionPath = await getSessionPath(SESSION_FILE);
-  const backupPath = await getSessionPath(SESSION_BACKUP_FILE);
   const content = encodeSessionSnapshot(current);
   await writeTextFile(sessionPath, content);
+  if (options?.skipBackup) {
+    return;
+  }
+  const backupPath = await getSessionPath(SESSION_BACKUP_FILE);
   await writeTextFile(backupPath, content);
 }
 
@@ -264,11 +270,14 @@ export async function getLastActiveWindowId(): Promise<string | null> {
   }
 }
 
-export async function updateLastActiveWindow(windowId: string): Promise<void> {
+export async function updateLastActiveWindow(
+  windowId: string,
+  options?: { skipBackup?: boolean },
+): Promise<void> {
   await withSessionWriteLock(async () => {
     const current = await readSessionSnapshot();
     current.lastActiveWindowId = windowId;
     current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current);
+    await writeSessionSnapshot(current, options);
   });
 }

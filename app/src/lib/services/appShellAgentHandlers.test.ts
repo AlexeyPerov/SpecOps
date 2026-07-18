@@ -22,6 +22,7 @@ vi.mock("./opencodeSidecarEnsure", () => ({
 vi.mock("../state/appState", () => ({
   appState: {
     getActiveSession: vi.fn(),
+    getWorkspaceRoot: vi.fn(() => "/repo/ws-a"),
     setLastActiveSessionId: vi.fn(),
     openOrFocusSessionTab: vi.fn(),
     selectTab: vi.fn(),
@@ -99,6 +100,7 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
       windowBounds: null,
       lastActiveSessionId: "agent-a",
     });
+    appStateMock.getWorkspaceRoot.mockReturnValue("/repo/ws-a");
 
     chatStoreMock.loadWorkspaceSessions.mockResolvedValue(undefined);
     chatStoreMock.mergeSessionDrafts.mockImplementation(() => {});
@@ -116,6 +118,63 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
     chatStoreMock.getActiveThreadSnapshot.mockReturnValue(null);
     chatStoreMock.getSessionLink.mockReturnValue(null);
     chatStoreMock.getActiveWorkspaceRoot.mockReturnValue("/repo/ws-a");
+  });
+
+  it("does not mutate another context when session loading finishes after switching away", async () => {
+    let finishLoading!: () => void;
+    chatStoreMock.loadWorkspaceSessions.mockImplementation(
+      () => new Promise<void>((resolve) => {
+        finishLoading = resolve;
+      }),
+    );
+    chatStoreMock.getSessionIndex.mockReturnValue([
+      makeEntry({ id: "agent-a", opencodeSessionId: "sess-a" }),
+    ]);
+
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+    const restore = handlers.restoreWorkspaceSession("/repo/ws-a");
+    await vi.waitFor(() => expect(chatStoreMock.loadWorkspaceSessions).toHaveBeenCalled());
+
+    appStateMock.getWorkspaceRoot.mockReturnValue(null);
+    finishLoading();
+    await restore;
+
+    expect(chatStoreMock.mergeSessionDrafts).not.toHaveBeenCalled();
+    expect(chatStoreMock.setActiveSessionId).not.toHaveBeenCalled();
+    expect(appStateMock.setLastActiveSessionId).not.toHaveBeenCalled();
+    expect(appStateMock.openOrFocusSessionTab).not.toHaveBeenCalled();
+  });
+
+  it("does not focus a restored session when hydration finishes after switching away", async () => {
+    let finishHydration!: () => void;
+    chatStoreMock.getSessionIndex.mockReturnValue([
+      makeEntry({ id: "agent-a", opencodeSessionId: "sess-a" }),
+    ]);
+    chatStoreMock.ensureSessionThreadHydrated.mockImplementation(
+      () => new Promise<null>((resolve) => {
+        finishHydration = () => resolve(null);
+      }),
+    );
+
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+    const restore = handlers.restoreWorkspaceSession("/repo/ws-a");
+    await vi.waitFor(() => expect(chatStoreMock.ensureSessionThreadHydrated).toHaveBeenCalled());
+
+    appStateMock.getWorkspaceRoot.mockReturnValue(null);
+    finishHydration();
+    await restore;
+
+    expect(chatStoreMock.setActiveSessionId).not.toHaveBeenCalled();
+    expect(appStateMock.setLastActiveSessionId).not.toHaveBeenCalled();
+    expect(appStateMock.openOrFocusSessionTab).not.toHaveBeenCalled();
   });
 
   it("clears stale session mappings during workspace restore", async () => {

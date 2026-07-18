@@ -83,13 +83,18 @@ function createStateStore() {
     rawUpdate(mutator);
   }
 
+  // Maintain the latest state via a single long-lived subscription instead of
+  // doing a subscribe/unsubscribe dance on every getSnapshot() call. Svelte's
+  // subscribe walks every subscriber on register/unregister, and getSnapshot()
+  // is called from many hot-path handlers (cursor moves, tab lookups, pane
+  // queries), so the per-call overhead was non-trivial.
+  let currentSnapshot: AppDomainState = initialState;
+  subscribe((state) => {
+    currentSnapshot = state;
+  });
+
   function getSnapshot(): AppDomainState {
-    let snapshot = initialState;
-    const un = subscribe((state) => {
-      snapshot = state;
-    });
-    un();
-    return snapshot;
+    return currentSnapshot;
   }
 
   const settingsSlice = createSettingsSlice(update);

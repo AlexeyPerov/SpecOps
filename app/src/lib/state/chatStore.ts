@@ -26,11 +26,13 @@ import type {
   ChatStoreState,
   ChatThreadRuntimeState,
   ChatTurnError,
+  SessionIndexEntry,
   SwitchThreadModelResult,
   SwitchThreadConnectionResult,
   SwitchThreadProviderResult,
   WorkspaceSessionsState,
 } from "./chatStore/types";
+import type { ChatMessage } from "../domain/chat";
 import { normalizeWorkspaceThreadsForScope } from "../ai/providers/threadScopeNormalization";
 import {
   deriveSessionSubtitleFromThread,
@@ -73,13 +75,16 @@ function createChatStore() {
     current: null,
   };
 
+  // Maintain the latest state via a single long-lived subscription instead of
+  // doing a subscribe/unsubscribe dance on every getSnapshot() call. See
+  // appState.ts for rationale.
+  let currentSnapshot: ChatStoreState = initialState;
+  subscribe((state) => {
+    currentSnapshot = state;
+  });
+
   function getSnapshot(): ChatStoreState {
-    let snapshot = initialState;
-    const un = subscribe((state) => {
-      snapshot = state;
-    });
-    un();
-    return snapshot;
+    return currentSnapshot;
   }
 
   function getActiveChatScopeKey(): ChatScopeKey | null {
@@ -159,7 +164,16 @@ function createChatStore() {
 
 export const chatStore = createChatStore();
 
-export const chatMessages = derived(chatStore, ($chatStore) => activeThread($chatStore)?.messages ?? []);
+// Stable empty-container references so downstream `derived`/`$derived` consumers
+// can short-circuit on referential equality when nothing has actually changed.
+// Without these, every chatStore emit allocates new `[]`/`{}`/`Map` values even
+// when the underlying data is identical, forcing cascading recomputations
+// (e.g. during per-token chat-streaming emits).
+const EMPTY_MESSAGES: ChatMessage[] = [];
+const EMPTY_SESSION_INDEX: SessionIndexEntry[] = [];
+const EMPTY_SUBTITLE_MAP = new Map<string, ChatSessionSubtitle>();
+
+export const chatMessages = derived(chatStore, ($chatStore) => activeThread($chatStore)?.messages ?? EMPTY_MESSAGES);
 export const chatMetadata = derived(chatStore, ($chatStore) => activeThread($chatStore)?.metadata ?? null);
 export const chatHasThread = derived(chatStore, ($chatStore) => activeThread($chatStore) !== null);
 export const chatIsEmpty = derived(
@@ -186,53 +200,103 @@ export const chatCanRetryLastTurn = derived(chatRuntimeState, ($runtime) =>
 export const chatSessionIndex = derived(chatStore, ($chatStore) => {
   const scopeKey = $chatStore.activeChatScopeKey;
   if (!scopeKey) {
-    return [];
+    return EMPTY_SESSION_INDEX;
   }
-  return [...($chatStore.workspaces[scopeKey]?.sessionIndex ?? [])];
+  const sessionIndex = $chatStore.workspaces[scopeKey]?.sessionIndex;
+  if (!sessionIndex || sessionIndex.length === 0) {
+    return EMPTY_SESSION_INDEX;
+  }
+  return [...sessionIndex];
 });
 
+export type ChatSessionRuntimeMap = {
+  scopeKey: ChatScopeKey | null;
+  runtimeBySessionId: Record<string, ChatThreadRuntimeState>;
+};
+
 /**
- * M6-T4/T5 — active workspace's per-session runtime map, plus its scope key, so
- * the notification observer effect can react to session-state transitions for
- * every session (not only the selected one). Returns a fresh object reference on
- * every chatStore change so `$derived` re-runs downstream.
+ * Active workspace's per-session runtime map, plus its scope key, so the
+ * notification observer effect can react to session-state transitions for every
+ * session (not only the selected one).
+ *
+ * Referential stability: the wrapper object is only re-allocated when the
+ * underlying `runtimeBySessionId` map reference actually changes (or the scope
+ * key changes). This lets downstream `$derived`/`$effect` consumers skip work
+ * on unrelated chatStore emits (e.g. per-token streaming in a different
+ * session). The workspace slice replaces the map instance on real runtime
+ * transitions, so a `!==` reference check is sufficient.
  */
-export const chatActiveRuntimeBySessionId = derived(
-  chatStore,
-  ($chatStore) => {
-    const scopeKey = $chatStore.activeChatScopeKey;
-    if (!scopeKey) {
-      return { scopeKey: null, runtimeBySessionId: {} };
+let lastRuntimeInput: { scopeKey: ChatScopeKey | null; mapRef: unknown } | null = null;
+let lastRuntimeOutput: ChatSessionRuntimeMap = {
+  scopeKey: null,
+  runtimeBySessionId: {},
+};
+export const chatActiveRuntimeBySessionId = derived(chatStore, ($chatStore) => {
+  const scopeKey = $chatStore.activeChatScopeKey;
+  if (!scopeKey) {
+    if (lastRuntimeInput?.scopeKey === null && lastRuntimeInput !== null) {
+      return lastRuntimeOutput;
     }
-    const runtimeBySessionId = $chatStore.workspaces[scopeKey]?.runtimeBySessionId ?? {};
-    return { scopeKey, runtimeBySessionId: { ...runtimeBySessionId } };
-  },
-);
+    lastRuntimeInput = { scopeKey: null, mapRef: null };
+    lastRuntimeOutput = { scopeKey: null, runtimeBySessionId: {} };
+    return lastRuntimeOutput;
+  }
+  const runtimeBySessionId = $chatStore.workspaces[scopeKey]?.runtimeBySessionId ?? {};
+  if (
+    lastRuntimeInput &&
+    lastRuntimeInput.scopeKey === scopeKey &&
+    lastRuntimeInput.mapRef === runtimeBySessionId
+  ) {
+    return lastRuntimeOutput;
+  }
+  lastRuntimeInput = { scopeKey, mapRef: runtimeBySessionId };
+  lastRuntimeOutput = { scopeKey, runtimeBySessionId: { ...runtimeBySessionId } };
+  return lastRuntimeOutput;
+});
 
 export type ChatSessionSubtitle = {
   display: string;
   full: string;
 };
 
+/**
+ * Per-session subtitle map for the active workspace. Referential stability:
+ * the `Map` is only rebuilt when the underlying `threadsBySessionId` reference
+ * changes (the workspace slice replaces it on real thread mutations). Returns a
+ * stable empty `Map` when there is no active scope/workspace.
+ */
+let lastSubtitleInput: { scopeKey: ChatScopeKey | null; threadsRef: unknown } | null = null;
+let lastSubtitleOutput: Map<string, ChatSessionSubtitle> = EMPTY_SUBTITLE_MAP;
 export const chatSessionSubtitleById = derived(chatStore, ($chatStore) => {
   const scopeKey = $chatStore.activeChatScopeKey;
   if (!scopeKey) {
-    return new Map<string, ChatSessionSubtitle>();
+    return EMPTY_SUBTITLE_MAP;
   }
 
   const workspace = $chatStore.workspaces[scopeKey];
   if (!workspace) {
-    return new Map<string, ChatSessionSubtitle>();
+    return EMPTY_SUBTITLE_MAP;
+  }
+
+  const threadsRef = workspace.threadsBySessionId;
+  if (
+    lastSubtitleInput &&
+    lastSubtitleInput.scopeKey === scopeKey &&
+    lastSubtitleInput.threadsRef === threadsRef
+  ) {
+    return lastSubtitleOutput;
   }
 
   const subtitles = new Map<string, ChatSessionSubtitle>();
-  for (const [sessionId, thread] of Object.entries(workspace.threadsBySessionId)) {
+  for (const [sessionId, thread] of Object.entries(threadsRef)) {
     const display = deriveSessionSubtitleFromThread(thread);
     const full = thread ? firstAssistantMessageContent(thread.messages) : null;
     if (display && full) {
       subtitles.set(sessionId, { display, full });
     }
   }
+  lastSubtitleInput = { scopeKey, threadsRef };
+  lastSubtitleOutput = subtitles;
   return subtitles;
 });
 

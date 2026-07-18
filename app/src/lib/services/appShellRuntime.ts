@@ -161,58 +161,66 @@ export async function startAppShellRuntime(
     }
   }
 
-  const unlistenTransfer = await listen<{ filePath: string | null; content: string; title: string }>(
-    WINDOW_EVENT_TRANSFER_TAB,
-    async (event) => {
-      const documentId = appState.openTransferredTab(event.payload);
-      if (event.payload.filePath && documentId) {
-        await claimOpenFile(event.payload.filePath, windowId, documentId);
-        await initializeDocumentDiskState(documentId, event.payload.filePath);
-      }
-    },
-  );
-  cleanupCallbacks.push(unlistenTransfer);
-
-  const unlistenMergeTab = await listen<MergeTabPayload>(WINDOW_EVENT_MERGE_TAB, async (event) => {
-    const { sourceWindowId, sourceTabId, ...payload } = event.payload;
-    try {
-      const documentId = appState.openTransferredTab(payload);
-      if (payload.filePath && documentId) {
-        await claimOpenFile(payload.filePath, windowId, documentId);
-        await initializeDocumentDiskState(documentId, payload.filePath);
-      }
-      await emitTo<MergeTabAckPayload>(sourceWindowId, WINDOW_EVENT_MERGE_TAB_ACK, {
-        sourceTabId,
-        ok: true,
-      });
-    } catch (error: unknown) {
+  // Register all independent window/dock listeners concurrently. Each `listen`
+  // is a separate IPC round-trip; awaiting them sequentially added 5 hops to
+  // the startup critical path. None of these handlers depend on each other, so
+  // they can be set up in parallel.
+  const registerListenersStartedAt = nowMs();
+  const listenerUnlistens = await Promise.all([
+    listen<{ filePath: string | null; content: string; title: string }>(
+      WINDOW_EVENT_TRANSFER_TAB,
+      async (event) => {
+        const documentId = appState.openTransferredTab(event.payload);
+        if (event.payload.filePath && documentId) {
+          await claimOpenFile(event.payload.filePath, windowId, documentId);
+          await initializeDocumentDiskState(documentId, event.payload.filePath);
+        }
+      },
+    ),
+    listen<MergeTabPayload>(WINDOW_EVENT_MERGE_TAB, async (event) => {
+      const { sourceWindowId, sourceTabId, ...payload } = event.payload;
       try {
+        const documentId = appState.openTransferredTab(payload);
+        if (payload.filePath && documentId) {
+          await claimOpenFile(payload.filePath, windowId, documentId);
+          await initializeDocumentDiskState(documentId, payload.filePath);
+        }
         await emitTo<MergeTabAckPayload>(sourceWindowId, WINDOW_EVENT_MERGE_TAB_ACK, {
           sourceTabId,
-          ok: false,
-          error: getErrorMessage(error, "Failed to open transferred tab."),
+          ok: true,
         });
-      } catch {
-        // Source will time out and keep the tab.
+      } catch (error: unknown) {
+        try {
+          await emitTo<MergeTabAckPayload>(sourceWindowId, WINDOW_EVENT_MERGE_TAB_ACK, {
+            sourceTabId,
+            ok: false,
+            error: getErrorMessage(error, "Failed to open transferred tab."),
+          });
+        } catch {
+          // Source will time out and keep the tab.
+        }
       }
-    }
+    }),
+    listen(DOCK_NEW_WINDOW_EVENT, () => {
+      options.runCommand("app.newWindow");
+    }),
+    listen<{ path: string }>(DOCK_OPEN_RECENT_EVENT, (event) => {
+      queueOpenRecentPath(event.payload.path);
+    }),
+    listen(DOCK_CLEAR_RECENT_EVENT, () => {
+      options.runCommand("file.clearRecentFiles");
+    }),
+  ]);
+  for (const un of listenerUnlistens) {
+    cleanupCallbacks.push(un);
+  }
+  await logPerfTiming("register window listeners", {
+    metric: "startup.phase",
+    label: "register-listeners",
+    durationMs: elapsedMs(registerListenersStartedAt),
+    windowId,
+    ok: true,
   });
-  cleanupCallbacks.push(unlistenMergeTab);
-
-  const unlistenDockNewWindow = await listen(DOCK_NEW_WINDOW_EVENT, () => {
-    options.runCommand("app.newWindow");
-  });
-  cleanupCallbacks.push(unlistenDockNewWindow);
-
-  const unlistenDockOpenRecent = await listen<{ path: string }>(DOCK_OPEN_RECENT_EVENT, (event) => {
-    queueOpenRecentPath(event.payload.path);
-  });
-  cleanupCallbacks.push(unlistenDockOpenRecent);
-
-  const unlistenDockClearRecent = await listen(DOCK_CLEAR_RECENT_EVENT, () => {
-    options.runCommand("file.clearRecentFiles");
-  });
-  cleanupCallbacks.push(unlistenDockClearRecent);
 
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
 
@@ -258,10 +266,19 @@ export async function startAppShellRuntime(
   }
 
   await runSafeStartupPhase("load-settings", async () => {
-    const persistedSettings = await loadPersistedSettings();
-    const connectionApiKeys = await loadConnectionApiKeys();
     setThemeSaveErrorNotifier(options.notify);
-    await appState.loadTheme();
+    // These five reads touch independent files (settings.json,
+    // provider-secrets.json, theme.json, the console-height preference, and the
+    // workspace hide-from-rail preferences). Running them concurrently cuts
+    // several serialized IPC/disk hops off the startup critical path. The
+    // synchronous apply steps below depend on their results, so they run after.
+    const [persistedSettings, connectionApiKeys, , consoleHeightPx] = await Promise.all([
+      loadPersistedSettings(),
+      loadConnectionApiKeys(),
+      appState.loadTheme(),
+      readConsoleHeightPreference(),
+      loadWorkspacePreferences().catch(() => {}),
+    ]);
     // Subscribe to OS color-scheme changes so `auto` theme mode re-resolves
     // when the user flips their system light/dark preference. Only re-applies
     // when mode === "auto" (dark/light are pinned); see applySystemPrefersDark.
@@ -303,11 +320,8 @@ export async function startAppShellRuntime(
       appState.setConnectionApiKey(connectionId, apiKey);
     }
     initializeChatProviders();
-    options.setConsoleHeightPx(await readConsoleHeightPreference());
+    options.setConsoleHeightPx(consoleHeightPx);
     await initializeLogging();
-    // Load global workspace hide-from-rail preferences (decision 9). Best-effort;
-    // failure leaves an empty preference set (no workspaces hidden).
-    await loadWorkspacePreferences().catch(() => {});
   });
 
   const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
@@ -319,7 +333,11 @@ export async function startAppShellRuntime(
   cleanupCallbacks.push(unlistenDragDrop);
 
   await runSafeStartupPhase("mark-window-active", async () => {
-    await markWindowActive(windowId);
+    // Skip the backup write here: this informational update is immediately
+    // followed by restore-session, and the next real session mutation (e.g.
+    // a tab change) will re-write both session.json and its backup. Skipping
+    // the second write on the launch path removes one disk hop before ready.
+    await markWindowActive(windowId, { skipBackup: true });
   });
 
   await runSafeStartupPhase("restore-session", async () => {
@@ -360,7 +378,26 @@ export async function startAppShellRuntime(
     chatStore.setActiveWorkspaceRoot(null);
   });
 
-  await runSafeStartupPhase("initialize-app-menu", async () => {
+  // Flip the readiness gate as soon as the session and chat scope are restored.
+  // The ~17 $effect blocks in +page.svelte are gated on `runtimeReady` and
+  // self-guard against missing workspace root, so they can start running now.
+  // The three phases below are visible-UI or correctness-deferrable work that
+  // does not need to block the readiness gate:
+  //   - initialize-app-menu: builds the macOS app menu (not needed for the
+  //     webview to be interactive).
+  //   - load-project-tree: also performed by syncProjectTreeWatcherEffect once
+  //     runtimeReady flips, so this phase is best-effort prewarming.
+  //   - startup-external-checks: stats open files for external changes; only
+  //     the active tab is priority and the user cannot interact yet, so
+  //     deferring it briefly is safe (it runs in the background here).
+  runtimeReady = true;
+  await logPerfTiming("app shell runtime ready", {
+    metric: "startup.total",
+    durationMs: elapsedMs(startupStartedAt),
+    windowId,
+  });
+
+  void runSafeStartupPhase("initialize-app-menu", async () => {
     if (!shouldInitializeAppMenu(windowId)) {
       return;
     }
@@ -369,15 +406,13 @@ export async function startAppShellRuntime(
     await refreshDockMenu(recentFiles);
   });
 
-  await runSafeStartupPhase("load-project-tree", async () => {
+  void runSafeStartupPhase("load-project-tree", async () => {
     await options.loadProjectTreeRoot();
   });
 
-  await runSafeStartupPhase("startup-external-checks", async () => {
+  void runSafeStartupPhase("startup-external-checks", async () => {
     await runStartupExternalChecks();
   });
-
-  runtimeReady = true;
 
   await runSafeStartupPhase("sync-file-watcher", async () => {
     await syncExternalFileWatcher(appState.getSnapshot());

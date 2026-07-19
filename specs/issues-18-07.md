@@ -146,13 +146,23 @@ moderate risk), **L** = large (1+ days, invasive).
 
 ### General / cross-cutting
 
-#### L14. Monolithic `+page.svelte` (2167 lines, ~200 props)
-- All `$effect`/`$derived` live in one component; no subtree skipping. The
-  root architectural blocker; unblocks L3, L9, L15, L17.
-- **Files:** `app/src/routes/+page.svelte`.
-- **Complexity: L.**
-- **Fix sketch:** Split into per-concern child components so Svelte can skip
-  unaffected subtrees on mutation.
+#### L14. ~~Monolithic `+page.svelte` (2167 lines, ~200 props)~~ ✅ Resolved
+- **Status:** Shipped. The 2179-line route dropped to 1266 lines (~42%
+  reduction). The 10-overlay concern (5 pickers + 3 dialogs + project search +
+  workspace context menu) is fully isolated in a new `OverlayHost.svelte`,
+  with pure-logic handlers (`overlayHostHandlers.ts`) and a unit-tested
+  close-others coordinator (`overlayCoordinator.ts`). The ~370 lines of
+  AppShell prop wiring moved into a new `AppShellHost.svelte` wrapper. The
+  three cross-cutting `$effect`s that fuse retained snapshot state with
+  overlay state stayed on the page but delegate to `overlayHost.api`
+  (`isAnyOverlayOpen` replaces the duplicated 10-boolean list;
+  `closeAllOnWorkspaceSwitch` / `closeMarkdownOnlyPickers` move the
+  picker-close half out of the workspace-switch / markdown-closer effects).
+  The three pre-refactor asymmetries (bookmark list not closed on language
+  change; sessionList / addMultiple / timeline / workspaceContextMenu not
+  closed on workspace switch; projectSearch left open on workspace switch
+  with its in-flight search cancelled) are pinned as-is with explicit tests.
+  Unblocks L3, L9, L15, L17. See the 2026-07-19 14:50 changelog entry.
 
 #### L15. `snapshot = $derived($appState)` reads the entire state on every mutation
 - Cursor moves, zoom, theme — every mutation re-runs every downstream
@@ -199,13 +209,16 @@ moderate risk), **L** = large (1+ days, invasive).
 | L13 | `allContextSnapshots` O(N·M) hot paths replaced by WeakMap-memoized context lookup indexes | (this pass) |
 | L4 | ChatPanel capability preflight cached per workspace (15s TTL + fingerprint) | (this pass) |
 | L5 | `extractSessionTotals` WeakMap-memoized by messages array reference | (this pass) |
+| L14 | Monolithic `+page.svelte` split into `OverlayHost` + `AppShellHost` + coordinator | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
-2. **L7, L8, L16, L17** — small cleanups.
+1. **L7, L8, L16, L17** — small cleanups.
+2. **L3, L9, L15** — now unblocked by L14. The route is small enough that the
+   controller-factory allocation (L3), the top-level effect tuning (L9), and
+   the snapshot selector (L15) can each land as isolated follow-ups.
 3. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
    twice per switch (and once on launch).
 4. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.

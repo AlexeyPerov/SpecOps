@@ -1,5 +1,64 @@
 # Changelog
 
+## 2026-07-19 14:50 — Performance: decompose monolithic +page.svelte (L14)
+
+Split the 2179-line `+page.svelte` into per-concern child components so Svelte
+can skip unaffected subtrees on mutation. The route dropped from 2179 → 1266
+lines (~42% reduction); the 10-overlay concern is fully isolated and the
+AppShell prop wiring lives in a dedicated wrapper.
+
+- **New `OverlayHost.svelte`** (`app/src/lib/components/overlays/`): owns the
+  state, `$derived` rankings, the landmark-picker-tick effect, and the cross-
+  overlay close-others coordinator for all 10 overlays that used to live inline
+  in the route — 5 pickers (QuickOpen, CommandPalette, HeadingJump,
+  BookmarkList, SnippetInsert), 3 dialogs (SessionList, AddMultiple,
+  SessionTimeline), plus Project Search and the Workspace context menu. The
+  5 pickers + 3 dialogs render directly from the host (they were previously
+  rendered inside `AppShell.svelte`); Project Search and the Workspace context
+  menu stay rendered by `AppShell` (they need its bottom-panel container and
+  the `bind:this` element ref) but their state is exposed upward through
+  `$derived` snapshots. The host exposes an imperative `OverlayHostApi`
+  (`isAnyOverlayOpen`, `openOverlay`, `closeOverlay`,
+  `closeAllOnWorkspaceSwitch`, `closeMarkdownOnlyPickers`,
+  `openWorkspaceContextMenu`, `refreshQuickOpenCatalog`) captured via
+  `bind:this` so the page's three cross-cutting `$effect`s can drive
+  coordination without the host reading the full app snapshot.
+- **New `overlayHostHandlers.ts`**: pure-logic handler factory
+  (`createOverlayHostHandlers`) for project search (run / replace / open-
+  result), the per-picker select handlers, the session-list refresh flow, and
+  the add-multiple-workspaces modal flow. Mirrors the existing
+  `appShellXxxHandlers(deps)` pattern. Unit-tested.
+- **New `overlayCoordinator.ts`**: pure-logic close-others matrix
+  (`createOverlayCoordinator`) extracted from the component so the cross-
+  overlay rules are unit-testable without mounting. Pins the three pre-refactor
+  asymmetries (bookmark list NOT closed on language change; sessionList /
+  addMultiple / timeline / workspaceContextMenu NOT closed on workspace
+  switch; projectSearch left open on workspace switch with its in-flight search
+  cancelled) with explicit tests documenting each.
+- **New `AppShellHost.svelte`**: the thin core-wiring wrapper that receives
+  the snapshot-derived values + handler bundles + overlay host from the page
+  and renders `<AppShell>` with the ~370 lines of prop blocks that used to be
+  inline in the route template. DOM-element `bind:this` refs
+  (`shellMainRowEl`, `editorShellEl`, `editorPaneEl`, `workspaceContextMenuEl`)
+  are `$bindable` so the page's layout observers and effects still see them.
+- **Refactored `+page.svelte`**: keeps the core reactive graph (snapshot-
+  derived values, the 19 `$effect`s with no overlay deps, `onMount` /
+  `onDestroy`, layout DOM refs) and the three cross-cutting `$effect`s that
+  fuse retained snapshot state with overlay state — those delegate to
+  `overlayHost.api` (`isAnyOverlayOpen` replaces the duplicated 10-boolean
+  list; `closeAllOnWorkspaceSwitch` and `closeMarkdownOnlyPickers` move the
+  picker-close half out of the workspace-switch / markdown-closer effects).
+  The two duplicate overlay-open lists at `+page.svelte:431-441` and
+  `1094-1104` collapse into one.
+
+New tests: `overlayCoordinator.test.ts` (20) and `overlayHostHandlers.test.ts`
+(14). Full suite: 3028 passing. svelte-check clean apart from a pre-existing
+unrelated `ChatPanel.svelte` duplicate-identifier error.
+
+This unblocks L3 (controller factories at module-eval), L9 (top-level effects),
+L15 (snapshot selector), and L17 (runtime listen() guard), which can now land
+incrementally against a much smaller route component.
+
 ## 2026-07-19 13:10 — Performance: cut chat-tab remount cost (L4 + L5)
 
 Chat tabs still tear down `ChatPanel` on every switch (only editor tabs are

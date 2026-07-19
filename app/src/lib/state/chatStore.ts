@@ -206,7 +206,7 @@ export const chatSessionIndex = derived(chatStore, ($chatStore) => {
   if (!sessionIndex || sessionIndex.length === 0) {
     return EMPTY_SESSION_INDEX;
   }
-  return [...sessionIndex];
+  return sessionIndex;
 });
 
 export type ChatSessionRuntimeMap = {

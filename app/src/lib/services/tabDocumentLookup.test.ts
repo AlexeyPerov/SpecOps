@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DocumentState } from "../domain/contracts";
 import { createFileTab, createSessionTab, createViewTab } from "../domain/contracts";
 import { isTabVisibleInStrip } from "./implicitDraftTab";
-import { buildDocumentByIdMap, tabDocumentFromMap } from "./tabDocumentLookup";
+import { buildDocumentByIdMap, getDocumentByIdMap, tabDocumentFromMap } from "./tabDocumentLookup";
 
 function doc(overrides: Partial<DocumentState> = {}): DocumentState {
   return {
@@ -77,6 +77,11 @@ describe("tabDocumentLookup", () => {
       return tabDoc.fileMissing ? `${tabDoc.title} (missing)` : tabDoc.title;
     });
     expect(labels).toEqual(["notes.md", "Untitled", "gone.txt (missing)", "session"]);
+  });
+
+  it("getDocumentByIdMap reuses the same Map for the same documents array", () => {
+    const documents = [doc({ id: "doc-1" }), doc({ id: "doc-2" })];
+    expect(getDocumentByIdMap(documents)).toBe(getDocumentByIdMap(documents));
   });
 
   it("map lookup stays correct for large tab counts where find would scan repeatedly", () => {

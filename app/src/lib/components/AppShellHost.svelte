@@ -306,10 +306,159 @@
     persistHeight: () => overlayHost?.persistProjectSearchHeight(),
   };
 
-  // The editor pane element ref is bound upward through AppShell's
-  // `onActivePaneElement` callback.
-  function handleActivePaneElement(element: HTMLElement): void {
-    editorPaneEl = element;
+  function handleProjectSearchHeightCommit(): void {
+    ps.persistHeight();
+  }
+
+  function handleProjectSearchHeightChange(heightPx: number): void {
+    ps.setHeight(heightPx);
+  }
+
+  function handleProjectSearchClose(): void {
+    ps.close();
+  }
+
+  function handleProjectSearchQueryChange(value: string): void {
+    ps.setQuery(value);
+  }
+
+  function handleProjectSearchReplaceChange(value: string): void {
+    ps.setReplace(value);
+  }
+
+  function handleProjectSearchCaseSensitiveChange(value: boolean): void {
+    ps.setCaseSensitive(value);
+  }
+
+  function handleProjectSearchWholeWordChange(value: boolean): void {
+    ps.setWholeWord(value);
+  }
+
+  function handleProjectSearchRegexChange(value: boolean): void {
+    ps.setRegex(value);
+  }
+
+  function handleProjectSearchRun(): void {
+    void ps.run();
+  }
+
+  function handleProjectSearchReplaceAll(): void {
+    void ps.replaceAll();
+  }
+
+  function handleProjectSearchOpenResult(path: string, line: number): void {
+    void ps.openResult(path, line);
+  }
+
+  function handleRequestCloseWorkspace(workspaceId: ContextId, x: number, y: number): void {
+    workspaceContextMenuActions.open(workspaceId, x, y);
+  }
+
+  function handleReorderWorkspaces(fromIndex: number, toIndex: number): void {
+    appState.reorderWorkspaces(fromIndex, toIndex);
+  }
+
+  function handleSessionsShareSession(sessionId: string): void {
+    void agentHandlers.handleShareSession(sessionId);
+  }
+
+  function handleOpenSessionList(): void {
+    overlayHost?.api.openOverlay("sessionList");
+  }
+
+  function handleProjectTreeGetPaneElements(): ReturnType<typeof collectPaneElementsFromDom> {
+    return collectPaneElementsFromDom();
+  }
+
+  function handleProjectTreeFileDropPaneChange(paneId: string | null): void {
+    onFileDropPaneChange(paneId);
+  }
+
+  function handleOpenAddMultipleWorkspaces(): void {
+    overlayHost?.api.openOverlay("addMultiple");
+  }
+
+  function handleMoveTabBetweenPanes(
+    fromPaneId: string,
+    tabId: string,
+    toPaneId: string,
+    toIndex: number,
+  ): void {
+    appState.moveTabBetweenPanes(fromPaneId, tabId, toPaneId, toIndex);
+  }
+
+  function handleOpenFileInPane(filePath: string, paneId: string): void {
+    void projectTreeHandlers.handleOpenProjectTreeFileInPane(filePath, paneId);
+  }
+
+  function handleEditorFileDropPaneChange(paneId: string | null): void {
+    onFileDropPaneChange(paneId);
+  }
+
+  function handleForkSession(messageId?: string): void {
+    const sessionId = chatStore.getActiveSessionId();
+    if (sessionId) {
+      void agentHandlers.handleForkSession(sessionId, messageId);
+    }
+  }
+
+  function handleRevertSession(messageId?: string): void {
+    const sessionId = chatStore.getActiveSessionId();
+    if (sessionId) {
+      void agentHandlers.handleRevertSession(sessionId, messageId);
+    }
+  }
+
+  function handleUnrevertSession(): void {
+    const sessionId = chatStore.getActiveSessionId();
+    if (sessionId) {
+      void agentHandlers.handleUnrevertSession(sessionId);
+    }
+  }
+
+  function handleShareActiveSession(): void {
+    const sessionId = chatStore.getActiveSessionId();
+    if (sessionId) {
+      void agentHandlers.handleShareSession(sessionId);
+    }
+  }
+
+  function handleUnshareActiveSession(): void {
+    const sessionId = chatStore.getActiveSessionId();
+    if (sessionId) {
+      void agentHandlers.handleUnshareSession(sessionId);
+    }
+  }
+
+  function handleSummarizeActiveSession(): void {
+    const sessionId = chatStore.getActiveSessionId();
+    if (sessionId) {
+      void agentHandlers.handleSummarizeSession(sessionId);
+    }
+  }
+
+  function handleExportActiveSession(): void {
+    const sessionId = chatStore.getActiveSessionId();
+    if (sessionId) {
+      void agentHandlers.handleExportSession(sessionId);
+    }
+  }
+
+  function handleWorkspaceContextMenuMoveUp(): void {
+    workspaceContextMenuActions.move("up");
+  }
+
+  function handleWorkspaceContextMenuMoveDown(): void {
+    workspaceContextMenuActions.move("down");
+  }
+
+  function handleOpenTimeline(): void {
+    overlayHost?.api.openOverlay("timeline");
+  }
+
+  function handleDiffPanelOpenFile(filePath: string): void {
+    const resolved = resolveWorkspaceRelativePath(activeWorkspaceRoot, filePath);
+    void projectTreeHandlers.handleOpenProjectTreeFile(resolved);
   }
 </script>
 
@@ -335,23 +484,17 @@
     results: psPanel.results,
     running: psPanel.running,
     status: psPanel.status,
-    onHeightCommit: () => ps.persistHeight(),
-    onHeightChange: (heightPx: number) => ps.setHeight(heightPx),
-    onClose: () => ps.close(),
-    onQueryChange: (value: string) => ps.setQuery(value),
-    onReplaceValueChange: (value: string) => ps.setReplace(value),
-    onCaseSensitiveChange: (value: boolean) => ps.setCaseSensitive(value),
-    onWholeWordChange: (value: boolean) => ps.setWholeWord(value),
-    onRegexChange: (value: boolean) => ps.setRegex(value),
-    onRunSearch: () => {
-      void ps.run();
-    },
-    onReplaceAll: () => {
-      void ps.replaceAll();
-    },
-    onOpenResult: (path: string, line: number) => {
-      void ps.openResult(path, line);
-    },
+    onHeightCommit: handleProjectSearchHeightCommit,
+    onHeightChange: handleProjectSearchHeightChange,
+    onClose: handleProjectSearchClose,
+    onQueryChange: handleProjectSearchQueryChange,
+    onReplaceValueChange: handleProjectSearchReplaceChange,
+    onCaseSensitiveChange: handleProjectSearchCaseSensitiveChange,
+    onWholeWordChange: handleProjectSearchWholeWordChange,
+    onRegexChange: handleProjectSearchRegexChange,
+    onRunSearch: handleProjectSearchRun,
+    onReplaceAll: handleProjectSearchReplaceAll,
+    onOpenResult: handleProjectSearchOpenResult,
   }}
   activityRail={{
     show: true,
@@ -366,10 +509,8 @@
     onAddWorkspace: handleAddWorkspace,
     onOpenWorkspaceManager: handleOpenWorkspaceManager,
     onPanelWidthChange: layoutHandlers.handleActivityRailWidthChange,
-    onRequestCloseWorkspace: (workspaceId: ContextId, x: number, y: number) =>
-      overlayHost?.api.openWorkspaceContextMenu(workspaceId, x, y),
-    onReorderWorkspaces: (fromIndex: number, toIndex: number) =>
-      appState.reorderWorkspaces(fromIndex, toIndex),
+    onRequestCloseWorkspace: handleRequestCloseWorkspace,
+    onReorderWorkspaces: handleReorderWorkspaces,
     onSelectNotepadTab: handleSelectNotepadTab,
   }}
   sessionsSidebar={{
@@ -385,11 +526,9 @@
     onNewSession: agentHandlers.handleNewSession,
     onDeleteSession: agentHandlers.handleDeleteSession,
     onRenameSession: agentHandlers.handleRenameSession,
-    onShareSession: (sessionId: string) => {
-      void agentHandlers.handleShareSession(sessionId);
-    },
+    onShareSession: handleSessionsShareSession,
     onExportSession: agentHandlers.handleExportSession,
-    onOpenSessions: () => overlayHost?.api.openOverlay("sessionList"),
+    onOpenSessions: handleOpenSessionList,
   }}
   projectTree={{
     workspaceRoot: activeWorkspaceRoot,
@@ -409,9 +548,9 @@
     onNewFolder: projectTreeHandlers.handleNewProjectFolder,
     onRenameEntry: projectTreeHandlers.handleRenameProjectEntry,
     onDeleteEntry: projectTreeHandlers.handleDeleteProjectEntry,
-    getPaneElements: () => collectPaneElementsFromDom(),
+    getPaneElements: handleProjectTreeGetPaneElements,
     onOpenFileInPane: projectTreeHandlers.handleOpenProjectTreeFileInPane,
-    onFileDropPaneChange: (paneId: string | null) => onFileDropPaneChange(paneId),
+    onFileDropPaneChange: handleProjectTreeFileDropPaneChange,
     notify,
   }}
   editor={{
@@ -426,7 +565,7 @@
       activeContextId,
       hiddenRootPaths: workspaceHiddenRootPaths,
       onAddWorkspace: handleAddWorkspace,
-      onAddMultiple: () => overlayHost?.api.openOverlay("addMultiple"),
+      onAddMultiple: handleOpenAddMultipleWorkspaces,
       onSelectWorkspace: handleSelectContext,
       onOpenWorkspaceSettings: handleOpenWorkspaceSettingsFromManager,
       onOpenVersionControl: handleOpenVersionControlFromManager,
@@ -461,16 +600,10 @@
     onSelectTab: appState.selectTab,
     onClosePane: appState.closeEditorPane,
     onFocusPane: appState.setActiveEditorPane,
-    onMoveTabBetweenPanes: (
-      fromPaneId: string,
-      tabId: string,
-      toPaneId: string,
-      toIndex: number,
-    ) => appState.moveTabBetweenPanes(fromPaneId, tabId, toPaneId, toIndex),
-    onOpenFileInPane: (filePath: string, paneId: string) =>
-      projectTreeHandlers.handleOpenProjectTreeFileInPane(filePath, paneId),
+    onMoveTabBetweenPanes: handleMoveTabBetweenPanes,
+    onOpenFileInPane: handleOpenFileInPane,
     fileDropTargetPaneId,
-    onFileDropPaneChange: (paneId: string | null) => onFileDropPaneChange(paneId),
+    onFileDropPaneChange: handleEditorFileDropPaneChange,
     onRunCommand: commandHandlers.runCommand,
     onConfirmLargeFile: editorHandlers.handleConfirmLargeFile,
     onMarkdownViewModeChange: layoutHandlers.setMarkdownViewMode,
@@ -479,48 +612,13 @@
     onDeleteSessionFromChat: agentHandlers.handleDeleteSessionFromChat,
     onGoToLine: editorHandlers.runGoToLine,
     notify,
-    onForkSession: (messageId?: string) => {
-      const sessionId = chatStore.getActiveSessionId();
-      if (sessionId) {
-        void agentHandlers.handleForkSession(sessionId, messageId);
-      }
-    },
-    onRevertSession: (messageId?: string) => {
-      const sessionId = chatStore.getActiveSessionId();
-      if (sessionId) {
-        void agentHandlers.handleRevertSession(sessionId, messageId);
-      }
-    },
-    onUnrevertSession: () => {
-      const sessionId = chatStore.getActiveSessionId();
-      if (sessionId) {
-        void agentHandlers.handleUnrevertSession(sessionId);
-      }
-    },
-    onShareSession: () => {
-      const sessionId = chatStore.getActiveSessionId();
-      if (sessionId) {
-        void agentHandlers.handleShareSession(sessionId);
-      }
-    },
-    onUnshareSession: () => {
-      const sessionId = chatStore.getActiveSessionId();
-      if (sessionId) {
-        void agentHandlers.handleUnshareSession(sessionId);
-      }
-    },
-    onSummarizeSession: () => {
-      const sessionId = chatStore.getActiveSessionId();
-      if (sessionId) {
-        void agentHandlers.handleSummarizeSession(sessionId);
-      }
-    },
-    onExportSession: () => {
-      const sessionId = chatStore.getActiveSessionId();
-      if (sessionId) {
-        void agentHandlers.handleExportSession(sessionId);
-      }
-    },
+    onForkSession: handleForkSession,
+    onRevertSession: handleRevertSession,
+    onUnrevertSession: handleUnrevertSession,
+    onShareSession: handleShareActiveSession,
+    onUnshareSession: handleUnshareActiveSession,
+    onSummarizeSession: handleSummarizeActiveSession,
+    onExportSession: handleExportActiveSession,
     activeShareUrl,
     activeParentSessionId,
   }}
@@ -535,14 +633,15 @@
     menu: workspaceContextMenuMenu,
     menuIndex: workspaceContextMenuActions.menuIndex(),
     workspaceCount: workspaces.length,
-    onMoveUp: () => workspaceContextMenuActions.move("up"),
-    onMoveDown: () => workspaceContextMenuActions.move("down"),
+    onMoveUp: handleWorkspaceContextMenuMoveUp,
+    onMoveDown: handleWorkspaceContextMenuMoveDown,
     onOpenSettings: workspaceContextMenuActions.openSettings,
     onOpenVersionControl: workspaceContextMenuActions.openVersionControl,
     onCloseWorkspace: workspaceContextMenuActions.closeWorkspace,
   }}
   overlays={{
     notify,
+    onOpenTimeline: handleOpenTimeline,
   }}
   todoPanel={{
     open: todoPanelOpen && Boolean(activeWorkspaceRoot) && Boolean(activeOpencodeSessionId),
@@ -555,12 +654,7 @@
     workspaceRootPath: activeWorkspaceRoot,
     sessionId: activeOpencodeSessionId,
     onToggle: onToggleDiffPanel,
-    onOpenFile: (filePath: string) => {
-      // OpenCode diff paths are workspace-relative; resolve to an absolute
-      // path before opening (matches the project-tree path convention).
-      const resolved = resolveWorkspaceRelativePath(activeWorkspaceRoot, filePath);
-      void projectTreeHandlers.handleOpenProjectTreeFile(resolved);
-    },
+    onOpenFile: handleDiffPanelOpenFile,
   }}
   timelineDialog={undefined}
   quickOpen={undefined}

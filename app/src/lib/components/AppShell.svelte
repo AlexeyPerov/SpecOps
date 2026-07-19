@@ -15,7 +15,6 @@
   import AddMultipleWorkspacesModal from "./AddMultipleWorkspacesModal.svelte";
   import PermissionPrompt from "./PermissionPrompt.svelte";
   import QuestionPrompt from "./QuestionPrompt.svelte";
-  import TabBar from "./TabBar.svelte";
   import EditorGridLayout from "./EditorGridLayout.svelte";
   import EditorPaneContent from "./EditorPaneContent.svelte";
   import ActivityRail from "./ActivityRail.svelte";
@@ -41,6 +40,14 @@
   } from "../domain/contracts";
   import { appState } from "../state/appState";
   import "../styles/app-shell.css";
+
+  const EMPTY_HIDDEN_ROOT_PATHS = new Set<string>();
+
+  function noop(): void {}
+  function noopContextId(_workspaceId: ContextId): void {}
+  function emptyPaneElements(): import("./paneDropTargets").PaneDropTargetElements[] {
+    return [];
+  }
 
   export interface AppShellActivityRailProps {
     show: boolean;
@@ -272,6 +279,12 @@
 
   export interface AppShellOverlayProps {
     notify: (message: string) => void;
+    /**
+     * Open the session timeline dialog. Used when the dialog itself is hosted
+     * outside AppShell (OverlayHost) so `timelineDialog` can stay undefined
+     * without losing the ChatPanel entry point.
+     */
+    onOpenTimeline?: () => void;
   }
 
   export interface AppShellSessionListPanelProps {
@@ -432,6 +445,56 @@
   const gitIntegrationEnabled = $derived($appState.settings.gitIntegration.enabled);
   const activePaneId = $derived(editor.session.editorLayout.activePaneId);
 
+  function handleActivePaneElement(element: HTMLElement | null): void {
+    editorPaneEl = element;
+  }
+
+  function handleToggleTodoPanel(): void {
+    todoPanel?.onToggle?.();
+  }
+
+  function handleToggleDiffPanel(): void {
+    diffPanel?.onToggle?.();
+  }
+
+  function handleDeleteSession(sessionId: string): void {
+    void sessionsSidebar.onDeleteSession(sessionId);
+  }
+
+  function handleProjectMoveEntry(sourcePath: string, destDirPath: string): void {
+    void projectTree.onMoveEntry(sourcePath, destDirPath);
+  }
+
+  function handleProjectNewFile(parent: string): void {
+    void projectTree.onNewFile(parent);
+  }
+
+  function handleProjectNewFolder(parent: string): void {
+    void projectTree.onNewFolder(parent);
+  }
+
+  function handleProjectRenameEntry(
+    path: string,
+    kind: ProjectTreeNode["kind"],
+  ): void {
+    void projectTree.onRenameEntry(path, kind);
+  }
+
+  function handleProjectDeleteEntry(
+    path: string,
+    kind: ProjectTreeNode["kind"],
+  ): void {
+    void projectTree.onDeleteEntry(path, kind);
+  }
+
+  function handleProjectGetPaneElements(): import("./paneDropTargets").PaneDropTargetElements[] {
+    return projectTree.getPaneElements?.() ?? [];
+  }
+
+  function handleProjectFileDropPaneChange(paneId: string | null): void {
+    projectTree.onFileDropPaneChange?.(paneId);
+  }
+
   // Status-bar overflow (U3.4): when the bar is too narrow, the secondary
   // document/view clusters collapse into a popover listing the hidden values
   // — replacing the old responsive hide-breakpoints that silently dropped info.
@@ -547,7 +610,7 @@
         onPanelWidthChange={sessionsSidebar.onPanelWidthChange}
         onSelectSession={sessionsSidebar.onSelectSession}
         onNewSession={sessionsSidebar.onNewSession}
-        onDeleteSession={(sessionId) => void sessionsSidebar.onDeleteSession(sessionId)}
+        onDeleteSession={handleDeleteSession}
         onRenameSession={sessionsSidebar.onRenameSession}
         onShareSession={sessionsSidebar.onShareSession}
         onExportSession={sessionsSidebar.onExportSession}
@@ -581,12 +644,12 @@
               workspaceRootPath={editor.workspaceRootPath ?? null}
               workspaceManagerWorkspaces={editor.workspaceManager?.workspaces ?? []}
               workspaceManagerActiveContextId={editor.workspaceManager?.activeContextId ?? "notepad"}
-              workspaceManagerHiddenRootPaths={editor.workspaceManager?.hiddenRootPaths ?? new Set()}
-              onWorkspaceManagerAddWorkspace={editor.workspaceManager?.onAddWorkspace ?? (() => {})}
-              onWorkspaceManagerAddMultiple={editor.workspaceManager?.onAddMultiple ?? (() => {})}
-              onWorkspaceManagerSelectWorkspace={editor.workspaceManager?.onSelectWorkspace ?? (() => {})}
-              onWorkspaceManagerOpenSettings={editor.workspaceManager?.onOpenWorkspaceSettings ?? (() => {})}
-              onWorkspaceManagerOpenVersionControl={editor.workspaceManager?.onOpenVersionControl ?? (() => {})}
+              workspaceManagerHiddenRootPaths={editor.workspaceManager?.hiddenRootPaths ?? EMPTY_HIDDEN_ROOT_PATHS}
+              onWorkspaceManagerAddWorkspace={editor.workspaceManager?.onAddWorkspace ?? noop}
+              onWorkspaceManagerAddMultiple={editor.workspaceManager?.onAddMultiple ?? noop}
+              onWorkspaceManagerSelectWorkspace={editor.workspaceManager?.onSelectWorkspace ?? noopContextId}
+              onWorkspaceManagerOpenSettings={editor.workspaceManager?.onOpenWorkspaceSettings ?? noopContextId}
+              onWorkspaceManagerOpenVersionControl={editor.workspaceManager?.onOpenVersionControl ?? noopContextId}
               previewMode={editor.previewMode}
               wrapLines={editor.wrapLines}
               zoomPercent={editor.zoomPercent}
@@ -599,9 +662,7 @@
               maxOpenWithoutConfirmBytes={editor.maxOpenWithoutConfirmBytes}
               canFitMarkdownSplit={editor.canFitMarkdownSplit}
               windowId={editor.currentWindowId}
-              onActivePaneElement={(element) => {
-                editorPaneEl = element;
-              }}
+              onActivePaneElement={handleActivePaneElement}
               onConfirmLargeFile={editor.onConfirmLargeFile}
               onMarkdownViewModeChange={editor.onMarkdownViewModeChange}
               onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
@@ -618,11 +679,11 @@
               activeParentSessionId={editor.activeParentSessionId}
               canToggleTodoPanel={Boolean(todoPanel)}
               todoPanelOpen={Boolean(todoPanel?.open)}
-              onToggleTodoPanel={() => todoPanel?.onToggle?.()}
+              onToggleTodoPanel={handleToggleTodoPanel}
               canToggleDiffPanel={Boolean(diffPanel)}
               diffPanelOpen={Boolean(diffPanel?.open)}
-              onToggleDiffPanel={() => diffPanel?.onToggle?.()}
-              onOpenTimeline={timelineDialog?.onToggle}
+              onToggleDiffPanel={handleToggleDiffPanel}
+              onOpenTimeline={timelineDialog?.onToggle ?? overlays.onOpenTimeline}
               onGoToLine={editor.onGoToLine}
               notify={editor.notify}
             />
@@ -647,14 +708,14 @@
         onPanelWidthChange={projectTree.onPanelWidthChange}
         onToggleDirectory={projectTree.onToggleDirectory}
         onOpenFile={projectTree.onOpenFile}
-        onMoveEntry={(sourcePath, destDirPath) => projectTree.onMoveEntry(sourcePath, destDirPath)}
-        onNewFile={(parent) => void projectTree.onNewFile(parent)}
-        onNewFolder={(parent) => void projectTree.onNewFolder(parent)}
-        onRenameEntry={(path, kind) => void projectTree.onRenameEntry(path, kind)}
-        onDeleteEntry={(path, kind) => void projectTree.onDeleteEntry(path, kind)}
-        getPaneElements={projectTree.getPaneElements ?? (() => [])}
+        onMoveEntry={handleProjectMoveEntry}
+        onNewFile={handleProjectNewFile}
+        onNewFolder={handleProjectNewFolder}
+        onRenameEntry={handleProjectRenameEntry}
+        onDeleteEntry={handleProjectDeleteEntry}
+        getPaneElements={projectTree.getPaneElements ? handleProjectGetPaneElements : emptyPaneElements}
         onOpenFileInPane={projectTree.onOpenFileInPane ?? null}
-        onFileDropPaneChange={(paneId) => projectTree.onFileDropPaneChange?.(paneId)}
+        onFileDropPaneChange={handleProjectFileDropPaneChange}
         notify={projectTree.notify}
       />
     {/if}

@@ -78,21 +78,17 @@ moderate risk), **L** = large (1+ days, invasive).
 - **Fix sketch:** Memoize `markdownHtml` by document content reference; lift
   the doc-by-id map so the find is not repeated.
 
-#### L7. `buildDocumentByIdMap` rebuilt in two components per emit
-- `EditorPaneView` and `TabBar` each independently rebuild a `Map` from the
-  documents array on every appState emit.
-- **Files:** `app/src/lib/components/EditorPaneView.svelte:82`,
-  `app/src/lib/components/TabBar.svelte:99`.
-- **Complexity: S.**
-- **Fix sketch:** Memoize at the parent, or derive one shared map and pass it
-  down.
+#### L7. ~~`buildDocumentByIdMap` rebuilt in two components per emit~~ ✅ Resolved
+- **Status:** Shipped. `getDocumentByIdMap` WeakMap-memoizes the id → document
+  map by the documents array identity, so every pane + nested TabBar shares one
+  Map per documents ref instead of rebuilding 2P times per emit. See the
+  2026-07-19 changelog entry.
 
-#### L8. `TabBar` rebuilds visible-tab filter, drag-preview, and sessionTitle Map per emit
-- `visibleTabs`, `tabsForRender`, and `sessionTitleById` all recompute on every
-  store update.
-- **Files:** `app/src/lib/components/TabBar.svelte:99-206`.
-- **Complexity: S-M.**
-- **Fix sketch:** Memoize each derivation on its input references.
+#### L8. ~~`TabBar` rebuilds visible-tab filter, drag-preview, and sessionTitle Map per emit~~ ✅ Resolved
+- **Status:** Shipped. `filterVisibleTabs` and `getSessionTitleById` memoize on
+  input array + map identities; `chatSessionIndex` returns the stored index by
+  reference. `EditorPaneView` reuses the same visible-tab helper for its count.
+  See the 2026-07-19 changelog entry.
 
 #### L9. ~5 top-level `$effect`s fire on every tab select
 - Hydration, persistence, sidecar, access monitor, and tool-close effects all
@@ -172,19 +168,18 @@ moderate risk), **L** = large (1+ days, invasive).
 - **Fix sketch:** Replace with fine-grained selectors (`$derived($appState.contexts.activeContextId)` etc.) so downstream derivations do not all
   re-run on unrelated mutations.
 
-#### L16. Inline arrow-function props get new identities each render
-- Defeats child prop-equality short-circuits in AppShell's children.
-- **Files:** `app/src/lib/components/AppShell.svelte:577-632`.
-- **Complexity: M.**
-- **Fix sketch:** Hoist stable callbacks (Svelte has no `useCallback`; use
-  module-scope or `$derived`-bound handlers).
+#### L16. ~~Inline arrow-function props get new identities each render~~ ✅ Resolved
+- **Status:** Shipped. AppShell, AppShellHost, and `+page.svelte` hoist stable
+  script-level handlers (module-scope noops for fallbacks) so EditorPaneContent
+  and siblings no longer receive fresh callback identities each flush — notably
+  `onActivePaneElement`, which had been re-firing an `$effect`. See the
+  2026-07-19 changelog entry.
 
-#### L17. Potential subscription-leak surface from runtime `listen()` registrations
-- If `startAppShellRuntime` ever re-runs (HMR / future re-init path), listeners
-  would accumulate. Not currently leaking in production.
-- **Files:** `app/src/lib/services/appShellRuntime.ts:164-469`.
-- **Complexity: S.**
-- **Fix sketch:** Guard against double-init.
+#### L17. ~~Potential subscription-leak surface from runtime `listen()` registrations~~ ✅ Resolved
+- **Status:** Shipped. `startAppShellRuntime` disposes any prior active cleanup
+  before registering new listeners; `setupAppShellMount` uses a `disposed` flag
+  so a late-resolving start cleans up immediately instead of leaking. See the
+  2026-07-19 changelog entry.
 
 ---
 
@@ -210,17 +205,20 @@ moderate risk), **L** = large (1+ days, invasive).
 | L4 | ChatPanel capability preflight cached per workspace (15s TTL + fingerprint) | (this pass) |
 | L5 | `extractSessionTotals` WeakMap-memoized by messages array reference | (this pass) |
 | L14 | Monolithic `+page.svelte` split into `OverlayHost` + `AppShellHost` + coordinator | (this pass) |
+| L7 | `getDocumentByIdMap` WeakMap shares document map across panes/TabBar | (this pass) |
+| L8 | TabBar visible-tab + session-title derivations memoized on input refs | (this pass) |
+| L16 | AppShell/AppShellHost/+page inline callback props hoisted to stable handlers | (this pass) |
+| L17 | App-shell runtime double-init guard + mount race cleanup | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L7, L8, L16, L17** — small cleanups.
-2. **L3, L9, L15** — now unblocked by L14. The route is small enough that the
+1. **L3, L9, L15** — now unblocked by L14. The route is small enough that the
    controller-factory allocation (L3), the top-level effect tuning (L9), and
    the snapshot selector (L15) can each land as isolated follow-ups.
-3. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
+2. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
    twice per switch (and once on launch).
-4. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.
-5. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
+3. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.
+4. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
    render contract or a fallback-then-rehighlight path.

@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-07-19 17:10 — Performance: L7, L8, L16, L17 tab/runtime cleanups
+
+Small performance cleanups from the 2026-07-18 audit:
+
+- **L7 — shared document map:** `getDocumentByIdMap` WeakMap-memoizes the id →
+  document map by array identity. Every editor pane and its nested TabBar now
+  share one Map per documents ref instead of rebuilding 2× per pane on each
+  app-state emit.
+- **L8 — TabBar derivations:** `filterVisibleTabs` and `getSessionTitleById`
+  memoize on open-tabs / document-map / session-index identities;
+  `chatSessionIndex` returns the stored index by reference (like
+  `chatMessages`). `EditorPaneView` reuses the same visible-tab helper for its
+  empty-strip count.
+- **L16 — stable callback props:** AppShell, AppShellHost, and `+page.svelte`
+  hoist script-level handlers and module-scope noops so EditorPaneContent no
+  longer receives fresh arrow identities each flush — notably
+  `onActivePaneElement`, which had been re-firing an `$effect`.
+- **L17 — runtime double-init guard:** `startAppShellRuntime` disposes any prior
+  active cleanup before registering listeners; `setupAppShellMount` uses a
+  `disposed` flag so a late-resolving start cleans up immediately instead of
+  leaking on unmount/HMR.
+
+## 2026-07-19 16:05 — Fix L14 OverlayHost regressions
+
+Follow-up to the L14 split (`6015e7c`). Four behavioral regressions from the
+extraction:
+
+- **Workspace context menu**: `getMenu` / `setMenu` had been stubbed to
+  no-ops after state moved into `OverlayHost`, so Move Up/Down stayed
+  disabled (`menuIndex` always `-1`), Escape / click-outside dismiss never
+  registered, and post-action `close()` could not clear the menu. The page
+  now bridges those hooks to `overlayHost.api`, and `AppShellHost` opens the
+  menu through `workspaceContextMenuActions.open` so dismiss listeners attach.
+- **Session timeline**: `timelineDialog={undefined}` also dropped
+  `onOpenTimeline`, so ChatPanel never exposed the timeline entry point while
+  `OverlayHost` owned the dialog. `AppShellOverlayProps` now carries an
+  optional `onOpenTimeline` wired to `openOverlay("timeline")`.
+- **Project-search result jump**: `openProjectSearchResult` had replaced
+  `await tick()` with `requestAnimationFrame`, racing the editor mount.
+  Restored the Svelte `tick()` boundary.
+- **Editor-tools sync effect**: the page `$effect` called
+  `api.isAnyOverlayOpen()` and discarded the boolean, which did not
+  reliably subscribe to overlay `$state`. It now reads the host's exported
+  `$derived` `anyOverlayOpen`.
+
 ## 2026-07-19 14:50 — Performance: decompose monolithic +page.svelte (L14)
 
 Split the 2179-line `+page.svelte` into per-concern child components so Svelte

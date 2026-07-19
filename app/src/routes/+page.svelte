@@ -331,13 +331,13 @@
 
   $effect(() => {
     // Close editor tools on pane/document/context changes or when any overlay
-    // opens. L14: the per-overlay booleans moved into OverlayHost; this effect
-    // now reads the aggregated `isAnyOverlayOpen()` so the inline boolean list
-    // no longer needs to be hand-maintained in two places.
+    // opens. L14: read the host's reactive `anyOverlayOpen` derived (not the
+    // imperative `api.isAnyOverlayOpen()` call) so flipping an overlay boolean
+    // re-runs this effect.
     activeContextId;
     session.editorLayout.activePaneId;
     getSessionActiveTab(session);
-    overlayHost?.api.isAnyOverlayOpen();
+    void overlayHost?.anyOverlayOpen;
     editorTools.syncToEnvironment();
   });
 
@@ -557,6 +557,18 @@
     toggleConsole();
   }
 
+  function handleToggleTodoPanel(): void {
+    todoPanelOpen = !todoPanelOpen;
+  }
+
+  function handleToggleDiffPanel(): void {
+    diffPanelOpen = !diffPanelOpen;
+  }
+
+  function handleFileDropPaneChange(paneId: string | null): void {
+    fileDropTargetPaneId = paneId;
+  }
+
   $effect(() => {
     if (!snapshot.settings.logSettings.canOpenLogsPanel && consoleOpen) {
       consoleOpen = false;
@@ -570,13 +582,16 @@
   });
 
   const workspaceContextMenuActions = createWorkspaceContextMenuActions({
-    // L14: the menu's open state is owned by OverlayHost. The action callbacks
-    // (move / close / openSettings) still live here because they orchestrate
-    // workspaces and view tabs — only the menu-state plumbing moved.
-    getMenu: () => null,
-    setMenu: () => {
-      // no-op — OverlayHost owns the menu state via its openWorkspaceContextMenu
-      // api; the action callback `open` now forwards there (see below).
+    // L14: the menu's open state is owned by OverlayHost. Bridge get/set so
+    // dismiss listeners (Escape / pointer-outside), menuIndex, move, and
+    // close-after-action still work through the existing controller.
+    getMenu: () => overlayHost?.workspaceContextMenu ?? null,
+    setMenu: (menu) => {
+      if (menu) {
+        overlayHost?.api.openWorkspaceContextMenu(menu.workspaceId, menu.x, menu.y);
+      } else {
+        overlayHost?.api.closeOverlay("workspaceContextMenu");
+      }
     },
     getMenuEl: () => workspaceContextMenuEl,
     getWorkspaceIds: () => workspaces.map((workspace) => workspace.id),
@@ -896,7 +911,7 @@
   // longer Markdown-editable, and close host-scoped pickers when document
   // identity changes (stale host data). L14: delegates to the host's
   // closeMarkdownOnlyPickers (bookmark list NOT closed — pre-existing
-  // asymmetry, pinned by a test in OverlayHost.test.ts).
+  // asymmetry, pinned by overlayCoordinator.test.ts).
   $effect(() => {
     const docId = activeDocument?.id;
     const language = activeDocument?.language;
@@ -1163,15 +1178,9 @@
   canFitMarkdownSplit={canFitMarkdownSplit()}
   {todoPanelOpen}
   {diffPanelOpen}
-  onToggleTodoPanel={() => {
-    todoPanelOpen = !todoPanelOpen;
-  }}
-  onToggleDiffPanel={() => {
-    diffPanelOpen = !diffPanelOpen;
-  }}
-  onFileDropPaneChange={(paneId) => {
-    fileDropTargetPaneId = paneId;
-  }}
+  onToggleTodoPanel={handleToggleTodoPanel}
+  onToggleDiffPanel={handleToggleDiffPanel}
+  onFileDropPaneChange={handleFileDropPaneChange}
   agentHandlers={agentHandlers}
   editorHandlers={editorHandlers}
   fileHandlers={fileHandlers}

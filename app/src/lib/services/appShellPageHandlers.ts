@@ -336,6 +336,7 @@ export interface AppShellMountDeps {
 export function setupAppShellMount(deps: AppShellMountDeps): () => void {
   let runtimeCleanup: (() => void) | undefined;
   let resizeObserverDisconnected = false;
+  let disposed = false;
 
   deps.registerSettingsDialogOpener((tab) => {
     appState.openOrFocusViewTab("settings", tab);
@@ -359,6 +360,10 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       setConsoleHeightPx: deps.setConsoleHeightPx,
     })
     .then((runtimeHandle) => {
+      if (disposed) {
+        runtimeHandle.cleanup();
+        return;
+      }
       runtimeCleanup = runtimeHandle.cleanup;
       deps.setRuntimeSyncExternalFileWatcher(runtimeHandle.syncExternalFileWatcher);
       deps.setCurrentWindowId(runtimeHandle.windowId);
@@ -416,6 +421,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
   window.addEventListener("beforeunload", onPageHide);
 
   return () => {
+    disposed = true;
     deps.registerSettingsDialogOpener(null);
     resizeObserverDisconnected = true;
     deps.cleanup.disconnectLayoutObserver();

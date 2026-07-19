@@ -2,8 +2,10 @@
   import { onDestroy } from "svelte";
   import TabBar from "./TabBar.svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
-  import { isTabVisibleInStrip } from "../services/implicitDraftTab";
-  import { buildDocumentByIdMap, tabDocumentFromMap } from "../services/tabDocumentLookup";
+  import {
+    filterVisibleTabs,
+    getDocumentByIdMap,
+  } from "../services/tabDocumentLookup";
   import type { PaneDropTargetElements } from "./paneDropTargets";
 
   /**
@@ -84,15 +86,9 @@
   const isTabDropTarget = $derived(tabDropTargetPaneId === paneId);
   const isFileDropTarget = $derived(fileDropTargetPaneId === paneId);
 
-  const documentById = $derived(buildDocumentByIdMap(documents));
+  const documentById = $derived(getDocumentByIdMap(documents));
 
-  function tabDocument(tab: TabState): DocumentState | undefined {
-    return tabDocumentFromMap(tab, documentById);
-  }
-
-  const visibleTabCount = $derived(
-    tabs.filter((tab) => isTabVisibleInStrip(tab, tabDocument(tab))).length,
-  );
+  const visibleTabCount = $derived(filterVisibleTabs(tabs, documentById).length);
 
   // Register/unregister our elements with the parent grid so the cross-pane
   // hit-tester can see this pane's strip + body. Re-registers when the bound

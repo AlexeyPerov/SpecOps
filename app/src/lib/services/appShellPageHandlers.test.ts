@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { tick } from "svelte";
 import { getSessionTabs, isFileTab, type ExternalFilesSettings } from "../domain/contracts";
 import { appState } from "../state/appState";
-import { createAppShellEditorHandlers, createAppShellFileHandlers } from "./appShellPageHandlers";
+import {
+  createAppShellEditorHandlers,
+  createAppShellFileHandlers,
+  setupAppShellMount,
+  type AppShellMountDeps,
+} from "./appShellPageHandlers";
 import { checkDocumentIfDeferred } from "./externalFileChanges";
 import { confirmLargeFileOpen } from "./openFileGate";
 import { openActivePath } from "./openActivePath";
@@ -32,6 +38,42 @@ const defaultExternalFiles: ExternalFilesSettings = {
   maxOpenWithoutConfirmBytes: 1024 * 1024,
 };
 
+function createMountDeps(
+  overrides: Partial<AppShellMountDeps> = {},
+): AppShellMountDeps {
+  return {
+    registerSettingsDialogOpener: vi.fn(),
+    setupLayoutObserver: vi.fn(),
+    startAppShellRuntime: vi.fn(async () => ({
+      cleanup: vi.fn(),
+      syncExternalFileWatcher: vi.fn(async () => {}),
+      windowId: "main",
+    })),
+    notify: vi.fn(),
+    runCommand: vi.fn(),
+    openAndActivatePath: vi.fn(async () => {}),
+    consumeOpenedPaths: vi.fn(async () => {}),
+    restoreWorkspaceSession: vi.fn(async () => {}),
+    loadProjectTreeRoot: vi.fn(async () => {}),
+    notifyProjectTreeFilesystemChange: vi.fn(),
+    setConsoleHeightPx: vi.fn(),
+    setRuntimeSyncExternalFileWatcher: vi.fn(),
+    setCurrentWindowId: vi.fn(),
+    setLastSelectedTabId: vi.fn(),
+    setRuntimeReady: vi.fn(),
+    routePathToLastActiveWindow: vi.fn(async () => {}),
+    getCurrentWebviewWindowLabel: vi.fn(() => "main"),
+    handleKeydown: vi.fn(),
+    stopChatAccessMonitor: vi.fn(),
+    flushSessionBeforeUnload: vi.fn(),
+    cleanup: {
+      disconnectLayoutObserver: vi.fn(),
+      clearUntitledTitleDebounceTimer: vi.fn(),
+    },
+    ...overrides,
+  };
+}
+
 function activeFileTabIdByPath(path: string): string {
   const tab = getSessionTabs(appState.getActiveSession()).find(
     (entry) =>
@@ -44,6 +86,46 @@ function activeFileTabIdByPath(path: string): string {
   }
   return tab.id;
 }
+
+describe("setupAppShellMount", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("cleans up runtime when unmount races the async start", async () => {
+    let resolveStart:
+      | ((handle: {
+          cleanup: () => void;
+          syncExternalFileWatcher: () => Promise<void>;
+          windowId: string;
+        }) => void)
+      | undefined;
+    const startPromise = new Promise<{
+      cleanup: () => void;
+      syncExternalFileWatcher: () => Promise<void>;
+      windowId: string;
+    }>((resolve) => {
+      resolveStart = resolve;
+    });
+    const cleanup = vi.fn();
+    const deps = createMountDeps({
+      startAppShellRuntime: vi.fn(() => startPromise),
+    });
+
+    const unmount = setupAppShellMount(deps);
+    unmount();
+    resolveStart?.({
+      cleanup,
+      syncExternalFileWatcher: vi.fn(async () => {}),
+      windowId: "main",
+    });
+    await startPromise;
+    await tick();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(deps.setRuntimeReady).not.toHaveBeenCalledWith(true);
+  });
+});
 
 describe("createAppShellFileHandlers.onTabActivated", () => {
   beforeEach(() => {

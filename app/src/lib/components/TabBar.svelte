@@ -7,8 +7,12 @@
   import { draftEntryTitleForScope } from "../services/chatSessions";
   import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import { DEFAULT_UNTITLED_TITLE } from "../services/untitledTitle";
-  import { isTabVisibleInStrip } from "../services/implicitDraftTab";
-  import { buildDocumentByIdMap, tabDocumentFromMap } from "../services/tabDocumentLookup";
+  import {
+    filterVisibleTabs,
+    getDocumentByIdMap,
+    getSessionTitleById,
+    tabDocumentFromMap,
+  } from "../services/tabDocumentLookup";
   import TabBarContextMenu from "./TabBarContextMenu.svelte";
   import {
     createTabDragController,
@@ -96,15 +100,13 @@
     }
   });
 
-  const documentById = $derived(buildDocumentByIdMap(documents));
+  const documentById = $derived(getDocumentByIdMap(documents));
 
   function tabDocument(tab: TabState): DocumentState | undefined {
     return tabDocumentFromMap(tab, documentById);
   }
 
-  const visibleTabs = $derived(
-    openTabs.filter((tab) => isTabVisibleInStrip(tab, tabDocument(tab))),
-  );
+  const visibleTabs = $derived(filterVisibleTabs(openTabs, documentById));
 
   const dragController = createTabDragController({
     getOpenTabs: () => visibleTabs,
@@ -137,7 +139,7 @@
     },
   });
 
-  const sessionTitleById = $derived(new Map($chatSessionIndex.map((entry) => [entry.id, entry.title])));
+  const sessionTitleById = $derived(getSessionTitleById($chatSessionIndex));
 
   const draftTabTitle = $derived(
     draftEntryTitleForScope(useChatTerminology ? CHAT_HTTP_CONTEXT_ID : null),

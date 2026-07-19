@@ -107,9 +107,20 @@ export interface AppShellRuntimeHandle {
   syncExternalFileWatcher: (state: AppDomainState) => Promise<void>;
 }
 
+let activeRuntimeCleanup: (() => void) | null = null;
+
+/** Disposes any prior runtime listeners and registers the new cleanup handle. */
+export function handoffAppShellRuntimeCleanup(next: () => void): void {
+  activeRuntimeCleanup?.();
+  activeRuntimeCleanup = next;
+}
+
 export async function startAppShellRuntime(
   options: AppShellRuntimeOptions,
 ): Promise<AppShellRuntimeHandle> {
+  activeRuntimeCleanup?.();
+  activeRuntimeCleanup = null;
+
   const currentWindow = getCurrentWebviewWindow();
   const windowId = currentWindow.label;
   let runtimeReady = false;
@@ -512,23 +523,29 @@ export async function startAppShellRuntime(
     windowId,
   });
 
+  const cleanup = (): void => {
+    runtimeReady = false;
+    for (const unlisten of cleanupCallbacks) {
+      unlisten();
+    }
+    if (windowBoundsTimer) {
+      clearTimeout(windowBoundsTimer);
+      windowBoundsTimer = null;
+    }
+    // Cancel any in-flight background startup external checks so a closing
+    // window does not keep stat-ing files against a tearing-down store.
+    void cancelStartupExternalChecks();
+    void clearFileWatcherPaths();
+    void stopOpencodeSidecar();
+    if (activeRuntimeCleanup === cleanup) {
+      activeRuntimeCleanup = null;
+    }
+  };
+  activeRuntimeCleanup = cleanup;
+
   return {
     windowId,
     syncExternalFileWatcher,
-    cleanup: () => {
-      runtimeReady = false;
-      for (const unlisten of cleanupCallbacks) {
-        unlisten();
-      }
-      if (windowBoundsTimer) {
-        clearTimeout(windowBoundsTimer);
-        windowBoundsTimer = null;
-      }
-      // Cancel any in-flight background startup external checks so a closing
-      // window does not keep stat-ing files against a tearing-down store.
-      void cancelStartupExternalChecks();
-      void clearFileWatcherPaths();
-      void stopOpencodeSidecar();
-    },
+    cleanup,
   };
 }

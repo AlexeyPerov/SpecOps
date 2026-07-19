@@ -53,23 +53,18 @@ moderate risk), **L** = large (1+ days, invasive).
 
 ### Tab switching (chat + per-keystroke)
 
-#### L4. ChatPanel re-runs capability preflight on every mount
-- `runAccessPreflight` + `checkActiveWorkspaceCapabilities` (IPC to the
-  sidecar) re-run from scratch on every chat-tab switch because ChatPanel is
-  destroyed/recreated (only editor tabs are keep-alive today).
-- **Files:** `app/src/lib/components/ChatPanel.svelte:346-371`.
-- **Complexity: M.**
-- **Fix sketch:** Either extend keep-alive to chat tabs (large — needs the
-  same host-coexistence treatment editors got), or cache the preflight result
-  per workspace with a short TTL and invalidate on provider/model change.
+#### L4. ~~ChatPanel re-runs capability preflight on every mount~~ ✅ Resolved
+- **Status:** Shipped. ChatPanel keeps a module-scoped per-workspace preflight
+  cache (15s TTL) keyed by provider/model/settings fingerprint. Tab
+  away-and-back within the TTL restores `supportedModes` synchronously and
+  skips `runAccessPreflight` + capability IPC. Provider/model/settings changes
+  miss the cache even inside the TTL. See the 2026-07-19 13:10 changelog entry.
 
-#### L5. `extractSessionTotals` loops every message on every chat-tab mount
-- Re-walks all assistant messages and step parts on each mount.
-- **Files:** `app/src/lib/components/ChatPanel.svelte:219`,
-  `app/src/lib/ai/chatSteps.ts:234-260`.
-- **Complexity: S-M.**
-- **Fix sketch:** Memoize the totals keyed by the messages array reference —
-  re-derive only when the messages identity actually changes.
+#### L5. ~~`extractSessionTotals` loops every message on every chat-tab mount~~ ✅ Resolved
+- **Status:** Shipped. `extractSessionTotals` is WeakMap-memoized by the
+  messages array reference, so remounts and subtitle derivations that re-read
+  the same thread array skip the assistant/step walk. See the 2026-07-19 13:10
+  changelog entry.
 
 #### L6. `EditorPaneContent` recomputes per-pane doc lookup + markdown HTML per keystroke
 - `paneDocument` does an `Array.find` over documents; `deriveAppShellDocumentView`
@@ -202,15 +197,17 @@ moderate risk), **L** = large (1+ days, invasive).
 | L1 | Bundle code-splitting: lazy pickers + lazy CodeMirror lang packs + manualChunks | (this pass) |
 | L12 | `loadWorkspaceSessions` skips thread-file re-reads when in-memory cache is current | (this pass) |
 | L13 | `allContextSnapshots` O(N·M) hot paths replaced by WeakMap-memoized context lookup indexes | (this pass) |
+| L4 | ChatPanel capability preflight cached per workspace (15s TTL + fingerprint) | (this pass) |
+| L5 | `extractSessionTotals` WeakMap-memoized by messages array reference | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L4** + **L5** — chat-tab mount cost (preflight + totals).
-2. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
-3. **L7, L8, L16, L17** — small cleanups.
-4. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
+1. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
+2. **L7, L8, L16, L17** — small cleanups.
+3. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
    twice per switch (and once on launch).
+4. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.
 5. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
    render contract or a fallback-then-rehighlight path.

@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-19 13:10 — Performance: cut chat-tab remount cost (L4 + L5)
+
+Chat tabs still tear down `ChatPanel` on every switch (only editor tabs are
+keep-alive). Two mount-time walks no longer redo their expensive work when
+inputs are unchanged.
+
+- **Capability preflight is cached across ChatPanel remounts**
+  (`ChatPanel.svelte`): the mount `$effect` that called `runAccessPreflight` +
+  `checkActiveWorkspaceCapabilities` (sidecar IPC) on every visit now consults
+  a module-scoped per-workspace cache with a 15s TTL, keyed by a fingerprint of
+  provider/model/connection/debug/HTTP/selectable-mode inputs. A cache hit
+  restores `supportedModes` synchronously and skips both IPC calls. Provider or
+  settings changes miss the cache even inside the TTL window. Same pattern as
+  the Version Control probe cache.
+- **`extractSessionTotals` is memoized by messages array identity**
+  (`chatSteps.ts`): remounts and sidebar subtitle derivations that re-read the
+  same thread array from the store reuse the prior `ChatSessionTotals` (or
+  `null`) via a WeakMap. Immutable thread updates produce a new array and
+  re-derive as before.
+
 ## 2026-07-19 08:20 — Performance: skip cached workspace session reads + index cross-context lookups (L12 + L13)
 
 Cut two workspace-switch hot paths down to constant time.

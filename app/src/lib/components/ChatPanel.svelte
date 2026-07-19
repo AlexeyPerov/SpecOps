@@ -1,3 +1,67 @@
+<script lang="ts" module>
+  import type { ChatModeId } from "../domain/contracts";
+
+  // Cross-mount preflight cache: ChatPanel is destroyed/recreated on every
+  // chat-tab switch (only editor tabs are keep-alive today), and without this
+  // cache the mount-time $effect re-runs runAccessPreflight + capability IPC
+  // on every visit. Entries are keyed by workspace root + a fingerprint of the
+  // provider/model/settings inputs that invalidate the result; a short TTL
+  // covers tab away-and-back without blocking real provider changes.
+  const PREFLIGHT_CACHE_TTL_MS = 15_000;
+
+  interface CachedChatPreflight {
+    fingerprint: string;
+    supportedModes: ChatModeId[];
+    checkedAt: number;
+  }
+
+  const preflightCacheByRoot = new Map<string, CachedChatPreflight>();
+
+  /** Test/helper: true when `root` has a non-expired cache entry. */
+  export function isChatPreflightCached(root: string): boolean {
+    const entry = preflightCacheByRoot.get(root);
+    if (!entry) {
+      return false;
+    }
+    return Date.now() - entry.checkedAt < PREFLIGHT_CACHE_TTL_MS;
+  }
+
+  /** Test/helper: records a successful preflight for `root`. */
+  export function markChatPreflightCached(
+    root: string,
+    fingerprint: string,
+    supportedModes: ChatModeId[],
+  ): void {
+    preflightCacheByRoot.set(root, {
+      fingerprint,
+      supportedModes: [...supportedModes],
+      checkedAt: Date.now(),
+    });
+  }
+
+  /** Test-only: clears the cross-mount preflight cache. */
+  export function clearChatPreflightCache(): void {
+    preflightCacheByRoot.clear();
+  }
+
+  function readCachedChatPreflight(
+    root: string,
+    fingerprint: string,
+  ): ChatModeId[] | null {
+    const entry = preflightCacheByRoot.get(root);
+    if (!entry) {
+      return null;
+    }
+    if (entry.fingerprint !== fingerprint) {
+      return null;
+    }
+    if (Date.now() - entry.checkedAt >= PREFLIGHT_CACHE_TTL_MS) {
+      return null;
+    }
+    return entry.supportedModes;
+  }
+</script>
+
 <script lang="ts">
   import {
     getProviderErrorRecoveryHint,
@@ -359,6 +423,26 @@
       supportedModes = selectableModeIds;
       return;
     }
+    // Fingerprint the inputs that invalidate supportedModes / access readiness
+    // so a provider/model/settings change never reuses a stale cache entry,
+    // even inside the TTL window.
+    const fingerprint = [
+      activeProvider,
+      activeModel,
+      metadata?.mode ?? "",
+      metadata?.connectionId ?? "",
+      providerSettings.debugChat.enabled ? "1" : "0",
+      providerSettings.debugWorkspace.enabled ? "1" : "0",
+      httpProviderSettings.enabled ? "1" : "0",
+      httpProviderSettings.baseUrl ?? "",
+      httpApiKey.length > 0 ? "key" : "",
+      selectableModeIds.join(","),
+    ].join("\0");
+    const cachedModes = readCachedChatPreflight(root, fingerprint);
+    if (cachedModes) {
+      supportedModes = cachedModes;
+      return;
+    }
     void chatStore.runAccessPreflight().then(async () => {
       const result = await chatStore.checkActiveWorkspaceCapabilities();
       const providerSupportedModes =
@@ -366,7 +450,9 @@
           ? result.capabilities.supportedModes
           : selectableModeIds;
       const allowed = new Set(providerSupportedModes);
-      supportedModes = selectableModeIds.filter((modeId) => allowed.has(modeId));
+      const nextModes = selectableModeIds.filter((modeId) => allowed.has(modeId));
+      supportedModes = nextModes;
+      markChatPreflightCached(root, fingerprint, nextModes);
     });
   });
 

@@ -223,15 +223,34 @@ function zeroTokens(): ChatTokenUsage {
 }
 
 /**
+ * Memoizes {@link extractSessionTotals} by the messages array identity. Chat
+ * tab remounts (and subtitle derivations) re-read the same thread array from
+ * the store; walking every assistant message + step part on each remount is
+ * wasted work when the array reference has not changed.
+ */
+const sessionTotalsByMessages = new WeakMap<
+  readonly ChatMessage[],
+  ChatSessionTotals | null
+>();
+
+/**
  * Sums per-message cost / token totals across a session. Only assistant
  * messages contribute (user/system messages carry no cost). Each message is
  * reduced via `extractMessageStepTotals`, so step-finish / cost-part dedupe is
  * already handled — we never double-count a message's own step finishes against
  * its cumulative `cost` part.
  *
+ * Results are memoized by the messages array reference — re-derive only when
+ * the identity actually changes (immutable thread updates produce a new array).
+ *
  * Returns `null` when no message contributes (so the header renders no total).
  */
 export function extractSessionTotals(messages: readonly ChatMessage[]): ChatSessionTotals | null {
+  const cached = sessionTotalsByMessages.get(messages);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const tokens = zeroTokens();
   let cost = 0;
   let messageCount = 0;
@@ -253,10 +272,10 @@ export function extractSessionTotals(messages: readonly ChatMessage[]): ChatSess
     messageCount += 1;
   }
 
-  if (messageCount === 0) {
-    return null;
-  }
-  return { cost, tokens, messageCount };
+  const result: ChatSessionTotals | null =
+    messageCount === 0 ? null : { cost, tokens, messageCount };
+  sessionTotalsByMessages.set(messages, result);
+  return result;
 }
 
 function resolveStepIndex(part: ChatStepPart, arrival: number): number {

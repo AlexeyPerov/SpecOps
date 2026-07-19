@@ -445,4 +445,27 @@ describe("extractSessionTotals", () => {
       messageCount: 1,
     });
   });
+
+  it("memoizes by the messages array reference", () => {
+    const messages = [
+      assistantMessageWithId("a1", [
+        stepStart(0, "s0"),
+        stepFinish(0, 0.01, tokens(100, 200)),
+      ]),
+    ];
+    const first = extractSessionTotals(messages);
+    const second = extractSessionTotals(messages);
+    expect(second).toBe(first);
+
+    const nextMessages = [...messages];
+    const third = extractSessionTotals(nextMessages);
+    expect(third).toEqual(first);
+    expect(third).not.toBe(first);
+  });
+
+  it("memoizes a null result for empty / non-contributing arrays", () => {
+    const empty: ChatMessage[] = [];
+    expect(extractSessionTotals(empty)).toBeNull();
+    expect(extractSessionTotals(empty)).toBeNull();
+  });
 });

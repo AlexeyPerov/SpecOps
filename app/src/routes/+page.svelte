@@ -1,21 +1,13 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick, untrack } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import AppShellHost from "../lib/components/AppShellHost.svelte";
+  import type { AppShellHostBound } from "../lib/components/appShellHostTypes";
   import OverlayHost from "../lib/components/overlays/OverlayHost.svelte";
   import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import {
     activeViewKindInActivePane,
     isSessionTabActiveInActivePane,
   } from "../lib/components/editorRouting";
-  import { createAppShellAgentHandlers } from "../lib/services/appShellAgentHandlers";
-  import { createAppShellLayoutHandlers } from "../lib/services/appShellLayoutHandlers";
-  import {
-    createAppShellCommandHandlers,
-    createAppShellEditorHandlers,
-    createAppShellFileHandlers,
-    setupAppShellMount,
-  } from "../lib/services/appShellPageHandlers";
-  import { createAppShellProjectTreeHandlers } from "../lib/services/appShellProjectTreeHandlers";
   import { createEditorWorkbenchRuntime } from "../lib/editor/editorWorkbenchRuntime";
   import { setEditorWorkbenchRuntime } from "../lib/editor/editorWorkbenchContext";
   import { createEditorDocumentSessionCache } from "../lib/editor/editorDocumentSessionCache";
@@ -25,7 +17,20 @@
   import { subscribeDocumentDiskReload } from "../lib/editor/editorSessionLifecycle";
   import { appState } from "../lib/state/appState";
   import {
-    collectAllOpenDocumentIds,
+    appActiveContext,
+    appActiveContextId,
+    appActiveDocuments,
+    appActiveSession,
+    appActivityRailWidthPx,
+    appContexts,
+    appEditor,
+    appOpenDocumentIds,
+    appRecentFiles,
+    appSettings,
+    appExternalWatcherSyncKey,
+    deriveQuickOpenRecencyInputs,
+  } from "../lib/state/appStateSelectors";
+  import {
     getActiveContextSnapshot,
   } from "../lib/state/appState/contextHelpers";
   import {
@@ -46,6 +51,7 @@
     getSessionActiveTab,
     getSessionSelectedTabId,
     isFileTab,
+    isSessionTab,
     type ContextId,
     tabDocumentId,
   } from "../lib/domain/contracts";
@@ -55,7 +61,6 @@
     createWorkspaceFileCatalogRegistry,
     type WorkspaceFileCatalogRegistry,
   } from "../lib/services/workspaceFileCatalogRegistry";
-  import { collectPaneElementsFromDom } from "../lib/components/paneDropTargets";
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
@@ -66,7 +71,6 @@
   import { DEFAULT_CONSOLE_HEIGHT_PX } from "../lib/services/consoleTabPrefs";
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
   import { deriveAppShellDocumentView } from "../lib/services/appShellDocumentView";
-  import { createWorkspaceContextMenuActions } from "../lib/services/workspaceContextMenuController";
   import {
     getHiddenRootPaths,
     setHiddenFromRail,
@@ -93,7 +97,6 @@
     syncSettingsPersistenceEffect,
     syncWorkspaceContextEffect,
   } from "../lib/services/appShellEffects";
-  import { externalFileWatcherSyncKey } from "../lib/services/appShellHelpers";
   import { refreshSessionTodos, clearSessionTodos } from "../lib/ai/opencodeTodoStore";
   import { refreshSessionDiffs, clearSessionDiffs } from "../lib/ai/opencodeDiffStore";
   import {
@@ -130,9 +133,6 @@
   let editorPaneEl = $state<HTMLElement | null>(null);
   let shellMainRowWidth = $state(0);
   let editorPaneWidth = $state(0);
-  let layoutResizeObserver = $state<ResizeObserver | null>(null);
-  let previousActiveContextId = $state<ContextId | null>(null);
-  let untitledTitleDebounceTimer = $state<ReturnType<typeof setTimeout> | null>(null);
   let lastSelectedTabId = $state<string | null>(null);
   let runtimeReady = $state(false);
   /**
@@ -166,10 +166,9 @@
   let autoSessionsSidebarCollapsed = $state(false);
   let lastChatScopeKey = $state<string | null>(null);
 
-  const snapshot = $derived($appState);
-  const activeContext = $derived(getActiveContextSnapshot(snapshot));
-  const session = $derived(activeContext.session);
-  const documents = $derived(activeContext.documents);
+  const activeContext = $derived($appActiveContext);
+  const session = $derived($appActiveSession);
+  const documents = $derived($appActiveDocuments);
 
   const editorWorkbench = createEditorWorkbenchRuntime({
     getActiveContextId: () => appState.getSnapshot().contexts.activeContextId,
@@ -204,14 +203,14 @@
   $effect(() => {
     // Retain undo/fold cache across inactive contexts (LRU-bounded); only drop
     // entries whose documents no longer exist in any context.
-    editorSessionCache.retainDocuments(collectAllOpenDocumentIds(snapshot));
+    editorSessionCache.retainDocuments($appOpenDocumentIds);
   });
 
   /** Stable key for external file-watcher sync; ignores non-path snapshot churn. */
-  const externalWatcherSyncKey = $derived(externalFileWatcherSyncKey(snapshot));
-  const activeContextId = $derived(snapshot.contexts.activeContextId);
+  const externalWatcherSyncKey = $derived($appExternalWatcherSyncKey);
+  const activeContextId = $derived($appActiveContextId);
   const isChatHttpActive = $derived(activeContextId === CHAT_HTTP_CONTEXT_ID);
-  const workspaces = $derived(snapshot.contexts.workspaces);
+  const workspaces = $derived($appContexts.workspaces);
   /**
    * Workspaces visible in the activity rail: hidden-from-rail entries are
    * filtered out (decision 3). The Workspace Manager always receives the full
@@ -248,7 +247,7 @@
   const activeOpencodeSessionId = $derived(
     activeSessionEntry?.opencodeSessionId ?? null,
   );
-  const opencodeMode = $derived(snapshot.settings.opencode.mode);
+  const opencodeMode = $derived($appSettings.opencode.mode);
 
   /**
    * M5-T1 — TODO panel toggle. Agent-scoped: only rendered when a workspace
@@ -283,6 +282,7 @@
    * to read the full app snapshot.
    */
   let overlayHost: import("../lib/components/overlays/overlayHostTypes").OverlayHostBound | null = $state(null);
+  let appShellHost: AppShellHostBound | null = $state(null);
 
   const editorTools = createEditorToolController({
     getActiveBinding: () => {
@@ -314,12 +314,11 @@
   const quickOpenCatalogSnapshot = $derived(
     workspaceFileCatalogRegistry.getActiveSnapshot(),
   );
-  const quickOpenRecencyInputs = $derived.by(() => {
-    const ctx = getActiveContextSnapshot(snapshot);
-    const openPaths = collectTabOpenPaths(allTabs(ctx.session.editorLayout), ctx.documents);
-    const recentPaths = snapshot.recentFiles;
-    return { openPaths, recentPaths };
-  });
+  const quickOpenRecencyInputs = $derived(
+    deriveQuickOpenRecencyInputs(session, documents, $appRecentFiles, (sessionState, docs) =>
+      collectTabOpenPaths(allTabs(sessionState.editorLayout), docs),
+    ),
+  );
 
   onDestroy(() => {
     editorWorkbench.dispose();
@@ -338,6 +337,9 @@
     session.editorLayout.activePaneId;
     getSessionActiveTab(session);
     void overlayHost?.anyOverlayOpen;
+    if (editorTools.getSnapshot().activeTool === null) {
+      return;
+    }
     editorTools.syncToEnvironment();
   });
 
@@ -350,19 +352,19 @@
     ),
   );
 
-  const opencodeBaseUrl = $derived(snapshot.settings.opencode.baseUrl);
-  const opencodeEnabled = $derived(snapshot.settings.opencode.enabled);
-  const opencodeSidecarPort = $derived(snapshot.settings.opencode.sidecarPort);
+  const opencodeBaseUrl = $derived($appSettings.opencode.baseUrl);
+  const opencodeEnabled = $derived($appSettings.opencode.enabled);
+  const opencodeSidecarPort = $derived($appSettings.opencode.sidecarPort);
   const showSessionsSidebar = $derived(
     (isChatHttpActive || (Boolean(activeWorkspaceRoot) && opencodeEnabled)) &&
       !workspaceLayout.sessionsSidebarCollapsed,
   );
   const chatHttpRailVisible = $derived(
     isChatHttpRailVisible(
-      snapshot.settings.providerSettings,
-      snapshot.settings.providerApiKeys,
-      snapshot.settings.providerSettings.debugChat,
-      snapshot.settings.chatHttp,
+      $appSettings.providerSettings,
+      $appSettings.providerApiKeys,
+      $appSettings.providerSettings.debugChat,
+      $appSettings.chatHttp,
     ),
   );
   const sessionSelectedTabId = $derived(getSessionSelectedTabId(session));
@@ -381,10 +383,10 @@
   // opened file tab in append order (newest-opened last). Kept to a single
   // row so the notepad card stays compact and its divider lands near the
   // editor tab-bar bottom line.
-  const notepadSession = $derived(snapshot.contexts.notepad.session);
+  const notepadSession = $derived($appContexts.notepad.session);
   const notepadOpenTabCount = $derived(allTabs(notepadSession.editorLayout).length);
   const notepadRecentTabs = $derived.by(() => {
-    const notepadDocs = snapshot.contexts.notepad.documents;
+    const notepadDocs = $appContexts.notepad.documents;
     const fileTabs = allTabs(notepadSession.editorLayout)
       .filter(isFileTab)
       .filter((tab) => {
@@ -432,7 +434,7 @@
   const commandPaletteEntries = $derived(
     buildPaletteSnapshot({
       snapshot: commandAvailabilitySnapshot,
-      bindingOverrides: snapshot.settings.commandBindingOverrides,
+      bindingOverrides: $appSettings.commandBindingOverrides,
     }),
   );
 
@@ -441,7 +443,7 @@
    * picker derives its ranking internally).
    */
   const markdownSnippets = $derived(
-    listEnabledMarkdownSnippets(snapshot.settings.markdownSnippets),
+    listEnabledMarkdownSnippets($appSettings.markdownSnippets),
   );
 
   const shouldRenderMarkdownPreview = $derived.by(() => {
@@ -451,110 +453,17 @@
     if (activeDocument.markdownViewMode === "preview") {
       return true;
     }
-    return activeDocument.markdownViewMode === "split" && canFitMarkdownSplit();
+    return activeDocument.markdownViewMode === "split" && (appShellHost?.api.canFitMarkdownSplit() ?? false);
   });
   const documentView = $derived(
     deriveAppShellDocumentView(activeDocument, {
       renderMarkdownHtml: shouldRenderMarkdownPreview,
     }),
   );
-  let largeFileConfirming = $state(false);
-  /**
-   * Phase 6 — the pane currently highlighted as a file-drop target during a
-   * project-tree file drag. Bound through AppShell → EditorGridLayout so the
-   * hovered pane renders an affordance; cleared when the drag ends.
-   */
   let fileDropTargetPaneId = $state<string | null>(null);
 
   function notify(message: string): void {
     statusMessage = message;
-  }
-
-  const projectTreeHandlers = createAppShellProjectTreeHandlers({
-    getActiveWorkspaceRoot: () => activeWorkspaceRoot,
-    getIsSessionTabActive: () => isSessionTabActive,
-    getCurrentWindowId: () => currentWindowId,
-    notify,
-    projectTreeController,
-    onFilesystemChange: (path, kind) => {
-      workspaceFileCatalog.notifyFilesystemChange(path, kind);
-      workspaceFileCatalogRegistry.notifyFilesystemChange(path, kind);
-    },
-  });
-
-  const {
-    loadProjectTreeRoot,
-    handleToggleProjectTreeDirectory,
-    handleOpenProjectTreeFile,
-    handleOpenProjectTreeFileInPane,
-    refreshProjectTree,
-    notifyProjectTreeFilesystemChange,
-    handleMoveProjectTreeEntry,
-    handleNewProjectFile,
-    handleNewProjectFolder,
-    handleRenameProjectEntry,
-    handleDeleteProjectEntry,
-    toggleProjectTreeHidden,
-  } = projectTreeHandlers;
-
-  const layoutHandlers = createAppShellLayoutHandlers({
-    getShellMainRowEl: () => shellMainRowEl,
-    getEditorPaneEl: () => editorPaneEl,
-    setShellMainRowWidth: (width) => {
-      shellMainRowWidth = width;
-    },
-    setEditorPaneWidth: (width) => {
-      editorPaneWidth = width;
-    },
-    getShellMainRowWidth: () => shellMainRowWidth,
-    getEditorPaneWidth: () => editorPaneWidth,
-    getActiveWorkspaceRoot: () => activeWorkspaceRoot,
-    getIsChatHttpActive: () => isChatHttpActive,
-    getIsSessionTabActive: () => isSessionTabActive,
-    getWorkspaceLayout: () => workspaceLayout,
-    getConsoleOpen: () => consoleOpen,
-    setConsoleOpen: (open) => {
-      consoleOpen = open;
-    },
-    getAutoProjectPanelCollapsed: () => autoProjectPanelCollapsed,
-    setAutoProjectPanelCollapsed: (collapsed) => {
-      autoProjectPanelCollapsed = collapsed;
-    },
-    getAutoSessionsSidebarCollapsed: () => autoSessionsSidebarCollapsed,
-    setAutoSessionsSidebarCollapsed: (collapsed) => {
-      autoSessionsSidebarCollapsed = collapsed;
-    },
-    getActiveDocument: () => activeDocument,
-    getConsoleHeightPx: () => consoleHeightPx,
-    setConsoleHeightPx: (heightPx) => {
-      consoleHeightPx = heightPx;
-    },
-    getLayoutResizeObserver: () => layoutResizeObserver,
-    setLayoutResizeObserver: (observer) => {
-      layoutResizeObserver = observer;
-    },
-  });
-
-  const {
-    toggleProjectPanelCollapsed,
-    toggleSessionsSidebarCollapsed,
-    handleProjectPanelWidthChange,
-    handleSessionsSidebarWidthChange,
-    handleActivityRailWidthChange,
-    toggleConsole,
-    persistConsoleHeightNow,
-    canFitMarkdownSplit,
-    setMarkdownViewMode,
-    applyResponsiveLayoutRules,
-    setupLayoutObserver,
-    disconnectLayoutObserver,
-  } = layoutHandlers;
-
-  function handleToggleConsole(): void {
-    if (!snapshot.settings.logSettings.canOpenLogsPanel) {
-      return;
-    }
-    toggleConsole();
   }
 
   function handleToggleTodoPanel(): void {
@@ -570,119 +479,10 @@
   }
 
   $effect(() => {
-    if (!snapshot.settings.logSettings.canOpenLogsPanel && consoleOpen) {
+    if (!$appSettings.logSettings.canOpenLogsPanel && consoleOpen) {
       consoleOpen = false;
     }
   });
-
-  const agentHandlers = createAppShellAgentHandlers({
-    getIsChatHttpActive: () => isChatHttpActive,
-    getCurrentWindowId: () => currentWindowId,
-    notify,
-  });
-
-  const workspaceContextMenuActions = createWorkspaceContextMenuActions({
-    // L14: the menu's open state is owned by OverlayHost. Bridge get/set so
-    // dismiss listeners (Escape / pointer-outside), menuIndex, move, and
-    // close-after-action still work through the existing controller.
-    getMenu: () => overlayHost?.workspaceContextMenu ?? null,
-    setMenu: (menu) => {
-      if (menu) {
-        overlayHost?.api.openWorkspaceContextMenu(menu.workspaceId, menu.x, menu.y);
-      } else {
-        overlayHost?.api.closeOverlay("workspaceContextMenu");
-      }
-    },
-    getMenuEl: () => workspaceContextMenuEl,
-    getWorkspaceIds: () => workspaces.map((workspace) => workspace.id),
-    getPreviousActiveContextId: () => previousActiveContextId,
-    setPreviousActiveContextId: (contextId) => {
-      previousActiveContextId = contextId;
-    },
-    setConsoleOpen: (open) => {
-      consoleOpen = open;
-    },
-    setMarkdownViewMode,
-    loadProjectTreeRoot,
-    notify,
-  });
-  const {
-    openSettings: openSettingsFromContextMenu,
-    openVersionControl: openVersionControlFromContextMenu,
-    handleActiveContextSwitch,
-    handleSelectContext,
-  } = workspaceContextMenuActions;
-
-  const commandHandlers = createAppShellCommandHandlers({
-    notify,
-    getSnapshot: () => snapshot,
-    getCurrentWindowId: () => currentWindowId,
-    getEditorRunner: () => editorWorkbench.getActiveRunner(),
-    getEditorTools: () => editorTools,
-    getOverlayOpen: () => overlayHost?.api.isAnyOverlayOpen() ?? false,
-    openProjectSearch: (focusReplace) => {
-      overlayHost?.api.openOverlay("projectSearch", { focusReplace });
-    },
-    openQuickOpen: () => overlayHost?.api.openOverlay("quickOpen"),
-    openHeadingJump: () => overlayHost?.api.openOverlay("headingJump"),
-    openBookmarkList: () => overlayHost?.api.openOverlay("bookmarkList"),
-    openSnippetInsert: () => overlayHost?.api.openOverlay("snippetInsert"),
-    openCommandPalette: () => overlayHost?.api.openOverlay("commandPalette"),
-    setConsoleOpen: (open) => {
-      consoleOpen = open;
-    },
-  });
-  const { runCommand, handleKeydown } = commandHandlers;
-
-  const fileHandlers = createAppShellFileHandlers({
-    getCurrentWindowId: () => currentWindowId,
-    getRuntimeReady: () => runtimeReady,
-    notify,
-  });
-  const { openAndActivatePath, consumeOpenedPaths, onTabActivated } = fileHandlers;
-
-  const editorHandlers = createAppShellEditorHandlers({
-    getDocument: (documentId) =>
-      documents.find((documentState) => documentState.id === documentId),
-    getLargeFileConfirming: () => largeFileConfirming,
-    setLargeFileConfirming: (value) => {
-      largeFileConfirming = value;
-    },
-    getGoToLineValue: () => editorTools.getSnapshot().goToLineValue,
-    getEditorRunner: () => editorWorkbench.getActiveRunner(),
-    getUntitledTitleDebounceTimer: () => untitledTitleDebounceTimer,
-    setUntitledTitleDebounceTimer: (timer) => {
-      untitledTitleDebounceTimer = timer;
-    },
-    notify,
-  });
-  const {
-    handleConfirmLargeFile,
-    handleDocumentScrollTop,
-    scheduleUntitledTitleRefresh,
-    runGoToLine,
-    clearUntitledTitleDebounceTimer,
-  } = editorHandlers;
-
-  function handleAddWorkspace(): void {
-    runCommand("workspace.add");
-  }
-
-  function handleOpenWorkspaceManager(): void {
-    runCommand("app.openWorkspaceManager");
-  }
-
-  /**
-   * Manager row "Settings" action: switch to the workspace and focus its
-   * `workspace-settings` view tab (same flow as the rail context menu).
-   */
-  function handleOpenWorkspaceSettingsFromManager(workspaceId: ContextId): void {
-    openSettingsFromContextMenu(workspaceId);
-  }
-
-  function handleOpenVersionControlFromManager(workspaceId: ContextId): void {
-    openVersionControlFromContextMenu(workspaceId);
-  }
 
   /** Switches to the notepad context and selects the given tab. */
   function handleSelectNotepadTab(tabId: string): void {
@@ -708,15 +508,18 @@
 
     const shellCleanup = setupAppShellMount({
       registerSettingsDialogOpener,
-      setupLayoutObserver,
+      setupLayoutObserver: () => appShellHost?.api.setupLayoutObserver(),
       startAppShellRuntime,
       notify,
-      runCommand,
-      openAndActivatePath,
-      consumeOpenedPaths,
-      restoreWorkspaceSession: agentHandlers.restoreWorkspaceSession,
-      loadProjectTreeRoot,
-      notifyProjectTreeFilesystemChange,
+      runCommand: (commandId) => appShellHost?.api.runCommand(commandId),
+      openAndActivatePath: (path, options) =>
+        appShellHost?.api.openAndActivatePath(path, options) ?? Promise.resolve(),
+      consumeOpenedPaths: () => appShellHost?.api.consumeOpenedPaths() ?? [],
+      restoreWorkspaceSession: (root, options) =>
+        appShellHost?.api.restoreWorkspaceSession(root, options) ?? Promise.resolve(),
+      loadProjectTreeRoot: () => appShellHost?.api.loadProjectTreeRoot() ?? Promise.resolve(),
+      notifyProjectTreeFilesystemChange: (path, kind) =>
+        appShellHost?.api.notifyProjectTreeFilesystemChange(path, kind),
       setConsoleHeightPx: (heightPx) => {
         consoleHeightPx = heightPx;
       },
@@ -734,13 +537,14 @@
       },
       routePathToLastActiveWindow,
       getCurrentWebviewWindowLabel: () => getCurrentWebviewWindow().label,
-      handleKeydown,
+      handleKeydown: (event) => appShellHost?.api.handleKeydown(event),
       stopChatAccessMonitor,
       flushSessionBeforeUnload: () =>
         flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
       cleanup: {
-        disconnectLayoutObserver,
-        clearUntitledTitleDebounceTimer,
+        disconnectLayoutObserver: () => appShellHost?.api.disconnectLayoutObserver(),
+        clearUntitledTitleDebounceTimer: () =>
+          appShellHost?.api.clearUntitledTitleDebounceTimer(),
       },
     });
     return () => {
@@ -749,8 +553,12 @@
     };
   });
 
+  const activeTabSessionId = $derived(
+    activeTab && isSessionTab(activeTab) ? activeTab.sessionId : null,
+  );
+
   $effect(() => {
-    activeTab;
+    activeTabSessionId;
     isChatHttpActive;
     chatHttpRailVisible;
     activeContextId;
@@ -767,8 +575,9 @@
       isSessionTabActive,
       selectedSessionId,
       lastChatScopeKey,
-      ensureChatHttpSessionTab: agentHandlers.ensureChatHttpSessionTab,
-      restoreWorkspaceSession: agentHandlers.restoreWorkspaceSession,
+      ensureChatHttpSessionTab: () => appShellHost?.api.ensureChatHttpSessionTab(),
+      restoreWorkspaceSession: (root, options) =>
+        appShellHost?.api.restoreWorkspaceSession(root, options) ?? Promise.resolve(),
       setLastChatScopeKey: (key) => {
         lastChatScopeKey = key;
       },
@@ -777,7 +586,6 @@
 
   $effect(() => {
     runtimeReady;
-    snapshot;
     currentWindowId;
     activeWorkspaceRoot;
     selectedSessionId;
@@ -786,19 +594,30 @@
     lastSelectedTabId;
     syncSessionPersistenceEffect({
       runtimeReady,
-      snapshot,
       currentWindowId,
       activeWorkspaceRoot,
       selectedSessionId,
       sessionLastActiveSessionId: session.lastActiveSessionId,
       selectedTabId: sessionSelectedTabId,
       lastSelectedTabId,
-      onTabActivated,
+      onTabActivated: (tabId) => appShellHost?.api.onTabActivated(tabId) ?? Promise.resolve(),
       setLastSelectedTabId: (tabId) => {
         lastSelectedTabId = tabId;
       },
     });
-    syncSettingsPersistenceEffect({ runtimeReady, currentWindowId, snapshot });
+  });
+
+  $effect(() => {
+    runtimeReady;
+    currentWindowId;
+    $appSettings;
+    $appEditor.wrapLines;
+    $appEditor.zoomPercent;
+    syncSettingsPersistenceEffect({
+      runtimeReady,
+      currentWindowId,
+      snapshot: appState.getSnapshot(),
+    });
   });
 
   /**
@@ -809,8 +628,8 @@
   $effect(() => {
     runtimeReady;
     activeRuntimeBySessionId;
-    snapshot.settings.soundSettings;
-    snapshot.settings.osNotificationSettings;
+    $appSettings.soundSettings;
+    $appSettings.osNotificationSettings;
     if (!runtimeReady) {
       return;
     }
@@ -818,8 +637,8 @@
       activeScopeKey: activeRuntimeBySessionId.scopeKey,
       runtimeBySessionId: activeRuntimeBySessionId.runtimeBySessionId,
       settings: {
-        sound: snapshot.settings.soundSettings,
-        osNotifications: snapshot.settings.osNotificationSettings,
+        sound: $appSettings.soundSettings,
+        osNotifications: $appSettings.osNotificationSettings,
       },
     });
   });
@@ -875,7 +694,7 @@
       activeWorkspaceRoot,
       isChatHttpActive,
       projectTreeController,
-      loadProjectTreeRoot,
+      loadProjectTreeRoot: () => appShellHost?.api.loadProjectTreeRoot() ?? Promise.resolve(),
     });
     void logPerfTiming(
       "project tree shell effect scheduled",
@@ -965,7 +784,7 @@
    */
   let lastHardFailureSignature = "";
   $effect(() => {
-    const health = snapshot.settings.opencodeHealth;
+    const health = $appSettings.opencodeHealth;
     if (health.status !== "error") {
       return;
     }
@@ -984,7 +803,7 @@
     externalWatcherSyncKey;
     syncExternalFileWatcherEffect({
       runtimeReady,
-      snapshot: untrack(() => snapshot),
+      snapshot: untrack(() => appState.getSnapshot()),
       syncExternalFileWatcher: runtimeSyncExternalFileWatcher,
     });
   });
@@ -1010,9 +829,12 @@
     consoleOpen;
     syncWorkspaceContextEffect({
       activeContextId,
-      handleActiveContextSwitch,
+      handleActiveContextSwitch: (contextId) =>
+        appShellHost?.api.handleActiveContextSwitch(contextId),
     });
-    syncResponsiveLayoutEffect({ applyResponsiveLayoutRules });
+    syncResponsiveLayoutEffect({
+      applyResponsiveLayoutRules: () => appShellHost?.api.applyResponsiveLayoutRules(),
+    });
   });
 
   /**
@@ -1136,13 +958,31 @@
 
 
 <AppShellHost
+  bind:this={appShellHost}
   bind:shellMainRowEl
   bind:editorShellEl
   bind:editorPaneEl
   bind:workspaceContextMenuEl
   bind:consoleHeightPx
-  {consoleOpen}
-  {snapshot}
+  bind:consoleOpen
+  bind:shellMainRowWidth
+  bind:editorPaneWidth
+  bind:autoProjectPanelCollapsed
+  bind:autoSessionsSidebarCollapsed
+  activityRailWidthPx={$appActivityRailWidthPx}
+  editorPreviewMode={$appEditor.previewMode}
+  editorWrapLines={$appEditor.wrapLines}
+  editorZoomPercent={$appEditor.zoomPercent}
+  editorCursorLine={$appEditor.cursorLine}
+  editorCursorColumn={$appEditor.cursorColumn}
+  editorSelectionCount={$appEditor.selectionCount}
+  decoratePlaintextSymbols={$appSettings.decoratePlaintextSymbols}
+  showMinimap={$appSettings.showMinimap}
+  showFoldGutter={$appSettings.showFoldGutter}
+  autoClosePairs={$appSettings.autoClosePairs}
+  autoSuggest={$appSettings.autoSuggest}
+  maxBinaryOpenAsTextBytes={$appSettings.externalFiles.maxBinaryOpenAsTextBytes}
+  maxOpenWithoutConfirmBytes={$appSettings.externalFiles.maxOpenWithoutConfirmBytes}
   {activeContextId}
   {session}
   {documents}
@@ -1168,39 +1008,27 @@
   {isSessionTabActive}
   {isChatHttpActive}
   {currentWindowId}
+  {runtimeReady}
   {notepadOpenTabCount}
   {notepadRecentTabs}
   {fileDropTargetPaneId}
   {statusMessage}
   {openSessionIds}
-  opencodeEnabled={snapshot.settings.opencode.enabled}
-  canOpenLogsPanel={snapshot.settings.logSettings.canOpenLogsPanel}
-  canFitMarkdownSplit={canFitMarkdownSplit()}
+  opencodeEnabled={$appSettings.opencode.enabled}
+  canOpenLogsPanel={$appSettings.logSettings.canOpenLogsPanel}
   {todoPanelOpen}
   {diffPanelOpen}
   onToggleTodoPanel={handleToggleTodoPanel}
   onToggleDiffPanel={handleToggleDiffPanel}
   onFileDropPaneChange={handleFileDropPaneChange}
-  agentHandlers={agentHandlers}
-  editorHandlers={editorHandlers}
-  fileHandlers={fileHandlers}
-  layoutHandlers={layoutHandlers}
-  projectTreeHandlers={projectTreeHandlers}
-  commandHandlers={commandHandlers}
-  workspaceContextMenuActions={workspaceContextMenuActions}
   {editorWorkbench}
   {editorTools}
+  {projectTreeController}
   {workspaceFileCatalog}
   {workspaceFileCatalogRegistry}
   overlayHost={overlayHost}
   {notify}
   {handleSelectNotepadTab}
-  {handleAddWorkspace}
-  {handleOpenWorkspaceManager}
-  {handleSelectContext}
-  {handleOpenWorkspaceSettingsFromManager}
-  {handleOpenVersionControlFromManager}
-  handleToggleConsole={handleToggleConsole}
   {quickOpenCatalogSnapshot}
   {quickOpenRecencyInputs}
   {commandPaletteEntries}
@@ -1222,11 +1050,13 @@
   commandPaletteEntries={commandPaletteEntries}
   markdownSnippets={markdownSnippets}
   notify={notify}
-  runCommand={runCommand}
-  setMarkdownViewMode={setMarkdownViewMode}
-  openAndActivatePath={openAndActivatePath}
-  handleListWorkspaceSessions={agentHandlers.handleListWorkspaceSessions}
-  handleOpenExternalSession={agentHandlers.handleOpenExternalSession}
+  runCommand={(commandId) => appShellHost?.api.runCommand(commandId)}
+  setMarkdownViewMode={(mode) => appShellHost?.api.setMarkdownViewMode(mode)}
+  openAndActivatePath={(path) => appShellHost?.api.openAndActivatePath(path) ?? Promise.resolve()}
+  handleListWorkspaceSessions={(options) =>
+    appShellHost?.api.handleListWorkspaceSessions(options) ?? Promise.resolve()}
+  handleOpenExternalSession={(sessionId) =>
+    appShellHost?.api.handleOpenExternalSession(sessionId) ?? Promise.resolve()}
   getWorkspaceFileCatalog={() => workspaceFileCatalog}
   getWorkspaceFileCatalogRegistry={() => workspaceFileCatalogRegistry}
   getEditorWorkbench={() => editorWorkbench}

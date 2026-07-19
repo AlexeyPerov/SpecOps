@@ -45,11 +45,13 @@ moderate risk), **L** = large (1+ days, invasive).
   as the picker expands them), or cache the result per root and invalidate on
   file-watcher events only.
 
-#### L3. `+page.svelte` constructs 12 handler/controller factories at module-eval
-- All controller factories are allocated before first paint. Individually
-  cheap; the real cost is the monolithic reactive graph (see L11).
-- **Files:** `app/src/routes/+page.svelte:164-252`.
-- **Complexity: L** (tied to L11).
+#### L3. ~~`+page.svelte` constructs 12 handler/controller factories at module-eval~~ ✅ Resolved
+- **Status:** Shipped. The seven AppShell handler bundles (project-tree, layout,
+  agent, workspace-context-menu, command, file, editor) now allocate inside
+  `AppShellHost.svelte` instead of at page init. The page captures a small
+  `AppShellHostApi` via `bind:this` for `onMount` and the retained `$effect`s;
+  workbench, session cache, tools, tree controller, and catalogs stay on the
+  page. See the 2026-07-19 17:25 changelog entry.
 
 ### Tab switching (chat + per-keystroke)
 
@@ -90,11 +92,13 @@ moderate risk), **L** = large (1+ days, invasive).
   reference. `EditorPaneView` reuses the same visible-tab helper for its count.
   See the 2026-07-19 changelog entry.
 
-#### L9. ~5 top-level `$effect`s fire on every tab select
-- Hydration, persistence, sidecar, access monitor, and tool-close effects all
-  re-run on tab activation. Some are inherent; many could be guarded finer.
-- **Files:** `app/src/routes/+page.svelte:1391-1662, 470-483`.
-- **Complexity: L** (tied to L11).
+#### L9. ~~~5 top-level `$effect`s fire on every tab select~~ ✅ Resolved
+- **Status:** Shipped. Persistence split into session vs settings effects; settings
+  writes fingerprint persisted fields (excluding cursor). Hydration effect narrows
+  to session-id string; tool-close early-returns when no tool is open; access
+  monitor skips stop/restart on unchanged boolean; sidecar probe memoized by
+  root/mode/url/port/session-active key. Retain-docs effect uses stable open-doc
+  ids selector. See the 2026-07-19 17:25 changelog entry.
 
 ### Workspace switching
 
@@ -160,13 +164,13 @@ moderate risk), **L** = large (1+ days, invasive).
   with its in-flight search cancelled) are pinned as-is with explicit tests.
   Unblocks L3, L9, L15, L17. See the 2026-07-19 14:50 changelog entry.
 
-#### L15. `snapshot = $derived($appState)` reads the entire state on every mutation
-- Cursor moves, zoom, theme — every mutation re-runs every downstream
-  derivation that reads `snapshot`.
-- **Files:** `app/src/routes/+page.svelte:254`.
-- **Complexity: M-L.**
-- **Fix sketch:** Replace with fine-grained selectors (`$derived($appState.contexts.activeContextId)` etc.) so downstream derivations do not all
-  re-run on unrelated mutations.
+#### L15. ~~`snapshot = $derived($appState)` reads the entire state on every mutation~~ ✅ Resolved
+- **Status:** Shipped. Monolithic `snapshot` removed from `+page.svelte`.
+  New `appStateSelectors.ts` exposes fine-grained `derived(appState, …)` slices
+  (`appSettings`, `appEditor`, `appContexts`, `appOpenDocumentIds`, etc.).
+  `AppShellHost` receives explicit leaf props instead of the full snapshot;
+  imperative paths use `appState.getSnapshot()`. See the 2026-07-19 17:25
+  changelog entry.
 
 #### L16. ~~Inline arrow-function props get new identities each render~~ ✅ Resolved
 - **Status:** Shipped. AppShell, AppShellHost, and `+page.svelte` hoist stable
@@ -209,16 +213,16 @@ moderate risk), **L** = large (1+ days, invasive).
 | L8 | TabBar visible-tab + session-title derivations memoized on input refs | (this pass) |
 | L16 | AppShell/AppShellHost/+page inline callback props hoisted to stable handlers | (this pass) |
 | L17 | App-shell runtime double-init guard + mount race cleanup | (this pass) |
+| L3 | AppShell handler factories moved into AppShellHost + bind:this API | (this pass) |
+| L9 | Tab-select effects narrowed/guarded (persistence, hydration, tools, monitor, sidecar) | (this pass) |
+| L15 | Monolithic snapshot replaced by appStateSelectors + AppShellHost leaf props | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L3, L9, L15** — now unblocked by L14. The route is small enough that the
-   controller-factory allocation (L3), the top-level effect tuning (L9), and
-   the snapshot selector (L15) can each land as isolated follow-ups.
-2. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
+1. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
    twice per switch (and once on launch).
-3. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.
-4. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
+2. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.
+3. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
    render contract or a fallback-then-rehighlight path.

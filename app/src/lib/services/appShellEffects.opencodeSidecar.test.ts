@@ -7,7 +7,7 @@ import {
   stopOpencodeSidecar,
 } from "./opencodeSidecar";
 import { ensureOpencodeSidecar } from "./opencodeSidecarEnsure";
-import { requestOpencodeHealthRefresh, syncOpencodeSidecarEffect, syncOpencodeToggleEffect, probeUrlHealth } from "./appShellEffects";
+import { requestOpencodeHealthRefresh, resetAppShellEffectsForTests, syncOpencodeSidecarEffect, syncOpencodeToggleEffect, probeUrlHealth } from "./appShellEffects";
 
 vi.mock("./opencodeSidecar", () => ({
   attachOpencodeSidecarWorkspace: vi.fn().mockResolvedValue({
@@ -61,6 +61,7 @@ async function flushAsyncWork(): Promise<void> {
 
 describe("syncOpencodeSidecarEffect", () => {
   beforeEach(() => {
+    resetAppShellEffectsForTests();
     attachMock.mockClear();
     getStatusMock.mockReset();
     mapHealthMock.mockReset();

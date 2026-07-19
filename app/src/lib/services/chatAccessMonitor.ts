@@ -4,8 +4,13 @@ import { chatStore } from "../state/chatStore";
 export const CHAT_ACCESS_POLL_INTERVAL_MS = 15_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let lastMonitorActive: boolean | null = null;
 
 export function syncChatAccessMonitor(active: boolean): void {
+  if (lastMonitorActive === active) {
+    return;
+  }
+  lastMonitorActive = active;
   stopChatAccessMonitor();
   if (!active) {
     return;
@@ -20,4 +25,5 @@ export function stopChatAccessMonitor(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  lastMonitorActive = null;
 }

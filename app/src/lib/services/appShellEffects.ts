@@ -51,6 +51,7 @@ import { scheduleSessionPersistence } from "./sessionManager";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { savePersistedSettings, toPersistedSettings } from "./settingsStore";
 import { externalFileWatcherSyncKey } from "./appShellHelpers";
+import { settingsPersistenceFingerprint } from "../state/appStateSelectors";
 
 export interface SyncSessionTabEffectInput {
   activeTab: TabState | undefined | null;
@@ -180,7 +181,6 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
 
 export interface SyncSessionPersistenceEffectInput {
   runtimeReady: boolean;
-  snapshot: AppDomainState;
   currentWindowId: string;
   activeWorkspaceRoot: string | null;
   selectedSessionId: string | null;
@@ -194,7 +194,6 @@ export interface SyncSessionPersistenceEffectInput {
 export function syncSessionPersistenceEffect(input: SyncSessionPersistenceEffectInput): void {
   const {
     runtimeReady,
-    snapshot,
     currentWindowId,
     activeWorkspaceRoot,
     selectedSessionId,
@@ -222,7 +221,7 @@ export function syncSessionPersistenceEffect(input: SyncSessionPersistenceEffect
   }
 
   if (runtimeReady) {
-    scheduleSessionPersistence(snapshot, currentWindowId);
+    scheduleSessionPersistence(appState.getSnapshot(), currentWindowId);
   }
 }
 
@@ -232,11 +231,18 @@ export interface SyncSettingsPersistenceEffectInput {
   snapshot: AppDomainState;
 }
 
+let lastSettingsPersistenceFingerprint: string | null = null;
+
 export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffectInput): void {
   const { runtimeReady, currentWindowId, snapshot } = input;
   if (!runtimeReady || !currentWindowId) {
     return;
   }
+  const fingerprint = settingsPersistenceFingerprint(snapshot);
+  if (fingerprint === lastSettingsPersistenceFingerprint) {
+    return;
+  }
+  lastSettingsPersistenceFingerprint = fingerprint;
   void savePersistedSettings(
     toPersistedSettings({
       wrapLines: snapshot.editor.wrapLines,
@@ -308,6 +314,7 @@ export interface SyncOpencodeSidecarEffectInput {
 
 const URL_HEALTH_TIMEOUT_MS = 10_000;
 const SIDECAR_STATUS_TIMEOUT_MS = 7_000;
+let lastOpencodeSidecarProbeKey: string | null = null;
 
 interface UrlHealthProbeResult {
   status: OpencodeHealthStatus;
@@ -386,8 +393,25 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     opencodeEnabled,
     opencodeMode,
     opencodeBaseUrl,
+    opencodeSidecarPort,
     setOpencodeHealth,
   } = input;
+
+  const probeKey = [
+    runtimeReady,
+    workspaceLifecycleActive,
+    activeWorkspaceRoot ?? "",
+    isChatHttpActive,
+    isSessionTabActive,
+    opencodeEnabled,
+    opencodeMode,
+    opencodeBaseUrl,
+    opencodeSidecarPort,
+  ].join("|");
+  if (probeKey === lastOpencodeSidecarProbeKey) {
+    return;
+  }
+  lastOpencodeSidecarProbeKey = probeKey;
 
   if (!runtimeReady || !workspaceLifecycleActive || !activeWorkspaceRoot || isChatHttpActive) {
     return;
@@ -710,6 +734,8 @@ export function resetAppShellEffectsForTests(): void {
   lastProjectTreeWatcherKey = null;
   lastExternalFileWatcherSyncKey = null;
   lastWorkspaceFileCatalogKey = null;
+  lastSettingsPersistenceFingerprint = null;
+  lastOpencodeSidecarProbeKey = null;
 }
 
 export function syncActiveFileTreeExpandEffect(input: SyncActiveFileTreeExpandEffectInput): void {

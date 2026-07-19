@@ -22,21 +22,23 @@
    * layout observers and effects can still see them.
    */
   import AppShell from "./AppShell.svelte";
+  import type { AppShellHostApi } from "./appShellHostTypes";
   import type { OverlayHostApi } from "./overlays/overlayHostTypes";
   import { collectPaneElementsFromDom } from "./paneDropTargets";
   import { activeViewKindInActivePane } from "./editorRouting";
   import { appState } from "../state/appState";
   import { chatStore } from "../state/chatStore";
   import type {
-    AppDomainState,
     ChatMessage,
     ContextId,
     DocumentState,
+    MarkdownViewMode,
     SessionIndexEntry,
     SessionState,
     WorkspaceEntry,
   } from "../domain/contracts";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
+  import type { createProjectTreeController } from "../services/projectTreeController";
   import type { AppShellDocumentView } from "../services/appShellDocumentView";
   import type { WorkspaceLayoutState } from "../domain/contracts";
   import type { EditorWorkbenchRuntime } from "../editor/editorWorkbenchRuntime";
@@ -46,15 +48,15 @@
   import type { WorkspaceFileCatalogSnapshot } from "../services/workspaceFileCatalog";
   import type { PaletteCommandEntry } from "../commands/catalog";
   import type { ResolvedMarkdownSnippet } from "../domain/snippets";
-  import type { createAppShellAgentHandlers } from "../services/appShellAgentHandlers";
-  import type {
+  import { createAppShellAgentHandlers } from "../services/appShellAgentHandlers";
+  import {
+    createAppShellCommandHandlers,
     createAppShellEditorHandlers,
     createAppShellFileHandlers,
-    createAppShellCommandHandlers,
   } from "../services/appShellPageHandlers";
-  import type { createAppShellLayoutHandlers } from "../services/appShellLayoutHandlers";
-  import type { createAppShellProjectTreeHandlers } from "../services/appShellProjectTreeHandlers";
-  import type { createWorkspaceContextMenuActions } from "../services/workspaceContextMenuController";
+  import { createAppShellLayoutHandlers } from "../services/appShellLayoutHandlers";
+  import { createAppShellProjectTreeHandlers } from "../services/appShellProjectTreeHandlers";
+  import { createWorkspaceContextMenuActions } from "../services/workspaceContextMenuController";
   import { normalizeActivityRailWidthPx } from "../services/panelLayout";
 
   /** Closed / empty project-search state — used before OverlayHost mounts. */
@@ -95,17 +97,11 @@
     return `${root}/${trimmed}`;
   }
 
-  type AgentHandlers = ReturnType<typeof createAppShellAgentHandlers>;
-  type EditorHandlers = ReturnType<typeof createAppShellEditorHandlers>;
-  type FileHandlers = ReturnType<typeof createAppShellFileHandlers>;
-  type LayoutHandlers = ReturnType<typeof createAppShellLayoutHandlers>;
-  type ProjectTreeHandlers = ReturnType<typeof createAppShellProjectTreeHandlers>;
-  type CommandHandlers = ReturnType<typeof createAppShellCommandHandlers>;
-  type WorkspaceContextMenuActions = ReturnType<typeof createWorkspaceContextMenuActions>;
+  // Re-export so +page.svelte can `import type { AppShellHostBound }`.
+  export type { AppShellHostBound } from "./appShellHostTypes";
 
-  // Re-export so +page.svelte can `import type { OverlayHostBound }`.
-  export type { OverlayHostBound } from "./overlays/overlayHostTypes";
-  // (Local alias for brevity in the Props interface below.)
+  type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
+
   type OverlayHostBound = import("./overlays/overlayHostTypes").OverlayHostBound;
 
   interface Props {
@@ -116,9 +112,27 @@
     workspaceContextMenuEl: HTMLDivElement | null;
     consoleHeightPx: number;
     consoleOpen: boolean;
+    shellMainRowWidth: number;
+    editorPaneWidth: number;
+    autoProjectPanelCollapsed: boolean;
+    autoSessionsSidebarCollapsed: boolean;
 
-    // --- Snapshot-derived values ---
-    snapshot: AppDomainState;
+    // --- Editor chrome (L15 leaf selectors) ---
+    activityRailWidthPx: number;
+    editorPreviewMode: MarkdownViewMode;
+    editorWrapLines: boolean;
+    editorZoomPercent: number;
+    editorCursorLine: number;
+    editorCursorColumn: number;
+    editorSelectionCount: number;
+    decoratePlaintextSymbols: boolean;
+    showMinimap: boolean;
+    showFoldGutter: boolean;
+    autoClosePairs: boolean;
+    autoSuggest: boolean;
+    maxBinaryOpenAsTextBytes: number;
+    maxOpenWithoutConfirmBytes: number;
+
     activeContextId: ContextId;
     session: SessionState;
     documents: DocumentState[];
@@ -155,7 +169,6 @@
     // --- Settings-derived flags ---
     opencodeEnabled: boolean;
     canOpenLogsPanel: boolean;
-    canFitMarkdownSplit: boolean;
 
     // --- Todo / diff panels (page-owned booleans + toggle callbacks) ---
     todoPanelOpen: boolean;
@@ -166,35 +179,20 @@
     // --- fileDropTargetPaneId setter (page-owned state) ---
     onFileDropPaneChange: (paneId: string | null) => void;
 
-    // --- Handler bundles ---
-    agentHandlers: AgentHandlers;
-    editorHandlers: EditorHandlers;
-    fileHandlers: FileHandlers;
-    layoutHandlers: LayoutHandlers;
-    projectTreeHandlers: ProjectTreeHandlers;
-    commandHandlers: CommandHandlers;
-    workspaceContextMenuActions: WorkspaceContextMenuActions;
-
     // --- Editor + catalog singletons ---
     editorWorkbench: EditorWorkbenchRuntime;
     editorTools: EditorToolController;
+    projectTreeController: ProjectTreeController;
     workspaceFileCatalog: WorkspaceFileCatalog;
     workspaceFileCatalogRegistry: WorkspaceFileCatalogRegistry;
+    runtimeReady: boolean;
 
     // --- Overlay host (page-mounted; this wrapper reads its exposed state) ---
-    // May be null on the very first render before OverlayHost's `bind:this`
-    // fires; the wrapper guards all reads.
     overlayHost: OverlayHostBound | null;
 
     // --- Misc page-owned helpers ---
     notify: (message: string) => void;
     handleSelectNotepadTab: (tabId: string) => void;
-    handleAddWorkspace: () => void;
-    handleOpenWorkspaceManager: () => void;
-    handleSelectContext: (contextId: ContextId) => void;
-    handleOpenWorkspaceSettingsFromManager: (workspaceId: ContextId) => void;
-    handleOpenVersionControlFromManager: (workspaceId: ContextId) => void;
-    handleToggleConsole: () => void;
 
     // --- Picker input snapshots fed into OverlayHost ---
     quickOpenCatalogSnapshot: WorkspaceFileCatalogSnapshot;
@@ -209,8 +207,25 @@
     editorPaneEl = $bindable(null),
     workspaceContextMenuEl = $bindable(null),
     consoleHeightPx = $bindable(0),
-    consoleOpen,
-    snapshot,
+    consoleOpen = $bindable(false),
+    shellMainRowWidth = $bindable(0),
+    editorPaneWidth = $bindable(0),
+    autoProjectPanelCollapsed = $bindable(false),
+    autoSessionsSidebarCollapsed = $bindable(false),
+    activityRailWidthPx,
+    editorPreviewMode,
+    editorWrapLines,
+    editorZoomPercent,
+    editorCursorLine,
+    editorCursorColumn,
+    editorSelectionCount,
+    decoratePlaintextSymbols,
+    showMinimap,
+    showFoldGutter,
+    autoClosePairs,
+    autoSuggest,
+    maxBinaryOpenAsTextBytes,
+    maxOpenWithoutConfirmBytes,
     activeContextId,
     session,
     documents,
@@ -243,37 +258,206 @@
     openSessionIds,
     opencodeEnabled,
     canOpenLogsPanel,
-    canFitMarkdownSplit,
     todoPanelOpen,
     diffPanelOpen,
     onToggleTodoPanel,
     onToggleDiffPanel,
     onFileDropPaneChange,
-    agentHandlers,
-    editorHandlers,
-    fileHandlers,
-    layoutHandlers,
-    projectTreeHandlers,
-    commandHandlers,
-    workspaceContextMenuActions,
     editorWorkbench,
     editorTools,
+    projectTreeController,
     workspaceFileCatalog,
     workspaceFileCatalogRegistry,
+    runtimeReady,
     overlayHost,
     notify,
     handleSelectNotepadTab,
-    handleAddWorkspace,
-    handleOpenWorkspaceManager,
-    handleSelectContext,
-    handleOpenWorkspaceSettingsFromManager,
-    handleOpenVersionControlFromManager,
-    handleToggleConsole,
     quickOpenCatalogSnapshot,
     quickOpenRecencyInputs,
     commandPaletteEntries,
     markdownSnippets,
   }: Props = $props();
+
+  let layoutResizeObserver = $state<ResizeObserver | null>(null);
+  let previousActiveContextId = $state<ContextId | null>(null);
+  let largeFileConfirming = $state(false);
+  let untitledTitleDebounceTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+
+  const projectTreeHandlers = createAppShellProjectTreeHandlers({
+    getActiveWorkspaceRoot: () => activeWorkspaceRoot,
+    getIsSessionTabActive: () => isSessionTabActive,
+    getCurrentWindowId: () => currentWindowId,
+    notify,
+    projectTreeController,
+    onFilesystemChange: (path, kind) => {
+      workspaceFileCatalog.notifyFilesystemChange(path, kind);
+      workspaceFileCatalogRegistry.notifyFilesystemChange(path, kind);
+    },
+  });
+
+  const layoutHandlers = createAppShellLayoutHandlers({
+    getShellMainRowEl: () => shellMainRowEl,
+    getEditorPaneEl: () => editorPaneEl,
+    setShellMainRowWidth: (width) => {
+      shellMainRowWidth = width;
+    },
+    setEditorPaneWidth: (width) => {
+      editorPaneWidth = width;
+    },
+    getShellMainRowWidth: () => shellMainRowWidth,
+    getEditorPaneWidth: () => editorPaneWidth,
+    getActiveWorkspaceRoot: () => activeWorkspaceRoot,
+    getIsChatHttpActive: () => isChatHttpActive,
+    getIsSessionTabActive: () => isSessionTabActive,
+    getWorkspaceLayout: () => workspaceLayout,
+    getConsoleOpen: () => consoleOpen,
+    setConsoleOpen: (open) => {
+      consoleOpen = open;
+    },
+    getAutoProjectPanelCollapsed: () => autoProjectPanelCollapsed,
+    setAutoProjectPanelCollapsed: (collapsed) => {
+      autoProjectPanelCollapsed = collapsed;
+    },
+    getAutoSessionsSidebarCollapsed: () => autoSessionsSidebarCollapsed,
+    setAutoSessionsSidebarCollapsed: (collapsed) => {
+      autoSessionsSidebarCollapsed = collapsed;
+    },
+    getActiveDocument: () => activeDocument,
+    getConsoleHeightPx: () => consoleHeightPx,
+    setConsoleHeightPx: (heightPx) => {
+      consoleHeightPx = heightPx;
+    },
+    getLayoutResizeObserver: () => layoutResizeObserver,
+    setLayoutResizeObserver: (observer) => {
+      layoutResizeObserver = observer;
+    },
+  });
+
+  const agentHandlers = createAppShellAgentHandlers({
+    getIsChatHttpActive: () => isChatHttpActive,
+    getCurrentWindowId: () => currentWindowId,
+    notify,
+  });
+
+  const workspaceContextMenuActions = createWorkspaceContextMenuActions({
+    getMenu: () => overlayHost?.workspaceContextMenu ?? null,
+    setMenu: (menu) => {
+      if (menu) {
+        overlayHost?.api.openWorkspaceContextMenu(menu.workspaceId, menu.x, menu.y);
+      } else {
+        overlayHost?.api.closeOverlay("workspaceContextMenu");
+      }
+    },
+    getMenuEl: () => workspaceContextMenuEl,
+    getWorkspaceIds: () => workspaces.map((workspace) => workspace.id),
+    getPreviousActiveContextId: () => previousActiveContextId,
+    setPreviousActiveContextId: (contextId) => {
+      previousActiveContextId = contextId;
+    },
+    setConsoleOpen: (open) => {
+      consoleOpen = open;
+    },
+    setMarkdownViewMode: layoutHandlers.setMarkdownViewMode,
+    loadProjectTreeRoot: projectTreeHandlers.loadProjectTreeRoot,
+    notify,
+  });
+
+  const commandHandlers = createAppShellCommandHandlers({
+    notify,
+    getSnapshot: () => appState.getSnapshot(),
+    getCurrentWindowId: () => currentWindowId,
+    getEditorRunner: () => editorWorkbench.getActiveRunner(),
+    getEditorTools: () => editorTools,
+    getOverlayOpen: () => overlayHost?.api.isAnyOverlayOpen() ?? false,
+    openProjectSearch: (focusReplace) => {
+      overlayHost?.api.openOverlay("projectSearch", { focusReplace });
+    },
+    openQuickOpen: () => overlayHost?.api.openOverlay("quickOpen"),
+    openHeadingJump: () => overlayHost?.api.openOverlay("headingJump"),
+    openBookmarkList: () => overlayHost?.api.openOverlay("bookmarkList"),
+    openSnippetInsert: () => overlayHost?.api.openOverlay("snippetInsert"),
+    openCommandPalette: () => overlayHost?.api.openOverlay("commandPalette"),
+    setConsoleOpen: (open) => {
+      consoleOpen = open;
+    },
+  });
+
+  const fileHandlers = createAppShellFileHandlers({
+    getCurrentWindowId: () => currentWindowId,
+    getRuntimeReady: () => runtimeReady,
+    notify,
+  });
+
+  const editorHandlers = createAppShellEditorHandlers({
+    getDocument: (documentId) =>
+      documents.find((documentState) => documentState.id === documentId),
+    getLargeFileConfirming: () => largeFileConfirming,
+    setLargeFileConfirming: (value) => {
+      largeFileConfirming = value;
+    },
+    getGoToLineValue: () => editorTools.getSnapshot().goToLineValue,
+    getEditorRunner: () => editorWorkbench.getActiveRunner(),
+    getUntitledTitleDebounceTimer: () => untitledTitleDebounceTimer,
+    setUntitledTitleDebounceTimer: (timer) => {
+      untitledTitleDebounceTimer = timer;
+    },
+    notify,
+  });
+
+  const api: AppShellHostApi = {
+    runCommand: commandHandlers.runCommand,
+    handleKeydown: commandHandlers.handleKeydown,
+    onTabActivated: fileHandlers.onTabActivated,
+    openAndActivatePath: fileHandlers.openAndActivatePath,
+    consumeOpenedPaths: fileHandlers.consumeOpenedPaths,
+    restoreWorkspaceSession: agentHandlers.restoreWorkspaceSession,
+    ensureChatHttpSessionTab: agentHandlers.ensureChatHttpSessionTab,
+    loadProjectTreeRoot: projectTreeHandlers.loadProjectTreeRoot,
+    notifyProjectTreeFilesystemChange: projectTreeHandlers.notifyProjectTreeFilesystemChange,
+    setupLayoutObserver: layoutHandlers.setupLayoutObserver,
+    disconnectLayoutObserver: layoutHandlers.disconnectLayoutObserver,
+    clearUntitledTitleDebounceTimer: editorHandlers.clearUntitledTitleDebounceTimer,
+    handleActiveContextSwitch: workspaceContextMenuActions.handleActiveContextSwitch,
+    openSettingsFromContextMenu: workspaceContextMenuActions.openSettings,
+    openVersionControlFromContextMenu: workspaceContextMenuActions.openVersionControl,
+    canFitMarkdownSplit: layoutHandlers.canFitMarkdownSplit,
+    toggleConsole: layoutHandlers.toggleConsole,
+    applyResponsiveLayoutRules: layoutHandlers.applyResponsiveLayoutRules,
+    setMarkdownViewMode: layoutHandlers.setMarkdownViewMode,
+    handleListWorkspaceSessions: agentHandlers.handleListWorkspaceSessions,
+    handleOpenExternalSession: agentHandlers.handleOpenExternalSession,
+  };
+
+  export { api };
+
+  function handleAddWorkspace(): void {
+    commandHandlers.runCommand("workspace.add");
+  }
+
+  function handleOpenWorkspaceManager(): void {
+    commandHandlers.runCommand("app.openWorkspaceManager");
+  }
+
+  function handleSelectContext(contextId: ContextId): void {
+    workspaceContextMenuActions.handleSelectContext(contextId);
+  }
+
+  function handleOpenWorkspaceSettingsFromManager(workspaceId: ContextId): void {
+    workspaceContextMenuActions.openSettings(workspaceId);
+  }
+
+  function handleOpenVersionControlFromManager(workspaceId: ContextId): void {
+    workspaceContextMenuActions.openVersionControl(workspaceId);
+  }
+
+  function handleToggleConsole(): void {
+    if (!canOpenLogsPanel) {
+      return;
+    }
+    layoutHandlers.toggleConsole();
+  }
+
+  const canFitMarkdownSplit = $derived(layoutHandlers.canFitMarkdownSplit());
 
   // Re-derive view-tab flags here so the editor prop block reads off local
   // const references (was inline in +page.svelte:544-548).
@@ -501,7 +685,7 @@
     workspaces: railWorkspaces,
     activeContextId,
     chatHttpRailVisible,
-    panelWidthPx: normalizeActivityRailWidthPx(snapshot.activityRailWidthPx),
+    panelWidthPx: normalizeActivityRailWidthPx(activityRailWidthPx),
     notepadOpenTabCount,
     notepadRecentTabs,
     contextMenuWorkspaceId: workspaceContextMenuMenu?.workspaceId ?? null,
@@ -581,19 +765,19 @@
     isMarkdownDocument: documentView.isMarkdownDocument,
     previewFileSizeBytes: documentView.previewFileSizeBytes,
     markdownHtml: documentView.markdownHtml,
-    previewMode: snapshot.editor.previewMode,
-    wrapLines: snapshot.editor.wrapLines,
-    zoomPercent: snapshot.editor.zoomPercent,
-    cursorLine: snapshot.editor.cursorLine,
-    cursorColumn: snapshot.editor.cursorColumn,
-    selectionCount: snapshot.editor.selectionCount,
-    decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
-    showMinimap: snapshot.settings.showMinimap,
-    showFoldGutter: snapshot.settings.showFoldGutter,
-    autoClosePairs: snapshot.settings.autoClosePairs,
-    autoSuggest: snapshot.settings.autoSuggest,
-    maxBinaryOpenAsTextBytes: snapshot.settings.externalFiles.maxBinaryOpenAsTextBytes,
-    maxOpenWithoutConfirmBytes: snapshot.settings.externalFiles.maxOpenWithoutConfirmBytes,
+    previewMode: editorPreviewMode,
+    wrapLines: editorWrapLines,
+    zoomPercent: editorZoomPercent,
+    cursorLine: editorCursorLine,
+    cursorColumn: editorCursorColumn,
+    selectionCount: editorSelectionCount,
+    decoratePlaintextSymbols,
+    showMinimap,
+    showFoldGutter,
+    autoClosePairs,
+    autoSuggest,
+    maxBinaryOpenAsTextBytes,
+    maxOpenWithoutConfirmBytes,
     canFitMarkdownSplit,
     currentWindowId,
     onCloseTab: agentHandlers.handleCloseTab,

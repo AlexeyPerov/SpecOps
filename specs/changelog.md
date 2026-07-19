@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-19 17:25 — Performance: L3, L9, L15 route reactivity cleanups
+
+Follow-up to the L14 `+page.svelte` split from the 2026-07-18 audit:
+
+- **L15 — fine-grained appState selectors:** Removed `snapshot =
+  $derived($appState)` from the route. New `appStateSelectors.ts` mirrors the
+  chatStore pattern with `derived(appState, …)` slices (`appSettings`,
+  `appEditor`, `appContexts`, `appOpenDocumentIds`, `appExternalWatcherSyncKey`,
+  stable quick-open recency inputs). `AppShellHost` now receives explicit leaf
+  editor/settings props instead of the monolithic snapshot; imperative handlers
+  read `appState.getSnapshot()`.
+- **L9 — tab-select effect guards:** Split session vs settings persistence
+  effects; settings disk writes fingerprint only persisted fields (cursor
+  excluded). Hydration effect depends on session-id string; tool-close skips
+  when no tool is open; access monitor skips stop/restart when active boolean
+  unchanged; sidecar probe memoized by workspace/settings/session-tab key.
+- **L3 — handler factories into AppShellHost:** The seven AppShell handler
+  bundles now allocate inside `AppShellHost.svelte`. The page captures
+  `AppShellHostApi` via `bind:this` for mount setup and cross-cutting effects;
+  workbench/session-cache/tools/tree/catalog singletons remain on the page.
+
 ## 2026-07-19 17:10 — Performance: L7, L8, L16, L17 tab/runtime cleanups
 
 Small performance cleanups from the 2026-07-18 audit:

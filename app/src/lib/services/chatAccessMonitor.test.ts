@@ -44,4 +44,14 @@ describe("chatAccessMonitor", () => {
     vi.advanceTimersByTime(CHAT_ACCESS_POLL_INTERVAL_MS * 2);
     expect(runAccessPreflightMock).not.toHaveBeenCalled();
   });
+
+  it("does not restart the interval when active state is unchanged", () => {
+    syncChatAccessMonitor(true);
+    vi.advanceTimersByTime(CHAT_ACCESS_POLL_INTERVAL_MS);
+    expect(runAccessPreflightMock).toHaveBeenCalledTimes(1);
+
+    syncChatAccessMonitor(true);
+    vi.advanceTimersByTime(CHAT_ACCESS_POLL_INTERVAL_MS);
+    expect(runAccessPreflightMock).toHaveBeenCalledTimes(2);
+  });
 });

@@ -62,7 +62,8 @@ import {
   normalizeGitIntegrationSettings,
 } from "../../services/gitIntegrationSettings";
 import { drainGitCommands } from "../../git/gitRun";
-import { closeAllViewTabsInState } from "./tabHelpers";
+import { closeAllSessionTabsInState, closeAllViewTabsInState } from "./tabHelpers";
+import { clearOpencodeSidecarCircuitBreaker } from "../../services/opencodeSidecarEnsure";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -126,6 +127,43 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
           }),
         },
       }));
+    },
+    setOpencodeEnabled(enabled: boolean) {
+      // Toggling the master switch clears the sidecar circuit breaker so a
+      // prior failure does not block re-enable.
+      clearOpencodeSidecarCircuitBreaker();
+      update((state) => {
+        let next: AppDomainState = {
+          ...state,
+          settings: {
+            ...state.settings,
+            opencode: normalizeOpencodeSettings({
+              ...state.settings.opencode,
+              enabled,
+            }),
+            opencodeHealth: enabled
+              ? {
+                  status: "checking",
+                  source: state.settings.opencode.mode,
+                  checkedAt: new Date().toISOString(),
+                  lastErrorMessage: null,
+                }
+              : {
+                  status: "unknown",
+                  source: null,
+                  checkedAt: new Date().toISOString(),
+                  lastErrorMessage: null,
+                },
+          },
+        };
+        if (!enabled) {
+          // Close any open session tabs so the hidden feature leaves no orphan
+          // tabs (mirrors how the git master toggle closes version-control
+          // view tabs).
+          next = closeAllSessionTabsInState(next);
+        }
+        return next;
+      });
     },
     setGitIntegrationEnabled(enabled: boolean) {
       let shouldDrain = false;

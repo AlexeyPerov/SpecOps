@@ -1,5 +1,10 @@
 # OpenCode integration
 
+> **Beta feature.** The workspace-sessions backend (OpenCode) is experimental
+> and **disabled by default**. Enable it under **Settings → Dev → Enable
+> OpenCode (beta)**. See [`docs/beta/opencode-workspace-sessions.md`](./beta/opencode-workspace-sessions.md)
+> for the opt-in flow and what is hidden when it is off.
+
 SpecOps uses OpenCode as the backend for all workspace-session workflows
 (`ws-*` is the internal context-id pattern). Chat HTTP providers are only used
 in the internal `chat-http` context.

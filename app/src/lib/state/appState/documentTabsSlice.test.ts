@@ -141,6 +141,36 @@ describe("appState tabs and selection", () => {
     }
   });
 
+  it("setOpencodeEnabled(false) closes session tabs across workspaces and resets health", () => {
+    appState.setOpencodeEnabled(true);
+    const workspaceId = appState.addWorkspace("/tmp/ws-a");
+    expect(workspaceId).not.toBeNull();
+    appState.switchContext(workspaceId!);
+    appState.openOrFocusSessionTab("sess-a");
+
+    const workspaceId2 = appState.addWorkspace("/tmp/ws-b");
+    expect(workspaceId2).not.toBeNull();
+    appState.switchContext(workspaceId2!);
+    appState.openOrFocusSessionTab("sess-b");
+
+    // Sanity: both workspaces have a session tab before the toggle.
+    const beforeTabs = appState.getSnapshot().contexts.workspaces.flatMap((ws) =>
+      getSessionTabs(ws.snapshot.session).filter(isSessionTab),
+    );
+    expect(beforeTabs).toHaveLength(2);
+
+    appState.setOpencodeEnabled(false);
+
+    for (const workspace of appState.getSnapshot().contexts.workspaces) {
+      const sessionTabs = getSessionTabs(workspace.snapshot.session).filter(isSessionTab);
+      expect(sessionTabs).toHaveLength(0);
+    }
+    const settings = appState.getSnapshot().settings;
+    expect(settings.opencode.enabled).toBe(false);
+    expect(settings.opencodeHealth.status).toBe("unknown");
+    expect(settings.opencodeHealth.source).toBeNull();
+  });
+
   it("openOrFocusViewTab opens a singleton version-control tab and focuses an existing one", () => {
     appState.openOrFocusViewTab("version-control");
     const versionControlTabs = () =>

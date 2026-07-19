@@ -32,6 +32,28 @@ vi.mock("./services/logging", () => ({
   logDiagnostic: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("./backends/opencodeBackendFactory", () => ({
+  createOpencodeBackendFromAppState: vi.fn(() => ({
+    getConfig: getConfigMock,
+    listProviderStatuses: listProviderStatusesMock,
+    listMcpStatuses: listMcpStatusesMock,
+    listAgentDetails: listAgentDetailsMock,
+    listSkills: listSkillsMock,
+  })),
+}));
+
+vi.mock("../state/appState", () => ({
+  appState: {
+    getSnapshot: () => ({
+      settings: { opencode: { enabled: true, mode: "sidecar", baseUrl: "", sidecarPort: 4096 } },
+    }),
+  },
+}));
+
+vi.mock("../services/opencodeSettings", () => ({
+  isOpencodeEnabled: () => true,
+}));
+
 const WS = "/repo/ws";
 
 function configDoc(): OpencodeConfigDocument {

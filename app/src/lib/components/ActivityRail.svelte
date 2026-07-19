@@ -32,6 +32,12 @@
     workspaces?: WorkspaceEntry[];
     activeContextId?: ContextId;
     showChatHttp?: boolean;
+    /**
+     * Whether the OpenCode workspace-sessions beta is enabled. When false the
+     * per-workspace "Sessions" count is hidden from expanded rail cards (the
+     * sessions backend is inactive).
+     */
+    opencodeEnabled?: boolean;
     /** Resizable rail width (compact 48px → expanded cards). */
     panelWidthPx?: number;
     /** Number of currently-open tabs in the notepad context. */
@@ -59,6 +65,7 @@
     workspaces = [],
     activeContextId = "notepad",
     showChatHttp = false,
+    opencodeEnabled = false,
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
     notepadOpenTabCount = 0,
     notepadRecentTabs = [],
@@ -352,7 +359,9 @@
               <span class="rail-workspace-name" title={workspacePath(workspace)}>{workspaceName(workspace)}</span>
               <span class="rail-workspace-path" title={workspacePath(workspace)}>{workspacePath(workspace)}</span>
               <span class="rail-workspace-stats">
-                <span class="rail-workspace-stat">Sessions: {counts.sessions}</span>
+                {#if opencodeEnabled}
+                  <span class="rail-workspace-stat">Sessions: {counts.sessions}</span>
+                {/if}
                 <span class="rail-workspace-stat">Tabs: {counts.tabs}</span>
               </span>
             </span>

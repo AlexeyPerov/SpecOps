@@ -5,6 +5,7 @@ import {
   findTabOwner,
   getSessionTabs,
   isFileTab,
+  isSessionTab,
   isViewTab,
   normalizeTabState,
   recomputeSelectedTabId,
@@ -217,6 +218,65 @@ export function closeAllViewTabsInState(
     if (patched !== workspace.snapshot) {
       next = patchContextById(next, workspace.id, () => patched);
     }
+  }
+  return next;
+}
+
+/** Remove every session tab (`kind === "session"`) from one context. */
+export function closeSessionTabsInContext(ctx: ContextSnapshot): ContextSnapshot {
+  const tabIdsToClose = allTabs(ctx.session.editorLayout)
+    .map((tab) => normalizeTabState(tab))
+    .filter((tab) => isSessionTab(tab))
+    .map((tab) => tab.id);
+
+  if (tabIdsToClose.length === 0) {
+    return ctx;
+  }
+
+  let layout = ctx.session.editorLayout;
+  for (const tabId of tabIdsToClose) {
+    for (const pane of layout.panes) {
+      if (pane.tabs.some((tab) => tab.id === tabId)) {
+        layout = removeTabFromPane(layout, pane.id, tabId);
+        break;
+      }
+    }
+  }
+
+  if (layout === ctx.session.editorLayout) {
+    return ctx;
+  }
+
+  return {
+    ...ctx,
+    session: {
+      ...ctx.session,
+      editorLayout: layout,
+    },
+  };
+}
+
+/**
+ * Close every session tab across all contexts (workspaces, notepad, chat-http).
+ * Used when the workspace-sessions beta is switched off so no orphan session
+ * tabs remain. Walks every context for robustness, even though session tabs
+ * today only live in workspace contexts.
+ */
+export function closeAllSessionTabsInState(state: AppDomainState): AppDomainState {
+  let next = state;
+  for (const workspace of state.contexts.workspaces) {
+    const patched = closeSessionTabsInContext(workspace.snapshot);
+    if (patched !== workspace.snapshot) {
+      next = patchContextById(next, workspace.id, () => patched);
+    }
+  }
+  const notepadPatched = closeSessionTabsInContext(next.contexts.notepad);
+  if (notepadPatched !== next.contexts.notepad) {
+    next = { ...next, contexts: { ...next.contexts, notepad: notepadPatched } };
+  }
+  const chatHttpPatched = closeSessionTabsInContext(next.contexts.chatHttp);
+  if (chatHttpPatched !== next.contexts.chatHttp) {
+    next = { ...next, contexts: { ...next.contexts, chatHttp: chatHttpPatched } };
   }
   return next;
 }

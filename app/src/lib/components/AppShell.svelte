@@ -54,6 +54,7 @@
     workspaces: WorkspaceEntry[];
     activeContextId: ContextId;
     chatHttpRailVisible: boolean;
+    opencodeEnabled: boolean;
     panelWidthPx: number;
     notepadOpenTabCount: number;
     notepadRecentTabs: { tabId: string; label: string }[];
@@ -586,6 +587,7 @@
         workspaces={activityRail.workspaces}
         activeContextId={activityRail.activeContextId}
         showChatHttp={activityRail.chatHttpRailVisible}
+        opencodeEnabled={activityRail.opencodeEnabled}
         panelWidthPx={activityRail.panelWidthPx}
         notepadOpenTabCount={activityRail.notepadOpenTabCount}
         notepadRecentTabs={activityRail.notepadRecentTabs}

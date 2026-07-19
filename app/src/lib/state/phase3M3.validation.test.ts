@@ -150,6 +150,7 @@ describe("Phase 3 M3 validation — workspace HTTP cutover regression gate", () 
   beforeEach(() => {
     vi.useFakeTimers();
     chatStore.reset();
+    appState.applyPersistedSettings({ opencode: { enabled: true } });
     resetChatProviderRegistryForTests();
     resetChatProvidersForTests();
     schedulePersistMock.mockReset();

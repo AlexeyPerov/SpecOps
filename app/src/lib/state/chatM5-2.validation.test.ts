@@ -63,6 +63,7 @@ describe("M5.2 milestone validation", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     chatStore.reset();
+    appState.applyPersistedSettings({ opencode: { enabled: true } });
     resetChatProviderRegistryForTests();
     resetChatProvidersForTests();
     schedulePersistMock.mockReset();

@@ -685,6 +685,7 @@
     workspaces: railWorkspaces,
     activeContextId,
     chatHttpRailVisible,
+    opencodeEnabled,
     panelWidthPx: normalizeActivityRailWidthPx(activityRailWidthPx),
     notepadOpenTabCount,
     notepadRecentTabs,

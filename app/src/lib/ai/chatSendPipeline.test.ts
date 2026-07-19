@@ -113,6 +113,7 @@ describe("chatSendPipeline workspace backend streaming", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     chatStore.reset();
+    appState.applyPersistedSettings({ opencode: { enabled: true } });
     resetChatProviderRegistryForTests();
     resetChatProvidersForTests();
     ensureWorkspaceReadAccessMock.mockReset();

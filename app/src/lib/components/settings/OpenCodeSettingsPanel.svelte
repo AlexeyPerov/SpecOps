@@ -81,28 +81,6 @@
     void chatStore.runAccessPreflight();
   }
 
-  function updateOpencodeEnabled(enabled: boolean): void {
-    // M13.5 — toggling the master switch clears the breaker.
-    clearOpencodeSidecarCircuitBreaker();
-    appState.applyPersistedSettings({
-      opencode: { enabled },
-      opencodeHealth: enabled
-        ? {
-            status: "checking",
-            source: snapshot.settings.opencode.mode,
-            checkedAt: new Date().toISOString(),
-            lastErrorMessage: null,
-          }
-        : {
-            status: "unknown",
-            source: null,
-            checkedAt: new Date().toISOString(),
-            lastErrorMessage: null,
-          },
-    });
-    void chatStore.runAccessPreflight();
-  }
-
   function updateOpencodeMode(mode: OpencodeTransportMode): void {
     if (snapshot.settings.opencode.mode === mode) {
       return;
@@ -211,82 +189,66 @@
 <section class="settings-section">
   <h3>OpenCode</h3>
   <p class="settings-section-note">
-    Workspace sessions use the OpenCode backend. Configure transport mode and server health here.
+    Workspace sessions backend. The master enable toggle lives in
+    Settings → Dev (OpenCode is a beta feature). Configure transport mode and
+    server health here.
   </p>
   <div class="settings-subsection">
-    <label class="settings-toggle" title="Enable OpenCode for workspace sessions">
+    <h4>Transport</h4>
+    <label class="settings-toggle">
       <input
-        type="checkbox"
-        checked={snapshot.settings.opencode.enabled}
-        title="Enable OpenCode for workspace sessions"
-        onchange={(event) =>
-          updateOpencodeEnabled((event.currentTarget as HTMLInputElement).checked)}
+        type="radio"
+        name="opencode-transport-mode"
+        checked={snapshot.settings.opencode.mode === "sidecar"}
+        title="Use local OpenCode sidecar transport"
+        onchange={() => updateOpencodeMode("sidecar")}
       />
-      Use OpenCode for workspace sessions
+      Sidecar (default)
     </label>
-    {#if !snapshot.settings.opencode.enabled}
-      <p class="settings-section-note">
-        OpenCode is off. Workspace folders open as editors without sessions. Enable above to use workspace sessions.
-      </p>
-    {/if}
-  </div>
-  {#if snapshot.settings.opencode.enabled}
-    <div class="settings-subsection">
-      <h4>Transport</h4>
-      <label class="settings-toggle">
+    <label class="settings-toggle">
+      <input
+        type="radio"
+        name="opencode-transport-mode"
+        checked={snapshot.settings.opencode.mode === "url"}
+        title="Connect to OpenCode by server URL"
+        onchange={() => updateOpencodeMode("url")}
+      />
+      URL
+    </label>
+    {#if snapshot.settings.opencode.mode === "url"}
+      <label class="settings-field">
+        <span>OpenCode server URL</span>
         <input
-          type="radio"
-          name="opencode-transport-mode"
-          checked={snapshot.settings.opencode.mode === "sidecar"}
-          title="Use local OpenCode sidecar transport"
-          onchange={() => updateOpencodeMode("sidecar")}
+          type="url"
+          spellcheck="false"
+          placeholder="https://opencode.example.com"
+          value={snapshot.settings.opencode.baseUrl}
+          oninput={(event) =>
+            updateOpencodeBaseUrl((event.currentTarget as HTMLInputElement).value)}
         />
-        Sidecar (default)
       </label>
-      <label class="settings-toggle">
+      {#if opencodeUrlValidationMessage}
+        <p class="settings-section-note opencode-validation-note">{opencodeUrlValidationMessage}</p>
+      {/if}
+    {:else}
+      <label class="settings-field">
+        <span>Sidecar port</span>
         <input
-          type="radio"
-          name="opencode-transport-mode"
-          checked={snapshot.settings.opencode.mode === "url"}
-          title="Connect to OpenCode by server URL"
-          onchange={() => updateOpencodeMode("url")}
+          type="number"
+          inputmode="numeric"
+          min="1024"
+          max="65535"
+          step="1"
+          spellcheck="false"
+          placeholder="4096"
+          title="Local port the OpenCode sidecar binds to. Default 4096; change if the port is already in use locally."
+          value={snapshot.settings.opencode.sidecarPort}
+          oninput={(event) =>
+            updateOpencodeSidecarPort((event.currentTarget as HTMLInputElement).value)}
         />
-        URL
       </label>
-      {#if snapshot.settings.opencode.mode === "url"}
-        <label class="settings-field">
-          <span>OpenCode server URL</span>
-          <input
-            type="url"
-            spellcheck="false"
-            placeholder="https://opencode.example.com"
-            value={snapshot.settings.opencode.baseUrl}
-            oninput={(event) =>
-              updateOpencodeBaseUrl((event.currentTarget as HTMLInputElement).value)}
-          />
-        </label>
-        {#if opencodeUrlValidationMessage}
-          <p class="settings-section-note opencode-validation-note">{opencodeUrlValidationMessage}</p>
-        {/if}
-      {:else}
-        <label class="settings-field">
-          <span>Sidecar port</span>
-          <input
-            type="number"
-            inputmode="numeric"
-            min="1024"
-            max="65535"
-            step="1"
-            spellcheck="false"
-            placeholder="4096"
-            title="Local port the OpenCode sidecar binds to. Default 4096; change if the port is already in use locally."
-            value={snapshot.settings.opencode.sidecarPort}
-            oninput={(event) =>
-              updateOpencodeSidecarPort((event.currentTarget as HTMLInputElement).value)}
-          />
-        </label>
-        {#if opencodeSidecarPortValidationMessage}
-          <p class="settings-section-note opencode-validation-note">
+      {#if opencodeSidecarPortValidationMessage}
+        <p class="settings-section-note opencode-validation-note">
             {opencodeSidecarPortValidationMessage}
           </p>
         {/if}
@@ -344,7 +306,6 @@
         Refresh model list
       </button>
     </div>
-  {/if}
 </section>
 
 <style>

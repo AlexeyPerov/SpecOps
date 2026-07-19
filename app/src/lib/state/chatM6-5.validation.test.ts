@@ -107,6 +107,7 @@ describe("M6 milestone validation — AI chat MVP", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     chatStore.reset();
+    appState.applyPersistedSettings({ opencode: { enabled: true } });
     resetChatProvidersForTests();
     deleteSessionPersistenceMock.mockReset();
     deleteSessionPersistenceMock.mockResolvedValue(undefined);

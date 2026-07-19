@@ -1,5 +1,88 @@
 # Changelog
 
+## 2026-07-19 23:50 — OpenCode (beta): gate workspace sessions behind a Dev toggle, off by default
+
+The OpenCode workspace-sessions integration now ships as a **beta feature,
+disabled by default** — mirroring the existing Chat (beta) gating pattern.
+Both AI lanes (workspace sessions and HTTP chat) are now opt-in from
+**Settings → Dev**. The editor, project panel, version control, and all
+non-AI features work without any beta toggle.
+
+### Default flip
+
+- `defaultOpencodeSettings.enabled`: `true` → `false`.
+- `isOpencodeEnabled`: null/undefined default `true` → `false`.
+- `normalizeOpencodeSettings`: missing-field default `true` → `false`.
+- Persisted explicit booleans are always preserved (no migration).
+
+### Toggle relocation
+
+- New slice action `appState.setOpencodeEnabled(enabled)` normalizes settings,
+  resets `opencodeHealth` to `unknown`/`null` on disable, clears the sidecar
+  circuit breaker, and closes all open session tabs across every context when
+  flipping off.
+- New `DevSettingsPanel.svelte` "OpenCode (beta)" section (next to Chat beta)
+  hosts the checkbox.
+- Removed the master toggle block from `OpenCodeSettingsPanel.svelte` (the
+  panel is now only reachable when enabled, via the gated Workspaces section);
+  the panel's `updateOpencodeEnabled` helper is dead code, removed.
+
+### Session-tab cleanup
+
+- New `closeAllSessionTabsInState` / `closeSessionTabsInContext` helpers in
+  `tabHelpers.ts` (mirror `closeAllViewTabsInState`). Called on disable so no
+  orphan session tabs remain.
+
+### Settings-tab gating
+
+- New `OPENCODE_GATED_TABS` in `settingsDialogUi.ts` (OpenCode, Config,
+  Providers, MCP servers, Agents, Permissions, Commands, Instructions, Debug
+  Provider).
+- `buildSettingsSidebar(chatHttp, opencode)` now omits the entire Workspaces
+  section when OpenCode is off (no orphan header). Deep links to gated tabs
+  redirect to Dev via `resolveOpenSettingsDialogTab`.
+- `SettingsView.svelte` passes both gates; existing auto-reset-to-Dev logic
+  handles tab hiding.
+
+### Activity rail
+
+- New `opencodeEnabled` prop on `ActivityRail.svelte`; the per-workspace
+  "Sessions: N" badge is hidden when OpenCode is off (the "Tabs: N" count
+  stays — file/view tabs are unrelated). Wired through `AppShell.svelte`
+  (`AppShellActivityRailProps`) and `AppShellHost.svelte`.
+
+### Runtime gating (already in place, no change)
+
+The backend factory, send pipeline, sidecar effects, and agent handlers
+already short-circuit on `isOpencodeEnabled`; this entry only flips the
+default and adds the UI/settings-tab/rail gating. Call sites confirmed
+read-only: `opencodeBackendFactory.ts`, `chatSendPipeline.ts`,
+`bootstrap.ts`, `appShellEffects.ts`, `appShellAgentHandlers.ts`.
+
+### Tests
+
+- `opencodeSettings.test.ts`: default-`false` assertions.
+- `settingsDialogUi.test.ts`: rewritten for the two-gate model
+  (`OPENCODE_GATED_TABS`, `isOpencodeGatedTab`, `resolveOpenSettingsDialogTab`
+  with both params, `buildSettingsSidebar` with opencode on/off).
+- `documentTabsSlice.test.ts`: `setOpencodeEnabled(false)` closes session tabs
+  + resets health.
+- `opencodeDiffStore.test.ts` / `opencodeConfigStore.test.ts`: fixed dead mock
+  paths; now mock `opencodeBackendFactory` directly.
+- Workspace-session test fixtures (`sendChatMessage`, `retryChatTurn`,
+  `chatSendPipeline`, `chatM5-2/3`, `chatM6-4/5`, `phase3M3` validation):
+  explicit `appState.applyPersistedSettings({ opencode: { enabled: true } })`
+  in `beforeEach` since the default is now off.
+
+### Docs
+
+- New `docs/beta/opencode-workspace-sessions.md` (mirrors the chat-http beta
+  doc structure).
+- `docs/beta/README.md`: OpenCode (beta) added to the table; framing updated
+  for two opt-in AI lanes.
+- `docs/opencode-integration.md`: beta banner at the top.
+- `README.md`: workspace sessions line marked (beta), tagline updated.
+
 ## 2026-07-19 17:25 — Performance: L3, L9, L15 route reactivity cleanups
 
 Follow-up to the L14 `+page.svelte` split from the 2026-07-18 audit:

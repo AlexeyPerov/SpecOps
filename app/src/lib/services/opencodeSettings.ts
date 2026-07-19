@@ -11,7 +11,7 @@ export const MAX_OPENCODE_SIDECAR_PORT = 65535;
 export const OPENCODE_SIDECAR_HOSTNAME = "127.0.0.1";
 
 export const defaultOpencodeSettings: OpencodeSettings = {
-  enabled: true,
+  enabled: false,
   mode: "sidecar",
   baseUrl: `http://${OPENCODE_SIDECAR_HOSTNAME}:${DEFAULT_OPENCODE_SIDECAR_PORT}`,
   sidecarPort: DEFAULT_OPENCODE_SIDECAR_PORT,
@@ -26,7 +26,7 @@ function isBoolean(value: unknown): value is boolean {
 }
 
 export function isOpencodeEnabled(settings?: OpencodeSettings | null): boolean {
-  return settings?.enabled ?? true;
+  return settings?.enabled ?? false;
 }
 
 /**
@@ -71,7 +71,7 @@ export function validateOpencodeSidecarPort(port: number): string | null {
 
 export function normalizeOpencodeSettings(input?: unknown): OpencodeSettings {
   const source = isRecord(input) ? input : {};
-  const enabled = isBoolean(source.enabled) ? source.enabled : true;
+  const enabled = isBoolean(source.enabled) ? source.enabled : false;
   const mode = source.mode === "url" ? "url" : "sidecar";
   const sidecarPort = isOpencodeSidecarPort(source.sidecarPort)
     ? source.sidecarPort

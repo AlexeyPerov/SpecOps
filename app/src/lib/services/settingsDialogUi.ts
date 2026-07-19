@@ -1,5 +1,6 @@
-import type { ChatHttpSettings } from "../domain/contracts";
+import type { ChatHttpSettings, OpencodeSettings } from "../domain/contracts";
 import { isChatHttpEnabled } from "./chatHttpSettings";
+import { isOpencodeEnabled } from "./opencodeSettings";
 import { appState } from "../state/appState";
 
 export type SettingsDialogTab =
@@ -156,11 +157,40 @@ const CHAT_HTTP_GATED_TAB_IDS: ReadonlySet<SettingsDialogTab> = new Set(
 );
 
 /**
+ * Tabs gated behind the OpenCode master toggle (the workspace-sessions beta).
+ * When the toggle is off, these tabs are hidden from the sidebar and
+ * unreachable from any panel switcher / deep link.
+ */
+export const OPENCODE_GATED_TABS = [
+  OPENCODE_TAB,
+  OPENCODE_CONFIG_TAB,
+  PROVIDERS_TAB,
+  MCP_TAB,
+  AGENTS_TAB,
+  PERMISSIONS_TAB,
+  COMMANDS_TAB,
+  INSTRUCTIONS_TAB,
+  DEBUG_AGENT_TAB,
+] as const satisfies readonly SettingsTabDefinition[];
+
+const OPENCODE_GATED_TAB_IDS: ReadonlySet<SettingsDialogTab> = new Set(
+  OPENCODE_GATED_TABS.map((tab) => tab.id),
+);
+
+/**
  * Whether a given tab id belongs to the chat-http beta subtree and should
  * only be reachable when the user has opted into the chat-http beta.
  */
 export function isChatHttpGatedTab(tab: SettingsDialogTab): boolean {
   return CHAT_HTTP_GATED_TAB_IDS.has(tab);
+}
+
+/**
+ * Whether a given tab id belongs to the OpenCode workspace-sessions beta
+ * subtree and should only be reachable when the user has opted in.
+ */
+export function isOpencodeGatedTab(tab: SettingsDialogTab): boolean {
+  return OPENCODE_GATED_TAB_IDS.has(tab);
 }
 
 /**
@@ -194,57 +224,61 @@ const ALL_TABS = [
 export const SETTINGS_TABS = ALL_TABS;
 
 /**
- * Resolve a deep-link tab against the chat-http beta gate. When the gate is
- * closed, chat-http tabs redirect to the Dev master panel; other tabs pass
- * through unchanged.
+ * Resolve a deep-link tab against the chat-http and OpenCode beta gates. When
+ * a gate is closed, its gated tabs redirect to the Dev master panel; other
+ * tabs pass through unchanged.
  */
 export function resolveOpenSettingsDialogTab(
   requested: SettingsDialogTab,
   chatHttp: ChatHttpSettings | null | undefined,
+  opencode: OpencodeSettings | null | undefined,
 ): SettingsDialogTab {
-  if (!isChatHttpGatedTab(requested)) {
-    return requested;
+  if (isChatHttpGatedTab(requested) && !isChatHttpEnabled(chatHttp)) {
+    return DEV_FALLBACK_TAB;
   }
-  return isChatHttpEnabled(chatHttp) ? requested : DEV_FALLBACK_TAB;
+  if (isOpencodeGatedTab(requested) && !isOpencodeEnabled(opencode)) {
+    return DEV_FALLBACK_TAB;
+  }
+  return requested;
 }
 
 /**
  * Build the sidebar entries for the settings dialog. The Dev section always
  * contains its master toggle plus Logs; the chat-http subtree (Providers,
- * Chat modes, Debug Provider) is appended only when the beta is enabled so
- * hidden tabs are not reachable from measure/layout code paths.
+ * Chat modes, Debug Provider) and the Workspaces subtree (OpenCode, Config,
+ * Providers, MCP servers, Agents, Permissions, Commands, Instructions, Debug
+ * Provider) are appended only when their respective beta is enabled so hidden
+ * tabs are not reachable from measure/layout code paths. The Workspaces
+ * section is omitted entirely when OpenCode is disabled (no orphan header).
  */
 export function buildSettingsSidebar(
   chatHttp: ChatHttpSettings | null | undefined,
+  opencode: OpencodeSettings | null | undefined,
 ): readonly SettingsSidebarEntry[] {
   const devTabs: readonly SettingsTabDefinition[] = isChatHttpEnabled(chatHttp)
     ? [DEV_TAB, LOGS_TAB, ...CHAT_HTTP_GATED_TABS]
     : [DEV_TAB, LOGS_TAB];
-  return [
+  const entries: SettingsSidebarEntry[] = [
     { kind: "tab", tab: EDITOR_TAB },
     { kind: "tab", tab: SHORTCUTS_TAB },
     { kind: "tab", tab: APPEARANCE_TAB },
     { kind: "tab", tab: VERSION_CONTROL_TAB },
     { kind: "section", label: "Dev", tabs: devTabs },
-    {
+  ];
+  if (isOpencodeEnabled(opencode)) {
+    entries.push({
       kind: "section",
       label: "Workspaces",
-      tabs: [
-        OPENCODE_TAB,
-        OPENCODE_CONFIG_TAB,
-        PROVIDERS_TAB,
-        MCP_TAB,
-        AGENTS_TAB,
-        PERMISSIONS_TAB,
-        COMMANDS_TAB,
-        INSTRUCTIONS_TAB,
-        DEBUG_AGENT_TAB,
-      ],
-    },
-  ] as const satisfies readonly SettingsSidebarEntry[];
+      tabs: [...OPENCODE_GATED_TABS],
+    });
+  }
+  return entries;
 }
 
-export const SETTINGS_SIDEBAR = buildSettingsSidebar({ enabled: false });
+export const SETTINGS_SIDEBAR = buildSettingsSidebar(
+  { enabled: false },
+  { enabled: false, mode: "sidecar", baseUrl: "", sidecarPort: 4096 },
+);
 
 function tabMatchesSettingsFilter(tab: SettingsTabDefinition, normalizedQuery: string): boolean {
   return tab.label.toLowerCase().includes(normalizedQuery);
@@ -299,9 +333,9 @@ export function openSettingsDialog(tab: SettingsDialogTab = "editor"): void {
 function resolveAgainstCurrentAppState(tab: SettingsDialogTab): SettingsDialogTab {
   try {
     const state = appState.getSnapshot();
-    return resolveOpenSettingsDialogTab(tab, state.settings.chatHttp);
+    return resolveOpenSettingsDialogTab(tab, state.settings.chatHttp, state.settings.opencode);
   } catch {
-    return resolveOpenSettingsDialogTab(tab, null);
+    return resolveOpenSettingsDialogTab(tab, null, null);
   }
 }
 

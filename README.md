@@ -1,7 +1,7 @@
 # <img src="app/static/favicon.png" alt="" width="32" height="32" align="top"> SpecOps
 
 Desktop workspace for notes, specs, and project files — with a built-in editor
-and **OpenCode**-powered workspace sessions. Built with
+and optional **OpenCode**-powered workspace sessions (beta). Built with
 [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
 
 > Under active development. APIs, settings, and on-disk formats may change without migration.
@@ -17,7 +17,7 @@ and **OpenCode**-powered workspace sessions. Built with
 - **Version Control** — per-workspace git tab (history, branches, tags, changes, fetch/pull/push) via system `git`
 - **Themes**, **multi-window**, **image** preview
 - **Console** — resizable bottom panel with logs
-- **Workspace sessions** — OpenCode-powered conversations with tools, permissions, and streaming
+- **Workspace sessions (beta)** — OpenCode-powered conversations with tools, permissions, and streaming; off by default, enable under Settings → Dev; see [`docs/beta/`](./docs/beta/)
 - **Chat (beta)** — experimental HTTP chat context, off by default; see [`docs/beta/`](./docs/beta/)
 
 ## Screenshots

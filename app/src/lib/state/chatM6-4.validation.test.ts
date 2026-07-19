@@ -33,6 +33,7 @@ describe("M6-4 edge-case transitions", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     chatStore.reset();
+    appState.applyPersistedSettings({ opencode: { enabled: true } });
     resetChatProviderRegistryForTests();
     resetChatProvidersForTests();
     ensureWorkspaceReadAccessMock.mockReset();

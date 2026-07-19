@@ -106,6 +106,7 @@ describe("sendChatMessage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     chatStore.reset();
+    appState.applyPersistedSettings({ opencode: { enabled: true } });
     resetChatProviderRegistryForTests();
     resetChatProvidersForTests();
     schedulePersistMock.mockReset();

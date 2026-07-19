@@ -110,6 +110,17 @@ export interface FontSettings {
 
 export type OpencodeTransportMode = "sidecar" | "url";
 
+/**
+ * Master toggle for the experimental workspace-sessions backend (OpenCode).
+ *
+ * Disabled by default (beta). When false, no OpenCode sidecar/SDK activity
+ * runs, the Sessions sidebar is hidden in workspaces, the activity-rail per-
+ * workspace session counts are hidden, and the Settings → Workspaces subtree
+ * (OpenCode, Config, Providers, MCP servers, Agents, Permissions, Commands,
+ * Instructions, Debug Provider) is removed from the sidebar. The toggle lives
+ * in Settings → Dev next to Chat (beta). Open session tabs are closed when the
+ * feature is switched off so no orphan tabs remain.
+ */
 export interface OpencodeSettings {
   enabled: boolean;
   mode: OpencodeTransportMode;

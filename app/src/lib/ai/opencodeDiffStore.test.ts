@@ -20,18 +20,10 @@ vi.mock("./services/logging", () => ({
   logDiagnostic: vi.fn().mockResolvedValue(undefined),
 }));
 
-const getSnapshotMock = vi.fn(() => ({
-  settings: {
-    opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
-  },
-}));
-
-vi.mock("./state/appState", () => ({
-  appState: { getSnapshot: getSnapshotMock },
-}));
-
-vi.mock("./services/opencodeSettings", () => ({
-  isOpencodeEnabled: (settings?: { enabled?: boolean }) => settings?.enabled ?? true,
+vi.mock("./backends/opencodeBackendFactory", () => ({
+  createOpencodeBackendFromAppState: vi.fn(() => ({
+    listSessionDiffs: listSessionDiffsMock,
+  })),
 }));
 
 const WS = "/repo/ws";
@@ -53,11 +45,6 @@ function getStoreValue(readable: { subscribe: (cb: (v: unknown) => void) => () =
 beforeEach(() => {
   resetSessionDiffStoreForTests();
   listSessionDiffsMock.mockReset();
-  getSnapshotMock.mockReturnValue({
-    settings: {
-      opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096" },
-    },
-  });
 });
 
 afterEach(() => {

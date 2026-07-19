@@ -39,7 +39,7 @@
   let filterQuery = $state("");
 
   const settingsSidebar = $derived(
-    buildSettingsSidebar($appState.settings.chatHttp),
+    buildSettingsSidebar($appState.settings.chatHttp, $appState.settings.opencode),
   );
   const filteredSettingsSidebar = $derived(
     filterSettingsSidebar(settingsSidebar, filterQuery),
@@ -58,13 +58,14 @@
       const resolved = resolveOpenSettingsDialogTab(
         subTab as SettingsDialogTab,
         $appState.settings.chatHttp,
+        $appState.settings.opencode,
       );
       activeTab = resolved;
       filterQuery = "";
     }
   });
 
-  // Reset to a valid tab when the active one is hidden by the chat-http gate.
+  // Reset to a valid tab when the active one is hidden by a beta gate.
   $effect(() => {
     if (!visibleTabIds.has(activeTab)) {
       activeTab = "dev";

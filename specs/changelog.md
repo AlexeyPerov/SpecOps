@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-07-19 07:50 — Performance: bundle code-splitting (L1)
+
+Shrank the initial JS payload by deferring code that isn't needed at launch.
+The main app chunk dropped from ~1.98 MB to ~1.27 MB (~35% reduction); the
+CodeMirror language packs and picker overlays now load on demand.
+
+- **Lazy-loaded the 5 picker overlays** (`AppShell.svelte`): QuickOpen,
+  CommandPalette, HeadingJump, BookmarkList, and SnippetInsert pickers were
+  statically imported but only mounted when invoked. They now resolve via a
+  cached dynamic `import()` through a new `loadLazyPicker` helper
+  (`lazyPicker.ts`) and render via Svelte's `{#await}` block. Each picker is
+  its own ~2.5-6 kB chunk fetched on first open; the shared picker shell stays
+  in a separate small chunk.
+- **Moved the 4 sync CodeMirror language packs behind the async path**
+  (`editorLanguage.ts`): `@codemirror/lang-markdown`, `lang-javascript`,
+  `lang-html`, and `lang-css` were imported eagerly at module top level. They
+  now resolve through the existing `loadLanguageSupport` async switch (same
+  pattern as json/python/rust/etc.). `getLanguageSupport` is now a pure cache
+  lookup; the editor controller's existing sync-miss-then-async-reconfigure
+  flow applies highlighting within a frame of first open, then caches.
+- **Added a `manualChunks` rule** (`vite.config.js`): forces
+  `@codemirror/lang-*` / `@replit/codemirror-lang-*` into a
+  `codemirror-languages` chunk and `highlight.js` into its own chunk. Without
+  this Vite folded the dynamic lang-pack imports back into the main chunk; the
+  rule keeps the 934 kB language pack and 162 kB highlight.js payloads in
+  separately-cacheable chunks loaded outside the initial graph.
+
+`highlight.js` itself remains eagerly imported (its sync chat-markdown render
+API makes lazy-loading invasive — deferred to a follow-up).
+
 ## 2026-07-18 23:00 — Performance: remove workspace-switch editor grid remount (L10)
 
 Eliminated the full editor-grid remount on every workspace / notepad / chat-http

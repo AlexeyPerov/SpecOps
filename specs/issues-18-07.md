@@ -27,18 +27,13 @@ moderate risk), **L** = large (1+ days, invasive).
 
 ### Launch / bundle
 
-#### L1. No code-splitting — heavy initial bundle
-- `highlight.js/lib/common` (~2.3 MB, ~40 languages), four CodeMirror language
-  packs imported synchronously, and all picker components are in the initial
-  bundle.
-- **Files:** `app/src/lib/services/chatMarkdown.ts:14`,
-  `app/src/lib/editor/editorLanguage.ts:1-5`, `app/src/routes/+page.svelte:1-145`.
-- **Complexity: M.**
-- **Fix sketch:** Vite `build.rollupOptions.output.manualChunks` plus dynamic
-  `import()` for highlight.js, the markdown renderer, and the picker dialogs.
-  Each lazy boundary needs a test (chat first render, picker open). The four
-  sync CodeMirror language packs can move behind dynamic imports matching the
-  existing lazy-pack pattern.
+#### L1. ~~No code-splitting — heavy initial bundle~~ ✅ Resolved
+- **Status:** Shipped. The 5 picker overlays and the 4 sync CodeMirror language
+  packs now load on demand; a `manualChunks` rule isolates the CodeMirror
+  language packs and highlight.js into separately-cacheable chunks. Main app
+  chunk dropped ~35% (~1.98 MB → ~1.27 MB). highlight.js itself stays eager
+  (sync chat-markdown API constraint — deferred). See the 2026-07-19 07:50
+  changelog entry.
 
 #### L2. Workspace file catalog walks the whole tree at startup
 - After the launch-waterfall fix this phase runs in the background, but it
@@ -192,15 +187,16 @@ moderate risk), **L** = large (1+ days, invasive).
 | #16 | Double OpenCode health probe per switch eliminated | `4e7a0f1` |
 | #20 | Workspace context lookups indexed via WeakMap | `4e7a0f1` |
 | #21 | cycleTheme theme list memoized | `4e7a0f1` |
-| L10 | `{#key editor.contextId}` workspace grid remount removed via full context-namespacing | (this pass) |
+| L10 | `{#key editor.contextId}` workspace grid remount removed via full context-namespacing | `146d69f` |
+| L1 | Bundle code-splitting: lazy pickers + lazy CodeMirror lang packs + manualChunks | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L1** — bundle code-splitting. Cuts initial load size materially
-   (highlight.js alone is ~2.3 MB).
-2. **L12** + **L13** — workspace-switch disk re-reads and linear scans.
-3. **L4** + **L5** — chat-tab mount cost (preflight + totals).
-4. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
-5. **L7, L8, L16, L17** — small cleanups.
+1. **L12** + **L13** — workspace-switch disk re-reads and linear scans.
+2. **L4** + **L5** — chat-tab mount cost (preflight + totals).
+3. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
+4. **L7, L8, L16, L17** — small cleanups.
+5. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
+   render contract or a fallback-then-rehighlight path.

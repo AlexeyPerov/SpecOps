@@ -1,7 +1,3 @@
-import { css } from "@codemirror/lang-css";
-import { html } from "@codemirror/lang-html";
-import { javascript } from "@codemirror/lang-javascript";
-import { markdown } from "@codemirror/lang-markdown";
 import { LanguageSupport, StreamLanguage } from "@codemirror/language";
 export type EditorLanguageId = string;
 
@@ -102,72 +98,26 @@ export function inferEditorLanguage(path: string | null): EditorLanguageId {
   return "plaintext";
 }
 
+// Module-level cache of resolved LanguageSupport instances. Populated by
+// loadLanguageSupport; getLanguageSupport is a pure cache lookup. All language
+// packs (including the formerly-sync markdown/javascript/html/css) are loaded
+// via dynamic import so they land in separate chunks and stay out of the
+// initial bundle — they're only needed once a file of that language is opened.
 const cache = new Map<string, LanguageSupport>();
 
-function syncMarkdown(): LanguageSupport {
-  let cached = cache.get("markdown");
-  if (!cached) {
-    cached = markdown({ addKeymap: false });
-    cache.set("markdown", cached);
-  }
-  return cached;
-}
-
-function syncJavascript(id: "javascript" | "typescript" | "jsx" | "shell"): LanguageSupport {
-  let cached = cache.get(id);
-  if (!cached) {
-    if (id === "typescript") cached = javascript({ typescript: true, jsx: true });
-    else if (id === "jsx") cached = javascript({ jsx: true });
-    else cached = javascript();
-    cache.set(id, cached);
-  }
-  return cached;
-}
-
-function syncHtml(): LanguageSupport {
-  let cached = cache.get("html");
-  if (!cached) {
-    cached = html();
-    cache.set("html", cached);
-  }
-  return cached;
-}
-
-function syncCss(): LanguageSupport {
-  let cached = cache.get("css");
-  if (!cached) {
-    cached = css();
-    cache.set("css", cached);
-  }
-  return cached;
-}
-
-const SYNC_LANGUAGE_IDS = new Set<EditorLanguageId>([
-  "markdown",
-  "javascript",
-  "typescript",
-  "jsx",
-  "shell",
-  "html",
-  "css",
-]);
-
+/**
+ * Returns the cached LanguageSupport for `id`, or null if it hasn't been
+ * loaded yet. Callers that need the support (e.g. the editor controller's
+ * `syncLanguage`) fall back to {@link loadLanguageSupport} on a miss, which
+ * fetches the language chunk and reconfigures the editor when it resolves.
+ */
 export function getLanguageSupport(id: EditorLanguageId): LanguageSupport | null {
   if (id === "plaintext") return null;
-  if (id === "markdown") return syncMarkdown();
-  if (id === "javascript" || id === "typescript" || id === "jsx" || id === "shell") {
-    return syncJavascript(id);
-  }
-  if (id === "html") return syncHtml();
-  if (id === "css") return syncCss();
-  const cached = cache.get(id);
-  if (cached) return cached;
-  return null;
+  return cache.get(id) ?? null;
 }
 
 export async function loadLanguageSupport(id: EditorLanguageId): Promise<LanguageSupport | null> {
   if (id === "plaintext") return null;
-  if (SYNC_LANGUAGE_IDS.has(id)) return getLanguageSupport(id);
 
   const cached = cache.get(id);
   if (cached) return cached;
@@ -176,6 +126,41 @@ export async function loadLanguageSupport(id: EditorLanguageId): Promise<Languag
 
   try {
     switch (id) {
+      case "markdown": {
+        const mod = await import("@codemirror/lang-markdown");
+        support = mod.markdown({ addKeymap: false });
+        break;
+      }
+      case "javascript": {
+        const mod = await import("@codemirror/lang-javascript");
+        support = mod.javascript();
+        break;
+      }
+      case "typescript": {
+        const mod = await import("@codemirror/lang-javascript");
+        support = mod.javascript({ typescript: true, jsx: true });
+        break;
+      }
+      case "jsx": {
+        const mod = await import("@codemirror/lang-javascript");
+        support = mod.javascript({ jsx: true });
+        break;
+      }
+      case "shell": {
+        const mod = await import("@codemirror/lang-javascript");
+        support = mod.javascript();
+        break;
+      }
+      case "html": {
+        const mod = await import("@codemirror/lang-html");
+        support = mod.html();
+        break;
+      }
+      case "css": {
+        const mod = await import("@codemirror/lang-css");
+        support = mod.css();
+        break;
+      }
       case "json": {
         const mod = await import("@codemirror/lang-json");
         support = mod.json();

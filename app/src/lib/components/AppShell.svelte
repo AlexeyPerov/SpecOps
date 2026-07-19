@@ -26,11 +26,7 @@
   import DiffViewerPanel from "./DiffViewerPanel.svelte";
   import ProjectSearchPanel from "./ProjectSearchPanel.svelte";
   import SessionTimelineDialog from "./SessionTimelineDialog.svelte";
-  import QuickOpenPicker from "./QuickOpenPicker.svelte";
-  import CommandPalettePicker from "./CommandPalettePicker.svelte";
-  import HeadingJumpPicker from "./HeadingJumpPicker.svelte";
-  import BookmarkListPicker from "./BookmarkListPicker.svelte";
-  import SnippetInsertPicker from "./SnippetInsertPicker.svelte";
+  import { loadLazyPicker } from "./lazyPicker";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import TitleBar from "./TitleBar.svelte";
@@ -897,54 +893,64 @@
 <ConfirmDialog />
 
 {#if commandPalette}
-  <CommandPalettePicker
-    open={commandPalette.open}
-    results={commandPalette.results}
-    onSelect={commandPalette.onSelect}
-    onClose={commandPalette.onClose}
-    onQueryInput={commandPalette.onQueryInput}
-  />
+  {#await loadLazyPicker("command-palette", () => import("./CommandPalettePicker.svelte")) then Cmp}
+    <Cmp.default
+      open={commandPalette.open}
+      results={commandPalette.results}
+      onSelect={commandPalette.onSelect}
+      onClose={commandPalette.onClose}
+      onQueryInput={commandPalette.onQueryInput}
+    />
+  {/await}
 {/if}
 
 {#if quickOpen}
-  <QuickOpenPicker
-    open={quickOpen.open}
-    results={quickOpen.results}
-    onSelect={quickOpen.onSelect}
-    onClose={quickOpen.onClose}
-    onRefresh={quickOpen.onRefresh}
-    onQueryInput={quickOpen.onQueryInput}
-  />
+  {#await loadLazyPicker("quick-open", () => import("./QuickOpenPicker.svelte")) then Cmp}
+    <Cmp.default
+      open={quickOpen.open}
+      results={quickOpen.results}
+      onSelect={quickOpen.onSelect}
+      onClose={quickOpen.onClose}
+      onRefresh={quickOpen.onRefresh}
+      onQueryInput={quickOpen.onQueryInput}
+    />
+  {/await}
 {/if}
 
 {#if headingJump}
-  <HeadingJumpPicker
-    open={headingJump.open}
-    results={headingJump.results}
-    onSelect={headingJump.onSelect}
-    onClose={headingJump.onClose}
-    onQueryInput={headingJump.onQueryInput}
-  />
+  {#await loadLazyPicker("heading-jump", () => import("./HeadingJumpPicker.svelte")) then Cmp}
+    <Cmp.default
+      open={headingJump.open}
+      results={headingJump.results}
+      onSelect={headingJump.onSelect}
+      onClose={headingJump.onClose}
+      onQueryInput={headingJump.onQueryInput}
+    />
+  {/await}
 {/if}
 
 {#if bookmarkList}
-  <BookmarkListPicker
-    open={bookmarkList.open}
-    bookmarks={bookmarkList.bookmarks}
-    onSelect={bookmarkList.onSelect}
-    onClose={bookmarkList.onClose}
-    onQueryInput={bookmarkList.onQueryInput}
-  />
+  {#await loadLazyPicker("bookmark-list", () => import("./BookmarkListPicker.svelte")) then Cmp}
+    <Cmp.default
+      open={bookmarkList.open}
+      bookmarks={bookmarkList.bookmarks}
+      onSelect={bookmarkList.onSelect}
+      onClose={bookmarkList.onClose}
+      onQueryInput={bookmarkList.onQueryInput}
+    />
+  {/await}
 {/if}
 
 {#if snippetInsert}
-  <SnippetInsertPicker
-    open={snippetInsert.open}
-    results={snippetInsert.results}
-    onSelect={snippetInsert.onSelect}
-    onClose={snippetInsert.onClose}
-    onQueryInput={snippetInsert.onQueryInput}
-  />
+  {#await loadLazyPicker("snippet-insert", () => import("./SnippetInsertPicker.svelte")) then Cmp}
+    <Cmp.default
+      open={snippetInsert.open}
+      results={snippetInsert.results}
+      onSelect={snippetInsert.onSelect}
+      onClose={snippetInsert.onClose}
+      onQueryInput={snippetInsert.onQueryInput}
+    />
+  {/await}
 {/if}
 
 {#if timelineDialog}

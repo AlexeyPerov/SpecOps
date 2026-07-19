@@ -304,6 +304,59 @@ export function findFileTabForNormalizedPath(
 }
 
 /**
+ * Per-state lookup index for cross-context document discovery. Keyed by the
+ * state reference via WeakMap, so a fresh state (every mutation) lazily builds
+ * a new index and the old one is GC'd. Within one state revision, repeated
+ * `findDocumentContext` / `findDocumentByNormalizedPathAllContexts` calls are
+ * O(1) instead of the O(N·M) linear walk over every workspace's docs/tabs.
+ *
+ * `findDocumentContext` is on the watcher/focus/startup hot path (called once
+ * per pending dirty-prompt flush, once per deferred startup-batch survivor, and
+ * once per focus check), so collapsing the per-call cost from "scan all
+ * contexts" to a Map lookup matters most when many documents are open across
+ * many workspaces. Document ids are not globally unique (a restore can seed
+ * the same id into more than one context), so the index records the
+ * active-context-first winner — same priority as {@link allContextSnapshots}.
+ */
+interface ContextLookupIndex {
+  /** documentId → owning context id (active-context-first winner). */
+  documentIdToContextId: Map<string, ContextId>;
+  /** normalized path → owning context id (active-context-first winner). */
+  pathToContextId: Map<string, ContextId>;
+}
+
+const contextLookupIndexCache = new WeakMap<AppDomainState, ContextLookupIndex>();
+
+function buildContextLookupIndex(state: AppDomainState): ContextLookupIndex {
+  const documentIdToContextId = new Map<string, ContextId>();
+  const pathToContextId = new Map<string, ContextId>();
+  for (const entry of allContextSnapshots(state)) {
+    for (const document of entry.snapshot.documents) {
+      if (!documentIdToContextId.has(document.id)) {
+        documentIdToContextId.set(document.id, entry.id);
+      }
+      if (document.filePath) {
+        const normalized = normalizePathSync(document.filePath);
+        if (!pathToContextId.has(normalized)) {
+          pathToContextId.set(normalized, entry.id);
+        }
+      }
+    }
+  }
+  return { documentIdToContextId, pathToContextId };
+}
+
+function getContextLookupIndex(state: AppDomainState): ContextLookupIndex {
+  const cached = contextLookupIndexCache.get(state);
+  if (cached) {
+    return cached;
+  }
+  const fresh = buildContextLookupIndex(state);
+  contextLookupIndexCache.set(state, fresh);
+  return fresh;
+}
+
+/**
  * Enumerates every context snapshot in a stable order: active context first
  * (so first-match lookups prefer it), then notepad, chat-http, and finally the
  * remaining workspaces. Used by the cross-context document discovery helpers
@@ -359,13 +412,20 @@ export function findDocumentContext(
   state: AppDomainState,
   documentId: string,
 ): { contextId: ContextId; document: DocumentState } | null {
-  for (const entry of allContextSnapshots(state)) {
-    const document = entry.snapshot.documents.find((doc) => doc.id === documentId);
-    if (document) {
-      return { contextId: entry.id, document };
-    }
+  const index = getContextLookupIndex(state);
+  const contextId = index.documentIdToContextId.get(documentId);
+  if (contextId === undefined) {
+    return null;
   }
-  return null;
+  const snapshot = getContextSnapshotById(state, contextId);
+  if (!snapshot) {
+    return null;
+  }
+  const document = snapshot.documents.find((doc) => doc.id === documentId);
+  if (!document) {
+    return null;
+  }
+  return { contextId, document };
 }
 
 /**
@@ -378,16 +438,23 @@ export function findDocumentByNormalizedPathAllContexts(
   state: AppDomainState,
   normalizedPath: string,
 ): { contextId: ContextId; documentId: string; tabId: string; document: DocumentState } | null {
-  for (const entry of allContextSnapshots(state)) {
-    const match = findFileTabForNormalizedPath(entry.snapshot, normalizedPath);
-    if (match) {
-      return {
-        contextId: entry.id,
-        documentId: match.documentId,
-        tabId: match.tabId,
-        document: match.document,
-      };
-    }
+  const index = getContextLookupIndex(state);
+  const contextId = index.pathToContextId.get(normalizedPath);
+  if (contextId === undefined) {
+    return null;
   }
-  return null;
+  const snapshot = getContextSnapshotById(state, contextId);
+  if (!snapshot) {
+    return null;
+  }
+  const match = findFileTabForNormalizedPath(snapshot, normalizedPath);
+  if (!match) {
+    return null;
+  }
+  return {
+    contextId,
+    documentId: match.documentId,
+    tabId: match.tabId,
+    document: match.document,
+  };
 }

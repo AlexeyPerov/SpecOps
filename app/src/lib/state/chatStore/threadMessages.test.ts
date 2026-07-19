@@ -434,6 +434,121 @@ describe("chatStore", () => {
     expect(index.some((entry) => entry.id === "agent-a")).toBe(true);
   });
 
+  it("loadWorkspaceSessions skips disk re-reads when in-memory cache is current", async () => {
+    const threadA: ChatThreadSnapshot = {
+      metadata: {
+        sessionId: "agent-a",
+        threadId: "agent-a",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+      },
+      messages: [
+        { id: "a-1", role: "user", content: "A", createdAt: "2026-05-25T00:00:00.000Z" },
+      ],
+    };
+    const threadB: ChatThreadSnapshot = {
+      metadata: {
+        sessionId: "agent-b",
+        threadId: "agent-b",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:01.000Z",
+        updatedAt: "2026-05-25T00:00:01.000Z",
+      },
+      messages: [
+        { id: "b-1", role: "user", content: "B", createdAt: "2026-05-25T00:00:01.000Z" },
+      ],
+    };
+    const indexSnapshot = {
+      version: 1 as const,
+      sessions: [
+        { id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" },
+        { id: "agent-b", title: "B", lastUsedAt: "2026-05-25T00:00:01.000Z" },
+      ],
+    };
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue(indexSnapshot);
+    readSessionThreadFileSnapshotMock.mockImplementation(async (_root, sessionId) => {
+      if (sessionId === "agent-a") return threadA;
+      if (sessionId === "agent-b") return threadB;
+      return null;
+    });
+
+    chatStore.setActiveWorkspaceRoot("/work/cache");
+    await chatStore.loadWorkspaceSessions("/work/cache");
+    expect(readSessionThreadFileSnapshotMock).toHaveBeenCalledTimes(2);
+
+    readSessionThreadFileSnapshotMock.mockClear();
+    // Re-enter the same workspace: the on-disk index is unchanged, every
+    // persisted session already has its thread in memory — no disk reads.
+    await chatStore.loadWorkspaceSessions("/work/cache");
+    expect(readSessionThreadFileSnapshotMock).not.toHaveBeenCalled();
+    // Threads are still in memory.
+    chatStore.setActiveSessionId("agent-a");
+    expect(chatStore.getMessages()).toEqual(threadA.messages);
+  });
+
+  it("loadWorkspaceSessions re-reads only missing threads when a new session appears", async () => {
+    const threadA: ChatThreadSnapshot = {
+      metadata: {
+        sessionId: "agent-a",
+        threadId: "agent-a",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+      },
+      messages: [
+        { id: "a-1", role: "user", content: "A", createdAt: "2026-05-25T00:00:00.000Z" },
+      ],
+    };
+    const threadB: ChatThreadSnapshot = {
+      metadata: {
+        sessionId: "agent-b",
+        threadId: "agent-b",
+        mode: "ask",
+        provider: "http",
+        createdAt: "2026-05-25T00:00:01.000Z",
+        updatedAt: "2026-05-25T00:00:01.000Z",
+      },
+      messages: [
+        { id: "b-1", role: "user", content: "B", createdAt: "2026-05-25T00:00:01.000Z" },
+      ],
+    };
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      sessions: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+    });
+    readSessionThreadFileSnapshotMock.mockImplementation(async (_root, sessionId) => {
+      if (sessionId === "agent-a") return threadA;
+      if (sessionId === "agent-b") return threadB;
+      return null;
+    });
+
+    chatStore.setActiveWorkspaceRoot("/work/delta");
+    await chatStore.loadWorkspaceSessions("/work/delta");
+    expect(readSessionThreadFileSnapshotMock).toHaveBeenCalledTimes(1);
+
+    readSessionThreadFileSnapshotMock.mockClear();
+    // The on-disk index now includes a new session — only the new one should
+    // be read from disk; agent-a stays cached in memory.
+    readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+      version: 1,
+      sessions: [
+        { id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" },
+        { id: "agent-b", title: "B", lastUsedAt: "2026-05-25T00:00:01.000Z" },
+      ],
+    });
+    await chatStore.loadWorkspaceSessions("/work/delta");
+    expect(readSessionThreadFileSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(readSessionThreadFileSnapshotMock).toHaveBeenCalledWith("/work/delta", "agent-b");
+    chatStore.setActiveSessionId("agent-a");
+    expect(chatStore.getMessages()).toEqual(threadA.messages);
+    chatStore.setActiveSessionId("agent-b");
+    expect(chatStore.getMessages()).toEqual(threadB.messages);
+  });
+
   it("shows empty state when workspace has no persisted thread", async () => {
     readSessionThreadFileSnapshotMock.mockResolvedValue(null);
 

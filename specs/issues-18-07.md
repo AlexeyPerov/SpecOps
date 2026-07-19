@@ -123,20 +123,31 @@ moderate risk), **L** = large (1+ days, invasive).
 - **Fix sketch:** Share one traversal between the tree and the catalog, or
   have the catalog derive from the tree.
 
-#### L12. `loadWorkspaceSessions` re-reads every session thread from disk
-- Re-reads all priority thread files even when the in-memory cache is current.
-- **Files:** `app/src/lib/state/chatStore/sessions.ts:562-739`,
-  `app/src/lib/services/chatPersistence.ts:74-106`.
-- **Complexity: M.**
-- **Fix sketch:** Track a per-root loaded generation; skip the disk read when
-  the in-memory `threadsBySessionId` is already current.
+#### L12. ~~`loadWorkspaceSessions` re-reads every session thread from disk~~ ✅ Resolved
+- **Status:** Shipped. The loader now tracks a per-scope signature of the
+  last persisted sessions index it fully loaded, and skips re-reading every
+  session's thread file when that signature still matches the on-disk index
+  AND every persisted session already has a thread entry in memory (the
+  common path on workspace re-entry). When the cache is current, only the
+  index file is re-read and the session index is refreshed in one store
+  update — zero thread-file reads. When the index has gained or shed
+  sessions, only the delta (missing threads) is read; existing in-memory
+  threads are carried over instead of being re-read. See the 2026-07-19
+  08:20 changelog entry.
 
-#### L13. `allContextSnapshots` is O(N·M) per watcher/focus/startup check
-- Linear walk over every workspace's docs/tabs on every external file event.
-- **Files:** `app/src/lib/state/appState/contextHelpers.ts:289-364`.
-- **Complexity: M.**
-- **Fix sketch:** Maintain `filePath → contextId` and `documentId → contextId`
-  indexes, updated on context mutations.
+#### L13. ~~`allContextSnapshots` is O(N·M) per watcher/focus/startup check~~ ✅ Resolved
+- **Status:** Shipped. Cross-context document discovery
+  (`findDocumentContext`, `findDocumentByNormalizedPathAllContexts`) now uses
+  WeakMap-memoized `documentId → contextId` and `normalizedPath → contextId`
+  indexes keyed by state revision, so repeated lookups within one state are
+  O(1) instead of a linear walk over every workspace's docs/tabs. The
+  active-context-first winner is preserved, and the index auto-invalidates
+  on every mutation (state is replaced immutably). `allContextSnapshots`
+  still drives the few callers that genuinely need the full enumeration
+  (startup/focus external checks, watched-path sync, tab-removal scan), but
+  the per-watcher / per-focus / per-startup-batch hot paths that the audit
+  called out no longer re-walk the tree. See the 2026-07-19 08:20 changelog
+  entry.
 
 ### General / cross-cutting
 
@@ -189,14 +200,17 @@ moderate risk), **L** = large (1+ days, invasive).
 | #21 | cycleTheme theme list memoized | `4e7a0f1` |
 | L10 | `{#key editor.contextId}` workspace grid remount removed via full context-namespacing | `146d69f` |
 | L1 | Bundle code-splitting: lazy pickers + lazy CodeMirror lang packs + manualChunks | (this pass) |
+| L12 | `loadWorkspaceSessions` skips thread-file re-reads when in-memory cache is current | (this pass) |
+| L13 | `allContextSnapshots` O(N·M) hot paths replaced by WeakMap-memoized context lookup indexes | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L12** + **L13** — workspace-switch disk re-reads and linear scans.
-2. **L4** + **L5** — chat-tab mount cost (preflight + totals).
-3. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
-4. **L7, L8, L16, L17** — small cleanups.
+1. **L4** + **L5** — chat-tab mount cost (preflight + totals).
+2. **L14** — split `+page.svelte`; unblocks L3, L9, L15, L17.
+3. **L7, L8, L16, L17** — small cleanups.
+4. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
+   twice per switch (and once on launch).
 5. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
    render contract or a fallback-then-rehighlight path.

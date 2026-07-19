@@ -26,6 +26,15 @@ const hydrateGenerationByScope = new Map<string, number>();
 /** In-flight ensure/hydrate promises keyed by `scopeKey\\0sessionId`. */
 const inFlightThreadHydrates = new Map<string, Promise<ChatThreadSnapshot | null>>();
 
+/**
+ * Per-scope signature of the last persisted index that was fully loaded into
+ * memory. When the on-disk index signature matches this AND every non-draft
+ * persisted session already has a thread entry in `threadsBySessionId`, the
+ * loader skips re-reading thread files from disk — workspace switches no longer
+ * re-walk every session thread when the cache is current.
+ */
+const loadedIndexSignatureByScope = new Map<string, string>();
+
 function threadHydrateKey(scopeKey: string, sessionId: string): string {
   return `${scopeKey}\x00${sessionId}`;
 }
@@ -40,10 +49,26 @@ function isHydrateGenerationCurrent(scopeKey: string, generation: number): boole
   return hydrateGenerationByScope.get(scopeKey) === generation;
 }
 
+/**
+ * Stable signature for a persisted sessions index. Used to detect that the
+ * on-disk index has not changed since the last full load, which (combined with
+ * the in-memory thread map being complete) lets the loader skip re-reading
+ * every session thread file on workspace re-entry.
+ *
+ * Includes `id`, `lastUsedAt`, and `title` because those are the fields a
+ * background write or external edit can change without the app's involvement.
+ */
+function indexSignature(sessions: readonly SessionIndexEntry[]): string {
+  return sessions
+    .map((entry) => `${entry.id}|${entry.lastUsedAt}|${entry.title ?? ""}`)
+    .join("\n");
+}
+
 /** Clears incremental-hydration bookkeeping between unit tests. */
 export function resetSessionHydrationForTests(): void {
   hydrateGenerationByScope.clear();
   inFlightThreadHydrates.clear();
+  loadedIndexSignatureByScope.clear();
 }
 
 export interface LoadWorkspaceSessionsOptions {
@@ -580,6 +605,59 @@ export function createSessionsSlice(deps: {
       const priorityIdSet = incremental
         ? new Set(prioritySessionIds.filter((id) => id.length > 0))
         : null;
+
+      // Skip re-reading thread files when the on-disk index matches what we
+      // last loaded AND every persisted session already has a thread entry in
+      // memory. This is the common path on a re-entry to a workspace whose
+      // sessions are already cached: instead of re-walking every thread file,
+      // we just refresh the session index and merge drafts.
+      const incomingSignature = indexSignature(persistedEntries);
+      const existingWorkspace = getSnapshot().workspaces[normalizedRootPath];
+      const existingThreads = existingWorkspace?.threadsBySessionId ?? {};
+      const allPersistedHydrated =
+        existingWorkspace !== undefined &&
+        loadedIndexSignatureByScope.get(normalizedRootPath) === incomingSignature &&
+        persistedEntries.length > 0 &&
+        persistedEntries.every((entry) =>
+          Object.prototype.hasOwnProperty.call(existingThreads, entry.id),
+        );
+
+      if (allPersistedHydrated) {
+        update((state) => {
+          const existing = state.workspaces[normalizedRootPath];
+          if (!existing) {
+            return state;
+          }
+          const persistedIds = new Set(index.sessions.map((entry) => entry.id));
+          const sessionDrafts = existing.sessionIndex.filter(
+            (entry) => entry.isDraft && !persistedIds.has(entry.id),
+          );
+          const mergedIndex = [...index.sessions, ...sessionDrafts];
+          syncSessionIdCounterFromWorkspace({
+            ...existing,
+            sessionIndex: mergedIndex,
+          });
+          return patchWorkspaceState(state, normalizedRootPath, {
+            ...existing,
+            sessionIndex: mergedIndex,
+          });
+        });
+
+        void logPerfTiming("workspace sessions load complete", {
+          metric: "workspace.sessionLoad",
+          durationMs: elapsedMs(loadStartedAt),
+          workspaceRoot: normalizedRootPath,
+          sessionCount: index.sessions.length,
+          hydratedThreadCount: 0,
+          deferredThreadCount: 0,
+          indexDurationMs,
+          threadsDurationMs: 0,
+          incremental,
+          cacheHit: true,
+        });
+        return;
+      }
+
       const priorityEntries = priorityIdSet
         ? persistedEntries.filter((entry) => priorityIdSet.has(entry.id))
         : persistedEntries;
@@ -587,9 +665,17 @@ export function createSessionsSlice(deps: {
         ? persistedEntries.filter((entry) => !priorityIdSet.has(entry.id))
         : [];
 
+      // Within the priority/deferred sets, skip sessions whose threads are
+      // already in memory (same index, re-entry): only read the genuinely
+      // missing ones.
+      const needsRead = (entry: SessionIndexEntry): boolean =>
+        !Object.prototype.hasOwnProperty.call(existingThreads, entry.id);
+      const priorityToRead = priorityEntries.filter(needsRead);
+      const deferredToRead = deferredEntries.filter(needsRead);
+
       const threadsStartedAt = nowMs();
       const priorityThreads = await mapWithConcurrency(
-        priorityEntries,
+        priorityToRead,
         SESSION_THREAD_HYDRATE_CONCURRENCY,
         async (entry) => {
           const thread = normalizeThreadForScope(
@@ -617,13 +703,25 @@ export function createSessionsSlice(deps: {
         );
         const mergedIndex = [...index.sessions, ...sessionDrafts];
         const mergedIds = new Set(mergedIndex.map((entry) => entry.id));
+        const existingThreadsBySessionId = existing?.threadsBySessionId ?? {};
         const mergedThreadsBySessionId: Record<string, ChatThreadSnapshot | null> = {
           ...priorityThreadsBySessionId,
         };
         const mergedRuntimeBySessionId = { ...(existing?.runtimeBySessionId ?? {}) };
+        // Carry over existing in-memory threads for persisted sessions that
+        // were not re-read from disk this pass (they are still current — same
+        // index signature or skipped because their thread was already loaded).
+        for (const entry of persistedEntries) {
+          if (Object.prototype.hasOwnProperty.call(mergedThreadsBySessionId, entry.id)) {
+            continue;
+          }
+          if (Object.prototype.hasOwnProperty.call(existingThreadsBySessionId, entry.id)) {
+            mergedThreadsBySessionId[entry.id] = existingThreadsBySessionId[entry.id];
+          }
+        }
         for (const draft of sessionDrafts) {
-          if (existing?.threadsBySessionId[draft.id]) {
-            mergedThreadsBySessionId[draft.id] = existing.threadsBySessionId[draft.id];
+          if (existingThreadsBySessionId[draft.id]) {
+            mergedThreadsBySessionId[draft.id] = existingThreadsBySessionId[draft.id];
           }
           if (existing?.runtimeBySessionId[draft.id]) {
             mergedRuntimeBySessionId[draft.id] = existing.runtimeBySessionId[draft.id];
@@ -654,26 +752,48 @@ export function createSessionsSlice(deps: {
         };
       });
 
+      // Persisted sessions not yet covered by priority/deferred reads keep
+      // their existing in-memory thread entries. We need to make sure those
+      // are reflected when computing the "fully loaded" signature below, so
+      // rebuild the in-memory thread map view including the carry-overs.
+      const postUpdateWorkspace = getSnapshot().workspaces[normalizedRootPath];
+      const postUpdateSignature =
+        postUpdateWorkspace !== undefined &&
+        deferredToRead.length === 0 &&
+        persistedEntries.every((entry) =>
+          Object.prototype.hasOwnProperty.call(
+            postUpdateWorkspace.threadsBySessionId,
+            entry.id,
+          ),
+        )
+          ? incomingSignature
+          : null;
+      if (postUpdateSignature !== null) {
+        loadedIndexSignatureByScope.set(normalizedRootPath, postUpdateSignature);
+      } else {
+        loadedIndexSignatureByScope.delete(normalizedRootPath);
+      }
+
       void logPerfTiming("workspace sessions load complete", {
         metric: "workspace.sessionLoad",
         durationMs: elapsedMs(loadStartedAt),
         workspaceRoot: normalizedRootPath,
         sessionCount: index.sessions.length,
-        hydratedThreadCount: priorityEntries.length,
-        deferredThreadCount: deferredEntries.length,
+        hydratedThreadCount: priorityToRead.length,
+        deferredThreadCount: deferredToRead.length,
         indexDurationMs,
         threadsDurationMs: priorityThreadsDurationMs,
         incremental,
       });
 
-      if (deferredEntries.length === 0) {
+      if (deferredToRead.length === 0) {
         return;
       }
 
       void (async () => {
         const backgroundStartedAt = nowMs();
         const deferredThreads = await mapWithConcurrency(
-          deferredEntries,
+          deferredToRead,
           SESSION_THREAD_HYDRATE_CONCURRENCY,
           async (entry) => {
             const key = threadHydrateKey(normalizedRootPath, entry.id);
@@ -726,11 +846,26 @@ export function createSessionsSlice(deps: {
           });
         });
 
+        // After the background drain completes, mark the scope fully loaded if
+        // every persisted session now has a thread entry.
+        const afterBackgroundWorkspace = getSnapshot().workspaces[normalizedRootPath];
+        if (
+          afterBackgroundWorkspace !== undefined &&
+          persistedEntries.every((entry) =>
+            Object.prototype.hasOwnProperty.call(
+              afterBackgroundWorkspace.threadsBySessionId,
+              entry.id,
+            ),
+          )
+        ) {
+          loadedIndexSignatureByScope.set(normalizedRootPath, incomingSignature);
+        }
+
         void logPerfTiming("workspace sessions background hydrate complete", {
           metric: "workspace.sessionLoad",
           durationMs: elapsedMs(backgroundStartedAt),
           workspaceRoot: normalizedRootPath,
-          hydratedThreadCount: deferredEntries.length,
+          hydratedThreadCount: deferredToRead.length,
           deferredThreadCount: 0,
           background: true,
           incremental: true,

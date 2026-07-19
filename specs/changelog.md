@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-07-19 08:20 — Performance: skip cached workspace session reads + index cross-context lookups (L12 + L13)
+
+Cut two workspace-switch hot paths down to constant time.
+
+- **`loadWorkspaceSessions` no longer re-reads every session thread from disk
+  on re-entry** (`sessions.ts`): the loader now tracks a per-scope signature
+  of the last persisted sessions index it fully loaded. When a workspace is
+  re-entered and the on-disk index signature still matches AND every persisted
+  session already has a thread entry in memory, only the index file is
+  re-read and the session index is refreshed in one store update — zero
+  thread-file reads. When the index has gained or shed sessions, only the
+  delta (missing threads) is read; existing in-memory threads are carried
+  over into the merged state instead of being re-fetched. The signature is
+  derived from the index's `(id, lastUsedAt, title)` triples, so external
+  edits to those fields (a background save, a sidecar-driven rename) are
+  detected and trigger a re-read of the changed threads only.
+- **Cross-context document discovery is now O(1)** (`contextHelpers.ts`):
+  `findDocumentContext` and `findDocumentByNormalizedPathAllContexts` were
+  O(N·M) — a linear walk over every workspace's docs and tabs on every
+  watcher event, every focus check, and every deferred startup-batch
+  survivor. They now resolve through WeakMap-memoized
+  `documentId → contextId` and `normalizedPath → contextId` indexes keyed by
+  state revision: the first lookup in a state revision builds the index
+  (one pass), subsequent lookups are a Map get. The active-context-first
+  winner is preserved (the index records the first-seen context in the same
+  `allContextSnapshots` iteration order), and immutability of state means the
+  cache auto-invalidates on every mutation with no manual bookkeeping.
+
 ## 2026-07-19 07:50 — Performance: bundle code-splitting (L1)
 
 Shrank the initial JS payload by deferring code that isn't needed at launch.

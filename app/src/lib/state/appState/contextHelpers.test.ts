@@ -240,4 +240,96 @@ describe("context-aware document lookup", () => {
       new Set(["doc-1", "doc-2", "doc-3", "doc-4"]),
     );
   });
+
+  it("findDocumentContext prefers the active context when an id is duplicated", async () => {
+    const { findDocumentContext } = await import("./contextHelpers");
+    // Restore-seeded duplicate id: ws-2 and ws-3 both hold `doc-shared`.
+    const state: AppDomainState = {
+      contexts: {
+        activeContextId: "ws-2",
+        notepad: buildSnapshot("doc-1", "tab-1"),
+        chatHttp: buildSnapshot("doc-2", "tab-2"),
+        workspaces: [
+          {
+            id: "ws-2",
+            rootPath: "/tmp/ws",
+            snapshot: buildFileSnapshot("doc-shared", "tab-3", "/tmp/ws/active.txt"),
+          },
+          {
+            id: "ws-3",
+            rootPath: "/tmp/other",
+            snapshot: buildFileSnapshot("doc-shared", "tab-4", "/tmp/other/inactive.txt"),
+          },
+        ],
+      },
+      settings: {
+        ...defaultSettings,
+        externalFiles: {
+          watchExternalChanges: false,
+          autoReloadCleanFiles: false,
+          checkOnWindowFocus: false,
+          checkOnTabActivate: false,
+          maxBinaryOpenAsTextBytes: 200_000,
+          maxOpenWithoutConfirmBytes: 1024 * 1024,
+        },
+      },
+      theme: {
+        mode: "auto",
+        darkTheme: { kind: "builtin", id: "dark-amber" },
+        lightTheme: { kind: "builtin", id: "light-blue" },
+        manualTheme: { kind: "builtin", id: "dark-amber" },
+        customThemes: [],
+      },
+      recentFiles: [],
+      editor: {
+        cursorLine: 1,
+        cursorColumn: 1,
+        selectionCount: 1,
+        zoomPercent: 100,
+        wrapLines: true,
+        previewMode: "editor",
+      },
+      activityRailWidthPx: 48,
+    };
+    const result = findDocumentContext(state, "doc-shared");
+    expect(result?.contextId).toBe("ws-2");
+  });
+
+  it("findDocumentByNormalizedPathAllContexts reflects mutations after a state revision", async () => {
+    const { findDocumentByNormalizedPathAllContexts } = await import("./contextHelpers");
+    const state = buildWorkspaceState("ws-1");
+    // Initial lookup resolves to ws-2.
+    expect(
+      findDocumentByNormalizedPathAllContexts(state, "/tmp/other/inactive.txt")?.contextId,
+    ).toBe("ws-2");
+    // Simulate a state revision that removes ws-2's file path: the WeakMap-keyed
+    // index must auto-invalidate so the lookup returns null instead of a stale
+    // pointer to the old workspace snapshot.
+    const next: AppDomainState = {
+      ...state,
+      contexts: {
+        ...state.contexts,
+        workspaces: state.contexts.workspaces.map((workspace) =>
+          workspace.id === "ws-2"
+            ? {
+                ...workspace,
+                snapshot: {
+                  ...workspace.snapshot,
+                  documents: workspace.snapshot.documents.map((doc) =>
+                    doc.id === "doc-4" ? { ...doc, filePath: null } : doc,
+                  ),
+                },
+              }
+            : workspace,
+        ),
+      },
+    };
+    expect(
+      findDocumentByNormalizedPathAllContexts(next, "/tmp/other/inactive.txt"),
+    ).toBeNull();
+    // The previous state's index is unchanged (cache is per-state).
+    expect(
+      findDocumentByNormalizedPathAllContexts(state, "/tmp/other/inactive.txt")?.contextId,
+    ).toBe("ws-2");
+  });
 });

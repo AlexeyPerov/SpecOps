@@ -49,6 +49,8 @@ export interface WorkspaceFileCatalogDeps {
     options: { isCancelled: () => boolean },
   ) => Promise<EnumerateOpenableFilesResult>;
   invalidateDebounceMs?: number;
+  /** Called before a forced rebuild (refresh / debounced watcher rebuild). */
+  onBeforeRebuild?: () => void;
 }
 
 export interface WorkspaceFileCatalog {
@@ -58,6 +60,10 @@ export interface WorkspaceFileCatalog {
   subscribe(listener: () => void): () => void;
   /** Switch workspace (or null to clear). Cancels in-flight enumeration. */
   setWorkspaceRoot(root: string | null): void;
+  /** Start enumeration when bound to a root but still idle. No-op when ready/loading. */
+  ensureReady(): void;
+  /** Resolves when the catalog is ready, errored, idle, or disposed. */
+  waitForReady(): Promise<void>;
   /** Force a rebuild of the current workspace. */
   refresh(): void;
   /**
@@ -120,6 +126,7 @@ export function createWorkspaceFileCatalog(
 ): WorkspaceFileCatalog {
   const enumerate = deps.enumerate ?? enumerateOpenableWorkspaceFiles;
   const invalidateDebounceMs = deps.invalidateDebounceMs ?? DEFAULT_INVALIDATE_DEBOUNCE_MS;
+  const onBeforeRebuild = deps.onBeforeRebuild;
 
   let disposed = false;
   let generation = 0;
@@ -155,6 +162,7 @@ export function createWorkspaceFileCatalog(
       invalidateTimer = null;
       if (!disposed && workspaceRoot) {
         debouncedRebuilds += 1;
+        onBeforeRebuild?.();
         beginEnumerate(workspaceRoot);
       }
     }, invalidateDebounceMs);
@@ -280,13 +288,43 @@ export function createWorkspaceFileCatalog(
         return;
       }
       const normalized = normalizeWorkspaceRoot(root);
-      if (workspaceRoot === normalized && (status === "ready" || status === "loading")) {
+      if (workspaceRoot === normalized) {
+        if (status === "ready" || status === "loading") {
+          return;
+        }
         return;
       }
+      generation += 1;
       workspaceRoot = normalized;
       entries = [];
       partialErrors = [];
-      beginEnumerate(normalized);
+      errorMessage = null;
+      status = "idle";
+      emit();
+    },
+
+    ensureReady() {
+      if (disposed || !workspaceRoot) {
+        return;
+      }
+      if (status === "ready" || status === "loading") {
+        return;
+      }
+      beginEnumerate(workspaceRoot);
+    },
+
+    waitForReady() {
+      if (disposed || !workspaceRoot || status === "ready" || status === "error") {
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        const unsub = this.subscribe(() => {
+          if (disposed || status === "ready" || status === "error" || !workspaceRoot) {
+            unsub();
+            resolve();
+          }
+        });
+      });
     },
 
     refresh() {
@@ -294,6 +332,7 @@ export function createWorkspaceFileCatalog(
         return;
       }
       clearInvalidateTimer();
+      onBeforeRebuild?.();
       beginEnumerate(workspaceRoot);
     },
 

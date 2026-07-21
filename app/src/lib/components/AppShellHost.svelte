@@ -43,9 +43,10 @@
   import type { WorkspaceLayoutState } from "../domain/contracts";
   import type { EditorWorkbenchRuntime } from "../editor/editorWorkbenchRuntime";
   import type { EditorToolController } from "../editor/editorToolController";
-  import type { WorkspaceFileCatalog } from "../services/workspaceFileCatalog";
   import type { WorkspaceFileCatalogRegistry } from "../services/workspaceFileCatalogRegistry";
   import type { WorkspaceFileCatalogSnapshot } from "../services/workspaceFileCatalog";
+  import type { WorkspaceDirectoryCache } from "../services/workspaceDirectoryCache";
+  import { directoriesToRefreshForChange } from "../services/projectTreeController";
   import type { PaletteCommandEntry } from "../commands/catalog";
   import type { ResolvedMarkdownSnippet } from "../domain/snippets";
   import { createAppShellAgentHandlers } from "../services/appShellAgentHandlers";
@@ -183,7 +184,7 @@
     editorWorkbench: EditorWorkbenchRuntime;
     editorTools: EditorToolController;
     projectTreeController: ProjectTreeController;
-    workspaceFileCatalog: WorkspaceFileCatalog;
+    workspaceDirectoryCache: WorkspaceDirectoryCache;
     workspaceFileCatalogRegistry: WorkspaceFileCatalogRegistry;
     runtimeReady: boolean;
 
@@ -266,7 +267,7 @@
     editorWorkbench,
     editorTools,
     projectTreeController,
-    workspaceFileCatalog,
+    workspaceDirectoryCache,
     workspaceFileCatalogRegistry,
     runtimeReady,
     overlayHost,
@@ -290,8 +291,19 @@
     notify,
     projectTreeController,
     onFilesystemChange: (path, kind) => {
-      workspaceFileCatalog.notifyFilesystemChange(path, kind);
+      if (activeWorkspaceRoot) {
+        workspaceDirectoryCache.invalidate(
+          directoriesToRefreshForChange(
+            activeWorkspaceRoot,
+            path,
+            projectTreeControllerState.expandedPaths,
+          ),
+        );
+      }
       workspaceFileCatalogRegistry.notifyFilesystemChange(path, kind);
+    },
+    onBeforeProjectTreeRefresh: () => {
+      workspaceDirectoryCache.clear();
     },
   });
 

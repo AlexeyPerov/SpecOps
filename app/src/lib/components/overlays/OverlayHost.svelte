@@ -79,7 +79,6 @@
       search?: string;
     }) => Promise<WorkspaceAgentSessionDetails[]>;
     handleOpenExternalSession: (sessionId: string, title?: string) => Promise<void>;
-    getWorkspaceFileCatalog: () => import("../../services/workspaceFileCatalog").WorkspaceFileCatalog;
     getWorkspaceFileCatalogRegistry: () => import("../../services/workspaceFileCatalogRegistry").WorkspaceFileCatalogRegistry;
     getEditorWorkbench: () => import("../../editor/editorWorkbenchRuntime").EditorWorkbenchRuntime;
     getEditorTools: () => import("../../editor/editorToolController").EditorToolController;
@@ -104,7 +103,6 @@
     openAndActivatePath,
     handleListWorkspaceSessions,
     handleOpenExternalSession,
-    getWorkspaceFileCatalog,
     getWorkspaceFileCatalogRegistry,
     getEditorWorkbench,
     getEditorTools,
@@ -270,7 +268,6 @@
     getEditorLayoutActivePaneId: () => editorLayoutActivePaneId,
     getEditorWorkbench: () => getEditorWorkbench(),
     getEditorTools: () => getEditorTools(),
-    getWorkspaceFileCatalog: () => getWorkspaceFileCatalog(),
     getWorkspaceFileCatalogRegistry: () => getWorkspaceFileCatalogRegistry(),
     getActiveDocumentMarkdownViewMode: () => activeDocumentMarkdownViewMode,
     setMarkdownViewMode: (mode) => setMarkdownViewMode(mode),
@@ -392,6 +389,10 @@
     getWorkspaceFileCatalogRegistry().refresh();
   }
 
+  function ensureActiveCatalogReady(): void {
+    getWorkspaceFileCatalogRegistry().ensureReady();
+  }
+
   // -------------------------------------------------------------------------
   // Cross-overlay close-others coordinator.
   //
@@ -458,12 +459,31 @@
     return coordinator.isAnyOverlayOpen();
   }
 
+  /**
+   * Reactive mirror of {@link isAnyOverlayOpen} for parent `$effect`s. Reading
+   * the exported `$derived` via `bind:this` establishes a proper dependency;
+   * calling the imperative API from an effect and discarding the boolean does
+   * not reliably re-run when overlay state flips.
+   */
+  const anyOverlayOpen = $derived(
+    sessionListOpen ||
+      addMultipleOpen ||
+      projectSearchOpen ||
+      timelineOpen ||
+      quickOpenOpen ||
+      commandPaletteOpen ||
+      headingJumpOpen ||
+      bookmarkListOpen ||
+      snippetInsertOpen ||
+      Boolean(workspaceContextMenu),
+  );
+
   function openOverlay(kind: OverlayKind, options?: { focusReplace?: boolean }): void {
     switch (kind) {
       case "quickOpen":
         coordinator.closeOtherPickers("quickOpen");
         quickOpenOpenerPaneId = editorLayoutActivePaneId;
-        // Query is reset by the picker component on open (via onQueryInput).
+        ensureActiveCatalogReady();
         quickOpenOpen = true;
         break;
       case "commandPalette":
@@ -494,6 +514,7 @@
         break;
       }
       case "projectSearch":
+        ensureActiveCatalogReady();
         projectSearchOpen = true;
         projectSearchFocusReplace = options?.focusReplace ?? false;
         projectSearchNonce += 1;
@@ -593,7 +614,6 @@
     openWorkspaceContextMenu,
     refreshQuickOpenCatalog,
   };
-  export { api };
 
   // -------------------------------------------------------------------------
   // Exposed read snapshots for AppShell-rendered overlays (project search +
@@ -664,6 +684,8 @@
   }
 
   export {
+    api,
+    anyOverlayOpen,
     projectSearchPanelState,
     workspaceContextMenuState,
     workspaceContextMenu,

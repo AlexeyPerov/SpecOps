@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-21 22:40 — Performance: L2, L11 shared workspace traversal
+
+Follow-up to the 2026-07-18 audit:
+
+- **L2 — deferred catalog enumeration:** `setWorkspaceRoot` now only binds the
+  workspace root; the first full openable-file walk runs when Quick Open,
+  project search, or an explicit refresh calls `ensureReady()`. Launch and
+  workspace switch no longer trigger a background recursive enumerate.
+- **L11 — shared directory cache:** New `workspaceDirectoryCache` memoizes
+  `readDir` results for the project tree and catalog. Removed the standalone
+  catalog instance; `syncWorkspaceFileCatalogEffect` drives the registry only.
+  FS watcher hints and manual tree/catalog refresh invalidate cached dirs
+  before rebuild.
+
 ## 2026-07-19 23:50 — OpenCode (beta): gate workspace sessions behind a Dev toggle, off by default
 
 The OpenCode workspace-sessions integration now ships as a **beta feature,

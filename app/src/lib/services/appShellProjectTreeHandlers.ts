@@ -27,6 +27,8 @@ export interface AppShellProjectTreeHandlersDeps {
   projectTreeController: ReturnType<typeof createProjectTreeController>;
   /** Optional extra listener (e.g. workspace file catalog invalidation). */
   onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;
+  /** Clears shared directory cache before a full tree refresh. */
+  onBeforeProjectTreeRefresh?: () => void;
 }
 
 export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandlersDeps) {
@@ -37,6 +39,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     notify,
     projectTreeController,
     onFilesystemChange,
+    onBeforeProjectTreeRefresh,
   } = deps;
 
   async function loadProjectTreeRoot(): Promise<void> {
@@ -84,6 +87,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
   }
 
   async function refreshProjectTree(): Promise<void> {
+    onBeforeProjectTreeRefresh?.();
     await projectTreeController.refreshProjectTree(getActiveWorkspaceRoot(), getIsSessionTabActive());
   }
 

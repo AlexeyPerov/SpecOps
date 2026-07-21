@@ -800,11 +800,7 @@ export function syncResponsiveLayoutEffect(_input: SyncResponsiveLayoutEffectInp
 export interface SyncWorkspaceFileCatalogEffectInput {
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
-  catalog: {
-    setWorkspaceRoot: (root: string | null) => void;
-  };
-  /** Optional per-root registry kept in sync with the same workspace signal. */
-  registry?: {
+  registry: {
     setActiveRoot: (root: string | null) => unknown;
   };
 }
@@ -816,14 +812,13 @@ let lastWorkspaceFileCatalogKey: string | null = null;
  * Clears on workspace leave / chat-http overlay.
  */
 export function syncWorkspaceFileCatalogEffect(input: SyncWorkspaceFileCatalogEffectInput): void {
-  const { activeWorkspaceRoot, isChatHttpActive, catalog, registry } = input;
+  const { activeWorkspaceRoot, isChatHttpActive, registry } = input;
   if (!activeWorkspaceRoot || isChatHttpActive) {
     if (lastWorkspaceFileCatalogKey === "inactive") {
       return;
     }
     lastWorkspaceFileCatalogKey = "inactive";
-    catalog.setWorkspaceRoot(null);
-    registry?.setActiveRoot(null);
+    registry.setActiveRoot(null);
     return;
   }
   const rootKey = normalizePathSync(activeWorkspaceRoot);
@@ -831,6 +826,5 @@ export function syncWorkspaceFileCatalogEffect(input: SyncWorkspaceFileCatalogEf
     return;
   }
   lastWorkspaceFileCatalogKey = rootKey;
-  catalog.setWorkspaceRoot(activeWorkspaceRoot);
-  registry?.setActiveRoot(activeWorkspaceRoot);
+  registry.setActiveRoot(activeWorkspaceRoot);
 }

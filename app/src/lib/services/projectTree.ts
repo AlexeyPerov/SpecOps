@@ -5,7 +5,7 @@ import {
   shouldSkipHeavyDirectoryName,
   type WorkspaceListEntry,
 } from "./workspaceTraversal";
-import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
+import { readDir } from "@tauri-apps/plugin-fs";
 
 export interface ProjectTreeNode {
   name: string;
@@ -15,6 +15,8 @@ export interface ProjectTreeNode {
 
 export interface LoadDirectoryChildrenOptions {
   showHidden: boolean;
+  /** Injectable directory listing (e.g. shared workspace directory cache). */
+  readDir?: (path: string) => Promise<WorkspaceListEntry[]>;
 }
 
 function isPathUnderRoot(path: string, workspaceRoot: string): boolean {
@@ -60,9 +62,16 @@ export async function loadDirectoryChildren(
   if (!isPathUnderRoot(dirPath, workspaceRoot)) {
     return [];
   }
-  let entries: DirEntry[] = [];
+  const readDirFn =
+    options.readDir ??
+    (async (path: string) => {
+      const dirEntries = await readDir(path);
+      return dirEntries as WorkspaceListEntry[];
+    });
+
+  let entries: WorkspaceListEntry[] = [];
   try {
-    entries = await readDir(dirPath);
+    entries = await readDirFn(dirPath);
   } catch {
     return [];
   }

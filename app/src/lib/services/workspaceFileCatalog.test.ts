@@ -15,6 +15,23 @@ describe("createWorkspaceFileCatalog", () => {
     vi.useRealTimers();
   });
 
+  it("does not enumerate until ensureReady is called", async () => {
+    const enumerate = vi.fn(async () => ({
+      paths: ["/ws/a.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const catalog = createWorkspaceFileCatalog({ enumerate });
+    catalog.setWorkspaceRoot("/ws");
+    expect(catalog.getSnapshot().status).toBe("idle");
+    expect(enumerate).not.toHaveBeenCalled();
+
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+    expect(enumerate).toHaveBeenCalledTimes(1);
+    catalog.dispose();
+  });
+
   it("enumerates entries with relative paths and skips content reads", async () => {
     const enumerate = vi.fn(async () => ({
       paths: ["/ws/src/a.ts", "/ws/README"],
@@ -23,6 +40,7 @@ describe("createWorkspaceFileCatalog", () => {
     }));
     const catalog = createWorkspaceFileCatalog({ enumerate });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     const snap = catalog.getSnapshot();
@@ -63,7 +81,9 @@ describe("createWorkspaceFileCatalog", () => {
 
     const catalog = createWorkspaceFileCatalog({ enumerate });
     catalog.setWorkspaceRoot("/ws-a");
+    catalog.ensureReady();
     catalog.setWorkspaceRoot("/ws-b");
+    catalog.ensureReady();
 
     second.resolve({
       paths: ["/ws-b/new.ts"],
@@ -89,6 +109,7 @@ describe("createWorkspaceFileCatalog", () => {
     const enumerate = vi.fn(() => pending.promise);
     const catalog = createWorkspaceFileCatalog({ enumerate });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     catalog.dispose();
     expect(catalog.getSnapshot().status).toBe("idle");
     expect(catalog.getOpenablePaths()).toBeNull();
@@ -110,6 +131,7 @@ describe("createWorkspaceFileCatalog", () => {
       invalidateDebounceMs: 50,
     });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
     expect(enumerate).toHaveBeenCalledTimes(1);
 
@@ -132,6 +154,7 @@ describe("createWorkspaceFileCatalog", () => {
       }),
     });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
     expect(catalog.getSnapshot().partialErrors).toEqual(["/ws/unreadable"]);
     expect(catalog.getSnapshot().errorMessage).toBeNull();
@@ -152,6 +175,7 @@ describe("createWorkspaceFileCatalog", () => {
     });
     const catalog = createWorkspaceFileCatalog({ enumerate });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     catalog.setWorkspaceRoot(null);
     pending.resolve({ paths: ["/ws/a.ts"], partialErrors: [], cancelled: false });
     await Promise.resolve();
@@ -173,6 +197,7 @@ describe("createWorkspaceFileCatalog", () => {
       invalidateDebounceMs: 50,
     });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
     expect(catalog.getSnapshot().entries).toHaveLength(2);
 
@@ -202,6 +227,7 @@ describe("createWorkspaceFileCatalog", () => {
       invalidateDebounceMs: 50,
     });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     catalog.notifyFilesystemChange("/ws/new.ts", "create");
@@ -227,6 +253,7 @@ describe("createWorkspaceFileCatalog", () => {
       invalidateDebounceMs: 50,
     });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
     expect(enumerate).toHaveBeenCalledTimes(1);
 
@@ -251,6 +278,7 @@ describe("createWorkspaceFileCatalog", () => {
     }));
     const catalog = createWorkspaceFileCatalog({ enumerate, invalidateDebounceMs: 50 });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     catalog.notifyFilesystemChange("/other/a.ts", "remove");
@@ -272,6 +300,7 @@ describe("createWorkspaceFileCatalog", () => {
     );
     const catalog = createWorkspaceFileCatalog({ enumerate, invalidateDebounceMs: 50 });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     // While still loading, an incremental remove cannot apply yet — it must
     // fall back to a debounced rebuild rather than mutating partial state.
     expect(catalog.getSnapshot().status).toBe("loading");
@@ -297,6 +326,7 @@ describe("createWorkspaceFileCatalog", () => {
     }));
     const catalog = createWorkspaceFileCatalog({ enumerate });
     catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     const diag = catalog.getDiagnostics();

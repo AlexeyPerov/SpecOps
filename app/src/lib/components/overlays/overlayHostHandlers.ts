@@ -13,10 +13,10 @@
  * `appShellPageHandlers.ts` / `appShellLayoutHandlers.ts` / etc.
  */
 
+import { tick } from "svelte";
 import type { EditorHostIdentity } from "../../types/editor";
 import type { EditorToolController } from "../../editor/editorToolController";
 import type { EditorWorkbenchRuntime } from "../../editor/editorWorkbenchRuntime";
-import type { WorkspaceFileCatalog } from "../../services/workspaceFileCatalog";
 import type { WorkspaceFileCatalogRegistry } from "../../services/workspaceFileCatalogRegistry";
 import {
   searchInProject,
@@ -67,8 +67,7 @@ export interface OverlayHostHandlersDeps {
   getEditorWorkbench: () => EditorWorkbenchRuntime;
   /** Editor tool controller — used to close inline tools when pickers open. */
   getEditorTools: () => EditorToolController;
-  /** Shared catalogs — passed in from the page (which owns their lifecycle). */
-  getWorkspaceFileCatalog: () => WorkspaceFileCatalog;
+  /** Shared catalog registry — passed in from the page (which owns its lifecycle). */
   getWorkspaceFileCatalogRegistry: () => WorkspaceFileCatalogRegistry;
   /** Active document markdown view mode — pickers switch preview → edit. */
   getActiveDocumentMarkdownViewMode: () => "edit" | "split" | "preview" | undefined;
@@ -154,14 +153,14 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     }
     deps.setProjectSearchRunning(true);
     deps.setProjectSearchStatus("Searching…");
+    const registry = deps.getWorkspaceFileCatalogRegistry();
+    registry.ensureReady();
+    await registry.waitForReady();
     // Invalidate any in-flight search so stale results never land.
     const generation = deps.bumpProjectSearchGeneration();
     try {
       const outcome = await searchInProject(root, query, {
-        files:
-          deps.getWorkspaceFileCatalogRegistry().getActive()?.getOpenablePaths() ??
-          deps.getWorkspaceFileCatalog().getOpenablePaths() ??
-          undefined,
+        files: registry.getActive()?.getOpenablePaths() ?? undefined,
         onProgress: () => generation === deps.getProjectSearchGeneration(),
       });
       if (generation !== deps.getProjectSearchGeneration()) {
@@ -266,14 +265,10 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
   async function openProjectSearchResult(path: string, line: number): Promise<void> {
     await deps.openAndActivatePath(path);
     if (line > 0) {
-      const workbench = deps.getEditorWorkbench();
-      // Mirror the page's `await tick()` boundary: the runner is captured
-      // after the open pipeline has installed the new editor.
-      await new Promise<void>((resolve) => {
-        // Defer to the next microtask + one frame so the editor host mounts.
-        requestAnimationFrame(() => resolve());
-      });
-      workbench.getActiveRunner()?.goToLine(line);
+      // Wait for Svelte to flush the open-pipeline DOM update so the new
+      // editor runner is installed before goToLine runs (pre-L14 behavior).
+      await tick();
+      deps.getEditorWorkbench().getActiveRunner()?.goToLine(line);
     }
   }
 

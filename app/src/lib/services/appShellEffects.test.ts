@@ -408,26 +408,39 @@ describe("syncWorkspaceFileCatalogEffect", () => {
     resetAppShellEffectsForTests();
   });
 
-  it("sets the catalog root once per workspace and clears when inactive", () => {
-    const setWorkspaceRoot = vi.fn();
+  it("binds the active root without enumerating until ensureReady", () => {
+    const setActiveRoot = vi.fn();
+    const ensureReady = vi.fn();
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot: "/repo",
       isChatHttpActive: false,
-      catalog: { setWorkspaceRoot },
+      registry: { setActiveRoot, ensureReady },
+    });
+    expect(setActiveRoot).toHaveBeenCalledTimes(1);
+    expect(setActiveRoot).toHaveBeenCalledWith("/repo");
+    expect(ensureReady).not.toHaveBeenCalled();
+  });
+
+  it("sets the registry root once per workspace and clears when inactive", () => {
+    const setActiveRoot = vi.fn();
+    syncWorkspaceFileCatalogEffect({
+      activeWorkspaceRoot: "/repo",
+      isChatHttpActive: false,
+      registry: { setActiveRoot },
     });
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot: "/repo",
       isChatHttpActive: false,
-      catalog: { setWorkspaceRoot },
+      registry: { setActiveRoot },
     });
-    expect(setWorkspaceRoot).toHaveBeenCalledTimes(1);
-    expect(setWorkspaceRoot).toHaveBeenCalledWith("/repo");
+    expect(setActiveRoot).toHaveBeenCalledTimes(1);
+    expect(setActiveRoot).toHaveBeenCalledWith("/repo");
 
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot: null,
       isChatHttpActive: false,
-      catalog: { setWorkspaceRoot },
+      registry: { setActiveRoot },
     });
-    expect(setWorkspaceRoot).toHaveBeenCalledWith(null);
+    expect(setActiveRoot).toHaveBeenCalledWith(null);
   });
 });

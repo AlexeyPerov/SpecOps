@@ -86,6 +86,8 @@ export interface EnumerateOpenableFilesOptions {
   isCancelled?: () => boolean;
   /** Skip symlink entries (default true — shared with project tree). */
   skipSymlinks?: boolean;
+  /** Injectable directory listing (e.g. shared workspace directory cache). */
+  readDir?: (path: string) => Promise<WorkspaceListEntry[]>;
 }
 
 export interface EnumerateOpenableFilesResult {
@@ -107,15 +109,21 @@ export async function enumerateOpenableWorkspaceFiles(
   const root = normalizeWorkspaceRoot(rootPath);
   const paths: string[] = [];
   const partialErrors: string[] = [];
+  const readDirFn =
+    options.readDir ??
+    (async (directoryPath: string) => {
+      const entries = await readDir(directoryPath);
+      return entries as WorkspaceListEntry[];
+    });
 
   async function walk(directoryPath: string): Promise<boolean> {
     if (options.isCancelled?.()) {
       return false;
     }
 
-    let entries: DirEntry[];
+    let entries: WorkspaceListEntry[];
     try {
-      entries = await readDir(directoryPath);
+      entries = await readDirFn(directoryPath);
     } catch {
       partialErrors.push(directoryPath);
       return true;

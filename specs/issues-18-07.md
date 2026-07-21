@@ -35,15 +35,11 @@ moderate risk), **L** = large (1+ days, invasive).
   (sync chat-markdown API constraint — deferred). See the 2026-07-19 07:50
   changelog entry.
 
-#### L2. Workspace file catalog walks the whole tree at startup
-- After the launch-waterfall fix this phase runs in the background, but it
-  still recursively enumerates the entire workspace on every launch.
-- **Files:** `app/src/lib/services/workspaceFileCatalog.ts:267-290`,
-  `app/src/lib/services/workspaceTraversal.ts:102-160`.
-- **Complexity: S-M.**
-- **Fix sketch:** Make enumeration incremental (lazy-populate deeper folders
-  as the picker expands them), or cache the result per root and invalidate on
-  file-watcher events only.
+#### L2. ~~Workspace file catalog walks the whole tree at startup~~ ✅ Resolved
+- **Status:** Shipped. Catalog enumeration is deferred until Quick Open, project
+  search, or an explicit refresh needs it; workspace enter only binds the
+  registry root. A shared in-memory directory cache serves both the project
+  tree and catalog walks. See the 2026-07-21 changelog entry.
 
 #### L3. ~~`+page.svelte` constructs 12 handler/controller factories at module-eval~~ ✅ Resolved
 - **Status:** Shipped. The seven AppShell handler bundles (project-tree, layout,
@@ -109,14 +105,11 @@ moderate risk), **L** = large (1+ days, invasive).
   through the full editor component stack. Editor trees for all contexts now
   stay mounted across a switch. See the 2026-07-18 23:00 changelog entry.
 
-#### L11. Two concurrent filesystem walks fire per switch (no shared traversal)
-- The project-tree root `readDir` and the catalog's recursive
-  `enumerateOpenableWorkspaceFiles` both walk the tree independently.
-- **Files:** `app/src/lib/services/projectTree.ts:55-90`,
-  `app/src/lib/services/workspaceTraversal.ts:102-160`.
-- **Complexity: M.**
-- **Fix sketch:** Share one traversal between the tree and the catalog, or
-  have the catalog derive from the tree.
+#### L11. ~~Two concurrent filesystem walks fire per switch (no shared traversal)~~ ✅ Resolved
+- **Status:** Shipped. Removed the standalone catalog (registry-only sync).
+  Project tree and catalog share one `WorkspaceDirectoryCache` for `readDir`
+  results; watcher and manual refresh invalidate cached dirs before rebuild.
+  See the 2026-07-21 changelog entry.
 
 #### L12. ~~`loadWorkspaceSessions` re-reads every session thread from disk~~ ✅ Resolved
 - **Status:** Shipped. The loader now tracks a per-scope signature of the
@@ -216,13 +209,13 @@ moderate risk), **L** = large (1+ days, invasive).
 | L3 | AppShell handler factories moved into AppShellHost + bind:this API | (this pass) |
 | L9 | Tab-select effects narrowed/guarded (persistence, hydration, tools, monitor, sidecar) | (this pass) |
 | L15 | Monolithic snapshot replaced by appStateSelectors + AppShellHost leaf props | (this pass) |
+| L2 | Deferred catalog enumerate + shared directory cache | (this pass) |
+| L11 | Registry-only catalog sync + shared readDir cache for tree/catalog | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L2** + **L11** — workspace tree/catalog traversal still walks the tree
-   twice per switch (and once on launch).
-2. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.
-3. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
+1. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.
+2. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
    render contract or a fallback-then-rehighlight path.

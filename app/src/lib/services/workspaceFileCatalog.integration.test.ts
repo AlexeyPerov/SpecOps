@@ -67,6 +67,14 @@ function stageFs(root: string, tree: Record<string, string[]>): void {
   setFs(fs);
 }
 
+function activateCatalog(
+  catalog: ReturnType<typeof createWorkspaceFileCatalog>,
+  root: string,
+): void {
+  catalog.setWorkspaceRoot(root);
+  catalog.ensureReady();
+}
+
 describe("workspace file catalog (integration)", () => {
   beforeEach(() => {
     setFs({});
@@ -82,7 +90,7 @@ describe("workspace file catalog (integration)", () => {
       "/ws/src": ["a.ts", "b.md"],
     });
     const catalog = createWorkspaceFileCatalog({ invalidateDebounceMs: 50 });
-    catalog.setWorkspaceRoot("/ws");
+    activateCatalog(catalog, "/ws");
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     const paths = catalog.getOpenablePaths()!;
@@ -100,7 +108,7 @@ describe("workspace file catalog (integration)", () => {
       // "/ws/locked" intentionally absent → readDir rejects.
     });
     const catalog = createWorkspaceFileCatalog({ invalidateDebounceMs: 50 });
-    catalog.setWorkspaceRoot("/ws");
+    activateCatalog(catalog, "/ws");
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     const snap = catalog.getSnapshot();
@@ -115,7 +123,7 @@ describe("workspace file catalog (integration)", () => {
       "/ws": ["a.ts"],
     });
     const catalog = createWorkspaceFileCatalog({ invalidateDebounceMs: 50 });
-    catalog.setWorkspaceRoot("/ws");
+    activateCatalog(catalog, "/ws");
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
     expect(catalog.getSnapshot().entries).toHaveLength(1);
 
@@ -131,7 +139,7 @@ describe("workspace file catalog (integration)", () => {
       "/ws": ["a.ts", "b.ts"],
     });
     const catalog = createWorkspaceFileCatalog({ invalidateDebounceMs: 50 });
-    catalog.setWorkspaceRoot("/ws");
+    activateCatalog(catalog, "/ws");
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
     expect(catalog.getSnapshot().entries).toHaveLength(2);
 
@@ -147,7 +155,7 @@ describe("workspace file catalog (integration)", () => {
     vi.useFakeTimers();
     stageFs("/ws", { "/ws": ["a.ts"] });
     const catalog = createWorkspaceFileCatalog({ invalidateDebounceMs: 50 });
-    catalog.setWorkspaceRoot("/ws");
+    activateCatalog(catalog, "/ws");
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     // Simulate a rename storm that cannot be classified incrementally.
@@ -164,9 +172,11 @@ describe("workspace file catalog (integration)", () => {
     stageFs("/ws-a", { "/ws-a": ["a.ts"] });
     const catalog = createWorkspaceFileCatalog({ invalidateDebounceMs: 50 });
     catalog.setWorkspaceRoot("/ws-a");
+    catalog.ensureReady();
     // Immediately switch before the first build settles.
     stageFs("/ws-b", { "/ws-b": ["b.ts"] });
     catalog.setWorkspaceRoot("/ws-b");
+    catalog.ensureReady();
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     const snap = catalog.getSnapshot();
@@ -180,7 +190,7 @@ describe("workspace file catalog (integration)", () => {
   it("disposes cleanly on workspace close and ignores later events", async () => {
     stageFs("/ws", { "/ws": ["a.ts"] });
     const catalog = createWorkspaceFileCatalog({ invalidateDebounceMs: 50 });
-    catalog.setWorkspaceRoot("/ws");
+    activateCatalog(catalog, "/ws");
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     catalog.dispose();
@@ -194,7 +204,7 @@ describe("workspace file catalog (integration)", () => {
   it("diagnostics contain entry counts and status but no file contents", async () => {
     stageFs("/ws", { "/ws": ["a.ts", "b.ts"] });
     const catalog = createWorkspaceFileCatalog({ invalidateDebounceMs: 50 });
-    catalog.setWorkspaceRoot("/ws");
+    activateCatalog(catalog, "/ws");
     await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
 
     const diag = catalog.getDiagnostics();

@@ -32,6 +32,10 @@ export interface WorkspaceFileCatalogRegistry {
   getActiveDiagnostics(): WorkspaceFileCatalogDiagnostics | null;
   /** Watcher hint forwarded to the active catalog. */
   notifyFilesystemChange(changedPath?: string, kind?: FileWatcherEventKind): void;
+  /** Start enumeration for the active catalog when still idle. */
+  ensureReady(): void;
+  /** Wait until the active catalog is ready or errored. */
+  waitForReady(): Promise<void>;
   /** Force a rebuild of the active catalog. */
   refresh(): void;
   /** Dispose a single root's catalog (e.g. when its workspace closes). */
@@ -104,6 +108,14 @@ export function createWorkspaceFileCatalogRegistry(
       this.getActive()?.notifyFilesystemChange(changedPath, kind);
     },
 
+    ensureReady() {
+      this.getActive()?.ensureReady();
+    },
+
+    waitForReady() {
+      return this.getActive()?.waitForReady() ?? Promise.resolve();
+    },
+
     refresh() {
       this.getActive()?.refresh();
     },
@@ -142,6 +154,8 @@ const IDLE_CATALOG: WorkspaceFileCatalog = {
   getOpenablePaths: () => null,
   subscribe: () => () => {},
   setWorkspaceRoot: () => {},
+  ensureReady: () => {},
+  waitForReady: () => Promise.resolve(),
   refresh: () => {},
   notifyFilesystemChange: () => {},
   getDiagnostics: () => ({

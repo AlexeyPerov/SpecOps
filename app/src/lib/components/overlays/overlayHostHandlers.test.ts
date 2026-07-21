@@ -34,9 +34,12 @@ function makeDeps(overrides: Partial<OverlayHostHandlersDeps> = {}): OverlayHost
         getActiveRunner: () => null,
       }) as never,
     getEditorTools: () => ({}) as never,
-    getWorkspaceFileCatalog: () => ({ getOpenablePaths: () => null }) as never,
     getWorkspaceFileCatalogRegistry: () =>
-      ({ getActive: () => null }) as never,
+      ({
+        getActive: () => null,
+        ensureReady: vi.fn(),
+        waitForReady: vi.fn(async () => {}),
+      }) as never,
     getActiveDocumentMarkdownViewMode: () => undefined,
     setMarkdownViewMode: vi.fn(),
     openAndActivatePath: vi.fn(async () => {}),
@@ -189,6 +192,41 @@ describe("createOverlayHostHandlers.cancelAddMultiple", () => {
     expect(setAddMultipleSelected).toHaveBeenCalledWith(new Set());
     expect(setAddMultipleError).toHaveBeenCalledWith(null);
     expect(setAddMultipleParentPath).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("createOverlayHostHandlers.openProjectSearchResult", () => {
+  it("opens the path and jumps to the line after a Svelte tick", async () => {
+    const openAndActivatePath = vi.fn(async () => {});
+    const goToLine = vi.fn();
+    const handlers = createOverlayHostHandlers(
+      makeDeps({
+        openAndActivatePath,
+        getEditorWorkbench: () =>
+          ({
+            getActiveHost: () => null,
+            getActiveRunner: () => ({ goToLine }),
+          }) as never,
+      }),
+    );
+    await handlers.openProjectSearchResult("/tmp/ws/a.ts", 12);
+    expect(openAndActivatePath).toHaveBeenCalledWith("/tmp/ws/a.ts");
+    expect(goToLine).toHaveBeenCalledWith(12);
+  });
+
+  it("skips goToLine when line is not positive", async () => {
+    const goToLine = vi.fn();
+    const handlers = createOverlayHostHandlers(
+      makeDeps({
+        getEditorWorkbench: () =>
+          ({
+            getActiveHost: () => null,
+            getActiveRunner: () => ({ goToLine }),
+          }) as never,
+      }),
+    );
+    await handlers.openProjectSearchResult("/tmp/ws/a.ts", 0);
+    expect(goToLine).not.toHaveBeenCalled();
   });
 });
 

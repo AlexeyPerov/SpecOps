@@ -56,7 +56,10 @@
     tabDocumentId,
   } from "../lib/domain/contracts";
   import { createProjectTreeController, type ProjectTreeControllerState } from "../lib/services/projectTreeController";
-  import { createWorkspaceFileCatalog } from "../lib/services/workspaceFileCatalog";
+  import {
+    createCachedWorkspaceTraversal,
+    createWorkspaceDirectoryCache,
+  } from "../lib/services/workspaceDirectoryCache";
   import {
     createWorkspaceFileCatalogRegistry,
     type WorkspaceFileCatalogRegistry,
@@ -153,15 +156,27 @@
     loadingPaths: new Set(),
     showHidden: false,
   });
+  const workspaceDirectoryCache = createWorkspaceDirectoryCache();
+  const cachedWorkspaceTraversal = createCachedWorkspaceTraversal({
+    cache: workspaceDirectoryCache,
+  });
   const projectTreeController = createProjectTreeController(
     (nextState) => {
       projectTreeControllerState = nextState;
     },
-    { probeWorkspaceReadAccessFn: probeWorkspaceReadAccess },
+    {
+      probeWorkspaceReadAccessFn: probeWorkspaceReadAccess,
+      loadDirectoryChildrenFn: cachedWorkspaceTraversal.loadDirectoryChildren,
+    },
   );
-  const workspaceFileCatalog = createWorkspaceFileCatalog();
   const workspaceFileCatalogRegistry: WorkspaceFileCatalogRegistry =
-    createWorkspaceFileCatalogRegistry();
+    createWorkspaceFileCatalogRegistry({
+      enumerate: cachedWorkspaceTraversal.enumerate,
+      onBeforeRebuild: () => {
+        workspaceDirectoryCache.clear();
+      },
+    });
+  let workspaceFileCatalogRevision = $state(0);
   let autoProjectPanelCollapsed = $state(false);
   let autoSessionsSidebarCollapsed = $state(false);
   let lastChatScopeKey = $state<string | null>(null);
@@ -311,9 +326,10 @@
    * inputs are computed here (they read app state) and passed down to the
    * overlay host, which owns the live query and the ranking derivation.
    */
-  const quickOpenCatalogSnapshot = $derived(
-    workspaceFileCatalogRegistry.getActiveSnapshot(),
-  );
+  const quickOpenCatalogSnapshot = $derived.by(() => {
+    void workspaceFileCatalogRevision;
+    return workspaceFileCatalogRegistry.getActiveSnapshot();
+  });
   const quickOpenRecencyInputs = $derived(
     deriveQuickOpenRecencyInputs(session, documents, $appRecentFiles, (sessionState, docs) =>
       collectTabOpenPaths(allTabs(sessionState.editorLayout), docs),
@@ -324,8 +340,19 @@
     editorWorkbench.dispose();
     editorSessionCache.clear();
     editorTools.dispose();
-    workspaceFileCatalog.dispose();
+    workspaceDirectoryCache.dispose();
     workspaceFileCatalogRegistry.dispose();
+  });
+
+  $effect(() => {
+    activeWorkspaceRoot;
+    const catalog = workspaceFileCatalogRegistry.getActive();
+    if (!catalog) {
+      return;
+    }
+    return catalog.subscribe(() => {
+      workspaceFileCatalogRevision += 1;
+    });
   });
 
   $effect(() => {
@@ -716,7 +743,6 @@
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot,
       isChatHttpActive,
-      catalog: workspaceFileCatalog,
       registry: workspaceFileCatalogRegistry,
     });
     // L14 — the picker-close + project-search-cancel half moved into the
@@ -1024,7 +1050,7 @@
   {editorWorkbench}
   {editorTools}
   {projectTreeController}
-  {workspaceFileCatalog}
+  {workspaceDirectoryCache}
   {workspaceFileCatalogRegistry}
   overlayHost={overlayHost}
   {notify}
@@ -1057,7 +1083,6 @@
     appShellHost?.api.handleListWorkspaceSessions(options) ?? Promise.resolve()}
   handleOpenExternalSession={(sessionId) =>
     appShellHost?.api.handleOpenExternalSession(sessionId) ?? Promise.resolve()}
-  getWorkspaceFileCatalog={() => workspaceFileCatalog}
   getWorkspaceFileCatalogRegistry={() => workspaceFileCatalogRegistry}
   getEditorWorkbench={() => editorWorkbench}
   getEditorTools={() => editorTools}

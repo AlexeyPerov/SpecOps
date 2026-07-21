@@ -13,11 +13,27 @@ function makeEnumerate(paths: string[]) {
   }));
 }
 
+function activateCatalog(
+  registry: WorkspaceFileCatalogRegistry,
+  root: string,
+): void {
+  registry.setActiveRoot(root);
+  registry.ensureReady();
+}
+
 describe("createWorkspaceFileCatalogRegistry", () => {
   let registry: WorkspaceFileCatalogRegistry;
 
   afterEach(() => {
     registry?.dispose();
+  });
+
+  it("binds the active root without enumerating until ensureReady", () => {
+    const enumerate = makeEnumerate(["/ws/a.ts"]);
+    registry = createWorkspaceFileCatalogRegistry({ enumerate });
+    registry.setActiveRoot("/ws");
+    expect(registry.getActiveSnapshot().status).toBe("idle");
+    expect(enumerate).not.toHaveBeenCalled();
   });
 
   it("isolates catalogs per normalized root so switches cannot leak candidates", async () => {
@@ -28,7 +44,7 @@ describe("createWorkspaceFileCatalogRegistry", () => {
     );
     registry = createWorkspaceFileCatalogRegistry({ enumerate: enumerateImpl });
 
-    registry.setActiveRoot("/ws-a");
+    activateCatalog(registry, "/ws-a");
     await vi.waitFor(() =>
       expect(registry.getActiveSnapshot().status).toBe("ready"),
     );
@@ -39,7 +55,7 @@ describe("createWorkspaceFileCatalogRegistry", () => {
       ),
     ).toBe(true);
 
-    registry.setActiveRoot("/ws-b");
+    activateCatalog(registry, "/ws-b");
     await vi.waitFor(() =>
       expect(registry.getActiveSnapshot().status).toBe("ready"),
     );
@@ -53,7 +69,7 @@ describe("createWorkspaceFileCatalogRegistry", () => {
     const enumerate = makeEnumerate(["/ws/a.ts"]);
     registry = createWorkspaceFileCatalogRegistry({ enumerate });
 
-    registry.setActiveRoot("/ws");
+    activateCatalog(registry, "/ws");
     await vi.waitFor(() =>
       expect(registry.getActiveSnapshot().status).toBe("ready"),
     );
@@ -64,7 +80,7 @@ describe("createWorkspaceFileCatalogRegistry", () => {
     registry.setActiveRoot(null);
     expect(registry.getActive()).toBeNull();
 
-    registry.setActiveRoot("/ws");
+    activateCatalog(registry, "/ws");
     await vi.waitFor(() =>
       expect(registry.getActiveSnapshot().status).toBe("ready"),
     );
@@ -87,7 +103,7 @@ describe("createWorkspaceFileCatalogRegistry", () => {
       enumerate,
       invalidateDebounceMs: 50,
     });
-    registry.setActiveRoot("/ws");
+    activateCatalog(registry, "/ws");
     await vi.waitFor(() =>
       expect(registry.getActiveSnapshot().status).toBe("ready"),
     );
@@ -99,7 +115,7 @@ describe("createWorkspaceFileCatalogRegistry", () => {
   it("disposes a single root catalog on disposeRoot", async () => {
     const enumerate = makeEnumerate(["/ws/a.ts"]);
     registry = createWorkspaceFileCatalogRegistry({ enumerate });
-    registry.setActiveRoot("/ws");
+    activateCatalog(registry, "/ws");
     await vi.waitFor(() =>
       expect(registry.getActiveSnapshot().status).toBe("ready"),
     );
@@ -107,7 +123,7 @@ describe("createWorkspaceFileCatalogRegistry", () => {
     registry.disposeRoot("/ws");
     expect(registry.getActive()).toBeNull();
     // Re-activating creates a fresh catalog.
-    registry.setActiveRoot("/ws");
+    activateCatalog(registry, "/ws");
     await vi.waitFor(() =>
       expect(registry.getActiveSnapshot().status).toBe("ready"),
     );
@@ -117,8 +133,8 @@ describe("createWorkspaceFileCatalogRegistry", () => {
   it("disposes all catalogs on dispose", async () => {
     const enumerate = makeEnumerate(["/ws/a.ts"]);
     registry = createWorkspaceFileCatalogRegistry({ enumerate });
-    registry.setActiveRoot("/ws-a");
-    registry.setActiveRoot("/ws-b");
+    activateCatalog(registry, "/ws-a");
+    activateCatalog(registry, "/ws-b");
     registry.dispose();
 
     expect(registry.getActive()).toBeNull();
@@ -128,7 +144,7 @@ describe("createWorkspaceFileCatalogRegistry", () => {
   it("refresh triggers a rebuild of the active catalog", async () => {
     const enumerate = makeEnumerate(["/ws/a.ts"]);
     registry = createWorkspaceFileCatalogRegistry({ enumerate });
-    registry.setActiveRoot("/ws");
+    activateCatalog(registry, "/ws");
     await vi.waitFor(() =>
       expect(registry.getActiveSnapshot().status).toBe("ready"),
     );

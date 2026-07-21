@@ -25,6 +25,8 @@ moderate risk), **L** = large (1+ days, invasive).
 
 ## Open — medium / large
 
+_(None remaining from this audit. See Suggested next steps for follow-ups.)_
+
 ### Launch / bundle
 
 #### L1. ~~No code-splitting — heavy initial bundle~~ ✅ Resolved
@@ -64,17 +66,14 @@ moderate risk), **L** = large (1+ days, invasive).
   the same thread array skip the assistant/step walk. See the 2026-07-19 13:10
   changelog entry.
 
-#### L6. `EditorPaneContent` recomputes per-pane doc lookup + markdown HTML per keystroke
-- `paneDocument` does an `Array.find` over documents; `deriveAppShellDocumentView`
-  recomputes `markdownHtml` on every `appState` tick (including cursor moves
-  and keystrokes via `setDocumentContent`). Partially mitigated by keep-alive
-  (only the active slot recomputes), but the markdown HTML path still runs per
-  edit.
-- **Files:** `app/src/lib/components/EditorPaneContent.svelte:235-257`,
-  `app/src/lib/services/appShellDocumentView.ts:23-62`.
-- **Complexity: M.**
-- **Fix sketch:** Memoize `markdownHtml` by document content reference; lift
-  the doc-by-id map so the find is not repeated.
+#### L6. ~~`EditorPaneContent` recomputes per-pane doc lookup + markdown HTML per keystroke~~ ✅ Resolved
+- **Status:** Shipped. `EditorPaneContent` uses the shared `getDocumentByIdMap`
+  for pane + keep-alive lookups (no per-tick `Array.find`). Keep-alive
+  eligibility uses a cheap `contentKind` check instead of deriving a full
+  document view (which previously parsed markdown HTML just to filter).
+  `deriveAppShellDocumentView` memoizes preview HTML by content string + file
+  path (bounded Map), so scroll/cursor/fingerprint updates that reuse the same
+  content string skip `marked` parse. See the 2026-07-21 changelog entry.
 
 #### L7. ~~`buildDocumentByIdMap` rebuilt in two components per emit~~ ✅ Resolved
 - **Status:** Shipped. `getDocumentByIdMap` WeakMap-memoizes the id → document
@@ -211,11 +210,11 @@ moderate risk), **L** = large (1+ days, invasive).
 | L15 | Monolithic snapshot replaced by appStateSelectors + AppShellHost leaf props | (this pass) |
 | L2 | Deferred catalog enumerate + shared directory cache | (this pass) |
 | L11 | Registry-only catalog sync + shared readDir cache for tree/catalog | (this pass) |
+| L6 | Doc-by-id map in EditorPaneContent + memoized markdown preview HTML | (this pass) |
 
 ---
 
 ## Suggested next steps (ordered by impact)
 
-1. **L6** — EditorPaneContent per-keystroke doc lookup + markdown HTML.
-2. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
+1. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
    render contract or a fallback-then-rehighlight path.

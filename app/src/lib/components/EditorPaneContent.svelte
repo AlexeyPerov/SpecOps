@@ -28,7 +28,11 @@
     type TabState,
     type WorkspaceEntry,
   } from "../domain/contracts";
-  import { deriveAppShellDocumentView } from "../services/appShellDocumentView";
+  import {
+    deriveAppShellDocumentView,
+    isTextEditorDocumentState,
+  } from "../services/appShellDocumentView";
+  import { getDocumentByIdMap } from "../services/tabDocumentLookup";
   import { appState } from "../state/appState";
   import { logPerfTiming } from "../services/perfDiagnostics";
   import { emptySet } from "../collections/emptyCollections";
@@ -241,12 +245,14 @@
     activeViewTabKind === "version-control" && $appState.settings.gitIntegration.enabled,
   );
 
+  const documentById = $derived(getDocumentByIdMap(documents));
+
   const paneDocument = $derived.by(() => {
     const docId = selectedTab ? tabDocumentId(selectedTab) : null;
     if (!docId) {
       return undefined;
     }
-    return documents.find((documentState) => documentState.id === docId);
+    return documentById.get(docId);
   });
 
   const shouldRenderMarkdownPreview = $derived.by(() => {
@@ -359,22 +365,16 @@
       tabId: string;
       document: DocumentState;
     }> = [];
+    const byId = documentById;
     for (const tab of paneFileTabs) {
       if (!visitedEditorTabIds.has(tab.id)) {
         continue;
       }
-      const document = documents.find((d) => d.id === tab.documentId);
-      if (!document) {
-        continue;
-      }
-      const view = deriveAppShellDocumentView(document, {
-        renderMarkdownHtml:
-          document.language === "markdown"
-            ? document.markdownViewMode === "preview" ||
-              (document.markdownViewMode === "split" && canFitMarkdownSplit)
-            : false,
-      });
-      if (view.isTextEditorDocument) {
+      const document = byId.get(tab.documentId);
+      // Cheap contentKind check — do not call deriveAppShellDocumentView here
+      // (that would parse markdown HTML for every visited preview tab on each
+      // documents emit, even when only filtering keep-alive eligibility).
+      if (isTextEditorDocumentState(document)) {
         entries.push({ tabId: tab.id, document });
       }
     }

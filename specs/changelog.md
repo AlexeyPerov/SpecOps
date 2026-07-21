@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-21 22:50 — Performance: L6 editor pane doc lookup + markdown HTML
+
+Follow-up to the 2026-07-18 audit:
+
+- **L6 — pane document lookup:** `EditorPaneContent` resolves the active pane
+  document and keep-alive tab documents via the shared `getDocumentByIdMap`
+  (WeakMap-memoized by the documents array) instead of `Array.find` on every
+  derive. Keep-alive eligibility uses `isTextEditorDocumentState` (contentKind)
+  so filtering no longer runs `deriveAppShellDocumentView` / markdown parse.
+- **L6 — markdown preview memoization:** `deriveAppShellDocumentView` caches
+  rendered preview HTML by content string + file path (bounded Map, same shape
+  as chat markdown). Scroll/cursor/fingerprint updates that reuse the content
+  string skip `renderDocumentMarkdown`; content or path changes re-render.
+
 ## 2026-07-21 22:40 — Performance: L2, L11 shared workspace traversal
 
 Follow-up to the 2026-07-18 audit:

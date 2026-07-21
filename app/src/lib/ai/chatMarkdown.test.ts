@@ -1,12 +1,14 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import {
+  ensureChatHighlight,
   invalidateChatMarkdown,
   renderChatMarkdown,
 } from "./chatMarkdown";
 
 describe("renderChatMarkdown", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     invalidateChatMarkdown();
+    await ensureChatHighlight();
   });
 
   it("renders headings, paragraphs, and emphasis", () => {
@@ -41,6 +43,7 @@ describe("renderChatMarkdown", () => {
     expect(html).toContain("hljs");
     expect(html).toContain("language-ts");
     expect(html).toContain('data-lang="ts"');
+    expect(html).toContain("hljs-keyword");
   });
 
   it("auto-detects language when no fence info is given", () => {
@@ -91,5 +94,40 @@ describe("renderChatMarkdown", () => {
   it("respects breaks: single newlines become <br>", () => {
     const { html } = renderChatMarkdown("line one\nline two");
     expect(html).toContain("<br>");
+  });
+});
+
+describe("lazy highlight.js fallback-then-rehighlight", () => {
+  it("renders escaped fenced code before highlight.js loads, then highlights", async () => {
+    // Fresh module graph so hljs starts unloaded (other tests may have loaded it).
+    vi.resetModules();
+    const mod = await import("./chatMarkdown");
+    expect(mod.isChatHighlightReady()).toBe(false);
+
+    const md = "```ts\nconst x: number = 1;\n```";
+    const plain = mod.renderChatMarkdown(md);
+    expect(plain.codeBlockCount).toBe(1);
+    expect(plain.html).toContain('class="chat-code"');
+    expect(plain.html).toContain("language-ts");
+    expect(plain.html).toContain("const x: number = 1;");
+    expect(plain.html).not.toContain("hljs-keyword");
+
+    await mod.ensureChatHighlight();
+    expect(mod.isChatHighlightReady()).toBe(true);
+
+    const highlighted = mod.renderChatMarkdown(md, true);
+    expect(highlighted.html).toContain("hljs-keyword");
+    expect(highlighted.html).toContain("language-ts");
+  });
+
+  it("does not load highlight.js for markdown without fenced code", async () => {
+    vi.resetModules();
+    const mod = await import("./chatMarkdown");
+    mod.renderChatMarkdown("# Just a heading");
+    // Kick was gated on code blocks — still not ready, and no in-flight load.
+    expect(mod.isChatHighlightReady()).toBe(false);
+    // Give a tick in case a stray import was scheduled.
+    await Promise.resolve();
+    expect(mod.isChatHighlightReady()).toBe(false);
   });
 });

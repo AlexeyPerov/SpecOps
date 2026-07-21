@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-21 22:55 — Performance: L1b lazy highlight.js
+
+Follow-up to L1 bundle code-splitting:
+
+- **Lazy highlight.js:** `chatMarkdown.ts` no longer statically imports
+  `highlight.js/lib/common`. The first fenced code block triggers
+  `ensureChatHighlight()` (dynamic `import()`, single-flight). Until the
+  chunk resolves, fenced blocks render as escaped plain text with the same
+  `<pre class="chat-code">` chrome and language label; the plain HTML cache
+  is cleared when the highlighter becomes ready.
+- **Rehighlight path:** New `chatHighlightReady` store; `MarkdownRenderer`
+  re-derives when it flips so token spans appear without remounting. Markdown
+  without fences never loads the ~162 kB chunk.
+- **Tests:** Existing highlight assertions await `ensureChatHighlight()`;
+  new coverage for plain fallback → rehighlight and no-load-without-fences.
+
 ## 2026-07-21 22:50 — Performance: L6 editor pane doc lookup + markdown HTML
 
 Follow-up to the 2026-07-18 audit:

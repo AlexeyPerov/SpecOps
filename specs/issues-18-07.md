@@ -33,9 +33,15 @@ _(None remaining from this audit. See Suggested next steps for follow-ups.)_
 - **Status:** Shipped. The 5 picker overlays and the 4 sync CodeMirror language
   packs now load on demand; a `manualChunks` rule isolates the CodeMirror
   language packs and highlight.js into separately-cacheable chunks. Main app
-  chunk dropped ~35% (~1.98 MB → ~1.27 MB). highlight.js itself stays eager
-  (sync chat-markdown API constraint — deferred). See the 2026-07-19 07:50
-  changelog entry.
+  chunk dropped ~35% (~1.98 MB → ~1.27 MB). Lazy highlight.js follow-up also
+  shipped (see L1b). See the 2026-07-19 07:50 changelog entry.
+
+#### L1b. ~~Lazy highlight.js~~ ✅ Resolved
+- **Status:** Shipped. `chatMarkdown` no longer eagerly imports highlight.js.
+  First fenced code block kicks off a dynamic `import()`; until it resolves,
+  code renders as escaped plain text with language chrome, then
+  `MarkdownRenderer` re-derives via `chatHighlightReady` for token spans.
+  See the 2026-07-21 changelog entry.
 
 #### L2. ~~Workspace file catalog walks the whole tree at startup~~ ✅ Resolved
 - **Status:** Shipped. Catalog enumeration is deferred until Quick Open, project
@@ -196,6 +202,7 @@ _(None remaining from this audit. See Suggested next steps for follow-ups.)_
 | #21 | cycleTheme theme list memoized | `4e7a0f1` |
 | L10 | `{#key editor.contextId}` workspace grid remount removed via full context-namespacing | `146d69f` |
 | L1 | Bundle code-splitting: lazy pickers + lazy CodeMirror lang packs + manualChunks | (this pass) |
+| L1b | Lazy highlight.js: fallback-then-rehighlight chat-markdown path | (this pass) |
 | L12 | `loadWorkspaceSessions` skips thread-file re-reads when in-memory cache is current | (this pass) |
 | L13 | `allContextSnapshots` O(N·M) hot paths replaced by WeakMap-memoized context lookup indexes | (this pass) |
 | L4 | ChatPanel capability preflight cached per workspace (15s TTL + fingerprint) | (this pass) |
@@ -216,5 +223,4 @@ _(None remaining from this audit. See Suggested next steps for follow-ups.)_
 
 ## Suggested next steps (ordered by impact)
 
-1. **Lazy highlight.js** — follow-up to L1; requires an async chat-markdown
-   render contract or a fallback-then-rehighlight path.
+_(None remaining from this audit.)_

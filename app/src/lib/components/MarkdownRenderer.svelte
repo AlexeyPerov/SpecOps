@@ -7,8 +7,12 @@
    * Streaming messages render plain text until generation completes — that
    * decision belongs to the parent, which can simply omit this component
    * while streaming.
+   *
+   * highlight.js loads on demand when a fenced code block is first seen.
+   * Until then code blocks show escaped plain text; we re-derive when
+   * `chatHighlightReady` flips so tokens appear without remounting.
    */
-  import { renderChatMarkdown } from "../ai/chatMarkdown";
+  import { chatHighlightReady, renderChatMarkdown } from "../ai/chatMarkdown";
 
   interface Props {
     source: string;
@@ -16,7 +20,11 @@
 
   let { source }: Props = $props();
 
-  let result = $derived(renderChatMarkdown(source));
+  const highlightReady = $derived($chatHighlightReady);
+  let result = $derived.by(() => {
+    void highlightReady;
+    return renderChatMarkdown(source);
+  });
 </script>
 
 <div class="chat-prose">{@html result.html}</div>

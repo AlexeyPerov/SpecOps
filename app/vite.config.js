@@ -7,9 +7,9 @@ const host = process.env.TAURI_DEV_HOST;
 // out of the initial bundle. Without this, Vite merges small dynamic-import
 // targets into the main chunk (its default chunk-merging logic folds dynamic
 // imports that share dependencies with the eager graph). The CodeMirror
-// language packs are loaded on demand via loadLanguageSupport; highlight.js is
-// eager today (sync chat-markdown API) but isolated here so the main app chunk
-// stays small and the big syntax-highlighting payload caches independently.
+// language packs load via loadLanguageSupport; highlight.js loads on first
+// fenced code block via ensureChatHighlight — both stay out of the initial
+// graph and cache as independently-named chunks.
 /**
  * @param {string} id - The module id (resolved file path).
  * @returns {string | undefined}

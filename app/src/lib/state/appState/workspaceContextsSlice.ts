@@ -12,6 +12,7 @@ import {
   totalTabCount,
   createFileTab,
   createSinglePaneLayout,
+  ensureUniquePaneIds,
 } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { isChatHttpRailVisible } from "../../ai/providers/chatHttpRailGating";
@@ -58,10 +59,18 @@ function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot
   // A split may deliberately leave its active pane empty while another pane
   // owns open tabs. Checking only the active pane here would replace the whole
   // restored context with a fresh draft and discard those sibling panes.
-  if (totalTabCount(snapshot.session.editorLayout) > 0) {
-    return snapshot;
+  const layout = ensureUniquePaneIds(snapshot.session.editorLayout);
+  const withUniquePanes =
+    layout === snapshot.session.editorLayout
+      ? snapshot
+      : {
+          ...snapshot,
+          session: { ...snapshot.session, editorLayout: layout },
+        };
+  if (totalTabCount(withUniquePanes.session.editorLayout) > 0) {
+    return withUniquePanes;
   }
-  return fallbackContextSnapshot(snapshot.session.lastActiveWindowId);
+  return fallbackContextSnapshot(withUniquePanes.session.lastActiveWindowId);
 }
 
 function canRestoreChatHttpAsActive(settings: AppDomainState["settings"]): boolean {
@@ -198,10 +207,40 @@ export function createWorkspaceContextsSlice(deps: {
           return state;
         }
         switched = true;
+        // Heal duplicate pane ids in the destination before activating so a
+        // corrupt notepad/workspace layout cannot freeze the editor grid.
+        let nextContexts = state.contexts;
+        if (contextId === NOTEPAD_CONTEXT_ID) {
+          const healed = ensureContextSnapshotHasTab(state.contexts.notepad);
+          if (healed !== state.contexts.notepad) {
+            nextContexts = { ...nextContexts, notepad: healed };
+          }
+        } else if (isChatHttpContext(contextId)) {
+          const healed = ensureContextSnapshotHasTab(state.contexts.chatHttp);
+          if (healed !== state.contexts.chatHttp) {
+            nextContexts = { ...nextContexts, chatHttp: healed };
+          }
+        } else {
+          let workspacesChanged = false;
+          const workspaces = state.contexts.workspaces.map((workspace) => {
+            if (workspace.id !== contextId) {
+              return workspace;
+            }
+            const healed = ensureContextSnapshotHasTab(workspace.snapshot);
+            if (healed === workspace.snapshot) {
+              return workspace;
+            }
+            workspacesChanged = true;
+            return { ...workspace, snapshot: healed };
+          });
+          if (workspacesChanged) {
+            nextContexts = { ...nextContexts, workspaces };
+          }
+        }
         return {
           ...state,
           contexts: {
-            ...state.contexts,
+            ...nextContexts,
             activeContextId: contextId,
           },
           editor: {

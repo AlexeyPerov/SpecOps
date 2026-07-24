@@ -37,11 +37,12 @@ import {
   getLanguageSupport,
   type EditorLanguageId,
 } from "./editorLanguage";
-import { foldExtension } from "./editorFold";
+import { foldBaseExtension, foldGutterExtension } from "./editorFold";
 import { minimapExtension } from "./editorMinimap";
 import { completionExtension } from "./editorCompletion";
 import { snippetExtension } from "./editorSnippets";
 import { bookmarkExtension } from "./editorBookmarks";
+import { createPlaintextSymbolDecorations } from "./plaintextDecorations";
 
 /** Named groups assembled into the editor state. */
 export type EditorExtensionGroupName =
@@ -81,7 +82,7 @@ export type EditorExtensionCompartments = {
   decoration: Compartment;
   searchHighlight: Compartment;
   minimap: Compartment;
-  /** M4 — folding (gutter + keymap); reconfigured via showFoldGutter. */
+  /** M4 — fold gutter only; base folding StateField stays outside this compartment. */
   fold: Compartment;
   /** M5 — auto-close pairs + document-word completion; reconfigured via the two flags. */
   completion: Compartment;
@@ -97,6 +98,12 @@ export type BuildEditorExtensionsOptions = {
   showMinimap: boolean;
   /** Fold gutter visibility (default on). Fold commands work even when hidden. */
   showFoldGutter?: boolean;
+  /** Line wrapping (default off). Baked into initial state; live toggles use the compartment. */
+  wrapLines?: boolean;
+  /** Zoom percent (default 100). Baked into initial state; live toggles use the compartment. */
+  zoomPercent?: number;
+  /** Plaintext symbol decorations (default on for plaintext). */
+  decoratePlaintextSymbols?: boolean;
   /**
    * Auto-close bracket/quote pairs (default on). Reconfigures the completion
    * compartment live via `completionExtension`.
@@ -140,6 +147,43 @@ function baseFontSizeExtension(): Extension {
       fontSize: "var(--font-size-editor, 13px)",
     },
   });
+}
+
+function zoomFontSizeExtension(zoomPercent: number): Extension {
+  if (zoomPercent === 100) {
+    return baseFontSizeExtension();
+  }
+  const base = resolveEditorBaseFontSizePx();
+  const px = Math.round((base * zoomPercent) / 100);
+  return EditorView.theme({
+    "&": {
+      fontSize: `${px}px`,
+    },
+  });
+}
+
+function wrapLinesExtension(wrapLines: boolean): Extension {
+  if (!wrapLines) {
+    return [];
+  }
+  return [
+    EditorView.lineWrapping,
+    EditorView.theme({
+      ".cm-scroller": {
+        overflowX: "hidden",
+      },
+    }),
+  ];
+}
+
+function plaintextDecorationExtension(
+  language: EditorLanguageId,
+  decoratePlaintextSymbols: boolean,
+): Extension {
+  if (language !== "plaintext" || !decoratePlaintextSymbols) {
+    return [];
+  }
+  return [createPlaintextSymbolDecorations()];
 }
 
 function editorSurfaceTheme(): Extension {
@@ -199,6 +243,9 @@ export function buildNamedExtensionGroups(
     language,
     showMinimap,
     showFoldGutter = true,
+    wrapLines = false,
+    zoomPercent = 100,
+    decoratePlaintextSymbols = true,
     autoClosePairs = true,
     autoSuggest = false,
     snippetsEnabled = false,
@@ -218,8 +265,8 @@ export function buildNamedExtensionGroups(
         // Selection keymap (occurrence commands) — wins over defaultKeymap overlaps.
         keymap.of([...searchKeymap]),
         keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
-        compartments.lineWrap.of([]),
-        compartments.fontSize.of(baseFontSizeExtension()),
+        compartments.lineWrap.of(wrapLinesExtension(wrapLines)),
+        compartments.fontSize.of(zoomFontSizeExtension(zoomPercent)),
       ],
     },
     {
@@ -232,7 +279,11 @@ export function buildNamedExtensionGroups(
     },
     {
       name: "decorations",
-      extensions: [compartments.decoration.of([])],
+      extensions: [
+        compartments.decoration.of(
+          plaintextDecorationExtension(language, decoratePlaintextSymbols),
+        ),
+      ],
     },
     {
       name: "search",
@@ -244,7 +295,13 @@ export function buildNamedExtensionGroups(
     },
     {
       name: "fold",
-      extensions: [compartments.fold.of(foldExtension({ showGutter: showFoldGutter }))],
+      // foldGutter() embeds codeFolding()'s StateField — keep the whole fold
+      // bundle outside the compartment. The compartment only holds a CSS hide
+      // theme when the gutter is off (never add/remove the StateField).
+      extensions: [
+        foldBaseExtension(),
+        compartments.fold.of(foldGutterExtension(showFoldGutter)),
+      ],
     },
     {
       name: "completion",
@@ -289,18 +346,7 @@ export function applyWrap(
   nextWrap: boolean,
 ): void {
   view.dispatch({
-    effects: lineWrapCompartment.reconfigure(
-      nextWrap
-        ? [
-            EditorView.lineWrapping,
-            EditorView.theme({
-              ".cm-scroller": {
-                overflowX: "hidden",
-              },
-            }),
-          ]
-        : [],
-    ),
+    effects: lineWrapCompartment.reconfigure(wrapLinesExtension(nextWrap)),
   });
 }
 
@@ -324,15 +370,7 @@ export function applyZoom(
   fontSizeCompartment: Compartment,
   nextZoom: number,
 ): void {
-  const base = resolveEditorBaseFontSizePx();
-  const px = Math.round((base * nextZoom) / 100);
   view.dispatch({
-    effects: fontSizeCompartment.reconfigure(
-      EditorView.theme({
-        "&": {
-          fontSize: `${px}px`,
-        },
-      }),
-    ),
+    effects: fontSizeCompartment.reconfigure(zoomFontSizeExtension(nextZoom)),
   });
 }

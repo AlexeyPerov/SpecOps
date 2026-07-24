@@ -51,9 +51,39 @@ export function resetPaneIdCounter(): void {
   paneIdCounter = 0;
 }
 
+/** Raise the pane-id counter so the next allocation is above `maxId`. */
+export function reindexPaneIdCounter(maxId: number): void {
+  if (Number.isFinite(maxId) && maxId > paneIdCounter) {
+    paneIdCounter = maxId;
+  }
+}
+
 export function nextPaneId(): string {
   paneIdCounter += 1;
   return `${PANE_ID_PREFIX}${paneIdCounter}`;
+}
+
+/**
+ * Allocate a pane id that does not collide with `existingIds`. Advances the
+ * module counter past any restored ids so split/preset expansion cannot mint
+ * duplicates (duplicate ids break keyed pane rendering and remount in a loop).
+ */
+export function allocatePaneId(existingIds: Iterable<string>): string {
+  const taken = existingIds instanceof Set ? existingIds : new Set(existingIds);
+  let id = nextPaneId();
+  while (taken.has(id)) {
+    id = nextPaneId();
+  }
+  return id;
+}
+
+/** Parse the numeric suffix of a `pane-N` id (0 when malformed). */
+export function paneIdNumericSuffix(paneId: string): number {
+  const match = /^pane-(\d+)$/.exec(paneId);
+  if (!match) {
+    return 0;
+  }
+  return Number(match[1]) || 0;
 }
 
 /** Shallow equality for slot row arrays (used to detect stale geometry). */
@@ -352,8 +382,20 @@ function templateForCount(count: number): { kind: LayoutKind; slots: number[][] 
       return { kind: "cols-2", slots: presetSlots("cols-2") };
     case 3:
       return { kind: "custom", slots: [[0, 1], [2]] };
-    default:
+    case 4:
       return { kind: "grid-2x2", slots: presetSlots("grid-2x2") };
+    default: {
+      // 5+ panes: rows of two (last row may be a single full-width cell).
+      const slots: number[][] = [];
+      for (let i = 0; i < count; i += 2) {
+        if (i + 1 < count) {
+          slots.push([i, i + 1]);
+        } else {
+          slots.push([i]);
+        }
+      }
+      return { kind: "custom", slots };
+    }
   }
 }
 
@@ -450,7 +492,7 @@ export function applyPreset(layout: EditorLayout, kind: Exclude<LayoutKind, "cus
       selectedTabId: clampSelectedTabId(pane),
     }));
     while (newPanes.length < targetCount) {
-      newPanes.push(createEmptyPane());
+      newPanes.push(createEmptyPane(allocatePaneId(newPanes.map((pane) => pane.id))));
     }
     const activeSurvives = newPanes.some((pane) => pane.id === layout.activePaneId);
     return {
@@ -801,6 +843,20 @@ export function normalizeEditorLayout(layout: EditorLayout | undefined | null): 
 }
 
 /**
+ * No-op when every pane id is non-empty and unique; otherwise rewrite colliding
+ * ids via {@link restructureEditorLayout}. Used on session apply / context
+ * switch so a corrupt layout (duplicate ids after a counter collision) cannot
+ * keep remounting the editor grid.
+ */
+export function ensureUniquePaneIds(layout: EditorLayout): EditorLayout {
+  const ids = layout.panes.map((pane) => pane.id);
+  if (ids.length > 0 && ids.every((id) => id.length > 0) && new Set(ids).size === ids.length) {
+    return layout;
+  }
+  return restructureEditorLayout(layout, () => true);
+}
+
+/**
  * Rebuild a (possibly stale/malformed) layout, dropping tabs that fail the
  * `retainTab` predicate (e.g. file tabs whose document no longer exists, or
  * ephemeral view tabs). The structured multi-pane layout is **preserved**:
@@ -820,8 +876,15 @@ export function restructureEditorLayout(
   if (!layout || !Array.isArray(layout.panes) || layout.panes.length === 0) {
     return createSinglePaneLayout([]);
   }
+  const seenIds = new Set<string>();
   const panes: EditorPane[] = layout.panes.map((pane) => {
-    const id = typeof pane.id === "string" && pane.id.length > 0 ? pane.id : nextPaneId();
+    let id = typeof pane.id === "string" && pane.id.length > 0 ? pane.id : "";
+    // Duplicate or missing ids (e.g. counter not reindexed after restore) must
+    // be rewritten — keyed grid cells and findPane both assume uniqueness.
+    if (!id || seenIds.has(id)) {
+      id = allocatePaneId(seenIds);
+    }
+    seenIds.add(id);
     const rawTabs = Array.isArray(pane.tabs) ? pane.tabs.filter(retainTab) : [];
     const nextPane: EditorPane = {
       id,

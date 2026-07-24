@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { javascript } from "@codemirror/lang-javascript";
-import { EditorState } from "@codemirror/state";
-import { foldable } from "@codemirror/language";
+import { Compartment, EditorState } from "@codemirror/state";
+import { foldable, foldCode, unfoldCode, foldedRanges } from "@codemirror/language";
+import { EditorView } from "@codemirror/view";
 import {
   computeMarkdownHeadingFoldBoundaries,
   createMarkdownFoldTestState,
   markdownHeadingFoldableAtLine,
 } from "./markdownFoldBoundaries";
-import { foldExtension } from "./editorFold";
-import { foldCode, unfoldCode, foldedRanges } from "@codemirror/language";
-import { EditorView } from "@codemirror/view";
+import { foldBaseExtension, foldExtension, foldGutterExtension } from "./editorFold";
 
 describe("computeMarkdownHeadingFoldBoundaries", () => {
   it("folds a heading section until the next equal/higher heading", () => {
@@ -97,6 +96,63 @@ describe("fold extension lifecycle", () => {
     expect(foldedRanges(view.state).size).toBeGreaterThan(0);
     unfoldCode(view);
     expect(view.state.doc.toString()).toBe(before);
+    view.destroy();
+    parent.remove();
+  });
+
+  it("hides the fold gutter via CSS without removing fold state", () => {
+    const doc = "function a() {\n  return 1;\n}\n";
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const foldGutterCompartment = new Compartment();
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        extensions: [
+          javascript(),
+          foldBaseExtension(),
+          foldGutterCompartment.of(foldGutterExtension(true)),
+        ],
+      }),
+      parent,
+    });
+    view.dispatch({ selection: { anchor: 0 } });
+    expect(foldCode(view)).toBe(true);
+    expect(foldedRanges(view.state).size).toBeGreaterThan(0);
+    view.dispatch({
+      effects: foldGutterCompartment.reconfigure(foldGutterExtension(false)),
+    });
+    // Fold state must survive a gutter-hide reconfigure.
+    expect(foldedRanges(view.state).size).toBeGreaterThan(0);
+    view.destroy();
+    parent.remove();
+  });
+
+  it("reconfigures fold gutter without hanging the view", () => {
+    const doc = "function a() {\n  return 1;\n}\n";
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const foldGutterCompartment = new Compartment();
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        extensions: [
+          javascript(),
+          foldBaseExtension(),
+          foldGutterCompartment.of(foldGutterExtension(true)),
+        ],
+      }),
+      parent,
+    });
+    // foldGutter() embeds codeFolding(); the compartment must only toggle a
+    // CSS hide theme — never reconfigure foldGutter()/codeFolding() itself.
+    view.dispatch({
+      effects: foldGutterCompartment.reconfigure(foldGutterExtension(false)),
+    });
+    view.dispatch({
+      effects: foldGutterCompartment.reconfigure(foldGutterExtension(true)),
+    });
+    expect(view.state.doc.toString()).toBe(doc);
     view.destroy();
     parent.remove();
   });

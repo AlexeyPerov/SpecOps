@@ -40,6 +40,7 @@
     chatStore,
   } from "../lib/state/chatStore";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
+  import { setupAppShellMount } from "../lib/services/appShellPageHandlers";
   import { elapsedMs, logPerfTiming, nowMs } from "../lib/services/perfDiagnostics";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
@@ -205,7 +206,12 @@
 
   $effect(() => {
     return editorWorkbench.subscribeCursorStatus(({ line, column, selectionCount }) => {
-      appState.setCursor(line, column, selectionCount);
+      // Cursor publishes from CodeMirror update listeners; skip no-op writes so
+      // keep-alive mounts and effect-only transactions do not thrash appState
+      // (each write captures ownership stacks in dev and re-ranks overlays).
+      untrack(() => {
+        appState.setCursor(line, column, selectionCount);
+      });
     });
   });
 

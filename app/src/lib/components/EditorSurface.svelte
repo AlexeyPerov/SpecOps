@@ -28,6 +28,12 @@
     autoClosePairs?: boolean;
     autoSuggest?: boolean;
     enabledSnippets?: import("../domain/snippets").ResolvedMarkdownSnippet[];
+    /**
+     * False while this surface lives in a keep-alive tab slot with
+     * `display: none`. When it flips back to true, remasure so caret/gutters
+     * recover after zero-size layout.
+     */
+    visible?: boolean;
     onStatusMessage?: (message: string) => void;
     onDocumentDirty?: (nextContent: string) => void;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
@@ -48,6 +54,7 @@
     autoClosePairs = true,
     autoSuggest = false,
     enabledSnippets = [],
+    visible = true,
     onStatusMessage = () => {},
     onDocumentDirty = () => {},
     onScrollTopChange = () => {},
@@ -128,6 +135,22 @@
       autoSuggest,
       enabledSnippets,
     });
+  });
+
+  // Keep-alive slots use display:none; CodeMirror's viewport/caret metrics go
+  // stale at zero size. Remasure on the frame after becoming visible again.
+  $effect(() => {
+    if (!visible) {
+      return;
+    }
+    const active = controller;
+    if (!active) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      active.requestMeasure();
+    });
+    return () => cancelAnimationFrame(frame);
   });
 </script>
 

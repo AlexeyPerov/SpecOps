@@ -1,8 +1,9 @@
 <script lang="ts">
   import EditorSurface from "./EditorSurface.svelte";
-  import { appState } from "../state/appState";
+  import { appSettings } from "../state/appStateSelectors";
   import type { EditorLanguageId } from "../editor/editorLanguage";
   import { listEnabledMarkdownSnippets } from "../editor/markdownSnippetSettings";
+  import { appState } from "../state/appState";
 
   let {
     content = "",
@@ -23,6 +24,7 @@
       | ((documentId: string) => void)
       | undefined,
     onScrollTopChange = (_documentId: string, _scrollTop: number) => {},
+    visible = true,
   }: {
     content?: string;
     documentId?: string | null;
@@ -40,12 +42,14 @@
     onStatusMessage?: (message: string) => void;
     onUntitledTitleRefresh?: ((documentId: string) => void) | undefined;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
+    visible?: boolean;
   } = $props();
 
-  const snapshot = $derived($appState);
+  // Subscribe to settings only — full `$appState` re-rendered every cursor tick
+  // and forced keep-alive surfaces through needless update churn.
   const enabledSnippets = $derived(
     language === "markdown"
-      ? listEnabledMarkdownSnippets(snapshot.settings.markdownSnippets)
+      ? listEnabledMarkdownSnippets($appSettings.markdownSnippets)
       : [],
   );
 
@@ -76,4 +80,5 @@
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
   {onScrollTopChange}
+  {visible}
 />

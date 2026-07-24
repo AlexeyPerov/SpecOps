@@ -355,6 +355,14 @@ function createStateStore() {
       void syncRecentFiles(recentFiles);
     },
     setCursor(line: number, column: number, selectionCount: number = 1) {
+      const current = getSnapshot().editor;
+      if (
+        current.cursorLine === line &&
+        current.cursorColumn === column &&
+        current.selectionCount === selectionCount
+      ) {
+        return;
+      }
       update((state) => ({
         ...state,
         editor: {

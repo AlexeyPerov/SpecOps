@@ -6,6 +6,7 @@ import {
   activeTab,
   activePaneTabs,
   allTabs,
+  allocatePaneId,
   applyPreset,
   effectiveLayoutSlots,
   createEmptyPane,
@@ -23,8 +24,10 @@ import {
   paneActiveTab,
   presetSlots,
   reflowAfterClose,
+  reindexPaneIdCounter,
   removeMatchingTabsFromAllPanes,
   removeTabFromPane,
+  resetPaneIdCounter,
   restructureEditorLayout,
   selectTabInLayout,
   setActivePaneInLayout,
@@ -586,6 +589,26 @@ describe("session-level accessors", () => {
   });
 });
 
+describe("applyPreset — pane id allocation", () => {
+  it("does not mint a pane id that already exists in the layout", () => {
+    resetPaneIdCounter();
+    // Counter sits just below an existing restored id so a naive nextPaneId
+    // would collide with pane-3.
+    reindexPaneIdCounter(2);
+    const layout = buildLayout(
+      "single",
+      [pane("pane-3", [fileTab("t1")], "t1")],
+      [[0]],
+      "pane-3",
+    );
+    const next = applyPreset(layout, "cols-2");
+    expect(next.panes).toHaveLength(2);
+    expect(next.panes[0].id).toBe("pane-3");
+    expect(next.panes[1].id).not.toBe("pane-3");
+    expect(new Set(next.panes.map((entry) => entry.id)).size).toBe(2);
+  });
+});
+
 describe("nextPaneId", () => {
   it("produces stable-ish sequential ids", () => {
     const a = nextPaneId();
@@ -602,10 +625,46 @@ describe("nextPaneId", () => {
     expect(p.id).toMatch(/^pane-\d+$/);
   });
 
+  it("allocatePaneId skips ids that already exist", () => {
+    resetPaneIdCounter();
+    const taken = new Set(["pane-1", "pane-2"]);
+    expect(allocatePaneId(taken)).toBe("pane-3");
+  });
+
+  it("reindexPaneIdCounter prevents collisions after restore", () => {
+    resetPaneIdCounter();
+    reindexPaneIdCounter(10);
+    expect(nextPaneId()).toBe("pane-11");
+  });
+
   it("findPane resolves by id", () => {
     const layout = createSinglePaneLayout([fileTab("t1")]);
     expect(findPane(layout, layout.panes[0].id)).toBe(layout.panes[0]);
     expect(findPane(layout, "missing")).toBeUndefined();
+  });
+});
+
+describe("restructureEditorLayout — duplicate pane ids", () => {
+  it("rewrites colliding pane ids so each pane is unique", () => {
+    resetPaneIdCounter();
+    reindexPaneIdCounter(3);
+    const layout = restructureEditorLayout(
+      {
+        kind: "cols-2",
+        panes: [
+          pane("pane-3", [fileTab("t1")], "t1"),
+          pane("pane-3", [], null),
+        ],
+        slots: [[0, 1]],
+        activePaneId: "pane-3",
+      },
+      () => true,
+    );
+    const ids = layout.panes.map((entry) => entry.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids[0]).toBe("pane-3");
+    expect(ids[1]).not.toBe("pane-3");
+    expect(layout.panes[0].tabs).toHaveLength(1);
   });
 });
 

@@ -30,6 +30,7 @@
     onMarkdownViewModeChange = (_mode: "edit" | "split" | "preview") => {},
     onUntitledTitleRefresh = undefined as ((documentId: string) => void) | undefined,
     onScrollTopChange = (_documentId: string, _scrollTop: number) => {},
+    visible = true,
   }: {
     content?: string;
     documentId?: string | null;
@@ -54,6 +55,7 @@
     onMarkdownViewModeChange?: (mode: "edit" | "split" | "preview") => void;
     onUntitledTitleRefresh?: ((documentId: string) => void) | undefined;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
+    visible?: boolean;
   } = $props();
 
   // Imperative DOM handles — `$state.raw` so bind:this reassignments notify
@@ -164,6 +166,7 @@
           {onStatusMessage}
           {onUntitledTitleRefresh}
           {onScrollTopChange}
+          {visible}
         />
       </div>
       {#if markdownEnabled && markdownViewMode === "split"}

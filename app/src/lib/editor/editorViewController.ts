@@ -20,7 +20,7 @@ import {
   type EditorLanguageId,
 } from "./editorLanguage";
 import { minimapExtension } from "./editorMinimap";
-import { foldExtension } from "./editorFold";
+import { foldGutterExtension } from "./editorFold";
 import { completionExtension } from "./editorCompletion";
 import {
   createSnippetCompletionSource,
@@ -70,6 +70,12 @@ export type EditorViewController = {
   update: (props: EditorViewControllerProps) => void;
   destroy: () => void;
   getView: () => EditorView | undefined;
+  /**
+   * Re-measure layout after the host becomes visible again (e.g. keep-alive
+   * tab slot leaving `display: none`). Without this, caret/gutter geometry can
+   * stay stale until the next edit.
+   */
+  requestMeasure: () => void;
   /** Test/diagnostics: current tracked document id. */
   getTrackedDocumentId: () => string | null;
   /** Test/diagnostics: current document generation. */
@@ -106,6 +112,8 @@ export function createEditorViewController(
   let lastCompletionKey = "";
   let lastSnippetKey = "";
   let lastSnippetsEnabled: boolean | null = null;
+  let lastWrapLines: boolean | null = null;
+  let lastZoomPercent: number | null = null;
 
   let applyingScroll = false;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -223,6 +231,9 @@ export function createEditorViewController(
     autoClosePairs: boolean,
     autoSuggest: boolean,
     enabledSnippets: readonly ResolvedMarkdownSnippet[],
+    wrapLines = false,
+    zoomPercent = 100,
+    decoratePlaintextSymbols = true,
   ) {
     const snippetSource =
       language === "markdown" && enabledSnippets.length > 0
@@ -233,6 +244,9 @@ export function createEditorViewController(
       language,
       showMinimap,
       showFoldGutter,
+      wrapLines,
+      zoomPercent,
+      decoratePlaintextSymbols,
       autoClosePairs,
       autoSuggest,
       snippetsEnabled: language === "markdown",
@@ -259,6 +273,9 @@ export function createEditorViewController(
     autoClosePairs: boolean,
     autoSuggest: boolean,
     enabledSnippets: readonly ResolvedMarkdownSnippet[],
+    wrapLines = false,
+    zoomPercent = 100,
+    decoratePlaintextSymbols = true,
   ): EditorState {
     return EditorState.create({
       doc: content,
@@ -269,6 +286,9 @@ export function createEditorViewController(
         autoClosePairs,
         autoSuggest,
         enabledSnippets,
+        wrapLines,
+        zoomPercent,
+        decoratePlaintextSymbols,
       ),
     });
   }
@@ -293,6 +313,9 @@ export function createEditorViewController(
     autoClosePairs: boolean,
     autoSuggest: boolean,
     enabledSnippets: readonly ResolvedMarkdownSnippet[],
+    wrapLines: boolean,
+    zoomPercent: number,
+    decoratePlaintextSymbols: boolean,
   ): EditorState {
     if (!documentId || !props) {
       return createState(
@@ -303,6 +326,9 @@ export function createEditorViewController(
         autoClosePairs,
         autoSuggest,
         enabledSnippets,
+        wrapLines,
+        zoomPercent,
+        decoratePlaintextSymbols,
       );
     }
     const cached = deps.sessionCache.take({
@@ -322,14 +348,43 @@ export function createEditorViewController(
       autoClosePairs,
       autoSuggest,
       enabledSnippets,
+      wrapLines,
+      zoomPercent,
+      decoratePlaintextSymbols,
     );
   }
 
-  function syncLanguage(language: EditorLanguageId): void {
-    if (!view || language === currentEditorLanguage) {
+  function syncWrapLines(wrapLines: boolean): void {
+    if (!view || wrapLines === lastWrapLines) {
       return;
     }
-    currentEditorLanguage = language;
+    lastWrapLines = wrapLines;
+    applyWrap(view, compartments.lineWrap, wrapLines);
+  }
+
+  function syncZoomPercent(zoomPercent: number): void {
+    if (!view || zoomPercent === lastZoomPercent) {
+      return;
+    }
+    lastZoomPercent = zoomPercent;
+    applyZoom(view, compartments.fontSize, zoomPercent);
+  }
+
+  function syncLanguage(language: EditorLanguageId): void {
+    if (!view) {
+      return;
+    }
+    // Mount seeds `currentEditorLanguage` to skip a redundant compartment
+    // reconfigure when the pack is already in createState. Still fall through
+    // when the id matches but the pack is cold — otherwise the first open of a
+    // language never schedules `loadLanguageSupport` and syntax/fold stay empty.
+    if (language === currentEditorLanguage) {
+      if (language === "plaintext" || getLanguageSupport(language) != null) {
+        return;
+      }
+    } else {
+      currentEditorLanguage = language;
+    }
     languageLoadGeneration += 1;
     const loadGeneration = languageLoadGeneration;
     const docGeneration = documentGeneration;
@@ -338,6 +393,9 @@ export function createEditorViewController(
       view.dispatch({
         effects: compartments.language.reconfigure(syncSupport),
       });
+    }
+    if (language === "plaintext") {
+      return;
     }
     void loadLanguageSupport(language).then((support) => {
       if (
@@ -390,9 +448,7 @@ export function createEditorViewController(
     }
     lastFoldGutterEnabled = showFoldGutter;
     view.dispatch({
-      effects: compartments.fold.reconfigure(
-        foldExtension({ showGutter: showFoldGutter }),
-      ),
+      effects: compartments.fold.reconfigure(foldGutterExtension(showFoldGutter)),
     });
   }
 
@@ -473,6 +529,9 @@ export function createEditorViewController(
       next.autoClosePairs,
       next.autoSuggest,
       next.enabledSnippets,
+      next.wrapLines,
+      next.zoomPercent,
+      next.decoratePlaintextSymbols,
     );
     view.setState(nextState);
 
@@ -485,10 +544,12 @@ export function createEditorViewController(
     lastCompletionKey = "";
     lastSnippetKey = "";
     lastSnippetsEnabled = null;
+    lastWrapLines = null;
+    lastZoomPercent = null;
 
     // Re-apply pane-level chrome that may differ from a restored session.
-    applyWrap(view, compartments.lineWrap, next.wrapLines);
-    applyZoom(view, compartments.fontSize, next.zoomPercent);
+    syncWrapLines(next.wrapLines);
+    syncZoomPercent(next.zoomPercent);
     syncLanguage(next.language);
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
@@ -534,32 +595,33 @@ export function createEditorViewController(
       initial.autoClosePairs,
       initial.autoSuggest,
       initial.enabledSnippets,
+      initial.wrapLines,
+      initial.zoomPercent,
+      initial.decoratePlaintextSymbols,
     );
     view = new EditorView({ state, parent });
 
-    applyWrap(view, compartments.lineWrap, initial.wrapLines);
-    applyZoom(view, compartments.fontSize, initial.zoomPercent);
+    // Wrap/zoom/fold/minimap/completion/snippets/decorations are baked into
+    // createState — seed caches so later $effect updates are no-ops unless
+    // props actually change. Avoid mount-time compartment reconfigure (StyleModule
+    // remount / fold StateField replace) which froze the UI with keep-alive.
+    lastWrapLines = initial.wrapLines;
+    lastZoomPercent = initial.zoomPercent;
+    lastDecoKey = `${initial.language}:${initial.decoratePlaintextSymbols}`;
+    lastMinimapEnabled = initial.showMinimap;
+    lastFoldGutterEnabled = initial.showFoldGutter;
+    lastCompletionKey = `${initial.autoClosePairs ? "1" : "0"}:${initial.autoSuggest ? "1" : "0"}:${initial.language}:${snippetCatalogKey(initial.enabledSnippets)}`;
+    lastSnippetKey = `${initial.language === "markdown" ? "1" : "0"}:${snippetCatalogKey(initial.enabledSnippets)}`;
+    lastSnippetsEnabled = initial.language === "markdown";
     attachScrollListener();
     trackedDocumentId = initial.documentId;
-    currentEditorLanguage = "" as EditorLanguageId;
-    lastMinimapEnabled = null;
-    lastFoldGutterEnabled = null;
-    lastCompletionKey = "";
-    lastSnippetKey = "";
-    lastSnippetsEnabled = null;
+    // Language is already in createState when cached — seed so syncLanguage
+    // no-ops the compartment swap. Still call syncLanguage so a cold pack
+    // schedules loadLanguageSupport (seed-only previously skipped that path).
+    currentEditorLanguage = initial.language;
     documentGeneration = 1;
     applyScrollTop(initial.scrollTop);
     syncLanguage(initial.language);
-    syncDecorations(initial.language, initial.decoratePlaintextSymbols);
-    syncMinimap(initial.showMinimap);
-    syncFoldGutter(initial.showFoldGutter);
-    syncCompletion(
-      initial.autoClosePairs,
-      initial.autoSuggest,
-      initial.language,
-      initial.enabledSnippets,
-    );
-    syncSnippets(initial.language, initial.enabledSnippets);
     registerHost();
     updateCursor();
   }
@@ -589,10 +651,8 @@ export function createEditorViewController(
       applyExternalContent(next.content, "reload");
     }
 
-    applyWrap(view, compartments.lineWrap, next.wrapLines);
-    if (next.zoomPercent) {
-      applyZoom(view, compartments.fontSize, next.zoomPercent);
-    }
+    syncWrapLines(next.wrapLines);
+    syncZoomPercent(next.zoomPercent);
     syncLanguage(next.language);
     syncDecorations(next.language, next.decoratePlaintextSymbols);
     syncMinimap(next.showMinimap);
@@ -625,7 +685,13 @@ export function createEditorViewController(
       return;
     }
     destroyed = true;
-    flushScrollTopSave(true);
+    // Do not flush scroll into app state during teardown — setDocumentScrollTop
+    // mid-destroy cascades Svelte updates across keep-alive surfaces and can
+    // wedge the main thread. Debounced scroll saves already cover steady state.
+    if (scrollSaveTimer) {
+      clearTimeout(scrollSaveTimer);
+      scrollSaveTimer = null;
+    }
     // Cached EditorStates bind to this controller's Compartment instances, so
     // every document this controller cached must be invalidated on teardown.
     // We invalidate by document (not pane) so that per-tab keep-alive sibling
@@ -638,10 +704,6 @@ export function createEditorViewController(
       }
     } else if (props?.paneId) {
       deps.sessionCache.invalidatePane(props.paneId);
-    }
-    if (scrollSaveTimer) {
-      clearTimeout(scrollSaveTimer);
-      scrollSaveTimer = null;
     }
     detachScrollListener?.();
     detachScrollListener = null;
@@ -657,6 +719,11 @@ export function createEditorViewController(
     update,
     destroy,
     getView: () => (destroyed ? undefined : view),
+    requestMeasure: () => {
+      if (!destroyed) {
+        view?.requestMeasure();
+      }
+    },
     getTrackedDocumentId: () => trackedDocumentId,
     getDocumentGeneration: () => documentGeneration,
     getCompartments: () => compartments,

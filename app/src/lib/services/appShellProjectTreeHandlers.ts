@@ -37,7 +37,6 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     getIsSessionTabActive,
     getCurrentWindowId,
     notify,
-    projectTreeController,
     onFilesystemChange,
     onBeforeProjectTreeRefresh,
   } = deps;
@@ -45,7 +44,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
   async function loadProjectTreeRoot(): Promise<void> {
     const startedAt = nowMs();
     const workspaceRoot = getActiveWorkspaceRoot();
-    await projectTreeController.loadProjectTreeRoot({
+    await deps.projectTreeController.loadProjectTreeRoot({
       workspaceRoot,
       isSessionTabActive: getIsSessionTabActive(),
       onWorkspaceBlocked: () => {
@@ -60,11 +59,17 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
   }
 
   async function loadProjectTreeChildren(directoryPath: string): Promise<void> {
-    await projectTreeController.loadProjectTreeChildren(getActiveWorkspaceRoot(), directoryPath);
+    await deps.projectTreeController.loadProjectTreeChildren(
+      getActiveWorkspaceRoot(),
+      directoryPath,
+    );
   }
 
   async function handleToggleProjectTreeDirectory(path: string): Promise<void> {
-    await projectTreeController.handleToggleProjectTreeDirectory(getActiveWorkspaceRoot(), path);
+    await deps.projectTreeController.handleToggleProjectTreeDirectory(
+      getActiveWorkspaceRoot(),
+      path,
+    );
   }
 
   async function handleOpenProjectTreeFile(path: string): Promise<void> {
@@ -88,19 +93,25 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
 
   async function refreshProjectTree(): Promise<void> {
     onBeforeProjectTreeRefresh?.();
-    await projectTreeController.refreshProjectTree(getActiveWorkspaceRoot(), getIsSessionTabActive());
+    await deps.projectTreeController.refreshProjectTree(
+      getActiveWorkspaceRoot(),
+      getIsSessionTabActive(),
+    );
   }
 
   function notifyProjectTreeFilesystemChange(
     path: string,
     kind: FileWatcherEventKind = "other",
   ): void {
-    projectTreeController.handleFilesystemChange(getActiveWorkspaceRoot(), path);
+    deps.projectTreeController.handleFilesystemChange(getActiveWorkspaceRoot(), path);
     onFilesystemChange?.(path, kind);
   }
 
   async function refreshProjectTreeDirectories(directoryPaths: string[]): Promise<void> {
-    await projectTreeController.reloadDirectories(getActiveWorkspaceRoot(), directoryPaths);
+    await deps.projectTreeController.reloadDirectories(
+      getActiveWorkspaceRoot(),
+      directoryPaths,
+    );
   }
 
   async function afterProjectTreeMutation(...paths: string[]): Promise<void> {
@@ -248,7 +259,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
   }
 
   async function toggleProjectTreeHidden(next: boolean): Promise<void> {
-    projectTreeController.setShowHidden(next);
+    deps.projectTreeController.setShowHidden(next);
     await refreshProjectTree();
   }
 

@@ -105,7 +105,7 @@
           paneIndex,
           gridRow: rowIndex + 1,
           gridColumn: spansFullWidth ? "1 / -1" : String(colIndex + 1),
-          key: pane.id,
+          key: `${paneIndex}:${pane.id}`,
         });
       }
     }
@@ -119,7 +119,9 @@
           paneIndex: i,
           gridRow: extraRow,
           gridColumn: "1 / -1",
-          key: `extra-${layout.panes[i].id}`,
+          // Index-prefixed so duplicate pane ids (corrupt sessions) still get
+          // distinct Svelte each-keys and do not remount in a loop.
+          key: `extra-${i}:${layout.panes[i].id}`,
         });
         extraRow += 1;
       }

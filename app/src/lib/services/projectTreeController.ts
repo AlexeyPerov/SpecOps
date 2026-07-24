@@ -140,6 +140,8 @@ export function createProjectTreeController(
   const probeAccess = deps.probeWorkspaceReadAccessFn;
   let state = createInitialState();
   let lastLoadedWorkspaceRoot: string | null = null;
+  /** Bumped on every root load/reset so slower in-flight loads cannot overwrite a newer workspace. */
+  let rootLoadGeneration = 0;
   let filesystemChangeTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingFilesystemDirs = new Set<string>();
 
@@ -148,6 +150,7 @@ export function createProjectTreeController(
   };
 
   const reset = (): void => {
+    rootLoadGeneration += 1;
     state = createInitialState(state.showHidden);
     lastLoadedWorkspaceRoot = null;
     publish();
@@ -216,9 +219,14 @@ export function createProjectTreeController(
       return;
     }
 
+    const loadGeneration = ++rootLoadGeneration;
     const rootNodes = await loadChildren(workspaceRoot, workspaceRoot, {
       showHidden: state.showHidden,
     });
+    // A newer switch/reset won the race — discard this result.
+    if (loadGeneration !== rootLoadGeneration) {
+      return;
+    }
     state = {
       ...state,
       rootNodes,
@@ -228,6 +236,9 @@ export function createProjectTreeController(
 
     if (isSessionTabActive && probeAccess) {
       const probe = await probeAccess(workspaceRoot);
+      if (loadGeneration !== rootLoadGeneration) {
+        return;
+      }
       if (probe === "blocked") {
         onWorkspaceBlocked?.();
       }

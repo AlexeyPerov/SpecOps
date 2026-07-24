@@ -182,6 +182,40 @@ describe("createProjectTreeController", () => {
     expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores a slower root load from a previous workspace after a switch", async () => {
+    let resolveUnity: ((nodes: ProjectTreeNode[]) => void) | null = null;
+    const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string) => {
+      if (workspaceRoot === "/unity") {
+        return await new Promise<ProjectTreeNode[]>((resolve) => {
+          resolveUnity = resolve;
+        });
+      }
+      return [makeNode("archero", "/notes/archero", "file")];
+    });
+    const snapshots: ProjectTreeControllerState[] = [];
+    const controller = createProjectTreeController(
+      (state) => snapshots.push(state),
+      { loadDirectoryChildrenFn },
+    );
+
+    const unityLoad = controller.loadProjectTreeRoot({
+      workspaceRoot: "/unity",
+      isSessionTabActive: false,
+    });
+    await controller.loadProjectTreeRoot({
+      workspaceRoot: "/notes",
+      isSessionTabActive: false,
+    });
+    const afterNotes = snapshots[snapshots.length - 1];
+    expect(afterNotes.rootNodes.map((node) => node.path)).toEqual(["/notes/archero"]);
+
+    resolveUnity?.([makeNode("hub", "/unity/hub", "directory")]);
+    await unityLoad;
+
+    const afterStale = snapshots[snapshots.length - 1];
+    expect(afterStale.rootNodes.map((node) => node.path)).toEqual(["/notes/archero"]);
+  });
+
   it("reloads root when force is set", async () => {
     const loadDirectoryChildrenFn = vi.fn(async () => [
       makeNode("src", "/repo/src", "directory"),

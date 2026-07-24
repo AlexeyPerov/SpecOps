@@ -33,7 +33,7 @@
     isTextEditorDocumentState,
   } from "../services/appShellDocumentView";
   import { getDocumentByIdMap } from "../services/tabDocumentLookup";
-  import { appState } from "../state/appState";
+  import { appSettings } from "../state/appStateSelectors";
   import { logPerfTiming } from "../services/perfDiagnostics";
   import { emptySet } from "../collections/emptyCollections";
   import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
@@ -242,7 +242,7 @@
   const isWorkspaceSettingsViewActive = $derived(activeViewTabKind === "workspace-settings");
   const isWorkspaceManagerViewActive = $derived(activeViewTabKind === "workspace-manager");
   const isVersionControlViewActive = $derived(
-    activeViewTabKind === "version-control" && $appState.settings.gitIntegration.enabled,
+    activeViewTabKind === "version-control" && $appSettings.gitIntegration.enabled,
   );
 
   const documentById = $derived(getDocumentByIdMap(documents));
@@ -531,6 +531,7 @@
               {onMarkdownViewModeChange}
               {onUntitledTitleRefresh}
               {onScrollTopChange}
+              visible={isEntryActive}
             />
           </div>
         {/each}

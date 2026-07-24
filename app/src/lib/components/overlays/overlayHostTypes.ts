@@ -103,6 +103,13 @@ export interface WorkspaceContextMenuState {
  */
 export interface OverlayHostBound {
   api: OverlayHostApi;
+  /**
+   * Reactive "any of the 10 overlays is open" flag. Prefer reading this from
+   * `$effect`s / `$derived`s over calling `api.isAnyOverlayOpen()` — the
+   * function form is for imperative checks and does not establish a Svelte
+   * dependency when only the return value is discarded.
+   */
+  anyOverlayOpen: boolean;
   projectSearchPanelState: ProjectSearchPanelState;
   workspaceContextMenu: {
     workspaceId: ContextId;

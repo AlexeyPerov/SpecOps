@@ -190,10 +190,20 @@
   // Picker derived rankings (was +page.svelte:451-462, 608-673)
   // -------------------------------------------------------------------------
   const quickOpenResults = $derived(
-    rankFiles(quickOpenCatalogSnapshot, quickOpenQuery, quickOpenRecencyInputs),
+    quickOpenOpen
+      ? rankFiles(quickOpenCatalogSnapshot, quickOpenQuery, quickOpenRecencyInputs)
+      : {
+          matches: [],
+          totalMatches: 0,
+          scannedCount: 0,
+          status: "idle" as const,
+          truncated: false,
+        },
   );
   const commandPaletteResults = $derived(
-    rankCommands(commandPaletteEntries, commandPaletteQuery),
+    commandPaletteOpen
+      ? rankCommands(commandPaletteEntries, commandPaletteQuery)
+      : { matches: [], totalMatches: 0, scannedCount: 0, truncated: false },
   );
 
   /**

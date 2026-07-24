@@ -301,16 +301,6 @@ function markersFor(positions: BookmarkState): RangeSet<GutterMarker> {
   );
 }
 
-function lineFromEvent(view: EditorView, event: MouseEvent): number | null {
-  const refRect = view.dom.getBoundingClientRect();
-  const y = event.clientY - refRect.top + view.scrollDOM.scrollTop;
-  const block = view.lineBlockAtHeight(y);
-  if ("from" in block && typeof block.from === "number") {
-    return view.state.doc.lineAt(block.from).number;
-  }
-  return null;
-}
-
 /** Theme rules for the bookmark gutter and marker. */
 export function bookmarkTheme(): Extension {
   return EditorView.theme({
@@ -359,19 +349,21 @@ export function bookmarkExtension(): Extension {
         const positions = view.state.field(bookmarkField, false) ?? [];
         return markersFor(positions);
       },
-    }),
-    EditorView.domEventHandlers({
-      mousedown(event, view) {
-        const line = lineFromEvent(view, event);
-        if (line == null) {
-          return;
-        }
-        view.dispatch({
-          effects: toggleBookmarkEffect.of({
-            positions: [view.state.doc.line(line).from],
-          }),
-        });
-        return false;
+      // Gutter-only: content mousedown must reach CodeMirror's mouse-selection
+      // path so the caret appears and editing works. A prior contentDOM handler
+      // toggled bookmarks on every click and interfered with focus/selection.
+      domEventHandlers: {
+        mousedown(view, line, event) {
+          if (event.button !== 0) {
+            return false;
+          }
+          view.dispatch({
+            effects: toggleBookmarkEffect.of({
+              positions: [line.from],
+            }),
+          });
+          return true;
+        },
       },
     }),
     bookmarkTheme(),

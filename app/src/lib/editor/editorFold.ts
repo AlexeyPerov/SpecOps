@@ -2,13 +2,14 @@
  * CodeMirror folding extensions: gutter, keymap, and placeholder theming.
  * Fold state lives in EditorState (session-cache ephemeral) and is never
  * written to app session storage.
+ *
+ * IMPORTANT: `@codemirror/language`'s `foldGutter()` appends `codeFolding()`
+ * (the fold `StateField`). That field must never live in a reconfigurable
+ * `Compartment` — replacing it after mount deadlocks CodeMirror's facet
+ * resolver (infinite `flatten`/`inner` recursion) and freezes the UI.
  */
 import type { Extension } from "@codemirror/state";
-import {
-  codeFolding,
-  foldGutter,
-  foldKeymap,
-} from "@codemirror/language";
+import { foldGutter, foldKeymap } from "@codemirror/language";
 import { EditorView, keymap } from "@codemirror/view";
 
 function createFoldMarker(open: boolean): HTMLElement {
@@ -65,26 +66,44 @@ export function foldTheme(): Extension {
 }
 
 /**
- * Folding extension group for the reserved `fold` compartment.
+ * Stable folding plumbing — must NOT live in a reconfigurable compartment.
  *
- * The fold gutter materially adds width (~14px), so visibility is a global
- * setting (`showFoldGutter`, default on). Fold keymap and folding plumbing
- * stay active even when the gutter is hidden so commands still work.
+ * Uses `foldGutter()` once (it already includes `codeFolding()`'s StateField).
+ * Gutter visibility is toggled separately via {@link foldGutterExtension}
+ * (CSS only) so the StateField is never added/removed after mount.
  */
-export function foldExtension(options: { showGutter: boolean }): Extension {
-  const { showGutter } = options;
+export function foldBaseExtension(): Extension {
   return [
-    codeFolding({
-      placeholderText: "…",
+    foldGutter({
+      markerDOM: createFoldMarker,
     }),
     keymap.of(foldKeymap),
     foldTheme(),
-    ...(showGutter
-      ? [
-          foldGutter({
-            markerDOM: createFoldMarker,
-          }),
-        ]
-      : []),
   ];
+}
+
+/**
+ * Fold gutter visibility only — safe to put in a compartment and reconfigure.
+ *
+ * Never calls `foldGutter()` / `codeFolding()` here. Hiding is CSS-only so the
+ * fold StateField installed by {@link foldBaseExtension} stays fixed.
+ */
+export function foldGutterExtension(showGutter: boolean): Extension {
+  if (showGutter) {
+    return [];
+  }
+  return EditorView.theme({
+    ".cm-foldGutter": {
+      display: "none",
+      width: "0",
+    },
+  });
+}
+
+/**
+ * Full folding bundle (base + optional hide). Prefer `foldBaseExtension` +
+ * `foldGutterExtension` when wiring compartments so the StateField stays fixed.
+ */
+export function foldExtension(options: { showGutter: boolean }): Extension {
+  return [foldBaseExtension(), foldGutterExtension(options.showGutter)];
 }

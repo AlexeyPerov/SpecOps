@@ -10,6 +10,9 @@ import {
   CHAT_HTTP_CONTEXT_ID,
   allTabs,
   isFileTab,
+  paneIdNumericSuffix,
+  reindexPaneIdCounter,
+  resetPaneIdCounter,
 } from "../../domain/contracts";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { normalizeDocument } from "./documentHelpers";
@@ -27,6 +30,7 @@ export function resetIdCounters(): void {
   idCounters.doc = 1;
   idCounters.tab = 1;
   idCounters.workspace = 0;
+  resetPaneIdCounter();
 }
 
 export function nextDocId(): string {
@@ -80,6 +84,22 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
     ].map((tab) => Number(tab.id.replace("tab-", "")) || 1),
   );
   reindexWorkspaceCounter(contexts.workspaces);
+
+  // Pane ids are allocated from a separate module counter. Without reindexing
+  // after restore, the next split/preset expansion can mint pane-1/pane-2/...
+  // that already exist in a restored layout (duplicate ids → remount loops).
+  const paneLayouts = [
+    contexts.notepad.session.editorLayout,
+    contexts.chatHttp.session.editorLayout,
+    ...contexts.workspaces.map((workspace) => workspace.snapshot.session.editorLayout),
+  ];
+  let maxPane = 0;
+  for (const layout of paneLayouts) {
+    for (const pane of layout.panes) {
+      maxPane = Math.max(maxPane, paneIdNumericSuffix(pane.id));
+    }
+  }
+  reindexPaneIdCounter(maxPane);
 }
 
 export function cloneContextSnapshot(snapshot: ContextSnapshot): ContextSnapshot {

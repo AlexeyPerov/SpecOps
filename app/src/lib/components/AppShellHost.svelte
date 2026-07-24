@@ -288,8 +288,10 @@
     getActiveWorkspaceRoot: () => activeWorkspaceRoot,
     getIsSessionTabActive: () => isSessionTabActive,
     getCurrentWindowId: () => currentWindowId,
-    notify,
-    projectTreeController,
+    notify: (message) => notify(message),
+    get projectTreeController() {
+      return projectTreeController;
+    },
     onFilesystemChange: (path, kind) => {
       if (activeWorkspaceRoot) {
         workspaceDirectoryCache.invalidate(
@@ -348,7 +350,7 @@
   const agentHandlers = createAppShellAgentHandlers({
     getIsChatHttpActive: () => isChatHttpActive,
     getCurrentWindowId: () => currentWindowId,
-    notify,
+    notify: (message) => notify(message),
   });
 
   const workspaceContextMenuActions = createWorkspaceContextMenuActions({
@@ -371,11 +373,11 @@
     },
     setMarkdownViewMode: layoutHandlers.setMarkdownViewMode,
     loadProjectTreeRoot: projectTreeHandlers.loadProjectTreeRoot,
-    notify,
+    notify: (message) => notify(message),
   });
 
   const commandHandlers = createAppShellCommandHandlers({
-    notify,
+    notify: (message) => notify(message),
     getSnapshot: () => appState.getSnapshot(),
     getCurrentWindowId: () => currentWindowId,
     getEditorRunner: () => editorWorkbench.getActiveRunner(),
@@ -397,7 +399,7 @@
   const fileHandlers = createAppShellFileHandlers({
     getCurrentWindowId: () => currentWindowId,
     getRuntimeReady: () => runtimeReady,
-    notify,
+    notify: (message) => notify(message),
   });
 
   const editorHandlers = createAppShellEditorHandlers({
@@ -413,7 +415,7 @@
     setUntitledTitleDebounceTimer: (timer) => {
       untitledTitleDebounceTimer = timer;
     },
-    notify,
+    notify: (message) => notify(message),
   });
 
   const api: AppShellHostApi = {

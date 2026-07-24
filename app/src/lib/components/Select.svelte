@@ -104,14 +104,24 @@
   }
 
   function moveActive(delta: number): void {
-    let next = activeIndex + delta;
     const len = options.length;
+    if (len === 0) {
+      return;
+    }
+    let next = activeIndex + delta;
     if (next < 0) next = len - 1;
     if (next >= len) next = 0;
-    while (options[next]?.disabled) {
+    // Cap iterations at one full sweep so we don't loop forever when every
+    // option is disabled; leave the cursor where it is in that case.
+    let steps = 0;
+    while (options[next]?.disabled && steps < len) {
       next += delta;
       if (next < 0) next = len - 1;
       if (next >= len) next = 0;
+      steps += 1;
+    }
+    if (options[next]?.disabled) {
+      return;
     }
     activeIndex = next;
     void tick().then(() => {

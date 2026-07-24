@@ -1360,7 +1360,7 @@ describe("checkoutBranch", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["checkout", "--", "feature/login"],
+      args: ["checkout", "feature/login"],
     }));
   });
 });

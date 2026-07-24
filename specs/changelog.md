@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-24 20:45 — Fix branch checkout never switching & Select freeze on all-disabled options
+
+- **`checkoutBranch` used `git checkout -- <name>`, treating the branch as a
+  pathspec:** the `--` separator forced git to look for a path named after the
+  branch, so every checkout from `GitBranchesPanel` failed with `pathspec did
+  not match`. Worse, the panel stashes uncommitted changes *before* checkout,
+  so the failure stranded the user's work in a stash with no branch switch.
+  Now runs `git checkout <name>`. (`createBranch` already used the correct
+  form.)
+- **`Select.svelte` froze the app when every option was disabled:** ArrowUp/Down
+  in `moveActive` looped until an enabled option was found, with no cap. A list
+  of all-disabled entries (e.g. no available models/providers) looped forever,
+  hanging the renderer. The loop now bails after one full sweep and leaves the
+  cursor in place.
+
 ## 2026-07-24 10:50 — Fix missing caret / broken text editing
 
 - **Bookmark clicks stole editor interaction:** The bookmark extension registered a

@@ -147,8 +147,13 @@ export async function loadLanguageSupport(id: EditorLanguageId): Promise<Languag
         break;
       }
       case "shell": {
-        const mod = await import("@codemirror/lang-javascript");
-        support = mod.javascript();
+        const { shell } = await import("@codemirror/legacy-modes/mode/shell");
+        support = new LanguageSupport(StreamLanguage.define(shell));
+        break;
+      }
+      case "dart": {
+        const { dart } = await import("@codemirror/legacy-modes/mode/clike");
+        support = new LanguageSupport(StreamLanguage.define(dart));
         break;
       }
       case "html": {

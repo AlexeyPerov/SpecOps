@@ -838,24 +838,62 @@ export function parseStatusPorcelainV2Z(stdout: string): ParsedStatusLine[] {
       continue;
     }
 
+    // Tracked entry records (`1`, `u`, `2`) have a fixed number of
+    // space-separated header fields before the path. The path is the remainder
+    // of the record and may itself contain spaces (porcelain v2 -z output is
+    // NUL-delimited, so it does not quote plain spaces). Splitting on every
+    // space and taking the last field would therefore truncate
+    // `src/my file.txt` to `txt`. Instead we skip exactly the header fields and
+    // treat everything after as the path.
     if (recordType === "1" || recordType === "u") {
-      const fields = segment.split(" ");
-      const xy = fields[1] ?? "..";
-      const path = fields[fields.length - 1] ?? "";
-      pushParsedStatusLine(lines, xy, path);
+      const headerFieldCount = recordType === "1" ? 8 : 10;
+      const parsed = parsePorcelainV2TrackedRecord(segment, headerFieldCount);
+      if (parsed) {
+        pushParsedStatusLine(lines, parsed.xy, parsed.path);
+      }
       continue;
     }
 
     if (recordType === "2") {
-      const fields = segment.split(" ");
-      const xy = fields[1] ?? "..";
-      const newPath = fields[fields.length - 1] ?? "";
-      pushParsedStatusLine(lines, xy, newPath);
+      const parsed = parsePorcelainV2TrackedRecord(segment, 9);
+      if (parsed) {
+        pushParsedStatusLine(lines, parsed.xy, parsed.path);
+      }
+      // The renamed entry is followed by a NUL-delimited old-path segment.
       index += 1;
     }
   }
 
   return lines;
+}
+
+/**
+ * Split a porcelain v2 tracked record (`1`/`u`/`2`) into its `XY` status and
+ * the path, which begins after `headerFieldCount` space-separated header
+ * fields. Returns `null` for malformed/truncated input.
+ */
+function parsePorcelainV2TrackedRecord(
+  segment: string,
+  headerFieldCount: number,
+): { xy: string; path: string } | null {
+  let spacesSeen = 0;
+  let pathStart = -1;
+  for (let i = 0; i < segment.length; i += 1) {
+    if (segment[i] === " ") {
+      spacesSeen += 1;
+      if (spacesSeen === headerFieldCount) {
+        pathStart = i + 1;
+        break;
+      }
+    }
+  }
+  if (pathStart <= 0 || pathStart >= segment.length) {
+    return null;
+  }
+  // XY is always the second field (after the record-type char).
+  const xy = segment.slice(2, 4);
+  const path = segment.slice(pathStart);
+  return { xy, path };
 }
 
 /** Split parsed porcelain rows into staged and unstaged file lists. */

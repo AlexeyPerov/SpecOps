@@ -535,8 +535,6 @@
       return;
     }
     statusOverflowOpen = true;
-    window.addEventListener("pointerdown", onStatusOverflowPointerDown);
-    window.addEventListener("keydown", onStatusOverflowKeydown);
   }
 
   function closeStatusOverflow(): void {
@@ -544,9 +542,21 @@
       return;
     }
     statusOverflowOpen = false;
-    window.removeEventListener("pointerdown", onStatusOverflowPointerDown);
-    window.removeEventListener("keydown", onStatusOverflowKeydown);
   }
+
+  // Window listeners are bound to `statusOverflowOpen` via this effect so they
+  // are removed both when the menu closes and when the component unmounts.
+  $effect(() => {
+    if (!statusOverflowOpen) {
+      return;
+    }
+    window.addEventListener("pointerdown", onStatusOverflowPointerDown);
+    window.addEventListener("keydown", onStatusOverflowKeydown);
+    return () => {
+      window.removeEventListener("pointerdown", onStatusOverflowPointerDown);
+      window.removeEventListener("keydown", onStatusOverflowKeydown);
+    };
+  });
 
   function toggleStatusOverflow(): void {
     if (statusOverflowOpen) {

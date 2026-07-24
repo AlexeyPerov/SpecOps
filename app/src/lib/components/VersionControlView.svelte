@@ -181,8 +181,6 @@
     }
     overflowOpen = true;
     overflowFocusIndex = -1;
-    window.addEventListener("pointerdown", onOverflowPointerDown);
-    window.addEventListener("keydown", onOverflowKeydown);
   }
 
   function closeOverflow(): void {
@@ -191,9 +189,22 @@
     }
     overflowOpen = false;
     overflowFocusIndex = -1;
-    window.removeEventListener("pointerdown", onOverflowPointerDown);
-    window.removeEventListener("keydown", onOverflowKeydown);
   }
+
+  // Window listeners are bound to `overflowOpen` via this effect so they are
+  // removed both when the menu closes and when the component unmounts (e.g.
+  // switching away from the Version Control view while the menu is open).
+  $effect(() => {
+    if (!overflowOpen) {
+      return;
+    }
+    window.addEventListener("pointerdown", onOverflowPointerDown);
+    window.addEventListener("keydown", onOverflowKeydown);
+    return () => {
+      window.removeEventListener("pointerdown", onOverflowPointerDown);
+      window.removeEventListener("keydown", onOverflowKeydown);
+    };
+  });
 
   function toggleOverflow(): void {
     if (overflowOpen) {

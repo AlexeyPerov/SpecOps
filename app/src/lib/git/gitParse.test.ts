@@ -603,6 +603,20 @@ describe("parseStatusPorcelainV2Z", () => {
     ]);
   });
 
+  it("preserves spaces in tracked/unmerged/rename paths", () => {
+    // porcelain v2 -z output is NUL-delimited and does not quote plain spaces,
+    // so paths with spaces appear verbatim after the fixed header fields.
+    const stdout =
+      "1 .M N... 100644 100644 100644 abc abc src/tracked file.txt\x00" +
+      "u UU N... 100644 100644 100644 100644 abc def ghi conflict file.txt\x00" +
+      "2 R. N... 100644 100644 100644 abc abc R100 renamed file.txt\x00old file.txt\x00";
+    expect(parseStatusPorcelainV2Z(stdout)).toEqual([
+      { indexStatus: " ", workTreeStatus: "M", path: "src/tracked file.txt" },
+      { indexStatus: "U", workTreeStatus: "U", path: "conflict file.txt" },
+      { indexStatus: "R", workTreeStatus: " ", path: "renamed file.txt" },
+    ]);
+  });
+
   it("parses unmerged conflict records", () => {
     const stdout =
       "u UU N... 100644 100644 100644 100644 abc def ghi conflict.txt\x00";

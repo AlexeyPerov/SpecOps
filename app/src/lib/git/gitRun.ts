@@ -243,6 +243,11 @@ async function invokeRunGit(
   options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
   try {
+    // Each attempt gets its own commandId so the backend's process registry
+    // never tracks two subprocesses under the same id. The first attempt keeps
+    // the caller-supplied id (e.g. a user-cancellable remote op); retries mint
+    // fresh ids so a concurrent cancel/drain targets the in-flight process and
+    // not a stale, already-failed one.
     let response = await invokeRunGitOnce(repoRoot, args, env, options);
 
     for (let attempt = 0; attempt < INDEX_LOCK_MAX_RETRIES && isIndexLockResponse(response); attempt += 1) {
@@ -254,7 +259,10 @@ async function invokeRunGit(
         await removeStaleIndexLock(repoRoot);
       }
       await sleep(INDEX_LOCK_RETRY_BASE_DELAY_MS * (attempt + 1));
-      response = await invokeRunGitOnce(repoRoot, args, env, options);
+      const retryOptions = options?.commandId
+        ? { ...options, commandId: crypto.randomUUID() }
+        : options;
+      response = await invokeRunGitOnce(repoRoot, args, env, retryOptions);
     }
 
     return response;

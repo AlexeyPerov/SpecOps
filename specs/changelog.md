@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-07-24 21:55 — Fix shell highlighting, porcelain v2 space-paths, dart, popover leaks, git retry id
+
+- **Shell files were highlighted as JavaScript:** the `shell` language case
+  imported `@codemirror/lang-javascript` (copy-paste leftover), so `.sh`/`.bash`
+  files got JS tokenization. Now loads the legacy-modes `shell` StreamLanguage.
+- **`.dart` was mapped but never handled:** `EXTENSION_MAP` advertised Dart, but
+  the loader switch had no `case "dart"`, so `.dart` files stayed plaintext and
+  re-triggered an uncached dynamic import on every open. Added a `dart` case via
+  the legacy-modes `clike` `dart` StreamParser.
+- **porcelain v2 truncated tracked paths containing spaces:** `1`/`u`/`2`
+  records were split on every space and the last field taken as the path, so
+  `src/my file.txt` became `txt`. The path is now taken as everything after the
+  fixed header fields, preserving embedded spaces. (Untracked `?` records were
+  already correct.) Added a regression test for space-containing tracked,
+  unmerged, and rename paths.
+- **Overflow-popover `window` listeners leaked on unmount:** in
+  `VersionControlView` and `AppShell`, the `pointerdown`/`keydown` listeners
+  were added in `open*Overflow` and only removed in `close*Overflow`, with no
+  cleanup when the component unmounted while the menu was open. `VersionControlView`
+  unmounts on every view switch, so leaked handlers accumulated. Moved
+  add/remove into a `$effect(open)` with a cleanup return (the existing pattern
+  in `Select.svelte`).
+- **Index-lock retry reused the same `commandId`:** when a write op hit a stale
+  `.git/index.lock` and retried, the new subprocess was registered under the
+  same id as the failed one, so a concurrent cancel/drain could target the wrong
+  process. Each retry now mints a fresh `commandId`.
+
 ## 2026-07-24 20:45 — Fix branch checkout never switching & Select freeze on all-disabled options
 
 - **`checkoutBranch` used `git checkout -- <name>`, treating the branch as a

@@ -1,5 +1,89 @@
 # Changelog
 
+## 2026-07-24 10:50 — Fix missing caret / broken text editing
+
+- **Bookmark clicks stole editor interaction:** The bookmark extension registered a
+  `contentDOM` `mousedown` handler that toggled a bookmark on every click in the
+  text (not just the gutter). That raced CodeMirror’s mouse-selection path so
+  the caret often never appeared and typing felt broken. Toggle is now limited
+  to the bookmark gutter via `gutter.domEventHandlers`.
+- **Cold language packs never loaded after mount:** The freeze fix seeded
+  `currentEditorLanguage` and skipped `syncLanguage` on mount, so the first open
+  of a language never scheduled `loadLanguageSupport`. `syncLanguage` now still
+  loads when the id matches but the pack is cold, and mount calls it again
+  (no-op when already cached — no extra compartment thrash).
+- **Keep-alive tab visibility:** When a `display:none` keep-alive slot becomes
+  active again, remasure the EditorView so caret/gutter geometry recovers.
+
+## 2026-07-23 22:10 — Fix launch freeze: foldGutter still embedded codeFolding in compartment
+
+- **Root cause:** The earlier fold fix kept `codeFolding()` outside the
+  compartment but still called `foldGutter()` inside it. Upstream
+  `foldGutter()` **appends `codeFolding()`** (the fold `StateField`). Restoring
+  a multi-pane workspace therefore mounted editors with the StateField in a
+  reconfigurable compartment; any gutter sync/reconfigure deadlocked
+  CodeMirror's facet resolver and froze the UI immediately after session
+  restore (Notes 2×2 was a reliable trigger).
+- **Fix:** `foldBaseExtension` installs `foldGutter()` once (with its embedded
+  `codeFolding`) outside the compartment. `foldGutterExtension` only toggles a
+  CSS hide theme — it never adds/removes the StateField. Skip redundant
+  mount-time language reconfigure.
+
+
+- **Notepad / editor remount loop:** Pane id counter was never reindexed after
+  session restore (unlike doc/tab/workspace ids). Expanding a restored layout
+  (e.g. notepad `pane-3` → cols-2) could mint another `pane-3`. Duplicate pane
+  ids broke Svelte keyed grid cells (`{#each}` key collisions) and `findPane`,
+  so EditorSurfaces destroyed/remounted in a tight loop and notepad became
+  unswitchable. Fix: reindex the pane counter with docs/tabs; `allocatePaneId`
+  skips collisions; `restructureEditorLayout` / `ensureUniquePaneIds` rewrite
+  duplicates on sanitize, session apply, and context switch; grid cell keys are
+  index-prefixed as a safety net.
+- **Wrong project tree after switch:** Concurrent `loadProjectTreeRoot` calls
+  had no generation guard — a slower load from the previous workspace could
+  finish last and leave e.g. unity-ai-hub tree while Notes editors were active.
+  Root loads now ignore stale generations.
+- **Misc:** `DocumentEditor` / version-control branch subscribe to `appSettings`
+  instead of full `$appState` (avoids cursor-tick churn on every keep-alive
+  surface). `templateForCount` for 5+ panes builds paired rows instead of a
+  4-slot grid that dropped extras.
+
+
+- **Root cause:** After restoring `setupAppShellMount`, the editor mounted and
+  immediately reconfigured CodeMirror compartments / wrote app state on every
+  surface:
+  1. `syncFoldGutter` replaced a compartment that included `codeFolding()`'s
+     StateField → infinite facet `flatten`/`inner` recursion.
+  2. `applyZoom`/`applyWrap` dispatched on every `EditorSurface` `$effect`
+     update with no change-guard → StyleModule remount thrash.
+  3. `setCursor` always wrote appState (even for unchanged cursor), so each
+     keep-alive mount / CM transaction paid Svelte ownership stack capture and
+     re-derived overlay rankings — wedging the main thread (full white window;
+     only native traffic lights).
+  Earlier, the missing mount import prevented editor mount, so chrome still
+  painted.
+- **Fix:** Keep `codeFolding` / fold keymap / theme outside the compartment
+  (only the gutter toggles). Bake wrap/zoom/decorations into `createState` and
+  guard wrap/zoom/fold/minimap syncs with last-value caches. Short-circuit
+  no-op `setCursor` writes; defer command/quick-open ranking until those
+  overlays are open.
+
+## 2026-07-23 11:57 — Silence AppShellHost `state_referenced_locally` warnings
+
+- Wrap `$props()` `notify` reads in call-time closures when wiring handler factories.
+- Pass `projectTreeController` via a live getter and read `deps.projectTreeController` in
+  project-tree handlers so identity is not captured at factory creation.
+
+## 2026-07-23 11:52 — Fix blank editor content after L3 handler move
+
+- **Root cause:** Commit `b646221` (fine-grained selectors / handler relocation)
+  removed the `setupAppShellMount` import from `+page.svelte` while leaving the
+  `onMount` call in place. That throws `ReferenceError: setupAppShellMount is
+  not defined` on every load, so shell runtime never starts and the CodeMirror
+  host mounts as an empty `.editor-host` while chrome (mode bar, status Ln/Col)
+  still paints from default app state.
+- **Fix:** Restore `import { setupAppShellMount } from "../lib/services/appShellPageHandlers"`.
+
 ## 2026-07-21 22:55 — Performance: L1b lazy highlight.js
 
 Follow-up to L1 bundle code-splitting:

@@ -56,6 +56,8 @@ describe("closeWorkspaceWithConfirm — Save all writes to disk", () => {
     expect(saveFileMock).toHaveBeenCalledWith({
       path: "/tmp/ws/a.txt",
       content: "edited",
+      lineEnding: "lf",
+      hasBom: false,
     });
     expect(renameMock).toHaveBeenCalledWith("/tmp/ws/a.txt", "/tmp/ws/a.txt", "win-a", documentId);
     // Workspace removed.
@@ -108,7 +110,10 @@ describe("closeWorkspaceWithConfirm — Save all writes to disk", () => {
     });
 
     expect(closed).toBe(true);
-    expect(saveFileAsMock).toHaveBeenCalledWith("new content", undefined);
+    expect(saveFileAsMock).toHaveBeenCalledWith("new content", undefined, {
+      lineEnding: "lf",
+      hasBom: false,
+    });
     expect(renameMock).toHaveBeenCalledWith(null, "/tmp/ws/saved.txt", "win-a", document.id);
   });
 
@@ -177,6 +182,8 @@ describe("closeWorkspaceWithConfirm — Save all writes to disk", () => {
     expect(saveFileMock).toHaveBeenCalledWith({
       path: "/tmp/ws-a/a.txt",
       content: "edited-a",
+      lineEnding: "lf",
+      hasBom: false,
     });
   });
 });

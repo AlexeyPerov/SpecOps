@@ -1,5 +1,82 @@
 # Changelog
 
+## 2026-07-25 20:40 — Fix eight critical bugs found in a full-codebase review
+
+Full review written up in [`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md)
+(92 findings). This entry covers the eight critical ones.
+
+- **Git write commands deadlocked on their own output:** the registered-command
+  poll loop read stdout/stderr only after `try_wait()` reported exit, with both
+  pipes `Stdio::piped()`. Once git filled the OS pipe buffer (16–64 KiB on
+  macOS) it blocked in `write()` and never exited, so the poll loop spun for the
+  full timeout (5 min local / 10 min remote) and then SIGTERM'd the child. Hit by
+  an initial `commit` of a large tree, a `pull` with a big diffstat, or a `fetch`
+  updating many refs — and since the operation had usually already landed on
+  disk, the user saw "Git command timed out." for work that succeeded, or a pull
+  killed mid-merge leaving `MERGE_HEAD`. Both pipes are now drained on reader
+  threads started at registration and joined after exit. Regression test spawns
+  a child emitting ~1.8 MB on stdout and ~0.9 MB on stderr.
+- **Save wrote stale content back into the buffer:** every save path read
+  `doc.content`, awaited the disk write, then passed that pre-await string to
+  `markDocumentSaved`, which assigned it to `content` and set `isDirty: false` —
+  reverting anything typed during the write *and* marking it clean, so there was
+  no second chance to save it. `markDocumentSaved` now records what reached disk
+  in `savedContent`, leaves `content` alone, and derives `isDirty` from the
+  comparison. Save-All also re-reads each document at its turn instead of
+  iterating a pre-await snapshot, and all save paths resolve the owning context
+  first (a workspace switch mid-write used to silently drop the patch).
+- **Cross-window tab transfer destroyed sibling-pane documents:**
+  `isDefaultBootstrapWindow` inspected only the focused pane's tabs but the
+  replacement patch assigned `documents: [newDoc]`. In a split where the focused
+  pane held the auto-seeded empty draft, every document owned by the other panes
+  was deleted while their tabs survived — unsaved buffers gone, tabs pointing at
+  nothing. Bootstrap replacement now requires the draft to be the only tab in the
+  whole layout, and drops only that draft's document.
+- **Quitting discarded unsaved work with no prompt:** Tauri's predefined Quit
+  menu item calls `exit(0)` directly and fires neither `CloseRequested` nor
+  `ExitRequested` (tauri-apps/tauri #3124, #7586, #9198), so Cmd+Q skipped any
+  prompt, skipped the session-snapshot flush, and skipped the Rust sidecar/git
+  cleanup. Compounding it, the session snapshot — the only durable copy of an
+  unsaved buffer — was written on a 1200 ms debounce restarted by every keystroke
+  and then flushed fire-and-forget from `pagehide`, which cannot await. Added a
+  `windowCloseFlow` that lists the dirty files, offers Save all / close without
+  saving / cancel, and awaits the flush; wired to `onCloseRequested` for window
+  closes and to a custom "Quit SpecOps" menu item (Cmd+Q) → `app.quit` →
+  `quit_app` for app quit. `RunEvent::Exit` now also runs the shutdown cleanup.
+- **Files were corrupted on save — binaries, BOMs, non-UTF-8, CRLF:** four
+  independent paths. Binary-sniffed files under 200 KB were lossily decoded into
+  an *editable* buffer full of U+FFFD, so Cmd+S overwrote the original bytes;
+  BOMs were stripped by `TextDecoder` and never restored; CRLF files were
+  rewritten as LF because no `lineSeparator` was configured and the dirty
+  callback fed back `doc.toString()` (always LF). New `textEncoding` module
+  decodes strictly (invalid UTF-8 now opens read-only as `binary`), normalizes to
+  LF for the editor, and records `lineEnding` + `hasBom` on the document to
+  restore on write. Every save path passes them through.
+- **CRLF documents dispatched a full-document replace on every reactive update:**
+  CodeMirror normalizes its doc to LF, so `content === view.state.doc.toString()`
+  was permanently false for a CRLF file. Every `update()` — a debounced scroll
+  save, zoom, wrap, minimap toggle, tab re-activation — replaced the whole
+  document and slammed the caret to offset 0, and `restoreOrCreateState`'s cache
+  guard never held, so undo history, folds and selection were discarded on every
+  tab switch. Fixed by the LF-normalization above: the store and the editor doc
+  now agree.
+- **Version Control could hang on "Checking git repository…" forever:** the
+  cross-mount probe cache stored only a timestamp, and on a hit the mount effect
+  returned early without ever writing `probeStatus` (initialised to `"loading"`,
+  and `refreshProbe` is its only writer). Since the view remounts on every tab
+  switch, going away and back within the 5 s TTL stranded it in the loading
+  branch, which does not render the Refresh button. The cache now stores the
+  probe *result* and replays it through the same state transitions.
+- **A failed runtime bootstrap was silent:** if `startAppShellRuntime` rejected,
+  `setRuntimeReady(true)` never ran and nothing was surfaced, so the shell
+  rendered and accepted edits with session persistence, settings persistence, the
+  project tree and the file watcher all permanently off. Now notifies the user,
+  and `startAppShellRuntime` releases its ~15 partial listener registrations on
+  failure instead of leaking them into a duplicate-handler state on re-mount.
+
+Also added `core:window:allow-close` to the default capability (required by the
+close interceptor).
+
 ## 2026-07-24 21:55 — Fix shell highlighting, porcelain v2 space-paths, dart, popover leaks, git retry id
 
 - **Shell files were highlighted as JavaScript:** the `shell` language case

@@ -24,6 +24,7 @@ vi.mock("../../services/openFileGate", () => ({
   requestOpenPath: vi.fn(),
   completeOpenPath: vi.fn(),
   completeLargePendingOpen: vi.fn(),
+  openedFileEncoding: vi.fn(() => ({ lineEnding: "lf", hasBom: false })),
 }));
 
 vi.mock("../../services/openFileRegistry", () => ({
@@ -254,7 +255,12 @@ describe("file.save command", () => {
     dispatchCommand("file.save", context);
     await flushCommandQueue();
 
-    expect(saveFile).toHaveBeenCalledWith({ path: "/tmp/draft.txt", content: "edited" });
+    expect(saveFile).toHaveBeenCalledWith({
+      path: "/tmp/draft.txt",
+      content: "edited",
+      lineEnding: "lf",
+      hasBom: false,
+    });
     expect(appState.getActiveDocuments()[0]?.isDirty).toBe(false);
     expect(notify).toHaveBeenCalledWith("Saved /tmp/draft.txt");
   });
@@ -312,6 +318,10 @@ describe("file.saveAll command", () => {
 
   it("no-ops when every document is clean", async () => {
     const { context, notify } = createCommandContext();
+    // Seed the buffer first: `markDocumentSaved` records what reached disk and derives
+    // dirtiness by comparing it to the live buffer, so it no longer doubles as a way to
+    // set content (doing that would clobber edits made during the write).
+    appState.setDocumentContent("doc-1", "clean");
     appState.markDocumentSaved("doc-1", "/tmp/clean.txt", "clean");
 
     dispatchCommand("file.saveAll", context);
@@ -396,7 +406,10 @@ describe("file.open command", () => {
     await flushCommandQueue();
 
     expect(openFileDialog).toHaveBeenCalled();
-    expect(completeOpenPathMock).toHaveBeenCalledWith("/tmp/open.txt", "hello", "main", "text");
+    expect(completeOpenPathMock).toHaveBeenCalledWith("/tmp/open.txt", "hello", "main", "text", {
+      lineEnding: "lf",
+      hasBom: false,
+    });
     expect(notify).toHaveBeenCalledWith("Opened /tmp/open.txt");
   });
 

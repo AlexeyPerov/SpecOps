@@ -20,7 +20,19 @@ export interface DocumentState extends DocumentIdentity {
   contentKind: DocumentContentKind;
   language: string;
   encoding: "utf-8";
+  /**
+   * Line ending the file uses on disk. `content` is always LF (CodeMirror normalizes
+   * its document to LF, so the store has to match or the two can never compare equal);
+   * this is what the save path converts back to. Detected once at open and preserved
+   * across saves rather than re-derived from the LF buffer.
+   */
   lineEnding: "lf" | "crlf";
+  /**
+   * True when the file on disk starts with a UTF-8 BOM, which is restored on write.
+   * Optional so buffers with no file behind them (and test fixtures) can omit it;
+   * `normalizeDocument` coerces it and the save path defaults it to false.
+   */
+  hasBom?: boolean;
   diskFingerprint: DiskFingerprint | null;
   dismissedFingerprint: DiskFingerprint | null;
   fileMissing: boolean;

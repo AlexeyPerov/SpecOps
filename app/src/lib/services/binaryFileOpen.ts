@@ -16,19 +16,21 @@ export function normalizeMaxBinaryOpenAsTextBytes(value: unknown): number {
   );
 }
 
+/**
+ * Decide whether a byte-sniffed-as-binary file is small enough to be worth trying to
+ * show as text.
+ *
+ * This is only the size gate. It deliberately does not decode: it used to return a
+ * lossy UTF-8 decode, which produced an *editable* buffer where every invalid byte had
+ * become U+FFFD — so opening a small `.so`, `.bin`, or UTF-16 file and pressing Cmd+S
+ * overwrote it with mojibake. The caller must follow up with a strict decode
+ * (`decodeTextFile`) and keep the document `binary` when that fails.
+ */
 export function resolveBinaryFileOpen(
-  bytes: Uint8Array,
   sizeBytes: number,
   maxBinaryOpenAsTextBytes: number,
-): { content: string; contentKind: FileContentKind } {
-  if (sizeBytes <= maxBinaryOpenAsTextBytes) {
-    return {
-      content: new TextDecoder("utf-8", { fatal: false }).decode(bytes),
-      contentKind: "text",
-    };
-  }
+): { contentKind: FileContentKind } {
   return {
-    content: "",
-    contentKind: "binary",
+    contentKind: sizeBytes <= maxBinaryOpenAsTextBytes ? "text" : "binary",
   };
 }

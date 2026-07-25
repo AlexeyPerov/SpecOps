@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { readFile } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
 import { getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
@@ -25,7 +25,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 }));
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
+  readFile: vi.fn(),
 }));
 
 vi.mock("./diskFingerprint", async (importOriginal) => {
@@ -37,7 +37,15 @@ vi.mock("./diskFingerprint", async (importOriginal) => {
 });
 
 const confirmMock = vi.mocked(confirm);
-const readTextFileMock = vi.mocked(readTextFile);
+const readFileMock = vi.mocked(readFile);
+
+/**
+ * Reloads read raw bytes, not text, so the line ending and BOM can be re-detected the
+ * way the initial open did. This helper keeps the tests reading as "the file now says X".
+ */
+function mockDiskText(text: string): void {
+  readFileMock.mockResolvedValue(new TextEncoder().encode(text));
+}
 const statMock = vi.mocked(statDiskFingerprint);
 
 const fp1: DiskFingerprint = { mtimeMs: 1000, sizeBytes: 10 };
@@ -83,7 +91,7 @@ describe("checkDocumentExternalChanges", () => {
     appState.resetAppState();
     setExternalFiles();
     confirmMock.mockReset();
-    readTextFileMock.mockReset();
+    readFileMock.mockReset();
     statMock.mockReset();
   });
 
@@ -112,7 +120,7 @@ describe("checkDocumentExternalChanges", () => {
   it("silently reloads a clean buffer when disk changed", async () => {
     const documentId = prepareSavedFile("/tmp/reload.txt", "old", fp1);
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockResolvedValue("new");
+    mockDiskText("new");
 
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("reloaded");
     const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
@@ -140,7 +148,7 @@ describe("checkDocumentExternalChanges", () => {
   it("reloads dirty buffers when user chooses Reload", async () => {
     const documentId = prepareSavedFile("/tmp/dirty-reload.txt", "local", fp1, true);
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockResolvedValue("from disk");
+    mockDiskText("from disk");
     confirmMock.mockResolvedValue(true);
 
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("deferred");
@@ -180,7 +188,7 @@ describe("checkDocumentExternalChanges", () => {
     const documentId = prepareSavedFile("/tmp/return.txt", "buffer", fp1);
     appState.setDocumentDiskState(documentId, { diskFingerprint: fp1, fileMissing: true });
     statMock.mockResolvedValue(fp1);
-    readTextFileMock.mockResolvedValue("buffer");
+    mockDiskText("buffer");
 
     await checkDocumentExternalChanges(documentId, "watcher");
     expect(
@@ -205,7 +213,7 @@ describe("checkDocumentExternalChanges", () => {
     const documentId = prepareSavedFile("/tmp/manual.txt", "old", fp1);
     setExternalFiles({ watchExternalChanges: false });
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockResolvedValue("manual reload");
+    mockDiskText("manual reload");
 
     await expect(checkDocumentExternalChanges(documentId, "manual")).resolves.toBe("reloaded");
   });
@@ -278,14 +286,14 @@ describe("reloadActiveDocumentFromDisk", () => {
     appState.resetAppState();
     setExternalFiles();
     confirmMock.mockReset();
-    readTextFileMock.mockReset();
+    readFileMock.mockReset();
     statMock.mockReset();
   });
 
   it("reloads clean active documents without a dialog", async () => {
     prepareSavedFile("/tmp/active-clean.txt", "old", fp1);
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockResolvedValue("fresh");
+    mockDiskText("fresh");
 
     await expect(reloadActiveDocumentFromDisk()).resolves.toBe("reloaded");
     expect(confirmMock).not.toHaveBeenCalled();
@@ -308,14 +316,14 @@ describe("runWatcherExternalCheck", () => {
     appState.resetAppState();
     setExternalFiles();
     statMock.mockReset();
-    readTextFileMock.mockReset();
+    readFileMock.mockReset();
   });
 
   it("checks only the tab matching the watched path", async () => {
     prepareSavedFile("/tmp/watched.txt", "old", fp1);
     appState.openFileInTab("/tmp/other.txt", "other");
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockResolvedValue("updated");
+    mockDiskText("updated");
 
     await runWatcherExternalCheck("/tmp/watched.txt");
 
@@ -334,7 +342,7 @@ describe("runStartupExternalChecks", () => {
     appState.resetAppState();
     setExternalFiles();
     confirmMock.mockReset();
-    readTextFileMock.mockReset();
+    readFileMock.mockReset();
     statMock.mockReset();
   });
 
@@ -406,8 +414,10 @@ describe("runStartupExternalChecks", () => {
     appState.selectTab(activeTab.id);
 
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockImplementation(async (path: string | URL) =>
-      String(path).endsWith("startup-clean-bg.txt") ? "new-bg" : "new-active",
+    readFileMock.mockImplementation(async (path: string | URL) =>
+      new TextEncoder().encode(
+        String(path).endsWith("startup-clean-bg.txt") ? "new-bg" : "new-active",
+      ),
     );
 
     await runStartupExternalChecks();
@@ -470,7 +480,7 @@ describe("runStartupExternalChecks", () => {
       }
       return fp1;
     });
-    readTextFileMock.mockResolvedValue("reloaded-b");
+    mockDiskText("reloaded-b");
 
     await runStartupExternalChecks();
     await awaitStartupExternalChecksBackgroundForTests();
@@ -488,7 +498,7 @@ describe("save/watcher feedback loop", () => {
     appState.resetAppState();
     setExternalFiles();
     confirmMock.mockReset();
-    readTextFileMock.mockReset();
+    readFileMock.mockReset();
     statMock.mockReset();
   });
 
@@ -498,7 +508,7 @@ describe("save/watcher feedback loop", () => {
     // has not been recorded yet. The watcher fires for the path in that window.
     beginSaveInFlight("/tmp/inflight-save.txt");
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockResolvedValue("from disk");
+    mockDiskText("from disk");
 
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
     // Buffer was NOT reloaded and no prompt fired.
@@ -516,7 +526,7 @@ describe("save/watcher feedback loop", () => {
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
 
     clearSaveInFlight("/tmp/after-save.txt");
-    readTextFileMock.mockResolvedValue("from disk");
+    mockDiskText("from disk");
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("reloaded");
     expect(appState.getActiveDocuments().find((doc) => doc.id === documentId)?.content).toBe(
       "from disk",
@@ -530,7 +540,7 @@ describe("cross-context external checks", () => {
     appState.resetAppState();
     setExternalFiles();
     confirmMock.mockReset();
-    readTextFileMock.mockReset();
+    readFileMock.mockReset();
     statMock.mockReset();
   });
 
@@ -549,7 +559,7 @@ describe("cross-context external checks", () => {
     expect(appState.getSnapshot().contexts.activeContextId).not.toBe(wsAId);
 
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockResolvedValue("updated");
+    mockDiskText("updated");
 
     await runWatcherExternalCheck("/tmp/ws-a/file.txt");
 
@@ -569,7 +579,7 @@ describe("cross-context external checks", () => {
     appState.setDocumentDiskState(activeDocId, { diskFingerprint: fp1, fileMissing: false });
 
     statMock.mockResolvedValue(fp2);
-    readTextFileMock.mockResolvedValue("fresh");
+    mockDiskText("fresh");
 
     await runStartupExternalChecks();
     await awaitStartupExternalChecksBackgroundForTests();
@@ -631,7 +641,7 @@ describe("cross-context external checks", () => {
       }
       return fp2;
     });
-    readTextFileMock.mockResolvedValue("fresh");
+    mockDiskText("fresh");
 
     const startupPromise = runStartupExternalChecks();
     await flushMicrotasks(10);

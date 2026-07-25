@@ -80,6 +80,7 @@
     setHiddenFromRail,
     subscribeWorkspacePreferences,
   } from "../lib/services/workspacePreferences";
+  import { confirmWindowClose } from "../lib/services/windowCloseFlow";
   import {
     flushSessionPersistence,
     registerTabsChangedSessionFlush,
@@ -574,6 +575,13 @@
       stopChatAccessMonitor,
       flushSessionBeforeUnload: () =>
         flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
+      confirmWindowClose: () =>
+        confirmWindowClose({
+          getWindowId: () => getCurrentWebviewWindow().label,
+          notify,
+          flushSession: () =>
+            flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
+        }),
       cleanup: {
         disconnectLayoutObserver: () => appShellHost?.api.disconnectLayoutObserver(),
         clearUntitledTitleDebounceTimer: () =>

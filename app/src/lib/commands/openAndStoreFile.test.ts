@@ -24,6 +24,10 @@ vi.mock("../services/openFileGate", () => ({
   requestOpenPath: vi.fn(),
   completeOpenPath: vi.fn().mockResolvedValue("doc-2"),
   completeLargePendingOpen: vi.fn().mockResolvedValue("doc-pending"),
+  openedFileEncoding: vi.fn((opened: { lineEnding?: string; hasBom?: boolean }) => ({
+    lineEnding: opened.lineEnding,
+    hasBom: opened.hasBom,
+  })),
 }));
 
 const requestOpenPathMock = vi.mocked(requestOpenPath);
@@ -79,9 +83,16 @@ describe("openAndStoreFile", () => {
       content: "payload",
       sizeBytes: 128,
       contentKind: "text",
+      lineEnding: "crlf",
+      hasBom: true,
     });
 
-    expect(completeOpenPathMock).toHaveBeenCalledWith("/tmp/ok.txt", "payload", "win-a", "text");
+    // The detected encoding has to reach the document, or the first save rewrites the
+    // file's line endings and drops its BOM.
+    expect(completeOpenPathMock).toHaveBeenCalledWith("/tmp/ok.txt", "payload", "win-a", "text", {
+      lineEnding: "crlf",
+      hasBom: true,
+    });
     expect(notify).toHaveBeenCalledWith("Opened /tmp/ok.txt");
   });
 
@@ -101,7 +112,10 @@ describe("openAndStoreFile", () => {
       contentKind: "image",
     });
 
-    expect(upgrade).toHaveBeenCalledWith("doc-9", "/tmp/photo.png", "", "image");
+    expect(upgrade).toHaveBeenCalledWith("doc-9", "/tmp/photo.png", "", "image", {
+      lineEnding: undefined,
+      hasBom: undefined,
+    });
     expect(completeOpenPathMock).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith("Opened /tmp/photo.png");
     upgrade.mockRestore();

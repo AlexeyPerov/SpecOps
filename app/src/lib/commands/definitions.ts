@@ -47,6 +47,17 @@ export const commandDefinitions: CommandDefinition[] = [
     binding: { mac: "Cmd+Shift+N", windows: "Ctrl+Shift+N" },
   },
   {
+    // Cmd+Q is bound on the native menu item, not here: the OS delivers the
+    // accelerator to the menu, and a keymap entry would double-fire it.
+    id: "app.quit",
+    label: "Quit SpecOps",
+    menuPath: "SpecOps/Quit SpecOps",
+    category: "App",
+    searchTerms: ["exit", "close app"],
+    paletteIntent: "palette",
+    binding: { mac: "none", windows: "none" },
+  },
+  {
     id: "view.cycleTheme",
     label: "Cycle Theme",
     menuPath: "View/Theme",

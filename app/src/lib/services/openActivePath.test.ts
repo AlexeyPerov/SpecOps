@@ -133,6 +133,8 @@ describe("openActivePath", () => {
       content: "hello",
       sizeBytes: 100,
       contentKind: "text",
+      lineEnding: "crlf",
+      hasBom: false,
     });
     completeOpenPathMock.mockResolvedValue("doc-new");
 
@@ -140,7 +142,12 @@ describe("openActivePath", () => {
 
     expect(result).toEqual({ kind: "opened", path: FILE_PATH });
     expect(openPathMock).toHaveBeenCalledWith(FILE_PATH);
-    expect(completeOpenPathMock).toHaveBeenCalledWith(FILE_PATH, "hello", WINDOW_ID, "text");
+    // The detected encoding must reach the document or the first save rewrites the
+    // file's line endings.
+    expect(completeOpenPathMock).toHaveBeenCalledWith(FILE_PATH, "hello", WINDOW_ID, "text", {
+      lineEnding: "crlf",
+      hasBom: false,
+    });
   });
 
   it("opens pending confirm tab without reading when file exceeds limit", async () => {

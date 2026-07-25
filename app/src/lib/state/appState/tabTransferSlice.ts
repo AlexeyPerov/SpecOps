@@ -119,19 +119,36 @@ function addFileTabWithDocument(
   };
 }
 
-function isDefaultBootstrapWindow(state: AppDomainState): boolean {
+/**
+ * Identify the replaceable bootstrap draft of the active context, or null.
+ *
+ * Requires the draft to be the only tab in the **whole layout**, not just the only tab
+ * in the focused pane. `seedImplicitDraftsInContext` puts an empty draft in every empty
+ * pane, so in a split the focused pane can hold a replaceable draft while sibling panes
+ * hold real file tabs. Treating that as "bootstrap window" let the replacement path
+ * discard every document in the context — losing the unsaved buffers behind the sibling
+ * panes' tabs and leaving those tabs pointing at documents that no longer existed.
+ *
+ * Because a single-tab layout means that tab is necessarily the focused pane's, the
+ * caller can safely replace the focused pane's tab list wholesale.
+ */
+function findReplaceableBootstrapTab(
+  state: AppDomainState,
+): { tabId: string; documentId: string } | null {
   const ctx = getActiveContextSnapshot(state);
-  // Bootstrap replacement is defined by the focused pane's initial draft.
-  const tabs = getSessionTabs(ctx.session);
-  if (tabs.length !== 1) {
-    return false;
+  const paneTabs = getSessionTabs(ctx.session);
+  if (paneTabs.length !== 1 || allTabs(ctx.session.editorLayout).length !== 1) {
+    return null;
   }
-  const tab = tabs[0];
+  const tab = paneTabs[0];
   if (!isFileTab(tab)) {
-    return false;
+    return null;
   }
   const documentState = ctx.documents.find((doc) => doc.id === tab.documentId);
-  return isReplaceableBootstrapTab(tab, documentState);
+  if (!isReplaceableBootstrapTab(tab, documentState)) {
+    return null;
+  }
+  return { tabId: tab.id, documentId: tab.documentId };
 }
 
 export function createTabTransferSlice(deps: {
@@ -313,13 +330,20 @@ export function createTabTransferSlice(deps: {
           "text",
           state.settings.defaultMarkdownViewMode,
         );
-        if (isDefaultBootstrapWindow(state)) {
-          return patchActiveContext(state, () => ({
-            documents: [newDoc],
+        const bootstrap = findReplaceableBootstrapTab(state);
+        if (bootstrap) {
+          return patchActiveContext(state, (ctx) => ({
+            // Drop only the bootstrap draft. Filtering rather than replacing the array
+            // keeps any other document this context owns (e.g. one still held by a
+            // pane the tab list does not cover) intact.
+            documents: [
+              ...ctx.documents.filter((doc) => doc.id !== bootstrap.documentId),
+              newDoc,
+            ],
             session: {
-              ...getActiveSession(state),
+              ...ctx.session,
               editorLayout: setActivePaneTabs(
-                getActiveSession(state).editorLayout,
+                ctx.session.editorLayout,
                 [createFileTab(tabId, docId)],
                 tabId,
               ),

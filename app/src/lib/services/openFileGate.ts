@@ -151,6 +151,17 @@ export function selectTabForNormalizedPath(normalizedPath: string): boolean {
   return false;
 }
 
+/**
+ * Line ending / BOM detected when the file was read, carried through to the document so
+ * the save path can restore the file's original shape. See `textEncoding.ts`.
+ */
+export type OpenedFileEncoding = Pick<OpenedFile, "lineEnding" | "hasBom">;
+
+/** Pull the encoding metadata out of an `OpenedFile` for the state-layer calls. */
+export function openedFileEncoding(opened: OpenedFile): OpenedFileEncoding {
+  return { lineEnding: opened.lineEnding, hasBom: opened.hasBom };
+}
+
 export async function refreshExistingDocumentFromDisk(
   documentId: string,
   path: string,
@@ -161,6 +172,7 @@ export async function refreshExistingDocumentFromDisk(
     opened.path,
     opened.content,
     opened.contentKind,
+    openedFileEncoding(opened),
   );
   await initializeDocumentDiskState(documentId, path);
   return opened;
@@ -171,8 +183,9 @@ export async function completeOpenPath(
   content: string,
   windowId: string,
   contentKind: FileContentKind = "text",
+  encoding?: OpenedFileEncoding,
 ): Promise<string> {
-  const documentId = appState.openFileInTab(path, content, contentKind);
+  const documentId = appState.openFileInTab(path, content, contentKind, encoding);
   await claimOpenFile(path, windowId, documentId);
   await initializeDocumentDiskState(documentId, path);
   return documentId;
@@ -191,8 +204,9 @@ export async function completeOpenPathInPane(
   windowId: string,
   paneId: string,
   contentKind: FileContentKind = "text",
+  encoding?: OpenedFileEncoding,
 ): Promise<string> {
-  const documentId = appState.openFileInPane(path, content, paneId, contentKind);
+  const documentId = appState.openFileInPane(path, content, paneId, contentKind, encoding);
   await claimOpenFile(path, windowId, documentId);
   await initializeDocumentDiskState(documentId, path);
   return documentId;
@@ -219,6 +233,7 @@ export async function confirmLargeFileOpen(documentId: string, path: string): Pr
     opened.path,
     opened.content,
     opened.contentKind,
+    openedFileEncoding(opened),
   );
   await initializeDocumentDiskState(documentId, path);
 }

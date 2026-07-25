@@ -580,6 +580,57 @@ describe("appState tabs and selection", () => {
     expect(appState.getActiveDocuments()[0]?.filePath).toBe("/tmp/move-me.txt");
   });
 
+  it("openTransferredTab keeps sibling-pane documents when the focused pane holds a draft", () => {
+    // Regression: the bootstrap-replacement path checked only the focused pane's tabs
+    // but replaced `documents` wholesale, so a file open in another pane lost its
+    // document (and its unsaved buffer) and was left with an orphan tab.
+    appState.resetAppState();
+    appState.openFileInTab("/tmp/keep-me.txt", "important unsaved work");
+    appState.setEditorLayout("cols-2");
+
+    const panes = appState.getActiveSession().editorLayout.panes;
+    expect(panes.length).toBeGreaterThan(1);
+    // Focus the pane that is *not* holding the real file. Splitting seeds an empty
+    // draft there, which is exactly the shape that used to be misread as "bootstrap".
+    const paneWithFile = panes.find((pane) =>
+      pane.tabs.some(
+        (tab) =>
+          isFileTab(tab) &&
+          appState
+            .getActiveDocuments()
+            .find((doc) => doc.id === tab.documentId)?.filePath === "/tmp/keep-me.txt",
+      ),
+    );
+    const emptyPane = panes.find((pane) => pane.id !== paneWithFile?.id);
+    expect(emptyPane).toBeDefined();
+    // The bug only reproduces when the focused pane looks like a bootstrap window on
+    // its own — one empty unsaved tab. Assert that precondition so this test cannot
+    // silently stop covering the regression.
+    expect(emptyPane!.tabs).toHaveLength(1);
+    appState.setActiveEditorPane(emptyPane!.id);
+
+    appState.openTransferredTab({
+      filePath: "/tmp/incoming.txt",
+      content: "transferred",
+      title: "incoming.txt",
+    });
+
+    const paths = appState
+      .getActiveDocuments()
+      .map((doc) => doc.filePath)
+      .filter((path): path is string => path !== null);
+    expect(paths).toContain("/tmp/keep-me.txt");
+    expect(paths).toContain("/tmp/incoming.txt");
+
+    // No tab may reference a document that no longer exists.
+    const documentIds = new Set(appState.getActiveDocuments().map((doc) => doc.id));
+    for (const tab of allTabs(appState.getActiveSession().editorLayout)) {
+      if (isFileTab(tab)) {
+        expect(documentIds.has(tab.documentId)).toBe(true);
+      }
+    }
+  });
+
   it("transferActiveTabOut and openTransferredTab round-trip tab payload", () => {
     appState.openFileInTab("/tmp/move-me.txt", "payload");
     const transfer = appState.transferActiveTabOut();

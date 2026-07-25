@@ -66,6 +66,7 @@ function createMountDeps(
     handleKeydown: vi.fn(),
     stopChatAccessMonitor: vi.fn(),
     flushSessionBeforeUnload: vi.fn(),
+    confirmWindowClose: vi.fn(async () => true),
     cleanup: {
       disconnectLayoutObserver: vi.fn(),
       clearUntitledTitleDebounceTimer: vi.fn(),

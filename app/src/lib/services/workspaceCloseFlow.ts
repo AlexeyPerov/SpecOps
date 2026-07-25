@@ -4,6 +4,7 @@ import { requestConfirm } from "./confirmDialogUi";
 import { saveFile, saveFileAs } from "./fileSystem";
 import { untitledSaveDefaultPath } from "./untitledSavePath";
 import { renameOpenFileRegistry } from "./openFileRegistry";
+import { documentEncodeOptions } from "./documentSave";
 
 /**
  * Shared workspace-close flow.
@@ -66,7 +67,7 @@ export async function closeWorkspaceWithConfirm(
  * write also records the post-write disk fingerprint so a subsequent watcher
  * self-echo is suppressed.
  */
-async function saveAllDirtyDocumentsToDisk(
+export async function saveAllDirtyDocumentsToDisk(
   workspaceId: ContextId,
   dirtyDocuments: DocumentState[],
   notify: (message: string) => void,
@@ -77,10 +78,12 @@ async function saveAllDirtyDocumentsToDisk(
     let targetPath = doc.filePath;
     const previousPath = doc.filePath;
     let fingerprint;
+    const encodeOptions = documentEncodeOptions(doc);
     if (!targetPath) {
       const savedAs = await saveFileAs(
         doc.content,
         await untitledSaveDefaultPath(doc.content, appState.getWorkspaceRoot(workspaceId)),
+        encodeOptions,
       );
       if (!savedAs) {
         // Cancelled save-as: abort the whole close so the user can decide what
@@ -91,7 +94,11 @@ async function saveAllDirtyDocumentsToDisk(
       targetPath = savedAs.path;
       fingerprint = savedAs.fingerprint;
     } else {
-      fingerprint = await saveFile({ path: targetPath, content: doc.content });
+      fingerprint = await saveFile({
+        path: targetPath,
+        content: doc.content,
+        ...encodeOptions,
+      });
     }
     appState.markDocumentSavedForContext(workspaceId, doc.id, targetPath, doc.content);
     appState.setDocumentDiskStateForContext(workspaceId, doc.id, {

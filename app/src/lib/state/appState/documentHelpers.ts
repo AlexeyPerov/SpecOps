@@ -6,6 +6,8 @@ import type {
 } from "../../domain/contracts";
 import { inferEditorLanguage } from "../../editor/editorLanguage";
 import { emptyUnsavedDocumentTitle } from "../../services/untitledDocument";
+import type { DocumentLineEnding } from "../../services/textEncoding";
+import { detectLineEnding } from "../../services/textEncoding";
 
 export function basename(path: string): string {
   const normalized = path.replaceAll("\\", "/");
@@ -27,6 +29,7 @@ export function buildDocument(
   title: string,
   contentKind: DocumentContentKind = "text",
   defaultMarkdownViewMode: MarkdownViewMode = "edit",
+  encoding?: { lineEnding?: DocumentLineEnding; hasBom?: boolean },
 ): DocumentState {
   const language = inferLanguage(identity.filePath);
   return {
@@ -39,7 +42,11 @@ export function buildDocument(
     contentKind,
     language,
     encoding: "utf-8",
-    lineEnding: content.includes("\r\n") ? "crlf" : "lf",
+    // Callers that opened a file pass the detected line ending. For buffers with no
+    // file behind them (new drafts, transferred tabs) fall back to sniffing the
+    // content, which is LF for anything the editor produced.
+    lineEnding: encoding?.lineEnding ?? detectLineEnding(content),
+    hasBom: encoding?.hasBom ?? false,
     diskFingerprint: null,
     dismissedFingerprint: null,
     fileMissing: false,
@@ -56,6 +63,7 @@ export function documentWithOpenedFilePayload(
   filePath: string,
   content: string,
   contentKind: DocumentContentKind,
+  encoding?: { lineEnding?: DocumentLineEnding; hasBom?: boolean },
 ): DocumentState {
   const normalizedContent =
     contentKind === "text" ? content : contentKind === "large_pending" ? "" : "";
@@ -82,7 +90,8 @@ export function documentWithOpenedFilePayload(
     savedContent: nextSaved,
     isDirty:
       contentKind === "text" ? (kindChanged ? false : documentState.isDirty) : false,
-    lineEnding: (nextContent.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
+    lineEnding: encoding?.lineEnding ?? documentState.lineEnding,
+    hasBom: encoding?.hasBom ?? documentState.hasBom,
     markdownViewMode:
       contentKind === "text" ? documentState.markdownViewMode : "edit",
     scrollTop: kindChanged ? 0 : documentState.scrollTop,
@@ -107,6 +116,8 @@ export function normalizeDocument(documentState: DocumentState): DocumentState {
     dismissedFingerprint: documentState.dismissedFingerprint ?? null,
     fileMissing: documentState.fileMissing ?? false,
     scrollTop: documentState.scrollTop ?? 0,
+    lineEnding: documentState.lineEnding === "crlf" ? "crlf" : "lf",
+    hasBom: documentState.hasBom ?? false,
     markdownViewMode,
   };
 }

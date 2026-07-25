@@ -1,5 +1,5 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { readFile } from "@tauri-apps/plugin-fs";
 import type { ContextId, DiskFingerprint } from "../domain/contracts";
 import { getSessionActiveTab } from "../domain/contracts";
 import { appState } from "../state/appState";
@@ -20,6 +20,7 @@ import {
 import { resolveExternalReloadPolicy, shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 import type { ExternalCheckResult, ExternalCheckTrigger } from "./externalFileChangesTypes";
 import { removeInaccessibleDocumentTab } from "./inaccessibleFileTabs";
+import { decodeTextFile } from "./textEncoding";
 
 type RuntimeState = {
   lastWriteFingerprintByPath: Map<string, DiskFingerprint>;
@@ -60,9 +61,24 @@ async function reloadDocumentFromDisk(
   documentId: string,
   filePath: string,
 ): Promise<void> {
-  const content = await readTextFile(filePath);
+  // Read bytes, not text: the reload has to re-detect line ending and BOM the same way
+  // the initial open did, or an externally-edited CRLF file comes back as LF and the
+  // next save rewrites every line in the file.
+  const bytes = await readFile(filePath);
+  const decoded = decodeTextFile(bytes);
+  if (!decoded) {
+    // The file is no longer valid UTF-8 text. Leave the buffer alone rather than
+    // replacing it with a lossy decode the user would then save back.
+    return;
+  }
   const fingerprint = await statDiskFingerprint(filePath);
-  appState.applyDocumentDiskReloadForContext(contextId, documentId, content, fingerprint);
+  appState.applyDocumentDiskReloadForContext(
+    contextId,
+    documentId,
+    decoded.content,
+    fingerprint,
+    { lineEnding: decoded.lineEnding, hasBom: decoded.hasBom },
+  );
 }
 
 function scheduleFlushDirtyPrompts(

@@ -20,20 +20,16 @@ describe("normalizeMaxBinaryOpenAsTextBytes", () => {
 });
 
 describe("resolveBinaryFileOpen", () => {
-  it("decodes small binary files as text", () => {
-    const bytes = new TextEncoder().encode("hello\0world");
-    expect(resolveBinaryFileOpen(bytes, bytes.length, 200 * 1024)).toEqual({
-      content: "hello\0world",
-      contentKind: "text",
-    });
+  it("allows small binary-sniffed files to be tried as text", () => {
+    expect(resolveBinaryFileOpen(11, 200 * 1024)).toEqual({ contentKind: "text" });
   });
 
   it("keeps large binary files as binary preview", () => {
-    const bytes = new Uint8Array(300 * 1024);
-    bytes.fill(0x01);
-    expect(resolveBinaryFileOpen(bytes, bytes.length, 200 * 1024)).toEqual({
-      content: "",
-      contentKind: "binary",
-    });
+    expect(resolveBinaryFileOpen(300 * 1024, 200 * 1024)).toEqual({ contentKind: "binary" });
+  });
+
+  it("treats the threshold as inclusive", () => {
+    expect(resolveBinaryFileOpen(200 * 1024, 200 * 1024)).toEqual({ contentKind: "text" });
+    expect(resolveBinaryFileOpen(200 * 1024 + 1, 200 * 1024)).toEqual({ contentKind: "binary" });
   });
 });

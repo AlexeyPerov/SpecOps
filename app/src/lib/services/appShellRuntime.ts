@@ -115,19 +115,48 @@ export function handoffAppShellRuntimeCleanup(next: () => void): void {
   activeRuntimeCleanup = next;
 }
 
+/**
+ * Start the window runtime, releasing every partial registration if startup fails.
+ *
+ * Startup registers ~15 Tauri event listeners before the returned `cleanup` closure
+ * exists. Without this wrapper a failure part-way through (a rejected `invoke`, a
+ * listener registration error) leaves those listeners attached with no handle to
+ * release them, so a retry or a re-mount ends up with two sets of handlers firing for
+ * every filesystem change, dock action and routed file open.
+ */
 export async function startAppShellRuntime(
   options: AppShellRuntimeOptions,
 ): Promise<AppShellRuntimeHandle> {
   activeRuntimeCleanup?.();
   activeRuntimeCleanup = null;
 
+  const cleanupCallbacks: UnlistenFn[] = [];
+  try {
+    return await startAppShellRuntimeInner(options, cleanupCallbacks);
+  } catch (error: unknown) {
+    for (const unlisten of cleanupCallbacks) {
+      try {
+        unlisten();
+      } catch {
+        // Best-effort teardown: one failed unlisten must not mask the startup error
+        // or skip the remaining releases.
+      }
+    }
+    void clearFileWatcherPaths();
+    throw error;
+  }
+}
+
+async function startAppShellRuntimeInner(
+  options: AppShellRuntimeOptions,
+  cleanupCallbacks: UnlistenFn[],
+): Promise<AppShellRuntimeHandle> {
   const currentWindow = getCurrentWebviewWindow();
   const windowId = currentWindow.label;
   let runtimeReady = false;
   let lastWatcherSyncKey = "";
   let windowBoundsTimer: ReturnType<typeof setTimeout> | null = null;
   let applyingWindowBounds = false;
-  const cleanupCallbacks: UnlistenFn[] = [];
 
   async function syncExternalFileWatcher(state: AppDomainState): Promise<void> {
     if (!runtimeReady) {

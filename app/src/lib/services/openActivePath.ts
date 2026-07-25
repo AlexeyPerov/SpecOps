@@ -4,6 +4,7 @@ import {
   completeLargePendingOpen,
   completeOpenPath,
   completeOpenPathInPane,
+  openedFileEncoding,
   refreshExistingDocumentFromDisk,
   requestOpenPath,
 } from "./openFileGate";
@@ -63,7 +64,13 @@ export async function openActivePath(
     }
 
     const opened = await openPath(path);
-    await completeOpenPath(opened.path, opened.content, windowId, opened.contentKind);
+    await completeOpenPath(
+      opened.path,
+      opened.content,
+      windowId,
+      opened.contentKind,
+      openedFileEncoding(opened),
+    );
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {
     if (isFileMissingError(error)) {
@@ -104,7 +111,14 @@ export async function openActivePathInPane(
       await refreshExistingDocumentFromDisk(gateResult.documentId, path);
       // Re-open into the target pane; openFileInPane steals + focuses.
       const reOpened = await openPath(path);
-      await completeOpenPathInPane(reOpened.path, reOpened.content, windowId, paneId, reOpened.contentKind);
+      await completeOpenPathInPane(
+        reOpened.path,
+        reOpened.content,
+        windowId,
+        paneId,
+        reOpened.contentKind,
+        openedFileEncoding(reOpened),
+      );
       return { kind: "existing", path: gateResult.path };
     }
 
@@ -122,6 +136,7 @@ export async function openActivePathInPane(
       windowId,
       paneId,
       opened.contentKind,
+      openedFileEncoding(opened),
     );
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {

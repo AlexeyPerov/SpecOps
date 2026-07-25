@@ -43,6 +43,30 @@ fn take_pending_opened_paths() -> Vec<String> {
     Vec::new()
 }
 
+/// Stop the sidecar and reap in-flight git children. Idempotent.
+fn run_shutdown_cleanup(app_handle: &tauri::AppHandle) {
+    if let Some(sidecar_state) = app_handle.try_state::<OpencodeSidecarState>() {
+        sidecar_state.stop_sync();
+    }
+    // Terminate any in-flight git subprocesses so a mid-flight write does not
+    // orphan a `.git/index.lock`. Each child is reaped and its index lock
+    // cleaned up before the process exits.
+    git::drain_all_active_git_commands();
+}
+
+/// Quit the app after the frontend has finished its own shutdown work.
+///
+/// The macOS app menu's predefined Quit item calls `exit(0)` directly — it fires
+/// neither `WindowEvent::CloseRequested` nor `RunEvent::ExitRequested` (tauri-apps/tauri
+/// #3124, #7586, #9198). That meant Cmd+Q discarded unsaved buffers with no prompt and
+/// skipped this cleanup entirely. The app menu now uses a custom item that routes
+/// through the frontend's save prompt and session flush, then calls this.
+#[tauri::command]
+fn quit_app(app_handle: tauri::AppHandle) {
+    run_shutdown_cleanup(&app_handle);
+    app_handle.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -59,6 +83,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             take_pending_opened_paths,
+            quit_app,
             git::git_available,
             git::run_git,
             git::respond_git_askpass,
@@ -96,14 +121,13 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
-        if let RunEvent::ExitRequested { .. } = &event {
-            if let Some(sidecar_state) = app_handle.try_state::<OpencodeSidecarState>() {
-                sidecar_state.stop_sync();
-            }
-            // Terminate any in-flight git subprocesses so a mid-flight write does not
-            // orphan a `.git/index.lock`. Each child is reaped and its index lock
-            // cleaned up before the process exits.
-            git::drain_all_active_git_commands();
+        // Both arms: `ExitRequested` covers the normal path (last window closed,
+        // `AppHandle::exit`), while `Exit` is the last chance on shutdown paths that
+        // skip it. `run_shutdown_cleanup` is idempotent, so running twice is fine —
+        // whereas missing it leaks `opencode serve` holding port 4096 (the next launch
+        // then fails with PortInUse) and orphans git children with their index locks.
+        if matches!(&event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+            run_shutdown_cleanup(app_handle);
         }
 
         #[cfg(target_os = "macos")]

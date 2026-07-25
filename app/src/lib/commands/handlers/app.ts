@@ -1,6 +1,7 @@
 import { appState } from "../../state/appState";
 import { openVersionControlForActiveContext } from "../../services/versionControlNavigation";
 import { createNewWindowWithTransfer } from "../../services/windowManager";
+import { requestAppQuit } from "../../services/windowCloseFlow";
 import { getSessionActiveTab, tabDocumentId } from "../../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../../state/appState/contextHelpers";
 import type { CommandHandlerMap } from "./types";
@@ -26,6 +27,9 @@ export const appHandlers: CommandHandlerMap = {
     } else {
       notify("Failed to open new window.");
     }
+  },
+  "app.quit": async ({ notify, getWindowId }) => {
+    await requestAppQuit({ getWindowId, notify });
   },
   "view.cycleTheme": () => {
     appState.cycleTheme();

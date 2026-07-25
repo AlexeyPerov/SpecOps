@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 const GIT_BINARY: &str = "git";
@@ -195,6 +196,60 @@ struct ActiveGitCommand {
     /// Repo root this command runs in, so a terminated subprocess can clean up its
     /// stale `.git/index.lock` once the process is confirmed dead.
     repo_root: PathBuf,
+    /// Threads draining the child's stdout/stderr for the lifetime of the process.
+    ///
+    /// The pipes **must** be drained while the process is still running. Once the OS
+    /// pipe buffer fills (16-64 KiB on macOS) git blocks in `write()` and never exits,
+    /// so a poll loop that reads only after `try_wait()` reports exit deadlocks on any
+    /// command with substantial output — e.g. an initial `commit` of a large tree (one
+    /// `create mode` line per file), a `pull` printing a large diffstat, or a `fetch`
+    /// updating many refs. Reading concurrently keeps the child unblocked.
+    readers: Mutex<Option<GitOutputReaders>>,
+}
+
+/// Reader threads draining one child's stdout and stderr.
+struct GitOutputReaders {
+    stdout: Option<JoinHandle<Result<String, String>>>,
+    stderr: Option<JoinHandle<Result<String, String>>>,
+}
+
+/// Detach the child's pipes onto reader threads so they drain concurrently with the
+/// caller's poll loop. Each thread ends at EOF, which happens when the child exits or
+/// is terminated, so the threads never outlive the subprocess.
+fn spawn_output_readers(child: &mut Child) -> GitOutputReaders {
+    let stdout = child.stdout.take().map(|mut stream| {
+        std::thread::spawn(move || read_limited_stream(&mut stream, MAX_GIT_OUTPUT_BYTES))
+    });
+    let stderr = child.stderr.take().map(|mut stream| {
+        std::thread::spawn(move || read_limited_stream(&mut stream, MAX_GIT_OUTPUT_BYTES))
+    });
+    GitOutputReaders { stdout, stderr }
+}
+
+/// Join both reader threads and return `(stdout, stderr)`.
+///
+/// Safe to call only after the child has exited or been terminated: the threads block
+/// on `read` until their pipe closes. A panicked reader thread is reported as an error
+/// rather than propagating the panic into the IPC handler.
+fn join_output_readers(readers: Option<GitOutputReaders>) -> Result<(String, String), String> {
+    let Some(readers) = readers else {
+        return Ok((String::new(), String::new()));
+    };
+
+    let stdout = match readers.stdout {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| "git stdout reader thread panicked".to_string())??,
+        None => String::new(),
+    };
+    let stderr = match readers.stderr {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| "git stderr reader thread panicked".to_string())??,
+        None => String::new(),
+    };
+
+    Ok((stdout, stderr))
 }
 
 struct GitCommandRegistry {
@@ -311,12 +366,17 @@ fn register_active_git_command(
         return Err(format!("git command id already in use: {command_id}"));
     }
 
+    // Start draining before the child is handed to the poll loop — see the `readers`
+    // field docs for why this cannot wait until the process exits.
+    let readers = spawn_output_readers(&mut child);
+
     commands.insert(
         command_id.to_string(),
         ActiveGitCommand {
             child: Mutex::new(Some(child)),
             cancelled: AtomicBool::new(false),
             repo_root,
+            readers: Mutex::new(Some(readers)),
         },
     );
     Ok(())
@@ -388,14 +448,10 @@ fn wait_for_registered_git_command(
                     .ok_or_else(|| format!("git command child already finished: {command_id}"))?;
                 let mut child = child.0;
                 let exit_code = status.code().unwrap_or(-1);
-                let mut stdout_text = String::new();
-                let mut stderr_text = String::new();
-                if let Some(mut stdout) = child.stdout.take() {
-                    stdout_text = read_limited_stream(&mut stdout, MAX_GIT_OUTPUT_BYTES)?;
-                }
-                if let Some(mut stderr) = child.stderr.take() {
-                    stderr_text = read_limited_stream(&mut stderr, MAX_GIT_OUTPUT_BYTES)?;
-                }
+                // The pipes were drained on reader threads while the process ran; the
+                // child has exited, so both readers have hit EOF and joining is prompt.
+                let (stdout_text, stderr_text) =
+                    join_output_readers(take_registered_git_command_readers(command_id))?;
                 let _ = child.wait();
 
                 return Ok(RegisteredCommandOutput {
@@ -431,10 +487,31 @@ fn take_registered_git_command_child(command_id: &str) -> Option<(Child, PathBuf
     Some((child_guard.take()?, entry.repo_root.clone()))
 }
 
+fn take_registered_git_command_readers(command_id: &str) -> Option<GitOutputReaders> {
+    let Ok(commands) = git_command_registry().commands.lock() else {
+        return None;
+    };
+    let entry = commands.get(command_id)?;
+    let Ok(mut readers_guard) = entry.readers.lock() else {
+        return None;
+    };
+    readers_guard.take()
+}
+
+/// Join the reader threads for a terminated command and discard their output.
+///
+/// Called on the cancel and timeout paths, where the response body is fixed. Joining
+/// still matters: it reaps the threads instead of detaching them, and it happens only
+/// after the child is dead, so both pipes are already closed.
+fn discard_registered_git_command_readers(command_id: &str) {
+    let _ = join_output_readers(take_registered_git_command_readers(command_id));
+}
+
 fn terminate_registered_git_command_child(command_id: &str) {
     if let Some((mut child, repo_root)) = take_registered_git_command_child(command_id) {
         terminate_child_process_gracefully(&mut child, &repo_root);
     }
+    discard_registered_git_command_readers(command_id);
 }
 
 fn active_git_command_was_cancelled(command_id: &str) -> bool {
@@ -1550,6 +1627,42 @@ mod tests {
         assert!(response.stderr.contains("timed out"));
 
         unregister_active_git_command(&command_id);
+    }
+
+    /// Regression: the poll loop used to read stdout/stderr only after `try_wait()`
+    /// reported exit, so a child that filled the OS pipe buffer (16-64 KiB) blocked in
+    /// `write()` forever and the command "timed out" despite having done its work.
+    #[cfg(unix)]
+    #[test]
+    fn registered_command_drains_large_output_without_deadlock() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        let command_id = format!(
+            "large-output-command-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        // ~1.8 MB on stdout and ~0.9 MB on stderr: far past any pipe buffer.
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg("yes aaaaaaaa | head -n 200000; yes bbbbbbbb | head -n 100000 1>&2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn output generator");
+
+        register_active_git_command(&command_id, PathBuf::from("/tmp/spec-ops-test"), child)
+            .expect("register command");
+
+        let response =
+            wait_for_registered_git_command(&command_id, Some(30_000)).expect("wait should return");
+        unregister_active_git_command(&command_id);
+
+        assert!(
+            !response.timed_out,
+            "large output must not stall the poll loop"
+        );
+        assert_eq!(response.exit_code, 0);
+        assert_eq!(response.stdout.len(), 200_000 * 9);
+        assert_eq!(response.stderr.len(), 100_000 * 9);
     }
 
     #[test]

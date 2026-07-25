@@ -15,17 +15,32 @@ import {
   DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES,
   resolveBinaryFileOpen,
 } from "./binaryFileOpen";
+import type { DocumentLineEnding } from "./textEncoding";
+import { decodeTextFile, encodeTextFile } from "./textEncoding";
 
 export interface OpenedFile {
   path: string;
+  /** LF-normalized, BOM-stripped content. Empty for image/binary kinds. */
   content: string;
   sizeBytes: number;
   contentKind: FileContentKind;
+  /**
+   * On-disk line ending, restored on write. Absent for non-text kinds.
+   * The editor always works in LF; this is what converts back.
+   */
+  lineEnding?: DocumentLineEnding;
+  /** True when the file began with a UTF-8 BOM, which is restored on write. */
+  hasBom?: boolean;
 }
 
 export interface FileSavePayload {
   path: string;
+  /** LF-normalized content straight from the editor. */
   content: string;
+  /** Line ending to write. Defaults to LF when the caller has no document metadata. */
+  lineEnding?: DocumentLineEnding;
+  /** Whether to re-emit a UTF-8 BOM. Defaults to false. */
+  hasBom?: boolean;
 }
 
 interface WorkspaceAccessSnapshot {
@@ -157,13 +172,26 @@ export async function openFolderDialog(defaultPath?: string | null): Promise<str
   return selectedPath;
 }
 
+/** Options controlling how editor content is serialized back to disk. */
+export type TextEncodeOptions = {
+  lineEnding?: DocumentLineEnding;
+  hasBom?: boolean;
+};
+
+function encodeForDisk(content: string, options?: TextEncodeOptions): string {
+  return encodeTextFile(content, {
+    lineEnding: options?.lineEnding ?? "lf",
+    hasBom: options?.hasBom ?? false,
+  });
+}
+
 export async function saveFile(payload: FileSavePayload): Promise<DiskFingerprint> {
   // Mark the save as in-flight around the write so a watcher event landing
   // between the disk write and the fingerprint record is recognized as the
   // app's own write (self-echo) and does not trigger a reload or prompt.
   beginSaveInFlight(payload.path);
   try {
-    await writeTextFile(payload.path, payload.content);
+    await writeTextFile(payload.path, encodeForDisk(payload.content, payload));
     const fingerprint = await statDiskFingerprint(payload.path);
     recordWriteFingerprint(payload.path, fingerprint);
     return fingerprint;
@@ -175,6 +203,7 @@ export async function saveFile(payload: FileSavePayload): Promise<DiskFingerprin
 export async function saveFileAs(
   content: string,
   defaultPath?: string | null,
+  encodeOptions?: TextEncodeOptions,
 ): Promise<{ path: string; fingerprint: DiskFingerprint } | null> {
   const selectedPath = await save({
     title: "Save File As",
@@ -185,7 +214,7 @@ export async function saveFileAs(
   }
   beginSaveInFlight(selectedPath);
   try {
-    await writeTextFile(selectedPath, content);
+    await writeTextFile(selectedPath, encodeForDisk(content, encodeOptions));
     const fingerprint = await statDiskFingerprint(selectedPath);
     recordWriteFingerprint(selectedPath, fingerprint);
     return { path: selectedPath, fingerprint };
@@ -228,19 +257,44 @@ export async function openPath(path: string, options?: OpenPathOptions): Promise
       options?.maxBinaryOpenAsTextBytes ??
       appState.getSnapshot().settings.externalFiles.maxBinaryOpenAsTextBytes ??
       DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES;
-    const resolved = resolveBinaryFileOpen(bytes, sizeBytes, maxBinaryOpenAsTextBytes);
+    const resolved = resolveBinaryFileOpen(sizeBytes, maxBinaryOpenAsTextBytes);
+    if (resolved.contentKind !== "text") {
+      return {
+        path,
+        content: "",
+        sizeBytes,
+        contentKind: resolved.contentKind,
+      };
+    }
+    // Small enough to show as text, but only if it really is UTF-8 text. Byte-sniffing
+    // flagged it as binary, so a strict decode is the deciding vote: anything that
+    // fails stays `binary` (non-editable) rather than becoming an editable buffer full
+    // of U+FFFD that Cmd+S would write over the original bytes.
+    const decoded = decodeTextFile(bytes);
+    if (!decoded) {
+      return { path, content: "", sizeBytes, contentKind: "binary" };
+    }
     return {
       path,
-      content: resolved.content,
+      content: decoded.content,
       sizeBytes,
-      contentKind: resolved.contentKind,
+      contentKind: "text",
+      lineEnding: decoded.lineEnding,
+      hasBom: decoded.hasBom,
     };
   }
-  const content = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  const decoded = decodeTextFile(bytes);
+  if (!decoded) {
+    // Passed the heuristic sniff but is not valid UTF-8 (e.g. Latin-1 or UTF-16
+    // without NUL runs in its first 8 KiB). Open read-only rather than lossily.
+    return { path, content: "", sizeBytes, contentKind: "binary" };
+  }
   return {
     path,
-    content,
+    content: decoded.content,
     sizeBytes,
     contentKind: "text",
+    lineEnding: decoded.lineEnding,
+    hasBom: decoded.hasBom,
   };
 }

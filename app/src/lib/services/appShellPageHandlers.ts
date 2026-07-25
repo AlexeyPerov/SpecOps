@@ -1,4 +1,5 @@
 import { tick } from "svelte";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { allTabs, getSessionSelectedTabId, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
@@ -330,6 +331,12 @@ export interface AppShellMountDeps {
   handleKeydown: (event: KeyboardEvent) => void;
   stopChatAccessMonitor: () => void;
   flushSessionBeforeUnload: () => void | Promise<void>;
+  /**
+   * Runs on an intercepted window close. Resolves true when the close may proceed
+   * (unsaved work handled and the session snapshot flushed), false to keep the window
+   * open. See `windowCloseFlow.confirmWindowClose`.
+   */
+  confirmWindowClose: () => Promise<boolean>;
   cleanup: AppShellMountCleanup;
 }
 
@@ -372,6 +379,16 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     })
     .catch(async (error: unknown) => {
       const message = getErrorMessage(error, String(error));
+      // `runtimeReady` stays false, which leaves every gated $effect off — session
+      // persistence, settings persistence, the project tree and the external file
+      // watcher all included. The shell still renders and accepts edits, so failing
+      // silently here means the user types into buffers that are never saved. Tell
+      // them, and keep it phrased as "don't rely on this window".
+      if (!disposed) {
+        deps.notify(
+          `SpecOps could not finish starting up: ${message}. Saving and session restore are disabled — reopen the window to retry.`,
+        );
+      }
       await logDiagnostic({
         level: "error",
         source: "frontend",
@@ -412,13 +429,74 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
   window.addEventListener("dragover", preventBrowserDragOver);
 
   function onPageHide(): void {
-    // Fire-and-forget: pagehide/beforeunload cannot reliably await async work,
-    // but flushSessionPersistence awaits the session write chain internally.
+    // Fire-and-forget: pagehide/beforeunload cannot reliably await async work.
+    // This is now only a backstop — the awaited flush lives in the
+    // `onCloseRequested` handler below, which runs before the webview tears down.
     void deps.flushSessionBeforeUnload();
   }
 
   window.addEventListener("pagehide", onPageHide);
   window.addEventListener("beforeunload", onPageHide);
+
+  // Intercept window/app close so unsaved buffers get a prompt and the session
+  // snapshot is actually written. Tauri lets us cancel the close and re-issue it once
+  // the async work is done, which `pagehide` cannot do.
+  let closeConfirmed = false;
+  let closeInFlight = false;
+  let unlistenCloseRequested: (() => void) | null = null;
+
+  async function handleCloseRequested(event: { preventDefault: () => void }): Promise<void> {
+    if (closeConfirmed) {
+      return;
+    }
+    event.preventDefault();
+    if (closeInFlight) {
+      // The user hit close again while the prompt was up; ignore the repeat rather
+      // than stacking a second dialog over the first.
+      return;
+    }
+    closeInFlight = true;
+    try {
+      const mayClose = await deps.confirmWindowClose();
+      if (mayClose) {
+        closeConfirmed = true;
+        await getCurrentWindow().close();
+      }
+    } catch (error: unknown) {
+      await logDiagnostic({
+        level: "error",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "window close confirmation failed",
+        metadata: { error: getErrorMessage(error, String(error)) },
+      });
+      // Never trap the user in a window they asked to close because our own prompt
+      // broke. Fall back to closing, having at least tried to flush.
+      closeConfirmed = true;
+      await getCurrentWindow().close();
+    } finally {
+      closeInFlight = false;
+    }
+  }
+
+  // `getCurrentWindow()` reads Tauri internals off the global scope and throws when
+  // they are absent, so this is guarded rather than chained: an unavailable window API
+  // must not abort the rest of the mount. Losing the interceptor only costs us the
+  // prompt — the pagehide backstop above still runs.
+  try {
+    void getCurrentWindow()
+      .onCloseRequested(handleCloseRequested)
+      .then((unlisten) => {
+        if (disposed) {
+          unlisten();
+          return;
+        }
+        unlistenCloseRequested = unlisten;
+      })
+      .catch(() => {});
+  } catch {
+    // No window API in this environment.
+  }
 
   return () => {
     disposed = true;
@@ -434,6 +512,8 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     window.removeEventListener("dragover", preventBrowserDragOver);
     window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("beforeunload", onPageHide);
+    unlistenCloseRequested?.();
+    unlistenCloseRequested = null;
     void deps.flushSessionBeforeUnload();
   };
 }

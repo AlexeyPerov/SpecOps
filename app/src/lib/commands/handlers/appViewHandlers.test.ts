@@ -24,6 +24,11 @@ vi.mock("../../services/openFileGate", () => ({
   requestOpenPath: vi.fn(),
   completeOpenPath: vi.fn(),
   completeLargePendingOpen: vi.fn(),
+  openedFileEncoding: vi.fn(() => ({ lineEnding: "lf", hasBom: false })),
+}));
+
+vi.mock("../../services/windowCloseFlow", () => ({
+  requestAppQuit: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../services/openFileRegistry", () => ({
@@ -109,6 +114,7 @@ import { closeTabWithUnsavedPrompt } from "../../services/closeTabFlow";
 import { completeOpenPath, requestOpenPath } from "../../services/openFileGate";
 import { reloadActiveDocumentFromDisk } from "../../services/externalFileChanges";
 import { createNewWindowWithTransfer } from "../../services/windowManager";
+import { requestAppQuit } from "../../services/windowCloseFlow";
 import { takeQueuedOpenRecentPath } from "../../services/appMenu";
 import { openActivePath } from "../../services/openActivePath";
 import { renameDocumentOnDisk } from "../../services/documentRename";
@@ -449,6 +455,19 @@ describe("app shell toggle commands", () => {
     await flushCommandQueue();
 
     expect(notify).toHaveBeenCalledWith("Failed to open new window.");
+  });
+
+  it("app.quit routes through the save-prompt-and-flush quit flow", async () => {
+    // Cmd+Q must not reach Tauri's predefined Quit item, which exits immediately and
+    // takes unsaved buffers with it. It goes through requestAppQuit instead.
+    const { context } = createCommandContext();
+    const requestAppQuitMock = vi.mocked(requestAppQuit);
+    requestAppQuitMock.mockClear();
+
+    dispatchCommand("app.quit", context);
+    await flushCommandQueue();
+
+    expect(requestAppQuitMock).toHaveBeenCalledTimes(1);
   });
 
   it("view.cycleTheme advances to the next theme and switches to manual mode", () => {
@@ -861,6 +880,7 @@ describe("command dispatch coverage", () => {
       "app.openWorkspaceManager",
       "app.openVersionControl",
       "app.newWindow",
+      "app.quit",
       "view.cycleTheme",
       "app.toggleFindReplace",
       "app.toggleGoTo",

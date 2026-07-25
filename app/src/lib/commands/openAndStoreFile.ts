@@ -1,8 +1,10 @@
 import {
   completeLargePendingOpen,
   completeOpenPath,
+  openedFileEncoding,
   requestOpenPath,
 } from "../services/openFileGate";
+import type { OpenedFile } from "../services/fileSystem";
 import { initializeDocumentDiskState } from "../services/externalFileChanges";
 import { statDiskFingerprint } from "../services/diskFingerprint";
 import { shouldGateFileOpenBySize } from "../services/largeFileOpen";
@@ -11,7 +13,7 @@ import { appState } from "../state/appState";
 export async function openAndStoreFile(
   notify: (message: string) => void,
   windowId: string,
-  opened: { path: string; content: string; sizeBytes: number; contentKind: "text" | "image" | "binary" } | null,
+  opened: OpenedFile | null,
 ): Promise<void> {
   if (!opened) {
     return;
@@ -47,6 +49,7 @@ export async function openAndStoreFile(
       opened.path,
       opened.content,
       opened.contentKind,
+      openedFileEncoding(opened),
     );
     await initializeDocumentDiskState(gateResult.documentId, opened.path);
     notify(`Opened ${opened.path}`);
@@ -60,6 +63,12 @@ export async function openAndStoreFile(
     return;
   }
 
-  await completeOpenPath(opened.path, opened.content, windowId, opened.contentKind);
+  await completeOpenPath(
+    opened.path,
+    opened.content,
+    windowId,
+    opened.contentKind,
+    openedFileEncoding(opened),
+  );
   notify(`Opened ${opened.path}`);
 }

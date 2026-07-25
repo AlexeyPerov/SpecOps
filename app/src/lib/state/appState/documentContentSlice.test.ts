@@ -46,11 +46,15 @@ describe("appState documents and paths", () => {
     expect(appState.findDocumentIdByPath("/tmp/missing.txt")).toBeNull();
   });
 
-  it("setDocumentContent marks documents dirty and detects CRLF", () => {
+  it("setDocumentContent marks documents dirty without re-deriving the line ending", () => {
+    // `lineEnding` describes the file on disk and is set once when it is read. This
+    // content comes from the editor, which normalizes its document to LF, so sniffing
+    // it here used to flip every CRLF file to "lf" on the first keystroke — and the
+    // next save then rewrote every line in the file.
     appState.setDocumentContent("doc-1", "line\r\n");
     const document = appState.getActiveDocuments()[0];
     expect(document?.isDirty).toBe(true);
-    expect(document?.lineEnding).toBe("crlf");
+    expect(document?.lineEnding).toBe("lf");
   });
 
   it("setDocumentContent reveals a hidden implicit draft tab when content appears", () => {
@@ -105,6 +109,37 @@ describe("appState documents and paths", () => {
     appState.setDocumentContent("doc-1", "# hi");
     appState.markDocumentSaved("doc-1", "/tmp/readme.markdown", "# hi");
     expect(appState.getActiveDocuments()[0]?.language).toBe("markdown");
+  });
+
+  it("markDocumentSaved keeps edits made while the write was in flight", () => {
+    // Regression: callers read the content to write before awaiting the disk write, so
+    // the string passed here can be stale. Writing it back into `content` reverted the
+    // user's keystrokes *and* marked the document clean, losing them for good.
+    appState.setDocumentContent("doc-1", "written to disk");
+    appState.setDocumentContent("doc-1", "written to disk plus a later keystroke");
+
+    appState.markDocumentSaved("doc-1", "/tmp/raced.txt", "written to disk");
+
+    const document = appState.getActiveDocuments()[0];
+    expect(document?.content).toBe("written to disk plus a later keystroke");
+    expect(document?.savedContent).toBe("written to disk");
+    expect(document?.isDirty).toBe(true);
+  });
+
+  it("markDocumentSaved preserves the document's line ending", () => {
+    // The buffer is always LF (CodeMirror normalizes it); `lineEnding` describes the
+    // file on disk. Re-deriving it from the LF buffer flipped every CRLF file to LF.
+    appState.openFileInTab("/tmp/crlf.txt", "one\ntwo", "text", {
+      lineEnding: "crlf",
+      hasBom: true,
+    });
+    appState.setDocumentContent("doc-2", "one\ntwo\nthree");
+    appState.markDocumentSaved("doc-2", "/tmp/crlf.txt", "one\ntwo\nthree");
+
+    const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
+    expect(document?.lineEnding).toBe("crlf");
+    expect(document?.hasBom).toBe(true);
+    expect(document?.isDirty).toBe(false);
   });
 });
 

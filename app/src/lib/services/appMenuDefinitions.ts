@@ -526,6 +526,19 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
     commandId: "app.openVersionControl",
     runCommand,
   });
+  // Deliberately a custom item rather than `PredefinedMenuItem { item: "Quit" }`.
+  // The predefined one calls `exit(0)` straight away and fires neither
+  // `CloseRequested` nor `ExitRequested` (tauri-apps/tauri #3124, #7586, #9198), so it
+  // discarded unsaved buffers with no prompt, skipped the session-snapshot flush, and
+  // skipped the Rust-side sidecar/git-child cleanup. Routing through `app.quit` runs
+  // all three, then exits via the `quit_app` command.
+  const quitItem = await commandItem({
+    id: "cmd.app.quit",
+    text: "Quit SpecOps",
+    accelerator: "CmdOrCtrl+Q",
+    commandId: "app.quit",
+    runCommand,
+  });
 
   return Submenu.new({
     text: "SpecOps",
@@ -543,7 +556,7 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
       workspaceManagerItem,
       versionControlItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
-      await PredefinedMenuItem.new({ item: "Quit" }),
+      quitItem,
     ],
   });
 }
@@ -556,6 +569,7 @@ export const NATIVE_MENU_COMMAND_IDS: readonly AppCommandId[] = [
   "file.openAllInFolder",
   "workspace.add",
   "app.newWindow",
+  "app.quit",
   "tab.moveToNewWindow",
   "file.save",
   "file.saveAs",

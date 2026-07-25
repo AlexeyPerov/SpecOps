@@ -19,6 +19,7 @@ import {
   setActivePaneInLayout,
   setActivePaneTabs,
 } from "../../domain/contracts";
+import type { DocumentLineEnding } from "../../services/textEncoding";
 import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
 import { deriveUntitledTitle } from "../../services/untitledTitle";
 import { bumpRecentFile } from "../../services/recentFiles";
@@ -67,6 +68,70 @@ function selectAndActivatePane(
   };
 }
 
+/**
+ * Line ending and BOM detected by the reader that produced the content being applied.
+ * Omit it to keep whatever the document already recorded.
+ */
+export type DocumentEncodingMetadata = {
+  lineEnding?: DocumentLineEnding;
+  hasBom?: boolean;
+};
+
+/**
+ * Replace a document's buffer with content just read from disk.
+ *
+ * `lineEnding`/`hasBom` come from the reader rather than being sniffed from `content`,
+ * because `content` is already LF-normalized by then — sniffing it would classify every
+ * externally-edited CRLF file as LF and the next save would rewrite the whole file.
+ */
+function documentAfterDiskReload(
+  documentState: DocumentState,
+  content: string,
+  diskFingerprint: DiskFingerprint,
+  encoding?: DocumentEncodingMetadata,
+): DocumentState {
+  return {
+    ...documentState,
+    content,
+    savedContent: content,
+    isDirty: false,
+    diskFingerprint,
+    dismissedFingerprint: null,
+    fileMissing: false,
+    lineEnding: encoding?.lineEnding ?? documentState.lineEnding,
+    hasBom: encoding?.hasBom ?? documentState.hasBom,
+  };
+}
+
+/**
+ * Apply the "written to disk" transition to one document without clobbering edits
+ * made while the write was in flight.
+ *
+ * Callers necessarily read the content to write *before* awaiting the disk write, so
+ * by the time this runs the buffer may already have moved on. Writing that stale
+ * string back into `content` silently reverted those keystrokes, and setting
+ * `isDirty: false` unconditionally meant the user got no second chance to save them.
+ *
+ * Instead: `savedContent` records what actually reached disk, `content` is left alone,
+ * and `isDirty` is derived from the comparison — so a document edited mid-save stays
+ * dirty and saves again cleanly.
+ */
+function documentAfterSave(
+  documentState: DocumentState,
+  filePath: string | null,
+  writtenContent: string,
+): DocumentState {
+  return {
+    ...documentState,
+    filePath,
+    title: filePath ? basename(filePath) : documentState.title,
+    savedContent: writtenContent,
+    isDirty: documentState.content !== writtenContent,
+    language: inferLanguage(filePath),
+    fileMissing: false,
+  };
+}
+
 export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
   const { update } = deps;
 
@@ -76,19 +141,31 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       filePath: string,
       content: string,
       contentKind: DocumentContentKind,
+      encoding?: DocumentEncodingMetadata,
     ): void {
       update((state) =>
         patchActiveContext(state, (ctx) => ({
           ...ctx,
           documents: ctx.documents.map((documentState) =>
             documentState.id === documentId
-              ? documentWithOpenedFilePayload(documentState, filePath, content, contentKind)
+              ? documentWithOpenedFilePayload(
+                  documentState,
+                  filePath,
+                  content,
+                  contentKind,
+                  encoding,
+                )
               : documentState,
           ),
         })),
       );
     },
-    openFileInTab(filePath: string, content: string, contentKind: DocumentContentKind = "text"): string {
+    openFileInTab(
+      filePath: string,
+      content: string,
+      contentKind: DocumentContentKind = "text",
+      encoding?: DocumentEncodingMetadata,
+    ): string {
       let openedDocumentId = "";
       let recentFiles: string[] = [];
       update((state) => {
@@ -108,6 +185,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
                     filePath,
                     content,
                     contentKind,
+                    encoding,
                   )
                 : documentState,
             ),
@@ -135,6 +213,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           basename(filePath),
           contentKind,
           state.settings.defaultMarkdownViewMode,
+          encoding,
         );
 
         return {
@@ -173,6 +252,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       content: string,
       paneId: string,
       contentKind: DocumentContentKind = "text",
+      encoding?: DocumentEncodingMetadata,
     ): string {
       let openedDocumentId = "";
       let recentFiles: string[] = [];
@@ -223,6 +303,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
                     filePath,
                     content,
                     contentKind,
+                    encoding,
                   )
                 : documentState,
             ),
@@ -277,6 +358,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           basename(filePath),
           contentKind,
           state.settings.defaultMarkdownViewMode,
+          encoding,
         );
         return {
           ...patchActiveContext(state, (ctx) => ({
@@ -315,11 +397,12 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
               if (documentState.contentKind !== "text") {
                 return documentState;
               }
-              const lineEnding: "lf" | "crlf" = content.includes("\r\n") ? "crlf" : "lf";
+              // `lineEnding` is deliberately not touched here. This content comes from
+              // the editor, which is always LF, so re-deriving it would flip every
+              // CRLF file to LF on the first keystroke and rewrite it on save.
               return {
                 ...documentState,
                 content,
-                lineEnding,
                 isDirty: content !== documentState.savedContent,
               };
             }),
@@ -388,22 +471,11 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
         const nextState = patchActiveContext(state, (ctx) => {
           let nextCtx: ContextSnapshot = {
             ...ctx,
-            documents: ctx.documents.map((documentState) => {
-              if (documentState.id !== documentId) {
-                return documentState;
-              }
-              return {
-                ...documentState,
-                filePath,
-                title: filePath ? basename(filePath) : documentState.title,
-                savedContent: content,
-                content,
-                lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
-                isDirty: false,
-                language: inferLanguage(filePath),
-                fileMissing: false,
-              };
-            }),
+            documents: ctx.documents.map((documentState) =>
+              documentState.id === documentId
+                ? documentAfterSave(documentState, filePath, content)
+                : documentState,
+            ),
           };
           if (filePath !== null) {
             const nextLayout = revealFileTabsInLayout(nextCtx.session.editorLayout, documentId);
@@ -428,25 +500,16 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       documentId: string,
       content: string,
       diskFingerprint: DiskFingerprint,
+      encoding?: DocumentEncodingMetadata,
     ) {
       update((state) =>
         patchActiveContext(state, (ctx) => ({
           ...ctx,
-          documents: ctx.documents.map((documentState) => {
-            if (documentState.id !== documentId) {
-              return documentState;
-            }
-            return {
-              ...documentState,
-              content,
-              savedContent: content,
-              isDirty: false,
-              diskFingerprint,
-              dismissedFingerprint: null,
-              fileMissing: false,
-              lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
-            };
-          }),
+          documents: ctx.documents.map((documentState) =>
+            documentState.id === documentId
+              ? documentAfterDiskReload(documentState, content, diskFingerprint, encoding)
+              : documentState,
+          ),
         })),
       );
       notifyDocumentDiskReload(documentId);
@@ -578,22 +641,11 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
         const nextState = patchContextById(state, contextId, (ctx) => {
           let nextCtx: ContextSnapshot = {
             ...ctx,
-            documents: ctx.documents.map((documentState) => {
-              if (documentState.id !== documentId) {
-                return documentState;
-              }
-              return {
-                ...documentState,
-                filePath,
-                title: filePath ? basename(filePath) : documentState.title,
-                savedContent: content,
-                content,
-                lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
-                isDirty: false,
-                language: inferLanguage(filePath),
-                fileMissing: false,
-              };
-            }),
+            documents: ctx.documents.map((documentState) =>
+              documentState.id === documentId
+                ? documentAfterSave(documentState, filePath, content)
+                : documentState,
+            ),
           };
           if (filePath !== null) {
             const nextLayout = revealFileTabsInLayout(nextCtx.session.editorLayout, documentId);
@@ -654,25 +706,16 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       documentId: string,
       content: string,
       diskFingerprint: DiskFingerprint,
+      encoding?: DocumentEncodingMetadata,
     ) {
       update((state) =>
         patchContextById(state, contextId, (ctx) => ({
           ...ctx,
-          documents: ctx.documents.map((documentState) => {
-            if (documentState.id !== documentId) {
-              return documentState;
-            }
-            return {
-              ...documentState,
-              content,
-              savedContent: content,
-              isDirty: false,
-              diskFingerprint,
-              dismissedFingerprint: null,
-              fileMissing: false,
-              lineEnding: (content.includes("\r\n") ? "crlf" : "lf") as "lf" | "crlf",
-            };
-          }),
+          documents: ctx.documents.map((documentState) =>
+            documentState.id === documentId
+              ? documentAfterDiskReload(documentState, content, diskFingerprint, encoding)
+              : documentState,
+          ),
         })),
       );
       notifyDocumentDiskReload(documentId);

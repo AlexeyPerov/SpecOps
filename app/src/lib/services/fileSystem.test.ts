@@ -83,6 +83,36 @@ describe("openPath", () => {
       content: "hello",
       sizeBytes: 5,
       contentKind: "text",
+      lineEnding: "lf",
+      hasBom: false,
+    });
+  });
+
+  it("normalizes CRLF to LF and reports the on-disk line ending", async () => {
+    const bytes = new TextEncoder().encode("one\r\ntwo");
+    statMockFs.mockResolvedValue({ size: bytes.length } as Awaited<ReturnType<typeof stat>>);
+    readFileMock.mockResolvedValue(bytes);
+    await expect(openPath("/tmp/crlf.txt")).resolves.toEqual({
+      path: "/tmp/crlf.txt",
+      content: "one\ntwo",
+      sizeBytes: bytes.length,
+      contentKind: "text",
+      lineEnding: "crlf",
+      hasBom: false,
+    });
+  });
+
+  it("opens non-UTF-8 text-sniffed files as binary instead of decoding lossily", async () => {
+    // Latin-1 "café": 0xE9 is not a valid UTF-8 sequence. A lossy decode would give a
+    // U+FFFD-riddled editable buffer that Cmd+S would write over the original bytes.
+    const bytes = new Uint8Array([0x63, 0x61, 0x66, 0xe9]);
+    statMockFs.mockResolvedValue({ size: bytes.length } as Awaited<ReturnType<typeof stat>>);
+    readFileMock.mockResolvedValue(bytes);
+    await expect(openPath("/tmp/latin1.txt")).resolves.toEqual({
+      path: "/tmp/latin1.txt",
+      content: "",
+      sizeBytes: bytes.length,
+      contentKind: "binary",
     });
   });
 
@@ -99,7 +129,23 @@ describe("openPath", () => {
     });
   });
 
-  it("opens small binary files as text when under the size limit", async () => {
+  it("keeps a small binary file non-editable when it is not valid UTF-8", async () => {
+    // Small enough to try as text, but 0xC3 0x28 is an invalid UTF-8 sequence. Opening
+    // this as an editable buffer is how Cmd+S used to corrupt small binaries.
+    const bytes = new Uint8Array([0x00, 0xc3, 0x28, 0x00]);
+    statMockFs.mockResolvedValue({ size: bytes.length } as Awaited<ReturnType<typeof stat>>);
+    readFileMock.mockResolvedValue(bytes);
+    await expect(
+      openPath("/tmp/small.bin", { maxBinaryOpenAsTextBytes: 200 * 1024 }),
+    ).resolves.toEqual({
+      path: "/tmp/small.bin",
+      content: "",
+      sizeBytes: bytes.length,
+      contentKind: "binary",
+    });
+  });
+
+  it("opens small binary files as text when under the size limit and valid UTF-8", async () => {
     statMockFs.mockResolvedValue({ size: 32 } as Awaited<ReturnType<typeof stat>>);
     const bytes = new Uint8Array(32);
     bytes.fill(0x01);
@@ -111,6 +157,8 @@ describe("openPath", () => {
       content: "\u0001".repeat(32),
       sizeBytes: 32,
       contentKind: "text",
+      lineEnding: "lf",
+      hasBom: false,
     });
   });
 
@@ -146,6 +194,27 @@ describe("saveFile", () => {
     );
     expect(writeTextFileMock).toHaveBeenCalledWith("/tmp/save.txt", "data");
     expect(recordWriteMock).toHaveBeenCalledWith("/tmp/save.txt", fingerprint);
+  });
+
+  it("restores the document's CRLF line endings and BOM on write", async () => {
+    statMock.mockResolvedValue({ mtimeMs: 100, sizeBytes: 4 });
+
+    await saveFile({
+      path: "/tmp/crlf.txt",
+      content: "one\ntwo",
+      lineEnding: "crlf",
+      hasBom: true,
+    });
+
+    expect(writeTextFileMock).toHaveBeenCalledWith("/tmp/crlf.txt", "﻿one\r\ntwo");
+  });
+
+  it("defaults to LF without a BOM when the caller passes no encoding", async () => {
+    statMock.mockResolvedValue({ mtimeMs: 100, sizeBytes: 4 });
+
+    await saveFile({ path: "/tmp/plain.txt", content: "one\ntwo" });
+
+    expect(writeTextFileMock).toHaveBeenCalledWith("/tmp/plain.txt", "one\ntwo");
   });
 });
 

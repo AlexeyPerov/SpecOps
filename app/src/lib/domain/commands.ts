@@ -4,6 +4,7 @@ export type AppCommandId =
   | "app.openWorkspaceManager"
   | "app.openVersionControl"
   | "app.newWindow"
+  | "app.quit"
   | "app.toggleFindReplace"
   | "app.toggleGoTo"
   | "app.findInProject"

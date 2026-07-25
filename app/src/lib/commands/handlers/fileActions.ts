@@ -6,7 +6,12 @@ import {
   getSessionTabs,
   tabDocumentId,
 } from "../../domain/contracts";
-import { getActiveDocuments, getActiveSession } from "../../state/appState/contextHelpers";
+import {
+  findDocumentContext,
+  getActiveDocuments,
+  getActiveSession,
+} from "../../state/appState/contextHelpers";
+import { applyDocumentSavedState, documentEncodeOptions } from "../../services/documentSave";
 import { openFolderDialog, saveFile, saveFileAs } from "../../services/fileSystem";
 import { untitledSaveDefaultPath } from "../../services/untitledSavePath";
 import { renameOpenFileRegistry } from "../../services/openFileRegistry";
@@ -115,10 +120,15 @@ export async function handleFileSave(context: CommandContext): Promise<void> {
   let targetPath = doc.filePath;
   const previousPath = doc.filePath;
   let fingerprint;
+  // Snapshot the exact bytes handed to the writer so the post-write state records what
+  // reached disk rather than whatever the buffer holds once the write resolves.
+  const writtenContent = doc.content;
+  const encodeOptions = documentEncodeOptions(doc);
   if (!targetPath) {
     const saved = await saveFileAs(
-      doc.content,
-      await untitledSaveDefaultPath(doc.content, appState.getWorkspaceRoot()),
+      writtenContent,
+      await untitledSaveDefaultPath(writtenContent, appState.getWorkspaceRoot()),
+      encodeOptions,
     );
     if (!saved) {
       return;
@@ -126,10 +136,13 @@ export async function handleFileSave(context: CommandContext): Promise<void> {
     targetPath = saved.path;
     fingerprint = saved.fingerprint;
   } else {
-    fingerprint = await saveFile({ path: targetPath, content: doc.content });
+    fingerprint = await saveFile({
+      path: targetPath,
+      content: writtenContent,
+      ...encodeOptions,
+    });
   }
-  appState.markDocumentSaved(doc.id, targetPath, doc.content);
-  appState.setDocumentDiskState(doc.id, { diskFingerprint: fingerprint, fileMissing: false });
+  applyDocumentSavedState(doc.id, targetPath, writtenContent, fingerprint);
   await renameOpenFileRegistry(previousPath, targetPath, getWindowId(), doc.id);
   notify(`Saved ${targetPath}`);
 }
@@ -156,10 +169,11 @@ export async function handleFileSaveAs(context: CommandContext): Promise<void> {
     return;
   }
   const activeWorkspaceRoot = appState.getWorkspaceRoot();
+  const writtenContent = doc.content;
   const saveAsDefaultPath = doc.filePath
     ? activeWorkspaceRoot
-    : await untitledSaveDefaultPath(doc.content, activeWorkspaceRoot);
-  const saved = await saveFileAs(doc.content, saveAsDefaultPath);
+    : await untitledSaveDefaultPath(writtenContent, activeWorkspaceRoot);
+  const saved = await saveFileAs(writtenContent, saveAsDefaultPath, documentEncodeOptions(doc));
   if (!saved) {
     return;
   }
@@ -172,17 +186,13 @@ export async function handleFileSaveAs(context: CommandContext): Promise<void> {
       sourceTabId,
       previousPath,
       filePath: saved.path,
-      content: doc.content,
+      content: writtenContent,
       title: doc.title,
       fingerprint: saved.fingerprint,
       windowId: getWindowId(),
     });
   } else {
-    appState.markDocumentSaved(doc.id, saved.path, doc.content);
-    appState.setDocumentDiskState(doc.id, {
-      diskFingerprint: saved.fingerprint,
-      fileMissing: false,
-    });
+    applyDocumentSavedState(doc.id, saved.path, writtenContent, saved.fingerprint);
     await renameOpenFileRegistry(previousPath, saved.path, getWindowId(), doc.id);
   }
   notify(
@@ -196,17 +206,30 @@ export async function handleFileSaveAll(context: CommandContext): Promise<void> 
   const { getState, notify, getWindowId } = context;
   const state = getState();
   let saved = 0;
-  for (const documentState of getActiveDocuments(state)) {
+  // Only the ids are taken from the initial snapshot. Each document is re-read from
+  // current state at its turn, because every await in this loop (the dialog for
+  // untitled files, each disk write, each registry update) is a window in which the
+  // user can keep typing — and a Save All over many files makes that window long.
+  const documentIds = getActiveDocuments(state).map((documentState) => documentState.id);
+  for (const documentId of documentIds) {
+    const owner = findDocumentContext(appState.getSnapshot(), documentId);
+    if (!owner) {
+      continue;
+    }
+    const documentState = owner.document;
     if (!documentState.isDirty || documentState.contentKind !== "text") {
       continue;
     }
     let targetPath = documentState.filePath;
     const previousPath = documentState.filePath;
+    const writtenContent = documentState.content;
+    const encodeOptions = documentEncodeOptions(documentState);
     let fingerprint;
     if (!targetPath) {
       const saved = await saveFileAs(
-        documentState.content,
-        await untitledSaveDefaultPath(documentState.content, appState.getWorkspaceRoot()),
+        writtenContent,
+        await untitledSaveDefaultPath(writtenContent, appState.getWorkspaceRoot()),
+        encodeOptions,
       );
       if (!saved) {
         continue;
@@ -214,13 +237,13 @@ export async function handleFileSaveAll(context: CommandContext): Promise<void> 
       targetPath = saved.path;
       fingerprint = saved.fingerprint;
     } else {
-      fingerprint = await saveFile({ path: targetPath, content: documentState.content });
+      fingerprint = await saveFile({
+        path: targetPath,
+        content: writtenContent,
+        ...encodeOptions,
+      });
     }
-    appState.markDocumentSaved(documentState.id, targetPath, documentState.content);
-    appState.setDocumentDiskState(documentState.id, {
-      diskFingerprint: fingerprint,
-      fileMissing: false,
-    });
+    applyDocumentSavedState(documentState.id, targetPath, writtenContent, fingerprint);
     await renameOpenFileRegistry(
       previousPath,
       targetPath,

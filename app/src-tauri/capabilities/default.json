@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Capability for the main window. The editor legitimately needs to read and write anywhere under $HOME, so the allow scopes stay broad; the deny lists remove the credential material a text editor has no reason to touch (private keys, cloud and registry tokens, keychains). Tauri applies deny before allow and merges fs plugin scopes, but the rules are repeated per permission so each grant is auditable on its own. Files people do hand-edit (~/.ssh/config, ~/.npmrc, ~/.aws/config) are deliberately left open.",
   "windows": ["*"],
   "permissions": [
     "core:default",
@@ -9,23 +9,69 @@
     "fs:default",
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }]
+      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }],
+      "deny": [
+        { "path": "$HOME/.ssh/id_*" },
+        { "path": "$HOME/.ssh/*_rsa" },
+        { "path": "$HOME/.ssh/*_ed25519" },
+        { "path": "$HOME/.aws/credentials" },
+        { "path": "$HOME/.git-credentials" },
+        { "path": "$HOME/.netrc" },
+        { "path": "$HOME/.gnupg/**" },
+        { "path": "$HOME/.docker/config.json" },
+        { "path": "$HOME/.kube/config" },
+        { "path": "$HOME/.config/gh/hosts.yml" },
+        { "path": "$HOME/Library/Keychains/**" }
+      ]
     },
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }]
+      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }],
+      "deny": [
+        { "path": "$HOME/.ssh/id_*" },
+        { "path": "$HOME/.ssh/*_rsa" },
+        { "path": "$HOME/.ssh/*_ed25519" },
+        { "path": "$HOME/.aws/credentials" },
+        { "path": "$HOME/.git-credentials" },
+        { "path": "$HOME/.netrc" },
+        { "path": "$HOME/.gnupg/**" },
+        { "path": "$HOME/.docker/config.json" },
+        { "path": "$HOME/.kube/config" },
+        { "path": "$HOME/.config/gh/hosts.yml" },
+        { "path": "$HOME/Library/Keychains/**" }
+      ]
     },
     {
       "identifier": "fs:allow-read-dir",
-      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }]
+      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }],
+      "deny": [{ "path": "$HOME/.gnupg/**" }, { "path": "$HOME/Library/Keychains/**" }]
     },
     {
       "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }]
+      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }],
+      "deny": [
+        { "path": "$HOME/.ssh/**" },
+        { "path": "$HOME/.aws/**" },
+        { "path": "$HOME/.gnupg/**" },
+        { "path": "$HOME/.git-credentials" },
+        { "path": "$HOME/.netrc" },
+        { "path": "$HOME/.docker/config.json" },
+        { "path": "$HOME/.kube/**" },
+        { "path": "$HOME/.config/gh/**" },
+        { "path": "$HOME/Library/Keychains/**" }
+      ]
     },
     {
       "identifier": "fs:allow-rename",
-      "allow": [{ "path": "$HOME/**" }]
+      "allow": [{ "path": "$HOME/**" }],
+      "deny": [
+        { "path": "$HOME/.ssh/**" },
+        { "path": "$HOME/.aws/**" },
+        { "path": "$HOME/.gnupg/**" },
+        { "path": "$HOME/.kube/**" },
+        { "path": "$HOME/.config/gh/**" },
+        { "path": "$HOME/Library/Keychains/**" }
+      ]
     },
     {
       "identifier": "fs:allow-mkdir",
@@ -33,7 +79,15 @@
     },
     {
       "identifier": "fs:allow-remove",
-      "allow": [{ "path": "$HOME/**" }]
+      "allow": [{ "path": "$HOME/**" }],
+      "deny": [
+        { "path": "$HOME/.ssh/**" },
+        { "path": "$HOME/.aws/**" },
+        { "path": "$HOME/.gnupg/**" },
+        { "path": "$HOME/.kube/**" },
+        { "path": "$HOME/.config/gh/**" },
+        { "path": "$HOME/Library/Keychains/**" }
+      ]
     },
     {
       "identifier": "fs:allow-stat",

@@ -91,6 +91,26 @@ struct OpencodeSidecarInner {
     hostname: String,
     health: SidecarHealthStatus,
     last_error: Option<OpencodeSidecarError>,
+    /// Identity of the child this state currently owns; see [`next_child_generation`].
+    generation: u64,
+}
+
+/// Bump the id that identifies "the child process this state currently owns".
+///
+/// A health poller captures the value when its child is spawned and stops touching
+/// state the moment it no longer matches. Without that, the poller operated on whatever
+/// `inner.child` happened to be: after a port change the old poller kept probing the old
+/// port, failed, and at its 15s deadline killed the *replacement* child and reported a
+/// bogus "did not become healthy" — the sidecar dying ~15s after changing the port.
+fn next_child_generation(inner: &mut OpencodeSidecarInner) -> u64 {
+    inner.generation = inner.generation.wrapping_add(1);
+    inner.generation
+}
+
+/// Install `child` as the current sidecar process and return its generation.
+fn install_child(inner: &mut OpencodeSidecarInner, child: Child) -> u64 {
+    inner.child = Some(child);
+    next_child_generation(inner)
 }
 
 impl OpencodeSidecarState {
@@ -103,6 +123,7 @@ impl OpencodeSidecarState {
                 hostname: DEFAULT_SIDECAR_HOSTNAME.to_string(),
                 health: SidecarHealthStatus::Unknown,
                 last_error: None,
+                generation: 0,
             })),
         }
     }
@@ -405,6 +426,7 @@ fn poll_health_in_background(
     state: OpencodeSidecarState,
     port: u16,
     hostname: String,
+    generation: u64,
 ) {
     let base_url = build_base_url(&hostname, port);
     let started = Instant::now();
@@ -415,6 +437,12 @@ fn poll_health_in_background(
                 Ok(guard) => guard,
                 Err(_) => return,
             };
+            // A restart (or stop) replaced the child we were spawned for. `port` and
+            // `base_url` describe that old child, so nothing we could conclude here
+            // applies to the current one.
+            if inner.generation != generation {
+                return;
+            }
             // If a stop request landed before we ever reached healthy, bail.
             let Some(child) = inner.child.as_mut() else {
                 return;
@@ -422,6 +450,7 @@ fn poll_health_in_background(
             if !child_is_running(child) {
                 let exit_code = child.wait().ok().and_then(|status| status.code());
                 inner.child = None;
+                next_child_generation(&mut inner);
                 inner.directory = None;
                 inner.health = SidecarHealthStatus::Unhealthy;
                 inner.last_error = Some(OpencodeSidecarError::LaunchFailure {
@@ -452,6 +481,12 @@ fn poll_health_in_background(
     };
 
     if let Ok(mut inner) = state.inner.lock() {
+        // The generation check matters most here: this branch kills a process, and
+        // without it a poller left behind by a port change would kill the sidecar that
+        // replaced its own child.
+        if inner.generation != generation {
+            return;
+        }
         if let Some(child) = inner.child.as_mut() {
             if child_is_running(child) {
                 let _ = child.kill();
@@ -459,6 +494,7 @@ fn poll_health_in_background(
             }
         }
         inner.child = None;
+        next_child_generation(&mut inner);
         inner.directory = None;
         inner.health = SidecarHealthStatus::Error;
         inner.last_error = Some(timeout_error);
@@ -467,6 +503,9 @@ fn poll_health_in_background(
 
 fn stop_child(inner: &mut OpencodeSidecarInner) -> Result<(), OpencodeSidecarError> {
     if let Some(mut child) = inner.child.take() {
+        // Retire this child's generation so any poller still watching it stops before
+        // it can act on the state a replacement will occupy.
+        next_child_generation(inner);
         if child_is_running(&mut child) {
             child.kill().map_err(|error| OpencodeSidecarError::Internal {
                 message: format!("Failed to stop OpenCode sidecar: {error}"),
@@ -488,6 +527,7 @@ fn refresh_child_state(inner: &mut OpencodeSidecarInner) {
     if let Some(child) = inner.child.as_mut() {
         if !child_is_running(child) {
             inner.child = None;
+            next_child_generation(inner);
             inner.directory = None;
             inner.health = SidecarHealthStatus::Unhealthy;
             inner.last_error = Some(OpencodeSidecarError::StaleProcess {
@@ -578,30 +618,26 @@ fn start_or_attach_nonblocking(
 
     // Phase 2 — spawn the process under the lock (the spawn itself is fast;
     // it includes port availability check + process start).
-    let port = {
+    let (port, hostname, generation) = {
         let mut inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
             message: format!("OpenCode sidecar state lock poisoned: {error}"),
         })?;
         let port = inner.port;
         let hostname = inner.hostname.clone();
         let child = spawn_sidecar_process(app, port, &hostname)?;
-        inner.child = Some(child);
+        let generation = install_child(&mut inner, child);
         inner.directory = Some(directory);
         inner.health = SidecarHealthStatus::Checking;
         inner.last_error = None;
-        port
+        (port, hostname, generation)
     };
 
-    // Phase 3 — kick off a background poller; clone the Arc-shared state.
-    let hostname = {
-        let inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
-            message: format!("OpenCode sidecar state lock poisoned: {error}"),
-        })?;
-        inner.hostname.clone()
-    };
+    // Phase 3 — kick off a background poller; clone the Arc-shared state. Port,
+    // hostname and generation are all captured from the same locked section as the
+    // spawn, so the poller can tell whether the child it is polling is still current.
     let poll_state = state.clone();
     thread::spawn(move || {
-        poll_health_in_background(poll_state, port, hostname);
+        poll_health_in_background(poll_state, port, hostname, generation);
     });
 
     let inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
@@ -636,7 +672,7 @@ fn start_or_attach(
     inner.last_error = None;
 
     let child = spawn_sidecar(app, inner.port, &inner.hostname)?;
-    inner.child = Some(child);
+    install_child(inner, child);
     inner.directory = Some(directory);
     inner.health = SidecarHealthStatus::Healthy;
     inner.last_error = None;
@@ -782,7 +818,39 @@ mod tests {
             hostname: DEFAULT_SIDECAR_HOSTNAME.to_string(),
             health: SidecarHealthStatus::Healthy,
             last_error: None,
+            generation: 0,
         }
+    }
+
+    /// Regression: the health poller used to operate on whatever `inner.child` was, so
+    /// after a port change the stale poller killed the replacement child. The generation
+    /// is what lets it recognise that its own child is gone.
+    #[test]
+    fn replacing_the_child_retires_the_previous_generation() {
+        let mut inner = test_inner();
+
+        let first = next_child_generation(&mut inner);
+        let second = next_child_generation(&mut inner);
+
+        assert_ne!(first, second, "each child gets a distinct generation");
+    }
+
+    #[test]
+    fn stopping_a_running_child_retires_its_generation() {
+        let mut inner = test_inner();
+        // A child that has already exited still counts as "installed" for bookkeeping.
+        let child = std::process::Command::new("true")
+            .spawn()
+            .expect("spawn placeholder child");
+        let installed = install_child(&mut inner, child);
+
+        stop_child(&mut inner).expect("stop should succeed");
+
+        assert_ne!(
+            inner.generation, installed,
+            "a poller holding the old generation must no longer match"
+        );
+        assert!(inner.child.is_none());
     }
 
     #[test]

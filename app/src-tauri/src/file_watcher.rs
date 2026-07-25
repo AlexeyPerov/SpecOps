@@ -124,44 +124,78 @@ fn compute_watcher_path_diff(
     (to_remove, to_add)
 }
 
+/// Apply a watch/unwatch diff and return the set the watcher actually holds afterwards.
+///
+/// Every path is attempted even when an earlier one fails, and the returned set reflects
+/// reality rather than intent. The previous version used `?` inside the loops and
+/// assigned the bookkeeping set only after both had completed, so a single failing path
+/// — routine, since notify errors when asked to watch something that does not exist, and
+/// tracked files do get deleted — leaked the watches already registered in that call,
+/// discarded the removals, and left every later sync aborting at the same path. External
+/// change detection and project-tree refresh then stayed broken for the rest of the
+/// session, signalled only by a rejected IPC promise.
+///
+/// A failed `unwatch` still drops the path from the set: notify's usual error here is
+/// "not watched", and retrying it forever would be worse than leaking one watcher. A
+/// failed `watch` is left out of the set so the next sync retries it, which is what makes
+/// a file that appears later start being watched.
+fn apply_watcher_path_diff(
+    debouncer: &mut Debouncer<notify::RecommendedWatcher, FileIdMap>,
+    previous: &HashSet<String>,
+    next_paths: &HashSet<String>,
+    mode: RecursiveMode,
+) -> HashSet<String> {
+    let (to_remove, to_add) = compute_watcher_path_diff(previous, next_paths);
+    let mut watched = previous.clone();
+
+    for path in to_remove {
+        if let Err(error) = debouncer.watcher().unwatch(PathBuf::from(&path).as_path()) {
+            log::debug!("file watcher unwatch failed for {path}: {error}");
+        }
+        watched.remove(&path);
+    }
+
+    for path in to_add {
+        match debouncer.watcher().watch(PathBuf::from(&path).as_path(), mode) {
+            Ok(()) => {
+                watched.insert(path);
+            }
+            Err(error) => {
+                log::warn!("file watcher watch failed for {path}: {error}");
+            }
+        }
+    }
+
+    watched
+}
+
 #[tauri::command]
 pub fn sync_file_watcher_paths(
     paths: Vec<String>,
     state: State<'_, FileWatcherState>,
 ) -> Result<(), String> {
-    let mut inner = state
+    let mut guard = state
         .inner
         .lock()
         .map_err(|error| error.to_string())?;
 
-    ensure_debouncer(&mut inner)?;
+    ensure_debouncer(&mut guard)?;
 
+    // One deref of the guard, so the disjoint `debouncer` / `watched_paths` field
+    // borrows below are accepted.
+    let inner = &mut *guard;
     let next_paths: HashSet<String> = paths.into_iter().collect();
+    let previous = std::mem::take(&mut inner.watched_paths);
 
-    let (to_remove, to_add) = compute_watcher_path_diff(&inner.watched_paths, &next_paths);
+    let Some(debouncer) = inner.debouncer.as_mut() else {
+        // Put the bookkeeping back before bailing so state still matches the watcher.
+        inner.watched_paths = previous;
+        return Err("File watcher debouncer is not initialized".to_string());
+    };
 
-    let debouncer = inner
-        .debouncer
-        .as_mut()
-        .ok_or_else(|| "File watcher debouncer is not initialized".to_string())?;
-
-    for path in to_remove {
-        let path_buf = PathBuf::from(&path);
-        debouncer
-            .watcher()
-            .unwatch(path_buf.as_path())
-            .map_err(|error| error.to_string())?;
-    }
-
-    for path in to_add {
-        let path_buf = PathBuf::from(&path);
-        debouncer
-            .watcher()
-            .watch(path_buf.as_path(), RecursiveMode::NonRecursive)
-            .map_err(|error| error.to_string())?;
-    }
-
-    inner.watched_paths = next_paths;
+    let next_watched =
+        apply_watcher_path_diff(debouncer, &previous, &next_paths, RecursiveMode::NonRecursive);
+    inner.watched_paths = next_watched;
     Ok(())
 }
 
@@ -170,39 +204,25 @@ pub fn sync_project_tree_watcher(
     root: Option<String>,
     state: State<'_, FileWatcherState>,
 ) -> Result<(), String> {
-    let mut inner = state
+    let mut guard = state
         .inner
         .lock()
         .map_err(|error| error.to_string())?;
 
-    ensure_debouncer(&mut inner)?;
+    ensure_debouncer(&mut guard)?;
 
+    let inner = &mut *guard;
     let next_roots: HashSet<String> = root.into_iter().collect();
-    let (to_remove, to_add) =
-        compute_watcher_path_diff(&inner.project_tree_roots, &next_roots);
+    let previous = std::mem::take(&mut inner.project_tree_roots);
 
-    let debouncer = inner
-        .debouncer
-        .as_mut()
-        .ok_or_else(|| "File watcher debouncer is not initialized".to_string())?;
+    let Some(debouncer) = inner.debouncer.as_mut() else {
+        inner.project_tree_roots = previous;
+        return Err("File watcher debouncer is not initialized".to_string());
+    };
 
-    for path in to_remove {
-        let path_buf = PathBuf::from(&path);
-        debouncer
-            .watcher()
-            .unwatch(path_buf.as_path())
-            .map_err(|error| error.to_string())?;
-    }
-
-    for path in to_add {
-        let path_buf = PathBuf::from(&path);
-        debouncer
-            .watcher()
-            .watch(path_buf.as_path(), RecursiveMode::Recursive)
-            .map_err(|error| error.to_string())?;
-    }
-
-    inner.project_tree_roots = next_roots;
+    let next_watched =
+        apply_watcher_path_diff(debouncer, &previous, &next_roots, RecursiveMode::Recursive);
+    inner.project_tree_roots = next_watched;
     Ok(())
 }
 
@@ -214,6 +234,54 @@ mod tests {
 
     fn set(paths: &[&str]) -> HashSet<String> {
         paths.iter().map(|path| (*path).to_string()).collect()
+    }
+
+    fn test_debouncer() -> Debouncer<notify::RecommendedWatcher, FileIdMap> {
+        new_debouncer(Duration::from_millis(200), None, |_result: DebounceEventResult| {})
+            .expect("create debouncer")
+    }
+
+    /// Regression: one unwatchable path used to abort the whole sync via `?` before the
+    /// bookkeeping set was assigned, so the watches registered earlier in the same call
+    /// leaked, the removals were forgotten, and every later sync aborted at the same
+    /// path — external-change detection silently died for the session.
+    #[test]
+    fn apply_diff_keeps_going_past_a_failing_path() {
+        let mut debouncer = test_debouncer();
+        let existing = std::env::temp_dir();
+        let existing_path = existing.to_string_lossy().into_owned();
+        let missing_path = existing
+            .join("spec-ops-watcher-does-not-exist-1a2b3c")
+            .to_string_lossy()
+            .into_owned();
+
+        // The missing path is listed first so a failure there would, under the old
+        // behaviour, prevent the real path from ever being watched.
+        let next = set(&[missing_path.as_str(), existing_path.as_str()]);
+        let watched = apply_watcher_path_diff(
+            &mut debouncer,
+            &set(&[]),
+            &next,
+            RecursiveMode::NonRecursive,
+        );
+
+        assert!(
+            watched.contains(&existing_path),
+            "a watchable path must still be registered after an earlier failure"
+        );
+        assert!(
+            !watched.contains(&missing_path),
+            "a path that failed to watch must stay out of the set so the next sync retries it"
+        );
+
+        // And the state is usable afterwards: removing the good path works.
+        let after = apply_watcher_path_diff(
+            &mut debouncer,
+            &watched,
+            &set(&[]),
+            RecursiveMode::NonRecursive,
+        );
+        assert!(after.is_empty());
     }
 
     #[test]

@@ -37,16 +37,47 @@ const ALLOWED_GIT_SUBCOMMANDS: &[&str] = &[
     "tag",
 ];
 
-/// Environment variables that must not be overridden by IPC callers.
-const BLOCKED_GIT_ENV_VARS: &[&str] = &[
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_COMMON_DIR",
-    "GIT_GRAFT_FILE",
-    "GIT_QUARANTINE_PATH",
+/// Environment variables an IPC caller may set on a git subprocess.
+///
+/// This is an allowlist by design. A denylist cannot work here: git reads dozens of
+/// variables that turn an "allowed" subcommand into an arbitrary-exec primitive —
+/// `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` (inject `core.pager`,
+/// `core.hooksPath`, `core.fsmonitor`), `GIT_EXTERNAL_DIFF`, `GIT_PAGER`, `GIT_EDITOR`,
+/// `GIT_SEQUENCE_EDITOR`, `GIT_EXEC_PATH`, and plain `PATH`. Enumerating those was never
+/// going to stay complete, so only the keys the app actually needs get through, and each
+/// one has its *value* checked too (see [`git_env_value_is_allowed`]) — `GIT_SSH_COMMAND`
+/// is itself a command line, so allowing the key alone would defeat the point.
+///
+/// App-generated env (the askpass helper's `GIT_ASKPASS`/`SSH_ASKPASS`) does not pass
+/// through here — see [`merge_env_maps`].
+const ALLOWED_GIT_ENV_VARS: &[&str] = &["GIT_TERMINAL_PROMPT", "GIT_SSH_COMMAND"];
+
+/// `ssh -o <Key>=<Value>` options a caller-supplied `GIT_SSH_COMMAND` may carry.
+const ALLOWED_SSH_OPTION_KEYS: &[&str] = &[
+    "BatchMode",
+    "StrictHostKeyChecking",
+    "ConnectTimeout",
+    "IdentitiesOnly",
+    "NumberOfPasswordPrompts",
+    "PreferredAuthentications",
+];
+
+/// Config keys the app is allowed to read or write. `git config` can otherwise set
+/// `core.hooksPath`, `core.pager`, `core.sshCommand`, `alias.*`, `credential.helper`,
+/// `diff.external` and friends, each of which executes a program on the next git call.
+const ALLOWED_GIT_CONFIG_KEYS: &[&str] = &["user.email", "user.name"];
+
+/// Option prefixes that hand an "allowed" subcommand a program to execute.
+///
+/// Matched against the part before `=`, so both `--upload-pack=x` and
+/// `--upload-pack x` are caught.
+const DENIED_GIT_ARG_PREFIXES: &[&str] = &[
+    "--upload-pack",  // fetch / ls-remote: runs this command instead of git-upload-pack
+    "--receive-pack", // push: same, on the receiving side
+    "--exec",         // push's alias for --receive-pack
+    "--exec-path",    // relocates the git binary directory
+    "--config-env",   // reads a config value out of an env var we did not vet
+    "--ext-cmd",
 ];
 
 static GIT_EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
@@ -630,12 +661,68 @@ fn normalize_repo_root(repo_root: &str) -> Result<PathBuf, String> {
         .map_err(|error| format!("Failed to resolve repo_root path: {error}"))
 }
 
-fn is_blocked_git_env_var(key: &str) -> bool {
-    BLOCKED_GIT_ENV_VARS
-        .iter()
-        .any(|blocked| key.eq_ignore_ascii_case(blocked))
+/// True when a caller-supplied `GIT_SSH_COMMAND` is a plain `ssh` invocation carrying
+/// nothing but vetted `-o Key=Value` options.
+///
+/// The value is a command line git will execute, so anything beyond that shape — a
+/// different program, a `-o ProxyCommand=…`, an unquoted value with shell characters —
+/// is rejected rather than sanitized.
+fn ssh_command_is_allowed(value: &str) -> bool {
+    let mut tokens = value.split_whitespace();
+    if tokens.next() != Some("ssh") {
+        return false;
+    }
+    loop {
+        match tokens.next() {
+            None => return true,
+            Some("-o") => {
+                let Some(pair) = tokens.next() else {
+                    return false;
+                };
+                let Some((key, option_value)) = pair.split_once('=') else {
+                    return false;
+                };
+                let key_allowed = ALLOWED_SSH_OPTION_KEYS
+                    .iter()
+                    .any(|allowed| allowed.eq_ignore_ascii_case(key));
+                if !key_allowed || !ssh_option_value_is_safe(option_value) {
+                    return false;
+                }
+            }
+            // Any other token (a second program, a redirect, `-o` bundled as `-oX`)
+            // is outside the shape we vet.
+            Some(_) => return false,
+        }
+    }
 }
 
+fn ssh_option_value_is_safe(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ','))
+}
+
+fn git_env_value_is_allowed(key: &str, value: &str) -> bool {
+    match key.to_ascii_uppercase().as_str() {
+        "GIT_TERMINAL_PROMPT" => value == "0" || value == "1",
+        "GIT_SSH_COMMAND" => ssh_command_is_allowed(value),
+        _ => false,
+    }
+}
+
+fn is_allowed_git_env_var(key: &str) -> bool {
+    ALLOWED_GIT_ENV_VARS
+        .iter()
+        .any(|allowed| key.eq_ignore_ascii_case(allowed))
+}
+
+/// Filter untrusted (IPC-supplied) environment down to the allowlist.
+///
+/// Entries that fail are dropped rather than erroring: the caller's intent still runs,
+/// just without the variable. Anything the app genuinely needs is either on the
+/// allowlist or added later as trusted env by [`merge_env_maps`].
 fn sanitize_git_env(env: Option<&HashMap<String, String>>) -> HashMap<String, String> {
     let Some(env_map) = env else {
         return HashMap::new();
@@ -643,9 +730,58 @@ fn sanitize_git_env(env: Option<&HashMap<String, String>>) -> HashMap<String, St
 
     env_map
         .iter()
-        .filter(|(key, _)| !is_blocked_git_env_var(key))
+        .filter(|(key, value)| is_allowed_git_env_var(key) && git_env_value_is_allowed(key, value))
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect()
+}
+
+/// True when `arg` is (or begins) one of the exec-granting options.
+fn is_denied_git_option(arg: &str) -> bool {
+    let name = arg.split('=').next().unwrap_or(arg);
+    DENIED_GIT_ARG_PREFIXES
+        .iter()
+        .any(|denied| name.eq_ignore_ascii_case(denied))
+}
+
+/// True for transport URLs that make git run a helper program of the caller's choosing.
+fn is_denied_transport_arg(arg: &str) -> bool {
+    let lowered = arg.to_ascii_lowercase();
+    lowered.starts_with("ext::") || lowered.starts_with("--upload-pack")
+}
+
+/// `config` is allowed only for the two identity keys the app manages, and only against
+/// the repository's own config file.
+fn validate_git_config_args(args: &[String]) -> Result<(), String> {
+    let rest: Vec<&str> = args[1..].iter().map(String::as_str).collect();
+    let key = match rest.as_slice() {
+        // Read forms. `--get-all` is accepted because `isWriteGitCommand` on the
+        // frontend already treats it as a read; both are harmless.
+        ["--get", key] | ["--get-all", key] => *key,
+        [key] => *key,
+        // Write form: `config <key> <value>`. No `--global`/`--system`/`--file`, so
+        // this can only ever touch the repository's own config.
+        [key, _value] => *key,
+        _ => return Err("git config form not allowed".to_string()),
+    };
+
+    if !ALLOWED_GIT_CONFIG_KEYS
+        .iter()
+        .any(|allowed| allowed.eq_ignore_ascii_case(key))
+    {
+        return Err(format!("git config key not allowed: {key}"));
+    }
+    Ok(())
+}
+
+/// `remote` is allowed only in the read-only listing form the app uses. The mutating
+/// verbs (`add`, `set-url`, …) could point a remote at an `ext::` URL, which git then
+/// executes on the next fetch.
+fn validate_git_remote_args(args: &[String]) -> Result<(), String> {
+    match args.len() {
+        1 => Ok(()),
+        2 if args[1] == "-v" || args[1] == "--verbose" => Ok(()),
+        _ => Err("git remote form not allowed".to_string()),
+    }
 }
 
 fn validate_git_args(args: &[String]) -> Result<(), String> {
@@ -658,6 +794,31 @@ fn validate_git_args(args: &[String]) -> Result<(), String> {
         .any(|allowed| allowed == subcommand)
     {
         return Err(format!("git subcommand not allowed: {subcommand}"));
+    }
+
+    // Every argument is checked, not just the subcommand. The allowlist alone left
+    // option-level vectors wide open: `ls-remote --upload-pack=/tmp/x.sh .`,
+    // `fetch --upload-pack=…`, `config core.hooksPath /tmp/evil` — each of them an
+    // "allowed" subcommand that executes an attacker-chosen program.
+    for arg in args {
+        if arg.contains('\0') {
+            return Err("git args must not contain NUL".to_string());
+        }
+        if is_denied_git_option(arg) || is_denied_transport_arg(arg) {
+            return Err(format!("git argument not allowed: {arg}"));
+        }
+    }
+
+    // `-u` is `--upload-pack` for ls-remote, but `--set-upstream` for push and an
+    // untracked-files mode for status, so it can only be rejected per subcommand.
+    if subcommand == "ls-remote" && args.iter().any(|arg| arg == "-u") {
+        return Err("git argument not allowed: -u".to_string());
+    }
+
+    match subcommand.as_str() {
+        "config" => validate_git_config_args(args)?,
+        "remote" => validate_git_remote_args(args)?,
+        _ => {}
     }
 
     Ok(())
@@ -754,15 +915,20 @@ pub struct GitCommitRequest {
     pub timeout_ms: Option<u64>,
 }
 
+/// Merge untrusted caller env with app-generated env.
+///
+/// `base` comes from the webview and is filtered by [`sanitize_git_env`]. `extra` is
+/// built by `git_askpass` inside this process and is applied verbatim — it deliberately
+/// sets `GIT_ASKPASS`/`SSH_ASKPASS` to our own helper script, which the caller allowlist
+/// would (correctly) reject. Applying it second also means the app's values win over
+/// anything the caller sent for the same key.
 fn merge_env_maps(
     base: Option<&HashMap<String, String>>,
     extra: &HashMap<String, String>,
 ) -> HashMap<String, String> {
     let mut merged = sanitize_git_env(base);
     for (key, value) in extra {
-        if !is_blocked_git_env_var(key) {
-            merged.insert(key.clone(), value.clone());
-        }
+        merged.insert(key.clone(), value.clone());
     }
     merged
 }
@@ -777,11 +943,9 @@ impl Drop for AskpassSessionGuard {
     }
 }
 
-fn build_git_command(
-    repo_root: &Path,
-    args: &[String],
-    env: Option<&HashMap<String, String>>,
-) -> Command {
+/// Build the git subprocess. `env` must already be sanitized — filtering happens once,
+/// at the IPC boundary, so the trusted askpass variables survive this step.
+fn build_git_command(repo_root: &Path, args: &[String], env: &HashMap<String, String>) -> Command {
     let mut command = Command::new(git_executable());
     command
         .current_dir(repo_root)
@@ -789,7 +953,7 @@ fn build_git_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    for (key, value) in sanitize_git_env(env) {
+    for (key, value) in env {
         command.env(key, value);
     }
 
@@ -870,13 +1034,15 @@ pub fn execute_git_with_full_options(
     };
     let _askpass_guard = AskpassSessionGuard(askpass_session_id.as_ref().map(|(id, _)| id.clone()));
 
-    let effective_env = askpass_session_id
-        .as_ref()
-        .map(|(_, env)| env as &HashMap<String, String>)
-        .or(options.env);
+    // Sanitize once, here. The askpass branch already merged the caller's env through
+    // `merge_env_maps`; the plain branch has raw caller env that still needs filtering.
+    let effective_env: HashMap<String, String> = match askpass_session_id.as_ref() {
+        Some((_, env)) => env.clone(),
+        None => sanitize_git_env(options.env),
+    };
 
     if let Some(id) = normalized_command_id.as_deref() {
-        let mut command = build_git_command(repo_root, args, effective_env);
+        let mut command = build_git_command(repo_root, args, &effective_env);
         let child = match command.spawn() {
             Ok(child) => child,
             Err(error) => {
@@ -941,7 +1107,7 @@ pub fn execute_git_with_full_options(
         }
         response
     } else {
-        match build_git_command(repo_root, args, effective_env).output() {
+        match build_git_command(repo_root, args, &effective_env).output() {
             Ok(output) => {
                 let mut response = RunGitResponse {
                     exit_code: output.status.code().unwrap_or(-1),
@@ -1705,7 +1871,7 @@ mod tests {
     }
 
     #[test]
-    fn run_git_strips_blocked_env_vars() {
+    fn run_git_strips_env_vars_outside_the_allowlist() {
         if skip_if_git_unavailable() {
             return;
         }
@@ -1728,6 +1894,137 @@ mod tests {
 
         assert_eq!(response.exit_code, 0);
         let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn sanitize_git_env_keeps_only_allowlisted_keys_and_values() {
+        let mut env = HashMap::new();
+        // Legitimate.
+        env.insert("GIT_TERMINAL_PROMPT".to_string(), "0".to_string());
+        env.insert(
+            "GIT_SSH_COMMAND".to_string(),
+            "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes".to_string(),
+        );
+        // Every one of these is an exec primitive; none may survive.
+        env.insert("GIT_CONFIG_COUNT".to_string(), "1".to_string());
+        env.insert("GIT_CONFIG_KEY_0".to_string(), "core.pager".to_string());
+        env.insert("GIT_CONFIG_VALUE_0".to_string(), "/tmp/evil.sh".to_string());
+        env.insert("GIT_EXTERNAL_DIFF".to_string(), "/tmp/evil.sh".to_string());
+        env.insert("GIT_PAGER".to_string(), "/tmp/evil.sh".to_string());
+        env.insert("GIT_EDITOR".to_string(), "/tmp/evil.sh".to_string());
+        env.insert("GIT_EXEC_PATH".to_string(), "/tmp/evil".to_string());
+        env.insert("PATH".to_string(), "/tmp/evil".to_string());
+        env.insert("GIT_DIR".to_string(), "/tmp/evil".to_string());
+
+        let sanitized = sanitize_git_env(Some(&env));
+
+        assert_eq!(sanitized.len(), 2, "only the two allowlisted keys survive");
+        assert_eq!(sanitized.get("GIT_TERMINAL_PROMPT").map(String::as_str), Some("0"));
+        assert!(sanitized.contains_key("GIT_SSH_COMMAND"));
+    }
+
+    #[test]
+    fn sanitize_git_env_rejects_weaponized_ssh_command() {
+        for value in [
+            "/tmp/evil.sh",
+            "sh -c evil",
+            "ssh -o ProxyCommand=/tmp/evil.sh",
+            "ssh -o BatchMode=yes; /tmp/evil.sh",
+            "ssh -oProxyCommand=x",
+            "ssh /tmp/evil.sh",
+        ] {
+            let mut env = HashMap::new();
+            env.insert("GIT_SSH_COMMAND".to_string(), value.to_string());
+            assert!(
+                sanitize_git_env(Some(&env)).is_empty(),
+                "GIT_SSH_COMMAND should be rejected: {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn sanitize_git_env_accepts_the_ssh_commands_the_app_builds() {
+        // Mirrors buildNonInteractiveRemoteEnv and the askpass session env.
+        for value in [
+            "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes",
+            "ssh -o StrictHostKeyChecking=yes",
+        ] {
+            let mut env = HashMap::new();
+            env.insert("GIT_SSH_COMMAND".to_string(), value.to_string());
+            assert_eq!(
+                sanitize_git_env(Some(&env)).len(),
+                1,
+                "app-generated GIT_SSH_COMMAND should pass: {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_git_args_rejects_option_level_exec_vectors() {
+        let cases: Vec<Vec<String>> = vec![
+            vec!["ls-remote".into(), "--upload-pack=/tmp/x.sh".into(), ".".into()],
+            vec!["ls-remote".into(), "--upload-pack".into(), "/tmp/x.sh".into()],
+            vec!["ls-remote".into(), "-u".into(), "/tmp/x.sh".into()],
+            vec!["fetch".into(), "--upload-pack=/tmp/x.sh".into()],
+            vec!["push".into(), "--receive-pack=/tmp/x.sh".into()],
+            vec!["push".into(), "--exec=/tmp/x.sh".into()],
+            vec!["log".into(), "--config-env=core.pager=EVIL".into()],
+            vec!["fetch".into(), "ext::sh -c /tmp/x.sh".into()],
+        ];
+        for args in cases {
+            assert!(
+                validate_git_args(&args).is_err(),
+                "args should be rejected: {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_git_args_restricts_config_to_identity_keys() {
+        assert!(validate_git_args(&[
+            "config".into(),
+            "core.hooksPath".into(),
+            "/tmp/evil".into()
+        ])
+        .is_err());
+        assert!(validate_git_args(&["config".into(), "alias.x".into(), "!sh".into()]).is_err());
+        assert!(validate_git_args(&["config".into(), "--global".into(), "user.name".into()]).is_err());
+
+        // Forms the app actually uses.
+        assert!(validate_git_args(&["config".into(), "--get".into(), "user.name".into()]).is_ok());
+        assert!(validate_git_args(&["config".into(), "user.email".into()]).is_ok());
+        assert!(validate_git_args(&["config".into(), "user.name".into(), "Test User".into()]).is_ok());
+    }
+
+    #[test]
+    fn validate_git_args_restricts_remote_to_listing() {
+        assert!(validate_git_args(&["remote".into(), "-v".into()]).is_ok());
+        assert!(validate_git_args(&["remote".into()]).is_ok());
+        assert!(validate_git_args(&[
+            "remote".into(),
+            "add".into(),
+            "evil".into(),
+            "ext::sh -c /tmp/x.sh".into()
+        ])
+        .is_err());
+    }
+
+    #[test]
+    fn validate_git_args_allows_ordinary_commands() {
+        let cases: Vec<Vec<String>> = vec![
+            vec!["status".into(), "--porcelain=v2".into(), "-z".into()],
+            vec!["push".into(), "-u".into(), "origin".into(), "main".into()],
+            vec!["status".into(), "-uall".into()],
+            vec!["log".into(), "-c".into()],
+            vec!["add".into(), "--".into(), "a.txt".into()],
+            vec!["diff".into(), "--no-ext-diff".into(), "--".into(), "a.txt".into()],
+        ];
+        for args in cases {
+            assert!(
+                validate_git_args(&args).is_ok(),
+                "args should be allowed: {args:?}"
+            );
+        }
     }
 
     #[test]

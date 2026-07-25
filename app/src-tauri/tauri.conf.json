@@ -27,8 +27,18 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "requireLiteralLeadingDot": false,
-          "allow": ["$HOME/**/*", "$APPDATA/**/*"]
+          "requireLiteralLeadingDot": true,
+          "allow": ["$HOME/**/*", "$APPDATA/**/*"],
+          "deny": [
+            "$HOME/.ssh/**",
+            "$HOME/.aws/**",
+            "$HOME/.gnupg/**",
+            "$HOME/.kube/**",
+            "$HOME/.config/gh/**",
+            "$HOME/.git-credentials",
+            "$HOME/.netrc",
+            "$HOME/Library/Keychains/**"
+          ]
         }
       }
     }

@@ -1,5 +1,62 @@
 # Changelog
 
+## 2026-07-25 21:30 — Harden git subprocess invocation, capability scopes, watcher sync, sidecar poller
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering H1–H4.
+
+- **The git allowlist did not actually constrain what could be executed (H1).** Two
+  holes. First, `sanitize_git_env` was a *denylist* of eight `GIT_*` variables, so
+  everything else came through — `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/
+  `GIT_CONFIG_VALUE_n` (inject `core.pager`, `core.hooksPath`, `core.fsmonitor`),
+  `GIT_EXTERNAL_DIFF`, `GIT_PAGER`, `GIT_EDITOR`, `GIT_EXEC_PATH`, `PATH`. Second,
+  `validate_git_args` only inspected `args[0]`, so option-level vectors worked against
+  perfectly "allowed" subcommands: `ls-remote --upload-pack=/tmp/x.sh .`,
+  `fetch --upload-pack=…`, `config core.hooksPath /tmp/evil` followed by a commit. Any
+  script running in the webview therefore had host code execution.
+
+  Env is now an allowlist of the two keys the app actually sends
+  (`GIT_TERMINAL_PROMPT`, `GIT_SSH_COMMAND`), and each *value* is checked too —
+  `GIT_SSH_COMMAND` is itself a command line, so it must be a bare `ssh` plus vetted
+  `-o Key=Value` options. Every argv entry is validated, not just the subcommand:
+  `--upload-pack`, `--receive-pack`, `--exec`, `--exec-path`, `--config-env`, `ext::`
+  transport URLs and `ls-remote -u` are rejected; `config` is restricted to reading and
+  writing `user.name`/`user.email` in the repo-local file; `remote` is restricted to the
+  read-only listing form the app uses. Sanitization moved to a single point at the IPC
+  boundary so the app's own askpass env (`GIT_ASKPASS`, `SSH_ASKPASS`) is applied as
+  trusted rather than filtered.
+
+- **Capability scopes were wider than the app needs (H2).** `requireLiteralLeadingDot`
+  was `false`, so `asset:` URLs could read dotfiles the fs plugin's own dot-matching
+  would have excluded (`~/.ssh/id_rsa`, `~/.aws/credentials`). It is now `true`, and both
+  the asset scope and the fs permissions carry deny rules for credential material —
+  private keys, `~/.aws/credentials`, `~/.git-credentials`, `~/.netrc`, `~/.gnupg`,
+  `~/.kube/config`, `~/.docker/config.json`, `~/.config/gh/hosts.yml`, macOS keychains.
+  The broad `$HOME/**` allow stays: it is what makes the app an editor. Files people do
+  hand-edit (`~/.ssh/config`, `~/.npmrc`, `~/.aws/config`) are deliberately still
+  reachable. *Behaviour change:* images inside dot-directories no longer render in
+  previews.
+
+- **One bad path permanently killed file watching (H3).** `sync_file_watcher_paths` and
+  `sync_project_tree_watcher` used `?` inside their watch/unwatch loops and assigned
+  `watched_paths` only after both completed. notify errors when asked to watch something
+  that does not exist — routine, since tracked files get deleted — so a single failure
+  leaked the watches already registered in that call, discarded the removals, and left
+  every later sync aborting at the same path. External-change detection and project-tree
+  refresh then stayed dead for the rest of the session, signalled only by a rejected IPC
+  promise. Both now go through `apply_watcher_path_diff`, which attempts every path and
+  returns the set the watcher actually holds: a failed watch is left out so the next sync
+  retries it, a failed unwatch is dropped rather than retried forever.
+
+- **The sidecar health poller could kill the wrong process (H4).** It captured `port` and
+  `hostname` by value but operated on whatever `inner.child` currently was, with no
+  identity check. After a port change the old poller kept probing the old port, failed,
+  and at its 15s deadline killed the *replacement* child and recorded a bogus "did not
+  become healthy" — the sidecar dying ~15s after the user changed the port. The state now
+  carries a generation that is bumped whenever a child is installed or cleared; the poller
+  captures it at spawn and returns as soon as it stops matching, checked most importantly
+  right before the kill.
+
 ## 2026-07-25 20:40 — Fix eight critical bugs found in a full-codebase review
 
 Full review written up in [`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md)

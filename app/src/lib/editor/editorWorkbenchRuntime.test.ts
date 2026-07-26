@@ -100,6 +100,10 @@ function makeHostWithIdentity(identity: EditorHostIdentity, label = "host"): Edi
         getHeadings: () => ({ ok: true, value: [] }),
         getActiveHeadingKey: () => ({ ok: true, value: null }),
         isHeadingFolded: () => ({ ok: true, value: false }),
+        getOutlineSnapshot: () => ({
+          ok: true,
+          value: { headings: [], activeKey: null, foldedKeys: [] },
+        }),
       },
       bookmarks: {
         list: () => ({ ok: true, value: [] }),

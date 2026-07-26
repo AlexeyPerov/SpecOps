@@ -13,6 +13,8 @@ import {
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
   writeTextFile: vi.fn(),
+  rename: vi.fn(),
+  remove: vi.fn(),
 }));
 
 vi.mock("./appDataDir", () => ({
@@ -123,8 +125,9 @@ describe("loadThemeFile", () => {
       customThemes: [],
     });
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
+    // Atomic write: content lands on a `theme.json.<random>.tmp` sibling.
     const [path, content] = writeTextFileMock.mock.calls[0];
-    expect(path).toBe(THEME_PATH);
+    expect(String(path)).toMatch(/^\/data\/spec-ops\/theme\.json\..+\.tmp$/);
     expect(JSON.parse(content as string)).toEqual({
       version: 2,
       mode: "auto",
@@ -301,8 +304,9 @@ describe("saveThemeFile", () => {
     await saveThemeFile(input);
 
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
+    // Atomic write: content lands on a `theme.json.<random>.tmp` sibling.
     const [path, content] = writeTextFileMock.mock.calls[0];
-    expect(path).toBe(THEME_PATH);
+    expect(String(path)).toMatch(/^\/data\/spec-ops\/theme\.json\..+\.tmp$/);
     const saved = JSON.parse(content as string) as ThemeFileV2;
     expect(saved.version).toBe(2);
     expect(saved.lightTheme).toEqual({ kind: "builtin", id: "light-blue" });

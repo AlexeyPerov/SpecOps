@@ -35,7 +35,18 @@ export type TabTransferPayload = {
 
 const WINDOW_READY_TIMEOUT_MS = 10_000;
 
-let windowCounter = 1;
+/**
+ * Mint a window label that is unique across the whole app, not just this
+ * webview. A module-level counter cannot do that: each webview window is its
+ * own JS realm with its own copy of the module, so "New Window" from window-2
+ * would mint `window-2` again and the `WebviewWindow` constructor fails with
+ * `tauri://error` (label already in use). Timestamp + random suffix cannot
+ * collide across realms.
+ */
+export function generateWindowLabel(): string {
+  const random = Math.random().toString(36).slice(2, 10);
+  return `window-${Date.now().toString(36)}-${random}`;
+}
 
 export async function markWindowActive(
   windowId: string,
@@ -98,8 +109,7 @@ export async function createNewWindowWithTransfer(
   snapshot: AppDomainState,
   transferPayload?: TabTransferPayload | null,
 ): Promise<string | null> {
-  windowCounter += 1;
-  const label = `window-${windowCounter}`;
+  const label = generateWindowLabel();
   const bounds = await resolveNewWindowBounds(snapshot);
 
   return new Promise((resolve) => {

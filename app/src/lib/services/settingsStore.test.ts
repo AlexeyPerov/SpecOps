@@ -1,6 +1,6 @@
 /** Theme persistence and migration are covered in `themeStore.test.ts`. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile, remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
 import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
 import {
   defaultHttpConnection,
@@ -27,6 +27,8 @@ import {
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
   writeTextFile: vi.fn(),
+  rename: vi.fn(),
+  remove: vi.fn(),
 }));
 
 vi.mock("./appDataDir", () => ({
@@ -39,6 +41,8 @@ vi.mock("@tauri-apps/api/path", () => ({
 
 const readTextFileMock = vi.mocked(readTextFile);
 const writeTextFileMock = vi.mocked(writeTextFile);
+const renameMock = vi.mocked(rename);
+const removeMock = vi.mocked(remove);
 
 describe("settings mapping", () => {
   it("round-trips external file settings", () => {
@@ -261,10 +265,43 @@ describe("loadPersistedSettings", () => {
     expect(result).not.toHaveProperty("theme");
   });
 
-  it("returns null when wrapLines is missing", async () => {
+  it("defaults wrapLines when missing instead of discarding the whole file", async () => {
     const { wrapLines: _wrapLines, ...withoutWrap } = defaultPersistedSettings;
     readTextFileMock.mockResolvedValue(JSON.stringify(withoutWrap));
-    await expect(loadPersistedSettings()).resolves.toBeNull();
+    // A missing/renamed field must not return null: that would boot on
+    // defaults and overwrite settings.json, losing every other setting.
+    await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
+  });
+
+  it("preserves other settings when zoomPercent is missing", async () => {
+    const { zoomPercent: _zoom, ...withoutZoom } = defaultPersistedSettings;
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...withoutZoom, wrapLines: false, showMinimap: false }),
+    );
+    const result = await loadPersistedSettings();
+    expect(result?.zoomPercent).toBe(defaultPersistedSettings.zoomPercent);
+    expect(result?.wrapLines).toBe(false);
+    expect(result?.showMinimap).toBe(false);
+  });
+
+  it("clamps out-of-range zoomPercent and rejects NaN", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...defaultPersistedSettings, zoomPercent: 10_000 }),
+    );
+    await expect(loadPersistedSettings()).resolves.toMatchObject({ zoomPercent: 220 });
+
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...defaultPersistedSettings, zoomPercent: 1 }),
+    );
+    await expect(loadPersistedSettings()).resolves.toMatchObject({ zoomPercent: 60 });
+
+    // JSON has no NaN literal, but a hand-edited "null" hits the same guard.
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...defaultPersistedSettings, zoomPercent: null }),
+    );
+    await expect(loadPersistedSettings()).resolves.toMatchObject({
+      zoomPercent: defaultPersistedSettings.zoomPercent,
+    });
   });
 
   it("returns null for corrupt JSON", async () => {
@@ -282,9 +319,13 @@ describe("savePersistedSettings", () => {
   beforeEach(() => {
     writeTextFileMock.mockReset();
     writeTextFileMock.mockResolvedValue(undefined);
+    renameMock.mockReset();
+    renameMock.mockResolvedValue(undefined);
+    removeMock.mockReset();
+    removeMock.mockResolvedValue(undefined);
   });
 
-  it("writes JSON to the settings path", async () => {
+  it("writes JSON to a temp file and renames it over the settings path", async () => {
     const settings = {
       ...defaultPersistedSettings,
       watchExternalChanges: false,
@@ -292,10 +333,47 @@ describe("savePersistedSettings", () => {
 
     await savePersistedSettings(settings);
 
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    const [tempPath, content] = writeTextFileMock.mock.calls[0] ?? [];
+    expect(String(tempPath)).toMatch(/^\/data\/spec-ops\/settings\.json\..+\.tmp$/);
+    expect(content).toBe(JSON.stringify(settings, null, 2));
+    expect(renameMock).toHaveBeenCalledWith(tempPath, "/data/spec-ops/settings.json");
+  });
+
+  it("falls back to a direct write when rename fails", async () => {
+    renameMock.mockRejectedValue(new Error("rename unsupported"));
+    const settings = { ...defaultPersistedSettings };
+
+    await savePersistedSettings(settings);
+
+    expect(writeTextFileMock).toHaveBeenLastCalledWith(
       "/data/spec-ops/settings.json",
       JSON.stringify(settings, null, 2),
     );
+  });
+
+  it("serializes overlapping saves so writes never interleave", async () => {
+    const order: string[] = [];
+    let releaseFirstWrite: () => void = () => {};
+    writeTextFileMock.mockImplementationOnce(async () => {
+      order.push("write-1-start");
+      await new Promise<void>((resolve) => {
+        releaseFirstWrite = resolve;
+      });
+      order.push("write-1-end");
+    });
+    writeTextFileMock.mockImplementationOnce(async () => {
+      order.push("write-2");
+    });
+
+    const first = savePersistedSettings({ ...defaultPersistedSettings });
+    const second = savePersistedSettings({ ...defaultPersistedSettings, wrapLines: false });
+    await vi.waitFor(() => {
+      expect(order).toContain("write-1-start");
+    });
+    releaseFirstWrite();
+    await Promise.all([first, second]);
+
+    expect(order).toEqual(["write-1-start", "write-1-end", "write-2"]);
   });
 });
 

@@ -84,6 +84,7 @@
   import {
     flushSessionPersistence,
     registerTabsChangedSessionFlush,
+    removeWindowSessionEntry,
     scheduleSessionPersistence,
   } from "../lib/services/sessionManager";
   import { isWorkspaceLifecycleActive } from "../lib/services/workspaceLifecycle";
@@ -98,6 +99,7 @@
     syncProjectTreeWatcherEffect,
     syncWorkspaceFileCatalogEffect,
     syncResponsiveLayoutEffect,
+    flushSettingsPersistence,
     syncSessionPersistenceEffect,
     syncSettingsPersistenceEffect,
     syncWorkspaceContextEffect,
@@ -574,14 +576,21 @@
       handleKeydown: (event) => appShellHost?.api.handleKeydown(event),
       stopChatAccessMonitor,
       flushSessionBeforeUnload: () =>
-        flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
+        Promise.all([
+          flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
+          flushSettingsPersistence(),
+        ]).then(() => {}),
       confirmWindowClose: () =>
         confirmWindowClose({
           getWindowId: () => getCurrentWebviewWindow().label,
           notify,
           flushSession: () =>
-            flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
+            Promise.all([
+              flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
+              flushSettingsPersistence(),
+            ]).then(() => {}),
         }),
+      removeWindowSessionEntry,
       cleanup: {
         disconnectLayoutObserver: () => appShellHost?.api.disconnectLayoutObserver(),
         clearUntitledTitleDebounceTimer: () =>

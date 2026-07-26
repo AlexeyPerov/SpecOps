@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import {
   defaultAppProviderSettings,
   normalizeAppProviderSettings,
@@ -139,6 +140,22 @@ function isBoolean(value: unknown): value is boolean {
   return typeof value === "boolean";
 }
 
+/** Matches the range enforced by the view.zoomIn / view.zoomOut commands. */
+const MIN_ZOOM_PERCENT = 60;
+const MAX_ZOOM_PERCENT = 220;
+
+/**
+ * Clamp a persisted zoom value into the range the zoom commands enforce.
+ * `typeof NaN === "number"`, so a bare typeof check would let NaN (or a
+ * hand-edited 10000) through and break every font-size computation.
+ */
+export function normalizeZoomPercent(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultPersistedSettings.zoomPercent;
+  }
+  return Math.min(MAX_ZOOM_PERCENT, Math.max(MIN_ZOOM_PERCENT, value));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -170,7 +187,11 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
     const raw = await readTextFile(path);
     const parsed = JSON.parse(raw) as Record<string, unknown>;
 
-    if (isBoolean(parsed.wrapLines) && typeof parsed.zoomPercent === "number") {
+    // Every field falls back to its default individually. A missing or
+    // renamed field (old schema, hand-edit) must not discard the entire
+    // file — returning null here would boot on defaults and then overwrite
+    // settings.json, losing every other setting the user had.
+    if (isRecord(parsed)) {
       const externalFiles = parseExternalFilesSettings(parsed as Partial<PersistedSettings>);
       const providerModelCatalogs = normalizeProviderModelCatalogs(parsed.providerModelCatalogs);
       const providerSettings = normalizeAppProviderSettings(
@@ -178,8 +199,10 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         providerModelCatalogs,
       );
       return {
-        wrapLines: parsed.wrapLines,
-        zoomPercent: parsed.zoomPercent as number,
+        wrapLines: isBoolean(parsed.wrapLines)
+          ? parsed.wrapLines
+          : defaultPersistedSettings.wrapLines,
+        zoomPercent: normalizeZoomPercent(parsed.zoomPercent),
         ...externalFiles,
         decoratePlaintextSymbols: isBoolean(parsed.decoratePlaintextSymbols)
           ? parsed.decoratePlaintextSymbols
@@ -228,11 +251,27 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
   }
 }
 
+/**
+ * Saves are chained so writes to settings.json never overlap (concurrent
+ * non-atomic writes to one path are how the file gets torn), and each write
+ * goes to a temp file that is renamed over the target, so a crash or full disk
+ * mid-write leaves the previous settings.json intact instead of a truncated one.
+ */
+let settingsSaveChain: Promise<void> = Promise.resolve();
+
+async function writeSettingsFileAtomically(settings: PersistedSettings): Promise<void> {
+  const path = await getSettingsPath();
+  await atomicWriteTextFile(path, JSON.stringify(settings, null, 2));
+}
+
 export async function savePersistedSettings(
   settings: PersistedSettings,
 ): Promise<void> {
-  const path = await getSettingsPath();
-  await writeTextFile(path, JSON.stringify(settings, null, 2));
+  const run = settingsSaveChain.then(() => writeSettingsFileAtomically(settings));
+  // Keep the chain usable after a failed write; the failure still propagates
+  // to this call's returned promise.
+  settingsSaveChain = run.catch(() => {});
+  return run;
 }
 
 export function toExternalFilesSettings(

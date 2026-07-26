@@ -1,4 +1,4 @@
-import type { AppDomainState } from "../../domain/contracts";
+import type { AppDomainState, ContextId } from "../../domain/contracts";
 import {
   allTabs,
   createFileTab,
@@ -33,6 +33,7 @@ import { createTabTransferSlice } from "./tabTransferSlice";
 import {
   canCreateFileTabs,
   closeTabsForce,
+  closeTabsForceInContext,
   missingTabIdsToClose,
   reopenTabForDocument,
   tabIdsToCloseOtherThan,
@@ -321,6 +322,21 @@ export function createDocumentTabsLifecycleSlice(deps: {
         return;
       }
       update((state) => closeTabsForce(state, tabIds, preferredTabId));
+    },
+    /**
+     * Context-aware variant of {@link closeTabsByIds}. Required by callers that
+     * locate a tab by searching every context — closing against the active
+     * context silently does nothing when the tab lives elsewhere.
+     */
+    closeTabsByIdsInContext(
+      contextId: ContextId,
+      tabIds: string[],
+      preferredTabId: string | null,
+    ): void {
+      if (tabIds.length === 0) {
+        return;
+      }
+      update((state) => closeTabsForceInContext(state, contextId, tabIds, preferredTabId));
     },
     closeMissingFileTabs(): boolean {
       const snapshot = getSnapshot();

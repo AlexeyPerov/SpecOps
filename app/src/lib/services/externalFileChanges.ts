@@ -39,12 +39,14 @@ const runtimeState = {
   inFlightCheckByDocument: new Map<string, Promise<ExternalCheckResult>>(),
   flushingDirtyPrompts: false,
   /**
-   * Paths with an app-initiated save in flight (between `writeTextFile` and
-   * `recordWriteFingerprint`). A watcher event that lands in that window must
-   * not trigger a reload or a dirty prompt — it is the app's own write echoing
-   * back before the fingerprint has been recorded.
+   * Paths with an app-initiated save in flight (between the disk write and
+   * `recordWriteFingerprint`), refcounted per path. A watcher event that
+   * lands in that window must not trigger a reload or a dirty prompt — it is
+   * the app's own write echoing back before the fingerprint has been
+   * recorded. A refcount (not a Set) so overlapping saves to the same path
+   * don't clear the guard while another write is still in flight (H26).
    */
-  saveInFlightByPath: new Set<string>(),
+  saveInFlightByPath: new Map<string, number>(),
 };
 
 let backgroundStartupChecks: Promise<void> | null = null;
@@ -65,12 +67,22 @@ export function resetExternalFileChangesForTests(): void {
 
 /** Mark `path` as having a save in flight (called before the disk write). */
 export function beginSaveInFlight(path: string): void {
-  runtimeState.saveInFlightByPath.add(normalizePathSync(path));
+  const key = normalizePathSync(path);
+  runtimeState.saveInFlightByPath.set(
+    key,
+    (runtimeState.saveInFlightByPath.get(key) ?? 0) + 1,
+  );
 }
 
-/** Clear the in-flight marker once the write fingerprint is recorded. */
+/** Release one in-flight marker once the write fingerprint is recorded. */
 export function clearSaveInFlight(path: string): void {
-  runtimeState.saveInFlightByPath.delete(normalizePathSync(path));
+  const key = normalizePathSync(path);
+  const count = runtimeState.saveInFlightByPath.get(key) ?? 0;
+  if (count <= 1) {
+    runtimeState.saveInFlightByPath.delete(key);
+    return;
+  }
+  runtimeState.saveInFlightByPath.set(key, count - 1);
 }
 
 /**

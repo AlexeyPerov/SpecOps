@@ -178,7 +178,9 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       deps.setProjectSearchStatus(
         matches === 0
           ? "No results"
-          : `${matches} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}`,
+          : `${matches} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}${
+              outcome.truncated ? " (capped — refine the search to see all matches)" : ""
+            }`,
       );
     } catch (error: unknown) {
       if (generation === deps.getProjectSearchGeneration()) {

@@ -38,6 +38,20 @@ type MarkdownHtmlCacheEntry = {
 const markdownHtmlCache = new Map<string, MarkdownHtmlCacheEntry>();
 const MARKDOWN_HTML_CACHE_MAX = 64;
 
+/**
+ * Render document markdown through the shared memo.
+ *
+ * Exported so components that debounce their preview input can render the trailing
+ * content directly instead of going through {@link deriveAppShellDocumentView}, which
+ * only ever sees the live buffer.
+ */
+export function renderMemoizedDocumentMarkdown(
+  content: string,
+  filePath: string | null,
+): string {
+  return getMemoizedMarkdownHtml(content, filePath);
+}
+
 function getMemoizedMarkdownHtml(content: string, filePath: string | null): string {
   const cached = markdownHtmlCache.get(content);
   if (cached && cached.filePath === filePath) {

@@ -18,6 +18,10 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
     sessionMock.readTextFile(...args),
   writeTextFile: (...args: Parameters<typeof sessionMock.writeTextFile>) =>
     sessionMock.writeTextFile(...args),
+  stat: (...args: Parameters<typeof sessionMock.stat>) => sessionMock.stat(...args),
+  rename: (...args: Parameters<typeof sessionMock.rename>) => sessionMock.rename(...args),
+  remove: (...args: Parameters<typeof sessionMock.remove>) => sessionMock.remove(...args),
+  mkdir: (...args: Parameters<typeof sessionMock.mkdir>) => sessionMock.mkdir(...args),
 }));
 
 vi.mock("./appDataDir", () => ({
@@ -529,10 +533,12 @@ describe("persistSessionSnapshot", () => {
     await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
 
     expect(sessionMock.getSessionStore()?.windows["win-a"]).toBeDefined();
-    expect(sessionMock.writeTextFile).toHaveBeenCalledWith(
-      "/data/spec-ops/session.backup.json",
-      expect.any(String),
+    // Writes are atomic (temp + rename), so the backup lands on a
+    // `session.backup.json.<random>.tmp` sibling first.
+    const backupWrite = sessionMock.writeTextFile.mock.calls.find((call) =>
+      String(call[0]).includes("/session.backup.json"),
     );
+    expect(backupWrite).toBeDefined();
   });
 
   it("persists chat-http snapshot alongside notepad/workspaces", async () => {
@@ -596,6 +602,80 @@ describe("persistSessionSnapshot", () => {
   });
 });
 
+describe("removeWindowSessionEntry", () => {
+  beforeEach(() => {
+    sessionManager.resetSessionManagerForTests();
+    sessionMock.restoreFsImplementations();
+  });
+
+  it("deletes the window entry and repoints lastActiveWindowId", async () => {
+    sessionMock.setSessionStore({
+      ...sessionWithWindow("window-x1", windowSnapshot()),
+      lastActiveWindowId: "window-x1",
+    });
+
+    await sessionManager.removeWindowSessionEntry("window-x1");
+
+    const store = sessionMock.getSessionStore();
+    expect(store?.windows["window-x1"]).toBeUndefined();
+    expect(store?.lastActiveWindowId).toBe("main");
+  });
+
+  it("never removes the main window entry", async () => {
+    sessionMock.setSessionStore(sessionWithWindow("main", windowSnapshot()));
+    sessionMock.writeTextFile.mockClear();
+
+    await sessionManager.removeWindowSessionEntry("main");
+
+    expect(sessionMock.getSessionStore()?.windows["main"]).toBeDefined();
+    expect(sessionMock.writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op when the entry does not exist", async () => {
+    sessionMock.setSessionStore(sessionWithWindow("main", windowSnapshot()));
+    sessionMock.writeTextFile.mockClear();
+
+    await sessionManager.removeWindowSessionEntry("window-gone");
+
+    expect(sessionMock.writeTextFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("pruneStaleWindowSessionEntries", () => {
+  beforeEach(() => {
+    sessionManager.resetSessionManagerForTests();
+    sessionMock.restoreFsImplementations();
+  });
+
+  it("removes entries without a live window, keeping main and live labels", async () => {
+    const base = sessionWithWindow("main", windowSnapshot());
+    sessionMock.setSessionStore({
+      ...base,
+      lastActiveWindowId: "window-stale",
+      windows: {
+        ...base.windows,
+        "window-live": windowSnapshot(),
+        "window-stale": windowSnapshot(),
+      },
+    });
+
+    await sessionManager.pruneStaleWindowSessionEntries(["main", "window-live"]);
+
+    const store = sessionMock.getSessionStore();
+    expect(Object.keys(store?.windows ?? {}).sort()).toEqual(["main", "window-live"]);
+    expect(store?.lastActiveWindowId).toBe("main");
+  });
+
+  it("does not write when nothing is stale", async () => {
+    sessionMock.setSessionStore(sessionWithWindow("main", windowSnapshot()));
+    sessionMock.writeTextFile.mockClear();
+
+    await sessionManager.pruneStaleWindowSessionEntries(["main"]);
+
+    expect(sessionMock.writeTextFile).not.toHaveBeenCalled();
+  });
+});
+
 describe("persistGlobalRecentFiles", () => {
   beforeEach(() => {
     sessionMock.restoreFsImplementations();
@@ -608,8 +688,9 @@ describe("persistGlobalRecentFiles", () => {
 
     await sessionManager.persistGlobalRecentFiles(["/tmp/a.txt", "/tmp/b.txt"]);
 
+    // Atomic writes land on a `session.json.<random>.tmp` sibling first.
     const sessionWriteCall = sessionMock.writeTextFile.mock.calls.find((call) =>
-      String(call[0]).endsWith("/session.json"),
+      String(call[0]).includes("/session.json"),
     );
     const written = JSON.parse(String(sessionWriteCall?.[1] ?? "{}"));
     expect(written.recentFiles).toEqual(["/tmp/a.txt", "/tmp/b.txt"]);

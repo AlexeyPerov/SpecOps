@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import MarkdownEditorPane from "./MarkdownEditorPane.svelte";
   import DiffPreviewPane from "./DiffPreviewPane.svelte";
   import ImagePreviewPane from "./ImagePreviewPane.svelte";
@@ -31,6 +32,7 @@
   import {
     deriveAppShellDocumentView,
     isTextEditorDocumentState,
+    renderMemoizedDocumentMarkdown,
   } from "../services/appShellDocumentView";
   import { getDocumentByIdMap } from "../services/tabDocumentLookup";
   import { appSettings } from "../state/appStateSelectors";
@@ -265,10 +267,60 @@
     return paneDocument.markdownViewMode === "split" && canFitMarkdownSplit;
   });
 
-  const documentView = $derived(
-    deriveAppShellDocumentView(paneDocument, {
-      renderMarkdownHtml: shouldRenderMarkdownPreview,
-    }),
+  // `renderMarkdownHtml` is deliberately off: nothing reads `documentView.markdownHtml`
+  // (the preview HTML reaches MarkdownEditorPane via `activePreviewHtml` below), so
+  // asking for it here was a second full markdown parse per keystroke whose result was
+  // thrown away.
+  const documentView = $derived(deriveAppShellDocumentView(paneDocument));
+
+  // ---- Markdown preview content ---------------------------------------------
+  // A markdown parse is proportional to document length and the render memo is keyed
+  // on the content string, so rendering straight from the live buffer meant a
+  // guaranteed cache miss and a full parse on every keystroke while split/preview was
+  // open. The preview instead trails the buffer by a short delay.
+  const PREVIEW_DEBOUNCE_MS = 120;
+  let previewSource = $state<{ documentId: string; content: string } | null>(null);
+
+  $effect(() => {
+    if (!shouldRenderMarkdownPreview || !paneDocument) {
+      return;
+    }
+    const documentId = paneDocument.id;
+    const content = paneDocument.content;
+    // Read without tracking: this effect writes `previewSource`, and tracking its own
+    // write would re-trigger it.
+    const current = untrack(() => previewSource);
+    if (!current || current.documentId !== documentId) {
+      previewSource = { documentId, content };
+      return;
+    }
+    if (current.content === content) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      previewSource = { documentId, content };
+    }, PREVIEW_DEBOUNCE_MS);
+    // Svelte runs this before the next run of the effect, which is what makes the
+    // timer a trailing debounce rather than a queue of pending renders.
+    return () => clearTimeout(timer);
+  });
+
+  const previewContent = $derived.by(() => {
+    if (!shouldRenderMarkdownPreview || !paneDocument) {
+      return null;
+    }
+    // Fall back to the live content when the trailing snapshot belongs to another
+    // document (first render, tab switch) so the preview never shows the previous
+    // document's HTML for a frame.
+    return previewSource && previewSource.documentId === paneDocument.id
+      ? previewSource.content
+      : paneDocument.content;
+  });
+
+  const activePreviewHtml = $derived(
+    previewContent === null
+      ? ""
+      : renderMemoizedDocumentMarkdown(previewContent, paneDocument?.filePath ?? null),
   );
 
   let confirmingDocumentId = $state<string | null>(null);
@@ -498,13 +550,7 @@
     >
       <div class="editor-pane-primary">
         {#each keepAliveEntries as entry (entry.tabId)}
-          {@const entryView = deriveAppShellDocumentView(entry.document, {
-            renderMarkdownHtml:
-              entry.document.language === "markdown"
-                ? entry.document.markdownViewMode === "preview" ||
-                  (entry.document.markdownViewMode === "split" && canFitMarkdownSplit)
-                : false,
-          })}
+          {@const entryView = deriveAppShellDocumentView(entry.document)}
           {@const isEntryActive = entry.tabId === activeTabId}
           <div class="editor-tab-slot" class:editor-tab-slot-hidden={!isEntryActive}>
             <MarkdownEditorPane
@@ -523,7 +569,7 @@
               {showFoldGutter}
               {autoClosePairs}
               {autoSuggest}
-              markdownHtml={entryView.markdownHtml}
+              markdownHtml={isEntryActive ? activePreviewHtml : ""}
               storedMarkdownViewMode={entry.document.markdownViewMode ?? "edit"}
               canFitSplit={canFitMarkdownSplit}
               {windowId}

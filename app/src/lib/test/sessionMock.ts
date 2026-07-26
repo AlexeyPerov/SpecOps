@@ -27,6 +27,25 @@ export function createSessionFsMock() {
     diskFiles.set(path, content);
   });
 
+  /** Metadata-only existence probe mirroring readTextFile's view of disk. */
+  const stat = vi.fn(async (path: string) => {
+    if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
+      if (!sessionStore) {
+        throw new Error("no such file or directory");
+      }
+      return { size: JSON.stringify(sessionStore).length, mtime: new Date() };
+    }
+    if (diskFiles.has(path)) {
+      return { size: diskFiles.get(path)!.length, mtime: new Date() };
+    }
+    throw new Error(`no such file or directory: ${path}`);
+  });
+
+  /** Atomic-write (temp + rename) and lock-dir helpers; permissive no-ops. */
+  const rename = vi.fn(async () => undefined);
+  const remove = vi.fn(async () => undefined);
+  const mkdir = vi.fn(async () => undefined);
+
   function restoreFsImplementations(): void {
     readTextFile.mockReset();
     writeTextFile.mockReset();
@@ -59,6 +78,10 @@ export function createSessionFsMock() {
     },
     readTextFile,
     writeTextFile,
+    stat,
+    rename,
+    remove,
+    mkdir,
     /** Clears call history and restores default read/write implementations. */
     restoreFsImplementations,
   };

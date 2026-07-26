@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
-import { getSessionTabs } from "../domain/contracts";
+import { allTabs, getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { flushMicrotasks } from "../test/sessionMock";
 import { statDiskFingerprint } from "./diskFingerprint";
@@ -139,7 +139,11 @@ describe("checkDocumentExternalChanges", () => {
 
   it("skips re-prompt when dismissed fingerprint matches disk", async () => {
     const documentId = prepareSavedFile("/tmp/dismissed.txt", "local", fp1, true);
-    appState.applyDocumentKeepLocal(documentId, fp2);
+    appState.applyDocumentKeepLocalForContext(
+      appState.getSnapshot().contexts.activeContextId,
+      documentId,
+      fp2,
+    );
     statMock.mockResolvedValue(fp2);
 
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
@@ -655,5 +659,63 @@ describe("cross-context external checks", () => {
     expect(checkedPaths.some((path) => path.endsWith("startup-stale.txt"))).toBe(false);
     expect(appState.getActiveDocuments().find((doc) => doc.id === keepId)?.content).toBe("fresh");
     expect(appState.getActiveDocuments().find((doc) => doc.id === staleId)).toBeUndefined();
+  });
+
+  it("stores Keep Local against the owning workspace and stops re-prompting", async () => {
+    const wsAId = appState.addWorkspace("/tmp/ws-a")!;
+    appState.openFileInTab("/tmp/ws-a/keep.txt", "local");
+    const documentId = appState.findDocumentIdByPath("/tmp/ws-a/keep.txt")!;
+    appState.setDocumentDiskState(documentId, { diskFingerprint: fp1, fileMissing: false });
+    appState.setDocumentContent(documentId, "local edited");
+
+    // Make ws-a inactive: the dismissal used to be written to the active
+    // context, so it never reached the document and the dialog re-opened on
+    // every check.
+    appState.addWorkspace("/tmp/ws-b");
+    expect(appState.getSnapshot().contexts.activeContextId).not.toBe(wsAId);
+
+    statMock.mockResolvedValue(fp2);
+    confirmMock.mockResolvedValue(false);
+
+    await checkDocumentExternalChanges(documentId, "watcher");
+    await flushMicrotasks();
+
+    const documentAfterKeep = appState
+      .getSnapshot()
+      .contexts.workspaces.find((ws) => ws.id === wsAId)
+      ?.snapshot.documents.find((doc) => doc.id === documentId);
+    expect(documentAfterKeep?.dismissedFingerprint).toEqual(fp2);
+    expect(documentAfterKeep?.content).toBe("local edited");
+
+    // Second check against the same disk state must be a no-op.
+    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
+    expect(confirmMock).toHaveBeenCalledOnce();
+  });
+
+  it("closes an inaccessible-file tab that lives in a non-active workspace", async () => {
+    const wsAId = appState.addWorkspace("/tmp/ws-a")!;
+    appState.openFileInTab("/tmp/ws-a/.gitignore", "ignore");
+    const documentId = appState.findDocumentIdByPath("/tmp/ws-a/.gitignore")!;
+    appState.setDocumentDiskState(documentId, { diskFingerprint: fp1, fileMissing: false });
+
+    appState.addWorkspace("/tmp/ws-b");
+    expect(appState.getSnapshot().contexts.activeContextId).not.toBe(wsAId);
+
+    statMock.mockRejectedValue(
+      new Error(
+        "forbidden path: /tmp/ws-a/.gitignore, maybe it is not allowed on the scope for `allow-stat` permission",
+      ),
+    );
+
+    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("skipped");
+
+    // The close used to target the active context, so the tab survived and the
+    // caller retried on every check.
+    const wsA = appState.getSnapshot().contexts.workspaces.find((ws) => ws.id === wsAId);
+    expect(
+      allTabs(wsA!.snapshot.session.editorLayout).some(
+        (tab) => tab.kind === "file" && tab.documentId === documentId,
+      ),
+    ).toBe(false);
   });
 });

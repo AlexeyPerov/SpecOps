@@ -256,10 +256,25 @@ export type MarkdownHeadingSnapshot = {
   line: number;
 };
 
+/** Everything the outline panel needs, read from one editor state. */
+export type MarkdownOutlineSnapshot = {
+  headings: MarkdownHeadingSnapshot[];
+  activeKey: string | null;
+  /** Keys of headings whose section is currently folded. */
+  foldedKeys: string[];
+};
+
 export type EditorMarkdownQueries = {
   getHeadings: () => EditorQueryResult<MarkdownHeadingSnapshot[]>;
   getActiveHeadingKey: () => EditorQueryResult<string | null>;
   isHeadingFolded: (headingKey: string) => EditorQueryResult<boolean>;
+  /**
+   * Batched read for the outline panel.
+   *
+   * Prefer this over calling the three queries above in a loop: it extracts headings
+   * once and resolves folded state in a single pass, instead of once per heading.
+   */
+  getOutlineSnapshot: () => EditorQueryResult<MarkdownOutlineSnapshot>;
 };
 
 /** Grouped read-only queries against the active pane host (M0.4). */

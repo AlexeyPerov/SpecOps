@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, readFile, readTextFile, stat, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readDir, readFile, readTextFile, rename, stat, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
   ensureWorkspaceReadAccess,
   openFileDialog,
@@ -26,6 +26,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   stat: vi.fn(),
   writeTextFile: vi.fn(),
   rename: vi.fn(),
+  remove: vi.fn(),
 }));
 
 vi.mock("./diskFingerprint", async (importOriginal) => {
@@ -65,9 +66,22 @@ const readFileMock = vi.mocked(readFile);
 const readTextFileMock = vi.mocked(readTextFile);
 const statMockFs = vi.mocked(stat);
 const writeTextFileMock = vi.mocked(writeTextFile);
+const renameMock = vi.mocked(rename);
 const statMock = vi.mocked(statDiskFingerprint);
 const recordWriteMock = vi.mocked(recordWriteFingerprint);
 const logDiagnosticMock = vi.mocked(logDiagnostic);
+
+/**
+ * Saves are atomic (temp file + rename over the target — H24), so writes land
+ * on a `<target>.<random>.tmp` sibling. Returns the content written for a
+ * target path regardless of which of the two shapes it took.
+ */
+function writtenContentFor(target: string): string | undefined {
+  const call = writeTextFileMock.mock.calls.find(
+    (c) => String(c[0]) === target || String(c[0]).startsWith(`${target}.`),
+  );
+  return call === undefined ? undefined : String(call[1]);
+}
 
 describe("openPath", () => {
   beforeEach(() => {
@@ -185,14 +199,17 @@ describe("saveFile", () => {
     recordWriteMock.mockReset();
   });
 
-  it("writes content, stats the file, and records the write fingerprint", async () => {
+  it("writes content atomically, stats the file, and records the write fingerprint", async () => {
     const fingerprint = { mtimeMs: 100, sizeBytes: 4 };
     statMock.mockResolvedValue(fingerprint);
 
     await expect(saveFile({ path: "/tmp/save.txt", content: "data" })).resolves.toEqual(
       fingerprint,
     );
-    expect(writeTextFileMock).toHaveBeenCalledWith("/tmp/save.txt", "data");
+    const [tempPath, written] = writeTextFileMock.mock.calls[0];
+    expect(String(tempPath)).toMatch(/^\/tmp\/save\.txt\..+\.tmp$/);
+    expect(written).toBe("data");
+    expect(renameMock).toHaveBeenCalledWith(tempPath, "/tmp/save.txt");
     expect(recordWriteMock).toHaveBeenCalledWith("/tmp/save.txt", fingerprint);
   });
 
@@ -206,7 +223,7 @@ describe("saveFile", () => {
       hasBom: true,
     });
 
-    expect(writeTextFileMock).toHaveBeenCalledWith("/tmp/crlf.txt", "﻿one\r\ntwo");
+    expect(writtenContentFor("/tmp/crlf.txt")).toBe("﻿one\r\ntwo");
   });
 
   it("defaults to LF without a BOM when the caller passes no encoding", async () => {
@@ -214,7 +231,7 @@ describe("saveFile", () => {
 
     await saveFile({ path: "/tmp/plain.txt", content: "one\ntwo" });
 
-    expect(writeTextFileMock).toHaveBeenCalledWith("/tmp/plain.txt", "one\ntwo");
+    expect(writtenContentFor("/tmp/plain.txt")).toBe("one\ntwo");
   });
 });
 
@@ -272,7 +289,7 @@ describe("probeWorkspaceReadAccess", () => {
     readDirMock.mockRejectedValue(new Error("no such file or directory"));
     await expect(probeWorkspaceReadAccess("/tmp/missing")).resolves.toBe("blocked");
     const accessWrites = writeTextFileMock.mock.calls.filter((call) =>
-      String(call[0]).endsWith("/workspace-access.json"),
+      String(call[0]).includes("/workspace-access.json"),
     );
     expect(accessWrites).toHaveLength(0);
   });
@@ -301,7 +318,7 @@ describe("ensureWorkspaceReadAccess", () => {
 
     expect(readDirMock).toHaveBeenCalledWith("/tmp/workspace");
     const writeCall = writeTextFileMock.mock.calls.find((call) =>
-      String(call[0]).endsWith("/workspace-access.json"),
+      String(call[0]).includes("/workspace-access.json"),
     );
     expect(writeCall).toBeDefined();
     const parsed = JSON.parse(String(writeCall?.[1] ?? "{}")) as {

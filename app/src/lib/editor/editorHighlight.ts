@@ -1,6 +1,6 @@
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import type { Extension } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
-import { EditorView } from "@codemirror/view";
 
 function readCSSVar(name: string): string {
   if (typeof document === "undefined") {
@@ -8,6 +8,17 @@ function readCSSVar(name: string): string {
   }
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888";
 }
+
+/**
+ * A `HighlightStyle` is a `StyleModule`: mounting it inserts one CSS rule per
+ * tag into the document and nothing ever removes them. Defining it per
+ * `EditorState` (once per document open, plus once per tab switch) therefore
+ * grows the CSSOM without bound for the whole session. The style is
+ * value-independent — every colour is a CSS variable resolved at paint time, so
+ * theme switches need no rebuild — so it is built once and shared.
+ */
+let highlightStyle: HighlightStyle | null = null;
+let syntaxHighlightExtension: Extension | null = null;
 
 function buildHighlightStyle(): HighlightStyle {
   return HighlightStyle.define([
@@ -45,6 +56,8 @@ function buildHighlightStyle(): HighlightStyle {
   ]);
 }
 
-export function createSyntaxHighlightExtension() {
-  return syntaxHighlighting(buildHighlightStyle());
+export function createSyntaxHighlightExtension(): Extension {
+  highlightStyle ??= buildHighlightStyle();
+  syntaxHighlightExtension ??= syntaxHighlighting(highlightStyle);
+  return syntaxHighlightExtension;
 }

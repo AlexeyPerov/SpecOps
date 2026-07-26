@@ -1,4 +1,5 @@
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import { join } from "@tauri-apps/api/path";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import type {
@@ -28,6 +29,9 @@ export { nextNumericId, sanitizeWindowSnapshot };
 
 const SESSION_FILE = "session.json";
 const SESSION_BACKUP_FILE = "session.backup.json";
+
+/** Label of the primary window; its session entry is what app relaunch restores. */
+export const MAIN_WINDOW_ID = "main";
 
 /**
  * When true, a brand-new window with no `windows[windowId]` entry restores a
@@ -88,12 +92,12 @@ async function writeSessionSnapshot(
 ): Promise<void> {
   const sessionPath = await getSessionPath(SESSION_FILE);
   const content = encodeSessionSnapshot(current);
-  await writeTextFile(sessionPath, content);
+  await atomicWriteTextFile(sessionPath, content);
   if (options?.skipBackup) {
     return;
   }
   const backupPath = await getSessionPath(SESSION_BACKUP_FILE);
-  await writeTextFile(backupPath, content);
+  await atomicWriteTextFile(backupPath, content);
 }
 
 export async function persistGlobalRecentFiles(recentFiles: string[]): Promise<void> {
@@ -130,6 +134,69 @@ export async function persistSessionSnapshot(
       timestamp: new Date().toISOString(),
       message: "session snapshot persisted",
       metadata: { windowId },
+    });
+  });
+}
+
+/**
+ * Remove one window's snapshot from `session.json`.
+ *
+ * Called when a secondary window closes for good: window labels are unique per
+ * creation (see `windowManager.generateWindowLabel`), so the entry can never be
+ * restored and would otherwise sit in `session.json` forever — carrying a full
+ * copy of every open document's text. The main window's entry is what an app
+ * relaunch restores, so it is never removed.
+ */
+export async function removeWindowSessionEntry(windowId: string): Promise<void> {
+  if (windowId === MAIN_WINDOW_ID) {
+    return;
+  }
+  await withSessionWriteLock(async () => {
+    const current = await readSessionSnapshot();
+    if (!(windowId in current.windows)) {
+      return;
+    }
+    delete current.windows[windowId];
+    if (current.lastActiveWindowId === windowId) {
+      current.lastActiveWindowId = MAIN_WINDOW_ID;
+    }
+    current.updatedAt = new Date().toISOString();
+    await writeSessionSnapshot(current);
+  });
+}
+
+/**
+ * Drop `windows[...]` entries whose label does not correspond to a live window
+ * (the main entry is always kept). Runs at startup of the main window: entries
+ * left behind by windows that never got a clean close (app quit, crash) are
+ * unreachable — labels are never reused — so they only bloat `session.json`
+ * with stale document text.
+ */
+export async function pruneStaleWindowSessionEntries(
+  liveWindowIds: Iterable<string>,
+): Promise<void> {
+  const keep = new Set(liveWindowIds);
+  keep.add(MAIN_WINDOW_ID);
+  await withSessionWriteLock(async () => {
+    const current = await readSessionSnapshot();
+    const staleIds = Object.keys(current.windows).filter((id) => !keep.has(id));
+    if (staleIds.length === 0) {
+      return;
+    }
+    for (const id of staleIds) {
+      delete current.windows[id];
+    }
+    if (current.lastActiveWindowId && !keep.has(current.lastActiveWindowId)) {
+      current.lastActiveWindowId = MAIN_WINDOW_ID;
+    }
+    current.updatedAt = new Date().toISOString();
+    await writeSessionSnapshot(current);
+    await logDiagnostic({
+      level: "info",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "pruned stale window session entries",
+      metadata: { staleIds },
     });
   });
 }

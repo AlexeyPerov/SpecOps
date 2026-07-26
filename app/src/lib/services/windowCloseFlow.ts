@@ -5,6 +5,7 @@ import { allContextSnapshots } from "../state/appState/contextHelpers";
 import { requestConfirm } from "./confirmDialogUi";
 import { saveAllDirtyDocumentsToDisk } from "./workspaceCloseFlow";
 import { flushSessionPersistence } from "./sessionManager";
+import { flushSettingsPersistence } from "./appShellEffects";
 import { logDiagnostic } from "./logging";
 
 /** A dirty document together with the context that owns it. */
@@ -147,8 +148,12 @@ export async function requestAppQuit(deps: {
   const mayQuit = await confirmWindowClose({
     getWindowId: deps.getWindowId,
     notify: deps.notify,
-    flushSession: () =>
-      flushSessionPersistence(appState.getSnapshot(), deps.getWindowId()),
+    flushSession: async () => {
+      await flushSessionPersistence(appState.getSnapshot(), deps.getWindowId());
+      // Settings share the debounced-write problem: a change in the last
+      // 300 ms (e.g. a slider drag right before Cmd+Q) would otherwise be lost.
+      await flushSettingsPersistence();
+    },
   });
   if (!mayQuit) {
     return;

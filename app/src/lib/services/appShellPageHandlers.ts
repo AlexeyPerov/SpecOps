@@ -337,6 +337,13 @@ export interface AppShellMountDeps {
    * open. See `windowCloseFlow.confirmWindowClose`.
    */
   confirmWindowClose: () => Promise<boolean>;
+  /**
+   * Removes this window's `windows[...]` entry from session.json once a close is
+   * confirmed. Only invoked for secondary windows: their labels are unique per
+   * creation, so the entry could never be restored and would otherwise persist
+   * (with full document text) forever. See `sessionManager.removeWindowSessionEntry`.
+   */
+  removeWindowSessionEntry?: (windowId: string) => Promise<void>;
   cleanup: AppShellMountCleanup;
 }
 
@@ -460,6 +467,19 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       const mayClose = await deps.confirmWindowClose();
       if (mayClose) {
         closeConfirmed = true;
+        // Secondary windows: drop the session entry the confirm flow just
+        // flushed. It can never be restored (labels are unique per creation)
+        // and would otherwise keep a full copy of the closed tabs' text in
+        // session.json forever. `removeWindowSessionEntry` is a no-op for main.
+        const label = deps.getCurrentWebviewWindowLabel();
+        if (label !== "main" && deps.removeWindowSessionEntry) {
+          try {
+            await deps.removeWindowSessionEntry(label);
+          } catch {
+            // Best-effort: a failed prune must not block the close. The
+            // startup prune in appShellRuntime catches leftovers next launch.
+          }
+        }
         await getCurrentWindow().close();
       }
     } catch (error: unknown) {

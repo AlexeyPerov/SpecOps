@@ -31,12 +31,15 @@ type RuntimeState = {
   >;
   inFlightCheckByDocument: Map<string, Promise<ExternalCheckResult>>;
   flushingDirtyPrompts: boolean;
-  /** Paths with an app save in flight; see externalFileChanges.beginSaveInFlight. */
-  saveInFlightByPath: Set<string>;
+  /**
+   * Refcount of in-flight app saves per path; see
+   * externalFileChanges.beginSaveInFlight.
+   */
+  saveInFlightByPath: Map<string, number>;
 };
 
 function isSaveInFlight(runtime: RuntimeState, path: string): boolean {
-  return runtime.saveInFlightByPath.has(normalizePathSync(path));
+  return (runtime.saveInFlightByPath.get(normalizePathSync(path)) ?? 0) > 0;
 }
 
 function matchesLastWrite(runtime: RuntimeState, path: string, fingerprint: DiskFingerprint): boolean {
@@ -172,7 +175,11 @@ export async function flushDirtyPrompts(
           await reloadDocumentFromDisk(contextId, documentId, filePath);
           deferredDirtyDocumentIds.delete(documentId);
         } else {
-          appState.applyDocumentKeepLocal(documentId, currentFingerprint);
+          appState.applyDocumentKeepLocalForContext(
+            postDialog.contextId,
+            documentId,
+            currentFingerprint,
+          );
           deferredDirtyDocumentIds.delete(documentId);
         }
       } catch {

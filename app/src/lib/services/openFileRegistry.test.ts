@@ -28,6 +28,10 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
     sessionMock.readTextFile(...args),
   writeTextFile: (...args: Parameters<typeof sessionMock.writeTextFile>) =>
     sessionMock.writeTextFile(...args),
+  stat: (...args: Parameters<typeof sessionMock.stat>) => sessionMock.stat(...args),
+  rename: (...args: Parameters<typeof sessionMock.rename>) => sessionMock.rename(...args),
+  remove: (...args: Parameters<typeof sessionMock.remove>) => sessionMock.remove(...args),
+  mkdir: (...args: Parameters<typeof sessionMock.mkdir>) => sessionMock.mkdir(...args),
 }));
 
 vi.mock("./appDataDir", () => ({

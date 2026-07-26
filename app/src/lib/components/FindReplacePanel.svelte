@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import type { EditorCommandRunner } from "../types/editor";
   import { createSearchQuery, validateSearchQuery, type SearchQuery } from "../editor/searchQuery";
 
@@ -220,15 +220,27 @@
     getEditorRunner()?.setSearchQuery(createSearchQuery({ text: "", regexp: false }));
   });
 
+  // Re-apply the current query to the editor when this pane switches to a different
+  // document.
+  //
+  // Deliberately depends on `documentId` alone. `query` is a `$derived` that builds a
+  // fresh object on every keystroke, so tracking it made this effect run the whole
+  // search synchronously on each input — a compartment reconfigure (which rebuilds the
+  // highlight decorations) plus a full-document match count — and then
+  // `scheduleSearch`'s 120 ms timer did the same work again a moment later. The
+  // debounce was doing nothing. Typing, and the three option toggles, all go through
+  // `scheduleSearch`; this effect only covers the document switch.
   $effect(() => {
     if (!mounted || !documentId) {
       return;
     }
-    const runner = getEditorRunner();
-    if (findQuery && runner && validation.ok) {
-      runner.setSearchQuery(query);
-      updateMatchInfo();
-    }
+    untrack(() => {
+      const runner = getEditorRunner();
+      if (findQuery && runner && validation.ok) {
+        runner.setSearchQuery(query);
+        updateMatchInfo();
+      }
+    });
   });
 </script>
 

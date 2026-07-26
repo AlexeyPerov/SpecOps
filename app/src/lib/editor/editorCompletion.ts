@@ -218,11 +218,19 @@ export const localWordSource: CompletionSource = (
 };
 
 /**
+ * Themes are `StyleModule`s and their rules are never unmounted, so building one
+ * per `EditorState` — or per completion-compartment reconfigure, which happens
+ * on every tab switch — grows the CSSOM for the whole session (see the caching
+ * note in `editorExtensions.ts`). Built once and shared.
+ */
+let tooltipTheme: Extension | null = null;
+
+/**
  * Theme rules for the completion tooltip and selected option. Uses existing
  * surface/border/text tokens so completion matches the editor's theme.
  */
 export function completionTheme(): Extension {
-  return EditorView.theme({
+  tooltipTheme ??= EditorView.theme({
     ".cm-tooltip.cm-tooltip-autocomplete": {
       border: "1px solid var(--color-border-subtle)",
       backgroundColor: "var(--color-surface-1)",
@@ -246,6 +254,7 @@ export function completionTheme(): Extension {
       maxHeight: "260px",
     },
   });
+  return tooltipTheme;
 }
 
 /**

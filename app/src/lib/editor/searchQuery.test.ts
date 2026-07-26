@@ -144,6 +144,31 @@ describe("findAllRangesInText", () => {
       { from: 11, to: 15 },
     ]);
   });
+
+  it("restricts the scan to the requested range", () => {
+    // The search-highlight plugin passes the viewport here so it does not sweep the
+    // whole document on every keystroke, scroll and cursor move.
+    const text = Text.of(["alpha beta", "beta gamma"]);
+    expect(findAllRangesInText(text, lit("beta"), { from: 0, to: 10 })).toEqual([
+      { from: 6, to: 10 },
+    ]);
+    expect(findAllRangesInText(text, lit("beta"), { from: 11, to: text.length })).toEqual([
+      { from: 11, to: 15 },
+    ]);
+  });
+
+  it("clamps an out-of-bounds range instead of throwing", () => {
+    const text = Text.of(["alpha beta"]);
+    expect(findAllRangesInText(text, lit("beta"), { from: -500, to: 5000 })).toEqual([
+      { from: 6, to: 10 },
+    ]);
+  });
+
+  it("returns nothing for an empty or inverted range", () => {
+    const text = Text.of(["alpha beta"]);
+    expect(findAllRangesInText(text, lit("beta"), { from: 5, to: 5 })).toEqual([]);
+    expect(findAllRangesInText(text, lit("beta"), { from: 8, to: 2 })).toEqual([]);
+  });
 });
 
 describe("expandReplacement", () => {

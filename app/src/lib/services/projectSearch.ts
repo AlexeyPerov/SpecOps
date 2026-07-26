@@ -1,10 +1,26 @@
 import { collectOpenableFolderFiles } from "./folderOpenableFiles";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile, stat } from "@tauri-apps/plugin-fs";
+import { isImageFilePath } from "./fileContentKind";
 import {
   findAllRangesInString,
   validateSearchQuery,
   type SearchQuery,
 } from "../editor/searchQuery";
+
+/**
+ * Per-file size cap (H28). The openable-file catalog admits any file without a
+ * dot in its basename, so one multi-hundred-MB extensionless file would
+ * otherwise be pulled fully through IPC and can OOM the webview. Checked via
+ * `stat` before reading.
+ */
+export const MAX_SEARCH_FILE_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Total match cap (H28). Results are rendered unvirtualized; an
+ * over-productive query (e.g. searching for `e`) should stop early instead of
+ * building an unbounded result set.
+ */
+export const MAX_SEARCH_TOTAL_MATCHES = 10_000;
 
 /** A single match inside a file. */
 export interface ProjectSearchMatch {
@@ -44,7 +60,12 @@ export interface SearchInProjectOptions {
  * error when the query itself is invalid (e.g. bad regex).
  */
 export type ProjectSearchOutcome =
-  | { ok: true; results: ProjectSearchResult[] }
+  | {
+      ok: true;
+      results: ProjectSearchResult[];
+      /** True when the search stopped early at {@link MAX_SEARCH_TOTAL_MATCHES}. */
+      truncated?: boolean;
+    }
   | { ok: false; reason: string };
 
 /**
@@ -133,9 +154,24 @@ export async function searchInProject(
       ? options.files
       : await collectOpenableFolderFiles(workspaceRoot);
   const results: ProjectSearchResult[] = [];
+  let totalMatches = 0;
+  let truncated = false;
   for (const path of files) {
     if (options.onProgress?.(path) === false) {
       break;
+    }
+    // Images are "openable" (they render in a preview pane) but are not text;
+    // decoding them as UTF-8 just produces garbage matches.
+    if (isImageFilePath(path)) {
+      continue;
+    }
+    try {
+      const info = await stat(path);
+      if (Number(info.size) > MAX_SEARCH_FILE_BYTES) {
+        continue;
+      }
+    } catch {
+      continue;
     }
     let content: string;
     try {
@@ -144,9 +180,17 @@ export async function searchInProject(
       continue;
     }
     const matches = computeFileMatches(content, query);
-    if (matches.length > 0) {
-      results.push({ path, matches });
+    if (matches.length === 0) {
+      continue;
     }
+    const remaining = MAX_SEARCH_TOTAL_MATCHES - totalMatches;
+    if (matches.length >= remaining) {
+      results.push({ path, matches: matches.slice(0, remaining) });
+      truncated = true;
+      break;
+    }
+    results.push({ path, matches });
+    totalMatches += matches.length;
   }
-  return { ok: true, results };
+  return { ok: true, results, truncated };
 }

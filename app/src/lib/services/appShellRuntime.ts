@@ -1,6 +1,6 @@
 import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
@@ -29,7 +29,11 @@ import {
   type MergeTabPayload,
   markWindowActive,
 } from "./windowManager";
-import { restoreWindowSession } from "./sessionManager";
+import {
+  MAIN_WINDOW_ID,
+  pruneStaleWindowSessionEntries,
+  restoreWindowSession,
+} from "./sessionManager";
 import { applyWindowBounds, readWindowBounds } from "./windowBounds";
 import { syncOpenFileRegistryForWindow, claimOpenFile, releaseAllOpenFilesForWindow } from "./openFileRegistry";
 import {
@@ -451,6 +455,17 @@ async function startAppShellRuntimeInner(
 
   void runSafeStartupPhase("load-project-tree", async () => {
     await options.loadProjectTreeRoot();
+  });
+
+  void runSafeStartupPhase("prune-stale-window-sessions", async () => {
+    // Main window only: it is the first window up on a fresh launch, so any
+    // windows[...] entry without a live window is left over from a previous
+    // run and — labels never being reused — can never be restored again.
+    if (windowId !== MAIN_WINDOW_ID) {
+      return;
+    }
+    const liveWindows = await getAllWebviewWindows();
+    await pruneStaleWindowSessionEntries(liveWindows.map((w) => w.label));
   });
 
   void runSafeStartupPhase("startup-external-checks", async () => {

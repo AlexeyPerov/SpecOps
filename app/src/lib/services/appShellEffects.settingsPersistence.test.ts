@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultSettings } from "../state/appState/settingsSlice";
 import type { AppDomainState } from "../domain/contracts";
+import { createSinglePaneLayout } from "../domain/contracts";
 import {
+  flushSettingsPersistence,
   resetAppShellEffectsForTests,
   syncSettingsPersistenceEffect,
 } from "./appShellEffects";
@@ -23,10 +25,7 @@ function makeState(overrides: Partial<AppDomainState> = {}): AppDomainState {
       notepad: {
         documents: [],
         session: {
-          editorLayout: {
-            panes: [],
-            activePaneId: "pane-1",
-          },
+          editorLayout: createSinglePaneLayout([], null),
           lastActiveWindowId: "main",
           windowBounds: null,
           lastActiveSessionId: null,
@@ -35,10 +34,7 @@ function makeState(overrides: Partial<AppDomainState> = {}): AppDomainState {
       chatHttp: {
         documents: [],
         session: {
-          editorLayout: {
-            panes: [],
-            activePaneId: "pane-1",
-          },
+          editorLayout: createSinglePaneLayout([], null),
           lastActiveWindowId: "main",
           windowBounds: null,
           lastActiveSessionId: null,
@@ -49,8 +45,9 @@ function makeState(overrides: Partial<AppDomainState> = {}): AppDomainState {
     settings: defaultSettings,
     theme: {
       mode: "auto",
-      darkThemeId: { kind: "builtin", id: "dark" },
-      lightThemeId: { kind: "builtin", id: "light" },
+      darkTheme: { kind: "builtin", id: "dark-amber" },
+      lightTheme: { kind: "builtin", id: "light-blue" },
+      manualTheme: { kind: "builtin", id: "dark-amber" },
       customThemes: [],
     },
     recentFiles: [],
@@ -69,8 +66,13 @@ function makeState(overrides: Partial<AppDomainState> = {}): AppDomainState {
 
 describe("syncSettingsPersistenceEffect", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     resetAppShellEffectsForTests();
     saveMock.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("skips disk write when only cursor fields change", () => {
@@ -80,6 +82,7 @@ describe("syncSettingsPersistenceEffect", () => {
       currentWindowId: "main",
       snapshot: base,
     });
+    vi.runAllTimers();
     expect(saveMock).toHaveBeenCalledTimes(1);
 
     syncSettingsPersistenceEffect({
@@ -94,6 +97,7 @@ describe("syncSettingsPersistenceEffect", () => {
         },
       }),
     });
+    vi.runAllTimers();
     expect(saveMock).toHaveBeenCalledTimes(1);
   });
 
@@ -104,6 +108,7 @@ describe("syncSettingsPersistenceEffect", () => {
       currentWindowId: "main",
       snapshot: base,
     });
+    vi.runAllTimers();
 
     syncSettingsPersistenceEffect({
       runtimeReady: true,
@@ -115,7 +120,47 @@ describe("syncSettingsPersistenceEffect", () => {
         },
       }),
     });
+    vi.runAllTimers();
     expect(saveMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("debounces rapid settings changes into one write", () => {
+    const base = makeState();
+    for (let scaleOffset = 1; scaleOffset <= 10; scaleOffset += 1) {
+      syncSettingsPersistenceEffect({
+        runtimeReady: true,
+        currentWindowId: "main",
+        snapshot: makeState({
+          settings: {
+            ...base.settings,
+            fontSettings: {
+              ...base.settings.fontSettings,
+              editorScale: 100 + scaleOffset,
+            },
+          },
+        }),
+      });
+    }
+    expect(saveMock).not.toHaveBeenCalled();
+    vi.runAllTimers();
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    const persisted = saveMock.mock.calls[0]?.[0] as { fontSettings: { editorScale: number } };
+    expect(persisted.fontSettings.editorScale).toBe(110);
+  });
+
+  it("flushSettingsPersistence writes pending settings immediately", async () => {
+    const base = makeState();
+    syncSettingsPersistenceEffect({
+      runtimeReady: true,
+      currentWindowId: "main",
+      snapshot: base,
+    });
+    expect(saveMock).not.toHaveBeenCalled();
+    await flushSettingsPersistence();
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    // No pending write left behind for the timer to repeat.
+    vi.runAllTimers();
+    expect(saveMock).toHaveBeenCalledTimes(1);
   });
 });
 

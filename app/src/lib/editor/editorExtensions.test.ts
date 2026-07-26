@@ -3,11 +3,26 @@ import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import {
   BASE_KEYMAP_PRECEDENCE,
+  applyWrap,
+  applyZoom,
   buildNamedExtensionGroups,
   createEditorExtensionCompartments,
   flattenExtensionGroups,
 } from "./editorExtensions";
 import { createSearchHighlightExtension } from "./searchHighlight";
+
+/** Total CSS rules injected into the document by every mounted StyleModule. */
+function countInjectedStyleRules(): number {
+  let total = 0;
+  for (const style of Array.from(document.querySelectorAll("style"))) {
+    try {
+      total += style.sheet?.cssRules.length ?? 0;
+    } catch {
+      // Unreadable sheet — ignore.
+    }
+  }
+  return total;
+}
 
 describe("editorExtensions", () => {
   it("documents base keymap precedence", () => {
@@ -53,6 +68,58 @@ describe("editorExtensions", () => {
     expect(a.language).not.toBe(b.language);
     expect(a.fold).toBeInstanceOf(Compartment);
     expect(a.completion).toBeInstanceOf(Compartment);
+  });
+
+  it("does not grow the CSSOM per editor state or repeated zoom/wrap toggle", () => {
+    // Themes are StyleModules and style-mod only ever inserts rules — nothing
+    // unmounts them. Rebuilding a theme per EditorState (one per document open)
+    // or per toggle grew the stylesheet for the whole session.
+    const mounted: Array<{ view: EditorView; parent: HTMLElement }> = [];
+    const mount = () => {
+      const compartments = createEditorExtensionCompartments();
+      const parent = document.createElement("div");
+      document.body.appendChild(parent);
+      const view = new EditorView({
+        parent,
+        extensions: flattenExtensionGroups(
+          buildNamedExtensionGroups({
+            compartments,
+            language: "markdown",
+            showMinimap: true,
+            wrapLines: true,
+          }),
+        ),
+      });
+      mounted.push({ view, parent });
+      return { view, compartments };
+    };
+
+    try {
+      const first = mount();
+      const afterFirstMount = countInjectedStyleRules();
+      expect(afterFirstMount).toBeGreaterThan(0);
+
+      mount();
+      mount();
+      expect(countInjectedStyleRules()).toBe(afterFirstMount);
+
+      // A genuinely new font size inserts one rule set; repeating known sizes
+      // must reuse it.
+      applyZoom(first.view, first.compartments.fontSize, 150);
+      const afterNewZoom = countInjectedStyleRules();
+      for (let i = 0; i < 5; i += 1) {
+        applyZoom(first.view, first.compartments.fontSize, 100);
+        applyZoom(first.view, first.compartments.fontSize, 150);
+        applyWrap(first.view, first.compartments.lineWrap, false);
+        applyWrap(first.view, first.compartments.lineWrap, true);
+      }
+      expect(countInjectedStyleRules()).toBe(afterNewZoom);
+    } finally {
+      for (const { view, parent } of mounted) {
+        view.destroy();
+        parent.remove();
+      }
+    }
   });
 
   it("reconfigures search without touching unrelated compartments", () => {

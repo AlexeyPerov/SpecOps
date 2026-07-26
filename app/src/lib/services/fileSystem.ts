@@ -1,5 +1,6 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, readFile, readTextFile, rename, stat, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readDir, readFile, readTextFile, rename, stat } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import type { FileContentKind } from "./fileContentKind";
 import { inferFileContentKind } from "./fileContentKind";
 import { join } from "@tauri-apps/api/path";
@@ -87,7 +88,7 @@ async function readWorkspaceAccessSnapshot(): Promise<WorkspaceAccessSnapshot | 
 
 async function writeWorkspaceAccessSnapshot(snapshot: WorkspaceAccessSnapshot): Promise<void> {
   const path = await getWorkspaceAccessFilePath();
-  await writeTextFile(path, JSON.stringify(snapshot, null, 2));
+  await atomicWriteTextFile(path, JSON.stringify(snapshot, null, 2));
 }
 
 async function rememberWorkspaceReadAccess(normalizedRootPath: string): Promise<void> {
@@ -185,19 +186,47 @@ function encodeForDisk(content: string, options?: TextEncodeOptions): string {
   });
 }
 
+/**
+ * Per-path save serialization (H26). `dispatchCommand` is fire-and-forget, so
+ * two rapid Cmd+S runs can overlap; without a queue save A's cleanup races
+ * save B's write and a watcher event can observe a half-written file. Entries
+ * are pruned once the last queued write for a path settles.
+ */
+const writeQueueByPath = new Map<string, Promise<void>>();
+
+function withPathWriteQueue<T>(path: string, fn: () => Promise<T>): Promise<T> {
+  const key = normalizePathSync(path);
+  const previous = writeQueueByPath.get(key) ?? Promise.resolve();
+  const run = previous.then(fn, fn);
+  const settled = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  writeQueueByPath.set(key, settled);
+  void settled.then(() => {
+    if (writeQueueByPath.get(key) === settled) {
+      writeQueueByPath.delete(key);
+    }
+  });
+  return run;
+}
+
 export async function saveFile(payload: FileSavePayload): Promise<DiskFingerprint> {
-  // Mark the save as in-flight around the write so a watcher event landing
-  // between the disk write and the fingerprint record is recognized as the
-  // app's own write (self-echo) and does not trigger a reload or prompt.
-  beginSaveInFlight(payload.path);
-  try {
-    await writeTextFile(payload.path, encodeForDisk(payload.content, payload));
-    const fingerprint = await statDiskFingerprint(payload.path);
-    recordWriteFingerprint(payload.path, fingerprint);
-    return fingerprint;
-  } finally {
-    clearSaveInFlight(payload.path);
-  }
+  // Serialize writes per path, and mark the save as in-flight around the
+  // write so a watcher event landing between the disk write and the
+  // fingerprint record is recognized as the app's own write (self-echo) and
+  // does not trigger a reload or prompt.
+  return withPathWriteQueue(payload.path, async () => {
+    beginSaveInFlight(payload.path);
+    try {
+      await atomicWriteTextFile(payload.path, encodeForDisk(payload.content, payload));
+      const fingerprint = await statDiskFingerprint(payload.path);
+      recordWriteFingerprint(payload.path, fingerprint);
+      return fingerprint;
+    } finally {
+      clearSaveInFlight(payload.path);
+    }
+  });
 }
 
 export async function saveFileAs(
@@ -212,15 +241,17 @@ export async function saveFileAs(
   if (!selectedPath) {
     return null;
   }
-  beginSaveInFlight(selectedPath);
-  try {
-    await writeTextFile(selectedPath, encodeForDisk(content, encodeOptions));
-    const fingerprint = await statDiskFingerprint(selectedPath);
-    recordWriteFingerprint(selectedPath, fingerprint);
-    return { path: selectedPath, fingerprint };
-  } finally {
-    clearSaveInFlight(selectedPath);
-  }
+  return withPathWriteQueue(selectedPath, async () => {
+    beginSaveInFlight(selectedPath);
+    try {
+      await atomicWriteTextFile(selectedPath, encodeForDisk(content, encodeOptions));
+      const fingerprint = await statDiskFingerprint(selectedPath);
+      recordWriteFingerprint(selectedPath, fingerprint);
+      return { path: selectedPath, fingerprint };
+    } finally {
+      clearSaveInFlight(selectedPath);
+    }
+  });
 }
 
 export async function renameFile(oldPath: string): Promise<string | null> {

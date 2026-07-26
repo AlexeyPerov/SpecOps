@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import { IMPORTED_THEMES } from "../styles/importedThemes";
 import type { BuiltinThemeId } from "../styles/themeTokens";
 import {
@@ -381,5 +382,5 @@ export async function saveThemeFile(data: ThemeFileV2): Promise<void> {
     customThemes: data.customThemes,
   });
   const path = await getThemeFilePath();
-  await writeTextFile(path, JSON.stringify(normalized, null, 2));
+  await atomicWriteTextFile(path, JSON.stringify(normalized, null, 2));
 }

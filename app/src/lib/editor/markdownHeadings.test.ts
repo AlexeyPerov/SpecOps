@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { EditorState } from "@codemirror/state";
 import {
   activeMarkdownHeading,
+  extractMarkdownHeadings,
   extractMarkdownHeadingsFromText,
   filterMarkdownHeadings,
 } from "./markdownHeadings";
@@ -77,5 +79,25 @@ describe("extractMarkdownHeadings scale", () => {
     expect(headings).toHaveLength(2000);
     // Agreed budget: under 1.5s in CI/jsdom (typically far lower).
     expect(elapsed).toBeLessThan(1500);
+  });
+});
+
+describe("extractMarkdownHeadings memoization", () => {
+  it("computes once per EditorState and recomputes for a new one", () => {
+    // The outline panel asks for the heading list, the active heading and the folded
+    // state of every heading against the same state, on a poll. Without the memo that
+    // was `2 + headings` full-document parses per tick.
+    const state = EditorState.create({ doc: "# One\n\n## Two\n" });
+
+    const first = extractMarkdownHeadings(state);
+    const second = extractMarkdownHeadings(state);
+
+    expect(second).toBe(first);
+    expect(first.map((heading) => heading.text)).toEqual(["One", "Two"]);
+
+    const edited = EditorState.create({ doc: "# One\n\n## Two\n\n### Three\n" });
+    const afterEdit = extractMarkdownHeadings(edited);
+    expect(afterEdit).not.toBe(first);
+    expect(afterEdit.map((heading) => heading.text)).toEqual(["One", "Two", "Three"]);
   });
 });

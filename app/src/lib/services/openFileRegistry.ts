@@ -1,5 +1,6 @@
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
+import { atomicWriteTextFile } from "./atomicWrite";
 import type {
   AppDomainState,
   AppSessionSnapshot,
@@ -55,7 +56,7 @@ async function readSessionSnapshot(): Promise<AppSessionSnapshot | null> {
 
 async function writeSessionSnapshot(snapshot: AppSessionSnapshot): Promise<void> {
   const sessionPath = await getSessionPath();
-  await writeTextFile(sessionPath, JSON.stringify(snapshot, null, 2));
+  await atomicWriteTextFile(sessionPath, JSON.stringify(snapshot, null, 2));
 }
 
 function buildRegistryForWindow(

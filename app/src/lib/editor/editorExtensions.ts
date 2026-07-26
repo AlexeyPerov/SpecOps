@@ -141,12 +141,29 @@ export function createEditorExtensionCompartments(): EditorExtensionCompartments
   };
 }
 
+/**
+ * Themes are `StyleModule`s: mounting one inserts its rules into the document
+ * and style-mod never removes them. Building a fresh theme per `EditorState`
+ * (one per document open, one per tab switch) or per zoom/wrap toggle therefore
+ * grows the CSSOM without bound for the lifetime of the session, slowing every
+ * style recalculation. Every theme in this module is built once and shared;
+ * value-dependent themes are memoized on the value that actually reaches CSS,
+ * which keeps the number of inserted rule sets finite.
+ */
+let baseFontSizeTheme: Extension | null = null;
+const zoomFontSizeThemes = new Map<number, Extension>();
+let wrapLinesTheme: Extension | null = null;
+let surfaceTheme: Extension | null = null;
+
+const NO_EXTENSION: Extension = [];
+
 function baseFontSizeExtension(): Extension {
-  return EditorView.theme({
+  baseFontSizeTheme ??= EditorView.theme({
     "&": {
       fontSize: "var(--font-size-editor, 13px)",
     },
   });
+  return baseFontSizeTheme;
 }
 
 function zoomFontSizeExtension(zoomPercent: number): Extension {
@@ -155,18 +172,27 @@ function zoomFontSizeExtension(zoomPercent: number): Extension {
   }
   const base = resolveEditorBaseFontSizePx();
   const px = Math.round((base * zoomPercent) / 100);
-  return EditorView.theme({
+  // Keyed on the resolved pixel size, not the percent: that is the only value
+  // that reaches CSS, so a changed base font size still produces a fresh theme
+  // while repeated zooms to the same size reuse one.
+  const cached = zoomFontSizeThemes.get(px);
+  if (cached) {
+    return cached;
+  }
+  const theme = EditorView.theme({
     "&": {
       fontSize: `${px}px`,
     },
   });
+  zoomFontSizeThemes.set(px, theme);
+  return theme;
 }
 
 function wrapLinesExtension(wrapLines: boolean): Extension {
   if (!wrapLines) {
-    return [];
+    return NO_EXTENSION;
   }
-  return [
+  wrapLinesTheme ??= [
     EditorView.lineWrapping,
     EditorView.theme({
       ".cm-scroller": {
@@ -174,6 +200,7 @@ function wrapLinesExtension(wrapLines: boolean): Extension {
       },
     }),
   ];
+  return wrapLinesTheme;
 }
 
 function plaintextDecorationExtension(
@@ -187,7 +214,7 @@ function plaintextDecorationExtension(
 }
 
 function editorSurfaceTheme(): Extension {
-  return EditorView.theme({
+  surfaceTheme ??= EditorView.theme({
     "&": {
       height: "100%",
       width: "100%",
@@ -227,6 +254,7 @@ function editorSurfaceTheme(): Extension {
       background: "var(--color-hover)",
     },
   });
+  return surfaceTheme;
 }
 
 /** Ordered extension list with named group markers for tests. */

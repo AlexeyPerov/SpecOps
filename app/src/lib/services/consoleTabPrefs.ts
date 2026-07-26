@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 
 export const DEFAULT_CONSOLE_HEIGHT_PX = 180;
@@ -60,7 +61,7 @@ async function readSnapshot(): Promise<ConsolePrefsSnapshot | null> {
 
 async function writeSnapshot(snapshot: ConsolePrefsSnapshot): Promise<void> {
   const prefsPath = await getPrefsPath();
-  await writeTextFile(prefsPath, JSON.stringify(snapshot, null, 2));
+  await atomicWriteTextFile(prefsPath, JSON.stringify(snapshot, null, 2));
 }
 
 async function loadOrCreateSnapshot(): Promise<ConsolePrefsSnapshot> {

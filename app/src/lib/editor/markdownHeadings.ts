@@ -93,10 +93,37 @@ function extractHeadingsFromTree(
 }
 
 /**
+ * Per-`EditorState` memo for {@link extractMarkdownHeadings}.
+ *
+ * An `EditorState` is immutable and replaced on every transaction, so keying on it
+ * gives exactly "compute once per document version" with no invalidation logic. A
+ * `WeakMap` means entries disappear with the state they describe.
+ *
+ * This matters because extraction is expensive — `ensureSyntaxTree` with a 5s budget,
+ * and a fresh `EditorState` plus a full Lezer parse on the fallback path — while the
+ * callers are chatty: the outline panel asks for the heading list, the active heading,
+ * and the folded state of *each* heading, all against the same state, on a 500ms poll.
+ * That was `2 + headings` full-document parses twice a second on a large file.
+ */
+const headingsByState = new WeakMap<EditorState, MarkdownHeading[]>();
+
+/**
  * Extract headings from an EditorState syntax tree.
  * Ignores headings nested inside FencedCode / CodeBlock / HTMLBlock.
+ *
+ * Memoized per state; see {@link headingsByState}.
  */
 export function extractMarkdownHeadings(state: EditorState): MarkdownHeading[] {
+  const cached = headingsByState.get(state);
+  if (cached) {
+    return cached;
+  }
+  const headings = computeMarkdownHeadings(state);
+  headingsByState.set(state, headings);
+  return headings;
+}
+
+function computeMarkdownHeadings(state: EditorState): MarkdownHeading[] {
   // Large documents may not be fully parsed yet; wait briefly for a complete tree.
   ensureSyntaxTree(state, state.doc.length, 5000);
   const tree = syntaxTree(state);

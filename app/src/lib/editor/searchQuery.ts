@@ -127,16 +127,34 @@ export function createSearchQuery(params: {
  * Uses `RegExpCursor` which iterates line-by-line and correctly skips
  * zero-length matches to avoid infinite loops.
  */
-export function findAllRangesInText(text: Text, query: SearchQuery): MatchRange[] {
+export function findAllRangesInText(
+  text: Text,
+  query: SearchQuery,
+  /**
+   * Restrict the scan to a document slice. Used by viewport-scoped consumers such as
+   * the search-highlight decorations, which only need matches the user can see —
+   * scanning the whole document there costs a full `RegExpCursor` sweep per update.
+   */
+  range?: { from: number; to: number },
+): MatchRange[] {
   const compiled = compileQuery(query);
   if (!compiled) {
     return [];
   }
+  const from = Math.max(0, range?.from ?? 0);
+  const to = Math.min(text.length, range?.to ?? text.length);
+  if (from >= to) {
+    return [];
+  }
   const ranges: MatchRange[] = [];
   try {
-    const cursor = new RegExpCursor(text, compiled.source, {
-      ignoreCase: compiled.ignoreCase,
-    });
+    const cursor = new RegExpCursor(
+      text,
+      compiled.source,
+      { ignoreCase: compiled.ignoreCase },
+      from,
+      to,
+    );
     while (!cursor.next().done) {
       ranges.push({ from: cursor.value.from, to: cursor.value.to });
     }

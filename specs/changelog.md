@@ -1,5 +1,151 @@
 # Changelog
 
+## 2026-07-26 — Atomic persistence writes, a cross-window session lock, and bounded traversal/search
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering H24–H29. The
+first three close the "no atomic writes and no write serialization" cross-cutting theme;
+the rest bound unbatched I/O on startup, catalog builds, and project search.
+
+- **Every save truncated the target in place (H24).** A plain `writeTextFile` truncates
+  before writing, so a crash or full disk mid-write left the file empty or partial — for
+  `session.json` that meant every open tab's unsaved content. The temp-file + rename
+  pattern from the H23 settings fix is extracted into a shared `atomicWriteTextFile`
+  (temp sibling in the same directory so the rename can't degrade into a copy, with a
+  direct-write fallback for filesystems that refuse rename-over-existing) and applied to
+  user-file saves, `session.json` and its backup, the open-file registry writer,
+  `theme.json`, `workspace-access.json`, `console-tab-prefs.json`, and project
+  replace-all.
+
+- **Session restore read every open file's full contents just to test existence (H25).**
+  `fileStillExists` was `readTextFile`, called once per restored file tab across every
+  context — startup I/O proportional to total open-file bytes. It is now a metadata
+  `stat`, keeping the "unknown errors count as existing" semantics.
+
+- **Overlapping saves cleared the self-write guard early (H26).** The in-flight marker
+  was a Set, so save A's `finally` deleted it while save B was still writing; a watcher
+  event in that window could stat a half-written file and auto-reload it into the buffer.
+  The marker is now a per-path refcount, and `saveFile`/`saveFileAs` writes are
+  serialized through a per-path queue — which, with H24, also removes the torn-file
+  window itself.
+
+- **Workspace enumeration paid one IPC round-trip per directory entry (H27).** The walk
+  called the async `@tauri-apps/api/path.join` per entry while the module already had a
+  synchronous `joinDirectoryPath`. Paths are now joined in-process, and the walk gained a
+  depth cap (64) and a file-count cap (100 000), surfaced as an optional `truncated` flag
+  so consumers see a partial catalog instead of an unbounded walk.
+
+- **Project search read every catalog file fully with no size cap (H28).** The catalog
+  admits image files and anything without a dot in its basename, so PNGs were decoded as
+  UTF-8 and one huge extensionless file could OOM the webview. Search now skips image
+  paths, `stat`s each file and skips anything over 4 MiB, and stops at 10 000 matches —
+  with the truncation called out in the results status line.
+
+- **The session write lock only locked one window (H29).** Each webview is its own JS
+  realm, so the promise chain serialized nothing across windows and concurrent RMWs could
+  drop `openFileRegistry` claims and `windows[...]` entries. The chain now acquires a
+  cross-window lock directory (`session.json.lock` next to the file; `mkdir` is atomic)
+  around each mutation, breaks stale locks by age (crashed holder), and degrades to the
+  in-window chain — never blocking a save — when the lock can't be acquired or the
+  filesystem is unavailable (tests, startup races).
+
+## 2026-07-26 — Stop the editor stylesheet growing without bound, cap minimap work, and target cross-context writes
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering H16–H19. The
+first two are unbounded work in the editor; the last two are state writes aimed at the
+wrong context.
+
+- **Every editor theme was rebuilt per `EditorState`, and their CSS rules are never
+  removed (H16).** A theme (and a `HighlightStyle`) is a `StyleModule`: mounting it inserts
+  rules and style-mod has no unmount path. The syntax highlight style alone defines ~33
+  rules and was redefined for every document opened; the surface, fold, bookmark and
+  completion-tooltip themes added ~20 more, and `applyZoom` / `applyWrap` inserted another
+  rule set per call. Because `switchDocument` clears `lastCompletionKey`, even a
+  session-cache *hit* re-inserted the tooltip theme. The CSSOM therefore grew for the
+  lifetime of the session, slowing every style recalculation. All of them are now built
+  once and shared. The two value-dependent themes are memoized: wrap on the flag, zoom on
+  the resolved pixel size rather than the percent, so a changed base font size still
+  produces a fresh theme while repeated zooms reuse one. Covered by a test that mounts
+  several editors and toggles zoom/wrap in a loop, asserting the injected rule count stops
+  growing.
+
+- **The minimap rebuilt a per-line array for the whole document on every keystroke (H17).**
+  Painting is viewport-scoped but the package's line-index `StateField` is not — it
+  re-iterates every line on each `docChanged` and on each fold change, with no size
+  threshold. The facet now returns `null` above 500 000 characters or 20 000 lines, which
+  makes the package skip the index entirely, and the guard is re-evaluated per document
+  change so paste/delete take effect immediately in both directions. Returning the same
+  config object keeps the facet value stable, so nothing downstream recomputes.
+
+- **"Keep Local" was written to the active context, so the reload prompt never stopped
+  reopening (H18).** Every other write in the dirty-prompt flush targets the context
+  resolved for the document, but the dismissal used `patchActiveContext`. For a document in
+  a non-active workspace the `dismissedFingerprint` went nowhere, `shouldSkipAsDismissed`
+  never fired, and the dialog came back on every focus and watcher check. Replaced with
+  `applyDocumentKeepLocalForContext`, targeted at the context re-resolved after the dialog;
+  no active-context variant is left behind, because nothing but this flow dismisses a
+  prompt.
+
+- **Closing a tab found by searching every context silently did nothing (H19).**
+  `removeInaccessibleDocumentTab` walks all contexts to locate the tab, then closed it
+  through `closeTabsByIds` → `patchActiveContext`. When the tab lived elsewhere the close
+  was a no-op, so the caller retried on every check — permanent log spam and a permanently
+  broken tab. Added `closeTabsForceInContext` / `closeTabsByIdsInContext` (with
+  `closeTabInPaneForceOnContext` now deciding the replacement-draft case against the target
+  context rather than the active one) and passed the owning context through. The identical
+  no-op in `closeTabsForDeletedDocumentsUnderPath`, which collects tab ids from one
+  workspace's snapshot, is fixed the same way.
+
+## 2026-07-25 22:10 — Stop per-keystroke full-document work in outline, search highlight, find panel and markdown preview
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering H12–H15.
+All four were the same shape: work proportional to the whole document, repeated on
+every keystroke or cursor move.
+
+- **The outline panel ran `2 + headings` full-document parses per poll tick (H12).**
+  `extractMarkdownHeadings` calls `ensureSyntaxTree` with a 5s budget and, when the
+  incremental tree is short, builds a fresh `EditorState` and does a complete Lezer
+  parse. The panel called it once for the heading list, once for the active heading, and
+  once more *per heading* to read folded state — twice a second, forever, via the 500ms
+  fallback poll. Extraction is now memoized per `EditorState` (immutable and replaced
+  each transaction, so a `WeakMap` gives exact "once per document version" semantics
+  with no invalidation), and a batched `getOutlineSnapshot()` query returns headings,
+  active key and folded keys from one pass — which also drops the linear `find` the
+  panel was doing per heading.
+
+- **Search highlighting swept the entire document on every cursor move (H13).** The
+  view plugin rebuilt decorations on `selectionSet` and `buildDecorations` was not
+  viewport-scoped, so arrow-keying with Find open ran a full-document `RegExpCursor`
+  pass plus a whole-document decoration rebuild per keypress. Decorations are now built
+  only over `view.visibleRanges` (padded so matches straddling the edge do not flicker
+  in on scroll) — nothing outside the viewport is rendered anyway. And a selection
+  change is ignored unless it could actually matter: the current-match decoration only
+  applies to a selection that exactly covers a match, and a match is never empty, so
+  caret movement between two empty selections cannot change anything.
+  `findAllRangesInText` gained an optional range to support this.
+
+- **The find panel's 120ms debounce did nothing (H14).** An `$effect` tracked `query`,
+  a `$derived` that builds a fresh object per keystroke, so it ran the full search
+  synchronously on every input — compartment reconfigure (rebuilding highlights) plus a
+  whole-document match count — and then the debounced timer did the same work again.
+  The effect now depends on `documentId` alone and reads the query untracked; it exists
+  only to re-apply the query after a document switch. Typing and the three option
+  toggles already route through `scheduleSearch`.
+
+- **Markdown preview re-parsed the document twice per keystroke (H15).** `documentView`
+  was built with `renderMarkdownHtml: true` but nothing ever read its `markdownHtml` —
+  a full parse per keystroke thrown away — while the keep-alive loop rendered HTML for
+  *every* visited preview tab, including hidden ones. On top of that the render memo is
+  keyed on the content string, making every keystroke a guaranteed miss, and
+  `renderDocumentMarkdown` constructed a new `Marked` instance each call. Now: the dead
+  render is gone, only the active tab's HTML is built (hidden slots display nothing),
+  the preview content trails the buffer by 120ms (falling back to live content on
+  document switch so a tab change never shows the previous document), and the `Marked`
+  instance is built once with the current file path handed to its `walkTokens` hook for
+  the duration of each synchronous parse.
+
 ## 2026-07-25 21:30 — Harden git subprocess invocation, capability scopes, watcher sync, sidecar poller
 
 Follow-up to the review in

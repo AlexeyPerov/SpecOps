@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
 import { exists, mkdir, readTextFile, remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import type { DiskFingerprint } from "../domain/contracts";
 import { SKIPPED_DIRECTORY_NAMES } from "./folderOpenableFiles";
 import { normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
@@ -168,7 +169,7 @@ export async function replaceInProjectFile(
     return { ok: false, reason: "No matches.", count: 0 };
   }
   try {
-    await writeTextFile(filePath, nextContent);
+    await atomicWriteTextFile(filePath, nextContent);
   } catch (error: unknown) {
     const reason = error instanceof Error ? error.message : String(error);
     return { ok: false, reason, count: 0 };

@@ -645,6 +645,27 @@ export function createEditorDomainApis(
         }
         return { ok: true, value: isLineFolded(view, heading.line) };
       },
+      getOutlineSnapshot: () => {
+        const view = getView();
+        if (!view) {
+          return { ok: false, reason: "unavailable" };
+        }
+        // One extraction, one pass over the result. Callers used to do this as
+        // `getHeadings()` + `getActiveHeadingKey()` + `isHeadingFolded()` per heading,
+        // which also meant a linear `find` per heading on top of the parse.
+        const headings = extractMarkdownHeadings(view.state);
+        const active = activeMarkdownHeading(headings, view.state.selection.main.head);
+        const foldedKeys: string[] = [];
+        for (const heading of headings) {
+          if (isLineFolded(view, heading.line)) {
+            foldedKeys.push(heading.key);
+          }
+        }
+        return {
+          ok: true,
+          value: { headings, activeKey: active?.key ?? null, foldedKeys },
+        };
+      },
     },
     bookmarks: {
       list: (): EditorQueryResult<EditorBookmarkSnapshot[]> => {

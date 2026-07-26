@@ -1,4 +1,4 @@
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { stat } from "@tauri-apps/plugin-fs";
 import type {
   DocumentState,
   EditorLayout,
@@ -72,8 +72,11 @@ function isFileMissingError(error: unknown): boolean {
 }
 
 async function fileStillExists(path: string): Promise<boolean> {
+  // A metadata stat, not a read: this runs once per restored file tab across
+  // every context, so reading full contents through IPC just to test
+  // existence made startup I/O proportional to total open-file bytes (H25).
   try {
-    await readTextFile(path);
+    await stat(path);
     return true;
   } catch (error: unknown) {
     if (isFileMissingError(error)) {

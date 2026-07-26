@@ -77,6 +77,24 @@ describe("markDocumentsMissingUnderPath", () => {
     ).toBe(false);
   });
 
+  it("keeps the tab open when the deleted document has unsaved edits", () => {
+    const docId = appState.getActiveDocuments().find((doc) => doc.filePath?.includes("nested.ts"))?.id;
+    expect(docId).toBeDefined();
+    // The buffer is now the only copy of these edits: closing the tab would
+    // destroy them along with the deleted file.
+    appState.setDocumentContent(docId!, "unsaved edits");
+    markDocumentsMissingUnderPath("/tmp/ws-del", "/tmp/ws-del/old/nested.ts");
+
+    closeTabsForDeletedDocumentsUnderPath("/tmp/ws-del", "/tmp/ws-del/old/nested.ts");
+
+    expect(
+      getSessionTabs(appState.getActiveSession()).some((tab) => isFileTab(normalizeTabState(tab)) && tabDocumentId(tab) === docId),
+    ).toBe(true);
+    const nested = appState.getActiveDocuments().find((doc) => doc.id === docId);
+    expect(nested?.isDirty).toBe(true);
+    expect(nested?.fileMissing).toBe(true);
+  });
+
   it("closes deleted-file tabs owned by a sibling pane", () => {
     const docId = appState.getActiveDocuments().find((doc) => doc.filePath?.includes("nested.ts"))?.id;
     const tab = allTabs(appState.getActiveSession().editorLayout).find(

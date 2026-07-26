@@ -18,6 +18,10 @@ vi.mock("../../services/themeStore", async (importOriginal) => {
 
 const saveThemeFileMock = vi.mocked(saveThemeFile);
 
+function activeContextId() {
+  return appState.getSnapshot().contexts.activeContextId;
+}
+
 describe("appState documents and paths", () => {
   beforeEach(() => {
     appState.resetAppState();
@@ -150,7 +154,10 @@ describe("appState external file fields", () => {
 
   it("applyDocumentDiskReload replaces buffer and clears dismissed/missing flags", () => {
     appState.openFileInTab("/tmp/external.txt", "old");
-    appState.applyDocumentKeepLocal("doc-2", { mtimeMs: 1, sizeBytes: 1 });
+    appState.applyDocumentKeepLocalForContext(activeContextId(), "doc-2", {
+      mtimeMs: 1,
+      sizeBytes: 1,
+    });
     appState.setDocumentDiskState("doc-2", { diskFingerprint: null, fileMissing: true });
 
     appState.applyDocumentDiskReload("doc-2", "new", { mtimeMs: 2, sizeBytes: 2 });
@@ -165,10 +172,13 @@ describe("appState external file fields", () => {
     });
   });
 
-  it("applyDocumentKeepLocal stores dismissed fingerprint only", () => {
+  it("applyDocumentKeepLocalForContext stores dismissed fingerprint only", () => {
     appState.openFileInTab("/tmp/keep.txt", "local");
     appState.setDocumentContent("doc-2", "edited");
-    appState.applyDocumentKeepLocal("doc-2", { mtimeMs: 9, sizeBytes: 9 });
+    appState.applyDocumentKeepLocalForContext(activeContextId(), "doc-2", {
+      mtimeMs: 9,
+      sizeBytes: 9,
+    });
 
     const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
     expect(document?.dismissedFingerprint).toEqual({ mtimeMs: 9, sizeBytes: 9 });

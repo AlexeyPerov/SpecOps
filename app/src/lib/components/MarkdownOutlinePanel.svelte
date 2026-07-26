@@ -59,9 +59,11 @@
       clearOutline();
       return;
     }
-    const list = host.queries.markdown.getHeadings();
-    const active = host.queries.markdown.getActiveHeadingKey();
-    // Re-read host after queries: ignore if tab/pane generation advanced mid-read.
+    // One batched query: headings, active key and folded state all come from the same
+    // editor state in a single pass. Reading them separately meant re-extracting the
+    // whole outline once per heading, on every poll tick.
+    const snapshot = host.queries.markdown.getOutlineSnapshot();
+    // Re-read host after the query: ignore if tab/pane generation advanced mid-read.
     const stillActive = getHost();
     if (
       !stillActive ||
@@ -70,15 +72,9 @@
     ) {
       return;
     }
-    const nextHeadings = list.ok ? list.value : [];
-    const nextActive = active.ok ? active.value : null;
-    const nextFolded = new SvelteSet<string>();
-    for (const heading of nextHeadings) {
-      const folded = host.queries.markdown.isHeadingFolded(heading.key);
-      if (folded.ok && folded.value) {
-        nextFolded.add(heading.key);
-      }
-    }
+    const nextHeadings = snapshot.ok ? snapshot.value.headings : [];
+    const nextActive = snapshot.ok ? snapshot.value.activeKey : null;
+    const nextFolded = new SvelteSet<string>(snapshot.ok ? snapshot.value.foldedKeys : []);
     // Final generation check before mutating visible state.
     const publishHost = getHost();
     if (!publishHost || !shouldPublishOutlineSnapshot(expected, publishHost.identity)) {

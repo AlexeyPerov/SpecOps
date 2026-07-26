@@ -3,6 +3,7 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow, WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   createNewWindowWithTransfer,
+  generateWindowLabel,
   resolveNewWindowBounds,
   WINDOW_EVENT_TRANSFER_TAB,
   WINDOW_EVENT_WINDOW_READY,
@@ -140,6 +141,16 @@ describe("resolveNewWindowBounds", () => {
   });
 });
 
+describe("generateWindowLabel", () => {
+  it("mints distinct labels on consecutive calls", () => {
+    const labels = new Set(Array.from({ length: 100 }, () => generateWindowLabel()));
+    expect(labels.size).toBe(100);
+    for (const label of labels) {
+      expect(label).toMatch(/^window-[0-9a-z]+-[0-9a-z]+$/);
+    }
+  });
+});
+
 describe("createNewWindowWithTransfer", () => {
   beforeEach(() => {
     emitToMock.mockClear();
@@ -164,7 +175,9 @@ describe("createNewWindowWithTransfer", () => {
     installWebviewWindowMock();
 
     const createdWindowId = await createNewWindowWithTransfer(snapshotWithBounds(null), null);
-    expect(createdWindowId).toMatch(/^window-\d+$/);
+    // Labels are minted from timestamp + random suffix so they are unique
+    // across webview realms (H21): a module counter would collide.
+    expect(createdWindowId).toMatch(/^window-[0-9a-z]+-[0-9a-z]+$/);
     expect(updateLastActiveWindowMock).toHaveBeenCalledWith(createdWindowId);
     expect(emitToMock).not.toHaveBeenCalled();
     expect(WebviewWindowMock).toHaveBeenCalledWith(

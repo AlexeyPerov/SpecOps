@@ -3,7 +3,6 @@
  * Enumerates openable files without reading file contents.
  */
 
-import { join } from "@tauri-apps/api/path";
 import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
 import { isOpenableFilePath } from "../editor/editorLanguage";
 import { normalizePathSync } from "./diskFingerprint";
@@ -95,7 +94,17 @@ export interface EnumerateOpenableFilesResult {
   /** Absolute paths of directories that could not be read (non-fatal). */
   partialErrors: string[];
   cancelled: boolean;
+  /** True when the walk stopped early at a depth or entry-count cap. */
+  truncated?: boolean;
 }
+
+/**
+ * Traversal safety caps (H27). A pathological tree (symlink cycles surviving
+ * the skip rules, or a root accidentally pointed at `$HOME`) should degrade to
+ * a partial catalog, not an unbounded walk.
+ */
+const MAX_TRAVERSAL_DEPTH = 64;
+const MAX_ENUMERATED_FILES = 100_000;
 
 /**
  * Recursively enumerate openable file paths under a workspace root.
@@ -109,6 +118,7 @@ export async function enumerateOpenableWorkspaceFiles(
   const root = normalizeWorkspaceRoot(rootPath);
   const paths: string[] = [];
   const partialErrors: string[] = [];
+  let truncated = false;
   const readDirFn =
     options.readDir ??
     (async (directoryPath: string) => {
@@ -116,7 +126,11 @@ export async function enumerateOpenableWorkspaceFiles(
       return entries as WorkspaceListEntry[];
     });
 
-  async function walk(directoryPath: string): Promise<boolean> {
+  // Paths are joined synchronously: `@tauri-apps/api/path.join` is one IPC
+  // round-trip per call, which made enumeration cost one hop per directory
+  // entry on large trees (H27). `directoryPath` descends from a normalized
+  // root, so plain string concatenation is equivalent.
+  async function walk(directoryPath: string, depth: number): Promise<boolean> {
     if (options.isCancelled?.()) {
       return false;
     }
@@ -133,6 +147,10 @@ export async function enumerateOpenableWorkspaceFiles(
       if (options.isCancelled?.()) {
         return false;
       }
+      if (paths.length >= MAX_ENUMERATED_FILES) {
+        truncated = true;
+        return true;
+      }
       const entry = raw as WorkspaceListEntry;
       if (skipSymlinks && entry.isSymlink) {
         continue;
@@ -141,8 +159,12 @@ export async function enumerateOpenableWorkspaceFiles(
         if (shouldSkipDirectoryEntry(entry)) {
           continue;
         }
-        const childPath = await join(directoryPath, entry.name);
-        const ok = await walk(childPath);
+        if (depth >= MAX_TRAVERSAL_DEPTH) {
+          truncated = true;
+          continue;
+        }
+        const childPath = joinDirectoryPath(directoryPath, entry.name);
+        const ok = await walk(childPath, depth + 1);
         if (!ok) {
           return false;
         }
@@ -151,7 +173,7 @@ export async function enumerateOpenableWorkspaceFiles(
       if (shouldSkipFileEntry(entry)) {
         continue;
       }
-      const path = await join(directoryPath, entry.name);
+      const path = joinDirectoryPath(directoryPath, entry.name);
       if (isOpenableFilePath(path)) {
         paths.push(path);
       }
@@ -159,10 +181,10 @@ export async function enumerateOpenableWorkspaceFiles(
     return true;
   }
 
-  const completed = await walk(root);
+  const completed = await walk(root, 0);
   if (!completed) {
     return { paths: [], partialErrors, cancelled: true };
   }
   paths.sort((a, b) => a.localeCompare(b));
-  return { paths, partialErrors, cancelled: false };
+  return { paths, partialErrors, cancelled: false, truncated };
 }

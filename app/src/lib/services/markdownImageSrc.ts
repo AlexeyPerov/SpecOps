@@ -160,36 +160,61 @@ function rewriteRawHtmlImageSources(html: string, documentFilePath: string | nul
  * defaults are used here (GFM on, breaks off) to match prior document-rendering
  * behavior.
  */
+/**
+ * File path of the document currently being rendered.
+ *
+ * The `walkTokens` hook needs it to resolve relative image paths, but the hook belongs
+ * to a `Marked` instance we want to build once rather than per render. Parsing is
+ * synchronous (`{ async: false }`) and single-threaded, so a module-level handoff for
+ * the duration of one `parse` call cannot interleave with another render.
+ */
+let renderingDocumentFilePath: string | null = null;
+
+/**
+ * Shared renderer instance.
+ *
+ * Built once: constructing a `Marked` compiles options and hooks, and this runs on
+ * every preview render — previously once per keystroke in split/preview mode.
+ */
+const documentMarked = new Marked({
+  walkTokens(token: Token): void {
+    if (token.type !== "image") {
+      return;
+    }
+    const image = token as ImageTokenWithLocalPath;
+    const localPath = resolveLocalImagePath(image.href, renderingDocumentFilePath);
+    image.localPath = localPath;
+    if (localPath) {
+      image.href = convertFileSrc(localPath);
+    }
+  },
+  renderer: {
+    image({ href, title, text, localPath }: ImageTokenWithLocalPath): string {
+      const alt = escapeAttr(text ?? "");
+      let html = `<img src="${escapeAttr(href)}" alt="${alt}"`;
+      if (title) {
+        html += ` title="${escapeAttr(title)}"`;
+      }
+      if (localPath) {
+        html += ` data-md-local-path="${escapeAttr(localPath)}"`;
+      }
+      return `${html}>`;
+    },
+  },
+});
+
 export function renderDocumentMarkdown(
   content: string,
   documentFilePath: string | null,
 ): string {
-  const instance = new Marked({
-    walkTokens(token: Token): void {
-      if (token.type !== "image") {
-        return;
-      }
-      const image = token as ImageTokenWithLocalPath;
-      const localPath = resolveLocalImagePath(image.href, documentFilePath);
-      image.localPath = localPath;
-      if (localPath) {
-        image.href = convertFileSrc(localPath);
-      }
-    },
-    renderer: {
-      image({ href, title, text, localPath }: ImageTokenWithLocalPath): string {
-        const alt = escapeAttr(text ?? "");
-        let html = `<img src="${escapeAttr(href)}" alt="${alt}"`;
-        if (title) {
-          html += ` title="${escapeAttr(title)}"`;
-        }
-        if (localPath) {
-          html += ` data-md-local-path="${escapeAttr(localPath)}"`;
-        }
-        return `${html}>`;
-      },
-    },
-  });
-  const html = instance.parse(content, { async: false }) as string;
-  return rewriteRawHtmlImageSources(html, documentFilePath);
+  const previous = renderingDocumentFilePath;
+  renderingDocumentFilePath = documentFilePath;
+  try {
+    const html = documentMarked.parse(content, { async: false }) as string;
+    return rewriteRawHtmlImageSources(html, documentFilePath);
+  } finally {
+    // Restore rather than clear: `rewriteRawHtmlImageSources` does not re-enter, but a
+    // nested render would otherwise lose its path.
+    renderingDocumentFilePath = previous;
+  }
 }

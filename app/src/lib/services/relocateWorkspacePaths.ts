@@ -145,13 +145,30 @@ export function closeTabsForDeletedDocumentsUnderPath(
     return;
   }
 
+  // Never force-close a dirty document: the file is gone from disk, so the
+  // buffer is the only copy of the user's edits. Dirty tabs stay open (already
+  // marked fileMissing by markDocumentsMissingUnderPath) so the user can
+  // Save As; only clean documents are closed.
+  const dirtyDocumentIds = new Set(
+    workspace.snapshot.documents
+      .filter((doc) => doc.isDirty)
+      .map((doc) => doc.id),
+  );
+
   const tabIds = allTabs(workspace.snapshot.session.editorLayout)
     .map((rawTab) => normalizeTabState(rawTab))
-    .filter((tab) => isFileTab(tab) && deletedDocumentIds.has(tab.documentId))
+    .filter(
+      (tab) =>
+        isFileTab(tab) &&
+        deletedDocumentIds.has(tab.documentId) &&
+        !dirtyDocumentIds.has(tab.documentId),
+    )
     .map((tab) => tab.id);
 
   if (tabIds.length > 0) {
-    appState.closeTabsByIds(tabIds, null);
+    // Tabs were collected from this workspace's snapshot, which need not be the
+    // active context, so the close has to be targeted at it.
+    appState.closeTabsByIdsInContext(workspaceId, tabIds, null);
   }
 }
 

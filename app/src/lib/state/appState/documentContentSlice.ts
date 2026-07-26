@@ -514,12 +514,24 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       );
       notifyDocumentDiskReload(documentId);
     },
-    applyDocumentKeepLocal(
+    /**
+     * Records the "Keep Local" dismissal for a document in a specific context.
+     *
+     * Context-aware by construction, with no active-context variant: the only
+     * flow that dismisses a reload prompt is the external-change runtime, which
+     * always resolves the owning context first and may be prompting for a
+     * document in a workspace that is not active. Writing to the active context
+     * instead dropped `dismissedFingerprint` on the floor, so
+     * `shouldSkipAsDismissed` never fired and the dialog re-opened on every
+     * focus/watcher check.
+     */
+    applyDocumentKeepLocalForContext(
+      contextId: ContextId,
       documentId: string,
       dismissedFingerprint: DiskFingerprint,
     ) {
       update((state) =>
-        patchActiveContext(state, (ctx) => ({
+        patchContextById(state, contextId, (ctx) => ({
           ...ctx,
           documents: ctx.documents.map((documentState) => {
             if (documentState.id !== documentId) {

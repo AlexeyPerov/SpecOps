@@ -78,6 +78,10 @@ function makeHost(
         getHeadings: () => ({ ok: true, value: headings }),
         getActiveHeadingKey: () => ({ ok: true, value: null }),
         isHeadingFolded: () => ({ ok: true, value: false }),
+        getOutlineSnapshot: () => ({
+          ok: true,
+          value: { headings, activeKey: null, foldedKeys: [] },
+        }),
       },
       bookmarks: { list: () => ({ ok: true, value: [] }) },
     },

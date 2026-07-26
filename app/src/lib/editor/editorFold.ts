@@ -23,9 +23,19 @@ function createFoldMarker(open: boolean): HTMLElement {
   return marker;
 }
 
+/**
+ * Themes are `StyleModule`s and their rules are never unmounted, so building
+ * one per `EditorState` grows the CSSOM for the whole session (see the caching
+ * note in `editorExtensions.ts`). Both fold themes are built once and shared.
+ */
+let markerTheme: Extension | null = null;
+let hideGutterTheme: Extension | null = null;
+
+const NO_EXTENSION: Extension = [];
+
 /** Theme rules for fold gutter markers and placeholders. */
 export function foldTheme(): Extension {
-  return EditorView.theme({
+  markerTheme ??= EditorView.theme({
     ".cm-foldGutter": {
       width: "14px",
     },
@@ -63,6 +73,7 @@ export function foldTheme(): Extension {
       cursor: "pointer",
     },
   });
+  return markerTheme;
 }
 
 /**
@@ -90,14 +101,15 @@ export function foldBaseExtension(): Extension {
  */
 export function foldGutterExtension(showGutter: boolean): Extension {
   if (showGutter) {
-    return [];
+    return NO_EXTENSION;
   }
-  return EditorView.theme({
+  hideGutterTheme ??= EditorView.theme({
     ".cm-foldGutter": {
       display: "none",
       width: "0",
     },
   });
+  return hideGutterTheme;
 }
 
 /**

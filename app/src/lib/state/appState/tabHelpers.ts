@@ -1,4 +1,10 @@
-import type { AppDomainState, ContextSnapshot, DocumentState, TabState } from "../../domain/contracts";
+import type {
+  AppDomainState,
+  ContextId,
+  ContextSnapshot,
+  DocumentState,
+  TabState,
+} from "../../domain/contracts";
 import {
   allTabs,
   createFileTab,
@@ -97,8 +103,12 @@ export function missingTabIdsToClose(
     .map((tab) => tab.id);
 }
 
+export function canCreateFileTabsInContext(contextId: ContextId): boolean {
+  return !isChatHttpContext(contextId);
+}
+
 export function canCreateFileTabs(state: AppDomainState): boolean {
-  return !isChatHttpContext(state.contexts.activeContextId);
+  return canCreateFileTabsInContext(state.contexts.activeContextId);
 }
 
 export function selectTabInternal(state: AppDomainState, tabId: string): AppDomainState {
@@ -122,16 +132,32 @@ export function reopenTabForDocument(state: AppDomainState, documentId: string):
 }
 
 export function closeTabsForce(state: AppDomainState, tabIds: string[], preferredTabId: string | null): AppDomainState {
+  return closeTabsForceInContext(state, state.contexts.activeContextId, tabIds, preferredTabId);
+}
+
+/**
+ * Context-aware variant of {@link closeTabsForce}. Use this for side effects
+ * that discover a tab by walking every context (inaccessible-file cleanup,
+ * relocation): the tab may live in a workspace that is not active, and closing
+ * it against the active context is a silent no-op that leaves the caller
+ * retrying forever.
+ */
+export function closeTabsForceInContext(
+  state: AppDomainState,
+  contextId: ContextId,
+  tabIds: string[],
+  preferredTabId: string | null,
+): AppDomainState {
   if (tabIds.length === 0) {
     return state;
   }
-  return patchActiveContext(state, (ctx) => {
+  return patchContextById(state, contextId, (ctx) => {
     const idsToClose = new Set(tabIds);
     let next = ctx;
     for (const tabId of idsToClose) {
       const owner = findTabOwner(next.session.editorLayout, tabId);
       if (owner) {
-        next = closeTabInPaneForceOnContext(state, next, owner.pane.id, tabId);
+        next = closeTabInPaneForceOnContext(state, next, owner.pane.id, tabId, contextId);
       }
     }
     if (!preferredTabId) {

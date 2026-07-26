@@ -1,4 +1,4 @@
-import type { AppDomainState, ContextSnapshot } from "../../domain/contracts";
+import type { AppDomainState, ContextId, ContextSnapshot } from "../../domain/contracts";
 import {
   findPane,
   findTabOwner,
@@ -16,7 +16,7 @@ import {
   patchActiveContext,
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
-import { canCreateFileTabs } from "./tabHelpers";
+import { canCreateFileTabsInContext } from "./tabHelpers";
 import { createFileTab } from "../../domain/contracts";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
@@ -57,12 +57,19 @@ function pruneUnreferencedDocuments(ctx: ContextSnapshot): ContextSnapshot {
   return { ...ctx, documents };
 }
 
-/** Pane-scoped force-close with implicit-draft replacement for empty last tabs. */
+/**
+ * Pane-scoped force-close with implicit-draft replacement for empty last tabs.
+ *
+ * `contextId` identifies the context `ctx` belongs to; it defaults to the active
+ * one. Pass it explicitly when closing in a non-active context so the
+ * replacement-draft decision is made for that context rather than the active one.
+ */
 export function closeTabInPaneForceOnContext(
   state: AppDomainState,
   ctx: ContextSnapshot,
   paneId: string,
   tabId: string,
+  contextId: ContextId = state.contexts.activeContextId,
 ): ContextSnapshot {
   const pane = findPane(ctx.session.editorLayout, paneId);
   if (!pane) {
@@ -86,7 +93,7 @@ export function closeTabInPaneForceOnContext(
     return pruneUnreferencedDocuments(withPaneTabs(ctx, paneId, filtered, selectedTabId));
   }
 
-  if (!canCreateFileTabs(state)) {
+  if (!canCreateFileTabsInContext(contextId)) {
     return withPaneTabs(ctx, paneId, [], null);
   }
 

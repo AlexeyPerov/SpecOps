@@ -102,6 +102,7 @@ describe("editor host contracts", () => {
         getHeadings: () => unavailable(),
         getActiveHeadingKey: () => unavailable(),
         isHeadingFolded: () => unavailable(),
+        getOutlineSnapshot: () => unavailable(),
       },
       bookmarks: {
         list: () => unavailable(),

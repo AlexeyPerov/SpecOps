@@ -49,7 +49,11 @@ import { logDiagnostic } from "./logging";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import { scheduleSessionPersistence } from "./sessionManager";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
-import { savePersistedSettings, toPersistedSettings } from "./settingsStore";
+import {
+  savePersistedSettings,
+  toPersistedSettings,
+  type PersistedSettings,
+} from "./settingsStore";
 import { externalFileWatcherSyncKey } from "./appShellHelpers";
 import { settingsPersistenceFingerprint } from "../state/appStateSelectors";
 
@@ -233,6 +237,45 @@ export interface SyncSettingsPersistenceEffectInput {
 
 let lastSettingsPersistenceFingerprint: string | null = null;
 
+/**
+ * Settings writes are debounced (trailing edge) so high-frequency updates —
+ * e.g. a range-slider firing `setFontSettings` per `oninput` — collapse into
+ * one write instead of dozens of concurrent writes to the same file.
+ * `savePersistedSettings` additionally serializes and atomically replaces the
+ * file, so even overlapping writers cannot tear settings.json.
+ */
+const SETTINGS_PERSIST_DEBOUNCE_MS = 300;
+let settingsPersistTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingPersistedSettings: PersistedSettings | null = null;
+
+function schedulePersistSettings(settings: PersistedSettings): void {
+  pendingPersistedSettings = settings;
+  if (settingsPersistTimer) {
+    clearTimeout(settingsPersistTimer);
+  }
+  settingsPersistTimer = setTimeout(() => {
+    settingsPersistTimer = null;
+    const toWrite = pendingPersistedSettings;
+    pendingPersistedSettings = null;
+    if (toWrite) {
+      void savePersistedSettings(toWrite);
+    }
+  }, SETTINGS_PERSIST_DEBOUNCE_MS);
+}
+
+/** Write any pending debounced settings immediately (window close / quit path). */
+export async function flushSettingsPersistence(): Promise<void> {
+  if (settingsPersistTimer) {
+    clearTimeout(settingsPersistTimer);
+    settingsPersistTimer = null;
+  }
+  const toWrite = pendingPersistedSettings;
+  pendingPersistedSettings = null;
+  if (toWrite) {
+    await savePersistedSettings(toWrite);
+  }
+}
+
 export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffectInput): void {
   const { runtimeReady, currentWindowId, snapshot } = input;
   if (!runtimeReady || !currentWindowId) {
@@ -243,7 +286,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
     return;
   }
   lastSettingsPersistenceFingerprint = fingerprint;
-  void savePersistedSettings(
+  schedulePersistSettings(
     toPersistedSettings({
       wrapLines: snapshot.editor.wrapLines,
       zoomPercent: snapshot.editor.zoomPercent,
@@ -736,6 +779,11 @@ export function resetAppShellEffectsForTests(): void {
   lastWorkspaceFileCatalogKey = null;
   lastSettingsPersistenceFingerprint = null;
   lastOpencodeSidecarProbeKey = null;
+  if (settingsPersistTimer) {
+    clearTimeout(settingsPersistTimer);
+    settingsPersistTimer = null;
+  }
+  pendingPersistedSettings = null;
 }
 
 export function syncActiveFileTreeExpandEffect(input: SyncActiveFileTreeExpandEffectInput): void {

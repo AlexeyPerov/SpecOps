@@ -301,9 +301,16 @@ function markersFor(positions: BookmarkState): RangeSet<GutterMarker> {
   );
 }
 
+/**
+ * Themes are `StyleModule`s and their rules are never unmounted, so building one
+ * per `EditorState` grows the CSSOM for the whole session (see the caching note
+ * in `editorExtensions.ts`). Built once and shared.
+ */
+let gutterTheme: Extension | null = null;
+
 /** Theme rules for the bookmark gutter and marker. */
 export function bookmarkTheme(): Extension {
-  return EditorView.theme({
+  gutterTheme ??= EditorView.theme({
     ".cm-bookmarkGutter": {
       width: "14px",
     },
@@ -332,6 +339,7 @@ export function bookmarkTheme(): Extension {
       color: "var(--color-text-primary)",
     },
   });
+  return gutterTheme;
 }
 
 /**

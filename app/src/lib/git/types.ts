@@ -258,6 +258,12 @@ export interface CommitSummary {
 
 export interface QueryCommitsOptions {
   limit?: number;
+  /**
+   * Number of leading (newest) commits to skip before reading `limit`.
+   * Used for incremental "load more" pagination so the panel does not refetch
+   * the whole history on every page.
+   */
+  skip?: number;
   /** History scope; defaults to {@link DEFAULT_HISTORY_FILTER_MODE}. */
   filterMode?: HistoryFilterMode;
 }

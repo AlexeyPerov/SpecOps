@@ -870,12 +870,20 @@
       return;
     }
 
-    const commandId = createGitCommandId();
-    activeRemoteCommandId = commandId;
-    remoteCancelRequested = false;
+    // Mark the toolbar busy up-front so Pull/Push/Refresh stay disabled while
+    // the pre-pull prompts (autosave, dirty-tree choice) are open. The
+    // cancellable command id is NOT registered yet: nothing can be cancelled
+    // until `pullRemote` actually spawns, and registering it early let a
+    // Cancel-pressed-during-prompt land on a not-yet-spawned command (`notFound`)
+    // and leave `remoteCancelRequested` latched, making the real network
+    // operation uncancellable (M5).
     pullBusy = true;
+    // Clear any stale cancel flag from a previous operation, so the inline
+    // Cancel control starts enabled once the command is registered below.
+    remoteCancelRequested = false;
 
     let stashedRef: string | null = null;
+    const commandId = createGitCommandId();
 
     try {
       if (workspaceRootPath) {
@@ -912,6 +920,11 @@
           return;
         }
       }
+
+      // All prompts resolved and we're about to spawn the cancellable network
+      // operation. Register the command id now — from this point the inline
+      // Cancel control has a real target.
+      activeRemoteCommandId = commandId;
 
       try {
         await pullRemote(repoRoot, buildRemoteOperationTarget(), { commandId });

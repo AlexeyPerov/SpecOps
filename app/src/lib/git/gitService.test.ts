@@ -556,6 +556,21 @@ describe("buildQueryCommitsArgs", () => {
     expect(args).not.toContain("--remotes");
     expect(args).not.toContain("--all");
   });
+
+  it("emits --skip=N before the limit when skip is set", () => {
+    const args = buildQueryCommitsArgs({ limit: 50, skip: 100 });
+    const skipIndex = args.indexOf("--skip=100");
+    const limitIndex = args.indexOf("-50");
+    expect(skipIndex).toBeGreaterThanOrEqual(0);
+    expect(limitIndex).toBeGreaterThan(skipIndex);
+  });
+
+  it("omits --skip when skip is 0 or undefined", () => {
+    expect(buildQueryCommitsArgs({ limit: 50, skip: 0 })).not.toContain("--skip=0");
+    expect(
+      buildQueryCommitsArgs({ limit: 50 }).some((arg) => arg.startsWith("--skip=")),
+    ).toBe(false);
+  });
 });
 
 describe("queryCommits", () => {
@@ -724,7 +739,7 @@ describe("queryCommitFileDiff", () => {
         `--unified=${DIFF_CONTEXT_LINES}`,
         "parent..child",
         "--",
-        "file.txt",
+        ":(literal)file.txt",
       ],
     }));
     expect(result.path).toBe("file.txt");
@@ -751,7 +766,7 @@ describe("queryCommitFileDiff", () => {
         `--unified=${DIFF_CONTEXT_LINES}`,
         "root",
         "--",
-        "file.txt",
+        ":(literal)file.txt",
       ],
     }));
   });
@@ -864,7 +879,7 @@ describe("queryWorkingTreeFileDiff", () => {
         `--unified=${DIFF_CONTEXT_LINES}`,
         "--cached",
         "--",
-        "file.txt",
+        ":(literal)file.txt",
       ],
     }));
     expect(result.path).toBe("file.txt");
@@ -890,7 +905,7 @@ describe("queryWorkingTreeFileDiff", () => {
         `--unified=${DIFF_CONTEXT_LINES}`,
         "HEAD",
         "--",
-        "file.txt",
+        ":(literal)file.txt",
       ],
     }));
     expect(invokeMock).toHaveBeenCalledTimes(1);
@@ -925,6 +940,7 @@ describe("queryWorkingTreeFileDiff", () => {
         `--unified=${DIFF_CONTEXT_LINES}`,
         "--",
         "/dev/null",
+        // --no-index takes literal paths, not pathspecs, so no :(literal).
         "new.txt",
       ],
     }));
@@ -951,7 +967,7 @@ describe("queryWorkingTreeFileDiff", () => {
         `--unified=${DIFF_CONTEXT_LINES}`,
         "--cached",
         "--",
-        "spaces file.txt",
+        ":(literal)spaces file.txt",
       ],
     }));
   });
@@ -1221,7 +1237,7 @@ describe("stagePaths and unstagePaths", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["add", "--", "path with spaces.txt", "plain.txt"],
+      args: ["add", "--", ":(literal)path with spaces.txt", ":(literal)plain.txt"],
     }));
   });
 
@@ -1237,7 +1253,7 @@ describe("stagePaths and unstagePaths", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["add", "--", "nested/folder/file.ts"],
+      args: ["add", "--", ":(literal)nested/folder/file.ts"],
     }));
   });
 
@@ -1253,7 +1269,7 @@ describe("stagePaths and unstagePaths", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["restore", "--staged", "--", "staged.txt"],
+      args: ["restore", "--staged", "--", ":(literal)staged.txt"],
     }));
   });
 

@@ -48,12 +48,30 @@
   let loadStatus = $state<LoadStatus>("idle");
   let commits = $state<CommitSummary[]>([]);
   let loadError = $state<string | null>(null);
+  // Tracks how many commits have been loaded so far (the offset for the next
+  // "load more" page). Bumped to MAX_COMMIT_LOG_LIMIT when a page returns
+  // fewer rows than requested, which signals end-of-history and disables the
+  // load-more affordance.
   let commitLimit = $state(DEFAULT_COMMIT_LOG_LIMIT);
   let loadingMore = $state(false);
   let filterMode = $state<HistoryFilterMode>(DEFAULT_HISTORY_FILTER_MODE);
   let filterModeReady = $state(false);
   let scrollContainer = $state<HTMLDivElement | null>(null);
   let scrollContainerSize = $state({ width: 0, height: 0 });
+
+  // AbortController for an in-flight "load more" fetch. A new load-more, a
+  // scope/filter change, or a repo/refresh-token change aborts the previous
+  // one so a late response from the older page can never overwrite the panel
+  // state with stale rows. Without this guard the load-more handler refetched
+  // the whole window and its result landed whenever it landed (M4).
+  let loadMoreController: AbortController | null = null;
+
+  function abortInFlightLoadMore(): void {
+    if (loadMoreController) {
+      loadMoreController.abort();
+      loadMoreController = null;
+    }
+  }
 
   const activeFilterOption = $derived(
     HISTORY_FILTER_MODE_OPTIONS.find((option) => option.value === filterMode) ??
@@ -164,23 +182,69 @@
       return;
     }
 
+    // Capture the scope the in-flight fetch belongs to. If repoRoot/filterMode
+    // change before the response lands, the loadCommits effect aborts this
+    // controller and we drop the result rather than stamping it over the new
+    // scope's data.
+    const root = repoRoot;
+    const mode = filterMode;
+    const skip = commitLimit;
+    const controller = new AbortController();
+    abortInFlightLoadMore();
+    loadMoreController = controller;
+
     const savedScrollTop = scrollContainer?.scrollTop ?? 0;
     loadingMore = true;
     loadError = null;
 
     try {
-      const rows = await queryCommits(repoRoot, { filterMode, limit: nextLimit });
-      commits = rows;
-      commitLimit = nextLimit;
+      // Paginate: fetch only the next page rather than re-running `git log`
+      // from scratch with a larger N. `--skip=N -PAGE` returns commits
+      // (N+1)..(N+PAGE) in newest-first order, which we append to the tail.
+      const rows = await queryCommits(root, {
+        filterMode: mode,
+        limit: COMMIT_LOG_PAGE_SIZE,
+        skip,
+      });
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      // Deduplicate at the page boundary in case the history moved under us
+      // (a fetch landed, a rebase happened, etc.) and the same SHA now appears
+      // on both sides of the skip offset.
+      const existing = new Set(commits.map((commit) => commit.sha));
+      const appended: CommitSummary[] = [];
+      for (const row of rows) {
+        if (!existing.has(row.sha)) {
+          appended.push(row);
+        }
+      }
+
+      commits = [...commits, ...appended];
+      // A short page means we've drained the history; pin commitLimit at the
+      // max so canLoadMore becomes false. Otherwise advance by the page size
+      // (not rows.length) so the offset stays aligned with --skip semantics.
+      commitLimit =
+        rows.length < COMMIT_LOG_PAGE_SIZE ? MAX_COMMIT_LOG_LIMIT : nextLimit;
+
       requestAnimationFrame(() => {
-        if (scrollContainer) {
+        if (scrollContainer && !controller.signal.aborted) {
           scrollContainer.scrollTop = savedScrollTop;
         }
       });
     } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
       loadError = error instanceof Error ? error.message : String(error);
     } finally {
-      loadingMore = false;
+      if (loadMoreController === controller) {
+        loadMoreController = null;
+      }
+      if (!controller.signal.aborted) {
+        loadingMore = false;
+      }
     }
   }
 
@@ -216,9 +280,14 @@
     const mode = filterMode;
     const previousSha = untrack(() => selectedSha);
     const controller = new AbortController();
+    // A new page-1 load supersedes any in-flight "load more": its result would
+    // be appended to a stale `commits` array otherwise.
+    abortInFlightLoadMore();
+    loadingMore = false;
     commitLimit = DEFAULT_COMMIT_LOG_LIMIT;
     void loadCommits(root, mode, DEFAULT_COMMIT_LOG_LIMIT, previousSha, controller.signal);
     return () => {
+      abortInFlightLoadMore();
       controller.abort();
     };
   });

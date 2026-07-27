@@ -39,6 +39,25 @@ function gitNullDevicePath(): string {
   return isWindows() ? "NUL" : "/dev/null";
 }
 
+/**
+ * Wrap a working-tree path as a literal git pathspec.
+ *
+ * A bare `-- <path>` argument is interpreted as a pathspec, so names
+ * containing glob metacharacters (`*`, `?`, `[`, `:`) match other files or
+ * fail outright (`:(literal)` is the magic-word form). Prefixing every path
+ * with `:(literal)` forces git to treat it as a literal relative path,
+ * preserving the leading-`/`-anchored-but-relative semantics the app relies
+ * on. No quoting is needed: pathspec values are passed as separate argv
+ * entries, never joined into a single string.
+ */
+function asLiteralPathspec(path: string): string {
+  return `:(literal)${path}`;
+}
+
+function asLiteralPathspecs(paths: readonly string[]): string[] {
+  return paths.map((path) => asLiteralPathspec(path));
+}
+
 function isDiffCommandSuccess(response: RunGitResponse, allowExitOne: boolean): boolean {
   if (response.exitCode === 0) {
     return true;
@@ -108,7 +127,7 @@ export async function stagePaths(repoRoot: string, paths: string[]): Promise<voi
     return;
   }
 
-  const response = await runGit(repoRoot, ["add", "--", ...paths]);
+  const response = await runGit(repoRoot, ["add", "--", ...asLiteralPathspecs(paths)]);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -128,7 +147,12 @@ export async function unstagePaths(repoRoot: string, paths: string[]): Promise<v
     return;
   }
 
-  const response = await runGit(repoRoot, ["restore", "--staged", "--", ...paths]);
+  const response = await runGit(repoRoot, [
+    "restore",
+    "--staged",
+    "--",
+    ...asLiteralPathspecs(paths),
+  ]);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -157,7 +181,7 @@ export async function queryWorkingTreeFileDiff(
       `--unified=${DIFF_CONTEXT_LINES}`,
       "--cached",
       "--",
-      normalizedPath,
+      asLiteralPathspec(normalizedPath),
     ]);
     assertDiffCommandSuccess(response, false);
     return parseWorkingTreeFileDiffPatch(response.stdout, normalizedPath);
@@ -170,7 +194,7 @@ export async function queryWorkingTreeFileDiff(
     `--unified=${DIFF_CONTEXT_LINES}`,
     "HEAD",
     "--",
-    normalizedPath,
+    asLiteralPathspec(normalizedPath),
   ]);
   assertDiffCommandSuccess(headResponse, false);
 
@@ -186,6 +210,11 @@ export async function queryWorkingTreeFileDiff(
     `--unified=${DIFF_CONTEXT_LINES}`,
     "--",
     gitNullDevicePath(),
+    // `--no-index` takes two literal file paths, not pathspecs, so the
+    // `:(literal)` magic-word form used for the working-tree diffs above does
+    // not apply here (git would try to open a file literally named
+    // `:(literal)…`). The path is the already-normalized absolute/relative
+    // working-tree path of the untracked file the user selected.
     normalizedPath,
   ]);
   assertDiffCommandSuccess(untrackedResponse, true);

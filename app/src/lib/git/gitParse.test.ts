@@ -289,6 +289,55 @@ describe("parseBranchVvLine", () => {
       subject: "",
     });
   });
+
+  it("parses a branch checked out in a linked worktree (`+` marker)", () => {
+    // `git branch -vv` prefixes worktree-checked-out branches with `+` and
+    // annotates them with `(/path/to/worktree)` where the upstream bracket
+    // would sit. Both must not cause the row to be dropped, and the worktree
+    // path must not be mistaken for an upstream.
+    expect(
+      parseBranchVvLine("+ feature abc1234 (/private/tmp/wt-linked) init"),
+    ).toEqual({
+      isCurrent: false,
+      name: "feature",
+      head: "abc1234",
+      upstream: null,
+      upstreamTrack: null,
+      subject: "init",
+    });
+  });
+
+  it("parses a worktree branch that also tracks an upstream", () => {
+    // The worktree annotation precedes the upstream bracket; both must be
+    // handled in order.
+    expect(
+      parseBranchVvLine(
+        "+ feature abc1234 (/private/tmp/wt-linked) [origin/feature: ahead 1] Init",
+      ),
+    ).toEqual({
+      isCurrent: false,
+      name: "feature",
+      head: "abc1234",
+      upstream: "origin/feature",
+      upstreamTrack: "ahead 1",
+      subject: "Init",
+    });
+  });
+
+  it("parses the current branch checked out in a linked worktree", () => {
+    // The current-branch marker `*` and the worktree marker `+` are mutually
+    // exclusive in practice, but `+` is still parsed as not-current.
+    expect(
+      parseBranchVvLine("+ current-in-worktree abc1234 (/path) subject"),
+    ).toEqual({
+      isCurrent: false,
+      name: "current-in-worktree",
+      head: "abc1234",
+      upstream: null,
+      upstreamTrack: null,
+      subject: "subject",
+    });
+  });
 });
 
 describe("parseBranchVvLines", () => {
@@ -625,11 +674,29 @@ describe("parseStatusPorcelainV2Z", () => {
     ]);
   });
 
-  it("decodes octal-quoted non-ASCII paths", () => {
-    const stdout = '1 .M N... 100644 100644 100644 abc abc "nested/caf\\303\\251.txt"\x00';
+  it("treats non-ASCII paths as raw UTF-8 (-z mode never octal-quotes)", () => {
+    // git status --porcelain=v2 -z emits non-ASCII paths as raw UTF-8 even
+    // with core.quotepath=true; octal-quoting only happens in line-oriented
+    // (non -z) output. The parser must therefore NOT decode octal escapes for
+    // -z input — doing so would silently mis-handle a file literally named
+    // `caf\303\251.txt`.
+    const stdout = "1 .M N... 100644 100644 100644 abc abc nested/café.txt\x00";
     expect(parseStatusPorcelainV2Z(stdout)).toEqual([
       { indexStatus: " ", workTreeStatus: "M", path: "nested/café.txt" },
     ]);
+  });
+
+  it("preserves literal leading/trailing whitespace and backslashes in paths", () => {
+    // -z segments are NUL-delimited and unquoted, so a leading/trailing space
+    // or a backslash is a literal part of the filename. Trimming or unquoting
+    // produces a non-existent path that can't be staged/diffed.
+    const stdout =
+      "1 .M N... 100644 100644 100644 abc abc  lead.txt\x00" +
+      "1 .M N... 100644 100644 100644 abc abc trail.txt \x00" +
+      '? back\\slash.txt\x00';
+    const lines = parseStatusPorcelainV2Z(stdout);
+    const paths = lines.map((line) => line.path);
+    expect(paths).toEqual([" lead.txt", "trail.txt ", "back/slash.txt"]);
   });
 
   it("normalizes Windows backslashes in v2 paths", () => {

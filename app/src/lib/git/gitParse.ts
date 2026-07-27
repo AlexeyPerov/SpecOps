@@ -13,6 +13,7 @@ import type {
   WorkingTreeStatus,
 } from "./types";
 import { normalizeGitOutputPath } from "./types";
+import { isWindows } from "../services/platform";
 
 /** Parsed commit row from structured `git log --format=…` output (phase 2). */
 export interface ParsedCommitLine {
@@ -322,6 +323,30 @@ function normalizeRepoRelativePath(path: string): string {
   return normalizeGitOutputPath(unquotePorcelainPath(path));
 }
 
+/**
+ * Normalize a path taken verbatim from NUL-delimited (`-z`) porcelain v2
+ * output. Unlike {@link normalizeRepoRelativePath}, this MUST NOT unquote,
+ * unescape, or `.trim()` — `-z` paths are emitted raw, so a leading/trailing
+ * space, a tab, or a backslash is a literal part of the filename. Stripping
+ * them produces a path that doesn't exist on disk and can't be staged/diffed.
+ *
+ * Only the Windows `\`→`/` separator rewrite is applied, plus a trailing-slash
+ * collapse (porcelain paths never carry a meaningful trailing slash). Note
+ * this intentionally bypasses {@link normalizeGitOutputPath}, which `.trim()`s
+ * — that trim is correct for line-oriented output but loses significant
+ * whitespace inside a raw NUL-delimited segment.
+ */
+function normalizeRawV2Path(path: string): string {
+  let normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (isWindows()) {
+    normalized = normalized.replace(
+      /^([A-Za-z]):\//,
+      (_, drive: string) => `${drive.toLowerCase()}:/`,
+    );
+  }
+  return normalized;
+}
+
 function parseNameStatusLine(line: string): CommitFileChange | null {
   const renameOrCopy = /^([RC])(\d+)\t([^\t]+)\t(.+)$/.exec(line);
   if (renameOrCopy) {
@@ -406,7 +431,10 @@ export function parseBranchVvLine(line: string): ParsedBranchLine | null {
     return null;
   }
 
-  const markerMatch = /^(\*|\s)\s/.exec(trimmed);
+  // Marker column: `*` = current branch, ` ` = ordinary branch, `+` = checked
+  // out in a linked worktree (otherwise silently dropped — see M3). Each is
+  // followed by a single space, then the branch name.
+  const markerMatch = /^(\*|\+|\s)\s/.exec(trimmed);
   if (!markerMatch) {
     return null;
   }
@@ -427,6 +455,18 @@ export function parseBranchVvLine(line: string): ParsedBranchLine | null {
 
   let upstream: string | null = null;
   let upstreamTrack: string | null = null;
+
+  // A branch checked out in a linked worktree carries a `(/path/to/worktree)`
+  // annotation where the upstream bracket normally sits. That parenthesised
+  // path is not an upstream ref — skip it and continue scanning for a real
+  // `[upstream: track]` bracket further along the line.
+  if (tail.startsWith("(")) {
+    const closingParen = tail.indexOf(")");
+    if (closingParen === -1) {
+      return null;
+    }
+    tail = tail.slice(closingParen + 1).trimStart();
+  }
 
   if (tail.startsWith("[")) {
     const closingBracket = tail.indexOf("]");
@@ -793,7 +833,10 @@ function pushParsedStatusLine(
   xy: string,
   path: string,
 ): void {
-  const normalizedPath = normalizeRepoRelativePath(unquotePorcelainPath(path));
+  // `-z` output is NUL-delimited, so paths are emitted raw (unquoted, with
+  // literal whitespace/backslashes). Treat them verbatim — only the Windows
+  // separator rewrite in `normalizeRawV2Path` is applied.
+  const normalizedPath = normalizeRawV2Path(path);
   if (!normalizedPath) {
     return;
   }
@@ -828,7 +871,7 @@ export function parseStatusPorcelainV2Z(stdout: string): ParsedStatusLine[] {
         lines.push({
           indexStatus: "?",
           workTreeStatus: "?",
-          path: normalizeRepoRelativePath(unquotePorcelainPath(path)),
+          path: normalizeRawV2Path(path),
         });
       }
       continue;

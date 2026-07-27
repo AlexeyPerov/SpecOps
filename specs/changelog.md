@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-07-27 — Git layer: literal pathspecs, raw -z parsing, worktree branches, paginated history, pull-cancel
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M1–M5 — the
+git-layer Medium block.
+
+- **Staging/unstaging/diffing a file whose name contains a glob metacharacter hit other
+  files (M1).** A bare `-- <path>` argument is a pathspec, so `git restore --staged --
+  'a*.txt'` matched both `a*.txt` and `ab.txt`, and a leading `:` failed outright. Every
+  stage/unstage/working-tree-diff/commit-diff path is now wrapped as `:(literal)<path>`,
+  forcing git to treat it as a literal relative path. The `git diff --no-index` untracked
+  fallback keeps a bare path — that command takes two literal file paths, not pathspecs,
+  so the magic-word form would be read as a filename.
+
+- **Porcelain v2 `-z` paths were unquoted and trimmed (M2).** The `-z` output is
+  NUL-delimited and never quotes or escapes paths, but the parser routed every segment
+  through `unquotePorcelainPath` (which strips quotes, decodes octal escapes, and
+  `.trim()`s). A file named ` lead.txt` was parsed as `lead.txt`, `trail.txt ` as
+  `trail.txt`, and `back\slash.txt` as the unrelated `back/slash.txt`; non-ASCII paths
+  never arrive octal-escaped in `-z` mode, so the octal decoder was dead weight that also
+  mis-handled a file literally named `caf\303\251.txt`. A new `normalizeRawV2Path` treats
+  `-z` paths verbatim (only the Windows `\`→`/` separator rewrite and a trailing-slash
+  collapse), and the synthetic octal-quoted test is replaced by a raw-UTF-8 test and a
+  whitespace/backslash preservation test.
+
+- **Branches checked out in a linked worktree were silently dropped (M3).** `git branch
+  -vv` prefixes them with `+` and annotates them with `(/path/to/worktree)` where the
+  upstream bracket normally sits; the `^(\*|\s)\s` marker regex rejected the `+` row, and
+  even if it hadn't, the parenthesised worktree path would have been mistaken for an
+  upstream. The regex now accepts `+`, and the worktree annotation is skipped before
+  scanning for the real `[upstream: track]` bracket.
+
+- **"Load more" refetched the whole history and had no abort/generation guard (M4).**
+  `handleLoadMore` re-ran `git log -N` with a larger `N` (up to 5000) and rebuilt the
+  whole graph + DOM, and a late response from a stale page could overwrite the panel
+  state. The handler now paginates with `git log --skip=<offset> -<PAGE_SIZE>` and
+  appends (deduped at the boundary), bumping the offset to the max when a short page
+  signals end-of-history. A per-panel `loadMoreController` aborts an in-flight page when
+  the repo, refresh token, or filter mode changes (and on a newer load-more), and the
+  page-1 load effect aborts it too. `QueryCommitsOptions` gained a `skip` option,
+  threaded through `buildQueryCommitsArgs`.
+
+- **Cancel pressed during a pull prompt permanently disabled Cancel (M5).** `handlePull`
+  registered `activeRemoteCommandId` before the autosave/dirty-tree prompts, so a Cancel
+  pressed during a prompt found a command that hadn't spawned yet (`notFound`) and latched
+  `remoteCancelRequested`, leaving the real network operation that spawned later
+  uncancellable. `pullBusy` is still set up-front for the toolbar disabled state, but the
+  command id is deferred until the prompts resolve and `pullRemote` is about to spawn;
+  `remoteCancelRequested` is reset before registration, so a prompt-time Cancel finds no
+  command to cancel and cannot latch the flag.
+
 ## 2026-07-26 — UI shell: shortcut routing, pane/observer/catalog staleness, and a virtualized file tree
 
 Follow-up to the review in

@@ -25,6 +25,15 @@ import {
 export const DIFF_CONTEXT_LINES = 3;
 
 /**
+ * Wrap a commit-diff path as a literal git pathspec so filenames containing
+ * glob metacharacters (`*`, `?`, `[`, `:`) or a leading `:` are not
+ * interpreted by the pathspec parser. See `git glossary` on pathspec magic.
+ */
+function asLiteralPathspec(path: string): string {
+  return `:(literal)${path}`;
+}
+
+/**
  * Maximum `git diff` / `git show --patch` stdout length parsed in the UI
  * (512 KiB). Larger patches throw {@link GitDiffTooLargeError}.
  */
@@ -56,6 +65,11 @@ export function buildQueryCommitsArgs(options: QueryCommitsOptions = {}): string
       break;
   }
 
+  // `--skip=N` must precede the limit so `git log --skip=N -L` returns the
+  // (N+1)..(N+L) window — used for incremental "load more" pagination.
+  if (options.skip !== undefined && options.skip > 0) {
+    args.push(`--skip=${options.skip}`);
+  }
   args.push(`-${limit}`);
   return args;
 }
@@ -137,7 +151,7 @@ export async function queryCommitFileDiff(
           `--unified=${DIFF_CONTEXT_LINES}`,
           `${parentSha}..${sha}`,
           "--",
-          normalizedPath,
+          asLiteralPathspec(normalizedPath),
         ]
       : [
           "show",
@@ -146,7 +160,7 @@ export async function queryCommitFileDiff(
           `--unified=${DIFF_CONTEXT_LINES}`,
           sha,
           "--",
-          normalizedPath,
+          asLiteralPathspec(normalizedPath),
         ];
 
   const response = await runGit(repoRoot, args);

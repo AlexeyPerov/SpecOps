@@ -1,11 +1,25 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { appState } from "../state/appState";
 import {
+  collapsePathSegments,
   ensureNotepadForOutsidePath,
   isPathUnderRoot,
   runInNotepadContext,
   workspaceRelativePath,
 } from "./workspacePaths";
+
+describe("collapsePathSegments", () => {
+  it("resolves . and .. segments", () => {
+    expect(collapsePathSegments("/Users/me/ws/../secrets")).toBe("/Users/me/secrets");
+    expect(collapsePathSegments("/Users/me/ws/./src/../main.ts")).toBe("/Users/me/ws/main.ts");
+    expect(collapsePathSegments("/Users/me/ws/foo/../../ws/bar")).toBe("/Users/me/ws/bar");
+  });
+
+  it("does not climb above the filesystem root", () => {
+    expect(collapsePathSegments("/../etc/passwd")).toBe("/etc/passwd");
+    expect(collapsePathSegments("/Users/../..")).toBe("/");
+  });
+});
 
 describe("isPathUnderRoot", () => {
   it("matches root and nested paths", () => {
@@ -16,6 +30,12 @@ describe("isPathUnderRoot", () => {
   it("handles trailing slashes", () => {
     expect(isPathUnderRoot("/Users/me/ws/src", "/Users/me/ws/")).toBe(true);
     expect(isPathUnderRoot("/Users/me/other", "/Users/me/ws/")).toBe(false);
+  });
+
+  it("rejects paths that escape the root via ..", () => {
+    expect(isPathUnderRoot("/Users/me/ws/../secrets", "/Users/me/ws")).toBe(false);
+    expect(isPathUnderRoot("/Users/me/ws/foo/../../outside", "/Users/me/ws")).toBe(false);
+    expect(isPathUnderRoot("/Users/me/ws/./src/file.ts", "/Users/me/ws")).toBe(true);
   });
 });
 
@@ -30,6 +50,10 @@ describe("workspaceRelativePath", () => {
 
   it("returns null for paths outside workspace root", () => {
     expect(workspaceRelativePath("/Users/me/other/file.ts", "/Users/me/ws")).toBeNull();
+  });
+
+  it("returns null when .. escapes the workspace root", () => {
+    expect(workspaceRelativePath("/Users/me/ws/../secrets/a.txt", "/Users/me/ws")).toBeNull();
   });
 });
 

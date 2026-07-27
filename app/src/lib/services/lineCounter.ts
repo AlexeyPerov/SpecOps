@@ -35,6 +35,12 @@ const PRUNED_DIRECTORY_NAMES: ReadonlySet<string> = new Set([
 /** Default maximum file size before skipping (5 MiB). */
 export const DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 
+/** Soft caps on retained detail lists (totals still count beyond the cap). */
+export const MAX_LISTED_CODE_FILES = 10_000;
+export const MAX_LISTED_IGNORED_FILES = 5_000;
+export const MAX_LISTED_SKIPPED_DIRS = 2_000;
+export const MAX_LISTED_READ_ERRORS = 500;
+
 const YIELD_EVERY_FILES = 50;
 
 export interface CodeFile {
@@ -54,6 +60,11 @@ export interface LineCountResult {
   ignoredFiles: IgnoredFile[];
   skippedDirs: string[];
   readErrors: string[];
+  /** Accurate counts when detail arrays are truncated. */
+  codeFileCount: number;
+  ignoredFileCount: number;
+  skippedDirCount: number;
+  readErrorCount: number;
 }
 
 export interface CountLinesProgress {
@@ -141,6 +152,26 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
+function emptyResult(): LineCountResult {
+  return {
+    totalLines: 0,
+    codeFiles: [],
+    ignoredFiles: [],
+    skippedDirs: [],
+    readErrors: [],
+    codeFileCount: 0,
+    ignoredFileCount: 0,
+    skippedDirCount: 0,
+    readErrorCount: 0,
+  };
+}
+
+function pushCapped<T>(list: T[], item: T, max: number): void {
+  if (list.length < max) {
+    list.push(item);
+  }
+}
+
 interface WalkAccumulator {
   result: LineCountResult;
   seenSkipped: Set<string>;
@@ -162,7 +193,12 @@ async function walkDir(ctx: WalkContext, dir: string): Promise<void> {
   try {
     entries = await readDir(dir);
   } catch (error) {
-    ctx.acc.result.readErrors.push(`${dir}: ${String(error)}`);
+    ctx.acc.result.readErrorCount += 1;
+    pushCapped(
+      ctx.acc.result.readErrors,
+      `${dir}: ${String(error)}`,
+      MAX_LISTED_READ_ERRORS,
+    );
     return;
   }
 
@@ -179,7 +215,8 @@ async function walkDir(ctx: WalkContext, dir: string): Promise<void> {
     if (entry.isDirectory) {
       if (isDotDir(name) || isPrunedDir(name)) {
         if (ctx.acc.seenSkipped.add(rel)) {
-          ctx.acc.result.skippedDirs.push(rel);
+          ctx.acc.result.skippedDirCount += 1;
+          pushCapped(ctx.acc.result.skippedDirs, rel, MAX_LISTED_SKIPPED_DIRS);
         }
         continue;
       }
@@ -193,24 +230,42 @@ async function walkDir(ctx: WalkContext, dir: string): Promise<void> {
 
     const ext = extensionOf(fullPath);
     if (ext === "") {
-      ctx.acc.result.ignoredFiles.push({ relPath: rel, reason: "no extension" });
+      ctx.acc.result.ignoredFileCount += 1;
+      pushCapped(
+        ctx.acc.result.ignoredFiles,
+        { relPath: rel, reason: "no extension" },
+        MAX_LISTED_IGNORED_FILES,
+      );
       continue;
     }
     if (!isCountedExtension(ext)) {
-      ctx.acc.result.ignoredFiles.push({ relPath: rel, reason: "non-code extension" });
+      ctx.acc.result.ignoredFileCount += 1;
+      pushCapped(
+        ctx.acc.result.ignoredFiles,
+        { relPath: rel, reason: "non-code extension" },
+        MAX_LISTED_IGNORED_FILES,
+      );
       continue;
     }
 
     try {
       const info = await stat(fullPath);
       if (info.size > ctx.maxFileBytes) {
-        ctx.acc.result.readErrors.push(
+        ctx.acc.result.readErrorCount += 1;
+        pushCapped(
+          ctx.acc.result.readErrors,
           `${rel}: skipped (file exceeds ${ctx.maxFileBytes} bytes)`,
+          MAX_LISTED_READ_ERRORS,
         );
         continue;
       }
     } catch (error) {
-      ctx.acc.result.readErrors.push(`${rel}: ${String(error)}`);
+      ctx.acc.result.readErrorCount += 1;
+      pushCapped(
+        ctx.acc.result.readErrors,
+        `${rel}: ${String(error)}`,
+        MAX_LISTED_READ_ERRORS,
+      );
       continue;
     }
 
@@ -218,12 +273,22 @@ async function walkDir(ctx: WalkContext, dir: string): Promise<void> {
     try {
       bytes = await readFile(fullPath);
     } catch (error) {
-      ctx.acc.result.readErrors.push(`${rel}: ${String(error)}`);
+      ctx.acc.result.readErrorCount += 1;
+      pushCapped(
+        ctx.acc.result.readErrors,
+        `${rel}: ${String(error)}`,
+        MAX_LISTED_READ_ERRORS,
+      );
       continue;
     }
 
     const lines = countNewlines(bytes);
-    ctx.acc.result.codeFiles.push({ relPath: rel, ext, lines });
+    ctx.acc.result.codeFileCount += 1;
+    pushCapped(
+      ctx.acc.result.codeFiles,
+      { relPath: rel, ext, lines },
+      MAX_LISTED_CODE_FILES,
+    );
     ctx.acc.result.totalLines += lines;
 
     ctx.filesScanned++;
@@ -245,13 +310,7 @@ async function countLinesInWorkspaceInternal(
   throwIfAborted(options?.signal);
 
   const acc: WalkAccumulator = {
-    result: {
-      totalLines: 0,
-      codeFiles: [],
-      ignoredFiles: [],
-      skippedDirs: [],
-      readErrors: [],
-    },
+    result: emptyResult(),
     seenSkipped: new Set(),
   };
 
@@ -273,7 +332,39 @@ async function countLinesInWorkspaceInternal(
   return acc.result;
 }
 
-const inflightByRoot = new Map<string, Promise<LineCountResult>>();
+interface InflightWalk {
+  promise: Promise<LineCountResult>;
+  /** Callers currently awaiting this walk; walk aborts only when the last one leaves. */
+  consumers: number;
+  walkController: AbortController;
+}
+
+const inflightByRoot = new Map<string, InflightWalk>();
+
+function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(new DOMException("Line count aborted", "AbortError"));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      reject(new DOMException("Line count aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
 
 /**
  * Walks `root` and counts newline bytes in every allowlisted code file.
@@ -282,25 +373,48 @@ const inflightByRoot = new Map<string, Promise<LineCountResult>>();
  * output.
  *
  * Concurrent calls for the same normalized root share one in-flight walk.
+ * Aborting one caller rejects only that caller; the walk continues until every
+ * consumer has aborted or the walk finishes.
  */
 export async function countLinesInWorkspace(
   root: string,
   options?: CountLinesOptions,
 ): Promise<LineCountResult> {
   const key = cacheKey(root);
-  const existing = inflightByRoot.get(key);
-  if (existing) {
-    return existing;
+  let entry = inflightByRoot.get(key);
+  if (!entry) {
+    const walkController = new AbortController();
+    const promise = countLinesInWorkspaceInternal(root, {
+      maxFileBytes: options?.maxFileBytes,
+      onProgress: options?.onProgress,
+      signal: walkController.signal,
+    }).finally(() => {
+      if (inflightByRoot.get(key)?.promise === promise) {
+        inflightByRoot.delete(key);
+      }
+    });
+    entry = { promise, consumers: 0, walkController };
+    inflightByRoot.set(key, entry);
   }
 
-  const promise = countLinesInWorkspaceInternal(root, options);
-  inflightByRoot.set(key, promise);
+  entry.consumers += 1;
+  const signal = options?.signal;
+  const onAbort = (): void => {
+    entry!.consumers -= 1;
+    if (entry!.consumers <= 0) {
+      entry!.walkController.abort();
+    }
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
 
   try {
-    return await promise;
+    return await raceWithAbort(entry.promise, signal);
   } finally {
-    if (inflightByRoot.get(key) === promise) {
-      inflightByRoot.delete(key);
+    signal?.removeEventListener("abort", onAbort);
+    // If this caller finished without aborting, drop our consumer slot so a
+    // later abort from another caller can still cancel a lingering walk.
+    if (!signal?.aborted) {
+      entry.consumers = Math.max(0, entry.consumers - 1);
     }
   }
 }

@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-07-27 — State/services: path `..` guard, catalog skips, dir-cache invalidate, selector memos, line-counter bounds
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M33–M37 — the
+second batch of state/services Medium findings.
+
+- **Workspace path guards accepted `..` escapes (M33).** `isPathUnderRoot` was a pure
+  prefix check, so `<root>/../secrets` passed and could reach recursive delete/rename.
+  Paths now collapse `.`/`..` before containment and relative-path checks.
+
+- **Catalog incremental creates ignored traversal skip rules (M34).** Watcher `create`
+  events under `node_modules` / `.git` / other skipped segments were added to quick-open
+  (with a full array copy + sort each time). Those paths are ignored with no rebuild;
+  `addEntry` applies the same skip predicate.
+
+- **Directory cache skipped invalidation for collapsed dirs (M35).** Invalidation reused
+  the tree-refresh helper, which returns nothing unless the parent is root or expanded, so
+  collapsed listings stayed stale and the cache grew without bound. Cache invalidation now
+  always drops the parent path; tree UI refresh stays expansion-scoped; listings are
+  LRU-capped.
+
+- **Cross-context selector memos keyed on `contexts` identity (M36).** Every keystroke
+  replaced `state.contexts`, so `appOpenDocumentIds` and `appExternalWatcherSyncKey`
+  recomputed and re-fired retain/watcher work. Open-doc ids reuse the previous Set when
+  membership is unchanged; the watcher key gates on session identity plus document
+  id/path slices.
+
+- **Line counter lists and cache were unbounded; shared abort was racy (M37).** Detail
+  arrays and the per-root result cache could grow without limit, and aborting one shared
+  walk rejected every waiter. Lists are capped (accurate totals kept), the cache is
+  LRU-bounded, and in-flight walks use refcounted abort so one caller's cancel does not
+  reject others.
+
 ## 2026-07-27 — State/services: dirty-after-stat, stable reload, content-hash fingerprints, path keys
 
 Follow-up to the review in

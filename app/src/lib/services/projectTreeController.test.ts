@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createProjectTreeController,
+  directoriesToInvalidateForChange,
   directoriesToRefreshForChange,
   expandedAncestorPathsForFile,
   type ProjectTreeControllerState,
@@ -28,12 +29,31 @@ describe("expandedAncestorPathsForFile", () => {
   });
 });
 
+describe("directoriesToInvalidateForChange", () => {
+  it("always includes parent even when not expanded", () => {
+    const dirs = directoriesToInvalidateForChange("/repo", "/repo/src/deep/file.ts");
+    expect(dirs).toContain("/repo");
+    expect(dirs).toContain("/repo/src/deep");
+    expect(dirs).toContain("/repo/src/deep/file.ts");
+  });
+
+  it("returns empty for paths outside workspace", () => {
+    expect(directoriesToInvalidateForChange("/repo", "/other/x.txt")).toEqual([]);
+  });
+});
+
 describe("directoriesToRefreshForChange", () => {
   it("includes workspace root parent and expanded dirs", () => {
     const expanded = new Set(["/repo/src"]);
     const dirs = directoriesToRefreshForChange("/repo", "/repo/src/main.ts", expanded);
     expect(dirs).toContain("/repo");
     expect(dirs).toContain("/repo/src");
+  });
+
+  it("omits collapsed deep parents from the tree refresh set", () => {
+    expect(
+      directoriesToRefreshForChange("/repo", "/repo/src/deep/file.ts", new Set()),
+    ).toEqual([]);
   });
 
   it("returns empty for paths outside workspace", () => {

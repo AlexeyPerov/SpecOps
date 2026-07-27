@@ -186,6 +186,28 @@ describe("countLinesInWorkspace walker", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 
+  it("does not reject a second caller when the first aborts a shared walk", async () => {
+    let resolveReadDir: ((value: Awaited<ReturnType<typeof readDir>>) => void) | undefined;
+    readDirMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReadDir = resolve;
+        }),
+    );
+
+    const firstController = new AbortController();
+    const first = countLinesInWorkspace("/tmp/project", { signal: firstController.signal });
+    const second = countLinesInWorkspace("/tmp/project");
+
+    firstController.abort();
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+
+    resolveReadDir?.([]);
+    await expect(second).resolves.toEqual(
+      expect.objectContaining({ totalLines: 0, codeFileCount: 0 }),
+    );
+  });
+
   it("records oversized files in readErrors instead of reading them", async () => {
     readDirMock.mockResolvedValue([
       { name: "bundle.js", isDirectory: false, isFile: true, isSymlink: false },
@@ -205,6 +227,7 @@ describe("countLinesInWorkspace walker", () => {
     expect(result.readErrors).toEqual([
       `bundle.js: skipped (file exceeds ${DEFAULT_MAX_FILE_BYTES} bytes)`,
     ]);
+    expect(result.readErrorCount).toBe(1);
     expect(result.totalLines).toBe(0);
   });
 
@@ -214,6 +237,7 @@ describe("countLinesInWorkspace walker", () => {
     const result = await countLinesInWorkspace("/tmp/project");
 
     expect(result.totalLines).toBe(0);
+    expect(result.readErrorCount).toBe(1);
     expect(result.readErrors).toEqual(["/tmp/project: Error: permission denied"]);
   });
 });

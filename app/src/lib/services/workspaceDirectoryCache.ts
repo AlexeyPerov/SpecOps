@@ -16,8 +16,13 @@ import {
 } from "./projectTree";
 import type { WorkspaceListEntry } from "./workspaceTraversal";
 
+/** Soft cap so collapsed-tree walks cannot retain every directory forever. */
+export const DEFAULT_DIRECTORY_CACHE_MAX_ENTRIES = 256;
+
 export interface WorkspaceDirectoryCacheDeps {
   readDirFn?: (path: string) => Promise<DirEntry[]>;
+  /** Maximum cached directory listings (LRU). Default: {@link DEFAULT_DIRECTORY_CACHE_MAX_ENTRIES}. */
+  maxEntries?: number;
 }
 
 export interface WorkspaceDirectoryCache {
@@ -25,6 +30,8 @@ export interface WorkspaceDirectoryCache {
   invalidate(paths: readonly string[]): void;
   clear(): void;
   dispose(): void;
+  /** Current number of retained listings (for tests). */
+  size(): number;
 }
 
 function normalizeDirPath(path: string): string {
@@ -35,13 +42,28 @@ export function createWorkspaceDirectoryCache(
   deps: WorkspaceDirectoryCacheDeps = {},
 ): WorkspaceDirectoryCache {
   const readDirFn = deps.readDirFn ?? readDir;
+  const maxEntries = deps.maxEntries ?? DEFAULT_DIRECTORY_CACHE_MAX_ENTRIES;
+  // Insertion order = LRU order (oldest first). Re-get moves to the end.
   const cache = new Map<string, WorkspaceListEntry[]>();
   const inflight = new Map<string, Promise<WorkspaceListEntry[]>>();
+
+  function touch(key: string, value: WorkspaceListEntry[]): void {
+    cache.delete(key);
+    cache.set(key, value);
+    while (cache.size > maxEntries) {
+      const oldest = cache.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      cache.delete(oldest);
+    }
+  }
 
   async function readDirCached(path: string): Promise<WorkspaceListEntry[]> {
     const key = normalizeDirPath(path);
     const cached = cache.get(key);
     if (cached !== undefined) {
+      touch(key, cached);
       return cached;
     }
     const pending = inflight.get(key);
@@ -51,7 +73,7 @@ export function createWorkspaceDirectoryCache(
     const promise = readDirFn(key)
       .then((entries) => {
         const result = entries as WorkspaceListEntry[];
-        cache.set(key, result);
+        touch(key, result);
         inflight.delete(key);
         return result;
       })
@@ -79,6 +101,9 @@ export function createWorkspaceDirectoryCache(
     dispose() {
       cache.clear();
       inflight.clear();
+    },
+    size() {
+      return cache.size;
     },
   };
 }

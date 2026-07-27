@@ -13,10 +13,10 @@
   let scanAbort = $state<AbortController | null>(null);
 
   const totalLines = $derived(result?.totalLines ?? 0);
-  const codeFileCount = $derived(result?.codeFiles.length ?? 0);
-  const ignoredFileCount = $derived(result?.ignoredFiles.length ?? 0);
-  const skippedDirCount = $derived(result?.skippedDirs.length ?? 0);
-  const readErrorCount = $derived(result?.readErrors.length ?? 0);
+  const codeFileCount = $derived(result?.codeFileCount ?? result?.codeFiles.length ?? 0);
+  const ignoredFileCount = $derived(result?.ignoredFileCount ?? result?.ignoredFiles.length ?? 0);
+  const skippedDirCount = $derived(result?.skippedDirCount ?? result?.skippedDirs.length ?? 0);
+  const readErrorCount = $derived(result?.readErrorCount ?? result?.readErrors.length ?? 0);
   const hasReadErrors = $derived(readErrorCount > 0);
 
   $effect(() => {

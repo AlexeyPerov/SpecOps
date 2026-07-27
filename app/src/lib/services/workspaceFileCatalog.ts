@@ -9,6 +9,7 @@ import {
   enumerateOpenableWorkspaceFiles,
   normalizeWorkspaceRoot,
   relativePathFromRoot,
+  shouldSkipHeavyDirectoryName,
   type EnumerateOpenableFilesResult,
 } from "./workspaceTraversal";
 import { isOpenableFilePath } from "../editor/editorLanguage";
@@ -104,6 +105,30 @@ function directoryOf(path: string): string {
   return normalized.slice(0, slash);
 }
 
+/**
+ * True when a path would be skipped by the full workspace traversal
+ * (dot segments, heavy dirs like node_modules). Used so incremental watcher
+ * creates cannot inject entries the rebuild would never list.
+ */
+export function shouldSkipCatalogPath(root: string, normalizedPath: string): boolean {
+  const relative = relativePathFromRoot(normalizedPath, root);
+  if (!relative) {
+    return true;
+  }
+  const segments = relative.split("/").filter(Boolean);
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    if (segment.startsWith(".")) {
+      return true;
+    }
+    // Heavy-dir names apply to parent directories only (same as full enumeration).
+    if (index < segments.length - 1 && shouldSkipHeavyDirectoryName(segment)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function toEntry(root: string, absolutePath: string): WorkspaceFileEntry {
   const normalized = normalizePathSync(absolutePath);
   return {
@@ -194,7 +219,7 @@ export function createWorkspaceFileCatalog(
    * present, and never reads file contents.
    */
   function addEntry(root: string, normalizedPath: string): boolean {
-    if (!isOpenableFilePath(normalizedPath)) {
+    if (!isOpenableFilePath(normalizedPath) || shouldSkipCatalogPath(root, normalizedPath)) {
       return false;
     }
     const existing = entries.find((entry) => entry.key === normalizedPath);
@@ -357,6 +382,12 @@ export function createWorkspaceFileCatalog(
             return;
           }
           if (kind === "create") {
+            // Match full enumeration: ignore creates under skipped dirs/dot
+            // segments so npm install etc. cannot flood the catalog or force
+            // a rebuild for paths that would never be listed.
+            if (shouldSkipCatalogPath(root, normalizedChanged)) {
+              return;
+            }
             if (addEntry(root, normalizedChanged)) {
               emit();
             }

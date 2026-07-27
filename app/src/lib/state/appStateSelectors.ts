@@ -8,6 +8,7 @@ import type {
 } from "../domain/contracts";
 import { appState } from "./appState";
 import {
+  allContextSnapshots,
   collectAllOpenDocumentIds,
   getActiveContextSnapshot,
 } from "./appState/contextHelpers";
@@ -49,38 +50,103 @@ export const appActiveContext = derived(appState, ($state) => {
 export const appActiveSession = derived(appActiveContext, ($ctx) => $ctx.session);
 export const appActiveDocuments = derived(appActiveContext, ($ctx) => $ctx.documents);
 
-let lastOpenDocIdsInput: AppDomainState["contexts"] | null = null;
 let lastOpenDocIdsOutput: Set<string> = new Set();
 
-/** Open document ids across all contexts; stable Set ref when contexts unchanged. */
+function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) {
+    return false;
+  }
+  for (const value of a) {
+    if (!b.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Open document ids across all contexts.
+ * Reuses the previous Set when membership is unchanged so content-only edits
+ * (which replace `state.contexts`) do not thrash session-cache retain.
+ */
 export const appOpenDocumentIds = derived(appState, ($state) => {
-  const contexts = $state.contexts;
-  if (lastOpenDocIdsInput === contexts) {
+  const next = collectAllOpenDocumentIds($state);
+  if (setsEqual(lastOpenDocIdsOutput, next)) {
     return lastOpenDocIdsOutput;
   }
-  lastOpenDocIdsInput = contexts;
-  lastOpenDocIdsOutput = collectAllOpenDocumentIds($state);
-  return lastOpenDocIdsOutput;
+  lastOpenDocIdsOutput = next;
+  return next;
 });
 
-let lastExternalWatcherContextsRef: AppDomainState["contexts"] | null = null;
+type WatcherStructuralSlice = {
+  session: SessionState;
+  documents: DocumentState[];
+};
+
 let lastExternalWatcherWatchFlag: boolean | null = null;
+let lastExternalWatcherSlices: WatcherStructuralSlice[] | null = null;
 let lastExternalWatcherKeyOutput: string | null = null;
 
-/** Stable external file-watcher sync key; skips recompute on cursor-only churn. */
+function documentWatchIdentityEqual(a: DocumentState[], b: DocumentState[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index]!;
+    const right = b[index]!;
+    if (left.id !== right.id || left.filePath !== right.filePath) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function watcherStructuralSlices(state: AppDomainState): WatcherStructuralSlice[] {
+  return allContextSnapshots(state).map((entry) => ({
+    session: entry.snapshot.session,
+    documents: entry.snapshot.documents,
+  }));
+}
+
+function watcherStructuralEqual(
+  previous: WatcherStructuralSlice[] | null,
+  next: WatcherStructuralSlice[],
+): boolean {
+  if (!previous || previous.length !== next.length) {
+    return false;
+  }
+  for (let index = 0; index < previous.length; index += 1) {
+    const left = previous[index]!;
+    const right = next[index]!;
+    // Content edits replace the documents array but keep the session ref.
+    if (left.session !== right.session) {
+      return false;
+    }
+    if (!documentWatchIdentityEqual(left.documents, right.documents)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Stable external file-watcher sync key.
+ * Gates on watch-flag + per-context session identity and document id/path
+ * (not `contexts` referential identity), so keystrokes do not re-walk tabs.
+ */
 export const appExternalWatcherSyncKey = derived(appState, ($state) => {
-  const contexts = $state.contexts;
   const watchFlag = $state.settings.externalFiles.watchExternalChanges;
+  const slices = watcherStructuralSlices($state);
   if (
-    lastExternalWatcherContextsRef === contexts &&
     lastExternalWatcherWatchFlag === watchFlag &&
+    watcherStructuralEqual(lastExternalWatcherSlices, slices) &&
     lastExternalWatcherKeyOutput !== null
   ) {
     return lastExternalWatcherKeyOutput;
   }
   const key = externalFileWatcherSyncKey($state);
-  lastExternalWatcherContextsRef = contexts;
   lastExternalWatcherWatchFlag = watchFlag;
+  lastExternalWatcherSlices = slices;
   lastExternalWatcherKeyOutput = key;
   return key;
 });
@@ -157,11 +223,10 @@ export function settingsPersistenceFingerprint(state: AppDomainState): string {
 export function resetAppStateSelectorsForTests(): void {
   lastActiveContextInput = null;
   lastActiveContextOutput = null;
-  lastOpenDocIdsInput = null;
   lastOpenDocIdsOutput = new Set();
   lastRecencyInput = null;
   lastRecencyOutput = EMPTY_RECENCY;
-  lastExternalWatcherContextsRef = null;
+  lastExternalWatcherSlices = null;
   lastExternalWatcherWatchFlag = null;
   lastExternalWatcherKeyOutput = null;
 }

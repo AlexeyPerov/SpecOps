@@ -87,6 +87,40 @@ function parentDirectoryPath(path: string): string {
   return normalized.slice(0, slash);
 }
 
+/**
+ * Directories whose cached listings must be dropped for a filesystem change,
+ * regardless of tree expansion. Always includes the parent of the changed path
+ * (and the path itself when it is an expanded/known directory).
+ */
+export function directoriesToInvalidateForChange(
+  workspaceRoot: string,
+  changedPath: string,
+): string[] {
+  const normalizedRoot = normalizePathForComparison(workspaceRoot);
+  const normalizedChanged = normalizePathForComparison(changedPath);
+  if (
+    normalizedChanged !== normalizedRoot &&
+    !normalizedChanged.startsWith(`${normalizedRoot}/`)
+  ) {
+    return [];
+  }
+
+  const dirs = new Set<string>();
+  dirs.add(normalizedRoot);
+  if (normalizedChanged === normalizedRoot) {
+    return [...dirs];
+  }
+  const parent = parentDirectoryPath(normalizedChanged);
+  dirs.add(parent);
+  dirs.add(normalizedChanged);
+  return [...dirs];
+}
+
+/**
+ * Directories the project-tree UI should reload for a filesystem change.
+ * Only parents that are the workspace root or currently expanded are included,
+ * so collapsed branches are not fetched into the tree view.
+ */
 export function directoriesToRefreshForChange(
   workspaceRoot: string,
   changedPath: string,

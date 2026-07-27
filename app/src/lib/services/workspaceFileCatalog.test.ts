@@ -34,7 +34,7 @@ describe("createWorkspaceFileCatalog", () => {
 
   it("enumerates entries with relative paths and skips content reads", async () => {
     const enumerate = vi.fn(async () => ({
-      paths: ["/ws/src/a.ts", "/ws/README"],
+      paths: ["/ws/src/a.ts", "/ws/readme"],
       partialErrors: ["/ws/locked"],
       cancelled: false,
     }));
@@ -51,8 +51,8 @@ describe("createWorkspaceFileCatalog", () => {
         basename: "a.ts",
       }),
       expect.objectContaining({
-        relativePath: "README",
-        basename: "README",
+        relativePath: "readme",
+        basename: "readme",
       }),
     ]);
     expect(snap.partialErrors).toEqual(["/ws/locked"]);
@@ -234,6 +234,34 @@ describe("createWorkspaceFileCatalog", () => {
     const snap = catalog.getSnapshot();
     expect(snap.entries.some((e) => e.absolutePath.endsWith("new.ts"))).toBe(true);
     expect(catalog.getDiagnostics().incrementalAdds).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(enumerate).toHaveBeenCalledTimes(1);
+    catalog.dispose();
+    vi.useRealTimers();
+  });
+
+  it("ignores creates under skipped directories without rebuilding", async () => {
+    vi.useFakeTimers();
+    const enumerate = vi.fn(async () => ({
+      paths: ["/ws/a.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const catalog = createWorkspaceFileCatalog({
+      enumerate,
+      invalidateDebounceMs: 50,
+    });
+    catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+
+    catalog.notifyFilesystemChange("/ws/node_modules/left-pad/index.js", "create");
+    catalog.notifyFilesystemChange("/ws/.git/config", "create");
+    catalog.notifyFilesystemChange("/ws/dist/bundle.js", "create");
+
+    expect(catalog.getSnapshot().entries).toHaveLength(1);
+    expect(catalog.getDiagnostics().incrementalAdds).toBe(0);
 
     await vi.advanceTimersByTimeAsync(100);
     expect(enumerate).toHaveBeenCalledTimes(1);

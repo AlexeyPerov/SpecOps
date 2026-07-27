@@ -46,7 +46,7 @@
   import type { WorkspaceFileCatalogRegistry } from "../services/workspaceFileCatalogRegistry";
   import type { WorkspaceFileCatalogSnapshot } from "../services/workspaceFileCatalog";
   import type { WorkspaceDirectoryCache } from "../services/workspaceDirectoryCache";
-  import { directoriesToRefreshForChange } from "../services/projectTreeController";
+  import { directoriesToInvalidateForChange } from "../services/projectTreeController";
   import type { PaletteCommandEntry } from "../commands/catalog";
   import type { ResolvedMarkdownSnippet } from "../domain/snippets";
   import { createAppShellAgentHandlers } from "../services/appShellAgentHandlers";
@@ -295,11 +295,7 @@
     onFilesystemChange: (path, kind) => {
       if (activeWorkspaceRoot) {
         workspaceDirectoryCache.invalidate(
-          directoriesToRefreshForChange(
-            activeWorkspaceRoot,
-            path,
-            projectTreeControllerState.expandedPaths,
-          ),
+          directoriesToInvalidateForChange(activeWorkspaceRoot, path),
         );
       }
       workspaceFileCatalogRegistry.notifyFilesystemChange(path, kind);

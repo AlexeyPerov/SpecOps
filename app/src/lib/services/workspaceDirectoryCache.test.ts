@@ -48,6 +48,23 @@ describe("createWorkspaceDirectoryCache", () => {
     expect(readDirFn).toHaveBeenCalledTimes(2);
   });
 
+  it("evicts oldest entries when over maxEntries", async () => {
+    const readDirFn = vi.fn(async (path: string) => [
+      { name: "a.ts", isDirectory: false, isFile: true, isSymlink: false, path: `${path}/a.ts` },
+    ]);
+    const cache = createWorkspaceDirectoryCache({ readDirFn, maxEntries: 2 });
+
+    await cache.readDir("/ws/a");
+    await cache.readDir("/ws/b");
+    await cache.readDir("/ws/c");
+
+    expect(cache.size()).toBe(2);
+    await cache.readDir("/ws/a");
+    expect(readDirFn).toHaveBeenCalledWith("/ws/a");
+    // First /ws/a was evicted; third call to /ws/a is a miss.
+    expect(readDirFn.mock.calls.filter((call) => call[0] === "/ws/a")).toHaveLength(2);
+  });
+
   it("clear drops all cached and in-flight entries", async () => {
     const readDirFn = vi.fn(async () => [
       { name: "a.ts", isDirectory: false, isFile: true, isSymlink: false },

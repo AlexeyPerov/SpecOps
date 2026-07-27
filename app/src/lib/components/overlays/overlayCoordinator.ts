@@ -114,6 +114,27 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
   }
 
   /**
+   * True when a *modal* overlay should own the keyboard (H30). Excludes the
+   * Find-in-Project panel — a persistent bottom panel deliberately left open
+   * across workspace switches — and the workspace context menu (transient,
+   * closes on any outside interaction): neither should disable Cmd+S / Cmd+P
+   * / Cmd+W app-wide while visible.
+   */
+  function isModalOverlayOpen(): boolean {
+    const s = deps.getState();
+    return (
+      s.sessionListOpen ||
+      s.addMultipleOpen ||
+      s.timelineOpen ||
+      s.quickOpenOpen ||
+      s.commandPaletteOpen ||
+      s.headingJumpOpen ||
+      s.bookmarkListOpen ||
+      s.snippetInsertOpen
+    );
+  }
+
+  /**
    * Mirrors the pre-refactor workspace-switch picker-clear block at
    * +page.svelte:1553-1575. sessionList / addMultiple / timeline /
    * workspaceContextMenu are intentionally NOT closed (pre-existing behavior).
@@ -165,6 +186,7 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
     shouldCloseEditorTools,
     isPicker,
     isAnyOverlayOpen,
+    isModalOverlayOpen,
     closeAllOnWorkspaceSwitch,
     closeMarkdownOnlyPickers,
   };

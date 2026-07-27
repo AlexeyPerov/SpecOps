@@ -470,6 +470,15 @@
   }
 
   /**
+   * Modal overlays only (H30) — excludes the persistent Find-in-Project panel
+   * and the transient workspace context menu. This is what the key-routing
+   * layer consults, so global shortcuts keep working while those are visible.
+   */
+  function isModalOverlayOpen(): boolean {
+    return coordinator.isModalOverlayOpen();
+  }
+
+  /**
    * Reactive mirror of {@link isAnyOverlayOpen} for parent `$effect`s. Reading
    * the exported `$derived` via `bind:this` establishes a proper dependency;
    * calling the imperative API from an effect and discarding the boolean does
@@ -617,6 +626,7 @@
 
   const api: OverlayHostApi = {
     isAnyOverlayOpen,
+    isModalOverlayOpen,
     openOverlay,
     closeOverlay,
     closeAllOnWorkspaceSwitch,

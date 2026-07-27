@@ -140,13 +140,27 @@ describe("resolveAppShellKeyRouting", () => {
     }
   });
 
-  it("encodes target precedence: overlay beats always-run and globals", () => {
+  // H30: always-run chords (find/replace, project search) beat the overlay
+  // bail — they replace whatever surface is open. Everything else still
+  // defers to an open (modal) overlay.
+  it("encodes target precedence: always-run beats overlay; overlay beats globals", () => {
     expect(
       resolveAppShellKeyRouting({
         commandId: "app.toggleFindReplace",
         overlayOpen: true,
         targetInOrdinaryInput: false,
         alwaysRunWhenMapped: true,
+      }),
+    ).toEqual({
+      action: "run-command",
+      commandId: "app.toggleFindReplace",
+      preventDefault: true,
+    });
+    expect(
+      resolveAppShellKeyRouting({
+        commandId: "edit.duplicateLine",
+        overlayOpen: true,
+        targetInOrdinaryInput: false,
       }),
     ).toEqual({ action: "ignore", reason: "overlay-open" });
   });

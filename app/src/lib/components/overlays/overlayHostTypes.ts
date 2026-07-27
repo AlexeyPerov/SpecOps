@@ -40,6 +40,12 @@ export type OverlayKind =
 export interface OverlayHostApi {
   /** True when ANY of the 10 overlays is open (drives editor-tools sync). */
   isAnyOverlayOpen: () => boolean;
+  /**
+   * True when a *modal* overlay owns the keyboard (H30) — excludes the
+   * persistent Find-in-Project panel and the workspace context menu, so
+   * global shortcuts are not disabled app-wide while those are visible.
+   */
+  isModalOverlayOpen: () => boolean;
   /** Open a specific overlay, closing the others per the close-others rules. */
   openOverlay: (kind: OverlayKind, options?: OpenOverlayOptions) => void;
   /** Close one overlay. */

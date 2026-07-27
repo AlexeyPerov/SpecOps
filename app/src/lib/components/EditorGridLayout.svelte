@@ -85,6 +85,7 @@
     const width = maxRowWidth;
     const out: PaneCell[] = [];
     const seen = new Set<number>();
+    const seenIds = new Set<string>();
 
     for (let rowIndex = 0; rowIndex < slots.length; rowIndex += 1) {
       const row = slots[rowIndex] ?? [];
@@ -105,8 +106,15 @@
           paneIndex,
           gridRow: rowIndex + 1,
           gridColumn: spansFullWidth ? "1 / -1" : String(colIndex + 1),
-          key: `${paneIndex}:${pane.id}`,
+          // H31: keyed on pane id alone — closing a pane compacts
+          // `layout.panes`, so an index-prefixed key would change for every
+          // surviving pane and remount it (destroying its CodeMirror view,
+          // undo history, folds and scroll). Duplicate pane ids (corrupt
+          // sessions) fall back to an index-prefixed key so Svelte still gets
+          // unique each-keys instead of crashing.
+          key: seenIds.has(pane.id) ? `dup-${paneIndex}:${pane.id}` : pane.id,
         });
+        seenIds.add(pane.id);
       }
     }
 
@@ -114,15 +122,18 @@
     let extraRow = slots.length + 1;
     for (let i = 0; i < layout.panes.length; i += 1) {
       if (!seen.has(i)) {
+        const pane = layout.panes[i];
         out.push({
-          pane: layout.panes[i],
+          pane,
           paneIndex: i,
           gridRow: extraRow,
           gridColumn: "1 / -1",
-          // Index-prefixed so duplicate pane ids (corrupt sessions) still get
-          // distinct Svelte each-keys and do not remount in a loop.
-          key: `extra-${i}:${layout.panes[i].id}`,
+          // H31: id-only key so a pane moving between slots and the safety
+          // net does not remount; duplicates (corrupt sessions) fall back to
+          // an index-prefixed key for uniqueness.
+          key: seenIds.has(pane.id) ? `extra-${i}:${pane.id}` : pane.id,
         });
+        seenIds.add(pane.id);
         extraRow += 1;
       }
     }

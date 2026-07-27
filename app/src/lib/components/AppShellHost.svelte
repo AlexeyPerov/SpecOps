@@ -347,6 +347,15 @@
     },
   });
 
+  // H33: `editorPaneEl` is rewritten by EditorPaneContent on every active-pane
+  // change; re-point the layout ResizeObserver at the new element (the setup
+  // pass only observed the element present at mount, so pane switches left a
+  // detached element observed and `editorPaneWidth` permanently stale).
+  $effect(() => {
+    editorPaneEl;
+    layoutHandlers.syncEditorPaneObserved();
+  });
+
   const agentHandlers = createAppShellAgentHandlers({
     getIsChatHttpActive: () => isChatHttpActive,
     getCurrentWindowId: () => currentWindowId,
@@ -382,7 +391,9 @@
     getCurrentWindowId: () => currentWindowId,
     getEditorRunner: () => editorWorkbench.getActiveRunner(),
     getEditorTools: () => editorTools,
-    getOverlayOpen: () => overlayHost?.api.isAnyOverlayOpen() ?? false,
+    // H30: keyboard routing only defers to *modal* overlays; the persistent
+    // Find-in-Project panel / context menu must not kill global shortcuts.
+    getOverlayOpen: () => overlayHost?.api.isModalOverlayOpen() ?? false,
     openProjectSearch: (focusReplace) => {
       overlayHost?.api.openOverlay("projectSearch", { focusReplace });
     },

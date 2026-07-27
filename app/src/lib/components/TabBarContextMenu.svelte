@@ -109,11 +109,20 @@
     nearbyFiles = [];
     const requestId = nearbyRequestId + 1;
     nearbyRequestId = requestId;
-    const result = await prefetchNearbyFilesForTab(tab, documents, openTabs, requestId);
-    if (!result || nearbyRequestId !== requestId) {
+    // H34: the loading flag must be cleared on every terminal path — a null
+    // result or a rejection previously left the submenu spinning forever
+    // (plus an unhandled rejection from the `void` call site). Only a
+    // superseded request leaves the flag alone: the newer request owns it.
+    let result: Awaited<ReturnType<typeof prefetchNearbyFilesForTab>> = null;
+    try {
+      result = await prefetchNearbyFilesForTab(tab, documents, openTabs, requestId);
+    } catch {
+      result = null;
+    }
+    if (nearbyRequestId !== requestId) {
       return;
     }
-    nearbyFiles = result.files;
+    nearbyFiles = result?.files ?? [];
     nearbyFilesLoading = false;
   }
 

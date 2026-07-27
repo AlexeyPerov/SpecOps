@@ -1,5 +1,58 @@
 # Changelog
 
+## 2026-07-26 — UI shell: shortcut routing, pane/observer/catalog staleness, and a virtualized file tree
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering H30–H35 —
+the UI-shell block. This closes out the review's High findings.
+
+- **Any open overlay killed every global shortcut (H30).** Key routing bailed on
+  `overlayOpen` before consulting `alwaysRunWhenMapped`, and the signal came from
+  `isAnyOverlayOpen()`, which includes the Find-in-Project panel — a persistent bottom
+  panel deliberately left open across workspace switches — and the workspace context
+  menu. With project search open, Cmd+S / Cmd+P / Cmd+W / Cmd+F were dead app-wide.
+  Routing now consults the always-run chords first (they replace whatever surface is
+  open) and reads a new `isModalOverlayOpen()` that excludes both non-modal surfaces;
+  `isAnyOverlayOpen` keeps its old meaning for the editor-tools sync. Pinned by updated
+  key-routing and new coordinator tests.
+
+- **Closing one split pane remounted every surviving pane (H31).** The pane `{#each}`
+  key was `` `${paneIndex}:${pane.id}` `` and `reflowAfterClose` compacts `layout.panes`,
+  so survivors shifted index, changed key, and were destroyed and rebuilt — CodeMirror
+  views torn down, undo history, folds, selection and scroll lost for panes the user
+  never touched. Cells are now keyed on `pane.id` alone, with an index-prefixed fallback
+  only for duplicate ids (corrupt sessions) so each-keys stay unique.
+
+- **Quick Open subscribed to the previous workspace's catalog (H32).** The subscription
+  effect ran before the registry-retargeting effect on a workspace switch (Svelte runs
+  invalidated effects in creation order), so `getActive()` still returned the old root's
+  catalog and the snapshot revision never bumped again. The effect now resolves the
+  catalog for the current root itself via the idempotent `setActiveRoot` and bumps the
+  revision on switch, so a ready cached catalog shows immediately.
+
+- **The layout ResizeObserver watched a detached element after any pane switch (H33).**
+  `setupLayoutObserver` observed `editorPaneEl` once at mount, but the element is
+  recreated on every active-pane change — `editorPaneWidth` went permanently stale, so
+  markdown split silently fell back to edit (or rendered when it didn't fit). A new
+  `syncEditorPaneObserved()` unobserves the old element, observes the new one, and
+  measures immediately, driven by an `$effect` on the bound element.
+
+- **The nearby-files submenu could spin forever (H34).** `nearbyFilesLoading` was
+  cleared only on the success path and the call site was un-caught, so a null result or
+  rejection left a permanent spinner plus an unhandled rejection. The load now clears
+  the flag on every terminal path; only a superseded request leaves it to the newer one.
+
+- **The file tree rendered every node with no virtualization (H35).** The recursive
+  `ProjectTreeList`/`ProjectTreeNode` pair created one component per row, recomputed
+  three `@const`s per node per render, and threaded `dragState`/`statusByPath` through
+  every level — one pointermove during a tree drag invalidated the entire recursive
+  subtree. Replaced by a pure `flattenProjectTree` pass (unit-tested) rendered as a
+  single flat `{#each}` in `ProjectTreeView`, windowed against the scrollable ancestor
+  above 200 rows: measured row pitch, 12-row overscan, spacer rows, and an in-view
+  reveal that scrolls to the active file when its row is outside the rendered window
+  (the panel's `scrollIntoView` only reaches rows that exist in the DOM). Both old
+  components are deleted.
+
 ## 2026-07-26 — Atomic persistence writes, a cross-window session lock, and bounded traversal/search
 
 Follow-up to the review in

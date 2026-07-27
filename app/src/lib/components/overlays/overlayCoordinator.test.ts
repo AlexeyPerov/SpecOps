@@ -132,6 +132,34 @@ describe("createOverlayCoordinator.isAnyOverlayOpen", () => {
   });
 });
 
+describe("createOverlayCoordinator.isModalOverlayOpen (H30)", () => {
+  it("excludes the non-modal project search panel and the workspace context menu", () => {
+    expect(setup({ projectSearchOpen: true }).coordinator.isModalOverlayOpen()).toBe(false);
+    expect(
+      setup({
+        workspaceContextMenu: { workspaceId: WORKSPACE_ID, x: 0, y: 0 },
+      }).coordinator.isModalOverlayOpen(),
+    ).toBe(false);
+  });
+
+  it("returns true for every modal overlay", () => {
+    const modalKeys: Array<keyof OverlayState> = [
+      "sessionListOpen",
+      "addMultipleOpen",
+      "timelineOpen",
+      "quickOpenOpen",
+      "commandPaletteOpen",
+      "headingJumpOpen",
+      "bookmarkListOpen",
+      "snippetInsertOpen",
+    ];
+    for (const key of modalKeys) {
+      const { coordinator } = setup({ [key]: true });
+      expect(coordinator.isModalOverlayOpen(), `expected true when ${key} is open`).toBe(true);
+    }
+  });
+});
+
 describe("createOverlayCoordinator.closeAllOnWorkspaceSwitch", () => {
   it("closes the 5 pickers", () => {
     const { state, coordinator } = setup({

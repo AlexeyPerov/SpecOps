@@ -95,6 +95,15 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
     }
   }
 
+  /**
+   * H33: the editor pane element is torn down and recreated on every
+   * active-pane change, so the element observed at setup goes stale (detached
+   * but still observed) while new elements are never measured. The currently
+   * observed element is tracked here and re-synced via
+   * {@link syncEditorPaneObserved} whenever the bound element changes.
+   */
+  let observedEditorPaneEl: HTMLElement | null = null;
+
   function setupLayoutObserver(): void {
     updateLayoutMeasurements();
     if (typeof ResizeObserver === "undefined") {
@@ -109,14 +118,42 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
       observer.observe(shellMainRowEl);
     }
     const editorPaneEl = deps.getEditorPaneEl();
+    observedEditorPaneEl = editorPaneEl;
     if (editorPaneEl) {
       observer.observe(editorPaneEl);
     }
   }
 
+  /**
+   * Re-point the layout observer at the current editor pane element (H33).
+   * Called from an effect on the bound `editorPaneEl`; a no-op until the
+   * observer exists and whenever the element is unchanged.
+   */
+  function syncEditorPaneObserved(): void {
+    const observer = deps.getLayoutResizeObserver();
+    if (!observer) {
+      return;
+    }
+    const editorPaneEl = deps.getEditorPaneEl();
+    if (editorPaneEl === observedEditorPaneEl) {
+      return;
+    }
+    if (observedEditorPaneEl) {
+      observer.unobserve(observedEditorPaneEl);
+    }
+    observedEditorPaneEl = editorPaneEl;
+    if (editorPaneEl) {
+      observer.observe(editorPaneEl);
+    }
+    // Measure immediately — the ResizeObserver only fires on future resizes,
+    // and the new pane's width is what canFitMarkdownSplit() needs right now.
+    updateLayoutMeasurements();
+  }
+
   function disconnectLayoutObserver(): void {
     deps.getLayoutResizeObserver()?.disconnect();
     deps.setLayoutResizeObserver(null);
+    observedEditorPaneEl = null;
   }
 
   return {
@@ -132,6 +169,7 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
     updateLayoutMeasurements,
     applyResponsiveLayoutRules,
     setupLayoutObserver,
+    syncEditorPaneObserved,
     disconnectLayoutObserver,
   };
 }

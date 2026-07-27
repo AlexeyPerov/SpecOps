@@ -354,8 +354,21 @@
   });
 
   $effect(() => {
-    activeWorkspaceRoot;
-    const catalog = workspaceFileCatalogRegistry.getActive();
+    // H32: retarget-then-subscribe in one effect. This effect is created
+    // before the catalog-retargeting effect below, so on a workspace switch
+    // it re-runs first — reading `registry.getActive()` here would still
+    // return the *previous* root's catalog and Quick Open would show the old
+    // workspace's files forever. `setActiveRoot` is idempotent (the later
+    // retargeting effect reuses the same catalog), so resolving the catalog
+    // for the current root directly makes the subscription order-independent.
+    const catalog =
+      activeWorkspaceRoot && !isChatHttpActive
+        ? workspaceFileCatalogRegistry.setActiveRoot(activeWorkspaceRoot)
+        : null;
+    // Refresh the Quick Open snapshot immediately on switch — a ready cached
+    // catalog may never emit again, so waiting for an event would show the
+    // old snapshot until the next filesystem change.
+    workspaceFileCatalogRevision += 1;
     if (!catalog) {
       return;
     }

@@ -62,10 +62,6 @@ export function resolveAppShellKeyRouting(
     alwaysRunWhenMapped = false,
   } = input;
 
-  if (overlayOpen) {
-    return { action: "ignore", reason: "overlay-open" };
-  }
-
   if (composing) {
     return { action: "ignore", reason: "ime-composing" };
   }
@@ -74,8 +70,16 @@ export function resolveAppShellKeyRouting(
     return { action: "ignore", reason: "no-command" };
   }
 
+  // H30: consulted before the overlay bail so the find/replace and project
+  // search chords still work while an overlay is open (they replace it), and
+  // callers pass a *modal-only* `overlayOpen` so the persistent Find-in-
+  // Project panel or a context menu never kills global shortcuts app-wide.
   if (alwaysRunWhenMapped) {
     return { action: "run-command", commandId, preventDefault: true };
+  }
+
+  if (overlayOpen) {
+    return { action: "ignore", reason: "overlay-open" };
   }
 
   if (targetInOrdinaryInput && !isEditorGlobalCommand(commandId)) {

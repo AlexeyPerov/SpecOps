@@ -31,7 +31,11 @@ export interface AppShellCommandHandlersDeps {
   getCurrentWindowId: () => string;
   getEditorRunner: () => EditorCommandRunner | null;
   getEditorTools: () => EditorToolController;
-  /** True when a modal/picker owns the keyboard (session list, project search, …). */
+  /**
+   * True when a *modal* overlay owns the keyboard (session list, pickers, …).
+   * H30: must exclude non-modal surfaces (Find-in-Project panel, context
+   * menus) or global shortcuts die app-wide while they are visible.
+   */
   getOverlayOpen?: () => boolean;
   openProjectSearch: (focusReplace: boolean) => void;
   openQuickOpen: () => void;

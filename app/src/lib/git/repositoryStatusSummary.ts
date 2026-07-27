@@ -15,6 +15,12 @@ export type RepositoryStatusSummary = {
   /** Set when upstream exists but ahead/behind query failed (non-upstream git error). */
   aheadBehindError?: string | null;
   isDirty: boolean;
+  /**
+   * True when the repository HEAD is unborn — `git init` ran but no commit
+   * exists yet. Lets callers render their dedicated empty state instead of
+   * surfacing a `git log` fatal.
+   */
+  isUnborn: boolean;
 };
 
 /**
@@ -67,6 +73,21 @@ export async function queryRepositoryStatusSummary(
     .join("\n");
   const isDirty = parseStatusPorcelain(porcelainStdout).length > 0;
 
+  // An unborn HEAD (freshly init'd repo, no commits) has no upstream and no
+  // ahead/behind to compute — and `parseStatusShortBranchHeader` already
+  // reported `isUnborn` with `upstream: null`. Skip the gone/upstream branch
+  // below rather than re-deriving it from the placeholder header text.
+  if (parsed.isUnborn) {
+    return {
+      branchName,
+      isDetached: false,
+      aheadBehind: null,
+      aheadBehindError: null,
+      isDirty,
+      isUnborn: true,
+    };
+  }
+
   let aheadBehind = parsed.aheadBehind;
   let aheadBehindError: string | null = null;
   if (!parsed.isDetached && parsed.upstream && aheadBehind === null && !headerLine.includes("[gone]")) {
@@ -97,5 +118,6 @@ export async function queryRepositoryStatusSummary(
     aheadBehind,
     aheadBehindError,
     isDirty,
+    isUnborn: false,
   };
 }

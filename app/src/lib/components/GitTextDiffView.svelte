@@ -36,6 +36,37 @@
     return diff.hunks.flatMap((hunk) => hunk.lines);
   });
 
+  // Windowing for large diffs. Each row is a single unwrapped line
+  // (`white-space: pre`, `line-height: 1.5` at 12px → 18px), so the pitch is
+  // fixed and the window math is exact. Without this a ~10k-row diff rendered
+  // every row (×4 elements) and stalled the panel (M13).
+  const DIFF_ROW_PITCH = 18;
+  const DIFF_VIRTUALIZE_THRESHOLD = 400;
+  const DIFF_OVERSCAN_ROWS = 20;
+
+  let diffScrollEl = $state<HTMLDivElement | null>(null);
+  let diffScrollTop = $state(0);
+  let diffViewportHeight = $state(0);
+
+  const diffVisibleRange = $derived.by(() => {
+    const total = allLines.length;
+    if (total <= DIFF_VIRTUALIZE_THRESHOLD || diffViewportHeight <= 0) {
+      return { start: 0, end: total };
+    }
+    const start = Math.max(0, Math.floor(diffScrollTop / DIFF_ROW_PITCH) - DIFF_OVERSCAN_ROWS);
+    const end = Math.min(
+      total,
+      Math.ceil((diffScrollTop + diffViewportHeight) / DIFF_ROW_PITCH) + DIFF_OVERSCAN_ROWS,
+    );
+    return { start, end };
+  });
+  const diffTopPadPx = $derived(
+    diffVisibleRange.start === 0 ? 0 : diffVisibleRange.start * DIFF_ROW_PITCH,
+  );
+  const diffBottomPadPx = $derived(
+    Math.max(0, (allLines.length - diffVisibleRange.end) * DIFF_ROW_PITCH),
+  );
+
   function formatLineNo(value: number | undefined): string {
     return value === undefined ? "" : String(value);
   }
@@ -67,6 +98,31 @@
         return "git-text-diff-line-context";
     }
   }
+
+  $effect(() => {
+    const el = diffScrollEl;
+    if (!el || typeof window === "undefined") {
+      return;
+    }
+    const measure = (): void => {
+      diffViewportHeight = el.clientHeight;
+    };
+    const onScroll = (): void => {
+      diffScrollTop = el.scrollTop;
+    };
+    measure();
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(measure);
+      resizeObserver.observe(el);
+    }
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      resizeObserver?.disconnect();
+    };
+  });
 </script>
 
 <div class="git-text-diff">
@@ -113,9 +169,12 @@
         <p class="git-text-diff-state-title">No diff content</p>
       </div>
     {:else}
-      <div class="git-text-diff-scroll">
+      <div class="git-text-diff-scroll" bind:this={diffScrollEl}>
         <div class="git-text-diff-table">
-          {#each allLines as line, index (index)}
+          {#if diffTopPadPx > 0}
+            <div class="git-text-diff-spacer" style="height: {diffTopPadPx}px" aria-hidden="true"></div>
+          {/if}
+          {#each allLines.slice(diffVisibleRange.start, diffVisibleRange.end) as line, i (diffVisibleRange.start + i)}
             <div class={`git-text-diff-row ${lineClass(line.kind)}`}>
               <span class="git-text-diff-gutter git-text-diff-gutter-old">
                 {formatLineNo(line.oldLineNo)}
@@ -127,6 +186,9 @@
               <pre class="git-text-diff-content">{line.content}</pre>
             </div>
           {/each}
+          {#if diffBottomPadPx > 0}
+            <div class="git-text-diff-spacer" style="height: {diffBottomPadPx}px" aria-hidden="true"></div>
+          {/if}
         </div>
       </div>
     {/if}
@@ -248,6 +310,10 @@
     display: flex;
     align-items: flex-start;
     min-width: 0;
+  }
+
+  .git-text-diff-spacer {
+    width: 100%;
   }
 
   .git-text-diff-gutter {

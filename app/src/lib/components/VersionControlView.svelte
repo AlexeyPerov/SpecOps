@@ -340,7 +340,8 @@
   });
 
   const toolbarBusy = $derived(
-    isVersionControlToolbarBusy({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading }),
+    isVersionControlToolbarBusy({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading }) ||
+      panelRemoteCommand !== null,
   );
 
   const remoteOperationBusy = $derived(
@@ -859,8 +860,13 @@
   async function handleFetch(): Promise<void> {
     if (
       !repoRoot ||
+      panelRemoteCommand !== null ||
       !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
     ) {
+      // Block a toolbar remote op while a panel remote command (tag push/
+      // delete, changes fetch) is in flight. Without this Pull/Push stayed
+      // enabled during a panel op, and starting one raced Cancel onto the
+      // wrong command (M15).
       return;
     }
 
@@ -884,8 +890,10 @@
   async function handlePull(): Promise<void> {
     if (
       !repoRoot ||
+      panelRemoteCommand !== null ||
       !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
     ) {
+      // See handleFetch: block toolbar remotes while a panel command runs (M15).
       return;
     }
 
@@ -987,8 +995,10 @@
   async function handlePush(): Promise<void> {
     if (
       !repoRoot ||
+      panelRemoteCommand !== null ||
       !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
     ) {
+      // See handleFetch: block toolbar remotes while a panel command runs (M15).
       return;
     }
 

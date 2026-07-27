@@ -186,6 +186,7 @@ describe("parseStatusShortBranchHeader", () => {
       isDetached: false,
       upstream: "origin/main",
       aheadBehind: { ahead: 2, behind: 1 },
+      isUnborn: false,
     });
   });
 
@@ -195,6 +196,7 @@ describe("parseStatusShortBranchHeader", () => {
       isDetached: false,
       upstream: "origin/main",
       aheadBehind: null,
+      isUnborn: false,
     });
   });
 
@@ -204,6 +206,7 @@ describe("parseStatusShortBranchHeader", () => {
       isDetached: false,
       upstream: null,
       aheadBehind: null,
+      isUnborn: false,
     });
   });
 
@@ -213,6 +216,7 @@ describe("parseStatusShortBranchHeader", () => {
       isDetached: true,
       upstream: null,
       aheadBehind: null,
+      isUnborn: false,
     });
   });
 
@@ -222,6 +226,20 @@ describe("parseStatusShortBranchHeader", () => {
       isDetached: false,
       upstream: "origin/main",
       aheadBehind: null,
+      isUnborn: false,
+    });
+  });
+
+  it("parses unborn-HEAD marker and reports the real branch name", () => {
+    // `git status -sb` emits this for a freshly `git init`-ed repo with no
+    // commits. Without dedicated handling the whole sentence was treated as
+    // the branch name (M11).
+    expect(parseStatusShortBranchHeader("## No commits yet on main")).toEqual({
+      branchName: "main",
+      isDetached: false,
+      upstream: null,
+      aheadBehind: null,
+      isUnborn: true,
     });
   });
 });

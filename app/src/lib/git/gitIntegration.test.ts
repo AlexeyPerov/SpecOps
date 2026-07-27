@@ -70,6 +70,23 @@ describeIfGitInstalled("git integration (temp repo harness)", () => {
     });
   });
 
+  it("status -sb parser flags unborn HEAD and reports the real branch name", () => {
+    // Freshly `git init`-ed repo with no commits. `git status -sb` emits
+    // `## No commits yet on <branch>`; without dedicated parsing the whole
+    // sentence was treated as the branch name (M11).
+    withTempGitRepo("specops-git-integration-unborn-", (repo) => {
+      const stdout = repo.run(["status", "-sb"]) as string;
+      const headerLine = stdout.split("\n").find((line) => line.startsWith("## "));
+      expect(headerLine).toBeDefined();
+
+      const parsed = parseStatusShortBranchHeader(headerLine!);
+      expect(parsed?.isUnborn).toBe(true);
+      expect(parsed?.branchName).toBeTruthy();
+      expect(parsed?.branchName).not.toContain("No commits yet");
+      expect(parsed?.isDetached).toBe(false);
+    });
+  });
+
   it("init → modify files → status parser round-trip", () => {
     withTempGitRepo("specops-git-integration-status-", (repo) => {
       repo.writeFile("tracked.txt", "v1");

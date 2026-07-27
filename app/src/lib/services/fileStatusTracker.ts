@@ -53,6 +53,14 @@ interface FileStatusEntry {
 const cache = new Map<string, FileStatusEntry>();
 const inflight = new Map<string, Promise<FileStatusTrackerState>>();
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/**
+ * Per-workspace "a mutation landed during an in-flight refresh" flag. When set,
+ * the in-flight refresh resolves against a snapshot older than the mutation, so
+ * a follow-up refresh is queued to pick up the new state. Without this the
+ * coalescing in {@link refreshFileStatuses} dropped the newer request entirely
+ * and project-tree badges stayed stale (M14).
+ */
+const pendingFollowUp = new Set<string>();
 let mutationHooksInstalled = false;
 
 function copyEmptyState(): FileStatusTrackerState {
@@ -206,6 +214,7 @@ export function getFileStatusSnapshot(workspaceRootPath: string): FileStatusTrac
 export function resetFileStatusTrackerForTests(): void {
   cache.clear();
   inflight.clear();
+  pendingFollowUp.clear();
   mutationHooksInstalled = false;
   for (const timer of debounceTimers.values()) {
     clearTimeout(timer);
@@ -221,6 +230,13 @@ export async function refreshFileStatuses(input: {
   const { workspaceRootPath } = input;
   const existing = inflight.get(workspaceRootPath);
   if (existing) {
+    // A refresh is already in flight. It will resolve against a snapshot
+    // taken before this call, so whatever mutation (or external change)
+    // prompted this request won't be reflected. Mark a follow-up so the
+    // in-flight completion triggers another fetch that picks up the newer
+    // state — without this the coalescing dropped the newer request and
+    // project-tree badges stayed stale (M14).
+    pendingFollowUp.add(workspaceRootPath);
     return existing;
   }
 
@@ -256,6 +272,14 @@ export async function refreshFileStatuses(input: {
       return errorState;
     } finally {
       inflight.delete(workspaceRootPath);
+      // If another refresh was requested while this one was in flight, the
+      // snapshot we just wrote is stale relative to that request. Re-fetch
+      // once so the latest state lands. The follow-up call clears the flag
+      // before going async, and any further concurrent request re-sets it.
+      if (pendingFollowUp.has(workspaceRootPath)) {
+        pendingFollowUp.delete(workspaceRootPath);
+        void refreshFileStatuses(input);
+      }
     }
   })();
 
@@ -266,6 +290,7 @@ export async function refreshFileStatuses(input: {
 export function clearFileStatusTracker(workspaceRootPath: string): void {
   cache.delete(workspaceRootPath);
   inflight.delete(workspaceRootPath);
+  pendingFollowUp.delete(workspaceRootPath);
   const timer = debounceTimers.get(workspaceRootPath);
   if (timer) {
     clearTimeout(timer);

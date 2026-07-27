@@ -46,6 +46,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: { ahead: 2, behind: 1 },
       aheadBehindError: null,
       isDirty: true,
+      isUnborn: false,
     });
 
     expect(runGitMock).toHaveBeenCalledTimes(1);
@@ -61,6 +62,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: { ahead: 0, behind: 0 },
       aheadBehindError: null,
       isDirty: false,
+      isUnborn: false,
     });
   });
 
@@ -75,6 +77,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: null,
       aheadBehindError: null,
       isDirty: false,
+      isUnborn: false,
     });
 
     expect(runGitMock).toHaveBeenNthCalledWith(1, "/tmp/repo", ["status", "-sb"]);
@@ -90,6 +93,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: null,
       aheadBehindError: null,
       isDirty: false,
+      isUnborn: false,
     });
 
     expect(logDiagnosticMock).toHaveBeenCalledWith(
@@ -98,5 +102,23 @@ describe("queryRepositoryStatusSummary", () => {
         message: "Upstream branch is gone; omitting ahead/behind counts",
       }),
     );
+  });
+
+  it("reports an unborn HEAD with the real branch name and no rev-parse call", async () => {
+    runGitMock.mockResolvedValue(statusResponse("## No commits yet on main\n"));
+
+    await expect(queryRepositoryStatusSummary("/tmp/repo")).resolves.toEqual({
+      branchName: "main",
+      isDetached: false,
+      aheadBehind: null,
+      aheadBehindError: null,
+      isDirty: false,
+      isUnborn: true,
+    });
+
+    // No detached-HEAD rev-parse follow-up for an unborn repo (it would exit
+    // 128 too).
+    expect(runGitMock).toHaveBeenCalledTimes(1);
+    expect(runGitMock).toHaveBeenCalledWith("/tmp/repo", ["status", "-sb"]);
   });
 });

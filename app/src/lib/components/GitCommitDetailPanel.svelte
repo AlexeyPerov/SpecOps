@@ -11,6 +11,7 @@
   } from "../git/gitService";
   import type { CommitDetail, CommitFileChange, ParsedTextDiff } from "../git/types";
   import GitTextDiffView from "./GitTextDiffView.svelte";
+  import { onDestroy } from "svelte";
 
   interface Props {
     repoRoot: string;
@@ -241,12 +242,37 @@
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
       window.removeEventListener("pointercancel", handleUp);
+      // The drag is finished; clear the active teardown so onDestroy no longer
+      // holds a stale reference to these handlers.
+      activeFileListResizeTeardown = null;
     }
 
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp);
     window.addEventListener("pointercancel", handleUp);
+
+    // Track the in-flight drag teardown so the panel can detach the window
+    // listeners if it unmounts mid-drag (e.g. a workspace switch destroys the
+    // whole Version Control view while the user is still dragging the divider).
+    // Without this, handleMove keeps firing for the lifetime of the window,
+    // writing to a destroyed panel's state (M12).
+    activeFileListResizeTeardown = () => {
+      isResizingFileList = false;
+      target?.releasePointerCapture(pointerId);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+    };
   }
+
+  let activeFileListResizeTeardown: (() => void) | null = null;
+
+  // If the panel unmounts while a file-list divider drag is in flight, detach
+  // the window listeners so they don't outlive the component.
+  onDestroy(() => {
+    activeFileListResizeTeardown?.();
+    activeFileListResizeTeardown = null;
+  });
 </script>
 
 <div class="git-commit-detail" aria-label="Commit detail">

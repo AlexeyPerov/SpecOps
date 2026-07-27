@@ -235,6 +235,12 @@ export type ParsedStatusShortBranch = {
   isDetached: boolean;
   upstream: string | null;
   aheadBehind: AheadBehindCounts | null;
+  /**
+   * True when `git status -sb` reports `## No commits yet on <branch>` — an
+   * unborn HEAD. Without this flag the header is parsed as a literal branch
+   * name of "No commits yet on main", leaking the placeholder into the UI.
+   */
+  isUnborn: boolean;
 };
 
 function parseStatusShortTrackCounts(track: string): AheadBehindCounts | null {
@@ -267,6 +273,23 @@ export function parseStatusShortBranchHeader(line: string): ParsedStatusShortBra
       isDetached: true,
       upstream: null,
       aheadBehind: null,
+      isUnborn: false,
+    };
+  }
+
+  // `git status -sb` emits `## No commits yet on <branch>` for an unborn HEAD
+  // (a freshly `git init`-ed repo with no commits). Parsing it through the
+  // generic branch-name path would treat the whole sentence as the branch
+  // name. Pull out the real branch name and flag the unborn state so callers
+  // can render their dedicated empty state instead.
+  const unbornMatch = /^No commits yet on (.+)$/.exec(body);
+  if (unbornMatch) {
+    return {
+      branchName: unbornMatch[1].trim(),
+      isDetached: false,
+      upstream: null,
+      aheadBehind: null,
+      isUnborn: true,
     };
   }
 
@@ -289,6 +312,7 @@ export function parseStatusShortBranchHeader(line: string): ParsedStatusShortBra
     isDetached: false,
     upstream,
     aheadBehind,
+    isUnborn: false,
   };
 }
 

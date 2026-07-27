@@ -19,6 +19,7 @@ import {
   type CommitSummary,
   type ParsedTextDiff,
   type QueryCommitsOptions,
+  type RunGitResponse,
 } from "./types";
 
 /** Context lines for `git diff` / `git show --patch` (D-02). */
@@ -75,8 +76,26 @@ export function buildQueryCommitsArgs(options: QueryCommitsOptions = {}): string
 }
 
 /**
+ * Detect `git log`'s unborn-HEAD fatal. In a freshly `git init`-ed repo with
+ * no commits, `git log` exits 128 with a message like
+ * `fatal: your current branch 'main' does not have any commits yet`. Rather
+ * than surfacing that fatal as a load error, callers treat it as an empty
+ * history so the existing "No commits yet" empty state renders.
+ */
+export function isUnbornRepoLogError(response: RunGitResponse): boolean {
+  if (response.exitCode === 0) {
+    return false;
+  }
+  return /does not have any commits yet/i.test(response.stderr);
+}
+
+/**
  * Query commit history using structured `git log` output.
  * Returns commits newest-first (default `git log` order).
+ *
+ * An unborn HEAD (freshly init'd repo, no commits) resolves to an empty list
+ * instead of throwing the raw `git log` fatal, so the panel can render its
+ * dedicated empty state.
  */
 export async function queryCommits(
   repoRoot: string,
@@ -84,6 +103,9 @@ export async function queryCommits(
 ): Promise<CommitSummary[]> {
   const response = await runGit(repoRoot, buildQueryCommitsArgs(options));
   if (response.exitCode !== 0) {
+    if (isUnbornRepoLogError(response)) {
+      return [];
+    }
     throw createGitCommandError(response);
   }
 

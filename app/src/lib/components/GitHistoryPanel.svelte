@@ -59,6 +59,15 @@
   let scrollContainer = $state<HTMLDivElement | null>(null);
   let scrollContainerSize = $state({ width: 0, height: 0 });
 
+  // Virtualization state for the commit list. Without windowing, a 5000-row
+  // history rendered every `<li>` (plus a `new Date().toISOString()` +
+  // `toLocaleString()` pair per row per render) on every change — the panel
+  // stalled for seconds after each load-more (M13). Rows are a fixed
+  // ROW_HEIGHT, so the window math is exact.
+  const HISTORY_VIRTUALIZE_THRESHOLD = 200;
+  const HISTORY_OVERSCAN_ROWS = 12;
+  let historyScrollTop = $state(0);
+
   // AbortController for an in-flight "load more" fetch. A new load-more, a
   // scope/filter change, or a repo/refresh-token change aborts the previous
   // one so a late response from the older page can never overwrite the panel
@@ -109,6 +118,46 @@
     return commitGraphColumnWidth(graphLayout.laneCount);
   });
   const graphHeight = $derived(commits.length * ROW_HEIGHT);
+
+  // Precompute each commit's rendered date strings once per `commits` change
+  // rather than re-running `new Date().toISOString()` + `toLocaleString()`
+  // per row per render (M13). Both are pure functions of `authorTime`, so the
+  // memo is stable across scroll/selection re-renders.
+  const commitDateMeta = $derived.by(() => {
+    void commits;
+    return commits.map((commit) => {
+      const ms = commit.authorTime * 1000;
+      const date = new Date(ms);
+      return {
+        iso: date.toISOString(),
+        local: date.toLocaleString(),
+      };
+    });
+  });
+
+  // Window the rendered rows against the scroll viewport. The graph column
+  // (SVG) stays full-height so curve segments spanning off-screen rows still
+  // paint when scrolled into view; only the heavy `<li>` list is windowed.
+  const historyVisibleRange = $derived.by(() => {
+    const total = commits.length;
+    if (total <= HISTORY_VIRTUALIZE_THRESHOLD) {
+      return { start: 0, end: total };
+    }
+    const viewport = scrollContainerSize.height || scrollContainer?.clientHeight || 0;
+    if (viewport <= 0) {
+      return { start: 0, end: Math.min(total, HISTORY_VIRTUALIZE_THRESHOLD) };
+    }
+    const start = Math.max(0, Math.floor(historyScrollTop / ROW_HEIGHT) - HISTORY_OVERSCAN_ROWS);
+    const end = Math.min(
+      total,
+      Math.ceil((historyScrollTop + viewport) / ROW_HEIGHT) + HISTORY_OVERSCAN_ROWS,
+    );
+    return { start, end };
+  });
+  const historyTopPadPx = $derived(historyVisibleRange.start * ROW_HEIGHT);
+  const historyBottomPadPx = $derived(
+    Math.max(0, (commits.length - historyVisibleRange.end) * ROW_HEIGHT),
+  );
   const canLoadMore = $derived(
     loadStatus === "ready" &&
       !loadingMore &&
@@ -122,15 +171,20 @@
       return;
     }
 
-    const observer = new ResizeObserver(([entry]) => {
-      scrollContainerSize = {
-        width: entry?.contentRect.width ?? 0,
-        height: entry?.contentRect.height ?? 0,
-      };
-    });
+    const measure = (): void => {
+      scrollContainerSize = { width: container.clientWidth, height: container.clientHeight };
+    };
+    const onScroll = (): void => {
+      historyScrollTop = container.scrollTop;
+    };
+    measure();
+    onScroll();
+    const observer = new ResizeObserver(measure);
     observer.observe(container);
+    container.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       observer.disconnect();
+      container.removeEventListener("scroll", onScroll);
     };
   });
 
@@ -398,7 +452,7 @@
       <div class="git-history-content">
         <div
           class="git-history-graph"
-          style="width: {graphWidth}px; min-width: {graphWidth}px; height: {graphHeight}px"
+          style="width: {graphWidth}px; min-width: {graphWidth}px; height: {graphHeight}px; transform: translateY({historyTopPadPx}px)"
         >
           <GitCommitGraphColumn
             layout={graphLayout}
@@ -407,7 +461,11 @@
           />
         </div>
         <ul class="git-history-list" role="listbox" aria-label="Commits in history scope">
-          {#each commits as commit (commit.sha)}
+          {#if historyTopPadPx > 0}
+            <li class="git-history-spacer" style="height: {historyTopPadPx}px" aria-hidden="true"></li>
+          {/if}
+          {#each commits.slice(historyVisibleRange.start, historyVisibleRange.end) as commit, i (commit.sha)}
+            {@const meta = commitDateMeta[historyVisibleRange.start + i]}
             <li class="git-history-item">
               <button
                 type="button"
@@ -436,8 +494,8 @@
                   <span class="git-history-meta-separator" aria-hidden="true">·</span>
                   <time
                     class="git-history-date"
-                    datetime={new Date(commit.authorTime * 1000).toISOString()}
-                    title={new Date(commit.authorTime * 1000).toLocaleString()}
+                    datetime={meta?.iso ?? ""}
+                    title={meta?.local ?? ""}
                   >
                     {formatRelativeCommitDate(commit.authorTime)}
                   </time>
@@ -445,6 +503,9 @@
               </button>
             </li>
           {/each}
+          {#if historyBottomPadPx > 0}
+            <li class="git-history-spacer" style="height: {historyBottomPadPx}px" aria-hidden="true"></li>
+          {/if}
         </ul>
         {#if canLoadMore || loadingMore}
           <div class="git-history-load-more">
@@ -574,6 +635,11 @@
 
   .git-history-item {
     margin: 0;
+  }
+
+  .git-history-spacer {
+    margin: 0;
+    list-style: none;
   }
 
   .git-history-row {

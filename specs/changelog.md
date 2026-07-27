@@ -1,5 +1,58 @@
 # Changelog
 
+## 2026-07-27 — Git layer: unborn-repo empty state, drag-teardown, virtualized history/diff, status follow-up, panel-remote guards
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M11–M15 — the third
+batch of git-layer Medium findings.
+
+- **An unborn repo surfaced a raw `git log` fatal instead of the empty state (M11).** In a
+  freshly `git init`-ed repo with no commits, `git log` exits 128 with
+  `fatal: your current branch 'main' does not have any commits yet`, which `queryCommits`
+  threw verbatim — so the history panel rendered "Could not load commit history" instead of
+  its purpose-built "No commits yet" state. `queryCommits` now detects the unborn-HEAD fatal
+  (`isUnbornRepoLogError`) and resolves to `[]`, so the existing empty state shows. The same
+  condition leaked through the status summary: `parseStatusShortBranchHeader` parsed
+  `## No commits yet on main` as a literal branch name of "No commits yet on main", which then
+  appeared in the workspace manager's git column. The parser now recognizes the marker,
+  reports the real branch name, and sets `isUnborn`; `queryRepositoryStatusSummary` short-
+  circuits ahead/behind for an unborn HEAD (skipping the detached-HEAD `rev-parse` that would
+  also exit 128) and exposes `isUnborn` on the summary.
+
+- **The commit-detail file-list divider drag leaked its window listeners if the panel
+  unmounted mid-drag (M12).** `handleFileListResizeStart` attached `pointermove`/`pointerup`/
+  `pointercancel` to `window` and removed them only from `handleUp`. A workspace switch (or any
+  remount) while the user was dragging the divider left `handleMove` firing for the lifetime of
+  the window, writing to a destroyed panel's state. The active drag teardown is now tracked at
+  component scope and run from `onDestroy`, so an unmount mid-drag detaches the listeners.
+
+- **The commit history list and the text diff view rendered every row with no virtualization
+  (M13).** `GitHistoryPanel` rendered up to 5000 `<li>` rows unconditionally, each running
+  `new Date().toISOString()` + `toLocaleString()` per render, and `GitTextDiffView` rendered up
+  to ~10k diff rows × 4 elements. Both now window their rows against the scroll viewport
+  (fixed row pitch — `ROW_HEIGHT` for history, 18px for diff — so the math is exact) with
+  top/bottom spacer padding and overscan, above a 200/400-row threshold. The history list also
+  precomputes each commit's date strings once per `commits` change instead of per row per
+  render, and the graph column is translated by the same top padding so SVG dots stay aligned
+  with the windowed rows.
+
+- **In-flight status coalescing dropped the newer refresh (M14).** `refreshFileStatuses`
+  joined a second caller onto the in-flight promise and returned, so a version-control mutation
+  landing during a refresh resolved against the older snapshot with no follow-up — project-tree
+  badges stayed stale. A per-workspace follow-up flag is now set when a refresh is requested
+  while one is in flight, and the in-flight completion triggers one more fetch to pick up the
+  newer state (further concurrent requests re-set the flag, so only the latest lands).
+
+- **Pull/Push stayed enabled during a panel remote operation, and Cancel could then target the
+  wrong command (M15).** `panelRemoteCommand` (set by the tags/changes panels for tag push/delete
+  and changes fetch) fed `remoteOperationBusy` (which shows the inline Cancel) but not
+  `toolbarBusy`/`remoteActionsDisabled`/the `canStartRemoteGitOperation` guards, so Pull/Push/
+  Fetch stayed clickable while a panel op ran. Starting one raced Cancel onto whichever command
+  `cancellableRemoteCommandId` resolved first. `panelRemoteCommand !== null` now feeds
+  `toolbarBusy` (cascading to `remoteActionsDisabled`) and the three toolbar handlers
+  (`handleFetch`/`handlePull`/`handlePush`) explicitly bail when a panel command is active, so
+  only one remote operation can run at a time and Cancel always targets the in-flight one.
+
 ## 2026-07-27 — Git layer: refresh generation guard, tag-delete remote picker, diff hunk headers, conflict labels, history prefs fallback
 
 Follow-up to the review in

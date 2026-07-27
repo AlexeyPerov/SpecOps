@@ -47,6 +47,7 @@ describe("formatGitColumnDisplayText", () => {
         isDetached: false,
         aheadBehind: { ahead: 1, behind: 2 },
         isDirty: true,
+        isUnborn: false,
       }),
     ).toBe("main · ↑1 ↓2 · dirty");
   });
@@ -58,6 +59,7 @@ describe("formatGitColumnDisplayText", () => {
         isDetached: true,
         aheadBehind: null,
         isDirty: false,
+        isUnborn: false,
       }),
     ).toBe("detached @ abc1234 · clean");
   });
@@ -116,6 +118,7 @@ describe("loadWorkspaceGitColumnCell", () => {
       isDetached: false,
       aheadBehind: null,
       isDirty: false,
+      isUnborn: false,
     });
 
     await expect(loadWorkspaceGitColumnCell("/tmp/repo")).resolves.toEqual({
@@ -125,6 +128,7 @@ describe("loadWorkspaceGitColumnCell", () => {
         isDetached: false,
         aheadBehind: null,
         isDirty: false,
+        isUnborn: false,
       },
       displayText: "feature · clean",
     });
@@ -191,6 +195,7 @@ describe("loadWorkspaceGitColumnCell", () => {
       isDetached: false,
       aheadBehind: null,
       isDirty: false,
+      isUnborn: false,
     });
 
     const [first, second] = await Promise.all([
@@ -229,6 +234,7 @@ describe("refreshWorkspaceGitColumnCells", () => {
         isDetached: false,
         aheadBehind: null,
         isDirty: false,
+        isUnborn: false,
       };
     });
 

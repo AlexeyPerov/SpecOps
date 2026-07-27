@@ -86,6 +86,40 @@ describe("fileStatusTracker git integration", () => {
     expect(queryWorkingTreeStatusMock).toHaveBeenCalledTimes(1);
   });
 
+  it("re-fetches when a mutation lands during an in-flight refresh (M14)", async () => {
+    resolveRepoRootMock.mockResolvedValue({ ok: true, repoRoot: "/repo" });
+    queryWorkingTreeStatusMock.mockResolvedValue({ staged: [], unstaged: [] });
+
+    // Hold the first fetch until we explicitly release it, so we can simulate
+    // a mutation arriving mid-flight.
+    let releaseFirst: () => void = () => {};
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    queryWorkingTreeStatusMock.mockImplementationOnce(async () => {
+      await firstGate;
+      return { staged: [], unstaged: [] };
+    });
+
+    // Kick off the first refresh (in flight, gated).
+    const first = refreshFileStatuses({ workspaceRootPath: "/repo" });
+
+    // While it's in flight, request another refresh. Previously this joined
+    // the in-flight promise and the newer request was dropped, leaving stale
+    // badges if a mutation landed in between.
+    const second = refreshFileStatuses({ workspaceRootPath: "/repo" });
+
+    // A follow-up should now be pending; release the first fetch.
+    releaseFirst();
+    await first;
+    await second;
+    await vi.runAllTicks();
+
+    // Two fetches: the original plus the follow-up triggered by the in-flight
+    // completion.
+    expect(queryWorkingTreeStatusMock).toHaveBeenCalledTimes(2);
+  });
+
   it("skips git probes when project-tree git badges are disabled", async () => {
     shouldLoadProjectTreeGitBadgesMock.mockReturnValue(false);
 

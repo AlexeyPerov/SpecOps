@@ -171,7 +171,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       encoding?: DocumentEncodingMetadata,
     ): string {
       let openedDocumentId = "";
-      let recentFiles: string[] = [];
+      let recentFiles: string[] | null = null;
       update((state) => {
         if (!canCreateFileTabs(state)) {
           return state;
@@ -239,7 +239,9 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           recentFiles,
         };
       });
-      syncRecentFiles(recentFiles);
+      if (recentFiles !== null) {
+        syncRecentFiles(recentFiles);
+      }
       return openedDocumentId;
     },
     /**
@@ -259,7 +261,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       encoding?: DocumentEncodingMetadata,
     ): string {
       let openedDocumentId = "";
-      let recentFiles: string[] = [];
+      let recentFiles: string[] | null = null;
       update((state) => {
         if (!canCreateFileTabs(state)) {
           return state;
@@ -379,7 +381,9 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           recentFiles,
         };
       });
-      syncRecentFiles(recentFiles);
+      if (recentFiles !== null) {
+        syncRecentFiles(recentFiles);
+      }
       return openedDocumentId;
     },
     setDocumentContent(documentId: string, content: string) {

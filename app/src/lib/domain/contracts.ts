@@ -17,6 +17,7 @@ export {
   isSessionTab,
   isViewTab,
   normalizeTabState,
+  tryNormalizeTabState,
   tabDocumentId,
 } from "./document";
 export type {

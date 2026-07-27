@@ -300,11 +300,9 @@ export async function handleTabClose(context: CommandContext): Promise<void> {
   if (!selectedTabId) {
     return;
   }
-  const closed = await closeTabWithUnsavedPrompt(
-    selectedTabId,
-    { getWindowId, notify },
-    { forceClose: false },
-  );
+  // Match the tab × button: force-close so the last tab in a pane is replaced
+  // with an untitled draft instead of prompting, no-oping, then reporting success.
+  const closed = await closeTabWithUnsavedPrompt(selectedTabId, { getWindowId, notify });
   if (closed) {
     notify("Tab closed.");
   }

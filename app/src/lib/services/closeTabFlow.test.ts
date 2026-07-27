@@ -122,6 +122,28 @@ describe("closeTabWithUnsavedPrompt", () => {
   it("returns false for an unknown tab id", async () => {
     await expect(closeTabWithUnsavedPrompt("missing", deps)).resolves.toBe(false);
   });
+
+  it("force-closes the last tab in a pane (matches the tab × button)", async () => {
+    appState.openFileInTab("/tmp/only.txt", "only");
+    const tabId = getSessionSelectedTabId(appState.getActiveSession())!;
+
+    const closed = await closeTabWithUnsavedPrompt(tabId, deps);
+
+    expect(closed).toBe(true);
+    const tabs = getSessionTabs(appState.getActiveSession());
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]?.id).not.toBe(tabId);
+  });
+
+  it("returns false when forceClose is off and the pane has only one tab", async () => {
+    const tabId = getSessionSelectedTabId(appState.getActiveSession())!;
+    expect(getSessionTabs(appState.getActiveSession())).toHaveLength(1);
+
+    const closed = await closeTabWithUnsavedPrompt(tabId, deps, { forceClose: false });
+
+    expect(closed).toBe(false);
+    expect(getSessionTabs(appState.getActiveSession()).some((tab) => tab.id === tabId)).toBe(true);
+  });
 });
 
 describe("closeOtherTabsWithUnsavedPrompt", () => {

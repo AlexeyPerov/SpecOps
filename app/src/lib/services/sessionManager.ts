@@ -10,8 +10,8 @@ import type {
 import { logDiagnostic } from "./logging";
 import { getErrorMessage } from "../commands/commandErrors";
 import {
+  buildOpenFileRegistryForWindow,
   dedupeWindowSnapshotAgainstRegistry,
-  syncOpenFileRegistryForWindowUnlocked,
 } from "./openFileRegistry";
 import {
   createEmptySessionSnapshot,
@@ -92,12 +92,21 @@ async function writeSessionSnapshot(
 ): Promise<void> {
   const sessionPath = await getSessionPath(SESSION_FILE);
   const content = encodeSessionSnapshot(current);
-  await atomicWriteTextFile(sessionPath, content);
-  if (options?.skipBackup) {
-    return;
+  if (!options?.skipBackup) {
+    // Promote the previous primary to backup only when it still decodes. That
+    // keeps a distinct last-good copy instead of a byte-identical twin of the
+    // write that may itself be corrupt (M38/M44).
+    try {
+      const existing = await readTextFile(sessionPath);
+      if (decodeSessionSnapshot(existing)) {
+        const backupPath = await getSessionPath(SESSION_BACKUP_FILE);
+        await atomicWriteTextFile(backupPath, existing);
+      }
+    } catch {
+      // No existing session yet (first save).
+    }
   }
-  const backupPath = await getSessionPath(SESSION_BACKUP_FILE);
-  await atomicWriteTextFile(backupPath, content);
+  await atomicWriteTextFile(sessionPath, content);
 }
 
 export async function persistGlobalRecentFiles(recentFiles: string[]): Promise<void> {
@@ -123,10 +132,15 @@ export async function persistSessionSnapshot(
     };
     current.lastActiveWindowId = windowId;
     current.updatedAt = stampedAt;
+    // Fold registry sync into this write so we do not re-read and rewrite the
+    // full session (including every open buffer) a second time.
+    current.openFileRegistry = buildOpenFileRegistryForWindow(
+      current.openFileRegistry,
+      windowId,
+      state,
+    );
 
     await writeSessionSnapshot(current);
-
-    await syncOpenFileRegistryForWindowUnlocked(windowId, state);
 
     await logDiagnostic({
       level: "debug",

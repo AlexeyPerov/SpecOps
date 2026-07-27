@@ -62,10 +62,13 @@ export async function closeTabWithUnsavedPrompt(
 
   if (options?.forceClose ?? true) {
     appState.closeTabForce(tabId);
-  } else {
-    appState.closeTab(tabId);
+    return true;
   }
-  return true;
+  appState.closeTab(tabId);
+  // `closeTab` intentionally no-ops when the pane has only one tab. Report
+  // failure so callers do not claim success after a save-prompt that closed nothing.
+  const stillOpen = findTabOwner(getActiveSession(appState.getSnapshot()).editorLayout, tabId);
+  return stillOpen === null;
 }
 
 export async function closeTabsWithUnsavedPrompt(

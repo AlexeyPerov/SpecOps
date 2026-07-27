@@ -85,6 +85,33 @@ describe("documentForSessionPersistence", () => {
     const persisted = documentForSessionPersistence(doc);
     expect(persisted.content).toBe("hello");
   });
+
+  it("omits duplicate savedContent for clean text buffers", () => {
+    const doc = baseDocument({
+      filePath: "/tmp/readme.md",
+      content: "hello",
+      savedContent: "hello",
+      isDirty: false,
+      contentKind: "text",
+    });
+    const persisted = documentForSessionPersistence(doc);
+    expect(persisted.content).toBe("hello");
+    expect(persisted.savedContent).toBe("");
+    expect(persisted.isDirty).toBe(false);
+  });
+
+  it("keeps both buffers when the document is dirty", () => {
+    const doc = baseDocument({
+      filePath: "/tmp/readme.md",
+      content: "edited",
+      savedContent: "hello",
+      isDirty: true,
+      contentKind: "text",
+    });
+    const persisted = documentForSessionPersistence(doc);
+    expect(persisted.content).toBe("edited");
+    expect(persisted.savedContent).toBe("hello");
+  });
 });
 
 describe("stripWindowSnapshotForSession", () => {

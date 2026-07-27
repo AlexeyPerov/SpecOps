@@ -11,25 +11,19 @@ import type {
 import {
   allTabs,
   isFileTab,
-  normalizeTabState,
+  tryNormalizeTabState,
   recomputeSelectedTabId,
 } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
+import {
+  createEmptySessionSnapshot,
+  decodeSessionSnapshot,
+  encodeSessionSnapshot,
+} from "./sessionSnapshotCodec";
 import { withSessionWriteLock } from "./sessionWriteLock";
 
 const SESSION_FILE = "session.json";
-
-function emptySession(): AppSessionSnapshot {
-  return {
-    version: 2,
-    updatedAt: new Date().toISOString(),
-    lastActiveWindowId: "main",
-    openFileRegistry: {},
-    recentFiles: [],
-    windows: {},
-  };
-}
 
 async function getSessionPath(): Promise<string> {
   const dataDir = await ensureSpecOpsDataDir();
@@ -40,15 +34,7 @@ async function readSessionSnapshot(): Promise<AppSessionSnapshot | null> {
   try {
     const sessionPath = await getSessionPath();
     const raw = await readTextFile(sessionPath);
-    const parsed = JSON.parse(raw) as AppSessionSnapshot;
-    if (parsed.version !== 2 || !parsed.windows) {
-      return null;
-    }
-    return {
-      ...parsed,
-      openFileRegistry: parsed.openFileRegistry ?? {},
-      recentFiles: parsed.recentFiles ?? [],
-    };
+    return decodeSessionSnapshot(raw);
   } catch {
     return null;
   }
@@ -56,10 +42,10 @@ async function readSessionSnapshot(): Promise<AppSessionSnapshot | null> {
 
 async function writeSessionSnapshot(snapshot: AppSessionSnapshot): Promise<void> {
   const sessionPath = await getSessionPath();
-  await atomicWriteTextFile(sessionPath, JSON.stringify(snapshot, null, 2));
+  await atomicWriteTextFile(sessionPath, encodeSessionSnapshot(snapshot));
 }
 
-function buildRegistryForWindow(
+export function buildOpenFileRegistryForWindow(
   existing: OpenFileRegistry,
   windowId: string,
   state: AppDomainState,
@@ -79,8 +65,8 @@ function buildRegistryForWindow(
 
   for (const contextSnapshot of contextSnapshots) {
     for (const rawTab of allTabs(contextSnapshot.session.editorLayout)) {
-      const tab = normalizeTabState(rawTab);
-      if (!isFileTab(tab)) {
+      const tab = tryNormalizeTabState(rawTab);
+      if (!tab || !isFileTab(tab)) {
         continue;
       }
       const documentState = contextSnapshot.documents.find((doc) => doc.id === tab.documentId);
@@ -107,8 +93,8 @@ export async function syncOpenFileRegistryForWindowUnlocked(
   state: AppDomainState,
 ): Promise<void> {
   const snapshot = await readSessionSnapshot();
-  const current = snapshot ?? emptySession();
-  current.openFileRegistry = buildRegistryForWindow(
+  const current = snapshot ?? createEmptySessionSnapshot();
+  current.openFileRegistry = buildOpenFileRegistryForWindow(
     snapshot?.openFileRegistry ?? {},
     windowId,
     state,
@@ -124,7 +110,7 @@ export async function readOpenFileRegistry(): Promise<OpenFileRegistry> {
 
 export async function writeOpenFileRegistry(registry: OpenFileRegistry): Promise<void> {
   await withSessionWriteLock(async () => {
-    const current = (await readSessionSnapshot()) ?? emptySession();
+    const current = (await readSessionSnapshot()) ?? createEmptySessionSnapshot();
     current.openFileRegistry = registry;
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current);
@@ -143,12 +129,15 @@ export async function claimOpenFile(
   windowId: string,
   documentId: string,
 ): Promise<void> {
+  if (!documentId) {
+    return;
+  }
   await withSessionWriteLock(async () => {
     const snapshot = await readSessionSnapshot();
     const registry: OpenFileRegistry = { ...(snapshot?.openFileRegistry ?? {}) };
     registry[normalizePathSync(filePath)] = { windowId, documentId };
 
-    const current = snapshot ?? emptySession();
+    const current = snapshot ?? createEmptySessionSnapshot();
     current.openFileRegistry = registry;
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current);
@@ -169,7 +158,11 @@ export function applyRegistryDedupeToWindowSnapshot(
     const panes = layout.panes.map((pane) => {
       const retainedTabs = [];
       for (const rawTab of pane.tabs) {
-        const tab = normalizeTabState(rawTab);
+        const tab = tryNormalizeTabState(rawTab);
+        if (!tab) {
+          layoutChanged = true;
+          continue;
+        }
         if (!isFileTab(tab)) {
           retainedTabs.push(tab);
           continue;
@@ -252,7 +245,7 @@ export async function dedupeWindowSnapshotAgainstRegistry(
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, windowId, snapshot);
 
-    const current = session ?? emptySession();
+    const current = session ?? createEmptySessionSnapshot();
     current.openFileRegistry = nextRegistry;
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current);
@@ -299,7 +292,7 @@ export async function renameOpenFileRegistry(
     }
     registry[normalizePathSync(newPath)] = { windowId, documentId };
 
-    const current = session ?? emptySession();
+    const current = session ?? createEmptySessionSnapshot();
     current.openFileRegistry = registry;
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current);

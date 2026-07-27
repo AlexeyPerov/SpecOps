@@ -5,7 +5,7 @@ import { allTabs, getSessionSelectedTabId, isFileTab } from "../domain/contracts
 import { appState } from "../state/appState";
 import type { EditorCommandRunner } from "../types/editor";
 import type { EditorToolController } from "../editor/editorToolController";
-import { dispatchMenuCommand, keymapCommandForEvent } from "../commands/registry";
+import { dispatchMenuCommand, isCommandAvailableInState, keymapCommandForEvent } from "../commands/registry";
 import { getErrorMessage } from "../commands/commandErrors";
 import { checkDocumentIfDeferred } from "./externalFileChanges";
 import { shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
@@ -73,6 +73,9 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
       targetInOrdinaryInput: isTargetInOrdinaryInput(event.target),
       composing: event.isComposing,
       alwaysRunWhenMapped: command ? isAlwaysRunShellCommand(command) : false,
+      commandAvailable: command
+        ? isCommandAvailableInState(command, deps.getSnapshot())
+        : true,
     });
     if (decision.action !== "run-command") {
       return;

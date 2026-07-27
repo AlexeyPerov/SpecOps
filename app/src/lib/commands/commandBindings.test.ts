@@ -3,6 +3,7 @@ import type { CommandDefinition } from "../domain/contracts";
 import { mockNavigatorPlatform } from "../test/helpers";
 import {
   expandPlatformKeymaps,
+  bindingToKeymapToken,
   findKeymapConflict,
   formatBindingForDisplay,
   getEffectiveBinding,
@@ -14,6 +15,12 @@ import {
 import { commandDefinitions } from "./registry";
 
 describe("commandBindings", () => {
+  it("maps Cmd to Ctrl on the windows platform instead of dropping it", () => {
+    expect(bindingToKeymapToken("Cmd+K", "windows")).toBe("Ctrl+k");
+    expect(bindingToKeymapToken("Cmd+Shift+G", "windows")).toBe("Ctrl+Shift+g");
+    expect(bindingToKeymapToken("Cmd+K", "mac")).toBe("Meta+k");
+  });
+
   it("merges overrides into effective bindings", () => {
     const definition: CommandDefinition = {
       id: "file.save",

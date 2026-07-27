@@ -15,7 +15,7 @@ import {
   isViewTab,
   layoutFromFlatTabs,
   nextPaneId,
-  normalizeTabState,
+  tryNormalizeTabState,
   restructureEditorLayout,
   totalTabCount,
 } from "../domain/contracts";
@@ -177,7 +177,10 @@ async function sanitizeContext(
   const incomingTabs = readIncomingTabs(context);
   const openTabs: TabState[] = [];
   for (const rawTab of incomingTabs) {
-    const tab = normalizeTabState(rawTab);
+    const tab = tryNormalizeTabState(rawTab);
+    if (!tab) {
+      continue;
+    }
     if (isSessionTab(tab)) {
       openTabs.push(tab);
       continue;
@@ -260,9 +263,15 @@ function buildFallbackContext(
   };
 }
 
-/** Normalize each tab in a pane (legacy kind/shape), preserving id/selection. */
+/** Normalize each tab in a pane (legacy kind/shape), dropping unrecognized tabs. */
 function normalizePane(pane: EditorPane): EditorPane {
-  const tabs = pane.tabs.map((raw) => normalizeTabState(raw));
+  const tabs: TabState[] = [];
+  for (const raw of pane.tabs) {
+    const tab = tryNormalizeTabState(raw);
+    if (tab) {
+      tabs.push(tab);
+    }
+  }
   const selectedTabId =
     typeof pane.selectedTabId === "string" && tabs.some((tab) => tab.id === pane.selectedTabId)
       ? pane.selectedTabId
@@ -346,6 +355,14 @@ export async function sanitizeWindowSnapshot(
   const chatHttp = await sanitizeContext(snapshot.chatHttp ?? snapshot.notepad);
   const workspaces = [];
   for (const workspace of snapshot.workspaces) {
+    // Drop workspaces whose root folder no longer exists — restoring them
+    // leaves a permanently broken entry in the rail.
+    if (workspace.rootPath) {
+      const rootExists = await fileStillExists(workspace.rootPath);
+      if (!rootExists) {
+        continue;
+      }
+    }
     workspaces.push({
       ...workspace,
       snapshot: await sanitizeContext(workspace.snapshot),

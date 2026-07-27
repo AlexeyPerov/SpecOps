@@ -16,6 +16,7 @@ export function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
       zoomPercent: state.editor.zoomPercent,
       wrapLines: state.editor.wrapLines,
     },
+    activityRailWidthPx: state.activityRailWidthPx,
   });
 }
 
@@ -44,12 +45,23 @@ export function decodeSessionSnapshot(raw: string): AppSessionSnapshot | null {
 }
 
 export function encodeSessionSnapshot(snapshot: AppSessionSnapshot): string {
-  return JSON.stringify(snapshot, null, 2);
+  // Compact JSON — pretty-printing nearly doubles session I/O for large open buffers.
+  return JSON.stringify(snapshot);
 }
 
 export function normalizeRestoredDocument(documentState: DocumentState): DocumentState {
+  const content = documentState.content ?? "";
+  const isDirty = documentState.isDirty ?? false;
+  // Clean docs may omit a duplicate savedContent on disk (empty sentinel).
+  const savedContent =
+    !isDirty && (documentState.savedContent === undefined || documentState.savedContent === "")
+      ? content
+      : (documentState.savedContent ?? "");
   return {
     ...documentState,
+    content,
+    savedContent,
+    isDirty,
     diskFingerprint: documentState.diskFingerprint ?? null,
     dismissedFingerprint: documentState.dismissedFingerprint ?? null,
     fileMissing: documentState.fileMissing ?? false,

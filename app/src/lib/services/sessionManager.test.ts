@@ -40,6 +40,7 @@ vi.mock("./openFileRegistry", () => ({
   dedupeWindowSnapshotAgainstRegistry: vi.fn(async (_windowId, snapshot) => snapshot),
   syncOpenFileRegistryForWindow: vi.fn().mockResolvedValue(undefined),
   syncOpenFileRegistryForWindowUnlocked: vi.fn().mockResolvedValue(undefined),
+  buildOpenFileRegistryForWindow: vi.fn((_existing, _windowId, _state) => ({})),
 }));
 
 vi.mock("./fileSystem", () => ({
@@ -530,15 +531,34 @@ describe("persistSessionSnapshot", () => {
   });
 
   it("merges window state into session.json and writes backup", async () => {
+    // Seed a valid primary so the next write can promote it to backup.
+    sessionMock.setSessionStore(sessionWithWindow("win-prior", windowSnapshot()));
+    sessionMock.writeTextFile.mockClear();
+
+    appState.setActivityRailWidth(180);
     await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
 
     expect(sessionMock.getSessionStore()?.windows["win-a"]).toBeDefined();
-    // Writes are atomic (temp + rename), so the backup lands on a
-    // `session.backup.json.<random>.tmp` sibling first.
+    expect(sessionMock.getSessionStore()?.windows["win-a"]?.activityRailWidthPx).toBe(180);
+    // Backup is the previous primary (not a twin of the new write).
     const backupWrite = sessionMock.writeTextFile.mock.calls.find((call) =>
       String(call[0]).includes("/session.backup.json"),
     );
     expect(backupWrite).toBeDefined();
+    const backupParsed = JSON.parse(String(backupWrite?.[1])) as AppSessionSnapshot;
+    expect(backupParsed.windows["win-prior"]).toBeDefined();
+    expect(backupParsed.windows["win-a"]).toBeUndefined();
+  });
+
+  it("skips backup on the first session write when no prior file exists", async () => {
+    sessionMock.writeTextFile.mockClear();
+    await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
+
+    const backupWrite = sessionMock.writeTextFile.mock.calls.find((call) =>
+      String(call[0]).includes("/session.backup.json"),
+    );
+    expect(backupWrite).toBeUndefined();
+    expect(sessionMock.getSessionStore()?.windows["win-a"]).toBeDefined();
   });
 
   it("persists chat-http snapshot alongside notepad/workspaces", async () => {

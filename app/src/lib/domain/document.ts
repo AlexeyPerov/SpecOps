@@ -123,7 +123,7 @@ export function createViewTab(
  * stale window snapshot does not crash on first load (the on-disk chat layout
  * itself was reset by M16-T5 — see `specs/changelog.md`).
  */
-export function normalizeTabState(
+export function tryNormalizeTabState(
   tab:
     | TabState
     | (Omit<FileTabState, "kind"> & {
@@ -133,7 +133,7 @@ export function normalizeTabState(
         view?: unknown;
         subTab?: unknown;
       }),
-): TabState {
+): TabState | null {
   if (tab.kind === "session" && typeof tab.sessionId === "string") {
     return {
       id: tab.id,
@@ -167,7 +167,25 @@ export function normalizeTabState(
     const stripHidden = fileTab.stripHidden === true;
     return createFileTab(tab.id, tab.documentId, tab.pinned ?? false, stripHidden);
   }
-  throw new Error(`Invalid tab state: ${tab.id}`);
+  return null;
+}
+
+export function normalizeTabState(
+  tab:
+    | TabState
+    | (Omit<FileTabState, "kind"> & {
+        kind?: unknown;
+        sessionId?: unknown;
+        agentId?: unknown;
+        view?: unknown;
+        subTab?: unknown;
+      }),
+): TabState {
+  const normalized = tryNormalizeTabState(tab);
+  if (!normalized) {
+    throw new Error(`Invalid tab state: ${tab.id}`);
+  }
+  return normalized;
 }
 
 export function tabDocumentId(

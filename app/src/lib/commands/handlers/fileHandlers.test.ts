@@ -406,10 +406,17 @@ describe("file.open command", () => {
     await flushCommandQueue();
 
     expect(openFileDialog).toHaveBeenCalled();
-    expect(completeOpenPathMock).toHaveBeenCalledWith("/tmp/open.txt", "hello", "main", "text", {
-      lineEnding: "lf",
-      hasBom: false,
-    });
+    expect(completeOpenPathMock).toHaveBeenCalledWith(
+      "/tmp/open.txt",
+      "hello",
+      "main",
+      "text",
+      {
+        lineEnding: "lf",
+        hasBom: false,
+      },
+      undefined,
+    );
     expect(notify).toHaveBeenCalledWith("Opened /tmp/open.txt");
   });
 

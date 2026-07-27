@@ -19,6 +19,7 @@ vi.mock("../commands/registry", async () => {
   return {
     ...actual,
     dispatchMenuCommand: vi.fn(),
+    isCommandAvailableInState: () => true,
   };
 });
 
@@ -27,6 +28,27 @@ import { dispatchMenuCommand } from "../commands/registry";
 const dispatchMenuCommandMock = vi.mocked(dispatchMenuCommand);
 
 describe("resolveAppShellKeyRouting", () => {
+  it("ignores unavailable commands without preventDefault", () => {
+    expect(
+      resolveAppShellKeyRouting({
+        commandId: "app.openVersionControl",
+        overlayOpen: false,
+        targetInOrdinaryInput: false,
+        commandAvailable: false,
+      }),
+    ).toEqual({ action: "ignore", reason: "unavailable" });
+
+    expect(
+      resolveAppShellKeyRouting({
+        commandId: "app.findInProject",
+        overlayOpen: false,
+        targetInOrdinaryInput: true,
+        alwaysRunWhenMapped: true,
+        commandAvailable: false,
+      }),
+    ).toEqual({ action: "ignore", reason: "unavailable" });
+  });
+
   it("ignores key events while an overlay owns the keyboard", () => {
     expect(
       resolveAppShellKeyRouting({

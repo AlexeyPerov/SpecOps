@@ -36,9 +36,10 @@ export function bindingToKeymapToken(binding: string, platform: "mac" | "windows
 
   for (const modifier of modifierParts) {
     if (modifier === "Cmd") {
-      if (platform === "mac") {
-        tokens.push("Meta");
-      }
+      // On Windows, hand-edited "Cmd+…" bindings must not collapse to a bare
+      // key token (which would match every unmodified keypress). Treat Cmd as
+      // Ctrl, the platform primary accelerator.
+      tokens.push(platform === "mac" ? "Meta" : "Ctrl");
     } else if (modifier === "Ctrl") {
       tokens.push("Ctrl");
     } else if (modifier === "Shift") {

@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-07-27 — State/services: session I/O, rail width, recent files, shortcuts, Cmd+W, restore
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M38–M44 — the
+third batch of state/services Medium findings.
+
+- **Session snapshots duplicated clean buffers and pretty-printed twice (M38).** Clean
+  documents now omit a duplicate `savedContent` (restored by expanding the empty
+  sentinel); session JSON is compact; window persist folds open-file registry sync into
+  the same write; backup promotes the previous primary instead of twinning the new write.
+
+- **Activity rail width was never written to session.json (M39).**
+  `toWindowSnapshot` now includes `activityRailWidthPx` so resize survives relaunch.
+
+- **Early-return file opens wiped recent files and poisoned the registry (M40).**
+  `openFileInTab` / `openFileInPane` skip `syncRecentFiles` when the context cannot host
+  file tabs; `claimOpenFile` ignores empty document ids.
+
+- **Shortcuts ignored command availability and always preventDefault (M41).** Key routing
+  consults availability and leaves unavailable chords for the browser (no swallow).
+
+- **Windows `Cmd+…` bindings collapsed to bare keys (M42).** `Cmd` maps to `Ctrl` on the
+  windows platform so hand-edited bindings cannot match unmodified keypresses.
+
+- **Cmd+W on a pane's last tab could prompt, no-op, then report success (M43).** Close
+  now force-closes like the tab × button; non-force close returns false when the last
+  tab is unchanged.
+
+- **Restore kept gone workspaces; one bad tab discarded the session (M44).** Missing
+  workspace roots are dropped; unrecognized tabs are skipped; backup is the previous
+  good primary rather than a corrupt twin.
+
 ## 2026-07-27 — State/services: path `..` guard, catalog skips, dir-cache invalidate, selector memos, line-counter bounds
 
 Follow-up to the review in

@@ -1,11 +1,16 @@
 import { get } from "svelte/store";
-import type { AppCommandId } from "../domain/contracts";
+import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { getSessionActiveTab, tabDocumentId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { getActiveDocuments, getActiveSession } from "../state/appState/contextHelpers";
 import { logDiagnostic } from "../services/logging";
 import { sanitizeErrorDetails, serializeUnknownError, summarizeError } from "./commandErrors";
 import { getKeyBindingsByPlatform } from "./commandBindingRuntime";
+import {
+  buildCommandAvailabilitySnapshot,
+  resolveCommandAvailability,
+} from "./availability";
+import { commandDefinitions } from "./definitions";
 import { appHandlers } from "./handlers/app";
 import { editHandlers } from "./handlers/edit";
 import { fileHandlers } from "./handlers/file";
@@ -28,6 +33,47 @@ const handlers: CommandHandlerMap = {
   ...editHandlers,
   ...viewHandlers,
 };
+
+const definitionById = new Map(
+  commandDefinitions.map((definition) => [definition.id, definition] as const),
+);
+
+/** Build the availability snapshot used by palette and shortcut routing. */
+export function availabilitySnapshotFromAppState(
+  state: AppDomainState,
+): ReturnType<typeof buildCommandAvailabilitySnapshot> {
+  const session = getActiveSession(state);
+  const activeTab = getSessionActiveTab(session);
+  const activeDocumentId = tabDocumentId(activeTab);
+  const activeDocument = activeDocumentId
+    ? getActiveDocuments(state).find((document) => document.id === activeDocumentId)
+    : undefined;
+  const workspaceRoot =
+    state.contexts.workspaces.find(
+      (workspace) => workspace.id === state.contexts.activeContextId,
+    )?.rootPath ?? null;
+  return buildCommandAvailabilitySnapshot({
+    hasWorkspace: Boolean(workspaceRoot),
+    hasActiveDocument: Boolean(activeDocument),
+    isDirty: activeDocument?.isDirty ?? false,
+    paneCount: session.editorLayout.panes.length,
+    markdownPreviewAvailable: activeDocument?.language === "markdown",
+    markdownEditAvailable: activeDocument?.language === "markdown",
+  });
+}
+
+/** True when a shortcut should run (and preventDefault) for this command. */
+export function isCommandAvailableInState(
+  commandId: AppCommandId,
+  state: AppDomainState,
+): boolean {
+  const definition = definitionById.get(commandId);
+  const availability = resolveCommandAvailability(
+    definition?.availability,
+    availabilitySnapshotFromAppState(state),
+  );
+  return availability.status === "enabled";
+}
 
 export function getRegisteredCommandIds(): AppCommandId[] {
   return Object.keys(handlers) as AppCommandId[];

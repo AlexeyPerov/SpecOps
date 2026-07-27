@@ -16,25 +16,36 @@ export function shouldStripDocumentContentForSession(doc: DocumentState): boolea
   return false;
 }
 
+/**
+ * Collapse clean buffers so session.json does not store the same text twice.
+ * On restore, {@link normalizeRestoredDocument} expands empty `savedContent`
+ * back to `content` when `isDirty` is false.
+ */
 export function documentForSessionPersistence(doc: DocumentState): DocumentState {
-  if (!shouldStripDocumentContentForSession(doc)) {
-    return doc;
+  if (shouldStripDocumentContentForSession(doc)) {
+    const contentKind =
+      doc.contentKind === "image" ||
+      doc.contentKind === "binary" ||
+      doc.contentKind === "large_pending"
+        ? doc.contentKind
+        : doc.filePath && isImageFilePath(doc.filePath)
+          ? "image"
+          : doc.contentKind;
+    return {
+      ...doc,
+      content: "",
+      savedContent: "",
+      isDirty: false,
+      contentKind,
+    };
   }
-  const contentKind =
-    doc.contentKind === "image" ||
-    doc.contentKind === "binary" ||
-    doc.contentKind === "large_pending"
-      ? doc.contentKind
-      : doc.filePath && isImageFilePath(doc.filePath)
-        ? "image"
-        : doc.contentKind;
-  return {
-    ...doc,
-    content: "",
-    savedContent: "",
-    isDirty: false,
-    contentKind,
-  };
+  if (!doc.isDirty && doc.content === doc.savedContent) {
+    return {
+      ...doc,
+      savedContent: "",
+    };
+  }
+  return doc;
 }
 
 /**

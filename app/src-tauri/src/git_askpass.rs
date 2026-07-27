@@ -189,6 +189,58 @@ fn create_askpass_script(session_dir: &Path) -> Result<PathBuf, String> {
     Ok(script_path)
 }
 
+/// Restrict a directory to owner-only access (`0700`).
+///
+/// Askpass session dirs live under the process temp dir. On Linux that is often
+/// world-writable `/tmp` (mode `1777`), so default `0755` dirs would let any local
+/// user read the password/PAT response file and plant a symlink over `askpass.sh`.
+#[cfg(unix)]
+fn set_owner_only_dir_permissions(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = fs::metadata(path)
+        .map_err(|error| format!("Failed to read askpass dir metadata: {error}"))?
+        .permissions();
+    perms.set_mode(0o700);
+    fs::set_permissions(path, perms)
+        .map_err(|error| format!("Failed to set askpass dir permissions: {error}"))
+}
+
+#[cfg(not(unix))]
+fn set_owner_only_dir_permissions(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+/// Write the askpass response with owner-only mode (`0600`), creating exclusively
+/// so a planted symlink cannot redirect the secret to an attacker-controlled path.
+fn write_askpass_response(response_path: &Path, value: &str) -> Result<(), String> {
+    // Defeat a pre-planted symlink / leftover file before the exclusive create.
+    let _ = fs::remove_file(response_path);
+
+    #[cfg(unix)]
+    {
+        use std::fs::OpenOptions;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(response_path)
+            .map_err(|error| format!("Failed to create askpass response file: {error}"))?;
+        file.write_all(value.as_bytes())
+            .map_err(|error| format!("Failed to write askpass response: {error}"))?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        let mut file = fs::File::create(response_path)
+            .map_err(|error| format!("Failed to create askpass response file: {error}"))?;
+        file.write_all(value.as_bytes())
+            .map_err(|error| format!("Failed to write askpass response: {error}"))?;
+    }
+
+    Ok(())
+}
+
 fn wait_for_prompt_and_respond(session: &Arc<AskpassSession>, request_counter: &mut u64) -> bool {
     let prompt_path = session.dir.join(PROMPT_FILE);
     let response_path = session.dir.join(RESPONSE_FILE);
@@ -282,11 +334,15 @@ pub fn prepare_askpass_session(
             .map(|duration| duration.as_nanos())
             .unwrap_or(0)
     );
-    let session_dir = std::env::temp_dir()
-        .join("spec-ops-git-askpass")
-        .join(&session_id);
+    let askpass_root = std::env::temp_dir().join("spec-ops-git-askpass");
+    fs::create_dir_all(&askpass_root)
+        .map_err(|error| format!("Failed to create askpass root dir: {error}"))?;
+    set_owner_only_dir_permissions(&askpass_root)?;
+
+    let session_dir = askpass_root.join(&session_id);
     fs::create_dir_all(&session_dir)
         .map_err(|error| format!("Failed to create askpass session dir: {error}"))?;
+    set_owner_only_dir_permissions(&session_dir)?;
 
     let script_path = create_askpass_script(&session_dir)?;
     let timeout = timeout_ms.unwrap_or(DEFAULT_ASKPASS_TIMEOUT_MS);
@@ -368,9 +424,7 @@ pub fn respond_git_askpass(request: RespondGitAskpassRequest) -> Result<(), Stri
         session.cancelled.store(true, Ordering::SeqCst);
         let _ = fs::remove_file(&response_path);
     } else {
-        let mut file = fs::File::create(&response_path).map_err(|error| error.to_string())?;
-        file.write_all(request.value.as_bytes())
-            .map_err(|error| error.to_string())?;
+        write_askpass_response(&response_path, &request.value)?;
     }
 
     let (lock, cvar) = &session.response_ready;

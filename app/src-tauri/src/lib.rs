@@ -9,6 +9,7 @@ mod dock_menu;
 use file_watcher::FileWatcherState;
 use opencode_sidecar::OpencodeSidecarState;
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use tauri::{Emitter, Manager, RunEvent};
 use tauri_plugin_log::log::LevelFilter;
@@ -26,6 +27,14 @@ fn pending_opened_paths() -> &'static Mutex<Vec<String>> {
     PENDING.get_or_init(|| Mutex::new(Vec::new()))
 }
 
+/// Set once the frontend has drained the cold-start queue via
+/// `take_pending_opened_paths`. After that, Finder/open-with deliveries go
+/// emit-only so the pending queue cannot grow unboundedly for the session.
+fn opened_paths_frontend_ready() -> &'static AtomicBool {
+    static READY: OnceLock<AtomicBool> = OnceLock::new();
+    READY.get_or_init(|| AtomicBool::new(false))
+}
+
 fn enqueue_opened_paths(paths: &[String]) {
     if paths.is_empty() {
         return;
@@ -37,6 +46,7 @@ fn enqueue_opened_paths(paths: &[String]) {
 
 #[tauri::command]
 fn take_pending_opened_paths() -> Vec<String> {
+    opened_paths_frontend_ready().store(true, Ordering::SeqCst);
     if let Ok(mut pending) = pending_opened_paths().lock() {
         return std::mem::take(&mut *pending);
     }
@@ -142,7 +152,13 @@ pub fn run() {
                 return;
             }
 
-            enqueue_opened_paths(&paths);
+            // Cold-start: stage in the pending queue for `take_pending_opened_paths`
+            // before the frontend has subscribed. Once the frontend has taken once,
+            // emit-only — otherwise every Finder open both emits *and* accumulates
+            // forever, so a later window init re-opens every stale path.
+            if !opened_paths_frontend_ready().load(Ordering::SeqCst) {
+                enqueue_opened_paths(&paths);
+            }
             let _ = app_handle.emit_to(
                 "main",
                 APP_EVENT_OPENED_PATHS,

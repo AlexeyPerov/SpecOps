@@ -561,36 +561,51 @@ pub fn cancel_git_command_by_id(command_id: &str) -> CancelGitCommandResponse {
         };
     };
 
-    let registry = git_command_registry();
-    let Ok(commands) = registry.commands.lock() else {
-        return CancelGitCommandResponse {
-            outcome: CancelGitCommandOutcome::NotFound,
+    // Mark cancelled and take the child under the registry lock, then release
+    // before the (up to 1.5s) graceful-shutdown sleep so other git commands can
+    // still register / poll / cancel, and so `drain_all_active_git_commands` on
+    // exit does not serialize N × 1.5s while holding the global mutex.
+    let taken = {
+        let registry = git_command_registry();
+        let Ok(commands) = registry.commands.lock() else {
+            return CancelGitCommandResponse {
+                outcome: CancelGitCommandOutcome::NotFound,
+            };
         };
+
+        let Some(entry) = commands.get(&normalized_id) else {
+            return CancelGitCommandResponse {
+                outcome: CancelGitCommandOutcome::NotFound,
+            };
+        };
+
+        entry.cancelled.store(true, Ordering::SeqCst);
+        let repo_root = entry.repo_root.clone();
+
+        let Ok(mut child_guard) = entry.child.lock() else {
+            return CancelGitCommandResponse {
+                outcome: CancelGitCommandOutcome::AlreadyFinished,
+            };
+        };
+
+        match child_guard.take() {
+            Some(child) => Some((child, repo_root)),
+            None => {
+                return CancelGitCommandResponse {
+                    outcome: CancelGitCommandOutcome::AlreadyFinished,
+                };
+            }
+        }
     };
 
-    let Some(entry) = commands.get(&normalized_id) else {
-        return CancelGitCommandResponse {
-            outcome: CancelGitCommandOutcome::NotFound,
-        };
-    };
-
-    entry.cancelled.store(true, Ordering::SeqCst);
-    let repo_root = entry.repo_root.clone();
-
-    let Ok(mut child_guard) = entry.child.lock() else {
+    let Some((mut child, repo_root)) = taken else {
         return CancelGitCommandResponse {
             outcome: CancelGitCommandOutcome::AlreadyFinished,
         };
     };
 
-    let Some(child) = child_guard.as_mut() else {
-        return CancelGitCommandResponse {
-            outcome: CancelGitCommandOutcome::AlreadyFinished,
-        };
-    };
-
-    terminate_child_process_gracefully(child, &repo_root);
-    *child_guard = None;
+    terminate_child_process_gracefully(&mut child, &repo_root);
+    discard_registered_git_command_readers(&normalized_id);
 
     CancelGitCommandResponse {
         outcome: CancelGitCommandOutcome::Cancelled,

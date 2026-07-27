@@ -152,12 +152,19 @@ fn apply_watcher_path_diff(
         if let Err(error) = debouncer.watcher().unwatch(PathBuf::from(&path).as_path()) {
             log::debug!("file watcher unwatch failed for {path}: {error}");
         }
+        // Keep the file-ID cache in sync so rename From/To pairs can still be
+        // correlated for the remaining roots (notify-debouncer-full requires
+        // `cache().add_root` alongside `watcher().watch`).
+        debouncer.cache().remove_root(PathBuf::from(&path));
         watched.remove(&path);
     }
 
     for path in to_add {
         match debouncer.watcher().watch(PathBuf::from(&path).as_path(), mode) {
             Ok(()) => {
+                debouncer
+                    .cache()
+                    .add_root(PathBuf::from(&path), mode);
                 watched.insert(path);
             }
             Err(error) => {

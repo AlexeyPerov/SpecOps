@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-07-27 — Rust: askpass permissions, unlocked sidecar probes, opened-paths drain, git cancel unlock, file-ID cache
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M18–M22 — the
+first batch of Rust Medium findings.
+
+- **Askpass credentials were written with default permissions (M18).** Session dirs under
+  the process temp directory used create-default modes (`0755` dirs / `0644` response
+  files). On Linux that is often world-writable `/tmp`, so any local user could read the
+  password/PAT and plant a symlink over the helper script git executes. The askpass root
+  and per-session dirs are now chmod'd to `0700` after create, and the response file is
+  written with exclusive `create_new` + mode `0600` after removing any leftover.
+
+- **A blocking 7s HTTP health probe held the sidecar mutex (M19).** Attach reuse checks,
+  the background health poller, and `opencode_sidecar_status` called `probe_health` while
+  holding the sidecar lock, so concurrent `_stop` / `_status` and exit-path `stop_sync`
+  blocked for up to the probe timeout on a hung endpoint. Probes now run outside the
+  mutex; restart stops under the lock then uses the non-blocking attach path so health
+  wait never serializes cleanup.
+
+- **`opened-paths` were both queued and emitted, never drained on emit (M20).** Every
+  Finder/open-with delivery enqueued into the pending list *and* emitted, so the queue
+  grew for the session and a later window's `take_pending_opened_paths` re-opened every
+  stale path. After the frontend drains the cold-start queue once, subsequent deliveries
+  are emit-only.
+
+- **Cancel/drain held the global git registry mutex across the 1.5s graceful shutdown
+  sleep (M21).** `cancel_git_command_by_id` terminated the child while still holding the
+  registry map lock, so quitting with several in-flight commands blocked other git
+  register/poll/cancel work for N × 1.5s. Cancel now takes the child under the lock,
+  releases, then runs the SIGTERM wait outside it.
+
+- **The debouncer file-ID cache was never populated, so rename stitching could not work
+  (M22).** `notify-debouncer-full` requires `cache().add_root` alongside `watcher().watch`
+  to correlate From/To rename pairs via file IDs; nothing touched `cache()`. Path sync
+  now adds/removes roots in the cache in lockstep with watch/unwatch.
+
 ## 2026-07-27 — Git layer: spaced remote URLs, single status load
 
 Follow-up to the review in

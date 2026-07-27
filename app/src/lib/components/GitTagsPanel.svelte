@@ -257,14 +257,15 @@
     actionBusy = true;
     actionError = null;
     const commandId = createGitCommandId();
-    const hasRemoteDeletes = result.deleteFromRemotes && remoteRows.length > 0;
+    const remoteNames = result.remoteNames;
+    const hasRemoteDeletes = remoteNames.length > 0;
     if (hasRemoteDeletes) {
       onRemoteCommandChange({ id: commandId, label: "Delete remote tag" });
     }
 
     try {
       await deleteTag(repoRoot, selectedTag, {
-        remoteNames: result.deleteFromRemotes ? remoteRows.map((remote) => remote.name) : undefined,
+        remoteNames: hasRemoteDeletes ? remoteNames : undefined,
         commandId: hasRemoteDeletes ? commandId : undefined,
       });
       await loadTags(repoRoot);

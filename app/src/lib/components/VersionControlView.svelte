@@ -173,6 +173,14 @@
   let panelRefreshToken = $state(0);
   let probeGeneration = 0;
   let lastRefreshAt = 0;
+  // AbortController for an in-flight manual Refresh. A new Refresh, a probe
+  // generation change (workspace switch / remount), or component teardown
+  // aborts the previous one so a late response from the older root can never
+  // stamp `probeStatus`/`repoRoot`/`remotes` with stale data (M6). The
+  // `refreshProbe` call also receives the generation captured at the start of
+  // the refresh, so `refreshProbe`'s own staleness guard drops the result even
+  // if the controller is never aborted.
+  let refreshController: AbortController | null = null;
 
   // Overflow-menu state for the de-densified toolbar (U3.3). Refresh, Fetch,
   // and the Remote <select> live behind a "…" popover; Pull and Push stay
@@ -712,6 +720,10 @@
     probeGeneration += 1;
     const generation = probeGeneration;
     const controller = new AbortController();
+    // A workspace switch / remount supersedes any in-flight manual Refresh: its
+    // result belongs to the previous root and must not overwrite the new
+    // root's `probeStatus`/`repoRoot`/`remotes` (M6).
+    abortInFlightRefresh();
     // Skip the git shell-out if this root was probed very recently (e.g. the
     // user switched away and back within the TTL) by replaying the cached
     // outcome instead. Explicit refreshes via panelRefreshToken always
@@ -728,6 +740,13 @@
       controller.abort();
     };
   });
+
+  function abortInFlightRefresh(): void {
+    if (refreshController) {
+      refreshController.abort();
+      refreshController = null;
+    }
+  }
 
   function selectSection(section: Section): void {
     activeSection = section;
@@ -1002,9 +1021,21 @@
     lastRefreshAt = now;
     refreshBusy = true;
 
+    // Capture the generation the refresh belongs to. If the workspace changes
+    // before the response lands, the probe-generation effect aborts this
+    // controller and bumps `probeGeneration`, so `refreshProbe`'s own guard
+    // (and the explicit `signal.aborted` checks below) drop the stale result
+    // rather than stamping it over the new root's data (M6).
+    const generation = probeGeneration;
+    abortInFlightRefresh();
     const controller = new AbortController();
+    refreshController = controller;
     try {
-      await refreshProbe(controller.signal, { silent: true, refreshBranchHeader: false });
+      await refreshProbe(controller.signal, {
+        silent: true,
+        refreshBranchHeader: false,
+        generation,
+      });
       if (controller.signal.aborted) {
         return;
       }
@@ -1017,6 +1048,12 @@
         ]);
       }
     } finally {
+      if (refreshController === controller) {
+        refreshController = null;
+      }
+      // Always release the toolbar busy flag, even on abort: a workspace
+      // switch that aborted us does not itself touch `refreshBusy`, so leaving
+      // it latched would permanently disable the Refresh action.
       refreshBusy = false;
     }
   }

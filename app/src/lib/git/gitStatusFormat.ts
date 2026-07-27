@@ -34,6 +34,13 @@ export function formatWorkingTreeStatusCode(statusCode: string): string {
   if (trimmed === "??") {
     return "Untracked";
   }
+  // Any XY containing a `U` (or the symmetric `DD`/`AA`) is an unmerged
+  // conflict; git never lets you "stage" one — you resolve and `git add` it.
+  // Testing `U` before `M`/`A`/`D` matters: `UD`/`DU` would otherwise label
+  // as "Deleted", `AU`/`UA`/`AA` as "Added", and `DD` as "Deleted" (M9).
+  if (isConflictStatusCode(trimmed)) {
+    return "Conflict";
+  }
   if (trimmed.includes("M")) {
     return "Modified";
   }
@@ -49,8 +56,26 @@ export function formatWorkingTreeStatusCode(statusCode: string): string {
   if (trimmed.includes("C")) {
     return "Copied";
   }
-  if (trimmed.includes("U")) {
-    return "Unmerged";
-  }
   return trimmed || "Changed";
+}
+
+/**
+ * Whether a porcelain XY status code denotes an unmerged/conflict entry.
+ * Covers every conflict code git emits in porcelain v1/v2 output:
+ * `DD`, `AU`, `UD`, `UA`, `DU`, `AA`, `UU`. Exported so the changes-panel
+ * split keeps conflicted paths out of the "Staged" list — git does not allow
+ * staging a conflict, and previously a code like `DD` appeared in both lists,
+ * letting a user "unstage" it with no warning (M9).
+ */
+export function isConflictStatusCode(statusCode: string): boolean {
+  const trimmed = statusCode.trim();
+  if (trimmed.length !== 2) {
+    return false;
+  }
+  if (trimmed.includes("U")) {
+    return true;
+  }
+  // `DD` (both sides deleted) and `AA` (both sides added) are conflicts that
+  // do not contain a `U` character.
+  return trimmed === "DD" || trimmed === "AA";
 }

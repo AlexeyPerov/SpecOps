@@ -86,6 +86,43 @@ describe("parseUnifiedDiff", () => {
     const binaryCrlf = readFixture("git-diff-binary.txt").replace(/\n/g, "\r\n");
     expect(parseUnifiedDiff(binaryCrlf)[0]?.isBinary).toBe(true);
   });
+
+  it("treats `--- `/`+++ ` body lines as content, not file headers (M8)", () => {
+    // A hunk that adds SQL/Lua/Haskell-style `--` comments renders as body
+    // lines starting with `+++ ` (added) / `--- ` (deleted). The parser must
+    // not re-interpret them as the per-file old/new path headers, otherwise
+    // `oldPath` is overwritten with comment text (making the file look
+    // renamed) and the `+`/`-` count is corrupted.
+    const stdout = [
+      "diff --git a/script.sql b/script.sql",
+      "index 1111111..2222222 100644",
+      "--- a/script.sql",
+      "+++ b/script.sql",
+      "@@ -1,2 +1,4 @@",
+      " -- existing comment",
+      "+-- new comment one",
+      "+-- new comment two that looks like +++ header",
+      " -- trailing comment",
+    ].join("\n");
+
+    const parsed = parseUnifiedDiff(stdout);
+    expect(parsed).toHaveLength(1);
+    const diff = parsed[0]!;
+    expect(diff.path).toBe("script.sql");
+    expect(diff.oldPath).toBeUndefined();
+    expect(diff.addedLines).toBe(2);
+    expect(diff.deletedLines).toBe(0);
+    expect(diff.isBinary).toBe(false);
+
+    const hunk = diff.hunks[0]!;
+    const addedContents = hunk.lines
+      .filter((line) => line.kind === "added")
+      .map((line) => line.content);
+    expect(addedContents).toEqual([
+      "-- new comment one",
+      "-- new comment two that looks like +++ header",
+    ]);
+  });
 });
 
 describeIfGitInstalled("parseUnifiedDiff integration (temp repo harness)", () => {

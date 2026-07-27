@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { normalizeGitOutputPath } from "./types";
 import { isWindows } from "../services/platform";
+import { isConflictStatusCode } from "./gitStatusFormat";
 
 /** Parsed commit row from structured `git log --format=…` output (phase 2). */
 export interface ParsedCommitLine {
@@ -947,6 +948,21 @@ export function splitWorkingTreeStatus(lines: ParsedStatusLine[]): WorkingTreeSt
   for (const line of lines) {
     const { indexStatus, workTreeStatus, path } = line;
     const statusCode = `${indexStatus}${workTreeStatus}`;
+
+    // Conflicted entries are unmerged — git does not let you stage one until
+    // it is resolved, so they appear only in the unstaged list. Previously a
+    // code like `DD` (indexStatus `D`, workTreeStatus `D`) was pushed into
+    // both lists, letting a user "unstage" a conflicted path with no warning
+    // and leaving a duplicate row that disagreed with itself (M9).
+    if (isConflictStatusCode(statusCode)) {
+      unstaged.push({
+        path,
+        indexStatus,
+        workTreeStatus,
+        statusCode,
+      });
+      continue;
+    }
 
     if (indexStatus !== " " && indexStatus !== "?") {
       staged.push({

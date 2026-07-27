@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-07-27 — Git layer: refresh generation guard, tag-delete remote picker, diff hunk headers, conflict labels, history prefs fallback
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M6–M10 — the
+second batch of git-layer Medium findings.
+
+- **Manual Refresh had no generation guard and its AbortController was never aborted (M6).**
+  `handleRefresh` created a fresh `AbortController` per click but never aborted the previous
+  one, and never passed a generation to `refreshProbe`, so a slow refresh whose user had
+  since switched workspace could stamp `probeStatus`/`repoRoot`/`remotes` with the previous
+  repo's data. A per-instance `refreshController` is now aborted by any newer Refresh and by
+  the probe-generation effect on a workspace switch or remount, and `refreshProbe` receives
+  the generation captured at the start of the refresh so its own staleness guard drops the
+  result even if the controller is never aborted. The toolbar busy flag is always released
+  in the `finally`, so an abort cannot permanently disable the action.
+
+- **"Delete from remotes" deleted the tag on every configured remote (M7).** The delete-tag
+  prompt only offered a single "Also delete from remote(s)" checkbox; ticking it deleted the
+  tag on every configured remote, with no way to pick one — unlike the push-tag prompt, which
+  already had a per-remote `<select>` plus a "push to all" toggle. The prompt now mirrors the
+  push flow: a per-remote `<select>`, a "delete from all remotes (N)" toggle, and a result
+  carrying the chosen `remoteNames` list (empty for local-only). The panel passes that list
+  straight through to `deleteTag`.
+
+- **Hunk body lines beginning with `--- `/`+++ ` were parsed as file headers (M8).** The
+  `--- `/`+++ ` headers were checked unconditionally, so deleting a SQL/Lua/Haskell comment
+  line like `-- get user` (rendered as `--- get user` in the diff) never reached the `-` body
+  handler — `deletedLines` was undercounted and `oldPath` was rewritten from the comment
+  text, which in turn made the file report as renamed. The headers are now honoured only
+  before the first hunk (`currentHunk === null`); inside a hunk they fall through to the
+  `+`/`-` body handlers as unified-diff content.
+
+- **Asymmetric conflict codes were mislabeled, and conflicted files appeared in both lists
+  (M9).** `formatWorkingTreeStatusCode` tested `U` last, so `UD`/`DU` labelled as "Deleted",
+  `AU`/`UA`/`AA` as "Added", and `DD` as "Deleted". A new `isConflictStatusCode` detects
+  every porcelain conflict code (`DD`, `AU`, `UD`, `UA`, `DU`, `AA`, `UU`) and is consulted
+  before any single-char check, so all conflicts now label as "Conflict". `splitWorkingTreeStatus`
+  uses the same helper to place conflicted paths only in the unstaged list — git does not
+  allow staging a conflict, and previously a code like `DD` appeared in both lists, letting a
+  user "unstage" a conflicted path with no warning.
+
+- **A failed prefs read left the history panel claiming "No commits yet" (M10).** The
+  panel's filter-mode effect awaited `readPersistedHistoryFilterMode` in an unguarded IIFE;
+  the function catches FS errors itself today, but any future regression in its error
+  handling would reject the IIFE, leave `filterModeReady` false forever, and gate the page-1
+  load effect — so the panel would render the empty "No commits yet" state for a repo that
+  actually has history. The IIFE now wraps the read in try/catch and falls back to the
+  default filter on any failure.
+
 ## 2026-07-27 — Git layer: literal pathspecs, raw -z parsing, worktree branches, paginated history, pull-cancel
 
 Follow-up to the review in

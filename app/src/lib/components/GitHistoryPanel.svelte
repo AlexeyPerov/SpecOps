@@ -257,7 +257,18 @@
     filterMode = DEFAULT_HISTORY_FILTER_MODE;
 
     void (async () => {
-      const persisted = await readPersistedHistoryFilterMode(root);
+      // The prefs read is best-effort: a transient FS failure (or any future
+      // regression in `readPersistedHistoryFilterMode`'s own error handling)
+      // must not strand the panel. Without this guard an unhandled rejection
+      // would leave `filterModeReady` false forever, which gates the page-1
+      // load effect — so the panel would render the empty "No commits yet"
+      // state for a repo that actually has history (M10).
+      let persisted: HistoryFilterMode | null;
+      try {
+        persisted = await readPersistedHistoryFilterMode(root);
+      } catch {
+        persisted = null;
+      }
       if (controller.signal.aborted) {
         return;
       }

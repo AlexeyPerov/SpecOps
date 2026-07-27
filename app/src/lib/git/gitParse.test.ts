@@ -768,6 +768,42 @@ describe("splitWorkingTreeStatus", () => {
     ]);
     expect(status.unstaged.find((entry) => entry.path === "untracked.txt")?.statusCode).toBe("??");
   });
+
+  it("places conflicted paths only in unstaged, never in staged (M9)", () => {
+    // Every porcelain conflict code: DD, AU, UD, UA, DU, AA, UU.
+    const conflictLines = [
+      { indexStatus: "D", workTreeStatus: "D", path: "dd.txt" },
+      { indexStatus: "A", workTreeStatus: "U", path: "au.txt" },
+      { indexStatus: "U", workTreeStatus: "D", path: "ud.txt" },
+      { indexStatus: "U", workTreeStatus: "A", path: "ua.txt" },
+      { indexStatus: "D", workTreeStatus: "U", path: "du.txt" },
+      { indexStatus: "A", workTreeStatus: "A", path: "aa.txt" },
+      { indexStatus: "U", workTreeStatus: "U", path: "uu.txt" },
+    ];
+    const status = splitWorkingTreeStatus(conflictLines);
+
+    expect(status.staged).toEqual([]);
+    // The unstaged list is sorted by path (localeCompare, base sensitivity).
+    expect(status.unstaged.map((entry) => entry.path)).toEqual([
+      "aa.txt",
+      "au.txt",
+      "dd.txt",
+      "du.txt",
+      "ua.txt",
+      "ud.txt",
+      "uu.txt",
+    ]);
+    // statusCode preserved verbatim so the panel can render the Conflict label.
+    expect(status.unstaged.map((entry) => entry.statusCode).sort()).toEqual([
+      "AA",
+      "AU",
+      "DD",
+      "DU",
+      "UA",
+      "UD",
+      "UU",
+    ]);
+  });
 });
 
 describeIfGitInstalled("parseStatusPorcelain integration", () => {

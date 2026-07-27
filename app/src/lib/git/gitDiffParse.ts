@@ -117,7 +117,15 @@ function parseDiffSection(section: string): ParsedTextDiff {
       continue;
     }
 
-    if (line.startsWith("--- ")) {
+    // `--- `/`+++ ` are the per-file old/new path headers and only appear
+    // before the first hunk. Once a hunk has started they are body content
+    // (e.g. a deleted SQL/Lua/Haskell `--` comment rendered as `--- get user`,
+    // or added text starting with `+++`). Without the `currentHunk === null`
+    // guard such a body line was parsed as a header: it never reached the
+    // `+`/`-` branch, so `deletedLines` was undercounted and `oldPath` was
+    // rewritten from the comment text, which in turn made the file look
+    // renamed (M8).
+    if (currentHunk === null && line.startsWith("--- ")) {
       const headerPath = parsePathHeader(line.slice(4));
       if (headerPath && headerPath !== "/dev/null") {
         oldPath = headerPath;
@@ -125,7 +133,7 @@ function parseDiffSection(section: string): ParsedTextDiff {
       continue;
     }
 
-    if (line.startsWith("+++ ")) {
+    if (currentHunk === null && line.startsWith("+++ ")) {
       const headerPath = parsePathHeader(line.slice(4));
       if (headerPath && headerPath !== "/dev/null") {
         path = headerPath;

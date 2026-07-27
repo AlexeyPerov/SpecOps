@@ -209,6 +209,22 @@ describe("checkDocumentExternalChanges", () => {
     expect(document?.isDirty).toBe(true);
   });
 
+  it("keeps local edits when the dirty-reload dialog rejects instead of re-prompting", async () => {
+    const documentId = prepareSavedFile("/tmp/dirty-dialog-fail.txt", "local", fp1, true);
+    statMock.mockResolvedValue(fp2);
+    confirmMock.mockRejectedValue(new Error("dialog unavailable"));
+
+    await checkDocumentExternalChanges(documentId, "watcher");
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
+    expect(document?.content).toBe("local edited");
+    expect(document?.dismissedFingerprint).toEqual(fp2);
+    expect(document?.isDirty).toBe(true);
+    expect(confirmMock).toHaveBeenCalledOnce();
+  });
+
   it("marks missing files without clearing buffer content", async () => {
     const documentId = prepareSavedFile("/tmp/missing.txt", "keep me", fp1);
     statMock.mockRejectedValue(new Error("no such file or directory"));

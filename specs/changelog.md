@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-07-27 — State/services: Save All, dirty prompt, drop folder, data dir, untitled name, catalog dispose
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M46–M51
+(M45 was already fixed with C4) — the fourth batch of state/services Medium findings.
+
+- **Save All stopped on the first write failure (M46).** The loop now catches per
+  document, keeps saving the rest, and notifies a saved/failed summary instead of
+  aborting with a raw "Command failed" OS error.
+
+- **Dirty-reload dialog rejection re-queued forever (M47).** A rejected
+  `confirm()` no longer re-inserts the pending prompt (which the outer flush
+  would microtask-retry unboundedly). Failure is treated like Keep Local.
+
+- **Dropped folders surfaced "Is a directory" (M48).** Drop handling stats the
+  path first; directories are added as workspaces, files still open normally.
+
+- **`ensureSpecOpsDataDir` cached a rejected promise (M49).** A transient mkdir
+  failure cleared the cache so the next caller retries instead of poisoning
+  settings/session/theme I/O for the process lifetime.
+
+- **Untitled Save As used unsanitized first-line text (M50).** Default filenames
+  strip path separators and illegal characters, drop trailing dots, and fall
+  back for empty/reserved Windows names so `join` cannot escape the workspace.
+
+- **Closed workspaces leaked file catalogs (M51).** Catalog sync now disposes
+  roots that are no longer open in the session.
+
 ## 2026-07-27 — State/services: session I/O, rail width, recent files, shortcuts, Cmd+W, restore
 
 Follow-up to the review in

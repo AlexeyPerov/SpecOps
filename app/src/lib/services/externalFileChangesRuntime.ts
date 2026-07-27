@@ -221,11 +221,19 @@ export async function flushDirtyPrompts(
           deferredDirtyDocumentIds.delete(documentId);
         }
       } catch {
-        runtime.pendingDirtyPromptByDocument.set(documentId, {
-          trigger: pending.trigger,
-          diskFingerprint: currentFingerprint,
-        });
-        break;
+        // Dialog rejection must not re-queue: the outer finally would
+        // scheduleFlushDirtyPrompts again via queueMicrotask and spin forever
+        // (one stat IPC per iteration). Treat failure like Keep Local so the
+        // buffer is preserved and the fingerprint is dismissed.
+        const postDialog = findDocumentContext(appState.getSnapshot(), documentId);
+        if (postDialog && postDialog.document.filePath === filePath) {
+          appState.applyDocumentKeepLocalForContext(
+            postDialog.contextId,
+            documentId,
+            currentFingerprint,
+          );
+        }
+        deferredDirtyDocumentIds.delete(documentId);
       } finally {
         runtime.dialogOpenForDocument.delete(documentId);
       }

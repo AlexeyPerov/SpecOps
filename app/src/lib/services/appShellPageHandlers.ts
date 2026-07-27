@@ -16,6 +16,7 @@ import {
   isSuccessfulOpenActivePathResult,
   openActivePath,
 } from "./openActivePath";
+import { openDroppedPath } from "./openDroppedPath";
 import { logDiagnostic } from "./logging";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { SettingsDialogTab } from "./settingsDialogUi";
@@ -105,11 +106,7 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
 
   async function openDroppedPaths(paths: string[]): Promise<void> {
     for (const droppedPath of paths) {
-      try {
-        await openAndActivatePath(droppedPath);
-      } catch (error: unknown) {
-        deps.notify(`Failed to open dropped file: ${getErrorMessage(error)}`);
-      }
+      await openDroppedPath(droppedPath, openAndActivatePath, deps.notify);
     }
   }
 

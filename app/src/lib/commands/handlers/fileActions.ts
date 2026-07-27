@@ -206,10 +206,13 @@ export async function handleFileSaveAll(context: CommandContext): Promise<void> 
   const { getState, notify, getWindowId } = context;
   const state = getState();
   let saved = 0;
+  const failures: string[] = [];
   // Only the ids are taken from the initial snapshot. Each document is re-read from
   // current state at its turn, because every await in this loop (the dialog for
   // untitled files, each disk write, each registry update) is a window in which the
   // user can keep typing — and a Save All over many files makes that window long.
+  // Per-document try/catch keeps one read-only or otherwise failing write from
+  // aborting the rest (and from surfacing only a raw OS error as "Command failed").
   const documentIds = getActiveDocuments(state).map((documentState) => documentState.id);
   for (const documentId of documentIds) {
     const owner = findDocumentContext(appState.getSnapshot(), documentId);
@@ -220,39 +223,55 @@ export async function handleFileSaveAll(context: CommandContext): Promise<void> 
     if (!documentState.isDirty || documentState.contentKind !== "text") {
       continue;
     }
-    let targetPath = documentState.filePath;
-    const previousPath = documentState.filePath;
-    const writtenContent = documentState.content;
-    const encodeOptions = documentEncodeOptions(documentState);
-    let fingerprint;
-    if (!targetPath) {
-      const saved = await saveFileAs(
-        writtenContent,
-        await untitledSaveDefaultPath(writtenContent, appState.getWorkspaceRoot()),
-        encodeOptions,
-      );
-      if (!saved) {
-        continue;
+    try {
+      let targetPath = documentState.filePath;
+      const previousPath = documentState.filePath;
+      const writtenContent = documentState.content;
+      const encodeOptions = documentEncodeOptions(documentState);
+      let fingerprint;
+      if (!targetPath) {
+        const savedAs = await saveFileAs(
+          writtenContent,
+          await untitledSaveDefaultPath(writtenContent, appState.getWorkspaceRoot()),
+          encodeOptions,
+        );
+        if (!savedAs) {
+          continue;
+        }
+        targetPath = savedAs.path;
+        fingerprint = savedAs.fingerprint;
+      } else {
+        fingerprint = await saveFile({
+          path: targetPath,
+          content: writtenContent,
+          ...encodeOptions,
+        });
       }
-      targetPath = saved.path;
-      fingerprint = saved.fingerprint;
-    } else {
-      fingerprint = await saveFile({
-        path: targetPath,
-        content: writtenContent,
-        ...encodeOptions,
-      });
+      applyDocumentSavedState(documentState.id, targetPath, writtenContent, fingerprint);
+      await renameOpenFileRegistry(
+        previousPath,
+        targetPath,
+        getWindowId(),
+        documentState.id,
+      );
+      saved += 1;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(
+        `"${documentState.title}"${message ? `: ${message}` : ""}`,
+      );
     }
-    applyDocumentSavedState(documentState.id, targetPath, writtenContent, fingerprint);
-    await renameOpenFileRegistry(
-      previousPath,
-      targetPath,
-      getWindowId(),
-      documentState.id,
-    );
-    saved += 1;
   }
-  notify(saved > 0 ? `Saved ${saved} document(s).` : "No dirty documents to save.");
+  if (failures.length === 0) {
+    notify(saved > 0 ? `Saved ${saved} document(s).` : "No dirty documents to save.");
+    return;
+  }
+  const failureSummary = failures.join("; ");
+  if (saved === 0) {
+    notify(`Save All failed: ${failureSummary}`);
+    return;
+  }
+  notify(`Saved ${saved} document(s). ${failures.length} failed: ${failureSummary}`);
 }
 
 export async function handleFileReloadFromDisk(context: CommandContext): Promise<void> {

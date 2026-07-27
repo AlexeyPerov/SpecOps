@@ -330,6 +330,26 @@ describe("file.saveAll command", () => {
     expect(saveFile).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith("No dirty documents to save.");
   });
+
+  it("continues after a mid-list failure and reports both outcomes", async () => {
+    const { context, notify } = createCommandContext();
+    appState.createTab();
+    appState.markDocumentSaved("doc-1", "/tmp/a.txt", "a");
+    appState.setDocumentContent("doc-1", "a-edited");
+    appState.markDocumentSaved("doc-2", "/tmp/b.txt", "b");
+    appState.setDocumentContent("doc-2", "b-edited");
+    vi.mocked(saveFile)
+      .mockRejectedValueOnce(new Error("Read-only file system (os error 30)"))
+      .mockResolvedValueOnce(savedFingerprint);
+
+    dispatchCommand("file.saveAll", context);
+    await flushCommandQueue();
+
+    expect(saveFile).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenCalledWith(
+      'Saved 1 document(s). 1 failed: "a.txt": Read-only file system (os error 30)',
+    );
+  });
 });
 
 describe("file.new command", () => {

@@ -64,6 +64,7 @@ import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { readConsoleHeightPreference } from "./consoleTabPrefs";
 import { externalFileWatcherSyncKey, watchedPathsFromState } from "./appShellHelpers";
 import { loadWorkspacePreferences } from "./workspacePreferences";
+import { openDroppedPath } from "./openDroppedPath";
 
 const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 const DOCK_NEW_WINDOW_EVENT = "spec-ops/dock/new-window";
@@ -196,12 +197,7 @@ async function startAppShellRuntimeInner(
 
   async function openDroppedPaths(paths: string[]): Promise<void> {
     for (const droppedPath of paths) {
-      try {
-        await options.openAndActivatePath(droppedPath);
-      } catch (error: unknown) {
-        const message = getErrorMessage(error);
-        options.notify(`Failed to open dropped file: ${message}`);
-      }
+      await openDroppedPath(droppedPath, options.openAndActivatePath, options.notify);
     }
   }
 

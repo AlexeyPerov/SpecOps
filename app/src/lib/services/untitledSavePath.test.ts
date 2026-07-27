@@ -28,6 +28,14 @@ describe("untitledSaveDefaultPath", () => {
     expect(joinMock).toHaveBeenCalledWith("/tmp/workspace", "# My Spec");
   });
 
+  it("sanitizes path separators before joining", async () => {
+    await expect(
+      untitledSaveDefaultPath("/escaped\nbody", "/tmp/workspace"),
+    ).resolves.toBe("/tmp/workspace/escaped");
+
+    expect(joinMock).toHaveBeenCalledWith("/tmp/workspace", "escaped");
+  });
+
   it("uses Untitled for empty content", async () => {
     await expect(untitledSaveDefaultPath("", "/tmp/workspace")).resolves.toBe(
       `/tmp/workspace/${DEFAULT_UNTITLED_TITLE}`,

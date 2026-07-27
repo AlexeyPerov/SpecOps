@@ -426,11 +426,13 @@ describe("syncWorkspaceFileCatalogEffect", () => {
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot: "/repo",
       isChatHttpActive: false,
+      openWorkspaceRoots: ["/repo"],
       registry: { setActiveRoot },
     });
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot: "/repo",
       isChatHttpActive: false,
+      openWorkspaceRoots: ["/repo"],
       registry: { setActiveRoot },
     });
     expect(setActiveRoot).toHaveBeenCalledTimes(1);
@@ -439,8 +441,29 @@ describe("syncWorkspaceFileCatalogEffect", () => {
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot: null,
       isChatHttpActive: false,
+      openWorkspaceRoots: [],
       registry: { setActiveRoot },
     });
     expect(setActiveRoot).toHaveBeenCalledWith(null);
+  });
+
+  it("disposes catalogs for workspace roots that are no longer open", () => {
+    const setActiveRoot = vi.fn();
+    const disposeRoot = vi.fn();
+    syncWorkspaceFileCatalogEffect({
+      activeWorkspaceRoot: "/repo-a",
+      isChatHttpActive: false,
+      openWorkspaceRoots: ["/repo-a", "/repo-b"],
+      registry: { setActiveRoot, disposeRoot },
+    });
+    syncWorkspaceFileCatalogEffect({
+      activeWorkspaceRoot: "/repo-a",
+      isChatHttpActive: false,
+      openWorkspaceRoots: ["/repo-a"],
+      registry: { setActiveRoot, disposeRoot },
+    });
+    expect(disposeRoot).toHaveBeenCalledTimes(1);
+    expect(disposeRoot).toHaveBeenCalledWith("/repo-b");
+    expect(setActiveRoot).toHaveBeenCalledTimes(1);
   });
 });

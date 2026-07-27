@@ -1,5 +1,5 @@
 import { join } from "@tauri-apps/api/path";
-import { deriveUntitledTitle } from "./untitledTitle";
+import { deriveUntitledFilename } from "./untitledTitle";
 
 export async function untitledSaveDefaultPath(
   content: string,
@@ -8,5 +8,5 @@ export async function untitledSaveDefaultPath(
   if (!workspaceRoot) {
     return undefined;
   }
-  return join(workspaceRoot, deriveUntitledTitle(content));
+  return join(workspaceRoot, deriveUntitledFilename(content));
 }

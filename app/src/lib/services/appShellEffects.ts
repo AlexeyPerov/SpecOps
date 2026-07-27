@@ -777,6 +777,7 @@ export function resetAppShellEffectsForTests(): void {
   lastProjectTreeWatcherKey = null;
   lastExternalFileWatcherSyncKey = null;
   lastWorkspaceFileCatalogKey = null;
+  lastOpenWorkspaceCatalogRoots = new Set();
   lastSettingsPersistenceFingerprint = null;
   lastOpencodeSidecarProbeKey = null;
   if (settingsPersistTimer) {
@@ -848,19 +849,37 @@ export function syncResponsiveLayoutEffect(_input: SyncResponsiveLayoutEffectInp
 export interface SyncWorkspaceFileCatalogEffectInput {
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
+  /** Roots still open in the session; catalogs for missing roots are disposed. */
+  openWorkspaceRoots?: readonly string[];
   registry: {
     setActiveRoot: (root: string | null) => unknown;
+    disposeRoot?: (root: string) => void;
   };
 }
 
 let lastWorkspaceFileCatalogKey: string | null = null;
+let lastOpenWorkspaceCatalogRoots = new Set<string>();
 
 /**
  * Keep the workspace file catalog scoped to the active workspace.
  * Clears on workspace leave / chat-http overlay.
+ * Disposes catalogs whose workspace root is no longer open so closed
+ * workspaces do not retain enumeration state forever.
  */
 export function syncWorkspaceFileCatalogEffect(input: SyncWorkspaceFileCatalogEffectInput): void {
   const { activeWorkspaceRoot, isChatHttpActive, registry } = input;
+  if (registry.disposeRoot && input.openWorkspaceRoots !== undefined) {
+    const openRoots = new Set(
+      input.openWorkspaceRoots.map((root) => normalizePathSync(root)),
+    );
+    for (const root of lastOpenWorkspaceCatalogRoots) {
+      if (!openRoots.has(root)) {
+        registry.disposeRoot(root);
+      }
+    }
+    lastOpenWorkspaceCatalogRoots = openRoots;
+  }
+
   if (!activeWorkspaceRoot || isChatHttpActive) {
     if (lastWorkspaceFileCatalogKey === "inactive") {
       return;

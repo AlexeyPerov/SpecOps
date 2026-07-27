@@ -776,9 +776,11 @@
   $effect(() => {
     activeWorkspaceRoot;
     isChatHttpActive;
+    workspaces;
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot,
       isChatHttpActive,
+      openWorkspaceRoots: workspaces.map((workspace) => workspace.rootPath),
       registry: workspaceFileCatalogRegistry,
     });
     // L14 — the picker-close + project-search-cancel half moved into the

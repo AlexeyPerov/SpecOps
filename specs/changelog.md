@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-07-27 — Rust: watcher ignore list, limited git capture, path rewrite, askpass race/poison, async commands
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M23–M28 — the
+second batch of Rust Medium findings.
+
+- **Recursive project-tree watches had no ignore list (M23).** A recursive root watch
+  delivered every `.git` / `node_modules` / build-artifact rewrite as an IPC event. The
+  debounce emit path now skips paths whose components match the frontend heavy-directory
+  skip set (`.git`, `node_modules`, `target`, `dist`, `build`, `.venv`, `__pycache__`).
+
+- **Git output size was enforced only after buffering everything (M24).** The
+  non-registered path used `Command::output()`, so a large `git show` allocated the full
+  stream (plus a lossy decode copy) before the 16 MiB check rejected it.
+  `read_limited_stream` now caps the retained buffer and keeps draining after the limit so
+  the child cannot block on a full pipe; capture goes through that helper instead of
+  `.output()`.
+
+- **Watched paths were not canonicalized while notify events often were (M25).** A
+  workspace under a symlink root (`/tmp` → `/private/tmp`) never matched document paths, so
+  external-change detection silently no-oped. Watch registration now canonicalizes, and
+  emitted events rewrite the canonical prefix back to the frontend-registered form.
+
+- **Askpass watcher exited after the first prompt if the helper won the race (M26).** After
+  signalling a response it checked `response_path.exists()`, but the helper deletes that
+  file as soon as it reads it — so a second HTTPS username/password prompt never arrived
+  and `git push` hung until timeout. The watcher now trusts the condvar `ready` flag.
+
+- **Askpass condvar used `expect()` and `respond` swallowed poison (M27).** A panic in the
+  watcher poisoned the mutex; `respond_git_askpass` then returned `Ok(())` while git waited
+  out its timeout. The watcher aborts the prompt on poison instead of panicking, and
+  respond returns `Err`.
+
+- **Blocking work ran in synchronous Tauri commands (M28).** `run_git`,
+  `git_commit_with_message`, and `opencode_sidecar_status` could block the UI/main thread
+  for up to the command/probe timeout. They are marked `#[tauri::command(async)]` so the
+  work runs off the main thread.
+
 ## 2026-07-27 — Rust: askpass permissions, unlocked sidecar probes, opened-paths drain, git cancel unlock, file-ID cache
 
 Follow-up to the review in

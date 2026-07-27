@@ -243,7 +243,6 @@ fn write_askpass_response(response_path: &Path, value: &str) -> Result<(), Strin
 
 fn wait_for_prompt_and_respond(session: &Arc<AskpassSession>, request_counter: &mut u64) -> bool {
     let prompt_path = session.dir.join(PROMPT_FILE);
-    let response_path = session.dir.join(RESPONSE_FILE);
     let started = Instant::now();
     let timeout = Duration::from_millis(session.timeout_ms);
 
@@ -278,23 +277,37 @@ fn wait_for_prompt_and_respond(session: &Arc<AskpassSession>, request_counter: &
                 });
 
                 let (lock, cvar) = &session.response_ready;
-                let mut ready = lock.lock().expect("askpass response lock");
+                let mut ready = match lock.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        // A poisoned mutex means the watcher (or a prior waiter)
+                        // panicked; abort this prompt rather than `expect`-ing
+                        // and taking down the thread — `respond_git_askpass`
+                        // must still be able to report the failure.
+                        return false;
+                    }
+                };
                 while !*ready && !session.cancelled.load(Ordering::SeqCst) {
                     let remaining = timeout.saturating_sub(started.elapsed());
                     if remaining.is_zero() {
                         return false;
                     }
-                    ready = cvar
-                        .wait_timeout(ready, Duration::from_millis(100))
-                        .expect("askpass response wait")
-                        .0;
+                    ready = match cvar.wait_timeout(ready, Duration::from_millis(100)) {
+                        Ok((guard, _)) => guard,
+                        Err(_) => return false,
+                    };
                 }
 
                 if session.cancelled.load(Ordering::SeqCst) {
                     return false;
                 }
 
-                if response_path.exists() {
+                // Trust the condvar flag, not `response_path.exists()`. The
+                // helper script deletes the response file as soon as it reads
+                // it; if it wins that race, a filesystem check would falsely
+                // conclude no response arrived and exit the watcher — hanging
+                // the next HTTPS username/password prompt until timeout.
+                if *ready {
                     *ready = false;
                     return true;
                 }
@@ -428,10 +441,11 @@ pub fn respond_git_askpass(request: RespondGitAskpassRequest) -> Result<(), Stri
     }
 
     let (lock, cvar) = &session.response_ready;
-    if let Ok(mut ready) = lock.lock() {
-        *ready = true;
-        cvar.notify_all();
-    }
+    let mut ready = lock
+        .lock()
+        .map_err(|_| "askpass response lock poisoned".to_string())?;
+    *ready = true;
+    cvar.notify_all();
 
     Ok(())
 }
@@ -500,5 +514,65 @@ mod tests {
             parse_host_hint("Username for 'https://github.com':"),
             Some("github.com".to_string())
         );
+    }
+
+    #[test]
+    fn wait_for_prompt_continues_when_response_file_already_consumed() {
+        let session_dir = std::env::temp_dir().join(format!(
+            "spec-ops-askpass-race-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_nanos())
+                .unwrap_or(0)
+        ));
+        fs::create_dir_all(&session_dir).expect("create session dir");
+
+        let session = Arc::new(AskpassSession {
+            session_id: "test-session".to_string(),
+            dir: session_dir.clone(),
+            operation: Some("push".to_string()),
+            timeout_ms: 2_000,
+            cancelled: AtomicBool::new(false),
+            active_request_id: Mutex::new(None),
+            response_ready: (Mutex::new(false), Condvar::new()),
+        });
+
+        fs::write(session_dir.join(PROMPT_FILE), b"Password for 'https://example.com':")
+            .expect("write prompt");
+
+        let session_for_responder = Arc::clone(&session);
+        let responder = thread::spawn(move || {
+            // Wait until the watcher has observed the prompt and is blocked on
+            // the condvar, then signal readiness *without* leaving a response
+            // file — simulating the helper script consuming it first.
+            for _ in 0..40 {
+                if session_for_responder
+                    .active_request_id
+                    .lock()
+                    .ok()
+                    .and_then(|guard| guard.clone())
+                    .is_some()
+                {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(25));
+            }
+            let (lock, cvar) = &session_for_responder.response_ready;
+            let mut ready = lock.lock().expect("lock");
+            *ready = true;
+            cvar.notify_all();
+        });
+
+        let mut counter = 0u64;
+        let continued = wait_for_prompt_and_respond(&session, &mut counter);
+        responder.join().expect("responder");
+        let _ = fs::remove_dir_all(&session_dir);
+
+        assert!(
+            continued,
+            "watcher must continue to the next prompt when the response file is already gone"
+        );
+        assert_eq!(counter, 1);
     }
 }

@@ -683,7 +683,7 @@ pub fn opencode_sidecar_restart(
     start_or_attach_nonblocking(&app, state.inner(), directory, port)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn opencode_sidecar_status(
     state: State<'_, OpencodeSidecarState>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {

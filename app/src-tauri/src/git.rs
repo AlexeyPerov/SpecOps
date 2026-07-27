@@ -856,6 +856,7 @@ fn apply_output_limit(response: &mut RunGitResponse) -> Result<(), String> {
 fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<String, String> {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
+    let mut exceeded = false;
 
     loop {
         let read = reader
@@ -864,13 +865,39 @@ fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<Strin
         if read == 0 {
             break;
         }
+        // Once over the limit, keep draining so the child is not blocked on a
+        // full pipe — but never grow `buf` past `max_bytes`.
+        if exceeded {
+            continue;
+        }
         if buf.len() + read > max_bytes {
-            return Err(format!("git output exceeded limit of {max_bytes} bytes"));
+            exceeded = true;
+            continue;
         }
         buf.extend_from_slice(&chunk[..read]);
     }
 
+    if exceeded {
+        return Err(format!("git output exceeded limit of {max_bytes} bytes"));
+    }
     Ok(decode_utf8(&buf))
+}
+
+/// Spawn git, drain stdout/stderr with the byte limit, and wait for exit.
+///
+/// Prefer this over `Command::output()`: that API buffers the entire stream in
+/// memory before any size check runs, so a huge `git show` can allocate
+/// unbounded (and a lossy UTF-8 decode copies it again) before being rejected.
+fn run_command_with_limited_output(mut command: Command) -> Result<(i32, String, String), String> {
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("Failed to spawn git: {error}"))?;
+    let readers = spawn_output_readers(&mut child);
+    let status = child
+        .wait()
+        .map_err(|error| format!("Failed to wait for git: {error}"))?;
+    let (stdout, stderr) = join_output_readers(Some(readers))?;
+    Ok((status.code().unwrap_or(-1), stdout, stderr))
 }
 
 /// Probe whether `git` is installed and readable from PATH (with Windows fallbacks).
@@ -1122,12 +1149,14 @@ pub fn execute_git_with_full_options(
         }
         response
     } else {
-        match build_git_command(repo_root, args, &effective_env).output() {
-            Ok(output) => {
+        match run_command_with_limited_output(build_git_command(repo_root, args, &effective_env)) {
+            Ok((exit_code, stdout, stderr)) => {
+                // Size already enforced while reading; `apply_output_limit` is a
+                // belt-and-suspenders check on the decoded strings.
                 let mut response = RunGitResponse {
-                    exit_code: output.status.code().unwrap_or(-1),
-                    stdout: decode_utf8(&output.stdout),
-                    stderr: decode_utf8(&output.stderr),
+                    exit_code,
+                    stdout,
+                    stderr,
                     duration_ms: start.elapsed().as_millis() as u64,
                     cancelled: false,
                     timed_out: false,
@@ -1147,7 +1176,7 @@ pub fn execute_git_with_full_options(
             Err(error) => RunGitResponse {
                 exit_code: -1,
                 stdout: String::new(),
-                stderr: error.to_string(),
+                stderr: error,
                 duration_ms: start.elapsed().as_millis() as u64,
                 cancelled: false,
                 timed_out: false,
@@ -1163,7 +1192,11 @@ pub fn git_available() -> GitAvailableResponse {
 }
 
 /// Create a commit using a temporary message file (`git commit -F`).
-#[tauri::command]
+///
+/// Marked `async` so Tauri runs the blocking git subprocess off the UI/main
+/// thread (sync commands otherwise run on the main thread and can freeze the
+/// window for the full command timeout).
+#[tauri::command(async)]
 pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitResponse, String> {
     let trimmed = request.message.trim();
     if trimmed.is_empty() {
@@ -1226,7 +1259,10 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
 /// Caller-supplied `env` is merged into the subprocess after stripping dangerous git
 /// variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, etc.). Only subcommands in
 /// `ALLOWED_GIT_SUBCOMMANDS` are permitted via this IPC entry point.
-#[tauri::command]
+///
+/// Marked `async` so the blocking subprocess (up to the remote-op timeout) runs off
+/// the UI/main thread.
+#[tauri::command(async)]
 pub fn run_git(request: RunGitRequest) -> Result<RunGitResponse, String> {
     validate_git_args(&request.args)?;
     let repo_root = normalize_repo_root(&request.repo_root)?;
@@ -1348,8 +1384,27 @@ pub fn remove_stale_index_lock(request: RemoveStaleIndexLockRequest) -> RemoveSt
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::Cursor;
     use std::process::Command as StdCommand;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn read_limited_stream_rejects_oversize_without_keeping_buffer() {
+        let oversized = vec![b'x'; 64];
+        let mut cursor = Cursor::new(oversized);
+        let err = read_limited_stream(&mut cursor, 16).expect_err("oversize must fail");
+        assert!(err.contains("exceeded limit"));
+        // Cursor should be fully drained so a concurrent writer would not block.
+        assert_eq!(cursor.position(), 64);
+    }
+
+    #[test]
+    fn read_limited_stream_accepts_within_limit() {
+        let data = b"hello git";
+        let mut cursor = Cursor::new(data.as_slice());
+        let text = read_limited_stream(&mut cursor, 64).expect("within limit");
+        assert_eq!(text, "hello git");
+    }
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 

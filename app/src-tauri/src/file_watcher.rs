@@ -1,12 +1,26 @@
 use notify::{EventKind, RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
-use std::collections::HashSet;
-use std::path::PathBuf;
-use std::sync::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
 pub const FILE_CHANGED_EVENT: &str = "spec-ops/fs/file-changed";
+
+/// Directory names skipped by the project-tree recursive watch emit path.
+///
+/// Mirrors the frontend `SKIPPED_DIRECTORY_NAMES` set so a recursive root watch
+/// does not flood IPC with every `.git`/`node_modules`/build-artifact rewrite.
+const IGNORED_WATCH_DIR_NAMES: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".venv",
+    "__pycache__",
+];
 
 /// Coarse filesystem-event kind emitted alongside each watched path.
 /// Consumers use this to apply incremental catalog invalidation safely
@@ -46,8 +60,15 @@ pub struct FileWatcherState {
 
 struct FileWatcherInner {
     debouncer: Option<Debouncer<notify::RecommendedWatcher, FileIdMap>>,
+    /// Paths as the frontend registered them (not necessarily canonical).
     watched_paths: HashSet<String>,
     project_tree_roots: HashSet<String>,
+    /// `frontend path → canonical path` actually passed to notify.
+    original_to_canonical: HashMap<String, String>,
+    /// Shared with the debounce callback so emitted paths can be rewritten
+    /// back to the frontend's registered form (notify often returns the
+    /// canonical symlink-resolved path, e.g. `/private/tmp/...` on macOS).
+    canonical_to_original: Arc<Mutex<HashMap<String, String>>>,
     app_handle: Option<AppHandle>,
 }
 
@@ -58,6 +79,8 @@ impl FileWatcherState {
                 debouncer: None,
                 watched_paths: HashSet::new(),
                 project_tree_roots: HashSet::new(),
+                original_to_canonical: HashMap::new(),
+                canonical_to_original: Arc::new(Mutex::new(HashMap::new())),
                 app_handle: None,
             }),
         }
@@ -70,6 +93,64 @@ impl FileWatcherState {
     }
 }
 
+/// Best-effort canonicalize. Falls back to the input when the path does not
+/// exist yet or cannot be resolved — callers still need to watch something.
+fn canonicalize_path_string(path: &str) -> String {
+    PathBuf::from(path)
+        .canonicalize()
+        .map(|resolved| resolved.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string())
+}
+
+/// True when any path component is a heavy/ignored directory name.
+fn path_has_ignored_component(path: &Path) -> bool {
+    path.components().any(|component| {
+        let Some(name) = component.as_os_str().to_str() else {
+            return false;
+        };
+        IGNORED_WATCH_DIR_NAMES
+            .iter()
+            .any(|ignored| name.eq_ignore_ascii_case(ignored))
+    })
+}
+
+/// Rewrite a notify-emitted path so it uses the frontend-registered root prefix.
+///
+/// Without this, a workspace rooted at `/tmp/proj` (symlink → `/private/tmp/proj`)
+/// receives events under `/private/tmp/...` that never match document paths.
+fn rewrite_emit_path(path: &Path, canonical_to_original: &HashMap<String, String>) -> String {
+    let raw = path.to_string_lossy();
+    let candidate = path
+        .canonicalize()
+        .map(|resolved| resolved.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| raw.clone().into_owned());
+
+    let mut best: Option<(usize, &str, &str)> = None;
+    for (canonical, original) in canonical_to_original {
+        if candidate == *canonical
+            || candidate.starts_with(&format!("{canonical}/"))
+            || candidate.starts_with(&format!("{canonical}\\"))
+        {
+            let replace = match best {
+                None => true,
+                Some((len, _, _)) => canonical.len() > len,
+            };
+            if replace {
+                best = Some((canonical.len(), canonical.as_str(), original.as_str()));
+            }
+        }
+    }
+
+    if let Some((_, canonical, original)) = best {
+        if candidate.len() == canonical.len() {
+            return original.to_string();
+        }
+        return format!("{original}{}", &candidate[canonical.len()..]);
+    }
+
+    raw.into_owned()
+}
+
 fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
     if inner.debouncer.is_some() {
         return Ok(());
@@ -79,6 +160,7 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
         .app_handle
         .clone()
         .ok_or_else(|| "File watcher app handle is not initialized".to_string())?;
+    let canonical_to_original = Arc::clone(&inner.canonical_to_original);
 
     let debouncer = new_debouncer(
         Duration::from_millis(200),
@@ -88,10 +170,23 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
                 return;
             };
 
+            let rewrite_map = canonical_to_original
+                .lock()
+                .map(|guard| guard.clone())
+                .unwrap_or_default();
+
             for event in events {
                 let kind = FileChangeKind::from(event.kind);
                 for path in &event.paths {
-                    let path_str = path.to_string_lossy().into_owned();
+                    if path_has_ignored_component(path) {
+                        continue;
+                    }
+                    let path_str = rewrite_emit_path(path, &rewrite_map);
+                    // Re-check after rewrite in case the original form still
+                    // contains an ignored segment the canonical path did too.
+                    if path_has_ignored_component(Path::new(&path_str)) {
+                        continue;
+                    }
                     let _ = app_handle.emit(
                         FILE_CHANGED_EVENT,
                         FileChangedPayload {
@@ -139,36 +234,56 @@ fn compute_watcher_path_diff(
 /// "not watched", and retrying it forever would be worse than leaking one watcher. A
 /// failed `watch` is left out of the set so the next sync retries it, which is what makes
 /// a file that appears later start being watched.
+///
+/// Paths are canonicalized before being handed to notify, and the
+/// original→canonical mapping is kept so emitted events can be rewritten back
+/// to the frontend-registered form.
 fn apply_watcher_path_diff(
     debouncer: &mut Debouncer<notify::RecommendedWatcher, FileIdMap>,
     previous: &HashSet<String>,
     next_paths: &HashSet<String>,
     mode: RecursiveMode,
+    original_to_canonical: &mut HashMap<String, String>,
+    canonical_to_original: &Mutex<HashMap<String, String>>,
 ) -> HashSet<String> {
     let (to_remove, to_add) = compute_watcher_path_diff(previous, next_paths);
     let mut watched = previous.clone();
 
     for path in to_remove {
-        if let Err(error) = debouncer.watcher().unwatch(PathBuf::from(&path).as_path()) {
-            log::debug!("file watcher unwatch failed for {path}: {error}");
+        let canonical = original_to_canonical
+            .remove(&path)
+            .unwrap_or_else(|| path.clone());
+        if let Ok(mut map) = canonical_to_original.lock() {
+            map.remove(&canonical);
+        }
+        if let Err(error) = debouncer.watcher().unwatch(PathBuf::from(&canonical).as_path()) {
+            log::debug!("file watcher unwatch failed for {canonical}: {error}");
         }
         // Keep the file-ID cache in sync so rename From/To pairs can still be
         // correlated for the remaining roots (notify-debouncer-full requires
         // `cache().add_root` alongside `watcher().watch`).
-        debouncer.cache().remove_root(PathBuf::from(&path));
+        debouncer.cache().remove_root(PathBuf::from(&canonical));
         watched.remove(&path);
     }
 
     for path in to_add {
-        match debouncer.watcher().watch(PathBuf::from(&path).as_path(), mode) {
+        let canonical = canonicalize_path_string(&path);
+        match debouncer
+            .watcher()
+            .watch(PathBuf::from(&canonical).as_path(), mode)
+        {
             Ok(()) => {
                 debouncer
                     .cache()
-                    .add_root(PathBuf::from(&path), mode);
+                    .add_root(PathBuf::from(&canonical), mode);
+                original_to_canonical.insert(path.clone(), canonical.clone());
+                if let Ok(mut map) = canonical_to_original.lock() {
+                    map.insert(canonical, path.clone());
+                }
                 watched.insert(path);
             }
             Err(error) => {
-                log::warn!("file watcher watch failed for {path}: {error}");
+                log::warn!("file watcher watch failed for {path} (canonical {canonical}): {error}");
             }
         }
     }
@@ -200,8 +315,14 @@ pub fn sync_file_watcher_paths(
         return Err("File watcher debouncer is not initialized".to_string());
     };
 
-    let next_watched =
-        apply_watcher_path_diff(debouncer, &previous, &next_paths, RecursiveMode::NonRecursive);
+    let next_watched = apply_watcher_path_diff(
+        debouncer,
+        &previous,
+        &next_paths,
+        RecursiveMode::NonRecursive,
+        &mut inner.original_to_canonical,
+        &inner.canonical_to_original,
+    );
     inner.watched_paths = next_watched;
     Ok(())
 }
@@ -227,8 +348,14 @@ pub fn sync_project_tree_watcher(
         return Err("File watcher debouncer is not initialized".to_string());
     };
 
-    let next_watched =
-        apply_watcher_path_diff(debouncer, &previous, &next_roots, RecursiveMode::Recursive);
+    let next_watched = apply_watcher_path_diff(
+        debouncer,
+        &previous,
+        &next_roots,
+        RecursiveMode::Recursive,
+        &mut inner.original_to_canonical,
+        &inner.canonical_to_original,
+    );
     inner.project_tree_roots = next_watched;
     Ok(())
 }
@@ -261,6 +388,8 @@ mod tests {
             .join("spec-ops-watcher-does-not-exist-1a2b3c")
             .to_string_lossy()
             .into_owned();
+        let mut original_to_canonical = HashMap::new();
+        let canonical_to_original = Mutex::new(HashMap::new());
 
         // The missing path is listed first so a failure there would, under the old
         // behaviour, prevent the real path from ever being watched.
@@ -270,6 +399,8 @@ mod tests {
             &set(&[]),
             &next,
             RecursiveMode::NonRecursive,
+            &mut original_to_canonical,
+            &canonical_to_original,
         );
 
         assert!(
@@ -280,6 +411,10 @@ mod tests {
             !watched.contains(&missing_path),
             "a path that failed to watch must stay out of the set so the next sync retries it"
         );
+        assert!(
+            original_to_canonical.contains_key(&existing_path),
+            "canonical mapping must be recorded for successfully watched paths"
+        );
 
         // And the state is usable afterwards: removing the good path works.
         let after = apply_watcher_path_diff(
@@ -287,8 +422,12 @@ mod tests {
             &watched,
             &set(&[]),
             RecursiveMode::NonRecursive,
+            &mut original_to_canonical,
+            &canonical_to_original,
         );
         assert!(after.is_empty());
+        assert!(original_to_canonical.is_empty());
+        assert!(canonical_to_original.lock().expect("lock").is_empty());
     }
 
     #[test]
@@ -358,5 +497,37 @@ mod tests {
             FileChangeKind::Modify
         );
         assert_eq!(FileChangeKind::from(EventKind::Any), FileChangeKind::Other);
+    }
+
+    #[test]
+    fn ignored_components_match_heavy_dirs() {
+        assert!(path_has_ignored_component(Path::new("/proj/.git/HEAD")));
+        assert!(path_has_ignored_component(Path::new("/proj/node_modules/x")));
+        assert!(path_has_ignored_component(Path::new("/proj/target/debug")));
+        assert!(path_has_ignored_component(Path::new("/proj/build/out")));
+        assert!(path_has_ignored_component(Path::new("/proj/dist/bundle.js")));
+        assert!(!path_has_ignored_component(Path::new("/proj/src/main.rs")));
+        assert!(!path_has_ignored_component(Path::new("/proj/src/build.rs")));
+    }
+
+    #[test]
+    fn rewrite_emit_path_swaps_canonical_prefix() {
+        let mut map = HashMap::new();
+        map.insert(
+            "/private/tmp/proj".to_string(),
+            "/tmp/proj".to_string(),
+        );
+        assert_eq!(
+            rewrite_emit_path(Path::new("/private/tmp/proj/src/a.ts"), &map),
+            "/tmp/proj/src/a.ts"
+        );
+        assert_eq!(
+            rewrite_emit_path(Path::new("/private/tmp/proj"), &map),
+            "/tmp/proj"
+        );
+        assert_eq!(
+            rewrite_emit_path(Path::new("/other/path"), &map),
+            "/other/path"
+        );
     }
 }

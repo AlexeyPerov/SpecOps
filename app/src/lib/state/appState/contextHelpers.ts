@@ -14,7 +14,7 @@ import {
   reindexPaneIdCounter,
   resetPaneIdCounter,
 } from "../../domain/contracts";
-import { normalizePathSync } from "../../services/diskFingerprint";
+import { normalizePathForStorage, normalizePathSync } from "../../services/diskFingerprint";
 import { normalizeDocument } from "./documentHelpers";
 
 export const NOTEPAD_CONTEXT_ID: ContextId = "notepad";
@@ -129,7 +129,7 @@ function cloneEditorLayout(layout: ContextSnapshot["session"]["editorLayout"]): 
 export function normalizeWorkspaceEntries(entries: WorkspaceEntry[]): WorkspaceEntry[] {
   return entries.map((entry) => ({
     id: entry.id,
-    rootPath: normalizePathSync(entry.rootPath),
+    rootPath: normalizePathForStorage(entry.rootPath),
     snapshot: cloneContextSnapshot(entry.snapshot),
   }));
 }

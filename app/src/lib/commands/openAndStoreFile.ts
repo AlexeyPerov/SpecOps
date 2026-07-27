@@ -6,7 +6,6 @@ import {
 } from "../services/openFileGate";
 import type { OpenedFile } from "../services/fileSystem";
 import { initializeDocumentDiskState } from "../services/externalFileChanges";
-import { statDiskFingerprint } from "../services/diskFingerprint";
 import { shouldGateFileOpenBySize } from "../services/largeFileOpen";
 import { appState } from "../state/appState";
 
@@ -35,10 +34,9 @@ export async function openAndStoreFile(
 
   if (gateResult.kind === "existing") {
     if (needsConfirm) {
-      const fingerprint = await statDiskFingerprint(opened.path);
       appState.upgradeDocumentFromOpenedFile(gateResult.documentId, opened.path, "", "large_pending");
       appState.setDocumentDiskState(gateResult.documentId, {
-        diskFingerprint: fingerprint,
+        diskFingerprint: opened.fingerprint,
         fileMissing: false,
       });
       notify(`Opened ${opened.path} (confirm to load contents)`);
@@ -51,14 +49,13 @@ export async function openAndStoreFile(
       opened.contentKind,
       openedFileEncoding(opened),
     );
-    await initializeDocumentDiskState(gateResult.documentId, opened.path);
+    await initializeDocumentDiskState(gateResult.documentId, opened.path, opened.fingerprint);
     notify(`Opened ${opened.path}`);
     return;
   }
 
   if (needsConfirm) {
-    const fingerprint = await statDiskFingerprint(opened.path);
-    await completeLargePendingOpen(opened.path, fingerprint, windowId);
+    await completeLargePendingOpen(opened.path, opened.fingerprint, windowId);
     notify(`Opened ${opened.path} (confirm to load contents)`);
     return;
   }
@@ -69,6 +66,7 @@ export async function openAndStoreFile(
     windowId,
     opened.contentKind,
     openedFileEncoding(opened),
+    opened.fingerprint,
   );
   notify(`Opened ${opened.path}`);
 }

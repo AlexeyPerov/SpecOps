@@ -6,19 +6,12 @@ import {
   completeOpenPath,
   requestOpenPath,
 } from "../services/openFileGate";
-import { statDiskFingerprint } from "../services/diskFingerprint";
+import { initializeDocumentDiskState } from "../services/externalFileChanges";
+import type { OpenedFile } from "../services/fileSystem";
 
 vi.mock("../services/externalFileChanges", () => ({
   initializeDocumentDiskState: vi.fn().mockResolvedValue(undefined),
 }));
-
-vi.mock("../services/diskFingerprint", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../services/diskFingerprint")>();
-  return {
-    ...actual,
-    statDiskFingerprint: vi.fn(),
-  };
-});
 
 vi.mock("../services/openFileGate", () => ({
   requestOpenPath: vi.fn(),
@@ -33,7 +26,18 @@ vi.mock("../services/openFileGate", () => ({
 const requestOpenPathMock = vi.mocked(requestOpenPath);
 const completeOpenPathMock = vi.mocked(completeOpenPath);
 const completeLargePendingOpenMock = vi.mocked(completeLargePendingOpen);
-const statDiskFingerprintMock = vi.mocked(statDiskFingerprint);
+const initializeDocumentDiskStateMock = vi.mocked(initializeDocumentDiskState);
+
+function opened(partial: Partial<OpenedFile> & Pick<OpenedFile, "path" | "content" | "sizeBytes" | "contentKind">): OpenedFile {
+  return {
+    fingerprint: partial.fingerprint ?? {
+      mtimeMs: 1,
+      sizeBytes: partial.sizeBytes,
+      contentHash: "abc",
+    },
+    ...partial,
+  };
+}
 
 describe("openAndStoreFile", () => {
   beforeEach(() => {
@@ -41,7 +45,7 @@ describe("openAndStoreFile", () => {
     requestOpenPathMock.mockReset();
     completeOpenPathMock.mockClear();
     completeLargePendingOpenMock.mockClear();
-    statDiskFingerprintMock.mockReset();
+    initializeDocumentDiskStateMock.mockClear();
   });
 
   it("opens large files as pending confirm tabs", async () => {
@@ -52,20 +56,21 @@ describe("openAndStoreFile", () => {
       path: "/tmp/huge.txt",
       switchedToNotepad: false,
     });
-    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: limit + 1 });
+    const fingerprint = { mtimeMs: 1, sizeBytes: limit + 1, contentHash: "huge" };
 
-    await openAndStoreFile(notify, "win-a", {
-      path: "/tmp/huge.txt",
-      content: "x",
-      sizeBytes: limit + 1,
-      contentKind: "text",
-    });
-
-    expect(completeLargePendingOpenMock).toHaveBeenCalledWith(
-      "/tmp/huge.txt",
-      { mtimeMs: 1, sizeBytes: limit + 1 },
+    await openAndStoreFile(
+      notify,
       "win-a",
+      opened({
+        path: "/tmp/huge.txt",
+        content: "x",
+        sizeBytes: limit + 1,
+        contentKind: "text",
+        fingerprint,
+      }),
     );
+
+    expect(completeLargePendingOpenMock).toHaveBeenCalledWith("/tmp/huge.txt", fingerprint, "win-a");
     expect(completeOpenPathMock).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith("Opened /tmp/huge.txt (confirm to load contents)");
   });
@@ -77,22 +82,35 @@ describe("openAndStoreFile", () => {
       path: "/tmp/ok.txt",
       switchedToNotepad: false,
     });
+    const fingerprint = { mtimeMs: 1, sizeBytes: 128, contentHash: "ok" };
 
-    await openAndStoreFile(notify, "win-a", {
-      path: "/tmp/ok.txt",
-      content: "payload",
-      sizeBytes: 128,
-      contentKind: "text",
-      lineEnding: "crlf",
-      hasBom: true,
-    });
+    await openAndStoreFile(
+      notify,
+      "win-a",
+      opened({
+        path: "/tmp/ok.txt",
+        content: "payload",
+        sizeBytes: 128,
+        contentKind: "text",
+        lineEnding: "crlf",
+        hasBom: true,
+        fingerprint,
+      }),
+    );
 
     // The detected encoding has to reach the document, or the first save rewrites the
     // file's line endings and drops its BOM.
-    expect(completeOpenPathMock).toHaveBeenCalledWith("/tmp/ok.txt", "payload", "win-a", "text", {
-      lineEnding: "crlf",
-      hasBom: true,
-    });
+    expect(completeOpenPathMock).toHaveBeenCalledWith(
+      "/tmp/ok.txt",
+      "payload",
+      "win-a",
+      "text",
+      {
+        lineEnding: "crlf",
+        hasBom: true,
+      },
+      fingerprint,
+    );
     expect(notify).toHaveBeenCalledWith("Opened /tmp/ok.txt");
   });
 
@@ -104,18 +122,29 @@ describe("openAndStoreFile", () => {
       path: "/tmp/photo.png",
       documentId: "doc-9",
     });
+    const fingerprint = { mtimeMs: 1, sizeBytes: 512, contentHash: "img" };
 
-    await openAndStoreFile(notify, "win-a", {
-      path: "/tmp/photo.png",
-      content: "",
-      sizeBytes: 512,
-      contentKind: "image",
-    });
+    await openAndStoreFile(
+      notify,
+      "win-a",
+      opened({
+        path: "/tmp/photo.png",
+        content: "",
+        sizeBytes: 512,
+        contentKind: "image",
+        fingerprint,
+      }),
+    );
 
     expect(upgrade).toHaveBeenCalledWith("doc-9", "/tmp/photo.png", "", "image", {
       lineEnding: undefined,
       hasBom: undefined,
     });
+    expect(initializeDocumentDiskStateMock).toHaveBeenCalledWith(
+      "doc-9",
+      "/tmp/photo.png",
+      fingerprint,
+    );
     expect(completeOpenPathMock).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith("Opened /tmp/photo.png");
     upgrade.mockRestore();
@@ -129,12 +158,16 @@ describe("openAndStoreFile", () => {
       ownerWindowId: "win-b",
     });
 
-    await openAndStoreFile(notify, "win-a", {
-      path: "/tmp/shared.txt",
-      content: "payload",
-      sizeBytes: 128,
-      contentKind: "text",
-    });
+    await openAndStoreFile(
+      notify,
+      "win-a",
+      opened({
+        path: "/tmp/shared.txt",
+        content: "payload",
+        sizeBytes: 128,
+        contentKind: "text",
+      }),
+    );
 
     expect(notify).toHaveBeenCalledWith("Switched to /tmp/shared.txt in another window.");
     expect(completeOpenPathMock).not.toHaveBeenCalled();

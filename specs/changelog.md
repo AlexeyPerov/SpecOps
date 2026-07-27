@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-07-27 — State/services: dirty-after-stat, stable reload, content-hash fingerprints, path keys
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M29–M32 — the
+first batch of state/services Medium findings.
+
+- **Auto-reload used a stale clean flag after `stat` (M29).** Document dirtiness was
+  sampled before `await statDiskFingerprint`, so typing during the await still triggered
+  silent reload and overwrote the buffer. The check re-reads the owning document after
+  every await and uses the live `isDirty` for reload policy.
+
+- **Reload recorded a fingerprint that could belong to a newer write than the buffer
+  (M30).** Read-then-stat left `diskChanged` false forever when a write landed between the
+  two. Reload now uses stat→read→re-stat (with content hash), and applies the same size /
+  binary / image / BOM guards as open (including `large_pending` when over the confirm
+  limit).
+
+- **Fingerprints were mtime+size only (M31).** Same-size edits within one coarse mtime tick
+  (or with null mtime) were invisible. `DiskFingerprint` now carries an optional SHA-256
+  `contentHash` from open/reload/save; size-only fingerprints are not trusted; watcher
+  checks re-hash when metadata matches but a known hash exists.
+
+- **Path normalization folded case on macOS only and persisted the folded root (M32).**
+  Windows comparison keys now fold too; `normalizePathForStorage` preserves case for
+  workspace roots; case-only renames are allowed; platform detection prefers
+  `userAgentData`, then `platform`, then `userAgent`.
+
 ## 2026-07-27 — Rust: watcher ignore list, limited git capture, path rewrite, askpass race/poison, async commands
 
 Follow-up to the review in

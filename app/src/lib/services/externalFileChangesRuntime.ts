@@ -11,15 +11,24 @@ import {
 import {
   diskChanged,
   fingerprintsEqual,
+  hashFileBytes,
   isFileMissingError,
   isFsScopePermissionError,
+  needsContentHashVerification,
   normalizePathSync,
   shouldSkipAsDismissed,
   statDiskFingerprint,
+  statDiskFingerprintWithContent,
 } from "./diskFingerprint";
 import { resolveExternalReloadPolicy, shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 import type { ExternalCheckResult, ExternalCheckTrigger } from "./externalFileChangesTypes";
 import { removeInaccessibleDocumentTab } from "./inaccessibleFileTabs";
+import { inferFileContentKind } from "./fileContentKind";
+import { shouldGateFileOpenBySize } from "./largeFileOpen";
+import {
+  DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES,
+  resolveBinaryFileOpen,
+} from "./binaryFileOpen";
 import { decodeTextFile } from "./textEncoding";
 
 type RuntimeState = {
@@ -64,17 +73,46 @@ async function reloadDocumentFromDisk(
   documentId: string,
   filePath: string,
 ): Promise<void> {
-  // Read bytes, not text: the reload has to re-detect line ending and BOM the same way
-  // the initial open did, or an externally-edited CRLF file comes back as LF and the
-  // next save rewrites every line in the file.
-  const bytes = await readFile(filePath);
+  // Same guards as openPath (size / binary / image / BOM), without importing
+  // fileSystem (that module already depends on the external-change runtime).
+  // Stat → read → re-stat so the fingerprint belongs to the decoded bytes —
+  // a write between a bare read and a later metadata-only stat permanently
+  // hid the change.
+  const { fingerprint, bytes } = await statDiskFingerprintWithContent(filePath, readFile);
+  const maxOpenWithoutConfirmBytes =
+    appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes;
+  if (shouldGateFileOpenBySize(filePath, fingerprint.sizeBytes, maxOpenWithoutConfirmBytes)) {
+    appState.applyDocumentDiskReloadForContext(
+      contextId,
+      documentId,
+      "",
+      fingerprint,
+      undefined,
+      "large_pending",
+    );
+    return;
+  }
+
+  const contentKind = inferFileContentKind(filePath, bytes);
+  if (contentKind === "image") {
+    return;
+  }
+  if (contentKind === "binary") {
+    const maxBinaryOpenAsTextBytes =
+      appState.getSnapshot().settings.externalFiles.maxBinaryOpenAsTextBytes ??
+      DEFAULT_MAX_BINARY_OPEN_AS_TEXT_BYTES;
+    const resolved = resolveBinaryFileOpen(fingerprint.sizeBytes, maxBinaryOpenAsTextBytes);
+    if (resolved.contentKind !== "text") {
+      return;
+    }
+  }
+
   const decoded = decodeTextFile(bytes);
   if (!decoded) {
     // The file is no longer valid UTF-8 text. Leave the buffer alone rather than
     // replacing it with a lossy decode the user would then save back.
     return;
   }
-  const fingerprint = await statDiskFingerprint(filePath);
   appState.applyDocumentDiskReloadForContext(
     contextId,
     documentId,
@@ -242,7 +280,8 @@ async function checkDocumentExternalChangesInner(
   if (!owner || !filePath) {
     return "skipped";
   }
-  const { contextId, document: documentState } = owner;
+  const { contextId } = owner;
+  let documentState = owner.document;
 
   if (documentState.contentKind !== "text") {
     return "skipped";
@@ -272,9 +311,10 @@ async function checkDocumentExternalChangesInner(
     currentFingerprint = await statDiskFingerprint(filePath);
   } catch (error: unknown) {
     if (isFileMissingError(error)) {
-      if (!documentState.fileMissing) {
-        appState.setDocumentDiskStateForContext(contextId, documentId, {
-          diskFingerprint: documentState.diskFingerprint,
+      const missingOwner = findDocumentContext(appState.getSnapshot(), documentId);
+      if (missingOwner && !missingOwner.document.fileMissing) {
+        appState.setDocumentDiskStateForContext(missingOwner.contextId, documentId, {
+          diskFingerprint: missingOwner.document.diskFingerprint,
           fileMissing: true,
         });
       }
@@ -287,8 +327,17 @@ async function checkDocumentExternalChangesInner(
     throw error;
   }
 
+  // Re-read after the stat await: the user may have typed (now dirty) or saved
+  // while we were waiting. Auto-reload decisions must use the live dirtiness.
+  const freshOwner = findDocumentContext(appState.getSnapshot(), documentId);
+  if (!freshOwner || freshOwner.document.filePath !== filePath) {
+    return "skipped";
+  }
+  documentState = freshOwner.document;
+  const liveContextId = freshOwner.contextId;
+
   if (documentState.fileMissing) {
-    appState.setDocumentDiskStateForContext(contextId, documentId, {
+    appState.setDocumentDiskStateForContext(liveContextId, documentId, {
       diskFingerprint: currentFingerprint,
       fileMissing: false,
     });
@@ -302,20 +351,57 @@ async function checkDocumentExternalChangesInner(
     return "unchanged";
   }
 
+  let changed =
+    diskChanged(documentState.diskFingerprint, currentFingerprint) || documentState.fileMissing;
+
+  // Metadata matched, but a watcher event (or a size-only fingerprint) can still
+  // mean a same-size edit within one mtime tick. Re-hash when we have a known hash.
   if (
-    !diskChanged(documentState.diskFingerprint, currentFingerprint) &&
-    !documentState.fileMissing
+    !changed &&
+    documentState.diskFingerprint &&
+    needsContentHashVerification(documentState.diskFingerprint, trigger)
   ) {
+    try {
+      const bytes = await readFile(filePath);
+      const contentHash = await hashFileBytes(bytes);
+      currentFingerprint = { ...currentFingerprint, contentHash };
+      if (documentState.diskFingerprint.contentHash !== contentHash) {
+        changed = true;
+      }
+    } catch (error: unknown) {
+      if (isFileMissingError(error)) {
+        appState.setDocumentDiskStateForContext(liveContextId, documentId, {
+          diskFingerprint: documentState.diskFingerprint,
+          fileMissing: true,
+        });
+        return "missing";
+      }
+      if (isFsScopePermissionError(error)) {
+        removeInaccessibleDocumentTab(documentId, filePath, error);
+        return "skipped";
+      }
+      throw error;
+    }
+
+    // Typing during the content verify must also defer auto-reload.
+    const afterHashOwner = findDocumentContext(appState.getSnapshot(), documentId);
+    if (!afterHashOwner || afterHashOwner.document.filePath !== filePath) {
+      return "skipped";
+    }
+    documentState = afterHashOwner.document;
+  }
+
+  if (!changed) {
     return "unchanged";
   }
 
   const policy = resolveExternalReloadPolicy({
     trigger,
     isDirty: documentState.isDirty,
-    autoReloadCleanFiles: snapshot.settings.externalFiles.autoReloadCleanFiles,
+    autoReloadCleanFiles: appState.getSnapshot().settings.externalFiles.autoReloadCleanFiles,
   });
   if (policy === "reloaded") {
-    await reloadDocumentFromDisk(contextId, documentId, filePath);
+    await reloadDocumentFromDisk(liveContextId, documentId, filePath);
     return "reloaded";
   }
   if (policy === "skipped") {

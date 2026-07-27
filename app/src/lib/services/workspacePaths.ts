@@ -3,8 +3,8 @@ import { appState } from "../state/appState";
 
 /**
  * Path routing contract:
- * - Returns true for root itself and any descendant path under the same normalized root
- * - Uses `normalizePathSync` for slash/case normalization
+ * - Returns true for root itself and any descendant path under the same root
+ * - Uses `normalizePathSync` for slash/case comparison keys (macOS + Windows fold)
  * - Callers should switch to Notepad before opening/saving files outside the active workspace root
  */
 export function isPathUnderRoot(filePath: string, workspaceRoot: string): boolean {

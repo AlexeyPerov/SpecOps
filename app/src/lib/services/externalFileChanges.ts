@@ -131,11 +131,12 @@ export async function recordWriteFingerprintFromPath(path: string): Promise<Disk
 export async function initializeDocumentDiskState(
   documentId: string,
   filePath: string,
+  fingerprint?: DiskFingerprint,
 ): Promise<void> {
   try {
-    const fingerprint = await statDiskFingerprint(filePath);
+    const resolved = fingerprint ?? (await statDiskFingerprint(filePath));
     appState.setDocumentDiskState(documentId, {
-      diskFingerprint: fingerprint,
+      diskFingerprint: resolved,
       fileMissing: false,
     });
   } catch (error: unknown) {

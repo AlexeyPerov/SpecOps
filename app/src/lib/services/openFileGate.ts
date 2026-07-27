@@ -174,7 +174,7 @@ export async function refreshExistingDocumentFromDisk(
     opened.contentKind,
     openedFileEncoding(opened),
   );
-  await initializeDocumentDiskState(documentId, path);
+  await initializeDocumentDiskState(documentId, path, opened.fingerprint);
   return opened;
 }
 
@@ -184,10 +184,11 @@ export async function completeOpenPath(
   windowId: string,
   contentKind: FileContentKind = "text",
   encoding?: OpenedFileEncoding,
+  fingerprint?: DiskFingerprint,
 ): Promise<string> {
   const documentId = appState.openFileInTab(path, content, contentKind, encoding);
   await claimOpenFile(path, windowId, documentId);
-  await initializeDocumentDiskState(documentId, path);
+  await initializeDocumentDiskState(documentId, path, fingerprint);
   return documentId;
 }
 
@@ -205,10 +206,11 @@ export async function completeOpenPathInPane(
   paneId: string,
   contentKind: FileContentKind = "text",
   encoding?: OpenedFileEncoding,
+  fingerprint?: DiskFingerprint,
 ): Promise<string> {
   const documentId = appState.openFileInPane(path, content, paneId, contentKind, encoding);
   await claimOpenFile(path, windowId, documentId);
-  await initializeDocumentDiskState(documentId, path);
+  await initializeDocumentDiskState(documentId, path, fingerprint);
   return documentId;
 }
 
@@ -235,5 +237,5 @@ export async function confirmLargeFileOpen(documentId: string, path: string): Pr
     opened.contentKind,
     openedFileEncoding(opened),
   );
-  await initializeDocumentDiskState(documentId, path);
+  await initializeDocumentDiskState(documentId, path, opened.fingerprint);
 }

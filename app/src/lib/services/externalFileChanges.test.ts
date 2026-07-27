@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { readFile } from "@tauri-apps/plugin-fs";
+import { readFile, stat } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
 import { allTabs, getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
@@ -26,6 +26,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readFile: vi.fn(),
+  stat: vi.fn(),
 }));
 
 vi.mock("./diskFingerprint", async (importOriginal) => {
@@ -38,13 +39,19 @@ vi.mock("./diskFingerprint", async (importOriginal) => {
 
 const confirmMock = vi.mocked(confirm);
 const readFileMock = vi.mocked(readFile);
+const statFsMock = vi.mocked(stat);
 
 /**
  * Reloads read raw bytes, not text, so the line ending and BOM can be re-detected the
  * way the initial open did. This helper keeps the tests reading as "the file now says X".
  */
-function mockDiskText(text: string): void {
-  readFileMock.mockResolvedValue(new TextEncoder().encode(text));
+function mockDiskText(text: string, fingerprint: DiskFingerprint = fp2): void {
+  const bytes = new TextEncoder().encode(text);
+  readFileMock.mockResolvedValue(bytes);
+  statFsMock.mockResolvedValue({
+    size: fingerprint.sizeBytes,
+    mtime: new Date(fingerprint.mtimeMs),
+  } as Awaited<ReturnType<typeof stat>>);
 }
 const statMock = vi.mocked(statDiskFingerprint);
 
@@ -92,6 +99,7 @@ describe("checkDocumentExternalChanges", () => {
     setExternalFiles();
     confirmMock.mockReset();
     readFileMock.mockReset();
+    statFsMock.mockReset();
     statMock.mockReset();
   });
 
@@ -126,6 +134,29 @@ describe("checkDocumentExternalChanges", () => {
     const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
     expect(document?.content).toBe("new");
     expect(document?.isDirty).toBe(false);
+  });
+
+  it("defers auto-reload when the buffer becomes dirty during the stat await", async () => {
+    const documentId = prepareSavedFile("/tmp/dirty-during-stat.txt", "clean", fp1);
+    let releaseStat!: (fingerprint: DiskFingerprint) => void;
+    const gatedStat = new Promise<DiskFingerprint>((resolve) => {
+      releaseStat = resolve;
+    });
+    statMock.mockImplementation(async () => gatedStat);
+    confirmMock.mockResolvedValue(false);
+
+    const checkPromise = checkDocumentExternalChanges(documentId, "watcher");
+    await flushMicrotasks();
+    appState.setDocumentContent(documentId, "typed while stating");
+    releaseStat(fp2);
+
+    await expect(checkPromise).resolves.toBe("deferred");
+    await flushMicrotasks();
+
+    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
+    expect(document?.content).toBe("typed while stating");
+    expect(document?.isDirty).toBe(true);
+    expect(confirmMock).toHaveBeenCalledOnce();
   });
 
   it("ignores watcher events matching the last app write fingerprint", async () => {
@@ -291,6 +322,7 @@ describe("reloadActiveDocumentFromDisk", () => {
     setExternalFiles();
     confirmMock.mockReset();
     readFileMock.mockReset();
+    statFsMock.mockReset();
     statMock.mockReset();
   });
 
@@ -347,6 +379,7 @@ describe("runStartupExternalChecks", () => {
     setExternalFiles();
     confirmMock.mockReset();
     readFileMock.mockReset();
+    statFsMock.mockReset();
     statMock.mockReset();
   });
 
@@ -418,6 +451,10 @@ describe("runStartupExternalChecks", () => {
     appState.selectTab(activeTab.id);
 
     statMock.mockResolvedValue(fp2);
+    statFsMock.mockResolvedValue({
+      size: fp2.sizeBytes,
+      mtime: new Date(fp2.mtimeMs),
+    } as Awaited<ReturnType<typeof stat>>);
     readFileMock.mockImplementation(async (path: string | URL) =>
       new TextEncoder().encode(
         String(path).endsWith("startup-clean-bg.txt") ? "new-bg" : "new-active",
@@ -503,6 +540,7 @@ describe("save/watcher feedback loop", () => {
     setExternalFiles();
     confirmMock.mockReset();
     readFileMock.mockReset();
+    statFsMock.mockReset();
     statMock.mockReset();
   });
 
@@ -545,6 +583,7 @@ describe("cross-context external checks", () => {
     setExternalFiles();
     confirmMock.mockReset();
     readFileMock.mockReset();
+    statFsMock.mockReset();
     statMock.mockReset();
   });
 

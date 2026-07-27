@@ -1,15 +1,18 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, readFile, readTextFile, rename, stat } from "@tauri-apps/plugin-fs";
+import { readDir, readFile, readTextFile, rename } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
 import type { FileContentKind } from "./fileContentKind";
 import { inferFileContentKind } from "./fileContentKind";
 import { join } from "@tauri-apps/api/path";
 import type { DiskFingerprint } from "../domain/contracts";
 import type { WorkspaceAccessStatus } from "../ai/capabilities";
-import { statDiskFingerprint } from "./diskFingerprint";
+import {
+  fingerprintFromWrittenBytes,
+  normalizePathSync,
+  statDiskFingerprintWithContent,
+} from "./diskFingerprint";
 import { beginSaveInFlight, clearSaveInFlight, recordWriteFingerprint } from "./externalFileChanges";
 import { appState } from "../state/appState";
-import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import { logDiagnostic } from "./logging";
 import {
@@ -25,6 +28,8 @@ export interface OpenedFile {
   content: string;
   sizeBytes: number;
   contentKind: FileContentKind;
+  /** Fingerprint of the bytes that were read (includes content hash). */
+  fingerprint: DiskFingerprint;
   /**
    * On-disk line ending, restored on write. Absent for non-text kinds.
    * The editor always works in LF; this is what converts back.
@@ -219,8 +224,12 @@ export async function saveFile(payload: FileSavePayload): Promise<DiskFingerprin
   return withPathWriteQueue(payload.path, async () => {
     beginSaveInFlight(payload.path);
     try {
-      await atomicWriteTextFile(payload.path, encodeForDisk(payload.content, payload));
-      const fingerprint = await statDiskFingerprint(payload.path);
+      const encoded = encodeForDisk(payload.content, payload);
+      await atomicWriteTextFile(payload.path, encoded);
+      const fingerprint = await fingerprintFromWrittenBytes(
+        payload.path,
+        new TextEncoder().encode(encoded),
+      );
       recordWriteFingerprint(payload.path, fingerprint);
       return fingerprint;
     } finally {
@@ -244,8 +253,12 @@ export async function saveFileAs(
   return withPathWriteQueue(selectedPath, async () => {
     beginSaveInFlight(selectedPath);
     try {
-      await atomicWriteTextFile(selectedPath, encodeForDisk(content, encodeOptions));
-      const fingerprint = await statDiskFingerprint(selectedPath);
+      const encoded = encodeForDisk(content, encodeOptions);
+      await atomicWriteTextFile(selectedPath, encoded);
+      const fingerprint = await fingerprintFromWrittenBytes(
+        selectedPath,
+        new TextEncoder().encode(encoded),
+      );
       recordWriteFingerprint(selectedPath, fingerprint);
       return { path: selectedPath, fingerprint };
     } finally {
@@ -271,9 +284,10 @@ export interface OpenPathOptions {
 }
 
 export async function openPath(path: string, options?: OpenPathOptions): Promise<OpenedFile> {
-  const fileStat = await stat(path);
-  const sizeBytes = Number(fileStat.size);
-  const bytes = await readFile(path);
+  // Stat → read → re-stat so the fingerprint belongs to the bytes we decoded,
+  // not to a write that landed between the read and a later metadata-only stat.
+  const { fingerprint, bytes } = await statDiskFingerprintWithContent(path, readFile);
+  const sizeBytes = fingerprint.sizeBytes;
   const contentKind = inferFileContentKind(path, bytes);
   if (contentKind === "image") {
     return {
@@ -281,6 +295,7 @@ export async function openPath(path: string, options?: OpenPathOptions): Promise
       content: "",
       sizeBytes,
       contentKind,
+      fingerprint,
     };
   }
   if (contentKind === "binary") {
@@ -295,6 +310,7 @@ export async function openPath(path: string, options?: OpenPathOptions): Promise
         content: "",
         sizeBytes,
         contentKind: resolved.contentKind,
+        fingerprint,
       };
     }
     // Small enough to show as text, but only if it really is UTF-8 text. Byte-sniffing
@@ -303,13 +319,14 @@ export async function openPath(path: string, options?: OpenPathOptions): Promise
     // of U+FFFD that Cmd+S would write over the original bytes.
     const decoded = decodeTextFile(bytes);
     if (!decoded) {
-      return { path, content: "", sizeBytes, contentKind: "binary" };
+      return { path, content: "", sizeBytes, contentKind: "binary", fingerprint };
     }
     return {
       path,
       content: decoded.content,
       sizeBytes,
       contentKind: "text",
+      fingerprint,
       lineEnding: decoded.lineEnding,
       hasBom: decoded.hasBom,
     };
@@ -318,13 +335,14 @@ export async function openPath(path: string, options?: OpenPathOptions): Promise
   if (!decoded) {
     // Passed the heuristic sniff but is not valid UTF-8 (e.g. Latin-1 or UTF-16
     // without NUL runs in its first 8 KiB). Open read-only rather than lossily.
-    return { path, content: "", sizeBytes, contentKind: "binary" };
+    return { path, content: "", sizeBytes, contentKind: "binary", fingerprint };
   }
   return {
     path,
     content: decoded.content,
     sizeBytes,
     contentKind: "text",
+    fingerprint,
     lineEnding: decoded.lineEnding,
     hasBom: decoded.hasBom,
   };

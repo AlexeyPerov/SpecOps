@@ -3,7 +3,7 @@ import { exists, mkdir, readTextFile, remove, rename, writeTextFile } from "@tau
 import { atomicWriteTextFile } from "./atomicWrite";
 import type { DiskFingerprint } from "../domain/contracts";
 import { SKIPPED_DIRECTORY_NAMES } from "./folderOpenableFiles";
-import { normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
+import { normalizePathForStorage, normalizePathSync, pathsEqual, statDiskFingerprint } from "./diskFingerprint";
 import { replaceAllInString, validateSearchQuery, type SearchQuery } from "../editor/searchQuery";
 import {
   closeTabsForDeletedDocumentsUnderPath,
@@ -229,10 +229,12 @@ export async function renameProjectEntry(
   }
   const parent = parentDirectory(entryPath);
   const targetPath = await join(parent, newName.trim());
-  if (normalizePathSync(targetPath) === normalizePathSync(entryPath)) {
+  // Exact (case-preserving) equality only — case-only renames are allowed on
+  // case-insensitive filesystems and must not be rejected as "unchanged".
+  if (normalizePathForStorage(targetPath) === normalizePathForStorage(entryPath)) {
     return { ok: false, reason: "Name unchanged." };
   }
-  if (await pathExists(targetPath)) {
+  if ((await pathExists(targetPath)) && !pathsEqual(targetPath, entryPath)) {
     return { ok: false, reason: "A file or folder with that name already exists." };
   }
   try {

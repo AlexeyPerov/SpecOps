@@ -89,12 +89,16 @@ function documentAfterDiskReload(
   content: string,
   diskFingerprint: DiskFingerprint,
   encoding?: DocumentEncodingMetadata,
+  contentKind?: DocumentContentKind,
 ): DocumentState {
+  const nextKind = contentKind ?? documentState.contentKind;
+  const nextContent = nextKind === "text" ? content : "";
   return {
     ...documentState,
-    content,
-    savedContent: content,
+    content: nextContent,
+    savedContent: nextContent,
     isDirty: false,
+    contentKind: nextKind,
     diskFingerprint,
     dismissedFingerprint: null,
     fileMissing: false,
@@ -501,13 +505,20 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       content: string,
       diskFingerprint: DiskFingerprint,
       encoding?: DocumentEncodingMetadata,
+      contentKind?: DocumentContentKind,
     ) {
       update((state) =>
         patchActiveContext(state, (ctx) => ({
           ...ctx,
           documents: ctx.documents.map((documentState) =>
             documentState.id === documentId
-              ? documentAfterDiskReload(documentState, content, diskFingerprint, encoding)
+              ? documentAfterDiskReload(
+                  documentState,
+                  content,
+                  diskFingerprint,
+                  encoding,
+                  contentKind,
+                )
               : documentState,
           ),
         })),
@@ -719,13 +730,20 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       content: string,
       diskFingerprint: DiskFingerprint,
       encoding?: DocumentEncodingMetadata,
+      contentKind?: DocumentContentKind,
     ) {
       update((state) =>
         patchContextById(state, contextId, (ctx) => ({
           ...ctx,
           documents: ctx.documents.map((documentState) =>
             documentState.id === documentId
-              ? documentAfterDiskReload(documentState, content, diskFingerprint, encoding)
+              ? documentAfterDiskReload(
+                  documentState,
+                  content,
+                  diskFingerprint,
+                  encoding,
+                  contentKind,
+                )
               : documentState,
           ),
         })),

@@ -1,6 +1,12 @@
 export interface DiskFingerprint {
   mtimeMs: number;
   sizeBytes: number;
+  /**
+   * Hex SHA-256 of the on-disk bytes, set when the fingerprint was taken from a
+   * content read/write. Absent on metadata-only stats. Used to detect same-size
+   * edits within a coarse mtime tick, and when mtime is unavailable.
+   */
+  contentHash?: string;
 }
 
 export interface DocumentIdentity {

@@ -4,10 +4,25 @@ import {
   fingerprintFromStat,
   fingerprintsEqual,
   isFileMissingError,
+  needsContentHashVerification,
+  normalizePathForStorage,
   normalizePathSync,
+  pathsEqual,
   shouldSkipAsDismissed,
 } from "./diskFingerprint";
 import { mockNavigatorPlatform } from "../test/helpers";
+
+describe("normalizePathForStorage", () => {
+  it("preserves case on every platform", () => {
+    const restore = mockNavigatorPlatform("MacIntel");
+    expect(normalizePathForStorage("/Foo/Bar.txt")).toBe("/Foo/Bar.txt");
+    restore();
+  });
+
+  it("converts backslashes and strips trailing slashes", () => {
+    expect(normalizePathForStorage("C:\\Foo\\Bar\\")).toBe("C:/Foo/Bar");
+  });
+});
 
 describe("normalizePathSync", () => {
   let restorePlatform: (() => void) | undefined;
@@ -23,7 +38,7 @@ describe("normalizePathSync", () => {
 
   it("converts backslashes to slashes", () => {
     restorePlatform = mockNavigatorPlatform("Linux x86_64");
-    expect(normalizePathSync(String.raw`C:\foo\bar.txt`)).toBe("C:/foo/bar.txt");
+    expect(normalizePathSync("C:\\foo\\bar.txt")).toBe("C:/foo/bar.txt");
   });
 
   it("strips trailing slashes", () => {
@@ -39,9 +54,33 @@ describe("normalizePathSync", () => {
     expect(normalizePathSync("/Foo/Bar.txt")).toBe("/foo/bar.txt");
   });
 
-  it("preserves case on non-macOS", () => {
+  it("folds case on Windows", () => {
+    restorePlatform = mockNavigatorPlatform("Win32");
+    expect(normalizePathSync("C:\\Foo\\Bar.txt")).toBe("c:/foo/bar.txt");
+  });
+
+  it("preserves case on Linux", () => {
     restorePlatform = mockNavigatorPlatform("Linux x86_64");
     expect(normalizePathSync("/Foo/Bar.txt")).toBe("/Foo/Bar.txt");
+  });
+});
+
+describe("pathsEqual", () => {
+  let restorePlatform: (() => void) | undefined;
+
+  afterEach(() => {
+    restorePlatform?.();
+    restorePlatform = undefined;
+  });
+
+  it("treats case variants as equal on Windows", () => {
+    restorePlatform = mockNavigatorPlatform("Win32");
+    expect(pathsEqual("C:\\Foo\\a.txt", "C:\\foo\\a.txt")).toBe(true);
+  });
+
+  it("treats case variants as distinct on Linux", () => {
+    restorePlatform = mockNavigatorPlatform("Linux x86_64");
+    expect(pathsEqual("/Foo/a.txt", "/foo/a.txt")).toBe(false);
   });
 });
 
@@ -58,6 +97,25 @@ describe("fingerprintsEqual", () => {
 
   it("returns false when size differs", () => {
     expect(fingerprintsEqual(fp, { ...fp, sizeBytes: 99 })).toBe(false);
+  });
+
+  it("compares content hashes when both sides have them", () => {
+    expect(
+      fingerprintsEqual(
+        { ...fp, contentHash: "aaa" },
+        { ...fp, contentHash: "bbb" },
+      ),
+    ).toBe(false);
+    expect(
+      fingerprintsEqual(
+        { ...fp, contentHash: "aaa" },
+        { ...fp, contentHash: "aaa" },
+      ),
+    ).toBe(true);
+  });
+
+  it("ignores a missing hash on one side when metadata matches", () => {
+    expect(fingerprintsEqual({ ...fp, contentHash: "aaa" }, fp)).toBe(true);
   });
 });
 
@@ -78,6 +136,45 @@ describe("diskChanged", () => {
 
   it("returns false when both fields match", () => {
     expect(diskChanged({ ...current }, current)).toBe(false);
+  });
+
+  it("treats size-only fingerprints (mtime 0, no hash) as changed", () => {
+    expect(diskChanged({ mtimeMs: 0, sizeBytes: 100 }, { mtimeMs: 0, sizeBytes: 100 })).toBe(
+      true,
+    );
+  });
+
+  it("detects content-hash mismatch when metadata matches", () => {
+    expect(
+      diskChanged(
+        { mtimeMs: 2000, sizeBytes: 100, contentHash: "aaa" },
+        { mtimeMs: 2000, sizeBytes: 100, contentHash: "bbb" },
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("needsContentHashVerification", () => {
+  it("requires verification for watcher events when a hash is known", () => {
+    expect(
+      needsContentHashVerification({ mtimeMs: 1, sizeBytes: 1, contentHash: "abc" }, "watcher"),
+    ).toBe(true);
+  });
+
+  it("requires verification when mtime is unavailable", () => {
+    expect(
+      needsContentHashVerification({ mtimeMs: 0, sizeBytes: 1, contentHash: "abc" }, "focus"),
+    ).toBe(true);
+  });
+
+  it("skips verification for focus when mtime is reliable", () => {
+    expect(
+      needsContentHashVerification({ mtimeMs: 1, sizeBytes: 1, contentHash: "abc" }, "focus"),
+    ).toBe(false);
+  });
+
+  it("skips verification when no hash is known", () => {
+    expect(needsContentHashVerification({ mtimeMs: 0, sizeBytes: 1 }, "watcher")).toBe(false);
   });
 });
 

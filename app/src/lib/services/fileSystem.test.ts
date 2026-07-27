@@ -87,32 +87,44 @@ describe("openPath", () => {
   beforeEach(() => {
     readFileMock.mockReset();
     statMockFs.mockReset();
-    statMockFs.mockResolvedValue({ size: 5 } as Awaited<ReturnType<typeof stat>>);
+    statMockFs.mockResolvedValue({
+      size: 5,
+      mtime: new Date(1),
+    } as Awaited<ReturnType<typeof stat>>);
   });
 
   it("returns path, content, and UTF-8 byte length for text files", async () => {
     readFileMock.mockResolvedValue(new TextEncoder().encode("hello"));
-    await expect(openPath("/tmp/open.txt")).resolves.toEqual({
+    await expect(openPath("/tmp/open.txt")).resolves.toMatchObject({
       path: "/tmp/open.txt",
       content: "hello",
       sizeBytes: 5,
       contentKind: "text",
       lineEnding: "lf",
       hasBom: false,
+      fingerprint: expect.objectContaining({
+        mtimeMs: 1,
+        sizeBytes: 5,
+        contentHash: expect.any(String),
+      }),
     });
   });
 
   it("normalizes CRLF to LF and reports the on-disk line ending", async () => {
     const bytes = new TextEncoder().encode("one\r\ntwo");
-    statMockFs.mockResolvedValue({ size: bytes.length } as Awaited<ReturnType<typeof stat>>);
+    statMockFs.mockResolvedValue({
+      size: bytes.length,
+      mtime: new Date(1),
+    } as Awaited<ReturnType<typeof stat>>);
     readFileMock.mockResolvedValue(bytes);
-    await expect(openPath("/tmp/crlf.txt")).resolves.toEqual({
+    await expect(openPath("/tmp/crlf.txt")).resolves.toMatchObject({
       path: "/tmp/crlf.txt",
       content: "one\ntwo",
       sizeBytes: bytes.length,
       contentKind: "text",
       lineEnding: "crlf",
       hasBom: false,
+      fingerprint: expect.objectContaining({ sizeBytes: bytes.length, contentHash: expect.any(String) }),
     });
   });
 
@@ -120,26 +132,34 @@ describe("openPath", () => {
     // Latin-1 "café": 0xE9 is not a valid UTF-8 sequence. A lossy decode would give a
     // U+FFFD-riddled editable buffer that Cmd+S would write over the original bytes.
     const bytes = new Uint8Array([0x63, 0x61, 0x66, 0xe9]);
-    statMockFs.mockResolvedValue({ size: bytes.length } as Awaited<ReturnType<typeof stat>>);
+    statMockFs.mockResolvedValue({
+      size: bytes.length,
+      mtime: new Date(1),
+    } as Awaited<ReturnType<typeof stat>>);
     readFileMock.mockResolvedValue(bytes);
-    await expect(openPath("/tmp/latin1.txt")).resolves.toEqual({
+    await expect(openPath("/tmp/latin1.txt")).resolves.toMatchObject({
       path: "/tmp/latin1.txt",
       content: "",
       sizeBytes: bytes.length,
       contentKind: "binary",
+      fingerprint: expect.objectContaining({ sizeBytes: bytes.length, contentHash: expect.any(String) }),
     });
   });
 
   it("opens images without loading text content", async () => {
-    statMockFs.mockResolvedValue({ size: 1200 } as Awaited<ReturnType<typeof stat>>);
+    statMockFs.mockResolvedValue({
+      size: 1200,
+      mtime: new Date(1),
+    } as Awaited<ReturnType<typeof stat>>);
     readFileMock.mockResolvedValue(
       new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     );
-    await expect(openPath("/tmp/photo.png")).resolves.toEqual({
+    await expect(openPath("/tmp/photo.png")).resolves.toMatchObject({
       path: "/tmp/photo.png",
       content: "",
       sizeBytes: 1200,
       contentKind: "image",
+      fingerprint: expect.objectContaining({ sizeBytes: 1200, contentHash: expect.any(String) }),
     });
   });
 
@@ -147,47 +167,62 @@ describe("openPath", () => {
     // Small enough to try as text, but 0xC3 0x28 is an invalid UTF-8 sequence. Opening
     // this as an editable buffer is how Cmd+S used to corrupt small binaries.
     const bytes = new Uint8Array([0x00, 0xc3, 0x28, 0x00]);
-    statMockFs.mockResolvedValue({ size: bytes.length } as Awaited<ReturnType<typeof stat>>);
+    statMockFs.mockResolvedValue({
+      size: bytes.length,
+      mtime: new Date(1),
+    } as Awaited<ReturnType<typeof stat>>);
     readFileMock.mockResolvedValue(bytes);
     await expect(
       openPath("/tmp/small.bin", { maxBinaryOpenAsTextBytes: 200 * 1024 }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       path: "/tmp/small.bin",
       content: "",
       sizeBytes: bytes.length,
       contentKind: "binary",
+      fingerprint: expect.objectContaining({ sizeBytes: bytes.length, contentHash: expect.any(String) }),
     });
   });
 
   it("opens small binary files as text when under the size limit and valid UTF-8", async () => {
-    statMockFs.mockResolvedValue({ size: 32 } as Awaited<ReturnType<typeof stat>>);
+    statMockFs.mockResolvedValue({
+      size: 32,
+      mtime: new Date(1),
+    } as Awaited<ReturnType<typeof stat>>);
     const bytes = new Uint8Array(32);
     bytes.fill(0x01);
     readFileMock.mockResolvedValue(bytes);
     await expect(
       openPath("/tmp/app.bin", { maxBinaryOpenAsTextBytes: 200 * 1024 }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       path: "/tmp/app.bin",
       content: "\u0001".repeat(32),
       sizeBytes: 32,
       contentKind: "text",
       lineEnding: "lf",
       hasBom: false,
+      fingerprint: expect.objectContaining({ sizeBytes: 32, contentHash: expect.any(String) }),
     });
   });
 
   it("opens large binary files without decoding as text", async () => {
-    statMockFs.mockResolvedValue({ size: 300 * 1024 } as Awaited<ReturnType<typeof stat>>);
+    statMockFs.mockResolvedValue({
+      size: 300 * 1024,
+      mtime: new Date(1),
+    } as Awaited<ReturnType<typeof stat>>);
     const bytes = new Uint8Array(300 * 1024);
     bytes.fill(0x01);
     readFileMock.mockResolvedValue(bytes);
     await expect(
       openPath("/tmp/app.bin", { maxBinaryOpenAsTextBytes: 200 * 1024 }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       path: "/tmp/app.bin",
       content: "",
       sizeBytes: 300 * 1024,
       contentKind: "binary",
+      fingerprint: expect.objectContaining({
+        sizeBytes: 300 * 1024,
+        contentHash: expect.any(String),
+      }),
     });
   });
 });
@@ -195,27 +230,32 @@ describe("openPath", () => {
 describe("saveFile", () => {
   beforeEach(() => {
     writeTextFileMock.mockReset();
-    statMock.mockReset();
+    renameMock.mockReset();
+    statMockFs.mockReset();
     recordWriteMock.mockReset();
+    statMockFs.mockResolvedValue({
+      size: 4,
+      mtime: new Date(100),
+    } as Awaited<ReturnType<typeof stat>>);
   });
 
   it("writes content atomically, stats the file, and records the write fingerprint", async () => {
-    const fingerprint = { mtimeMs: 100, sizeBytes: 4 };
-    statMock.mockResolvedValue(fingerprint);
-
-    await expect(saveFile({ path: "/tmp/save.txt", content: "data" })).resolves.toEqual(
-      fingerprint,
-    );
+    await expect(saveFile({ path: "/tmp/save.txt", content: "data" })).resolves.toMatchObject({
+      mtimeMs: 100,
+      sizeBytes: 4,
+      contentHash: expect.any(String),
+    });
     const [tempPath, written] = writeTextFileMock.mock.calls[0];
     expect(String(tempPath)).toMatch(/^\/tmp\/save\.txt\..+\.tmp$/);
     expect(written).toBe("data");
     expect(renameMock).toHaveBeenCalledWith(tempPath, "/tmp/save.txt");
-    expect(recordWriteMock).toHaveBeenCalledWith("/tmp/save.txt", fingerprint);
+    expect(recordWriteMock).toHaveBeenCalledWith(
+      "/tmp/save.txt",
+      expect.objectContaining({ mtimeMs: 100, sizeBytes: 4, contentHash: expect.any(String) }),
+    );
   });
 
   it("restores the document's CRLF line endings and BOM on write", async () => {
-    statMock.mockResolvedValue({ mtimeMs: 100, sizeBytes: 4 });
-
     await saveFile({
       path: "/tmp/crlf.txt",
       content: "one\ntwo",
@@ -227,8 +267,6 @@ describe("saveFile", () => {
   });
 
   it("defaults to LF without a BOM when the caller passes no encoding", async () => {
-    statMock.mockResolvedValue({ mtimeMs: 100, sizeBytes: 4 });
-
     await saveFile({ path: "/tmp/plain.txt", content: "one\ntwo" });
 
     expect(writtenContentFor("/tmp/plain.txt")).toBe("one\ntwo");
@@ -239,8 +277,13 @@ describe("saveFileAs", () => {
   beforeEach(() => {
     saveMock.mockReset();
     writeTextFileMock.mockReset();
-    statMock.mockReset();
+    renameMock.mockReset();
+    statMockFs.mockReset();
     recordWriteMock.mockReset();
+    statMockFs.mockResolvedValue({
+      size: 7,
+      mtime: new Date(1),
+    } as Awaited<ReturnType<typeof stat>>);
   });
 
   it("returns null when the dialog is cancelled", async () => {
@@ -250,7 +293,6 @@ describe("saveFileAs", () => {
 
   it("passes defaultPath to save dialog when provided", async () => {
     saveMock.mockResolvedValue("/tmp/workspace/new.txt");
-    statMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 7 });
 
     await saveFileAs("content", "/tmp/workspace");
 

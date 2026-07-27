@@ -14,7 +14,7 @@ import {
   createSinglePaneLayout,
   ensureUniquePaneIds,
 } from "../../domain/contracts";
-import { normalizePathSync } from "../../services/diskFingerprint";
+import { normalizePathForStorage } from "../../services/diskFingerprint";
 import { isChatHttpRailVisible } from "../../ai/providers/chatHttpRailGating";
 import {
   DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
@@ -254,8 +254,9 @@ export function createWorkspaceContextsSlice(deps: {
     addWorkspace(rootPath: string): ContextId | null {
       let createdId: ContextId | null = null;
       update((state) => {
-        const normalizedRoot = normalizePathSync(rootPath);
-        const duplicate = findWorkspaceByPath(state.contexts.workspaces, normalizedRoot);
+        // Persist the real casing; only the duplicate check folds case.
+        const storedRoot = normalizePathForStorage(rootPath);
+        const duplicate = findWorkspaceByPath(state.contexts.workspaces, storedRoot);
         if (duplicate) {
           return state;
         }
@@ -271,7 +272,7 @@ export function createWorkspaceContextsSlice(deps: {
               ...state.contexts.workspaces,
               {
                 id: workspaceId,
-                rootPath: normalizedRoot,
+                rootPath: storedRoot,
                 snapshot: workspaceSnapshot,
               },
             ],

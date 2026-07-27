@@ -1,6 +1,6 @@
 import { appState } from "../../state/appState";
 import type { WorkspaceReorderPayload } from "../../domain/contracts";
-import { normalizePathSync } from "../../services/diskFingerprint";
+import { normalizePathForStorage } from "../../services/diskFingerprint";
 import { ensureWorkspaceReadAccess, openFolderDialog } from "../../services/fileSystem";
 import { markWorkspaceLifecycleActive } from "../../services/workspaceLifecycle";
 import { closeWorkspaceWithConfirm } from "../../services/workspaceCloseFlow";
@@ -25,14 +25,14 @@ export const workspaceHandlers: CommandHandlerMap = {
     if (!selected) {
       return;
     }
-    const normalizedRoot = normalizePathSync(selected);
-    const accessStatus = await ensureWorkspaceReadAccess(normalizedRoot);
+    const storedRoot = normalizePathForStorage(selected);
+    const accessStatus = await ensureWorkspaceReadAccess(storedRoot);
     if (accessStatus === "blocked") {
       notify("Workspace path is inaccessible. Check permissions and try again.");
       return;
     }
 
-    const workspaceId = appState.addWorkspace(normalizedRoot);
+    const workspaceId = appState.addWorkspace(storedRoot);
     if (!workspaceId) {
       notify("Workspace is already open.");
       return;

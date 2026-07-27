@@ -64,7 +64,14 @@
   let diffLoading = $state(false);
   let diffError = $state<string | null>(null);
   let statusVersion = $state(0);
-  let lastLoadedRepoRoot = $state<string | null>(null);
+  // `lastLoadedRepoRoot` is a non-reactive memoization guard: it decides
+  // whether a status load should preserve the active diff selection (same repo,
+  // e.g. a refresh) or reset it (new repo). Making it `$state` re-invalidated
+  // this effect the moment the first load wrote to it from `.then()`, so every
+  // mount / repoRoot change ran `git status` twice with a visible list flash
+  // (M17). A plain variable is read at effect-creation time and mutated without
+  // scheduling a re-run.
+  let lastLoadedRepoRoot: string | null = null;
 
   const hasStagedChanges = $derived(staged.length > 0);
   const activeDiffEntry = $derived.by(() => {

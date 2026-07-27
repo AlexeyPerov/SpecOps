@@ -640,14 +640,24 @@ export interface ParsedRemoteVvLine {
   kind: "fetch" | "push";
 }
 
-/** Parse one line from `git remote -v` stdout. */
+/**
+ * Parse one line from `git remote -v` stdout.
+ *
+ * `git remote -v` separates fields with a tab, but the line may arrive here
+ * after arbitrary trimming/splitting, so the parser is whitespace-tolerant.
+ * The remote *name* is a single token (git refnames cannot contain spaces),
+ * and the URL is everything up to the trailing ` (fetch)` / ` (push)` marker —
+ * local-path remotes such as `/Users/me/My Projects/repo.git` legitimately
+ * contain spaces and were silently dropped by the previous `(\S+)` capture
+ * (M16).
+ */
 export function parseRemoteVvLine(line: string): ParsedRemoteVvLine | null {
   const trimmed = line.trim();
   if (!trimmed) {
     return null;
   }
 
-  const match = trimmed.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
+  const match = trimmed.match(/^(\S+)\s+(.+?)\s+\((fetch|push)\)$/);
   if (!match) {
     return null;
   }

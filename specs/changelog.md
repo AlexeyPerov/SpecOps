@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-27 — Git layer: spaced remote URLs, single status load
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M16–M17 — the fourth
+batch of git-layer Medium findings.
+
+- **A remote whose URL contains a space was silently dropped (M16).** `parseRemoteVvLine`
+  captured the URL with `(\S+)`, which rejects any whitespace. Local-path remotes such as
+  `/Users/me/My Projects/repo.git` failed the regex, so `parseRemoteVvLines` returned an empty
+  list — the Version Control view reported "No remotes configured" and disabled Pull/Push/Fetch
+  with no error, even though `git remote -v` listed the remote. The URL capture is now `(.+?)`
+  bounded by the trailing ` (fetch)` / ` (push)` marker, so spaced local paths (and any other
+  URL containing spaces) parse correctly while the remote name remains a single token.
+
+- **Working-tree status loaded twice on every mount / repoRoot change (M17).** In
+  `GitChangesPanel`, `lastLoadedRepoRoot` was `$state`, read synchronously in the load
+  `$effect` to decide whether to preserve the diff selection, then written from the load's
+  `.then()`. Completing the first `git status` write re-invalidated the effect, so it ran a
+  second `git status` immediately — a wasted command plus a visible list flash (empty →
+  populated → empty → populated). `lastLoadedRepoRoot` is now a plain non-reactive variable:
+  it is still read at effect-creation time and mutated after a successful load, but the
+  mutation no longer schedules a re-run.
+
 ## 2026-07-27 — Git layer: unborn-repo empty state, drag-teardown, virtualized history/diff, status follow-up, panel-remote guards
 
 Follow-up to the review in

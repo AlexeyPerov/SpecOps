@@ -14,6 +14,7 @@ import {
   parseLogCommitLine,
   parseLogCommits,
   parseLsRemoteTags,
+  parseRemoteVvLine,
   parseRemoteVvLines,
   mergeTagRemotePresence,
   resolveDefaultRemote,
@@ -484,6 +485,47 @@ describe("parseStashListItem", () => {
   it("returns null for incomplete field sets", () => {
     expect(parseStashListItem("abc123\nparent\n")).toBeNull();
     expect(parseStashListItem("")).toBeNull();
+  });
+});
+
+describe("parseRemoteVvLine", () => {
+  it("parses a tab-separated remote line", () => {
+    expect(parseRemoteVvLine("origin\thttps://github.com/example/repo.git\t(fetch)")).toEqual({
+      name: "origin",
+      url: "https://github.com/example/repo.git",
+      kind: "fetch",
+    });
+  });
+
+  it("parses an SCP-style push URL", () => {
+    expect(parseRemoteVvLine("upstream  git@github.com:example/repo.git  (push)")).toEqual({
+      name: "upstream",
+      url: "git@github.com:example/repo.git",
+      kind: "push",
+    });
+  });
+
+  it("parses a local-path remote whose URL contains spaces (M16)", () => {
+    const url = "/Users/me/My Projects/spec ops/repo.git";
+    expect(parseRemoteVvLine(`origin  ${url}  (fetch)`)).toEqual({
+      name: "origin",
+      url,
+      kind: "fetch",
+    });
+  });
+
+  it("aggregates a spaced local-path fetch/push pair into one remote", () => {
+    const url = "/Users/me/My Projects/repo.git";
+    const stdout = `origin  ${url}  (fetch)\norigin  ${url}  (push)\n`;
+    expect(parseRemoteVvLines(stdout)).toEqual([
+      { name: "origin", fetchUrl: url, pushUrl: url },
+    ]);
+  });
+
+  it("returns null for malformed lines", () => {
+    expect(parseRemoteVvLine("")).toBeNull();
+    expect(parseRemoteVvLine("just-a-name")).toBeNull();
+    expect(parseRemoteVvLine("origin https://example.com/repo.git")).toBeNull();
   });
 });
 

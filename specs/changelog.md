@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-07-28 — UI shell: menu clamp, find sync, project panel runes
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M72–M74 —
+UI-shell Medium findings.
+
+- **Context menus could render off-screen (M72).** Shared `clampFixedOverlayPosition`
+  measures the mounted menu and clamps top-left into the viewport; wired into tab,
+  project-tree, and workspace context menus.
+
+- **Per-pane find state ping-ponged with the shared tool controller (M73).** Removed
+  mirrored local find/go-to fields and bidirectional `$effect` sync; `FindReplacePanel`
+  / `GoToLinePanel` bind to the controller via function bindings so only the active
+  pane writes and a second pane cannot clobber the query.
+
+- **Project panel was legacy Svelte 4 with a broken reveal-scroll (M74).** Migrated to
+  `$props` / `$state` / `$effect`; active-file reveal runs after the DOM patch and
+  re-runs when the tree structure/expansion changes.
+
 ## 2026-07-28 — UI shell: pane registry, rail counts, dialog a11y, git-column load
 
 Follow-up to the review in

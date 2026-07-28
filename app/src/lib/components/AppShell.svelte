@@ -39,6 +39,7 @@
     WorkspaceEntry,
   } from "../domain/contracts";
   import { appState } from "../state/appState";
+  import { clampFixedOverlayPosition } from "./clampFixedOverlayPosition";
   import "../styles/app-shell.css";
 
   const EMPTY_HIDDEN_ROOT_PATHS = new Set<string>();
@@ -445,6 +446,30 @@
 
   const gitIntegrationEnabled = $derived($appState.settings.gitIntegration.enabled);
   const activePaneId = $derived(editor.session.editorLayout.activePaneId);
+
+  // Local display coords so we can clamp the workspace menu after measure (M72)
+  // without mutating the overlay-host menu state.
+  let workspaceMenuPosition = $state<{ x: number; y: number } | null>(null);
+
+  $effect(() => {
+    const menu = workspaceContextMenu.menu;
+    const el = workspaceContextMenuEl;
+    if (!menu) {
+      workspaceMenuPosition = null;
+      return;
+    }
+    if (!el) {
+      workspaceMenuPosition = { x: menu.x, y: menu.y };
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    workspaceMenuPosition = clampFixedOverlayPosition(
+      menu.x,
+      menu.y,
+      rect.width,
+      rect.height,
+    );
+  });
 
   function handleActivePaneElement(element: HTMLElement | null): void {
     editorPaneEl = element;
@@ -1038,10 +1063,11 @@
 {/if}
 
 {#if workspaceContextMenu.menu}
+  {@const menuPos = workspaceMenuPosition ?? workspaceContextMenu.menu}
   <div
     bind:this={workspaceContextMenuEl}
     class="workspace-context-menu"
-    style={`left:${workspaceContextMenu.menu.x}px; top:${workspaceContextMenu.menu.y}px;`}
+    style={`left:${menuPos.x}px; top:${menuPos.y}px;`}
     role="menu"
     tabindex="-1"
     onpointerdown={(event) => event.stopPropagation()}

@@ -15,41 +15,72 @@
   import { startPointerDrag } from "./pointerDrag";
   import RefreshIcon from "./icons/RefreshIcon.svelte";
 
-  export let workspaceRoot: string;
-  export let rootNodes: ProjectTreeNode[] = [];
-  export let expandedPaths = emptySet<string>();
-  export let childrenByPath = emptyMap<string, ProjectTreeNode[]>();
-  export let loadingPaths = emptySet<string>();
-  export let activeFilePath: string | null = null;
-  /** M5-T3 — git change status badges (absolute path → status). */
-  export let statusByPath: ReadonlyMap<string, OpencodeFileChangeStatus> | null = null;
-  export let showHidden = false;
-  export let collapsed = false;
-  export let panelWidthPx = DEFAULT_PROJECT_PANEL_WIDTH_PX;
-  export let onRefresh: () => void = () => {};
-  export let onToggleHidden: (next: boolean) => void = () => {};
-  export let onToggleCollapsed: (next: boolean) => void = () => {};
-  export let onPanelWidthChange: (width: number) => void = () => {};
-  export let onToggleDirectory: (path: string) => void = () => {};
-  export let onOpenFile: (path: string) => void = () => {};
-  export let onMoveEntry: (sourcePath: string, destDirPath: string) => Promise<void> = async () => {};
-  export let onNewFile: (parentDirPath: string) => void = () => {};
-  export let onNewFolder: (parentDirPath: string) => void = () => {};
-  export let onRenameEntry: (path: string, kind: ProjectTreeNode["kind"]) => void = () => {};
-  export let onDeleteEntry: (path: string, kind: ProjectTreeNode["kind"]) => void = () => {};
-  export let notify: (message: string) => void = () => {};
-  /** Phase 6 — live pane elements for file→pane DnD. */
-  export let getPaneElements: () => PaneDropTargetElements[] = () => [];
-  /** Phase 6 — open a file into a specific pane. */
-  export let onOpenFileInPane:
-    | ((filePath: string, paneId: string) => void | Promise<void>)
-    | null = null;
-  /** Phase 6 — reports the hovered pane during a file drag (for affordance). */
-  export let onFileDropPaneChange: (paneId: string | null) => void = () => {};
-  let panelBodyEl: HTMLDivElement | null = null;
-  let contextMenuComponent: ProjectTreeContextMenu | undefined;
-  let displayWidth = panelWidthPx;
-  let isResizing = false;
+  interface Props {
+    workspaceRoot: string;
+    rootNodes?: ProjectTreeNode[];
+    expandedPaths?: ReadonlySet<string>;
+    childrenByPath?: ReadonlyMap<string, ProjectTreeNode[]>;
+    loadingPaths?: ReadonlySet<string>;
+    activeFilePath?: string | null;
+    /** M5-T3 — git change status badges (absolute path → status). */
+    statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
+    showHidden?: boolean;
+    collapsed?: boolean;
+    panelWidthPx?: number;
+    onRefresh?: () => void;
+    onToggleHidden?: (next: boolean) => void;
+    onToggleCollapsed?: (next: boolean) => void;
+    onPanelWidthChange?: (width: number) => void;
+    onToggleDirectory?: (path: string) => void;
+    onOpenFile?: (path: string) => void;
+    onMoveEntry?: (sourcePath: string, destDirPath: string) => Promise<void>;
+    onNewFile?: (parentDirPath: string) => void;
+    onNewFolder?: (parentDirPath: string) => void;
+    onRenameEntry?: (path: string, kind: ProjectTreeNode["kind"]) => void;
+    onDeleteEntry?: (path: string, kind: ProjectTreeNode["kind"]) => void;
+    notify?: (message: string) => void;
+    /** Phase 6 — live pane elements for file→pane DnD. */
+    getPaneElements?: () => PaneDropTargetElements[];
+    /** Phase 6 — open a file into a specific pane. */
+    onOpenFileInPane?:
+      | ((filePath: string, paneId: string) => void | Promise<void>)
+      | null;
+    /** Phase 6 — reports the hovered pane during a file drag (for affordance). */
+    onFileDropPaneChange?: (paneId: string | null) => void;
+  }
+
+  let {
+    workspaceRoot,
+    rootNodes = [],
+    expandedPaths = emptySet<string>(),
+    childrenByPath = emptyMap<string, ProjectTreeNode[]>(),
+    loadingPaths = emptySet<string>(),
+    activeFilePath = null,
+    statusByPath = null,
+    showHidden = false,
+    collapsed = false,
+    panelWidthPx = DEFAULT_PROJECT_PANEL_WIDTH_PX,
+    onRefresh = () => {},
+    onToggleHidden = () => {},
+    onToggleCollapsed = () => {},
+    onPanelWidthChange = () => {},
+    onToggleDirectory = () => {},
+    onOpenFile = () => {},
+    onMoveEntry = async () => {},
+    onNewFile = () => {},
+    onNewFolder = () => {},
+    onRenameEntry = () => {},
+    onDeleteEntry = () => {},
+    notify = () => {},
+    getPaneElements = () => [],
+    onOpenFileInPane = null,
+    onFileDropPaneChange = () => {},
+  }: Props = $props();
+
+  let panelBodyEl = $state<HTMLDivElement | null>(null);
+  let contextMenuComponent = $state<ProjectTreeContextMenu | undefined>(undefined);
+  let displayWidth = $state(DEFAULT_PROJECT_PANEL_WIDTH_PX);
+  let isResizing = $state(false);
 
   function basename(path: string): string {
     const normalized = path.replaceAll("\\", "/");
@@ -57,14 +88,29 @@
     return parts[parts.length - 1] || path;
   }
 
-  $: if (panelBodyEl && activeFilePath) {
-    const node = panelBodyEl.querySelector<HTMLElement>(`[data-path="${CSS.escape(activeFilePath)}"]`);
+  // Reveal the active file after the DOM patch, and re-run when the tree
+  // expands so auto-expanded ancestors make the row queryable (M74).
+  $effect(() => {
+    const path = activeFilePath;
+    const body = panelBodyEl;
+    void rootNodes;
+    void childrenByPath;
+    void expandedPaths;
+    if (!body || !path) {
+      return;
+    }
+    const node = body.querySelector<HTMLElement>(
+      `[data-path="${CSS.escape(path)}"]`,
+    );
     node?.scrollIntoView({ block: "nearest" });
-  }
+  });
 
-  $: if (!isResizing) {
-    displayWidth = normalizePanelWidthPx(panelWidthPx);
-  }
+  $effect(() => {
+    const synced = panelWidthPx;
+    if (!isResizing) {
+      displayWidth = normalizePanelWidthPx(synced);
+    }
+  });
 
   function clampPanelWidth(next: number): number {
     return Math.max(MIN_PANEL_WIDTH_PX, Math.min(MAX_PANEL_WIDTH_PX, next));

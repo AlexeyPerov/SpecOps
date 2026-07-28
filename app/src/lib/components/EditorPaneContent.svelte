@@ -170,12 +170,6 @@
   const goToOpen = $derived(toolSnapshot.activeTool === "go-to");
   const outlineOpen = $derived(toolSnapshot.activeTool === "outline");
 
-  let findQuery = $state("");
-  let replaceValue = $state("");
-  let findCaseSensitive = $state(false);
-  let findWholeWord = $state(false);
-  let findRegexp = $state(false);
-  let goToLineValue = $state("");
   /**
    * Text captured from the editor's main selection at the moment Find opens.
    * Used to seed the query when the selection is non-empty and single-ranged;
@@ -184,35 +178,9 @@
   let findReplaceSeedSelection = $state("");
   let prevFindReplaceOpen = false;
 
-  $effect(() => {
-    findQuery = toolSnapshot.find.query;
-    replaceValue = toolSnapshot.find.replace;
-    findCaseSensitive = toolSnapshot.find.caseSensitive;
-    findWholeWord = toolSnapshot.find.wholeWord;
-    findRegexp = toolSnapshot.find.regexp;
-    goToLineValue = toolSnapshot.goToLineValue;
-  });
-
-  $effect(() => {
-    editorTools.setFindQuery(findQuery);
-  });
-  $effect(() => {
-    editorTools.setFindReplace(replaceValue);
-  });
-  $effect(() => {
-    editorTools.setFindCaseSensitive(findCaseSensitive);
-  });
-  $effect(() => {
-    editorTools.setFindWholeWord(findWholeWord);
-  });
-  $effect(() => {
-    editorTools.setFindRegexp(findRegexp);
-  });
-  $effect(() => {
-    editorTools.setGoToLineValue(goToLineValue);
-  });
-
   // Seed the find query from a non-empty single selection when Find opens.
+  // Find/go-to field state lives only on the shared controller — panels bind
+  // via function bindings (M73) so inactive panes cannot clobber the query.
   $effect(() => {
     const isOpen = findReplaceOpen;
     if (isOpen && !prevFindReplaceOpen) {
@@ -609,11 +577,26 @@
 
   {#if isActivePane && documentView.isTextEditorDocument && !isSessionTabActive && !isChatHttpActive && findReplaceOpen}
     <FindReplacePanel
-      bind:findQuery
-      bind:replaceValue
-      bind:findCaseSensitive
-      bind:findWholeWord
-      bind:findRegexp
+      bind:findQuery={
+        () => toolSnapshot.find.query,
+        (value) => editorTools.setFindQuery(value)
+      }
+      bind:replaceValue={
+        () => toolSnapshot.find.replace,
+        (value) => editorTools.setFindReplace(value)
+      }
+      bind:findCaseSensitive={
+        () => toolSnapshot.find.caseSensitive,
+        (value) => editorTools.setFindCaseSensitive(value)
+      }
+      bind:findWholeWord={
+        () => toolSnapshot.find.wholeWord,
+        (value) => editorTools.setFindWholeWord(value)
+      }
+      bind:findRegexp={
+        () => toolSnapshot.find.regexp,
+        (value) => editorTools.setFindRegexp(value)
+      }
       seedSelection={findReplaceSeedSelection}
       getEditorRunner={getActiveEditorRunner}
       {notify}
@@ -624,7 +607,10 @@
 
   {#if isActivePane && documentView.isTextEditorDocument && !isSessionTabActive && !isChatHttpActive && goToOpen}
     <GoToLinePanel
-      bind:lineValue={goToLineValue}
+      bind:lineValue={
+        () => toolSnapshot.goToLineValue,
+        (value) => editorTools.setGoToLineValue(value)
+      }
       onGo={onGoToLine}
       onClose={() => editorTools.close({ restoreFocus: true })}
     />

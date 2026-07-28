@@ -21,6 +21,7 @@
     tabDocumentForTab,
   } from "../services/tabContextMenuActions";
   import TabBarNearbySubmenu from "./TabBarNearbySubmenu.svelte";
+  import { clampFixedOverlayPosition } from "./clampFixedOverlayPosition";
 
   const revealLabel = revealInFileManagerLabel();
 
@@ -141,6 +142,20 @@
   const contextMenuCanCopyRelativePath = $derived(
     canCopyRelativePath(contextMenuTabDoc?.filePath, contextMenuWorkspaceRoot),
   );
+
+  // After mount, measure the menu and clamp so items stay inside the viewport (M72).
+  $effect(() => {
+    const menu = contextMenu;
+    const el = contextMenuEl;
+    if (!menu || !el) {
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const next = clampFixedOverlayPosition(menu.x, menu.y, rect.width, rect.height);
+    if (next.x !== menu.x || next.y !== menu.y) {
+      contextMenu = { ...menu, x: next.x, y: next.y };
+    }
+  });
 </script>
 
 {#if contextMenu && contextMenuTab}

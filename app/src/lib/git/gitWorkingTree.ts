@@ -51,11 +51,27 @@ function gitNullDevicePath(): string {
  * entries, never joined into a single string.
  */
 function asLiteralPathspec(path: string): string {
+  // F34: an empty path becomes `:(literal)`, which git treats as "match the
+  // entire working tree" — `git restore --staged -- ':(literal)'` unstages
+  // everything. Callers already guard `paths.length === 0`, but a stray `[""]`
+  // entry would slip through that length check and mass-stage/unstage. Drop the
+  // magic prefix for an empty path so git rejects it explicitly instead of
+  // matching silently.
+  if (path.length === 0) {
+    return "";
+  }
   return `:(literal)${path}`;
 }
 
 function asLiteralPathspecs(paths: readonly string[]): string[] {
-  return paths.map((path) => asLiteralPathspec(path));
+  // F34: filter empty entries at the array boundary too, so a caller passing
+  // `[""]` or `["a", ""]` does not produce a bare `:(literal)` for the empty
+  // slot. Returning a shorter array is safe: git treats a missing pathspec as
+  // "no paths", which every caller here already handles via the
+  // `paths.length === 0` guard.
+  return paths
+    .filter((path) => path.length > 0)
+    .map((path) => asLiteralPathspec(path));
 }
 
 function isDiffCommandSuccess(response: RunGitResponse, allowExitOne: boolean): boolean {
@@ -69,6 +85,21 @@ function assertDiffCommandSuccess(response: RunGitResponse, allowExitOne: boolea
   if (!isDiffCommandSuccess(response, allowExitOne)) {
     throw createGitCommandError(response);
   }
+}
+
+/// True when a `git diff HEAD -- …` failure is the unborn-repo fatal rather
+/// than a real diff error. In a repo with no commits `HEAD` does not resolve,
+/// so git exits 128 with `fatal: bad revision 'HEAD'` (or the ambiguous-object
+/// variant). Used in F28 to fall through to the `--no-index` untracked diff
+/// instead of surfacing the fatal.
+function isUnbornHeadDiffError(stderr: string): boolean {
+  const lower = stderr.toLowerCase();
+  return (
+    lower.includes("bad revision 'head'") ||
+    lower.includes("bad revision head") ||
+    lower.includes("ambiguous argument 'head'") ||
+    lower.includes("unknown revision")
+  );
 }
 
 function findParsedTextDiff(
@@ -202,9 +233,23 @@ export async function queryWorkingTreeFileDiff(
     "--",
     asLiteralPathspec(normalizedPath),
   ]);
-  assertDiffCommandSuccess(headResponse, false);
 
-  if (headResponse.stdout.trim().length > 0) {
+  // F28 (H7): in an unborn repo (no commits yet — the exact state the Changes
+  // view offers to `git init`), `git diff HEAD -- <path>` dies with
+  // `fatal: bad revision 'HEAD'` (exit 128). `assertDiffCommandSuccess` would
+  // throw before the `--no-index` untracked fallback below is reachable, so the
+  // first file the user clicks renders a raw "bad revision" error instead of a
+  // diff. Detect the unborn fatal and skip straight to the untracked path,
+  // mirroring how `status --porcelain` already surfaces every entry as
+  // untracked when `HEAD` does not exist.
+  const headIsUnbornFatal =
+    headResponse.exitCode !== 0 && isUnbornHeadDiffError(headResponse.stderr);
+
+  if (!headIsUnbornFatal) {
+    assertDiffCommandSuccess(headResponse, false);
+  }
+
+  if (!headIsUnbornFatal && headResponse.stdout.trim().length > 0) {
     return parseWorkingTreeFileDiffPatch(headResponse.stdout, normalizedPath);
   }
 

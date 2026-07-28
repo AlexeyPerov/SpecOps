@@ -687,7 +687,7 @@ describe("queryCommitDetail", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["show", "--no-show-signature", "--name-status", `--format=${GIT_SHOW_FORMAT}`, "abc123"],
+      args: ["show", "--no-show-signature", "--first-parent", "--name-status", `--format=${GIT_SHOW_FORMAT}`, "abc123"],
     }));
     expect(result.sha).toBe("abc123");
     expect(result.message).toBe("Subject line");

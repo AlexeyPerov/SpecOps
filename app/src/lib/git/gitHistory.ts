@@ -123,6 +123,14 @@ export async function queryCommitDetail(repoRoot: string, sha: string): Promise<
     // lines when `log.showSignature = true`, which the fixed-NUL metadata scan
     // cannot tolerate.
     "--no-show-signature",
+    // F29 (H10): a merge commit renders as a *combined* diff by default, and
+    // `git show --name-status <merge>` prints zero file rows (verified on a real
+    // merge). `--first-parent` makes the name-status list describe what the
+    // merge brought in relative to its first parent — the intuitive "files
+    // changed by this merge" view — and emits a single section the parser
+    // already handles. (`-m` would emit one per-parent section and require
+    // parser changes; `--cc` prints none.)
+    "--first-parent",
     "--name-status",
     `--format=${GIT_SHOW_FORMAT}`,
     sha,

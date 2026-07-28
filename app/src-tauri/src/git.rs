@@ -661,6 +661,23 @@ fn decode_utf8(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// Like [`decode_utf8`] but also reports whether `bytes` contained any sequence
+/// that is not valid UTF-8 (i.e. whether any U+FFFD replacement was synthesised).
+///
+/// F21: path-bearing `-z` output that contains a non-UTF-8 filename decodes to
+/// U+FFFD, and that lossy string breaks the follow-up `git add -- <path>`. The
+/// validity flag lets the caller surface a typed error instead of acting on a
+/// silently wrong path.
+fn decode_utf8_with_validity(bytes: &[u8]) -> (String, bool) {
+    match String::from_utf8(bytes.to_vec()) {
+        Ok(text) => (text, false),
+        // F21: invalid UTF-8 in path-bearing `-z` output means filenames came
+        // back with U+FFFD replacements — surface the corruption rather than
+        // handing a silently wrong string to the next `git add`.
+        Err(lossy) => (String::from_utf8_lossy(&lossy.into_bytes()).into_owned(), true),
+    }
+}
+
 /// Format a filesystem path for `git commit -F` argv on all platforms.
 ///
 /// Git accepts forward slashes on Windows; normalizing avoids mixed-slash paths
@@ -929,7 +946,20 @@ fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<Strin
     // is then at most `max_bytes` bytes and downstream truncation is char-safe.
     truncate_bytes_to_utf8_boundary(&mut buf, max_bytes);
 
-    let mut text = decode_utf8(&buf);
+    // F21: `status --porcelain=v2 -z` (and other `-z` output) carries raw bytes
+    // for paths. A non-UTF-8 filename (Latin-1, invalid byte sequence) decodes
+    // to U+FFFD here, and the follow-up `git add -- <path>` then fails with
+    // "pathspec did not match" — a silently wrong string instead of a typed
+    // error. Surface the corruption explicitly so the frontend can refuse to
+    // act on the lossy path and tell the user, rather than massaging U+FFFD
+    // into a command that cannot succeed.
+    let (text, had_invalid_utf8) = decode_utf8_with_validity(&buf);
+    let mut text = text;
+    if had_invalid_utf8 {
+        text.push_str(
+            "\n\n[git output contained non-UTF-8 bytes; paths may have been replaced with U+FFFD]\n",
+        );
+    }
     if exceeded {
         // Preserve the partial output instead of discarding the whole stream — a
         // huge `git log`/`git show` is still useful truncated. The marker lets
@@ -1075,6 +1105,17 @@ fn build_git_command(repo_root: &Path, args: &[String], env: &HashMap<String, St
     for (key, value) in env {
         command.env(key, value);
     }
+
+    // F19: pin git's locale to the default C locale. git honors gettext on builds that
+    // ship `.mo` catalogs (Homebrew, several Linux distros), translating status headers,
+    // error messages and ref decorations. Every English-substring matcher in the frontend
+    // (`isUnbornRepoLogError`, `isStash*Response`, `isNoUpstream*Error`,
+    // `parseNoUpstreamBranch`, the `status -sb` header parser) silently breaks under a
+    // localized OS otherwise. `LC_ALL` overrides `LANG`, so setting both covers
+    // gettext-aware git as well as libc-respecting code paths. These are set after the
+    // caller env so a (sanitized-away) caller value cannot override them.
+    command.env("LC_ALL", "C");
+    command.env("LANG", "C");
 
     command
 }

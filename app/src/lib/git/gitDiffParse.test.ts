@@ -123,6 +123,65 @@ describe("parseUnifiedDiff", () => {
       "-- new comment two that looks like +++ header",
     ]);
   });
+
+  it("octal-decodes quoted non-ASCII diff-header paths (F20)", () => {
+    // git quotes paths in every header when core.quotepath=true (the default),
+    // emitting non-ASCII bytes as `\NNN` octal escapes. `caf\303\251.txt` is
+    // `café.txt`. The previous parser only handled `[\\"nrt]`, so the parsed
+    // path never matched the status path and the diff lookup threw.
+    const stdout = [
+      'diff --git "a/caf\\303\\251.txt" "b/caf\\303\\251.txt"',
+      "new file mode 100644",
+      "index 0000000..3367afd",
+      "--- /dev/null",
+      '+++ "b/caf\\303\\251.txt"',
+      "@@ -0,0 +1 @@",
+      "+café",
+    ].join("\n");
+
+    const parsed = parseUnifiedDiff(stdout);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.path).toBe("café.txt");
+  });
+
+  it("parses a binary diff whose path contains a space (F22)", () => {
+    // git does not quote a path whose only special character is a space, so
+    // `diff --git a/my img.png b/my img.png` has no `---`/`+++` lines to
+    // recover the path from. The previous whitespace tokenizer split this
+    // into four tokens and the lookup threw `GitCommitFileDiffNotFoundError`
+    // instead of rendering the binary placeholder.
+    const stdout = [
+      "diff --git a/my img.png b/my img.png",
+      "new file mode 100644",
+      "index 0000000..0f49c4a",
+      "Binary files /dev/null and b/my img.png differ",
+    ].join("\n");
+
+    const parsed = parseUnifiedDiff(stdout);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.path).toBe("my img.png");
+    expect(parsed[0]?.isBinary).toBe(true);
+  });
+
+  it("preserves a trailing space in an unquoted diff-header path (F23)", () => {
+    // git appends a TAB to disambiguate an unquoted path that itself ends in a
+    // space (`+++ b/trail.txt \t`). The previous `.trim()` ate the tab and the
+    // significant trailing space, so the parsed path no longer matched the
+    // status path.
+    const stdout = [
+      "diff --git a/trail.txt  b/trail.txt ",
+      "index 1111111..2222222 100644",
+      "--- a/trail.txt \t",
+      "+++ b/trail.txt \t",
+      "@@ -1 +1 @@",
+      "-old",
+      "+new",
+    ].join("\n");
+
+    const parsed = parseUnifiedDiff(stdout);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.path).toBe("trail.txt ");
+  });
 });
 
 describeIfGitInstalled("parseUnifiedDiff integration (temp repo harness)", () => {

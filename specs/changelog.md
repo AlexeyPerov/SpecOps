@@ -1,5 +1,97 @@
 # Changelog
 
+## 2026-07-28 — Follow-up review Tier 3 (F19–F36)
+
+Fixes for the git-layer-correctness tier of the follow-up review in
+[`specs/code-review-follow-up-2026-07-28.md`](./code-review-follow-up-2026-07-28.md).
+
+### Locale & output decoding
+
+- **git output was never pinned to a stable locale (F19).** No `LC_ALL=C`/`LANG=C` was set
+  on git spawns, and the env allowlist would not have let one through. On a localized OS
+  with a gettext-enabled git, every English-substring matcher (`isUnbornRepoLogError`,
+  `isStash*Response`, `isNoUpstream*Error`, the `status -sb` header parser) silently broke.
+  Every git subprocess now runs with `LC_ALL=C` and `LANG=C` set inside `build_git_command`,
+  after the caller env so a sanitized-away caller value cannot override them.
+- **Non-UTF-8 git output was still lossily decoded (F21).** `status --porcelain=v2 -z`
+  carries raw bytes for paths, so a non-UTF-8 filename came back with U+FFFD and the
+  follow-up `git add -- <path>` failed with "pathspec did not match". `read_limited_stream`
+  now detects invalid UTF-8 and appends a typed marker so the corruption is surfaced rather
+  than silently passed through.
+
+### Diff parser
+
+- **Diff-header paths were not octal-decoded → non-ASCII filenames never showed a diff
+  (F20).** `unquoteGitPath` handled only `[\\"nrt]`, so `caf\303\251.txt` parsed to a string
+  that never matched the status path and the diff lookup threw. The two path decoders are
+  now one: `unquoteGitPath` delegates to the octal-aware `decodeGitQuotedPath` already used
+  by the porcelain `-z` parser.
+- **Binary/mode-only diffs of a path containing a space showed "Could not load diff"
+  (F22).** git does not quote a path whose only special character is a space, so
+  `diff --git a/my img.png b/my img.png` split into four tokens and the binary placeholder
+  never rendered. The parser now falls back to the known ` b/` boundary git places between
+  the two halves when whitespace tokenization is ambiguous.
+- **Trailing-space filenames still could not show a diff (F23).** git appends a TAB to
+  disambiguate an unquoted path ending in a space (`+++ b/trail.txt \t`); the previous
+  `.trim()` ate the tab and the significant trailing space. `parsePathHeader` now strips at
+  most one trailing tab and `unquoteGitPath` no longer trims the unquoted form.
+- **`normalizeRawV2Path`'s backslash rewrite was not Windows-gated (F24).** The `\`→`/`
+  rewrite sat outside the `isWindows()` guard, so a POSIX filename containing a literal
+  backslash (`back\slash.txt`) resolved to a different real path and could not be
+  staged/diffed. The rewrite now mirrors `normalizeGitOutputPath` and only applies on
+  Windows.
+- **`:(literal)` with an empty path matched the whole repo (F34).** A stray `[""]` entry
+  produced `:(literal)`, which `git restore --staged` treats as "unstage everything".
+  `asLiteralPathspec`/`asLiteralPathspecs` now reject empty path entries.
+
+### Stash, status, history
+
+- **"Apply stash" with a dirty tree applied the wrong stash (F25, H8).** The positional
+  `stash@{n}` ref was captured before a WIP stash was created, shifting the stack so the
+  apply targeted the fresh WIP. The apply now uses the stable SHA (`git stash apply <sha>`
+  exits 0).
+- **`git stash pop --index <sha>` was rejected → autostash was never restored (F26, H9/L13).**
+  `pop` only accepts a positional `stash@{n}` ref; a captured SHA made pull/checkout with
+  autostash end in "could not restore stashed changes". `applyStash(.., true)` now resolves
+  the SHA back to its current `stash@{n}` index immediately before popping.
+- **`isStashNotFoundResponse` matched text git no longer emits (F27).** git 2.34+ says
+  "is not a valid reference" / "is not a stash reference" / "is not a stash-like commit";
+  the matcher now covers all variants so a missing stash surfaces as the typed
+  `GitStashNotFoundError` instead of a raw command error.
+- **Unstaged diff threw in an unborn repo (F28, H7).** `git diff HEAD` in a repo with no
+  commits dies with `fatal: bad revision 'HEAD'`, and the assertion ran before the
+  `--no-index` untracked fallback was reachable. The unborn fatal is now detected and the
+  diff goes straight to the `--no-index` path.
+- **Merge commits showed zero changed files (F29, H10).** `git show --name-status <merge>`
+  prints no file rows for a combined diff. `queryCommitDetail` now passes `--first-parent`
+  so the name-status list describes what the merge brought in relative to its first parent.
+- **Every Tags load fired a blocking `ls-remote` on the serialized per-repo queue (F30,
+  H11).** With an unreachable remote, every status/log/staging command for that repo
+  blocked behind a 10-minute probe. Remote tag presence is now opt-in (an explicit "Check
+  remote" button), runs off the per-repo queue (`bypassQueue`), with a short 15 s timeout
+  and a cancellable command id.
+- **`parseCommitDecorators` split on `,` (F33, L8).** git separates `%D` decorators with
+  `", "`; splitting on `","` alone broke a tag/branch name containing a comma. The split
+  now uses the actual `", "` separator.
+- **Detached-HEAD push was misreported (F35, L15).** `git push <remote> HEAD` is rejected
+  in detached HEAD with "not a full refname", which `isNoUpstreamPushError` did not match.
+  The error is now detected and surfaced as a typed "Detached HEAD cannot be pushed" message.
+
+### Commit graph & history panel
+
+- **Commit-graph column double-offsets once the list virtualizes (F31, M13).** The graph
+  `div` was full-height *and* got `translateY(historyTopPadPx)` while the list already
+  offset rows with a spacer, so every dot/curve slid down by `start * ROW_HEIGHT`. The
+  translate is dropped — the full-height graph aligns with the windowed list via the spacer.
+- **`buildCommitGraphLayout` re-ran the O(commits) lane assignment on every highlight change
+  (F32, M13).** The expensive structure (lane assignment) is split from the cheap
+  highlighting pass into `buildCommitGraphStructure`; the panel memoizes the structure on
+  `commits` and reapplies highlighting only when the current-branch set changes.
+- **"Load more commits" could vanish while history remained (F36, M4).** `canLoadMore`
+  required `commits.length >= commitLimit`, but boundary dedup could append fewer rows than
+  the page size, hiding the button. A `historyExhausted` flag now keys off the authoritative
+  "short page" signal from the backend instead of the row count.
+
 ## 2026-07-28 — Follow-up review Tier 2 (F5–F18)
 
 Fixes for the data-loss tier of the follow-up review in

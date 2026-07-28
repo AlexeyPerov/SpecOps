@@ -20,6 +20,16 @@ export const REMOTE_GIT_OPERATION_TIMEOUT_MS = 10 * 60 * 1000;
 /** Default ceiling for local git subprocess operations (5 minutes). */
 export const LOCAL_GIT_OPERATION_TIMEOUT_MS = 5 * 60 * 1000;
 
+/**
+ * Short ceiling for non-mutating remote presence probes (remote tag listing).
+ *
+ * F30 (H11): such probes are background-only (the local tag list renders
+ * immediately; remote presence is a decorative badge) and must not pin the UI
+ * or the per-repo queue on an unreachable remote. A 15 s ceiling gives a
+ * reachable host time to respond while bounding the worst case.
+ */
+export const REMOTE_TAG_PROBE_TIMEOUT_MS = 15 * 1000;
+
 const GIT_INTEGRATION_DISABLED_MESSAGE = "Git integration is disabled in Settings.";
 
 const GIT_INTEGRATION_DISABLED_RESPONSE: RunGitResponse = {
@@ -303,9 +313,15 @@ export async function runGit(
           timeoutMs: options?.timeoutMs ?? LOCAL_GIT_OPERATION_TIMEOUT_MS,
         }
       : options;
-  return enqueueGitCommandForRepo(repoRoot, () =>
-    invokeRunGit(repoRoot, args, env, effectiveOptions),
-  );
+  const invoke = () => invokeRunGit(repoRoot, args, env, effectiveOptions);
+  // F30: a non-mutating remote probe (remote tag presence) must not block local
+  // reads/writes on an unreachable remote. Such probes opt out of the per-repo
+  // FIFO queue via `bypassQueue` so a 10-minute `ls-remote` against a dead host
+  // does not stall status/log/staging for that repo.
+  if (options?.bypassQueue) {
+    return invoke();
+  }
+  return enqueueGitCommandForRepo(repoRoot, invoke);
 }
 
 interface RemoteGitInvokeOptions extends CancellableGitOptions {

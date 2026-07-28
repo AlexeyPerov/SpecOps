@@ -48,6 +48,14 @@ export interface CancellableGitOptions {
   askpassTimeoutMs?: number;
   /** Optional subprocess timeout in milliseconds (cancellable commands only). */
   timeoutMs?: number;
+  /**
+   * When true, skip the per-repo FIFO serialization queue and run the command
+   * concurrently. Reserved for short, non-mutating remote probes (e.g. remote
+   * tag presence) that must not block local reads/writes on an unreachable
+   * remote — a 10-minute `ls-remote` against a dead host would otherwise stall
+   * every status/log/staging command for that repo behind it.
+   */
+  bypassQueue?: boolean;
 }
 
 /** Remote git operation context surfaced in askpass prompts. */

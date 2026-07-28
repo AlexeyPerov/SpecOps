@@ -3,7 +3,8 @@
   import GitCommitGraphColumn from "./GitCommitGraphColumn.svelte";
   import {
     ROW_HEIGHT,
-    buildCommitGraphLayout,
+    applyGraphHighlighting,
+    buildCommitGraphStructure,
     commitGraphColumnWidth,
     computeCurrentBranchCommitSet,
   } from "../git/commitGraphLayout";
@@ -53,6 +54,12 @@
   // fewer rows than requested, which signals end-of-history and disables the
   // load-more affordance.
   let commitLimit = $state(DEFAULT_COMMIT_LOG_LIMIT);
+  // F36 (M4): separately track whether the backend history is exhausted. A
+  // short page is the real "no more commits" signal; `commitLimit` can outrun
+  // `commits.length` when boundary dedup drops rows, which previously hid the
+  // "Load more" button even though more history existed. This flag is set only
+  // by an actual short page and is what `canLoadMore` keys off.
+  let historyExhausted = $state(false);
   let loadingMore = $state(false);
   let filterMode = $state<HistoryFilterMode>(DEFAULT_HISTORY_FILTER_MODE);
   let filterModeReady = $state(false);
@@ -110,9 +117,26 @@
     return computeCurrentBranchCommitSet(commits, currentBranchHeadSha);
   });
 
-  const graphLayout = $derived(
-    buildCommitGraphLayout(commits, { highlightedShas }),
-  );
+  // F32 (M13 sub-item): split the O(commits) lane assignment from the cheap
+  // highlighting pass. The structure only depends on the commit list, so Svelte
+  // recomputes it when `commits` changes (history load) — not when the
+  // current-branch highlight set changes. Highlighting is reapplied on top.
+  const graphStructure = $derived(buildCommitGraphStructure(commits));
+  const graphLayout = $derived.by(() => {
+    const highlighted = applyGraphHighlighting(
+      graphStructure.dots,
+      graphStructure.segments,
+      graphStructure.curves,
+      highlightedShas,
+    );
+    return {
+      dots: highlighted.dots,
+      segments: highlighted.segments,
+      curves: highlighted.curves,
+      laneCount: graphStructure.laneCount,
+      rowHeight: graphStructure.rowHeight,
+    };
+  });
   const graphWidth = $derived.by(() => {
     void scrollContainerSize;
     return commitGraphColumnWidth(graphLayout.laneCount);
@@ -161,7 +185,7 @@
   const canLoadMore = $derived(
     loadStatus === "ready" &&
       !loadingMore &&
-      commits.length >= commitLimit &&
+      !historyExhausted &&
       commitLimit < MAX_COMMIT_LOG_LIMIT,
   );
 
@@ -215,6 +239,11 @@
         return;
       }
       commits = rows;
+      // F36: a short initial page means the backend history fits in one page;
+      // mark it exhausted so the "Load more" button does not appear.
+      if (rows.length < limit) {
+        historyExhausted = true;
+      }
       loadStatus = "ready";
       reconcileSelection(rows, previousSha);
     } catch (error) {
@@ -276,11 +305,16 @@
       }
 
       commits = [...commits, ...appended];
-      // A short page means we've drained the history; pin commitLimit at the
-      // max so canLoadMore becomes false. Otherwise advance by the page size
-      // (not rows.length) so the offset stays aligned with --skip semantics.
-      commitLimit =
-        rows.length < COMMIT_LOG_PAGE_SIZE ? MAX_COMMIT_LOG_LIMIT : nextLimit;
+      // F36: a short page from the backend is the authoritative "no more
+      // commits" signal — set `historyExhausted` regardless of how many rows
+      // survived boundary dedup. Otherwise advance the offset by the full page
+      // size so `--skip` stays aligned.
+      if (rows.length < COMMIT_LOG_PAGE_SIZE) {
+        historyExhausted = true;
+        commitLimit = MAX_COMMIT_LOG_LIMIT;
+      } else {
+        commitLimit = nextLimit;
+      }
 
       requestAnimationFrame(() => {
         if (scrollContainer && !controller.signal.aborted) {
@@ -350,6 +384,7 @@
     abortInFlightLoadMore();
     loadingMore = false;
     commitLimit = DEFAULT_COMMIT_LOG_LIMIT;
+    historyExhausted = false;
     void loadCommits(root, mode, DEFAULT_COMMIT_LOG_LIMIT, previousSha, controller.signal);
     return () => {
       abortInFlightLoadMore();
@@ -362,6 +397,7 @@
       return;
     }
     commitLimit = DEFAULT_COMMIT_LOG_LIMIT;
+    historyExhausted = false;
     filterMode = nextMode;
     try {
       await writePersistedHistoryFilterMode(repoRoot, nextMode);
@@ -452,7 +488,7 @@
       <div class="git-history-content">
         <div
           class="git-history-graph"
-          style="width: {graphWidth}px; min-width: {graphWidth}px; height: {graphHeight}px; transform: translateY({historyTopPadPx}px)"
+          style="width: {graphWidth}px; min-width: {graphWidth}px; height: {graphHeight}px;"
         >
           <GitCommitGraphColumn
             layout={graphLayout}

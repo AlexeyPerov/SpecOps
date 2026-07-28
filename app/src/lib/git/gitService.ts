@@ -6,6 +6,7 @@
 export {
   LOCAL_GIT_OPERATION_TIMEOUT_MS,
   REMOTE_GIT_OPERATION_TIMEOUT_MS,
+  REMOTE_TAG_PROBE_TIMEOUT_MS,
   cancelGitCommand,
   checkGitAvailable,
   resetGitAvailabilityCacheForTests,

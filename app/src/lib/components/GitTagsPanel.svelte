@@ -11,6 +11,7 @@
     queryRemotes,
     queryRemoteTags,
     queryTags,
+    REMOTE_TAG_PROBE_TIMEOUT_MS,
     type GitRemote,
     type GitTagSummary,
   } from "../git/gitService";
@@ -51,10 +52,21 @@
   let selectedTag = $state<string | null>(null);
   let actionBusy = $state(false);
   let actionError = $state<string | null>(null);
+  // F30 (H11): remote tag presence is opt-in, not automatic. A blocking
+  // `ls-remote` fired on every mount/refresh pinned the per-repo FIFO queue on
+  // an unreachable remote, stalling every status/log/staging command behind it.
+  let remotePresenceStatus = $state<LoadStatus>("idle");
+  let remotePresenceCommandId = $state<string | null>(null);
 
   const canDelete = $derived(selectedTag !== null && !actionBusy && !readOnly);
   const canPush = $derived(
     selectedTag !== null && !actionBusy && !readOnly && !remoteOpBusy && remotes.length > 0,
+  );
+  const canCheckRemotePresence = $derived(
+    defaultRemoteName !== null &&
+      remotePresenceStatus !== "loading" &&
+      !actionBusy &&
+      !readOnly,
   );
 
   async function loadRemoteTagPresence(
@@ -63,7 +75,16 @@
     signal?: AbortSignal,
   ): Promise<string[]> {
     try {
-      return await queryRemoteTags(root, remoteName);
+      // F30: run the probe off the per-repo queue (a dead remote must not block
+      // local commands), with a short timeout and a cancellable command id so
+      // the user/Navigate-away can abort it.
+      const commandId = crypto.randomUUID();
+      remotePresenceCommandId = commandId;
+      return await queryRemoteTags(root, remoteName, {
+        commandId,
+        timeoutMs: REMOTE_TAG_PROBE_TIMEOUT_MS,
+        bypassQueue: true,
+      });
     } catch (error) {
       if (signal?.aborted) {
         return [];
@@ -77,6 +98,8 @@
         metadata: { repoRoot: root, remoteName },
       });
       return [];
+    } finally {
+      remotePresenceCommandId = null;
     }
   }
 
@@ -98,17 +121,12 @@
       const defaultRemote = resolveDefaultRemote(remoteRows);
       defaultRemoteName = defaultRemote?.name ?? null;
 
-      let tagRows = mergeTagRemotePresence(localTags, []);
-      if (defaultRemote) {
-        const remoteTagNames = await loadRemoteTagPresence(root, defaultRemote.name, signal);
-        if (signal?.aborted) {
-          return;
-        }
-        tagRows = mergeTagRemotePresence(localTags, remoteTagNames);
-      }
-
-      tags = tagRows;
-      selectedTag = tagRows[0]?.name ?? null;
+      // F30: render local tags immediately with no remote-presence info. Remote
+      // presence is a decorative badge and is now opt-in via
+      // `checkRemoteTagPresence` so a dead remote cannot block the panel load
+      // (or the per-repo git queue).
+      tags = mergeTagRemotePresence(localTags, []);
+      selectedTag = tags[0]?.name ?? null;
       loadStatus = "ready";
     } catch (error) {
       if (signal?.aborted) {
@@ -116,6 +134,33 @@
       }
       loadStatus = "error";
       loadError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /// Explicitly fetch remote tag presence for the default remote and merge the
+  /// result into the visible list. Triggered by the "Check remote" affordance,
+  /// not on mount/refresh — see F30.
+  async function checkRemoteTagPresence(root: string): Promise<void> {
+    if (!defaultRemoteName || remotePresenceStatus === "loading") {
+      return;
+    }
+    remotePresenceStatus = "loading";
+    const controller = new AbortController();
+    try {
+      const localTags = tags.map((tag) => tag.name);
+      const remoteTagNames = await loadRemoteTagPresence(
+        root,
+        defaultRemoteName,
+        controller.signal,
+      );
+      if (controller.signal.aborted) {
+        return;
+      }
+      tags = mergeTagRemotePresence(localTags, remoteTagNames);
+      selectedTag = tags.find((tag) => tag.name === selectedTag)?.name ?? tags[0]?.name ?? null;
+      remotePresenceStatus = "ready";
+    } catch {
+      remotePresenceStatus = "error";
     }
   }
 
@@ -321,6 +366,19 @@
       onclick={handleDeleteTag}
     >
       Delete tag
+    </button>
+    <button
+      type="button"
+      class="git-tags-action"
+      disabled={!canCheckRemotePresence}
+      title={
+        defaultRemoteName
+          ? `Check which tags are present on ${defaultRemoteName}`
+          : "No remote configured"
+      }
+      onclick={() => checkRemoteTagPresence(repoRoot)}
+    >
+      {remotePresenceStatus === "loading" ? "Checking…" : "Check remote"}
     </button>
   </div>
 

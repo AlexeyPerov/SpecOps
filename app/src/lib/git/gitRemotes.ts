@@ -92,6 +92,20 @@ function isNoUpstreamPushError(stderr: string): boolean {
   return lower.includes("no upstream branch") || lower.includes("set-upstream");
 }
 
+/// F35 (L15): in detached HEAD, a plain `git push <remote> HEAD` is rejected
+/// with "The destination you provided is not a full refname" plus the hint
+/// "Did you mean to create a new branch by pushing to 'HEAD:refs/heads/HEAD'?".
+/// `isNoUpstreamPushError` does not match that wording, so the failure surfaced
+/// as a generic command error. Detect it and map to a typed upstream-style
+/// error so the UI can tell the user to checkout a branch first.
+function isDetachedHeadPushError(stderr: string): boolean {
+  const lower = stderr.toLowerCase();
+  return (
+    lower.includes("not a full refname") ||
+    lower.includes("did you mean to create a new branch by pushing to")
+  );
+}
+
 /**
  * List configured remotes via `git remote -v`.
  * Returns remotes sorted by name; empty when none are configured.
@@ -189,6 +203,15 @@ export async function pushRemote(
           ? `Branch "${branchName}" has no upstream. Set an upstream branch before pushing.`
           : "Current branch has no upstream. Set an upstream branch before pushing.",
         branchName,
+      );
+    }
+    if (isDetachedHeadPushError(response.stderr)) {
+      // F35: detached HEAD cannot be pushed as `HEAD` — git needs a full refspec.
+      // Tell the user to checkout a branch first rather than surfacing the raw
+      // "not a full refname" / "did you mean HEAD:refs/heads/HEAD" wording.
+      throw new GitNoUpstreamError(
+        "Detached HEAD cannot be pushed. Checkout a branch before pushing.",
+        null,
       );
     }
     throw createGitCommandError(response);

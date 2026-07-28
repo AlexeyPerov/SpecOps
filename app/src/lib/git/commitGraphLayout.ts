@@ -174,7 +174,7 @@ export function computeCurrentBranchCommitSet(
   return highlighted;
 }
 
-function applyGraphHighlighting(
+export function applyGraphHighlighting(
   dots: CommitGraphDot[],
   segments: CommitGraphSegment[],
   curves: CommitGraphCurve[],
@@ -352,7 +352,34 @@ export function buildCommitGraphLayout(
   commits: CommitSummary[],
   options: CommitGraphLayoutOptions = {},
 ): CommitGraphLayoutResult {
-  const firstParentOnly = options.firstParentOnly ?? false;
+  const structure = buildCommitGraphStructure(commits, options.firstParentOnly ?? false);
+  const highlighted = applyGraphHighlighting(
+    structure.dots,
+    structure.segments,
+    structure.curves,
+    options.highlightedShas,
+  );
+  return {
+    dots: highlighted.dots,
+    segments: highlighted.segments,
+    curves: highlighted.curves,
+    laneCount: structure.laneCount,
+    rowHeight: structure.rowHeight,
+  };
+}
+
+/// Structural layout (dots/segments/curves + lane count) without highlighting.
+///
+/// F32 (M13 sub-item): the lane assignment is O(commits) and depends only on
+/// the commit list and the `firstParentOnly` flag — not on which SHAs are
+/// highlighted. Splitting it out lets callers memoize the expensive structure
+/// on `commits` identity and reapply highlighting cheaply when the
+/// current-branch set changes. {@link buildCommitGraphLayout} remains the
+/// all-in-one entry point for callers that don't care about the split.
+export function buildCommitGraphStructure(
+  commits: CommitSummary[],
+  firstParentOnly = false,
+): CommitGraphLayoutResult {
   const halfHeight = 0.5;
   const unitHeight = 1;
 
@@ -511,17 +538,12 @@ export function buildCommitGraphLayout(
 
   const laneCount = Math.max(1, laneFromX(maxLaneX) + 1);
 
-  const highlighted = applyGraphHighlighting(
+  // F32: return the raw structure; highlighting is applied by the
+  // `buildCommitGraphLayout` wrapper so the structure can be memoized on its own.
+  return {
     dots,
     segments,
     curves,
-    options.highlightedShas,
-  );
-
-  return {
-    dots: highlighted.dots,
-    segments: highlighted.segments,
-    curves: highlighted.curves,
     laneCount,
     rowHeight: ROW_HEIGHT,
   };

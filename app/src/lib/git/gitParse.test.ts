@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import { isWindows } from "../services/platform";
 import { describeIfGitInstalled, withTempGitRepo } from "./test/gitTempRepoHarness";
 import { GIT_LOG_FORMAT } from "./gitParse";
 import {
@@ -86,6 +87,16 @@ describe("parseCommitDecorators", () => {
   it("returns an empty list for blank decorator fields", () => {
     expect(parseCommitDecorators("")).toEqual([]);
     expect(parseCommitDecorators("  ")).toEqual([]);
+  });
+
+  it("does not split a tag or branch name that contains a comma (F33)", () => {
+    // git separates `%D` decorators with `", "` (comma-space). A branch or tag
+    // may legitimately contain a comma (`v1,2`, `a,b`), and splitting on `","`
+    // alone broke such a name into two decorators and dropped the second half.
+    expect(parseCommitDecorators("tag: refs/tags/v1,2, refs/heads/a,b")).toEqual([
+      { type: "localBranchHead", name: "a,b" },
+      { type: "tag", name: "v1,2" },
+    ]);
   });
 });
 
@@ -798,16 +809,21 @@ describe("parseStatusPorcelainV2Z", () => {
     // -z segments are NUL-delimited and unquoted, so a leading/trailing space
     // or a backslash is a literal part of the filename. Trimming or unquoting
     // produces a non-existent path that can't be staged/diffed.
+    //
+    // F24: the `\`→`/` separator rewrite is Windows-only. On POSIX a literal
+    // backslash in a filename (`back\slash.txt`) must be preserved — rewriting
+    // it resolves to a different real path.
     const stdout =
       "1 .M N... 100644 100644 100644 abc abc  lead.txt\x00" +
       "1 .M N... 100644 100644 100644 abc abc trail.txt \x00" +
       '? back\\slash.txt\x00';
     const lines = parseStatusPorcelainV2Z(stdout);
     const paths = lines.map((line) => line.path);
-    expect(paths).toEqual([" lead.txt", "trail.txt ", "back/slash.txt"]);
+    const expectedBack = isWindows() ? "back/slash.txt" : "back\\slash.txt";
+    expect(paths).toEqual([" lead.txt", "trail.txt ", expectedBack]);
   });
 
-  it("normalizes Windows backslashes in v2 paths", () => {
+  it.runIf(isWindows())("normalizes Windows backslashes in v2 paths", () => {
     const stdout =
       "1 .M N... 100644 100644 100644 abc abc src\\components\\App.svelte\x00" +
       "? nested\\folder\\new.txt\x00" +

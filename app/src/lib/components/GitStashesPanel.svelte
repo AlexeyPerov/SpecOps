@@ -156,7 +156,13 @@
     actionBusy = true;
     actionError = null;
 
-    const stashRef = selectedSummary.ref;
+    // F25 (H8): capture the stable SHA, not the positional `stash@{n}` ref. When
+    // the working tree is dirty we create a WIP stash before applying, which
+    // shifts the whole stack — `stash@{0}` then refers to that fresh WIP and
+    // `applyStash(stashRef)` applies the wrong stash. A SHA is immutable; `git
+    // stash apply <sha>` exits 0 (verified), so the apply always targets the
+    // entry the user selected regardless of intervening stack churn.
+    const stashRef = selectedSummary.sha;
 
     try {
       const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {

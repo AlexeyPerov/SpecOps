@@ -1,4 +1,10 @@
-import { normalizeGitOutputPath, type DiffHunk, type DiffLine, type ParsedTextDiff } from "./types";
+import {
+  normalizeGitOutputPath,
+  type DiffHunk,
+  type DiffLine,
+  type ParsedTextDiff,
+} from "./types";
+import { decodeGitQuotedPath } from "./gitParse";
 
 const DIFF_GIT_PREFIX = "diff --git ";
 const HUNK_HEADER =
@@ -225,15 +231,111 @@ function parseDiffGitLine(line: string): DiffGitPaths | null {
     return null;
   }
 
-  const tokens = tokenizeDiffGitPaths(line.slice(DIFF_GIT_PREFIX.length));
-  if (tokens.length !== 2) {
+  const paths = parseDiffGitPathPair(line.slice(DIFF_GIT_PREFIX.length));
+  if (!paths) {
     return null;
   }
 
   return {
-    oldPath: stripGitPathPrefix(tokens[0]!),
-    newPath: stripGitPathPrefix(tokens[1]!),
+    oldPath: stripGitPathPrefix(paths.oldRaw),
+    newPath: stripGitPathPrefix(paths.newRaw),
   };
+}
+
+/// Parse the two path halves of a `diff --git a/<old> b/<new>` header.
+///
+/// git emits exactly two paths after `diff --git`. Each is either quoted
+/// (`"a/path"`, used when the path contains characters git's `quote_c.c` flags)
+/// or bare. The previous tokenizer split on whitespace, which broke on a bare
+/// path containing a space — verified `diff --git a/my img.png b/my img.png`
+/// yielded four tokens and `parseDiffGitLine` returned null, so a binary or
+/// mode-only diff (no `---`/`+++` lines to recover the path from) rendered as
+/// "Could not load diff" instead of the existing binary placeholder.
+///
+/// F22: when the bare-token count is not exactly two, fall back to the known
+/// ` b/` boundary git places between the two halves. The first token is always
+/// a complete bare/quoted unit, so the boundary we want is the first ` b/`
+/// (or `"b/`) *after* it; the second half is the canonical path used for the
+/// file lookup.
+function parseDiffGitPathPair(rest: string): { oldRaw: string; newRaw: string } | null {
+  const tokens = tokenizeDiffGitPaths(rest);
+  if (tokens.length === 2) {
+    return { oldRaw: tokens[0]!, newRaw: tokens[1]! };
+  }
+  if (tokens.length < 2) {
+    return null;
+  }
+
+  // Ambiguous: a bare path contains whitespace. Locate the second half by
+  // scanning for ` b/` (or ` "b/`) starting just past the first token, then
+  // re-split there. The first token is always a complete bare/quoted unit, so
+  // the boundary we want is the first ` b/` *after* it.
+  const firstEnd = tokenEndOffset(rest, 0);
+  if (firstEnd < 0) {
+    return null;
+  }
+  const tail = rest.slice(firstEnd);
+  const boundaryIdx = findPathBoundary(tail);
+  if (boundaryIdx < 0) {
+    return null;
+  }
+  const oldRaw = rest.slice(0, firstEnd).trim();
+  const newRaw = tail.slice(boundaryIdx).trim();
+  if (!oldRaw || !newRaw) {
+    return null;
+  }
+  return { oldRaw, newRaw };
+}
+
+/// Index in `rest` just past the end of token `tokenIndex` (inclusive of any
+/// trailing inter-token whitespace), or -1 if there is no such token. Used to
+/// anchor the second-half boundary search after the first complete token.
+function tokenEndOffset(rest: string, tokenIndex: number): number {
+  let index = 0;
+  let consumed = 0;
+  while (index < rest.length && consumed <= tokenIndex) {
+    while (index < rest.length && rest[index] === " ") {
+      index += 1;
+    }
+    if (index >= rest.length) {
+      break;
+    }
+    if (rest[index] === '"') {
+      let end = index + 1;
+      while (end < rest.length) {
+        if (rest[end] === "\\" && end + 1 < rest.length) {
+          end += 2;
+          continue;
+        }
+        if (rest[end] === '"') {
+          break;
+        }
+        end += 1;
+      }
+      index = end + 1;
+    } else {
+      const nextSpace = rest.indexOf(" ", index);
+      index = nextSpace === -1 ? rest.length : nextSpace;
+    }
+    consumed += 1;
+  }
+  return consumed > tokenIndex ? index : -1;
+}
+
+/// Offset into `tail` of the start of the second path half. git always emits
+/// the new path with a `b/` prefix (or `"b/` when quoted), preceded by a single
+/// space. The first such occurrence after the first token is the boundary.
+function findPathBoundary(tail: string): number {
+  for (let index = 0; index < tail.length; index += 1) {
+    if (tail[index] !== " ") {
+      continue;
+    }
+    const look = tail.slice(index + 1);
+    if (look.startsWith("b/") || look.startsWith('"b/')) {
+      return index + 1;
+    }
+  }
+  return -1;
 }
 
 function tokenizeDiffGitPaths(raw: string): string[] {
@@ -286,39 +388,37 @@ function stripGitPathPrefix(raw: string): string {
 }
 
 function unquoteGitPath(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed
-      .slice(1, -1)
-      .replace(/\\([\\"nrt])/g, (_match, char: string) => {
-        switch (char) {
-          case "n":
-            return "\n";
-          case "t":
-            return "\t";
-          case "r":
-            return "\r";
-          case '"':
-            return '"';
-          case "\\":
-            return "\\";
-          default:
-            return char;
-        }
-      });
+  // F23: do not `.trim()` the unquoted form. git appends a TAB to disambiguate
+  // an unquoted path with a trailing space (`+++ b/trail.txt \t`); the tab is
+  // stripped in `parsePathHeader`, but the trailing space is part of the
+  // filename and must survive. Trimming here made the parsed path mismatch the
+  // status path, so the diff lookup failed.
+  if (raw.startsWith('"') && raw.endsWith('"')) {
+    // F20: hand off to the same octal-aware decoder the porcelain `-z` path uses.
+    // git's `core.quotepath=true` (the default) emits non-ASCII bytes as `\NNN`
+    // octal escapes inside the double quotes — `caf\303\251.txt` for `café.txt`.
+    // The previous implementation only handled `[\\"nrt]`, so every Cyrillic,
+    // accented, CJK or emoji filename parsed to a string that no longer matched
+    // the status path and the diff lookup threw `GitCommitFileDiffNotFoundError`.
+    return decodeGitQuotedPath(raw.slice(1, -1));
   }
-  return trimmed;
+  return raw;
 }
 
 function parsePathHeader(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) {
+  // F23: git appends a TAB to an unquoted diff-header path that contains a
+  // trailing space (`--- a/trail.txt \t`) to disambiguate it. A full `.trim()`
+  // eats that tab *and* the significant trailing space, so the parsed path no
+  // longer matches the status path. Strip at most one trailing tab; the leading
+  // whitespace of a header is never significant.
+  const leadingTrimmed = raw.replace(/^\s+/, "").replace(/\t$/, "");
+  if (!leadingTrimmed) {
     return null;
   }
-  if (trimmed === "/dev/null") {
+  if (leadingTrimmed === "/dev/null") {
     return "/dev/null";
   }
-  return stripGitPathPrefix(trimmed);
+  return stripGitPathPrefix(leadingTrimmed);
 }
 
 function parseHunkHeader(line: string): HunkStart | null {

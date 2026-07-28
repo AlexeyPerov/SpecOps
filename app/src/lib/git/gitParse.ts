@@ -123,7 +123,11 @@ export function parseCommitDecorators(raw: string): CommitDecorator[] {
   }
 
   const refs: CommitDecorator[] = [];
-  for (const segment of trimmed.split(",")) {
+  // F33: git's `%D` separates decorators with `", "` (comma-space), and a branch
+  // or tag may legitimately contain a comma (`a,b`, `v1,2`). Splitting on `","`
+  // alone breaks such a name into two decorators and silently drops the second
+  // half. Split on the actual separator instead.
+  for (const segment of trimmed.split(", ")) {
     const decorator = segment.trim();
     if (!decorator) {
       continue;
@@ -368,12 +372,19 @@ function normalizeRepoRelativePath(path: string): string {
  * whitespace inside a raw NUL-delimited segment.
  */
 function normalizeRawV2Path(path: string): string {
-  let normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  // Trailing-slash collapse only — porcelain paths never carry a meaningful
+  // trailing slash, and `-z` segments never end in one. A leading/trailing
+  // space or tab is a literal part of the filename and must be preserved.
+  let normalized = path.replace(/\/+$/, "");
   if (isWindows()) {
-    normalized = normalized.replace(
-      /^([A-Za-z]):\//,
-      (_, drive: string) => `${drive.toLowerCase()}:/`,
-    );
+    // F24: the `\`→`/` separator rewrite is a Windows-only concern. Applying it
+    // unconditionally rewrites a literal backslash in a POSIX filename
+    // (`back\slash.txt`) to a forward slash, resolving to a different real path
+    // that can't be staged/unstaged/diffed. Mirrors `normalizeGitOutputPath` in
+    // `types.ts`, which already gates this under `isWindows()`.
+    normalized = normalized
+      .replace(/\\/g, "/")
+      .replace(/^([A-Za-z]):\//, (_, drive: string) => `${drive.toLowerCase()}:/`);
   }
   return normalized;
 }
@@ -764,7 +775,7 @@ export function mergeTagRemotePresence(
   }));
 }
 
-function decodeGitQuotedPath(inner: string): string {
+export function decodeGitQuotedPath(inner: string): string {
   const bytes: number[] = [];
   const encoder = new TextEncoder();
   for (let index = 0; index < inner.length; index += 1) {

@@ -3,7 +3,6 @@
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
   import {
     loadWorkspaceGitColumnCell,
-    refreshWorkspaceGitColumnCells,
     subscribeWorkspaceGitColumnAutoRefresh,
     type WorkspaceGitColumnCell,
   } from "../git/workspaceManagerGitColumn";
@@ -45,7 +44,14 @@
 
   let gitCellsByPath = $state<Map<string, WorkspaceGitColumnCell>>(new Map());
   let gitRefreshBusy = $state(false);
+  /** Bumped on each batch load start / effect cleanup so stale writes are dropped. */
+  let gitLoadGeneration = 0;
   const showGitColumn = $derived(shouldLoadWorkspaceManagerGitColumn());
+
+  function gitErrorCell(error: unknown): WorkspaceGitColumnCell {
+    const message = error instanceof Error ? error.message : String(error);
+    return { status: "error", text: "Git error", message };
+  }
 
   function workspaceName(workspace: WorkspaceEntry): string {
     const normalized = workspace.rootPath.replaceAll("\\", "/");
@@ -98,11 +104,19 @@
     rows: WorkspaceEntry[],
     options?: { force?: boolean },
   ): Promise<void> {
+    const generation = ++gitLoadGeneration;
+
     if (!showGitColumn) {
+      if (generation !== gitLoadGeneration) {
+        return;
+      }
       gitCellsByPath = new Map();
       return;
     }
     if (rows.length === 0) {
+      if (generation !== gitLoadGeneration) {
+        return;
+      }
       gitCellsByPath = new Map();
       return;
     }
@@ -116,16 +130,39 @@
     }
     gitCellsByPath = pending;
 
-    const results = options?.force
-      ? await refreshWorkspaceGitColumnCells(rows.map((workspace) => workspace.rootPath))
-      : new Map(
-          await Promise.all(
-            rows.map(async (workspace) => {
-              const cell = await loadWorkspaceGitColumnCell(workspace.rootPath);
-              return [workspace.rootPath, cell] as const;
-            }),
-          ),
-        );
+    const results = new Map<string, WorkspaceGitColumnCell>();
+    try {
+      // Per-path catch so one failure does not leave the whole batch on "…".
+      await Promise.all(
+        rows.map(async (workspace) => {
+          try {
+            const cell = await loadWorkspaceGitColumnCell(workspace.rootPath, {
+              force: options?.force,
+            });
+            results.set(workspace.rootPath, cell);
+          } catch (error) {
+            results.set(workspace.rootPath, gitErrorCell(error));
+          }
+        }),
+      );
+    } catch (error) {
+      if (generation !== gitLoadGeneration) {
+        return;
+      }
+      const next = new Map(untrack(() => gitCellsByPath));
+      for (const workspace of rows) {
+        const cell = next.get(workspace.rootPath);
+        if (!cell || cell.status === "loading") {
+          next.set(workspace.rootPath, gitErrorCell(error));
+        }
+      }
+      gitCellsByPath = next;
+      return;
+    }
+
+    if (generation !== gitLoadGeneration) {
+      return;
+    }
 
     const next = new Map(untrack(() => gitCellsByPath));
     for (const [path, cell] of results) {
@@ -148,9 +185,20 @@
   }
 
   async function refreshGitColumnCell(workspaceRootPath: string): Promise<void> {
+    const generation = gitLoadGeneration;
     gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, { status: "loading" });
-    const cell = await loadWorkspaceGitColumnCell(workspaceRootPath, { force: true });
-    gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, cell);
+    try {
+      const cell = await loadWorkspaceGitColumnCell(workspaceRootPath, { force: true });
+      if (generation !== gitLoadGeneration) {
+        return;
+      }
+      gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, cell);
+    } catch (error) {
+      if (generation !== gitLoadGeneration) {
+        return;
+      }
+      gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, gitErrorCell(error));
+    }
   }
 
   $effect(() => {
@@ -166,6 +214,9 @@
   $effect(() => {
     const rows = workspaces;
     void loadGitCellsForWorkspaces(rows);
+    return () => {
+      gitLoadGeneration += 1;
+    };
   });
 </script>
 

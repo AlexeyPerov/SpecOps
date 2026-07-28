@@ -301,3 +301,44 @@ export const chatSessionSubtitleById = derived(chatStore, ($chatStore) => {
 });
 
 export const chatActiveSessionId = derived(chatStore, ($chatStore) => activeSessionId($chatStore));
+
+/**
+ * Per-workspace session counts (root path → `sessionIndex.length`). Referential
+ * stability: the Map is only reallocated when any root's length actually
+ * changes, so ActivityRail (and similar) can skip work on unrelated chatStore
+ * emits such as per-token streaming.
+ */
+const EMPTY_SESSION_COUNTS_MAP = new Map<string, number>();
+let lastSessionCountsOutput: Map<string, number> = EMPTY_SESSION_COUNTS_MAP;
+
+function sessionCountsUnchanged(
+  previous: Map<string, number>,
+  next: Record<string, number>,
+): boolean {
+  const keys = Object.keys(next);
+  if (previous.size !== keys.length) {
+    return false;
+  }
+  for (const key of keys) {
+    if (previous.get(key) !== next[key]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export const chatSessionCountsByRoot = derived(chatStore, ($chatStore) => {
+  const next: Record<string, number> = {};
+  for (const [root, workspace] of Object.entries($chatStore.workspaces)) {
+    next[root] = workspace.sessionIndex.length;
+  }
+  if (Object.keys(next).length === 0) {
+    lastSessionCountsOutput = EMPTY_SESSION_COUNTS_MAP;
+    return EMPTY_SESSION_COUNTS_MAP;
+  }
+  if (sessionCountsUnchanged(lastSessionCountsOutput, next)) {
+    return lastSessionCountsOutput;
+  }
+  lastSessionCountsOutput = new Map(Object.entries(next));
+  return lastSessionCountsOutput;
+});

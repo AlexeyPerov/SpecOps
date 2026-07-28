@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteMap } from "svelte/reactivity";
   import EditorPaneView from "./EditorPaneView.svelte";
   import type {
     DocumentState,
@@ -165,7 +166,8 @@
 
   // ---- Cross-pane DnD registry (Phase 5/6) ----
   // paneId → strip/body elements, populated by each EditorPaneView on mount.
-  const paneElements = $state(new Map<string, { stripEl: HTMLElement | null; bodyEl: HTMLElement | null }>());
+  // SvelteMap tracks get/set/delete/size without wrapping in $state.
+  const paneElements = new SvelteMap<string, { stripEl: HTMLElement | null; bodyEl: HTMLElement | null }>();
 
   function registerPaneElements(
     paneId: string,
@@ -180,7 +182,8 @@
 
   /** Live snapshot of every pane's strip/body elements, for hit-testing. */
   const paneElementsList = $derived.by<PaneDropTargetElements[]>(() => {
-    void paneElements.size; // depend on the map
+    // Reading size/get on SvelteMap establishes reactive dependencies.
+    void paneElements.size;
     const out: PaneDropTargetElements[] = [];
     for (const cell of cells) {
       const entry = paneElements.get(cell.pane.id);

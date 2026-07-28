@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
   import TabBar from "./TabBar.svelte";
   import type { DocumentState, TabState } from "../domain/contracts";
   import {
@@ -92,12 +91,14 @@
 
   // Register/unregister our elements with the parent grid so the cross-pane
   // hit-tester can see this pane's strip + body. Re-registers when the bound
-  // elements change (mount/unmount).
+  // elements change; cleanup drops the entry on paneId change / unmount so the
+  // registry never retains detached elements.
   $effect(() => {
-    onRegisterElements(paneId, { stripEl: tabStripEl, bodyEl: paneBodyEl });
-  });
-  onDestroy(() => {
-    onUnregisterElements(paneId);
+    const id = paneId;
+    onRegisterElements(id, { stripEl: tabStripEl, bodyEl: paneBodyEl });
+    return () => {
+      onUnregisterElements(id);
+    };
   });
 </script>
 

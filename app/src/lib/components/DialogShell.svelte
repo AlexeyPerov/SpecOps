@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
 
   /**
    * Shared dialog chrome (R4). Provides the backdrop + centered panel,
    * `role="dialog"` / `aria-modal="true"`, Escape + optional backdrop
-   * dismiss, and title/body/actions regions. This is the presentational
-   * shell only — the promise-based confirm API lands in a later milestone.
+   * dismiss, focus trap, and title/body/actions regions. This is the
+   * presentational shell only — the promise-based confirm API lands in a
+   * later milestone.
    *
    * Callers keep their own `open` state and service wiring (e.g. the
    * self-registering prompt runners). When `open` is false, nothing renders.
@@ -16,11 +17,12 @@
    * - `actions` snippet → footer action row (Cancel / confirm buttons).
    *
    * Accessibility:
-   * - Escape calls `onDismiss` when provided.
+   * - Escape (window capture) calls `onDismiss` when provided.
+   * - Tab / Shift+Tab cycle within focusable elements inside the panel.
    * - Backdrop pointer-down calls `onDismiss` when `dismissOnBackdrop` is set
    *   (default true). Callers that must suppress dismiss while busy pass false.
    * - On open, focus moves into the panel; the previously-focused element is
-   *   restored when the dialog closes (best-effort).
+   *   restored when the dialog closes or the component unmounts (best-effort).
    */
   interface Props {
     open: boolean;
@@ -54,6 +56,9 @@
   let panelEl = $state<HTMLDivElement | null>(null);
   let previouslyFocused: HTMLElement | null = null;
 
+  const FOCUSABLE_SELECTOR =
+    "a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex='-1'])";
+
   // Stable id so multiple shells can coexist without clashing aria-labelledby.
   const autoTitleId =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -74,28 +79,69 @@
     }
   }
 
-  function handleKeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape" && onDismiss) {
+  function focusableInPanel(panel: HTMLElement): HTMLElement[] {
+    return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      if (!onDismiss) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       onDismiss();
+      return;
+    }
+
+    if (event.key !== "Tab" || !panelEl) {
+      return;
+    }
+
+    const focusable = focusableInPanel(panelEl);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      panelEl.focus();
+      return;
+    }
+
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    const active = document.activeElement as HTMLElement | null;
+
+    if (event.shiftKey) {
+      if (active === first || !active || !panelEl.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !active || !panelEl.contains(active)) {
+      event.preventDefault();
+      first.focus();
     }
   }
 
-  // Focus management: capture the prior active element on open, focus into the
-  // dialog, and restore focus on close. Callers that need to focus a specific
-  // control can do so themselves after open — if focus is already inside the
-  // panel by the time this runs, we leave it alone (no focus stealing).
-  $effect(() => {
-    if (!open) {
-      // Restore focus once when transitioning to closed.
-      if (previouslyFocused) {
-        previouslyFocused.focus?.();
-        previouslyFocused = null;
-      }
+  function restorePreviousFocus(): void {
+    if (!previouslyFocused) {
       return;
     }
+    previouslyFocused.focus?.();
+    previouslyFocused = null;
+  }
+
+  // Focus management: capture the prior active element on open, focus into the
+  // dialog, trap Tab within the panel via a window capture listener, and
+  // restore focus on close. Callers that need to focus a specific control can
+  // do so themselves after open — if focus is already inside the panel by the
+  // time this runs, we leave it alone (no focus stealing).
+  $effect(() => {
+    if (!open) {
+      restorePreviousFocus();
+      return;
+    }
+
     previouslyFocused = (document.activeElement as HTMLElement) ?? null;
+    window.addEventListener("keydown", handleWindowKeydown, true);
+
     void tick().then(() => {
       // If a caller already moved focus into the dialog, respect it.
       const active = document.activeElement as HTMLElement | null;
@@ -103,11 +149,17 @@
         return;
       }
       // Otherwise prefer a focusable child (input/button); fall back to panel.
-      const focusable = panelEl?.querySelector<HTMLElement>(
-        "input, button:not([disabled]), [tabindex]:not([tabindex='-1']), textarea, select, a[href]",
-      );
+      const focusable = panelEl ? focusableInPanel(panelEl)[0] : null;
       (focusable ?? panelEl)?.focus();
     });
+
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeydown, true);
+    };
+  });
+
+  onDestroy(() => {
+    restorePreviousFocus();
   });
 </script>
 
@@ -125,7 +177,6 @@
       aria-modal="true"
       aria-labelledby={resolvedTitleId}
       tabindex="-1"
-      onkeydown={handleKeydown}
     >
       <h2 id={resolvedTitleId} class="dialog-shell-title">{title}</h2>
       {#if children}{@render children()}{/if}

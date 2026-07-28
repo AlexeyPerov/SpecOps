@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-28 — UI shell: pane registry, rail counts, dialog a11y, git-column load
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M66–M71 —
+UI-shell Medium findings (M67 was already fixed with H15).
+
+- **Cross-pane DnD registry used a non-reactive Map (M66).** Pane strip/body elements are
+  tracked in a `SvelteMap`; each pane’s register effect unregisters on cleanup so hit-tests
+  never see detached nodes.
+
+- **Activity rail rebuilt workspace counts on every chat-store emit (M68).** Stable
+  `chatSessionCountsByRoot` derived only reallocates when a root’s session count changes;
+  the rail reads that for Sessions and still takes Tabs from workspace snapshots.
+
+- **Add-multiple workspaces modal lacked Escape/focus handling (M69).** Modal rebuilt on
+  `DialogShell` so open focuses the panel, Escape/backdrop dismiss (when not loading), and
+  the shared focus trap apply.
+
+- **DialogShell had no focus trap; Escape was panel-scoped (M70).** Capture-phase window
+  keydown handles Escape and Tab cycling inside the panel; unmount-while-open restores the
+  previously focused element.
+
+- **Workspace Manager git column could stick on “…” (M71).** Batch loads use a generation
+  token (invalidated on effect cleanup) and per-row try/catch so rejections write error
+  cells instead of leaving loading placeholders forever.
+
 ## 2026-07-28 — UI shell: resize leak, context menu, tree drag, drag rAF, tooltip timer
 
 Follow-up to the review in

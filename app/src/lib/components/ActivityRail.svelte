@@ -7,7 +7,7 @@
     type ContextId,
     type WorkspaceEntry,
   } from "../domain/contracts";
-  import { chatStore } from "../state/chatStore";
+  import { chatSessionCountsByRoot } from "../state/chatStore";
   import {
     createWorkspaceRailDragController,
     previewWorkspaces,
@@ -162,15 +162,15 @@
   });
 
   /**
-   * Per-workspace opened-session counts, derived from the chatStore workspaces
-   * map (keyed by normalized root path). Tab counts come from each workspace
+   * Per-workspace opened-session counts from the stable chatSessionCountsByRoot
+   * store (keyed by normalized root path). Tab counts come from each workspace
    * entry's session snapshot (already reactive via the appState prop chain).
    */
   const countsByRoot = $derived.by(() => {
     const map = new Map<string, { sessions: number; tabs: number }>();
-    const storeWorkspaces = $chatStore.workspaces;
+    const sessionCounts = $chatSessionCountsByRoot;
     for (const workspace of workspaces) {
-      const sessions = storeWorkspaces[workspace.rootPath]?.sessionIndex.length ?? 0;
+      const sessions = sessionCounts.get(workspace.rootPath) ?? 0;
       const tabs = allTabs(workspace.snapshot.session.editorLayout).length;
       map.set(workspace.rootPath, { sessions, tabs });
     }

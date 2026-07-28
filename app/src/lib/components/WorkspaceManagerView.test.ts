@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { mount, unmount } from "svelte";
 import WorkspaceManagerView from "./WorkspaceManagerView.svelte";
 import type { ContextId, WorkspaceEntry } from "../domain/contracts";
+import { loadWorkspaceGitColumnCell } from "../git/workspaceManagerGitColumn";
 
 // Mock the git column loader so the test never hits Tauri IPC. The view's mount
 // `$effect` calls `loadGitCellsForWorkspaces`, which reads/writes `gitCellsByPath`;
@@ -128,6 +129,37 @@ describe("WorkspaceManagerView", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(onOpenVersionControl).toHaveBeenCalledWith("ws-1");
+
+    unmount(instance as never);
+    host.remove();
+  });
+
+  it("writes Git error cells when a git-column load rejects", async () => {
+    vi.mocked(loadWorkspaceGitColumnCell).mockRejectedValueOnce(new Error("boom"));
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const workspaces = [makeWorkspace("ws-1", "/tmp/repo-a")];
+    const instance = mount(WorkspaceManagerView, {
+      target: host,
+      props: {
+        workspaces,
+        activeContextId: "ws-1",
+        hiddenRootPaths: new Set<string>(),
+        onAddWorkspace: () => {},
+        onAddMultiple: () => {},
+        onSelectWorkspace: () => {},
+        onOpenWorkspaceSettings: () => {},
+        onOpenVersionControl: () => {},
+      },
+    }) as unknown as Record<string, unknown>;
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const gitCell = host.querySelector(".wm-git-text");
+    expect(gitCell?.textContent?.trim()).toBe("Git error");
+    expect(gitCell?.getAttribute("title")).toBe("boom");
 
     unmount(instance as never);
     host.remove();

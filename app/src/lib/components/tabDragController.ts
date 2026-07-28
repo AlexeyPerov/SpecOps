@@ -149,6 +149,8 @@ export function crossPaneDropIndex(
 
 export function createTabDragController(deps: TabDragControllerDeps) {
   let state = createInitialState();
+  /** Coalesces expensive layout reads (getBoundingClientRect) to one per frame (M64). */
+  let moveRafId: number | null = null;
 
   function emitState(): void {
     deps.onStateChange(cloneState(state));
@@ -220,10 +222,60 @@ export function createTabDragController(deps: TabDragControllerDeps) {
     window.removeEventListener("pointercancel", onPointerCancel);
   }
 
+  function applyDragLayout(): void {
+    if (!state.didDrag || !state.dragTabId) {
+      return;
+    }
+    collectTabRects();
+    // Phase 5 — hit-test every pane; if a *different* pane is under the
+    // pointer, record it as the drop target (and its strip's drop index). A
+    // same-pane hit (or no pane-elements wired) keeps the in-strip `dropIndex`.
+    const sourcePaneId = deps.getPaneId?.() ?? null;
+    const paneElements = deps.getPaneElements?.() ?? [];
+    const crossPaneTarget =
+      sourcePaneId && paneElements.length > 0
+        ? hitTestPaneElements(state.dragPointerX, state.dragPointerY, paneElements)
+        : null;
+    if (crossPaneTarget && crossPaneTarget.paneId !== sourcePaneId) {
+      state.dropPaneId = crossPaneTarget.paneId;
+      // For a strip hit on the other pane, use its computed index; for a body
+      // hit (or empty strip), append.
+      state.dropIndex = crossPaneDropIndex(
+        crossPaneTarget.index,
+        deps.getPaneTabCount?.(crossPaneTarget.paneId) ?? deps.getOpenTabs().length,
+      );
+    } else {
+      state.dropPaneId = crossPaneTarget ? crossPaneTarget.paneId : null;
+      state.dropIndex = nextDropIndex(state.dragPointerX);
+    }
+    emitState();
+  }
+
+  function scheduleDragLayout(): void {
+    if (moveRafId !== null) {
+      return;
+    }
+    moveRafId = requestAnimationFrame(() => {
+      moveRafId = null;
+      applyDragLayout();
+    });
+  }
+
+  function flushDragLayout(): void {
+    if (moveRafId === null) {
+      return;
+    }
+    cancelAnimationFrame(moveRafId);
+    moveRafId = null;
+    applyDragLayout();
+  }
+
   function finishDrag(commitReorder: boolean): void {
     if (state.isFinishingDrag) {
       return;
     }
+    // Apply any coalesced layout update so dropIndex reflects the latest pointer.
+    flushDragLayout();
     state.isFinishingDrag = true;
     const activePointerId = state.pointerId;
     const fromIndex = state.dragFromIndex;
@@ -324,29 +376,8 @@ export function createTabDragController(deps: TabDragControllerDeps) {
     }
 
     state.didDrag = true;
-    collectTabRects();
-    // Phase 5 — hit-test every pane; if a *different* pane is under the
-    // pointer, record it as the drop target (and its strip's drop index). A
-    // same-pane hit (or no pane-elements wired) keeps the in-strip `dropIndex`.
-    const sourcePaneId = deps.getPaneId?.() ?? null;
-    const paneElements = deps.getPaneElements?.() ?? [];
-    const crossPaneTarget =
-      sourcePaneId && paneElements.length > 0
-        ? hitTestPaneElements(event.clientX, event.clientY, paneElements)
-        : null;
-    if (crossPaneTarget && crossPaneTarget.paneId !== sourcePaneId) {
-      state.dropPaneId = crossPaneTarget.paneId;
-      // For a strip hit on the other pane, use its computed index; for a body
-      // hit (or empty strip), append.
-      state.dropIndex = crossPaneDropIndex(
-        crossPaneTarget.index,
-        deps.getPaneTabCount?.(crossPaneTarget.paneId) ?? deps.getOpenTabs().length,
-      );
-    } else {
-      state.dropPaneId = crossPaneTarget ? crossPaneTarget.paneId : null;
-      state.dropIndex = nextDropIndex(event.clientX);
-    }
-    emitState();
+    // Coalesce tab/pane getBoundingClientRect walks to one rAF per frame (M64).
+    scheduleDragLayout();
   }
 
   function onPointerUp(event: PointerEvent): void {

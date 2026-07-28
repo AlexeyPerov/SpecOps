@@ -43,7 +43,7 @@ function dragPastThreshold(controller: ReturnType<typeof createController>["cont
     clientX: 0,
     clientY: 0,
   } as PointerEvent;
-  controller.handlePointerDown(downEvent, node);
+  expect(controller.handlePointerDown(downEvent, node)).toBe(true);
   const moveEvent = {
     pointerId: 1,
     clientX: PROJECT_TREE_DRAG_THRESHOLD_PX + 1,
@@ -144,10 +144,12 @@ describe("projectTreeDrag — file→pane drop (Phase 6)", () => {
 
   it("ignores right-button pointerdown (no drag initiated)", async () => {
     const { controller, getState } = createController();
-    controller.handlePointerDown(
+    const accepted = controller.handlePointerDown(
       { button: 2, pointerId: 1, clientX: 0, clientY: 0 } as PointerEvent,
       fileNode("/root/a.txt"),
     );
+    // Caller must not attach window listeners when the press is rejected (M63).
+    expect(accepted).toBe(false);
     // No state change emitted on right-button → state stays at its initial null.
     expect(getState()?.sourcePath ?? null).toBeNull();
   });

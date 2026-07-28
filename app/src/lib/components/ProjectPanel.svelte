@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
@@ -11,6 +12,7 @@
     normalizePanelWidthPx,
   } from "../services/panelLayout";
   import { emptyMap, emptySet } from "../collections/emptyCollections";
+  import { startPointerDrag } from "./pointerDrag";
   import RefreshIcon from "./icons/RefreshIcon.svelte";
 
   export let workspaceRoot: string;
@@ -68,11 +70,14 @@
     return Math.max(MIN_PANEL_WIDTH_PX, Math.min(MAX_PANEL_WIDTH_PX, next));
   }
 
+  let activeResizeTeardown: (() => void) | null = null;
+
   function handleResizeStart(event: PointerEvent): void {
     if (collapsed) {
       return;
     }
     event.preventDefault();
+    activeResizeTeardown?.();
     isResizing = true;
     const pointerId = event.pointerId;
     const startX = event.clientX;
@@ -80,24 +85,31 @@
     const target = event.currentTarget as HTMLElement | null;
     target?.setPointerCapture(pointerId);
 
-    const onPointerMove = (moveEvent: PointerEvent): void => {
-      const deltaX = startX - moveEvent.clientX;
-      displayWidth = clampPanelWidth(startWidth + deltaX);
-    };
+    const teardown = startPointerDrag({
+      pointerId,
+      target,
+      onMove: (moveEvent) => {
+        const deltaX = startX - moveEvent.clientX;
+        displayWidth = clampPanelWidth(startWidth + deltaX);
+      },
+      onEnd: () => {
+        isResizing = false;
+        activeResizeTeardown = null;
+        onPanelWidthChange(displayWidth);
+      },
+    });
 
-    const onPointerEnd = (): void => {
+    activeResizeTeardown = () => {
       isResizing = false;
-      target?.releasePointerCapture(pointerId);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerEnd);
-      window.removeEventListener("pointercancel", onPointerEnd);
-      onPanelWidthChange(displayWidth);
+      teardown();
     };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerEnd);
-    window.addEventListener("pointercancel", onPointerEnd);
   }
+
+  onDestroy(() => {
+    activeResizeTeardown?.();
+    activeResizeTeardown = null;
+    contextMenuComponent?.closeContextMenu();
+  });
 
   function openContextMenu(
     event: MouseEvent,

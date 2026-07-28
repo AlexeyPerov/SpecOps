@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-07-28 — UI shell: resize leak, context menu, tree drag, drag rAF, tooltip timer
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M61–M65 —
+UI-shell Medium findings.
+
+- **Pane/rail resize leaked window listeners on unmount mid-drag (M61).** Shared
+  `startPointerDrag` attaches move/up/cancel listeners and returns a teardown; Activity
+  rail, project panel, console, and project search wire that teardown into `onDestroy`.
+
+- **Project tree context menu left capture-phase window listeners after unmount (M62).**
+  `closeContextMenu` always detaches listeners (no early return), the menu clears itself
+  on destroy, and `ProjectPanel` closes the menu on unmount like the tab bar.
+
+- **Tree-row right-click attached drag listeners that never detached (M63).**
+  `projectTreeDrag.handlePointerDown` returns whether the press was accepted; window
+  listeners attach only for primary-button presses.
+
+- **Tab/workspace drag read layout on every pointermove (M64).** Rect collection and
+  hit-testing coalesce to one animation frame; rail auto-scroll ticks only near edges and
+  defers rect reads to the next frame after writing `scrollTop`.
+
+- **Hover tooltip show timer survived unmount (M65).** `onDestroy` clears the pending
+  show timeout so a destroy-while-hovered cannot write into a dead instance.
+
 ## 2026-07-28 — Editor: markdown memo, project-search passes, completion scan, replace validate
 
 Follow-up to the review in

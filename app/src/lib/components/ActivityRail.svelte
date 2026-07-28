@@ -18,6 +18,7 @@
     isActivityRailExpanded,
     normalizeActivityRailWidthPx,
   } from "../services/panelLayout";
+  import { startPointerDrag } from "./pointerDrag";
   import NotepadIcon from "./icons/NotepadIcon.svelte";
   import AddIcon from "./icons/AddIcon.svelte";
   import ListIcon from "./icons/ListIcon.svelte";
@@ -191,8 +192,11 @@
     return workspace.rootPath;
   }
 
+  let activeResizeTeardown: (() => void) | null = null;
+
   function handleResizeStart(event: PointerEvent): void {
     event.preventDefault();
+    activeResizeTeardown?.();
     isResizing = true;
     const pointerId = event.pointerId;
     const startX = event.clientX;
@@ -200,28 +204,31 @@
     const target = event.currentTarget as HTMLElement | null;
     target?.setPointerCapture(pointerId);
 
-    const onPointerMove = (moveEvent: PointerEvent): void => {
-      // Rail is anchored to the left edge, so dragging its right handle to the
-      // right grows the width.
-      const deltaX = moveEvent.clientX - startX;
-      displayWidth = normalizeActivityRailWidthPx(startWidth + deltaX);
-    };
+    const teardown = startPointerDrag({
+      pointerId,
+      target,
+      onMove: (moveEvent) => {
+        // Rail is anchored to the left edge, so dragging its right handle to the
+        // right grows the width.
+        const deltaX = moveEvent.clientX - startX;
+        displayWidth = normalizeActivityRailWidthPx(startWidth + deltaX);
+      },
+      onEnd: () => {
+        isResizing = false;
+        activeResizeTeardown = null;
+        onPanelWidthChange(displayWidth);
+      },
+    });
 
-    const onPointerEnd = (): void => {
+    activeResizeTeardown = () => {
       isResizing = false;
-      target?.releasePointerCapture(pointerId);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerEnd);
-      window.removeEventListener("pointercancel", onPointerEnd);
-      onPanelWidthChange(displayWidth);
+      teardown();
     };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerEnd);
-    window.addEventListener("pointercancel", onPointerEnd);
   }
 
   onDestroy(() => {
+    activeResizeTeardown?.();
+    activeResizeTeardown = null;
     dragController.destroy();
   });
 </script>

@@ -63,12 +63,13 @@ export function createProjectTreeDragController(deps: ProjectTreeDragControllerD
     emit();
   }
 
+  /** Returns true when the press was accepted and window listeners should attach. */
   function handlePointerDown(
     event: PointerEvent,
     node: ProjectTreeNode,
-  ): void {
+  ): boolean {
     if (event.button !== 0) {
-      return;
+      return false;
     }
     state = {
       pointerId: event.pointerId,
@@ -81,6 +82,7 @@ export function createProjectTreeDragController(deps: ProjectTreeDragControllerD
       startY: event.clientY,
     };
     emit();
+    return true;
   }
 
   function handlePointerMove(event: PointerEvent): void {

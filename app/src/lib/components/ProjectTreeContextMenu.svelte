@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
   import { revealInFileManagerLabel } from "../services/platform";
   import { revealInFileManager } from "../services/revealInFileManager";
@@ -32,6 +33,11 @@
   let contextMenu = $state<{ x: number; y: number; target: ProjectTreeContextTarget } | null>(null);
   let contextMenuEl = $state<HTMLDivElement | null>(null);
 
+  function detachWindowListeners(): void {
+    window.removeEventListener("pointerdown", handlePointerDownOutside, true);
+    window.removeEventListener("keydown", handleKeyDown, true);
+  }
+
   export function openContextMenu(
     event: MouseEvent,
     target: ProjectTreeContextTarget,
@@ -44,12 +50,11 @@
   }
 
   export function closeContextMenu(): void {
-    if (!contextMenu) {
-      return;
-    }
     contextMenu = null;
-    window.removeEventListener("pointerdown", handlePointerDownOutside, true);
-    window.removeEventListener("keydown", handleKeyDown, true);
+    // Always detach — even when the menu was already null — so an unmount
+    // (or a redundant close) cannot leave capture-phase window listeners
+    // attached (M62).
+    detachWindowListeners();
   }
 
   function handlePointerDownOutside(event: PointerEvent): void {
@@ -65,6 +70,10 @@
       closeContextMenu();
     }
   }
+
+  onDestroy(() => {
+    closeContextMenu();
+  });
 
   const menuTarget = $derived(contextMenu?.target ?? null);
   const isFile = $derived(menuTarget?.node?.kind === "file");

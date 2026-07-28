@@ -113,9 +113,25 @@ export function isPointerInsideRect(pointerX: number, pointerY: number, rect: DO
   );
 }
 
+function scrollEdgeForPointer(
+  railWorkspacesEl: HTMLElement,
+  pointerY: number,
+): "up" | "down" | null {
+  const rect = railWorkspacesEl.getBoundingClientRect();
+  if (pointerY < rect.top + WORKSPACE_SCROLL_EDGE_PX) {
+    return "up";
+  }
+  if (pointerY > rect.bottom - WORKSPACE_SCROLL_EDGE_PX) {
+    return "down";
+  }
+  return null;
+}
+
 export function createWorkspaceRailDragController(deps: WorkspaceRailDragControllerDeps) {
   let state = createInitialState();
   let scrollRafId: number | null = null;
+  /** Coalesces workspace-rect collection + drop-index updates to one per frame (M64). */
+  let moveRafId: number | null = null;
 
   function emitState(): void {
     deps.onStateChange(cloneState(state));
@@ -128,35 +144,66 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
     }
   }
 
+  function applyDragLayout(): void {
+    if (!state.didDrag || !state.dragWorkspaceId) {
+      return;
+    }
+    collectWorkspaceRects();
+    state.dropIndex = nextWorkspaceDropIndex(
+      deps.getWorkspaces(),
+      state.workspaceRects,
+      state.dragWorkspaceId,
+      state.dragPointerY,
+      state.dragFromIndex,
+    );
+    emitState();
+  }
+
+  function scheduleDragLayout(): void {
+    if (moveRafId !== null) {
+      return;
+    }
+    moveRafId = requestAnimationFrame(() => {
+      moveRafId = null;
+      applyDragLayout();
+    });
+  }
+
+  function flushDragLayout(): void {
+    if (moveRafId === null) {
+      return;
+    }
+    cancelAnimationFrame(moveRafId);
+    moveRafId = null;
+    applyDragLayout();
+  }
+
   function startAutoScrollLoop(): void {
     if (scrollRafId !== null) {
       return;
     }
 
     const tick = (): void => {
+      scrollRafId = null;
       const railWorkspacesEl = deps.getRailWorkspacesEl();
       if (!state.didDrag || !railWorkspacesEl) {
-        stopAutoScrollLoop();
         return;
       }
 
-      const rect = railWorkspacesEl.getBoundingClientRect();
-      const pointerY = state.dragPointerY;
-      if (pointerY < rect.top + WORKSPACE_SCROLL_EDGE_PX) {
+      const edge = scrollEdgeForPointer(railWorkspacesEl, state.dragPointerY);
+      if (!edge) {
+        // Pointer left the scroll edge — stop ticking until a later move
+        // restarts the loop. Avoids a perpetual rAF while dragging mid-list (M64).
+        return;
+      }
+      if (edge === "up") {
         railWorkspacesEl.scrollTop -= WORKSPACE_SCROLL_SPEED_PX;
-      } else if (pointerY > rect.bottom - WORKSPACE_SCROLL_EDGE_PX) {
+      } else {
         railWorkspacesEl.scrollTop += WORKSPACE_SCROLL_SPEED_PX;
       }
-
-      collectWorkspaceRects();
-      state.dropIndex = nextWorkspaceDropIndex(
-        deps.getWorkspaces(),
-        state.workspaceRects,
-        state.dragWorkspaceId,
-        state.dragPointerY,
-        state.dragFromIndex,
-      );
-      emitState();
+      // Defer rect collection to the next frame so we don't read layout in the
+      // same turn as the scrollTop write (forced sync layout — M64).
+      scheduleDragLayout();
       scrollRafId = requestAnimationFrame(tick);
     };
 
@@ -200,6 +247,7 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
     if (state.isFinishingDrag) {
       return;
     }
+    flushDragLayout();
     state.isFinishingDrag = true;
     stopAutoScrollLoop();
 
@@ -269,20 +317,13 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
       return;
     }
 
-    if (!state.didDrag) {
-      state.didDrag = true;
+    state.didDrag = true;
+    // Coalesce workspace getBoundingClientRect walks to one rAF per frame (M64).
+    scheduleDragLayout();
+    const railWorkspacesEl = deps.getRailWorkspacesEl();
+    if (railWorkspacesEl && scrollEdgeForPointer(railWorkspacesEl, event.clientY)) {
       startAutoScrollLoop();
     }
-
-    collectWorkspaceRects();
-    state.dropIndex = nextWorkspaceDropIndex(
-      deps.getWorkspaces(),
-      state.workspaceRects,
-      state.dragWorkspaceId,
-      event.clientY,
-      state.dragFromIndex,
-    );
-    emitState();
   }
 
   function onPointerUp(event: PointerEvent): void {

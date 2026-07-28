@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { Snippet } from "svelte";
 
   let {
@@ -30,6 +31,10 @@
       showTimer = null;
     }
   }
+
+  onDestroy(() => {
+    clearShowTimer();
+  });
 
   function positionTooltip(): void {
     if (!anchorEl) {

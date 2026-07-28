@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import ConsoleLogsPanel from "./ConsoleLogsPanel.svelte";
   import {
     DEFAULT_CONSOLE_HEIGHT_PX,
     MIN_CONSOLE_HEIGHT_PX,
     normalizeConsoleHeightPx,
   } from "../services/consoleTabPrefs";
+  import { startPointerDrag } from "./pointerDrag";
 
   let {
     heightPx = $bindable(DEFAULT_CONSOLE_HEIGHT_PX),
@@ -15,6 +17,7 @@
   } = $props();
 
   let isResizing = $state(false);
+  let activeResizeTeardown: (() => void) | null = null;
 
   function clampHeight(next: number): number {
     return normalizeConsoleHeightPx(next);
@@ -22,6 +25,7 @@
 
   function handleResizeStart(event: PointerEvent): void {
     event.preventDefault();
+    activeResizeTeardown?.();
     isResizing = true;
     const pointerId = event.pointerId;
     const startY = event.clientY;
@@ -29,24 +33,30 @@
     const target = event.currentTarget as HTMLElement | null;
     target?.setPointerCapture(pointerId);
 
-    const onPointerMove = (moveEvent: PointerEvent): void => {
-      const deltaY = startY - moveEvent.clientY;
-      heightPx = clampHeight(startHeight + deltaY);
-    };
+    const teardown = startPointerDrag({
+      pointerId,
+      target,
+      onMove: (moveEvent) => {
+        const deltaY = startY - moveEvent.clientY;
+        heightPx = clampHeight(startHeight + deltaY);
+      },
+      onEnd: () => {
+        isResizing = false;
+        activeResizeTeardown = null;
+        onHeightCommit?.();
+      },
+    });
 
-    const onPointerEnd = (): void => {
+    activeResizeTeardown = () => {
       isResizing = false;
-      target?.releasePointerCapture(pointerId);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerEnd);
-      window.removeEventListener("pointercancel", onPointerEnd);
-      onHeightCommit?.();
+      teardown();
     };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerEnd);
-    window.addEventListener("pointercancel", onPointerEnd);
   }
+
+  onDestroy(() => {
+    activeResizeTeardown?.();
+    activeResizeTeardown = null;
+  });
 
   function handleResizeDoubleClick(): void {
     heightPx = DEFAULT_CONSOLE_HEIGHT_PX;

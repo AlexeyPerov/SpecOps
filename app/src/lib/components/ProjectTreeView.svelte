@@ -145,7 +145,13 @@
   }
 
   function handlePointerDown(event: PointerEvent, node: ProjectTreeNode): void {
-    dragController.handlePointerDown(event, node);
+    // Only attach window listeners when the drag controller accepts the press.
+    // Right-clicks (and other non-primary buttons) bail without setting
+    // pointerId; attaching anyway left pointermove dispatching for the panel's
+    // lifetime because pointerup early-returns on a null pointerId (M63).
+    if (!dragController.handlePointerDown(event, node)) {
+      return;
+    }
     window.addEventListener("pointermove", handleWindowPointerMove);
     window.addEventListener("pointerup", handleWindowPointerUp);
     window.addEventListener("pointercancel", handleWindowPointerUp);

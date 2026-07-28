@@ -687,7 +687,7 @@ describe("queryCommitDetail", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["show", "--name-status", `--format=${GIT_SHOW_FORMAT}`, "abc123"],
+      args: ["show", "--no-show-signature", "--name-status", `--format=${GIT_SHOW_FORMAT}`, "abc123"],
     }));
     expect(result.sha).toBe("abc123");
     expect(result.message).toBe("Subject line");
@@ -762,6 +762,7 @@ describe("queryCommitFileDiff", () => {
       args: [
         "show",
         "--no-color",
+        "--no-show-signature",
         "--patch",
         `--unified=${DIFF_CONTEXT_LINES}`,
         "root",
@@ -876,6 +877,7 @@ describe("queryWorkingTreeFileDiff", () => {
         "diff",
         "--no-color",
         "--patch",
+        "--no-ext-diff",
         `--unified=${DIFF_CONTEXT_LINES}`,
         "--cached",
         "--",
@@ -902,6 +904,7 @@ describe("queryWorkingTreeFileDiff", () => {
         "diff",
         "--no-color",
         "--patch",
+        "--no-ext-diff",
         `--unified=${DIFF_CONTEXT_LINES}`,
         "HEAD",
         "--",
@@ -964,6 +967,7 @@ describe("queryWorkingTreeFileDiff", () => {
         "diff",
         "--no-color",
         "--patch",
+        "--no-ext-diff",
         `--unified=${DIFF_CONTEXT_LINES}`,
         "--cached",
         "--",
@@ -1376,7 +1380,7 @@ describe("checkoutBranch", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["checkout", "feature/login"],
+      args: ["checkout", "feature/login", "--"],
     }));
   });
 });
@@ -1448,7 +1452,7 @@ describe("createBranch", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["checkout", "-b", "feature/new"],
+      args: ["checkout", "-b", "feature/new", "--"],
     }));
   });
 

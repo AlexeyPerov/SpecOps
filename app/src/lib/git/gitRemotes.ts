@@ -1,4 +1,5 @@
 import { parseLsRemoteTags, parseRemoteVvLines } from "./gitParse";
+import { queryCurrentBranch } from "./gitRepo";
 import { runGit, runRemoteGit } from "./gitRun";
 import {
   assertGitCommandCompleted,
@@ -40,6 +41,45 @@ function buildPushArgs(target?: RemoteOperationTarget): string[] {
   const remoteName = target.remoteName.trim();
   const branchName = target.branchName?.trim();
   return branchName ? ["push", remoteName, branchName] : ["push", remoteName, "HEAD"];
+}
+
+/**
+ * Resolve a push target's branch name from the configured upstream when the caller
+ * supplied a remote but no branch. Returns the original `target` unchanged when an
+ * explicit branch was given, when there is no target, or when the upstream cannot
+ * be resolved (detached HEAD / no tracking branch) — in those cases the caller's
+ * `HEAD` default applies.
+ */
+async function resolvePushTarget(
+  repoRoot: string,
+  target?: RemoteOperationTarget,
+): Promise<RemoteOperationTarget | undefined> {
+  if (!target?.remoteName?.trim()) {
+    return target;
+  }
+  if (target.branchName?.trim()) {
+    return target;
+  }
+  try {
+    const current = await queryCurrentBranch(repoRoot);
+    if (current.isDetached || !current.upstream) {
+      return target;
+    }
+    // `upstream` is `<remote>/<branch>`; only use it when it points at the same
+    // remote the user selected, so the derived branch name is the right one.
+    const upstreamRemote = current.upstream.slice(0, current.upstream.indexOf("/"));
+    if (upstreamRemote !== target.remoteName.trim()) {
+      return target;
+    }
+    const upstreamBranch = current.upstream.slice(current.upstream.indexOf("/") + 1);
+    if (!upstreamBranch) {
+      return target;
+    }
+    return { remoteName: target.remoteName, branchName: upstreamBranch };
+  } catch {
+    // Branch resolution is best-effort; never block a push on it.
+    return target;
+  }
 }
 
 function parseNoUpstreamBranch(stderr: string): string | null {
@@ -130,7 +170,13 @@ export async function pushRemote(
   target?: RemoteOperationTarget,
   options?: CancellableGitOptions,
 ): Promise<void> {
-  const response = await runRemoteGit(repoRoot, buildPushArgs(target), {
+  // When the caller selected a remote but left the branch blank, push the current
+  // branch to the remote branch name it tracks (e.g. a local `feature` tracking
+  // `origin/main` pushes to `main`, not to a stray `feature`). Falls back to a
+  // plain `HEAD` push only when there is no upstream to derive a name from or the
+  // current branch is detached.
+  const resolvedTarget = await resolvePushTarget(repoRoot, target);
+  const response = await runRemoteGit(repoRoot, buildPushArgs(resolvedTarget), {
     ...options,
     operation: "push",
   });

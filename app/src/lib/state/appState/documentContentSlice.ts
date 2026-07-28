@@ -29,6 +29,7 @@ import {
   findDocumentByPath,
   getActiveSession,
   nextDocAndTabIds,
+  nextTabId,
   patchActiveContext,
   patchContextById,
 } from "./contextHelpers";
@@ -336,7 +337,10 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
               recentFiles,
             };
           }
-          const reopenedTabId = nextDocAndTabIds().tabId;
+          // The duplicate document already has an id; only a new tab id is needed.
+          // Using `nextTabId` (not `nextDocAndTabIds().tabId`) avoids burning a
+          // document id counter slot for a document that is never created.
+          const reopenedTabId = nextTabId();
           return {
             ...patchActiveContext(upgradedState, (ctx) => ({
               ...ctx,

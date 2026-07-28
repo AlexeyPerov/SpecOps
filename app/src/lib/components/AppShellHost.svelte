@@ -381,6 +381,15 @@
     notify: (message) => notify(message),
   });
 
+  // Detach the workspace context menu's window listeners when this host is
+  // destroyed, so a menu left open on unmount does not leak pointer/keydown
+  // handlers for the page lifetime (L21).
+  $effect(() => {
+    return () => {
+      workspaceContextMenuActions.detach();
+    };
+  });
+
   const commandHandlers = createAppShellCommandHandlers({
     notify: (message) => notify(message),
     getSnapshot: () => appState.getSnapshot(),

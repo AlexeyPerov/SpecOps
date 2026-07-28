@@ -347,7 +347,14 @@ export function buildNamedExtensionGroups(
     },
     {
       name: "landmarks",
-      extensions: [compartments.landmarks.of(bookmarkExtension())],
+      // The bookmark extension carries a `StateField` (`bookmarkField`). A
+      // `StateField` must NOT live inside a reconfigurable `Compartment` —
+      // replacing it after mount deadlocks CodeMirror's facet resolver (infinite
+      // `flatten`/`inner` recursion, the same freeze documented in `editorFold.ts`
+      // for `codeFolding()`). Mount it as a static extension; the `landmarks`
+      // Compartment remains available for future non-`StateField` landmark
+      // toggles without reintroducing that bug.
+      extensions: [bookmarkExtension()],
     },
     {
       name: "theme",

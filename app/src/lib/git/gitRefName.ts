@@ -34,6 +34,12 @@ export function validateGitRefName(name: string): GitRefNameValidationResult {
     return { ok: false, message: "Branch name cannot start with '/'." };
   }
 
+  // Reject a leading dash so the name cannot be misparsed as an option when it is
+  // later placed bare on the argv (e.g. `["tag", name]`, `["checkout", "-b", name]`).
+  if (trimmed.startsWith("-")) {
+    return { ok: false, message: "Branch name cannot start with '-'." };
+  }
+
   if (trimmed.endsWith(".lock")) {
     return { ok: false, message: "Branch name cannot end with '.lock'." };
   }

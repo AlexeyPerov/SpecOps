@@ -7,7 +7,7 @@ import {
   parseUpstreamRef,
 } from "./gitParse";
 import { runGit } from "./gitRun";
-import { GitRefValidationError } from "./gitErrors";
+import { assertGitCommandCompleted, GitRefValidationError } from "./gitErrors";
 import { validateGitRefName } from "./gitRefName";
 import {
   createGitCommandError,
@@ -171,8 +171,15 @@ export async function checkoutBranch(repoRoot: string, branchName: string): Prom
   if (!trimmed) {
     throw new GitRefValidationError("Branch name cannot be empty.");
   }
+  const validation = validateGitRefName(trimmed);
+  if (!validation.ok) {
+    throw new GitRefValidationError(validation.message);
+  }
 
-  const response = await runGit(repoRoot, ["checkout", trimmed]);
+  // `--` disambiguates when a branch and a path share a name, otherwise git fails
+  // with "ambiguous argument … could be both a local file and a tracking branch".
+  const response = await runGit(repoRoot, ["checkout", trimmed, "--"]);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -185,7 +192,8 @@ export async function createBranch(repoRoot: string, name: string): Promise<void
     throw new GitRefValidationError(validation.message);
   }
 
-  const response = await runGit(repoRoot, ["checkout", "-b", name.trim()]);
+  const response = await runGit(repoRoot, ["checkout", "-b", name.trim(), "--"]);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }

@@ -1,5 +1,94 @@
 # Changelog
 
+## 2026-07-28 — Low-severity review findings (L1–L31)
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering all 22 Low
+findings (L1–L31).
+
+### Rust (`src-tauri`)
+
+- **Commit message temp file was not created exclusively (L1).** `git_commit_with_message`
+  now creates the message file with `create_new` (O_EXCL) and mode `0600` on Unix, refusing
+  a pre-planted symlink and keeping the message private; a write failure cleans up the empty
+  file.
+- **`remove_stale_index_lock` had no repo confinement (L2).** It now refuses the path unless
+  `repo_root/.git` exists, so the delete primitive only fires inside a real repository.
+- **Sidecar inherited the app's cwd (L3).** `spawn_sidecar_process` sets `current_dir` to the
+  canonicalized workspace; the port-check TOCTOU window is documented as acceptable (the
+  background health poller reaps a bad spawn).
+- **Output-limit breach discarded the whole result (L4).** `read_limited_stream` and
+  `apply_output_limit` now truncate at the limit and append an `[output truncated: …]`
+  marker instead of erroring — a huge `git log`/`git show` still returns partial output.
+- **Sidecar stderr logging was unbounded (L5).** Each line is capped at 2048 bytes
+  (char-boundary safe) and logging stops after 4096 lines (draining continues).
+- **`SidecarHealthStatus::Unhealthy` was missing from the TS union (L31).** Renamed to
+  `Degraded` (serializes to `"degraded"`), matching the frontend union and
+  `OpencodeHealthStatus`, so a degraded sidecar no longer reports as `"unknown"`.
+
+### Git layer (frontend)
+
+- **`checkout` had no `--` disambiguator and skipped ref validation (L6).** Both checkout
+  forms append `--`, and `checkoutBranch` now validates the ref name.
+- **`validateGitRefName` accepted a leading dash (L7).** Rejected (covered by a unit test),
+  so `-d`/`--delete` cannot be parsed as a flag.
+- **Decorator parsing dropped local branches ending in `/HEAD` (L8).** Only the remote
+  symbolic `refs/remotes/<remote>/HEAD` is skipped now.
+- **`queryCommitDetail`/root-commit show omitted `--no-show-signature` (L9).** Added.
+- **Working-tree diffs omitted `--no-ext-diff` (L10).** Staged and unstaged diffs now pass it.
+- **`normalizeGitOutputPath` rewrote `\`→`/` everywhere and full-trimmed (L11).** Backslash
+  folding is Windows-only; the trim is reduced to trailing-newline stripping so meaningful
+  path whitespace survives.
+- **v1 rename/`->` parsing mis-split quoted renames (L12).** The arrow is located
+  quote-aware before each side is unquoted; a literal ` -> ` inside a quoted path is
+  preserved (unit-tested).
+- **Positional stash refs were racy (L13).** The checkout-with-stash flow uses the stable
+  SHA returned by `createStash` instead of `stash@{0}`.
+- **Local write commands didn't surface cancelled/timeout as typed errors (L14).**
+  Stage/unstage/checkout/create-branch call `assertGitCommandCompleted` before the exit-code
+  check.
+- **`git push <remote> HEAD` ignored the upstream branch name (L15).** `pushRemote`
+  resolves the upstream branch from the tracking branch when no explicit branch is given.
+- **`decodeGitQuotedPath` truncated code points > 255 (L16).** Literal chars are UTF-8
+  encoded; escape handling matches git's `quote_c.c` (no false `\f`/`\b` escapes on Windows
+  paths).
+
+### State / services
+
+- **`patchActiveContext` silently dropped writes on a dangling context (L17).** Now logs a
+  warning instead of swallowing the patch.
+- **O(n²) tab/document lookups in close handlers (L18).** Shared `confirmDirtyTabsInPane`
+  builds tab-id and document-id maps once via the existing `getDocumentByIdMap`.
+- **`initializeDocumentDiskState` targeted the active context after an await (L19).**
+  Resolves the owning context before the await and uses `setDocumentDiskStateForContext`.
+- **`openFileInPane` burned a document id for a tab id (L20).** Uses `nextTabId()`; closing
+  a tab now prunes the document's deferred-dirty / in-flight / self-write entries.
+- **Self-write fingerprint map was never evicted (L28).** Capped at 256 entries (LRU) and
+  cleared per-path on close.
+- **Prompt history could never be written (L29).** `prompt-history/` is `mkdir`'d, and the
+  filename is a stable hash of the workspace path (no long-path collisions).
+- **`replaceInProjectFile` didn't register its write (L30).** Wraps the write in
+  `beginSaveInFlight`/`clearSaveInFlight`, records the content-hashed fingerprint, and the
+  fallback uses the encoded byte length.
+
+### Editor / UI shell
+
+- **`bookmarkField` lived inside a reconfigurable Compartment (L22).** Mounted as a static
+  extension to avoid the documented facet-resolver deadlock.
+- **`appendTabToPane` lacked dedupe; `activePane` could return undefined (L23).** Dedupe by
+  tab id added; `activePane` throws on an empty `panes` array.
+- **AppShell carried dead duplicate pickers/dialogs (L24).** Removed the dead template
+  blocks and their unused imports; the live copies live only in `OverlayHost`.
+- **SettingsView deep-link effect depended on the whole store (L25).** Reads only the
+  `chatHttp`/`opencode` slices via `$derived`.
+- **Landmark picker polled at 200 ms (L26).** Raised to 500 ms (matching the outline panel).
+- **Console logging had no level filter and copied the array per append (L27).** Minimum
+  console level gate (default `info`) plus in-place trimming.
+- **Various listener/resource leaks (L21).** `applyingScroll` rAF cancelled on destroy;
+  `TabBar` drop-target clears on unmount; `ImagePreviewPane` revokes the blob on unmount;
+  `windowManager`/`tabWindowTransfer` detach a late `listen()` registration after timeout;
+  `workspaceContextMenuController` detaches on host unmount.
+
 ## 2026-07-28 — UI shell: menu clamp, find sync, project panel runes
 
 Follow-up to the review in

@@ -65,6 +65,24 @@ export function resetExternalFileChangesForTests(): void {
   startupChecksAbort = null;
 }
 
+/**
+ * Drop all external-change bookkeeping for a document that has just been closed.
+ * Without this, `deferredDirtyDocumentIds` and the in-flight/pending maps retain
+ * entries for closed documents for the rest of the session (L20).
+ */
+export function clearDocumentExternalChangeState(
+  documentId: string,
+  filePath?: string | null,
+): void {
+  deferredDirtyDocumentIds.delete(documentId);
+  runtimeState.inFlightCheckByDocument.delete(documentId);
+  runtimeState.pendingDirtyPromptByDocument.delete(documentId);
+  runtimeState.dialogOpenForDocument.delete(documentId);
+  if (filePath) {
+    clearWriteFingerprintForPath(filePath);
+  }
+}
+
 /** Mark `path` as having a save in flight (called before the disk write). */
 export function beginSaveInFlight(path: string): void {
   const key = normalizePathSync(path);
@@ -118,8 +136,34 @@ export function shouldSyncFileWatcher(settings: ExternalFilesSettings): boolean 
 
 export { shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 
+/**
+ * Upper bound on the self-write fingerprint cache. Each entry is one path's last
+ * write fingerprint; the map is never evicted on tab close, so without a cap a
+ * long session that saves many distinct files would grow it without limit. Map
+ * preserves insertion order, so the oldest entry is dropped when the cap is hit.
+ */
+const MAX_WRITE_FINGERPRINT_ENTRIES = 256;
+
 export function recordWriteFingerprint(path: string, fingerprint: DiskFingerprint): void {
-  runtimeState.lastWriteFingerprintByPath.set(normalizePathSync(path), fingerprint);
+  const key = normalizePathSync(path);
+  runtimeState.lastWriteFingerprintByPath.delete(key);
+  runtimeState.lastWriteFingerprintByPath.set(key, fingerprint);
+  if (runtimeState.lastWriteFingerprintByPath.size > MAX_WRITE_FINGERPRINT_ENTRIES) {
+    const oldest = runtimeState.lastWriteFingerprintByPath.keys().next().value;
+    if (oldest !== undefined) {
+      runtimeState.lastWriteFingerprintByPath.delete(oldest);
+    }
+  }
+}
+
+/**
+ * Drop the self-write fingerprint for a path. Called when a document closes so
+ * the entry does not linger for the session after its tab is gone (the path may
+ * be re-opened or watched by an external editor, where a stale self-write guard
+ * would wrongly suppress a reload).
+ */
+export function clearWriteFingerprintForPath(path: string): void {
+  runtimeState.lastWriteFingerprintByPath.delete(normalizePathSync(path));
 }
 
 export async function recordWriteFingerprintFromPath(path: string): Promise<DiskFingerprint> {
@@ -133,18 +177,38 @@ export async function initializeDocumentDiskState(
   filePath: string,
   fingerprint?: DiskFingerprint,
 ): Promise<void> {
+  // Resolve the owning context before the await: `setDocumentDiskState` targets
+  // the active context, so a context switch during the stat would drop the patch
+  // and leave `diskFingerprint: null` → a spurious external-change prompt on the
+  // next check. `setDocumentDiskStateForContext` lands the patch in the right
+  // workspace regardless of what is active when the await resolves.
+  const owner = findDocumentContext(appState.getSnapshot(), documentId);
   try {
     const resolved = fingerprint ?? (await statDiskFingerprint(filePath));
-    appState.setDocumentDiskState(documentId, {
-      diskFingerprint: resolved,
-      fileMissing: false,
-    });
+    if (owner) {
+      appState.setDocumentDiskStateForContext(owner.contextId, documentId, {
+        diskFingerprint: resolved,
+        fileMissing: false,
+      });
+    } else {
+      appState.setDocumentDiskState(documentId, {
+        diskFingerprint: resolved,
+        fileMissing: false,
+      });
+    }
   } catch (error: unknown) {
     if (isFileMissingError(error)) {
-      appState.setDocumentDiskState(documentId, {
-        diskFingerprint: null,
-        fileMissing: true,
-      });
+      if (owner) {
+        appState.setDocumentDiskStateForContext(owner.contextId, documentId, {
+          diskFingerprint: null,
+          fileMissing: true,
+        });
+      } else {
+        appState.setDocumentDiskState(documentId, {
+          diskFingerprint: null,
+          fileMissing: true,
+        });
+      }
       return;
     }
     if (isFsScopePermissionError(error)) {

@@ -24,6 +24,13 @@
       blobObjectUrl = null;
     }
     loadFailed = false;
+    // On unmount, revoke the last blob URL so it does not leak for the session.
+    return () => {
+      if (blobObjectUrl) {
+        URL.revokeObjectURL(blobObjectUrl);
+        blobObjectUrl = null;
+      }
+    };
   });
 
   async function loadBlobFallback(): Promise<void> {

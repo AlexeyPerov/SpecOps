@@ -188,9 +188,14 @@ export function mapGitInvokeError(error: unknown, workspaceRootPath: string): Gi
 }
 
 export function normalizeGitOutputPath(path: string): string {
-  let normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  // Strip only the trailing line ending that git appends to path-bearing output
+  // (`rev-parse --show-toplevel`, diff headers). A full `.trim()` would also strip
+  // meaningful leading/trailing spaces in a path; the raw `-z` path already
+  // bypasses this via `normalizeRawV2Path`, so this is the quoted/header form where
+  // such whitespace is not significant.
+  let normalized = path.replace(/[\r\n]+$/g, "").replace(/\/+$/, "");
   if (isWindows()) {
-    normalized = normalized.replace(
+    normalized = normalized.replace(/\\/g, "/").replace(
       /^([A-Za-z]):\//,
       (_, drive: string) => `${drive.toLowerCase()}:/`,
     );

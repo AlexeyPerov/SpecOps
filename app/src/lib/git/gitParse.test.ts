@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { describeIfGitInstalled, withTempGitRepo } from "./test/gitTempRepoHarness";
 import { GIT_LOG_FORMAT } from "./gitParse";
 import {
@@ -401,21 +401,28 @@ describe("parseCommitShow", () => {
   });
 
   it("normalizes Windows backslashes in name-status paths", () => {
-    const stdout =
-      "abc123\x00\x00Author\x00author@example.com\x001700000000\x00Author\x00author@example.com\x001700000000\x00Rename commit\n\nR100\told\\path.ts\tnew\\path.ts\nM\tsrc\\components\\App.svelte\n";
-    const detail = parseCommitShow(stdout);
+    // Backslash→forward-slash rewriting is Windows-only (POSIX keeps backslashes
+    // as filename characters), so force the platform detection to Windows here.
+    vi.stubGlobal("navigator", { ...navigator, platform: "Win32" });
+    try {
+      const stdout =
+        "abc123\x00\x00Author\x00author@example.com\x001700000000\x00Author\x00author@example.com\x001700000000\x00Rename commit\n\nR100\told\\path.ts\tnew\\path.ts\nM\tsrc\\components\\App.svelte\n";
+      const detail = parseCommitShow(stdout);
 
-    expect(detail?.files).toEqual([
-      {
-        status: "R",
-        previousPath: "old/path.ts",
-        path: "new/path.ts",
-      },
-      {
-        status: "M",
-        path: "src/components/App.svelte",
-      },
-    ]);
+      expect(detail?.files).toEqual([
+        {
+          status: "R",
+          previousPath: "old/path.ts",
+          path: "new/path.ts",
+        },
+        {
+          status: "M",
+          path: "src/components/App.svelte",
+        },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("decodes octal-quoted non-ASCII paths in name-status lines", () => {
@@ -660,36 +667,77 @@ describe("parseStatusPorcelain", () => {
     });
   });
 
-  it("normalizes Windows backslashes in porcelain paths", () => {
-    const lines = parseStatusPorcelain(
-      [
-        " M src\\components\\App.svelte",
-        "?? nested\\folder\\new.txt",
-        'R  old\\name.txt -> new\\name.txt',
-        '?? "nested\\folder\\spaces file.txt"',
-      ].join("\n"),
-    );
-
-    expect(lines.find((line) => line.path === "src/components/App.svelte")).toEqual({
-      indexStatus: " ",
-      workTreeStatus: "M",
-      path: "src/components/App.svelte",
-    });
-    expect(lines.find((line) => line.path === "nested/folder/new.txt")).toEqual({
-      indexStatus: "?",
-      workTreeStatus: "?",
-      path: "nested/folder/new.txt",
-    });
-    expect(lines.find((line) => line.path === "new/name.txt")).toEqual({
+  it("splits a quoted rename arrow into the destination path", () => {
+    // Both sides quoted independently; the whole row must not be collapsed into
+    // one quoted path, and a surviving quote must not leak into the result.
+    const lines = parseStatusPorcelain(['R  "a b.txt" -> "c d.txt"'].join("\n"));
+    expect(lines.find((line) => line.path === "c d.txt")).toEqual({
       indexStatus: "R",
       workTreeStatus: " ",
-      path: "new/name.txt",
+      path: "c d.txt",
     });
-    expect(lines.find((line) => line.path === "nested/folder/spaces file.txt")).toEqual({
-      indexStatus: "?",
-      workTreeStatus: "?",
-      path: "nested/folder/spaces file.txt",
+  });
+
+  it("keeps a literal ' -> ' inside a single quoted path", () => {
+    const lines = parseStatusPorcelain([' M "a -> b.txt"'].join("\n"));
+    expect(lines.find((line) => line.path === "a -> b.txt")).toEqual({
+      indexStatus: " ",
+      workTreeStatus: "M",
+      path: "a -> b.txt",
     });
+  });
+
+  it("normalizes Windows backslashes in porcelain paths", () => {
+    // Backslash→forward-slash rewriting is Windows-only (on POSIX a backslash is a
+    // legal filename char), so force the platform detection to Windows for this test.
+    vi.stubGlobal("navigator", { ...navigator, platform: "Win32" });
+    try {
+      const lines = parseStatusPorcelain(
+        [
+          " M src\\components\\App.svelte",
+          "?? nested\\folder\\new.txt",
+          'R  old\\name.txt -> new\\name.txt',
+          '?? "nested\\folder\\spaces file.txt"',
+        ].join("\n"),
+      );
+
+      expect(lines.find((line) => line.path === "src/components/App.svelte")).toEqual({
+        indexStatus: " ",
+        workTreeStatus: "M",
+        path: "src/components/App.svelte",
+      });
+      expect(lines.find((line) => line.path === "nested/folder/new.txt")).toEqual({
+        indexStatus: "?",
+        workTreeStatus: "?",
+        path: "nested/folder/new.txt",
+      });
+      expect(lines.find((line) => line.path === "new/name.txt")).toEqual({
+        indexStatus: "R",
+        workTreeStatus: " ",
+        path: "new/name.txt",
+      });
+      expect(lines.find((line) => line.path === "nested/folder/spaces file.txt")).toEqual({
+        indexStatus: "?",
+        workTreeStatus: "?",
+        path: "nested/folder/spaces file.txt",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("preserves backslashes in porcelain paths on POSIX platforms", () => {
+    vi.stubGlobal("navigator", { ...navigator, platform: "MacIntel" });
+    try {
+      const lines = parseStatusPorcelain(['R  old\\name.txt -> new\\name.txt'].join("\n"));
+      expect(lines.find((line) => line.path === "new\\name.txt")).toEqual({
+        indexStatus: "R",
+        workTreeStatus: " ",
+        path: "new\\name.txt",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

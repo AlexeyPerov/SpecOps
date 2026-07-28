@@ -13,12 +13,38 @@ export interface ConsoleLogEntry {
 
 const MAX_ENTRIES = 1000;
 
+const LEVEL_RANK: Record<DiagnosticLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
+
+/**
+ * Minimum level retained in the in-app console store. `debug` and below-noise
+ * `info` events (e.g. every command dispatch) are dropped before they enter the
+ * 1000-entry ring so the console surfaces signal, not keystroke-by-keystroke
+ * noise. The Rust log plugin still receives every level via `logDiagnostic`.
+ */
+let minConsoleLevel: DiagnosticLevel = "info";
+
+export function setMinConsoleLevel(level: DiagnosticLevel): void {
+  minConsoleLevel = level;
+}
+
+export function getMinConsoleLevel(): DiagnosticLevel {
+  return minConsoleLevel;
+}
+
 let nextEntryId = 0;
 const { subscribe, update, set } = writable<ConsoleLogEntry[]>([]);
 
 export const consoleLogs = { subscribe };
 
 export function appendConsoleLog(event: DiagnosticEvent): void {
+  if (LEVEL_RANK[event.level] < LEVEL_RANK[minConsoleLevel]) {
+    return;
+  }
   update((entries) => {
     const entry: ConsoleLogEntry = {
       id: String(nextEntryId += 1),
@@ -29,10 +55,8 @@ export function appendConsoleLog(event: DiagnosticEvent): void {
       metadata: event.metadata,
       text: formatConsoleEventText(event),
     };
-    const next = [...entries, entry];
-    if (next.length > MAX_ENTRIES) {
-      return next.slice(next.length - MAX_ENTRIES);
-    }
+    // Avoid double-copying: append, then trim in place only when over the cap.
+    const next = entries.length >= MAX_ENTRIES ? [...entries.slice(1), entry] : [...entries, entry];
     return next;
   });
 }

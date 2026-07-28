@@ -3,7 +3,18 @@ import { exists, mkdir, readTextFile, remove, rename, writeTextFile } from "@tau
 import { atomicWriteTextFile } from "./atomicWrite";
 import type { DiskFingerprint } from "../domain/contracts";
 import { SKIPPED_DIRECTORY_NAMES } from "./folderOpenableFiles";
-import { normalizePathForStorage, normalizePathSync, pathsEqual, statDiskFingerprint } from "./diskFingerprint";
+import {
+  beginSaveInFlight,
+  clearSaveInFlight,
+  recordWriteFingerprint,
+} from "./externalFileChanges";
+import {
+  fingerprintFromWrittenBytes,
+  normalizePathForStorage,
+  normalizePathSync,
+  pathsEqual,
+  statDiskFingerprint,
+} from "./diskFingerprint";
 import { replaceAllInString, validateSearchQuery, type SearchQuery } from "../editor/searchQuery";
 import {
   closeTabsForDeletedDocumentsUnderPath,
@@ -168,20 +179,33 @@ export async function replaceInProjectFile(
   if (count === 0) {
     return { ok: false, reason: "No matches.", count: 0 };
   }
+  const writtenBytes = new TextEncoder().encode(nextContent);
+  // Register this as an app-initiated write so a watcher self-echo landing
+  // before the fingerprint is recorded does not trigger a reload/dirty prompt.
+  beginSaveInFlight(filePath);
   try {
     await atomicWriteTextFile(filePath, nextContent);
   } catch (error: unknown) {
+    clearSaveInFlight(filePath);
     const reason = error instanceof Error ? error.message : String(error);
     return { ok: false, reason, count: 0 };
   }
   // Capture the post-write fingerprint so callers can refresh the disk state
-  // of any open document for this path (suppressing a watcher self-echo and
-  // keeping the buffer in sync without flipping it dirty).
+  // of any open document for this path. `fingerprintFromWrittenBytes` carries a
+  // content hash tied to the exact bytes we wrote (so even a same-size edit is
+  // recognised), and `recordWriteFingerprint` arms the self-write guard for any
+  // watcher event that arrives after this point.
   let fingerprint: DiskFingerprint;
   try {
-    fingerprint = await statDiskFingerprint(filePath);
+    fingerprint = await fingerprintFromWrittenBytes(filePath, writtenBytes);
+    recordWriteFingerprint(filePath, fingerprint);
   } catch {
-    fingerprint = { mtimeMs: 0, sizeBytes: nextContent.length };
+    // Fallback only when the post-write stat itself fails: use the byte length
+    // (not the string length, which is wrong for non-ASCII — string length
+    // counts UTF-16 code units, not bytes).
+    fingerprint = { mtimeMs: 0, sizeBytes: writtenBytes.length };
+  } finally {
+    clearSaveInFlight(filePath);
   }
   return { ok: true, path: filePath, count, content: nextContent, fingerprint };
 }

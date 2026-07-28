@@ -98,6 +98,11 @@
     } else if (!target) {
       onDropTargetChange(null);
     }
+    // Clear the drop target on unmount so a phantom affordance does not persist
+    // after the pane's TabBar is destroyed mid-drag.
+    return () => {
+      onDropTargetChange(null);
+    };
   });
 
   const documentById = $derived(getDocumentByIdMap(documents));

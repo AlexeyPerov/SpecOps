@@ -199,7 +199,8 @@ export function patchActiveContext(
   patch: (snapshot: ContextSnapshot) => ContextSnapshot,
 ): AppDomainState {
   const contextId = state.contexts.activeContextId;
-  const current = getContextSnapshotById(state, contextId) ?? state.contexts.notepad;
+  const resolved = getContextSnapshotById(state, contextId);
+  const current = resolved ?? state.contexts.notepad;
   const nextSnapshot = patch(current);
   if (nextSnapshot === current) {
     return state;
@@ -221,6 +222,17 @@ export function patchActiveContext(
         chatHttp: nextSnapshot,
       },
     };
+  }
+  if (!resolved) {
+    // `activeContextId` dangles: reads fell back to the notepad snapshot above, but
+    // no workspace owns this id, so the computed patch has nowhere to land and is
+    // silently dropped. This is always a bug — surface it instead of swallowing
+    // the write (which would otherwise turn a dangling-id regression into silent
+    // data loss). `patchContextById` returns early for the same reason.
+    console.warn(
+      `[spec-ops] patchActiveContext: active context "${contextId}" is not registered; update discarded.`,
+    );
+    return state;
   }
   return {
     ...state,

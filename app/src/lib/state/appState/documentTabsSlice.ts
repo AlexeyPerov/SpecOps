@@ -1,4 +1,4 @@
-import type { AppDomainState, ContextId } from "../../domain/contracts";
+import type { AppDomainState, ContextId, TabState } from "../../domain/contracts";
 import {
   allTabs,
   createFileTab,
@@ -16,6 +16,7 @@ import {
   tabDocumentId,
 } from "../../domain/contracts";
 import { findNextOpenSessionTabAfterClose } from "../../services/workspaceAgentSession";
+import { getDocumentByIdMap } from "../../services/tabDocumentLookup";
 import { isGitIntegrationEnabled } from "../../services/gitIntegrationSettings";
 import {
   findDocumentByPath,
@@ -42,6 +43,36 @@ import {
 } from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
+
+/**
+ * Confirm closing dirty tabs in one pass. Builds a normalized tab-id map and a
+ * document-id map once (O(n)) instead of re-normalizing the whole tab array and
+ * scanning every document per candidate tab (O(n²)).
+ */
+function confirmDirtyTabsInPane(
+  snapshot: AppDomainState,
+  paneTabs: readonly TabState[],
+  tabIds: readonly string[],
+  confirm: (message: string) => boolean,
+): boolean {
+  const tabById = new Map<string, TabState>();
+  for (const rawTab of paneTabs) {
+    const tab = normalizeTabState(rawTab);
+    tabById.set(tab.id, tab);
+  }
+  const documentById = getDocumentByIdMap(getActiveDocuments(snapshot));
+  for (const tabId of tabIds) {
+    const tab = tabById.get(tabId);
+    if (!tab || !isFileTab(tab)) {
+      continue;
+    }
+    const doc = documentById.get(tab.documentId);
+    if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 export function createDocumentTabsLifecycleSlice(deps: {
   update: AppStateUpdate;
@@ -239,23 +270,12 @@ export function createDocumentTabsLifecycleSlice(deps: {
       if (!owner) {
         return false;
       }
-      const tabs = owner.pane.tabs;
-      const tabIds = tabIdsToCloseOtherThan(tabs, contextTabId);
+      const tabIds = tabIdsToCloseOtherThan(owner.pane.tabs, contextTabId);
       if (tabIds.length === 0) {
         return false;
       }
-
-      for (const tabId of tabIds) {
-        const tab = tabs
-          .map((rawTab) => normalizeTabState(rawTab))
-          .find((entry) => entry.id === tabId);
-        if (!tab || !isFileTab(tab)) {
-          continue;
-        }
-        const doc = getActiveDocuments(snapshot).find((documentState) => documentState.id === tab.documentId);
-        if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
-          return false;
-        }
+      if (!confirmDirtyTabsInPane(snapshot, owner.pane.tabs, tabIds, confirm)) {
+        return false;
       }
 
       update((state) => closeTabsForce(state, tabIds, contextTabId));
@@ -267,23 +287,12 @@ export function createDocumentTabsLifecycleSlice(deps: {
       if (!owner) {
         return false;
       }
-      const tabs = owner.pane.tabs;
-      const tabIds = tabIdsToCloseToRightOf(tabs, contextTabId);
+      const tabIds = tabIdsToCloseToRightOf(owner.pane.tabs, contextTabId);
       if (tabIds.length === 0) {
         return false;
       }
-
-      for (const tabId of tabIds) {
-        const tab = tabs
-          .map((rawTab) => normalizeTabState(rawTab))
-          .find((entry) => entry.id === tabId);
-        if (!tab || !isFileTab(tab)) {
-          continue;
-        }
-        const doc = getActiveDocuments(snapshot).find((documentState) => documentState.id === tab.documentId);
-        if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
-          return false;
-        }
+      if (!confirmDirtyTabsInPane(snapshot, owner.pane.tabs, tabIds, confirm)) {
+        return false;
       }
 
       update((state) => closeTabsForce(state, tabIds, contextTabId));
@@ -295,23 +304,12 @@ export function createDocumentTabsLifecycleSlice(deps: {
       if (!owner) {
         return false;
       }
-      const tabs = owner.pane.tabs;
-      const tabIds = tabIdsToCloseToLeftOf(tabs, contextTabId);
+      const tabIds = tabIdsToCloseToLeftOf(owner.pane.tabs, contextTabId);
       if (tabIds.length === 0) {
         return false;
       }
-
-      for (const tabId of tabIds) {
-        const tab = tabs
-          .map((rawTab) => normalizeTabState(rawTab))
-          .find((entry) => entry.id === tabId);
-        if (!tab || !isFileTab(tab)) {
-          continue;
-        }
-        const doc = getActiveDocuments(snapshot).find((documentState) => documentState.id === tab.documentId);
-        if (doc?.isDirty && !confirm(`Close ${doc.title} without saving?`)) {
-          return false;
-        }
+      if (!confirmDirtyTabsInPane(snapshot, owner.pane.tabs, tabIds, confirm)) {
+        return false;
       }
 
       update((state) => closeTabsForce(state, tabIds, contextTabId));

@@ -30,4 +30,15 @@ describe("validateGitRefName", () => {
       message: "Branch name cannot be '@'.",
     });
   });
+
+  it("rejects a leading dash so the name cannot be parsed as a flag", () => {
+    expect(validateGitRefName("-d")).toEqual({
+      ok: false,
+      message: "Branch name cannot start with '-'.",
+    });
+    expect(validateGitRefName("--delete")).toEqual({
+      ok: false,
+      message: "Branch name cannot start with '-'.",
+    });
+  });
 });

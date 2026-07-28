@@ -76,6 +76,16 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     window.removeEventListener("keydown", onWindowKeydown);
   }
 
+  /**
+   * Detach the capture-phase window listeners unconditionally. Called from the
+   * host's unmount lifecycle so a menu left open when the host is destroyed does
+   * not leak `pointerdown`/`keydown` handlers for the page lifetime.
+   */
+  function detach(): void {
+    window.removeEventListener("pointerdown", onWindowPointerDown);
+    window.removeEventListener("keydown", onWindowKeydown);
+  }
+
   function open(workspaceId: ContextId, x: number, y: number): void {
     deps.setMenu({ workspaceId, x, y });
     window.addEventListener("pointerdown", onWindowPointerDown);
@@ -174,6 +184,7 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
   return {
     open,
     close,
+    detach,
     menuIndex,
     move,
     closeWorkspace,

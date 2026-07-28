@@ -252,9 +252,25 @@ export function findTabOwner(
   return null;
 }
 
+/**
+ * The active pane, or the first pane when `activePaneId` does not match.
+ *
+ * A layout invariant guarantees at least one pane, so this never returns
+ * `undefined` in practice. The empty-panes case throws rather than silently
+ * returning `undefined` (which the `EditorPane` return type forbids) so a future
+ * regression that produces an empty `panes` array surfaces here instead of
+ * crashing later with an opaque "cannot read property of undefined".
+ */
 export function activePane(layout: EditorLayout): EditorPane {
   const pane = layout.panes.find((entry) => entry.id === layout.activePaneId);
-  return pane ?? layout.panes[0];
+  if (pane) {
+    return pane;
+  }
+  const first = layout.panes[0];
+  if (!first) {
+    throw new Error("activePane: layout has no panes (editor layout invariant violated)");
+  }
+  return first;
 }
 
 export function activePaneTabs(layout: EditorLayout): TabState[] {
@@ -552,8 +568,8 @@ export function setActivePaneInLayout(layout: EditorLayout, paneId: string): Edi
 
 /**
  * Append a tab to the active pane (or a specific pane). If a tab with the same
- * id already exists anywhere, this is a no-op (caller is expected to focus it
- * via selectTabInLayout instead).
+ * id already exists in the target pane, this is a no-op (returns the layout
+ * unchanged) so a caller trusting the doc comment cannot mint duplicate tab ids.
  */
 export function appendTabToPane(
   layout: EditorLayout,
@@ -562,6 +578,9 @@ export function appendTabToPane(
 ): EditorLayout {
   const targetId = paneId ?? layout.activePaneId;
   const pane = findPane(layout, targetId) ?? activePane(layout);
+  if (pane.tabs.some((entry) => entry.id === tab.id)) {
+    return layout;
+  }
   const nextPane: EditorPane = {
     ...pane,
     tabs: [...pane.tabs, tab],

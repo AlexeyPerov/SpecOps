@@ -209,7 +209,9 @@
   /**
    * M7.1 / M7.2 pickers read from the live editor host queries. Host queries
    * are not Svelte-reactive, so while a picker is open we refresh on a short
-   * interval (mirrors the MarkdownOutlinePanel polling approach).
+   * interval (mirrors the MarkdownOutlinePanel polling approach). 500 ms matches
+   * the outline panel and avoids re-ranking the whole heading list five times a
+   * second (the previous 200 ms tick) while a picker is open.
    */
   let landmarkPickerTick = $state(0);
   $effect(() => {
@@ -218,7 +220,7 @@
     }
     const interval = setInterval(() => {
       landmarkPickerTick += 1;
-    }, 200);
+    }, 500);
     return () => clearInterval(interval);
   });
 

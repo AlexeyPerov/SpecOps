@@ -125,7 +125,13 @@ export function parseCommitDecorators(raw: string): CommitDecorator[] {
   const refs: CommitDecorator[] = [];
   for (const segment of trimmed.split(",")) {
     const decorator = segment.trim();
-    if (!decorator || decorator.endsWith("/HEAD")) {
+    if (!decorator) {
+      continue;
+    }
+    // Skip the remote symbolic default-branch pointer (`refs/remotes/<remote>/HEAD`):
+    // it is redundant noise, not a real branch tip. A local branch literally named
+    // e.g. `feature/HEAD` is valid and is kept (only the remote form is suppressed).
+    if (decorator.startsWith("refs/remotes/") && decorator.endsWith("/HEAD")) {
       continue;
     }
 
@@ -760,10 +766,16 @@ export function mergeTagRemotePresence(
 
 function decodeGitQuotedPath(inner: string): string {
   const bytes: number[] = [];
+  const encoder = new TextEncoder();
   for (let index = 0; index < inner.length; index += 1) {
     const char = inner[index]!;
     if (char !== "\\" || index + 1 >= inner.length) {
-      bytes.push(char.charCodeAt(0));
+      // git's quoted literal portion is ASCII (non-ASCII bytes arrive as octal
+      // escapes), but encode each char as UTF-8 defensively so a stray non-ASCII
+      // char is not truncated by `charCodeAt(0)` for code points > 255.
+      for (const byte of encoder.encode(char)) {
+        bytes.push(byte);
+      }
       continue;
     }
 
@@ -790,6 +802,11 @@ function decodeGitQuotedPath(inner: string): string {
         index += 1;
         continue;
       default: {
+        // git's quoting (`quote_c.c`) only emits `\n \t \r \" \\` and octal escapes
+        // for other bytes — it never emits `\a \b \f \v`. Treat any other `\x` as a
+        // literal backslash followed by `x` (push the backslash here; `x` is handled
+        // on the next loop iteration), which also keeps Windows path separators
+        // (`\folder`, `\build`) intact instead of misreading `\f`/`\b` as escapes.
         const octalMatch = /^[0-7]{1,3}/.exec(inner.slice(index + 1));
         if (octalMatch) {
           bytes.push(Number.parseInt(octalMatch[0], 8));
@@ -814,18 +831,43 @@ function unquotePorcelainPath(raw: string): string {
 }
 
 function parsePorcelainPathPart(pathPart: string): string {
-  const unquoted = unquotePorcelainPath(pathPart);
-  const arrowMatch = /^(.+?) -> (.+)$/.exec(unquoted);
-  if (arrowMatch) {
-    return normalizeRepoRelativePath(unquotePorcelainPath(arrowMatch[2]));
+  // A rename/copy row is `OLD -> NEW`, where each side may independently be a
+  // quoted path (`"a b.txt" -> "c d.txt"`). Split on the arrow *before* unquoting
+  // so the surrounding quotes are not collapsed into one path and a path that
+  // literally contains ` -> ` (e.g. `a -> b.txt`) survives intact.
+  const arrowIndex = findPorcelainRenameArrow(pathPart);
+  if (arrowIndex !== -1) {
+    const afterArrow = pathPart.slice(arrowIndex + " -> ".length);
+    return normalizeRepoRelativePath(unquotePorcelainPath(afterArrow));
   }
 
-  const tabIndex = unquoted.indexOf("\t");
+  const tabIndex = pathPart.indexOf("\t");
   if (tabIndex !== -1) {
-    return normalizeRepoRelativePath(unquotePorcelainPath(unquoted.slice(tabIndex + 1)));
+    return normalizeRepoRelativePath(unquotePorcelainPath(pathPart.slice(tabIndex + 1)));
   }
 
-  return normalizeRepoRelativePath(unquoted);
+  return normalizeRepoRelativePath(unquotePorcelainPath(pathPart));
+}
+
+/**
+ * Locate the ` -> ` rename arrow in a porcelain v1 path part without matching an
+ * arrow that lives inside a quoted path. Quoted segments are delimited by `"`
+ * and may contain spaces (but not a raw ` -> ` that spans the closing+opening
+ * quotes); an unquoted arrow is only valid between two complete path tokens.
+ */
+function findPorcelainRenameArrow(pathPart: string): number {
+  let inQuotes = false;
+  for (let i = 0; i < pathPart.length; i += 1) {
+    const ch = pathPart[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (!inQuotes && ch === " " && pathPart.slice(i, i + 4) === " -> ") {
+      return i;
+    }
+  }
+  return -1;
 }
 
 /** Parse `git status --porcelain` v1 stdout into working-tree rows. */

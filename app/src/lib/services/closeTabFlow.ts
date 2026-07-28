@@ -7,10 +7,49 @@ import {
   tabIdsToCloseToLeftOf,
   tabIdsToCloseToRightOf,
 } from "../state/appState/tabHelpers";
+import { clearDocumentExternalChangeState } from "./externalFileChanges";
 import { saveDocumentForClose, saveDocumentKeepingTab, type SaveDocumentDeps } from "./documentSave";
 import { needsCloseConfirmation, promptUnsavedClose } from "./unsavedClosePrompt";
 
 export type CloseTabFlowDeps = SaveDocumentDeps;
+
+/**
+ * After closing tabs, drop external-change bookkeeping for any file document that
+ * is no longer referenced by a tab anywhere in the active session. Keeps the
+ * deferred-dirty / in-flight / self-write maps from retaining entries for closed
+ * documents for the rest of the session (L20/L28).
+ */
+function pruneUnreferencedDocumentExternalChangeState(closedTabs: TabState[]): void {
+  const closedFileDocs = new Map<string, string | null>();
+  for (const tab of closedTabs) {
+    if (isFileTab(tab)) {
+      const docId = tabDocumentId(tab);
+      if (docId && !closedFileDocs.has(docId)) {
+        closedFileDocs.set(docId, null);
+      }
+    }
+  }
+  if (closedFileDocs.size === 0) {
+    return;
+  }
+  const snapshot = appState.getSnapshot();
+  const stillOpenDocIds = new Set<string>();
+  for (const tab of allTabs(getActiveSession(snapshot).editorLayout)) {
+    if (isFileTab(tab)) {
+      const docId = tabDocumentId(tab);
+      if (docId) {
+        stillOpenDocIds.add(docId);
+      }
+    }
+  }
+  for (const docId of closedFileDocs.keys()) {
+    if (stillOpenDocIds.has(docId)) {
+      continue;
+    }
+    const doc = getActiveDocuments(snapshot).find((entry) => entry.id === docId);
+    clearDocumentExternalChangeState(docId, doc?.filePath ?? undefined);
+  }
+}
 
 async function resolveCloseDirtyDocument(
   document: DocumentState,
@@ -62,9 +101,11 @@ export async function closeTabWithUnsavedPrompt(
 
   if (options?.forceClose ?? true) {
     appState.closeTabForce(tabId);
+    pruneUnreferencedDocumentExternalChangeState([tab]);
     return true;
   }
   appState.closeTab(tabId);
+  pruneUnreferencedDocumentExternalChangeState([tab]);
   // `closeTab` intentionally no-ops when the pane has only one tab. Report
   // failure so callers do not claim success after a save-prompt that closed nothing.
   const stillOpen = findTabOwner(getActiveSession(appState.getSnapshot()).editorLayout, tabId);
@@ -79,9 +120,14 @@ export async function closeTabsWithUnsavedPrompt(
   const snapshot = appState.getSnapshot();
   const openTabs = allTabs(getActiveSession(snapshot).editorLayout);
 
+  const closingTabs: TabState[] = [];
   for (const tabId of tabIds) {
     const tab = openTabs.find((entry) => entry.id === tabId);
-    if (!tab || !isFileTab(tab)) {
+    if (!tab) {
+      continue;
+    }
+    closingTabs.push(tab);
+    if (!isFileTab(tab)) {
       continue;
     }
     const documentId = tabDocumentId(tab);
@@ -98,6 +144,7 @@ export async function closeTabsWithUnsavedPrompt(
   }
 
   appState.closeTabsByIds(tabIds, selectedTabIdAfter);
+  pruneUnreferencedDocumentExternalChangeState(closingTabs);
   return true;
 }
 

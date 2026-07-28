@@ -138,8 +138,11 @@
         }
 
         try {
-          await createStash(repoRoot, `WIP before checkout to ${branchName}`);
-          stashedRef = "stash@{0}";
+          // `createStash` resolves the stable SHA of the freshly-created stash
+          // (`git rev-parse --verify stash@{0}`) so the later apply targets that
+          // exact entry instead of the positional `stash@{0}`, which would race
+          // if another stash landed in between.
+          stashedRef = await createStash(repoRoot, `WIP before checkout to ${branchName}`);
         } catch (error) {
           actionError = reportGitError(error, { operation: "Stash", repoRoot, notify });
           return;

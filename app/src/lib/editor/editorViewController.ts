@@ -120,6 +120,7 @@ export function createEditorViewController(
   let lastZoomPercent: number | null = null;
 
   let applyingScroll = false;
+  let applyingScrollRaf: ReturnType<typeof requestAnimationFrame> | null = null;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let detachScrollListener: (() => void) | null = null;
 
@@ -146,7 +147,11 @@ export function createEditorViewController(
     }
     applyingScroll = true;
     view.scrollDOM.scrollTop = nextScrollTop;
-    requestAnimationFrame(() => {
+    if (applyingScrollRaf !== null) {
+      cancelAnimationFrame(applyingScrollRaf);
+    }
+    applyingScrollRaf = requestAnimationFrame(() => {
+      applyingScrollRaf = null;
       applyingScroll = false;
     });
   }
@@ -701,6 +706,10 @@ export function createEditorViewController(
     if (scrollSaveTimer) {
       clearTimeout(scrollSaveTimer);
       scrollSaveTimer = null;
+    }
+    if (applyingScrollRaf !== null) {
+      cancelAnimationFrame(applyingScrollRaf);
+      applyingScrollRaf = null;
     }
     // Cached EditorStates bind to this controller's Compartment instances, so
     // every session this controller wrote must be invalidated on teardown —

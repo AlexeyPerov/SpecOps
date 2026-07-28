@@ -38,9 +38,13 @@
   let activeTab = $state<SettingsDialogTab>("editor");
   let filterQuery = $state("");
 
-  const settingsSidebar = $derived(
-    buildSettingsSidebar($appState.settings.chatHttp, $appState.settings.opencode),
-  );
+  // Read only the specific settings slices this view depends on so the deep-link
+  // effect below does not re-run on every `$appState` emit (which would otherwise
+  // re-snap `activeTab` and clear `filterQuery` while the user is typing).
+  const chatHttpSettings = $derived($appState.settings.chatHttp);
+  const opencodeSettings = $derived($appState.settings.opencode);
+
+  const settingsSidebar = $derived(buildSettingsSidebar(chatHttpSettings, opencodeSettings));
   const filteredSettingsSidebar = $derived(
     filterSettingsSidebar(settingsSidebar, filterQuery),
   );
@@ -57,8 +61,8 @@
     if (subTab) {
       const resolved = resolveOpenSettingsDialogTab(
         subTab as SettingsDialogTab,
-        $appState.settings.chatHttp,
-        $appState.settings.opencode,
+        chatHttpSettings,
+        opencodeSettings,
       );
       activeTab = resolved;
       filterQuery = "";

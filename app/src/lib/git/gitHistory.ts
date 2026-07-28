@@ -119,6 +119,10 @@ export async function queryCommits(
 export async function queryCommitDetail(repoRoot: string, sha: string): Promise<CommitDetail> {
   const response = await runGit(repoRoot, [
     "show",
+    // Match `queryCommits`/`queryStashes`: suppress interleaved gpg signature
+    // lines when `log.showSignature = true`, which the fixed-NUL metadata scan
+    // cannot tolerate.
+    "--no-show-signature",
     "--name-status",
     `--format=${GIT_SHOW_FORMAT}`,
     sha,
@@ -178,6 +182,7 @@ export async function queryCommitFileDiff(
       : [
           "show",
           "--no-color",
+          "--no-show-signature",
           "--patch",
           `--unified=${DIFF_CONTEXT_LINES}`,
           sha,

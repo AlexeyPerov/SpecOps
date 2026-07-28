@@ -78,6 +78,12 @@ export async function requestMergeTabAck(
       finish(event.payload);
     })
       .then(async (fn) => {
+        // If the timeout already fired before registration completed, detach the
+        // listener immediately so it does not leak for the process lifetime.
+        if (settled) {
+          void fn();
+          return;
+        }
         unlisten = fn;
         try {
           await emitTo<MergeTabPayload>(targetWindowId, WINDOW_EVENT_MERGE_TAB, payload);

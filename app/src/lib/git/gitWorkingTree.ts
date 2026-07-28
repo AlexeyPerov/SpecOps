@@ -128,6 +128,7 @@ export async function stagePaths(repoRoot: string, paths: string[]): Promise<voi
   }
 
   const response = await runGit(repoRoot, ["add", "--", ...asLiteralPathspecs(paths)]);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -136,6 +137,7 @@ export async function stagePaths(repoRoot: string, paths: string[]): Promise<voi
 /** Stage all unstaged changes (`git add -A`). */
 export async function stageAll(repoRoot: string): Promise<void> {
   const response = await runGit(repoRoot, ["add", "-A"]);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -153,6 +155,7 @@ export async function unstagePaths(repoRoot: string, paths: string[]): Promise<v
     "--",
     ...asLiteralPathspecs(paths),
   ]);
+  assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -178,6 +181,8 @@ export async function queryWorkingTreeFileDiff(
       "diff",
       "--no-color",
       "--patch",
+      // Defeat a configured `diff.external` so output is always unified-diff format.
+      "--no-ext-diff",
       `--unified=${DIFF_CONTEXT_LINES}`,
       "--cached",
       "--",
@@ -191,6 +196,7 @@ export async function queryWorkingTreeFileDiff(
     "diff",
     "--no-color",
     "--patch",
+    "--no-ext-diff",
     `--unified=${DIFF_CONTEXT_LINES}`,
     "HEAD",
     "--",

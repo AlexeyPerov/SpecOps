@@ -36,7 +36,12 @@ pub enum SidecarHealthStatus {
     Unknown,
     Checking,
     Healthy,
-    Unhealthy,
+    /// The sidecar is running but failing its health probe. Serializes to
+    /// `"degraded"` to match the frontend `SidecarHealthStatus` union and the
+    /// shared `OpencodeHealthStatus` mapping (the previous `Unhealthy` variant
+    /// serialized to `"unhealthy"`, which the frontend union omitted, so a
+    /// degraded sidecar was reported as `"unknown"`).
+    Degraded,
     Error,
 }
 
@@ -289,9 +294,16 @@ fn spawn_sidecar_process(
     app: &AppHandle,
     port: u16,
     hostname: &str,
+    directory: Option<&str>,
 ) -> Result<Child, OpencodeSidecarError> {
     let binary = resolve_opencode_binary(app)?;
 
+    // NOTE: there is an inherent TOCTOU window between this availability check and
+    // `.spawn()` — another process could claim the port in between. That is
+    // acceptable here: `install_child` + `poll_health_in_background` detect a
+    // non-healthy child and tear it down, so the worst case is a short-lived bad
+    // spawn, not a stuck one. The probe above only exists to surface a clear
+    // "port in use" error instead of a generic launch failure.
     if !is_port_available(port) {
         let base_url = build_base_url(hostname, port);
         match probe_health_detailed(&base_url) {
@@ -326,9 +338,20 @@ fn spawn_sidecar_process(
         .arg("--hostname")
         .arg(hostname)
         .arg("--port")
-        .arg(port.to_string())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped());
+        .arg(port.to_string());
+    // Run the sidecar with the workspace as its working directory. Without this,
+    // a bundled macOS app inherits a cwd of `/`, so the sidecar resolves relative
+    // paths against the filesystem root rather than the active workspace.
+    if let Some(dir) = directory {
+        if !dir.trim().is_empty() {
+            if let Ok(resolved) = Path::new(dir).canonicalize() {
+                command.current_dir(&resolved);
+            } else {
+                command.current_dir(dir);
+            }
+        }
+    }
+    command.stdout(Stdio::null()).stderr(Stdio::piped());
 
     let mut child = command.spawn().map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
@@ -345,9 +368,45 @@ fn spawn_sidecar_process(
 
     if let Some(stderr) = child.stderr.take() {
         thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines().map_while(Result::ok) {
+            let mut reader = BufReader::new(stderr);
+            // Cap each line so a pathological binary emitting huge lines without
+            // newlines cannot grow the log unboundedly, and stop logging after a
+            // burst so a chatty sidecar does not flood the log for the session.
+            const MAX_SIDECAR_LOG_LINE_LEN: usize = 2048;
+            const MAX_SIDECAR_LOG_LINES: usize = 4096;
+            let mut logged = 0usize;
+            let mut raw = Vec::new();
+            loop {
+                raw.clear();
+                let bytes = match reader.read_until(b'\n', &mut raw) {
+                    Ok(0) => break,
+                    Ok(n) => n,
+                    Err(_) => break,
+                };
+                let mut line = String::from_utf8_lossy(&raw[..bytes]).into_owned();
+                let line_len = line.len();
+                let capped = logged >= MAX_SIDECAR_LOG_LINES;
+                if capped {
+                    if logged == MAX_SIDECAR_LOG_LINES {
+                        log::warn!(
+                            "[opencode-sidecar] suppressing further stderr output (line cap reached)"
+                        );
+                    }
+                    // Keep counting but do not log; draining continues so the child
+                    // is not blocked on a full stderr pipe.
+                    logged += 1;
+                    continue;
+                }
+                if line_len > MAX_SIDECAR_LOG_LINE_LEN {
+                    let mut end = MAX_SIDECAR_LOG_LINE_LEN;
+                    while end > 0 && !line.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    line.truncate(end);
+                    line.push_str("…[truncated]");
+                }
                 log::warn!("[opencode-sidecar] {line}");
+                logged += 1;
             }
         });
     }
@@ -391,7 +450,7 @@ fn poll_health_in_background(
                 inner.child = None;
                 next_child_generation(&mut inner);
                 inner.directory = None;
-                inner.health = SidecarHealthStatus::Unhealthy;
+                inner.health = SidecarHealthStatus::Degraded;
                 inner.last_error = Some(OpencodeSidecarError::LaunchFailure {
                     message: "OpenCode sidecar process exited before health check succeeded"
                         .to_string(),
@@ -480,7 +539,7 @@ fn refresh_child_state(inner: &mut OpencodeSidecarInner) {
             inner.child = None;
             next_child_generation(inner);
             inner.directory = None;
-            inner.health = SidecarHealthStatus::Unhealthy;
+            inner.health = SidecarHealthStatus::Degraded;
             inner.last_error = Some(OpencodeSidecarError::StaleProcess {
                 message: "OpenCode sidecar process is no longer running".to_string(),
             });
@@ -597,7 +656,7 @@ fn start_or_attach_nonblocking(
         })?;
         let port = inner.port;
         let hostname = inner.hostname.clone();
-        let child = spawn_sidecar_process(app, port, &hostname)?;
+        let child = spawn_sidecar_process(app, port, &hostname, Some(&directory))?;
         let generation = install_child(&mut inner, child);
         inner.directory = Some(directory);
         inner.health = SidecarHealthStatus::Checking;
@@ -709,7 +768,7 @@ pub fn opencode_sidecar_status(
         if probe_health(url) {
             SidecarHealthStatus::Healthy
         } else {
-            SidecarHealthStatus::Unhealthy
+            SidecarHealthStatus::Degraded
         }
     });
 

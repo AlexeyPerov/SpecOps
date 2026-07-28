@@ -11,7 +11,7 @@
  */
 
 import { join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import { normalizePathSync } from "./diskFingerprint";
 import { logDiagnostic } from "./logging";
@@ -112,12 +112,18 @@ interface PersistenceShim {
 async function defaultWorkspacePersistence(workspaceRoot: string): Promise<PersistenceShim> {
   const base = await ensureSpecOpsDataDir();
   const dir = await join(base, HISTORY_DIR_NAME);
+  // Ensure the per-workspace history directory exists — without this the first
+  // `writeTextFile` always failed into the swallowing catch below, so prompt
+  // history could never be persisted.
+  await mkdir(dir, { recursive: true });
   const normalized = normalizePathSync(workspaceRoot);
-  // Filename uses a sanitized hash of the workspace path so two workspaces
-  // never collide. `normalizePathSync` already returns a stable form; we
-  // additionally strip path separators for a flat filename.
-  const safe = normalized.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 120);
-  const file = await join(dir, `${safe || "default"}.json`);
+  // Filename derives from a stable hash of the full workspace path so two
+  // workspaces never collide (a plain truncation of the sanitized path collided
+  // for long paths sharing the first ~120 sanitized characters). A short
+  // sanitized prefix keeps the file recognizable when browsing the directory.
+  const hash = hashWorkspacePath(normalized);
+  const prefix = normalized.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32);
+  const file = await join(dir, `${prefix || "default"}-${hash}.json`);
   return {
     async load() {
       try {
@@ -145,6 +151,19 @@ async function defaultWorkspacePersistence(workspaceRoot: string): Promise<Persi
       }
     },
   };
+}
+
+/**
+ * Stable 32-bit djb2 hash of the workspace path, rendered as base36. Two
+ * different workspace paths collide with negligible probability (~1 in 2^32),
+ * which is the point: a truncated sanitized path does not have that guarantee.
+ */
+function hashWorkspacePath(path: string): string {
+  let hash = 5381;
+  for (let i = 0; i < path.length; i += 1) {
+    hash = ((hash << 5) + hash + path.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36);
 }
 
 /**

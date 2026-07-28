@@ -1,7 +1,9 @@
 use crate::git_askpass;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Read;
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -843,14 +845,24 @@ fn string_exceeds_output_limit(value: &str) -> bool {
     value.len() > MAX_GIT_OUTPUT_BYTES
 }
 
-fn apply_output_limit(response: &mut RunGitResponse) -> Result<(), String> {
-    if string_exceeds_output_limit(&response.stdout) || string_exceeds_output_limit(&response.stderr)
-    {
-        return Err(format!(
-            "git output exceeded limit of {MAX_GIT_OUTPUT_BYTES} bytes"
+/// Truncate any stream that breached the byte limit, leaving the partial output in
+/// place and appending a visible marker. Discarding the whole result (the previous
+/// behaviour) threw away a usable partial `git log`/`git show` just because the last
+/// stream crossed the threshold; callers that need a hard failure can still detect
+/// the breach via [`string_exceeds_output_limit`] on the truncated body.
+fn apply_output_limit(response: &mut RunGitResponse) {
+    if string_exceeds_output_limit(&response.stdout) {
+        response.stdout.truncate(MAX_GIT_OUTPUT_BYTES);
+        response.stdout.push_str(&format!(
+            "\n\n[output truncated: exceeded {MAX_GIT_OUTPUT_BYTES} byte limit]\n"
         ));
     }
-    Ok(())
+    if string_exceeds_output_limit(&response.stderr) {
+        response.stderr.truncate(MAX_GIT_OUTPUT_BYTES);
+        response.stderr.push_str(&format!(
+            "\n\n[output truncated: exceeded {MAX_GIT_OUTPUT_BYTES} byte limit]\n"
+        ));
+    }
 }
 
 fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<String, String> {
@@ -871,16 +883,25 @@ fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<Strin
             continue;
         }
         if buf.len() + read > max_bytes {
+            // Take only what fits, then keep draining the rest to EOF.
+            let remaining = max_bytes.saturating_sub(buf.len());
+            buf.extend_from_slice(&chunk[..remaining]);
             exceeded = true;
             continue;
         }
         buf.extend_from_slice(&chunk[..read]);
     }
 
+    let mut text = decode_utf8(&buf);
     if exceeded {
-        return Err(format!("git output exceeded limit of {max_bytes} bytes"));
+        // Preserve the partial output instead of discarding the whole stream — a
+        // huge `git log`/`git show` is still useful truncated. The marker lets
+        // callers and users see that the tail was dropped.
+        text.push_str(&format!(
+            "\n\n[output truncated: exceeded {max_bytes} byte limit]\n"
+        ));
     }
-    Ok(decode_utf8(&buf))
+    Ok(text)
 }
 
 /// Spawn git, drain stdout/stderr with the byte limit, and wait for exit.
@@ -1137,16 +1158,7 @@ pub fn execute_git_with_full_options(
             cancelled,
             timed_out: output.timed_out,
         };
-        if let Err(error) = apply_output_limit(&mut response) {
-            return RunGitResponse {
-                exit_code: -1,
-                stdout: String::new(),
-                stderr: error,
-                duration_ms: start.elapsed().as_millis() as u64,
-                cancelled: false,
-                timed_out: false,
-            };
-        }
+        apply_output_limit(&mut response);
         response
     } else {
         match run_command_with_limited_output(build_git_command(repo_root, args, &effective_env)) {
@@ -1161,16 +1173,7 @@ pub fn execute_git_with_full_options(
                     cancelled: false,
                     timed_out: false,
                 };
-                if let Err(error) = apply_output_limit(&mut response) {
-                    return RunGitResponse {
-                        exit_code: -1,
-                        stdout: String::new(),
-                        stderr: error,
-                        duration_ms: start.elapsed().as_millis() as u64,
-                        cancelled: false,
-                        timed_out: false,
-                    };
-                }
+                apply_output_limit(&mut response);
                 response
             }
             Err(error) => RunGitResponse {
@@ -1213,8 +1216,30 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
             .unwrap_or(0)
     ));
 
-    std::fs::write(&temp_path, request.message.as_bytes())
-        .map_err(|error| format!("Failed to write commit message file: {error}"))?;
+    // Create the message file exclusively (`O_EXCL`) with mode `0600`. This refuses
+    // a pre-planted symlink at the generated path (a planted regular file simply
+    // makes us retry with a new nanosecond timestamp on the next attempt) and keeps
+    // the commit message private to this user on shared temp directories.
+    #[cfg(unix)]
+    let write_result = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&temp_path)
+        .and_then(|mut file| file.write_all(request.message.as_bytes()));
+    #[cfg(not(unix))]
+    let write_result = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+        .and_then(|mut file| file.write_all(request.message.as_bytes()));
+
+    if let Err(error) = write_result {
+        // `create_new` may have succeeded before `write_all` failed — drop the empty
+        // file so the next attempt does not collide with it.
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(format!("Failed to write commit message file: {error}"));
+    }
 
     let temp_arg = git_message_file_arg(&temp_path);
     let response = execute_git_with_full_options(
@@ -1354,6 +1379,16 @@ pub fn remove_stale_index_lock(request: RemoveStaleIndexLockRequest) -> RemoveSt
         };
     }
 
+    // Confine the delete to paths that are actually git repositories. The lock file
+    // is only meaningful under `.git/` anyway, so a path without one is not a repo
+    // this command should touch — refuse rather than construct a stray `.git/`
+    // directory just to delete a file inside it.
+    if !repo_root.join(".git").exists() {
+        return RemoveStaleIndexLockResponse {
+            outcome: RemoveStaleIndexLockOutcome::Absent,
+        };
+    }
+
     let lock_path = repo_root.join(".git").join("index.lock");
     match std::fs::remove_file(&lock_path) {
         Ok(()) => {
@@ -1389,11 +1424,18 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
-    fn read_limited_stream_rejects_oversize_without_keeping_buffer() {
+    fn read_limited_stream_truncates_oversize_and_drains_to_eof() {
         let oversized = vec![b'x'; 64];
         let mut cursor = Cursor::new(oversized);
-        let err = read_limited_stream(&mut cursor, 16).expect_err("oversize must fail");
-        assert!(err.contains("exceeded limit"));
+        let text = read_limited_stream(&mut cursor, 16).expect("oversize truncates, not errors");
+        // Partial body preserved up to the limit, plus the truncation marker.
+        assert!(text.contains("output truncated"), "missing truncation marker: {text}");
+        let x_count = text.chars().filter(|c| *c == 'x').count();
+        // The cap is `max_bytes` (16); the full 64-byte input must not be retained.
+        assert!(
+            x_count < 64,
+            "body should be truncated, got {x_count} body bytes"
+        );
         // Cursor should be fully drained so a concurrent writer would not block.
         assert_eq!(cursor.position(), 64);
     }

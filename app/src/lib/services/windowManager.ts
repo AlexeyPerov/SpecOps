@@ -141,7 +141,13 @@ export async function createNewWindowWithTransfer(
           finish(null);
         }
       }).then((unlisten) => {
-        readyUnlisten = unlisten;
+        // If the timeout already fired before registration completed, detach the
+        // listener immediately so it does not leak for the process lifetime.
+        if (settled) {
+          void unlisten();
+        } else {
+          readyUnlisten = unlisten;
+        }
       });
 
       readyTimeoutId = setTimeout(() => finish(null), WINDOW_READY_TIMEOUT_MS);

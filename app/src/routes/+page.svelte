@@ -372,12 +372,22 @@
     // Refresh the Quick Open snapshot immediately on switch — a ready cached
     // catalog may never emit again, so waiting for an event would show the
     // old snapshot until the next filesystem change.
-    workspaceFileCatalogRevision += 1;
+    //
+    // F1: the writes must be untracked. In Svelte 5 `rev += 1` compiles to
+    // `$.set(rev, $.get(rev) + 1)`, and the tracked `$.get` inside this effect
+    // would make the effect its own dependency — it re-schedules forever and
+    // throws `effect_update_depth_exceeded` (including on mount, since this
+    // runs unconditionally).
+    untrack(() => {
+      workspaceFileCatalogRevision += 1;
+    });
     if (!catalog) {
       return;
     }
     return catalog.subscribe(() => {
-      workspaceFileCatalogRevision += 1;
+      untrack(() => {
+        workspaceFileCatalogRevision += 1;
+      });
     });
   });
 

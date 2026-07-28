@@ -69,7 +69,8 @@ const ALLOWED_SSH_OPTION_KEYS: &[&str] = &[
 /// `diff.external` and friends, each of which executes a program on the next git call.
 const ALLOWED_GIT_CONFIG_KEYS: &[&str] = &["user.email", "user.name"];
 
-/// Option prefixes that hand an "allowed" subcommand a program to execute.
+/// Option prefixes that hand an "allowed" subcommand a program to execute, or
+/// otherwise redirect git's output to an attacker-chosen path.
 ///
 /// Matched against the part before `=`, so both `--upload-pack=x` and
 /// `--upload-pack x` are caught.
@@ -80,6 +81,15 @@ const DENIED_GIT_ARG_PREFIXES: &[&str] = &[
     "--exec-path",    // relocates the git binary directory
     "--config-env",   // reads a config value out of an env var we did not vet
     "--ext-cmd",
+    // F3: `log`/`diff`/`show` are all allowlisted subcommands, and `--output=<path>`
+    // writes exactly the bytes git would have streamed to stdout to that path,
+    // truncating any existing file — an arbitrary file write outside every fs deny
+    // rule (e.g. `~/.zshrc`, a repo's `.git/config`).
+    "--output",
+    // F3: `init`/`clone --template=<dir>` run every hook under <dir> and can seed a
+    // `.git/config` with arbitrary `core.fsmonitor`/`core.hooksPath` (which execute
+    // on the next plain `git status`, bypassing the config-key allowlist entirely).
+    "--template",
 ];
 
 static GIT_EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
@@ -845,6 +855,25 @@ fn string_exceeds_output_limit(value: &str) -> bool {
     value.len() > MAX_GIT_OUTPUT_BYTES
 }
 
+/// Truncate `value` to at most `max_bytes` without splitting a multi-byte UTF-8
+/// character.
+///
+/// `String::truncate` panics when the requested index is not on a char boundary.
+/// `read_limited_stream` caps the raw byte buffer at the limit, then
+/// [`decode_utf8`] replaces each invalid byte with U+FFFD (up to 3 bytes), so the
+/// decoded string can overshoot the limit and land mid-character. Backing off to
+/// the previous char boundary avoids the panic (F2).
+fn truncate_to_byte_limit(value: &mut String, max_bytes: usize) {
+    if value.len() <= max_bytes {
+        return;
+    }
+    // `floor_char_boundary` (stable since 1.82) returns the largest index <= the
+    // requested byte that is a UTF-8 char boundary, so the subsequent truncate is
+    // always valid.
+    let boundary = value.floor_char_boundary(max_bytes);
+    value.truncate(boundary);
+}
+
 /// Truncate any stream that breached the byte limit, leaving the partial output in
 /// place and appending a visible marker. Discarding the whole result (the previous
 /// behaviour) threw away a usable partial `git log`/`git show` just because the last
@@ -852,13 +881,13 @@ fn string_exceeds_output_limit(value: &str) -> bool {
 /// the breach via [`string_exceeds_output_limit`] on the truncated body.
 fn apply_output_limit(response: &mut RunGitResponse) {
     if string_exceeds_output_limit(&response.stdout) {
-        response.stdout.truncate(MAX_GIT_OUTPUT_BYTES);
+        truncate_to_byte_limit(&mut response.stdout, MAX_GIT_OUTPUT_BYTES);
         response.stdout.push_str(&format!(
             "\n\n[output truncated: exceeded {MAX_GIT_OUTPUT_BYTES} byte limit]\n"
         ));
     }
     if string_exceeds_output_limit(&response.stderr) {
-        response.stderr.truncate(MAX_GIT_OUTPUT_BYTES);
+        truncate_to_byte_limit(&mut response.stderr, MAX_GIT_OUTPUT_BYTES);
         response.stderr.push_str(&format!(
             "\n\n[output truncated: exceeded {MAX_GIT_OUTPUT_BYTES} byte limit]\n"
         ));
@@ -892,6 +921,14 @@ fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<Strin
         buf.extend_from_slice(&chunk[..read]);
     }
 
+    // F2: a hard byte cap can split a multi-byte UTF-8 sequence. The raw buffer is
+    // at most `max_bytes` long, but `decode_utf8` replaces every stray byte with
+    // U+FFFD (up to 3 bytes), so the decoded string can overshoot the limit and a
+    // later `String::truncate` would land mid-character and panic. Back the buffer
+    // off to the longest UTF-8-valid prefix *before* decoding: the decoded result
+    // is then at most `max_bytes` bytes and downstream truncation is char-safe.
+    truncate_bytes_to_utf8_boundary(&mut buf, max_bytes);
+
     let mut text = decode_utf8(&buf);
     if exceeded {
         // Preserve the partial output instead of discarding the whole stream — a
@@ -902,6 +939,25 @@ fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<Strin
         ));
     }
     Ok(text)
+}
+
+/// Shrink `buf` to at most `max_bytes`, never splitting a multi-byte UTF-8
+/// sequence.
+///
+/// Valid UTF-8 continuation bytes are in `0x80..=0xBF` and a leading byte is
+/// `>= 0xC0`, so scanning backwards for the first leading byte yields the longest
+/// complete-character prefix. When the cut point is mid-sequence the trailing
+/// partial bytes are dropped (they are not useful output and the caller appends a
+/// truncation marker anyway).
+fn truncate_bytes_to_utf8_boundary(buf: &mut Vec<u8>, max_bytes: usize) {
+    if buf.len() <= max_bytes {
+        return;
+    }
+    let mut end = max_bytes;
+    while end > 0 && (buf[end] & 0xC0) == 0x80 {
+        end -= 1;
+    }
+    buf.truncate(end);
 }
 
 /// Spawn git, drain stdout/stderr with the byte limit, and wait for exit.
@@ -1446,6 +1502,58 @@ mod tests {
         let mut cursor = Cursor::new(data.as_slice());
         let text = read_limited_stream(&mut cursor, 64).expect("within limit");
         assert_eq!(text, "hello git");
+    }
+
+    /// F2: a byte cap that splits a multi-byte UTF-8 sequence must not produce a
+    /// mid-character string. Previously the raw bytes were cut at exactly the
+    /// limit, lossy-decoded (expanding stray bytes to U+FFFD), then
+    /// `String::truncate(MAX_GIT_OUTPUT_BYTES)` panicked because the cut landed
+    /// inside a character. This also exercises `apply_output_limit` on the result.
+    #[test]
+    fn read_limited_stream_never_splits_multibyte_char() {
+        // "é" is 0xC3 0xA9 in UTF-8. Repeating it many times exceeds a small cap
+        // and guarantees the cap lands between the two bytes of some character.
+        let pattern = "é".as_bytes();
+        let oversized: Vec<u8> = (0..1024).flat_map(|_| pattern.iter().copied()).collect();
+        let cap = 16; // even — guaranteed to land mid-character for 2-byte "é"
+        let mut cursor = Cursor::new(oversized.clone().into_boxed_slice());
+        let text = read_limited_stream(&mut cursor, cap).expect("truncates, not errors");
+        // Must not panic and must remain valid UTF-8 (decode_utf8 guarantees this,
+        // but the assertion documents the F2 invariant).
+        assert!(text.contains("output truncated"), "missing marker: {text}");
+
+        // `apply_output_limit` is the other panic site: feed it a decoded string
+        // whose byte length exceeds the limit (lossy expansion) and confirm it
+        // backs off to a char boundary instead of panicking.
+        let mut response = RunGitResponse {
+            exit_code: 0,
+            stdout: text,
+            stderr: String::new(),
+            duration_ms: 0,
+            cancelled: false,
+            timed_out: false,
+        };
+        apply_output_limit(&mut response);
+        assert!(response.stdout.len() <= MAX_GIT_OUTPUT_BYTES + 128);
+    }
+
+    #[test]
+    fn truncate_bytes_to_utf8_boundary_keeps_complete_chars() {
+        // "é" = 0xC3 0xA9. Cap of 3 keeps one full "é" (2 bytes) and drops the
+        // lone 0xA9 continuation byte of the second.
+        let mut buf = b"\xc3\xa9\xc3\xa9\xc3\xa9".to_vec();
+        truncate_bytes_to_utf8_boundary(&mut buf, 3);
+        assert_eq!(buf, b"\xc3\xa9");
+
+        // All-ASCII input truncates at the exact cap.
+        let mut buf = b"abcdef".to_vec();
+        truncate_bytes_to_utf8_boundary(&mut buf, 3);
+        assert_eq!(buf, b"abc");
+
+        // Buffer within the cap is untouched.
+        let mut buf = b"ab".to_vec();
+        truncate_bytes_to_utf8_boundary(&mut buf, 3);
+        assert_eq!(buf, b"ab");
     }
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -2082,6 +2190,13 @@ mod tests {
             vec!["push".into(), "--exec=/tmp/x.sh".into()],
             vec!["log".into(), "--config-env=core.pager=EVIL".into()],
             vec!["fetch".into(), "ext::sh -c /tmp/x.sh".into()],
+            // F3: --output writes git's stdout to an arbitrary path.
+            vec!["log".into(), "-1".into(), "--output=/tmp/evil".into()],
+            vec!["diff".into(), "--output=/tmp/evil".into()],
+            vec!["show".into(), "--output".into(), "/tmp/evil".into()],
+            // F3: --template runs hooks / seeds .git/config on init/clone.
+            vec!["init".into(), "--template=/tmp/evil".into()],
+            vec!["clone".into(), "--template=/tmp/evil".into(), "url".into()],
         ];
         for args in cases {
             assert!(

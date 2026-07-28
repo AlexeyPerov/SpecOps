@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window. The editor legitimately needs to read and write anywhere under $HOME, so the allow scopes stay broad; the deny lists remove the credential material a text editor has no reason to touch (private keys, cloud and registry tokens, keychains). Tauri applies deny before allow and merges fs plugin scopes, but the rules are repeated per permission so each grant is auditable on its own. Files people do hand-edit (~/.ssh/config, ~/.npmrc, ~/.aws/config) are deliberately left open.",
+  "description": "Capability for the main window. The editor legitimately needs to read and write anywhere under $HOME, so the allow scopes stay broad; the deny lists remove the credential material a text editor has no reason to touch (private keys, cloud and registry tokens, keychains) and the auto-executing files a write to which would amount to code execution (shell rc files, launch agents, git config). Tauri applies deny before allow and merges fs plugin scopes, but the rules are repeated per permission so each grant is auditable on its own. Files people do hand-edit (~/.ssh/config, ~/.npmrc, ~/.aws/config) are deliberately left open.",
   "windows": ["*"],
   "permissions": [
     "core:default",
@@ -14,13 +14,19 @@
         { "path": "$HOME/.ssh/id_*" },
         { "path": "$HOME/.ssh/*_rsa" },
         { "path": "$HOME/.ssh/*_ed25519" },
+        { "path": "$HOME/.ssh/*_ecdsa" },
+        { "path": "$HOME/.ssh/*_ecdsa-sk" },
+        { "path": "$HOME/.ssh/*_ed25519-sk" },
+        { "path": "$HOME/.ssh/*.pem" },
         { "path": "$HOME/.aws/credentials" },
+        { "path": "$HOME/.aws/sso/**" },
         { "path": "$HOME/.git-credentials" },
         { "path": "$HOME/.netrc" },
         { "path": "$HOME/.gnupg/**" },
         { "path": "$HOME/.docker/config.json" },
         { "path": "$HOME/.kube/config" },
         { "path": "$HOME/.config/gh/hosts.yml" },
+        { "path": "$HOME/.config/gcloud/**" },
         { "path": "$HOME/Library/Keychains/**" }
       ]
     },
@@ -31,13 +37,19 @@
         { "path": "$HOME/.ssh/id_*" },
         { "path": "$HOME/.ssh/*_rsa" },
         { "path": "$HOME/.ssh/*_ed25519" },
+        { "path": "$HOME/.ssh/*_ecdsa" },
+        { "path": "$HOME/.ssh/*_ecdsa-sk" },
+        { "path": "$HOME/.ssh/*_ed25519-sk" },
+        { "path": "$HOME/.ssh/*.pem" },
         { "path": "$HOME/.aws/credentials" },
+        { "path": "$HOME/.aws/sso/**" },
         { "path": "$HOME/.git-credentials" },
         { "path": "$HOME/.netrc" },
         { "path": "$HOME/.gnupg/**" },
         { "path": "$HOME/.docker/config.json" },
         { "path": "$HOME/.kube/config" },
         { "path": "$HOME/.config/gh/hosts.yml" },
+        { "path": "$HOME/.config/gcloud/**" },
         { "path": "$HOME/Library/Keychains/**" }
       ]
     },
@@ -58,7 +70,21 @@
         { "path": "$HOME/.docker/config.json" },
         { "path": "$HOME/.kube/**" },
         { "path": "$HOME/.config/gh/**" },
-        { "path": "$HOME/Library/Keychains/**" }
+        { "path": "$HOME/.config/gcloud/**" },
+        { "path": "$HOME/Library/Keychains/**" },
+        { "path": "**/.git/config" },
+        { "path": "**/.git/**" },
+        { "path": "$HOME/.zshrc" },
+        { "path": "$HOME/.zshenv" },
+        { "path": "$HOME/.zprofile" },
+        { "path": "$HOME/.zlogin" },
+        { "path": "$HOME/.bashrc" },
+        { "path": "$HOME/.bash_profile" },
+        { "path": "$HOME/.bash_login" },
+        { "path": "$HOME/.profile" },
+        { "path": "$HOME/.inputrc" },
+        { "path": "$HOME/.config/fish/config.fish" },
+        { "path": "$HOME/Library/LaunchAgents/**" }
       ]
     },
     {
@@ -70,7 +96,21 @@
         { "path": "$HOME/.gnupg/**" },
         { "path": "$HOME/.kube/**" },
         { "path": "$HOME/.config/gh/**" },
-        { "path": "$HOME/Library/Keychains/**" }
+        { "path": "$HOME/.config/gcloud/**" },
+        { "path": "$HOME/Library/Keychains/**" },
+        { "path": "**/.git/config" },
+        { "path": "**/.git/**" },
+        { "path": "$HOME/.zshrc" },
+        { "path": "$HOME/.zshenv" },
+        { "path": "$HOME/.zprofile" },
+        { "path": "$HOME/.zlogin" },
+        { "path": "$HOME/.bashrc" },
+        { "path": "$HOME/.bash_profile" },
+        { "path": "$HOME/.bash_login" },
+        { "path": "$HOME/.profile" },
+        { "path": "$HOME/.inputrc" },
+        { "path": "$HOME/.config/fish/config.fish" },
+        { "path": "$HOME/Library/LaunchAgents/**" }
       ]
     },
     {
@@ -86,7 +126,10 @@
         { "path": "$HOME/.gnupg/**" },
         { "path": "$HOME/.kube/**" },
         { "path": "$HOME/.config/gh/**" },
-        { "path": "$HOME/Library/Keychains/**" }
+        { "path": "$HOME/.config/gcloud/**" },
+        { "path": "$HOME/Library/Keychains/**" },
+        { "path": "**/.git/config" },
+        { "path": "$HOME/Library/LaunchAgents/**" }
       ]
     },
     {

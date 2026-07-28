@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-07-28 — Follow-up review Tier 0/1 (F1–F4)
+
+Fixes for the blocker and security tiers of the follow-up review in
+[`specs/code-review-follow-up-2026-07-28.md`](./code-review-follow-up-2026-07-28.md).
+
+### Tier 0 — Blockers
+
+- **Quick Open catalog effect invalidated itself on mount (F1).** The H32 fix incremented
+  `workspaceFileCatalogRevision` inside a subscribing `$effect`; in Svelte 5 `rev += 1`
+  tracks `$.get(rev)`, making the effect its own dependency and throwing
+  `effect_update_depth_exceeded` on mount. The two writes (initial refresh and the
+  catalog-subscribe callback) are now wrapped in `untrack`.
+- **`apply_output_limit` panicked on a mid-character truncation (F2).** `read_limited_stream`
+  caps raw bytes at the limit, then `from_utf8_lossy` expands each invalid byte to U+FFFD,
+  so a later `String::truncate(limit)` could land mid-character and panic — and since these
+  are `#[tauri::command(async)]` the IPC promise never resolved, hanging the UI. The byte
+  buffer is now backed off to a UTF-8-valid prefix before decoding, and `apply_output_limit`
+  truncates via `floor_char_boundary` so it is always char-safe.
+
+### Tier 1 — Security
+
+- **`--output`/`--template` were not denied git options (F3).** `log`/`diff`/`show` are
+  allowlisted subcommands, so `--output=<path>` wrote attacker-chosen bytes to any path
+  (e.g. `~/.zshrc`, a repo's `.git/config`) outside every fs deny rule, and
+  `init --template=<dir>` could seed a `.git/config` with executing keys. Both are added to
+  `DENIED_GIT_ARG_PREFIXES`, with regression coverage.
+- **Filesystem capability scope still reached shell rc files and git config (F4).** The write
+  scope now denies `**/.git/**`, shell rc files (`~/.zshrc`, `~/.bashrc`, `~/.profile`, …),
+  `~/Library/LaunchAgents/**` and `~/.config/gcloud/**`; the read deny list is extended to
+  cover `~/.ssh/*.pem`, ECDSA/ed25519-sk keys, `~/.aws/sso/**` and `~/.config/gcloud/**`;
+  and `plugins.fs.requireLiteralLeadingDot: true` is set in `tauri.conf.json` so that on
+  Windows `$HOME/**` no longer matches dotfiles like `.git/config`.
+
 ## 2026-07-28 — Low-severity review findings (L1–L31)
 
 Follow-up to the review in

@@ -270,6 +270,16 @@ describe("buildReplaceAllChanges", () => {
       { from: 3, to: 5, insert: "2b" },
     ]);
   });
+
+  it("accepts a CodeMirror Text without re-splitting a string", () => {
+    const doc = Text.of(["foo bar foo"]);
+    const { changes, count } = buildReplaceAllChanges(doc, lit("foo", { replacement: "baz" }));
+    expect(count).toBe(2);
+    expect(changes).toEqual([
+      { from: 0, to: 3, insert: "baz" },
+      { from: 8, to: 11, insert: "baz" },
+    ]);
+  });
 });
 
 describe("countMatches", () => {

@@ -304,18 +304,14 @@ export function editorReplaceCurrent(
     return false;
   }
   const sel = view.state.selection.main;
-  // Only replace when the current selection is an exact match for the query.
-  const matches = findAllRangesInText(view.state.doc, query);
-  const isMatch = matches.some((m) => m.from === sel.from && m.to === sel.to);
-  if (!isMatch) {
+  // Validate the selection with a cursor starting at `from` — not a full-document
+  // match list (held-down Replace was O(matches × doc)).
+  const match = matchAtRange(view.state.doc, query, sel.from, sel.to);
+  if (!match) {
     return false;
   }
   const insert = query.regexp
-    ? expandReplacement(
-        query.replacement,
-        matchAtRange(view.state.doc, query, sel.from, sel.to),
-        true,
-      )
+    ? expandReplacement(query.replacement, match, true)
     : query.replacement;
   view.dispatch({
     changes: { from: sel.from, to: sel.to, insert },
@@ -329,8 +325,7 @@ export function editorReplaceAll(view: EditorView | undefined, query: SearchQuer
   if (!view || !query.text) {
     return 0;
   }
-  const source = view.state.doc.toString();
-  const { changes, count } = buildQueryReplaceAllChanges(source, query);
+  const { changes, count } = buildQueryReplaceAllChanges(view.state.doc, query);
   if (changes.length > 0) {
     view.dispatch({ changes, userEvent: "input" });
   }
@@ -345,15 +340,10 @@ export function editorReplaceAndFindNext(
     return false;
   }
   const sel = view.state.selection.main;
-  const matches = findAllRangesInText(view.state.doc, query);
-  const isMatch = matches.some((m) => m.from === sel.from && m.to === sel.to);
-  if (isMatch) {
+  const match = matchAtRange(view.state.doc, query, sel.from, sel.to);
+  if (match) {
     const insert = query.regexp
-      ? expandReplacement(
-          query.replacement,
-          matchAtRange(view.state.doc, query, sel.from, sel.to),
-          true,
-        )
+      ? expandReplacement(query.replacement, match, true)
       : query.replacement;
     view.dispatch({
       changes: { from: sel.from, to: sel.to, insert },

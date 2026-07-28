@@ -98,6 +98,29 @@ type ScoredCandidate = {
 };
 
 /**
+ * Document ranges to scan for local-word candidates. Large docs use a
+ * cursor-centered window plus a head sample; smaller docs scan the whole
+ * buffer. Ranges never materialize `doc.toString()`.
+ */
+function wordScanRanges(
+  docLength: number,
+  pos: number,
+): ReadonlyArray<{ from: number; to: number }> {
+  if (docLength <= LARGE_DOC_THRESHOLD_CHARS) {
+    return [{ from: 0, to: docLength }];
+  }
+  const windowStart = Math.max(0, pos - WINDOW_HALF_CHARS);
+  const windowEnd = Math.min(docLength, pos + WINDOW_HALF_CHARS);
+  const headEnd = Math.min(docLength, HEAD_SAMPLE_CHARS);
+  const ranges: { from: number; to: number }[] = [];
+  if (headEnd > 0 && headEnd < windowStart) {
+    ranges.push({ from: 0, to: headEnd });
+  }
+  ranges.push({ from: windowStart, to: windowEnd });
+  return ranges;
+}
+
+/**
  * Build the candidate list for a document-word completion query. Pure and
  * content-agnostic in its return shape — callers never see raw document text
  * beyond the matched words themselves.
@@ -112,6 +135,10 @@ type ScoredCandidate = {
  * token (the prefix word) is excluded so completion never offers the word
  * being typed.
  *
+ * Scanning walks CodeMirror lines (word tokens never span newlines) so
+ * `activateOnTyping` does not allocate a fresh full-document string per
+ * keystroke.
+ *
  * Exported for unit testing.
  */
 export function buildLocalWordCandidates(
@@ -119,66 +146,74 @@ export function buildLocalWordCandidates(
   pos: number,
   prefix: string,
 ): string[] {
-  const docLength = state.doc.length;
+  const doc = state.doc;
+  const docLength = doc.length;
   if (docLength === 0 || prefix.length === 0) {
     return [];
   }
 
-  let scanText: string;
-  let cursorOffset = pos;
-  if (docLength <= LARGE_DOC_THRESHOLD_CHARS) {
-    scanText = state.doc.toString();
-  } else {
-    const windowStart = Math.max(0, pos - WINDOW_HALF_CHARS);
-    const windowEnd = Math.min(docLength, pos + WINDOW_HALF_CHARS);
-    const headEnd = Math.min(docLength, HEAD_SAMPLE_CHARS);
-    const slices: string[] = [];
-    if (headEnd > 0 && headEnd < windowStart) {
-      slices.push(state.sliceDoc(0, headEnd));
-    }
-    slices.push(state.sliceDoc(windowStart, windowEnd));
-    scanText = slices.join("\n");
-    cursorOffset = pos - windowStart + (slices.length > 1 ? headEnd + 1 : 0);
-  }
-
   const prefixLower = prefix.toLowerCase();
-  const seen = new Set<string>();
   /** Tracks the lowercased form to dedupe case variants. */
   const seenLower = new Set<string>();
   const candidates: ScoredCandidate[] = [];
   const currentTokenLower = prefixLower;
-
-  const globalRegex = new RegExp(WORD_SCAN_GLOBAL.source, "gu");
   let tokensScanned = 0;
-  let match: RegExpExecArray | null;
-  while ((match = globalRegex.exec(scanText)) !== null) {
-    if (tokensScanned >= MAX_TOKENS_SCANNED) {
+  let capped = false;
+
+  for (const range of wordScanRanges(docLength, pos)) {
+    if (capped || range.from >= range.to) {
       break;
     }
-    tokensScanned += 1;
-    const token = match[0];
-    if (token.length < 2) {
-      // Single-character tokens add noise; skip them.
-      continue;
-    }
-    const tokenLower = token.toLowerCase();
-    if (tokenLower === currentTokenLower) {
-      // Exclude the exact token being typed.
-      continue;
-    }
-    if (!tokenLower.startsWith(prefixLower)) {
-      continue;
-    }
-    if (seenLower.has(tokenLower)) {
-      continue;
-    }
-    seenLower.add(tokenLower);
-    seen.add(token);
-    const matchPos = match.index;
-    const distance = Math.abs(matchPos - cursorOffset);
-    candidates.push({ text: token, distance, length: token.length });
-    if (candidates.length >= MAX_CANDIDATES) {
-      break;
+    const startLine = doc.lineAt(range.from).number;
+    const endLine = doc.lineAt(Math.max(range.from, range.to - 1)).number;
+    for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+      if (capped) {
+        break;
+      }
+      const line = doc.line(lineNo);
+      const sliceFrom = Math.max(line.from, range.from);
+      const sliceTo = Math.min(line.to, range.to);
+      if (sliceFrom >= sliceTo) {
+        continue;
+      }
+      // Contiguous line slice — no whole-document string.
+      const slice =
+        sliceFrom === line.from && sliceTo === line.to
+          ? line.text
+          : doc.sliceString(sliceFrom, sliceTo);
+      const globalRegex = new RegExp(WORD_SCAN_GLOBAL.source, "gu");
+      let match: RegExpExecArray | null;
+      while ((match = globalRegex.exec(slice)) !== null) {
+        if (tokensScanned >= MAX_TOKENS_SCANNED) {
+          capped = true;
+          break;
+        }
+        tokensScanned += 1;
+        const token = match[0];
+        if (token.length < 2) {
+          // Single-character tokens add noise; skip them.
+          continue;
+        }
+        const tokenLower = token.toLowerCase();
+        if (tokenLower === currentTokenLower) {
+          // Exclude the exact token being typed.
+          continue;
+        }
+        if (!tokenLower.startsWith(prefixLower)) {
+          continue;
+        }
+        if (seenLower.has(tokenLower)) {
+          continue;
+        }
+        seenLower.add(tokenLower);
+        const matchPos = sliceFrom + match.index;
+        const distance = Math.abs(matchPos - pos);
+        candidates.push({ text: token, distance, length: token.length });
+        if (candidates.length >= MAX_CANDIDATES) {
+          capped = true;
+          break;
+        }
+      }
     }
   }
 

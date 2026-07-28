@@ -4,6 +4,7 @@ import { EditorView } from "@codemirror/view";
 import {
   buildReplaceAllChanges,
   countReplaceAllMatches,
+  editorReplaceAll,
   editorReplaceCurrent,
   findNextMatchIndex,
   findNextRange,
@@ -88,5 +89,45 @@ describe("editorReplaceCurrent regex captures", () => {
     });
     expect(editorReplaceCurrent(view, query)).toBe(true);
     expect(view.state.doc.toString()).toBe("xn42");
+  });
+
+  it("rejects a selection that is not an exact match without scanning for replace", () => {
+    view = new EditorView({
+      doc: "alpha alpha alpha",
+      parent: document.body,
+    });
+    view.dispatch({
+      selection: EditorSelection.range(0, 3), // "alp", not a full match
+    });
+    const query = createSearchQuery({
+      text: "alpha",
+      replacement: "omega",
+      caseSensitive: true,
+    });
+    expect(editorReplaceCurrent(view, query)).toBe(false);
+    expect(view.state.doc.toString()).toBe("alpha alpha alpha");
+  });
+});
+
+describe("editorReplaceAll", () => {
+  let view: EditorView | undefined;
+
+  afterEach(() => {
+    view?.destroy();
+    view = undefined;
+  });
+
+  it("replaces using the live Text document (no string rebuild)", () => {
+    view = new EditorView({
+      doc: "alpha\nbeta alpha",
+      parent: document.body,
+    });
+    const query = createSearchQuery({
+      text: "alpha",
+      replacement: "omega",
+      caseSensitive: true,
+    });
+    expect(editorReplaceAll(view, query)).toBe(2);
+    expect(view.state.doc.toString()).toBe("omega\nbeta omega");
   });
 });

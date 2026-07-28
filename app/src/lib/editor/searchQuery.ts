@@ -285,16 +285,19 @@ export function replaceAllInString(
 /**
  * Build CodeMirror change specs for an in-editor replace-all so it dispatches
  * as a single undoable transaction. Each entry is `{ from, to, insert }`.
+ *
+ * Accepts a CodeMirror {@link Text} (preferred in the editor — no
+ * `doc.toString()` + re-split) or a plain string (project / string callers).
  */
 export function buildReplaceAllChanges(
-  source: string,
+  source: string | Text,
   query: SearchQuery,
 ): { changes: { from: number; to: number; insert: string }[]; count: number } {
   const compiled = compileQuery(query);
   if (!compiled) {
     return { changes: [], count: 0 };
   }
-  const text = Text.of(source.split("\n"));
+  const text = typeof source === "string" ? Text.of(source.split("\n")) : source;
   const changes: { from: number; to: number; insert: string }[] = [];
   let count = 0;
   try {

@@ -4,6 +4,7 @@ import {
   deriveAppShellDocumentView,
   invalidateDocumentMarkdownHtml,
   isTextEditorDocumentState,
+  retainDocumentMarkdownHtml,
 } from "./appShellDocumentView";
 import * as markdownImageSrc from "./markdownImageSrc";
 
@@ -122,7 +123,7 @@ describe("deriveAppShellDocumentView — markdownHtml memoization", () => {
     invalidateDocumentMarkdownHtml();
   });
 
-  it("reuses rendered html for the same content string across document object identity", () => {
+  it("reuses rendered html for the same document id across object identity", () => {
     const spy = vi.spyOn(markdownImageSrc, "renderDocumentMarkdown");
     const content = "# Cached heading";
     const first = textDocument({ content, savedContent: content });
@@ -137,7 +138,7 @@ describe("deriveAppShellDocumentView — markdownHtml memoization", () => {
     spy.mockRestore();
   });
 
-  it("re-renders when content changes", () => {
+  it("re-renders when content changes for the same document (overwrites slot)", () => {
     const spy = vi.spyOn(markdownImageSrc, "renderDocumentMarkdown");
     const first = textDocument({ content: "# One", savedContent: "# One" });
     const second = textDocument({ content: "# Two", savedContent: "# Two" });
@@ -149,7 +150,20 @@ describe("deriveAppShellDocumentView — markdownHtml memoization", () => {
     spy.mockRestore();
   });
 
-  it("re-renders when filePath changes for the same content (image base path)", () => {
+  it("keeps independent slots for different document ids with the same content", () => {
+    const spy = vi.spyOn(markdownImageSrc, "renderDocumentMarkdown");
+    const content = "# Shared body";
+    const first = textDocument({ id: "doc-a", content, savedContent: content });
+    const second = textDocument({ id: "doc-b", content, savedContent: content });
+
+    deriveAppShellDocumentView(first, { renderMarkdownHtml: true });
+    deriveAppShellDocumentView(second, { renderMarkdownHtml: true });
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
+  });
+
+  it("re-renders when filePath changes for the same document (image base path)", () => {
     const spy = vi.spyOn(markdownImageSrc, "renderDocumentMarkdown");
     const content = "# Same body";
     const first = textDocument({ content, savedContent: content, filePath: "/a/readme.md" });
@@ -161,6 +175,23 @@ describe("deriveAppShellDocumentView — markdownHtml memoization", () => {
     expect(spy).toHaveBeenCalledTimes(2);
     expect(spy).toHaveBeenNthCalledWith(1, content, "/a/readme.md");
     expect(spy).toHaveBeenNthCalledWith(2, content, "/b/readme.md");
+    spy.mockRestore();
+  });
+
+  it("retainDocumentMarkdownHtml drops closed document entries", () => {
+    const spy = vi.spyOn(markdownImageSrc, "renderDocumentMarkdown");
+    const open = textDocument({ id: "keep", content: "# Keep", savedContent: "# Keep" });
+    const closed = textDocument({ id: "drop", content: "# Drop", savedContent: "# Drop" });
+
+    deriveAppShellDocumentView(open, { renderMarkdownHtml: true });
+    deriveAppShellDocumentView(closed, { renderMarkdownHtml: true });
+    retainDocumentMarkdownHtml(new Set(["keep"]));
+
+    deriveAppShellDocumentView(open, { renderMarkdownHtml: true });
+    deriveAppShellDocumentView(closed, { renderMarkdownHtml: true });
+
+    // keep hit cache; drop was pruned and re-rendered
+    expect(spy).toHaveBeenCalledTimes(3);
     spy.mockRestore();
   });
 });

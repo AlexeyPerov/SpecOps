@@ -320,7 +320,11 @@
   const activePreviewHtml = $derived(
     previewContent === null
       ? ""
-      : renderMemoizedDocumentMarkdown(previewContent, paneDocument?.filePath ?? null),
+      : renderMemoizedDocumentMarkdown(
+          paneDocument?.id ?? "",
+          previewContent,
+          paneDocument?.filePath ?? null,
+        ),
   );
 
   let confirmingDocumentId = $state<string | null>(null);

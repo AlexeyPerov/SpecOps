@@ -21,19 +21,16 @@ export interface DeriveAppShellDocumentViewOptions {
 }
 
 type MarkdownHtmlCacheEntry = {
+  content: string;
   filePath: string | null;
   html: string;
 };
 
 /**
- * Memoizes rendered document markdown by content string identity (and file
- * path, which affects local image resolution). Scroll/cursor/fingerprint
- * updates replace the DocumentState object but reuse the same content string,
- * so preview panes skip a full marked parse on those ticks. Keep-alive sibling
- * tabs also hit this when the active document is the only one that changed.
- *
- * Bounded like chat markdown: Map insertion order gives approximate LRU
- * eviction (re-hits do not refresh order; that is fine for this hot path).
+ * Memoizes rendered document markdown by document id. Content-string keys
+ * retained every keystroke's full buffer (up to CACHE_MAX copies). One slot
+ * per document overwrites in place on edit; {@link retainDocumentMarkdownHtml}
+ * drops entries whose documents are no longer open.
  */
 const markdownHtmlCache = new Map<string, MarkdownHtmlCacheEntry>();
 const MARKDOWN_HTML_CACHE_MAX = 64;
@@ -46,35 +43,49 @@ const MARKDOWN_HTML_CACHE_MAX = 64;
  * only ever sees the live buffer.
  */
 export function renderMemoizedDocumentMarkdown(
+  documentId: string,
   content: string,
   filePath: string | null,
 ): string {
-  return getMemoizedMarkdownHtml(content, filePath);
+  return getMemoizedMarkdownHtml(documentId, content, filePath);
 }
 
-function getMemoizedMarkdownHtml(content: string, filePath: string | null): string {
-  const cached = markdownHtmlCache.get(content);
-  if (cached && cached.filePath === filePath) {
+function getMemoizedMarkdownHtml(
+  documentId: string,
+  content: string,
+  filePath: string | null,
+): string {
+  const cached = markdownHtmlCache.get(documentId);
+  if (cached && cached.content === content && cached.filePath === filePath) {
     return cached.html;
   }
   const html = renderDocumentMarkdown(content, filePath);
-  if (markdownHtmlCache.size >= MARKDOWN_HTML_CACHE_MAX) {
+  if (!markdownHtmlCache.has(documentId) && markdownHtmlCache.size >= MARKDOWN_HTML_CACHE_MAX) {
     const firstKey = markdownHtmlCache.keys().next().value;
     if (firstKey !== undefined) {
       markdownHtmlCache.delete(firstKey);
     }
   }
-  markdownHtmlCache.set(content, { filePath, html });
+  markdownHtmlCache.set(documentId, { content, filePath, html });
   return html;
 }
 
-/** Test helper: drop memoized preview HTML (full clear or one content key). */
-export function invalidateDocumentMarkdownHtml(content?: string): void {
-  if (content === undefined) {
+/** Drop memoized preview HTML (full clear or one document id). */
+export function invalidateDocumentMarkdownHtml(documentId?: string): void {
+  if (documentId === undefined) {
     markdownHtmlCache.clear();
     return;
   }
-  markdownHtmlCache.delete(content);
+  markdownHtmlCache.delete(documentId);
+}
+
+/** Keep only cache entries for documents that are still open. */
+export function retainDocumentMarkdownHtml(documentIds: ReadonlySet<string>): void {
+  for (const documentId of markdownHtmlCache.keys()) {
+    if (!documentIds.has(documentId)) {
+      markdownHtmlCache.delete(documentId);
+    }
+  }
 }
 
 /** True when the document should mount a text editor (not image/binary/large). */
@@ -104,7 +115,11 @@ export function deriveAppShellDocumentView(
   const renderMarkdownHtml = options.renderMarkdownHtml ?? false;
   const markdownHtml =
     renderMarkdownHtml && isMarkdownDocument && activeDocument
-      ? getMemoizedMarkdownHtml(activeDocument.content, activeDocument.filePath ?? null)
+      ? getMemoizedMarkdownHtml(
+          activeDocument.id,
+          activeDocument.content,
+          activeDocument.filePath ?? null,
+        )
       : "";
   const statusPath = formatStatusPath(
     activeDocument?.filePath ?? null,

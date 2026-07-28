@@ -1,8 +1,9 @@
+import { Text } from "@codemirror/state";
 import { collectOpenableFolderFiles } from "./folderOpenableFiles";
 import { readTextFile, stat } from "@tauri-apps/plugin-fs";
 import { isImageFilePath } from "./fileContentKind";
 import {
-  findAllRangesInString,
+  findAllRangesInText,
   validateSearchQuery,
   type SearchQuery,
 } from "../editor/searchQuery";
@@ -80,41 +81,21 @@ export function computeFileMatches(
   if (!query.text) {
     return [];
   }
-  const offsets = findAllRangesInString(content, query);
+  // One split → Text tree; RegExpCursor + lineAt reuse that structure (no second
+  // full-document char scan for line starts/ends).
+  const text = Text.of(content.split("\n"));
+  const offsets = findAllRangesInText(text, query);
   if (offsets.length === 0) {
     return [];
   }
 
-  // Precompute the start offset of every line so we can map each match offset
-  // to its (1-based) line/column without scanning from the top for each match.
-  const lineStarts: number[] = [0];
-  for (let i = 0; i < content.length; i += 1) {
-    if (content[i] === "\n") {
-      lineStarts.push(i + 1);
-    }
-  }
-  const lineEnds: number[] = [];
-  for (let i = 0; i < content.length; i += 1) {
-    if (content[i] === "\n") {
-      lineEnds.push(i);
-    }
-  }
-  lineEnds.push(content.length);
-
   const matches: ProjectSearchMatch[] = [];
-  let lineHint = 0; // index into lineStarts; advances monotonically with matches
   for (const offset of offsets) {
-    // Advance the hint until the match start falls inside this line.
-    while (lineHint + 1 < lineStarts.length && lineStarts[lineHint + 1] <= offset.from) {
-      lineHint += 1;
-    }
-    const lineIndex = lineHint;
-    const column = offset.from - lineStarts[lineIndex] + 1;
-    const lineText = content.slice(lineStarts[lineIndex], lineEnds[lineIndex]);
+    const line = text.lineAt(offset.from);
     matches.push({
-      line: lineIndex + 1,
-      column,
-      lineText,
+      line: line.number,
+      column: offset.from - line.from + 1,
+      lineText: line.text,
       from: offset.from,
       to: offset.to,
       length: offset.to - offset.from,

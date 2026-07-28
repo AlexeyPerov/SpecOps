@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-28 — Editor: markdown memo, project-search passes, completion scan, replace validate
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M57–M60 —
+the second batch of editor Medium findings.
+
+- **Markdown preview memo kept every keystroke's full buffer (M57).** Cache is keyed by
+  document id (one slot overwritten on edit) and pruned when documents close, instead of
+  retaining up to 64 content-string copies.
+
+- **Project search mapped matches with redundant full-file scans (M58).**
+  `computeFileMatches` builds one CodeMirror `Text`, finds ranges once, and uses `lineAt`
+  for line/column/preview (no dual char-by-char line-index passes).
+
+- **Word completion allocated `doc.toString()` on every keystroke (M59).** Local-word
+  scan walks document lines (and large-doc windows) without materializing the whole buffer.
+
+- **Replace validated the selection with a full match list (M60).** Replace-current /
+  replace-and-find-next use `matchAtRange`; replace-all passes `view.state.doc` into
+  `buildReplaceAllChanges` instead of `toString()` + re-split.
+
 ## 2026-07-28 — Editor: session scope, language reconfigure, find wrap, replace captures, plaintext code points
 
 Follow-up to the review in

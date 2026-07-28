@@ -74,7 +74,10 @@
   import { collectTabOpenPaths } from "../lib/services/tabContextMenuActions";
   import { DEFAULT_CONSOLE_HEIGHT_PX } from "../lib/services/consoleTabPrefs";
   import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
-  import { deriveAppShellDocumentView } from "../lib/services/appShellDocumentView";
+  import {
+    deriveAppShellDocumentView,
+    retainDocumentMarkdownHtml,
+  } from "../lib/services/appShellDocumentView";
   import {
     getHiddenRootPaths,
     setHiddenFromRail,
@@ -228,6 +231,7 @@
     // Retain undo/fold cache across inactive contexts (LRU-bounded); only drop
     // entries whose documents no longer exist in any context.
     editorSessionCache.retainDocuments($appOpenDocumentIds);
+    retainDocumentMarkdownHtml($appOpenDocumentIds);
   });
 
   /** Stable key for external file-watcher sync; ignores non-path snapshot churn. */

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import {
   canMoveEntry,
   isBlockedProjectTreeDirectory,
@@ -29,12 +30,15 @@ function reQuery(text: string, replacement: string, opts: { caseSensitive?: bool
 }
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
+  readFile: vi.fn(),
 }));
 
-const readTextFileMock = vi.mocked(readTextFile);
-const writeTextFileMock = vi.mocked(writeTextFile);
+vi.mock("./atomicWrite", () => ({
+  atomicWriteTextFile: vi.fn().mockResolvedValue(undefined),
+}));
+
+const readFileMock = vi.mocked(readFile);
+const atomicWriteTextFileMock = vi.mocked(atomicWriteTextFile);
 
 describe("validateEntryName", () => {
   it("rejects empty and path separators", () => {
@@ -76,25 +80,26 @@ describe("replaceInProjectFile", () => {
   const root = "/tmp/ws";
 
   beforeEach(() => {
-    readTextFileMock.mockReset();
-    writeTextFileMock.mockReset();
+    readFileMock.mockReset();
+    atomicWriteTextFileMock.mockReset();
+    atomicWriteTextFileMock.mockResolvedValue(undefined);
   });
 
   it("replaces all matches and writes the rebuilt content", async () => {
-    readTextFileMock.mockResolvedValue("foo bar foo");
+    readFileMock.mockResolvedValue(new TextEncoder().encode("foo bar foo"));
     const result = await replaceInProjectFile(root, `${root}/a.txt`, litQuery("foo", "baz"));
     expect(result).toMatchObject({ ok: true, path: `${root}/a.txt`, count: 2, content: "baz bar baz" });
-    expect(writeTextFileMock).toHaveBeenCalledWith(`${root}/a.txt`, "baz bar baz");
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(`${root}/a.txt`, "baz bar baz");
   });
 
   it("respects case sensitivity", async () => {
-    readTextFileMock.mockResolvedValue("Foo foo");
+    readFileMock.mockResolvedValue(new TextEncoder().encode("Foo foo"));
     const result = await replaceInProjectFile(root, `${root}/a.txt`, litQuery("foo", "x", { caseSensitive: true }));
     expect(result).toMatchObject({ ok: true, count: 1, content: "Foo x" });
   });
 
   it("supports regex capture-group replacement", async () => {
-    readTextFileMock.mockResolvedValue("2024-01-15");
+    readFileMock.mockResolvedValue(new TextEncoder().encode("2024-01-15"));
     const result = await replaceInProjectFile(root, `${root}/a.txt`, reQuery("(\\d+)-(\\d+)-(\\d+)", "$3/$2/$1"));
     expect(result).toMatchObject({ ok: true, count: 1, content: "15/01/2024" });
   });
@@ -102,27 +107,27 @@ describe("replaceInProjectFile", () => {
   it("rejects an invalid regex without touching disk", async () => {
     const result = await replaceInProjectFile(root, `${root}/a.txt`, reQuery("(foo", "bar"));
     expect(result).toMatchObject({ ok: false, count: 0 });
-    expect(readTextFileMock).not.toHaveBeenCalled();
-    expect(writeTextFileMock).not.toHaveBeenCalled();
+    expect(readFileMock).not.toHaveBeenCalled();
+    expect(atomicWriteTextFileMock).not.toHaveBeenCalled();
   });
 
   it("reports no matches without writing", async () => {
-    readTextFileMock.mockResolvedValue("nothing here");
+    readFileMock.mockResolvedValue(new TextEncoder().encode("nothing here"));
     const result = await replaceInProjectFile(root, `${root}/a.txt`, litQuery("foo", "baz"));
     expect(result).toMatchObject({ ok: false, count: 0 });
-    expect(writeTextFileMock).not.toHaveBeenCalled();
+    expect(atomicWriteTextFileMock).not.toHaveBeenCalled();
   });
 
   it("rejects paths outside the workspace", async () => {
     const result = await replaceInProjectFile(root, "/elsewhere/a.txt", litQuery("foo", "baz"));
     expect(result).toMatchObject({ ok: false, count: 0 });
-    expect(readTextFileMock).not.toHaveBeenCalled();
-    expect(writeTextFileMock).not.toHaveBeenCalled();
+    expect(readFileMock).not.toHaveBeenCalled();
+    expect(atomicWriteTextFileMock).not.toHaveBeenCalled();
   });
 
   it("rejects skipped directories", async () => {
     const result = await replaceInProjectFile(root, `${root}/node_modules/a.js`, litQuery("f", "b"));
     expect(result).toMatchObject({ ok: false, count: 0 });
-    expect(readTextFileMock).not.toHaveBeenCalled();
+    expect(readFileMock).not.toHaveBeenCalled();
   });
 });

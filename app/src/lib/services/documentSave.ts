@@ -97,6 +97,7 @@ async function persistDocument(
   if (options?.allowWorkspaceTabMove && savedOutsideWorkspace && tabId) {
     await handoffSavedFileToNotepad({
       sourceTabId: tabId,
+      sourceDocumentId: document.id,
       previousPath,
       filePath: targetPath,
       content: document.content,

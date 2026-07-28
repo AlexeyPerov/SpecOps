@@ -71,6 +71,13 @@ export function subscribeSystemColorScheme(onChange: (prefersDark: boolean) => v
 
 let themeSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let themeSaveErrorNotifier: ((message: string) => void) | null = null;
+/**
+ * The most recent theme scheduled for a debounced save. Captured so a quit /
+ * close can flush it immediately via {@link flushThemePersistence} rather than
+ * losing edits made in the last debounce window.
+ */
+let pendingThemeSave: AppThemeState | null = null;
+let pendingThemeSavePromise: Promise<void> | null = null;
 
 const THEME_TOKEN_SAVE_DEBOUNCE_MS = 300;
 const THEME_SAVE_ERROR_MESSAGE =
@@ -82,6 +89,8 @@ export function resetThemePersistenceForTests(): void {
     clearTimeout(themeSaveTimer);
     themeSaveTimer = null;
   }
+  pendingThemeSave = null;
+  pendingThemeSavePromise = null;
   systemPrefersDark = readSystemPrefersDark();
 }
 
@@ -113,16 +122,46 @@ export function persistThemeImmediate(theme: AppThemeState): void {
     clearTimeout(themeSaveTimer);
     themeSaveTimer = null;
   }
-  void persistThemeNow(theme);
+  pendingThemeSave = null;
+  pendingThemeSavePromise = persistThemeNow(theme);
+}
+
+/**
+ * Flush any pending debounced theme save immediately and await it. Called from
+ * the window close / app quit path so token edits made in the last
+ * {@link THEME_TOKEN_SAVE_DEBOUNCE_MS} are not lost when the process exits.
+ */
+export async function flushThemePersistence(): Promise<void> {
+  if (themeSaveTimer) {
+    clearTimeout(themeSaveTimer);
+    themeSaveTimer = null;
+  }
+  const toWrite = pendingThemeSave;
+  pendingThemeSave = null;
+  if (toWrite) {
+    pendingThemeSavePromise = persistThemeNow(toWrite);
+  }
+  if (pendingThemeSavePromise) {
+    try {
+      await pendingThemeSavePromise;
+    } finally {
+      pendingThemeSavePromise = null;
+    }
+  }
 }
 
 export function scheduleDebouncedThemeSave(theme: AppThemeState): void {
+  pendingThemeSave = theme;
   if (themeSaveTimer) {
     clearTimeout(themeSaveTimer);
   }
   themeSaveTimer = setTimeout(() => {
     themeSaveTimer = null;
-    void persistThemeNow(theme);
+    const toWrite = pendingThemeSave;
+    pendingThemeSave = null;
+    if (toWrite) {
+      pendingThemeSavePromise = persistThemeNow(toWrite);
+    }
   }, THEME_TOKEN_SAVE_DEBOUNCE_MS);
 }
 

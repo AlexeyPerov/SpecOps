@@ -85,6 +85,8 @@ describe("moveTabToNewWindow", () => {
       filePath: "/tmp/move-me.txt",
       content: "payload",
       title: "move-me.txt",
+      lineEnding: "lf",
+      hasBom: false,
     });
     expect(syncOpenFileRegistryForWindowMock).toHaveBeenCalledWith(
       "main",
@@ -123,6 +125,8 @@ describe("moveTabToNewWindow", () => {
       filePath: "/tmp/inactive-pane-transfer.txt",
       content: "payload",
       title: "inactive-pane-transfer.txt",
+      lineEnding: "lf",
+      hasBom: false,
     });
   });
 });

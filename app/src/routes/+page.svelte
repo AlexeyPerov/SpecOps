@@ -107,6 +107,7 @@
     syncSettingsPersistenceEffect,
     syncWorkspaceContextEffect,
   } from "../lib/services/appShellEffects";
+  import { flushThemePersistence } from "../lib/state/appState/themeController";
   import { refreshSessionTodos, clearSessionTodos } from "../lib/ai/opencodeTodoStore";
   import { refreshSessionDiffs, clearSessionDiffs } from "../lib/ai/opencodeDiffStore";
   import {
@@ -606,6 +607,7 @@
         Promise.all([
           flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
           flushSettingsPersistence(),
+          flushThemePersistence(),
         ]).then(() => {}),
       confirmWindowClose: () =>
         confirmWindowClose({
@@ -615,6 +617,7 @@
             Promise.all([
               flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
               flushSettingsPersistence(),
+              flushThemePersistence(),
             ]).then(() => {}),
         }),
       removeWindowSessionEntry,

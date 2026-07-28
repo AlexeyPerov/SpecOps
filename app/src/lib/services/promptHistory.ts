@@ -11,7 +11,8 @@
  */
 
 import { join } from "@tauri-apps/api/path";
-import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { mkdir, readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import { normalizePathSync } from "./diskFingerprint";
 import { logDiagnostic } from "./logging";
@@ -135,7 +136,7 @@ async function defaultWorkspacePersistence(workspaceRoot: string): Promise<Persi
     },
     async save(payload) {
       try {
-        await writeTextFile(file, JSON.stringify(payload, null, 2));
+        await atomicWriteTextFile(file, JSON.stringify(payload, null, 2));
       } catch (error: unknown) {
         void logDiagnostic({
           level: "warn",

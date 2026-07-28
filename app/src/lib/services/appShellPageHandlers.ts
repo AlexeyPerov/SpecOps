@@ -1,4 +1,5 @@
 import { tick } from "svelte";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { allTabs, getSessionSelectedTabId, isFileTab } from "../domain/contracts";
@@ -20,6 +21,10 @@ import { openDroppedPath } from "./openDroppedPath";
 import { logDiagnostic } from "./logging";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { SettingsDialogTab } from "./settingsDialogUi";
+import {
+  WINDOW_EVENT_PREPARE_QUIT,
+  WINDOW_EVENT_PREPARE_QUIT_ACK,
+} from "./windowManager";
 import {
   isAlwaysRunShellCommand,
   isTargetInOrdinaryInput,
@@ -455,6 +460,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
   let closeConfirmed = false;
   let closeInFlight = false;
   let unlistenCloseRequested: (() => void) | null = null;
+  let unlistenPrepareQuit: (() => void) | null = null;
 
   async function handleCloseRequested(event: { preventDefault: () => void }): Promise<void> {
     if (closeConfirmed) {
@@ -522,6 +528,57 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     // No window API in this environment.
   }
 
+  // App-quit fan-out: when another window receives Cmd+Q it emits prepare-quit
+  // to us. We run our own unsaved-changes prompt + session flush (the same
+  // confirmWindowClose used for a direct window close) and ack with whether the
+  // user consented. `quit_app`'s `exit(0)` skips per-window CloseRequested, so
+  // without this a secondary window's dirty buffers would only hit the
+  // fire-and-forget pagehide backstop.
+  void listen<{ initiatorWindowId: string }>(WINDOW_EVENT_PREPARE_QUIT, async () => {
+    let mayQuit = false;
+    try {
+      mayQuit = await deps.confirmWindowClose();
+    } catch (error: unknown) {
+      await logDiagnostic({
+        level: "error",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "prepare-quit confirmation failed",
+        metadata: { error: getErrorMessage(error, String(error)) },
+      });
+      // Fail closed: if our prompt itself broke, consent so the user is not
+      // trapped by a broken dialog in another window. The pagehide backstop
+      // still runs on exit.
+      mayQuit = true;
+    }
+    const label = deps.getCurrentWebviewWindowLabel();
+    try {
+      // Secondary windows drop their session entry once the confirm flow has
+      // flushed, matching the direct-close path. Best-effort: a failed prune
+      // must not block the ack (the startup prune catches leftovers).
+      if (mayQuit && label !== "main" && deps.removeWindowSessionEntry) {
+        try {
+          await deps.removeWindowSessionEntry(label);
+        } catch {
+          // best-effort
+        }
+      }
+      await emitTo(label, WINDOW_EVENT_PREPARE_QUIT_ACK, {
+        windowId: label,
+        mayQuit,
+      });
+    } catch {
+      // If the ack itself can't be delivered the initiator will time out and
+      // abort; better than silently proceeding past a possibly-cancelled quit.
+    }
+  }).then((unlisten) => {
+    if (disposed) {
+      unlisten();
+      return;
+    }
+    unlistenPrepareQuit = unlisten;
+  });
+
   return () => {
     disposed = true;
     deps.registerSettingsDialogOpener(null);
@@ -538,6 +595,8 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     window.removeEventListener("beforeunload", onPageHide);
     unlistenCloseRequested?.();
     unlistenCloseRequested = null;
+    unlistenPrepareQuit?.();
+    unlistenPrepareQuit = null;
     void deps.flushSessionBeforeUnload();
   };
 }

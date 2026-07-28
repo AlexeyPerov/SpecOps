@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile, exists } from "@tauri-apps/plugin-fs";
+import { readTextFile, exists } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import { normalizePathSync } from "./diskFingerprint";
 
@@ -67,7 +68,7 @@ async function readFromDisk(): Promise<WorkspacePreferencesFile> {
 async function writeToDisk(prefs: WorkspacePreferencesFile): Promise<void> {
   try {
     const filePath = await preferencesFilePath();
-    await writeTextFile(filePath, JSON.stringify(prefs, null, 2));
+      await atomicWriteTextFile(filePath, JSON.stringify(prefs, null, 2));
   } catch {
     // Preferences are best-effort; a write failure must not crash the app.
   }

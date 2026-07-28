@@ -546,6 +546,8 @@ describe("appState tabs and selection", () => {
       filePath: "/tmp/move-me.txt",
       content: "payload",
       title: "move-me.txt",
+      lineEnding: "lf",
+      hasBom: false,
     });
     expect(getSessionTabs(appState.getActiveSession())).toHaveLength(2);
   });
@@ -638,6 +640,8 @@ describe("appState tabs and selection", () => {
       filePath: "/tmp/move-me.txt",
       content: "payload",
       title: "move-me.txt",
+      lineEnding: "lf",
+      hasBom: false,
     });
     expect(getSessionTabs(appState.getActiveSession())).toHaveLength(1);
 

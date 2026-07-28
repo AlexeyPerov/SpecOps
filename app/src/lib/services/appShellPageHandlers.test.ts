@@ -26,6 +26,11 @@ vi.mock("./openActivePath", async (importOriginal) => {
   };
 });
 
+vi.mock("@tauri-apps/api/event", () => ({
+  emitTo: vi.fn().mockResolvedValue(undefined),
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
+
 const checkDocumentIfDeferredMock = vi.mocked(checkDocumentIfDeferred);
 const openActivePathMock = vi.mocked(openActivePath);
 

@@ -207,7 +207,7 @@ async function startAppShellRuntimeInner(
   // they can be set up in parallel.
   const registerListenersStartedAt = nowMs();
   const listenerUnlistens = await Promise.all([
-    listen<{ filePath: string | null; content: string; title: string }>(
+    listen<{ filePath: string | null; content: string; title: string; lineEnding?: "lf" | "crlf"; hasBom?: boolean }>(
       WINDOW_EVENT_TRANSFER_TAB,
       async (event) => {
         const documentId = appState.openTransferredTab(event.payload);

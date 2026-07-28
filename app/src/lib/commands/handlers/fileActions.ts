@@ -184,6 +184,7 @@ export async function handleFileSaveAs(context: CommandContext): Promise<void> {
   if (savedOutsideWorkspace && isFileContextRestricted()) {
     await handoffSavedFileToNotepad({
       sourceTabId,
+      sourceDocumentId: doc.id,
       previousPath,
       filePath: saved.path,
       content: writtenContent,

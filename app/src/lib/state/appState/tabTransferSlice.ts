@@ -250,7 +250,7 @@ export function createTabTransferSlice(deps: {
     },
     buildTabTransferPayload(
       tabId: string,
-    ): { filePath: string | null; content: string; title: string } | null {
+    ): { filePath: string | null; content: string; title: string; lineEnding?: "lf" | "crlf"; hasBom?: boolean } | null {
       const snapshot = getSnapshot();
       const tab = allTabs(getActiveSession(snapshot).editorLayout).find((entry) => entry.id === tabId);
       if (!tab) {
@@ -267,12 +267,16 @@ export function createTabTransferSlice(deps: {
         filePath: doc.filePath,
         content: doc.content,
         title: doc.title,
+        // Carry the on-disk encoding so the first save in the target window
+        // preserves line endings and BOM instead of rewriting as LF/no-BOM.
+        lineEnding: doc.lineEnding,
+        hasBom: doc.hasBom,
       };
     },
     removeTransferredTab(tabId: string): void {
       closeTabForce(tabId);
     },
-    transferActiveTabOut(): { filePath: string | null; content: string; title: string } | null {
+    transferActiveTabOut(): { filePath: string | null; content: string; title: string; lineEnding?: "lf" | "crlf"; hasBom?: boolean } | null {
       const snapshot = getSnapshot();
       const selectedTabId = activePaneSelectedTabId(getActiveContextSnapshot(snapshot));
       if (!selectedTabId) {
@@ -294,6 +298,8 @@ export function createTabTransferSlice(deps: {
         filePath: doc.filePath,
         content: doc.content,
         title: doc.title,
+        lineEnding: doc.lineEnding,
+        hasBom: doc.hasBom,
       };
       closeTabForce(selectedTabId);
       return payload;
@@ -302,6 +308,8 @@ export function createTabTransferSlice(deps: {
       filePath: string | null;
       content: string;
       title: string;
+      lineEnding?: "lf" | "crlf";
+      hasBom?: boolean;
     }): string | null {
       let documentId: string | null = null;
       update((state) => {
@@ -329,6 +337,9 @@ export function createTabTransferSlice(deps: {
           payload.title,
           "text",
           state.settings.defaultMarkdownViewMode,
+          // Preserve the source document's line ending and BOM so the first
+          // save in this window does not rewrite a CRLF / BOM'd file as LF.
+          { lineEnding: payload.lineEnding, hasBom: payload.hasBom },
         );
         const bootstrap = findReplaceableBootstrapTab(state);
         if (bootstrap) {

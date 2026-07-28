@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import {
   loadOpencodeServerPassword,
   OPENCODE_SERVER_PASSWORD_KEY,
@@ -8,7 +9,10 @@ import {
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
+}));
+
+vi.mock("./atomicWrite", () => ({
+  atomicWriteTextFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./appDataDir", () => ({
@@ -20,12 +24,13 @@ vi.mock("@tauri-apps/api/path", () => ({
 }));
 
 const readTextFileMock = vi.mocked(readTextFile);
-const writeTextFileMock = vi.mocked(writeTextFile);
+const atomicWriteTextFileMock = vi.mocked(atomicWriteTextFile);
 
 describe("providerSecretsStore OpenCode password", () => {
   beforeEach(() => {
     readTextFileMock.mockReset();
-    writeTextFileMock.mockReset();
+    atomicWriteTextFileMock.mockReset();
+    atomicWriteTextFileMock.mockResolvedValue(undefined);
   });
 
   it("loads password when present", async () => {
@@ -47,9 +52,9 @@ describe("providerSecretsStore OpenCode password", () => {
 
   it("writes password when provided", async () => {
     readTextFileMock.mockResolvedValue(JSON.stringify({ version: 1, keys: {} }));
-    writeTextFileMock.mockResolvedValue(undefined);
+    atomicWriteTextFileMock.mockResolvedValue(undefined);
     await saveOpencodeServerPassword(" secret ");
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",
       JSON.stringify(
         {

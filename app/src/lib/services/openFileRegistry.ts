@@ -22,6 +22,7 @@ import {
   encodeSessionSnapshot,
 } from "./sessionSnapshotCodec";
 import { withSessionWriteLock } from "./sessionWriteLock";
+import { logDiagnostic } from "./logging";
 
 const SESSION_FILE = "session.json";
 
@@ -30,19 +31,66 @@ async function getSessionPath(): Promise<string> {
   return join(dataDir, SESSION_FILE);
 }
 
-async function readSessionSnapshot(): Promise<AppSessionSnapshot | null> {
+/**
+ * Outcome of a session read for a read-modify-write.
+ *
+ * A failed read must NOT be papered over with an empty snapshot: an empty
+ * `session.json` decodes cleanly, so `restoreWindowSession` returns null and never
+ * falls back to the backup — one transient read failure (lock contention, a slow
+ * network volume) would destroy every window's tabs and unsaved buffers with no
+ * error surfaced. Callers therefore distinguish "no file yet" (safe to seed empty)
+ * from "could not read the existing file" (must abort the RMW).
+ */
+type ReadResult =
+  | { kind: "snapshot"; snapshot: AppSessionSnapshot }
+  | { kind: "absent" }
+  | { kind: "unreadable"; reason: string };
+
+async function readSessionSnapshotForUpdate(): Promise<ReadResult> {
+  const sessionPath = await getSessionPath();
+  let raw: string;
   try {
-    const sessionPath = await getSessionPath();
-    const raw = await readTextFile(sessionPath);
-    return decodeSessionSnapshot(raw);
-  } catch {
-    return null;
+    raw = await readTextFile(sessionPath);
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    // "no such file" / ENOENT means this is the very first write — seeding an
+    // empty snapshot is correct and loses nothing. Any other failure (EACCES,
+    // EIO, lock contention, IPC error) means the file likely exists and holds
+    // real data we must not overwrite.
+    const lower = reason.toLowerCase();
+    if (
+      lower.includes("no such file") ||
+      lower.includes("not found") ||
+      lower.includes("os error 2")
+    ) {
+      return { kind: "absent" };
+    }
+    return { kind: "unreadable", reason };
   }
+  const decoded = decodeSessionSnapshot(raw);
+  if (decoded) {
+    return { kind: "snapshot", snapshot: decoded };
+  }
+  // The file exists but did not decode. Overwriting it with an empty snapshot
+  // would lose whatever is there (and the backup-promotion logic lives in
+  // sessionManager, not here). Abort so sessionManager's restore can still
+  // fall back to session.backup.json.
+  return { kind: "unreadable", reason: "session.json failed to decode" };
 }
 
 async function writeSessionSnapshot(snapshot: AppSessionSnapshot): Promise<void> {
   const sessionPath = await getSessionPath();
   await atomicWriteTextFile(sessionPath, encodeSessionSnapshot(snapshot));
+}
+
+async function logAbortedUpdate(windowId: string, reason: string): Promise<void> {
+  await logDiagnostic({
+    level: "error",
+    source: "frontend",
+    timestamp: new Date().toISOString(),
+    message: "open-file registry update aborted: session.json unreadable",
+    metadata: { windowId, reason },
+  });
 }
 
 export function buildOpenFileRegistryForWindow(
@@ -92,25 +140,34 @@ export async function syncOpenFileRegistryForWindowUnlocked(
   windowId: string,
   state: AppDomainState,
 ): Promise<void> {
-  const snapshot = await readSessionSnapshot();
-  const current = snapshot ?? createEmptySessionSnapshot();
-  current.openFileRegistry = buildOpenFileRegistryForWindow(
-    snapshot?.openFileRegistry ?? {},
-    windowId,
-    state,
-  );
+  const read = await readSessionSnapshotForUpdate();
+  if (read.kind === "unreadable") {
+    await logAbortedUpdate(windowId, read.reason);
+    return;
+  }
+  const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
+  const existingRegistry = read.kind === "snapshot" ? read.snapshot.openFileRegistry : {};
+  current.openFileRegistry = buildOpenFileRegistryForWindow(existingRegistry, windowId, state);
   current.updatedAt = new Date().toISOString();
   await writeSessionSnapshot(current);
 }
 
 export async function readOpenFileRegistry(): Promise<OpenFileRegistry> {
-  const snapshot = await readSessionSnapshot();
-  return snapshot?.openFileRegistry ?? {};
+  // Read-only: returning empty on a transient failure is acceptable (callers
+  // treat an empty registry as "no owner yet"), unlike the RMW writers above
+  // which must abort to avoid overwriting a good session.json.
+  const read = await readSessionSnapshotForUpdate();
+  return read.kind === "snapshot" ? read.snapshot.openFileRegistry : {};
 }
 
 export async function writeOpenFileRegistry(registry: OpenFileRegistry): Promise<void> {
   await withSessionWriteLock(async () => {
-    const current = (await readSessionSnapshot()) ?? createEmptySessionSnapshot();
+    const read = await readSessionSnapshotForUpdate();
+    if (read.kind === "unreadable") {
+      await logAbortedUpdate("unknown", read.reason);
+      return;
+    }
+    const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
     current.openFileRegistry = registry;
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current);
@@ -133,11 +190,14 @@ export async function claimOpenFile(
     return;
   }
   await withSessionWriteLock(async () => {
-    const snapshot = await readSessionSnapshot();
-    const registry: OpenFileRegistry = { ...(snapshot?.openFileRegistry ?? {}) };
+    const read = await readSessionSnapshotForUpdate();
+    if (read.kind === "unreadable") {
+      await logAbortedUpdate(windowId, read.reason);
+      return;
+    }
+    const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
+    const registry: OpenFileRegistry = { ...current.openFileRegistry };
     registry[normalizePathSync(filePath)] = { windowId, documentId };
-
-    const current = snapshot ?? createEmptySessionSnapshot();
     current.openFileRegistry = registry;
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current);
@@ -240,12 +300,20 @@ export async function dedupeWindowSnapshotAgainstRegistry(
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
   return withSessionWriteLock(async () => {
-    const session = await readSessionSnapshot();
-    const registry = session?.openFileRegistry ?? {};
+    const read = await readSessionSnapshotForUpdate();
+    // When the session can't be read, still return the (un-deduped) snapshot so
+    // the caller's restore proceeds with its own tabs intact; just skip the
+    // registry write that would otherwise overwrite an unreadable session.json.
+    const registry = read.kind === "snapshot" ? read.snapshot.openFileRegistry : {};
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, windowId, snapshot);
 
-    const current = session ?? createEmptySessionSnapshot();
+    if (read.kind === "unreadable") {
+      await logAbortedUpdate(windowId, read.reason);
+      return nextSnapshot;
+    }
+
+    const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
     current.openFileRegistry = nextRegistry;
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current);
@@ -256,10 +324,14 @@ export async function dedupeWindowSnapshotAgainstRegistry(
 
 export async function releaseAllOpenFilesForWindow(windowId: string): Promise<void> {
   await withSessionWriteLock(async () => {
-    const session = await readSessionSnapshot();
-    if (!session) {
+    const read = await readSessionSnapshotForUpdate();
+    if (read.kind !== "snapshot") {
+      if (read.kind === "unreadable") {
+        await logAbortedUpdate(windowId, read.reason);
+      }
       return;
     }
+    const session = read.snapshot;
     const registry = { ...session.openFileRegistry };
     let changed = false;
 
@@ -285,14 +357,17 @@ export async function renameOpenFileRegistry(
   documentId: string,
 ): Promise<void> {
   await withSessionWriteLock(async () => {
-    const session = await readSessionSnapshot();
-    const registry: OpenFileRegistry = { ...(session?.openFileRegistry ?? {}) };
+    const read = await readSessionSnapshotForUpdate();
+    if (read.kind === "unreadable") {
+      await logAbortedUpdate(windowId, read.reason);
+      return;
+    }
+    const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
+    const registry: OpenFileRegistry = { ...current.openFileRegistry };
     if (oldPath) {
       delete registry[normalizePathSync(oldPath)];
     }
     registry[normalizePathSync(newPath)] = { windowId, documentId };
-
-    const current = session ?? createEmptySessionSnapshot();
     current.openFileRegistry = registry;
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current);

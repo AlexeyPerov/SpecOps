@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import { DEFAULT_HTTP_CONNECTION_ID } from "../ai/providers/httpConnectionSettings";
 
@@ -91,7 +92,7 @@ export async function saveConnectionApiKey(connectionId: string, apiKey: string)
     version: 1,
     keys,
   };
-  await writeTextFile(path, JSON.stringify(payload, null, 2));
+  await atomicWriteTextFile(path, JSON.stringify(payload, null, 2));
 }
 
 /** Deletes one connection API key from dedicated secrets storage. */
@@ -134,7 +135,7 @@ export async function saveOpencodeServerPassword(password: string): Promise<void
     version: 1,
     keys,
   };
-  await writeTextFile(path, JSON.stringify(payload, null, 2));
+  await atomicWriteTextFile(path, JSON.stringify(payload, null, 2));
 }
 
 /** @deprecated Use `loadConnectionApiKey`. */

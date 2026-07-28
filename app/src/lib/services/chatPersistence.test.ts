@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, readTextFile, remove, writeTextFile } from "@tauri-apps/plugin-fs";
+import { mkdir, readTextFile, remove } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import {
   chatScopeStorageSegment,
@@ -26,8 +27,11 @@ import type { ChatSessionThreadFileSnapshot, ChatThreadSnapshot } from "../domai
 vi.mock("@tauri-apps/plugin-fs", () => ({
   mkdir: vi.fn(),
   readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
   remove: vi.fn(),
+}));
+
+vi.mock("./atomicWrite", () => ({
+  atomicWriteTextFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./appDataDir", () => ({
@@ -40,7 +44,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 
 const mkdirMock = vi.mocked(mkdir);
 const readTextFileMock = vi.mocked(readTextFile);
-const writeTextFileMock = vi.mocked(writeTextFile);
+const atomicWriteTextFileMock = vi.mocked(atomicWriteTextFile);
 const removeMock = vi.mocked(remove);
 
 const WORKSPACE = "/work/a";
@@ -505,11 +509,11 @@ describe("workspace agents index codec", () => {
 describe("agent persistence reads and writes", () => {
   beforeEach(() => {
     readTextFileMock.mockReset();
-    writeTextFileMock.mockReset();
+    atomicWriteTextFileMock.mockReset();
     removeMock.mockReset();
     mkdirMock.mockReset();
     mkdirMock.mockResolvedValue(undefined);
-    writeTextFileMock.mockResolvedValue(undefined);
+    atomicWriteTextFileMock.mockResolvedValue(undefined);
     removeMock.mockResolvedValue(undefined);
     resetChatPersistenceForTests();
   });
@@ -535,8 +539,8 @@ describe("agent persistence reads and writes", () => {
     const thread = sampleThread();
     await persistSessionThreadSnapshot(WORKSPACE, AGENT_ID, thread);
 
-    expect(writeTextFileMock).toHaveBeenCalledTimes(2);
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledTimes(2);
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/index.json",
       encodeWorkspaceSessionsIndexSnapshot({
         version: 1,
@@ -549,7 +553,7 @@ describe("agent persistence reads and writes", () => {
         ],
       }),
     );
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/" + AGENT_ID + ".json",
       encodeChatSessionThreadFileSnapshot({ version: 1, thread }),
     );
@@ -561,8 +565,8 @@ describe("agent persistence reads and writes", () => {
       sessions: [{ id: AGENT_ID, title: "New session", lastUsedAt: "2026-05-28T00:00:00.000Z", isDraft: true }],
     });
 
-    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledTimes(1);
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/index.json",
       expect.stringContaining("New session"),
     );
@@ -581,7 +585,7 @@ describe("agent persistence reads and writes", () => {
     expect(removeMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/" + AGENT_ID + ".json",
     );
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/index.json",
       encodeWorkspaceSessionsIndexSnapshot({ version: 1, sessions: [] }),
     );
@@ -596,8 +600,8 @@ describe("agent persistence reads and writes", () => {
     const thread = sampleThread();
     await writeSessionThreadFileSnapshot(WORKSPACE, AGENT_ID, { version: 1, thread });
 
-    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledTimes(1);
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/chat/" + workspaceChatPathHashKey(WORKSPACE) + "/" + AGENT_ID + ".json",
       encodeChatSessionThreadFileSnapshot({ version: 1, thread }),
     );

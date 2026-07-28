@@ -6,6 +6,8 @@ import { requestConfirm } from "./confirmDialogUi";
 import { saveAllDirtyDocumentsToDisk } from "./workspaceCloseFlow";
 import { flushSessionPersistence } from "./sessionManager";
 import { flushSettingsPersistence } from "./appShellEffects";
+import { flushThemePersistence } from "../state/appState/themeController";
+import { prepareOtherWindowsForQuit } from "./windowManager";
 import { logDiagnostic } from "./logging";
 
 /** A dirty document together with the context that owns it. */
@@ -140,22 +142,39 @@ export async function confirmWindowClose(deps: WindowCloseDeps): Promise<boolean
  * because the predefined item calls `exit(0)` immediately — firing neither
  * `CloseRequested` nor `ExitRequested` — so Cmd+Q used to bypass the prompt, the
  * session flush, and the Rust-side sidecar/git cleanup all at once.
+ *
+ * `exit(0)` also skips per-window `CloseRequested`, so secondary windows would
+ * get neither a prompt nor an awaited flush — only the fire-and-forget
+ * `pagehide` backstop. After this window confirms and flushes, we fan a
+ * prepare-quit event out to every other live window and wait for each to run
+ * its own `confirmWindowClose` before exiting.
  */
 export async function requestAppQuit(deps: {
   getWindowId: () => string;
   notify: (message: string) => void;
 }): Promise<void> {
+  const initiatorWindowId = deps.getWindowId();
   const mayQuit = await confirmWindowClose({
     getWindowId: deps.getWindowId,
     notify: deps.notify,
     flushSession: async () => {
-      await flushSessionPersistence(appState.getSnapshot(), deps.getWindowId());
+      await flushSessionPersistence(appState.getSnapshot(), initiatorWindowId);
       // Settings share the debounced-write problem: a change in the last
       // 300 ms (e.g. a slider drag right before Cmd+Q) would otherwise be lost.
       await flushSettingsPersistence();
+      // Theme token edits are debounced on the same 300 ms window; flush them
+      // too so a color tweak made right before quit is not dropped.
+      await flushThemePersistence();
     },
   });
   if (!mayQuit) {
+    return;
+  }
+  // Ask every other window to prompt + flush too. If any window's user cancels
+  // (or one times out mid-prompt), abort the whole quit rather than silently
+  // killing secondary windows mid-edit.
+  const othersReady = await prepareOtherWindowsForQuit(initiatorWindowId);
+  if (!othersReady) {
     return;
   }
   // `quit_app` re-runs the Rust shutdown cleanup (stop the sidecar, reap git

@@ -340,7 +340,7 @@ describe("savePersistedSettings", () => {
   });
 
   it("falls back to a direct write when rename fails", async () => {
-    renameMock.mockRejectedValue(new Error("rename unsupported"));
+    renameMock.mockRejectedValue(new Error("file exists"));
     const settings = { ...defaultPersistedSettings };
 
     await savePersistedSettings(settings);

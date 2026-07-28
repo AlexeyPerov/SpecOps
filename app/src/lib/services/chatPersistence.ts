@@ -1,4 +1,5 @@
-import { readTextFile, remove, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile, remove } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import type {
   ChatSessionThreadFileSnapshot,
   ChatThreadSnapshot,
@@ -88,7 +89,7 @@ export async function writeWorkspaceSessionsIndexSnapshot(
   snapshot: WorkspaceSessionsIndexSnapshot,
 ): Promise<void> {
   const indexPath = await getWorkspaceSessionsIndexFilePath(scopeKey);
-  await writeTextFile(indexPath, encodeWorkspaceSessionsIndexSnapshot(snapshot));
+  await atomicWriteTextFile(indexPath, encodeWorkspaceSessionsIndexSnapshot(snapshot));
 }
 
 export async function readSessionThreadFileSnapshot(
@@ -111,7 +112,7 @@ export async function writeSessionThreadFileSnapshot(
   snapshot: ChatSessionThreadFileSnapshot,
 ): Promise<void> {
   const threadPath = await getSessionThreadFilePath(scopeKey, sessionId);
-  await writeTextFile(threadPath, encodeChatSessionThreadFileSnapshot(snapshot));
+  await atomicWriteTextFile(threadPath, encodeChatSessionThreadFileSnapshot(snapshot));
 }
 
 export async function syncSessionIndexEntryForThread(

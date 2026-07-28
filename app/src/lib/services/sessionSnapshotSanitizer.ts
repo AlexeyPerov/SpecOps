@@ -355,14 +355,17 @@ export async function sanitizeWindowSnapshot(
   const chatHttp = await sanitizeContext(snapshot.chatHttp ?? snapshot.notepad);
   const workspaces = [];
   for (const workspace of snapshot.workspaces) {
-    // Drop workspaces whose root folder no longer exists — restoring them
-    // leaves a permanently broken entry in the rail.
-    if (workspace.rootPath) {
-      const rootExists = await fileStillExists(workspace.rootPath);
-      if (!rootExists) {
-        continue;
-      }
-    }
+    // A workspace whose root folder is gone used to be dropped here. But
+    // session.json is the only copy of that workspace's unsaved buffers, and a
+    // missing root on restore is ambiguous: an unmounted network volume or a
+    // folder renamed while the app was closed looks exactly like a real
+    // deletion (ENOENT), yet the data is still recoverable once the volume
+    // returns. Dropping the entry rewrites session.json without it on the next
+    // persist — silent total loss. Mirror the "unknown errors count as
+    // existing" semantics H25 preserved for documents: keep the workspace (and
+    // its buffers) in the snapshot. The rail / workspace switcher surfaces a
+    // broken-root state at use time rather than destroying the data at restore
+    // time.
     workspaces.push({
       ...workspace,
       snapshot: await sanitizeContext(workspace.snapshot),

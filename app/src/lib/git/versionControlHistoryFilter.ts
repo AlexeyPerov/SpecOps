@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "../services/atomicWrite";
 import { ensureSpecOpsDataDir } from "../services/appDataDir";
 import {
   DEFAULT_HISTORY_FILTER_MODE,
@@ -115,7 +116,7 @@ async function readSnapshot(): Promise<PersistedHistoryFilterByRepo | null> {
 
 async function writeSnapshot(snapshot: PersistedHistoryFilterByRepo): Promise<void> {
   const prefsPath = await getPrefsPath();
-  await writeTextFile(prefsPath, JSON.stringify(snapshot, null, 2));
+  await atomicWriteTextFile(prefsPath, JSON.stringify(snapshot, null, 2));
 }
 
 async function loadOrCreateSnapshot(): Promise<PersistedHistoryFilterByRepo> {

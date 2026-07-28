@@ -15,6 +15,15 @@ export const WINDOW_EVENT_WINDOW_READY = "spec-ops/window/ready";
 export const WINDOW_EVENT_MERGE_TAB = "spec-ops/window/merge-tab";
 /** Target → source acknowledgment after adopting (or failing to adopt) a merged tab. */
 export const WINDOW_EVENT_MERGE_TAB_ACK = "spec-ops/window/merge-tab-ack";
+/**
+ * App-quit coordination. The window that received Cmd+Q emits this to every
+ * other live window; each runs its own unsaved-changes prompt + session flush
+ * and replies with {@link WINDOW_EVENT_PREPARE_QUIT_ACK}. If any window reports
+ * that the user cancelled (or fails to ack within the deadline), the quit is
+ * aborted so secondary windows are not silently killed mid-edit.
+ */
+export const WINDOW_EVENT_PREPARE_QUIT = "spec-ops/window/prepare-quit";
+export const WINDOW_EVENT_PREPARE_QUIT_ACK = "spec-ops/window/prepare-quit-ack";
 
 export type MergeTabPayload = TabTransferPayload & {
   sourceWindowId: string;
@@ -27,10 +36,24 @@ export type MergeTabAckPayload = {
   error?: string;
 };
 
+export type PrepareQuitAckPayload = {
+  windowId: string;
+  /** True when this window has no unsaved work or the user confirmed save/discard. */
+  mayQuit: boolean;
+};
+
 export type TabTransferPayload = {
   filePath: string | null;
   content: string;
   title: string;
+  /**
+   * On-disk line ending of the source document. The editor always works in LF,
+   * so this is what converts back on the first save in the target window.
+   * Absent for legacy payloads (treated as LF by `buildDocument`).
+   */
+  lineEnding?: "lf" | "crlf";
+  /** Whether the source document began with a UTF-8 BOM (restored on save). */
+  hasBom?: boolean;
 };
 
 const WINDOW_READY_TIMEOUT_MS = 10_000;
@@ -181,4 +204,79 @@ export async function createNewWindowWithTransfer(
 export async function routePathToLastActiveWindow(path: string): Promise<void> {
   const target = await resolveActivationWindow(null);
   await activateFileInWindow(path, target);
+}
+
+/** Per-window ack deadline for the prepare-quit handshake. */
+const PREPARE_QUIT_ACK_TIMEOUT_MS = 60_000;
+
+/**
+ * Ask every *other* live window to run its unsaved-changes prompt and session
+ * flush, returning false if any window reports the user cancelled (or fails to
+ * ack within the deadline).
+ *
+ * Cmd+Q calls `app_handle.exit(0)`, which fires `ExitRequested`/`Exit` but not
+ * per-window `CloseRequested` — so without this, secondary windows get no prompt
+ * and no awaited flush, only the fire-and-forget `pagehide` backstop (the exact
+ * race the close flow was written to close). Each window's existing
+ * `confirmWindowClose` runs locally (prompt + flush), so this only adds the
+ * cross-window fan-out and ack collection.
+ */
+export async function prepareOtherWindowsForQuit(
+  initiatorWindowId: string,
+): Promise<boolean> {
+  let otherWindows: WebviewWindow[] = [];
+  try {
+    otherWindows = (await WebviewWindow.getAll()).filter(
+      (window) => window.label !== initiatorWindowId,
+    );
+  } catch {
+    // No multi-window API available (single-window env / tests): nothing to
+    // coordinate, the initiator's own confirm is the whole quit.
+    return true;
+  }
+  if (otherWindows.length === 0) {
+    return true;
+  }
+
+  const pending = new Set(otherWindows.map((window) => window.label));
+  let cancelled = false;
+
+  const ackUnlisten = await listen<PrepareQuitAckPayload>(
+    WINDOW_EVENT_PREPARE_QUIT_ACK,
+    (event) => {
+      const { windowId, mayQuit } = event.payload;
+      pending.delete(windowId);
+      if (!mayQuit) {
+        cancelled = true;
+      }
+    },
+  );
+
+  try {
+    await Promise.all(
+      otherWindows.map((window) =>
+        emitTo(window.label, WINDOW_EVENT_PREPARE_QUIT, {
+          initiatorWindowId,
+        }).catch(() => {
+          // A window that can't be reached is treated as consenting; its
+          // pagehide backstop still runs on exit. Failing the whole quit
+          // because one window's IPC dropped would trap the user.
+          pending.delete(window.label);
+        }),
+      ),
+    );
+
+    const deadline = Date.now() + PREPARE_QUIT_ACK_TIMEOUT_MS;
+    // Poll until every window has acked or the deadline lapses. The user may
+    // be staring at a save prompt in another window, so a tight loop with a
+    // short sleep keeps latency low without busy-spinning.
+    while (pending.size > 0 && Date.now() < deadline && !cancelled) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    // A timed-out window is assumed to still be running its prompt (or stuck);
+    // we do not force-quit past it. The user can re-issue Cmd+Q.
+    return !cancelled && pending.size === 0;
+  } finally {
+    ackUnlisten();
+  }
 }

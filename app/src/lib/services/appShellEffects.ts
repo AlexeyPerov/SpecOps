@@ -66,7 +66,7 @@ export interface SyncSessionTabEffectInput {
   isSessionTabActive: boolean;
   selectedSessionId: string | null;
   lastChatScopeKey: string | null;
-  ensureChatHttpSessionTab: () => void;
+  ensureChatHttpSessionTab: () => void | Promise<void>;
   restoreWorkspaceSession: (
     workspaceRoot: string,
     options?: { skipOpencodeReconcile?: boolean },
@@ -106,7 +106,7 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
 
   if (isChatHttpActive) {
     selectedSessionId;
-    ensureChatHttpSessionTab();
+    void ensureChatHttpSessionTab();
   }
 
   if (activeContextId === CHAT_HTTP_CONTEXT_ID) {
@@ -117,10 +117,10 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
       setLastChatScopeKey(CHAT_HTTP_CONTEXT_ID);
       chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
       void chatStore.loadWorkspaceSessions(CHAT_HTTP_CONTEXT_ID).then(() => {
-        ensureChatHttpSessionTab();
+        void ensureChatHttpSessionTab();
       });
     } else {
-      ensureChatHttpSessionTab();
+      void ensureChatHttpSessionTab();
     }
     return;
   }

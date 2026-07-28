@@ -1,5 +1,5 @@
 import { join } from "@tauri-apps/api/path";
-import { exists, mkdir, readTextFile, remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import { exists, mkdir, readFile, remove, rename } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
 import type { DiskFingerprint } from "../domain/contracts";
 import { SKIPPED_DIRECTORY_NAMES } from "./folderOpenableFiles";
@@ -22,6 +22,7 @@ import {
   syncDocumentsAfterPathRelocation,
 } from "./relocateWorkspacePaths";
 import { isPathUnderRoot } from "./workspacePaths";
+import { decodeTextFile, encodeTextFile, type DocumentLineEnding } from "./textEncoding";
 
 export type ProjectFileOpResult =
   | { ok: true; path: string }
@@ -29,7 +30,18 @@ export type ProjectFileOpResult =
 
 /** Result of replacing all matches inside a single project file. */
 export type ProjectReplaceResult =
-  | { ok: true; path: string; count: number; content: string; fingerprint: DiskFingerprint }
+  | {
+      ok: true;
+      path: string;
+      count: number;
+      /** LF-normalized content (matches what the editor store holds). */
+      content: string;
+      fingerprint: DiskFingerprint;
+      /** On-disk line ending, preserved across the replace. */
+      lineEnding: DocumentLineEnding;
+      /** Whether the file began with a UTF-8 BOM, preserved across the replace. */
+      hasBom: boolean;
+    }
   | { ok: false; reason: string; count: number };
 
 function basename(path: string): string {
@@ -137,7 +149,7 @@ export async function createProjectFile(
     return { ok: false, reason: "A file or folder with that name already exists." };
   }
   try {
-    await writeTextFile(targetPath, "");
+    await atomicWriteTextFile(targetPath, "");
     return { ok: true, path: targetPath };
   } catch (error: unknown) {
     const reason = error instanceof Error ? error.message : String(error);
@@ -168,23 +180,42 @@ export async function replaceInProjectFile(
   if (isBlockedProjectTreeDirectory(filePath)) {
     return { ok: false, reason: "Cannot modify files in this folder.", count: 0 };
   }
-  let content: string;
+  // Read raw bytes and strict-decode, mirroring the open-file path (C5). A
+  // lossy `readTextFile` here would rewrite a Latin-1 / UTF-16 / small-binary
+  // file that happens to match the query with U+FFFD, destroying it on save.
+  // Skip non-UTF-8 files with a surfaced reason instead of corrupting them.
+  let bytes: Uint8Array;
   try {
-    content = await readTextFile(filePath);
+    bytes = await readFile(filePath);
   } catch (error: unknown) {
     const reason = error instanceof Error ? error.message : String(error);
     return { ok: false, reason, count: 0 };
   }
-  const { text: nextContent, count } = replaceAllInString(content, query);
+  const decoded = decodeTextFile(bytes);
+  if (!decoded) {
+    return {
+      ok: false,
+      reason: "File is not valid UTF-8 text and was skipped.",
+      count: 0,
+    };
+  }
+  const { text: nextContent, count } = replaceAllInString(decoded.content, query);
   if (count === 0) {
     return { ok: false, reason: "No matches.", count: 0 };
   }
-  const writtenBytes = new TextEncoder().encode(nextContent);
+  // Re-apply the original line ending and BOM so a CRLF / BOM'd file is not
+  // silently rewritten as LF with no BOM. The editor store always holds the
+  // LF-normalized form, so `nextContent` (already LF) is what we return.
+  const encoded = encodeTextFile(nextContent, {
+    lineEnding: decoded.lineEnding,
+    hasBom: decoded.hasBom,
+  });
+  const writtenBytes = new TextEncoder().encode(encoded);
   // Register this as an app-initiated write so a watcher self-echo landing
   // before the fingerprint is recorded does not trigger a reload/dirty prompt.
   beginSaveInFlight(filePath);
   try {
-    await atomicWriteTextFile(filePath, nextContent);
+    await atomicWriteTextFile(filePath, encoded);
   } catch (error: unknown) {
     clearSaveInFlight(filePath);
     const reason = error instanceof Error ? error.message : String(error);
@@ -207,7 +238,15 @@ export async function replaceInProjectFile(
   } finally {
     clearSaveInFlight(filePath);
   }
-  return { ok: true, path: filePath, count, content: nextContent, fingerprint };
+  return {
+    ok: true,
+    path: filePath,
+    count,
+    content: nextContent,
+    fingerprint,
+    lineEnding: decoded.lineEnding,
+    hasBom: decoded.hasBom,
+  };
 }
 
 export async function createProjectFolder(

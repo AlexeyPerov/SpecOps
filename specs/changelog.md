@@ -1,5 +1,99 @@
 # Changelog
 
+## 2026-07-28 — Follow-up review Tier 2 (F5–F18)
+
+Fixes for the data-loss tier of the follow-up review in
+[`specs/code-review-follow-up-2026-07-28.md`](./code-review-follow-up-2026-07-28.md).
+
+### Session integrity & atomic writes
+
+- **Open-file registry could overwrite `session.json` with an empty snapshot (F5).** Every
+  registry writer fell back to `createEmptySessionSnapshot()` when its own
+  `readSessionSnapshot` returned null on a transient read failure (lock contention, a slow
+  network volume), then wrote that empty file — and because an empty snapshot decodes
+  cleanly, `restoreWindowSession` never fell back to the backup, silently destroying every
+  window's tabs and unsaved buffers. The registry's read-modify-write now distinguishes
+  "no file yet" (safe to seed) from "unreadable" (abort the RMW and log) and never
+  synthesises a snapshot from a failed read.
+- **`atomicWriteTextFile`'s fallback truncated the good target (F9).** A blanket `catch`
+  fell through to a plain truncating `writeTextFile(path)` even when the *temp-file* write
+  failed (ENOSPC, EIO), destroying the previously-good target in exactly the scenario
+  atomicity exists to prevent. The fallback now only triggers on rename-specific failures
+  (with a remove+rename retry first); a temp-write failure propagates so the original file
+  is left intact. The residual fsync gap is documented.
+- **Eleven persisted-state writers still used plain `writeTextFile` (F10).** Provider
+  secrets, chat threads/index, workspace preferences, prompt history, git remote/history
+  filter selections, and project file creation all wrote with a truncating
+  `writeTextFile`; a torn write to any lost the whole file. All are migrated to
+  `atomicWriteTextFile`.
+- **Cross-window session lock had no ownership token (F12).** The lock directory's mtime
+  was set at acquisition and never refreshed, so a legitimately slow RMW (>10 s) was judged
+  stale and broken, after which the original holder's `release()` deleted the *new* holder's
+  lock — silently losing mutual exclusion. A filesystem reporting no mtime made every lock
+  look epoch-old and broken on every attempt. The lock now carries an owner token
+  (window id + acquire id) written to a file inside the lock dir; release and stale-break
+  verify ownership first; a heartbeat refreshes the mtime while held; and a missing mtime is
+  treated as fresh.
+
+### Close / quit data loss
+
+- **Cmd+Q prompted and flushed only the focused window (F6).** `quit_app` calls
+  `app_handle.exit(0)`, which fires `ExitRequested`/`Exit` but not per-window
+  `CloseRequested`, so secondary windows got no prompt and no awaited flush — only the
+  fire-and-forget `pagehide` backstop. A new `prepare-quit` cross-window handshake fans out
+  to every other live window, each runs its own `confirmWindowClose` (prompt + flush) and
+  acks; the quit aborts if any window cancels or times out.
+- **"Close Missing Files" force-closed the dirty tabs H20 preserved (F7).** The menu item
+  closed every `fileMissing` tab via `closeTabsByIds` with no prompt and no dirty check, so
+  the marker H20 added to *prevent* data loss became the trigger for it. It now routes
+  through `closeTabsWithUnsavedPrompt`, offering Save As for a missing path.
+- **Chat-session switch force-closed every file tab with no prompt (F8).** Opening a
+  chat-session tab discarded all unsaved file buffers in the active session via
+  `closeTabsByIds(fileTabIds, null)`. It now uses the same dirty-prompt path; a cancel
+  leaves the file tabs in place.
+- **Theme token edits in the last 300 ms were lost on quit (F17).** Token edits were
+  debounced on a 300 ms timer, but no close/quit path flushed it. A new
+  `flushThemePersistence` drains the pending save (and awaits the in-flight one); it is
+  called from both the per-window close and the app-quit flush paths alongside settings.
+
+### Encoding & file-transfer correctness
+
+- **Project Replace All corrupted non-UTF-8 files and re-introduced the CRLF divergence
+  (F13).** `replaceInProjectFile` read with lossy `readTextFile` and wrote the result back,
+  bypassing the strict-decode/binary gate, so a Latin-1/UTF-16/small-binary file matching
+  the query was rewritten with U+FFFD; `syncOpenDocumentAfterReplace` then pushed raw
+  CRLF-preserving content into the store, diverging it from the CodeMirror doc. The read now
+  goes through `readFile` + `decodeTextFile` (non-UTF-8 files are skipped with a surfaced
+  count), the write re-applies the original line ending/BOM via `encodeTextFile`, and the
+  store sync carries the encoding metadata.
+- **Cross-window tab transfer dropped `lineEnding` and `hasBom` (F14).** `TabTransferPayload`
+  carried only `filePath`/`content`/`title`, so `buildDocument` fell back to sniffing
+  already-LF text and the first save in the target window rewrote a CRLF/BOM'd file as LF
+  with no BOM. The payload now carries `lineEnding`/`hasBom`.
+- **`refreshDocumentFromDiskIfNeeded` discarded freshly-read encoding metadata (F15).**
+  `documentWithOpenedFilePayload` was called without the decoded line ending/BOM, so a
+  session-restored document refreshed from disk kept stale defaults. It now passes
+  `opened.lineEnding`/`opened.hasBom`.
+- **`handoffSavedFileToNotepad` reverted mid-write keystrokes (F16).** The replacement
+  document was built from the pre-await `writtenContent` and marked saved with the same
+  string, so edits made during the write were dropped and marked clean. It now re-reads the
+  document's current content before closing the source tab, transfers the live buffer, and
+  records only the written content as the saved baseline so mid-write edits stay dirty.
+- **`renameDocumentOnDisk` used active-context mutators after a dialog await (F18).**
+  `renameFile` awaits a native dialog; a workspace switch meanwhile made
+  `renameDocument`/`setDocumentDiskState` land in the wrong context or no-op. The owning
+  context is now resolved before the await and the context-aware variants
+  (`renameDocumentInContext`/`setDocumentDiskStateForContext`) are used throughout.
+
+### Session restore
+
+- **Session restore dropped a workspace — and its unsaved buffers — on a transient ENOENT
+  (F11).** An unmounted network volume or a renamed folder made the root-existence check
+  fail, the workspace was dropped, and the next persist rewrote `session.json` without it —
+  silent total loss of the only copy of those dirty buffers. The workspace is now retained
+  (mirroring the "unknown errors count as existing" semantics H25 preserved for documents);
+  a broken root surfaces at use time rather than destroying data at restore time.
+
 ## 2026-07-28 — Follow-up review Tier 0/1 (F1–F4)
 
 Fixes for the blocker and security tiers of the follow-up review in

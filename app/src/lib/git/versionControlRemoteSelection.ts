@@ -1,5 +1,6 @@
 import { join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "../services/atomicWrite";
 import { ensureSpecOpsDataDir } from "../services/appDataDir";
 import { resolveDefaultRemote } from "./gitParse";
 import type { GitRemote } from "./types";
@@ -172,7 +173,7 @@ async function readSnapshot(): Promise<PersistedRemoteSelectionByRepo | null> {
 
 async function writeSnapshot(snapshot: PersistedRemoteSelectionByRepo): Promise<void> {
   const prefsPath = await getPrefsPath();
-  await writeTextFile(prefsPath, JSON.stringify(snapshot, null, 2));
+  await atomicWriteTextFile(prefsPath, JSON.stringify(snapshot, null, 2));
 }
 
 async function loadOrCreateSnapshot(): Promise<PersistedRemoteSelectionByRepo> {

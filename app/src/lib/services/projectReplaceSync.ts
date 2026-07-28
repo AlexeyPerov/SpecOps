@@ -3,6 +3,7 @@ import {
   findDocumentByNormalizedPathAllContexts,
 } from "../state/appState/contextHelpers";
 import { normalizePathSync } from "./diskFingerprint";
+import type { DocumentLineEnding } from "./textEncoding";
 
 /**
  * Decision returned before running a project-wide Replace All on a single file
@@ -33,11 +34,17 @@ export function decideReplaceAllForPath(filePath: string): ReplaceAllFileDecisio
  * copy) and the post-write disk fingerprint is recorded. Uses the
  * context-aware APIs because the document may live in a workspace that is not
  * the active context.
+ *
+ * The content passed in is already LF-normalized (the editor store always
+ * holds LF); the on-disk line ending / BOM are carried as metadata so the
+ * document's encoding state matches what was written, preventing the next
+ * save from converting line endings or dropping a BOM (C5/C6).
  */
 export function syncOpenDocumentAfterReplace(
   filePath: string,
   content: string,
   fingerprint: { mtimeMs: number; sizeBytes: number },
+  encoding?: { lineEnding?: DocumentLineEnding; hasBom?: boolean },
 ): void {
   const normalized = normalizePathSync(filePath);
   const match = findDocumentByNormalizedPathAllContexts(appState.getSnapshot(), normalized);
@@ -49,5 +56,6 @@ export function syncOpenDocumentAfterReplace(
     match.documentId,
     content,
     fingerprint,
+    encoding,
   );
 }

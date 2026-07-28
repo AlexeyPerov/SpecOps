@@ -13,9 +13,13 @@ vi.mock("./openFileRegistry", () => ({
   renameOpenFileRegistry: (...args: unknown[]) => renameOpenFileRegistryMock(...args),
 }));
 
-vi.mock("./diskFingerprint", () => ({
-  statDiskFingerprint: (...args: unknown[]) => statDiskFingerprintMock(...args),
-}));
+vi.mock("./diskFingerprint", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./diskFingerprint")>();
+  return {
+    ...actual,
+    statDiskFingerprint: (...args: unknown[]) => statDiskFingerprintMock(...args),
+  };
+});
 
 import { renameDocumentOnDisk } from "./documentRename";
 

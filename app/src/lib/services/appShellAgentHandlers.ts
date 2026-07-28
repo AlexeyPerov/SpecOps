@@ -8,7 +8,7 @@ import {
 } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
-import { closeTabWithUnsavedPrompt } from "./closeTabFlow";
+import { closeTabWithUnsavedPrompt, closeTabsWithUnsavedPrompt } from "./closeTabFlow";
 import {
   WorkspaceAgentBackendError,
   type WorkspaceAgentSessionDetails,
@@ -115,7 +115,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     }
   }
 
-  function ensureChatHttpSessionTab(): void {
+  async function ensureChatHttpSessionTab(): Promise<void> {
     if (!getIsChatHttpActive()) {
       return;
     }
@@ -146,7 +146,19 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       .filter((tab) => isFileTab(tab))
       .map((tab) => tab.id);
     if (fileTabIds.length > 0) {
-      appState.closeTabsByIds(fileTabIds, null);
+      // Closing these tabs used to bypass the dirty prompt, discarding every
+      // unsaved buffer in the active session when a chat-session tab opened.
+      // Route through the same dirty-prompt path as a user-initiated close so
+      // the user can save (or Save As) before the file tabs go away. If the
+      // user cancels, leave the file tabs in place rather than forcing the
+      // session tab over them.
+      const closed = await closeTabsWithUnsavedPrompt(fileTabIds, {
+        getWindowId: getCurrentWindowId,
+        notify,
+      }, null);
+      if (!closed) {
+        return;
+      }
     }
     appState.openOrFocusSessionTab(sessionId);
   }

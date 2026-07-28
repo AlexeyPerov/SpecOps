@@ -177,6 +177,11 @@ export async function refreshDocumentFromDiskIfNeeded(
       opened.path,
       opened.content,
       opened.contentKind,
+      // Carry the freshly-read line ending / BOM so a session-restored
+      // document refreshed from disk keeps current encoding metadata instead
+      // of stale defaults (which would let the next save convert line endings
+      // or drop a BOM).
+      { lineEnding: opened.lineEnding, hasBom: opened.hasBom },
     );
   } catch (error: unknown) {
     if (isFileMissingError(error)) {

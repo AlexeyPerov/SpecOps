@@ -14,6 +14,7 @@ import {
   closeTabWithUnsavedPrompt,
   closeTabsToLeftWithUnsavedPrompt,
   closeTabsToRightWithUnsavedPrompt,
+  closeTabsWithUnsavedPrompt,
   type CloseTabFlowDeps,
 } from "./closeTabFlow";
 
@@ -318,12 +319,24 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
     deps.closeContextMenu();
   }
 
-  function closeMissingFileTabs(): void {
-    const tabIds = deps
-      .getOpenTabs()
-      .filter((tab) => !tab.pinned && Boolean(tabDocumentForTab(tab, deps.getDocuments())?.fileMissing))
+  async function closeMissingFileTabsWithPrompt(): Promise<void> {
+    const openTabs = deps.getOpenTabs();
+    const documents = deps.getDocuments();
+    // Missing-file tabs were preserved (H20) by flagging the document
+    // `fileMissing: true` rather than force-closing it — the buffer is the only
+    // copy of unsaved edits once the file is gone. Closing them here used to
+    // bypass the dirty prompt entirely, so this menu item became the trigger for
+    // exactly the data loss H20 was written to prevent. Route through the same
+    // dirty-prompt path as every other close; Save As is offered for a missing
+    // path by the close flow's save step.
+    const tabIds = openTabs
+      .filter((tab) => !tab.pinned && Boolean(tabDocumentForTab(tab, documents)?.fileMissing))
       .map((tab) => tab.id);
-    appState.closeTabsByIds(tabIds, null);
+    if (tabIds.length === 0) {
+      deps.closeContextMenu();
+      return;
+    }
+    await closeTabsWithUnsavedPrompt(tabIds, closeTabDeps, null);
     deps.closeContextMenu();
   }
 
@@ -339,7 +352,7 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
     closeOtherTabsWithPrompt,
     closeTabsToLeftWithPrompt,
     closeTabsToRightWithPrompt,
-    closeMissingFileTabs,
+    closeMissingFileTabs: closeMissingFileTabsWithPrompt,
   };
 }
 

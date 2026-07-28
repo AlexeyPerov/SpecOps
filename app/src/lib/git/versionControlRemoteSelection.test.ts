@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "../services/atomicWrite";
 import type { GitRemote } from "./types";
 import {
   emptyRemoteSelection,
@@ -15,7 +16,10 @@ import {
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
+}));
+
+vi.mock("../services/atomicWrite", () => ({
+  atomicWriteTextFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../services/appDataDir", () => ({
@@ -27,7 +31,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 }));
 
 const readTextFileMock = vi.mocked(readTextFile);
-const writeTextFileMock = vi.mocked(writeTextFile);
+const atomicWriteTextFileMock = vi.mocked(atomicWriteTextFile);
 
 const origin: GitRemote = {
   name: "origin",
@@ -134,8 +138,8 @@ describe("parsePersistedRemoteSelection", () => {
 describe("remote selection persistence", () => {
   beforeEach(() => {
     readTextFileMock.mockReset();
-    writeTextFileMock.mockReset();
-    writeTextFileMock.mockResolvedValue(undefined);
+    atomicWriteTextFileMock.mockReset();
+    atomicWriteTextFileMock.mockResolvedValue(undefined);
   });
 
   it("returns null when the prefs file is missing", async () => {
@@ -150,7 +154,7 @@ describe("remote selection persistence", () => {
       remoteBranch: null,
     });
 
-    const [, content] = writeTextFileMock.mock.calls[0];
+    const [, content] = atomicWriteTextFileMock.mock.calls[0];
     const snapshot = parsePersistedRemoteSelectionSnapshot(content as string);
     expect(snapshot?.byRepo["/tmp/repo"]).toEqual({
       remoteName: "origin",
@@ -176,7 +180,7 @@ describe("remote selection persistence", () => {
 
     await writePersistedRemoteSelection("/tmp/repo", emptyRemoteSelection());
 
-    const [, content] = writeTextFileMock.mock.calls[0];
+    const [, content] = atomicWriteTextFileMock.mock.calls[0];
     const snapshot = parsePersistedRemoteSelectionSnapshot(content as string);
     expect(snapshot?.byRepo["/tmp/repo"]).toBeUndefined();
   });

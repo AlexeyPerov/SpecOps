@@ -230,6 +230,7 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     let files = 0;
     let failures = 0;
     let skippedDirty = 0;
+    let skippedNonUtf8 = 0;
     try {
       for (const result of results) {
         // Never silently clobber an unsaved buffer: skip files whose open
@@ -243,7 +244,16 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
         if (outcome.ok) {
           replaced += outcome.count;
           files += 1;
-          syncOpenDocumentAfterReplaceService(result.path, outcome.content, outcome.fingerprint);
+          syncOpenDocumentAfterReplaceService(
+            result.path,
+            outcome.content,
+            outcome.fingerprint,
+            { lineEnding: outcome.lineEnding, hasBom: outcome.hasBom },
+          );
+        } else if (outcome.reason === "File is not valid UTF-8 text and was skipped.") {
+          // Non-UTF-8 files are skipped rather than corrupted (C5); surface the
+          // count so the user knows matches were left untouched.
+          skippedNonUtf8 += 1;
         } else if (outcome.reason !== "No matches.") {
           failures += 1;
         }
@@ -251,12 +261,18 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       deps.setProjectSearchStatus(
         `Replaced ${replaced} occurrence(s) in ${files} file(s)${
           failures > 0 ? `; ${failures} file(s) failed` : ""
-        }${skippedDirty > 0 ? `; skipped ${skippedDirty} file(s) with unsaved changes` : ""}`,
+        }${skippedDirty > 0 ? `; skipped ${skippedDirty} file(s) with unsaved changes` : ""}${
+          skippedNonUtf8 > 0 ? `; skipped ${skippedNonUtf8} non-UTF-8 file(s)` : ""
+        }`,
       );
       deps.notify(
-        skippedDirty > 0
-          ? `Replaced ${replaced} occurrence(s) in ${files} file(s); skipped ${skippedDirty} with unsaved changes.`
-          : `Replaced ${replaced} occurrence(s) in ${files} file(s).`,
+        [
+          `Replaced ${replaced} occurrence(s) in ${files} file(s).`,
+          skippedDirty > 0 ? `Skipped ${skippedDirty} with unsaved changes.` : "",
+          skippedNonUtf8 > 0 ? `Skipped ${skippedNonUtf8} non-UTF-8 file(s).` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
       );
       await rerunSearch();
     } finally {

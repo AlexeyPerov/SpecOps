@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "../services/atomicWrite";
 import { DEFAULT_HISTORY_FILTER_MODE } from "./types";
 import {
   HISTORY_FILTER_MODE_OPTIONS,
@@ -12,7 +13,10 @@ import {
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
+}));
+
+vi.mock("../services/atomicWrite", () => ({
+  atomicWriteTextFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../services/appDataDir", () => ({
@@ -24,7 +28,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 }));
 
 const readTextFileMock = vi.mocked(readTextFile);
-const writeTextFileMock = vi.mocked(writeTextFile);
+const atomicWriteTextFileMock = vi.mocked(atomicWriteTextFile);
 
 describe("parsePersistedHistoryFilterMode", () => {
   it("accepts known filter modes", () => {
@@ -55,7 +59,8 @@ describe("reconcileHistoryFilterMode", () => {
 describe("history filter persistence", () => {
   beforeEach(() => {
     readTextFileMock.mockReset();
-    writeTextFileMock.mockReset();
+    atomicWriteTextFileMock.mockReset();
+    atomicWriteTextFileMock.mockResolvedValue(undefined);
   });
 
   it("returns null when no snapshot exists", async () => {
@@ -90,8 +95,8 @@ describe("history filter persistence", () => {
 
     await writePersistedHistoryFilterMode("/tmp/repo", "all-branches-and-remotes");
 
-    expect(writeTextFileMock).toHaveBeenCalledOnce();
-    const [, raw] = writeTextFileMock.mock.calls[0] ?? [];
+    expect(atomicWriteTextFileMock).toHaveBeenCalledOnce();
+    const [, raw] = atomicWriteTextFileMock.mock.calls[0] ?? [];
     const snapshot = parsePersistedHistoryFilterSnapshot(String(raw));
     expect(snapshot?.byRepo["/tmp/other"]).toBe("all-branches");
     expect(snapshot?.byRepo["/tmp/repo"]).toBe("all-branches-and-remotes");
@@ -99,7 +104,7 @@ describe("history filter persistence", () => {
     readTextFileMock.mockResolvedValue(String(raw));
     await writePersistedHistoryFilterMode("/tmp/repo", DEFAULT_HISTORY_FILTER_MODE);
 
-    const [, resetRaw] = writeTextFileMock.mock.calls[1] ?? [];
+    const [, resetRaw] = atomicWriteTextFileMock.mock.calls[1] ?? [];
     const resetSnapshot = parsePersistedHistoryFilterSnapshot(String(resetRaw));
     expect(resetSnapshot?.byRepo["/tmp/repo"]).toBeUndefined();
     expect(resetSnapshot?.byRepo["/tmp/other"]).toBe("all-branches");

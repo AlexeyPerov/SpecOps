@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { atomicWriteTextFile } from "./atomicWrite";
 import {
   loadConnectionApiKey,
   loadConnectionApiKeys,
@@ -8,7 +9,10 @@ import {
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
+}));
+
+vi.mock("./atomicWrite", () => ({
+  atomicWriteTextFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./appDataDir", () => ({
@@ -20,13 +24,13 @@ vi.mock("@tauri-apps/api/path", () => ({
 }));
 
 const readTextFileMock = vi.mocked(readTextFile);
-const writeTextFileMock = vi.mocked(writeTextFile);
+const atomicWriteTextFileMock = vi.mocked(atomicWriteTextFile);
 
 describe("providerSecretsStore", () => {
   beforeEach(() => {
     readTextFileMock.mockReset();
-    writeTextFileMock.mockReset();
-    writeTextFileMock.mockResolvedValue(undefined);
+    atomicWriteTextFileMock.mockReset();
+    atomicWriteTextFileMock.mockResolvedValue(undefined);
   });
 
   it("loads and trims the default connection API key from legacy http key", async () => {
@@ -48,7 +52,7 @@ describe("providerSecretsStore", () => {
   it("writes API key to a connection-keyed secrets file", async () => {
     await saveConnectionApiKey("conn-a", "  secret-key  ");
 
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",
       JSON.stringify({ version: 1, keys: { "conn-a": "secret-key" } }, null, 2),
     );
@@ -61,7 +65,7 @@ describe("providerSecretsStore", () => {
 
     await saveConnectionApiKey("conn-b", "key-b");
 
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",
       JSON.stringify(
         { version: 1, keys: { "conn-a": "existing-a", "conn-b": "key-b" } },
@@ -78,7 +82,7 @@ describe("providerSecretsStore", () => {
 
     await saveConnectionApiKey("conn-a", "   ");
 
-    expect(writeTextFileMock).toHaveBeenCalledWith(
+    expect(atomicWriteTextFileMock).toHaveBeenCalledWith(
       "/data/spec-ops/provider-secrets.json",
       JSON.stringify({ version: 1, keys: { "conn-b": "key-b" } }, null, 2),
     );

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { codePointAt, codePointSize } from "@codemirror/state";
 import { shouldDecorateAsSymbol } from "./plaintextDecorations";
 
 describe("shouldDecorateAsSymbol", () => {
@@ -15,5 +16,12 @@ describe("shouldDecorateAsSymbol", () => {
     expect(shouldDecorateAsSymbol("=")).toBe(true);
     expect(shouldDecorateAsSymbol("!")).toBe(true);
     expect(shouldDecorateAsSymbol("#")).toBe(true);
+  });
+
+  it("classifies astral emoji as a single decorate-able symbol code point", () => {
+    const emoji = "😀";
+    expect(emoji.length).toBe(2);
+    expect(codePointSize(codePointAt(emoji, 0))).toBe(2);
+    expect(shouldDecorateAsSymbol(emoji)).toBe(true);
   });
 });

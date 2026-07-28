@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-07-28 — Editor: session scope, language reconfigure, find wrap, replace captures, plaintext code points
+
+Follow-up to the review in
+[`specs/code-review-2026-07-25.md`](./code-review-2026-07-25.md), covering M52–M56 —
+the first batch of editor Medium findings.
+
+- **Controller destroy wiped every pane's editor session for a document (M52).**
+  Teardown now drops only the exact `{contextId, paneId, documentId}` keys this
+  controller wrote (`invalidateSession`). Disk reload still invalidates by
+  document id across panes.
+
+- **Tab switch reconfigured the language compartment twice (M53).** When the
+  language pack was already cached, `syncLanguage` reconfigured sync and again
+  from the resolved `loadLanguageSupport` microtask. Cache hits now return after
+  the single sync reconfigure.
+
+- **Find-next wrap missed a sole full-document match (M54).** The wrap pass used
+  exclusive `to = from - 1`, so `abc` with the cursor at the end reported no
+  match. Wrap now searches `[0, from)`.
+
+- **Replace-current dropped lookbehind/lookahead captures (M55).** Running the
+  pattern on the isolated selection text failed assertions and inserted a
+  literal `$1`. Replace now obtains the match via `RegExpCursor` on the document
+  (same as replace-all).
+
+- **Plaintext symbol marks split surrogate pairs (M56).** Decoration walked the
+  viewport one UTF-16 code unit at a time. They now iterate `iterRange` chunks
+  by Unicode code point.
+
 ## 2026-07-27 — State/services: Save All, dirty prompt, drop folder, data dir, untitled name, catalog dispose
 
 Follow-up to the review in

@@ -205,13 +205,14 @@ export function findNextRange(
     if (!cursor.next().done) {
       return { from: cursor.value.from, to: cursor.value.to };
     }
-    // Wrap: search from the document start up to `from`.
+    // Wrap: search [0, from). `to` is exclusive — using `from - 1` skipped the
+    // last code unit and made a sole full-document match report "not found".
     cursor = new RegExpCursor(
       doc,
       compiled.source,
       { ignoreCase: compiled.ignoreCase },
       0,
-      from > 0 ? from - 1 : 0,
+      from,
     );
     if (!cursor.next().done) {
       return { from: cursor.value.from, to: cursor.value.to };
@@ -309,11 +310,10 @@ export function editorReplaceCurrent(
   if (!isMatch) {
     return false;
   }
-  const selectedText = view.state.sliceDoc(sel.from, sel.to);
   const insert = query.regexp
     ? expandReplacement(
         query.replacement,
-        runMatch(query.text, selectedText, query.caseSensitive),
+        matchAtRange(view.state.doc, query, sel.from, sel.to),
         true,
       )
     : query.replacement;
@@ -348,11 +348,10 @@ export function editorReplaceAndFindNext(
   const matches = findAllRangesInText(view.state.doc, query);
   const isMatch = matches.some((m) => m.from === sel.from && m.to === sel.to);
   if (isMatch) {
-    const selectedText = view.state.sliceDoc(sel.from, sel.to);
     const insert = query.regexp
       ? expandReplacement(
           query.replacement,
-          runMatch(query.text, selectedText, query.caseSensitive),
+          matchAtRange(view.state.doc, query, sel.from, sel.to),
           true,
         )
       : query.replacement;
@@ -402,15 +401,35 @@ export function editorGetMatchInfo(
   return { total: matches.length, current };
 }
 
-/** Run the raw regex against a single match's text to obtain capture groups. */
-function runMatch(
-  pattern: string,
-  text: string,
-  caseSensitive: boolean,
+/**
+ * Re-run the compiled query against the full document at a known match range
+ * so lookbehind/lookahead and capture groups see surrounding context (same as
+ * replace-all). Matching the isolated slice alone drops assertions and yields
+ * a literal `$1` from expandReplacement.
+ */
+function matchAtRange(
+  doc: Text,
+  query: SearchQuery,
+  from: number,
+  to: number,
 ): RegExpExecArray | null {
+  const compiled = compileQueryInternal(query);
+  if (!compiled) return null;
   try {
-    return new RegExp(pattern, caseSensitive ? undefined : "i").exec(text);
+    const cursor = new RegExpCursor(
+      doc,
+      compiled.source,
+      { ignoreCase: compiled.ignoreCase },
+      from,
+    );
+    if (!cursor.next().done) {
+      const value = cursor.value;
+      if (value.from === from && value.to === to) {
+        return value.match;
+      }
+    }
   } catch {
     return null;
   }
+  return null;
 }

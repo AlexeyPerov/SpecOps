@@ -1,13 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { EditorSelection, Text } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import {
   buildReplaceAllChanges,
   countReplaceAllMatches,
+  editorReplaceCurrent,
   findNextMatchIndex,
+  findNextRange,
   findPreviousMatchIndex,
   normalizeForSearch,
   replaceSelectionText,
   selectionMatchesQuery,
 } from "./editorSearchOps";
+import { createSearchQuery } from "./searchQuery";
 
 describe("editorSearchOps", () => {
   const doc = "Alpha alpha\nBETA beta";
@@ -48,5 +53,40 @@ describe("editorSearchOps", () => {
       { from: 0, to: 5, insert: "omega" },
       { from: 6, to: 11, insert: "omega" },
     ]);
+  });
+});
+
+describe("findNextRange wrap", () => {
+  it("wraps to the sole full-document match when the cursor is at the end", () => {
+    const text = Text.of(["abc"]);
+    const query = createSearchQuery({ text: "abc", caseSensitive: true });
+    expect(findNextRange(text, query, 3)).toEqual({ from: 0, to: 3 });
+  });
+});
+
+describe("editorReplaceCurrent regex captures", () => {
+  let view: EditorView | undefined;
+
+  afterEach(() => {
+    view?.destroy();
+    view = undefined;
+  });
+
+  it("expands lookbehind captures using document context, not the isolated slice", () => {
+    view = new EditorView({
+      doc: "x42",
+      parent: document.body,
+    });
+    view.dispatch({
+      selection: EditorSelection.range(1, 3),
+    });
+    const query = createSearchQuery({
+      text: "(?<=x)(\\d+)",
+      replacement: "n$1",
+      regexp: true,
+      caseSensitive: true,
+    });
+    expect(editorReplaceCurrent(view, query)).toBe(true);
+    expect(view.state.doc.toString()).toBe("xn42");
   });
 });

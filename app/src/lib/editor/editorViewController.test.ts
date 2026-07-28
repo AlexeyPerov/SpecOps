@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EditorSelection, Transaction } from "@codemirror/state";
+import { EditorSelection, EditorState, Transaction } from "@codemirror/state";
 import { undo } from "@codemirror/commands";
 import { createEditorDocumentSessionCache } from "./editorDocumentSessionCache";
 import { createEditorWorkbenchRuntime } from "./editorWorkbenchRuntime";
@@ -224,16 +224,22 @@ describe("createEditorViewController", () => {
     expect(view.state.doc.toString()).toBe("plain-again");
   });
 
-  it("destroy is idempotent and clears the pane session cache", () => {
+  it("destroy is idempotent and clears only this pane's cached sessions", () => {
     const { sessionCache } = mountController();
     controller!.update(
       baseProps({ content: "document-b", documentId: "doc-b" }),
     );
     expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
+    // Other pane sessions for the same document must survive teardown.
+    sessionCache.save(
+      { contextId: "notepad", paneId: "pane-2", documentId: "doc-a" },
+      EditorState.create({ doc: "from-other-pane" }),
+    );
 
     controller!.destroy();
     controller!.destroy();
     expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(false);
+    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-2", documentId: "doc-a" })).toBe(true);
     expect(controller!.getView()).toBeUndefined();
     controller = undefined;
   });

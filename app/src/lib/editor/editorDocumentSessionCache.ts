@@ -37,7 +37,10 @@ export type EditorDocumentSessionCache = {
   take: (key: EditorSessionKey) => EditorState | undefined;
   peek: (key: EditorSessionKey) => EditorState | undefined;
   has: (key: EditorSessionKey) => boolean;
+  /** Drop every pane/context session for `documentId` (e.g. disk reload). */
   invalidateDocument: (documentId: string) => void;
+  /** Drop a single pane+context session (e.g. EditorView teardown for that key). */
+  invalidateSession: (key: EditorSessionKey) => void;
   /** Drop sessions for a pane (e.g. EditorView teardown — cached states bind to that view's compartments). */
   invalidatePane: (paneId: string) => void;
   /** Drop sessions whose documentId is not in the retained set. */
@@ -140,6 +143,13 @@ export function createEditorDocumentSessionCache(
     }
   }
 
+  function invalidateSession(key: EditorSessionKey): void {
+    if (disposed || !key.documentId) {
+      return;
+    }
+    entries.delete(sessionKeyId(key));
+  }
+
   function invalidatePane(paneId: string): void {
     if (disposed || !paneId) {
       return;
@@ -173,6 +183,7 @@ export function createEditorDocumentSessionCache(
     peek,
     has,
     invalidateDocument,
+    invalidateSession,
     invalidatePane,
     retainDocuments,
     clear,

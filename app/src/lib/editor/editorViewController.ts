@@ -6,7 +6,11 @@
 import { EditorState, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { EditorHostRegistration } from "../types/editor";
-import type { EditorDocumentSessionCache } from "./editorDocumentSessionCache";
+import {
+  sessionKeyId,
+  type EditorDocumentSessionCache,
+  type EditorSessionKey,
+} from "./editorDocumentSessionCache";
 import {
   applyWrap,
   applyZoom,
@@ -97,12 +101,12 @@ export function createEditorViewController(
   let props: EditorViewControllerProps | null = null;
 
   let trackedDocumentId: string | null = null;
-  // Documents this controller has written to the session cache. Cached
-  // EditorStates bind to this controller's Compartment instances, so on
-  // destroy we invalidate exactly these — not the whole pane. With per-tab
-  // keep-alive multiple controllers share a pane; pane-level invalidation
-  // would wipe undo/fold state for still-open sibling tabs.
-  const cachedDocumentIds = new Set<string>();
+  // Sessions this controller has written to the cache. Cached EditorStates
+  // bind to this controller's Compartment instances, so on destroy we
+  // invalidate exactly these keys — not every pane/context that happens to
+  // show the same documentId. With per-tab keep-alive, multiple controllers
+  // share a pane; pane-level invalidation would wipe sibling undo/fold state.
+  const cachedSessionKeys = new Map<string, EditorSessionKey>();
   let documentGeneration = 0;
   let languageLoadGeneration = 0;
   let currentEditorLanguage: EditorLanguageId = "plaintext";
@@ -297,11 +301,13 @@ export function createEditorViewController(
     if (!view || !trackedDocumentId || !props) {
       return;
     }
-    deps.sessionCache.save(
-      { contextId: props.contextId, paneId: props.paneId, documentId: trackedDocumentId },
-      view.state,
-    );
-    cachedDocumentIds.add(trackedDocumentId);
+    const key: EditorSessionKey = {
+      contextId: props.contextId,
+      paneId: props.paneId,
+      documentId: trackedDocumentId,
+    };
+    deps.sessionCache.save(key, view.state);
+    cachedSessionKeys.set(sessionKeyId(key), key);
   }
 
   function restoreOrCreateState(
@@ -390,9 +396,13 @@ export function createEditorViewController(
     const docGeneration = documentGeneration;
     const syncSupport = getLanguageSupport(language);
     if (syncSupport) {
+      // Pack already cached — reconfigure once. Do not also await
+      // loadLanguageSupport: it resolves in a microtask with the same
+      // instance and would restart the parser a second time (tab switch).
       view.dispatch({
         effects: compartments.language.reconfigure(syncSupport),
       });
+      return;
     }
     if (language === "plaintext") {
       return;
@@ -693,15 +703,17 @@ export function createEditorViewController(
       scrollSaveTimer = null;
     }
     // Cached EditorStates bind to this controller's Compartment instances, so
-    // every document this controller cached must be invalidated on teardown.
-    // We invalidate by document (not pane) so that per-tab keep-alive sibling
-    // controllers — which may share this pane — keep their undo/fold cache.
-    // The fallback to pane-level invalidation only runs when no document was
-    // ever tracked by this controller.
-    if (cachedDocumentIds.size > 0) {
-      for (const documentId of cachedDocumentIds) {
-        deps.sessionCache.invalidateDocument(documentId);
+    // every session this controller wrote must be invalidated on teardown —
+    // scoped to context+pane+document so other panes (and contexts) keep
+    // independent undo/fold caches for the same documentId. Per-tab keep-alive
+    // siblings share a pane but different document ids; pane-level wipe would
+    // drop their cache. Fallback to pane invalidation only when nothing was
+    // ever written by this controller.
+    if (cachedSessionKeys.size > 0) {
+      for (const key of cachedSessionKeys.values()) {
+        deps.sessionCache.invalidateSession(key);
       }
+      cachedSessionKeys.clear();
     } else if (props?.paneId) {
       deps.sessionCache.invalidatePane(props.paneId);
     }

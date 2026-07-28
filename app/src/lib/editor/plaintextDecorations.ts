@@ -1,5 +1,5 @@
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
-import { RangeSetBuilder } from "@codemirror/state";
+import { codePointAt, codePointSize, RangeSetBuilder } from "@codemirror/state";
 
 const symbolDeco = Decoration.mark({ class: "cm-plaintext-symbol" });
 
@@ -29,17 +29,30 @@ export function createPlaintextSymbolDecorations() {
       build(view: EditorView): DecorationSet {
         const builder = new RangeSetBuilder<Decoration>();
         const doc = view.state.doc;
-        const visible = view.visibleRanges;
-        let pos = 0;
 
-        for (const { from, to } of visible) {
-          pos = from;
-          while (pos < to) {
-            const ch = doc.sliceString(pos, pos + 1);
-            if (ch && shouldDecorateAsSymbol(ch)) {
-              builder.add(pos, pos + 1, symbolDeco);
+        for (const { from, to } of view.visibleRanges) {
+          let pos = from;
+          const iter = doc.iterRange(from, to);
+          for (;;) {
+            iter.next();
+            if (iter.done) {
+              break;
             }
-            pos += 1;
+            if (iter.lineBreak) {
+              pos += iter.value.length;
+              continue;
+            }
+            const chunk = iter.value;
+            let i = 0;
+            while (i < chunk.length) {
+              const size = codePointSize(codePointAt(chunk, i));
+              const ch = chunk.slice(i, i + size);
+              if (shouldDecorateAsSymbol(ch)) {
+                builder.add(pos, pos + size, symbolDeco);
+              }
+              pos += size;
+              i += size;
+            }
           }
         }
 

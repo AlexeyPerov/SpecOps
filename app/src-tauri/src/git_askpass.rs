@@ -138,15 +138,31 @@ done
 cat "$dir/response"
 rm -f "$dir/response"
 "#;
-    fs::write(path, script.as_bytes()).map_err(|error| error.to_string())?;
+    // F48: write the helper script with O_EXCL and the final mode set atomically
+    // at create time. The previous `fs::write` followed symlinks (a planted
+    // symlink at the script path would redirect the write) and left a window
+    // between create and chmod where the umask could leave it group/world
+    // readable on a misconfigured system. `create_new` refuses a pre-existing
+    // file or symlink; the mode is applied via `OpenOptions::mode` so no chmod
+    // step is needed afterwards.
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(path)
-            .map_err(|error| error.to_string())?
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(path, perms).map_err(|error| error.to_string())?;
+        use std::fs::OpenOptions;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o700)
+            .open(path)
+            .map_err(|error| format!("Failed to create askpass helper script: {error}"))?;
+        file
+            .write_all(script.as_bytes())
+            .map_err(|error| format!("Failed to write askpass helper script: {error}"))?;
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, script.as_bytes())
+            .map_err(|error| format!("Failed to write askpass helper script: {error}"))?;
     }
     Ok(())
 }
@@ -207,6 +223,34 @@ fn set_owner_only_dir_permissions(path: &Path) -> Result<(), String> {
 
 #[cfg(not(unix))]
 fn set_owner_only_dir_permissions(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+/// Create a directory (and parents) with owner-only mode `0700`, atomically on
+/// Unix so there is no default-umask window between creation and the chmod.
+///
+/// F48: `create_dir_all` followed by `chmod` left a window where a misconfigured
+/// umask could create the session dir group/world-readable on a world-writable
+/// temp volume, briefly exposing the response file. `DirBuilder::mode` applies
+/// the mode at creation for every component it creates, closing the window.
+fn create_owner_only_dir(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true);
+        builder.mode(0o700);
+        builder
+            .create(path)
+            .map_err(|error| format!("Failed to create askpass dir: {error}"))?;
+        // Re-assert 0700 on the leaf in case it pre-existed with looser perms.
+        set_owner_only_dir_permissions(path)?;
+    }
+    #[cfg(not(unix))]
+    {
+        fs::create_dir_all(path)
+            .map_err(|error| format!("Failed to create askpass dir: {error}"))?;
+    }
     Ok(())
 }
 
@@ -348,14 +392,14 @@ pub fn prepare_askpass_session(
             .unwrap_or(0)
     );
     let askpass_root = std::env::temp_dir().join("spec-ops-git-askpass");
-    fs::create_dir_all(&askpass_root)
-        .map_err(|error| format!("Failed to create askpass root dir: {error}"))?;
-    set_owner_only_dir_permissions(&askpass_root)?;
+    // The root is shared across sessions and may already exist; create with the
+    // owner-only mode and re-assert perms (closes the umask window for the first
+    // creation and re-tightens if a prior run left it looser).
+    create_owner_only_dir(&askpass_root)?;
 
     let session_dir = askpass_root.join(&session_id);
-    fs::create_dir_all(&session_dir)
-        .map_err(|error| format!("Failed to create askpass session dir: {error}"))?;
-    set_owner_only_dir_permissions(&session_dir)?;
+    // F48: create the per-session dir with mode 0700 atomically (no umask window).
+    create_owner_only_dir(&session_dir)?;
 
     let script_path = create_askpass_script(&session_dir)?;
     let timeout = timeout_ms.unwrap_or(DEFAULT_ASKPASS_TIMEOUT_MS);
@@ -451,17 +495,23 @@ pub fn respond_git_askpass(request: RespondGitAskpassRequest) -> Result<(), Stri
 }
 
 pub fn end_askpass_session(session_id: &str) {
+    // F48: a poisoned lock used to make this return early after removing the
+    // session, leaking the watcher thread and leaving the response file on disk.
+    // Recover the inner data from a poison error so teardown always runs — the
+    // session is ending regardless, so the poisoned state is irrelevant.
     let session = {
-        let Ok(mut sessions) = askpass_state().sessions.lock() else {
-            return;
-        };
+        let mut sessions = askpass_state()
+            .sessions
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         sessions.remove(session_id)
     };
 
     let watcher = {
-        let Ok(mut watchers) = askpass_state().watchers.lock() else {
-            return;
-        };
+        let mut watchers = askpass_state()
+            .watchers
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         watchers.remove(session_id)
     };
 

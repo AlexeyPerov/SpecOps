@@ -1,5 +1,98 @@
 # Changelog
 
+## 2026-07-28 — Follow-up review Tier 4 (F37–F49)
+
+Fixes for the Rust-runtime tier of the follow-up review in
+[`specs/code-review-follow-up-2026-07-28.md`](./code-review-follow-up-2026-07-28.md).
+
+### File watcher
+
+- **Watcher ignore filter matched ancestor path components (F37).** The heavy-directory
+  check ran against the whole absolute path, case-insensitively, so a workspace whose
+  path merely contained `build`/`dist`/`target`/`.git`/`.venv` (`~/dev/dist/site`,
+  `~/Documents/Build/proj`) had 100% of its file-change events dropped, silently killing
+  external-change detection and project-tree refresh. The filter is now root-aware:
+  ignored components are only considered *below* a registered root, so a root whose own
+  ancestor path contains one of those names is not filtered.
+- **Ignore list was applied only on emit, not at watch registration (F38).** notify still
+  recursively watched `.git`/`node_modules`/`target` (inotify watch exhaustion on Linux,
+  FSEvents churn on macOS) and the file-ID cache walked and stated every entry under them.
+  A recursive root registration now best-effort unwatches heavy immediate subdirectories
+  and drops them from the file-ID cache; the root-aware emit filter remains the
+  authoritative gate so a backend that ignores the unwatch still drops those events.
+- **Shared canonical↔original map was not reference-counted across the two watch sets
+  (F39).** A canonical target claimed by both the file-path watch set and the recursive
+  project-tree watch (or two originals that resolve to the same file) lost its mapping
+  when removed from one set while the other still referenced it, permanently missing
+  events. The map now carries a reference count per canonical path and only evicts an
+  entry once the last registrant is removed.
+
+### Sidecar runtime
+
+- **7 s health probe was held under the sidecar mutex on the port-in-use path (F40).**
+  The port-in-use probe ran inside the lock via `spawn_sidecar_process`, so a stale or
+  hung listener on 4096 stalled `opencode_sidecar_stop` and the exit-path `stop_sync()`
+  for the full probe timeout, blocking quit. The probe now runs outside the lock before
+  the spawn; only the fast `Command::spawn()` holds the mutex.
+- **`stop_child` leaked the child on a kill/wait error and did not signal the group
+  (F47).** The `Child` was `take()`n first, so a `kill()`/`wait()` error returned early
+  and dropped the handle — an orphaned `opencode serve` kept port 4096 while state
+  reported stopped. The sidecar is now spawned in its own process group
+  (`process_group(0)`), shutdown signals the whole group, and kill/wait are best-effort
+  with the handle always reaped.
+- **Unbounded `read_until` in the sidecar stderr thread (F46).** The 2048-byte/4096-line
+  caps bounded the log but not memory: a sidecar emitting no newline grew the buffer
+  without limit. A bounded line reader (`read_bounded_line`) now caps the bytes buffered
+  per line and drains the remainder up to the next newline, keeping the child's stderr
+  pipe from filling while memory stays bounded.
+
+### Git command runtime
+
+- **`register_active_git_command` held the registry mutex across a 1.5 s graceful kill
+  (F41).** The duplicate-id path terminated the rejected child while holding
+  `registry.commands`, blocking every register/poll/cancel/drain for the grace window.
+  The duplicate check now runs under the lock and the termination happens after it is
+  released (with a re-check on re-acquire).
+- **`drain_all_active_git_commands` was serial N × 1.5 s on the main thread (F42).**
+  Quitting with several in-flight commands blocked shutdown for N grace windows in
+  series. All children are now taken out of the registry under a single lock acquisition
+  and terminated concurrently, so the cost is one grace window (~1.5 s), not N × 1.5 s.
+- **Several blocking commands were still synchronous (F43).** `cancel_git_command`,
+  `drain_git_commands`, `git_available`, the sidecar attach/start/restart/stop commands,
+  and `sync_project_tree_watcher` ran on the UI/main thread. They are now
+  `#[tauri::command(async)]` with blocking work moved to `tauri::async_runtime::
+  spawn_blocking`, so the spawn/kill/wait and the recursive-watch file-ID-cache walk no
+  longer freeze the window.
+- **`join_output_readers` could block indefinitely when a grandchild inherited the pipe
+  (F44).** After SIGKILLing git, the reader threads stayed blocked in `read()` until every
+  write end closed; a surviving `ssh`/credential-helper grandchild kept the pipe open and
+  hung the cancel/timeout IPC thread. Reader joins are now deadline-bounded
+  (`OUTPUT_READER_JOIN_TIMEOUT`); a thread that does not finish in time is detached and its
+  tail discarded rather than blocking the caller.
+- **Registered-command error path orphaned the child and detached reader threads (F45).**
+  When `wait_for_registered_git_command` returned `Err` (concurrent cancel or a poisoned
+  lock), `unregister_active_git_command` dropped the `Child` without kill/wait and the
+  reader `JoinHandle`s without joining. The error path now terminates-and-reaps the
+  registered child (a no-op when a concurrent cancel already took it) before removing the
+  entry.
+
+### Askpass & cold-start
+
+- **Askpass residual hardening gaps (F48).** The `askpass.sh` helper was written with
+  `fs::write` (follows symlinks, no `O_EXCL`); session dirs were created with the default
+  umask and chmod'd afterwards (a window where a misconfigured umask could leave them
+  group/world-readable on a world-writable temp volume); and a poisoned `watchers` lock
+  leaked the watcher thread and left the response file on disk. The helper is now created
+  with `O_EXCL` and mode `0700` atomically, session dirs are created with
+  `DirBuilder::mode(0700)` (no umask window), and `end_askpass_session` recovers from a
+  poisoned lock so teardown always runs.
+- **Finder path could be opened twice on cold start (F49).** The `opened-paths` listener
+  was registered one `await` before `take_pending_opened_paths`, and Rust both enqueued
+  and emitted until the drain flag flipped — so a Finder delivery in that window was both
+  emitted (handled by the listener) and enqueued (returned by the drain), opening the
+  path twice. Rust now enqueues *only* before the flag flips and emits *only* after, so
+  each cold-start delivery has exactly one consumer.
+
 ## 2026-07-28 — Follow-up review Tier 3 (F19–F36)
 
 Fixes for the git-layer-correctness tier of the follow-up review in

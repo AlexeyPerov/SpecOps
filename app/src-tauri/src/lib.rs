@@ -153,17 +153,26 @@ pub fn run() {
             }
 
             // Cold-start: stage in the pending queue for `take_pending_opened_paths`
-            // before the frontend has subscribed. Once the frontend has taken once,
-            // emit-only — otherwise every Finder open both emits *and* accumulates
-            // forever, so a later window init re-opens every stale path.
+            // before the frontend has drained it. Once the frontend has taken once,
+            // emit-only.
+            //
+            // F49: before the drain flag flips, enqueue *only* — do not also emit.
+            // The frontend subscribes the `opened-paths` listener one `await`
+            // before calling `take_pending_opened_paths`, so a Finder delivery in
+            // that window was previously both emitted (handled by the listener)
+            // and enqueued (returned by the drain), opening the path twice.
+            // Enqueue-only before the flip lets the single `take_pending_opened_paths`
+            // drain be the sole consumer of cold-start deliveries; emit-only after
+            // the flip lets the listener be the sole consumer of later ones.
             if !opened_paths_frontend_ready().load(Ordering::SeqCst) {
                 enqueue_opened_paths(&paths);
+            } else {
+                let _ = app_handle.emit_to(
+                    "main",
+                    APP_EVENT_OPENED_PATHS,
+                    OpenedPathsPayload { paths },
+                );
             }
-            let _ = app_handle.emit_to(
-                "main",
-                APP_EVENT_OPENED_PATHS,
-                OpenedPathsPayload { paths },
-            );
         }
     });
 }

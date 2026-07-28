@@ -269,26 +269,68 @@ fn spawn_output_readers(child: &mut Child) -> GitOutputReaders {
     GitOutputReaders { stdout, stderr }
 }
 
+/// How long to wait for a reader thread to finish after the child is reaped.
+///
+/// F44: after SIGKILLing git, the reader threads stay blocked in `read()` until
+/// *every* write end of the pipe closes. An `ssh` or credential-helper grandchild
+/// that survives keeps the pipe open, so an unbounded `join()` blocks the cancel/
+/// timeout IPC thread forever — a milder version of the deadlock C1 fixed. We join
+/// with a deadline and detach the threads if it expires (their output is lost, but
+/// the IPC call returns instead of hanging).
+const OUTPUT_READER_JOIN_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Join a reader thread, but never block longer than [`OUTPUT_READER_JOIN_TIMEOUT`].
+///
+/// Returns `Ok(result)` when the thread finished in time, or `Err` with empty
+/// output plus a marker when the deadline expired (the handle is dropped, which
+/// detaches the still-blocked thread). A panicked thread is surfaced as an error.
+fn join_reader_with_timeout(
+    handle: JoinHandle<Result<String, String>>,
+    what: &str,
+) -> Result<String, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        // The only error path here is a panic; forward it as `None` so the
+        // caller can distinguish "joined with a panic" from "timed out".
+        let _ = tx.send(handle.join().ok());
+    });
+    match rx.recv_timeout(OUTPUT_READER_JOIN_TIMEOUT) {
+        Ok(Some(Ok(output))) => Ok(output),
+        Ok(Some(Err(read_error))) => Err(read_error),
+        Ok(None) => Err(format!("git {what} reader thread panicked")),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            // The reader is still blocked because a grandchild holds the pipe
+            // open. Detach it (its handle was moved into the helper thread, which
+            // itself exited after timing out the recv) and return empty output
+            // with a marker so the caller can see the tail was lost.
+            Err(format!(
+                "[git {what} reader still blocked after {}s; output discarded]",
+                OUTPUT_READER_JOIN_TIMEOUT.as_secs()
+            ))
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            Err(format!("git {what} reader join helper panicked"))
+        }
+    }
+}
+
 /// Join both reader threads and return `(stdout, stderr)`.
 ///
 /// Safe to call only after the child has exited or been terminated: the threads block
 /// on `read` until their pipe closes. A panicked reader thread is reported as an error
-/// rather than propagating the panic into the IPC handler.
+/// rather than propagating the panic into the IPC handler. Joins are deadline-bounded
+/// (see [`join_reader_with_timeout`]) so a surviving grandchild cannot hang the caller.
 fn join_output_readers(readers: Option<GitOutputReaders>) -> Result<(String, String), String> {
     let Some(readers) = readers else {
         return Ok((String::new(), String::new()));
     };
 
     let stdout = match readers.stdout {
-        Some(handle) => handle
-            .join()
-            .map_err(|_| "git stdout reader thread panicked".to_string())??,
+        Some(handle) => join_reader_with_timeout(handle, "stdout")?,
         None => String::new(),
     };
     let stderr = match readers.stderr {
-        Some(handle) => handle
-            .join()
-            .map_err(|_| "git stderr reader thread panicked".to_string())??,
+        Some(handle) => join_reader_with_timeout(handle, "stderr")?,
         None => String::new(),
     };
 
@@ -398,13 +440,36 @@ fn register_active_git_command(
     repo_root: PathBuf,
     mut child: Child,
 ) -> Result<(), String> {
+    // F41: the duplicate-id path used to call `terminate_child_process_gracefully`
+    // while holding `registry.commands`, blocking every register/poll/cancel/drain
+    // for up to the graceful-shutdown grace window (1.5s). Check for the duplicate
+    // under the lock, then release before terminating the rejected child.
+    let duplicate = {
+        let registry = git_command_registry();
+        let commands = registry
+            .commands
+            .lock()
+            .map_err(|_| "git command registry lock poisoned".to_string())?;
+        commands.contains_key(command_id)
+    };
+
+    if duplicate {
+        // Lock released: terminate the rejected child without blocking the registry.
+        terminate_child_process_gracefully(&mut child, &repo_root);
+        return Err(format!("git command id already in use: {command_id}"));
+    }
+
     let registry = git_command_registry();
     let mut commands = registry
         .commands
         .lock()
         .map_err(|_| "git command registry lock poisoned".to_string())?;
 
+    // Re-check after re-acquiring: a concurrent registration for the same id could
+    // have landed between the unlocked duplicate check and here. The winner is
+    // whoever holds the lock at insert; the loser terminates and errors as above.
     if commands.contains_key(command_id) {
+        drop(commands);
         terminate_child_process_gracefully(&mut child, &repo_root);
         return Err(format!("git command id already in use: {command_id}"));
     }
@@ -629,19 +694,56 @@ pub fn cancel_git_command_by_id(command_id: &str) -> CancelGitCommandResponse {
 /// Called on app exit so a git write that was mid-flight when the user quit the app
 /// does not orphan its `.git/index.lock`. Each command is cancelled and reaped via
 /// the graceful SIGTERM-first path; the registry is cleared afterwards.
+///
+/// F42: the children are taken out of the registry under a single lock acquisition
+/// and terminated concurrently, so quitting with several in-flight commands costs
+/// one grace window (~1.5s) rather than N × 1.5s in series.
 pub fn drain_all_active_git_commands() {
-    let command_ids: Vec<String> = {
-        let Ok(commands) = git_command_registry().commands.lock() else {
+    let registry = git_command_registry();
+
+    // Snapshot every entry under one lock: mark cancelled, capture each child +
+    // repo root, and drop the registry entries so no later poll sees them. The
+    // reader handles are taken too so they can be joined after the children exit.
+    let mut to_terminate: Vec<(Child, PathBuf, Option<GitOutputReaders>)> = Vec::new();
+    {
+        let Ok(mut commands) = registry.commands.lock() else {
             return;
         };
-        commands.keys().cloned().collect()
-    };
+        for (_id, entry) in commands.iter() {
+            entry.cancelled.store(true, Ordering::SeqCst);
+            if let Ok(mut child_guard) = entry.child.lock() {
+                if let Some(child) = child_guard.take() {
+                    let readers = entry
+                        .readers
+                        .lock()
+                        .ok()
+                        .and_then(|mut guard| guard.take());
+                    to_terminate.push((child, entry.repo_root.clone(), readers));
+                }
+            }
+        }
+        commands.clear();
+    }
 
-    for command_id in command_ids {
-        // Reuse the public cancel path: marks cancelled, terminates the child
-        // gracefully, and removes the repo's index.lock once the child is reaped.
-        let _ = cancel_git_command_by_id(&command_id);
-        unregister_active_git_command(&command_id);
+    if to_terminate.is_empty() {
+        return;
+    }
+
+    // Terminate every child on its own thread so the graceful-shutdown grace
+    // windows overlap instead of stacking. Each thread also joins its reader
+    // handles (the child is reaped before join, so the pipes are already closed).
+    let join_handles: Vec<std::thread::JoinHandle<()>> = to_terminate
+        .into_iter()
+        .map(|(mut child, repo_root, readers)| {
+            std::thread::spawn(move || {
+                terminate_child_process_gracefully(&mut child, &repo_root);
+                let _ = join_output_readers(readers);
+            })
+        })
+        .collect();
+
+    for handle in join_handles {
+        let _ = handle.join();
     }
 }
 
@@ -1232,6 +1334,13 @@ pub fn execute_git_with_full_options(
             Ok(output) => output,
             Err(error) => {
                 let cancelled = active_git_command_was_cancelled(id);
+                // F45: the error path (concurrent cancel took the child, or a
+                // poisoned lock) used to `unregister_active_git_command`, which
+                // drops the `Child` without kill/wait and the reader `JoinHandle`s
+                // without joining — orphaning the process and detaching the
+                // drainers. Terminate-and-reap the registered child (a no-op when
+                // a concurrent cancel already took it) before removing the entry.
+                terminate_registered_git_command_child(id);
                 unregister_active_git_command(id);
                 return RunGitResponse {
                     exit_code: -1,
@@ -1286,9 +1395,19 @@ pub fn execute_git_with_full_options(
 }
 
 /// Probe whether system `git` is available.
-#[tauri::command]
-pub fn git_available() -> GitAvailableResponse {
-    probe_git_available()
+///
+/// F43: marked `async` so the `git --version` subprocess runs off the UI/main
+/// thread (spawning git can briefly block on PATH resolution / cold disk). The
+/// underlying probe is [`probe_git_available`], kept sync for direct unit-test use.
+#[tauri::command(async)]
+pub async fn git_available() -> GitAvailableResponse {
+    let result = tauri::async_runtime::spawn_blocking(probe_git_available).await;
+    match result {
+        Ok(response) => response,
+        // The blocking task can only fail if the runtime is shutting down; fall
+        // back to a direct probe so the IPC call still answers.
+        Err(_) => probe_git_available(),
+    }
 }
 
 /// Create a commit using a temporary message file (`git commit -F`).
@@ -1409,15 +1528,25 @@ pub fn respond_git_askpass(request: git_askpass::RespondGitAskpassRequest) -> Re
 }
 
 /// Terminate an in-flight cancellable git command by id.
-#[tauri::command]
-pub fn cancel_git_command(command_id: String) -> CancelGitCommandResponse {
-    cancel_git_command_by_id(&command_id)
+///
+/// F43: marked `async` so the (up to 1.5s) graceful SIGTERM→SIGKILL reap runs
+/// off the UI/main thread instead of freezing the window for the grace window.
+#[tauri::command(async)]
+pub async fn cancel_git_command(command_id: String) -> CancelGitCommandResponse {
+    tauri::async_runtime::spawn_blocking(move || cancel_git_command_by_id(&command_id))
+        .await
+        .unwrap_or(CancelGitCommandResponse {
+            outcome: CancelGitCommandOutcome::NotFound,
+        })
 }
 
 /// Terminate all in-flight registered git subprocesses (best-effort).
-#[tauri::command]
-pub fn drain_git_commands() {
-    drain_all_active_git_commands();
+///
+/// F43: marked `async` so the concurrent reap (one grace window, not N×1.5s —
+/// see [`drain_all_active_git_commands`]) runs off the UI/main thread.
+#[tauri::command(async)]
+pub async fn drain_git_commands() {
+    let _ = tauri::async_runtime::spawn_blocking(drain_all_active_git_commands).await;
 }
 
 /// Outcome of a `remove_stale_index_lock` request.
@@ -1662,8 +1791,10 @@ mod tests {
         if skip_if_git_unavailable() {
             return;
         }
-        let response = git_available();
-        assert_eq!(response.available, true);
+        // `git_available` is `async` (runs the probe off the main thread); drive
+        // it on Tauri's async runtime so the unit test can await it.
+        let response = tauri::async_runtime::block_on(git_available());
+        assert!(response.available);
         assert!(response.version.is_some());
         assert_eq!(response.error, None);
     }
@@ -1930,6 +2061,10 @@ mod tests {
         if skip_if_git_unavailable() {
             return;
         }
+        // Holds the registry mutex: the command registers into the shared global
+        // registry, and a concurrent drain test (which clears the registry) would
+        // otherwise remove this command mid-flight and surface a spurious -1.
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
         let repo_root = create_temp_git_repo();
         let command_id = format!(
             "completed-command-{}",

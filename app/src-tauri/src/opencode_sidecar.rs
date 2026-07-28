@@ -290,6 +290,170 @@ fn probe_health_detailed(base_url: &str) -> PortProbeResult {
     }
 }
 
+/// Probe whether `port` is free; when it is held, classify the holder so the
+/// surfaced error tells the user whether to switch to URL mode.
+///
+/// Extracted from `spawn_sidecar_process` so the (up to 7s) probe can run
+/// *outside* the sidecar mutex — see [`start_or_attach_nonblocking`]. Holding
+/// the lock across `probe_health_detailed` on the port-in-use path stalled
+/// `opencode_sidecar_stop` and the exit-path `stop_sync()` for the full probe
+/// timeout, blocking quit (F40).
+fn check_port_available(port: u16, hostname: &str) -> Result<(), OpencodeSidecarError> {
+    // NOTE: there is an inherent TOCTOU window between this availability check and
+    // `.spawn()` — another process could claim the port in between. That is
+    // acceptable here: `install_child` + `poll_health_in_background` detect a
+    // non-healthy child and tear it down, so the worst case is a short-lived bad
+    // spawn, not a stuck one. The probe only exists to surface a clear "port in
+    // use" error instead of a generic launch failure.
+    if is_port_available(port) {
+        return Ok(());
+    }
+    let base_url = build_base_url(hostname, port);
+    match probe_health_detailed(&base_url) {
+        PortProbeResult::Healthy => Err(OpencodeSidecarError::PortInUse {
+            port,
+            message: format!(
+                "Port {port} is already in use by a healthy OpenCode server. Switch to URL mode in Settings \u{2192} Workspaces \u{2192} OpenCode with {base_url}."
+            ),
+        }),
+        PortProbeResult::AuthRequired => Err(OpencodeSidecarError::PortInUse {
+            port,
+            message: format!(
+                "Port {port} is already in use by an OpenCode server that requires a password. Switch to URL mode and configure Server password."
+            ),
+        }),
+        PortProbeResult::NotResponsive => Err(OpencodeSidecarError::PortInUse {
+            port,
+            message: format!("Port {port} is already in use by another process"),
+        }),
+    }
+}
+
+/// Outcome of [`read_bounded_line`].
+enum ReadBoundedResult {
+    /// `reader.read()` returned 0 — stream ended.
+    Eof,
+    /// `reader.read()` returned an error.
+    Error,
+    /// Read `n` bytes up to and including the delimiter; `buf` holds the line.
+    Read(usize),
+    /// Hit the byte ceiling before a delimiter. `n` bytes are in `buf` (the
+    /// capped prefix); the remainder of the line was drained and discarded up to
+    /// and including the next delimiter (or EOF), so the child is not blocked on
+    /// a full pipe but memory is not exhausted.
+    Truncated(usize),
+}
+
+/// Read one line (up to and including `delimiter`) into `buf`, but never buffer
+/// more than `max_bytes` for a single line.
+///
+/// F46: `BufRead::read_until` grows the buffer without limit, so a sidecar
+/// emitting a long run of bytes with no newline could exhaust memory (the line/
+/// count caps bound the *log*, not the buffer). This drains anything past the
+/// ceiling so the child's stderr pipe cannot fill and block the process, while
+/// keeping the in-memory line bounded.
+fn read_bounded_line<R: BufRead>(
+    reader: &mut R,
+    delimiter: u8,
+    buf: &mut Vec<u8>,
+    max_bytes: usize,
+) -> ReadBoundedResult {
+    // Use the buffered slice to find the delimiter cheaply, consuming only what
+    // we need rather than copying the whole line through `read_until`.
+    loop {
+        // Already have the delimiter in `buf` from a prior iteration — done.
+        if buf.contains(&delimiter) {
+            let n = buf.len();
+            return ReadBoundedResult::Read(n);
+        }
+
+        let available = match reader.fill_buf() {
+            Ok(slice) => slice,
+            Err(_) => return ReadBoundedResult::Error,
+        };
+        if available.is_empty() {
+            // EOF. If we buffered something, surface it; otherwise signal EOF.
+            return if buf.is_empty() {
+                ReadBoundedResult::Eof
+            } else {
+                ReadBoundedResult::Read(buf.len())
+            };
+        }
+
+        // Find the delimiter within the buffered data.
+        let delim_pos = available.iter().position(|b| *b == delimiter);
+
+        if let Some(pos) = delim_pos {
+            let take = if buf.len() + pos < max_bytes {
+                // Whole remainder (incl. delimiter) fits under the ceiling.
+                pos + 1
+            } else {
+                // Delimiter is past the ceiling: take only what fits, then drain
+                // the rest of the line below.
+                max_bytes.saturating_sub(buf.len())
+            };
+            buf.extend_from_slice(&available[..take]);
+            let consumed_before_drain = take;
+            reader.consume(consumed_before_drain);
+
+            if buf.len() >= max_bytes && !buf.contains(&delimiter) {
+                // Past the ceiling with no delimiter yet: drain the rest of the
+                // line up to and including the next delimiter (or EOF).
+                drain_until_delimiter(reader, delimiter);
+                return ReadBoundedResult::Truncated(buf.len());
+            }
+            return ReadBoundedResult::Read(buf.len());
+        }
+
+        // No delimiter in the buffer. Append up to the ceiling and consume.
+        let remaining_capacity = max_bytes.saturating_sub(buf.len());
+        if remaining_capacity == 0 {
+            // Already at the ceiling with no delimiter: drain the rest of the line.
+            drain_until_delimiter(reader, delimiter);
+            return ReadBoundedResult::Truncated(buf.len());
+        }
+        let take = available.len().min(remaining_capacity);
+        buf.extend_from_slice(&available[..take]);
+        reader.consume(take);
+        if buf.len() >= max_bytes {
+            // Reached the ceiling mid-line; drain the remainder.
+            drain_until_delimiter(reader, delimiter);
+            return ReadBoundedResult::Truncated(buf.len());
+        }
+        // Loop again: fill_buf will surface more data or the delimiter.
+    }
+}
+
+/// Consume and discard bytes from `reader` up to and including the next
+/// `delimiter` (or EOF), without retaining them. Keeps a runaway line from
+/// filling the child's stderr pipe while bounded in memory.
+fn drain_until_delimiter<R: BufRead>(reader: &mut R, delimiter: u8) {
+    let mut discarded = 0u64;
+    loop {
+        let available = match reader.fill_buf() {
+            Ok(slice) => slice,
+            Err(_) => return,
+        };
+        if available.is_empty() {
+            return;
+        }
+        if let Some(pos) = available.iter().position(|b| *b == delimiter) {
+            reader.consume(pos + 1);
+            return;
+        }
+        let len = available.len();
+        reader.consume(len);
+        discarded = discarded.saturating_add(len as u64);
+        // Defensive bound: a single pathological line longer than this is
+        // truncated and we stop draining (the child may block, but we will not
+        // loop forever on an attacker-controlled stream).
+        const MAX_DRAIN_PER_LINE: u64 = 16 * 1024 * 1024;
+        if discarded >= MAX_DRAIN_PER_LINE {
+            return;
+        }
+    }
+}
+
 fn spawn_sidecar_process(
     app: &AppHandle,
     port: u16,
@@ -298,39 +462,13 @@ fn spawn_sidecar_process(
 ) -> Result<Child, OpencodeSidecarError> {
     let binary = resolve_opencode_binary(app)?;
 
-    // NOTE: there is an inherent TOCTOU window between this availability check and
-    // `.spawn()` — another process could claim the port in between. That is
-    // acceptable here: `install_child` + `poll_health_in_background` detect a
-    // non-healthy child and tear it down, so the worst case is a short-lived bad
-    // spawn, not a stuck one. The probe above only exists to surface a clear
-    // "port in use" error instead of a generic launch failure.
-    if !is_port_available(port) {
-        let base_url = build_base_url(hostname, port);
-        match probe_health_detailed(&base_url) {
-            PortProbeResult::Healthy => {
-                return Err(OpencodeSidecarError::PortInUse {
-                    port,
-                    message: format!(
-                        "Port {port} is already in use by a healthy OpenCode server. Switch to URL mode in Settings \u{2192} Workspaces \u{2192} OpenCode with {base_url}."
-                    ),
-                });
-            }
-            PortProbeResult::AuthRequired => {
-                return Err(OpencodeSidecarError::PortInUse {
-                    port,
-                    message: format!(
-                        "Port {port} is already in use by an OpenCode server that requires a password. Switch to URL mode and configure Server password."
-                    ),
-                });
-            }
-            PortProbeResult::NotResponsive => {
-                return Err(OpencodeSidecarError::PortInUse {
-                    port,
-                    message: format!("Port {port} is already in use by another process"),
-                });
-            }
-        }
-    }
+    // Port-in-use probing is handled by the caller via [`check_port_available`],
+    // outside the sidecar mutex so a slow probe on a hung port cannot stall
+    // stop/quit (F40). There is an inherent TOCTOU window between that probe and
+    // `.spawn()` here — another process could claim the port in between — but
+    // `install_child` + `poll_health_in_background` detect a non-healthy child
+    // and tear it down, so the worst case is a short-lived bad spawn, not a
+    // stuck one.
 
     let mut command = Command::new(&binary);
     command
@@ -339,6 +477,17 @@ fn spawn_sidecar_process(
         .arg(hostname)
         .arg("--port")
         .arg(port.to_string());
+    // F47: put the sidecar in its own process group so shutdown can signal the
+    // whole group (the sidecar plus any `opencode serve` grandchildren it spawns,
+    // e.g. MCP servers / tool runners). Without this, `Child::kill` reaps only
+    // the top-level process and leaves grandchildren holding port 4096 after the
+    // app exits — the next launch then fails with PortInUse.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // `process_group(0)` makes the child the leader of a new session/group.
+        command.process_group(0);
+    }
     // Run the sidecar with the workspace as its working directory. Without this,
     // a bundled macOS app inherits a cwd of `/`, so the sidecar resolves relative
     // paths against the filesystem root rather than the active workspace.
@@ -372,16 +521,27 @@ fn spawn_sidecar_process(
             // Cap each line so a pathological binary emitting huge lines without
             // newlines cannot grow the log unboundedly, and stop logging after a
             // burst so a chatty sidecar does not flood the log for the session.
+            //
+            // F46: the 2048-byte/4096-line caps bound the *log*, not memory — a
+            // sidecar emitting no newline made `read_until` grow `raw` without
+            // limit. Read with a hard per-line byte ceiling so a newline-less
+            // stream cannot exhaust memory; bytes past the ceiling are consumed
+            // (drained) up to the next newline so the child is not blocked.
             const MAX_SIDECAR_LOG_LINE_LEN: usize = 2048;
             const MAX_SIDECAR_LOG_LINES: usize = 4096;
+            // Hard cap on bytes buffered for a single line. A line longer than
+            // this is truncated to `MAX_SIDECAR_LOG_LINE_LEN` for logging and the
+            // remainder is drained (not retained) up to the terminating newline.
+            const MAX_SIDECAR_LINE_BYTES: usize = 64 * 1024;
             let mut logged = 0usize;
             let mut raw = Vec::new();
             loop {
                 raw.clear();
-                let bytes = match reader.read_until(b'\n', &mut raw) {
-                    Ok(0) => break,
-                    Ok(n) => n,
-                    Err(_) => break,
+                let bytes = match read_bounded_line(&mut reader, b'\n', &mut raw, MAX_SIDECAR_LINE_BYTES) {
+                    ReadBoundedResult::Eof => break,
+                    ReadBoundedResult::Error => break,
+                    ReadBoundedResult::Read(n) => n,
+                    ReadBoundedResult::Truncated(n) => n,
                 };
                 let mut line = String::from_utf8_lossy(&raw[..bytes]).into_owned();
                 let line_len = line.len();
@@ -516,21 +676,61 @@ fn stop_child(inner: &mut OpencodeSidecarInner) -> Result<(), OpencodeSidecarErr
         // Retire this child's generation so any poller still watching it stops before
         // it can act on the state a replacement will occupy.
         next_child_generation(inner);
+        // F47: the previous version `?`-returned on a `kill()`/`wait()` error,
+        // which dropped the `Child` handle and orphaned the process (it kept
+        // running while state reported it stopped). Make both best-effort and
+        // always reap, surfacing the failure as the return value without leaking
+        // the handle. Also signal the whole process group (the sidecar was
+        // spawned as a group leader) so its grandchildren are torn down too.
+        let mut had_error: Option<OpencodeSidecarError> = None;
         if child_is_running(&mut child) {
-            child.kill().map_err(|error| OpencodeSidecarError::Internal {
-                message: format!("Failed to stop OpenCode sidecar: {error}"),
-            })?;
-            child.wait().map_err(|error| OpencodeSidecarError::Internal {
-                message: format!("Failed to reap OpenCode sidecar process: {error}"),
-            })?;
-        } else {
-            let _ = child.wait();
+            #[cfg(unix)]
+            {
+                kill_process_group(&child);
+            }
+            if let Err(error) = child.kill() {
+                log::warn!("Failed to stop OpenCode sidecar: {error}");
+                had_error = Some(OpencodeSidecarError::Internal {
+                    message: format!("Failed to stop OpenCode sidecar: {error}"),
+                });
+            }
+        }
+        // Always wait so the OS reaps the child — never drop the handle while the
+        // process might still be alive (that would orphan it).
+        if let Err(error) = child.wait() {
+            log::warn!("Failed to reap OpenCode sidecar process: {error}");
+            if had_error.is_none() {
+                had_error = Some(OpencodeSidecarError::Internal {
+                    message: format!("Failed to reap OpenCode sidecar process: {error}"),
+                });
+            }
+        }
+        if let Some(error) = had_error {
+            inner.directory = None;
+            inner.health = SidecarHealthStatus::Unknown;
+            return Err(error);
         }
     }
 
     inner.directory = None;
     inner.health = SidecarHealthStatus::Unknown;
     Ok(())
+}
+
+/// F47: best-effort signal the whole process group led by `child` (Unix).
+///
+/// The sidecar is spawned with `process_group(0)`, so its pid equals its process-
+/// group id. Signalling `-pid` reaches the sidecar plus any grandchildren it
+/// spawned into the same group. Errors are ignored: the child may already have
+/// exited, and the per-process `child.kill()` below is the authoritative reap.
+#[cfg(unix)]
+fn kill_process_group(child: &Child) {
+    use nix::sys::signal::{kill, Signal};
+    use nix::unistd::Pid;
+    if let Some(pgid) = child.id().try_into().ok().map(Pid::from_raw) {
+        // Negative pid == "signal the process group".
+        let _ = kill(pgid, Signal::SIGTERM);
+    }
 }
 
 fn refresh_child_state(inner: &mut OpencodeSidecarInner) {
@@ -648,14 +848,38 @@ fn start_or_attach_nonblocking(
         });
     }
 
-    // Phase 2 — spawn the process under the lock (the spawn itself is fast;
-    // it includes port availability check + process start).
+    // Phase 2 — spawn the process.
+    //
+    // The port-in-use probe (`check_port_available`) can block for the full
+    // HEALTH_PROBE_TIMEOUT (7s) when a stale or hung listener occupies the port.
+    // Run it *before* acquiring the lock so that slow probe does not stall
+    // `opencode_sidecar_stop` and the exit-path `stop_sync()` — the one case
+    // that matters, since a hung listener on 4096 is exactly when quit needs to
+    // stay responsive (F40). The actual `Command::spawn()` is fast and runs
+    // under the lock so `install_child` + bookkeeping stay atomic with it.
+    let (port, hostname) = {
+        let inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
+            message: format!("OpenCode sidecar state lock poisoned: {error}"),
+        })?;
+        (inner.port, inner.hostname.clone())
+    };
+    // Probe outside the lock. A concurrent `_stop` / restart that lands here can
+    // change `inner.port`, but that only means we may probe a stale port — the
+    // spawn under the lock below re-reads `inner.port`, and the worst case is a
+    // spurious PortInUse error surfaced to a call that is already being
+    // superseded, never a stuck quit.
+    check_port_available(port, &hostname)?;
+
     let (port, hostname, generation) = {
         let mut inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
             message: format!("OpenCode sidecar state lock poisoned: {error}"),
         })?;
         let port = inner.port;
         let hostname = inner.hostname.clone();
+        // Do NOT re-probe the port under the lock: that would reintroduce the
+        // up-to-7s hold on the port-in-use path that F40 removes. The unlocked
+        // probe above is authoritative for the error surface; a concurrent port
+        // change between probe and spawn is covered by the poller teardown path.
         let child = spawn_sidecar_process(app, port, &hostname, Some(&directory))?;
         let generation = install_child(&mut inner, child);
         inner.directory = Some(directory);
@@ -678,8 +902,10 @@ fn start_or_attach_nonblocking(
     Ok(current_status(&inner))
 }
 
-#[tauri::command]
-pub fn opencode_sidecar_attach_workspace(
+/// F43: `async` so the spawn + (lock-free) port probe run off the UI/main
+/// thread instead of freezing the window.
+#[tauri::command(async)]
+pub async fn opencode_sidecar_attach_workspace(
     directory: String,
     app: AppHandle,
     state: State<'_, OpencodeSidecarState>,
@@ -689,37 +915,53 @@ pub fn opencode_sidecar_attach_workspace(
     port: Option<u16>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
     let directory = normalize_directory(&directory)?;
-    start_or_attach_nonblocking(&app, state.inner(), directory, port)
+    let app = app;
+    // Clone the whole state (it is just an `Arc` under the hood) so the blocking
+    // spawn task is `'static` and can run off the UI/main thread.
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        start_or_attach_nonblocking(&app, &state, directory, port)
+    })
+    .await
+    .map_err(|error| OpencodeSidecarError::Internal {
+        message: format!("sidecar attach task failed: {error}"),
+    })?
 }
 
-#[tauri::command]
-pub fn opencode_sidecar_start(
+/// F43: `async` — delegates to [`opencode_sidecar_attach_workspace`].
+#[tauri::command(async)]
+pub async fn opencode_sidecar_start(
     directory: String,
     app: AppHandle,
     state: State<'_, OpencodeSidecarState>,
     // M14-T3 — see `opencode_sidecar_attach_workspace`.
     port: Option<u16>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
-    opencode_sidecar_attach_workspace(directory, app, state, port)
+    opencode_sidecar_attach_workspace(directory, app, state, port).await
 }
 
-#[tauri::command]
-pub fn opencode_sidecar_stop(
+/// F43: `async` so the kill/wait runs off the UI/main thread.
+#[tauri::command(async)]
+pub async fn opencode_sidecar_stop(
     state: State<'_, OpencodeSidecarState>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|error| OpencodeSidecarError::Internal {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut inner = state.inner.lock().map_err(|error| OpencodeSidecarError::Internal {
             message: format!("OpenCode sidecar state lock poisoned: {error}"),
         })?;
-
-    stop_child(&mut inner)?;
-    Ok(current_status(&inner))
+        stop_child(&mut inner)?;
+        Ok(current_status(&inner))
+    })
+    .await
+    .map_err(|error| OpencodeSidecarError::Internal {
+        message: format!("sidecar stop task failed: {error}"),
+    })?
 }
 
-#[tauri::command]
-pub fn opencode_sidecar_restart(
+/// F43: `async` — stop + spawn off the UI/main thread.
+#[tauri::command(async)]
+pub async fn opencode_sidecar_restart(
     directory: String,
     app: AppHandle,
     state: State<'_, OpencodeSidecarState>,
@@ -729,17 +971,31 @@ pub fn opencode_sidecar_restart(
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
     let directory = normalize_directory(&directory)?;
     {
-        let mut inner = state
-            .inner
-            .lock()
-            .map_err(|error| OpencodeSidecarError::Internal {
-                message: format!("OpenCode sidecar state lock poisoned: {error}"),
+        let state = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || -> Result<(), OpencodeSidecarError> {
+            let mut inner = state.inner.lock().map_err(|error| {
+                OpencodeSidecarError::Internal {
+                    message: format!("OpenCode sidecar state lock poisoned: {error}"),
+                }
             })?;
-        stop_child(&mut inner)?;
+            stop_child(&mut inner)?;
+            Ok(())
+        })
+        .await
+        .map_err(|error| OpencodeSidecarError::Internal {
+            message: format!("sidecar restart stop task failed: {error}"),
+        })??;
     }
     // Use the non-blocking path so health probing never holds the sidecar mutex
     // (and so restart returns immediately with `checking` like attach/start).
-    start_or_attach_nonblocking(&app, state.inner(), directory, port)
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        start_or_attach_nonblocking(&app, &state, directory, port)
+    })
+    .await
+    .map_err(|error| OpencodeSidecarError::Internal {
+        message: format!("sidecar restart spawn task failed: {error}"),
+    })?
 }
 
 #[tauri::command(async)]
@@ -799,6 +1055,56 @@ mod tests {
             build_base_url("127.0.0.1", 4096),
             "http://127.0.0.1:4096"
         );
+    }
+
+    /// F46: a normal short line reads up to and including the newline.
+    #[test]
+    fn read_bounded_line_reads_short_line() {
+        let mut reader = BufReader::new(std::io::Cursor::new(b"hello\nworld\n".to_vec()));
+        let mut buf = Vec::new();
+        match read_bounded_line(&mut reader, b'\n', &mut buf, 1024) {
+            ReadBoundedResult::Read(n) => {
+                assert_eq!(n, 6);
+                assert_eq!(&buf[..], b"hello\n");
+            }
+            _ => panic!("expected Read for first line"),
+        }
+        buf.clear();
+        match read_bounded_line(&mut reader, b'\n', &mut buf, 1024) {
+            ReadBoundedResult::Read(n) => {
+                assert_eq!(n, 6);
+                assert_eq!(&buf[..], b"world\n");
+            }
+            _ => panic!("expected Read for second line"),
+        }
+    }
+
+    /// F46: a newline-less run longer than the ceiling is truncated and the
+    /// remainder is drained, so memory stays bounded and the buffer reflects the
+    /// capped prefix. Previously `read_until` would have grown without limit.
+    #[test]
+    fn read_bounded_line_truncates_runaway_line() {
+        // 100_000 bytes, no newline, ceiling 1024.
+        let payload = vec![b'A'; 100_000];
+        let mut reader = BufReader::new(std::io::Cursor::new(payload));
+        let mut buf = Vec::new();
+        match read_bounded_line(&mut reader, b'\n', &mut buf, 1024) {
+            ReadBoundedResult::Truncated(n) => {
+                assert_eq!(n, 1024, "buffer must be capped at the ceiling");
+                assert_eq!(buf.len(), 1024);
+            }
+            _ => panic!("expected Truncated for a runaway line"),
+        }
+    }
+
+    #[test]
+    fn read_bounded_line_signals_eof() {
+        let mut reader = BufReader::new(std::io::Cursor::new(b"".to_vec()));
+        let mut buf = Vec::new();
+        assert!(matches!(
+            read_bounded_line(&mut reader, b'\n', &mut buf, 1024),
+            ReadBoundedResult::Eof
+        ));
     }
 
     #[test]
@@ -920,6 +1226,29 @@ mod tests {
         let base_url = format!("http://127.0.0.1:{port}");
         let result = probe_health_detailed(&base_url);
         assert_eq!(result, PortProbeResult::NotResponsive);
+    }
+
+    /// F40: `check_port_available` returns `Ok` for a free port without invoking
+    /// the (up to 7s) health probe — the common path that must never block quit.
+    ///
+    /// We bind a listener solely to discover a free ephemeral port, then release
+    /// it before calling `check_port_available` (which rebinds via its own
+    /// `is_port_available`). A listening socket with no accepted connections
+    /// releases immediately, but we guard with `is_port_available` first so a
+    /// rare lingering-window race cannot fall through to the slow probe.
+    #[test]
+    fn check_port_available_ok_for_free_port() {
+        let port = loop {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            drop(listener);
+            // Confirm the port is actually rebindable before handing it to
+            // `check_port_available`, so the test never trips the 7s probe.
+            if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+                break port;
+            }
+        };
+        check_port_available(port, "127.0.0.1").expect("free port must be available");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { readFile } from "@tauri-apps/plugin-fs";
+  import { untrack } from "svelte";
   import { mimeTypeForImagePath } from "../services/imagePreviewSrc";
 
   interface Props {
@@ -19,17 +20,21 @@
 
   $effect(() => {
     filePath;
-    if (blobObjectUrl) {
-      URL.revokeObjectURL(blobObjectUrl);
-      blobObjectUrl = null;
-    }
-    loadFailed = false;
-    // On unmount, revoke the last blob URL so it does not leak for the session.
-    return () => {
+    untrack(() => {
       if (blobObjectUrl) {
         URL.revokeObjectURL(blobObjectUrl);
         blobObjectUrl = null;
       }
+    });
+    loadFailed = false;
+    // On unmount, revoke the last blob URL so it does not leak for the session.
+    return () => {
+      untrack(() => {
+        if (blobObjectUrl) {
+          URL.revokeObjectURL(blobObjectUrl);
+          blobObjectUrl = null;
+        }
+      });
     };
   });
 

@@ -21,8 +21,12 @@ export type AppShellKeyRoutingDecision =
         | "overlay-open"
         | "no-command"
         | "protected-input"
-        | "ime-composing"
-        | "unavailable";
+        | "ime-composing";
+    }
+  | {
+      action: "suppress";
+      reason: "unavailable";
+      preventDefault: true;
     }
   | {
       action: "run-command";
@@ -48,8 +52,8 @@ export type AppShellKeyRoutingInput = {
   alwaysRunWhenMapped?: boolean;
   /**
    * When false, the mapped command is not available in the current context
-   * (no workspace, no document, …). The key is left for the browser/default
-   * layer — do not preventDefault.
+   * (no workspace, no document, …). The chord is still swallowed so the
+   * browser default (print dialog, native find bar, …) does not run.
    */
   commandAvailable?: boolean;
 };
@@ -79,7 +83,7 @@ export function resolveAppShellKeyRouting(
   }
 
   if (!commandAvailable) {
-    return { action: "ignore", reason: "unavailable" };
+    return { action: "suppress", reason: "unavailable", preventDefault: true };
   }
 
   // H30: consulted before the overlay bail so the find/replace and project

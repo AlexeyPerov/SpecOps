@@ -55,6 +55,7 @@ export function deriveUntitledFilename(content: string): string {
     .join("")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "")
+    .trim()
     .replace(/\.+$/g, "")
     .trim();
   if (!sanitized) {

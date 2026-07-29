@@ -51,7 +51,7 @@ function basename(path: string): string {
 }
 
 function parentDirectory(path: string): string {
-  const normalized = normalizePathSync(path).replace(/\/+$/, "");
+  const normalized = normalizePathForStorage(path).replace(/\/+$/, "");
   const slash = normalized.lastIndexOf("/");
   if (slash <= 0) {
     return normalized;

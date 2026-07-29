@@ -331,7 +331,7 @@
     focusEditor: () => {
       editorWorkbench.focusActive();
     },
-    isModalOpen: () => overlayHost?.api.isAnyOverlayOpen() ?? false,
+    isModalOpen: () => overlayHost?.api.isModalOverlayOpen() ?? false,
   });
   setEditorToolController(editorTools);
 

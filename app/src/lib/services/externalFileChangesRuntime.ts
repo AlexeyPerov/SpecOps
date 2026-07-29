@@ -16,6 +16,7 @@ import {
   isFsScopePermissionError,
   needsContentHashVerification,
   normalizePathSync,
+  shouldHashFileContent,
   shouldSkipAsDismissed,
   statDiskFingerprint,
   statDiskFingerprintWithContent,
@@ -75,23 +76,27 @@ async function reloadDocumentFromDisk(
 ): Promise<void> {
   // Same guards as openPath (size / binary / image / BOM), without importing
   // fileSystem (that module already depends on the external-change runtime).
-  // Stat → read → re-stat so the fingerprint belongs to the decoded bytes —
-  // a write between a bare read and a later metadata-only stat permanently
-  // hid the change.
-  const { fingerprint, bytes } = await statDiskFingerprintWithContent(filePath, readFile);
   const maxOpenWithoutConfirmBytes =
     appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes;
-  if (shouldGateFileOpenBySize(filePath, fingerprint.sizeBytes, maxOpenWithoutConfirmBytes)) {
+  const statFingerprint = await statDiskFingerprint(filePath);
+  if (
+    shouldGateFileOpenBySize(filePath, statFingerprint.sizeBytes, maxOpenWithoutConfirmBytes)
+  ) {
     appState.applyDocumentDiskReloadForContext(
       contextId,
       documentId,
       "",
-      fingerprint,
+      statFingerprint,
       undefined,
       "large_pending",
     );
     return;
   }
+
+  // Stat → read → re-stat so the fingerprint belongs to the decoded bytes —
+  // a write between a bare read and a later metadata-only stat permanently
+  // hid the change.
+  const { fingerprint, bytes } = await statDiskFingerprintWithContent(filePath, readFile);
 
   const contentKind = inferFileContentKind(filePath, bytes);
   if (contentKind === "image") {
@@ -127,8 +132,20 @@ function scheduleFlushDirtyPrompts(
   deferredDirtyDocumentIds: Set<string>,
 ): void {
   queueMicrotask(() => {
-    void flushDirtyPrompts(runtime, deferredDirtyDocumentIds);
+    void flushDirtyPrompts(runtime, deferredDirtyDocumentIds).catch(() => {
+      // Per-entry failures are handled inside the flush; an outer throw must
+      // not become an unhandled rejection from the microtask.
+    });
   });
+}
+
+function hasDrainableDirtyPrompts(runtime: RuntimeState): boolean {
+  for (const documentId of runtime.pendingDirtyPromptByDocument.keys()) {
+    if (!runtime.dialogOpenForDocument.has(documentId)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export async function flushDirtyPrompts(
@@ -181,7 +198,8 @@ export async function flushDirtyPrompts(
           removeInaccessibleDocumentTab(documentId, filePath, error);
           continue;
         }
-        throw error;
+        runtime.pendingDirtyPromptByDocument.delete(documentId);
+        continue;
       }
 
       if (shouldSkipAsDismissed(documentState.dismissedFingerprint, currentFingerprint)) {
@@ -240,7 +258,7 @@ export async function flushDirtyPrompts(
     }
   } finally {
     runtime.flushingDirtyPrompts = false;
-    if (runtime.pendingDirtyPromptByDocument.size > 0) {
+    if (hasDrainableDirtyPrompts(runtime)) {
       scheduleFlushDirtyPrompts(runtime, deferredDirtyDocumentIds);
     }
   }
@@ -367,7 +385,8 @@ async function checkDocumentExternalChangesInner(
   if (
     !changed &&
     documentState.diskFingerprint &&
-    needsContentHashVerification(documentState.diskFingerprint, trigger)
+    needsContentHashVerification(documentState.diskFingerprint, trigger) &&
+    shouldHashFileContent(currentFingerprint.sizeBytes)
   ) {
     try {
       const bytes = await readFile(filePath);

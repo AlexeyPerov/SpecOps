@@ -186,6 +186,29 @@ describe("countLinesInWorkspace walker", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 
+  it("does not leak shared-walk consumers for a pre-aborted signal", async () => {
+    readDirMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(
+            () => resolve([{ name: "main.ts", isDirectory: false, isFile: true, isSymlink: false }]),
+            50,
+          );
+        }),
+    );
+
+    const preAborted = new AbortController();
+    preAborted.abort();
+    await expect(
+      countLinesInWorkspace("/tmp/project", { signal: preAborted.signal }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    const controller = new AbortController();
+    const pending = countLinesInWorkspace("/tmp/project", { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   it("does not reject a second caller when the first aborts a shared walk", async () => {
     let resolveReadDir: ((value: Awaited<ReturnType<typeof readDir>>) => void) | undefined;
     readDirMock.mockImplementation(

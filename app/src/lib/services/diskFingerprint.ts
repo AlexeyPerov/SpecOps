@@ -1,5 +1,6 @@
 import { stat } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint } from "../domain/contracts";
+import { DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES } from "./largeFileOpen";
 import { isCaseInsensitivePathPlatform } from "./platform";
 
 function stripTrailingSlashes(path: string): string {
@@ -92,6 +93,16 @@ export function shouldSkipAsDismissed(
   return dismissed !== null && fingerprintsEqual(dismissed, current);
 }
 
+/** Files larger than this are fingerprinted by mtime+size only (no SHA-256). */
+export const MAX_CONTENT_HASH_BYTES = DEFAULT_MAX_OPEN_WITHOUT_CONFIRM_BYTES;
+
+export function shouldHashFileContent(
+  sizeBytes: number,
+  maxHashBytes: number = MAX_CONTENT_HASH_BYTES,
+): boolean {
+  return sizeBytes <= maxHashBytes;
+}
+
 function bytesToHex(bytes: ArrayBuffer): string {
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -117,8 +128,12 @@ export async function fingerprintFromStatAndBytes(
   info: { size: number; mtime: Date | null },
   bytes: Uint8Array,
 ): Promise<DiskFingerprint> {
+  const base = fingerprintFromStat(info);
+  if (!shouldHashFileContent(info.size)) {
+    return base;
+  }
   return {
-    ...fingerprintFromStat(info),
+    ...base,
     contentHash: await hashFileBytes(bytes),
   };
 }

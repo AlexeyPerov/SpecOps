@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, readFile, readTextFile, rename } from "@tauri-apps/plugin-fs";
+import { readDir, readFile, readTextFile, rename, stat } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
 import type { FileContentKind } from "./fileContentKind";
 import { inferFileContentKind } from "./fileContentKind";
@@ -7,10 +7,13 @@ import { join } from "@tauri-apps/api/path";
 import type { DiskFingerprint } from "../domain/contracts";
 import type { WorkspaceAccessStatus } from "../ai/capabilities";
 import {
+  fingerprintFromStat,
   fingerprintFromWrittenBytes,
+  normalizePathForStorage,
   normalizePathSync,
   statDiskFingerprintWithContent,
 } from "./diskFingerprint";
+import { shouldGateFileOpenBySize } from "./largeFileOpen";
 import { beginSaveInFlight, clearSaveInFlight, recordWriteFingerprint } from "./externalFileChanges";
 import { appState } from "../state/appState";
 import { ensureSpecOpsDataDir } from "./appDataDir";
@@ -120,9 +123,9 @@ export async function readAllowedWorkspaceRoots(): Promise<string[]> {
 
 /** Lightweight read probe without persisting allowed roots (for polling / FS hooks). */
 export async function probeWorkspaceReadAccess(rootPath: string): Promise<WorkspaceAccessStatus> {
-  const normalizedRootPath = normalizePathSync(rootPath);
+  const storageRootPath = normalizePathForStorage(rootPath);
   try {
-    await readDir(normalizedRootPath);
+    await readDir(storageRootPath);
     return "ready";
   } catch {
     return "blocked";
@@ -130,10 +133,10 @@ export async function probeWorkspaceReadAccess(rootPath: string): Promise<Worksp
 }
 
 export async function ensureWorkspaceReadAccess(rootPath: string): Promise<WorkspaceAccessStatus> {
-  const normalizedRootPath = normalizePathSync(rootPath);
+  const storageRootPath = normalizePathForStorage(rootPath);
   try {
-    await readDir(normalizedRootPath);
-    await rememberWorkspaceReadAccess(normalizedRootPath);
+    await readDir(storageRootPath);
+    await rememberWorkspaceReadAccess(storageRootPath);
     return "ready";
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -143,7 +146,7 @@ export async function ensureWorkspaceReadAccess(rootPath: string): Promise<Works
       timestamp: new Date().toISOString(),
       message: "workspace read access preparation failed",
       metadata: {
-        rootPath: normalizedRootPath,
+        rootPath: storageRootPath,
         reason: message,
       },
     });
@@ -284,10 +287,25 @@ export interface OpenPathOptions {
 }
 
 export async function openPath(path: string, options?: OpenPathOptions): Promise<OpenedFile> {
+  const maxOpenWithoutConfirmBytes =
+    appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes;
+  const initialStat = await stat(path);
+  const sizeBytes = initialStat.size;
+  const statOnlyFingerprint = fingerprintFromStat(initialStat);
+  if (shouldGateFileOpenBySize(path, sizeBytes, maxOpenWithoutConfirmBytes)) {
+    const contentKind = inferFileContentKind(path, new Uint8Array());
+    return {
+      path,
+      content: "",
+      sizeBytes,
+      contentKind,
+      fingerprint: statOnlyFingerprint,
+    };
+  }
+
   // Stat → read → re-stat so the fingerprint belongs to the bytes we decoded,
   // not to a write that landed between the read and a later metadata-only stat.
   const { fingerprint, bytes } = await statDiskFingerprintWithContent(path, readFile);
-  const sizeBytes = fingerprint.sizeBytes;
   const contentKind = inferFileContentKind(path, bytes);
   if (contentKind === "image") {
     return {

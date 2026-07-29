@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-07-29 — Follow-up review Tier 5 (F50–F62)
+
+Fixes for the state/services tier of the follow-up review in
+[`specs/code-review-follow-up-2026-07-28.md`](./code-review-follow-up-2026-07-28.md).
+
+### Path normalization
+
+- **Case-folded comparison keys reached the filesystem and persistence (F50).**
+  `normalizePathSync` lowercasing leaked into `readDir`, workspace-access persistence,
+  path relocation, and rename parent resolution. FS and persisted paths now use
+  `normalizePathForStorage`; folding is comparison-only.
+
+### Keyboard routing
+
+- **Mapped-but-unavailable chords fell through to the webview (F51).** Shell key
+  routing returns a `suppress` decision with `preventDefault` when a chord is mapped
+  but not available, blocking native print/find dialogs without dispatching.
+- **Cmd+F was blocked while Find-in-Project was open (F52).** Editor tool
+  `isModalOpen` now uses modal-only overlay detection, matching shell key routing.
+
+### External file changes
+
+- **`flushDirtyPrompts` livelocked on unclassified stat errors (F53).** Unknown stat
+  failures drop the pending entry; re-schedule only when drainable prompts remain;
+  microtask rejections are swallowed.
+- **SHA-256 hashing was unbounded and ran before the large-file gate (F54).**
+  Open/reload paths stat and size-gate before reading; hashing is capped at the
+  open-without-confirm limit (mtime+size above the cap).
+- **Write fingerprints were not cleared on tab close (F57).** File paths are captured
+  from the pre-close snapshot before documents are pruned.
+
+### Caches and catalog
+
+- **Directory-cache invalidation was lost during in-flight `readDir` (F55).** Per-key
+  generation tokens discard stale resolutions after invalidate.
+- **Catalog rebuilds were unfiltered for modify/rename; directory remove no-oped (F59).**
+  Skipped paths no longer schedule rebuilds; directory deletes purge nested entries.
+
+### UI and runtime
+
+- **`ImagePreviewPane` blob-URL effect re-triggered itself (F56).** The reset effect
+  keys on `filePath` only; blob URL reads/writes use `untrack`.
+- **`startAppShellRuntime` listener batch leaked on rejection (F58).** Window/dock
+  listeners register sequentially with immediate cleanup registration.
+- **`lineCounter` shared-walk refcount leaked for pre-aborted signals (F60).**
+  Pre-aborted callers no longer pin consumer slots.
+- **Untitled filename sanitizer stripped dots before trim (F61).** Trim runs before
+  trailing-dot removal.
+- **Session persist re-parsed the primary file for backup (F62).** The merge-read raw
+  bytes are reused for backup promotion, eliminating a second read+parse per cycle.
+
 ## 2026-07-28 — Follow-up review Tier 4 (F37–F49)
 
 Fixes for the Rust-runtime tier of the follow-up review in

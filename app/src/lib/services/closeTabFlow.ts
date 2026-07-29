@@ -19,17 +19,20 @@ export type CloseTabFlowDeps = SaveDocumentDeps;
  * deferred-dirty / in-flight / self-write maps from retaining entries for closed
  * documents for the rest of the session (L20/L28).
  */
-function pruneUnreferencedDocumentExternalChangeState(closedTabs: TabState[]): void {
-  const closedFileDocs = new Map<string, string | null>();
+function pruneUnreferencedDocumentExternalChangeState(
+  closedTabs: TabState[],
+  preCloseFilePathsByDocumentId: ReadonlyMap<string, string | null>,
+): void {
+  const closedFileDocIds = new Set<string>();
   for (const tab of closedTabs) {
     if (isFileTab(tab)) {
       const docId = tabDocumentId(tab);
-      if (docId && !closedFileDocs.has(docId)) {
-        closedFileDocs.set(docId, null);
+      if (docId) {
+        closedFileDocIds.add(docId);
       }
     }
   }
-  if (closedFileDocs.size === 0) {
+  if (closedFileDocIds.size === 0) {
     return;
   }
   const snapshot = appState.getSnapshot();
@@ -42,13 +45,31 @@ function pruneUnreferencedDocumentExternalChangeState(closedTabs: TabState[]): v
       }
     }
   }
-  for (const docId of closedFileDocs.keys()) {
+  for (const docId of closedFileDocIds) {
     if (stillOpenDocIds.has(docId)) {
       continue;
     }
-    const doc = getActiveDocuments(snapshot).find((entry) => entry.id === docId);
-    clearDocumentExternalChangeState(docId, doc?.filePath ?? undefined);
+    clearDocumentExternalChangeState(docId, preCloseFilePathsByDocumentId.get(docId) ?? undefined);
   }
+}
+
+function filePathsForClosedTabs(
+  closedTabs: TabState[],
+  snapshot: ReturnType<typeof appState.getSnapshot>,
+): Map<string, string | null> {
+  const pathsByDocumentId = new Map<string, string | null>();
+  for (const tab of closedTabs) {
+    if (!isFileTab(tab)) {
+      continue;
+    }
+    const docId = tabDocumentId(tab);
+    if (!docId || pathsByDocumentId.has(docId)) {
+      continue;
+    }
+    const doc = getActiveDocuments(snapshot).find((entry) => entry.id === docId);
+    pathsByDocumentId.set(docId, doc?.filePath ?? null);
+  }
+  return pathsByDocumentId;
 }
 
 async function resolveCloseDirtyDocument(
@@ -100,12 +121,14 @@ export async function closeTabWithUnsavedPrompt(
   }
 
   if (options?.forceClose ?? true) {
+    const preClosePaths = filePathsForClosedTabs([tab], snapshot);
     appState.closeTabForce(tabId);
-    pruneUnreferencedDocumentExternalChangeState([tab]);
+    pruneUnreferencedDocumentExternalChangeState([tab], preClosePaths);
     return true;
   }
+  const preClosePaths = filePathsForClosedTabs([tab], snapshot);
   appState.closeTab(tabId);
-  pruneUnreferencedDocumentExternalChangeState([tab]);
+  pruneUnreferencedDocumentExternalChangeState([tab], preClosePaths);
   // `closeTab` intentionally no-ops when the pane has only one tab. Report
   // failure so callers do not claim success after a save-prompt that closed nothing.
   const stillOpen = findTabOwner(getActiveSession(appState.getSnapshot()).editorLayout, tabId);
@@ -143,8 +166,9 @@ export async function closeTabsWithUnsavedPrompt(
     }
   }
 
+  const preClosePaths = filePathsForClosedTabs(closingTabs, snapshot);
   appState.closeTabsByIds(tabIds, selectedTabIdAfter);
-  pruneUnreferencedDocumentExternalChangeState(closingTabs);
+  pruneUnreferencedDocumentExternalChangeState(closingTabs, preClosePaths);
   return true;
 }
 

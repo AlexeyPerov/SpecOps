@@ -201,13 +201,12 @@ async function startAppShellRuntimeInner(
     }
   }
 
-  // Register all independent window/dock listeners concurrently. Each `listen`
-  // is a separate IPC round-trip; awaiting them sequentially added 5 hops to
-  // the startup critical path. None of these handlers depend on each other, so
-  // they can be set up in parallel.
+  // Register window/dock listeners sequentially so each unlisten is pushed
+  // into cleanupCallbacks before the next IPC round-trip. A batch Promise.all
+  // dropped already-resolved handles when one listen rejected (C8).
   const registerListenersStartedAt = nowMs();
-  const listenerUnlistens = await Promise.all([
-    listen<{ filePath: string | null; content: string; title: string; lineEnding?: "lf" | "crlf"; hasBom?: boolean }>(
+  cleanupCallbacks.push(
+    await listen<{ filePath: string | null; content: string; title: string; lineEnding?: "lf" | "crlf"; hasBom?: boolean }>(
       WINDOW_EVENT_TRANSFER_TAB,
       async (event) => {
         const documentId = appState.openTransferredTab(event.payload);
@@ -217,7 +216,9 @@ async function startAppShellRuntimeInner(
         }
       },
     ),
-    listen<MergeTabPayload>(WINDOW_EVENT_MERGE_TAB, async (event) => {
+  );
+  cleanupCallbacks.push(
+    await listen<MergeTabPayload>(WINDOW_EVENT_MERGE_TAB, async (event) => {
       const { sourceWindowId, sourceTabId, ...payload } = event.payload;
       try {
         const documentId = appState.openTransferredTab(payload);
@@ -241,19 +242,22 @@ async function startAppShellRuntimeInner(
         }
       }
     }),
-    listen(DOCK_NEW_WINDOW_EVENT, () => {
+  );
+  cleanupCallbacks.push(
+    await listen(DOCK_NEW_WINDOW_EVENT, () => {
       options.runCommand("app.newWindow");
     }),
-    listen<{ path: string }>(DOCK_OPEN_RECENT_EVENT, (event) => {
+  );
+  cleanupCallbacks.push(
+    await listen<{ path: string }>(DOCK_OPEN_RECENT_EVENT, (event) => {
       queueOpenRecentPath(event.payload.path);
     }),
-    listen(DOCK_CLEAR_RECENT_EVENT, () => {
+  );
+  cleanupCallbacks.push(
+    await listen(DOCK_CLEAR_RECENT_EVENT, () => {
       options.runCommand("file.clearRecentFiles");
     }),
-  ]);
-  for (const un of listenerUnlistens) {
-    cleanupCallbacks.push(un);
-  }
+  );
   await logPerfTiming("register window listeners", {
     metric: "startup.phase",
     label: "register-listeners",

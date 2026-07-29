@@ -28,7 +28,7 @@ import { dispatchMenuCommand } from "../commands/registry";
 const dispatchMenuCommandMock = vi.mocked(dispatchMenuCommand);
 
 describe("resolveAppShellKeyRouting", () => {
-  it("ignores unavailable commands without preventDefault", () => {
+  it("suppresses unavailable mapped commands with preventDefault", () => {
     expect(
       resolveAppShellKeyRouting({
         commandId: "app.openVersionControl",
@@ -36,7 +36,7 @@ describe("resolveAppShellKeyRouting", () => {
         targetInOrdinaryInput: false,
         commandAvailable: false,
       }),
-    ).toEqual({ action: "ignore", reason: "unavailable" });
+    ).toEqual({ action: "suppress", reason: "unavailable", preventDefault: true });
 
     expect(
       resolveAppShellKeyRouting({
@@ -46,7 +46,7 @@ describe("resolveAppShellKeyRouting", () => {
         alwaysRunWhenMapped: true,
         commandAvailable: false,
       }),
-    ).toEqual({ action: "ignore", reason: "unavailable" });
+    ).toEqual({ action: "suppress", reason: "unavailable", preventDefault: true });
   });
 
   it("ignores key events while an overlay owns the keyboard", () => {

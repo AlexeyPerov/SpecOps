@@ -5,7 +5,7 @@
  */
 
 import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
-import { normalizePathSync } from "./diskFingerprint";
+import { normalizePathForStorage, normalizePathSync } from "./diskFingerprint";
 import {
   enumerateOpenableWorkspaceFiles,
   type EnumerateOpenableFilesResult,
@@ -46,6 +46,7 @@ export function createWorkspaceDirectoryCache(
   // Insertion order = LRU order (oldest first). Re-get moves to the end.
   const cache = new Map<string, WorkspaceListEntry[]>();
   const inflight = new Map<string, Promise<WorkspaceListEntry[]>>();
+  const generationByKey = new Map<string, number>();
 
   function touch(key: string, value: WorkspaceListEntry[]): void {
     cache.delete(key);
@@ -70,8 +71,13 @@ export function createWorkspaceDirectoryCache(
     if (pending) {
       return pending;
     }
-    const promise = readDirFn(key)
+    const requestGeneration = generationByKey.get(key) ?? 0;
+    const promise = readDirFn(normalizePathForStorage(path))
       .then((entries) => {
+        if ((generationByKey.get(key) ?? 0) !== requestGeneration) {
+          inflight.delete(key);
+          return readDirCached(path);
+        }
         const result = entries as WorkspaceListEntry[];
         touch(key, result);
         inflight.delete(key);
@@ -90,6 +96,7 @@ export function createWorkspaceDirectoryCache(
     invalidate(paths) {
       for (const path of paths) {
         const key = normalizeDirPath(path);
+        generationByKey.set(key, (generationByKey.get(key) ?? 0) + 1);
         cache.delete(key);
         inflight.delete(key);
       }
@@ -97,10 +104,12 @@ export function createWorkspaceDirectoryCache(
     clear() {
       cache.clear();
       inflight.clear();
+      generationByKey.clear();
     },
     dispose() {
       cache.clear();
       inflight.clear();
+      generationByKey.clear();
     },
     size() {
       return cache.size;

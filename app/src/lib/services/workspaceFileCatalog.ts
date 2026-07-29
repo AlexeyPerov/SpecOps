@@ -213,6 +213,25 @@ export function createWorkspaceFileCatalog(
   }
 
   /**
+   * Remove a file entry or every entry under a deleted directory prefix.
+   */
+  function removeEntryOrSubtree(normalizedPath: string): boolean {
+    if (removeEntry(normalizedPath)) {
+      return true;
+    }
+    const prefix = `${normalizedPath}/`;
+    const next = entries.filter(
+      (entry) => entry.key !== normalizedPath && !entry.key.startsWith(prefix),
+    );
+    if (next.length === entries.length) {
+      return false;
+    }
+    entries = next;
+    incrementalRemoves += 1;
+    return true;
+  }
+
+  /**
    * Synchronously add an entry for a newly created openable file. Returns true
    * when a new entry was inserted (caller emits + bumps diagnostics). No-ops
    * when the path is a directory (handled by debounced rebuild) or already
@@ -376,7 +395,7 @@ export function createWorkspaceFileCatalog(
         // During loading, every event collapses into a single deferred rebuild.
         if (status === "ready" && kind) {
           if (kind === "remove") {
-            if (removeEntry(normalizedChanged)) {
+            if (removeEntryOrSubtree(normalizedChanged)) {
               emit();
             }
             return;
@@ -397,6 +416,8 @@ export function createWorkspaceFileCatalog(
             if (entries.some((entry) => entry.key === normalizedChanged)) {
               return;
             }
+          } else if (shouldSkipCatalogPath(root, normalizedChanged)) {
+            return;
           }
         }
       }

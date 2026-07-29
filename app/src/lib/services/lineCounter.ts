@@ -399,6 +399,10 @@ export async function countLinesInWorkspace(
 
   entry.consumers += 1;
   const signal = options?.signal;
+  if (signal?.aborted) {
+    entry.consumers = Math.max(0, entry.consumers - 1);
+    return raceWithAbort(entry.promise, signal);
+  }
   const onAbort = (): void => {
     entry!.consumers -= 1;
     if (entry!.consumers <= 0) {

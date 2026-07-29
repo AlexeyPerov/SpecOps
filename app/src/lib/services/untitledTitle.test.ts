@@ -34,4 +34,9 @@ describe("deriveUntitledFilename", () => {
     expect(deriveUntitledFilename("CON")).toBe(DEFAULT_UNTITLED_TITLE);
     expect(deriveUntitledFilename("nul.txt")).toBe(DEFAULT_UNTITLED_TITLE);
   });
+
+  it("trims before stripping trailing dots so truncated dot-space suffixes are removed", () => {
+    const truncated = `${"x".repeat(63)}. `;
+    expect(deriveUntitledFilename(truncated)).not.toMatch(/\.$/);
+  });
 });

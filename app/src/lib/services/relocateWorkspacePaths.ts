@@ -1,7 +1,11 @@
 import { appState } from "../state/appState";
 import type { ContextId } from "../domain/contracts";
 import { allTabs, isFileTab, normalizeTabState } from "../domain/contracts";
-import { normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
+import {
+  normalizePathForStorage,
+  normalizePathSync,
+  statDiskFingerprint,
+} from "./diskFingerprint";
 import { renameOpenFileRegistry } from "./openFileRegistry";
 import { isPathUnderRoot } from "./workspacePaths";
 
@@ -12,13 +16,16 @@ function isPathEqualOrUnder(prefix: string, path: string): boolean {
 }
 
 function relocatedPath(oldPrefix: string, newPrefix: string, filePath: string): string {
-  const normalizedOld = normalizePathSync(oldPrefix).replace(/\/+$/, "");
-  const normalizedNew = normalizePathSync(newPrefix).replace(/\/+$/, "");
-  const normalizedFile = normalizePathSync(filePath);
-  if (normalizedFile === normalizedOld) {
-    return normalizedNew;
+  const compareOld = normalizePathSync(oldPrefix).replace(/\/+$/, "");
+  const compareNew = normalizePathSync(newPrefix).replace(/\/+$/, "");
+  const compareFile = normalizePathSync(filePath);
+  const storageOld = normalizePathForStorage(oldPrefix).replace(/\/+$/, "");
+  const storageNew = normalizePathForStorage(newPrefix).replace(/\/+$/, "");
+  const storageFile = normalizePathForStorage(filePath);
+  if (compareFile === compareOld) {
+    return storageNew;
   }
-  return `${normalizedNew}${normalizedFile.slice(normalizedOld.length)}`;
+  return `${storageNew}${storageFile.slice(storageOld.length)}`;
 }
 
 function basename(path: string): string {

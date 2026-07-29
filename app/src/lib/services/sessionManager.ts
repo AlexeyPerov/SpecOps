@@ -72,23 +72,29 @@ async function getSessionPath(fileName: string): Promise<string> {
   return join(dataDir, fileName);
 }
 
-async function readSessionSnapshot(): Promise<AppSessionSnapshot> {
+type ReadSessionResult = {
+  snapshot: AppSessionSnapshot;
+  /** Raw primary bytes when read+decode succeeded; omitted on first save. */
+  primaryRaw: string | null;
+};
+
+async function readSessionSnapshot(): Promise<ReadSessionResult> {
   const sessionPath = await getSessionPath(SESSION_FILE);
   try {
     const raw = await readTextFile(sessionPath);
     const decoded = decodeSessionSnapshot(raw);
     if (decoded) {
-      return decoded;
+      return { snapshot: decoded, primaryRaw: raw };
     }
   } catch {
     // first save / no session file
   }
-  return createEmptySessionSnapshot();
+  return { snapshot: createEmptySessionSnapshot(), primaryRaw: null };
 }
 
 async function writeSessionSnapshot(
   current: AppSessionSnapshot,
-  options?: { skipBackup?: boolean },
+  options?: { skipBackup?: boolean; backupSourceRaw?: string | null },
 ): Promise<void> {
   const sessionPath = await getSessionPath(SESSION_FILE);
   const content = encodeSessionSnapshot(current);
@@ -96,14 +102,20 @@ async function writeSessionSnapshot(
     // Promote the previous primary to backup only when it still decodes. That
     // keeps a distinct last-good copy instead of a byte-identical twin of the
     // write that may itself be corrupt (M38/M44).
-    try {
-      const existing = await readTextFile(sessionPath);
-      if (decodeSessionSnapshot(existing)) {
-        const backupPath = await getSessionPath(SESSION_BACKUP_FILE);
-        await atomicWriteTextFile(backupPath, existing);
+    const existing = options?.backupSourceRaw;
+    if (existing && decodeSessionSnapshot(existing)) {
+      const backupPath = await getSessionPath(SESSION_BACKUP_FILE);
+      await atomicWriteTextFile(backupPath, existing);
+    } else if (existing === undefined) {
+      try {
+        const readBack = await readTextFile(sessionPath);
+        if (decodeSessionSnapshot(readBack)) {
+          const backupPath = await getSessionPath(SESSION_BACKUP_FILE);
+          await atomicWriteTextFile(backupPath, readBack);
+        }
+      } catch {
+        // No existing session yet (first save).
       }
-    } catch {
-      // No existing session yet (first save).
     }
   }
   await atomicWriteTextFile(sessionPath, content);
@@ -111,10 +123,10 @@ async function writeSessionSnapshot(
 
 export async function persistGlobalRecentFiles(recentFiles: string[]): Promise<void> {
   await withSessionWriteLock(async () => {
-    const current = await readSessionSnapshot();
+    const { snapshot: current, primaryRaw } = await readSessionSnapshot();
     current.recentFiles = recentFiles;
     current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current);
+    await writeSessionSnapshot(current, { backupSourceRaw: primaryRaw });
   });
 }
 
@@ -123,7 +135,7 @@ export async function persistSessionSnapshot(
   windowId: string,
 ): Promise<void> {
   await withSessionWriteLock(async () => {
-    const current = await readSessionSnapshot();
+    const { snapshot: current, primaryRaw } = await readSessionSnapshot();
     const stampedAt = new Date().toISOString();
 
     current.windows[windowId] = {
@@ -140,7 +152,7 @@ export async function persistSessionSnapshot(
       state,
     );
 
-    await writeSessionSnapshot(current);
+    await writeSessionSnapshot(current, { backupSourceRaw: primaryRaw });
 
     await logDiagnostic({
       level: "debug",
@@ -166,7 +178,7 @@ export async function removeWindowSessionEntry(windowId: string): Promise<void> 
     return;
   }
   await withSessionWriteLock(async () => {
-    const current = await readSessionSnapshot();
+    const { snapshot: current, primaryRaw } = await readSessionSnapshot();
     if (!(windowId in current.windows)) {
       return;
     }
@@ -175,7 +187,7 @@ export async function removeWindowSessionEntry(windowId: string): Promise<void> 
       current.lastActiveWindowId = MAIN_WINDOW_ID;
     }
     current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current);
+    await writeSessionSnapshot(current, { backupSourceRaw: primaryRaw });
   });
 }
 
@@ -192,7 +204,7 @@ export async function pruneStaleWindowSessionEntries(
   const keep = new Set(liveWindowIds);
   keep.add(MAIN_WINDOW_ID);
   await withSessionWriteLock(async () => {
-    const current = await readSessionSnapshot();
+    const { snapshot: current, primaryRaw } = await readSessionSnapshot();
     const staleIds = Object.keys(current.windows).filter((id) => !keep.has(id));
     if (staleIds.length === 0) {
       return;
@@ -204,7 +216,7 @@ export async function pruneStaleWindowSessionEntries(
       current.lastActiveWindowId = MAIN_WINDOW_ID;
     }
     current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current);
+    await writeSessionSnapshot(current, { backupSourceRaw: primaryRaw });
     await logDiagnostic({
       level: "info",
       source: "frontend",
@@ -356,9 +368,9 @@ export async function updateLastActiveWindow(
   options?: { skipBackup?: boolean },
 ): Promise<void> {
   await withSessionWriteLock(async () => {
-    const current = await readSessionSnapshot();
+    const { snapshot: current, primaryRaw } = await readSessionSnapshot();
     current.lastActiveWindowId = windowId;
     current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current, options);
+    await writeSessionSnapshot(current, { ...options, backupSourceRaw: primaryRaw });
   });
 }

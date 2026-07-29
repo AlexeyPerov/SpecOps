@@ -65,16 +65,28 @@ describe("createWorkspaceDirectoryCache", () => {
     expect(readDirFn.mock.calls.filter((call) => call[0] === "/ws/a")).toHaveLength(2);
   });
 
-  it("clear drops all cached and in-flight entries", async () => {
-    const readDirFn = vi.fn(async () => [
-      { name: "a.ts", isDirectory: false, isFile: true, isSymlink: false },
-    ]);
+  it("discards in-flight listings invalidated before they settle", async () => {
+    let resolveFirst!: (value: unknown[]) => void;
+    const readDirFn = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<unknown[]>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce([
+        { name: "fresh.ts", isDirectory: false, isFile: true, isSymlink: false },
+      ]);
     const cache = createWorkspaceDirectoryCache({ readDirFn });
 
-    await cache.readDir("/ws");
-    cache.clear();
-    await cache.readDir("/ws");
+    const pending = cache.readDir("/ws");
+    cache.invalidate(["/ws"]);
+    resolveFirst([{ name: "stale.ts", isDirectory: false, isFile: true, isSymlink: false }]);
+    const result = await pending;
 
+    expect(result[0]?.name).toBe("fresh.ts");
     expect(readDirFn).toHaveBeenCalledTimes(2);
+    expect(cache.size()).toBe(1);
   });
 });

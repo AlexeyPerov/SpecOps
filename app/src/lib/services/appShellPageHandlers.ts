@@ -83,10 +83,13 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
         ? isCommandAvailableInState(command, deps.getSnapshot())
         : true,
     });
-    if (decision.action !== "run-command") {
+    if (decision.action === "ignore") {
       return;
     }
     event.preventDefault();
+    if (decision.action === "suppress") {
+      return;
+    }
     runCommand(decision.commandId);
   }
 

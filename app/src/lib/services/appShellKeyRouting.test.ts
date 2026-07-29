@@ -162,10 +162,10 @@ describe("resolveAppShellKeyRouting", () => {
     }
   });
 
-  // H30: always-run chords (find/replace, project search) beat the overlay
-  // bail — they replace whatever surface is open. Everything else still
-  // defers to an open (modal) overlay.
-  it("encodes target precedence: always-run beats overlay; overlay beats globals", () => {
+  // F75: always-run chords still bypass the ordinary-input guard, but a real
+  // modal overlay owns the keyboard — firing find/project-search behind Quick
+  // Open / Command Palette left the modal on top (or no-op'd Cmd+F).
+  it("encodes target precedence: overlay beats always-run; always-run beats ordinary input", () => {
     expect(
       resolveAppShellKeyRouting({
         commandId: "app.toggleFindReplace",
@@ -173,11 +173,15 @@ describe("resolveAppShellKeyRouting", () => {
         targetInOrdinaryInput: false,
         alwaysRunWhenMapped: true,
       }),
-    ).toEqual({
-      action: "run-command",
-      commandId: "app.toggleFindReplace",
-      preventDefault: true,
-    });
+    ).toEqual({ action: "ignore", reason: "overlay-open" });
+    expect(
+      resolveAppShellKeyRouting({
+        commandId: "app.findInProject",
+        overlayOpen: true,
+        targetInOrdinaryInput: true,
+        alwaysRunWhenMapped: true,
+      }),
+    ).toEqual({ action: "ignore", reason: "overlay-open" });
     expect(
       resolveAppShellKeyRouting({
         commandId: "edit.duplicateLine",

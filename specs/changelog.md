@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-07-29 — Follow-up review Tier 7 (F70–F76)
+
+Fixes for the UI shell polish tier of the follow-up review in
+[`specs/code-review-follow-up-2026-07-28.md`](./code-review-follow-up-2026-07-28.md).
+
+### Activity rail
+
+- **`countsByRoot` re-derived on every chat token (F70).** Reading
+  `$chatSessionCountsByRoot` inside `$derived` still invalidated per streamed
+  token (Svelte 5 `store_get` treats object store values as always-changed), so
+  the rail walked `allTabs` and repainted on every emit. Session counts now live
+  in `$state.raw` updated by an explicit subscription (notifies only when the
+  Map reference changes); tab counts derive from workspace snapshots alone.
+
+### Project tree
+
+- **Windowed active-file reveal never retried after auto-expand (F71).**
+  `lastRevealedPath` was set before the row was known to exist, so open-file →
+  ancestors expand → row appears permanently skipped the scroll. The path is
+  recorded only after a successful scroll (or when not virtualizing); a missing
+  row leaves the path unset so the effect retries when `rows` updates.
+- **Windowed spacers ignored the grid gap (F72).** Each spacer is a grid item
+  and therefore adds an extra `gap`, making the windowed list taller than the
+  unwindowed one. Spacer height is now `start * rowPitch - gap`.
+- **`role="group"` restored on the flattened tree list (F73).** `role="treeitem"`
+  rows again sit under an explicit group (fixes axe `aria-required-parent`).
+
+### Dialogs and keyboard
+
+- **`DialogShell` focus-trap selector gaps and stacked Escape (F74).** The
+  focusable selector now excludes disabled `input`/`textarea`/`select` and
+  includes `[contenteditable]`. Escape uses `stopImmediatePropagation`, and
+  only the topmost `.dialog-shell-panel` handles Escape/Tab so stacked shells
+  (Confirm over EntryNamePrompt) dismiss one at a time.
+- **`alwaysRunWhenMapped` fired under real modals (F75).** Modal overlays now
+  own the keyboard before always-run chords, so Cmd+F / Cmd+Shift+F no longer
+  no-op or open Find-in-Project behind Quick Open / Command Palette. Opening
+  project search also closes other pickers.
+
+### Version control
+
+- **Loading branch had no in-view Refresh (F76).** The slow-probe loading state
+  now offers a Refresh button so recovery does not require leaving the view.
+
 ## 2026-07-29 — Follow-up review Tier 6 (F63–F69)
 
 Fixes for the editor tier of the follow-up review in

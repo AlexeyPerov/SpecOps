@@ -535,6 +535,8 @@
         break;
       }
       case "projectSearch":
+        // Close modal pickers so Find-in-Project does not open behind them (F75).
+        coordinator.closeOtherPickers("projectSearch");
         ensureActiveCatalogReady();
         projectSearchOpen = true;
         projectSearchFocusReplace = options?.focusReplace ?? false;

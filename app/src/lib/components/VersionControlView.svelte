@@ -1077,6 +1077,14 @@
   {#if probeStatus === "loading"}
     <div class="version-control-empty" role="status" aria-live="polite">
       <p class="version-control-empty-title">Checking git repository…</p>
+      <button
+        type="button"
+        class="version-control-init-button"
+        disabled={refreshBusy}
+        onclick={() => void handleRefresh()}
+      >
+        {refreshBusy ? "Refreshing…" : "Refresh"}
+      </button>
     </div>
   {:else if probeStatus === "noWorkspace"}
     <div class="version-control-empty" role="status">

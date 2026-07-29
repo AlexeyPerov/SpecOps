@@ -194,6 +194,8 @@
   const OVERSCAN_ROWS = 12;
   /** Fallback pitch (row height + list gap) until a real pair is measured. */
   const FALLBACK_ROW_PITCH = 21;
+  /** Matches `--space-1` on `.project-tree-list` (F72 spacer correction). */
+  const LIST_GAP_PX = 2;
 
   const rows = $derived(
     flattenProjectTree(nodes, expandedPaths, childrenByPath, loadingPaths),
@@ -285,29 +287,47 @@
   });
 
   const visibleRows = $derived(rows.slice(visibleRange.start, visibleRange.end));
-  const topPadPx = $derived(visibleRange.start * rowPitch);
-  const bottomPadPx = $derived(
-    Math.max(0, (rows.length - visibleRange.end) * rowPitch),
+  // Spacers sit in the same CSS grid as rows, so each spacer also contributes
+  // one `gap`. Subtract that gap so windowed scroll height matches the
+  // unwindowed list (F72).
+  const topPadPx = $derived(
+    visibleRange.start > 0
+      ? visibleRange.start * rowPitch - LIST_GAP_PX
+      : 0,
   );
+  const bottomPadPx = $derived.by(() => {
+    const remaining = rows.length - visibleRange.end;
+    if (remaining <= 0) {
+      return 0;
+    }
+    return remaining * rowPitch - LIST_GAP_PX;
+  });
 
   // Reveal the active file even when its row is outside the rendered window
   // (the parent panel's scrollIntoView can only reach rows that are in the
-  // DOM). Runs only when the active path actually changes.
+  // DOM). Only record lastRevealedPath once the scroll actually happened so
+  // an auto-expand that adds the row later can still retry (F71).
   let lastRevealedPath: string | null = null;
   $effect(() => {
     const path = activeFilePath;
     if (path === lastRevealedPath) {
       return;
     }
-    lastRevealedPath = path;
+    if (!path) {
+      lastRevealedPath = null;
+      return;
+    }
     const parent = scrollParent;
-    if (!path || !parent || rows.length <= VIRTUALIZE_ROW_THRESHOLD) {
+    if (!parent || rows.length <= VIRTUALIZE_ROW_THRESHOLD) {
+      // Not windowed — ProjectPanel's querySelector reveal handles it.
+      lastRevealedPath = path;
       return;
     }
     const index = rows.findIndex(
       (row) => row.kind === "node" && row.node.path === path,
     );
     if (index < 0) {
+      // Ancestors may still be expanding; retry when `rows` changes.
       return;
     }
     const rowTop = listOffsetTop + index * rowPitch;
@@ -317,6 +337,7 @@
     } else if (rowBottom > parent.scrollTop + parent.clientHeight) {
       parent.scrollTop = rowBottom - parent.clientHeight;
     }
+    lastRevealedPath = path;
   });
 
   function rowClasses(row: Extract<ProjectTreeRow, { kind: "node" }>): string {
@@ -338,7 +359,7 @@
   data-dragging={dragState.didDrag}
   oncontextmenu={onContextMenuRoot}
 >
-  <ul class="project-tree-list" bind:this={listEl}>
+  <ul class="project-tree-list" role="group" bind:this={listEl}>
     {#if topPadPx > 0}
       <li class="project-tree-spacer" style={`height:${topPadPx}px`} aria-hidden="true"></li>
     {/if}

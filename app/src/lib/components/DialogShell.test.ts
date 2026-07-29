@@ -156,6 +156,50 @@ describe("DialogShell", () => {
     expect(document.activeElement).toBe(last);
   });
 
+  it("skips disabled inputs when finding focusable controls", async () => {
+    const children = createRawSnippet(() => ({
+      render: () =>
+        `<div><input disabled data-disabled /><button type="button" data-enabled>Go</button></div>`,
+    }));
+    const { host } = mountComponent<DialogShellProps>(DialogShell, {
+      open: true,
+      title: "Disabled first",
+      children,
+    });
+    await tick();
+    // Flush the open-effect's tick().then focus pass.
+    await tick();
+
+    const enabled = host.querySelector("[data-enabled]") as HTMLButtonElement;
+    const disabled = host.querySelector("[data-disabled]") as HTMLInputElement;
+    expect(document.activeElement).toBe(enabled);
+
+    // Tab from the only enabled control wraps to itself — disabled is skipped.
+    enabled.focus();
+    dispatchKey(window, "Tab");
+    expect(document.activeElement).toBe(enabled);
+    expect(document.activeElement).not.toBe(disabled);
+  });
+
+  it("only the topmost stacked shell dismisses on Escape", async () => {
+    const onDismissLower = vi.fn();
+    const onDismissUpper = vi.fn();
+    mountComponent<DialogShellProps>(DialogShell, {
+      open: true,
+      title: "Lower",
+      onDismiss: onDismissLower,
+    });
+    mountComponent<DialogShellProps>(DialogShell, {
+      open: true,
+      title: "Upper",
+      onDismiss: onDismissUpper,
+    });
+    await tick();
+    dispatchKey(window, "Escape");
+    expect(onDismissUpper).toHaveBeenCalledTimes(1);
+    expect(onDismissLower).not.toHaveBeenCalled();
+  });
+
   it("restores previously focused element when unmounted while open", async () => {
     const outside = document.createElement("button");
     outside.type = "button";

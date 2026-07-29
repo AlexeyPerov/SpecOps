@@ -86,16 +86,19 @@ export function resolveAppShellKeyRouting(
     return { action: "suppress", reason: "unavailable", preventDefault: true };
   }
 
-  // H30: consulted before the overlay bail so the find/replace and project
-  // search chords still work while an overlay is open (they replace it), and
-  // callers pass a *modal-only* `overlayOpen` so the persistent Find-in-
-  // Project panel or a context menu never kills global shortcuts app-wide.
-  if (alwaysRunWhenMapped) {
-    return { action: "run-command", commandId, preventDefault: true };
-  }
-
+  // Modal overlays own the keyboard. Always-run chords (find/replace, project
+  // search) still bypass the ordinary-input guard below, but must not fire
+  // while a real modal is open — otherwise Cmd+Shift+F opens Find-in-Project
+  // behind Quick Open / Command Palette, and Cmd+F is preventDefault'd while
+  // editor tools refuse to open under isModalOpen (F75). Callers pass a
+  // *modal-only* `overlayOpen` so the persistent Find-in-Project panel or a
+  // context menu never kills global shortcuts app-wide (H30).
   if (overlayOpen) {
     return { action: "ignore", reason: "overlay-open" };
+  }
+
+  if (alwaysRunWhenMapped) {
+    return { action: "run-command", commandId, preventDefault: true };
   }
 
   if (targetInOrdinaryInput && !isEditorGlobalCommand(commandId)) {

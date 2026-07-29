@@ -57,7 +57,7 @@
   let previouslyFocused: HTMLElement | null = null;
 
   const FOCUSABLE_SELECTOR =
-    "a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex='-1'])";
+    "a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1']), [contenteditable]:not([contenteditable='false'])";
 
   // Stable id so multiple shells can coexist without clashing aria-labelledby.
   const autoTitleId =
@@ -83,18 +83,35 @@
     return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
   }
 
+  function isTopmostDialogPanel(panel: HTMLElement): boolean {
+    const panels = document.querySelectorAll(".dialog-shell-panel");
+    return panels.length === 0 || panels[panels.length - 1] === panel;
+  }
+
   function handleWindowKeydown(event: KeyboardEvent): void {
     if (event.key === "Escape") {
-      if (!onDismiss) {
+      if (!onDismiss || !panelEl) {
+        return;
+      }
+      // Stacked shells all listen on window capture; only the topmost panel
+      // (last in DOM order) may dismiss, and stopImmediatePropagation keeps a
+      // lower shell from also handling the same Escape (F74).
+      if (!isTopmostDialogPanel(panelEl)) {
         return;
       }
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
       onDismiss();
       return;
     }
 
     if (event.key !== "Tab" || !panelEl) {
+      return;
+    }
+
+    // Only the topmost dialog traps Tab — a lower shell must not yank focus
+    // out of a ConfirmDialog stacked above an EntryNamePrompt.
+    if (!isTopmostDialogPanel(panelEl)) {
       return;
     }
 

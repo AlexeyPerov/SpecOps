@@ -162,17 +162,29 @@
   });
 
   /**
-   * Per-workspace opened-session counts from the stable chatSessionCountsByRoot
-   * store (keyed by normalized root path). Tab counts come from each workspace
-   * entry's session snapshot (already reactive via the appState prop chain).
+   * Session counts via an explicit store subscription (F70). Reading
+   * `$chatSessionCountsByRoot` inside `$derived` re-runs on every chatStore
+   * emit — Svelte 5's store_get treats object values as always-changed — so
+   * the rail repainted per streamed token. Subscribe only notifies when the
+   * derived Map's reference actually changes (counts changed).
    */
-  const countsByRoot = $derived.by(() => {
-    const map = new Map<string, { sessions: number; tabs: number }>();
-    const sessionCounts = $chatSessionCountsByRoot;
+  let sessionCountsByRoot = $state.raw<ReadonlyMap<string, number>>(new Map());
+  $effect(() => {
+    return chatSessionCountsByRoot.subscribe((map) => {
+      if (map !== sessionCountsByRoot) {
+        sessionCountsByRoot = map;
+      }
+    });
+  });
+
+  /** Tab counts depend only on workspace session snapshots, not chat tokens. */
+  const tabCountsByRoot = $derived.by(() => {
+    const map = new Map<string, number>();
     for (const workspace of workspaces) {
-      const sessions = sessionCounts.get(workspace.rootPath) ?? 0;
-      const tabs = allTabs(workspace.snapshot.session.editorLayout).length;
-      map.set(workspace.rootPath, { sessions, tabs });
+      map.set(
+        workspace.rootPath,
+        allTabs(workspace.snapshot.session.editorLayout).length,
+      );
     }
     return map;
   });
@@ -323,7 +335,10 @@
 
   <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl}>
     {#each workspacesForRender as workspace (workspace.id)}
-      {@const counts = countsByRoot.get(workspace.rootPath) ?? { sessions: 0, tabs: 0 }}
+      {@const counts = {
+        sessions: sessionCountsByRoot.get(workspace.rootPath) ?? 0,
+        tabs: tabCountsByRoot.get(workspace.rootPath) ?? 0,
+      }}
       {#if dragState.didDrag && workspace.id === dragState.dragWorkspaceId}
         <span
           class="rail-workspace-placeholder"

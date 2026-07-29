@@ -3,7 +3,7 @@
  * Prefers CodeMirror / Lezer syntax trees; pure text fallback for tests.
  */
 import { EditorState } from "@codemirror/state";
-import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree } from "@codemirror/language";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import type { Tree } from "@lezer/common";
 
@@ -125,13 +125,18 @@ export function extractMarkdownHeadings(state: EditorState): MarkdownHeading[] {
 
 function computeMarkdownHeadings(state: EditorState): MarkdownHeading[] {
   // Large documents may not be fully parsed yet; wait briefly for a complete tree.
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  const tree = syntaxTree(state);
-  if (tree.length < state.doc.length) {
-    // Incremental parse still incomplete — fall back to a full document parse.
-    return extractMarkdownHeadingsFromText(state.doc.toString());
+  // `ensureSyntaxTree` returns the completed tree when it finishes within the
+  // budget — use *that* tree. Reading `syntaxTree(state)` instead returns the
+  // pre-transaction field tree (still pointing at the old document length), so
+  // it appears incomplete and forces the expensive text fallback on every call
+  // until the background parse catches up — a double parse per extraction.
+  const tree = ensureSyntaxTree(state, state.doc.length, 5000);
+  if (tree && tree.length >= state.doc.length) {
+    return extractHeadingsFromTree(tree, state.doc);
   }
-  return extractHeadingsFromTree(tree, state.doc);
+  // Incremental parse still incomplete (timed out or tree missing) — fall back
+  // to a full document parse.
+  return extractMarkdownHeadingsFromText(state.doc.toString());
 }
 
 /**

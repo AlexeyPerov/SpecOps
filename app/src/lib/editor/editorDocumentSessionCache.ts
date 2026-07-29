@@ -43,6 +43,14 @@ export type EditorDocumentSessionCache = {
   invalidateSession: (key: EditorSessionKey) => void;
   /** Drop sessions for a pane (e.g. EditorView teardown — cached states bind to that view's compartments). */
   invalidatePane: (paneId: string) => void;
+  /**
+   * Drop sessions for a pane within a single context. Used by the
+   * EditorView-teardown fallback when the controller never recorded a session
+   * key itself: pane-only invalidation would also drop other contexts' cached
+   * undo/fold for the same pane id (two restored workspaces can both have
+   * `pane-1`), which is the opposite of the cache's namespacing intent.
+   */
+  invalidatePaneInContext: (contextId: ContextId, paneId: string) => void;
   /** Drop sessions whose documentId is not in the retained set. */
   retainDocuments: (documentIds: ReadonlySet<string>) => void;
   clear: () => void;
@@ -161,6 +169,17 @@ export function createEditorDocumentSessionCache(
     }
   }
 
+  function invalidatePaneInContext(contextId: ContextId, paneId: string): void {
+    if (disposed || !paneId) {
+      return;
+    }
+    for (const [id, entry] of entries) {
+      if (entry.key.paneId === paneId && entry.key.contextId === contextId) {
+        entries.delete(id);
+      }
+    }
+  }
+
   function retainDocuments(documentIds: ReadonlySet<string>): void {
     if (disposed) {
       return;
@@ -185,6 +204,7 @@ export function createEditorDocumentSessionCache(
     invalidateDocument,
     invalidateSession,
     invalidatePane,
+    invalidatePaneInContext,
     retainDocuments,
     clear,
     size: () => entries.size,

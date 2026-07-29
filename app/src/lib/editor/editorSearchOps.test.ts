@@ -107,6 +107,27 @@ describe("editorReplaceCurrent regex captures", () => {
     expect(editorReplaceCurrent(view, query)).toBe(false);
     expect(view.state.doc.toString()).toBe("alpha alpha alpha");
   });
+
+  it("replaces a lookbehind match whose assertion needs context left of the selection", () => {
+    // `(?<=\s)bar` matches "bar" only when preceded by whitespace. A cursor
+    // starting exactly at the selection start sees no leading context, so the
+    // lookbehind fails and Replace used to no-op while Replace-All worked.
+    view = new EditorView({
+      doc: "foo bar baz",
+      parent: document.body,
+    });
+    view.dispatch({
+      selection: EditorSelection.range(4, 7), // "bar"
+    });
+    const query = createSearchQuery({
+      text: "(?<=\\s)bar",
+      replacement: "QUX",
+      regexp: true,
+      caseSensitive: true,
+    });
+    expect(editorReplaceCurrent(view, query)).toBe(true);
+    expect(view.state.doc.toString()).toBe("foo QUX baz");
+  });
 });
 
 describe("editorReplaceAll", () => {

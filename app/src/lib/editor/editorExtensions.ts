@@ -41,7 +41,7 @@ import { foldBaseExtension, foldGutterExtension } from "./editorFold";
 import { minimapExtension } from "./editorMinimap";
 import { completionExtension } from "./editorCompletion";
 import { snippetExtension } from "./editorSnippets";
-import { bookmarkExtension } from "./editorBookmarks";
+import { bookmarkLandmarksExtension, bookmarkStaticExtension } from "./editorBookmarks";
 import { createPlaintextSymbolDecorations } from "./plaintextDecorations";
 
 /** Named groups assembled into the editor state. */
@@ -347,14 +347,18 @@ export function buildNamedExtensionGroups(
     },
     {
       name: "landmarks",
-      // The bookmark extension carries a `StateField` (`bookmarkField`). A
-      // `StateField` must NOT live inside a reconfigurable `Compartment` —
-      // replacing it after mount deadlocks CodeMirror's facet resolver (infinite
-      // `flatten`/`inner` recursion, the same freeze documented in `editorFold.ts`
-      // for `codeFolding()`). Mount it as a static extension; the `landmarks`
-      // Compartment remains available for future non-`StateField` landmark
-      // toggles without reintroducing that bug.
-      extensions: [bookmarkExtension()],
+      // The bookmark `StateField` (`bookmarkField`) must NOT live inside a
+      // reconfigurable `Compartment` — replacing it after mount deadlocks
+      // CodeMirror's facet resolver (infinite `flatten`/`inner` recursion, the
+      // same freeze documented in `editorFold.ts` for `codeFolding()`). So the
+      // field is mounted as a static extension, while the gutter + theme — the
+      // parts a future "hide bookmark gutter" toggle would actually flip — go
+      // inside the compartment. That makes `landmarks.reconfigure([])` work,
+      // which the previous bundle-as-static-extension silently no-op'd.
+      extensions: [
+        bookmarkStaticExtension(),
+        compartments.landmarks.of(bookmarkLandmarksExtension()),
+      ],
     },
     {
       name: "theme",

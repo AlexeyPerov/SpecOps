@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-07-29 — Follow-up review Tier 6 (F63–F69)
+
+Fixes for the editor tier of the follow-up review in
+[`specs/code-review-follow-up-2026-07-28.md`](./code-review-follow-up-2026-07-28.md).
+
+### Markdown outline and preview
+
+- **Markdown outline discarded `ensureSyntaxTree`'s result and re-parsed (F63).**
+  `computeMarkdownHeadings` waited for a complete tree via `ensureSyntaxTree` but then
+  read `syntaxTree(state)` — the pre-transaction field tree, still shorter than the doc —
+  so it fell into the text-fallback path (`doc.toString()` + fresh `EditorState` + full
+  Lezer parse) on every extraction until the background parse caught up. It now uses the
+  non-null tree `ensureSyntaxTree` returns, eliminating the double parse per extraction.
+- **The dead live-buffer markdown render survived and thrashed the one-slot memo (F64).**
+  `+page.svelte` still passed `renderMarkdownHtml: shouldRenderMarkdownPreview` to
+  `deriveAppShellDocumentView`, parsing the live buffer on every keystroke into a
+  `markdownHtml` prop that `AppShell.svelte` declared and never read — and contending
+  for the same one-slot render memo as the debounced per-pane preview. The dead prop and
+  its flag are removed from the `+page.svelte` → `AppShellHost.svelte` → `AppShell.svelte`
+  path; the live preview already flows through `EditorPaneContent`'s debounced
+  `activePreviewHtml`.
+
+### Search and replace
+
+- **Empty-matching regex queries threw `RangeError` and killed highlighting (F65).**
+  Patterns like `\d*`, `x?`, `^`, `\b` legitimately yield zero-length matches, and
+  `Decoration.mark(...).range(n, n)` throws "Mark decorations may not be empty" inside the
+  ViewPlugin, crashing it and silently disabling highlight for that view. Empty
+  (`from === to`) matches are now skipped when building decorations.
+- **Replace silently no-op'd for lookbehind patterns (F66).** `matchAtRange` started its
+  `RegExpCursor` at the selection start, so a `MultilineRegExpCursor` flattened text
+  beginning exactly there — any assertion needing left context (`(?<=\s)(bar)`, tokens
+  among `\s \n \r \W \D [^`) found nothing, Replace no-op'd while Replace-All worked. The
+  cursor now starts at the head of the line containing the selection and selects the match
+  whose range equals the selection. Added a `(?<=\s)` regression test.
+
+### Editor session cache and extensions
+
+- **`destroy()`'s fallback wiped pane-wide sessions across contexts (F67).** A controller
+  that hosted a single document (the normal keep-alive case) never populated
+  `cachedSessionKeys`, so teardown fell back to `invalidatePane(paneId)`, which ignores
+  contextId and dropped other contexts' cached undo/fold for the same pane id (two restored
+  workspaces can both have `pane-1`). The fallback now uses a new context-scoped
+  `invalidatePaneInContext(contextId, paneId)`.
+- **Outline republished a fresh `SvelteSet` every 500 ms (F68).** `foldedKeys` was
+  reallocated on every poll even when folds were unchanged, invalidating every outline
+  item's `class:`/`aria-label` binding twice a second for nothing. The set is now mutated
+  in place only when its contents actually differ.
+- **The `landmarks` compartment was never mounted (F69).** The bookmark `StateField` was
+  bundled with the gutter/theme as one static extension, so nothing did
+  `compartments.landmarks.of(...)` and a future `landmarks.reconfigure()` silently no-op'd.
+  The bundle is split: `bookmarkField` stays a static extension (a `StateField` must not
+  live in a reconfigurable compartment), while the gutter + theme now live inside the
+  mounted compartment, so `landmarks.reconfigure([])` can actually hide the bookmark gutter.
+
 ## 2026-07-29 — Follow-up review Tier 5 (F50–F62)
 
 Fixes for the state/services tier of the follow-up review in

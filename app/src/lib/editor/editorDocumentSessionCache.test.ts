@@ -94,6 +94,22 @@ describe("editorDocumentSessionCache", () => {
     expect(cache.has(key("p2", "a"))).toBe(true);
   });
 
+  it("invalidatePaneInContext drops only that context+pane's sessions", () => {
+    // Two contexts can share a pane id (two restored workspaces both have
+    // `pane-1`). A pane-only wipe would drop the other context's cached
+    // undo/fold for the same pane id; the context-scoped variant must not.
+    const cache = createEditorDocumentSessionCache();
+    cache.save(key("p1", "a", "ws-1"), makeState("a"));
+    cache.save(key("p1", "a", "ws-2"), makeState("a"));
+    cache.save(key("p2", "a", "ws-1"), makeState("a"));
+
+    cache.invalidatePaneInContext("ws-1", "p1");
+
+    expect(cache.has(key("p1", "a", "ws-1"))).toBe(false);
+    expect(cache.has(key("p1", "a", "ws-2"))).toBe(true);
+    expect(cache.has(key("p2", "a", "ws-1"))).toBe(true);
+  });
+
   it("retainDocuments keeps only open document ids", () => {
     const cache = createEditorDocumentSessionCache();
     cache.save(key("p", "keep"), makeState("keep"));

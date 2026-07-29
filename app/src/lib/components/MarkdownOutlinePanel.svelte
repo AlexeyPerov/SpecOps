@@ -49,6 +49,21 @@
     publishedBinding = null;
   }
 
+  /**
+   * Sync `current` to `next` in place, adding/removing only the diff. A fresh
+   * `SvelteSet` allocation on every poll invalidated every outline item's
+   * `class:` and `aria-label` binding twice a second even when folds were
+   * unchanged; mutating only on a real change keeps idle ticks cheap.
+   */
+  function applyFoldedKeys(current: SvelteSet<string>, next: readonly string[]): void {
+    if (current.size !== next.length || next.some((k) => !current.has(k))) {
+      current.clear();
+      for (const k of next) {
+        current.add(k);
+      }
+    }
+  }
+
   function refreshFromHost(): void {
     if (disposed) {
       return;
@@ -74,7 +89,7 @@
     }
     const nextHeadings = snapshot.ok ? snapshot.value.headings : [];
     const nextActive = snapshot.ok ? snapshot.value.activeKey : null;
-    const nextFolded = new SvelteSet<string>(snapshot.ok ? snapshot.value.foldedKeys : []);
+    const nextFoldedKeys = snapshot.ok ? snapshot.value.foldedKeys : [];
     // Final generation check before mutating visible state.
     const publishHost = getHost();
     if (!publishHost || !shouldPublishOutlineSnapshot(expected, publishHost.identity)) {
@@ -82,7 +97,11 @@
     }
     headings = nextHeadings;
     activeKey = nextActive;
-    foldedKeys = nextFolded;
+    // `headings` and `activeKey` keep referential equality on an idle tick, but
+    // allocating a fresh `SvelteSet` here every 500 ms invalidated every item's
+    // `class:`/`aria-label` binding for nothing. Mutate the existing set in
+    // place only when its contents actually changed.
+    applyFoldedKeys(foldedKeys, nextFoldedKeys);
     publishedBinding = expected;
   }
 

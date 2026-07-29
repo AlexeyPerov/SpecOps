@@ -510,20 +510,13 @@
     listEnabledMarkdownSnippets($appSettings.markdownSnippets),
   );
 
-  const shouldRenderMarkdownPreview = $derived.by(() => {
-    if (!activeDocument || activeDocument.language !== "markdown") {
-      return false;
-    }
-    if (activeDocument.markdownViewMode === "preview") {
-      return true;
-    }
-    return activeDocument.markdownViewMode === "split" && (appShellHost?.api.canFitMarkdownSplit() ?? false);
-  });
-  const documentView = $derived(
-    deriveAppShellDocumentView(activeDocument, {
-      renderMarkdownHtml: shouldRenderMarkdownPreview,
-    }),
-  );
+  // Markdown preview HTML is produced inside EditorPaneContent (debounced,
+  // per-pane) and reaches MarkdownEditorPane via `activePreviewHtml`. Do NOT
+  // render it here: nothing in the AppShell chrome reads `markdownHtml`, so
+  // asking for it was a second full markdown parse per keystroke whose result
+  // was thrown away (and it contended for the same one-slot render memo as the
+  // debounced consumer, making that miss too).
+  const documentView = $derived(deriveAppShellDocumentView(activeDocument));
   let fileDropTargetPaneId = $state<string | null>(null);
 
   function notify(message: string): void {

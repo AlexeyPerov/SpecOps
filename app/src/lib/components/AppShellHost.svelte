@@ -795,7 +795,6 @@
     isTextEditorDocument: documentView.isTextEditorDocument,
     isMarkdownDocument: documentView.isMarkdownDocument,
     previewFileSizeBytes: documentView.previewFileSizeBytes,
-    markdownHtml: documentView.markdownHtml,
     previewMode: editorPreviewMode,
     wrapLines: editorWrapLines,
     zoomPercent: editorZoomPercent,

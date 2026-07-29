@@ -723,8 +723,14 @@ export function createEditorViewController(
         deps.sessionCache.invalidateSession(key);
       }
       cachedSessionKeys.clear();
-    } else if (props?.paneId) {
-      deps.sessionCache.invalidatePane(props.paneId);
+    } else if (props?.paneId && props?.contextId) {
+      // Fallback for a controller that hosted a single document (the normal
+      // keep-alive case) and so never populated `cachedSessionKeys` via
+      // `switchDocument`. Scope by context AND pane: a pane-only wipe would
+      // drop sibling tabs and — because two restored workspaces can both have
+      // `pane-1` — other contexts' cached undo/fold for the same pane id,
+      // which is the opposite of M52's intent.
+      deps.sessionCache.invalidatePaneInContext(props.contextId, props.paneId);
     }
     detachScrollListener?.();
     detachScrollListener = null;

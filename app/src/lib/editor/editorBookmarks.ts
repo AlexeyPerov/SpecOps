@@ -343,14 +343,17 @@ export function bookmarkTheme(): Extension {
 }
 
 /**
- * Bookmark extension group for the reserved `landmarks` compartment.
+ * The reconfigurable half of the bookmark landmarks group: the gutter and its
+ * theme. This is what lives inside the `landmarks` compartment, so a future
+ * `landmarks.reconfigure([])` can hide the bookmark gutter without touching
+ * the `StateField`.
  *
- * Always registered (cheap when empty); bookmarks are ephemeral and never
- * persisted. The gutter coexists with the line-number and fold gutters.
+ * The `bookmarkField` `StateField` is mounted separately as a static
+ * extension (see {@link bookmarkStaticExtension}) — a `StateField` must not
+ * live inside a reconfigurable compartment.
  */
-export function bookmarkExtension(): Extension {
+export function bookmarkLandmarksExtension(): Extension {
   return [
-    bookmarkField,
     gutter({
       class: "cm-bookmarkGutter",
       markers: (view) => {
@@ -376,6 +379,31 @@ export function bookmarkExtension(): Extension {
     }),
     bookmarkTheme(),
   ];
+}
+
+/**
+ * Static bookmark extensions that must never be reconfigured: the
+ * `bookmarkField` `StateField`. Replacing a `StateField` after mount deadlocks
+ * CodeMirror's facet resolver (the same freeze documented in `editorFold.ts`
+ * for `codeFolding()`), so it stays outside the `landmarks` compartment while
+ * the gutter/theme move with it.
+ */
+export function bookmarkStaticExtension(): Extension {
+  return bookmarkField;
+}
+
+/**
+ * Bookmark extension group for the reserved `landmarks` compartment.
+ *
+ * Always registered (cheap when empty); bookmarks are ephemeral and never
+ * persisted. The gutter coexists with the line-number and fold gutters.
+ *
+ * @deprecated Prefer {@link bookmarkStaticExtension} + {@link bookmarkLandmarksExtension}
+ * so the `landmarks` compartment can actually be mounted and reconfigured. Kept
+ * for any external caller that still wants the whole bundle as a static extension.
+ */
+export function bookmarkExtension(): Extension {
+  return [bookmarkField, bookmarkLandmarksExtension()];
 }
 
 /** Map a transaction's effects/doc changes for tests without a live view. */

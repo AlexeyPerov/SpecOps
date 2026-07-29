@@ -67,6 +67,14 @@ function buildDecorations(
         continue;
       }
       seen.add(key);
+      // Empty-matching regex queries (`\d*`, `x?`, `^`, `\b`, `.*`, …) legally
+      // produce zero-length matches. `Decoration.mark` rejects `range(n, n)` with
+      // `RangeError: Mark decorations may not be empty`; thrown inside a ViewPlugin
+      // it crashes the plugin and silently disables highlighting for that view.
+      // Such a match has no extent to highlight, so skip it.
+      if (match.from === match.to) {
+        continue;
+      }
       const isCurrent = match.from === sel.from && match.to === sel.to;
       ranges.push((isCurrent ? currentMatchDeco : matchDeco).range(match.from, match.to));
     }

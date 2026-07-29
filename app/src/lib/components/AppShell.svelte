@@ -157,7 +157,6 @@
     isTextEditorDocument: boolean;
     isMarkdownDocument: boolean;
     previewFileSizeBytes: number;
-    markdownHtml: string;
     previewMode: "editor" | "markdown" | "diff";
     wrapLines: boolean;
     zoomPercent: number;

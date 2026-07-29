@@ -396,6 +396,15 @@ export function editorGetMatchInfo(
  * so lookbehind/lookahead and capture groups see surrounding context (same as
  * replace-all). Matching the isolated slice alone drops assertions and yields
  * a literal `$1` from expandReplacement.
+ *
+ * The cursor starts at the beginning of the line containing `from`, not at
+ * `from` itself. `RegExpCursor` flattens each line into a standalone subject
+ * string, so a pattern whose assertion looks *behind* the match start —
+ * `(?<=\s)(bar)`, `(?<=foo\n)(bar)`, any token among `\s \n \r \W \D [^` —
+ * finds nothing when the flattened text begins exactly at `from`, because the
+ * text the assertion needs is to the left of the slice start. Starting at the
+ * line head gives the assertion its context; we then pick the match whose
+ * range equals the selection.
  */
 function matchAtRange(
   doc: Text,
@@ -406,16 +415,22 @@ function matchAtRange(
   const compiled = compileQueryInternal(query);
   if (!compiled) return null;
   try {
+    const lineStart = doc.lineAt(Math.min(from, doc.length)).from;
     const cursor = new RegExpCursor(
       doc,
       compiled.source,
       { ignoreCase: compiled.ignoreCase },
-      from,
+      lineStart,
     );
-    if (!cursor.next().done) {
+    while (!cursor.next().done) {
       const value = cursor.value;
       if (value.from === from && value.to === to) {
         return value.match;
+      }
+      // Matches are returned in document order; once we are past the target
+      // range no later match can equal it.
+      if (value.from > from) {
+        break;
       }
     }
   } catch {

@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-08-01 — Follow-up review verification (F21 / F44 / F47)
+
+Re-verification pass over every fix in the three review documents
+(`code-review-2026-07-25.md`, `code-review-follow-up-2026-07-28.md`,
+`issues-18-07.md`). The overwhelming majority of F1–F76, C1–C8, H1–H35,
+M1–M74, and L1–L31 held up; three residual issues found during the audit:
+
+### Rust runtime
+
+- **Non-UTF-8 git-output marker polluted structured stdout parsers (F21).**
+  `read_limited_stream` appended the `[git output contained non-UTF-8 bytes…]`
+  note to the decoded stream itself, which landed in stdout. Structured
+  consumers that split stdout on `\0` or `diff --git` then absorbed the marker
+  as a phantom record (`status --porcelain=v2 -z`'s record-type switch silently
+  dropped it, but `parseUnifiedDiff` folded it into the last diff section and
+  `parseStashList`/`resolveStashIndexForRef` carried it as a phantom entry).
+  The reader now returns a `had_invalid_utf8` flag alongside the content, and
+  `join_output_readers` routes the note to **stderr** (free-form diagnostics)
+  so the structured stdout payload stays clean.
+- **`join_reader_with_timeout` comment mis-described the detach (F44).** The
+  comment claimed the helper thread "itself exited after timing out the recv";
+  in fact the helper stays blocked in `handle.join()` until the grandchild
+  releases the pipe. The caller's IPC thread is still unblocked (the fix's
+  goal), but the comment now describes the actual lifecycle.
+- **Sidecar health-poll timeout did not signal the process group (F47).**
+  `stop_child` signals the whole group so sidecar grandchildren are torn down,
+  but the health-timeout kill in `poll_health_in_background` killed only the
+  sidecar process, orphaning grandchildren that could keep the port open. The
+  timeout path now calls `kill_process_group` first, matching `stop_child`.
+
 ## 2026-07-29 — Follow-up review Tier 7 (F70–F76)
 
 Fixes for the UI shell polish tier of the follow-up review in

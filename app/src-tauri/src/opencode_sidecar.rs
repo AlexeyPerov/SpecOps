@@ -659,6 +659,14 @@ fn poll_health_in_background(
         }
         if let Some(child) = inner.child.as_mut() {
             if child_is_running(child) {
+                // F47: signal the whole process group (the sidecar is spawned as a
+                // group leader) so its grandchildren are torn down too — the same
+                // best-effort teardown `stop_child` uses, so a health-timeout kill
+                // cannot orphan sidecar grandchildren that hold the port open.
+                #[cfg(unix)]
+                {
+                    kill_process_group(child);
+                }
                 let _ = child.kill();
                 let _ = child.wait();
             }

@@ -251,9 +251,13 @@ struct ActiveGitCommand {
 }
 
 /// Reader threads draining one child's stdout and stderr.
+///
+/// Each thread yields the decoded content plus whether the raw bytes contained any
+/// non-UTF-8 sequence (so the caller can surface the corruption on the right stream
+/// rather than polluting the structured stdout payload — F21).
 struct GitOutputReaders {
-    stdout: Option<JoinHandle<Result<String, String>>>,
-    stderr: Option<JoinHandle<Result<String, String>>>,
+    stdout: Option<JoinHandle<Result<(String, bool), String>>>,
+    stderr: Option<JoinHandle<Result<(String, bool), String>>>,
 }
 
 /// Detach the child's pipes onto reader threads so they drain concurrently with the
@@ -285,9 +289,9 @@ const OUTPUT_READER_JOIN_TIMEOUT: Duration = Duration::from_secs(2);
 /// output plus a marker when the deadline expired (the handle is dropped, which
 /// detaches the still-blocked thread). A panicked thread is surfaced as an error.
 fn join_reader_with_timeout(
-    handle: JoinHandle<Result<String, String>>,
+    handle: JoinHandle<Result<(String, bool), String>>,
     what: &str,
-) -> Result<String, String> {
+) -> Result<(String, bool), String> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         // The only error path here is a panic; forward it as `None` so the
@@ -300,9 +304,10 @@ fn join_reader_with_timeout(
         Ok(None) => Err(format!("git {what} reader thread panicked")),
         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
             // The reader is still blocked because a grandchild holds the pipe
-            // open. Detach it (its handle was moved into the helper thread, which
-            // itself exited after timing out the recv) and return empty output
-            // with a marker so the caller can see the tail was lost.
+            // open. Detach it (its handle was moved into a helper thread that
+            // itself stays blocked in `join()` until the pipe finally closes)
+            // and return empty output with a marker so the caller can see the
+            // tail was lost. The caller's IPC thread is unblocked either way.
             Err(format!(
                 "[git {what} reader still blocked after {}s; output discarded]",
                 OUTPUT_READER_JOIN_TIMEOUT.as_secs()
@@ -320,19 +325,33 @@ fn join_reader_with_timeout(
 /// on `read` until their pipe closes. A panicked reader thread is reported as an error
 /// rather than propagating the panic into the IPC handler. Joins are deadline-bounded
 /// (see [`join_reader_with_timeout`]) so a surviving grandchild cannot hang the caller.
+///
+/// F21: the non-UTF-8 corruption note is appended to **stderr**, not stdout. Appending
+/// it to stdout polluted structured `-z` consumers (`parseStatusPorcelainV2Z`,
+/// `parseUnifiedDiff`, `parseStashList`): the marker landed as a phantom record in the
+/// status record-type switch or as trailing lines absorbed into the last diff section.
+/// stderr is free-form diagnostics, so the human-readable trace is safe there.
 fn join_output_readers(readers: Option<GitOutputReaders>) -> Result<(String, String), String> {
     let Some(readers) = readers else {
         return Ok((String::new(), String::new()));
     };
 
-    let stdout = match readers.stdout {
+    let (stdout, stdout_invalid) = match readers.stdout {
         Some(handle) => join_reader_with_timeout(handle, "stdout")?,
-        None => String::new(),
+        None => (String::new(), false),
     };
-    let stderr = match readers.stderr {
+    let (mut stderr, stderr_invalid) = match readers.stderr {
         Some(handle) => join_reader_with_timeout(handle, "stderr")?,
-        None => String::new(),
+        None => (String::new(), false),
     };
+
+    // F21: surface non-UTF-8 corruption on stderr (free-form diagnostics) rather
+    // than stdout (structured output parsed by `-z`/diff/log consumers).
+    if stdout_invalid || stderr_invalid {
+        stderr.push_str(
+            "\n\n[git output contained non-UTF-8 bytes; paths may have been replaced with U+FFFD]\n",
+        );
+    }
 
     Ok((stdout, stderr))
 }
@@ -1013,7 +1032,10 @@ fn apply_output_limit(response: &mut RunGitResponse) {
     }
 }
 
-fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<String, String> {
+fn read_limited_stream(
+    reader: &mut impl Read,
+    max_bytes: usize,
+) -> Result<(String, bool), String> {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
     let mut exceeded = false;
@@ -1055,13 +1077,14 @@ fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<Strin
     // error. Surface the corruption explicitly so the frontend can refuse to
     // act on the lossy path and tell the user, rather than massaging U+FFFD
     // into a command that cannot succeed.
+    //
+    // The marker is *not* appended to the content here: appending it to stdout
+    // polluted structured `-z`/diff/log parsers (a phantom record-type segment,
+    // or trailing lines absorbed into the last diff section). The caller
+    // ([`join_output_readers`]) routes the note to stderr, which is free-form
+    // diagnostics, on the strength of the returned `had_invalid_utf8` flag.
     let (text, had_invalid_utf8) = decode_utf8_with_validity(&buf);
     let mut text = text;
-    if had_invalid_utf8 {
-        text.push_str(
-            "\n\n[git output contained non-UTF-8 bytes; paths may have been replaced with U+FFFD]\n",
-        );
-    }
     if exceeded {
         // Preserve the partial output instead of discarding the whole stream — a
         // huge `git log`/`git show` is still useful truncated. The marker lets
@@ -1070,7 +1093,7 @@ fn read_limited_stream(reader: &mut impl Read, max_bytes: usize) -> Result<Strin
             "\n\n[output truncated: exceeded {max_bytes} byte limit]\n"
         ));
     }
-    Ok(text)
+    Ok((text, had_invalid_utf8))
 }
 
 /// Shrink `buf` to at most `max_bytes`, never splitting a multi-byte UTF-8
@@ -1653,7 +1676,8 @@ mod tests {
     fn read_limited_stream_truncates_oversize_and_drains_to_eof() {
         let oversized = vec![b'x'; 64];
         let mut cursor = Cursor::new(oversized);
-        let text = read_limited_stream(&mut cursor, 16).expect("oversize truncates, not errors");
+        let (text, had_invalid_utf8) =
+            read_limited_stream(&mut cursor, 16).expect("oversize truncates, not errors");
         // Partial body preserved up to the limit, plus the truncation marker.
         assert!(text.contains("output truncated"), "missing truncation marker: {text}");
         let x_count = text.chars().filter(|c| *c == 'x').count();
@@ -1664,14 +1688,16 @@ mod tests {
         );
         // Cursor should be fully drained so a concurrent writer would not block.
         assert_eq!(cursor.position(), 64);
+        assert!(!had_invalid_utf8, "ASCII input must not flag invalid UTF-8");
     }
 
     #[test]
     fn read_limited_stream_accepts_within_limit() {
         let data = b"hello git";
         let mut cursor = Cursor::new(data.as_slice());
-        let text = read_limited_stream(&mut cursor, 64).expect("within limit");
+        let (text, had_invalid_utf8) = read_limited_stream(&mut cursor, 64).expect("within limit");
         assert_eq!(text, "hello git");
+        assert!(!had_invalid_utf8);
     }
 
     /// F2: a byte cap that splits a multi-byte UTF-8 sequence must not produce a
@@ -1687,7 +1713,8 @@ mod tests {
         let oversized: Vec<u8> = (0..1024).flat_map(|_| pattern.iter().copied()).collect();
         let cap = 16; // even — guaranteed to land mid-character for 2-byte "é"
         let mut cursor = Cursor::new(oversized.clone().into_boxed_slice());
-        let text = read_limited_stream(&mut cursor, cap).expect("truncates, not errors");
+        let (text, had_invalid_utf8) =
+            read_limited_stream(&mut cursor, cap).expect("truncates, not errors");
         // Must not panic and must remain valid UTF-8 (decode_utf8 guarantees this,
         // but the assertion documents the F2 invariant).
         assert!(text.contains("output truncated"), "missing marker: {text}");
@@ -1705,6 +1732,27 @@ mod tests {
         };
         apply_output_limit(&mut response);
         assert!(response.stdout.len() <= MAX_GIT_OUTPUT_BYTES + 128);
+    }
+
+    /// F21: a stream containing non-UTF-8 bytes must flag the corruption so the
+    /// caller routes the marker to stderr, and the returned content must NOT carry
+    /// the marker inline (it would pollute structured `-z`/diff parsers).
+    #[test]
+    fn read_limited_stream_flags_non_utf8_without_polluting_content() {
+        // 0xFF is never valid UTF-8 on its own.
+        let data = b"valid \xFF invalid";
+        let mut cursor = Cursor::new(data.as_slice());
+        let (text, had_invalid_utf8) = read_limited_stream(&mut cursor, 64).expect("decodes lossily");
+        assert!(
+            had_invalid_utf8,
+            "non-UTF-8 input must set the validity flag"
+        );
+        assert!(
+            !text.contains("non-UTF-8 bytes"),
+            "content must not carry the marker; got: {text}"
+        );
+        // The lossy replacement is present in the content itself.
+        assert!(text.contains('\u{FFFD}'));
     }
 
     #[test]

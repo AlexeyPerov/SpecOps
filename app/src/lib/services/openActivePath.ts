@@ -1,3 +1,8 @@
+import {
+  allTabs,
+  findTabOwner,
+  isFileTab,
+} from "../domain/contracts";
 import { isFileMissingError, normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
 import { openPath } from "./fileSystem";
 import {
@@ -5,7 +10,6 @@ import {
   completeOpenPath,
   completeOpenPathInPane,
   openedFileEncoding,
-  refreshExistingDocumentFromDisk,
   requestOpenPath,
 } from "./openFileGate";
 import { shouldGateFileOpenBySize } from "./largeFileOpen";
@@ -13,6 +17,8 @@ import { appState } from "../state/appState";
 import { syncRecentFiles } from "./recentFilesSync";
 import { getErrorMessage } from "../commands/commandErrors";
 import { releasePendingOpenFile } from "./openFileRegistry";
+import { checkDocumentIfDeferred } from "./externalFileChanges";
+import { logDiagnostic } from "./logging";
 
 export type OpenActivePathResult =
   | { kind: "opened"; path: string }
@@ -36,6 +42,41 @@ async function pruneMissingRecentFile(path: string): Promise<void> {
   syncRecentFiles(recentFiles);
 }
 
+/**
+ * Check an already-visible document without making file activation wait for
+ * filesystem I/O. The external-change engine performs a metadata-only check
+ * first and reads contents only when the fingerprint changed.
+ */
+function scheduleExistingDocumentCheck(documentId: string, path: string): void {
+  queueMicrotask(() => {
+    void checkDocumentIfDeferred(documentId, "tab").catch((error: unknown) => {
+      void logDiagnostic({
+        level: "warn",
+        source: "frontend",
+        timestamp: new Date().toISOString(),
+        message: "background external-file check failed after file activation",
+        metadata: { documentId, path, error: getErrorMessage(error) },
+      }).catch(() => {
+        // File activation already succeeded; diagnostics must stay best-effort.
+      });
+    });
+  });
+}
+
+/** Move an existing file tab to a drop target without replacing its buffer. */
+function moveExistingDocumentToPane(documentId: string, paneId: string): void {
+  const layout = appState.getActiveSession().editorLayout;
+  const tab = allTabs(layout).find(
+    (entry) => isFileTab(entry) && entry.documentId === documentId,
+  );
+  const owner = tab ? findTabOwner(layout, tab.id) : null;
+  const target = layout.panes.find((pane) => pane.id === paneId);
+  if (!tab || !owner || !target || owner.pane.id === paneId) {
+    return;
+  }
+  appState.moveTabBetweenPanes(owner.pane.id, tab.id, paneId, target.tabs.length);
+}
+
 export async function openActivePath(
   path: string,
   windowId: string,
@@ -47,13 +88,7 @@ export async function openActivePath(
       return { kind: "redirected", path: gateResult.path };
     }
     if (gateResult.kind === "existing") {
-      const existingDocument = appState
-        .getActiveDocuments()
-        .find((documentState) => documentState.id === gateResult.documentId);
-      if (existingDocument?.contentKind === "large_pending") {
-        return { kind: "existing", path: gateResult.path };
-      }
-      await refreshExistingDocumentFromDisk(gateResult.documentId, path);
+      scheduleExistingDocumentCheck(gateResult.documentId, path);
       return { kind: "existing", path: gateResult.path };
     }
 
@@ -71,6 +106,7 @@ export async function openActivePath(
       windowId,
       opened.contentKind,
       openedFileEncoding(opened),
+      opened.fingerprint,
     );
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {
@@ -88,9 +124,9 @@ export async function openActivePath(
  * Phase 6 — open a file into a specific pane (file→pane DnD). Same gating as
  * {@link openActivePath} (cross-window redirect, large-file confirm), but the
  * terminal "open" step routes through {@link completeOpenPathInPane} so the
- * file lands in `paneId` (stealing it from any other pane first per Q9). The
- * "existing" branch also re-reads from disk for consistency with the active-pane
- * open path, then opens into the target pane via the reducer's steal/focus path.
+ * file lands in `paneId` (stealing it from any other pane first per Q9). An
+ * existing document is moved/focused immediately without replacing its buffer;
+ * external-change detection runs afterward in the background.
  */
 export async function openActivePathInPane(
   path: string,
@@ -104,23 +140,8 @@ export async function openActivePathInPane(
       return { kind: "redirected", path: gateResult.path };
     }
     if (gateResult.kind === "existing") {
-      const existingDocument = appState
-        .getActiveDocuments()
-        .find((documentState) => documentState.id === gateResult.documentId);
-      if (existingDocument?.contentKind === "large_pending") {
-        return { kind: "existing", path: gateResult.path };
-      }
-      await refreshExistingDocumentFromDisk(gateResult.documentId, path);
-      // Re-open into the target pane; openFileInPane steals + focuses.
-      const reOpened = await openPath(path);
-      await completeOpenPathInPane(
-        reOpened.path,
-        reOpened.content,
-        windowId,
-        paneId,
-        reOpened.contentKind,
-        openedFileEncoding(reOpened),
-      );
+      moveExistingDocumentToPane(gateResult.documentId, paneId);
+      scheduleExistingDocumentCheck(gateResult.documentId, path);
       return { kind: "existing", path: gateResult.path };
     }
 
@@ -139,6 +160,7 @@ export async function openActivePathInPane(
       paneId,
       opened.contentKind,
       openedFileEncoding(opened),
+      opened.fingerprint,
     );
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {

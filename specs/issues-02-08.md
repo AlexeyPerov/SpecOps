@@ -99,12 +99,13 @@ architectural work).
 
 ## P02-08-04 — Clicking an already-open file rereads its complete contents
 
-- **Status:** Open.
+- **Status:** Resolved on 2026-08-02.
 - **Area:** Project pane / file activation.
 - **Impact:** **Medium–high.** Focusing an existing tab can incur stat, file read,
   decode, fingerprint, and document-state update work. This is especially
   noticeable for large files and cloud, network, or externally mounted roots.
-- **Fix complexity:** **S–M.** External-change semantics need explicit tests.
+- **Fix complexity:** **S–M.** Completed with activation and external-change
+  policy coverage.
 - **Evidence:** The `existing` branch of `openActivePath` unconditionally calls
   `refreshExistingDocumentFromDisk` unless the document is waiting for large-file
   confirmation.
@@ -112,10 +113,15 @@ architectural work).
   checks are enabled, compare a cheap metadata fingerprint in the background
   and read contents only when metadata differs. Reuse the existing external-file
   conflict policy for dirty buffers instead of silently refreshing during tab
-  focus.
+  focus. Implemented by scheduling the existing external-change engine after
+  activation rather than awaiting a direct full-file refresh. File-to-pane drops
+  now move the existing tab without replacing its buffer before scheduling the
+  same check.
 - **Acceptance criteria:** Clicking an unchanged open file performs no content
   read; the tab focuses immediately; changed clean files still refresh; changed
-  dirty files still use the configured conflict flow.
+  dirty files still use the configured conflict flow. Covered by open-path and
+  external-file-change tests, including preservation of unsaved pane-drop
+  content.
 
 ## P02-08-05 — Tab activation checks are repeated across short tab cycles
 

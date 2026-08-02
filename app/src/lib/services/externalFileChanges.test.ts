@@ -118,19 +118,20 @@ describe("checkDocumentExternalChanges", () => {
     );
   });
 
-  it("returns unchanged when disk fingerprint matches", async () => {
+  it("performs no content read when a tab activation fingerprint is unchanged", async () => {
     const documentId = prepareSavedFile("/tmp/unchanged.txt", "same", fp1);
     statMock.mockResolvedValue(fp1);
 
-    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
+    await expect(checkDocumentExternalChanges(documentId, "tab")).resolves.toBe("unchanged");
+    expect(readFileMock).not.toHaveBeenCalled();
   });
 
-  it("silently reloads a clean buffer when disk changed", async () => {
+  it("reloads a clean buffer after a tab activation fingerprint changed", async () => {
     const documentId = prepareSavedFile("/tmp/reload.txt", "old", fp1);
     statMock.mockResolvedValue(fp2);
     mockDiskText("new");
 
-    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("reloaded");
+    await expect(checkDocumentExternalChanges(documentId, "tab")).resolves.toBe("reloaded");
     const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
     expect(document?.content).toBe("new");
     expect(document?.isDirty).toBe(false);
@@ -180,19 +181,19 @@ describe("checkDocumentExternalChanges", () => {
     await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
   });
 
-  it("reloads dirty buffers when user chooses Reload", async () => {
+  it("uses the dirty-buffer prompt after a tab activation fingerprint changed", async () => {
     const documentId = prepareSavedFile("/tmp/dirty-reload.txt", "local", fp1, true);
     statMock.mockResolvedValue(fp2);
     mockDiskText("from disk");
     confirmMock.mockResolvedValue(true);
 
-    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("deferred");
-    await flushMicrotasks();
-
-    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
-    expect(document?.content).toBe("from disk");
-    expect(document?.isDirty).toBe(false);
-    expect(confirmMock).toHaveBeenCalledOnce();
+    await expect(checkDocumentExternalChanges(documentId, "tab")).resolves.toBe("deferred");
+    await vi.waitFor(() => {
+      const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
+      expect(document?.content).toBe("from disk");
+      expect(document?.isDirty).toBe(false);
+      expect(confirmMock).toHaveBeenCalledOnce();
+    });
   });
 
   it("keeps local edits when user chooses Keep Local", async () => {
@@ -201,12 +202,12 @@ describe("checkDocumentExternalChanges", () => {
     confirmMock.mockResolvedValue(false);
 
     await checkDocumentExternalChanges(documentId, "watcher");
-    await flushMicrotasks();
-
-    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
-    expect(document?.content).toBe("local edited");
-    expect(document?.dismissedFingerprint).toEqual(fp2);
-    expect(document?.isDirty).toBe(true);
+    await vi.waitFor(() => {
+      const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
+      expect(document?.content).toBe("local edited");
+      expect(document?.dismissedFingerprint).toEqual(fp2);
+      expect(document?.isDirty).toBe(true);
+    });
   });
 
   it("keeps local edits when the dirty-reload dialog rejects instead of re-prompting", async () => {

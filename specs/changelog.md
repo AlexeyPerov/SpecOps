@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-02 16:51 MSK — Fast activation for already-open files
+
+- Resolved P02-08-04 by focusing existing file tabs without awaiting or performing an unconditional full-file reread.
+- Reused the background external-change policy so unchanged files require only a metadata check, changed clean files reload, and dirty files retain the reload/keep-local prompt flow.
+- Changed existing-file pane drops to move the live tab instead of rebuilding it from disk, preserving unsaved content, and added regression coverage for activation latency and reload behavior.
+- Reused the fingerprint already returned by new-file reads when initializing document disk state, avoiding an immediate redundant stat.
+
 ## 2026-08-02 16:24 MSK — Dedicated open-file ownership registry
 
 - Resolved P02-08-03 by moving cross-window file ownership out of the full session snapshot into a small, atomically written `open-files.json` registry with event-coherent in-memory reads.

@@ -159,22 +159,6 @@ export function openedFileEncoding(opened: OpenedFile): OpenedFileEncoding {
   return { lineEnding: opened.lineEnding, hasBom: opened.hasBom };
 }
 
-export async function refreshExistingDocumentFromDisk(
-  documentId: string,
-  path: string,
-): Promise<OpenedFile> {
-  const opened = await openPath(path);
-  appState.upgradeDocumentFromOpenedFile(
-    documentId,
-    opened.path,
-    opened.content,
-    opened.contentKind,
-    openedFileEncoding(opened),
-  );
-  await initializeDocumentDiskState(documentId, path, opened.fingerprint);
-  return opened;
-}
-
 export async function completeOpenPath(
   path: string,
   content: string,

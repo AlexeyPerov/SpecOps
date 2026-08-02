@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-02 17:01 MSK — Deduplicated tab activation checks
+
+- Resolved P02-08-05 by replacing the single-document 600 ms cooldown with a bounded per-document freshness cache and a five-second watcher-backed window.
+- Moved tab checks onto a zero-delay background scheduler shared by tab switching and existing-file activation, with one queued/in-flight operation per document.
+- Made watcher, focus, startup, manual-refresh, and document-close paths invalidate tab freshness; authoritative checks cancel queued tab work or run again after work already in progress.
+- Added regression coverage for A → B → A cycling, concurrent scheduling, freshness expiry, watcher invalidation, and focus-check cancellation.
+
 ## 2026-08-02 16:51 MSK — Fast activation for already-open files
 
 - Resolved P02-08-04 by focusing existing file tabs without awaiting or performing an unconditional full-file reread.

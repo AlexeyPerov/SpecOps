@@ -8,12 +8,12 @@ import {
   setupAppShellMount,
   type AppShellMountDeps,
 } from "./appShellPageHandlers";
-import { checkDocumentIfDeferred } from "./externalFileChanges";
+import { scheduleTabExternalCheck } from "./externalFileChanges";
 import { confirmLargeFileOpen } from "./openFileGate";
 import { openActivePath } from "./openActivePath";
 
 vi.mock("./externalFileChanges", () => ({
-  checkDocumentIfDeferred: vi.fn(async () => "unchanged"),
+  scheduleTabExternalCheck: vi.fn(() => "scheduled"),
 }));
 vi.mock("./openFileGate", () => ({
   confirmLargeFileOpen: vi.fn(async () => {}),
@@ -31,7 +31,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
 
-const checkDocumentIfDeferredMock = vi.mocked(checkDocumentIfDeferred);
+const scheduleTabExternalCheckMock = vi.mocked(scheduleTabExternalCheck);
 const openActivePathMock = vi.mocked(openActivePath);
 
 const defaultExternalFiles: ExternalFilesSettings = {
@@ -137,7 +137,8 @@ describe("createAppShellFileHandlers.onTabActivated", () => {
   beforeEach(() => {
     appState.resetAppState();
     appState.setExternalFilesSettings(defaultExternalFiles);
-    checkDocumentIfDeferredMock.mockReset();
+    scheduleTabExternalCheckMock.mockReset();
+    scheduleTabExternalCheckMock.mockReturnValue("scheduled");
     vi.useFakeTimers();
     vi.setSystemTime(0);
   });
@@ -161,10 +162,10 @@ describe("createAppShellFileHandlers.onTabActivated", () => {
 
     await handlers.onTabActivated(tabId);
 
-    expect(checkDocumentIfDeferredMock).not.toHaveBeenCalled();
+    expect(scheduleTabExternalCheckMock).not.toHaveBeenCalled();
   });
 
-  it("dedupes same-document tab activations during cooldown", async () => {
+  it("delegates repeated activations to the shared freshness scheduler", async () => {
     appState.openFileInTab("/tmp/a.ts", "a");
     const documentId = appState.findDocumentIdByPath("/tmp/a.ts");
     const tabId = activeFileTabIdByPath("/tmp/a.ts");
@@ -174,16 +175,14 @@ describe("createAppShellFileHandlers.onTabActivated", () => {
       notify: () => {},
     });
 
+    scheduleTabExternalCheckMock
+      .mockReturnValueOnce("scheduled")
+      .mockReturnValueOnce("fresh");
     await handlers.onTabActivated(tabId);
     await handlers.onTabActivated(tabId);
 
-    expect(checkDocumentIfDeferredMock).toHaveBeenCalledTimes(1);
-    expect(checkDocumentIfDeferredMock).toHaveBeenCalledWith(documentId, "tab");
-
-    vi.setSystemTime(650);
-    await handlers.onTabActivated(tabId);
-
-    expect(checkDocumentIfDeferredMock).toHaveBeenCalledTimes(2);
+    expect(scheduleTabExternalCheckMock).toHaveBeenCalledTimes(2);
+    expect(scheduleTabExternalCheckMock).toHaveBeenCalledWith(documentId);
   });
 
   it("still checks when switching to a different document within cooldown", async () => {
@@ -202,9 +201,9 @@ describe("createAppShellFileHandlers.onTabActivated", () => {
     await handlers.onTabActivated(firstTabId);
     await handlers.onTabActivated(secondTabId);
 
-    expect(checkDocumentIfDeferredMock).toHaveBeenCalledTimes(2);
-    expect(checkDocumentIfDeferredMock).toHaveBeenNthCalledWith(1, firstDocumentId, "tab");
-    expect(checkDocumentIfDeferredMock).toHaveBeenNthCalledWith(2, secondDocumentId, "tab");
+    expect(scheduleTabExternalCheckMock).toHaveBeenCalledTimes(2);
+    expect(scheduleTabExternalCheckMock).toHaveBeenNthCalledWith(1, firstDocumentId);
+    expect(scheduleTabExternalCheckMock).toHaveBeenNthCalledWith(2, secondDocumentId);
   });
 });
 

@@ -8,7 +8,7 @@ import type { EditorCommandRunner } from "../types/editor";
 import type { EditorToolController } from "../editor/editorToolController";
 import { dispatchMenuCommand, isCommandAvailableInState, keymapCommandForEvent } from "../commands/registry";
 import { getErrorMessage } from "../commands/commandErrors";
-import { checkDocumentIfDeferred } from "./externalFileChanges";
+import { scheduleTabExternalCheck } from "./externalFileChanges";
 import { shouldRunAutomaticCheck } from "./externalFileReloadPolicy";
 import { requestConfirm } from "./confirmDialogUi";
 import { confirmLargeFileOpen } from "./openFileGate";
@@ -102,11 +102,7 @@ export interface AppShellFileHandlersDeps {
   notify: (message: string) => void;
 }
 
-const TAB_ACTIVATION_CHECK_COOLDOWN_MS = 600;
-
 export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
-  let lastTabActivationCheck: { documentId: string; checkedAtMs: number } | null = null;
-
   async function openAndActivatePath(path: string): Promise<void> {
     const result = await openActivePath(path, deps.getCurrentWindowId());
     deps.notify(describeOpenActivePathResult(result));
@@ -175,12 +171,8 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
       );
       return;
     }
-    const now = Date.now();
-    if (
-      lastTabActivationCheck &&
-      lastTabActivationCheck.documentId === tab.documentId &&
-      now - lastTabActivationCheck.checkedAtMs < TAB_ACTIVATION_CHECK_COOLDOWN_MS
-    ) {
+    const scheduleResult = scheduleTabExternalCheck(tab.documentId);
+    if (scheduleResult !== "scheduled") {
       void logPerfTiming(
         "tab activation side-effects skipped",
         {
@@ -189,24 +181,19 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
           tabId,
           documentId: tab.documentId,
           skipped: true,
-          reason: "cooldown",
+          reason: scheduleResult,
         },
         "debug",
       );
       return;
     }
-    lastTabActivationCheck = {
-      documentId: tab.documentId,
-      checkedAtMs: now,
-    };
-    await checkDocumentIfDeferred(tab.documentId, "tab");
-    void logPerfTiming("tab activation side-effects complete", {
+    void logPerfTiming("tab activation side-effects scheduled", {
       metric: "tab.activationSideEffects",
       durationMs: elapsedMs(sideEffectsStartedAt),
       tabId,
       documentId: tab.documentId,
       skipped: false,
-      reason: "external-check",
+      reason: "external-check-scheduled",
     });
   }
 

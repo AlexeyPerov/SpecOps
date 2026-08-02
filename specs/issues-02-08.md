@@ -125,12 +125,12 @@ architectural work).
 
 ## P02-08-05 — Tab activation checks are repeated across short tab cycles
 
-- **Status:** Open.
+- **Status:** Resolved on 2026-08-02.
 - **Area:** Tab switching / external-file detection.
 - **Impact:** **High on slow filesystems; medium otherwise.** A tab switch can
   trigger disk work that took 592 ms in the captured log.
-- **Fix complexity:** **M.** Watcher gaps and focus/startup fallbacks must remain
-  correct.
+- **Fix complexity:** **M.** Completed with watcher, focus, expiry, and rapid-cycle
+  regression coverage.
 - **Evidence:** The activation cooldown stores only one document id for 600 ms.
   Switching A → B → A replaces the remembered id and checks A again, even when
   both files were checked moments earlier.
@@ -139,9 +139,15 @@ architectural work).
   watcher is active. Run activation checks after the visual tab commit (idle or
   background task), deduplicate in-flight checks by document id, and invalidate
   freshness immediately on watcher events, app focus, or explicit refresh.
+  Implemented with a 256-entry LRU-style completion cache, a five-second
+  watcher-backed freshness window, deferred zero-delay checks, and one pending
+  check per document. Authoritative watcher, focus, startup, manual, and close
+  paths invalidate freshness; queued tab work is cancelled where possible, and
+  already-running tab work is followed by the authoritative check.
 - **Acceptance criteria:** Rapid cycling among unchanged tabs does not issue
   repeated stats; watcher-reported changes are not delayed; returning from app
-  background still performs the required safety check.
+  background still performs the required safety check. Covered by A → B → A,
+  expiry, watcher invalidation, and queued-check cancellation tests.
 
 ---
 

@@ -9,7 +9,7 @@ import { openPath } from "./fileSystem";
 import { statDiskFingerprint } from "./diskFingerprint";
 import { syncRecentFiles } from "./recentFilesSync";
 import { releasePendingOpenFile } from "./openFileRegistry";
-import { checkDocumentIfDeferred } from "./externalFileChanges";
+import { scheduleTabExternalCheck } from "./externalFileChanges";
 import {
   describeOpenActivePathResult,
   isSuccessfulOpenActivePathResult,
@@ -20,7 +20,7 @@ import {
 
 vi.mock("./externalFileChanges", () => ({
   initializeDocumentDiskState: vi.fn().mockResolvedValue(undefined),
-  checkDocumentIfDeferred: vi.fn().mockResolvedValue("unchanged"),
+  scheduleTabExternalCheck: vi.fn(() => "scheduled"),
 }));
 
 vi.mock("./openFileGate", async (importOriginal) => {
@@ -56,7 +56,7 @@ vi.mock("./openFileRegistry", () => ({
 const requestOpenPathMock = vi.mocked(requestOpenPath);
 const completeOpenPathMock = vi.mocked(completeOpenPath);
 const completeLargePendingOpenMock = vi.mocked(completeLargePendingOpen);
-const checkDocumentIfDeferredMock = vi.mocked(checkDocumentIfDeferred);
+const scheduleTabExternalCheckMock = vi.mocked(scheduleTabExternalCheck);
 const openPathMock = vi.mocked(openPath);
 const statDiskFingerprintMock = vi.mocked(statDiskFingerprint);
 const syncRecentFilesMock = vi.mocked(syncRecentFiles);
@@ -71,8 +71,8 @@ describe("openActivePath", () => {
     requestOpenPathMock.mockReset();
     completeOpenPathMock.mockReset();
     completeLargePendingOpenMock.mockReset();
-    checkDocumentIfDeferredMock.mockReset();
-    checkDocumentIfDeferredMock.mockResolvedValue("unchanged");
+    scheduleTabExternalCheckMock.mockReset();
+    scheduleTabExternalCheckMock.mockReturnValue("scheduled");
     openPathMock.mockReset();
     statDiskFingerprintMock.mockReset();
     syncRecentFilesMock.mockReset();
@@ -102,20 +102,12 @@ describe("openActivePath", () => {
       path: FILE_PATH,
       documentId,
     });
-    let finishCheck!: () => void;
-    checkDocumentIfDeferredMock.mockImplementation(
-      () => new Promise((resolve) => {
-        finishCheck = () => resolve("unchanged");
-      }),
-    );
-
     const result = await openActivePath(FILE_PATH, WINDOW_ID);
 
     expect(result).toEqual({ kind: "existing", path: FILE_PATH });
-    expect(checkDocumentIfDeferredMock).toHaveBeenCalledWith(documentId, "tab");
+    expect(scheduleTabExternalCheckMock).toHaveBeenCalledWith(documentId);
     expect(openPathMock).not.toHaveBeenCalled();
     expect(completeOpenPathMock).not.toHaveBeenCalled();
-    finishCheck();
   });
 
   it("lets the external-change policy skip existing large_pending documents", async () => {
@@ -129,7 +121,7 @@ describe("openActivePath", () => {
     const result = await openActivePath(FILE_PATH, WINDOW_ID);
 
     expect(result).toEqual({ kind: "existing", path: FILE_PATH });
-    expect(checkDocumentIfDeferredMock).toHaveBeenCalledWith(documentId, "tab");
+    expect(scheduleTabExternalCheckMock).toHaveBeenCalledWith(documentId);
     expect(openPathMock).not.toHaveBeenCalled();
   });
 
@@ -167,7 +159,7 @@ describe("openActivePath", () => {
       isDirty: true,
     });
     expect(openPathMock).not.toHaveBeenCalled();
-    expect(checkDocumentIfDeferredMock).toHaveBeenCalledWith(documentId, "tab");
+    expect(scheduleTabExternalCheckMock).toHaveBeenCalledWith(documentId);
   });
 
   it("completes open on happy path", async () => {

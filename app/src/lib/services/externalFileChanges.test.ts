@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { readFile, stat } from "@tauri-apps/plugin-fs";
 import type { DiskFingerprint, ExternalFilesSettings } from "../domain/contracts";
@@ -8,6 +8,7 @@ import { flushMicrotasks } from "../test/sessionMock";
 import { statDiskFingerprint } from "./diskFingerprint";
 import {
   awaitStartupExternalChecksBackgroundForTests,
+  awaitPendingTabExternalChecks,
   beginSaveInFlight,
   cancelStartupExternalChecks,
   checkDocumentExternalChanges,
@@ -16,8 +17,11 @@ import {
   recordWriteFingerprint,
   reloadActiveDocumentFromDisk,
   resetExternalFileChangesForTests,
+  runFocusExternalChecks,
   runStartupExternalChecks,
   runWatcherExternalCheck,
+  scheduleTabExternalCheck,
+  TAB_EXTERNAL_CHECK_FRESHNESS_MS,
 } from "./externalFileChanges";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -329,6 +333,89 @@ describe("checkDocumentExternalChanges", () => {
     resolveConfirm?.(false);
     await first;
     await flushMicrotasks();
+  });
+});
+
+describe("scheduleTabExternalCheck", () => {
+  beforeEach(() => {
+    resetExternalFileChangesForTests();
+    appState.resetAppState();
+    setExternalFiles();
+    confirmMock.mockReset();
+    readFileMock.mockReset();
+    statFsMock.mockReset();
+    statMock.mockReset();
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+
+  afterEach(() => {
+    resetExternalFileChangesForTests();
+    vi.useRealTimers();
+  });
+
+  it("deduplicates A-B-A cycling with per-document freshness", async () => {
+    const firstId = prepareSavedFile("/tmp/a.txt", "a", fp1);
+    const secondId = prepareSavedFile("/tmp/b.txt", "b", fp1);
+    statMock.mockResolvedValue(fp1);
+
+    expect(scheduleTabExternalCheck(firstId)).toBe("scheduled");
+    expect(scheduleTabExternalCheck(secondId)).toBe("scheduled");
+    expect(scheduleTabExternalCheck(firstId)).toBe("in-flight");
+    await vi.runAllTimersAsync();
+    await awaitPendingTabExternalChecks();
+
+    expect(statMock).toHaveBeenCalledTimes(2);
+    vi.setSystemTime(TAB_EXTERNAL_CHECK_FRESHNESS_MS - 1);
+    expect(scheduleTabExternalCheck(firstId)).toBe("fresh");
+    expect(scheduleTabExternalCheck(secondId)).toBe("fresh");
+    expect(statMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks again after the watcher-backed freshness window expires", async () => {
+    const documentId = prepareSavedFile("/tmp/expiry.txt", "same", fp1);
+    statMock.mockResolvedValue(fp1);
+
+    expect(scheduleTabExternalCheck(documentId)).toBe("scheduled");
+    await vi.runAllTimersAsync();
+    await awaitPendingTabExternalChecks();
+    vi.setSystemTime(TAB_EXTERNAL_CHECK_FRESHNESS_MS + 1);
+    expect(scheduleTabExternalCheck(documentId)).toBe("scheduled");
+    await vi.runAllTimersAsync();
+    await awaitPendingTabExternalChecks();
+
+    expect(statMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets watcher checks bypass and invalidate tab freshness", async () => {
+    const path = "/tmp/watcher-invalidates.txt";
+    const documentId = prepareSavedFile(path, "old", fp1);
+    statMock.mockResolvedValueOnce(fp1);
+
+    expect(scheduleTabExternalCheck(documentId)).toBe("scheduled");
+    await vi.runAllTimersAsync();
+    await awaitPendingTabExternalChecks();
+    expect(scheduleTabExternalCheck(documentId)).toBe("fresh");
+
+    statMock.mockResolvedValue(fp2);
+    mockDiskText("new", fp2);
+    await runWatcherExternalCheck(path);
+
+    expect(appState.getActiveDocuments().find((doc) => doc.id === documentId)?.content).toBe(
+      "new",
+    );
+    expect(scheduleTabExternalCheck(documentId)).toBe("scheduled");
+  });
+
+  it("cancels a queued tab check when an authoritative check starts", async () => {
+    const documentId = prepareSavedFile("/tmp/focus.txt", "same", fp1);
+    statMock.mockResolvedValue(fp1);
+
+    expect(scheduleTabExternalCheck(documentId)).toBe("scheduled");
+    await runFocusExternalChecks();
+    await vi.runAllTimersAsync();
+
+    expect(statMock).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -17,8 +17,7 @@ import { appState } from "../state/appState";
 import { syncRecentFiles } from "./recentFilesSync";
 import { getErrorMessage } from "../commands/commandErrors";
 import { releasePendingOpenFile } from "./openFileRegistry";
-import { checkDocumentIfDeferred } from "./externalFileChanges";
-import { logDiagnostic } from "./logging";
+import { scheduleTabExternalCheck } from "./externalFileChanges";
 
 export type OpenActivePathResult =
   | { kind: "opened"; path: string }
@@ -47,20 +46,8 @@ async function pruneMissingRecentFile(path: string): Promise<void> {
  * filesystem I/O. The external-change engine performs a metadata-only check
  * first and reads contents only when the fingerprint changed.
  */
-function scheduleExistingDocumentCheck(documentId: string, path: string): void {
-  queueMicrotask(() => {
-    void checkDocumentIfDeferred(documentId, "tab").catch((error: unknown) => {
-      void logDiagnostic({
-        level: "warn",
-        source: "frontend",
-        timestamp: new Date().toISOString(),
-        message: "background external-file check failed after file activation",
-        metadata: { documentId, path, error: getErrorMessage(error) },
-      }).catch(() => {
-        // File activation already succeeded; diagnostics must stay best-effort.
-      });
-    });
-  });
+function scheduleExistingDocumentCheck(documentId: string): void {
+  scheduleTabExternalCheck(documentId);
 }
 
 /** Move an existing file tab to a drop target without replacing its buffer. */
@@ -88,7 +75,7 @@ export async function openActivePath(
       return { kind: "redirected", path: gateResult.path };
     }
     if (gateResult.kind === "existing") {
-      scheduleExistingDocumentCheck(gateResult.documentId, path);
+      scheduleExistingDocumentCheck(gateResult.documentId);
       return { kind: "existing", path: gateResult.path };
     }
 
@@ -141,7 +128,7 @@ export async function openActivePathInPane(
     }
     if (gateResult.kind === "existing") {
       moveExistingDocumentToPane(gateResult.documentId, paneId);
-      scheduleExistingDocumentCheck(gateResult.documentId, path);
+      scheduleExistingDocumentCheck(gateResult.documentId);
       return { kind: "existing", path: gateResult.path };
     }
 

@@ -20,6 +20,7 @@ import {
 import { mapWithConcurrency } from "./mapWithConcurrency";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import { getErrorMessage } from "../commands/commandErrors";
+import { logDiagnostic } from "./logging";
 
 export type { ExternalCheckResult, ExternalCheckTrigger } from "./externalFileChangesTypes";
 
@@ -27,8 +28,27 @@ export type { ExternalCheckResult, ExternalCheckTrigger } from "./externalFileCh
 const STARTUP_EXTERNAL_CHECK_CONCURRENCY = 4;
 /** Yield to the event loop between batches so large tab sets stay responsive. */
 const STARTUP_EXTERNAL_CHECK_BATCH_SIZE = 8;
+/** Tab checks stay fresh longer while the native watcher supplies invalidations. */
+export const TAB_EXTERNAL_CHECK_FRESHNESS_MS = 5_000;
+/** Defensive fallback for callers that schedule while watcher settings change. */
+export const TAB_EXTERNAL_CHECK_FALLBACK_FRESHNESS_MS = 600;
+const MAX_TAB_EXTERNAL_CHECK_FRESHNESS_ENTRIES = 256;
+
+export type TabExternalCheckScheduleResult =
+  | "scheduled"
+  | "fresh"
+  | "in-flight"
+  | "disabled";
 
 const deferredDirtyDocumentIds = new Set<string>();
+const tabCheckCompletedAtByDocument = new Map<string, number>();
+type PendingTabCheck = {
+  promise: Promise<void>;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  finish: () => void;
+};
+const pendingTabCheckByDocument = new Map<string, PendingTabCheck>();
+let tabCheckFreshnessGeneration = 0;
 const runtimeState = {
   lastWriteFingerprintByPath: new Map<string, DiskFingerprint>(),
   dialogOpenForDocument: new Set<string>(),
@@ -61,8 +81,126 @@ export function resetExternalFileChangesForTests(): void {
   runtimeState.pendingDirtyPromptByDocument.clear();
   runtimeState.flushingDirtyPrompts = false;
   runtimeState.saveInFlightByPath.clear();
+  tabCheckCompletedAtByDocument.clear();
+  for (const pending of pendingTabCheckByDocument.values()) {
+    if (pending.timeoutId !== null) {
+      clearTimeout(pending.timeoutId);
+    }
+    pending.finish();
+  }
+  pendingTabCheckByDocument.clear();
+  tabCheckFreshnessGeneration = 0;
   backgroundStartupChecks = null;
   startupChecksAbort = null;
+}
+
+/**
+ * Invalidate tab-activation freshness before authoritative focus, watcher, or
+ * manual checks. The generation prevents a previously queued tab check from
+ * restoring stale freshness after invalidation.
+ */
+export function invalidateTabExternalCheckFreshness(documentId?: string): void {
+  tabCheckFreshnessGeneration += 1;
+  if (documentId) {
+    tabCheckCompletedAtByDocument.delete(documentId);
+    const pending = pendingTabCheckByDocument.get(documentId);
+    if (pending && pending.timeoutId !== null) {
+      clearTimeout(pending.timeoutId);
+      pending.finish();
+      pendingTabCheckByDocument.delete(documentId);
+    }
+  } else {
+    tabCheckCompletedAtByDocument.clear();
+    for (const [pendingDocumentId, pending] of pendingTabCheckByDocument) {
+      if (pending.timeoutId !== null) {
+        clearTimeout(pending.timeoutId);
+        pending.finish();
+        pendingTabCheckByDocument.delete(pendingDocumentId);
+      }
+    }
+  }
+}
+
+function recordTabCheckCompletion(documentId: string, completedAtMs: number): void {
+  tabCheckCompletedAtByDocument.delete(documentId);
+  tabCheckCompletedAtByDocument.set(documentId, completedAtMs);
+  while (tabCheckCompletedAtByDocument.size > MAX_TAB_EXTERNAL_CHECK_FRESHNESS_ENTRIES) {
+    const oldest = tabCheckCompletedAtByDocument.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    tabCheckCompletedAtByDocument.delete(oldest);
+  }
+}
+
+/**
+ * Schedule a post-commit tab check without blocking tab activation. Repeated
+ * activations share one in-flight check and then use a bounded per-document
+ * freshness cache until a watcher/focus/manual check invalidates it.
+ */
+export function scheduleTabExternalCheck(
+  documentId: string,
+  nowMsValue: number = Date.now(),
+): TabExternalCheckScheduleResult {
+  const settings = appState.getSnapshot().settings.externalFiles;
+  if (!shouldRunAutomaticCheck(settings, "tab")) {
+    return "disabled";
+  }
+  if (pendingTabCheckByDocument.has(documentId)) {
+    return "in-flight";
+  }
+  const freshnessMs = settings.watchExternalChanges
+    ? TAB_EXTERNAL_CHECK_FRESHNESS_MS
+    : TAB_EXTERNAL_CHECK_FALLBACK_FRESHNESS_MS;
+  const completedAt = tabCheckCompletedAtByDocument.get(documentId);
+  if (completedAt !== undefined && nowMsValue - completedAt < freshnessMs) {
+    // Refresh insertion order so actively cycled documents stay in the bounded cache.
+    tabCheckCompletedAtByDocument.delete(documentId);
+    tabCheckCompletedAtByDocument.set(documentId, completedAt);
+    return "fresh";
+  }
+
+  const generationAtSchedule = tabCheckFreshnessGeneration;
+  let finishPending!: () => void;
+  const pendingPromise = new Promise<void>((resolve) => {
+    finishPending = resolve;
+  });
+  const pending: PendingTabCheck = {
+    promise: pendingPromise,
+    timeoutId: null,
+    finish: finishPending,
+  };
+  pending.timeoutId = setTimeout(() => {
+    pending.timeoutId = null;
+    void checkDocumentIfDeferred(documentId, "tab")
+      .then(() => {
+        if (generationAtSchedule === tabCheckFreshnessGeneration) {
+          recordTabCheckCompletion(documentId, Date.now());
+        }
+      })
+      .catch((error: unknown) => {
+        void logDiagnostic({
+          level: "warn",
+          source: "frontend",
+          timestamp: new Date().toISOString(),
+          message: "background external-file check failed after tab activation",
+          metadata: { documentId, error: getErrorMessage(error) },
+        }).catch(() => {});
+      })
+      .finally(finishPending);
+  }, 0);
+  pendingTabCheckByDocument.set(documentId, pending);
+  void pendingPromise.finally(() => {
+    if (pendingTabCheckByDocument.get(documentId) === pending) {
+      pendingTabCheckByDocument.delete(documentId);
+    }
+  });
+  return "scheduled";
+}
+
+/** Await all currently scheduled tab checks in tests and shutdown diagnostics. */
+export async function awaitPendingTabExternalChecks(): Promise<void> {
+  await Promise.all([...pendingTabCheckByDocument.values()].map((entry) => entry.promise));
 }
 
 /**
@@ -74,6 +212,7 @@ export function clearDocumentExternalChangeState(
   documentId: string,
   filePath?: string | null,
 ): void {
+  invalidateTabExternalCheckFreshness(documentId);
   deferredDirtyDocumentIds.delete(documentId);
   runtimeState.inFlightCheckByDocument.delete(documentId);
   runtimeState.pendingDirtyPromptByDocument.delete(documentId);
@@ -112,6 +251,9 @@ export function clearSaveInFlight(path: string): void {
  * (or immediately if none is running).
  */
 export function cancelStartupExternalChecks(): Promise<void> {
+  // Runtime teardown also cancels tab checks that have not crossed their
+  // post-commit timer boundary yet.
+  invalidateTabExternalCheckFreshness();
   startupChecksAbort?.abort();
   startupChecksAbort = null;
   const pending = backgroundStartupChecks;
@@ -223,6 +365,16 @@ export async function checkDocumentExternalChanges(
   documentId: string,
   trigger: ExternalCheckTrigger,
 ): Promise<ExternalCheckResult> {
+  if (trigger !== "tab") {
+    invalidateTabExternalCheckFreshness(documentId);
+    // If the tab check already crossed its timer boundary, it cannot be
+    // cancelled. Let it settle, then run this authoritative trigger with its
+    // own watcher/focus/manual semantics instead of sharing the weaker tab run.
+    const runningTabCheck = pendingTabCheckByDocument.get(documentId);
+    if (runningTabCheck?.timeoutId === null) {
+      await runningTabCheck.promise;
+    }
+  }
   return checkDocumentExternalChangesWithRuntime(
     runtimeState,
     deferredDirtyDocumentIds,
@@ -408,5 +560,6 @@ export function collectOpenFilePaths(): string[] {
 }
 
 export async function reloadActiveDocumentFromDisk(): Promise<ExternalCheckResult> {
+  invalidateTabExternalCheckFreshness();
   return reloadActiveDocumentFromDiskWithRuntime(runtimeState, deferredDirtyDocumentIds);
 }

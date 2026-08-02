@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-02 15:52 MSK — Workspace interaction issue register
+
+- Added [`issues-02-08.md`](./issues-02-08.md), assigning stable IDs P02-08-01 through P02-08-10 to the hidden-file and workspace/file/tab lag findings.
+- Documented status, evidence, impact, fix complexity, suggested solution, and acceptance criteria for every finding, including the two quick wins already resolved.
+- Added a recommended implementation order for the eight remaining performance issues.
+
+## 2026-08-02 15:34 MSK — Workspace interaction lag diagnostics and quick wins
+
+- Fixed project-pane hidden files failing to open by allowing filesystem and asset-protocol scope globs to match dot-prefixed path components. Existing explicit credential and system-file deny rules remain in force.
+- Removed a duplicate project-tree root load from the context-switch handler. The root-keyed shell effect is now the sole switch-time loader, avoiding the paired concurrent loads visible in performance diagnostics.
+- Added regression coverage that context switching does not directly start a second project-tree load.
+
 ## 2026-08-01 — Follow-up review verification (F21 / F44 / F47)
 
 Re-verification pass over every fix in the three review documents

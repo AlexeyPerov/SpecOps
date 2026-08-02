@@ -1,4 +1,4 @@
-import { CHAT_HTTP_CONTEXT_ID, type ContextId } from "../domain/contracts";
+import type { ContextId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { openVersionControlForWorkspace } from "./versionControlNavigation";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
@@ -129,9 +129,9 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     deps.setPreviousActiveContextId(nextContextId);
     deps.setConsoleOpen(false);
     close();
-    if (nextContextId !== CHAT_HTTP_CONTEXT_ID) {
-      void deps.loadProjectTreeRoot();
-    }
+    // The root-keyed project-tree effect owns loading after a context switch.
+    // Calling it here as well started a second concurrent root load before the
+    // controller's first result had populated its cache.
   }
 
   function handleSelectContext(contextId: ContextId): void {

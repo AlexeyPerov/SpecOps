@@ -27,7 +27,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "requireLiteralLeadingDot": true,
+          "requireLiteralLeadingDot": false,
           "allow": ["$HOME/**/*", "$APPDATA/**/*"],
           "deny": [
             "$HOME/.ssh/**",
@@ -74,7 +74,7 @@
   },
   "plugins": {
     "fs": {
-      "requireLiteralLeadingDot": true
+      "requireLiteralLeadingDot": false
     }
   }
 }

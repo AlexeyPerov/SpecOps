@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ContextId } from "../domain/contracts";
 import {
   computeWorkspaceReorderTarget,
   createWorkspaceContextMenuActions,
@@ -64,7 +65,10 @@ describe("computeWorkspaceReorderTarget", () => {
 });
 
 describe("createWorkspaceContextMenuActions", () => {
-  function createActions() {
+  function createActions(options: {
+    previousActiveContextId?: ContextId | null;
+    loadProjectTreeRoot?: () => Promise<void>;
+  } = {}) {
     let menu: WorkspaceContextMenuState | null = {
       workspaceId: "ws-1",
       x: 10,
@@ -77,11 +81,11 @@ describe("createWorkspaceContextMenuActions", () => {
       },
       getMenuEl: () => null,
       getWorkspaceIds: () => ["ws-1"],
-      getPreviousActiveContextId: () => null,
+      getPreviousActiveContextId: () => options.previousActiveContextId ?? null,
       setPreviousActiveContextId: () => {},
       setConsoleOpen: () => {},
       setMarkdownViewMode: () => {},
-      loadProjectTreeRoot: async () => {},
+      loadProjectTreeRoot: options.loadProjectTreeRoot ?? (async () => {}),
       notify: () => {},
     });
     return { actions, getMenu: () => menu };
@@ -97,5 +101,17 @@ describe("createWorkspaceContextMenuActions", () => {
     expect(markWorkspaceLifecycleActive).toHaveBeenCalled();
     expect(appState.openOrFocusViewTab).toHaveBeenCalledWith("version-control");
     expect(getMenu()).toBeNull();
+  });
+
+  it("leaves project-tree loading to the root-keyed shell effect on context switch", () => {
+    const loadProjectTreeRoot = vi.fn(async () => {});
+    const { actions } = createActions({
+      previousActiveContextId: "ws-2",
+      loadProjectTreeRoot,
+    });
+
+    actions.handleActiveContextSwitch("ws-1");
+
+    expect(loadProjectTreeRoot).not.toHaveBeenCalled();
   });
 });

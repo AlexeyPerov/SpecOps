@@ -48,7 +48,13 @@ type PendingTabCheck = {
   finish: () => void;
 };
 const pendingTabCheckByDocument = new Map<string, PendingTabCheck>();
-let tabCheckFreshnessGeneration = 0;
+/**
+ * Per-document freshness generation. Bumping document B's generation must not
+ * suppress freshness recording for an in-flight tab check on document A, so the
+ * generation is namespaced per document id (a global counter did exactly that
+ * under frequent watcher activity, defeating the dedup for unrelated docs).
+ */
+const tabCheckFreshnessGenerationByDocument = new Map<string, number>();
 const runtimeState = {
   lastWriteFingerprintByPath: new Map<string, DiskFingerprint>(),
   dialogOpenForDocument: new Set<string>(),
@@ -89,7 +95,7 @@ export function resetExternalFileChangesForTests(): void {
     pending.finish();
   }
   pendingTabCheckByDocument.clear();
-  tabCheckFreshnessGeneration = 0;
+  tabCheckFreshnessGenerationByDocument.clear();
   backgroundStartupChecks = null;
   startupChecksAbort = null;
 }
@@ -100,8 +106,11 @@ export function resetExternalFileChangesForTests(): void {
  * restoring stale freshness after invalidation.
  */
 export function invalidateTabExternalCheckFreshness(documentId?: string): void {
-  tabCheckFreshnessGeneration += 1;
   if (documentId) {
+    tabCheckFreshnessGenerationByDocument.set(
+      documentId,
+      (tabCheckFreshnessGenerationByDocument.get(documentId) ?? 0) + 1,
+    );
     tabCheckCompletedAtByDocument.delete(documentId);
     const pending = pendingTabCheckByDocument.get(documentId);
     if (pending && pending.timeoutId !== null) {
@@ -111,6 +120,12 @@ export function invalidateTabExternalCheckFreshness(documentId?: string): void {
     }
   } else {
     tabCheckCompletedAtByDocument.clear();
+    for (const [genDocumentId] of tabCheckFreshnessGenerationByDocument) {
+      tabCheckFreshnessGenerationByDocument.set(
+        genDocumentId,
+        (tabCheckFreshnessGenerationByDocument.get(genDocumentId) ?? 0) + 1,
+      );
+    }
     for (const [pendingDocumentId, pending] of pendingTabCheckByDocument) {
       if (pending.timeoutId !== null) {
         clearTimeout(pending.timeoutId);
@@ -160,7 +175,7 @@ export function scheduleTabExternalCheck(
     return "fresh";
   }
 
-  const generationAtSchedule = tabCheckFreshnessGeneration;
+  const generationAtSchedule = tabCheckFreshnessGenerationByDocument.get(documentId) ?? 0;
   let finishPending!: () => void;
   const pendingPromise = new Promise<void>((resolve) => {
     finishPending = resolve;
@@ -174,9 +189,15 @@ export function scheduleTabExternalCheck(
     pending.timeoutId = null;
     void checkDocumentIfDeferred(documentId, "tab")
       .then(() => {
-        if (generationAtSchedule === tabCheckFreshnessGeneration) {
+        // Only record freshness when this document's generation has not been
+        // invalidated (by its own watcher/focus/close event) since scheduling.
+        // A global generation would also suppress this for unrelated docs.
+        if (
+          (tabCheckFreshnessGenerationByDocument.get(documentId) ?? 0) === generationAtSchedule
+        ) {
           recordTabCheckCompletion(documentId, Date.now());
         }
+        tabCheckFreshnessGenerationByDocument.delete(documentId);
       })
       .catch((error: unknown) => {
         void logDiagnostic({
@@ -409,6 +430,13 @@ export async function runStartupExternalChecks(): Promise<void> {
     return;
   }
 
+  // Create the abort controller before any await so a teardown that races the
+  // priority phase can still cancel the whole scan. Previously the controller
+  // was created only after the priority loop, so a cancel during priority was a
+  // no-op and the subsequent background drain ran uncancellable.
+  startupChecksAbort = new AbortController();
+  const signal = startupChecksAbort.signal;
+
   const session = getActiveSession(snapshot);
   const fileDocumentIds: string[] = [];
   const seen = new Set<string>();
@@ -440,11 +468,18 @@ export async function runStartupExternalChecks(): Promise<void> {
 
   const priorityStartedAt = nowMs();
   for (const documentId of priorityIds) {
+    if (signal.aborted) {
+      break;
+    }
     try {
       await checkDocumentExternalChanges(documentId, "startup");
     } catch {
       // Keep startup robust when an individual check fails.
     }
+  }
+  if (signal.aborted) {
+    startupChecksAbort = null;
+    return;
   }
   await logPerfTiming("startup external checks priority complete", {
     metric: "startup.phase",
@@ -456,14 +491,12 @@ export async function runStartupExternalChecks(): Promise<void> {
   });
 
   if (deferredIds.length === 0) {
+    startupChecksAbort = null;
     return;
   }
 
   const deferredStartedAt = nowMs();
   const deferredCount = deferredIds.length;
-  // Fresh controller per scan; cancelStartupExternalChecks aborts it.
-  startupChecksAbort = new AbortController();
-  const signal = startupChecksAbort.signal;
   backgroundStartupChecks = (async () => {
     try {
       for (let offset = 0; offset < deferredIds.length; offset += STARTUP_EXTERNAL_CHECK_BATCH_SIZE) {
@@ -507,6 +540,15 @@ export async function runStartupExternalChecks(): Promise<void> {
         },
         "info",
       );
+    } finally {
+      // Release this scan's controller so a later teardown does not observe a
+      // stale reference. `cancelStartupExternalChecks` aborts and nulls both
+      // fields itself for an in-flight cancel; only clear when this scan still
+      // owns the controller.
+      if (startupChecksAbort?.signal === signal) {
+        startupChecksAbort = null;
+        backgroundStartupChecks = null;
+      }
     }
   })();
 }

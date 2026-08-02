@@ -1,4 +1,4 @@
-import { readTextFile, remove } from "@tauri-apps/plugin-fs";
+import { readDir, readTextFile, remove } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
 import type {
   AppDomainState,
@@ -46,6 +46,27 @@ function safeFilePart(value: string): string {
 
 async function navigationPath(windowId: string): Promise<string> {
   return join(await ensureSpecOpsDataDir(), `session-navigation.${safeFilePart(windowId)}.json`);
+}
+
+/**
+ * List every `session-buffer.<windowId>.*.json` file in the data dir. Cleanup
+ * enumerates by filename prefix rather than by parsing the navigation record:
+ * if the navigation file is missing or corrupt, the buffer files would
+ * otherwise leak forever (and could be rehydrated by a window that reuses the
+ * label).
+ */
+async function listBufferFilesForWindow(windowId: string): Promise<string[]> {
+  const dataDir = await ensureSpecOpsDataDir();
+  const prefix = `session-buffer.${safeFilePart(windowId)}.`;
+  let entries: Awaited<ReturnType<typeof readDir>>;
+  try {
+    entries = await readDir(dataDir);
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isFile && entry.name.startsWith(prefix) && entry.name.endsWith(".json"))
+    .map((entry) => entry.name);
 }
 
 async function bufferPath(
@@ -130,7 +151,12 @@ export async function persistIncrementalWindowSession(
   for (const context of contextEntries(fullSnapshot)) {
     for (const documentState of context.snapshot.documents) {
       const record = bufferRecord(windowId, context.contextId, documentState);
-      const fingerprint = JSON.stringify(record);
+      // The fingerprint tracks only the payload that is expensive to serialize
+      // and that the spec names as the dedup key: the document content. Metadata
+      // fields (savedContent/isDirty) ride along in the record but do not by
+      // themselves trigger a buffer rewrite, so a Save with no text change does
+      // not re-serialize every buffer.
+      const fingerprint = record.content;
       const key = bufferKey(windowId, context.contextId, documentState.id);
       if (bufferFingerprintByKey.get(key) !== fingerprint) {
         changedBuffers.push({ record, fingerprint });
@@ -211,7 +237,16 @@ async function hydrateContextBuffers(
       } catch {
         // A checkpoint document is the safe fallback for a missing/corrupt buffer record.
       }
-      return fallback?.get(documentState.id) ?? documentState;
+      const checkpointDoc = fallback?.get(documentState.id);
+      if (checkpointDoc) {
+        return checkpointDoc;
+      }
+      // No checkpoint and no buffer: the navigation record carries stripped
+      // (empty) content for this document. Restoring that verbatim would look
+      // like a legitimate empty file and silently overwrite the user's real
+      // file on the next save. Mark it missing so the save/external-change
+      // flows re-resolve it instead of writing empty content.
+      return { ...documentState, content: "", savedContent: "", isDirty: false, fileMissing: true };
     }),
   );
   return { ...context, documents };
@@ -279,24 +314,20 @@ export async function readIncrementalWindowSession(
 }
 
 export async function removeIncrementalWindowSession(windowId: string): Promise<void> {
-  try {
-    const parsed = JSON.parse(
-      await readTextFile(await navigationPath(windowId)),
-    ) as Partial<NavigationRecord>;
-    if (parsed.version === NAVIGATION_VERSION && parsed.snapshot) {
-      for (const context of contextEntries(parsed.snapshot)) {
-        for (const documentState of context.snapshot.documents) {
-          try {
-            await remove(await bufferPath(windowId, context.contextId, documentState.id));
-          } catch {
-            // Missing buffer record is already removed.
-          }
-        }
+  // Enumerate buffer files by filename prefix so a missing or corrupt
+  // navigation record cannot strand buffer files on disk (which could otherwise
+  // be rehydrated if a window label were ever reused).
+  const dataDir = await ensureSpecOpsDataDir();
+  const bufferFileNames = await listBufferFilesForWindow(windowId);
+  await Promise.all(
+    bufferFileNames.map(async (name) => {
+      try {
+        await remove(await join(dataDir, name));
+      } catch {
+        // Missing buffer record is already removed.
       }
-    }
-  } catch {
-    // Missing/corrupt navigation cannot enumerate buffer records; ids are not reused.
-  }
+    }),
+  );
   try {
     await remove(await navigationPath(windowId));
   } catch {

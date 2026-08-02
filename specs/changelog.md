@@ -1,5 +1,78 @@
 # Changelog
 
+## 2026-08-03 01:50 MSK — Review fixes for workspace interaction changes
+
+Code-review pass over the P02-08 implementation. Fixed correctness and
+data-safety defects found across the affected areas; no new features.
+
+### Project tree (P02-08-10)
+
+- Added a generation guard to the root branch of `reloadDirectories` so a stale
+  stale-directory root refresh from a previously-entered workspace can no longer
+  overwrite the currently-active workspace's tree after a switch. The non-root
+  branch was already guarded; the root branch was the one gap.
+- `setShowHidden` now drops cached per-workspace snapshots so re-entering a
+  workspace after toggling hidden files reloads under the new setting instead of
+  republishing a listing whose hidden-file state disagrees with the toggle.
+
+### Incremental session persistence (P02-08-09)
+
+- Buffer-record cleanup on window close now enumerates files by filename prefix
+  in the data dir instead of by parsing the navigation record, so a missing or
+  corrupt navigation file can no longer strand buffer files on disk (which could
+  otherwise be rehydrated if a window label were ever reused).
+- The buffer fingerprint is now computed from document content only, so a Save
+  that flips `isDirty`/`savedContent` without altering text no longer
+  re-serializes every buffer.
+- Restoring without a checkpoint when a buffer record is missing/corrupt now
+  marks the document missing instead of restoring stripped empty content, so a
+  subsequent Save cannot silently overwrite the real file.
+
+### Editor keep-alive (P02-08-06/07)
+
+- Disk-reload session-cache invalidation is now scoped to the reloaded context.
+  Previously `notifyDocumentDiskReload` keyed on the bare document id, so with
+  several contexts mounted at once a reload in one workspace wiped another
+  (parked) workspace's cached editor session for the same id.
+- Portable scroll captured at controller teardown now falls back to the persisted
+  document-state scroll when the DOM reports zero (the `display:none` parked-host
+  case), and reactivation only honors a positive portable scroll. Evicted parked
+  tabs no longer jump to the top on reactivation.
+
+### Chat session cache (P02-08-08)
+
+- Closing a workspace now evicts its chat session index, hydrated threads,
+  hydrate-generation, index signature, and cancels its pending 750 ms
+  deferred-validation timer. These previously leaked for the rest of the app
+  session, and the timer could re-populate state for a workspace the user just
+  closed.
+- Corrected the P02-08-08 acceptance text: the file watcher covers open document
+  files, not the chat session index, so external session additions/removals are
+  discovered on the next workspace re-entry rather than via watcher invalidation.
+
+### Tab activation checks (P02-08-05)
+
+- The startup external-check abort controller is now created before the priority
+  phase, so cancelling app-shell teardown while the active-tab stat is in flight
+  actually aborts the scan. Previously the controller was created only after the
+  priority loop, so a priority-phase cancel was a no-op and the background drain
+  then ran uncancellable.
+- Tab-check freshness generation is now per-document. A global counter meant a
+  watcher event for one document suppressed freshness recording for an in-flight
+  tab check on an unrelated document, defeating the dedup under frequent watcher
+  activity.
+
+### Coverage
+
+- Added regression tests for the project-tree stale-root race and showHidden
+  cache invalidation; incremental buffer-fingerprint scope, orphan-buffer
+  cleanup, and missing-buffer-no-checkpoint restore; cross-context
+  `invalidateDocumentInContext` and parked-editor scroll restoration; chat
+  workspace eviction; and startup priority-phase cancellation.
+- Wired a `readDir` mock into the session test filesystem helper so
+  prefix-based buffer cleanup is exercisable; `remove` now mirrors a real
+  filesystem by deleting from the in-memory file map.
+
 ## 2026-08-02 18:22 MSK — Incremental navigation and buffer persistence
 
 - Resolved P02-08-09 by moving debounced session updates to small per-window navigation records with all document text stripped.

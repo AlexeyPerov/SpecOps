@@ -44,6 +44,15 @@ export type EditorDocumentSessionCache = {
   has: (key: EditorSessionKey) => boolean;
   /** Drop every pane/context session for `documentId` (e.g. disk reload). */
   invalidateDocument: (documentId: string) => void;
+  /**
+   * Drop every pane session for `documentId` within a single context. Document
+   * ids are only unique within a context, so a disk reload in one workspace
+   * must not wipe another (parked) workspace's session for the same id.
+   *
+   * `contextId` accepts a plain string because the disk-reload notification
+   * seam is intentionally decoupled from the `ContextId` branded type.
+   */
+  invalidateDocumentInContext: (contextId: string, documentId: string) => void;
   /** Drop a single pane+context session (e.g. disk reload for that key). */
   invalidateSession: (key: EditorSessionKey) => void;
   /** Drop sessions for a pane. */
@@ -195,6 +204,17 @@ export function createEditorDocumentSessionCache(
     }
   }
 
+  function invalidateDocumentInContext(contextId: string, documentId: string): void {
+    if (disposed || !documentId) {
+      return;
+    }
+    for (const [id, entry] of entries) {
+      if (entry.key.documentId === documentId && entry.key.contextId === contextId) {
+        entries.delete(id);
+      }
+    }
+  }
+
   function invalidateSession(key: EditorSessionKey): void {
     if (disposed || !key.documentId) {
       return;
@@ -248,6 +268,7 @@ export function createEditorDocumentSessionCache(
     takePortable,
     has,
     invalidateDocument,
+    invalidateDocumentInContext,
     invalidateSession,
     invalidatePane,
     invalidatePaneInContext,

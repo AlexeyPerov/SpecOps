@@ -762,6 +762,51 @@ describe("cross-context external checks", () => {
     await awaitStartupExternalChecksBackgroundForTests();
   });
 
+  it("cancels during the priority phase so the background drain never starts", async () => {
+    // The priority (active-tab) check is gated. Cancelling teardown while it is
+    // in flight must abort the whole scan: previously the abort controller was
+    // only created after the priority loop, so the cancel was a no-op and a
+    // fresh uncontrollable drain then ran over every deferred tab.
+    const priorityId = prepareSavedFile("/tmp/ws-a/priority.txt", "p", fp1);
+    const deferred1Id = prepareSavedFile("/tmp/ws-a/deferred-1.txt", "d1", fp1);
+    const deferred2Id = prepareSavedFile("/tmp/ws-a/deferred-2.txt", "d2", fp1);
+    const priorityTab = getSessionTabs(appState.getActiveSession()).find(
+      (tab) => tab.kind === "file" && tab.documentId === priorityId,
+    );
+    if (!priorityTab) {
+      throw new Error("priority tab missing");
+    }
+    appState.selectTab(priorityTab.id);
+    mockDiskText("p", fp1);
+
+    let releaseStat!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseStat = resolve;
+    });
+    const checkedPaths: string[] = [];
+    statMock.mockImplementation(async (path: string) => {
+      checkedPaths.push(path);
+      if (path.endsWith("priority.txt")) {
+        await gate;
+      }
+      return fp1;
+    });
+
+    const startupPromise = runStartupExternalChecks();
+    await flushMicrotasks(10);
+    // Cancel while the priority stat is still in flight.
+    await cancelStartupExternalChecks();
+    releaseStat();
+    await expect(startupPromise).resolves.toBeUndefined();
+    await awaitStartupExternalChecksBackgroundForTests();
+
+    // Only the priority file was ever stat-ed; the deferred drain did not run.
+    expect(checkedPaths).toEqual(["/tmp/ws-a/priority.txt"]);
+    expect(checkedPaths.some((p) => p.endsWith("deferred-1.txt"))).toBe(false);
+    void deferred1Id;
+    void deferred2Id;
+  });
+
   it("skips stale document ids pruned during background drain", async () => {
     const keepId = prepareSavedFile("/tmp/startup-keep.txt", "keep", fp1);
     const staleId = prepareSavedFile("/tmp/startup-stale.txt", "stale", fp1);

@@ -469,9 +469,21 @@ export function createProjectTreeController(
     const normalizedRoot = normalizePathForComparison(workspaceRoot);
     const unique = [...new Set(directoryPaths.map((path) => normalizePathForComparison(path)))];
     if (unique.includes(normalizedRoot)) {
+      // Capture the generation before the await so a workspace switch (or a
+      // manual refresh) that lands while the root listing is in flight cannot
+      // overwrite the now-active workspace's tree with this stale result. The
+      // non-root branch gets the same protection from `loadProjectTreeChildren`.
+      const loadGeneration = rootLoadGeneration;
+      const showHiddenAtSchedule = state.showHidden;
       const rootNodes = await loadChildren(workspaceRoot, workspaceRoot, {
-        showHidden: state.showHidden,
+        showHidden: showHiddenAtSchedule,
       });
+      if (
+        loadGeneration !== rootLoadGeneration ||
+        lastLoadedWorkspaceRoot !== normalizedRoot
+      ) {
+        return;
+      }
       state = {
         ...state,
         rootNodes,
@@ -569,6 +581,11 @@ export function createProjectTreeController(
       if (state.showHidden === next) {
         return;
       }
+      // Cached snapshots hold listings loaded with their own showHidden value;
+      // republishing them after a toggle would show a flag/listing mismatch
+      // (toggle on but hidden files absent, or vice versa). Drop them so the
+      // next entry to each workspace reloads under the new setting.
+      cachedTrees.clear();
       state = {
         ...state,
         showHidden: next,

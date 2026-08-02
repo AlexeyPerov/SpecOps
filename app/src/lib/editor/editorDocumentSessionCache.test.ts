@@ -86,6 +86,24 @@ describe("editorDocumentSessionCache", () => {
     expect(cache.has(key("p1", "b"))).toBe(true);
   });
 
+  it("invalidateDocumentInContext drops only that context's sessions for the document", () => {
+    // Two contexts can share a document id (two restored workspaces both have
+    // `doc-1`). A disk reload in one workspace must not wipe the other
+    // (parked) workspace's cached editor session for the same id.
+    const cache = createEditorDocumentSessionCache();
+    cache.save(key("p1", "a", "ws-1"), makeState("a1"));
+    cache.save(key("p2", "a", "ws-1"), makeState("a2"));
+    cache.save(key("p1", "a", "ws-2"), makeState("a-other"));
+    cache.save(key("p1", "b", "ws-1"), makeState("b"));
+
+    cache.invalidateDocumentInContext("ws-1", "a");
+
+    expect(cache.has(key("p1", "a", "ws-1"))).toBe(false);
+    expect(cache.has(key("p2", "a", "ws-1"))).toBe(false);
+    expect(cache.has(key("p1", "a", "ws-2"))).toBe(true);
+    expect(cache.has(key("p1", "b", "ws-1"))).toBe(true);
+  });
+
   it("invalidateSession drops only the exact context+pane+document key", () => {
     const cache = createEditorDocumentSessionCache();
     cache.save(key("p1", "a"), makeState("a1"));

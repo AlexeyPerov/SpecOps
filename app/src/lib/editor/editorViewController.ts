@@ -623,7 +623,14 @@ export function createEditorViewController(
       next.enabledSnippets,
     );
     syncSnippets(next.language, next.enabledSnippets);
-    applyScrollTop(restoredPortableScrollTop ?? next.scrollTop);
+    // A portable scrollTop of 0 is ambiguous: it may be a genuine top-of-file
+    // scroll, or a parked-editor capture where display:none forced the DOM to
+    // report 0. Only honor the portable value when it is positive; otherwise
+    // fall back to the persisted document-state scroll so parked tabs restore
+    // to their real position instead of jumping to the top.
+    applyScrollTop(restoredPortableScrollTop && restoredPortableScrollTop > 0
+      ? restoredPortableScrollTop
+      : next.scrollTop);
     restoredPortableScrollTop = null;
     registerHost();
     updateCursor();
@@ -684,7 +691,9 @@ export function createEditorViewController(
     // schedules loadLanguageSupport (seed-only previously skipped that path).
     currentEditorLanguage = initial.language;
     documentGeneration = 1;
-    applyScrollTop(restoredPortableScrollTop ?? initial.scrollTop);
+    applyScrollTop(restoredPortableScrollTop && restoredPortableScrollTop > 0
+      ? restoredPortableScrollTop
+      : initial.scrollTop);
     restoredPortableScrollTop = null;
     syncLanguage(initial.language);
     registerHost();
@@ -777,9 +786,15 @@ export function createEditorViewController(
         paneId: props.paneId,
         documentId: trackedDocumentId,
       };
+      // A parked (display: none) editor reports scrollTop === 0 from the DOM
+      // even when its real scroll position is non-zero. Prefer the persisted
+      // document-state scroll (kept in sync by the debounced scroll save) when
+      // the DOM read is non-positive, so reactivation does not jump to top.
+      const domScroll = view.scrollDOM.scrollTop;
+      const capturedScroll = domScroll > 0 ? domScroll : props.scrollTop;
       deps.sessionCache.savePortable(
         key,
-        serializePortableSession(view.state, view.scrollDOM.scrollTop),
+        serializePortableSession(view.state, capturedScroll),
       );
     }
     detachScrollListener?.();

@@ -223,8 +223,17 @@
   });
 
   $effect(() => {
-    return subscribeDocumentDiskReload((documentId) => {
-      editorSessionCache.invalidateDocument(documentId);
+    return subscribeDocumentDiskReload((documentId, contextId) => {
+      // Document ids are only unique within a context; with several contexts
+      // mounted at once (active + parked), invalidate only the reloaded
+      // context so a disk reload in one workspace does not wipe another's
+      // cached editor session for the same id. Fall back to the broad
+      // invalidation only when the context could not be resolved.
+      if (contextId) {
+        editorSessionCache.invalidateDocumentInContext(contextId, documentId);
+      } else {
+        editorSessionCache.invalidateDocument(documentId);
+      }
     });
   });
 

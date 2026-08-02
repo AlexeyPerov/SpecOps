@@ -23,6 +23,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   rename: (...args: Parameters<typeof sessionMock.rename>) => sessionMock.rename(...args),
   remove: (...args: Parameters<typeof sessionMock.remove>) => sessionMock.remove(...args),
   mkdir: (...args: Parameters<typeof sessionMock.mkdir>) => sessionMock.mkdir(...args),
+  readDir: (...args: Parameters<typeof sessionMock.readDir>) => sessionMock.readDir(...args),
 }));
 
 vi.mock("./appDataDir", () => ({
@@ -806,5 +807,71 @@ describe("incremental session persistence", () => {
     expect(getSessionTabs(restored?.snapshot.notepad.session as never).some(
       (tab) => tab.kind === "file" && tab.documentId === documentId,
     )).toBe(true);
+  });
+
+  it("does not rewrite buffers when only savedContent/isDirty change (save with no text edit)", async () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-a");
+    sessionMock.writeTextFile.mockClear();
+
+    // A save flips isDirty/savedContent without altering content. Only that
+    // metadata changed, so no buffer record should be re-serialized.
+    const documentId = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/a.txt")!.id;
+    appState.markDocumentSaved(documentId, "/tmp/a.txt", "a");
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-a");
+
+    const bufferWrites = sessionMock.writeTextFile.mock.calls.filter(([path]) =>
+      String(path).includes("session-buffer."),
+    );
+    expect(bufferWrites).toHaveLength(0);
+  });
+
+  it("removes orphaned buffer files even when the navigation record is unreadable", async () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-gone");
+    // Simulate a corrupt/missing navigation record so the legacy enumeration
+    // path (walking documents via the navigation snapshot) could not list them.
+    const navKey = [...sessionMock.diskFiles.keys()].find((key) =>
+      key.includes("session-navigation.win-gone.json"),
+    );
+    expect(navKey).toBeDefined();
+    sessionMock.diskFiles.delete(navKey!);
+
+    const bufferKeysBefore = [...sessionMock.diskFiles.keys()].filter((key) =>
+      key.includes("session-buffer.win-gone."),
+    );
+    expect(bufferKeysBefore.length).toBeGreaterThanOrEqual(1);
+
+    await sessionManager.removeWindowSessionEntry("win-gone");
+
+    const bufferKeysAfter = [...sessionMock.diskFiles.keys()].filter((key) =>
+      key.includes("session-buffer.win-gone."),
+    );
+    expect(bufferKeysAfter).toHaveLength(0);
+  });
+
+  it("marks a document missing when restored without a checkpoint and its buffer is absent", async () => {
+    appState.openFileInTab("/tmp/lost.txt", "had-content");
+    const documentId = appState.getActiveDocuments().find(
+      (doc) => doc.filePath === "/tmp/lost.txt",
+    )!.id;
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-lost");
+    // Delete the buffer file but keep the navigation record; no checkpoint exists.
+    const bufferKey = [...sessionMock.diskFiles.keys()].find((key) =>
+      key.includes(`session-buffer.win-lost.`) && key.includes(documentId),
+    );
+    expect(bufferKey).toBeDefined();
+    sessionMock.diskFiles.delete(bufferKey!);
+    sessionMock.setSessionStore(null);
+
+    const restored = await sessionManager.restoreWindowSession("win-lost");
+
+    expect(restored).not.toBeNull();
+    const doc = restored?.snapshot.notepad.documents.find((d) => d.id === documentId);
+    // Restoring stripped (empty) content verbatim would look like a legit empty
+    // file and overwrite the real file on the next save; mark it missing instead.
+    expect(doc?.fileMissing).toBe(true);
+    expect(doc?.isDirty).toBe(false);
   });
 });

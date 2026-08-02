@@ -1,10 +1,12 @@
 import type { ContextId, DocumentState } from "../domain/contracts";
 import { appState } from "../state/appState";
+import { chatStore } from "../state/chatStore";
 import { requestConfirm } from "./confirmDialogUi";
 import { saveFile, saveFileAs } from "./fileSystem";
 import { untitledSaveDefaultPath } from "./untitledSavePath";
 import { renameOpenFileRegistry } from "./openFileRegistry";
 import { documentEncodeOptions } from "./documentSave";
+import { normalizePathSync } from "./diskFingerprint";
 
 /**
  * Shared workspace-close flow.
@@ -118,8 +120,17 @@ function finishClose(
   workspaceId: ContextId,
   notify: (message: string) => void,
 ): boolean {
+  // Capture the root before removing the workspace so the chat session cache
+  // (index, hydrated threads, deferred-validation timer) can be evicted too —
+  // otherwise they linger and the timer re-populates the entry after close.
+  // The chat scope key is the case-folded normalized root, so normalize the
+  // stored root path (which preserves casing) before evicting.
+  const workspaceRoot = appState.getWorkspaceRoot(workspaceId);
   const closed = appState.closeWorkspace(workspaceId);
   if (closed) {
+    if (workspaceRoot) {
+      chatStore.evictWorkspace(normalizePathSync(workspaceRoot));
+    }
     notify("Workspace closed.");
   }
   return closed;

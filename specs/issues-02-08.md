@@ -235,11 +235,16 @@ architectural work).
   ordinary file/view re-entry. Validation is coalesced per root and deferred for
   750 ms; session-tab entry continues to read immediately. The existing hydrate
   generation prevents stale validation results from winning over newer loads.
+  External additions/removals are discovered on the next workspace re-entry via
+  the deferred validation (the file watcher covers open document files, not the
+  chat session index, so changes while a workspace stays active are not pushed
+  until the user leaves and returns).
 - **Acceptance criteria:** Re-entering a cached workspace on a file tab performs
   no synchronous chat-index read; opening a session tab still sees current
-  metadata; externally added or removed sessions become visible after watcher
-  invalidation or explicit refresh. Covered by cache-first restore and deferred
-  external-index update tests.
+  metadata; externally added or removed sessions become visible on the next
+  workspace re-entry (the file watcher does not observe the chat index) or after
+  explicit refresh. Covered by cache-first restore and deferred external-index
+  update tests.
 
 ---
 

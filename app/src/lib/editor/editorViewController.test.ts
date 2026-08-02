@@ -299,6 +299,50 @@ describe("createEditorViewController", () => {
     expect(restored.state.doc.toString()).toBe("first line\nsecond line\nthird line");
   });
 
+  it("restores the persisted scroll when a parked editor is evicted with a zero DOM scroll", () => {
+    // A parked (display: none) editor reports scrollTop === 0 from the DOM.
+    // Eviction must capture the persisted document-state scroll (props.scrollTop)
+    // instead of the zeroed DOM read, otherwise reactivation jumps to the top.
+    const props = baseProps({
+      content: "first line\nsecond line\nthird line",
+      scrollTop: 120,
+    });
+    const sessionCache = createEditorDocumentSessionCache();
+    const workbench = createEditorWorkbenchRuntime({
+      getActiveContextId: () => props.contextId,
+      getActivePaneId: () => props.paneId,
+      getActiveDocumentId: () => props.documentId,
+    });
+    const deps = {
+      workbench,
+      sessionCache,
+      onStatusMessage: () => {},
+      onDocumentDirty: vi.fn(),
+      onScrollTopChange: vi.fn(),
+    };
+    parent = document.createElement("div");
+    document.body.appendChild(parent);
+    controller = createEditorViewController(deps);
+    controller.update(props);
+    controller.mount(parent);
+    // Force the DOM scroll to 0, mirroring a display:none parked host.
+    Object.defineProperty(controller.getView()!.scrollDOM, "scrollTop", {
+      configurable: true,
+      value: 0,
+    });
+
+    controller.destroy();
+    parent.replaceChildren();
+    controller = createEditorViewController(deps);
+    controller.update(props);
+    controller.mount(parent);
+    const restored = controller.getView()!;
+
+    // Reactivation applies the captured persisted scroll (120), not the zeroed
+    // DOM read that a parked display:none editor would have produced.
+    expect(restored.scrollDOM.scrollTop).toBe(120);
+  });
+
   it("marks store-origin transactions so dirty sync can ignore them", () => {
     mountController();
     const view = controller!.getView()!;

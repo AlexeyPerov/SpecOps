@@ -77,6 +77,24 @@ export function resetSessionHydrationForTests(): void {
   deferredIndexValidationByScope.clear();
 }
 
+/**
+ * Drop all in-memory chat state and deferred-validation timers for a closed
+ * workspace root. Without this, closing a workspace leaves its session index,
+ * hydrated threads, index signature, hydrate generation, and a pending 750 ms
+ * deferred-validation timer (which would re-populate the entry on fire) in
+ * memory for the rest of the app session. Idempotent; safe to call for a root
+ * that was never loaded.
+ */
+export function evictWorkspaceSessionHydration(normalizedRootPath: string): void {
+  hydrateGenerationByScope.delete(normalizedRootPath);
+  loadedIndexSignatureByScope.delete(normalizedRootPath);
+  const timer = deferredIndexValidationByScope.get(normalizedRootPath);
+  if (timer) {
+    clearTimeout(timer);
+    deferredIndexValidationByScope.delete(normalizedRootPath);
+  }
+}
+
 export interface LoadWorkspaceSessionsOptions {
   /**
    * Session ids that must be thread-hydrated before `loadWorkspaceSessions` resolves
@@ -934,6 +952,22 @@ export function createSessionsSlice(deps: {
           ...workspace,
           sessionIndex: [...workspace.sessionIndex, ...additions],
         });
+      });
+    },
+    /**
+     * Remove a closed workspace's chat state and cancel its deferred validation.
+     * Prevents the session index, hydrated threads, and pending validation timer
+     * from lingering (and re-populating the entry when the timer fires) after the
+     * workspace is gone. No-op when the workspace was never loaded.
+     */
+    evictWorkspace(normalizedRootPath: string): void {
+      evictWorkspaceSessionHydration(normalizedRootPath);
+      update((state) => {
+        if (!(normalizedRootPath in state.workspaces)) {
+          return state;
+        }
+        const { [normalizedRootPath]: _removed, ...rest } = state.workspaces;
+        return { ...state, workspaces: rest };
       });
     },
     /** @deprecated Use loadWorkspaceSessions. */

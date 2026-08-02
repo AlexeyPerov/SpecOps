@@ -554,8 +554,10 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
       encoding?: DocumentEncodingMetadata,
       contentKind?: DocumentContentKind,
     ) {
-      update((state) =>
-        patchActiveContext(state, (ctx) => ({
+      let activeContextId: ContextId | null = null;
+      update((state) => {
+        activeContextId = state.contexts.activeContextId;
+        return patchActiveContext(state, (ctx) => ({
           ...ctx,
           documents: ctx.documents.map((documentState) =>
             documentState.id === documentId
@@ -568,9 +570,9 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
                 )
               : documentState,
           ),
-        })),
-      );
-      notifyDocumentDiskReload(documentId);
+        }));
+      });
+      notifyDocumentDiskReload(documentId, activeContextId);
     },
     /**
      * Records the "Keep Local" dismissal for a document in a specific context.
@@ -815,7 +817,7 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
           ),
         })),
       );
-      notifyDocumentDiskReload(documentId);
+      notifyDocumentDiskReload(documentId, contextId);
     },
     /**
      * Context-aware variant of {@link renameDocument}. Applies a path/title

@@ -52,13 +52,43 @@ export function createSessionFsMock() {
       diskFiles.delete(from);
     }
   });
-  const remove = vi.fn(async () => undefined);
+  const remove = vi.fn(async (path: string) => {
+    // Mirror a real remove so cleanup paths (incremental session teardown)
+    // observe the file disappearing from subsequent listings.
+    for (const key of [...diskFiles.keys()]) {
+      if (key === path) {
+        diskFiles.delete(key);
+      }
+    }
+  });
   const mkdir = vi.fn(async () => undefined);
+  /**
+   * Directory listing over the in-memory file map. Returns the basenames the
+   * incremental session layer writes under the data dir so prefix-based buffer
+   * cleanup can be exercised without a real filesystem.
+   */
+  const readDir = vi.fn(async (dir: string) => {
+    const prefix = dir.endsWith("/") ? dir : `${dir}/`;
+    const entries: Array<{ name: string; isDirectory: boolean; isFile: boolean }> = [];
+    for (const key of diskFiles.keys()) {
+      if (!key.startsWith(prefix)) {
+        continue;
+      }
+      const rest = key.slice(prefix.length);
+      if (rest.length === 0 || rest.includes("/")) {
+        continue;
+      }
+      entries.push({ name: rest, isDirectory: false, isFile: true });
+    }
+    return entries;
+  });
 
   function restoreFsImplementations(): void {
     readTextFile.mockReset();
     writeTextFile.mockReset();
     rename.mockReset();
+    remove.mockReset();
+    readDir.mockReset();
     readTextFile.mockImplementation(async (path: string) => {
       if (isPrimarySessionPath(path) || isBackupSessionPath(path)) {
         if (!sessionStore) {
@@ -84,6 +114,28 @@ export function createSessionFsMock() {
         diskFiles.delete(from);
       }
     });
+    remove.mockImplementation(async (path: string) => {
+      for (const key of [...diskFiles.keys()]) {
+        if (key === path) {
+          diskFiles.delete(key);
+        }
+      }
+    });
+    readDir.mockImplementation(async (dir: string) => {
+      const prefix = dir.endsWith("/") ? dir : `${dir}/`;
+      const entries: Array<{ name: string; isDirectory: boolean; isFile: boolean }> = [];
+      for (const key of diskFiles.keys()) {
+        if (!key.startsWith(prefix)) {
+          continue;
+        }
+        const rest = key.slice(prefix.length);
+        if (rest.length === 0 || rest.includes("/")) {
+          continue;
+        }
+        entries.push({ name: rest, isDirectory: false, isFile: true });
+      }
+      return entries;
+    });
   }
 
   return {
@@ -98,6 +150,7 @@ export function createSessionFsMock() {
     rename,
     remove,
     mkdir,
+    readDir,
     /** Clears call history and restores default read/write implementations. */
     restoreFsImplementations,
   };

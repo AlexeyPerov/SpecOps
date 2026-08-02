@@ -525,6 +525,37 @@ describe("chatStore", () => {
     }
   });
 
+  it("evictWorkspace drops the chat cache and cancels the pending deferred validation", async () => {
+    vi.useFakeTimers();
+    try {
+      readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+        version: 1,
+        sessions: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+      });
+      readSessionThreadFileSnapshotMock.mockResolvedValue(null);
+      chatStore.setActiveWorkspaceRoot("/work/evict");
+      await chatStore.loadWorkspaceSessions("/work/evict", { prioritySessionIds: [] });
+      // Arm the deferred validation by re-entering with a cache hit.
+      await chatStore.loadWorkspaceSessions("/work/evict", {
+        prioritySessionIds: [],
+        preferCachedIndex: true,
+      });
+
+      chatStore.evictWorkspace("/work/evict");
+
+      // The workspace entry is gone from the store...
+      chatStore.setActiveWorkspaceRoot("/work/evict");
+      expect(chatStore.getSessionIndex()).toEqual([]);
+      // ...and the pending deferred validation no longer re-populates it.
+      readWorkspaceSessionsIndexSnapshotMock.mockClear();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(readWorkspaceSessionsIndexSnapshotMock).not.toHaveBeenCalled();
+    } finally {
+      chatStore.reset();
+      vi.useRealTimers();
+    }
+  });
+
   it("loadWorkspaceSessions re-reads only missing threads when a new session appears", async () => {
     const threadA: ChatThreadSnapshot = {
       metadata: {

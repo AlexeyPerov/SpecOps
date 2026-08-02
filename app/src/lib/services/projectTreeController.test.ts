@@ -317,4 +317,69 @@ describe("createProjectTreeController", () => {
 
     expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(2);
   });
+
+  it("does not let a stale stale-directory root refresh overwrite a newer workspace", async () => {
+    // Workspace A is cached with a stale root; re-entering A schedules a
+    // background root reload. Switching to B before that reload resolves must
+    // not let A's stale root listing overwrite B's tree.
+    const reloadGate = { resolve: null as ((nodes: ProjectTreeNode[]) => void) | null };
+    let aLoadCount = 0;
+    const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string) => {
+      if (workspaceRoot === "/a") {
+        // First load (initial) resolves immediately; subsequent loads block so
+        // the cancel/switch can race the stale-directory reload.
+        aLoadCount += 1;
+        if (aLoadCount === 1) {
+          return [makeNode("a-init", "/a/a-init", "file")];
+        }
+        return await new Promise<ProjectTreeNode[]>((resolve) => {
+          reloadGate.resolve = resolve;
+        });
+      }
+      return [makeNode("b-file", "/b/b-file", "file")];
+    });
+    const snapshots: ProjectTreeControllerState[] = [];
+    const controller = createProjectTreeController((state) => snapshots.push(state), {
+      loadDirectoryChildrenFn,
+    });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/a", isSessionTabActive: false });
+    // Mark A's root stale while inactive, then switch away so A is cached but not active.
+    controller.handleFilesystemChange("/b", "/a/a-init");
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/b", isSessionTabActive: false });
+    // Re-enter A: publishes cached snapshot, schedules stale root reload (blocked).
+    const restoreA = controller.loadProjectTreeRoot({
+      workspaceRoot: "/a",
+      isSessionTabActive: false,
+    });
+    expect(controller.getState().rootNodes[0]?.path).toBe("/a/a-init");
+    await restoreA;
+    // Switch to B before A's stale reload resolves.
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/b", isSessionTabActive: false });
+    expect(controller.getState().rootNodes[0]?.path).toBe("/b/b-file");
+
+    reloadGate.resolve?.([makeNode("a-stale", "/a/a-stale", "file")]);
+    await vi.waitFor(() => undefined);
+
+    const lastState = snapshots[snapshots.length - 1];
+    expect(lastState.rootNodes.map((node) => node.path)).toEqual(["/b/b-file"]);
+  });
+
+  it("drops cached snapshots when showHidden changes so the next entry reloads", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string) => [
+      makeNode("visible", `${workspaceRoot}/visible`, "file"),
+    ]);
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/a", isSessionTabActive: false });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/b", isSessionTabActive: false });
+    // Both workspaces are now cached.
+    expect(controller.getCachedRootCount()).toBe(2);
+
+    controller.setShowHidden(true);
+    loadDirectoryChildrenFn.mockClear();
+
+    // Re-entering A must reload (cache was invalidated by the toggle), not republish.
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/a", isSessionTabActive: false });
+    expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(1);
+    expect(controller.getState().showHidden).toBe(true);
+  });
 });

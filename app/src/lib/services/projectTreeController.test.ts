@@ -202,6 +202,76 @@ describe("createProjectTreeController", () => {
     expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(1);
   });
 
+  it("publishes a cached workspace tree immediately without another root read", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string, directoryPath: string) => {
+      if (directoryPath === workspaceRoot) {
+        return [makeNode("src", `${workspaceRoot}/src`, "directory")];
+      }
+      return [makeNode("main.ts", `${directoryPath}/main.ts`, "file")];
+    });
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/a", isSessionTabActive: false });
+    await controller.handleToggleProjectTreeDirectory("/a", "/a/src");
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/b", isSessionTabActive: false });
+    loadDirectoryChildrenFn.mockClear();
+
+    const restore = controller.loadProjectTreeRoot({
+      workspaceRoot: "/a",
+      isSessionTabActive: false,
+    });
+    expect(controller.getState().rootNodes.map((node) => node.path)).toEqual(["/a/src"]);
+    expect(controller.getState().expandedPaths).toEqual(new Set(["/a/src"]));
+    expect(controller.getState().childrenByPath.get("/a/src")?.[0]?.path).toBe(
+      "/a/src/main.ts",
+    );
+    await restore;
+
+    expect(loadDirectoryChildrenFn).not.toHaveBeenCalled();
+  });
+
+  it("bounds cached workspace snapshots with least-recently-used eviction", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string) => [
+      makeNode("file", `${workspaceRoot}/file`, "file"),
+    ]);
+    const controller = createProjectTreeController(() => {}, {
+      loadDirectoryChildrenFn,
+      maxCachedRoots: 2,
+    });
+    for (const root of ["/a", "/b", "/c"]) {
+      await controller.loadProjectTreeRoot({ workspaceRoot: root, isSessionTabActive: false });
+    }
+    expect(controller.getCachedRootCount()).toBe(2);
+    loadDirectoryChildrenFn.mockClear();
+
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/a", isSessionTabActive: false });
+
+    expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks an inactive cached tree stale and refreshes it after publication", async () => {
+    let aRootVersion = 1;
+    const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string, directoryPath: string) => {
+      if (directoryPath === workspaceRoot) {
+        const suffix = workspaceRoot === "/a" ? aRootVersion : 1;
+        return [makeNode(`file-${suffix}`, `${workspaceRoot}/file-${suffix}`, "file")];
+      }
+      return [];
+    });
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/a", isSessionTabActive: false });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/b", isSessionTabActive: false });
+    aRootVersion = 2;
+    controller.handleFilesystemChange("/b", "/a/file-1");
+
+    const restore = controller.loadProjectTreeRoot({
+      workspaceRoot: "/a",
+      isSessionTabActive: false,
+    });
+    expect(controller.getState().rootNodes[0]?.path).toBe("/a/file-1");
+    await restore;
+    await vi.waitFor(() => expect(controller.getState().rootNodes[0]?.path).toBe("/a/file-2"));
+  });
+
   it("ignores a slower root load from a previous workspace after a switch", async () => {
     let resolveUnity: ((nodes: ProjectTreeNode[]) => void) | null = null;
     const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string) => {

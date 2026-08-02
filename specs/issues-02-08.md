@@ -270,14 +270,15 @@ architectural work).
 
 ## P02-08-10 — Project-tree state is not cached per workspace
 
-- **Status:** Open.
+- **Status:** Resolved on 2026-08-02.
 - **Area:** Workspace switching / project tree / slow filesystems.
 - **Impact:** **Medium, potentially high on cloud or network roots.** Removing
   the duplicate load still leaves a single root load that took approximately
   590 ms in the captured Notes workspace. Switching away replaces the
   controller's root nodes, expanded paths, and children state, so revisiting a
   workspace cannot display its previous tree immediately.
-- **Fix complexity:** **M.** Cache invalidation and memory limits are required.
+- **Fix complexity:** **M.** Completed with bounded per-root snapshots and
+  targeted stale-directory refresh.
 - **Evidence:** The controller owns one `ProjectTreeControllerState` and one
   `lastLoadedWorkspaceRoot`. The shared directory cache can reuse listings, but
   it does not preserve a renderable per-root tree snapshot and may be invalidated
@@ -288,9 +289,17 @@ architectural work).
   Route watcher events to the affected root even when it is inactive, marking
   only impacted cached directories stale. Use an LRU cap across closed or rarely
   used workspaces.
+  Implemented in the project-tree controller with a six-root LRU containing root
+  nodes, expanded paths, and loaded children. Cached state publishes before any
+  I/O. Filesystem events are matched to the longest cached root, inactive trees
+  record only affected renderable directories as stale, and those directories
+  refresh after the cached tree is shown. Shared directory listings are
+  invalidated for every matching open workspace root.
 - **Acceptance criteria:** Returning to a cached workspace paints its previous
   tree without waiting for `readDir`; changed directories refresh correctly;
   cache size remains bounded; manual refresh still forces a complete rebuild.
+  Covered by immediate publication, expanded-child restoration, inactive-root
+  invalidation, LRU eviction, race prevention, and forced-refresh tests.
 
 ---
 

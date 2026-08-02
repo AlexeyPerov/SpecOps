@@ -296,9 +296,9 @@
       return projectTreeController;
     },
     onFilesystemChange: (path, kind) => {
-      if (activeWorkspaceRoot) {
+      for (const workspace of appState.getSnapshot().contexts.workspaces) {
         workspaceDirectoryCache.invalidate(
-          directoriesToInvalidateForChange(activeWorkspaceRoot, path),
+          directoriesToInvalidateForChange(workspace.rootPath, path),
         );
       }
       workspaceFileCatalogRegistry.notifyFilesystemChange(path, kind);

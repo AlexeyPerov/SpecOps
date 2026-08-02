@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-02 18:15 MSK — Per-workspace project-tree snapshots
+
+- Resolved P02-08-10 by retaining root nodes, expanded paths, and loaded children in a six-workspace LRU and publishing cached trees immediately on re-entry.
+- Routed filesystem changes to the longest matching active or inactive cached root, marked only renderable affected directories stale, and refreshed them after cached publication with generation guards against cross-workspace races.
+- Invalidated shared directory listings for every matching open workspace and added regression coverage for immediate restoration, bounds, inactive invalidation, and forced refresh.
+
 ## 2026-08-02 18:12 MSK — Cache-first workspace session metadata
 
 - Resolved P02-08-08 by restoring an existing per-workspace chat-session index from memory without synchronously reading its persistence file during ordinary file/view workspace re-entry.

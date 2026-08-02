@@ -14,6 +14,8 @@ export interface ProjectTreeControllerDeps {
   probeWorkspaceReadAccessFn?: (
     workspaceRoot: string,
   ) => Promise<"ready" | "blocked" | "unknown">;
+  /** Maximum workspace tree snapshots retained in memory. Default: 6. */
+  maxCachedRoots?: number;
 }
 
 export interface LoadProjectTreeRootOptions {
@@ -169,6 +171,7 @@ export function createProjectTreeController(
   handleFilesystemChange: (workspaceRoot: string | null, changedPath: string) => void;
   reloadDirectories: (workspaceRoot: string | null, directoryPaths: string[]) => Promise<void>;
   clearFilesystemChangeDebounce: () => void;
+  getCachedRootCount: () => number;
 } {
   const loadChildren = deps.loadDirectoryChildrenFn ?? loadDirectoryChildren;
   const probeAccess = deps.probeWorkspaceReadAccessFn;
@@ -178,12 +181,47 @@ export function createProjectTreeController(
   let rootLoadGeneration = 0;
   let filesystemChangeTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingFilesystemDirs = new Set<string>();
+  const maxCachedRoots = Math.max(1, deps.maxCachedRoots ?? 6);
+  type CachedTree = {
+    state: ProjectTreeControllerState;
+    staleDirectories: Set<string>;
+  };
+  // Insertion order is LRU order (oldest first).
+  const cachedTrees = new Map<string, CachedTree>();
+
+  const touchCachedTree = (workspaceRoot: string, entry: CachedTree): void => {
+    cachedTrees.delete(workspaceRoot);
+    cachedTrees.set(workspaceRoot, entry);
+    while (cachedTrees.size > maxCachedRoots) {
+      const oldest = cachedTrees.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      cachedTrees.delete(oldest);
+    }
+  };
+
+  const cacheActiveState = (): void => {
+    if (!lastLoadedWorkspaceRoot || state.rootNodes.length === 0) {
+      return;
+    }
+    const existing = cachedTrees.get(lastLoadedWorkspaceRoot);
+    touchCachedTree(lastLoadedWorkspaceRoot, {
+      state: {
+        ...cloneState(state),
+        loadingPaths: new Set(),
+      },
+      staleDirectories: new Set(existing?.staleDirectories ?? []),
+    });
+  };
 
   const publish = (): void => {
+    cacheActiveState();
     onStateChange(cloneState(state));
   };
 
   const reset = (): void => {
+    cacheActiveState();
     rootLoadGeneration += 1;
     state = createInitialState(state.showHidden);
     lastLoadedWorkspaceRoot = null;
@@ -197,6 +235,11 @@ export function createProjectTreeController(
     if (!workspaceRoot || !isPathInsideRoot(directoryPath, workspaceRoot)) {
       return;
     }
+    const normalizedRoot = normalizePathForComparison(workspaceRoot);
+    if (lastLoadedWorkspaceRoot !== normalizedRoot) {
+      return;
+    }
+    const loadGeneration = rootLoadGeneration;
     state = {
       ...state,
       loadingPaths: new Set([...state.loadingPaths, directoryPath]),
@@ -206,6 +249,12 @@ export function createProjectTreeController(
       const children = await loadChildren(workspaceRoot, directoryPath, {
         showHidden: state.showHidden,
       });
+      if (
+        loadGeneration !== rootLoadGeneration ||
+        lastLoadedWorkspaceRoot !== normalizedRoot
+      ) {
+        return;
+      }
       const nextChildren = new Map(state.childrenByPath);
       nextChildren.set(directoryPath, children);
       const nextLoading = new Set(state.loadingPaths);
@@ -217,6 +266,12 @@ export function createProjectTreeController(
       };
       publish();
     } catch (error) {
+      if (
+        loadGeneration !== rootLoadGeneration ||
+        lastLoadedWorkspaceRoot !== normalizedRoot
+      ) {
+        return;
+      }
       const nextLoading = new Set(state.loadingPaths);
       nextLoading.delete(directoryPath);
       state = {
@@ -253,7 +308,40 @@ export function createProjectTreeController(
       return;
     }
 
+    cacheActiveState();
+    if (!force) {
+      const cached = cachedTrees.get(normalizedWorkspaceRoot);
+      if (cached) {
+        rootLoadGeneration += 1;
+        lastLoadedWorkspaceRoot = normalizedWorkspaceRoot;
+        state = {
+          ...cloneState(cached.state),
+          showHidden: state.showHidden,
+          loadingPaths: new Set(),
+        };
+        const staleDirectories = [...cached.staleDirectories];
+        cached.staleDirectories.clear();
+        touchCachedTree(normalizedWorkspaceRoot, cached);
+        publish();
+        if (staleDirectories.length > 0) {
+          void reloadDirectories(workspaceRoot, staleDirectories);
+        }
+        if (isSessionTabActive && probeAccess) {
+          const probe = await probeAccess(workspaceRoot);
+          if (probe === "blocked") {
+            onWorkspaceBlocked?.();
+          }
+        }
+        return;
+      }
+    }
+
     const loadGeneration = ++rootLoadGeneration;
+    if (lastLoadedWorkspaceRoot !== normalizedWorkspaceRoot) {
+      state = createInitialState(state.showHidden);
+      lastLoadedWorkspaceRoot = null;
+      publish();
+    }
     const rootNodes = await loadChildren(workspaceRoot, workspaceRoot, {
       showHidden: state.showHidden,
     });
@@ -412,15 +500,43 @@ export function createProjectTreeController(
   };
 
   const handleFilesystemChange = (workspaceRoot: string | null, changedPath: string): void => {
-    if (!workspaceRoot) {
+    const normalizedChangedPath = normalizePathForComparison(changedPath);
+    const preferredRoot = workspaceRoot ? normalizePathForComparison(workspaceRoot) : null;
+    const candidateRoots = [
+      ...(preferredRoot ? [preferredRoot] : []),
+      ...cachedTrees.keys(),
+      ...(lastLoadedWorkspaceRoot ? [lastLoadedWorkspaceRoot] : []),
+    ];
+    const targetRoot = candidateRoots
+      .filter((root, index) => candidateRoots.indexOf(root) === index)
+      .filter((root) => isPathInsideRoot(normalizedChangedPath, root))
+      .sort((a, b) => b.length - a.length)[0];
+    if (!targetRoot) {
+      return;
+    }
+    if (targetRoot !== lastLoadedWorkspaceRoot) {
+      const cached = cachedTrees.get(targetRoot);
+      if (!cached) {
+        return;
+      }
+      const staleDirectories = directoriesToRefreshForChange(
+        targetRoot,
+        changedPath,
+        cached.state.expandedPaths,
+      );
+      staleDirectories.push(targetRoot);
+      for (const directory of staleDirectories) {
+        cached.staleDirectories.add(directory);
+      }
+      touchCachedTree(targetRoot, cached);
       return;
     }
     const dirs = directoriesToRefreshForChange(
-      workspaceRoot,
+      targetRoot,
       changedPath,
       state.expandedPaths,
     );
-    const normalizedRoot = normalizePathForComparison(workspaceRoot);
+    const normalizedRoot = targetRoot;
     if (dirs.length === 0 && normalizePathForComparison(changedPath) !== normalizedRoot) {
       return;
     }
@@ -433,7 +549,7 @@ export function createProjectTreeController(
     }
     filesystemChangeTimer = setTimeout(() => {
       filesystemChangeTimer = null;
-      void flushFilesystemChanges(workspaceRoot);
+      void flushFilesystemChanges(targetRoot);
     }, FILESYSTEM_CHANGE_DEBOUNCE_MS);
   };
 
@@ -467,5 +583,6 @@ export function createProjectTreeController(
     handleFilesystemChange,
     reloadDirectories,
     clearFilesystemChangeDebounce,
+    getCachedRootCount: () => cachedTrees.size,
   };
 }

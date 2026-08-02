@@ -57,6 +57,22 @@ describe("editorDocumentSessionCache", () => {
     expect(cache.has(key("p", "3"))).toBe(true);
   });
 
+  it("stores portable snapshots in the same bounded namespace", () => {
+    const cache = createEditorDocumentSessionCache({ maxEntries: 2 });
+    const portable = {
+      state: { doc: ["portable"], selection: { ranges: [{ anchor: 2, head: 2 }], main: 0 } },
+      scrollTop: 42,
+    };
+    cache.savePortable(key("p", "portable"), portable);
+    cache.save(key("p", "live"), makeState("live"));
+
+    expect(cache.take(key("p", "portable"))).toBeUndefined();
+    expect(cache.has(key("p", "portable"))).toBe(true);
+    expect(cache.takePortable(key("p", "portable"))).toEqual(portable);
+    expect(cache.takePortable(key("p", "live"))).toBeUndefined();
+    expect(cache.take(key("p", "live"))?.doc.toString()).toBe("live");
+  });
+
   it("invalidateDocument drops all pane sessions for that document", () => {
     const cache = createEditorDocumentSessionCache();
     cache.save(key("p1", "a"), makeState("a1"));

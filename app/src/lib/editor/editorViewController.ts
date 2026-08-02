@@ -3,12 +3,15 @@
  * Owns EditorView create/destroy, document switching, content sync, scroll
  * ownership, and generation-aware language loads. Svelte only bridges props.
  */
-import { EditorState, Transaction } from "@codemirror/state";
+import { EditorState, Transaction, type StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { historyField } from "@codemirror/commands";
+import { foldState } from "@codemirror/language";
 import type { EditorHostRegistration } from "../types/editor";
 import {
   sessionKeyId,
   type EditorDocumentSessionCache,
+  type PortableEditorSession,
   type EditorSessionKey,
 } from "./editorDocumentSessionCache";
 import {
@@ -39,6 +42,7 @@ import {
   transactionHasStoreOrigin,
 } from "./editorTransactions";
 import type { EditorWorkbenchRuntime } from "./editorWorkbenchRuntime";
+import { bookmarkField } from "./editorBookmarks";
 
 export type EditorViewControllerProps = {
   content: string;
@@ -89,6 +93,11 @@ export type EditorViewController = {
 };
 
 const SCROLL_SAVE_DEBOUNCE_MS = 150;
+const PORTABLE_EDITOR_FIELDS: Record<string, StateField<any>> = {
+  history: historyField,
+  folds: foldState,
+  bookmarks: bookmarkField,
+};
 
 export function createEditorViewController(
   deps: EditorViewControllerDeps,
@@ -101,11 +110,9 @@ export function createEditorViewController(
   let props: EditorViewControllerProps | null = null;
 
   let trackedDocumentId: string | null = null;
-  // Sessions this controller has written to the cache. Cached EditorStates
-  // bind to this controller's Compartment instances, so on destroy we
-  // invalidate exactly these keys — not every pane/context that happens to
-  // show the same documentId. With per-tab keep-alive, multiple controllers
-  // share a pane; pane-level invalidation would wipe sibling undo/fold state.
+  // Sessions this controller has written to the cache. Cached EditorStates bind
+  // to this controller's Compartment instances, so teardown converts exactly
+  // these keys to portable JSON before the compartments disappear.
   const cachedSessionKeys = new Map<string, EditorSessionKey>();
   let documentGeneration = 0;
   let languageLoadGeneration = 0;
@@ -120,6 +127,7 @@ export function createEditorViewController(
   let lastZoomPercent: number | null = null;
 
   let applyingScroll = false;
+  let restoredPortableScrollTop: number | null = null;
   let applyingScrollRaf: ReturnType<typeof requestAnimationFrame> | null = null;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let detachScrollListener: (() => void) | null = null;
@@ -315,6 +323,13 @@ export function createEditorViewController(
     cachedSessionKeys.set(sessionKeyId(key), key);
   }
 
+  function serializePortableSession(
+    state: EditorState,
+    scrollTop: number,
+  ): PortableEditorSession {
+    return { state: state.toJSON(PORTABLE_EDITOR_FIELDS), scrollTop };
+  }
+
   function restoreOrCreateState(
     documentId: string | null,
     content: string,
@@ -350,6 +365,38 @@ export function createEditorViewController(
     // Never resurrect pre-reload content from a stale cached session.
     if (cached && cached.doc.toString() === content) {
       return cached;
+    }
+    const portable = deps.sessionCache.takePortable({
+      contextId: props.contextId,
+      paneId: props.paneId,
+      documentId,
+    });
+    if (portable) {
+      try {
+        const restored = EditorState.fromJSON(
+          portable.state,
+          {
+            extensions: buildExtensions(
+              language,
+              showMinimap,
+              showFoldGutter,
+              autoClosePairs,
+              autoSuggest,
+              enabledSnippets,
+              wrapLines,
+              zoomPercent,
+              decoratePlaintextSymbols,
+            ),
+          },
+          PORTABLE_EDITOR_FIELDS,
+        );
+        if (restored.doc.toString() === content) {
+          restoredPortableScrollTop = portable.scrollTop;
+          return restored;
+        }
+      } catch {
+        // Corrupt or incompatible ephemeral state is safe to discard.
+      }
     }
     return createState(
       content,
@@ -576,7 +623,8 @@ export function createEditorViewController(
       next.enabledSnippets,
     );
     syncSnippets(next.language, next.enabledSnippets);
-    applyScrollTop(next.scrollTop);
+    applyScrollTop(restoredPortableScrollTop ?? next.scrollTop);
+    restoredPortableScrollTop = null;
     registerHost();
     updateCursor();
   }
@@ -602,7 +650,8 @@ export function createEditorViewController(
       enabledSnippets: [],
     };
 
-    const state = createState(
+    const state = restoreOrCreateState(
+      initial.documentId,
       initial.content,
       initial.language,
       initial.showMinimap,
@@ -635,7 +684,8 @@ export function createEditorViewController(
     // schedules loadLanguageSupport (seed-only previously skipped that path).
     currentEditorLanguage = initial.language;
     documentGeneration = 1;
-    applyScrollTop(initial.scrollTop);
+    applyScrollTop(restoredPortableScrollTop ?? initial.scrollTop);
+    restoredPortableScrollTop = null;
     syncLanguage(initial.language);
     registerHost();
     updateCursor();
@@ -711,26 +761,26 @@ export function createEditorViewController(
       cancelAnimationFrame(applyingScrollRaf);
       applyingScrollRaf = null;
     }
-    // Cached EditorStates bind to this controller's Compartment instances, so
-    // every session this controller wrote must be invalidated on teardown —
-    // scoped to context+pane+document so other panes (and contexts) keep
-    // independent undo/fold caches for the same documentId. Per-tab keep-alive
-    // siblings share a pane but different document ids; pane-level wipe would
-    // drop their cache. Fallback to pane invalidation only when nothing was
-    // ever written by this controller.
-    if (cachedSessionKeys.size > 0) {
-      for (const key of cachedSessionKeys.values()) {
-        deps.sessionCache.invalidateSession(key);
+    // Live EditorStates bind to this controller's Compartment instances. Turn
+    // them into extension-independent JSON before destroying the controller so
+    // an evicted tab can restore into a fresh set of compartments.
+    for (const key of cachedSessionKeys.values()) {
+      const cached = deps.sessionCache.take(key);
+      if (cached) {
+        deps.sessionCache.savePortable(key, serializePortableSession(cached, 0));
       }
-      cachedSessionKeys.clear();
-    } else if (props?.paneId && props?.contextId) {
-      // Fallback for a controller that hosted a single document (the normal
-      // keep-alive case) and so never populated `cachedSessionKeys` via
-      // `switchDocument`. Scope by context AND pane: a pane-only wipe would
-      // drop sibling tabs and — because two restored workspaces can both have
-      // `pane-1` — other contexts' cached undo/fold for the same pane id,
-      // which is the opposite of M52's intent.
-      deps.sessionCache.invalidatePaneInContext(props.contextId, props.paneId);
+    }
+    cachedSessionKeys.clear();
+    if (view && trackedDocumentId && props) {
+      const key: EditorSessionKey = {
+        contextId: props.contextId,
+        paneId: props.paneId,
+        documentId: trackedDocumentId,
+      };
+      deps.sessionCache.savePortable(
+        key,
+        serializePortableSession(view.state, view.scrollDOM.scrollTop),
+      );
     }
     detachScrollListener?.();
     detachScrollListener = null;

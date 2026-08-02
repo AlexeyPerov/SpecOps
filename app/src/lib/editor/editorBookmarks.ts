@@ -183,6 +183,11 @@ export const bookmarkField: StateField<BookmarkState> = StateField.define<Bookma
     }
     return value;
   },
+  toJSON: (value) => value,
+  fromJSON: (value) =>
+    Array.isArray(value)
+      ? sortedUnique(value.filter((position): position is number => Number.isFinite(position)))
+      : [],
 });
 
 /**

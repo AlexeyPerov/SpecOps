@@ -187,14 +187,14 @@ architectural work).
 
 ## P02-08-07 — Visited text tabs retain an unbounded number of live editors
 
-- **Status:** Open.
+- **Status:** Resolved on 2026-08-02.
 - **Area:** Tab switching / memory / DOM size.
 - **Impact:** **Medium–high over long sessions.** Every visited text tab in a
   pane retains a live CodeMirror instance until that tab closes. Hidden slots do
   not paint, but still retain editor state, DOM, extensions, observers, and
   language services.
-- **Fix complexity:** **L.** A simple cap would currently lose controller-bound
-  state during teardown.
+- **Fix complexity:** **L.** Completed with a bounded per-pane live-editor LRU
+  and portable controller-independent session snapshots.
 - **Evidence:** The visited set grows whenever a new text tab is activated and
   is pruned only when tabs close or the context changes; there is no live-editor
   limit or LRU eviction.
@@ -203,9 +203,16 @@ architectural work).
   compartments. Eviction should serialize document text identity, selection,
   scroll, folds, bookmarks, and undo history into a controller-independent
   cache; reactivation should restore that snapshot without a disk reread.
+  Implemented with a four-editor per-pane live limit. Evicted views serialize
+  document identity/content, selection, scroll, folds, bookmarks, and undo
+  history into the existing bounded ephemeral session cache. Reactivation builds
+  fresh extension compartments from that snapshot and recent tabs remain mounted
+  for CSS-only switching.
 - **Acceptance criteria:** Live editor count remains bounded as tabs are visited;
   revisiting an evicted tab preserves user-visible editor state; switching among
-  the most recent tabs remains a CSS-only visibility change.
+  the most recent tabs remains a CSS-only visibility change. LRU bounds,
+  pruning, portable cache separation, and eviction restoration have regression
+  coverage.
 
 ## P02-08-08 — Workspace switching rereads chat-session metadata unnecessarily
 

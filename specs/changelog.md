@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-02 17:41 MSK — Bounded per-pane editor keep-alive
+
+- Resolved P02-08-07 by limiting each pane to four live text editors with least-recently-used eviction while retaining CSS-only switching among recent tabs.
+- Added controller-independent editor snapshots to the bounded ephemeral session cache; evicted tabs restore content identity, selection, scroll, folds, bookmarks, and undo history into fresh extension compartments without rereading the file.
+- Added regression coverage for live-editor bounds, LRU revisits, closed/non-text pruning, portable cache separation, and full state restoration after controller eviction.
+
 ## 2026-08-02 17:14 MSK — Bounded workspace editor keep-alive
 
 - Resolved P02-08-06 by rendering editor grids in keyed context hosts and retaining the active context plus two recently used contexts instead of replacing one grid's context props.

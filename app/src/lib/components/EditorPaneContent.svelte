@@ -41,6 +41,7 @@
   import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
   import { getEditorToolController } from "../editor/editorToolContext";
   import type { EditorToolSnapshot } from "../editor/editorToolController";
+  import { updateLiveEditorTabs } from "../editor/editorTabKeepAlive";
 
   let {
     paneId,
@@ -310,8 +311,8 @@
   // Scope: only text-editor file tabs are kept alive. Session/chat/view tabs
   // and non-text documents (image/binary/large-pending) keep using the
   // single-branch {#if} chain below; they are singletons or cheap to remount.
-  // The set grows as tabs are visited and is pruned when tabs are closed so it
-  // does not accumulate forever.
+  // A small LRU keeps recent switches CSS-only while older views are evicted
+  // into the portable editor-session cache.
   const activeTabId = $derived(selectedTab?.id ?? null);
   const paneFileTabs = $derived(
     (findPane(layout, paneId)?.tabs.filter((tab) => isFileTab(tab)) ?? []) as Extract<
@@ -319,38 +320,31 @@
       { kind: "file" }
     >[],
   );
-  const paneFileTabIds = $derived(new Set(paneFileTabs.map((tab) => tab.id)));
-  let visitedEditorTabIds = $state<Set<string>>(new Set());
-
-  $effect(() => {
-    // Capture the reactive reads so this re-runs when the active tab or the
-    // pane's file-tab set changes.
-    const activeId = activeTabId;
-    const openIds = paneFileTabIds;
-    // Prune ids that have been closed.
-    let next = visitedEditorTabIds;
-    let changed = false;
-    for (const id of visitedEditorTabIds) {
-      if (!openIds.has(id)) {
-        if (next === visitedEditorTabIds) {
-          next = new Set(visitedEditorTabIds);
-          changed = true;
-        }
-        next.delete(id);
+  const openTextEditorTabIds = $derived.by(() => {
+    const ids = new Set<string>();
+    for (const tab of paneFileTabs) {
+      if (isTextEditorDocumentState(documentById.get(tab.documentId))) {
+        ids.add(tab.id);
       }
     }
-    // Add the active tab if it is currently a text-editor document. We rely on
-    // `documentView.isTextEditorDocument` (derived from the active tab's
-    // document) to decide; that flag already excludes image/binary/large docs.
-    if (activeId && documentView.isTextEditorDocument && !visitedEditorTabIds.has(activeId)) {
-      if (next === visitedEditorTabIds) {
-        next = new Set(visitedEditorTabIds);
+    return ids;
+  });
+  let liveEditorTabIds = $state<string[]>([]);
+  const desiredLiveEditorTabIds = $derived(
+    updateLiveEditorTabs(liveEditorTabIds, activeTabId, openTextEditorTabIds),
+  );
+
+  $effect(() => {
+    const next = desiredLiveEditorTabIds;
+    const current = untrack(() => liveEditorTabIds);
+    if (next.length !== current.length || next.some((tabId, index) => tabId !== current[index])) {
+      const mountedNewTab = activeTabId !== null && !current.includes(activeTabId) && next.includes(activeTabId);
+      liveEditorTabIds = next;
+      if (!mountedNewTab) {
+        return;
       }
-      next.add(activeId);
-      changed = true;
       // Observable signal: a one-time mount cost per tab. Repeat visits to an
-      // already-kept-alive tab produce no such log, which is the keep-alive win
-      // (file→file tab switches become CSS visibility toggles, not remounts).
+      // already-live recent tab produce no such log.
       void logPerfTiming(
         "editor tab keep-alive slot mounted",
         {
@@ -358,19 +352,16 @@
           durationMs: 0,
           label: "editor-keepalive-mount",
           paneId,
-          tabId: activeId,
-          liveSlotCount: next.size,
+          tabId: activeTabId,
+          liveSlotCount: next.length,
         },
         "debug",
       );
     }
-    if (changed) {
-      visitedEditorTabIds = next;
-    }
   });
 
   /**
-   * Entries to keep alive: visited file tabs that are still open AND still
+   * Entries to keep alive: recent file tabs that are still open AND still
    * resolve to a text-editor document. Each entry carries its own document so
    * the per-tab MarkdownEditorPane binds to the right content. A tab whose
    * document became non-text (e.g. the file changed to binary on disk) is
@@ -383,7 +374,7 @@
     }> = [];
     const byId = documentById;
     for (const tab of paneFileTabs) {
-      if (!visitedEditorTabIds.has(tab.id)) {
+      if (!desiredLiveEditorTabIds.includes(tab.id)) {
         continue;
       }
       const document = byId.get(tab.documentId);

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditorSelection, EditorState, Transaction } from "@codemirror/state";
-import { undo } from "@codemirror/commands";
+import { undo, undoDepth } from "@codemirror/commands";
+import { foldEffect, foldedRanges } from "@codemirror/language";
 import { createEditorDocumentSessionCache } from "./editorDocumentSessionCache";
 import { createEditorWorkbenchRuntime } from "./editorWorkbenchRuntime";
 import {
@@ -9,6 +10,7 @@ import {
   type EditorViewControllerProps,
 } from "./editorViewController";
 import { dispatchUserEdit } from "./codeMirrorFixture";
+import { bookmarkField, toggleBookmarkEffect } from "./editorBookmarks";
 import {
   storeOriginAnnotation,
   transactionHasStoreOrigin,
@@ -224,7 +226,7 @@ describe("createEditorViewController", () => {
     expect(view.state.doc.toString()).toBe("plain-again");
   });
 
-  it("destroy is idempotent and clears only this pane's cached sessions", () => {
+  it("destroy is idempotent and preserves portable sessions without touching other panes", () => {
     const { sessionCache } = mountController();
     controller!.update(
       baseProps({ content: "document-b", documentId: "doc-b" }),
@@ -238,10 +240,63 @@ describe("createEditorViewController", () => {
 
     controller!.destroy();
     controller!.destroy();
-    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(false);
+    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
     expect(sessionCache.has({ contextId: "notepad", paneId: "pane-2", documentId: "doc-a" })).toBe(true);
     expect(controller!.getView()).toBeUndefined();
     controller = undefined;
+  });
+
+  it("restores portable selection, undo, folds, and bookmarks after controller eviction", () => {
+    const props = baseProps({ content: "first line\nsecond line\nthird line" });
+    const sessionCache = createEditorDocumentSessionCache();
+    const workbench = createEditorWorkbenchRuntime({
+      getActiveContextId: () => props.contextId,
+      getActivePaneId: () => props.paneId,
+      getActiveDocumentId: () => props.documentId,
+    });
+    const deps = {
+      workbench,
+      sessionCache,
+      onStatusMessage: () => {},
+      onDocumentDirty: vi.fn(),
+      onScrollTopChange: vi.fn(),
+    };
+    parent = document.createElement("div");
+    document.body.appendChild(parent);
+    controller = createEditorViewController(deps);
+    controller.update(props);
+    controller.mount(parent);
+    const firstView = controller.getView()!;
+    dispatchUserEdit(firstView, { changes: { from: firstView.state.doc.length, insert: "!" } });
+    firstView.dispatch({
+      selection: EditorSelection.range(2, 8),
+      effects: [
+        foldEffect.of({ from: 11, to: 22 }),
+        toggleBookmarkEffect.of({ positions: [11] }),
+      ],
+    });
+    firstView.scrollDOM.scrollTop = 47;
+    expect(undoDepth(firstView.state)).toBeGreaterThan(0);
+
+    controller.destroy();
+    parent.replaceChildren();
+    controller = createEditorViewController(deps);
+    controller.update(baseProps({ ...props, content: "first line\nsecond line\nthird line!" }));
+    controller.mount(parent);
+    const restored = controller.getView()!;
+
+    expect(restored.state.selection.main.from).toBe(2);
+    expect(restored.state.selection.main.to).toBe(8);
+    expect(undoDepth(restored.state)).toBeGreaterThan(0);
+    expect(restored.state.field(bookmarkField)).toEqual([11]);
+    expect(restored.scrollDOM.scrollTop).toBe(47);
+    const folds: Array<[number, number]> = [];
+    foldedRanges(restored.state).between(0, restored.state.doc.length, (from, to) => {
+      folds.push([from, to]);
+    });
+    expect(folds).toEqual([[11, 22]]);
+    undo(restored);
+    expect(restored.state.doc.toString()).toBe("first line\nsecond line\nthird line");
   });
 
   it("marks store-origin transactions so dirty sync can ignore them", () => {

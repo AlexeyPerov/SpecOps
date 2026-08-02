@@ -6,12 +6,13 @@
  * workspaces can both have `pane-1`/`doc-1`); without it the wrong EditorState
  * could be resurrected for a same-content document in another context. The
  * same document shown in multiple panes of one context keeps independent view
- * sessions (selection, undo history, fold/completion/bookmark fields). Fold
- * state is ephemeral: it lives in cached EditorState while a pane/document
- * remains mounted and is never written to app session storage.
+ * sessions. Live states support controller-local document switches; portable
+ * JSON snapshots support eviction and remount with fresh extension compartments.
  *
  * Only inactive sessions live here; the live EditorView holds the active one.
- * Scroll position stays in `DocumentState.scrollTop` and is not cached.
+ * Portable entries also capture teardown-time scroll to cover an eviction that
+ * races its debounced store save. All entries are ephemeral and are never
+ * written to app session storage.
  *
  * Cross-context retain (F1.6): callers should pass document ids from every
  * context (not only the active one) so switching workspaces does not drop
@@ -27,7 +28,7 @@ export type EditorSessionKey = {
 };
 
 export type EditorDocumentSessionCacheOptions = {
-  /** Maximum inactive EditorState snapshots retained. Default: 32. */
+  /** Maximum inactive live/portable snapshots retained. Default: 32. */
   maxEntries?: number;
 };
 
@@ -36,19 +37,20 @@ export type EditorDocumentSessionCache = {
   /** Remove and return a cached state, or undefined on miss. */
   take: (key: EditorSessionKey) => EditorState | undefined;
   peek: (key: EditorSessionKey) => EditorState | undefined;
+  /** Save controller-independent state for a destroyed live editor. */
+  savePortable: (key: EditorSessionKey, snapshot: PortableEditorSession) => void;
+  /** Remove and return a portable state, or undefined when the key is live/missing. */
+  takePortable: (key: EditorSessionKey) => PortableEditorSession | undefined;
   has: (key: EditorSessionKey) => boolean;
   /** Drop every pane/context session for `documentId` (e.g. disk reload). */
   invalidateDocument: (documentId: string) => void;
-  /** Drop a single pane+context session (e.g. EditorView teardown for that key). */
+  /** Drop a single pane+context session (e.g. disk reload for that key). */
   invalidateSession: (key: EditorSessionKey) => void;
-  /** Drop sessions for a pane (e.g. EditorView teardown — cached states bind to that view's compartments). */
+  /** Drop sessions for a pane. */
   invalidatePane: (paneId: string) => void;
   /**
-   * Drop sessions for a pane within a single context. Used by the
-   * EditorView-teardown fallback when the controller never recorded a session
-   * key itself: pane-only invalidation would also drop other contexts' cached
-   * undo/fold for the same pane id (two restored workspaces can both have
-   * `pane-1`), which is the opposite of the cache's namespacing intent.
+   * Drop sessions for a pane within a single context. Pane-only invalidation
+   * would also drop other contexts with the same restored pane id.
    */
   invalidatePaneInContext: (contextId: ContextId, paneId: string) => void;
   /** Drop sessions whose documentId is not in the retained set. */
@@ -58,9 +60,18 @@ export type EditorDocumentSessionCache = {
   maxEntries: () => number;
 };
 
+export type PortableEditorSession = {
+  /** EditorState JSON including selection and selected portable state fields. */
+  state: unknown;
+  /** View scroll captured before controller teardown. */
+  scrollTop: number;
+};
+
 type CacheEntry = {
   key: EditorSessionKey;
-  state: EditorState;
+  value:
+    | { kind: "live"; state: EditorState }
+    | { kind: "portable"; snapshot: PortableEditorSession };
   lastAccess: number;
 };
 
@@ -105,7 +116,7 @@ export function createEditorDocumentSessionCache(
       return;
     }
     const id = sessionKeyId(key);
-    const entry: CacheEntry = { key, state, lastAccess: 0 };
+    const entry: CacheEntry = { key, value: { kind: "live", state }, lastAccess: 0 };
     touch(entry);
     entries.set(id, entry);
     evictOverflow();
@@ -120,8 +131,11 @@ export function createEditorDocumentSessionCache(
     if (!entry) {
       return undefined;
     }
+    if (entry.value.kind !== "live") {
+      return undefined;
+    }
     entries.delete(id);
-    return entry.state;
+    return entry.value.state;
   }
 
   function peek(key: EditorSessionKey): EditorState | undefined {
@@ -132,8 +146,38 @@ export function createEditorDocumentSessionCache(
     if (!entry) {
       return undefined;
     }
+    if (entry.value.kind !== "live") {
+      return undefined;
+    }
     touch(entry);
-    return entry.state;
+    return entry.value.state;
+  }
+
+  function savePortable(key: EditorSessionKey, snapshot: PortableEditorSession): void {
+    if (disposed || !key.documentId) {
+      return;
+    }
+    const entry: CacheEntry = {
+      key,
+      value: { kind: "portable", snapshot },
+      lastAccess: 0,
+    };
+    touch(entry);
+    entries.set(sessionKeyId(key), entry);
+    evictOverflow();
+  }
+
+  function takePortable(key: EditorSessionKey): PortableEditorSession | undefined {
+    if (disposed) {
+      return undefined;
+    }
+    const id = sessionKeyId(key);
+    const entry = entries.get(id);
+    if (!entry || entry.value.kind !== "portable") {
+      return undefined;
+    }
+    entries.delete(id);
+    return entry.value.snapshot;
   }
 
   function has(key: EditorSessionKey): boolean {
@@ -200,6 +244,8 @@ export function createEditorDocumentSessionCache(
     save,
     take,
     peek,
+    savePortable,
+    takePortable,
     has,
     invalidateDocument,
     invalidateSession,

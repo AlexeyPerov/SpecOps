@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-02 18:22 MSK — Incremental navigation and buffer persistence
+
+- Resolved P02-08-09 by moving debounced session updates to small per-window navigation records with all document text stripped.
+- Added per-context/document atomic buffer records keyed by content revision, so unchanged dirty or clean buffers are not serialized again during tab selection or unrelated UI updates.
+- Kept full `session.json` and backup writes for explicit checkpoints/window close, retained the shared cross-window write lock, and added incremental-only crash recovery plus cleanup for closed windows.
+- Added regression coverage proving navigation writes contain no buffer payload, only changed documents write buffer records, unchanged state performs no writes, and topology with unsaved text restores without a full checkpoint.
+
 ## 2026-08-02 18:15 MSK — Per-workspace project-tree snapshots
 
 - Resolved P02-08-10 by retaining root nodes, expanded paths, and loaded children in a six-workspace LRU and publishing cached trees immediately on re-entry.

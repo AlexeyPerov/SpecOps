@@ -5,9 +5,13 @@ import type { AppSessionSnapshot } from "../domain/contracts";
 export function createSessionFsMock() {
   let sessionStore: AppSessionSnapshot | null = null;
   const diskFiles = new Map<string, string>();
+  const isPrimarySessionPath = (path: string): boolean =>
+    path.endsWith("/session.json") || path.includes("/session.json.");
+  const isBackupSessionPath = (path: string): boolean =>
+    path.endsWith("/session.backup.json") || path.includes("/session.backup.json.");
 
   const readTextFile = vi.fn(async (path: string) => {
-    if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
+    if (isPrimarySessionPath(path) || isBackupSessionPath(path)) {
       if (!sessionStore) {
         throw new Error("no such file or directory");
       }
@@ -20,7 +24,7 @@ export function createSessionFsMock() {
   });
 
   const writeTextFile = vi.fn(async (path: string, content: string) => {
-    if (path.includes("session")) {
+    if (isPrimarySessionPath(path) || isBackupSessionPath(path)) {
       sessionStore = JSON.parse(content) as AppSessionSnapshot;
       return;
     }
@@ -29,7 +33,7 @@ export function createSessionFsMock() {
 
   /** Metadata-only existence probe mirroring readTextFile's view of disk. */
   const stat = vi.fn(async (path: string) => {
-    if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
+    if (isPrimarySessionPath(path) || isBackupSessionPath(path)) {
       if (!sessionStore) {
         throw new Error("no such file or directory");
       }
@@ -56,7 +60,7 @@ export function createSessionFsMock() {
     writeTextFile.mockReset();
     rename.mockReset();
     readTextFile.mockImplementation(async (path: string) => {
-      if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
+      if (isPrimarySessionPath(path) || isBackupSessionPath(path)) {
         if (!sessionStore) {
           throw new Error("no such file or directory");
         }
@@ -68,7 +72,7 @@ export function createSessionFsMock() {
       throw new Error(`no such file or directory: ${path}`);
     });
     writeTextFile.mockImplementation(async (path: string, content: string) => {
-      if (path.includes("session")) {
+      if (isPrimarySessionPath(path) || isBackupSessionPath(path)) {
         sessionStore = JSON.parse(content) as AppSessionSnapshot;
         return;
       }

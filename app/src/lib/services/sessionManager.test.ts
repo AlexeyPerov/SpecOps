@@ -10,6 +10,7 @@ import {
 import { appState } from "../state/appState";
 import { createSessionFsMock } from "../test/sessionMock";
 import * as sessionManager from "./sessionManager";
+import { persistIncrementalWindowSession } from "./sessionIncrementalPersistence";
 
 const sessionMock = createSessionFsMock();
 
@@ -733,5 +734,77 @@ describe("scheduleSessionPersistence", () => {
       setTimeout(resolve, 1300);
     });
     expect(sessionMock.writeTextFile).toHaveBeenCalled();
+  });
+});
+
+describe("incremental session persistence", () => {
+  beforeEach(() => {
+    sessionManager.resetSessionManagerForTests();
+    sessionMock.restoreFsImplementations();
+    sessionMock.setSessionStore(null);
+    sessionMock.diskFiles.clear();
+    sessionMock.writeTextFile.mockClear();
+    appState.resetAppState();
+  });
+
+  it("writes only lightweight navigation when tab selection changes", async () => {
+    appState.openFileInTab("/tmp/a.txt", "large-a-payload");
+    appState.openFileInTab("/tmp/b.txt", "large-b-payload");
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-a");
+    sessionMock.writeTextFile.mockClear();
+
+    const firstTab = getSessionTabs(appState.getActiveSession())[0]!;
+    appState.selectTab(firstTab.id);
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-a");
+
+    const writtenPaths = sessionMock.writeTextFile.mock.calls.map(([path]) => String(path));
+    expect(writtenPaths.some((path) => path.includes("session-navigation.win-a.json"))).toBe(true);
+    expect(writtenPaths.some((path) => path.includes("session-buffer."))).toBe(false);
+    expect(writtenPaths.some((path) => path.includes("/session.json."))).toBe(false);
+    const payloads = sessionMock.writeTextFile.mock.calls.map(([, content]) => String(content));
+    expect(payloads.join("\n")).not.toContain("large-a-payload");
+    expect(payloads.join("\n")).not.toContain("large-b-payload");
+  });
+
+  it("writes a document buffer only when its content revision changes", async () => {
+    appState.openFileInTab("/tmp/a.txt", "a");
+    appState.openFileInTab("/tmp/b.txt", "b");
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-a");
+    sessionMock.writeTextFile.mockClear();
+    const documentId = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/a.txt")!.id;
+
+    appState.setDocumentContent(documentId, "a-edited");
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-a");
+
+    const bufferWrites = sessionMock.writeTextFile.mock.calls.filter(([path]) =>
+      String(path).includes("session-buffer."),
+    );
+    expect(bufferWrites).toHaveLength(1);
+    expect(String(bufferWrites[0]?.[1])).toContain("a-edited");
+
+    sessionMock.writeTextFile.mockClear();
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-a");
+    expect(sessionMock.writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it("restores topology and dirty buffers without a full checkpoint", async () => {
+    appState.openFileInTab("/tmp/crash.txt", "before-crash");
+    const documentId = appState.getActiveDocuments().find(
+      (doc) => doc.filePath === "/tmp/crash.txt",
+    )!.id;
+    appState.setDocumentContent(documentId, "unsaved-before-crash");
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-crash");
+    sessionMock.setSessionStore(null);
+
+    const restored = await sessionManager.restoreWindowSession("win-crash");
+
+    expect(restored).not.toBeNull();
+    expect(restored?.snapshot.notepad.documents.find((doc) => doc.id === documentId)).toMatchObject({
+      content: "unsaved-before-crash",
+      isDirty: true,
+    });
+    expect(getSessionTabs(restored?.snapshot.notepad.session as never).some(
+      (tab) => tab.kind === "file" && tab.documentId === documentId,
+    )).toBe(true);
   });
 });

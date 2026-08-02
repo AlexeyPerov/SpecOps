@@ -247,14 +247,14 @@ architectural work).
 
 ## P02-08-09 — Tab selection persists the complete session and backup
 
-- **Status:** Open.
+- **Status:** Resolved on 2026-08-02.
 - **Area:** Session persistence / filesystem contention.
 - **Impact:** **Medium.** Writes are debounced and asynchronous, but every pause
   after tab selection can serialize all window topology and open buffer contents,
   promote the old primary to backup, and atomically replace the primary. This can
   contend with file reads, external checks, tree loading, and registry claims.
-- **Fix complexity:** **M–L.** Durability and multi-window ordering must remain
-  correct.
+- **Fix complexity:** **M–L.** Completed with incremental topology/buffer records
+  and explicit full checkpoints.
 - **Evidence:** The session-persistence effect schedules persistence when the
   selected tab changes. `persistSessionSnapshot` reads the existing snapshot and
   writes the full window snapshot plus backup through the shared lock.
@@ -264,9 +264,19 @@ architectural work).
   Batch topology and dirty-buffer updates through one queue, and retain the full
   snapshot only for explicit checkpoints or application close. No compatibility
   migration is required while the app remains in active development.
+  Implemented with one atomic navigation record per window and one atomic buffer
+  record per context/document. Navigation records contain topology and document
+  metadata with text payloads stripped. Buffer fingerprints ensure only changed
+  content revisions are serialized; buffer records are committed before the
+  navigation record under the existing cross-window lock. Full `session.json`
+  plus backup writes now occur only through explicit checkpoint/close paths.
+  Restore overlays incremental records on the last checkpoint and can recover
+  entirely from them when a crash occurs before the first full checkpoint.
 - **Acceptance criteria:** Selecting a tab with unchanged buffers writes only a
   small topology record; dirty buffer contents are not repeatedly serialized;
-  crash restore and multi-window ordering remain correct.
+  crash restore and multi-window ordering remain correct. Covered by payload-free
+  navigation writes, per-document revision deduplication, incremental-only crash
+  restore, full checkpoint, backup, debounce, and concurrent-window tests.
 
 ## P02-08-10 — Project-tree state is not cached per workspace
 

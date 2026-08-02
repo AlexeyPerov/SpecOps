@@ -24,6 +24,12 @@ import {
   resetSessionWriteLockForTests,
   withSessionWriteLock,
 } from "./sessionWriteLock";
+import {
+  persistIncrementalWindowSession,
+  readIncrementalWindowSession,
+  removeIncrementalWindowSession,
+  resetIncrementalSessionPersistenceForTests,
+} from "./sessionIncrementalPersistence";
 export { nextNumericId, sanitizeWindowSnapshot };
 
 const SESSION_FILE = "session.json";
@@ -63,6 +69,7 @@ export function resetSessionManagerForTests(): void {
     persistTimer = null;
   }
   resetTabsChangedSessionFlushForTests();
+  resetIncrementalSessionPersistenceForTests();
   resetSessionWriteLockForTests();
 }
 
@@ -133,6 +140,9 @@ export async function persistSessionSnapshot(
   state: AppDomainState,
   windowId: string,
 ): Promise<void> {
+  // Keep the authoritative incremental crash-recovery record aligned with this
+  // explicit full checkpoint before updating the primary/backup pair.
+  await persistIncrementalWindowSession(state, windowId);
   await withSessionWriteLock(async () => {
     const { snapshot: current, primaryRaw } = await readSessionSnapshot();
     const stampedAt = new Date().toISOString();
@@ -180,6 +190,7 @@ export async function removeWindowSessionEntry(windowId: string): Promise<void> 
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current, { backupSourceRaw: primaryRaw });
   });
+  await removeIncrementalWindowSession(windowId);
 }
 
 /**
@@ -194,6 +205,7 @@ export async function pruneStaleWindowSessionEntries(
 ): Promise<void> {
   const keep = new Set(liveWindowIds);
   keep.add(MAIN_WINDOW_ID);
+  let removedWindowIds: string[] = [];
   await withSessionWriteLock(async () => {
     const { snapshot: current, primaryRaw } = await readSessionSnapshot();
     const staleIds = Object.keys(current.windows).filter((id) => !keep.has(id));
@@ -203,6 +215,7 @@ export async function pruneStaleWindowSessionEntries(
     for (const id of staleIds) {
       delete current.windows[id];
     }
+    removedWindowIds = staleIds;
     if (current.lastActiveWindowId && !keep.has(current.lastActiveWindowId)) {
       current.lastActiveWindowId = MAIN_WINDOW_ID;
     }
@@ -216,6 +229,7 @@ export async function pruneStaleWindowSessionEntries(
       metadata: { staleIds },
     });
   });
+  await Promise.all(removedWindowIds.map((windowId) => removeIncrementalWindowSession(windowId)));
 }
 
 async function restoreWindowSessionFromSnapshot(
@@ -225,7 +239,10 @@ async function restoreWindowSessionFromSnapshot(
   if (parsed.version !== 2 || !parsed.windows) {
     return null;
   }
-  const snapshot = parsed.windows[windowId];
+  const snapshot = await readIncrementalWindowSession(
+    windowId,
+    parsed.windows[windowId] ?? null,
+  );
   if (!snapshot) {
     return null;
   }
@@ -311,7 +328,15 @@ export async function restoreWindowSession(
       message: "session backup restore failed",
       metadata: { windowId, reason: message },
     });
-    return null;
+    const incremental = await readIncrementalWindowSession(windowId, null);
+    if (!incremental) {
+      return null;
+    }
+    const deduped = await dedupeWindowSnapshotAgainstRegistry(windowId, incremental);
+    return {
+      snapshot: await sanitizeWindowSnapshot(deduped),
+      recentFiles: [],
+    };
   }
 }
 
@@ -324,7 +349,7 @@ export function scheduleSessionPersistence(
   }
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    void persistSessionSnapshot(state, windowId);
+    void persistIncrementalWindowSession(state, windowId);
   }, 1200);
 }
 

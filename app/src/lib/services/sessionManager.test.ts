@@ -38,9 +38,6 @@ vi.mock("./logging", () => ({
 
 vi.mock("./openFileRegistry", () => ({
   dedupeWindowSnapshotAgainstRegistry: vi.fn(async (_windowId, snapshot) => snapshot),
-  syncOpenFileRegistryForWindow: vi.fn().mockResolvedValue(undefined),
-  syncOpenFileRegistryForWindowUnlocked: vi.fn().mockResolvedValue(undefined),
-  buildOpenFileRegistryForWindow: vi.fn((_existing, _windowId, _state) => ({})),
 }));
 
 vi.mock("./fileSystem", () => ({

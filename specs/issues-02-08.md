@@ -67,13 +67,14 @@ architectural work).
 
 ## P02-08-03 — File opening performs full-session registry reads and rewrites
 
-- **Status:** Open.
+- **Status:** Resolved on 2026-08-02.
 - **Area:** File opening / multi-window ownership / persistence.
 - **Impact:** **High.** Opening a new file waits for a full `session.json` read
   to discover ownership, then waits for a cross-window lock, another full
   session read, and a full session rewrite to claim ownership. Cost grows with
   every persisted window, document, and unsaved buffer.
-- **Fix complexity:** **M–L.** Multi-window correctness must be preserved.
+- **Fix complexity:** **M–L.** Completed; multi-window correctness required an
+  atomic pre-open reservation and a separate transfer handoff.
 - **Evidence:** `requestOpenPath` calls `readOpenFileRegistry`; successful opens
   later call `claimOpenFile`. Both registry operations decode the complete
   session snapshot, and claiming rewrites it. The observed session file is
@@ -84,11 +85,17 @@ architectural work).
   Keep a per-window in-memory snapshot so ordinary lookups avoid disk. Update
   the session topology and registry in one queued background operation after the
   editor tab is visible; only a confirmed cross-window owner should block the
-  visible open.
+  visible open. Implemented with a versioned `open-files.json`, atomic writes
+  under the existing cross-window lock, event-coherent per-window caches, an
+  atomic claim before file I/O, failed-reservation cleanup, atomic ownership
+  handoff for tab transfers, and startup pruning against the live window set.
+  Session persistence no longer reads or rewrites ownership during ordinary
+  file opens.
 - **Acceptance criteria:** Opening cost is independent of total buffer content;
   concurrent windows cannot both claim the same normalized path; crash recovery
   removes stale owners; no complete session decode/write occurs on the normal
-  single-window open path.
+  single-window open path. Covered by registry, open-gate, open-path, transfer,
+  and session-persistence tests.
 
 ## P02-08-04 — Clicking an already-open file rereads its complete contents
 

@@ -12,7 +12,7 @@ vi.mock("./fileSystem", () => ({
 
 vi.mock("./openFileRegistry", () => ({
   renameOpenFileRegistry: vi.fn().mockResolvedValue(undefined),
-  claimOpenFile: vi.fn().mockResolvedValue(undefined),
+  claimOpenFile: vi.fn().mockResolvedValue(null),
 }));
 
 const saveFileMock = vi.mocked(saveFile);

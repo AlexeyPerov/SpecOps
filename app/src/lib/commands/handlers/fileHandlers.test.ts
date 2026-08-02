@@ -563,7 +563,7 @@ describe("file.saveAs command", () => {
     vi.mocked(renameOpenFileRegistry).mockReset();
     vi.mocked(renameOpenFileRegistry).mockResolvedValue(undefined);
     vi.mocked(claimOpenFile).mockReset();
-    vi.mocked(claimOpenFile).mockResolvedValue(undefined);
+    vi.mocked(claimOpenFile).mockResolvedValue(null);
   });
 
   it("saves the active document to a new path", async () => {
@@ -690,4 +690,3 @@ describe("file.reloadFromDisk command", () => {
     expect(notify).toHaveBeenCalledWith("Save the document before reloading from disk.");
   });
 });
-

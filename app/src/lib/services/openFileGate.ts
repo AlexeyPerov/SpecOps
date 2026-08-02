@@ -4,13 +4,8 @@ import { appState } from "../state/appState";
 import type { ContextId, DiskFingerprint } from "../domain/contracts";
 import { allTabs, isFileTab } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
-import {
-  claimOpenFile,
-  readOpenFileRegistry,
-} from "./openFileRegistry";
-import {
-  initializeDocumentDiskState,
-} from "./externalFileChanges";
+import { claimOpenFile } from "./openFileRegistry";
+import { initializeDocumentDiskState } from "./externalFileChanges";
 import type { FileContentKind } from "./fileContentKind";
 import type { OpenedFile } from "./fileSystem";
 import { openPath } from "./fileSystem";
@@ -60,10 +55,12 @@ export async function requestOpenPath(
   windowId: string,
 ): Promise<RequestOpenPathResult> {
   const normalized = normalizePathSync(path);
-  const registry = await readOpenFileRegistry();
-  const owner = registry[normalized];
+  // Atomically reserve unowned paths before file I/O. A separate registry read
+  // followed by a later claim allowed two windows to race and both open the
+  // same file; claimOpenFile now returns the conflicting owner when present.
+  const owner = await claimOpenFile(normalized, windowId, "");
 
-  if (owner && owner.windowId !== windowId) {
+  if (owner) {
     await redirectToOwnerWindow(normalized, owner.windowId);
     return { kind: "redirected", path: normalized, ownerWindowId: owner.windowId };
   }

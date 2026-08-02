@@ -1,10 +1,11 @@
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
 import { atomicWriteTextFile } from "./atomicWrite";
 import type {
   AppDomainState,
-  AppSessionSnapshot,
   ContextSnapshot,
+  OpenFileOwner,
   OpenFileRegistry,
   WindowSessionSnapshot,
 } from "../domain/contracts";
@@ -16,41 +17,93 @@ import {
 } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
-import {
-  createEmptySessionSnapshot,
-  decodeSessionSnapshot,
-  encodeSessionSnapshot,
-} from "./sessionSnapshotCodec";
 import { withSessionWriteLock } from "./sessionWriteLock";
 import { logDiagnostic } from "./logging";
 
-const SESSION_FILE = "session.json";
+const OPEN_FILE_REGISTRY_FILE = "open-files.json";
+const OPEN_FILE_REGISTRY_VERSION = 1 as const;
+const OPEN_FILE_REGISTRY_CHANGED_EVENT = "spec-ops/open-files-changed";
 
-async function getSessionPath(): Promise<string> {
+interface OpenFileRegistrySnapshot {
+  version: typeof OPEN_FILE_REGISTRY_VERSION;
+  updatedAt: string;
+  registry: OpenFileRegistry;
+}
+
+let cachedSnapshot: OpenFileRegistrySnapshot | null = null;
+let registryListenerPromise: Promise<UnlistenFn | null> | null = null;
+
+function decodeRegistrySnapshot(raw: string): OpenFileRegistrySnapshot | null {
+  try {
+    const parsed = JSON.parse(raw) as Partial<OpenFileRegistrySnapshot>;
+    if (
+      parsed.version !== OPEN_FILE_REGISTRY_VERSION ||
+      typeof parsed.updatedAt !== "string" ||
+      !parsed.registry ||
+      typeof parsed.registry !== "object" ||
+      Array.isArray(parsed.registry)
+    ) {
+      return null;
+    }
+    const registry: OpenFileRegistry = {};
+    for (const [path, owner] of Object.entries(parsed.registry)) {
+      if (
+        owner &&
+        typeof owner === "object" &&
+        typeof owner.windowId === "string" &&
+        typeof owner.documentId === "string"
+      ) {
+        registry[normalizePathSync(path)] = {
+          windowId: owner.windowId,
+          documentId: owner.documentId,
+        };
+      }
+    }
+    return { version: OPEN_FILE_REGISTRY_VERSION, updatedAt: parsed.updatedAt, registry };
+  } catch {
+    return null;
+  }
+}
+
+async function ensureRegistryChangeListener(): Promise<boolean> {
+  if (registryListenerPromise) {
+    return (await registryListenerPromise) !== null;
+  }
+  registryListenerPromise = listen<OpenFileRegistrySnapshot>(
+    OPEN_FILE_REGISTRY_CHANGED_EVENT,
+    (event) => {
+      const snapshot = decodeRegistrySnapshot(JSON.stringify(event.payload));
+      if (snapshot) {
+        cachedSnapshot = snapshot;
+      }
+    },
+  ).catch(() => null);
+  return (await registryListenerPromise) !== null;
+}
+
+async function getRegistryPath(): Promise<string> {
   const dataDir = await ensureSpecOpsDataDir();
-  return join(dataDir, SESSION_FILE);
+  return join(dataDir, OPEN_FILE_REGISTRY_FILE);
 }
 
 /**
- * Outcome of a session read for a read-modify-write.
+ * Outcome of an ownership-registry read for a read-modify-write.
  *
  * A failed read must NOT be papered over with an empty snapshot: an empty
- * `session.json` decodes cleanly, so `restoreWindowSession` returns null and never
- * falls back to the backup — one transient read failure (lock contention, a slow
- * network volume) would destroy every window's tabs and unsaved buffers with no
- * error surfaced. Callers therefore distinguish "no file yet" (safe to seed empty)
- * from "could not read the existing file" (must abort the RMW).
+ * registry would make every path appear unowned, allowing multiple windows to
+ * edit the same file. Callers therefore distinguish "no file yet" (safe to seed
+ * empty) from "could not read the existing file" (must abort the RMW).
  */
 type ReadResult =
-  | { kind: "snapshot"; snapshot: AppSessionSnapshot }
+  | { kind: "snapshot"; snapshot: OpenFileRegistrySnapshot }
   | { kind: "absent" }
   | { kind: "unreadable"; reason: string };
 
-async function readSessionSnapshotForUpdate(): Promise<ReadResult> {
-  const sessionPath = await getSessionPath();
+async function readRegistrySnapshotForUpdate(): Promise<ReadResult> {
+  const registryPath = await getRegistryPath();
   let raw: string;
   try {
-    raw = await readTextFile(sessionPath);
+    raw = await readTextFile(registryPath);
   } catch (error: unknown) {
     const reason = error instanceof Error ? error.message : String(error);
     // "no such file" / ENOENT means this is the very first write — seeding an
@@ -67,20 +120,25 @@ async function readSessionSnapshotForUpdate(): Promise<ReadResult> {
     }
     return { kind: "unreadable", reason };
   }
-  const decoded = decodeSessionSnapshot(raw);
+  const decoded = decodeRegistrySnapshot(raw);
   if (decoded) {
     return { kind: "snapshot", snapshot: decoded };
   }
   // The file exists but did not decode. Overwriting it with an empty snapshot
-  // would lose whatever is there (and the backup-promotion logic lives in
-  // sessionManager, not here). Abort so sessionManager's restore can still
-  // fall back to session.backup.json.
-  return { kind: "unreadable", reason: "session.json failed to decode" };
+  // would silently discard ownership and allow duplicate editors.
+  return { kind: "unreadable", reason: "open-files.json failed to decode" };
 }
 
-async function writeSessionSnapshot(snapshot: AppSessionSnapshot): Promise<void> {
-  const sessionPath = await getSessionPath();
-  await atomicWriteTextFile(sessionPath, encodeSessionSnapshot(snapshot));
+async function writeRegistrySnapshot(registry: OpenFileRegistry): Promise<void> {
+  const snapshot: OpenFileRegistrySnapshot = {
+    version: OPEN_FILE_REGISTRY_VERSION,
+    updatedAt: new Date().toISOString(),
+    registry,
+  };
+  const registryPath = await getRegistryPath();
+  await atomicWriteTextFile(registryPath, JSON.stringify(snapshot));
+  cachedSnapshot = snapshot;
+  void emit(OPEN_FILE_REGISTRY_CHANGED_EVENT, snapshot).catch(() => {});
 }
 
 async function logAbortedUpdate(windowId: string, reason: string): Promise<void> {
@@ -88,7 +146,7 @@ async function logAbortedUpdate(windowId: string, reason: string): Promise<void>
     level: "error",
     source: "frontend",
     timestamp: new Date().toISOString(),
-    message: "open-file registry update aborted: session.json unreadable",
+    message: "open-file registry update aborted: open-files.json unreadable",
     metadata: { windowId, reason },
   });
 }
@@ -132,75 +190,122 @@ export function buildOpenFileRegistryForWindow(
   return registry;
 }
 
-/**
- * Registry sync without acquiring the session write lock.
- * Call only from inside {@link withSessionWriteLock} (e.g. persistSessionSnapshot).
- */
-export async function syncOpenFileRegistryForWindowUnlocked(
-  windowId: string,
-  state: AppDomainState,
-): Promise<void> {
-  const read = await readSessionSnapshotForUpdate();
-  if (read.kind === "unreadable") {
-    await logAbortedUpdate(windowId, read.reason);
-    return;
-  }
-  const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
-  const existingRegistry = read.kind === "snapshot" ? read.snapshot.openFileRegistry : {};
-  current.openFileRegistry = buildOpenFileRegistryForWindow(existingRegistry, windowId, state);
-  current.updatedAt = new Date().toISOString();
-  await writeSessionSnapshot(current);
-}
-
 export async function readOpenFileRegistry(): Promise<OpenFileRegistry> {
+  const hadListener = registryListenerPromise !== null;
+  const listenerReady = await ensureRegistryChangeListener();
+  // A cache created before the change listener existed may have missed another
+  // window's event. Force one disk read after listener installation; subsequent
+  // reads are event-coherent and can stay in memory.
+  if (hadListener && listenerReady && cachedSnapshot) {
+    return { ...cachedSnapshot.registry };
+  }
   // Read-only: returning empty on a transient failure is acceptable (callers
-  // treat an empty registry as "no owner yet"), unlike the RMW writers above
-  // which must abort to avoid overwriting a good session.json.
-  const read = await readSessionSnapshotForUpdate();
-  return read.kind === "snapshot" ? read.snapshot.openFileRegistry : {};
-}
-
-export async function writeOpenFileRegistry(registry: OpenFileRegistry): Promise<void> {
-  await withSessionWriteLock(async () => {
-    const read = await readSessionSnapshotForUpdate();
-    if (read.kind === "unreadable") {
-      await logAbortedUpdate("unknown", read.reason);
-      return;
-    }
-    const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
-    current.openFileRegistry = registry;
-    current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current);
-  });
+  // treat an empty registry as "no owner yet"), unlike the RMW writers below
+  // which must abort rather than replace an unreadable ownership record.
+  const read = await readRegistrySnapshotForUpdate();
+  if (read.kind !== "snapshot") {
+    return {};
+  }
+  cachedSnapshot = read.snapshot;
+  return { ...read.snapshot.registry };
 }
 
 export async function syncOpenFileRegistryForWindow(
   windowId: string,
   state: AppDomainState,
 ): Promise<void> {
-  await withSessionWriteLock(() => syncOpenFileRegistryForWindowUnlocked(windowId, state));
+  await withSessionWriteLock(async () => {
+    const read = await readRegistrySnapshotForUpdate();
+    if (read.kind === "unreadable") {
+      await logAbortedUpdate(windowId, read.reason);
+      return;
+    }
+    const existingRegistry = read.kind === "snapshot" ? read.snapshot.registry : {};
+    await writeRegistrySnapshot(
+      buildOpenFileRegistryForWindow(existingRegistry, windowId, state),
+    );
+  });
 }
 
 export async function claimOpenFile(
   filePath: string,
   windowId: string,
   documentId: string,
-): Promise<void> {
-  if (!documentId) {
-    return;
-  }
-  await withSessionWriteLock(async () => {
-    const read = await readSessionSnapshotForUpdate();
+): Promise<OpenFileOwner | null> {
+  return withSessionWriteLock(async () => {
+    const read = await readRegistrySnapshotForUpdate();
     if (read.kind === "unreadable") {
       await logAbortedUpdate(windowId, read.reason);
+      throw new Error(`Open-file ownership is unavailable: ${read.reason}`);
+    }
+    const registry: OpenFileRegistry = {
+      ...(read.kind === "snapshot" ? read.snapshot.registry : {}),
+    };
+    const normalizedPath = normalizePathSync(filePath);
+    const existing = registry[normalizedPath];
+    if (existing && existing.windowId !== windowId) {
+      return existing;
+    }
+    // Empty document id is an atomic reservation made before file I/O. Do not
+    // erase an established same-window document id when re-requesting it.
+    registry[normalizedPath] = {
+      windowId,
+      documentId: documentId || existing?.documentId || "",
+    };
+    await writeRegistrySnapshot(registry);
+    return null;
+  });
+}
+
+/** Release a failed pre-open reservation without touching established tabs. */
+export async function releasePendingOpenFile(
+  filePath: string,
+  windowId: string,
+): Promise<void> {
+  await withSessionWriteLock(async () => {
+    const read = await readRegistrySnapshotForUpdate();
+    if (read.kind !== "snapshot") {
       return;
     }
-    const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
-    const registry: OpenFileRegistry = { ...current.openFileRegistry };
-    registry[normalizePathSync(filePath)] = { windowId, documentId };
-    current.openFileRegistry = registry;
-    current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current);
+    const normalizedPath = normalizePathSync(filePath);
+    const owner = read.snapshot.registry[normalizedPath];
+    if (!owner || owner.windowId !== windowId || owner.documentId !== "") {
+      return;
+    }
+    const registry = { ...read.snapshot.registry };
+    delete registry[normalizedPath];
+    await writeRegistrySnapshot(registry);
+  });
+}
+
+/** Atomically hand ownership from a source window to a transfer target. */
+export async function transferOpenFileClaim(
+  filePath: string,
+  sourceWindowId: string,
+  targetWindowId: string,
+  documentId: string,
+): Promise<OpenFileOwner | null> {
+  return withSessionWriteLock(async () => {
+    const read = await readRegistrySnapshotForUpdate();
+    if (read.kind === "unreadable") {
+      await logAbortedUpdate(targetWindowId, read.reason);
+      throw new Error(`Open-file ownership is unavailable: ${read.reason}`);
+    }
+    const registry: OpenFileRegistry = {
+      ...(read.kind === "snapshot" ? read.snapshot.registry : {}),
+    };
+    const normalizedPath = normalizePathSync(filePath);
+    const existing = registry[normalizedPath];
+    if (
+      existing &&
+      existing.windowId !== sourceWindowId &&
+      existing.windowId !== targetWindowId
+    ) {
+      return existing;
+    }
+    registry[normalizedPath] = { windowId: targetWindowId, documentId };
+    await writeRegistrySnapshot(registry);
+    return null;
   });
 }
 
@@ -300,11 +405,11 @@ export async function dedupeWindowSnapshotAgainstRegistry(
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
   return withSessionWriteLock(async () => {
-    const read = await readSessionSnapshotForUpdate();
-    // When the session can't be read, still return the (un-deduped) snapshot so
+    const read = await readRegistrySnapshotForUpdate();
+    // When the registry can't be read, still return the (un-deduped) snapshot so
     // the caller's restore proceeds with its own tabs intact; just skip the
-    // registry write that would otherwise overwrite an unreadable session.json.
-    const registry = read.kind === "snapshot" ? read.snapshot.openFileRegistry : {};
+    // registry write that would otherwise overwrite an unreadable record.
+    const registry = read.kind === "snapshot" ? read.snapshot.registry : {};
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, windowId, snapshot);
 
@@ -313,10 +418,7 @@ export async function dedupeWindowSnapshotAgainstRegistry(
       return nextSnapshot;
     }
 
-    const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
-    current.openFileRegistry = nextRegistry;
-    current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current);
+    await writeRegistrySnapshot(nextRegistry);
 
     return nextSnapshot;
   });
@@ -324,15 +426,14 @@ export async function dedupeWindowSnapshotAgainstRegistry(
 
 export async function releaseAllOpenFilesForWindow(windowId: string): Promise<void> {
   await withSessionWriteLock(async () => {
-    const read = await readSessionSnapshotForUpdate();
+    const read = await readRegistrySnapshotForUpdate();
     if (read.kind !== "snapshot") {
       if (read.kind === "unreadable") {
         await logAbortedUpdate(windowId, read.reason);
       }
       return;
     }
-    const session = read.snapshot;
-    const registry = { ...session.openFileRegistry };
+    const registry = { ...read.snapshot.registry };
     let changed = false;
 
     for (const [path, owner] of Object.entries(registry)) {
@@ -343,9 +444,35 @@ export async function releaseAllOpenFilesForWindow(windowId: string): Promise<vo
     }
 
     if (changed) {
-      session.openFileRegistry = registry;
-      session.updatedAt = new Date().toISOString();
-      await writeSessionSnapshot(session);
+      await writeRegistrySnapshot(registry);
+    }
+  });
+}
+
+/** Remove ownership records left by windows that are no longer live. */
+export async function pruneOpenFileRegistryWindows(
+  liveWindowIds: Iterable<string>,
+): Promise<void> {
+  const live = new Set(liveWindowIds);
+  await withSessionWriteLock(async () => {
+    const read = await readRegistrySnapshotForUpdate();
+    if (read.kind !== "snapshot") {
+      if (read.kind === "unreadable") {
+        await logAbortedUpdate("startup", read.reason);
+      }
+      return;
+    }
+    const registry: OpenFileRegistry = {};
+    let changed = false;
+    for (const [path, owner] of Object.entries(read.snapshot.registry)) {
+      if (live.has(owner.windowId)) {
+        registry[path] = owner;
+      } else {
+        changed = true;
+      }
+    }
+    if (changed) {
+      await writeRegistrySnapshot(registry);
     }
   });
 }
@@ -357,19 +484,23 @@ export async function renameOpenFileRegistry(
   documentId: string,
 ): Promise<void> {
   await withSessionWriteLock(async () => {
-    const read = await readSessionSnapshotForUpdate();
+    const read = await readRegistrySnapshotForUpdate();
     if (read.kind === "unreadable") {
       await logAbortedUpdate(windowId, read.reason);
       return;
     }
-    const current = read.kind === "snapshot" ? read.snapshot : createEmptySessionSnapshot();
-    const registry: OpenFileRegistry = { ...current.openFileRegistry };
+    const registry: OpenFileRegistry = {
+      ...(read.kind === "snapshot" ? read.snapshot.registry : {}),
+    };
     if (oldPath) {
       delete registry[normalizePathSync(oldPath)];
     }
     registry[normalizePathSync(newPath)] = { windowId, documentId };
-    current.openFileRegistry = registry;
-    current.updatedAt = new Date().toISOString();
-    await writeSessionSnapshot(current);
+    await writeRegistrySnapshot(registry);
   });
+}
+
+export function resetOpenFileRegistryForTests(): void {
+  cachedSnapshot = null;
+  registryListenerPromise = null;
 }

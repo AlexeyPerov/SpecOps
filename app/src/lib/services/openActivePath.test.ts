@@ -9,6 +9,7 @@ import {
 import { openPath } from "./fileSystem";
 import { statDiskFingerprint } from "./diskFingerprint";
 import { syncRecentFiles } from "./recentFilesSync";
+import { releasePendingOpenFile } from "./openFileRegistry";
 import {
   describeOpenActivePathResult,
   isSuccessfulOpenActivePathResult,
@@ -47,6 +48,10 @@ vi.mock("./recentFilesSync", () => ({
   syncRecentFiles: vi.fn(),
 }));
 
+vi.mock("./openFileRegistry", () => ({
+  releasePendingOpenFile: vi.fn().mockResolvedValue(undefined),
+}));
+
 const requestOpenPathMock = vi.mocked(requestOpenPath);
 const completeOpenPathMock = vi.mocked(completeOpenPath);
 const completeLargePendingOpenMock = vi.mocked(completeLargePendingOpen);
@@ -54,6 +59,7 @@ const refreshExistingDocumentFromDiskMock = vi.mocked(refreshExistingDocumentFro
 const openPathMock = vi.mocked(openPath);
 const statDiskFingerprintMock = vi.mocked(statDiskFingerprint);
 const syncRecentFilesMock = vi.mocked(syncRecentFiles);
+const releasePendingOpenFileMock = vi.mocked(releasePendingOpenFile);
 
 const WINDOW_ID = "main";
 const FILE_PATH = "/tmp/example.txt";
@@ -68,6 +74,7 @@ describe("openActivePath", () => {
     openPathMock.mockReset();
     statDiskFingerprintMock.mockReset();
     syncRecentFilesMock.mockReset();
+    releasePendingOpenFileMock.mockClear();
   });
 
   it("returns redirected and touches recent when gate redirects", async () => {
@@ -187,6 +194,7 @@ describe("openActivePath", () => {
     expect(appState.getSnapshot().recentFiles).toEqual(["/tmp/old.txt"]);
     expect(syncRecentFilesMock).toHaveBeenCalledWith(["/tmp/old.txt"]);
     expect(completeOpenPathMock).not.toHaveBeenCalled();
+    expect(releasePendingOpenFileMock).toHaveBeenCalledWith(FILE_PATH, WINDOW_ID);
   });
 
   it("returns failed with reason on generic errors", async () => {
@@ -205,6 +213,7 @@ describe("openActivePath", () => {
       path: FILE_PATH,
       reason: "permission denied",
     });
+    expect(releasePendingOpenFileMock).toHaveBeenCalledWith(FILE_PATH, WINDOW_ID);
   });
 
   it("returns failed with unknown error for non-Error throws", async () => {
@@ -217,6 +226,7 @@ describe("openActivePath", () => {
       path: FILE_PATH,
       reason: "unknown error",
     });
+    expect(releasePendingOpenFileMock).toHaveBeenCalledWith(FILE_PATH, WINDOW_ID);
   });
 });
 

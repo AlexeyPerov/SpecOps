@@ -46,6 +46,8 @@ export type TabTransferPayload = {
   filePath: string | null;
   content: string;
   title: string;
+  /** Source owner used for an atomic cross-window ownership handoff. */
+  sourceWindowId?: string;
   /**
    * On-disk line ending of the source document. The editor always works in LF,
    * so this is what converts back on the first save in the target window.

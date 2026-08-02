@@ -10,7 +10,6 @@ import type {
 import { logDiagnostic } from "./logging";
 import { getErrorMessage } from "../commands/commandErrors";
 import {
-  buildOpenFileRegistryForWindow,
   dedupeWindowSnapshotAgainstRegistry,
 } from "./openFileRegistry";
 import {
@@ -144,14 +143,6 @@ export async function persistSessionSnapshot(
     };
     current.lastActiveWindowId = windowId;
     current.updatedAt = stampedAt;
-    // Fold registry sync into this write so we do not re-read and rewrite the
-    // full session (including every open buffer) a second time.
-    current.openFileRegistry = buildOpenFileRegistryForWindow(
-      current.openFileRegistry,
-      windowId,
-      state,
-    );
-
     await writeSessionSnapshot(current, { backupSourceRaw: primaryRaw });
 
     await logDiagnostic({

@@ -12,6 +12,7 @@ import { shouldGateFileOpenBySize } from "./largeFileOpen";
 import { appState } from "../state/appState";
 import { syncRecentFiles } from "./recentFilesSync";
 import { getErrorMessage } from "../commands/commandErrors";
+import { releasePendingOpenFile } from "./openFileRegistry";
 
 export type OpenActivePathResult =
   | { kind: "opened"; path: string }
@@ -73,6 +74,7 @@ export async function openActivePath(
     );
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {
+    await releasePendingOpenFile(path, windowId);
     if (isFileMissingError(error)) {
       await pruneMissingRecentFile(path);
       return { kind: "missing", path };
@@ -140,6 +142,7 @@ export async function openActivePathInPane(
     );
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {
+    await releasePendingOpenFile(path, windowId);
     if (isFileMissingError(error)) {
       await pruneMissingRecentFile(path);
       return { kind: "missing", path };

@@ -42,13 +42,19 @@ export function createSessionFsMock() {
   });
 
   /** Atomic-write (temp + rename) and lock-dir helpers; permissive no-ops. */
-  const rename = vi.fn(async () => undefined);
+  const rename = vi.fn(async (from: string, to: string) => {
+    if (diskFiles.has(from)) {
+      diskFiles.set(to, diskFiles.get(from)!);
+      diskFiles.delete(from);
+    }
+  });
   const remove = vi.fn(async () => undefined);
   const mkdir = vi.fn(async () => undefined);
 
   function restoreFsImplementations(): void {
     readTextFile.mockReset();
     writeTextFile.mockReset();
+    rename.mockReset();
     readTextFile.mockImplementation(async (path: string) => {
       if (path.endsWith("/session.json") || path.endsWith("/session.backup.json")) {
         if (!sessionStore) {
@@ -67,6 +73,12 @@ export function createSessionFsMock() {
         return;
       }
       diskFiles.set(path, content);
+    });
+    rename.mockImplementation(async (from: string, to: string) => {
+      if (diskFiles.has(from)) {
+        diskFiles.set(to, diskFiles.get(from)!);
+        diskFiles.delete(from);
+      }
     });
   }
 

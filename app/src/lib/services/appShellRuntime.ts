@@ -27,6 +27,7 @@ import {
   WINDOW_EVENT_WINDOW_READY,
   type MergeTabAckPayload,
   type MergeTabPayload,
+  type TabTransferPayload,
   markWindowActive,
 } from "./windowManager";
 import {
@@ -35,7 +36,13 @@ import {
   restoreWindowSession,
 } from "./sessionManager";
 import { applyWindowBounds, readWindowBounds } from "./windowBounds";
-import { syncOpenFileRegistryForWindow, claimOpenFile, releaseAllOpenFilesForWindow } from "./openFileRegistry";
+import {
+  claimOpenFile,
+  pruneOpenFileRegistryWindows,
+  releaseAllOpenFilesForWindow,
+  syncOpenFileRegistryForWindow,
+  transferOpenFileClaim,
+} from "./openFileRegistry";
 import {
   loadPersistedSettings,
   toExternalFilesSettings,
@@ -206,12 +213,22 @@ async function startAppShellRuntimeInner(
   // dropped already-resolved handles when one listen rejected (C8).
   const registerListenersStartedAt = nowMs();
   cleanupCallbacks.push(
-    await listen<{ filePath: string | null; content: string; title: string; lineEnding?: "lf" | "crlf"; hasBom?: boolean }>(
+    await listen<TabTransferPayload>(
       WINDOW_EVENT_TRANSFER_TAB,
       async (event) => {
         const documentId = appState.openTransferredTab(event.payload);
         if (event.payload.filePath && documentId) {
-          await claimOpenFile(event.payload.filePath, windowId, documentId);
+          const conflict = event.payload.sourceWindowId
+            ? await transferOpenFileClaim(
+                event.payload.filePath,
+                event.payload.sourceWindowId,
+                windowId,
+                documentId,
+              )
+            : await claimOpenFile(event.payload.filePath, windowId, documentId);
+          if (conflict) {
+            throw new Error("The transferred file is already open in another window.");
+          }
           await initializeDocumentDiskState(documentId, event.payload.filePath);
         }
       },
@@ -223,7 +240,15 @@ async function startAppShellRuntimeInner(
       try {
         const documentId = appState.openTransferredTab(payload);
         if (payload.filePath && documentId) {
-          await claimOpenFile(payload.filePath, windowId, documentId);
+          const conflict = await transferOpenFileClaim(
+            payload.filePath,
+            sourceWindowId,
+            windowId,
+            documentId,
+          );
+          if (conflict) {
+            throw new Error("The transferred file is already open in another window.");
+          }
           await initializeDocumentDiskState(documentId, payload.filePath);
         }
         await emitTo<MergeTabAckPayload>(sourceWindowId, WINDOW_EVENT_MERGE_TAB_ACK, {
@@ -388,6 +413,10 @@ async function startAppShellRuntimeInner(
   });
 
   await runSafeStartupPhase("restore-session", async () => {
+    // Clear crash-stale ownership before deduping the restored tabs. A stale
+    // secondary-window owner must not make the main window discard its tab.
+    const liveWindows = await getAllWebviewWindows();
+    await pruneOpenFileRegistryWindows(liveWindows.map((entry) => entry.label));
     const restoredSession = await restoreWindowSession(windowId);
     if (!restoredSession) {
       return;

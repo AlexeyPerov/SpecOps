@@ -9,7 +9,7 @@ import {
   requestOpenPath,
   selectTabForNormalizedPath,
 } from "./openFileGate";
-import { claimOpenFile, readOpenFileRegistry } from "./openFileRegistry";
+import { claimOpenFile } from "./openFileRegistry";
 import { initializeDocumentDiskState } from "./externalFileChanges";
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -23,8 +23,7 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
 }));
 
 vi.mock("./openFileRegistry", () => ({
-  readOpenFileRegistry: vi.fn(),
-  claimOpenFile: vi.fn().mockResolvedValue(undefined),
+  claimOpenFile: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("./externalFileChanges", () => ({
@@ -39,7 +38,6 @@ vi.mock("./diskFingerprint", async (importOriginal) => {
   };
 });
 
-const readOpenFileRegistryMock = vi.mocked(readOpenFileRegistry);
 const claimOpenFileMock = vi.mocked(claimOpenFile);
 const initializeDocumentDiskStateMock = vi.mocked(initializeDocumentDiskState);
 const emitToMock = vi.mocked(emitTo);
@@ -48,16 +46,14 @@ const getByLabelMock = vi.mocked(WebviewWindow.getByLabel);
 describe("requestOpenPath", () => {
   beforeEach(() => {
     appState.resetAppState();
-    readOpenFileRegistryMock.mockReset();
-    claimOpenFileMock.mockClear();
+    claimOpenFileMock.mockReset();
+    claimOpenFileMock.mockResolvedValue(null);
     emitToMock.mockClear();
     getByLabelMock.mockReset();
   });
 
   it("redirects to the owning window for cross-window paths", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({
-      "/tmp/shared.txt": { windowId: "win-b", documentId: "doc-9" },
-    });
+    claimOpenFileMock.mockResolvedValueOnce({ windowId: "win-b", documentId: "doc-9" });
     const focus = vi.fn().mockResolvedValue(undefined);
     getByLabelMock.mockResolvedValue({ setFocus: focus } as never);
 
@@ -73,7 +69,6 @@ describe("requestOpenPath", () => {
   });
 
   it("reuses an existing document in the same window", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({});
     appState.openFileInTab("/tmp/existing.txt", "hello");
 
     await expect(requestOpenPath("/tmp/existing.txt", "win-a")).resolves.toEqual({
@@ -86,7 +81,6 @@ describe("requestOpenPath", () => {
   });
 
   it("returns needs_read for a new path", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({});
     await expect(requestOpenPath("/tmp/new.txt", "win-a")).resolves.toEqual({
       kind: "needs_read",
       path: "/tmp/new.txt",
@@ -95,7 +89,6 @@ describe("requestOpenPath", () => {
   });
 
   it("switches to owning local context when file is already open there", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({});
     appState.addWorkspace("/tmp/ws");
     appState.openFileInTab("/tmp/ws/existing.txt", "workspace");
     appState.switchContext("notepad");
@@ -110,7 +103,6 @@ describe("requestOpenPath", () => {
   });
 
   it("migrates a notepad tab into the active workspace when opening a workspace file", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({});
     appState.setRestrictFilesToContext(true);
     appState.addWorkspace("/tmp/ws");
     appState.switchContext("notepad");
@@ -142,7 +134,6 @@ describe("requestOpenPath", () => {
   });
 
   it("removes the notepad duplicate and focuses an existing workspace tab in an inactive pane", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({});
     appState.setRestrictFilesToContext(true);
     const workspaceId = appState.addWorkspace("/tmp/ws")!;
     appState.setEditorLayout("cols-2");
@@ -189,7 +180,6 @@ describe("requestOpenPath", () => {
   });
 
   it("opens outside-root paths in the active workspace when unrestricted", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({});
     appState.addWorkspace("/tmp/ws");
 
     await expect(requestOpenPath("/tmp/outside.txt", "win-a")).resolves.toEqual({
@@ -201,7 +191,6 @@ describe("requestOpenPath", () => {
   });
 
   it("switches to notepad for outside-root paths when restricted", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({});
     appState.addWorkspace("/tmp/ws");
     appState.setRestrictFilesToContext(true);
 
@@ -214,7 +203,6 @@ describe("requestOpenPath", () => {
   });
 
   it("focuses notepad without migrating when unrestricted and file is already open there", async () => {
-    readOpenFileRegistryMock.mockResolvedValue({});
     appState.addWorkspace("/tmp/ws");
     appState.switchContext("notepad");
     appState.openFileInTab("/tmp/ws/in-notepad.txt", "notepad copy");
@@ -273,7 +261,11 @@ describe("completeOpenPath", () => {
   it("opens the file, claims registry ownership, and initializes disk state", async () => {
     await expect(completeOpenPath("/tmp/complete.txt", "payload", "win-a")).resolves.toBe("doc-2");
     expect(claimOpenFileMock).toHaveBeenCalledWith("/tmp/complete.txt", "win-a", "doc-2");
-    expect(initializeDocumentDiskStateMock).toHaveBeenCalledWith("doc-2", "/tmp/complete.txt");
+    expect(initializeDocumentDiskStateMock).toHaveBeenCalledWith(
+      "doc-2",
+      "/tmp/complete.txt",
+      undefined,
+    );
     const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
     expect(document?.content).toBe("payload");
     expect(document?.contentKind).toBe("text");

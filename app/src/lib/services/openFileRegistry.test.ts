@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AppDomainState,
-  AppSessionSnapshot,
   OpenFileRegistry,
   WindowSessionSnapshot,
 } from "../domain/contracts";
@@ -14,14 +13,23 @@ import { defaultSettings } from "../state/appState/settingsSlice";
 import {
   applyRegistryDedupeToWindowSnapshot,
   claimOpenFile,
+  pruneOpenFileRegistryWindows,
   readOpenFileRegistry,
   releaseAllOpenFilesForWindow,
+  releasePendingOpenFile,
   renameOpenFileRegistry,
+  resetOpenFileRegistryForTests,
   syncOpenFileRegistryForWindow,
+  transferOpenFileClaim,
 } from "./openFileRegistry";
 import { resetSessionWriteLockForTests } from "./sessionWriteLock";
 
 const sessionMock = createSessionFsMock();
+
+vi.mock("@tauri-apps/api/event", () => ({
+  emit: vi.fn().mockResolvedValue(undefined),
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: (...args: Parameters<typeof sessionMock.readTextFile>) =>
@@ -41,6 +49,28 @@ vi.mock("./appDataDir", () => ({
 vi.mock("@tauri-apps/api/path", () => ({
   join: (...parts: string[]) => parts.join("/"),
 }));
+
+const REGISTRY_PATH = "/data/spec-ops/open-files.json";
+
+function setRegistryStore(registry: OpenFileRegistry): void {
+  sessionMock.diskFiles.set(
+    REGISTRY_PATH,
+    JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), registry }),
+  );
+}
+
+function getRegistryStore(): OpenFileRegistry {
+  const raw = sessionMock.diskFiles.get(REGISTRY_PATH);
+  if (!raw) {
+    return {};
+  }
+  return (JSON.parse(raw) as { registry: OpenFileRegistry }).registry;
+}
+
+beforeEach(() => {
+  resetOpenFileRegistryForTests();
+  sessionMock.diskFiles.clear();
+});
 
 function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowSessionSnapshot {
   const notepad: WindowSessionSnapshot["notepad"] = {
@@ -102,17 +132,6 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
   };
 }
 
-function emptySession(): AppSessionSnapshot {
-  return {
-    version: 2,
-    updatedAt: new Date().toISOString(),
-    lastActiveWindowId: "main",
-    openFileRegistry: {},
-    recentFiles: [],
-    windows: {},
-  };
-}
-
 describe("readOpenFileRegistry", () => {
   beforeEach(() => {
     resetSessionWriteLockForTests();
@@ -122,21 +141,31 @@ describe("readOpenFileRegistry", () => {
     sessionMock.writeTextFile.mockClear();
   });
 
-  it("returns an empty registry when session file is missing", async () => {
+  it("returns an empty registry when the dedicated registry file is missing", async () => {
     await expect(readOpenFileRegistry()).resolves.toEqual({});
   });
 
-  it("returns registry entries from session.json", async () => {
-    sessionMock.setSessionStore({
-      ...emptySession(),
-      openFileRegistry: {
-        "/tmp/a.txt": { windowId: "win-a", documentId: "doc-1" },
-      },
+  it("returns registry entries from open-files.json", async () => {
+    setRegistryStore({
+      "/tmp/a.txt": { windowId: "win-a", documentId: "doc-1" },
     });
 
     await expect(readOpenFileRegistry()).resolves.toEqual({
       "/tmp/a.txt": { windowId: "win-a", documentId: "doc-1" },
     });
+  });
+
+  it("serves repeated reads from the in-memory snapshot", async () => {
+    setRegistryStore({
+      "/tmp/cached.txt": { windowId: "win-a", documentId: "doc-1" },
+    });
+
+    await readOpenFileRegistry();
+    await readOpenFileRegistry();
+
+    expect(
+      sessionMock.readTextFile.mock.calls.filter(([path]) => path === REGISTRY_PATH),
+    ).toHaveLength(1);
   });
 });
 
@@ -144,13 +173,77 @@ describe("claimOpenFile", () => {
   beforeEach(() => {
     resetSessionWriteLockForTests();
     sessionMock.restoreFsImplementations();
-    sessionMock.setSessionStore(emptySession());
   });
 
   it("writes a normalized registry entry", async () => {
     await claimOpenFile("/tmp/claim.txt", "win-a", "doc-9");
-    expect(sessionMock.getSessionStore()?.openFileRegistry).toEqual({
+    expect(getRegistryStore()).toEqual({
       "/tmp/claim.txt": { windowId: "win-a", documentId: "doc-9" },
+    });
+    expect(
+      sessionMock.readTextFile.mock.calls.some(([path]) => path.endsWith("/session.json")),
+    ).toBe(false);
+    expect(
+      sessionMock.writeTextFile.mock.calls.some(([path]) => path.includes("session.json")),
+    ).toBe(false);
+  });
+
+  it("atomically rejects a claim owned by another window", async () => {
+    setRegistryStore({
+      "/tmp/shared.txt": { windowId: "win-b", documentId: "doc-b" },
+    });
+
+    await expect(claimOpenFile("/tmp/shared.txt", "win-a", "")).resolves.toEqual({
+      windowId: "win-b",
+      documentId: "doc-b",
+    });
+    expect(getRegistryStore()).toEqual({
+      "/tmp/shared.txt": { windowId: "win-b", documentId: "doc-b" },
+    });
+  });
+
+  it("releases only failed pending reservations", async () => {
+    await claimOpenFile("/tmp/pending.txt", "win-a", "");
+    await claimOpenFile("/tmp/open.txt", "win-a", "doc-a");
+
+    await releasePendingOpenFile("/tmp/pending.txt", "win-a");
+    await releasePendingOpenFile("/tmp/open.txt", "win-a");
+
+    expect(getRegistryStore()).toEqual({
+      "/tmp/open.txt": { windowId: "win-a", documentId: "doc-a" },
+    });
+  });
+});
+
+describe("transferOpenFileClaim", () => {
+  beforeEach(() => {
+    resetSessionWriteLockForTests();
+    sessionMock.restoreFsImplementations();
+  });
+
+  it("atomically hands ownership from the source to the target window", async () => {
+    setRegistryStore({
+      "/tmp/shared.txt": { windowId: "win-a", documentId: "doc-a" },
+    });
+
+    await expect(
+      transferOpenFileClaim("/tmp/shared.txt", "win-a", "win-b", "doc-b"),
+    ).resolves.toBeNull();
+    expect(getRegistryStore()).toEqual({
+      "/tmp/shared.txt": { windowId: "win-b", documentId: "doc-b" },
+    });
+  });
+
+  it("rejects a transfer when a third window owns the path", async () => {
+    setRegistryStore({
+      "/tmp/shared.txt": { windowId: "win-c", documentId: "doc-c" },
+    });
+
+    await expect(
+      transferOpenFileClaim("/tmp/shared.txt", "win-a", "win-b", "doc-b"),
+    ).resolves.toEqual({ windowId: "win-c", documentId: "doc-c" });
+    expect(getRegistryStore()).toEqual({
+      "/tmp/shared.txt": { windowId: "win-c", documentId: "doc-c" },
     });
   });
 });
@@ -159,12 +252,9 @@ describe("syncOpenFileRegistryForWindow", () => {
   beforeEach(() => {
     resetSessionWriteLockForTests();
     sessionMock.restoreFsImplementations();
-    sessionMock.setSessionStore({
-      ...emptySession(),
-      openFileRegistry: {
-        "/tmp/old.txt": { windowId: "win-a", documentId: "doc-old" },
-        "/tmp/other-window.txt": { windowId: "win-b", documentId: "doc-x" },
-      },
+    setRegistryStore({
+      "/tmp/old.txt": { windowId: "win-a", documentId: "doc-old" },
+      "/tmp/other-window.txt": { windowId: "win-b", documentId: "doc-x" },
     });
   });
 
@@ -233,7 +323,7 @@ describe("syncOpenFileRegistryForWindow", () => {
 
     await syncOpenFileRegistryForWindow("win-a", state);
 
-    expect(sessionMock.getSessionStore()?.openFileRegistry).toEqual({
+    expect(getRegistryStore()).toEqual({
       "/tmp/other-window.txt": { windowId: "win-b", documentId: "doc-x" },
       "/tmp/new.txt": { windowId: "win-a", documentId: "doc-1" },
     });
@@ -335,7 +425,7 @@ describe("syncOpenFileRegistryForWindow", () => {
 
     await syncOpenFileRegistryForWindow("win-a", state);
 
-    expect(sessionMock.getSessionStore()?.openFileRegistry).toMatchObject({
+    expect(getRegistryStore()).toMatchObject({
       "/tmp/notepad.txt": { windowId: "win-a", documentId: "doc-n" },
       "/tmp/ws/workspace.txt": { windowId: "win-a", documentId: "doc-w" },
     });
@@ -468,7 +558,7 @@ describe("syncOpenFileRegistryForWindow", () => {
 
     await syncOpenFileRegistryForWindow("win-a", state);
 
-    expect(sessionMock.getSessionStore()?.openFileRegistry).toMatchObject({
+    expect(getRegistryStore()).toMatchObject({
       "/tmp/a.txt": { windowId: "win-a", documentId: "doc-1" },
       "/tmp/b.txt": { windowId: "win-a", documentId: "doc-2" },
       "/tmp/c.txt": { windowId: "win-a", documentId: "doc-3" },
@@ -479,18 +569,32 @@ describe("syncOpenFileRegistryForWindow", () => {
 
 describe("releaseAllOpenFilesForWindow", () => {
   it("removes only entries owned by the given window", async () => {
-    sessionMock.setSessionStore({
-      ...emptySession(),
-      openFileRegistry: {
-        "/tmp/a.txt": { windowId: "win-a", documentId: "doc-1" },
-        "/tmp/b.txt": { windowId: "win-b", documentId: "doc-2" },
-      },
+    setRegistryStore({
+      "/tmp/a.txt": { windowId: "win-a", documentId: "doc-1" },
+      "/tmp/b.txt": { windowId: "win-b", documentId: "doc-2" },
     });
 
     await releaseAllOpenFilesForWindow("win-a");
 
-    expect(sessionMock.getSessionStore()?.openFileRegistry).toEqual({
+    expect(getRegistryStore()).toEqual({
       "/tmp/b.txt": { windowId: "win-b", documentId: "doc-2" },
+    });
+  });
+});
+
+describe("pruneOpenFileRegistryWindows", () => {
+  it("removes crash-stale owners while preserving live windows", async () => {
+    setRegistryStore({
+      "/tmp/main.txt": { windowId: "main", documentId: "doc-1" },
+      "/tmp/live.txt": { windowId: "win-live", documentId: "doc-2" },
+      "/tmp/stale.txt": { windowId: "win-crashed", documentId: "doc-3" },
+    });
+
+    await pruneOpenFileRegistryWindows(["main", "win-live"]);
+
+    expect(getRegistryStore()).toEqual({
+      "/tmp/main.txt": { windowId: "main", documentId: "doc-1" },
+      "/tmp/live.txt": { windowId: "win-live", documentId: "doc-2" },
     });
   });
 });
@@ -499,17 +603,14 @@ describe("renameOpenFileRegistry", () => {
   beforeEach(() => {
     resetSessionWriteLockForTests();
     sessionMock.restoreFsImplementations();
-    sessionMock.setSessionStore({
-      ...emptySession(),
-      openFileRegistry: {
-        "/tmp/old.txt": { windowId: "win-a", documentId: "doc-1" },
-      },
+    setRegistryStore({
+      "/tmp/old.txt": { windowId: "win-a", documentId: "doc-1" },
     });
   });
 
   it("moves registry ownership to the new path", async () => {
     await renameOpenFileRegistry("/tmp/old.txt", "/tmp/new.txt", "win-a", "doc-1");
-    expect(sessionMock.getSessionStore()?.openFileRegistry).toEqual({
+    expect(getRegistryStore()).toEqual({
       "/tmp/new.txt": { windowId: "win-a", documentId: "doc-1" },
     });
   });

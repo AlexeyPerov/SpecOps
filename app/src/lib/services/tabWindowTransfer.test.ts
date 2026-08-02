@@ -87,6 +87,7 @@ describe("moveTabToNewWindow", () => {
       title: "move-me.txt",
       lineEnding: "lf",
       hasBom: false,
+      sourceWindowId: "main",
     });
     expect(syncOpenFileRegistryForWindowMock).toHaveBeenCalledWith(
       "main",
@@ -127,6 +128,7 @@ describe("moveTabToNewWindow", () => {
       title: "inactive-pane-transfer.txt",
       lineEnding: "lf",
       hasBom: false,
+      sourceWindowId: "main",
     });
   });
 });

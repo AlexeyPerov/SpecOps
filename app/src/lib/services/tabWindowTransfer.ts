@@ -219,7 +219,10 @@ export async function moveTabToNewWindow({
     return false;
   }
 
-  const createdWindowId = await createNewWindowWithTransfer(snapshot, payload);
+  const createdWindowId = await createNewWindowWithTransfer(snapshot, {
+    ...payload,
+    sourceWindowId,
+  });
   if (!createdWindowId) {
     notify("Failed to open new window.");
     return false;

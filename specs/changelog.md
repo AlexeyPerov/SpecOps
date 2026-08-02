@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-02 16:24 MSK — Dedicated open-file ownership registry
+
+- Resolved P02-08-03 by moving cross-window file ownership out of the full session snapshot into a small, atomically written `open-files.json` registry with event-coherent in-memory reads.
+- Added atomic pre-open reservations, failed-open cleanup, cross-window tab-transfer handoff, and startup pruning of owners belonging to crashed windows.
+- Removed open-file registry work from ordinary session persistence and added regression coverage for contention, caching, stale-owner cleanup, transfer ownership, and avoiding `session.json` I/O during claims.
+
 ## 2026-08-02 15:52 MSK — Workspace interaction issue register
 
 - Added [`issues-02-08.md`](./issues-02-08.md), assigning stable IDs P02-08-01 through P02-08-10 to the hidden-file and workspace/file/tab lag findings.

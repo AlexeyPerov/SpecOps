@@ -105,7 +105,7 @@ export interface AppShellRuntimeOptions {
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceSession: (
     normalizedRoot: string,
-    options?: { skipOpencodeReconcile?: boolean },
+    options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
   onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;

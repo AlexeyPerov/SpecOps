@@ -34,6 +34,8 @@ const inFlightThreadHydrates = new Map<string, Promise<ChatThreadSnapshot | null
  * re-walk every session thread when the cache is current.
  */
 const loadedIndexSignatureByScope = new Map<string, string>();
+const deferredIndexValidationByScope = new Map<string, ReturnType<typeof setTimeout>>();
+const DEFERRED_INDEX_VALIDATION_MS = 750;
 
 function threadHydrateKey(scopeKey: string, sessionId: string): string {
   return `${scopeKey}\x00${sessionId}`;
@@ -69,6 +71,10 @@ export function resetSessionHydrationForTests(): void {
   hydrateGenerationByScope.clear();
   inFlightThreadHydrates.clear();
   loadedIndexSignatureByScope.clear();
+  for (const timer of deferredIndexValidationByScope.values()) {
+    clearTimeout(timer);
+  }
+  deferredIndexValidationByScope.clear();
 }
 
 export interface LoadWorkspaceSessionsOptions {
@@ -77,6 +83,8 @@ export interface LoadWorkspaceSessionsOptions {
    * (active / open / visible tabs). Remaining persisted sessions hydrate in background.
    */
   prioritySessionIds?: readonly string[];
+  /** Return an existing in-memory index immediately and validate it later. */
+  preferCachedIndex?: boolean;
 }
 
 function parseSessionCounterFromId(sessionId: string): number | null {
@@ -590,6 +598,33 @@ export function createSessionsSlice(deps: {
     ): Promise<void> {
       const loadStartedAt = nowMs();
       const generation = bumpHydrateGeneration(normalizedRootPath);
+      const existingCachedWorkspace = getSnapshot().workspaces[normalizedRootPath];
+      if (options?.preferCachedIndex && existingCachedWorkspace) {
+        syncSessionIdCounterFromWorkspace(existingCachedWorkspace);
+        if (!deferredIndexValidationByScope.has(normalizedRootPath)) {
+          const timer = setTimeout(() => {
+            deferredIndexValidationByScope.delete(normalizedRootPath);
+            void this.loadWorkspaceSessions(normalizedRootPath, {
+              prioritySessionIds: options.prioritySessionIds,
+            });
+          }, DEFERRED_INDEX_VALIDATION_MS);
+          deferredIndexValidationByScope.set(normalizedRootPath, timer);
+        }
+        void logPerfTiming("workspace sessions load complete", {
+          metric: "workspace.sessionLoad",
+          durationMs: elapsedMs(loadStartedAt),
+          workspaceRoot: normalizedRootPath,
+          sessionCount: existingCachedWorkspace.sessionIndex.length,
+          hydratedThreadCount: 0,
+          deferredThreadCount: 0,
+          indexDurationMs: 0,
+          threadsDurationMs: 0,
+          incremental: true,
+          cacheHit: true,
+          validationDeferred: true,
+        });
+        return;
+      }
       const indexStartedAt = nowMs();
       const index = await readWorkspaceSessionsIndexSnapshot(normalizedRootPath);
       const indexDurationMs = elapsedMs(indexStartedAt);

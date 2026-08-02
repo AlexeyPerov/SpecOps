@@ -216,12 +216,13 @@ architectural work).
 
 ## P02-08-08 — Workspace switching rereads chat-session metadata unnecessarily
 
-- **Status:** Open.
+- **Status:** Resolved on 2026-08-02.
 - **Area:** Workspace switching / chat session hydration.
 - **Impact:** **Medium.** Ordinary workspace navigation performs chat-session
   index I/O even when the selected destination is a file or view tab. The
   captured workspace restore reached 224 ms.
-- **Fix complexity:** **M.** External session changes still need discovery.
+- **Fix complexity:** **M.** Completed with cache-first re-entry and coalesced
+  deferred validation.
 - **Evidence:** Every new workspace scope invokes `restoreWorkspaceSession`,
   which calls `loadWorkspaceSessions`. Hydrated threads can be reused, but the
   persisted session index is still read on each re-entry.
@@ -230,10 +231,15 @@ architectural work).
   restore the cached index synchronously and defer validation until idle. Read
   immediately only when entering a session tab, when a watcher signals index
   changes, or when the user explicitly refreshes sessions.
+  Implemented by reusing the per-root chat-store workspace index immediately for
+  ordinary file/view re-entry. Validation is coalesced per root and deferred for
+  750 ms; session-tab entry continues to read immediately. The existing hydrate
+  generation prevents stale validation results from winning over newer loads.
 - **Acceptance criteria:** Re-entering a cached workspace on a file tab performs
   no synchronous chat-index read; opening a session tab still sees current
   metadata; externally added or removed sessions become visible after watcher
-  invalidation or explicit refresh.
+  invalidation or explicit refresh. Covered by cache-first restore and deferred
+  external-index update tests.
 
 ---
 

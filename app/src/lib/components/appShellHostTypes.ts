@@ -21,7 +21,7 @@ export interface AppShellHostApi {
   consumeOpenedPaths: () => string[];
   restoreWorkspaceSession: (
     workspaceRoot: string,
-    options?: { skipOpencodeReconcile?: boolean },
+    options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
   ) => Promise<void>;
   ensureChatHttpSessionTab: () => void | Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;

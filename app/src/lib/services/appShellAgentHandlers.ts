@@ -228,7 +228,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
 
   async function restoreWorkspaceSession(
     normalizedRoot: string,
-    options?: { skipOpencodeReconcile?: boolean },
+    options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
   ): Promise<void> {
     const isRestoreTargetActive = (): boolean =>
       appState.getWorkspaceRoot() === normalizedRoot;
@@ -249,7 +249,10 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     ];
     const restoreStartedAt = nowMs();
     const loadSessionsStartedAt = nowMs();
-    await chatStore.loadWorkspaceSessions(normalizedRoot, { prioritySessionIds });
+    await chatStore.loadWorkspaceSessions(normalizedRoot, {
+      prioritySessionIds,
+      ...(options?.preferCachedIndex ? { preferCachedIndex: true } : {}),
+    });
     if (!isRestoreTargetActive()) {
       return;
     }
@@ -287,6 +290,7 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
       loadSessionsDurationMs,
       prioritySessionCount: new Set(prioritySessionIds).size,
       skipOpencodeReconcile: Boolean(options?.skipOpencodeReconcile),
+      preferCachedIndex: Boolean(options?.preferCachedIndex),
       focusedSessionTab: Boolean(restored.shouldFocusSessionTab && restored.activeSessionId),
     });
 

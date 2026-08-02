@@ -489,6 +489,42 @@ describe("chatStore", () => {
     expect(chatStore.getMessages()).toEqual(threadA.messages);
   });
 
+  it("returns a cached index before deferred disk validation on workspace re-entry", async () => {
+    vi.useFakeTimers();
+    try {
+      readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+        version: 1,
+        sessions: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+      });
+      readSessionThreadFileSnapshotMock.mockResolvedValue(null);
+      chatStore.setActiveWorkspaceRoot("/work/cached-reentry");
+      await chatStore.loadWorkspaceSessions("/work/cached-reentry", { prioritySessionIds: [] });
+      expect(readWorkspaceSessionsIndexSnapshotMock).toHaveBeenCalledTimes(1);
+
+      readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+        version: 1,
+        sessions: [
+          { id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" },
+          { id: "agent-b", title: "B", lastUsedAt: "2026-05-25T00:00:01.000Z" },
+        ],
+      });
+      await chatStore.loadWorkspaceSessions("/work/cached-reentry", {
+        prioritySessionIds: [],
+        preferCachedIndex: true,
+      });
+
+      expect(readWorkspaceSessionsIndexSnapshotMock).toHaveBeenCalledTimes(1);
+      expect(chatStore.getSessionIndex().map((entry) => entry.id)).toEqual(["agent-a"]);
+
+      await vi.advanceTimersByTimeAsync(750);
+      expect(readWorkspaceSessionsIndexSnapshotMock).toHaveBeenCalledTimes(2);
+      expect(chatStore.getSessionIndex().map((entry) => entry.id)).toEqual(["agent-a", "agent-b"]);
+    } finally {
+      chatStore.reset();
+      vi.useRealTimers();
+    }
+  });
+
   it("loadWorkspaceSessions re-reads only missing threads when a new session appears", async () => {
     const threadA: ChatThreadSnapshot = {
       metadata: {

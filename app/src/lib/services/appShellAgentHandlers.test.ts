@@ -293,6 +293,31 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
     expect(chatStoreMock.clearSessionLink).not.toHaveBeenCalled();
   });
 
+  it("requests cache-first session loading for ordinary workspace re-entry", async () => {
+    chatStoreMock.getSessionIndex.mockReturnValue([]);
+    appStateMock.getActiveSession.mockReturnValue({
+      editorLayout: createSinglePaneLayout([], "tab-file"),
+      lastActiveWindowId: "main",
+      windowBounds: null,
+      lastActiveSessionId: null,
+    });
+    const handlers = createAppShellAgentHandlers({
+      getIsChatHttpActive: () => false,
+      getCurrentWindowId: () => "main",
+      notify: vi.fn(),
+    });
+
+    await handlers.restoreWorkspaceSession("/repo/ws-a", {
+      skipOpencodeReconcile: true,
+      preferCachedIndex: true,
+    });
+
+    expect(chatStoreMock.loadWorkspaceSessions).toHaveBeenCalledWith("/repo/ws-a", {
+      prioritySessionIds: [],
+      preferCachedIndex: true,
+    });
+  });
+
   it("hydrates thread messages from session.messages during restore (M1-T3)", async () => {
     chatStoreMock.getSessionIndex.mockReturnValue([
       makeEntry({ id: "agent-a", opencodeSessionId: "sess-a" }),

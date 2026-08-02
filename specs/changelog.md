@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-02 18:12 MSK — Cache-first workspace session metadata
+
+- Resolved P02-08-08 by restoring an existing per-workspace chat-session index from memory without synchronously reading its persistence file during ordinary file/view workspace re-entry.
+- Added coalesced 750 ms deferred index validation so external session additions/removals appear after the workspace is interactive; entering a session tab still performs immediate validation.
+- Added regression coverage for cache-first restore routing and deferred external index discovery.
+
 ## 2026-08-02 17:41 MSK — Bounded per-pane editor keep-alive
 
 - Resolved P02-08-07 by limiting each pane to four live text editors with least-recently-used eviction while retaining CSS-only switching among recent tabs.

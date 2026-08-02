@@ -1057,6 +1057,7 @@
   autoSuggest={$appSettings.autoSuggest}
   maxBinaryOpenAsTextBytes={$appSettings.externalFiles.maxBinaryOpenAsTextBytes}
   maxOpenWithoutConfirmBytes={$appSettings.externalFiles.maxOpenWithoutConfirmBytes}
+  contexts={$appContexts}
   {activeContextId}
   {session}
   {documents}

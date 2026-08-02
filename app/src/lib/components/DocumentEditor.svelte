@@ -57,8 +57,18 @@
     if (!documentId) {
       return;
     }
-    appState.setDocumentContent(documentId, nextContent);
-    onUntitledTitleRefresh?.(documentId);
+    appState.setDocumentContentForContext(contextId, documentId, nextContent);
+    if (appState.getSnapshot().contexts.activeContextId === contextId) {
+      onUntitledTitleRefresh?.(documentId);
+    }
+  }
+
+  function handleScrollTopChange(documentId: string, nextScrollTop: number): void {
+    if (appState.getSnapshot().contexts.activeContextId === contextId) {
+      onScrollTopChange(documentId, nextScrollTop);
+      return;
+    }
+    appState.setDocumentScrollTopForContext(contextId, documentId, nextScrollTop);
   }
 </script>
 
@@ -79,6 +89,6 @@
   {enabledSnippets}
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
-  {onScrollTopChange}
+  onScrollTopChange={handleScrollTopChange}
   {visible}
 />

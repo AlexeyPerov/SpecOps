@@ -433,6 +433,45 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
         }),
       );
     },
+    /** Context-aware editor update used by parked keep-alive controllers. */
+    setDocumentContentForContext(
+      contextId: ContextId,
+      documentId: string,
+      content: string,
+    ) {
+      update((state) =>
+        patchContextById(state, contextId, (ctx) => {
+          const previous = ctx.documents.find((documentState) => documentState.id === documentId);
+          const wasEmpty =
+            previous?.filePath === null &&
+            previous.content === "" &&
+            previous.savedContent === "";
+          const hasContent = content.length > 0;
+          let nextCtx: ContextSnapshot = {
+            ...ctx,
+            documents: ctx.documents.map((documentState) =>
+              documentState.id === documentId && documentState.contentKind === "text"
+                ? {
+                    ...documentState,
+                    content,
+                    isDirty: content !== documentState.savedContent,
+                  }
+                : documentState,
+            ),
+          };
+          if (wasEmpty && hasContent) {
+            const nextLayout = revealFileTabsInLayout(nextCtx.session.editorLayout, documentId);
+            if (nextLayout !== nextCtx.session.editorLayout) {
+              nextCtx = {
+                ...nextCtx,
+                session: { ...nextCtx.session, editorLayout: nextLayout },
+              };
+            }
+          }
+          return nextCtx;
+        }),
+      );
+    },
     refreshUntitledTitle(documentId: string) {
       update((state) =>
         patchActiveContext(state, (ctx) => {
@@ -629,6 +668,26 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
             return ctx;
           }
           return { ...ctx, documents };
+        }),
+      );
+    },
+    /** Context-aware scroll persistence for a recently parked editor host. */
+    setDocumentScrollTopForContext(
+      contextId: ContextId,
+      documentId: string,
+      scrollTop: number,
+    ) {
+      update((state) =>
+        patchContextById(state, contextId, (ctx) => {
+          let changed = false;
+          const documents = ctx.documents.map((documentState) => {
+            if (documentState.id !== documentId || documentState.scrollTop === scrollTop) {
+              return documentState;
+            }
+            changed = true;
+            return { ...documentState, scrollTop };
+          });
+          return changed ? { ...ctx, documents } : ctx;
         }),
       );
     },

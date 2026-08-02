@@ -155,14 +155,14 @@ architectural work).
 
 ## P02-08-06 — Context changes destroy visited editor keep-alive slots
 
-- **Status:** Open.
+- **Status:** Resolved on 2026-08-02.
 - **Area:** Workspace switching / CodeMirror lifecycle.
 - **Impact:** **High with many visited tabs and panes.** Switching context resets
   the visited-tab set, unmounts its file-editor slots, destroys their CodeMirror
   views, and constructs destination views. The current session includes a
   workspace with 18 tabs across 4 panes, making this lifecycle cost material.
-- **Fix complexity:** **L.** Editor identity, undo state, extensions, and memory
-  ownership are coupled to live controller instances.
+- **Fix complexity:** **L.** Completed with keyed context hosts and bounded LRU
+  ownership of live controller trees.
 - **Evidence:** `EditorPaneContent` resets `visitedEditorTabIds` whenever
   `contextId` changes. Removing the keep-alive entries destroys `EditorSurface`;
   controller teardown destroys the view and invalidates controller-bound cached
@@ -173,9 +173,17 @@ architectural work).
   keep the active context mounted, park a small number of recent contexts, and
   evict least-recently-used contexts after saving a controller-independent
   editor snapshot. Avoid keeping every workspace DOM tree live indefinitely.
+  Implemented as keyed context hosts retaining the active context plus two
+  recently used contexts. Parked hosts use `display: none` without destroying
+  their editor controllers; reactivation triggers editor measurement. Closed
+  contexts and LRU overflow unmount normally. Late content and scroll callbacks
+  are context-aware so parked controllers cannot update a different context
+  with overlapping document ids.
 - **Acceptance criteria:** Switching away and back to a recent workspace does
   not reconstruct its visible editor; selection, folds, undo history, and scroll
-  survive; total parked editor memory remains bounded.
+  survive because the keyed editor view remains mounted; total live context
+  trees are bounded to three. LRU ordering, close pruning, hard bounds, and
+  parked-context state routing have regression coverage.
 
 ## P02-08-07 — Visited text tabs retain an unbounded number of live editors
 

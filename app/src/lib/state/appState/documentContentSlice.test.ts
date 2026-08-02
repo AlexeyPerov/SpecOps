@@ -69,6 +69,33 @@ describe("appState documents and paths", () => {
     expect(tab).toMatchObject({ stripHidden: false });
   });
 
+  it("applies parked editor content and scroll updates to their owning context", () => {
+    const workspaceId = appState.addWorkspace("/tmp/parked-workspace")!;
+    appState.switchContext(workspaceId);
+    const workspaceDocumentId = appState.getActiveDocuments()[0]!.id;
+    appState.setDocumentContent(workspaceDocumentId, "workspace draft");
+    appState.switchContext("notepad");
+
+    appState.setDocumentContentForContext(
+      workspaceId,
+      workspaceDocumentId,
+      "late editor update",
+    );
+    appState.setDocumentScrollTopForContext(workspaceId, workspaceDocumentId, 240);
+
+    const snapshot = appState.getSnapshot();
+    const parkedDocument = snapshot.contexts.workspaces.find(
+      (workspace) => workspace.id === workspaceId,
+    )?.snapshot.documents[0];
+    expect(parkedDocument).toMatchObject({
+      content: "late editor update",
+      scrollTop: 240,
+      isDirty: true,
+    });
+    expect(snapshot.contexts.notepad.documents[0]?.content).toBe("");
+    expect(snapshot.contexts.notepad.documents[0]?.scrollTop).toBe(0);
+  });
+
   it("markDocumentSaved clears dirty state and updates metadata", () => {
     appState.setDocumentContent("doc-1", "draft");
     appState.markDocumentSaved("doc-1", "/tmp/saved.txt", "draft");
@@ -204,4 +231,3 @@ describe("appState external file fields", () => {
     expect(document?.markdownViewMode).toBe("preview");
   });
 });
-

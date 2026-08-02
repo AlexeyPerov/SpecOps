@@ -25,7 +25,10 @@
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
   import TitleBar from "./TitleBar.svelte";
+  import { untrack } from "svelte";
+  import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import type {
+    ContextSnapshot,
     SessionIndexEntry,
     AppCommandId,
     ContextId,
@@ -33,8 +36,12 @@
     SessionState,
     TabState,
     WorkspaceEntry,
+    WindowContextState,
   } from "../domain/contracts";
   import { appState } from "../state/appState";
+  import {
+    updateMountedEditorContexts,
+  } from "../editor/editorContextKeepAlive";
   import { clampFixedOverlayPosition } from "./clampFixedOverlayPosition";
   import "../styles/app-shell.css";
 
@@ -137,7 +144,9 @@
   }
 
   export interface AppShellEditorChromeProps {
-    /** Context-local editor identities may overlap, so context changes remount the grid. */
+    /** All context snapshots used by the bounded keyed editor-host registry. */
+    contexts: WindowContextState;
+    /** Active context; context-local editor identities are keyed by this id. */
     contextId: ContextId;
     session: SessionState;
     documents: DocumentState[];
@@ -440,7 +449,71 @@
   } = $props();
 
   const gitIntegrationEnabled = $derived($appState.settings.gitIntegration.enabled);
-  const activePaneId = $derived(editor.session.editorLayout.activePaneId);
+
+  type MountedEditorContext = {
+    contextId: ContextId;
+    snapshot: ContextSnapshot;
+    workspaceRootPath: string | null;
+    isChatHttp: boolean;
+  };
+
+  const editorContextsById = $derived.by(() => {
+    const entries = new Map<ContextId, MountedEditorContext>();
+    entries.set("notepad", {
+      contextId: "notepad",
+      snapshot: editor.contexts.notepad,
+      workspaceRootPath: null,
+      isChatHttp: false,
+    });
+    entries.set(CHAT_HTTP_CONTEXT_ID, {
+      contextId: CHAT_HTTP_CONTEXT_ID,
+      snapshot: editor.contexts.chatHttp,
+      workspaceRootPath: null,
+      isChatHttp: true,
+    });
+    if (editor.contexts.chatCloud) {
+      entries.set("chat-cloud", {
+        contextId: "chat-cloud",
+        snapshot: editor.contexts.chatCloud,
+        workspaceRootPath: null,
+        isChatHttp: false,
+      });
+    }
+    for (const workspace of editor.contexts.workspaces) {
+      entries.set(workspace.id, {
+        contextId: workspace.id,
+        snapshot: workspace.snapshot,
+        workspaceRootPath: workspace.rootPath,
+        isChatHttp: false,
+      });
+    }
+    return entries;
+  });
+
+  let mountedEditorContextIds = $state<ContextId[]>([]);
+  const desiredMountedEditorContextIds = $derived.by(() =>
+    updateMountedEditorContexts(
+      mountedEditorContextIds,
+      editor.contextId,
+      new Set(editorContextsById.keys()),
+    ),
+  );
+  $effect(() => {
+    const next = desiredMountedEditorContextIds;
+    const current = untrack(() => mountedEditorContextIds);
+    if (
+      next.length !== current.length ||
+      next.some((contextId, index) => contextId !== current[index])
+    ) {
+      mountedEditorContextIds = next;
+    }
+  });
+
+  const mountedEditorContexts = $derived.by(() =>
+    desiredMountedEditorContextIds
+      .map((contextId) => editorContextsById.get(contextId))
+      .filter((entry): entry is MountedEditorContext => entry !== undefined),
+  );
 
   // Local display coords so we can clamp the workspace menu after measure (M72)
   // without mutating the overlay-host menu state.
@@ -650,11 +723,14 @@
       />
     {/if}
     <section class="editor-shell" bind:this={editorShellEl}>
-      <EditorGridLayout
-        layout={editor.session.editorLayout}
-        documents={editor.documents}
-        contextId={editor.contextId}
-          useChatTerminology={editor.isChatHttpActive}
+      {#each mountedEditorContexts as contextHost (contextHost.contextId)}
+        {@const isActiveContext = contextHost.contextId === editor.contextId}
+        <div class="editor-context-host" hidden={!isActiveContext}>
+          <EditorGridLayout
+            layout={contextHost.snapshot.session.editorLayout}
+            documents={contextHost.snapshot.documents}
+            contextId={contextHost.contextId}
+            useChatTerminology={contextHost.isChatHttp}
           windowId={editor.currentWindowId}
           notify={editor.notify}
           onSelectTab={editor.onSelectTab}
@@ -668,12 +744,13 @@
           {#snippet renderPaneContent(paneId)}
             <EditorPaneContent
               {paneId}
-              isActivePane={paneId === activePaneId}
-              session={editor.session}
-              documents={editor.documents}
-              contextId={editor.contextId}
-              isChatHttpActive={editor.isChatHttpActive}
-              workspaceRootPath={editor.workspaceRootPath ?? null}
+              isContextActive={isActiveContext}
+              isActivePane={isActiveContext && paneId === contextHost.snapshot.session.editorLayout.activePaneId}
+              session={contextHost.snapshot.session}
+              documents={contextHost.snapshot.documents}
+              contextId={contextHost.contextId}
+              isChatHttpActive={contextHost.isChatHttp}
+              workspaceRootPath={contextHost.workspaceRootPath}
               workspaceManagerWorkspaces={editor.workspaceManager?.workspaces ?? []}
               workspaceManagerActiveContextId={editor.workspaceManager?.activeContextId ?? "notepad"}
               workspaceManagerHiddenRootPaths={editor.workspaceManager?.hiddenRootPaths ?? EMPTY_HIDDEN_ROOT_PATHS}
@@ -720,7 +797,9 @@
               notify={editor.notify}
             />
           {/snippet}
-      </EditorGridLayout>
+          </EditorGridLayout>
+        </div>
+      {/each}
     </section>
     {#if projectTree.workspaceRoot}
       <ProjectPanel

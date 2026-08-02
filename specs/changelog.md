@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-02 17:14 MSK — Bounded workspace editor keep-alive
+
+- Resolved P02-08-06 by rendering editor grids in keyed context hosts and retaining the active context plus two recently used contexts instead of replacing one grid's context props.
+- Parked context hosts remain mounted but hidden, preserving live editor selection, folds, undo history, and scroll; editors are remeasured when their context becomes visible again.
+- Added bounded LRU selection and closed-context pruning, plus context-aware content and scroll updates so delayed callbacks from parked controllers cannot mutate another workspace with overlapping ids.
+- Added regression coverage for the context-host bound, LRU revisits, closed-context pruning, and parked editor state routing.
+
 ## 2026-08-02 17:01 MSK — Deduplicated tab activation checks
 
 - Resolved P02-08-05 by replacing the single-document 600 ms cooldown with a bounded per-document freshness cache and a five-second watcher-backed window.

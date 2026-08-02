@@ -36,6 +36,7 @@
     SessionIndexEntry,
     SessionState,
     WorkspaceEntry,
+    WindowContextState,
   } from "../domain/contracts";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { createProjectTreeController } from "../services/projectTreeController";
@@ -134,6 +135,7 @@
     maxBinaryOpenAsTextBytes: number;
     maxOpenWithoutConfirmBytes: number;
 
+    contexts: WindowContextState;
     activeContextId: ContextId;
     session: SessionState;
     documents: DocumentState[];
@@ -227,6 +229,7 @@
     autoSuggest,
     maxBinaryOpenAsTextBytes,
     maxOpenWithoutConfirmBytes,
+    contexts,
     activeContextId,
     session,
     documents,
@@ -769,6 +772,7 @@
     notify,
   }}
   editor={{
+    contexts,
     contextId: activeContextId,
     session,
     documents,

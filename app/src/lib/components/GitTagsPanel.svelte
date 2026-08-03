@@ -8,13 +8,13 @@
     GitTagPartialDeleteError,
     isGitCommandCancelledError,
     pushTag,
-    queryRemotes,
     queryRemoteTags,
     queryTags,
     REMOTE_TAG_PROBE_TIMEOUT_MS,
     type GitRemote,
     type GitTagSummary,
   } from "../git/gitService";
+  import { loadRemotes } from "../git/versionControlRemotesCache";
   import { validateGitRefName } from "../git/gitRefName";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { logDiagnostic } from "../services/logging";
@@ -112,7 +112,12 @@
     selectedTag = null;
 
     try {
-      const [localTags, remoteRows] = await Promise.all([queryTags(root), queryRemotes(root)]);
+      const [localTags, remoteRows] = await Promise.all([
+        queryTags(root),
+        // P03-08-09: shared remotes cache — reuses the VC view's recent
+        // `git remote -v` result instead of running a second subprocess.
+        loadRemotes(root),
+      ]);
       if (signal?.aborted) {
         return;
       }
@@ -237,7 +242,7 @@
     let remoteRows = remotes;
     if (remoteRows.length === 0) {
       try {
-        remoteRows = await queryRemotes(repoRoot);
+        remoteRows = await loadRemotes(repoRoot);
       } catch (error) {
         actionError = reportGitError(error, { operation: "Load remotes", repoRoot, notify });
         return;
@@ -288,7 +293,7 @@
     let remoteRows = remotes;
     if (remoteRows.length === 0) {
       try {
-        remoteRows = await queryRemotes(repoRoot);
+        remoteRows = await loadRemotes(repoRoot);
       } catch {
         remoteRows = [];
       }

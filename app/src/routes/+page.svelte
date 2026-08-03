@@ -991,15 +991,21 @@
    * M13.5 — file-status refresh: git-backed workspaces use system git and
    * refresh on any editor tab; non-git workspaces still gate OpenCode
    * `file.status` on `isSessionTabActive`.
+   *
+   * P03-08-06 — deps trimmed to `activeWorkspaceRoot` + `isSessionTabActive`
+   * only. The effect previously also depended on `session.lastActiveSessionId`
+   * and `chatStore.getRuntimeState().isGenerating`, so it fired on every agent
+   * turn and every session change — re-running `git rev-parse` + `git status`
+   * (~200 ms) on each. Badge freshness now comes from the file watcher / VC
+   * mutation events (debounced in `scheduleDebouncedFileStatusRefresh`) plus a
+   * per-workspace TTL inside the tracker, not from re-reading the agent's
+   * lifecycle state.
    */
   let lastFileStatusWorkspace = $state<string | null>(null);
   $effect(() => {
     runtimeReady;
     activeWorkspaceRoot;
     isSessionTabActive;
-    session.lastActiveSessionId;
-    const isGenerating = chatStore.getRuntimeState().isGenerating;
-    void isGenerating;
 
     const root = activeWorkspaceRoot;
     if (lastFileStatusWorkspace && lastFileStatusWorkspace !== root) {

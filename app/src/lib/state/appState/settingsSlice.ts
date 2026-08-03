@@ -59,6 +59,7 @@ import {
 } from "../../services/chatHttpSettings";
 import {
   defaultGitIntegrationSettings,
+  isGitIntegrationEnabled,
   normalizeGitIntegrationSettings,
 } from "../../services/gitIntegrationSettings";
 import { drainGitCommands } from "../../git/gitRun";
@@ -168,9 +169,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
     setGitIntegrationEnabled(enabled: boolean) {
       let shouldDrain = false;
       update((state) => {
-        if (state.settings.gitIntegration.enabled && !enabled) {
-          shouldDrain = true;
-        }
+        const wasEnabled = isGitIntegrationEnabled(state.settings.gitIntegration);
         let next: AppDomainState = {
           ...state,
           settings: {
@@ -181,7 +180,9 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             }),
           },
         };
-        if (!enabled) {
+        const nowEnabled = isGitIntegrationEnabled(next.settings.gitIntegration);
+        if (wasEnabled && !nowEnabled) {
+          shouldDrain = true;
           next = closeAllViewTabsInState(next, "version-control");
         }
         return next;
@@ -193,13 +194,11 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
     updateGitIntegrationSettings(patch: Partial<GitIntegrationSettings>) {
       let shouldDrain = false;
       update((state) => {
+        const wasEnabled = isGitIntegrationEnabled(state.settings.gitIntegration);
         const nextSettings = normalizeGitIntegrationSettings({
           ...state.settings.gitIntegration,
           ...patch,
         });
-        if (state.settings.gitIntegration.enabled && !nextSettings.enabled) {
-          shouldDrain = true;
-        }
         let next: AppDomainState = {
           ...state,
           settings: {
@@ -207,7 +206,11 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             gitIntegration: nextSettings,
           },
         };
-        if (!nextSettings.enabled) {
+        const nowEnabled = isGitIntegrationEnabled(nextSettings);
+        if (wasEnabled && !nowEnabled) {
+          // P03-08-T1: covers both `enabled: false` and `scope: "off"` — either
+          // one disables git, so close any open VC tabs and drain in-flight work.
+          shouldDrain = true;
           next = closeAllViewTabsInState(next, "version-control");
         }
         return next;

@@ -29,6 +29,32 @@ function errorGitColumnCell(message: string): WorkspaceGitColumnCell {
 
 const GIT_COLUMN_REFRESH_DEBOUNCE_MS = 300;
 
+/**
+ * P03-08-07 — per-workspace result TTL. A fresh cell is reused without
+ * re-shelling-out to git, so re-mounting the Workspace Manager (or a quick
+ * list change) no longer fans out 2N blocking git processes for data that was
+ * just loaded. Mutations invalidate the entry via
+ * `invalidateWorkspaceGitColumnCell`.
+ */
+const WORKSPACE_GIT_COLUMN_TTL_MS = 60_000;
+
+interface CachedCell {
+  at: number;
+  cell: WorkspaceGitColumnCell;
+}
+
+const cellCacheByPath = new Map<string, CachedCell>();
+
+/** Drop the cached cell for one workspace (mutations + explicit invalidation). */
+export function invalidateWorkspaceGitColumnCell(workspaceRootPath: string): void {
+  cellCacheByPath.delete(workspaceRootPath);
+}
+
+/** Clear all cached cells (tests only). */
+export function resetWorkspaceGitColumnCacheForTests(): void {
+  cellCacheByPath.clear();
+}
+
 const inFlightByPath = new Map<string, Promise<WorkspaceGitColumnCell>>();
 const gitColumnRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -100,6 +126,16 @@ export async function loadWorkspaceGitColumnCell(
     return NEUTRAL_CELL;
   }
 
+  // P03-08-07: serve a fresh cached cell without re-shelling-out. The view
+  // re-runs its load effect on every `workspaces` array identity change, so
+  // without this gate each list churn fanned out a blocking git process per row.
+  if (!options?.force) {
+    const cached = cellCacheByPath.get(workspaceRootPath);
+    if (cached && Date.now() - cached.at < WORKSPACE_GIT_COLUMN_TTL_MS) {
+      return cached.cell;
+    }
+  }
+
   if (options?.force) {
     inFlightByPath.delete(workspaceRootPath);
   }
@@ -109,9 +145,16 @@ export async function loadWorkspaceGitColumnCell(
     return existing;
   }
 
-  const promise = loadWorkspaceGitColumnCellInternal(workspaceRootPath).finally(() => {
-    inFlightByPath.delete(workspaceRootPath);
-  });
+  const promise = loadWorkspaceGitColumnCellInternal(workspaceRootPath)
+    .then((cell) => {
+      // P03-08-07: cache successful / neutral / error cells so a re-mount within
+      // the TTL skips the git round-trip. Loading cells are not cached.
+      cellCacheByPath.set(workspaceRootPath, { at: Date.now(), cell });
+      return cell;
+    })
+    .finally(() => {
+      inFlightByPath.delete(workspaceRootPath);
+    });
   inFlightByPath.set(workspaceRootPath, promise);
   return promise;
 }
@@ -133,13 +176,14 @@ export async function refreshWorkspaceGitColumnCells(
   return new Map(entries);
 }
 
-/** Reset module in-flight state (tests only). */
+/** Reset module in-flight + cache state (tests only). */
 export function resetWorkspaceGitColumnQueueForTests(): void {
   inFlightByPath.clear();
   for (const timer of gitColumnRefreshTimers.values()) {
     clearTimeout(timer);
   }
   gitColumnRefreshTimers.clear();
+  cellCacheByPath.clear();
 }
 
 /** True when a VC mutation should invalidate the workspace git column for that root. */
@@ -158,6 +202,9 @@ export function subscribeWorkspaceGitColumnAutoRefresh(
     if (!shouldRefreshGitColumnForMutation(scope)) {
       return;
     }
+    // P03-08-07: a mutation invalidates the cached cell so the debounced
+    // refresh (which passes `force`) re-reads git instead of serving stale data.
+    invalidateWorkspaceGitColumnCell(workspaceRootPath);
 
     const existing = gitColumnRefreshTimers.get(workspaceRootPath);
     if (existing) {

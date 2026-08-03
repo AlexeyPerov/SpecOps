@@ -92,6 +92,7 @@ export type {
   AppThemeState,
   ChatHttpSettings,
   GitIntegrationSettings,
+  GitIntegrationScope,
   DebugProviderSettings,
   ExternalFilesSettings,
   FontSettings,

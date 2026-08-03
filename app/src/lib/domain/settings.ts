@@ -147,6 +147,21 @@ export interface ChatHttpSettings {
 }
 
 /**
+ * Where system-git version control integration is allowed to run.
+ *
+ * - `"always"`: git runs wherever enabled (VC view, background badges, etc.).
+ * - `"versionControlOnly"`: git runs only while a Version Control view tab is
+ *   active in some pane; background callers (project-tree badges, Workspace
+ *   Manager column, file-status tracker) skip git entirely. This is the
+ *   setting that makes tab/workspace switching produce zero git subprocesses.
+ * - `"off"`: behaves exactly like {@link GitIntegrationSettings.enabled}
+ *   `false` — no git subprocesses ever, VC UI hidden, drains in-flight work.
+ *   Kept as a distinct value (instead of reusing `enabled`) so the master
+ *   toggle and the scope can be controlled independently in the UI.
+ */
+export type GitIntegrationScope = "always" | "versionControlOnly" | "off";
+
+/**
  * Master and behavioral toggles for system-git version control integration.
  *
  * When {@link GitIntegrationSettings.enabled} is false, no git subprocesses
@@ -155,6 +170,12 @@ export interface ChatHttpSettings {
 export interface GitIntegrationSettings {
   /** Master switch — when false, no git subprocesses or VC UI. */
   enabled: boolean;
+  /**
+   * P03-08-T1 — where git may run. `"off"` is equivalent to `enabled: false`
+   * for all gating; `"versionControlOnly"` restricts git to runs initiated by
+   * the Version Control view.
+   */
+  scope: GitIntegrationScope;
   /** Autosave dirty editor buffers before VC mutations. */
   autosaveBeforeOperations: boolean;
   /** Use system git for project-tree M/A/D badges. */

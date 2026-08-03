@@ -74,12 +74,14 @@ vi.mock("../services/logging", () => ({
 
 vi.mock("./gitIntegrationGating", () => ({
   isGitIntegrationEnabledInApp: vi.fn(() => true),
+  shouldRunGitForCallerScope: vi.fn(() => true),
 }));
 
-import { isGitIntegrationEnabledInApp } from "./gitIntegrationGating";
+import { isGitIntegrationEnabledInApp, shouldRunGitForCallerScope } from "./gitIntegrationGating";
 
 const invokeMock = vi.mocked(invoke);
 const isGitIntegrationEnabledInAppMock = vi.mocked(isGitIntegrationEnabledInApp);
+const shouldRunGitForCallerScopeMock = vi.mocked(shouldRunGitForCallerScope);
 
 const REMOTE_GIT_ENV = {
   GIT_TERMINAL_PROMPT: "0",
@@ -133,12 +135,13 @@ describe("runGit", () => {
     invokeMock.mockReset();
     resetGitCommandQueueForTests();
     isGitIntegrationEnabledInAppMock.mockReturnValue(true);
+    shouldRunGitForCallerScopeMock.mockReturnValue(true);
   });
 
   it("returns a disabled response without invoking Tauri when git integration is off", async () => {
     isGitIntegrationEnabledInAppMock.mockReturnValue(false);
 
-    const result = await runGit("/tmp/repo", ["status"]);
+    const result = await runGit("/tmp/repo", ["status"], "versionControl");
 
     expect(invokeMock).not.toHaveBeenCalled();
     expect(result.exitCode).toBe(1);
@@ -154,7 +157,7 @@ describe("runGit", () => {
     };
     invokeMock.mockResolvedValue(response);
 
-    const result = await runGit("/tmp/repo", ["status"]);
+    const result = await runGit("/tmp/repo", ["status"], "versionControl");
 
     expectLocalGitInvoke("/tmp/repo", ["status"]);
     expect(result).toEqual(response);
@@ -168,7 +171,7 @@ describe("runGit", () => {
       durationMs: 1,
     });
 
-    await runGit("/tmp/repo", ["status"], { GIT_TERMINAL_PROMPT: "0" });
+    await runGit("/tmp/repo", ["status"], "versionControl", { GIT_TERMINAL_PROMPT: "0" });
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
@@ -180,7 +183,7 @@ describe("runGit", () => {
   it("maps Tauri validation errors to typed GitInvalidPathError", async () => {
     invokeMock.mockRejectedValue("repo_root must be an absolute path");
 
-    await expect(runGit("relative/path", ["status"])).rejects.toSatisfy((error) => {
+    await expect(runGit("relative/path", ["status"], "versionControl")).rejects.toSatisfy((error) => {
       return (
         isGitError(error) &&
         error.kind === "invalidPath" &&
@@ -1901,7 +1904,7 @@ describe("git command logging", () => {
       durationMs: 3,
     });
 
-    await runGit("/tmp/repo", ["status"]);
+    await runGit("/tmp/repo", ["status"], "versionControl");
 
     expect(logDiagnostic).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -122,7 +122,7 @@
     }
 
     try {
-      const status = await queryWorkingTreeStatus(root);
+      const status = await queryWorkingTreeStatus(root, "versionControl");
       if (signal?.aborted) {
         return;
       }

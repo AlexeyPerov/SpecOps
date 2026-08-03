@@ -1,5 +1,6 @@
 import { parseStashList, parseTagList, GIT_STASH_LIST_FORMAT } from "./gitParse";
 import { runGit, runRemoteGit } from "./gitRun";
+import type { GitCallScope } from "./gitIntegrationGating";
 import { validateGitRefName } from "./gitRefName";
 import {
   assertGitCommandCompleted,
@@ -18,8 +19,11 @@ import {
 import { validateRemoteName } from "./gitRemotes";
 
 /** Query local tags via `git tag -l`. Returns tag names sorted alphabetically. */
-export async function queryTags(repoRoot: string): Promise<string[]> {
-  const response = await runGit(repoRoot, ["tag", "-l"]);
+export async function queryTags(
+  repoRoot: string,
+  scope: GitCallScope = "versionControl",
+): Promise<string[]> {
+  const response = await runGit(repoRoot, ["tag", "-l"], scope);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -28,26 +32,34 @@ export async function queryTags(repoRoot: string): Promise<string[]> {
 }
 
 /** Create a lightweight tag at HEAD (`git tag <name>`). */
-export async function createTag(repoRoot: string, name: string): Promise<void> {
+export async function createTag(
+  repoRoot: string,
+  name: string,
+  scope: GitCallScope = "versionControl",
+): Promise<void> {
   const validation = validateGitRefName(name);
   if (!validation.ok) {
     throw new GitRefValidationError(validation.message);
   }
 
-  const response = await runGit(repoRoot, ["tag", name.trim()]);
+  const response = await runGit(repoRoot, ["tag", name.trim()], scope);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
 }
 
 /** Delete a local tag (`git tag -d <name>`). Does not delete remote tags. */
-export async function deleteLocalTag(repoRoot: string, name: string): Promise<void> {
+export async function deleteLocalTag(
+  repoRoot: string,
+  name: string,
+  scope: GitCallScope = "versionControl",
+): Promise<void> {
   const validation = validateGitRefName(name);
   if (!validation.ok) {
     throw new GitRefValidationError(validation.message);
   }
 
-  const response = await runGit(repoRoot, ["tag", "-d", name.trim()]);
+  const response = await runGit(repoRoot, ["tag", "-d", name.trim()], scope);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -62,6 +74,7 @@ export async function pushTag(
   remoteName: string,
   tagName: string,
   options?: CancellableGitOptions,
+  scope: GitCallScope = "versionControl",
 ): Promise<void> {
   validateRemoteName(remoteName);
 
@@ -74,6 +87,7 @@ export async function pushTag(
   const response = await runRemoteGit(
     repoRoot,
     ["push", remoteName.trim(), `refs/tags/${trimmedTag}`],
+    scope,
     { ...options, operation: "tagPush" },
   );
   assertGitCommandCompleted(response);
@@ -90,6 +104,7 @@ export async function deleteRemoteTag(
   remoteName: string,
   tagName: string,
   options?: CancellableGitOptions,
+  scope: GitCallScope = "versionControl",
 ): Promise<void> {
   validateRemoteName(remoteName);
 
@@ -102,6 +117,7 @@ export async function deleteRemoteTag(
   const response = await runRemoteGit(
     repoRoot,
     ["push", "--delete", remoteName.trim(), `refs/tags/${trimmedTag}`],
+    scope,
     { ...options, operation: "tagDelete" },
   );
   assertGitCommandCompleted(response);
@@ -123,8 +139,9 @@ export async function deleteTag(
   repoRoot: string,
   tagName: string,
   options?: DeleteTagOptions,
+  scope: GitCallScope = "versionControl",
 ): Promise<void> {
-  await deleteLocalTag(repoRoot, tagName);
+  await deleteLocalTag(repoRoot, tagName, scope);
 
   const remoteNames = options?.remoteNames?.map((name) => name.trim()).filter(Boolean) ?? [];
   if (remoteNames.length === 0) {
@@ -134,7 +151,7 @@ export async function deleteTag(
   const failedRemotes: Array<{ remoteName: string; message: string }> = [];
   for (const remoteName of remoteNames) {
     try {
-      await deleteRemoteTag(repoRoot, remoteName, tagName, options);
+      await deleteRemoteTag(repoRoot, remoteName, tagName, options, scope);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failedRemotes.push({ remoteName, message });
@@ -191,6 +208,7 @@ export async function createStash(
   repoRoot: string,
   message?: string,
   includeUntracked = true,
+  scope: GitCallScope = "versionControl",
 ): Promise<string> {
   const args = ["stash", "push"];
   if (includeUntracked) {
@@ -201,7 +219,7 @@ export async function createStash(
     args.push("-m", trimmedMessage);
   }
 
-  const response = await runGit(repoRoot, args);
+  const response = await runGit(repoRoot, args, scope);
   if (response.exitCode !== 0) {
     if (isStashNothingToSaveResponse(response)) {
       throw new GitStashNothingToSaveError();
@@ -209,7 +227,7 @@ export async function createStash(
     throw createGitCommandError(response);
   }
 
-  const refResponse = await runGit(repoRoot, ["rev-parse", "--verify", "stash@{0}"]);
+  const refResponse = await runGit(repoRoot, ["rev-parse", "--verify", "stash@{0}"], scope);
   if (refResponse.exitCode !== 0) {
     throw createGitCommandError(refResponse);
   }
@@ -227,14 +245,21 @@ export async function createStash(
 }
 
 /** List stashes via structured `git stash list -z --format=…` (newest first). */
-export async function queryStashes(repoRoot: string): Promise<GitStashSummary[]> {
-  const response = await runGit(repoRoot, [
-    "stash",
-    "list",
-    "-z",
-    "--no-show-signature",
-    `--format=${GIT_STASH_LIST_FORMAT}`,
-  ]);
+export async function queryStashes(
+  repoRoot: string,
+  scope: GitCallScope = "versionControl",
+): Promise<GitStashSummary[]> {
+  const response = await runGit(
+    repoRoot,
+    [
+      "stash",
+      "list",
+      "-z",
+      "--no-show-signature",
+      `--format=${GIT_STASH_LIST_FORMAT}`,
+    ],
+    scope,
+  );
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -257,6 +282,7 @@ export async function applyStash(
   repoRoot: string,
   stashRef: string,
   pop = false,
+  scope: GitCallScope = "versionControl",
 ): Promise<void> {
   const trimmedRef = stashRef.trim();
   if (!trimmedRef) {
@@ -267,14 +293,12 @@ export async function applyStash(
     // Resolve the SHA to a positional `stash@{n}` immediately before popping —
     // the index can shift between the original `createStash` and now (another
     // stash created, a concurrent pop), so do not trust a captured index.
-    const resolved = await resolveStashIndexForRef(repoRoot, trimmedRef);
-    const response = await runGit(repoRoot, [
-      "stash",
-      "pop",
-      "-q",
-      "--index",
-      resolved,
-    ]);
+    const resolved = await resolveStashIndexForRef(repoRoot, trimmedRef, scope);
+    const response = await runGit(
+      repoRoot,
+      ["stash", "pop", "-q", "--index", resolved],
+      scope,
+    );
     if (response.exitCode !== 0) {
       const stderr = response.stderr.trim();
       if (isStashNotFoundResponse(stderr)) {
@@ -288,7 +312,7 @@ export async function applyStash(
     return;
   }
 
-  const response = await runGit(repoRoot, ["stash", "apply", "-q", trimmedRef]);
+  const response = await runGit(repoRoot, ["stash", "apply", "-q", trimmedRef], scope);
   if (response.exitCode !== 0) {
     const stderr = response.stderr.trim();
     if (isStashNotFoundResponse(stderr)) {
@@ -311,18 +335,18 @@ export async function applyStash(
 async function resolveStashIndexForRef(
   repoRoot: string,
   stashRef: string,
+  scope: GitCallScope = "versionControl",
 ): Promise<string> {
   // A positional ref (`stash@{n}`) is already acceptable to `pop`.
   if (stashRef.startsWith("stash@{") || stashRef.startsWith("refs/stash")) {
     return stashRef;
   }
 
-  const response = await runGit(repoRoot, [
-    "stash",
-    "list",
-    "-z",
-    "--format=%H",
-  ]);
+  const response = await runGit(
+    repoRoot,
+    ["stash", "list", "-z", "--format=%H"],
+    scope,
+  );
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -339,13 +363,17 @@ async function resolveStashIndexForRef(
 }
 
 /** Drop a stash ref (`git stash drop`). Missing refs map to {@link GitStashNotFoundError}. */
-export async function dropStash(repoRoot: string, stashRef: string): Promise<void> {
+export async function dropStash(
+  repoRoot: string,
+  stashRef: string,
+  scope: GitCallScope = "versionControl",
+): Promise<void> {
   const trimmedRef = stashRef.trim();
   if (!trimmedRef) {
     throw new GitStashNotFoundError(stashRef, "Stash ref cannot be empty.");
   }
 
-  const response = await runGit(repoRoot, ["stash", "drop", "-q", trimmedRef]);
+  const response = await runGit(repoRoot, ["stash", "drop", "-q", trimmedRef], scope);
   if (response.exitCode !== 0) {
     const stderr = response.stderr.trim();
     if (isStashNotFoundResponse(stderr)) {

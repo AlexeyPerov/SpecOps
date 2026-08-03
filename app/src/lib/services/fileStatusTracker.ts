@@ -44,6 +44,15 @@ const emptyState: FileStatusTrackerState = {
 
 const FILE_STATUS_DEBOUNCE_MS = 150;
 
+/**
+ * P03-08-06 — per-workspace result TTL. A warm entry fresher than this skips
+ * the git round-trip entirely, so A→B→A workspace switching (and repeated tab
+ * activations) no longer re-shell-out to `git rev-parse` + `git status` while
+ * the snapshot is still current. Mutation-driven refreshes pass `force` to
+ * bypass the TTL so the tree reflects the change promptly.
+ */
+const FILE_STATUS_TTL_MS = 75_000;
+
 interface FileStatusEntry {
   value: FileStatusTrackerState;
   readable: Readable<FileStatusTrackerState>;
@@ -132,7 +141,9 @@ export function scheduleDebouncedFileStatusRefresh(workspaceRootPath: string): v
     workspaceRootPath,
     setTimeout(() => {
       debounceTimers.delete(workspaceRootPath);
-      void refreshFileStatuses({ workspaceRootPath });
+      // Mutations invalidate the TTL: the user staged/committed/checked out, so
+      // the cached snapshot is now stale and must be re-read.
+      void refreshFileStatuses({ workspaceRootPath, force: true });
     }, FILE_STATUS_DEBOUNCE_MS),
   );
 }
@@ -184,10 +195,13 @@ async function fetchFileStatuses(input: {
   allowOpencode?: boolean;
 }): Promise<FileStatusTrackerState> {
   if (!shouldLoadProjectTreeGitBadges()) {
-    if (input.allowOpencode === false) {
-      return copyEmptyState();
-    }
-    return fetchOpencodeFileStatuses(input.workspaceRootPath);
+    // P03-08-T1: badges are off — either the user disabled
+    // `showProjectTreeBadges`, or git is scoped to Version Control only / off.
+    // Previously this silently fell back to an OpenCode `file.status` HTTP
+    // call, so "off" wasn't really off. Return the empty state instead; the
+    // OpenCode fallback below only runs when badges are enabled *and* the
+    // workspace turns out not to be a git repository.
+    return copyEmptyState();
   }
 
   const gitState = await fetchGitFileStatuses(input.workspaceRootPath);
@@ -225,9 +239,26 @@ export function resetFileStatusTrackerForTests(): void {
 export async function refreshFileStatuses(input: {
   workspaceRootPath: string;
   allowOpencode?: boolean;
+  /** Bypass the TTL cache (used by mutation-driven refreshes). */
+  force?: boolean;
 }): Promise<FileStatusTrackerState> {
   ensureMutationRefreshHooks();
   const { workspaceRootPath } = input;
+
+  // P03-08-06: serve a warm, fresh snapshot without re-shelling-out to git.
+  // The page effect fires on every tab/workspace switch; without this gate each
+  // activation paid ~200 ms of git for data that was already current.
+  if (!input.force) {
+    const snapshot = getFileStatusSnapshot(workspaceRootPath);
+    if (
+      snapshot.status === "loaded" &&
+      snapshot.loadedAt &&
+      Date.now() - new Date(snapshot.loadedAt).getTime() < FILE_STATUS_TTL_MS
+    ) {
+      return snapshot;
+    }
+  }
+
   const existing = inflight.get(workspaceRootPath);
   if (existing) {
     // A refresh is already in flight. It will resolve against a snapshot
@@ -276,9 +307,11 @@ export async function refreshFileStatuses(input: {
       // snapshot we just wrote is stale relative to that request. Re-fetch
       // once so the latest state lands. The follow-up call clears the flag
       // before going async, and any further concurrent request re-sets it.
+      // The follow-up bypasses the TTL (`force`) because a newer request
+      // explicitly invalidated the snapshot we just wrote.
       if (pendingFollowUp.has(workspaceRootPath)) {
         pendingFollowUp.delete(workspaceRootPath);
-        void refreshFileStatuses(input);
+        void refreshFileStatuses({ ...input, force: true });
       }
     }
   })();

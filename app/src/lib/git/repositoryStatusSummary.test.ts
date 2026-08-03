@@ -50,7 +50,7 @@ describe("queryRepositoryStatusSummary", () => {
     });
 
     expect(runGitMock).toHaveBeenCalledTimes(1);
-    expect(runGitMock).toHaveBeenCalledWith("/tmp/repo", ["status", "-sb"]);
+    expect(runGitMock).toHaveBeenCalledWith("/tmp/repo", ["status", "-sb"], "background");
   });
 
   it("uses zero counts when upstream exists without ahead/behind bracket", async () => {
@@ -80,8 +80,13 @@ describe("queryRepositoryStatusSummary", () => {
       isUnborn: false,
     });
 
-    expect(runGitMock).toHaveBeenNthCalledWith(1, "/tmp/repo", ["status", "-sb"]);
-    expect(runGitMock).toHaveBeenNthCalledWith(2, "/tmp/repo", ["rev-parse", "--short", "HEAD"]);
+    expect(runGitMock).toHaveBeenNthCalledWith(1, "/tmp/repo", ["status", "-sb"], "background");
+    expect(runGitMock).toHaveBeenNthCalledWith(
+      2,
+      "/tmp/repo",
+      ["rev-parse", "--short", "HEAD"],
+      "background",
+    );
   });
 
   it("omits ahead/behind when upstream is gone", async () => {
@@ -119,6 +124,6 @@ describe("queryRepositoryStatusSummary", () => {
     // No detached-HEAD rev-parse follow-up for an unborn repo (it would exit
     // 128 too).
     expect(runGitMock).toHaveBeenCalledTimes(1);
-    expect(runGitMock).toHaveBeenCalledWith("/tmp/repo", ["status", "-sb"]);
+    expect(runGitMock).toHaveBeenCalledWith("/tmp/repo", ["status", "-sb"], "background");
   });
 });

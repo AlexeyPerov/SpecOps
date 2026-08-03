@@ -38,7 +38,7 @@ describe("runGit index.lock retry", () => {
         durationMs: 2,
       });
 
-    const response = await runGit("/tmp/repo", ["status"]);
+    const response = await runGit("/tmp/repo", ["status"], "versionControl");
 
     expect(response.exitCode).toBe(0);
     expect(invokeMock).toHaveBeenCalledTimes(3);

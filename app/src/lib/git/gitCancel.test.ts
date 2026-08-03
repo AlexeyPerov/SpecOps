@@ -152,7 +152,7 @@ describe("cancellable remote operations", () => {
       durationMs: 1,
     });
 
-    await runGit("/tmp/repo", ["status"], undefined, { commandId: "status-1" });
+    await runGit("/tmp/repo", ["status"], "versionControl", undefined, { commandId: "status-1" });
 
     expect(invokeMock).toHaveBeenCalledWith(
       "run_git",

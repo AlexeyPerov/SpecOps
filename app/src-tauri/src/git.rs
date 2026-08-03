@@ -989,8 +989,80 @@ fn validate_git_args(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// Git subcommands that mutate the repository (and thus may hold `.git/index.lock`).
+///
+/// P03-08-10(d): the inverse of this list marks read-only commands, which get
+/// `GIT_OPTIONAL_LOCKS=0` so a `git status` never contends with a concurrent
+/// writer over the index lock. Mirrors the frontend `WRITE_GIT_SUBCOMMANDS`
+/// classification; `branch`/`tag`/`config`/`stash` listing forms stay reads.
+const WRITE_GIT_SUBCOMMANDS: &[&str] = &[
+    "add",
+    "commit",
+    "restore",
+    "checkout",
+    "stash",
+    "fetch",
+    "pull",
+    "push",
+    "tag",
+    "branch",
+    "init",
+    "config",
+];
+
+/// True when the git argv is a read-only command that will not mutate the index.
+///
+/// Used to set `GIT_OPTIONAL_LOCKS=0` (P03-08-10) so read-only commands skip the
+/// optional index lock and cannot block — or be blocked by — a concurrent writer.
+/// Conservative: anything that parses as a write subcommand (per
+/// [`WRITE_GIT_SUBCOMMANDS`], modulo the listing-only exceptions) counts as a
+/// write, so a misclassified command stays safe by taking the lock.
+fn is_read_only_git_args(args: &[String]) -> bool {
+    let Some(subcommand) = args.first() else {
+        return true;
+    };
+    if !WRITE_GIT_SUBCOMMANDS
+        .iter()
+        .any(|write_sub| *write_sub == subcommand.as_str())
+    {
+        return true;
+    }
+    let rest = &args[1..];
+    match subcommand.as_str() {
+        // Listing forms stay reads (mirror the frontend `isWriteGitCommand`).
+        "branch" | "tag" => {
+            rest.is_empty()
+                || rest
+                    .iter()
+                    .any(|arg| matches!(arg.as_str(), "-l" | "--list" | "-v" | "-vv"))
+        }
+        "config" => {
+            rest.iter().any(|arg| matches!(arg.as_str(), "--get" | "--get-all"))
+                || rest.iter().filter(|arg| !arg.starts_with('-')).count() < 2
+        }
+        "stash" => matches!(rest.first().map(String::as_str), Some("list") | None),
+        _ => false,
+    }
+}
+
 fn string_exceeds_output_limit(value: &str) -> bool {
     value.len() > MAX_GIT_OUTPUT_BYTES
+}
+
+/// P03-08-10(d): assemble the final env map for a git subprocess.
+///
+/// Adds `GIT_OPTIONAL_LOCKS=0` for read-only commands so they skip the optional
+/// index lock and cannot block — or be blocked by — a concurrent writer. The
+/// base map is the already-sanitized caller/askpass env. Extracted as a pure
+/// function so the env construction is unit-testable without spawning git.
+fn build_effective_git_env(
+    mut base_env: HashMap<String, String>,
+    is_read_only: bool,
+) -> HashMap<String, String> {
+    if is_read_only {
+        base_env.insert("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string());
+    }
+    base_env
 }
 
 /// Truncate `value` to at most `max_bytes` without splitting a multi-byte UTF-8
@@ -1382,10 +1454,21 @@ pub fn execute_git_with_full_options(
 
     // Sanitize once, here. The askpass branch already merged the caller's env through
     // `merge_env_maps`; the plain branch has raw caller env that still needs filtering.
-    let effective_env: HashMap<String, String> = match askpass_session_id.as_ref() {
+    let base_env: HashMap<String, String> = match askpass_session_id.as_ref() {
         Some((_, env)) => env.clone(),
         None => sanitize_git_env(options.env),
     };
+
+    // P03-08-10(d): read-only commands (`status`, `diff`, `log`, `show`, …) never
+    // need to mutate the index, but git still takes `.git/index.lock` for some
+    // optional refreshes (`GIT_OPTIONAL_LOCKS` defaults to 1). Under contention
+    // with a concurrent writer (the app's own `add`/`commit`, an external tool,
+    // or the sidecar) a `git status` could block on the lock and fight the writer.
+    // `GIT_OPTIONAL_LOCKS=0` makes read-only commands skip those optional locks
+    // entirely. The non-registered path is the read-only path (write commands are
+    // registered above); gate the env on the same condition.
+    let is_read_only = normalized_command_id.is_none() || is_read_only_git_args(args);
+    let effective_env = build_effective_git_env(base_env, is_read_only);
 
     if let Some(id) = normalized_command_id.as_deref() {
         let mut command = build_git_command(repo_root, args, &effective_env);
@@ -2558,6 +2641,76 @@ mod tests {
                 "args should be allowed: {args:?}"
             );
         }
+    }
+
+    #[test]
+    fn is_read_only_git_args_classifies_reads_and_writes() {
+        // P03-08-10(d): read-only commands get GIT_OPTIONAL_LOCKS=0.
+        let read_only: Vec<Vec<String>> = vec![
+            vec!["status".into()],
+            vec!["diff".into()],
+            vec!["log".into()],
+            vec!["show".into()],
+            vec!["rev-parse".into(), "--show-toplevel".into()],
+            vec!["rev-list".into()],
+            vec!["ls-remote".into()],
+            vec!["remote".into(), "-v".into()],
+            // Listing forms of subcommands that can also mutate.
+            vec!["branch".into()],
+            vec!["branch".into(), "-vv".into()],
+            vec!["tag".into(), "-l".into()],
+            vec!["config".into(), "--get".into(), "user.name".into()],
+            vec!["stash".into(), "list".into()],
+        ];
+        for args in read_only {
+            assert!(
+                is_read_only_git_args(&args),
+                "expected read-only: {args:?}"
+            );
+        }
+
+        let writes: Vec<Vec<String>> = vec![
+            vec!["add".into(), ".".into()],
+            vec!["commit".into(), "-m".into(), "x".into()],
+            vec!["checkout".into(), "main".into()],
+            vec!["stash".into(), "push".into()],
+            vec!["fetch".into()],
+            vec!["pull".into()],
+            vec!["push".into()],
+            vec!["tag".into(), "v1.0".into()],
+            vec!["branch".into(), "feature".into()],
+            vec!["config".into(), "user.name".into(), "X".into()],
+            vec!["init".into()],
+            vec!["restore".into(), "--staged".into(), "a.txt".into()],
+        ];
+        for args in writes {
+            assert!(
+                !is_read_only_git_args(&args),
+                "expected write (not read-only): {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn build_effective_git_env_sets_optional_locks_for_read_only() {
+        // P03-08-10(d): read-only commands must carry GIT_OPTIONAL_LOCKS=0 so
+        // they skip the optional index lock and never block a concurrent writer.
+        let base: HashMap<String, String> =
+            [("GIT_TERMINAL_PROMPT".to_string(), "0".to_string())]
+                .into_iter()
+                .collect();
+        let read_only_env = build_effective_git_env(base.clone(), true);
+        assert_eq!(read_only_env.get("GIT_OPTIONAL_LOCKS").map(String::as_str), Some("0"));
+        // The base env is preserved.
+        assert_eq!(read_only_env.get("GIT_TERMINAL_PROMPT").map(String::as_str), Some("0"));
+
+        let write_env = build_effective_git_env(base, false);
+        // Write commands keep the default (no override) so they can take the
+        // index lock they need.
+        assert!(
+            write_env.get("GIT_OPTIONAL_LOCKS").is_none(),
+            "write commands must not force GIT_OPTIONAL_LOCKS=0"
+        );
     }
 
     #[test]

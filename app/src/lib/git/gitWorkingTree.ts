@@ -13,6 +13,7 @@ import {
   logGitCommandSummary,
   runGit,
 } from "./gitRun";
+import type { GitCallScope } from "./gitIntegrationGating";
 import {
   assertGitCommandCompleted,
   GitCommitFileDiffNotFoundError,
@@ -133,8 +134,11 @@ function parseWorkingTreeFileDiffPatch(
 /**
  * Query staged and unstaged working-tree files via `git status --porcelain=v2 -z`.
  */
-export async function queryWorkingTreeStatus(repoRoot: string): Promise<WorkingTreeStatus> {
-  const response = await runGit(repoRoot, [...WORKING_TREE_STATUS_ARGS]);
+export async function queryWorkingTreeStatus(
+  repoRoot: string,
+  scope: GitCallScope = "background",
+): Promise<WorkingTreeStatus> {
+  const response = await runGit(repoRoot, [...WORKING_TREE_STATUS_ARGS], scope);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -143,8 +147,11 @@ export async function queryWorkingTreeStatus(repoRoot: string): Promise<WorkingT
 }
 
 /** Returns true when porcelain status has any entries (dirty working tree). */
-export async function isWorkingTreeDirty(repoRoot: string): Promise<boolean> {
-  const response = await runGit(repoRoot, [...WORKING_TREE_STATUS_ARGS]);
+export async function isWorkingTreeDirty(
+  repoRoot: string,
+  scope: GitCallScope = "background",
+): Promise<boolean> {
+  const response = await runGit(repoRoot, [...WORKING_TREE_STATUS_ARGS], scope);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -153,12 +160,16 @@ export async function isWorkingTreeDirty(repoRoot: string): Promise<boolean> {
 }
 
 /** Stage selected paths (`git add -- …`). */
-export async function stagePaths(repoRoot: string, paths: string[]): Promise<void> {
+export async function stagePaths(
+  repoRoot: string,
+  paths: string[],
+  scope: GitCallScope = "versionControl",
+): Promise<void> {
   if (paths.length === 0) {
     return;
   }
 
-  const response = await runGit(repoRoot, ["add", "--", ...asLiteralPathspecs(paths)]);
+  const response = await runGit(repoRoot, ["add", "--", ...asLiteralPathspecs(paths)], scope);
   assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
@@ -166,8 +177,11 @@ export async function stagePaths(repoRoot: string, paths: string[]): Promise<voi
 }
 
 /** Stage all unstaged changes (`git add -A`). */
-export async function stageAll(repoRoot: string): Promise<void> {
-  const response = await runGit(repoRoot, ["add", "-A"]);
+export async function stageAll(
+  repoRoot: string,
+  scope: GitCallScope = "versionControl",
+): Promise<void> {
+  const response = await runGit(repoRoot, ["add", "-A"], scope);
   assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
@@ -175,17 +189,20 @@ export async function stageAll(repoRoot: string): Promise<void> {
 }
 
 /** Unstage selected paths (`git restore --staged -- …`). */
-export async function unstagePaths(repoRoot: string, paths: string[]): Promise<void> {
+export async function unstagePaths(
+  repoRoot: string,
+  paths: string[],
+  scope: GitCallScope = "versionControl",
+): Promise<void> {
   if (paths.length === 0) {
     return;
   }
 
-  const response = await runGit(repoRoot, [
-    "restore",
-    "--staged",
-    "--",
-    ...asLiteralPathspecs(paths),
-  ]);
+  const response = await runGit(
+    repoRoot,
+    ["restore", "--staged", "--", ...asLiteralPathspecs(paths)],
+    scope,
+  );
   assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
@@ -204,35 +221,44 @@ export async function queryWorkingTreeFileDiff(
   repoRoot: string,
   path: string,
   source: WorkingTreeDiffSource,
+  scope: GitCallScope = "versionControl",
 ): Promise<ParsedTextDiff> {
   const normalizedPath = normalizeGitOutputPath(path);
 
   if (source === "staged") {
-    const response = await runGit(repoRoot, [
-      "diff",
-      "--no-color",
-      "--patch",
-      // Defeat a configured `diff.external` so output is always unified-diff format.
-      "--no-ext-diff",
-      `--unified=${DIFF_CONTEXT_LINES}`,
-      "--cached",
-      "--",
-      asLiteralPathspec(normalizedPath),
-    ]);
+    const response = await runGit(
+      repoRoot,
+      [
+        "diff",
+        "--no-color",
+        "--patch",
+        // Defeat a configured `diff.external` so output is always unified-diff format.
+        "--no-ext-diff",
+        `--unified=${DIFF_CONTEXT_LINES}`,
+        "--cached",
+        "--",
+        asLiteralPathspec(normalizedPath),
+      ],
+      scope,
+    );
     assertDiffCommandSuccess(response, false);
     return parseWorkingTreeFileDiffPatch(response.stdout, normalizedPath);
   }
 
-  const headResponse = await runGit(repoRoot, [
-    "diff",
-    "--no-color",
-    "--patch",
-    "--no-ext-diff",
-    `--unified=${DIFF_CONTEXT_LINES}`,
-    "HEAD",
-    "--",
-    asLiteralPathspec(normalizedPath),
-  ]);
+  const headResponse = await runGit(
+    repoRoot,
+    [
+      "diff",
+      "--no-color",
+      "--patch",
+      "--no-ext-diff",
+      `--unified=${DIFF_CONTEXT_LINES}`,
+      "HEAD",
+      "--",
+      asLiteralPathspec(normalizedPath),
+    ],
+    scope,
+  );
 
   // F28 (H7): in an unborn repo (no commits yet — the exact state the Changes
   // view offers to `git init`), `git diff HEAD -- <path>` dies with
@@ -253,21 +279,25 @@ export async function queryWorkingTreeFileDiff(
     return parseWorkingTreeFileDiffPatch(headResponse.stdout, normalizedPath);
   }
 
-  const untrackedResponse = await runGit(repoRoot, [
-    "diff",
-    "--no-index",
-    "--no-color",
-    "--patch",
-    `--unified=${DIFF_CONTEXT_LINES}`,
-    "--",
-    gitNullDevicePath(),
-    // `--no-index` takes two literal file paths, not pathspecs, so the
-    // `:(literal)` magic-word form used for the working-tree diffs above does
-    // not apply here (git would try to open a file literally named
-    // `:(literal)…`). The path is the already-normalized absolute/relative
-    // working-tree path of the untracked file the user selected.
-    normalizedPath,
-  ]);
+  const untrackedResponse = await runGit(
+    repoRoot,
+    [
+      "diff",
+      "--no-index",
+      "--no-color",
+      "--patch",
+      `--unified=${DIFF_CONTEXT_LINES}`,
+      "--",
+      gitNullDevicePath(),
+      // `--no-index` takes two literal file paths, not pathspecs, so the
+      // `:(literal)` magic-word form used for the working-tree diffs above does
+      // not apply here (git would try to open a file literally named
+      // `:(literal)…`). The path is the already-normalized absolute/relative
+      // working-tree path of the untracked file the user selected.
+      normalizedPath,
+    ],
+    scope,
+  );
   assertDiffCommandSuccess(untrackedResponse, true);
 
   if (!untrackedResponse.stdout.trim()) {
@@ -285,6 +315,7 @@ export async function createCommit(
   repoRoot: string,
   message: string,
   options?: CancellableGitOptions,
+  scope: GitCallScope = "versionControl",
 ): Promise<void> {
   const trimmed = message.trim();
   if (!trimmed) {
@@ -320,5 +351,5 @@ export async function createCommit(
       }
       throw mapGitInvokeError(error, repoRoot);
     }
-  });
+  }, { lane: "mutation" });
 }

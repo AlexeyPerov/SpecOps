@@ -1,6 +1,7 @@
 import { parseLsRemoteTags, parseRemoteVvLines } from "./gitParse";
 import { queryCurrentBranch } from "./gitRepo";
 import { runGit, runRemoteGit } from "./gitRun";
+import type { GitCallScope } from "./gitIntegrationGating";
 import {
   assertGitCommandCompleted,
   GitNoUpstreamError,
@@ -53,6 +54,7 @@ function buildPushArgs(target?: RemoteOperationTarget): string[] {
 async function resolvePushTarget(
   repoRoot: string,
   target?: RemoteOperationTarget,
+  scope: GitCallScope = "versionControl",
 ): Promise<RemoteOperationTarget | undefined> {
   if (!target?.remoteName?.trim()) {
     return target;
@@ -61,7 +63,7 @@ async function resolvePushTarget(
     return target;
   }
   try {
-    const current = await queryCurrentBranch(repoRoot);
+    const current = await queryCurrentBranch(repoRoot, scope);
     if (current.isDetached || !current.upstream) {
       return target;
     }
@@ -110,8 +112,11 @@ function isDetachedHeadPushError(stderr: string): boolean {
  * List configured remotes via `git remote -v`.
  * Returns remotes sorted by name; empty when none are configured.
  */
-export async function queryRemotes(repoRoot: string): Promise<GitRemote[]> {
-  const response = await runGit(repoRoot, ["remote", "-v"]);
+export async function queryRemotes(
+  repoRoot: string,
+  scope: GitCallScope = "versionControl",
+): Promise<GitRemote[]> {
+  const response = await runGit(repoRoot, ["remote", "-v"], scope);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -127,6 +132,7 @@ export async function queryRemoteTags(
   repoRoot: string,
   remoteName: string,
   options?: CancellableGitOptions,
+  scope: GitCallScope = "versionControl",
 ): Promise<string[]> {
   const trimmedRemote = remoteName.trim();
   if (!trimmedRemote) {
@@ -136,6 +142,7 @@ export async function queryRemoteTags(
   const response = await runRemoteGit(
     repoRoot,
     ["ls-remote", "--tags", trimmedRemote],
+    scope,
     { ...options, operation: "lsRemote" },
   );
   assertGitCommandCompleted(response);
@@ -151,8 +158,9 @@ export async function fetchRemote(
   repoRoot: string,
   target?: RemoteOperationTarget,
   options?: CancellableGitOptions,
+  scope: GitCallScope = "versionControl",
 ): Promise<void> {
-  const response = await runRemoteGit(repoRoot, buildFetchArgs(target), {
+  const response = await runRemoteGit(repoRoot, buildFetchArgs(target), scope, {
     ...options,
     operation: "fetch",
   });
@@ -167,8 +175,9 @@ export async function pullRemote(
   repoRoot: string,
   target?: RemoteOperationTarget,
   options?: CancellableGitOptions,
+  scope: GitCallScope = "versionControl",
 ): Promise<void> {
-  const response = await runRemoteGit(repoRoot, buildPullArgs(target), {
+  const response = await runRemoteGit(repoRoot, buildPullArgs(target), scope, {
     ...options,
     operation: "pull",
   });
@@ -183,14 +192,15 @@ export async function pushRemote(
   repoRoot: string,
   target?: RemoteOperationTarget,
   options?: CancellableGitOptions,
+  scope: GitCallScope = "versionControl",
 ): Promise<void> {
   // When the caller selected a remote but left the branch blank, push the current
   // branch to the remote branch name it tracks (e.g. a local `feature` tracking
   // `origin/main` pushes to `main`, not to a stray `feature`). Falls back to a
   // plain `HEAD` push only when there is no upstream to derive a name from or the
   // current branch is detached.
-  const resolvedTarget = await resolvePushTarget(repoRoot, target);
-  const response = await runRemoteGit(repoRoot, buildPushArgs(resolvedTarget), {
+  const resolvedTarget = await resolvePushTarget(repoRoot, target, scope);
+  const response = await runRemoteGit(repoRoot, buildPushArgs(resolvedTarget), scope, {
     ...options,
     operation: "push",
   });

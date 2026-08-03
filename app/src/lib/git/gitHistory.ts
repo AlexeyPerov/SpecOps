@@ -6,6 +6,7 @@ import {
   parseLogCommits,
 } from "./gitParse";
 import { runGit } from "./gitRun";
+import type { GitCallScope } from "./gitIntegrationGating";
 import {
   GitCommitFileDiffNotFoundError,
   GitDiffTooLargeError,
@@ -100,8 +101,9 @@ export function isUnbornRepoLogError(response: RunGitResponse): boolean {
 export async function queryCommits(
   repoRoot: string,
   options: QueryCommitsOptions = {},
+  scope: GitCallScope = "versionControl",
 ): Promise<CommitSummary[]> {
-  const response = await runGit(repoRoot, buildQueryCommitsArgs(options));
+  const response = await runGit(repoRoot, buildQueryCommitsArgs(options), scope);
   if (response.exitCode !== 0) {
     if (isUnbornRepoLogError(response)) {
       return [];
@@ -116,25 +118,33 @@ export async function queryCommits(
  * Query full commit metadata and changed files for one revision.
  * Uses `git show --name-status --format=…` (no diff hunks).
  */
-export async function queryCommitDetail(repoRoot: string, sha: string): Promise<CommitDetail> {
-  const response = await runGit(repoRoot, [
-    "show",
-    // Match `queryCommits`/`queryStashes`: suppress interleaved gpg signature
-    // lines when `log.showSignature = true`, which the fixed-NUL metadata scan
-    // cannot tolerate.
-    "--no-show-signature",
-    // F29 (H10): a merge commit renders as a *combined* diff by default, and
-    // `git show --name-status <merge>` prints zero file rows (verified on a real
-    // merge). `--first-parent` makes the name-status list describe what the
-    // merge brought in relative to its first parent — the intuitive "files
-    // changed by this merge" view — and emits a single section the parser
-    // already handles. (`-m` would emit one per-parent section and require
-    // parser changes; `--cc` prints none.)
-    "--first-parent",
-    "--name-status",
-    `--format=${GIT_SHOW_FORMAT}`,
-    sha,
-  ]);
+export async function queryCommitDetail(
+  repoRoot: string,
+  sha: string,
+  scope: GitCallScope = "versionControl",
+): Promise<CommitDetail> {
+  const response = await runGit(
+    repoRoot,
+    [
+      "show",
+      // Match `queryCommits`/`queryStashes`: suppress interleaved gpg signature
+      // lines when `log.showSignature = true`, which the fixed-NUL metadata scan
+      // cannot tolerate.
+      "--no-show-signature",
+      // F29 (H10): a merge commit renders as a *combined* diff by default, and
+      // `git show --name-status <merge>` prints zero file rows (verified on a real
+      // merge). `--first-parent` makes the name-status list describe what the
+      // merge brought in relative to its first parent — the intuitive "files
+      // changed by this merge" view — and emits a single section the parser
+      // already handles. (`-m` would emit one per-parent section and require
+      // parser changes; `--cc` prints none.)
+      "--first-parent",
+      "--name-status",
+      `--format=${GIT_SHOW_FORMAT}`,
+      sha,
+    ],
+    scope,
+  );
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -173,6 +183,7 @@ export async function queryCommitFileDiff(
   sha: string,
   path: string,
   parentSha?: string,
+  scope: GitCallScope = "versionControl",
 ): Promise<ParsedTextDiff> {
   const normalizedPath = normalizeGitOutputPath(path);
   const args =
@@ -198,7 +209,7 @@ export async function queryCommitFileDiff(
           asLiteralPathspec(normalizedPath),
         ];
 
-  const response = await runGit(repoRoot, args);
+  const response = await runGit(repoRoot, args, scope);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }

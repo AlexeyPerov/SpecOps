@@ -11,16 +11,20 @@ export {
   checkGitAvailable,
   resetGitAvailabilityCacheForTests,
   runGit,
+  runRemoteGit,
 } from "./gitRun";
+export type { GitCallScope } from "./gitIntegrationGating";
 
 export {
   checkoutBranch,
   createBranch,
+  invalidateResolveRepoRootCache,
   isNoUpstreamAheadBehindError,
   queryAheadBehind,
   queryBranches,
   queryCurrentBranch,
   queryIsBareRepository,
+  resetResolveRepoRootCacheForTests,
   resolveRepoRoot,
 } from "./gitRepo";
 

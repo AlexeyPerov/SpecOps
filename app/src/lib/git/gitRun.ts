@@ -3,7 +3,11 @@ import { logDiagnostic } from "../services/logging";
 import { enqueueGitCommandForRepo } from "./gitCommandQueue";
 import { sanitizeGitStderrForDiagnosticLog } from "./gitDiagnosticSanitize";
 import { buildNonInteractiveRemoteEnv } from "./gitRemoteEnv";
-import { isGitIntegrationEnabledInApp } from "./gitIntegrationGating";
+import {
+  isGitIntegrationEnabledInApp,
+  shouldRunGitForCallerScope,
+  type GitCallScope,
+} from "./gitIntegrationGating";
 import {
   mapGitInvokeError,
   type CancelGitCommandResponse,
@@ -289,6 +293,13 @@ async function invokeRunGit(
  * Commands for the same repository root are serialized via {@link enqueueGitCommandForRepo};
  * unrelated repositories may run concurrently.
  *
+ * `scope` (P03-08-T1) declares where this call originates:
+ * - `"versionControl"` — the Version Control view or a user action taken there.
+ *   Always allowed while git is enabled.
+ * - `"background"` — project-tree badges, Workspace Manager column, file-status
+ *   tracker. Blocked when the user's git scope is `"versionControlOnly"` (and no
+ *   VC tab is active) or `"off"`.
+ *
  * Write operations (see {@link isWriteGitCommand}) are auto-registered with the Rust
  * backend so they can be drained on app exit — a mid-flight `add`/`commit`/`stash`/
  * `checkout` is reaped and its `.git/index.lock` cleaned up instead of orphaned.
@@ -298,10 +309,17 @@ async function invokeRunGit(
 export async function runGit(
   repoRoot: string,
   args: string[],
+  scope: GitCallScope,
   env?: Record<string, string>,
   options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
   if (!isGitIntegrationEnabledInApp()) {
+    return GIT_INTEGRATION_DISABLED_RESPONSE;
+  }
+  // P03-08-T1: scope chokepoint. Background callers are rejected when the user
+  // scoped git to the Version Control view only (and no VC tab is active) or off.
+  // VC-initiated calls always pass (a user looking at VC expects git to work).
+  if (!shouldRunGitForCallerScope(scope)) {
     return GIT_INTEGRATION_DISABLED_RESPONSE;
   }
   // Register write operations so they are drainable on app exit. Callers that
@@ -323,7 +341,10 @@ export async function runGit(
   if (options?.bypassQueue) {
     return invoke();
   }
-  return enqueueGitCommandForRepo(repoRoot, invoke);
+  // P03-08-08: mutations serialize per repo (index-lock safety); reads run on a
+  // small concurrent lane. Classify by the same rule used for registration.
+  const lane = isWriteGitCommand(args) ? "mutation" : "read";
+  return enqueueGitCommandForRepo(repoRoot, invoke, { lane });
 }
 
 interface RemoteGitInvokeOptions extends CancellableGitOptions {
@@ -334,10 +355,11 @@ interface RemoteGitInvokeOptions extends CancellableGitOptions {
 export async function runRemoteGit(
   repoRoot: string,
   args: string[],
+  scope: GitCallScope,
   options?: RemoteGitInvokeOptions,
 ): Promise<RunGitResponse> {
   const env = buildNonInteractiveRemoteEnv();
-  return runGit(repoRoot, args, env, {
+  return runGit(repoRoot, args, scope, env, {
     ...options,
     askpass: true,
     askpassOperation: options?.operation,

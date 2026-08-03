@@ -1,11 +1,13 @@
 <script lang="ts">
   import { checkGitAvailable } from "../../git/gitService";
   import type { GitAvailableResponse } from "../../git/types";
+  import type { GitIntegrationScope } from "../../domain/contracts";
   import { appState } from "../../state/appState";
 
   const snapshot = $derived($appState);
   const gitIntegration = $derived(snapshot.settings.gitIntegration);
   const gitIntegrationEnabled = $derived(gitIntegration.enabled);
+  const gitScope = $derived(gitIntegration.scope);
 
   let gitInfo = $state<GitAvailableResponse | null>(null);
   let gitInfoLoading = $state(false);
@@ -44,6 +46,10 @@
   ): void {
     appState.updateGitIntegrationSettings({ [key]: value });
   }
+
+  function updateGitIntegrationScope(scope: GitIntegrationScope): void {
+    appState.updateGitIntegrationSettings({ scope });
+  }
 </script>
 
 <section class="settings-section">
@@ -66,6 +72,48 @@
 </section>
 
 {#if gitIntegrationEnabled}
+  <section class="settings-section">
+    <h3>When to run git</h3>
+    <p class="settings-section-note">
+      Controls where git subprocesses may run. "Only while the Version Control view is
+      open" keeps workspace and tab switching git-free; background badges and the
+      Workspace Manager git column stay empty until you open Version Control. "Never"
+      turns git off entirely (closes Version Control tabs and stops background probes).
+    </p>
+    <div class="settings-subsection">
+      <label class="settings-toggle" title="Run git anywhere it is needed">
+        <input
+          type="radio"
+          name="git-scope"
+          value="always"
+          checked={gitScope === "always"}
+          onchange={() => updateGitIntegrationScope("always")}
+        />
+        Always
+      </label>
+      <label class="settings-toggle" title="Run git only while a Version Control tab is open">
+        <input
+          type="radio"
+          name="git-scope"
+          value="versionControlOnly"
+          checked={gitScope === "versionControlOnly"}
+          onchange={() => updateGitIntegrationScope("versionControlOnly")}
+        />
+        Only while the Version Control view is open
+      </label>
+      <label class="settings-toggle" title="Never run git (turns integration off)">
+        <input
+          type="radio"
+          name="git-scope"
+          value="off"
+          checked={gitScope === "off"}
+          onchange={() => updateGitIntegrationScope("off")}
+        />
+        Never (turn integration off)
+      </label>
+    </div>
+  </section>
+
   <section class="settings-section">
     <h3>Git binary</h3>
     <p class="settings-section-note">
@@ -114,6 +162,10 @@
 
   <section class="settings-section">
     <h3>Options</h3>
+    <p class="settings-section-note">
+      Badges and the Workspace Manager git column are background git features — they
+      only run when "When to run git" is set to "Always".
+    </p>
     <div class="settings-subsection">
       <label class="settings-toggle" title="Autosave open files before git operations">
         <input

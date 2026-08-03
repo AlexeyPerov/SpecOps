@@ -197,6 +197,15 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-06 — Project-tree badges run full `git status` on every switch
 
+- **Status:** Resolved on 2026-08-03. The page effect no longer depends on
+  `session.lastActiveSessionId` or `chatStore.isGenerating`, so it fires only
+  on workspace/tab switches — not on every agent turn and session change. The
+  tracker now serves warm snapshots within a per-workspace TTL (75 s) without
+  re-shelling-out, and mutation-driven refreshes bypass the TTL. `resolveRepoRoot`
+  is memoized per workspace path and invalidated on `git init`-class mutations,
+  collapsing the doubled `git rev-parse` per switch. The whole path is gated
+  behind the new git scope setting (P03-08-T1), so with `versionControlOnly`
+  no `git status` runs on switching when no VC tab is active.
 - **Area:** Project tree file badges / tab and workspace switching.
 - **Impact:** **High.** This is the log-confirmed ~200 ms of git per tab
   activation. The `$effect` at `+page.svelte:996-1017` depends on `session`
@@ -225,6 +234,12 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-07 — Workspace Manager git column refetches everything with unbounded concurrency
 
+- **Status:** Resolved on 2026-08-03. The Workspace Manager load loop now
+  bounds cross-repo fan-out to 4 concurrent git processes via
+  `mapWithConcurrency` (previously `Promise.all` fired one per row — up to 2N
+  subprocesses). The git column cell loader gained a per-workspace result TTL
+  (60 s) so re-mounting the view skips the git round-trip; mutations
+  invalidate the cached cell via the existing VC mutation subscription.
 - **Area:** Workspace Manager / git.
 - **Impact:** **High.** The `$effect` at `WorkspaceManagerView.svelte:214-220`
   is keyed on the `workspaces` array identity and re-runs on any list change;
@@ -244,6 +259,14 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-08 — Per-repo git queue has no timeout, cap, cancellation, or eviction
 
+- **Status:** Resolved on 2026-08-03. The per-repo queue is split into two
+  lanes: mutations stay FIFO-serial (index-lock safety), reads run on a
+  bounded-concurrent lane (cap 4) so multiple reads of the same repo proceed
+  in parallel and a slow read no longer blocks a queued mutation (or vice
+  versa). Queued commands whose `AbortSignal` already fired are rejected
+  before running instead of executing just to discard the result. The repo's
+  lane entry is evicted once both lanes settle, closing the per-repo memory
+  leak. Read timeouts are enforced Rust-side (P03-08-02).
 - **Area:** Git command queue / head-of-line blocking.
 - **Impact:** **High.** One unbounded serial promise chain per repo root
   (`gitCommandQueue.ts:13-28`): reads queue behind writes; a `fetch`/`pull`/
@@ -264,6 +287,13 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-09 — Version Control view remount fans out ~12–16 serialized git commands
 
+- **Status:** Resolved on 2026-08-03. The redundant `queryRemotes` calls (VC
+  view probe + Tags panel mount + Tags panel refresh) collapse through a
+  shared short-TTL per-repo remotes cache (`loadRemotes`, 30 s), invalidated
+  on VC mutations. The Tags panel was already lazily mounted (only when its
+  section is active), and its remote `ls-remote` probe was already opt-in via
+  the "Check remote" button (F30). The mount-time probe cache (5 s TTL) was
+  already in place.
 - **Area:** Version Control view (in-scope git, but bursty).
 - **Impact:** **Medium.** `VersionControlView` is conditionally mounted, so
   every tab switch into it remounts and re-runs the probe (3 commands), branch
@@ -283,6 +313,14 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-10 — Git subprocess overhead: threads, polling, lock retries, optional locks
 
+- **Status:** Partially resolved on 2026-08-03. Read-only commands now run with
+  `GIT_OPTIONAL_LOCKS=0` (env built via a unit-tested `build_effective_git_env`),
+  so `git status`/`diff`/`log` skip the optional index lock and cannot contend
+  with a concurrent writer. The read/write classification mirrors the frontend
+  `isWriteGitCommand`. The reader-thread cost (a) remains — the threads are
+  necessary for the byte cap — and the registered-command poll loop (b) and
+  in-queue index-lock retries (c) are deferred: `spawn_blocking` (P03-08-02)
+  plus `GIT_OPTIONAL_LOCKS=0` cover the dominant cost.
 - **Area:** Rust git execution.
 - **Impact:** **Medium (batch).** (a) 2–3 OS threads spawned per git command
   for stdout/stderr readers (`git.rs:266-275`, `:291-301`); (b) registered
@@ -722,6 +760,7 @@ and gated settings tabs are hidden. Remaining residue:
 
 ## P03-08-T1 — Setting to completely disable git (and scope it to Version Control)
 
+- **Status:** Resolved on 2026-08-03.
 - **Area:** Settings / git integration.
 - **Impact:** **High** (user-facing control; also the fastest mitigation for
   P03-08-06/07 while the fixes land).

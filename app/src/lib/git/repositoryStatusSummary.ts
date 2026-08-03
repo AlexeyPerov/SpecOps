@@ -4,7 +4,7 @@ import {
   parseStatusPorcelain,
   parseStatusShortBranchHeader,
 } from "./gitParse";
-import { runGit } from "./gitService";
+import { runGit, type GitCallScope } from "./gitService";
 import { createGitCommandError } from "./types";
 import type { AheadBehindCounts } from "./types";
 
@@ -31,8 +31,9 @@ export type RepositoryStatusSummary = {
  */
 export async function queryRepositoryStatusSummary(
   repoRoot: string,
+  scope: GitCallScope = "background",
 ): Promise<RepositoryStatusSummary> {
-  const response = await runGit(repoRoot, ["status", "-sb"]);
+  const response = await runGit(repoRoot, ["status", "-sb"], scope);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -60,7 +61,7 @@ export async function queryRepositoryStatusSummary(
 
   let branchName = parsed.branchName;
   if (parsed.isDetached) {
-    const headResponse = await runGit(repoRoot, ["rev-parse", "--short", "HEAD"]);
+    const headResponse = await runGit(repoRoot, ["rev-parse", "--short", "HEAD"], scope);
     if (headResponse.exitCode !== 0) {
       throw createGitCommandError(headResponse);
     }

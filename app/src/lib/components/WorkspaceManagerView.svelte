@@ -7,6 +7,7 @@
     type WorkspaceGitColumnCell,
   } from "../git/workspaceManagerGitColumn";
   import { shouldLoadWorkspaceManagerGitColumn } from "../git/gitIntegrationGating";
+  import { mapWithConcurrency } from "../services/mapWithConcurrency";
   import { emptySet } from "../collections/emptyCollections";
   import EmptyState from "./EmptyState.svelte";
 
@@ -133,18 +134,23 @@
     const results = new Map<string, WorkspaceGitColumnCell>();
     try {
       // Per-path catch so one failure does not leave the whole batch on "…".
-      await Promise.all(
-        rows.map(async (workspace) => {
-          try {
-            const cell = await loadWorkspaceGitColumnCell(workspace.rootPath, {
-              force: options?.force,
-            });
-            results.set(workspace.rootPath, cell);
-          } catch (error) {
-            results.set(workspace.rootPath, gitErrorCell(error));
-          }
-        }),
-      );
+      // P03-08-07: bound concurrent git processes (previously Promise.all fired
+      // one load per row — up to 2N blocking subprocesses for N workspaces,
+      // which saturated the tokio pool shared with file reads). The per-repo
+      // queue still serializes same-repo work; this caps cross-repo fan-out.
+      const ordered = await mapWithConcurrency(rows, 4, async (workspace) => {
+        try {
+          const cell = await loadWorkspaceGitColumnCell(workspace.rootPath, {
+            force: options?.force,
+          });
+          return [workspace.rootPath, cell] as const;
+        } catch (error) {
+          return [workspace.rootPath, gitErrorCell(error)] as const;
+        }
+      });
+      for (const [path, cell] of ordered) {
+        results.set(path, cell);
+      }
     } catch (error) {
       if (generation !== gitLoadGeneration) {
         return;

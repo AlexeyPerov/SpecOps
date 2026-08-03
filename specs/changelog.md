@@ -1,5 +1,83 @@
 # Changelog
 
+## 2026-08-03 23:15 MSK — Gate git behind the Version Control view (P03-08-T1, P03-08-06…10)
+
+Implemented the "Git executed outside the Version Control view" section of
+`specs/performance-review-03-08.md`: a user-facing scope setting that makes
+tab/workspace switching git-free, plus the caching, concurrency, and
+Rust-side efficiency work that removes the latency the background git calls
+were causing.
+
+### New "When to run git" scope setting (P03-08-T1)
+
+- Added `gitIntegration.scope: "always" | "versionControlOnly" | "off"`.
+  `"versionControlOnly"` restricts git to runs initiated by the Version
+  Control view (or while a VC tab is active in any pane); `"off"` behaves
+  exactly like `enabled: false` (closes VC tabs, drains subprocesses, hides
+  menus). Rendered as a radio group in Settings → Version Control. Both the
+  master toggle and the scope can disable git, and either one triggers the
+  close-tabs + drain side effects.
+- Added a required `scope: "versionControl" | "background"` tag to `runGit`
+  and `runRemoteGit`, threaded through every git service function. The
+  chokepoint rejects background calls when scoped to VC-only (and no VC tab
+  is active) or off, so a single edit covers all current and future call
+  sites. A view-awareness predicate (`isVersionControlViewActiveInAnyPane`)
+  walks every context's panes so background callers may proceed while the
+  user is actively looking at VC.
+- Fixed the documented trap: when project-tree badges are disabled (or git
+  is scoped away), `fileStatusTracker` now returns the empty state instead
+  of silently falling back to an OpenCode `file.status` HTTP call. "Off"
+  is now actually off.
+
+### Project-tree badge effect + caches (P03-08-06)
+
+- The badge-refresh `$effect` no longer depends on `session.lastActiveSessionId`
+  or `chatStore.isGenerating`, so it no longer fires on every agent turn and
+  session change — only on workspace/tab switches.
+- The file-status tracker serves warm snapshots within a per-workspace TTL
+  (75 s) without re-shelling-out; mutation-driven refreshes bypass the TTL.
+- `resolveRepoRoot` is now memoized per workspace path and invalidated on
+  `git init`-class mutations, collapsing the doubled `git rev-parse` per
+  switch.
+
+### Workspace Manager git column (P03-08-07)
+
+- The load loop now uses `mapWithConcurrency` (cap 4) instead of `Promise.all`,
+  bounding cross-repo fan-out from 2N to 4 concurrent git processes.
+- Added a per-workspace result TTL (60 s); re-mounting the view skips the git
+  round-trip. Mutations invalidate the cached cell via the existing VC
+  mutation subscription.
+
+### Per-repo git queue (P03-08-08)
+
+- Split the per-repo queue into two lanes: mutations stay FIFO-serial
+  (index-lock safety), reads run bounded-concurrent (cap 4). A slow read no
+  longer blocks a queued mutation, and a slow mutation no longer stalls local
+  reads.
+- Queued commands whose `AbortSignal` already fired are rejected before
+  running. The repo's lane entry is evicted once both lanes settle, closing a
+  per-repo memory leak.
+
+### Version Control view remount (P03-08-09)
+
+- The three redundant `queryRemotes` call sites (VC view, Tags panel mount,
+  Tags panel refresh) collapse through a shared short-TTL per-repo remotes
+  cache (`loadRemotes`, 30 s), invalidated on VC mutations.
+
+### Rust git subprocess efficiency (P03-08-10)
+
+- Read-only commands now run with `GIT_OPTIONAL_LOCKS=0` (env built via a
+  unit-tested `build_effective_git_env`), so `git status`/`diff`/`log` skip
+  the optional index lock and cannot contend with a concurrent writer. The
+  read/write classification mirrors the frontend `isWriteGitCommand`.
+
+### Tests
+
+- New `gitIntegrationGating.test.ts` (scope matrix + view-awareness),
+  `gitIntegrationSettings.test.ts` scope cases, `gitCommandQueue.test.ts`
+  read/mutation lane + abort coverage, and Rust `is_read_only_git_args` +
+  `build_effective_git_env` unit tests. All touched-area suites green.
+
 ## 2026-08-03 22:20 MSK — Critical performance/stall fixes (P03-08-01…05)
 
 Implemented the five critical issues from `specs/performance-review-03-08.md`:

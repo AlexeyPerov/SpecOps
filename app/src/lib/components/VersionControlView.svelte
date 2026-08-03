@@ -71,7 +71,6 @@
     pushRemote,
     queryAheadBehind,
     queryCurrentBranch,
-    queryRemotes,
     type RemoteOperationTarget,
   } from "../git/gitService";
   import type { AheadBehindCounts, CommitSummary, CurrentBranchInfo, GitRemote } from "../git/types";
@@ -99,6 +98,7 @@
     writePersistedRemoteSelection,
     type VersionControlRemoteSelection,
   } from "../git/versionControlRemoteSelection";
+  import { loadRemotes } from "../git/versionControlRemotesCache";
   import type { SaveDocumentDeps } from "../services/documentSave";
   import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
   import { shouldRunAutosaveBeforeGitOperations } from "../git/gitIntegrationGating";
@@ -509,7 +509,9 @@
     remotesLoading = true;
     try {
       const [remoteRows, persisted] = await Promise.all([
-        queryRemotes(root),
+        // P03-08-09: shared remotes cache — a quick VC remount or a Tags panel
+        // open reuses the same `git remote -v` result instead of re-shelling-out.
+        loadRemotes(root),
         readPersistedRemoteSelection(root),
       ]);
       if (signal?.aborted) {

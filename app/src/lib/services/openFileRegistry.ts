@@ -17,7 +17,7 @@ import {
 } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureSpecOpsDataDir } from "./appDataDir";
-import { withSessionWriteLock } from "./sessionWriteLock";
+import { withOpenFileRegistryLock } from "./sessionWriteLock";
 import { logDiagnostic } from "./logging";
 
 const OPEN_FILE_REGISTRY_FILE = "open-files.json";
@@ -214,7 +214,7 @@ export async function syncOpenFileRegistryForWindow(
   windowId: string,
   state: AppDomainState,
 ): Promise<void> {
-  await withSessionWriteLock(async () => {
+  await withOpenFileRegistryLock(async () => {
     const read = await readRegistrySnapshotForUpdate();
     if (read.kind === "unreadable") {
       await logAbortedUpdate(windowId, read.reason);
@@ -232,7 +232,7 @@ export async function claimOpenFile(
   windowId: string,
   documentId: string,
 ): Promise<OpenFileOwner | null> {
-  return withSessionWriteLock(async () => {
+  return withOpenFileRegistryLock(async () => {
     const read = await readRegistrySnapshotForUpdate();
     if (read.kind === "unreadable") {
       await logAbortedUpdate(windowId, read.reason);
@@ -262,7 +262,7 @@ export async function releasePendingOpenFile(
   filePath: string,
   windowId: string,
 ): Promise<void> {
-  await withSessionWriteLock(async () => {
+  await withOpenFileRegistryLock(async () => {
     const read = await readRegistrySnapshotForUpdate();
     if (read.kind !== "snapshot") {
       return;
@@ -285,7 +285,7 @@ export async function transferOpenFileClaim(
   targetWindowId: string,
   documentId: string,
 ): Promise<OpenFileOwner | null> {
-  return withSessionWriteLock(async () => {
+  return withOpenFileRegistryLock(async () => {
     const read = await readRegistrySnapshotForUpdate();
     if (read.kind === "unreadable") {
       await logAbortedUpdate(targetWindowId, read.reason);
@@ -404,7 +404,7 @@ export async function dedupeWindowSnapshotAgainstRegistry(
   windowId: string,
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
-  return withSessionWriteLock(async () => {
+  return withOpenFileRegistryLock(async () => {
     const read = await readRegistrySnapshotForUpdate();
     // When the registry can't be read, still return the (un-deduped) snapshot so
     // the caller's restore proceeds with its own tabs intact; just skip the
@@ -425,7 +425,7 @@ export async function dedupeWindowSnapshotAgainstRegistry(
 }
 
 export async function releaseAllOpenFilesForWindow(windowId: string): Promise<void> {
-  await withSessionWriteLock(async () => {
+  await withOpenFileRegistryLock(async () => {
     const read = await readRegistrySnapshotForUpdate();
     if (read.kind !== "snapshot") {
       if (read.kind === "unreadable") {
@@ -454,7 +454,7 @@ export async function pruneOpenFileRegistryWindows(
   liveWindowIds: Iterable<string>,
 ): Promise<void> {
   const live = new Set(liveWindowIds);
-  await withSessionWriteLock(async () => {
+  await withOpenFileRegistryLock(async () => {
     const read = await readRegistrySnapshotForUpdate();
     if (read.kind !== "snapshot") {
       if (read.kind === "unreadable") {
@@ -483,7 +483,7 @@ export async function renameOpenFileRegistry(
   windowId: string,
   documentId: string,
 ): Promise<void> {
-  await withSessionWriteLock(async () => {
+  await withOpenFileRegistryLock(async () => {
     const read = await readRegistrySnapshotForUpdate();
     if (read.kind === "unreadable") {
       await logAbortedUpdate(windowId, read.reason);

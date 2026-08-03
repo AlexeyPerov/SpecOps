@@ -1115,21 +1115,82 @@ fn truncate_bytes_to_utf8_boundary(buf: &mut Vec<u8>, max_bytes: usize) {
     buf.truncate(end);
 }
 
+/// Result of [`run_command_with_limited_output`].
+struct LimitedCommandOutput {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+    timed_out: bool,
+}
+
 /// Spawn git, drain stdout/stderr with the byte limit, and wait for exit.
 ///
 /// Prefer this over `Command::output()`: that API buffers the entire stream in
 /// memory before any size check runs, so a huge `git show` can allocate
 /// unbounded (and a lossy UTF-8 decode copies it again) before being rejected.
-fn run_command_with_limited_output(mut command: Command) -> Result<(i32, String, String), String> {
+///
+/// P03-08-02: `timeout_ms` bounds the wait for the non-registered (read-only)
+/// path, which previously had no ceiling at all — one hung `git status`
+/// (stalled network mount, wedged credential helper) blocked its caller
+/// forever. On timeout the child is killed outright: read-only commands never
+/// hold `.git/index.lock`, so no graceful-termination dance is needed.
+fn run_command_with_limited_output(
+    mut command: Command,
+    timeout_ms: Option<u64>,
+) -> Result<LimitedCommandOutput, String> {
     let mut child = command
         .spawn()
         .map_err(|error| format!("Failed to spawn git: {error}"))?;
     let readers = spawn_output_readers(&mut child);
-    let status = child
-        .wait()
-        .map_err(|error| format!("Failed to wait for git: {error}"))?;
-    let (stdout, stderr) = join_output_readers(Some(readers))?;
-    Ok((status.code().unwrap_or(-1), stdout, stderr))
+    let status = match timeout_ms {
+        None => Some(
+            child
+                .wait()
+                .map_err(|error| format!("Failed to wait for git: {error}"))?,
+        ),
+        Some(timeout) => {
+            let wait_start = Instant::now();
+            loop {
+                match child
+                    .try_wait()
+                    .map_err(|error| format!("Failed to wait for git: {error}"))?
+                {
+                    Some(status) => break Some(status),
+                    None => {
+                        if wait_start.elapsed().as_millis() as u64 >= timeout {
+                            break None;
+                        }
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                }
+            }
+        }
+    };
+    match status {
+        Some(status) => {
+            let (stdout, stderr) = join_output_readers(Some(readers))?;
+            Ok(LimitedCommandOutput {
+                exit_code: status.code().unwrap_or(-1),
+                stdout,
+                stderr,
+                timed_out: false,
+            })
+        }
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            // Killing the child closes its pipes, so the readers hit EOF and
+            // joining is prompt. Partial output is discarded to mirror the
+            // registered-command timeout path.
+            let _ = join_output_readers(Some(readers));
+            Ok(LimitedCommandOutput {
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: "Git command timed out.".to_string(),
+                timed_out: true,
+            })
+        }
+    }
 }
 
 /// Probe whether `git` is installed and readable from PATH (with Windows fallbacks).
@@ -1390,17 +1451,20 @@ pub fn execute_git_with_full_options(
         apply_output_limit(&mut response);
         response
     } else {
-        match run_command_with_limited_output(build_git_command(repo_root, args, &effective_env)) {
-            Ok((exit_code, stdout, stderr)) => {
+        match run_command_with_limited_output(
+            build_git_command(repo_root, args, &effective_env),
+            options.timeout_ms,
+        ) {
+            Ok(output) => {
                 // Size already enforced while reading; `apply_output_limit` is a
                 // belt-and-suspenders check on the decoded strings.
                 let mut response = RunGitResponse {
-                    exit_code,
-                    stdout,
-                    stderr,
+                    exit_code: output.exit_code,
+                    stdout: output.stdout,
+                    stderr: output.stderr,
                     duration_ms: start.elapsed().as_millis() as u64,
                     cancelled: false,
-                    timed_out: false,
+                    timed_out: output.timed_out,
                 };
                 apply_output_limit(&mut response);
                 response
@@ -1435,17 +1499,27 @@ pub async fn git_available() -> GitAvailableResponse {
 
 /// Create a commit using a temporary message file (`git commit -F`).
 ///
-/// Marked `async` so Tauri runs the blocking git subprocess off the UI/main
-/// thread (sync commands otherwise run on the main thread and can freeze the
-/// window for the full command timeout).
+/// P03-08-02: a true `async fn` whose blocking body (temp-file write + git
+/// subprocess wait) runs in `spawn_blocking`, off the shared tokio worker pool
+/// that also services `tauri-plugin-fs` — see [`run_git`].
 #[tauri::command(async)]
-pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitResponse, String> {
+pub async fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitResponse, String> {
     let trimmed = request.message.trim();
     if trimmed.is_empty() {
         return Err("commit message must not be empty".to_string());
     }
-
     let repo_root = normalize_repo_root(&request.repo_root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        commit_with_message_blocking(&repo_root, &request)
+    })
+    .await
+    .map_err(|error| format!("git task failed: {error}"))?
+}
+
+fn commit_with_message_blocking(
+    repo_root: &Path,
+    request: &GitCommitRequest,
+) -> Result<RunGitResponse, String> {
     let temp_path = std::env::temp_dir().join(format!(
         "spec-ops-git-commit-{}-{}",
         std::process::id(),
@@ -1524,24 +1598,32 @@ pub fn git_commit_with_message(request: GitCommitRequest) -> Result<RunGitRespon
 /// variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, etc.). Only subcommands in
 /// `ALLOWED_GIT_SUBCOMMANDS` are permitted via this IPC entry point.
 ///
-/// Marked `async` so the blocking subprocess (up to the remote-op timeout) runs off
-/// the UI/main thread.
+/// P03-08-02: a true `async fn` that runs the blocking subprocess wait in
+/// `spawn_blocking`. The previous `#[tauri::command(async)]` on a *sync* fn
+/// dispatched the fully blocking body onto Tauri's shared tokio worker pool —
+/// enough concurrent git commands (worker count ≈ CPU cores) starved the
+/// `tauri-plugin-fs` async commands on the same runtime, so file reads (and
+/// therefore document opens) stalled until a git command finished.
 #[tauri::command(async)]
-pub fn run_git(request: RunGitRequest) -> Result<RunGitResponse, String> {
+pub async fn run_git(request: RunGitRequest) -> Result<RunGitResponse, String> {
     validate_git_args(&request.args)?;
     let repo_root = normalize_repo_root(&request.repo_root)?;
-    Ok(execute_git_with_full_options(
-        &repo_root,
-        &request.args,
-        ExecuteGitOptions {
-            env: request.env.as_ref(),
-            command_id: request.command_id.as_deref(),
-            askpass_enabled: request.askpass_enabled,
-            askpass_operation: request.askpass_operation.as_deref(),
-            askpass_timeout_ms: request.askpass_timeout_ms,
-            timeout_ms: request.timeout_ms,
-        },
-    ))
+    tauri::async_runtime::spawn_blocking(move || {
+        execute_git_with_full_options(
+            &repo_root,
+            &request.args,
+            ExecuteGitOptions {
+                env: request.env.as_ref(),
+                command_id: request.command_id.as_deref(),
+                askpass_enabled: request.askpass_enabled,
+                askpass_operation: request.askpass_operation.as_deref(),
+                askpass_timeout_ms: request.askpass_timeout_ms,
+                timeout_ms: request.timeout_ms,
+            },
+        )
+    })
+    .await
+    .map_err(|error| format!("git task failed: {error}"))
 }
 
 /// Write a credential response for an in-flight askpass session.
@@ -1908,7 +1990,7 @@ mod tests {
 
     #[test]
     fn run_git_rejects_empty_repo_root() {
-        let error = run_git(RunGitRequest {
+        let error = tauri::async_runtime::block_on(run_git(RunGitRequest {
             repo_root: "   ".to_string(),
             args: vec!["status".to_string()],
             env: None,
@@ -1917,7 +1999,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
-        })
+        }))
         .expect_err("empty repo_root should fail");
 
         assert!(error.contains("repo_root must not be empty"));
@@ -1925,7 +2007,7 @@ mod tests {
 
     #[test]
     fn run_git_rejects_relative_repo_root() {
-        let error = run_git(RunGitRequest {
+        let error = tauri::async_runtime::block_on(run_git(RunGitRequest {
             repo_root: "relative/path".to_string(),
             args: vec!["status".to_string()],
             env: None,
@@ -1934,7 +2016,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
-        })
+        }))
         .expect_err("relative repo_root should fail");
 
         assert!(error.contains("absolute path"));
@@ -1971,12 +2053,12 @@ mod tests {
 
     #[test]
     fn git_commit_with_message_rejects_empty_message() {
-        let error = git_commit_with_message(GitCommitRequest {
+        let error = tauri::async_runtime::block_on(git_commit_with_message(GitCommitRequest {
             repo_root: "/tmp/repo".to_string(),
             message: "   ".to_string(),
             command_id: None,
             timeout_ms: None,
-        })
+        }))
         .expect_err("empty message should fail");
 
         assert!(error.contains("commit message must not be empty"));
@@ -2012,12 +2094,12 @@ mod tests {
         );
         assert_eq!(add.exit_code, 0);
 
-        let response = git_commit_with_message(GitCommitRequest {
+        let response = tauri::async_runtime::block_on(git_commit_with_message(GitCommitRequest {
             repo_root: repo_root.to_string_lossy().into_owned(),
             message: "Initial commit\n\nBody paragraph.".to_string(),
             command_id: None,
             timeout_ms: None,
-        })
+        }))
         .expect("commit should succeed");
 
         assert_eq!(response.exit_code, 0);
@@ -2193,7 +2275,7 @@ mod tests {
         register_active_git_command(&command_id, PathBuf::from("/tmp/spec-ops-test"), child)
             .expect("register command");
 
-        let response = run_git(RunGitRequest {
+        let response = tauri::async_runtime::block_on(run_git(RunGitRequest {
             repo_root: repo_root.to_string_lossy().into_owned(),
             args: vec!["status".to_string()],
             env: None,
@@ -2202,7 +2284,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
-        })
+        }))
         .expect("run_git should return response");
 
         assert_eq!(response.exit_code, -1);
@@ -2277,7 +2359,7 @@ mod tests {
 
     #[test]
     fn run_git_rejects_nonexistent_repo_root() {
-        let error = run_git(RunGitRequest {
+        let error = tauri::async_runtime::block_on(run_git(RunGitRequest {
             repo_root: "/tmp/spec-ops-git-missing-repo-path".to_string(),
             args: vec!["status".to_string()],
             env: None,
@@ -2286,7 +2368,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
-        })
+        }))
         .expect_err("missing repo_root should fail");
 
         assert!(error.contains("repo_root path does not exist"));
@@ -2298,7 +2380,7 @@ mod tests {
             return;
         }
         let repo_root = create_temp_git_repo();
-        let error = run_git(RunGitRequest {
+        let error = tauri::async_runtime::block_on(run_git(RunGitRequest {
             repo_root: repo_root.to_string_lossy().into_owned(),
             args: vec!["clean".to_string(), "-fdx".to_string()],
             env: None,
@@ -2307,7 +2389,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
-        })
+        }))
         .expect_err("disallowed subcommand should fail");
 
         assert!(error.contains("git subcommand not allowed"));
@@ -2324,7 +2406,7 @@ mod tests {
         env.insert("GIT_DIR".to_string(), "/tmp/evil".to_string());
         env.insert("GIT_TERMINAL_PROMPT".to_string(), "0".to_string());
 
-        let response = run_git(RunGitRequest {
+        let response = tauri::async_runtime::block_on(run_git(RunGitRequest {
             repo_root: repo_root.to_string_lossy().into_owned(),
             args: vec!["status".to_string()],
             env: Some(env),
@@ -2333,7 +2415,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
-        })
+        }))
         .expect("status should succeed when blocked env is stripped");
 
         assert_eq!(response.exit_code, 0);

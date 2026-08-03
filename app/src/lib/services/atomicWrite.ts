@@ -25,6 +25,11 @@
  */
 
 import { remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  isSessionStoragePath,
+  nativeAtomicWriteTextFile,
+  nativeSessionFsSupported,
+} from "./sessionNativeFs";
 
 function tempPathFor(path: string): string {
   return `${path}.${Math.random().toString(36).slice(2, 10)}.tmp`;
@@ -59,6 +64,16 @@ function isRenameFailure(error: unknown): boolean {
 
 /** Write `content` to `path` via temp-file + rename (direct-write fallback only for rename failures). */
 export async function atomicWriteTextFile(path: string, content: string): Promise<void> {
+  // P03-08-04: session-storage files (settings, themes, session snapshots,
+  // registries) take the native backend path — one async IPC call with the
+  // temp-write + rename executed off the main thread — instead of 2–4
+  // synchronous plugin-fs commands that run on the main/IPC thread. Errors
+  // propagate: falling back to the plugin path after a genuine native write
+  // failure would just repeat the failing I/O with worse atomicity.
+  if (isSessionStoragePath(path) && (await nativeSessionFsSupported())) {
+    await nativeAtomicWriteTextFile(path, content);
+    return;
+  }
   const tempPath = tempPathFor(path);
   try {
     // Write the temp file first. A failure here (ENOSPC, EIO, EACCES on the

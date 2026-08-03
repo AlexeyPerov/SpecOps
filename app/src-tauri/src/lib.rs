@@ -2,6 +2,7 @@ mod file_watcher;
 mod git;
 mod git_askpass;
 mod opencode_sidecar;
+mod session_fs;
 
 #[cfg(target_os = "macos")]
 mod dock_menu;
@@ -103,6 +104,13 @@ pub fn run() {
             git::remove_stale_index_lock,
             file_watcher::sync_file_watcher_paths,
             file_watcher::sync_project_tree_watcher,
+            session_fs::session_fs_supported,
+            session_fs::session_fs_mkdir,
+            session_fs::session_fs_stat_mtime_ms,
+            session_fs::session_fs_remove,
+            session_fs::session_fs_write_text,
+            session_fs::session_fs_read_text,
+            session_fs::session_fs_atomic_write_text,
             opencode_sidecar::opencode_sidecar_attach_workspace,
             opencode_sidecar::opencode_sidecar_start,
             opencode_sidecar::opencode_sidecar_stop,

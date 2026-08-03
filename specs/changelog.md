@@ -1,5 +1,68 @@
 # Changelog
 
+## 2026-08-03 22:20 MSK — Critical performance/stall fixes (P03-08-01…05)
+
+Implemented the five critical issues from `specs/performance-review-03-08.md`:
+the file-open wedge, git-induced I/O starvation, and the session write-lock
+defects behind them. No feature changes.
+
+### Session write lock (P03-08-01, P03-08-05)
+
+- The acquire loop now checks its deadline and a hard iteration cap at the top
+  of every iteration, and every retry path — including the stale-lock break —
+  goes through the shared retry sleep. A stale lock directory that cannot be
+  removed can no longer spin the loop forever, saturate IPC, and permanently
+  wedge the write chain (the "new files stop opening until relaunch" bug).
+- Lock staleness is now judged from the owner file's mtime (which the
+  heartbeat actually refreshes) instead of the lock directory's mtime (which
+  it never did) — long read-modify-writes are no longer misjudged stale every
+  time. Each heartbeat re-verifies ownership and stops itself after a
+  takeover, and release skips removal once the lock was lost, so a broken and
+  reacquired lock is never clobbered or deleted by the previous holder.
+  Heartbeat refreshes stop after 60 s so a genuinely wedged holder's lock can
+  still be broken by age.
+
+### Write-chain resilience and split (P03-08-03)
+
+- Every chained session write now runs under a 30 s watchdog: a wedged entry
+  rejects its caller with a descriptive error and the queue advances, instead
+  of silently blocking all future session writes and file opens forever. The
+  watchdog starts when an entry begins executing, not when it is queued.
+- The open-file registry now has its own write chain and cross-window lock
+  (`open-files.json.lock`), separate from session persistence: opening a file
+  no longer queues behind snapshot/navigation writes, and a wedged write in
+  one domain cannot block the other.
+
+### Backend git execution (P03-08-02)
+
+- `run_git` and `git_commit_with_message` are now true async commands that run
+  their blocking subprocess work in `spawn_blocking`. Previously the blocking
+  bodies ran directly on the shared tokio worker pool, and enough concurrent
+  git commands starved the async fs plugin commands on the same runtime —
+  file reads (and therefore document opens) stalled until a git command
+  finished, which matches the observed "files open after tens of seconds".
+- Read-only (unregistered) git commands now have a timeout: the backend wait
+  loop enforces a deadline and kills the child on expiry, and the frontend
+  sends a default `timeoutMs` for every command. A hung `git status` against a
+  stalled mount no longer pins a worker and its per-repo queue forever.
+
+### Session-storage filesystem off the main thread (P03-08-04)
+
+- New `session_fs_*` backend commands (async + `spawn_blocking`, scoped to the
+  app-data directory) back the write lock's mkdir/stat/remove/owner I/O and
+  atomic session writes. `atomicWriteTextFile` on session-storage paths is now
+  a single backend call that writes a temp sibling, fsyncs it, and renames —
+  replacing 2–4 synchronous plugin-fs commands that executed on the main/IPC
+  thread and could freeze the window under lock contention. The frontend
+  probes `session_fs_supported` once and falls back to the plugin path when
+  the native commands are absent.
+
+Regression coverage: new `sessionWriteLock.test.ts` (unremovable stale lock
+bounded by deadline; watchdog abandons a wedged entry; slow-but-legit
+predecessors are not falsely abandoned; registry chain independent of session
+chain; heartbeat/release ownership after takeover) and a Rust round-trip test
+for the native atomic write.
+
 ## 2026-08-03 01:50 MSK — Review fixes for workspace interaction changes
 
 Code-review pass over the P02-08 implementation. Fixed correctness and

@@ -209,9 +209,11 @@ function buildRunGitInvokePayload(
       extra.askpassTimeoutMs = options.askpassTimeoutMs;
     }
   }
-  if (options?.commandId || options?.askpass || options?.timeoutMs !== undefined) {
-    extra.timeoutMs = resolveGitCommandTimeout(options);
-  }
+  // P03-08-02: every command gets a timeout, including unregistered read-only
+  // ones (status/log/diff/rev-parse). Those previously ran with no ceiling at
+  // all, so one hung `git status` (stalled network mount, wedged credential
+  // helper) pinned its backend worker — and the per-repo queue — forever.
+  extra.timeoutMs = resolveGitCommandTimeout(options);
   return runGitInvokeArgs(repoRoot, args, extra);
 }
 

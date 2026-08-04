@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-08-04 23:32 MSK — Incremental session persistence (P03-08-25…26)
+
+Implemented the "Persistence" section of `specs/performance-review-03-08.md`:
+the debounced session persist no longer stringifies and copies every open
+document just to decide nothing changed, and the per-document buffer cache no
+longer retains the full text of every file ever opened for the session. No
+feature changes.
+
+### Navigation fingerprint (P03-08-25)
+
+- The change-detection fingerprint for the per-window navigation record is now
+  a cheap structural key built from topology + per-document metadata (id/title/
+  path/dirty/kind) and the editor layout (panes/tabs/selection/slots) — never
+  document content. Previously each debounced persist (1.2 s after a tab
+  switch) mapped every document in every context twice (persistence shape, then
+  payload strip) and `JSON.stringify`d the whole snapshot purely to compute a
+  change fingerprint.
+- The buffer-strip pass was collapsed into the write-only path
+  (`buildNavigationSnapshot`) and now runs in the same single pass that walks
+  each context, instead of mapping every document a second time.
+- The navigation + buffer writes (per-window files with exactly one writer by
+  construction, written atomically via temp + rename) now go through a new
+  in-window-only chain (`enqueueSessionWriteInWindow`) instead of acquiring the
+  cross-window lock directory. The shared chain still orders these writes
+  against `session.json` writes (which take the cross-window lock), and the
+  watchdog still bounds a hung write.
+
+### Buffer fingerprint cache (P03-08-26)
+
+- The per-document buffer fingerprint is now a djb2 hash + length of the
+  content instead of the content itself, so the cache no longer retains the
+  full text of every persisted document for the session.
+- Buffer files and their fingerprint entries for documents no longer present in
+  any context (closed tabs) are now detected as orphans during each persist and
+  deleted. Previously the cache was pruned only when a window session was
+  removed entirely — never on tab close — so long sessions retained every file
+  ever opened (JS heap growth → GC pauses) and the growing
+  `session-buffer.*.json` directory was `readDir`ed on restore.
+
 ## 2026-08-04 22:33 MSK — Tab-switching and editor reactivity (P03-08-19…24)
 
 Implemented the "Tab switching and editor reactivity" section of

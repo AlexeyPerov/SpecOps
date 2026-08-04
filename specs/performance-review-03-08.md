@@ -719,6 +719,19 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-25 — Navigation-persist fingerprint copies and stringifies every document
 
+- **Status:** Resolved on 2026-08-04. The change-detection fingerprint is now a
+  cheap structural key built from topology + per-document metadata (id/title/
+  path/dirty/kind) and the editor layout (panes/tabs/selection/slots) — never
+  document content — so a debounced persist no longer maps every document in
+  every context twice and `JSON.stringify`s the whole snapshot just to decide
+  nothing changed. `stripBufferPayload` is deferred to the write-only path
+  (`buildNavigationSnapshot`) and runs in the same single pass, and the
+  navigation + buffer writes (per-window files with exactly one writer by
+  construction, written atomically via temp + rename) now go through a new
+  in-window-only chain (`enqueueSessionWriteInWindow`) instead of acquiring the
+  cross-window lock directory — dropping the mkdir/owner-write/stat/remove IPC
+  round-trips per persist. The shared chain still orders these writes against
+  `session.json` writes, and the watchdog still bounds a hung write.
 - **Area:** Incremental session persistence.
 - **Impact:** **Low–medium.** Each debounced persist (1.2 s after a tab
   switch) maps **every document in every context** twice (persistence shape,
@@ -736,6 +749,15 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-26 — Buffer-fingerprint map retains full text of every document forever
 
+- **Status:** Resolved on 2026-08-04. The per-document buffer fingerprint is
+  now a djb2 hash + length of the content instead of the content itself, so the
+  cache no longer retains the full text of every document ever persisted for the
+  session. Buffer files and their fingerprint entries for documents no longer
+  present in any context (closed tabs) are now detected as orphans during each
+  persist and deleted, so neither the in-memory cache nor the growing
+  `session-buffer.*.json` directory outlives the document — closing a tab frees
+  its buffer immediately instead of waiting for the whole window session to be
+  removed (and the restore `readDir` no longer walks stale buffer files).
 - **Area:** Session persistence / memory.
 - **Impact:** **Medium.** `bufferFingerprintByKey` stores the **entire
   content string** of every persisted document and is pruned only when a

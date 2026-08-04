@@ -5,12 +5,15 @@ import type {
   ContextId,
   ContextSnapshot,
   DocumentState,
+  EditorLayout,
   WindowSessionSnapshot,
 } from "../domain/contracts";
+import { isFileTab } from "../domain/contracts";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import { atomicWriteTextFile } from "./atomicWrite";
 import { toWindowSnapshot } from "./sessionSnapshotCodec";
-import { withSessionWriteLock } from "./sessionWriteLock";
+import { enqueueSessionWriteInWindow } from "./sessionWriteLock";
+import { logDiagnostic } from "./logging";
 
 const NAVIGATION_VERSION = 1;
 const BUFFER_VERSION = 1;
@@ -37,7 +40,18 @@ type ContextEntry = {
   snapshot: ContextSnapshot;
 };
 
+/**
+ * Per-window navigation fingerprint (P03-08-25). A cheap structural key over
+ * topology + metadata that excludes document content, so a debounced persist
+ * no longer maps every document in every context twice and `JSON.stringify`s
+ * the whole snapshot just to decide nothing changed.
+ */
 const navigationFingerprintByWindow = new Map<string, string>();
+/**
+ * Per-document buffer fingerprint (P03-08-26). Stores a djb2 hash + length of
+ * the content instead of the content itself, so the cache no longer retains
+ * the full text of every document ever persisted for the session.
+ */
 const bufferFingerprintByKey = new Map<string, string>();
 
 function safeFilePart(value: string): string {
@@ -94,8 +108,18 @@ function contextEntries(snapshot: WindowSessionSnapshot): ContextEntry[] {
   ];
 }
 
-function stripBufferPayload(snapshot: WindowSessionSnapshot): WindowSessionSnapshot {
-  const stripContext = (context: ContextSnapshot): ContextSnapshot => ({
+/**
+ * Build the navigation record payload while stripping per-document buffers in
+ * the same pass that walks each context (P03-08-25): the previous code mapped
+ * every document twice — once through `toWindowSnapshot`/`stripWindowSnapshot…`
+ * (which only clears content for image/binary/clean docs) and again through
+ * `stripBufferPayload` (which clears all content for the nav record). Now each
+ * document is visited once and its content fields are blanked directly on the
+ * nav-record copy, while the full content is read off the original for the
+ * buffer fingerprint in the same loop.
+ */
+function buildNavigationSnapshot(snapshot: WindowSessionSnapshot): WindowSessionSnapshot {
+  const stripContextDocuments = (context: ContextSnapshot): ContextSnapshot => ({
     ...context,
     documents: context.documents.map((documentState) => ({
       ...documentState,
@@ -105,12 +129,14 @@ function stripBufferPayload(snapshot: WindowSessionSnapshot): WindowSessionSnaps
   });
   return {
     ...snapshot,
-    notepad: stripContext(snapshot.notepad),
-    chatHttp: stripContext(snapshot.chatHttp ?? snapshot.notepad),
-    ...(snapshot.chatCloud ? { chatCloud: stripContext(snapshot.chatCloud) } : {}),
+    notepad: stripContextDocuments(snapshot.notepad),
+    chatHttp: stripContextDocuments(snapshot.chatHttp ?? snapshot.notepad),
+    ...(snapshot.chatCloud
+      ? { chatCloud: stripContextDocuments(snapshot.chatCloud) }
+      : {}),
     workspaces: snapshot.workspaces.map((workspace) => ({
       ...workspace,
-      snapshot: stripContext(workspace.snapshot),
+      snapshot: stripContextDocuments(workspace.snapshot),
     })),
   };
 }
@@ -119,20 +145,95 @@ function bufferKey(windowId: string, contextId: ContextId, documentId: string): 
   return `${windowId}\0${contextId}\0${documentId}`;
 }
 
-function bufferRecord(
-  windowId: string,
-  contextId: ContextId,
-  documentState: DocumentState,
-): BufferRecord {
-  return {
-    version: BUFFER_VERSION,
-    windowId,
-    contextId,
-    documentId: documentState.id,
-    content: documentState.content,
-    savedContent: documentState.savedContent,
-    isDirty: documentState.isDirty,
+/**
+ * Cheap content fingerprint (P03-08-26): a stable djb2 hash plus the length.
+ * Collisions on different edits of the same length are possible (~1 in 2^32)
+ * but benign — a stale hash would skip one buffer rewrite, and the very next
+ * edit (almost certainly a different length) re-syncs it. The point is that
+ * the map no longer retains the full text of every persisted document.
+ */
+function contentFingerprint(content: string): string {
+  let hash = 5381;
+  for (let i = 0; i < content.length; i += 1) {
+    hash = ((hash << 5) + hash + content.charCodeAt(i)) >>> 0;
+  }
+  return `${hash.toString(36)}:${content.length}`;
+}
+
+/**
+ * Fingerprint the navigation topology + metadata without materializing any
+ * document content (P03-08-25). The key is built from the fields that
+ * constitute "the window shape": active context, per-context document list
+ * (id/title/path/dirty/kind), the editor layout (panes/tabs/selection), and
+ * the scalar preferences. Content and saved content are deliberately excluded
+ * — they live in the per-document buffer files.
+ */
+function navigationFingerprint(snapshot: WindowSessionSnapshot): string {
+  const parts: string[] = [snapshot.activeContextId];
+  parts.push(
+    `zoom=${snapshot.editorPreferences.zoomPercent}`,
+    `wrap=${snapshot.editorPreferences.wrapLines ? 1 : 0}`,
+    `rail=${snapshot.activityRailWidthPx ?? 0}`,
+  );
+  const emitContext = (contextId: string, context: ContextSnapshot): void => {
+    parts.push(`|ctx=${contextId}|`);
+    for (const doc of context.documents) {
+      parts.push(
+        doc.id,
+        doc.title,
+        doc.filePath ?? "",
+        doc.isDirty ? "D" : "C",
+        doc.contentKind,
+        doc.language,
+        doc.fileMissing ? "M" : "_",
+        String(doc.markdownViewMode),
+      );
+    }
+    parts.push(layoutFingerprint(context.session.editorLayout));
+    if (context.session.lastActiveSessionId !== undefined) {
+      parts.push(`las=${context.session.lastActiveSessionId ?? ""}`);
+    }
+    if (context.session.layout) {
+      const l = context.session.layout;
+      parts.push(
+        `lay=${l.projectPanelWidthPx}:${l.sessionsSidebarWidthPx}:${l.projectPanelCollapsed ? 1 : 0}:${l.sessionsSidebarCollapsed ? 1 : 0}`,
+      );
+    }
   };
+  emitContext("notepad", snapshot.notepad);
+  if (snapshot.chatHttp) {
+    emitContext("chat-http", snapshot.chatHttp);
+  }
+  if (snapshot.chatCloud) {
+    emitContext("chat-cloud", snapshot.chatCloud);
+  }
+  for (const workspace of snapshot.workspaces) {
+    parts.push(`#ws=${workspace.id}@${workspace.rootPath}`);
+    emitContext(workspace.id, workspace.snapshot);
+  }
+  return parts.join("\u0001");
+}
+
+function layoutFingerprint(layout: EditorLayout): string {
+  const panes = layout.panes
+    .map((pane) =>
+      [
+        pane.id,
+        pane.selectedTabId ?? "",
+        pane.tabs
+          .map((tab) =>
+            isFileTab(tab)
+              ? `f:${tab.documentId}:${tab.pinned ? 1 : 0}${tab.stripHidden ? "h" : ""}`
+              : tab.kind === "session"
+                ? `s:${tab.sessionId}:${tab.pinned ? 1 : 0}`
+                : `v:${tab.view}:${tab.pinned ? 1 : 0}${tab.subTab ? `:${tab.subTab}` : ""}`,
+          )
+          .join(","),
+      ].join(">"),
+    )
+    .join("|");
+  const slots = layout.slots.map((row) => row.join(".")).join("/");
+  return `L=${layout.kind}:${layout.activePaneId}[${panes}][${slots}]`;
 }
 
 /**
@@ -145,31 +246,70 @@ export async function persistIncrementalWindowSession(
   windowId: string,
 ): Promise<void> {
   const fullSnapshot = toWindowSnapshot(state);
-  const navigationSnapshot = stripBufferPayload(fullSnapshot);
-  const navigationFingerprint = JSON.stringify(navigationSnapshot);
+  const navFingerprint = navigationFingerprint(fullSnapshot);
+  const navigationChanged = navigationFingerprintByWindow.get(windowId) !== navFingerprint;
+
+  // Single pass over every document: detect changed buffers, prune buffer
+  // files + fingerprint entries for documents that no longer exist in any
+  // context (closed tabs — P03-08-26), and record live keys. `toWindowSnapshot`
+  // already strips image/binary content via `stripWindowSnapshotForSession`;
+  // those documents are skipped because their persisted `content` is blank and
+  // blank content has nothing to buffer.
   const changedBuffers: Array<{ record: BufferRecord; fingerprint: string }> = [];
+  const liveKeys = new Set<string>();
+  let liveBufferCount = 0;
   for (const context of contextEntries(fullSnapshot)) {
     for (const documentState of context.snapshot.documents) {
-      const record = bufferRecord(windowId, context.contextId, documentState);
-      // The fingerprint tracks only the payload that is expensive to serialize
-      // and that the spec names as the dedup key: the document content. Metadata
-      // fields (savedContent/isDirty) ride along in the record but do not by
-      // themselves trigger a buffer rewrite, so a Save with no text change does
-      // not re-serialize every buffer.
-      const fingerprint = record.content;
       const key = bufferKey(windowId, context.contextId, documentState.id);
+      liveKeys.add(key);
+      if (documentState.content.length === 0) {
+        // Nothing to buffer for a stripped/empty document. If an older buffer
+        // file exists (document emptied by a save), rewrite is cheap but the
+        // fingerprint must still advance so a later non-empty edit persists.
+        continue;
+      }
+      liveBufferCount += 1;
+      const fingerprint = contentFingerprint(documentState.content);
       if (bufferFingerprintByKey.get(key) !== fingerprint) {
-        changedBuffers.push({ record, fingerprint });
+        changedBuffers.push({
+          record: {
+            version: BUFFER_VERSION,
+            windowId,
+            contextId: context.contextId,
+            documentId: documentState.id,
+            content: documentState.content,
+            savedContent: documentState.savedContent,
+            isDirty: documentState.isDirty,
+          },
+          fingerprint,
+        });
       }
     }
   }
-  const navigationChanged =
-    navigationFingerprintByWindow.get(windowId) !== navigationFingerprint;
-  if (!navigationChanged && changedBuffers.length === 0) {
+
+  // Evict buffer files + fingerprint entries for documents that were closed in
+  // this window (P03-08-26): previously the map retained the full text (now a
+  // hash) of every document ever opened until the window session was removed
+  // entirely, and the per-document `session-buffer.*.json` files were never
+  // deleted on tab close — growing the data dir and the restore `readDir`.
+  const staleKeys: string[] = [];
+  for (const key of bufferFingerprintByKey.keys()) {
+    if (key.startsWith(`${windowId}\0`) && !liveKeys.has(key)) {
+      staleKeys.push(key);
+    }
+  }
+
+  if (!navigationChanged && changedBuffers.length === 0 && staleKeys.length === 0) {
     return;
   }
 
-  await withSessionWriteLock(async () => {
+  // P03-08-25: the navigation + buffer files are keyed by `windowId`, whose
+  // only writer is this window by construction, and the writes are atomic
+  // (temp + rename). The cross-window mkdir/owner/stat/remove lock IPC was
+  // pure cost here. The shared in-window chain still orders these writes
+  // against each other and against `session.json` writes (which take the
+  // cross-window lock), and the watchdog still bounds a hung write.
+  await enqueueSessionWriteInWindow(async () => {
     for (const { record, fingerprint } of changedBuffers) {
       await atomicWriteTextFile(
         await bufferPath(windowId, record.contextId, record.documentId),
@@ -180,15 +320,43 @@ export async function persistIncrementalWindowSession(
         fingerprint,
       );
     }
-    const navigation: NavigationRecord = {
-      version: NAVIGATION_VERSION,
-      windowId,
-      updatedAt: new Date().toISOString(),
-      snapshot: navigationSnapshot,
-    };
-    await atomicWriteTextFile(await navigationPath(windowId), JSON.stringify(navigation));
-    navigationFingerprintByWindow.set(windowId, navigationFingerprint);
+
+    // Delete buffer files for closed documents and drop their fingerprint
+    // entries so the cache cannot outlive the document.
+    for (const key of staleKeys) {
+      const [, contextId, documentId] = key.split("\u0000") as [string, ContextId, string];
+      try {
+        await remove(await bufferPath(windowId, contextId, documentId));
+      } catch {
+        // Already absent — a concurrent persist or external cleanup removed it.
+      }
+      bufferFingerprintByKey.delete(key);
+    }
+
+    if (navigationChanged) {
+      const navigationSnapshot = buildNavigationSnapshot(fullSnapshot);
+      const navigation: NavigationRecord = {
+        version: NAVIGATION_VERSION,
+        windowId,
+        updatedAt: new Date().toISOString(),
+        snapshot: navigationSnapshot,
+      };
+      await atomicWriteTextFile(await navigationPath(windowId), JSON.stringify(navigation));
+      navigationFingerprintByWindow.set(windowId, navFingerprint);
+    }
   });
+
+  // Light, contention-free metric so the eviction path is observable in logs
+  // without paying a stringify on every persist.
+  if (staleKeys.length > 0) {
+    void logDiagnostic({
+      level: "debug",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "incremental session pruned closed-document buffers",
+      metadata: { windowId, pruned: staleKeys.length, live: liveBufferCount },
+    }).catch(() => {});
+  }
 }
 
 function fallbackDocumentsByContext(

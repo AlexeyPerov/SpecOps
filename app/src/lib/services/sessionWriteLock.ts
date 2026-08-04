@@ -196,6 +196,12 @@ async function lockFreshnessMtimeMs(
 
 interface CrossProcessWriteLock {
   withLock<T>(fn: () => Promise<T>): Promise<T>;
+  /**
+   * In-window-only serialization (P03-08-25): same FIFO chain as
+   * {@link withLock} but skips the cross-window lock directory. See
+   * `enqueueSessionWriteInWindow`.
+   */
+  enqueueInWindow<T>(fn: () => Promise<T>): Promise<T>;
   /** Wait until all currently queued writes have settled (or watchdogged). */
   flush(): Promise<void>;
   reset(): void;
@@ -431,8 +437,32 @@ function createCrossProcessWriteLock(lockDirName: string, label: string): CrossP
     return guarded;
   }
 
+  /**
+   * In-window-only serialization (P03-08-25): runs `fn` on the same FIFO
+   * chain as {@link withLock} but skips the cross-window lock directory. For
+   * per-window session files (navigation + buffer records) the only writer is
+   * this window by construction, and the writes are atomic (temp + rename), so
+   * the cross-window mkdir/owner/stat/remove IPC round-trips were pure cost.
+   * The chain still orders per-window writes against each other and against
+   * cross-window-locked writes (they share `writeChain`), and the watchdog
+   * still applies, so a hung write cannot wedge later entries.
+   */
+  function enqueueInWindow<T>(fn: () => Promise<T>): Promise<T> {
+    const previous = writeChain;
+    const guarded = (async () => {
+      await previous;
+      return guardWithWatchdog(fn());
+    })();
+    writeChain = guarded.then(
+      () => undefined,
+      () => undefined,
+    );
+    return guarded;
+  }
+
   return {
     withLock,
+    enqueueInWindow,
     flush: async () => {
       await writeChain;
     },
@@ -453,6 +483,15 @@ const openFileRegistryLock = createCrossProcessWriteLock(
 /** Run `fn` exclusively against other session.json writers (all windows). */
 export function withSessionWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   return sessionLock.withLock(fn);
+}
+
+/**
+ * Run `fn` on the session write chain without acquiring the cross-window lock
+ * (P03-08-25). Use for per-window session files whose only writer is this
+ * window; see {@link CrossProcessWriteLock.enqueueInWindow}.
+ */
+export function enqueueSessionWriteInWindow<T>(fn: () => Promise<T>): Promise<T> {
+  return sessionLock.enqueueInWindow(fn);
 }
 
 /**

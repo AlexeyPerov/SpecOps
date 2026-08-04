@@ -299,6 +299,63 @@ describe("createEditorViewController", () => {
     expect(restored.state.doc.toString()).toBe("first line\nsecond line\nthird line");
   });
 
+  it("drops undo history from the portable snapshot for large documents on eviction", () => {
+    // P03-08-22: evicting a large document must not serialize the unbounded
+    // undo stack (and restore must not pay the deserialize cost). Folds and
+    // bookmarks are preserved; only history is dropped for big files.
+    // Use newline-separated content so a bookmark away from line 1 keeps its
+    // position (the bookmark field dedupes by line).
+    const line = "x".repeat(64) + "\n";
+    const largeContent = line.repeat(Math.ceil((300 * 1024) / line.length));
+    const props = baseProps({ content: largeContent });
+    const sessionCache = createEditorDocumentSessionCache();
+    const workbench = createEditorWorkbenchRuntime({
+      getActiveContextId: () => props.contextId,
+      getActivePaneId: () => props.paneId,
+      getActiveDocumentId: () => props.documentId,
+    });
+    const deps = {
+      workbench,
+      sessionCache,
+      onStatusMessage: () => {},
+      onDocumentDirty: vi.fn(),
+      onScrollTopChange: vi.fn(),
+    };
+    parent = document.createElement("div");
+    document.body.appendChild(parent);
+    controller = createEditorViewController(deps);
+    controller.update(props);
+    controller.mount(parent);
+    const firstView = controller.getView()!;
+    dispatchUserEdit(firstView, {
+      changes: { from: firstView.state.doc.length, insert: "!" },
+    });
+    firstView.dispatch({
+      effects: [
+        foldEffect.of({ from: 0, to: 100 }),
+        toggleBookmarkEffect.of({ positions: [130] }),
+      ],
+    });
+    expect(undoDepth(firstView.state)).toBeGreaterThan(0);
+
+    controller.destroy();
+    parent.replaceChildren();
+    controller = createEditorViewController(deps);
+    controller.update(baseProps({ ...props, content: `${largeContent}!` }));
+    controller.mount(parent);
+    const restored = controller.getView()!;
+
+    // History was dropped — undo depth is zero on restore.
+    expect(undoDepth(restored.state)).toBe(0);
+    // Folds and bookmarks survive.
+    expect(restored.state.field(bookmarkField)).toEqual([130]);
+    const folds: Array<[number, number]> = [];
+    foldedRanges(restored.state).between(0, restored.state.doc.length, (from, to) => {
+      folds.push([from, to]);
+    });
+    expect(folds).toEqual([[0, 100]]);
+  });
+
   it("restores the persisted scroll when a parked editor is evicted with a zero DOM scroll", () => {
     // A parked (display: none) editor reports scrollTop === 0 from the DOM.
     // Eviction must capture the persisted document-state scroll (props.scrollTop)
@@ -382,5 +439,56 @@ describe("createEditorViewController", () => {
 
     const after = compartments.completion.get(view.state);
     expect(after).toBe(before);
+  });
+
+  it("does not dispatch a content replacement when the store emits the same content reference", () => {
+    // P03-08-19: app-state emits fire on every cursor move / unrelated change.
+    // The same content reference must short-circuit without re-materializing
+    // the buffer or dispatching a no-op replacement transaction. A dispatch
+    // produces a new EditorState, so `view.state` identity is a faithful
+    // "did anything happen" signal.
+    mountController();
+    const view = controller!.getView()!;
+    const stateBefore = view.state;
+
+    controller!.update(baseProps());
+    controller!.update(baseProps());
+    controller!.update(baseProps());
+
+    expect(view.state).toBe(stateBefore);
+  });
+
+  it("does not dispatch when the store re-derives the same content by value", () => {
+    // The store may produce a new string instance with the same text (e.g. a
+    // reducer that spreads the documents array). The controller must detect
+    // the value equality via length + toString() and skip the dispatch, then
+    // remember the new reference so subsequent emits are reference-cheap.
+    mountController();
+    const view = controller!.getView()!;
+    const stateBefore = view.state;
+
+    controller!.update(baseProps({ content: "document-a" }));
+
+    expect(view.state).toBe(stateBefore);
+  });
+
+  it("records the user-edit content as the new agreement reference", () => {
+    // After a user edit, the store echoes the new content back. The controller
+    // must treat that echo as reference-equal (no dispatch) because the dirty
+    // listener already recorded the same string as the agreement.
+    const dirty = vi.fn();
+    mountController(baseProps(), { onDocumentDirty: dirty });
+    const view = controller!.getView()!;
+
+    dispatchUserEdit(view, {
+      changes: { from: view.state.doc.length, insert: "!" },
+    });
+    expect(dirty).toHaveBeenLastCalledWith("document-a!");
+    const stateAfterEdit = view.state;
+
+    // Store echoes the edited content back with the SAME reference the dirty
+    // listener produced (real app-state uses that exact string).
+    controller!.update(baseProps({ content: "document-a!" }));
+    expect(view.state).toBe(stateAfterEdit);
   });
 });

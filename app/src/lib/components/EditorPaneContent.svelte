@@ -30,7 +30,7 @@
     type WorkspaceEntry,
   } from "../domain/contracts";
   import {
-    deriveAppShellDocumentView,
+    deriveAppShellDocumentViewMemoized,
     isTextEditorDocumentState,
     renderMemoizedDocumentMarkdown,
   } from "../services/appShellDocumentView";
@@ -242,7 +242,7 @@
   // (the preview HTML reaches MarkdownEditorPane via `activePreviewHtml` below), so
   // asking for it here was a second full markdown parse per keystroke whose result was
   // thrown away.
-  const documentView = $derived(deriveAppShellDocumentView(paneDocument));
+  const documentView = $derived(deriveAppShellDocumentViewMemoized(paneDocument));
 
   // ---- Markdown preview content ---------------------------------------------
   // A markdown parse is proportional to document length and the render memo is keyed
@@ -599,7 +599,7 @@
     >
       <div class="editor-pane-primary">
         {#each keepAliveEntries as entry (entry.tabId)}
-          {@const entryView = deriveAppShellDocumentView(entry.document)}
+          {@const entryView = deriveAppShellDocumentViewMemoized(entry.document)}
           {@const isEntryActive = entry.tabId === activeTabId}
           <div class="editor-tab-slot" class:editor-tab-slot-hidden={!isEntryActive}>
             <MarkdownEditorPane

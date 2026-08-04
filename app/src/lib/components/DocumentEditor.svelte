@@ -2,8 +2,16 @@
   import EditorSurface from "./EditorSurface.svelte";
   import { appSettings } from "../state/appStateSelectors";
   import type { EditorLanguageId } from "../editor/editorLanguage";
-  import { listEnabledMarkdownSnippets } from "../editor/markdownSnippetSettings";
+  import { listEnabledMarkdownSnippetsMemoized } from "../editor/markdownSnippetSettings";
   import { appState } from "../state/appState";
+  import type { ResolvedMarkdownSnippet } from "../domain/snippets";
+
+  /**
+   * Stable empty array for the non-markdown path (P03-08-24a). Returning a new
+   * `[]` literal on every emit gave the controller a fresh reference each time,
+   * re-triggering the snippet/completion compartment key check.
+   */
+  const EMPTY_SNIPPETS: ResolvedMarkdownSnippet[] = [];
 
   let {
     content = "",
@@ -46,11 +54,13 @@
   } = $props();
 
   // Subscribe to settings only — full `$appState` re-rendered every cursor tick
-  // and forced keep-alive surfaces through needless update churn.
+  // and forced keep-alive surfaces through needless update churn. The memoized
+  // resolver (P03-08-24a) returns the same array reference across unrelated
+  // settings emits, so the controller's snippet key check is a no-op then.
   const enabledSnippets = $derived(
     language === "markdown"
-      ? listEnabledMarkdownSnippets($appSettings.markdownSnippets)
-      : [],
+      ? listEnabledMarkdownSnippetsMemoized($appSettings.markdownSnippets)
+      : EMPTY_SNIPPETS,
   );
 
   function handleDocumentDirty(nextContent: string): void {

@@ -98,6 +98,26 @@ const PORTABLE_EDITOR_FIELDS: Record<string, StateField<any>> = {
   folds: foldState,
   bookmarks: bookmarkField,
 };
+/**
+ * Portable fields excluding undo history. Used when serializing an evicted
+ * large document (P03-08-22): the unbounded undo stack dominates both the
+ * `toJSON` serialization cost on eviction and the `fromJSON` deserialize on
+ * restore, and it is the field the user is least likely to miss after a cold
+ * tab restore of a big file. Folds and bookmarks are cheap and kept.
+ */
+const PORTABLE_EDITOR_FIELDS_NO_HISTORY: Record<string, StateField<any>> = {
+  folds: foldState,
+  bookmarks: bookmarkField,
+};
+/**
+ * Documents at or above this length drop their undo history when evicted from
+ * the live-tab LRU (P03-08-22). The threshold is chosen so the common case
+ * (small/medium source files) keeps full undo across tab switches, while
+ * very large files — whose history serialization stalls the unmount/mount
+ * path — get a cheap eviction. Below this size the history is small enough
+ * that serialize/restore is not user-perceptible.
+ */
+const PORTABLE_HISTORY_DROP_LENGTH = 256 * 1024;
 
 export function createEditorViewController(
   deps: EditorViewControllerDeps,
@@ -116,6 +136,23 @@ export function createEditorViewController(
   const cachedSessionKeys = new Map<string, EditorSessionKey>();
   let documentGeneration = 0;
   let languageLoadGeneration = 0;
+  /**
+   * Last content the editor and the store agreed on, captured by reference.
+   *
+   * P03-08-19: comparing `next.content !== view.state.doc.toString()` on every
+   * app-state emit materializes the whole buffer (O(length) allocation) per
+   * live editor per emit — dozens of full-document string builds on a single
+   * tab switch or cursor move, tens–hundreds of ms on MB-scale files. Tracking
+   * the reference here lets the hot path short-circuit by identity first:
+   *   1. reference-equal → no work, no allocation;
+   *   2. different length → definitely changed;
+   *   3. only then fall back to the O(length) `doc.toString()`.
+   *
+   * Kept in sync at every point the editor content and the store content
+   * converge: mount, document switch, external apply, and the dirty listener
+   * (the user edit's new string becomes the new agreement).
+   */
+  let lastSyncedContent: string | null = null;
   let currentEditorLanguage: EditorLanguageId = "plaintext";
   let lastDecoKey = "";
   let lastMinimapEnabled: boolean | null = null;
@@ -273,7 +310,12 @@ export function createEditorViewController(
           return;
         }
         if (update.docChanged && !transactionHasStoreOrigin(update.transactions)) {
-          deps.onDocumentDirty(update.state.doc.toString());
+          // The new content string IS the editor/store agreement: record it by
+          // reference so the next `update()` pass can short-circuit without
+          // re-materializing the buffer (P03-08-19).
+          const nextContent = update.state.doc.toString();
+          lastSyncedContent = nextContent;
+          deps.onDocumentDirty(nextContent);
         }
         if (update.selectionSet) {
           updateCursor();
@@ -327,7 +369,15 @@ export function createEditorViewController(
     state: EditorState,
     scrollTop: number,
   ): PortableEditorSession {
-    return { state: state.toJSON(PORTABLE_EDITOR_FIELDS), scrollTop };
+    // P03-08-22: drop the unbounded undo history for large documents so the
+    // synchronous `toJSON` on eviction (and the matching `fromJSON` on restore)
+    // does not stall the tab-switch path. Folds/bookmarks stay — they are
+    // cheap and high-value. Small/medium files keep full history.
+    const fields =
+      state.doc.length >= PORTABLE_HISTORY_DROP_LENGTH
+        ? PORTABLE_EDITOR_FIELDS_NO_HISTORY
+        : PORTABLE_EDITOR_FIELDS;
+    return { state: state.toJSON(fields), scrollTop };
   }
 
   function restoreOrCreateState(
@@ -560,7 +610,28 @@ export function createEditorViewController(
   }
 
   function applyExternalContent(content: string, kind: "sync" | "reload"): void {
-    if (!view || content === view.state.doc.toString()) {
+    if (!view) {
+      return;
+    }
+    // P03-08-19: compare by reference first, then length, before falling back
+    // to the O(length) `doc.toString()`. The store's content string is usually
+    // the same instance the editor last agreed on, so this is a near-free
+    // no-op on the vast majority of app-state emits (cursor moves, tab
+    // switches between other documents, etc.).
+    if (lastSyncedContent !== null) {
+      if (content === lastSyncedContent) {
+        return;
+      }
+      if (content.length !== view.state.doc.length) {
+        // Length differs → content definitely changed; apply below.
+      } else if (content === view.state.doc.toString()) {
+        // Same content, different reference (e.g. store re-derived the same
+        // text). Record the new reference and skip the dispatch.
+        lastSyncedContent = content;
+        return;
+      }
+    } else if (content === view.state.doc.toString()) {
+      lastSyncedContent = content;
       return;
     }
     view.dispatch({
@@ -570,6 +641,7 @@ export function createEditorViewController(
         Transaction.addToHistory.of(false),
       ],
     });
+    lastSyncedContent = content;
   }
 
   function switchDocument(next: EditorViewControllerProps): void {
@@ -608,6 +680,10 @@ export function createEditorViewController(
     lastSnippetsEnabled = null;
     lastWrapLines = null;
     lastZoomPercent = null;
+    // The restored/created state's doc matches `next.content` (cached sessions
+    // are only reused when `doc.toString() === content`, fresh states are built
+    // from `content`), so seed the agreement reference here (P03-08-19).
+    lastSyncedContent = next.content;
 
     // Re-apply pane-level chrome that may differ from a restored session.
     syncWrapLines(next.wrapLines);
@@ -686,6 +762,11 @@ export function createEditorViewController(
     lastSnippetsEnabled = initial.language === "markdown";
     attachScrollListener();
     trackedDocumentId = initial.documentId;
+    // Seed the content-agreement reference so the first `update()` after mount
+    // can short-circuit by identity (P03-08-19). `restoreOrCreateState` only
+    // returns a cached/restored state whose doc matches `initial.content`, so
+    // this is the editor's actual initial content.
+    lastSyncedContent = initial.content;
     // Language is already in createState when cached — seed so syncLanguage
     // no-ops the compartment swap. Still call syncLanguage so a cold pack
     // schedules loadLanguageSupport (seed-only previously skipped that path).
@@ -721,9 +802,9 @@ export function createEditorViewController(
     }
 
     // Same document: external/store content sync (no dirty feedback).
-    if (next.content !== view.state.doc.toString()) {
-      applyExternalContent(next.content, "reload");
-    }
+    // `applyExternalContent` short-circuits by reference / length before any
+    // O(length) allocation (P03-08-19), so this is cheap to call every emit.
+    applyExternalContent(next.content, "reload");
 
     syncWrapLines(next.wrapLines);
     syncZoomPercent(next.zoomPercent);
@@ -802,6 +883,7 @@ export function createEditorViewController(
     unregisterHost();
     view?.destroy();
     view = undefined;
+    lastSyncedContent = null;
     languageLoadGeneration += 1;
     documentGeneration += 1;
   }

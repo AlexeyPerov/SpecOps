@@ -6,6 +6,7 @@ import type {
   DocumentState,
   SessionState,
 } from "../domain/contracts";
+import { allTabs, isFileTab } from "../domain/contracts";
 import { appState } from "./appState";
 import {
   allContextSnapshots,
@@ -13,15 +14,30 @@ import {
   getActiveContextSnapshot,
 } from "./appState/contextHelpers";
 import { externalFileWatcherSyncKey } from "../services/appShellHelpers";
+import { stableDerived } from "./stableStore";
 
-export const appContexts = derived(appState, ($state) => $state.contexts);
-export const appSettings = derived(appState, ($state) => $state.settings);
-export const appEditor = derived(appState, ($state) => $state.editor);
-export const appTheme = derived(appState, ($state) => $state.theme);
-export const appRecentFiles = derived(appState, ($state) => $state.recentFiles);
-export const appActivityRailWidthPx = derived(appState, ($state) => $state.activityRailWidthPx);
+/**
+ * Object-valued slices of `appState`, republished with strict (`===`) equality.
+ *
+ * Svelte's `safe_not_equal` treats every object as changed on every
+ * `appState.update()`, so a plain `derived(appState, ($s) => $s.contexts)`
+ * re-notifies every consumer on every keystroke / cursor move — even though
+ * the `contexts` reference is unchanged. These stable variants suppress that
+ * spurious fan-out (P03-08-20). Pair with the referential-stability selectors
+ * below (which preserve object references when nothing changed).
+ */
+export const appContexts = stableDerived(derived(appState, ($state) => $state.contexts));
+export const appSettings = stableDerived(derived(appState, ($state) => $state.settings));
+export const appEditor = stableDerived(derived(appState, ($state) => $state.editor));
+export const appTheme = stableDerived(derived(appState, ($state) => $state.theme));
+export const appRecentFiles = stableDerived(derived(appState, ($state) => $state.recentFiles));
+export const appActivityRailWidthPx = stableDerived(
+  derived(appState, ($state) => $state.activityRailWidthPx),
+);
 
-export const appActiveContextId = derived(appContexts, ($contexts) => $contexts.activeContextId);
+export const appActiveContextId = stableDerived(
+  derived(appContexts, ($contexts) => $contexts.activeContextId),
+);
 
 let lastActiveContextInput: {
   contextsRef: AppDomainState["contexts"];
@@ -30,25 +46,31 @@ let lastActiveContextInput: {
 let lastActiveContextOutput: ContextSnapshot | null = null;
 
 /** Active context snapshot with referential stability when contexts are unchanged. */
-export const appActiveContext = derived(appState, ($state) => {
-  const contexts = $state.contexts;
-  const activeContextId = contexts.activeContextId;
-  if (
-    lastActiveContextInput &&
-    lastActiveContextInput.contextsRef === contexts &&
-    lastActiveContextInput.activeContextId === activeContextId &&
-    lastActiveContextOutput
-  ) {
-    return lastActiveContextOutput;
-  }
-  const snapshot = getActiveContextSnapshot($state);
-  lastActiveContextInput = { contextsRef: contexts, activeContextId };
-  lastActiveContextOutput = snapshot;
-  return snapshot;
-});
+export const appActiveContext = stableDerived(
+  derived(appState, ($state) => {
+    const contexts = $state.contexts;
+    const activeContextId = contexts.activeContextId;
+    if (
+      lastActiveContextInput &&
+      lastActiveContextInput.contextsRef === contexts &&
+      lastActiveContextInput.activeContextId === activeContextId &&
+      lastActiveContextOutput
+    ) {
+      return lastActiveContextOutput;
+    }
+    const snapshot = getActiveContextSnapshot($state);
+    lastActiveContextInput = { contextsRef: contexts, activeContextId };
+    lastActiveContextOutput = snapshot;
+    return snapshot;
+  }),
+);
 
-export const appActiveSession = derived(appActiveContext, ($ctx) => $ctx.session);
-export const appActiveDocuments = derived(appActiveContext, ($ctx) => $ctx.documents);
+export const appActiveSession = stableDerived(
+  derived(appActiveContext, ($ctx) => $ctx.session),
+);
+export const appActiveDocuments = stableDerived(
+  derived(appActiveContext, ($ctx) => $ctx.documents),
+);
 
 let lastOpenDocIdsOutput: Set<string> = new Set();
 
@@ -69,32 +91,38 @@ function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
  * Reuses the previous Set when membership is unchanged so content-only edits
  * (which replace `state.contexts`) do not thrash session-cache retain.
  */
-export const appOpenDocumentIds = derived(appState, ($state) => {
-  const next = collectAllOpenDocumentIds($state);
-  if (setsEqual(lastOpenDocIdsOutput, next)) {
-    return lastOpenDocIdsOutput;
-  }
-  lastOpenDocIdsOutput = next;
-  return next;
-});
+export const appOpenDocumentIds = stableDerived(
+  derived(appState, ($state) => {
+    const next = collectAllOpenDocumentIds($state);
+    if (setsEqual(lastOpenDocIdsOutput, next)) {
+      return lastOpenDocIdsOutput;
+    }
+    lastOpenDocIdsOutput = next;
+    return next;
+  }),
+);
 
 type WatcherStructuralSlice = {
-  session: SessionState;
-  documents: DocumentState[];
+  /**
+   * Sorted list of `filePath`s that the file tabs in this context's editor
+   * layout resolve to (via the context's documents). This is exactly the
+   * per-context contribution to the watched path set, so comparing these
+   * strings across emits is a precise gate for "the watched set changed"
+   * without re-walking every tab (P03-08-24e).
+   */
+  watchedPaths: string[];
 };
 
 let lastExternalWatcherWatchFlag: boolean | null = null;
 let lastExternalWatcherSlices: WatcherStructuralSlice[] | null = null;
 let lastExternalWatcherKeyOutput: string | null = null;
 
-function documentWatchIdentityEqual(a: DocumentState[], b: DocumentState[]): boolean {
+function stringArraysEqual(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) {
     return false;
   }
   for (let index = 0; index < a.length; index += 1) {
-    const left = a[index]!;
-    const right = b[index]!;
-    if (left.id !== right.id || left.filePath !== right.filePath) {
+    if (a[index] !== b[index]) {
       return false;
     }
   }
@@ -102,10 +130,23 @@ function documentWatchIdentityEqual(a: DocumentState[], b: DocumentState[]): boo
 }
 
 function watcherStructuralSlices(state: AppDomainState): WatcherStructuralSlice[] {
-  return allContextSnapshots(state).map((entry) => ({
-    session: entry.snapshot.session,
-    documents: entry.snapshot.documents,
-  }));
+  return allContextSnapshots(state).map((entry) => {
+    const documents = entry.snapshot.documents;
+    const documentById = new Map(documents.map((documentState) => [documentState.id, documentState]));
+    const paths = new Set<string>();
+    for (const tab of allTabs(entry.snapshot.session.editorLayout)) {
+      if (!isFileTab(tab)) {
+        continue;
+      }
+      const documentState = documentById.get(tab.documentId);
+      if (documentState?.filePath) {
+        paths.add(documentState.filePath);
+      }
+    }
+    // Sort so the comparison is order-independent (the iteration order of
+    // `allContextSnapshots` is stable, but sorting removes any doubt).
+    return { watchedPaths: [...paths].sort() };
+  });
 }
 
 function watcherStructuralEqual(
@@ -118,11 +159,13 @@ function watcherStructuralEqual(
   for (let index = 0; index < previous.length; index += 1) {
     const left = previous[index]!;
     const right = next[index]!;
-    // Content edits replace the documents array but keep the session ref.
-    if (left.session !== right.session) {
-      return false;
-    }
-    if (!documentWatchIdentityEqual(left.documents, right.documents)) {
+    // P03-08-24e: compare the resolved watched path sets directly. A tab
+    // switch within a workspace (or a cursor move that replaces the session
+    // object) leaves this set unchanged but used to flip the session
+    // reference, forcing a full `externalFileWatcherSyncKey` re-walk of every
+    // tab in every context. (`allContextSnapshots` returns contexts in a
+    // stable order, so index alignment is reliable.)
+    if (!stringArraysEqual(left.watchedPaths, right.watchedPaths)) {
       return false;
     }
   }

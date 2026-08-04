@@ -142,3 +142,41 @@ export function deriveAppShellDocumentView(
     activeDocumentPath,
   };
 }
+
+/**
+ * Memoized {@link deriveAppShellDocumentView} keyed on the document reference
+ * (P03-08-24b). The keep-alive editor grid calls this per entry per emit; the
+ * per-pane active-document call re-runs on every app-state emit. With the
+ * default `renderMarkdownHtml = false`, the view is a pure function of the
+ * document's immutable-for-its-lifetime fields (contentKind, language,
+ * diskFingerprint, filePath, title), so a document reference that hasn't
+ * changed yields an identical view. The WeakMap returns the cached view until
+ * the document object is replaced (content edit, reload).
+ *
+ * `renderMarkdownHtml = true` callers bypass the memo (the HTML depends on the
+ * content string, which changes within the same document reference).
+ */
+const documentViewCache = new WeakMap<DocumentState, AppShellDocumentView>();
+
+export function deriveAppShellDocumentViewMemoized(
+  activeDocument: DocumentState | undefined,
+  options: DeriveAppShellDocumentViewOptions = {},
+): AppShellDocumentView {
+  if (
+    !activeDocument ||
+    (options.renderMarkdownHtml ?? false) ||
+    activeDocument.contentKind === "large_pending"
+  ) {
+    // Large-pending documents transition to text once confirmed, but while
+    // pending the same document reference can flip its view as the confirm
+    // dialog state changes — bypass the memo for that kind.
+    return deriveAppShellDocumentView(activeDocument, options);
+  }
+  const cached = documentViewCache.get(activeDocument);
+  if (cached) {
+    return cached;
+  }
+  const view = deriveAppShellDocumentView(activeDocument, options);
+  documentViewCache.set(activeDocument, view);
+  return view;
+}

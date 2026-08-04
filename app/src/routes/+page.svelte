@@ -68,14 +68,14 @@
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
   import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
-  import { listEnabledMarkdownSnippets } from "../lib/editor/markdownSnippetSettings";
+  import { listEnabledMarkdownSnippetsMemoized } from "../lib/editor/markdownSnippetSettings";
   import { buildCommandAvailabilitySnapshot } from "../lib/commands/availability";
   import { buildPaletteSnapshot } from "../lib/commands/catalog";
   import { collectTabOpenPaths } from "../lib/services/tabContextMenuActions";
   import { DEFAULT_CONSOLE_HEIGHT_PX } from "../lib/services/consoleTabPrefs";
-  import { normalizeWorkspaceLayout } from "../lib/services/panelLayout";
+  import { normalizeWorkspaceLayoutMemoized } from "../lib/services/panelLayout";
   import {
-    deriveAppShellDocumentView,
+    deriveAppShellDocumentViewMemoized,
     retainDocumentMarkdownHtml,
   } from "../lib/services/appShellDocumentView";
   import {
@@ -262,7 +262,7 @@
   );
   const activeWorkspaceRoot = $derived(appState.getWorkspaceRoot(activeContextId));
   const workspaceLayout = $derived(
-    normalizeWorkspaceLayout(session.layout),
+    normalizeWorkspaceLayoutMemoized(session.layout),
   );
   const showProjectPanel = $derived(
     !isChatHttpActive &&
@@ -461,8 +461,24 @@
   // editor tab-bar bottom line.
   const notepadSession = $derived($appContexts.notepad.session);
   const notepadOpenTabCount = $derived(allTabs(notepadSession.editorLayout).length);
+  // P03-08-24f: memoize on the notepad session + documents references so the
+  // card's tab list keeps its array identity across unrelated app-state emits
+  // (cursor moves, other workspaces' edits). Re-derives only when the notepad
+  // session or documents actually change.
+  let notepadRecentTabsInput: {
+    session: typeof notepadSession;
+    documents: import("../lib/domain/contracts").DocumentState[];
+  } | null = null;
+  let notepadRecentTabsOutput: { tabId: string; label: string }[] = [];
   const notepadRecentTabs = $derived.by(() => {
     const notepadDocs = $appContexts.notepad.documents;
+    if (
+      notepadRecentTabsInput &&
+      notepadRecentTabsInput.session === notepadSession &&
+      notepadRecentTabsInput.documents === notepadDocs
+    ) {
+      return notepadRecentTabsOutput;
+    }
     const fileTabs = allTabs(notepadSession.editorLayout)
       .filter(isFileTab)
       .filter((tab) => {
@@ -472,13 +488,15 @@
         return Boolean(doc?.filePath);
       });
     const lastOne = fileTabs.slice(-1);
-    return lastOne.map((tab) => {
+    notepadRecentTabsOutput = lastOne.map((tab) => {
       const doc = notepadDocs.find((documentState) => documentState.id === tab.documentId);
       return {
         tabId: tab.id,
         label: formatNotepadTabLabel(doc?.filePath ?? null, doc?.title ?? ""),
       };
     });
+    notepadRecentTabsInput = { session: notepadSession, documents: notepadDocs };
+    return notepadRecentTabsOutput;
   });
   // Phase 4: the active document is the active pane's selected FILE tab's
   // document. Session / view tabs and empty panes resolve to `undefined`
@@ -516,10 +534,11 @@
 
   /**
    * M6.2 — enabled Markdown snippets, fed to OverlayHost (the snippet-insert
-   * picker derives its ranking internally).
+   * picker derives its ranking internally). Memoized so unrelated app-state
+   * emits do not reallocate the array (P03-08-24a).
    */
   const markdownSnippets = $derived(
-    listEnabledMarkdownSnippets($appSettings.markdownSnippets),
+    listEnabledMarkdownSnippetsMemoized($appSettings.markdownSnippets),
   );
 
   // Markdown preview HTML is produced inside EditorPaneContent (debounced,
@@ -528,7 +547,7 @@
   // asking for it was a second full markdown parse per keystroke whose result
   // was thrown away (and it contended for the same one-slot render memo as the
   // debounced consumer, making that miss too).
-  const documentView = $derived(deriveAppShellDocumentView(activeDocument));
+  const documentView = $derived(deriveAppShellDocumentViewMemoized(activeDocument));
   let fileDropTargetPaneId = $state<string | null>(null);
 
   function notify(message: string): void {

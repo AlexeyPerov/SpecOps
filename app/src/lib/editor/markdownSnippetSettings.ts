@@ -323,6 +323,30 @@ export function listEnabledMarkdownSnippets(
   return [...builtins, ...users];
 }
 
+/**
+ * Memoized {@link listEnabledMarkdownSnippets} keyed on the settings object
+ * reference (P03-08-24a). The `$derived` in `DocumentEditor.svelte` re-runs on
+ * every `$appSettings` emit; without memoization it allocated a fresh array
+ * (and fresh snippet objects) per editor per emit, re-triggering the
+ * controller's snippet/completion compartment reconfigure checks. The settings
+ * object identity is stable across unrelated app-state mutations, so a
+ * WeakMap keyed on it returns the same resolved array until the settings
+ * genuinely change.
+ */
+const enabledSnippetsCache = new WeakMap<MarkdownSnippetSettings, ResolvedMarkdownSnippet[]>();
+
+export function listEnabledMarkdownSnippetsMemoized(
+  settings: MarkdownSnippetSettings,
+): ResolvedMarkdownSnippet[] {
+  const cached = enabledSnippetsCache.get(settings);
+  if (cached) {
+    return cached;
+  }
+  const resolved = listEnabledMarkdownSnippets(settings);
+  enabledSnippetsCache.set(settings, resolved);
+  return resolved;
+}
+
 /** All snippets for settings UI (builtins + users), with enable flags. */
 export function listAllMarkdownSnippets(
   settings: MarkdownSnippetSettings,

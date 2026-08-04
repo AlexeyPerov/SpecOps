@@ -20,6 +20,16 @@ export type MarkdownHeading = {
 const ATX_HEADING = /^(ATXHeading)(\d)$/;
 const SETEXT_HEADING = /^(SetextHeading)(\d)$/;
 
+/**
+ * Per-extraction time budget handed to `ensureSyntaxTree` (P03-08-23).
+ *
+ * One animation frame is enough for the incremental parser to make progress
+ * on most documents, and the outline panel re-polls every 500 ms so a partial
+ * tree now becomes a complete tree on the next tick. A multi-second budget
+ * stalled the main thread on every tab switch into a markdown doc.
+ */
+export const MARKDOWN_OUTLINE_PARSE_BUDGET_MS = 16;
+
 function headingLevelFromNodeName(name: string): number | null {
   const atx = ATX_HEADING.exec(name);
   if (atx) {
@@ -130,7 +140,16 @@ function computeMarkdownHeadings(state: EditorState): MarkdownHeading[] {
   // pre-transaction field tree (still pointing at the old document length), so
   // it appears incomplete and forces the expensive text fallback on every call
   // until the background parse catches up — a double parse per extraction.
-  const tree = ensureSyntaxTree(state, state.doc.length, 5000);
+  //
+  // P03-08-23: the budget is one frame (~16 ms), not 5 s. The outline panel
+  // re-polls every 500 ms and re-extracts on every tab switch into a markdown
+  // doc, so a multi-second budget handed the parser a main-thread stall on
+  // every activation. A partial tree is fine: the poll re-schedules, and the
+  // per-state WeakMap memo means a completed parse is reused for the rest of
+  // that document version. The text fallback only runs when parsing genuinely
+  // cannot finish in a frame (very large docs), and even then it runs once per
+  // state version, not per poll.
+  const tree = ensureSyntaxTree(state, state.doc.length, MARKDOWN_OUTLINE_PARSE_BUDGET_MS);
   if (tree && tree.length >= state.doc.length) {
     return extractHeadingsFromTree(tree, state.doc);
   }

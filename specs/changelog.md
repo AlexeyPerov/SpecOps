@@ -1,5 +1,96 @@
 # Changelog
 
+## 2026-08-04 22:33 MSK — Tab-switching and editor reactivity (P03-08-19…24)
+
+Implemented the "Tab switching and editor reactivity" section of
+`specs/performance-review-03-08.md`: the Svelte reactivity storm that made
+every keystroke, cursor move, and tab switch re-evaluate the whole editor
+tree, plus the markdown-outline and editor-eviction hot spots. No feature
+changes.
+
+### Reactivity storm foundation (P03-08-20)
+
+- New `stableDerived` store wrapper (`stableStore.ts`) that republishes a
+  source store's values with strict (`===`) equality instead of Svelte's
+  `safe_not_equal`. Svelte's `safe_not_equal` treats every object as changed
+  on every `appState.update()`, so a plain `derived(appState, ($s) =>
+  $s.contexts)` re-notified every consumer on every cursor move even when the
+  `contexts` reference was unchanged.
+- The object-valued app-state slices (`$appContexts`, `$appSettings`,
+  `$appEditor`, `$appTheme`, `$appRecentFiles`, `$appActivityRailWidthPx`,
+  `$appActiveContextId`, `$appActiveContext`, `$appActiveSession`,
+  `$appActiveDocuments`, `$appOpenDocumentIds`) now flow through
+  `stableDerived`, so an unrelated state mutation no longer fans out to every
+  component that reads any slice.
+
+### Editor content-sync hot path (P03-08-19)
+
+- `editorViewController` now tracks `lastSyncedContent` (the editor/store
+  content agreement, by reference) and compares incoming content by reference
+  first, then length, and only falls back to the O(length) `doc.toString()`
+  when both disagree. The agreement reference is refreshed on mount, document
+  switch, external apply, and the user-edit dirty listener. A same-reference
+  emit (the common case — cursor moves, tab switches between other documents)
+  is now a near-free no-op instead of a full-buffer materialization per live
+  editor per emit.
+
+### Editor mega-prop split (P03-08-21)
+
+- The high-frequency cursor fields (`cursorLine`, `cursorColumn`,
+  `selectionCount`) moved from the `editor` chrome prop into the existing
+  `statusBar` prop, which is their only consumer. A cursor move no longer
+  rebuilds the `editor={{ … }}` object literal, so the
+  `editorContextsById` → `mountedEditorContexts` → grid cells → pane/tab-bar →
+  per-editor update-effect cascade no longer fires on every keystroke.
+
+### Editor LRU eviction (P03-08-22)
+
+- The portable-session serializer now drops the unbounded `historyField` for
+  documents ≥ 256 KB, so eviction (and restore) no longer
+  serialize/deserialize the full undo stack — the dominant cost on the
+  unmount/mount path for large files. Folds and bookmarks survive; small/
+  medium files keep full undo across tab switches.
+
+### Markdown outline (P03-08-23)
+
+- The `ensureSyntaxTree` budget was cut from 5 s to ~16 ms (one frame). A
+  partial tree is acceptable: the panel re-polls every 500 ms and the
+  per-`EditorState` WeakMap memo reuses a completed parse for the rest of that
+  document version.
+- The outline poll now pauses while `document.hidden` and resumes (with an
+  immediate refresh) on `visibilitychange`, so a backgrounded window no longer
+  burns main-thread time on a panel the user cannot see.
+
+### Derived-identity churn batch (P03-08-24)
+
+- (a) `enabledSnippets` uses a WeakMap-memoized resolver keyed on the settings
+  reference, plus a stable empty array for the non-markdown path.
+- (b) `deriveAppShellDocumentView` gained a `…Memoized` variant keyed on the
+  document reference (used by `+page.svelte` and the per-entry keep-alive
+  loop).
+- (c) `normalizeWorkspaceLayout` gained a WeakMap-memoized variant keyed on
+  the input layout reference.
+- (d) The retain-cache effect only re-runs when the open-document-id set
+  genuinely changes membership (via P03-08-20's stable slice).
+- (e) The watcher sync-key structural-equality gate now compares the resolved
+  per-context watched-path sets directly instead of the session reference, so
+  a tab switch / cursor move that leaves the watched set unchanged no longer
+  forces a full `externalFileWatcherSyncKey` re-walk.
+- (f) `notepadRecentTabs` keeps its array identity across emits that don't
+  change the notepad session or documents.
+
+### Tests
+
+- New `stableStore` unit tests (reference/value equality, late-subscriber
+  notification, source-subscription lifecycle, composition with `derived`).
+- New editor-controller regression tests: no content-replacement dispatch on
+  same-reference / same-value / post-edit-echo emits; large-document history
+  drop on eviction (folds/bookmarks survive). All touched-area suites green
+  (546 editor/state tests, 1341 services/components tests); the two
+  pre-existing failures (`MarkdownOutlinePanel` mount and
+  `workspaceFileCatalog` README enumeration) fail identically on the
+  unmodified tree. No new type errors (32 pre-existing unchanged).
+
 ## 2026-08-04 21:20 MSK — Workspace switching performance (P03-08-11…18)
 
 Implemented the "Workspace switching" section of

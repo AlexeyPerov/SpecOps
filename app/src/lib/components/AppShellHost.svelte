@@ -802,9 +802,6 @@
     previewMode: editorPreviewMode,
     wrapLines: editorWrapLines,
     zoomPercent: editorZoomPercent,
-    cursorLine: editorCursorLine,
-    cursorColumn: editorCursorColumn,
-    selectionCount: editorSelectionCount,
     decoratePlaintextSymbols,
     showMinimap,
     showFoldGutter,
@@ -845,6 +842,9 @@
     statusMessage,
     consoleOpen,
     canOpenLogsPanel,
+    cursorLine: editorCursorLine,
+    cursorColumn: editorCursorColumn,
+    selectionCount: editorSelectionCount,
     onToggleConsole: handleToggleConsole,
   }}
   workspaceContextMenu={{

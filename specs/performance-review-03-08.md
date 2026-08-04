@@ -548,6 +548,14 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-19 — Every store emit rebuilds full document strings in every live editor
 
+- **Status:** Resolved on 2026-08-04. The controller now tracks
+  `lastSyncedContent` (the editor/store content agreement, by reference) and
+  compares incoming content by reference first, then length, and only falls
+  back to `doc.toString()` when both disagree. The agreement reference is
+  refreshed on mount, document switch, external apply, and the user-edit dirty
+  listener (the new content string becomes the new agreement). Covered by
+  regression tests asserting no dispatch occurs on same-reference, same-value,
+  and post-edit echo emits.
 - **Area:** Editor controller / hot path.
 - **Impact:** **High.** `controller.update()` compares
   `next.content !== view.state.doc.toString()` — materializing the **entire
@@ -565,6 +573,17 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-20 — Object-valued stores invalidate all consumers on every mutation
 
+- **Status:** Resolved on 2026-08-04. Object-valued app-state slices
+  (`$appContexts`, `$appSettings`, `$appEditor`, `$appTheme`,
+  `$appRecentFiles`, `$appActivityRailWidthPx`, `$appActiveContextId`,
+  `$appActiveContext`, `$appActiveSession`, `$appActiveDocuments`,
+  `$appOpenDocumentIds`) are republished through a new `stableDerived` wrapper
+  that uses strict (`===`) equality instead of Svelte's `safe_not_equal`, so a
+  reference-identical slice no longer re-notifies its consumers. Combined with
+  the existing referential-stability selectors (which preserve object
+  references when nothing changed), an unrelated `appState.update()` — a
+  cursor move, a content edit in another document — no longer fans out to
+  every component that reads any slice. Covered by `stableStore` unit tests.
 - **Area:** State layer / Svelte reactivity.
 - **Impact:** **High (systemic).** Svelte's `safe_not_equal` treats every
   object as changed, so `$appContexts`, `$appSettings`, `$appEditor`,
@@ -582,6 +601,15 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-21 — The ~60-field `editor` mega-prop couples cursor moves to full editor-tree updates
 
+- **Status:** Resolved on 2026-08-04. The high-frequency cursor fields
+  (`cursorLine`, `cursorColumn`, `selectionCount`) moved out of the `editor`
+  chrome prop and into the existing `statusBar` prop, which is the only
+  consumer. A cursor move (every keystroke / arrow press) no longer rebuilds
+  the `editor={{ … }}` object literal in `AppShellHost`, so the
+  `editorContextsById` → `mountedEditorContexts` → grid cells → pane/tab-bar
+  → per-editor update-effect cascade no longer fires on cursor moves. The
+  status bar still reads the (infrequently-changing) view-tab and document
+  flags from `editor`.
 - **Area:** AppShellHost → AppShell prop plumbing.
 - **Impact:** **High.** The `editor={{ … }}` literal
   (`AppShellHost.svelte:774`) mixes high-frequency status-bar fields
@@ -601,6 +629,14 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-22 — Editor LRU eviction synchronously serializes the full undo history
 
+- **Status:** Resolved on 2026-08-04. The portable-session serializer now drops
+  the unbounded `historyField` for documents at or above 256 KB, so eviction
+  (and the matching restore) no longer serialize/deserialize the full undo
+  stack — the dominant cost on the unmount/mount path for large files. Folds
+  and bookmarks are preserved (cheap, high-value); small/medium files keep
+  full undo across tab switches. Covered by a regression test asserting zero
+  undo depth on restore of an evicted large document while folds/bookmarks
+  survive.
 - **Area:** Tab switching / editor keep-alive.
 - **Impact:** **Medium–high.** Switching to a text tab outside the 4 most
   recent in a pane unmounts the evicted slot; `controller.destroy()` runs
@@ -618,6 +654,13 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-23 — Markdown outline runs a synchronous parse with a 5-second budget
 
+- **Status:** Resolved on 2026-08-04. The `ensureSyntaxTree` budget was cut
+  from 5 s to one frame (~16 ms); a partial tree is acceptable because the
+  panel re-polls every 500 ms and the per-`EditorState` WeakMap memo reuses a
+  completed parse for the rest of that document version. The poll now pauses
+  while `document.hidden` (backgrounded/minimized) and resumes — with an
+  immediate refresh — on `visibilitychange`. Covered by the existing
+  `markdownHeadings` suite.
 - **Area:** Markdown outline panel.
 - **Impact:** **Medium (high for markdown-heavy use).**
   `ensureSyntaxTree(state, doc.length, 5000)` gives the parser a 5 s
@@ -634,6 +677,25 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-24 — Derived-identity churn batch (six small leaks that feed the storm)
 
+- **Status:** Resolved on 2026-08-04 (landed after P03-08-20 so the remaining
+  churn is measurable). (a) `enabledSnippets` now uses a WeakMap-memoized
+  resolver keyed on the settings reference, plus a stable empty array for the
+  non-markdown path, so the controller's snippet/completion key check is a
+  no-op across unrelated emits. (b) `deriveAppShellDocumentView` gained a
+  `deriveAppShellDocumentViewMemoized` variant keyed on the document
+  reference (used by `+page.svelte` and the per-entry keep-alive loop), so
+  the per-pane and per-entry view objects keep their identity across emits
+  that don't change the document. (c) `normalizeWorkspaceLayout` gained a
+  WeakMap-memoized variant keyed on the input layout reference. (d) The
+  retain-cache effect now only re-runs when the open-document-id set genuinely
+  changes membership (via the P03-08-20 `stableDerived` +
+  referential-stability `appOpenDocumentIds`). (e) The watcher sync-key
+  structural-equality gate now compares the resolved per-context watched-path
+  sets directly instead of the session reference, so a tab switch (or cursor
+  move) that leaves the watched set unchanged no longer forces a full
+  `externalFileWatcherSyncKey` re-walk. (f) `notepadRecentTabs` keeps its
+  array identity across emits that don't change the notepad session or
+  documents.
 - **Area:** Svelte deriveds / prop identity.
 - **Impact:** **Medium combined; each Low.** Each returns a fresh
   object/array per emit, re-triggering downstream effects:

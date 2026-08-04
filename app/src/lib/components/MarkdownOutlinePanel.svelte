@@ -111,6 +111,11 @@
     }
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
+      // P03-08-23: skip work while the window is hidden (backgrounded tab,
+      // minimized window). The poll re-arms on the next visible tick.
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
       refreshFromHost();
     }, 80);
   }
@@ -122,13 +127,49 @@
     void paneId;
     clearOutline();
     refreshFromHost();
-    const interval = setInterval(scheduleRefresh, 500);
-    return () => {
-      clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let visibilityHandler: (() => void) | null = null;
+    // P03-08-23: only poll while the document is visible. The outline parse
+    // runs on the main thread; polling a hidden window burned CPU for a panel
+    // the user cannot see, and re-parsing on focus return is a single tick.
+    const startPolling = (): void => {
+      if (interval !== null) {
+        return;
+      }
+      interval = setInterval(scheduleRefresh, 500);
+    };
+    const stopPolling = (): void => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
       if (refreshTimer) {
         clearTimeout(refreshTimer);
         refreshTimer = null;
       }
+    };
+    if (typeof document !== "undefined") {
+      visibilityHandler = (): void => {
+        if (document.hidden) {
+          stopPolling();
+        } else {
+          // Refresh immediately on return to visible, then resume polling.
+          refreshFromHost();
+          startPolling();
+        }
+      };
+      document.addEventListener("visibilitychange", visibilityHandler);
+      if (!document.hidden) {
+        startPolling();
+      }
+    } else {
+      startPolling();
+    }
+    return () => {
+      if (visibilityHandler && typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", visibilityHandler);
+      }
+      stopPolling();
     };
   });
 

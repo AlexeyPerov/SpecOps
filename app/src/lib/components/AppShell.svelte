@@ -169,9 +169,6 @@
     previewMode: "editor" | "markdown" | "diff";
     wrapLines: boolean;
     zoomPercent: number;
-    cursorLine: number;
-    cursorColumn: number;
-    selectionCount: number;
     decoratePlaintextSymbols: boolean;
     showMinimap: boolean;
     showFoldGutter: boolean;
@@ -226,6 +223,16 @@
     statusMessage: string;
     consoleOpen: boolean;
     canOpenLogsPanel: boolean;
+    /**
+     * High-frequency cursor fields (P03-08-21). These live on the status bar
+     * rather than the `editor` chrome prop so a cursor move — which fires on
+     * every keystroke and arrow press — does not rebuild the `editor` object
+     * literal and re-evaluate the editor-tree descendants that read any
+     * `editor.*` field. The status bar is the only consumer.
+     */
+    cursorLine: number;
+    cursorColumn: number;
+    selectionCount: number;
     onToggleConsole: () => void;
   }
 
@@ -900,14 +907,14 @@
         {#if !editor.isSessionTabActive && !editor.isChatHttpActive && !editor.isViewTabActive}
           <span class="status-cluster status-cluster-primary">
             <span class="status-segment">
-              Ln {editor.cursorLine}, Col {editor.cursorColumn}
+              Ln {statusBar.cursorLine}, Col {statusBar.cursorColumn}
             </span>
-            {#if editor.selectionCount > 1}
+            {#if statusBar.selectionCount > 1}
               <span
                 class="status-segment"
-                aria-label={`${editor.selectionCount} selections`}
+                aria-label={`${statusBar.selectionCount} selections`}
               >
-                {editor.selectionCount} selections
+                {statusBar.selectionCount} selections
               </span>
             {/if}
           </span>

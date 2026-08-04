@@ -84,3 +84,33 @@ export function normalizeWorkspaceLayout(
         : defaults.sessionsSidebarCollapsed,
   };
 }
+
+/**
+ * Memoized {@link normalizeWorkspaceLayout} keyed on the input layout reference
+ * (P03-08-24c). The `$derived` in `+page.svelte` re-runs on every app-state
+ * emit (the session snapshot is rebuilt frequently); without memoization the
+ * normalizer allocated a fresh object each time, invalidating every consumer
+ * that reads `workspaceLayout.*` even when the panel widths/collapsed flags
+ * were unchanged. The layout object identity is stable across cursor moves
+ * and content edits, so a WeakMap keyed on it returns the same normalized
+ * object until the layout genuinely changes.
+ */
+const normalizedWorkspaceLayoutCache = new WeakMap<
+  Partial<WorkspaceLayoutState>,
+  WorkspaceLayoutState
+>();
+
+export function normalizeWorkspaceLayoutMemoized(
+  layout?: Partial<WorkspaceLayoutState> | null,
+): WorkspaceLayoutState {
+  if (!layout) {
+    return defaultWorkspaceLayout();
+  }
+  const cached = normalizedWorkspaceLayoutCache.get(layout);
+  if (cached) {
+    return cached;
+  }
+  const normalized = normalizeWorkspaceLayout(layout);
+  normalizedWorkspaceLayoutCache.set(layout, normalized);
+  return normalized;
+}

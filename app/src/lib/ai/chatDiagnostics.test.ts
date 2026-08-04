@@ -1,6 +1,10 @@
 import { get } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { consoleLogs, resetConsoleForTests } from "../services/appConsole";
+import {
+  consoleLogs,
+  resetConsoleForTests,
+  setMinConsoleLevel,
+} from "../services/appConsole";
 import { setVerboseProviderLoggingReader } from "./providerVerboseLogging";
 import {
   logChatConnectionSwitch,
@@ -21,11 +25,15 @@ vi.mock("../services/logging", () => ({
 describe("chatDiagnostics", () => {
   beforeEach(() => {
     resetConsoleForTests();
+    // Verbose provider payloads are emitted at `debug`; surface them in the
+    // console ring for these tests.
+    setMinConsoleLevel("debug");
     setVerboseProviderLoggingReader(() => true);
   });
 
   afterEach(() => {
     setVerboseProviderLoggingReader(null);
+    setMinConsoleLevel("info");
   });
 
   it("writes structured chat send metadata to the app console", async () => {
@@ -89,7 +97,10 @@ describe("chatDiagnostics", () => {
     await vi.waitFor(() => {
       const entry = get(consoleLogs).at(-1);
       expect(entry?.message).toBe("chat provider payload");
-      expect(entry?.metadata).toMatchObject({
+      // P03-08-28: the console ring retains metadata as a capped serialized
+      // string, not the live object. Parse it back to assert the payload shape.
+      const metadata = entry?.metadataText ? JSON.parse(entry.metadataText) : {};
+      expect(metadata).toMatchObject({
         kind: "chat.provider.payload",
         payload,
       });

@@ -15,9 +15,21 @@ function emit(level: "debug" | "info" | "warn" | "error", message: string, metad
   });
 }
 
+/**
+ * P03-08-27: cap on any single string value inside a sanitized verbose payload
+ * (request/response bodies, message content). Provider bodies can run to
+ * hundreds of KB; deep-cloning and stringifying them on every turn is pure
+ * cost (and the debug line is dropped by the Rust plugin anyway when verbose
+ * logging is off). Truncating here bounds the allocation and the JSON output.
+ */
+const VERBOSE_LOG_MAX_STRING_LENGTH = 8_192;
+
 function sanitizeVerboseLogValue(value: unknown): unknown {
   if (typeof value === "string") {
-    return value.replace(/Bearer\s+\S+/gi, "[redacted]");
+    const redacted = value.replace(/Bearer\s+\S+/gi, "[redacted]");
+    return redacted.length > VERBOSE_LOG_MAX_STRING_LENGTH
+      ? `${redacted.slice(0, VERBOSE_LOG_MAX_STRING_LENGTH)} …[truncated ${redacted.length - VERBOSE_LOG_MAX_STRING_LENGTH} chars]`
+      : redacted;
   }
   if (Array.isArray(value)) {
     return value.map(sanitizeVerboseLogValue);

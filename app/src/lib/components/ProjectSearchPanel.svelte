@@ -5,7 +5,7 @@
     MIN_CONSOLE_HEIGHT_PX,
     normalizeConsoleHeightPx,
   } from "../services/consoleTabPrefs";
-  import type { ProjectSearchResult } from "../services/projectSearch";
+  import type { ProjectSearchMatch, ProjectSearchResult } from "../services/projectSearch";
   import { startPointerDrag } from "./pointerDrag";
 
   interface Props {
@@ -65,6 +65,16 @@
   let isResizing = $state(false);
   let activeResizeTeardown: (() => void) | null = null;
   let collapsedFiles = $state<Set<string>>(new Set());
+  /**
+   * P03-08-31: a broad query can mount ~10k unvirtualized match rows, which
+   * janks the panel and the whole window on mount/scroll. Instead of full
+   * scroll-window virtualization, cap the rendered matches per file and reveal
+   * the rest on demand — file headers are bounded by file count, so the only
+   * unbounded axis is per-file matches, and this bounds it. Collapsed-by-
+   * default for files with many matches keeps the initial paint cheap.
+   */
+  const MAX_MATCHES_PER_FILE_RENDER = 50;
+  let expandedMatchFiles = $state<Set<string>>(new Set());
   let showReplace = $state(false);
   let findInputEl: HTMLInputElement | null = $state(null);
   let replaceInputEl: HTMLInputElement | null = $state(null);
@@ -131,6 +141,26 @@
     return collapsedFiles.has(path);
   }
 
+  function visibleMatchesFor(result: ProjectSearchResult): ProjectSearchMatch[] {
+    if (expandedMatchFiles.has(result.path)) {
+      return result.matches;
+    }
+    return result.matches.slice(0, MAX_MATCHES_PER_FILE_RENDER);
+  }
+
+  function hiddenMatchCountFor(result: ProjectSearchResult): number {
+    if (expandedMatchFiles.has(result.path)) {
+      return 0;
+    }
+    return Math.max(0, result.matches.length - MAX_MATCHES_PER_FILE_RENDER);
+  }
+
+  function showAllMatchesFor(path: string): void {
+    const next = new Set(expandedMatchFiles);
+    next.add(path);
+    expandedMatchFiles = next;
+  }
+
   function totalMatches(): number {
     let total = 0;
     for (const result of results) {
@@ -158,6 +188,17 @@
       }
       void focusField();
     }
+  });
+
+  // P03-08-31: reset per-file collapse/expansion when a fresh result set lands
+  // so stale expand state from a previous query does not bleed into the new one.
+  $effect(() => {
+    // Track by the first path + total so a re-render with the same results
+    // (e.g. a status update) does not wipe the user's manual expansions.
+    const signature = results.map((r) => r.path).join("\0");
+    void signature;
+    collapsedFiles = new Set();
+    expandedMatchFiles = new Set();
   });
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -313,7 +354,7 @@
         </div>
         {#if !collapsed}
           <ul class="ps-matches">
-            {#each result.matches as match (match.from)}
+            {#each visibleMatchesFor(result) as match (match.from)}
               <li>
                 <button
                   type="button"
@@ -327,6 +368,19 @@
               </li>
             {/each}
           </ul>
+          {@const hidden = hiddenMatchCountFor(result)}
+          {#if hidden > 0}
+            <div class="ps-file ps-show-more">
+              <div class="ps-chevron-spacer"></div>
+              <button
+                type="button"
+                class="ps-show-more-btn"
+                onclick={() => showAllMatchesFor(result.path)}
+              >
+                Show {hidden} more match{hidden === 1 ? "" : "es"} in this file
+              </button>
+            </div>
+          {/if}
         {/if}
       {:else}
         <div class="ps-empty">
@@ -545,5 +599,23 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  }
+
+  .ps-show-more {
+    padding-left: calc(16px + var(--space-3));
+  }
+
+  .ps-show-more-btn {
+    border: none;
+    background: transparent;
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-status);
+    padding: var(--space-1) 0;
+    text-align: left;
+  }
+
+  .ps-show-more-btn:hover {
+    text-decoration: underline;
   }
 </style>

@@ -1,5 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { elapsedMs, logPerfTiming, measureAsync, nowMs, PERF_DIAGNOSTIC_KIND } from "./perfDiagnostics";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearPerfSamples,
+  elapsedMs,
+  getPerfSamples,
+  isPerfCollectionEnabled,
+  logPerfTiming,
+  measureAsync,
+  nowMs,
+  PERF_DIAGNOSTIC_KIND,
+  serializePerfReport,
+  serializePerfReportMarkdown,
+  setPerfCollectionEnabled,
+} from "./perfDiagnostics";
 import { logDiagnostic } from "./logging";
 
 vi.mock("./logging", () => ({
@@ -11,6 +23,13 @@ const logDiagnosticMock = vi.mocked(logDiagnostic);
 describe("perfDiagnostics", () => {
   beforeEach(() => {
     logDiagnosticMock.mockReset();
+    setPerfCollectionEnabled(false);
+    clearPerfSamples();
+  });
+
+  afterEach(() => {
+    setPerfCollectionEnabled(false);
+    clearPerfSamples();
   });
 
   it("nowMs and elapsedMs return finite non-negative numbers", () => {
@@ -89,4 +108,61 @@ describe("perfDiagnostics", () => {
     expect(result).toBeUndefined();
     expect(logDiagnosticMock).toHaveBeenCalledTimes(1);
   });
+
+  describe("perf sample ring (P03-08-T2)", () => {
+    it("does not capture samples when collection is disabled", async () => {
+      expect(isPerfCollectionEnabled()).toBe(false);
+      await logPerfTiming("ignored", { metric: "startup.total", durationMs: 1 });
+      expect(getPerfSamples()).toHaveLength(0);
+    });
+
+    it("captures samples when collection is enabled, including debug-level", async () => {
+      setPerfCollectionEnabled(true);
+      await logPerfTiming("a", { metric: "startup.total", durationMs: 10 }, "info");
+      await logPerfTiming("b", { metric: "startup.total", durationMs: 20 }, "debug");
+      await logPerfTiming("c", { metric: "workspace.switchRestore", durationMs: 5 });
+
+      const samples = getPerfSamples();
+      expect(samples).toHaveLength(3);
+      expect(samples.map((s) => s.message)).toEqual(["a", "b", "c"]);
+      // Same run id across all samples.
+      const runId = samples[0]!.runId;
+      expect(samples.every((s) => s.runId === runId)).toBe(true);
+    });
+
+    it("serializePerfReport aggregates min/p50/p95/max per metric", async () => {
+      setPerfCollectionEnabled(true);
+      for (const d of [10, 20, 30, 40, 100]) {
+        await logPerfTiming("m", { metric: "startup.phase", durationMs: d });
+      }
+      const report = serializePerfReport({ appVersion: "9.9.9" });
+      expect(report.appVersion).toBe("9.9.9");
+      expect(report.samples).toHaveLength(5);
+      const agg = report.aggregates.find((a) => a.metric === "startup.phase");
+      expect(agg).toBeDefined();
+      expect(agg!.count).toBe(5);
+      expect(agg!.min).toBe(10);
+      expect(agg!.max).toBe(100);
+      expect(agg!.p50).toBeGreaterThanOrEqual(20);
+      expect(agg!.p95).toBeGreaterThanOrEqual(agg!.p50);
+    });
+
+    it("serializePerfReportMarkdown renders a table header and rows", async () => {
+      setPerfCollectionEnabled(true);
+      await logPerfTiming("m", { metric: "tab.activationSideEffects", durationMs: 7 });
+      const md = serializePerfReportMarkdown();
+      expect(md).toContain("SpecOps performance report");
+      expect(md).toContain("| metric |");
+      expect(md).toContain("tab.activationSideEffects");
+    });
+
+    it("disabling collection clears the ring", async () => {
+      setPerfCollectionEnabled(true);
+      await logPerfTiming("m", { metric: "startup.total", durationMs: 1 });
+      expect(getPerfSamples()).toHaveLength(1);
+      setPerfCollectionEnabled(false);
+      expect(getPerfSamples()).toHaveLength(0);
+    });
+  });
 });
+

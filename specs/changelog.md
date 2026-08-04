@@ -1,5 +1,75 @@
 # Changelog
 
+## 2026-08-05 00:20 MSK — Logging, console, disabled-AI, search, and perf reporting (P03-08-27…32, T2…T3)
+
+Implemented the remaining sections of `specs/performance-review-03-08.md`:
+logging/console cost, disabled-AI residual churn, project search, small memory
+leaks, and the perf-log collection + console-toolbar feature tasks.
+
+### Logging pipeline (P03-08-27)
+
+- `logDiagnostic` now mirrors the Rust log plugin's `Info` cutoff on the JS side
+  *before* `JSON.stringify` + IPC, so debug/trace payloads are dropped without
+  being serialized or marshalled. The in-app console still receives every level
+  via its own cheap path.
+- Per-command git summaries are demoted to `debug` on the success path
+  (failures stay `warn`), so the per-switch log spam no longer crosses the
+  bridge.
+- `verboseProviderLogging` now defaults to `false`; verbose provider payloads
+  are truncated per string value (8 KB cap) so a chat turn no longer deep-clones
+  and ships unbounded request/response bodies only to be discarded.
+
+### In-app console (P03-08-28, T3)
+
+- The console store is now a pre-allocated fixed-size ring written through a
+  head index (O(1) per append, no per-line ~1000-element clone). Subscriber
+  notifications are coalesced per animation frame. Entry metadata is serialized
+  once, length-capped (2 KB), and retained only as a string — the live object
+  reference is dropped. Command dispatch is demoted to `debug`.
+- `ConsolePanel` gained a toolbar: Clear, a minimum-level dropdown, Copy-visible,
+  and the perf-report download button.
+
+### Performance-log collection (P03-08-T2)
+
+- `logPerfTiming` captures every sample into a bounded in-memory ring (cap 2000)
+  before the log hop. Collection is gated by a new
+  `settings.logSettings.collectPerfLogs` toggle (default off; allocation-free
+  while disabled). `serializePerfReport` / `serializePerfReportMarkdown` emit
+  per-metric count/min/max/p50/p95 plus raw samples, run id, app version, and a
+  settings snapshot; `downloadPerfReport` wires the save dialog + atomic write.
+
+### Disabled-AI churn (P03-08-29)
+
+- The sidecar health effect's disabled branch no longer includes
+  `activeWorkspaceRoot` in its dedup key, so switching workspaces while AI is
+  off no longer writes a fresh `checkedAt` per switch.
+- The workspace chat-scope setup is skipped when AI is disabled (the session tab
+  is unreachable), so no empty per-workspace slice is created; chat-http is
+  unaffected.
+- The 15 s chat access poll has an explicit `opencodeEnabled` gate and pauses
+  while `document.hidden`; the session notification observer is gated on
+  `opencodeEnabled` too. The 250 ms JS sidecar health poll duplication (d)
+  remains open.
+
+### Project search (P03-08-30, P03-08-31)
+
+- The project search scan now fans out via `mapWithConcurrency` (cap 12) so the
+  per-file `stat` + `readTextFile` IPC round-trips overlap. The total-match cap,
+  size cap, image skipping, and `onProgress` abort are preserved.
+- The results list caps rendered match rows per file (50) with a "show more"
+  affordance, so a broad query no longer mounts ~10k unvirtualized DOM rows.
+- The project replace loop reports progress every ~5% and honors the search
+  generation, so starting a new search or closing the panel cancels an in-flight
+  replace.
+
+### Memory hygiene (P03-08-32)
+
+- `tabCheckFreshnessGenerationByDocument` is now LRU-bounded (256) and deleted
+  on tab close instead of retained via the bumping invalidator.
+- `evictWorkspaceSessionHydration` now drops `inFlightThreadHydrates` entries
+  keyed under the evicted scope. The three `void listen()` registrations were
+  audited and already clean up in their finish/dispose paths.
+
 ## 2026-08-04 23:32 MSK — Incremental session persistence (P03-08-25…26)
 
 Implemented the "Persistence" section of `specs/performance-review-03-08.md`:

@@ -778,6 +778,15 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-27 — Every log line pays stringify + IPC, including lines that are discarded
 
+- **Status:** Resolved on 2026-08-04. `logDiagnostic` now mirrors the Rust
+  plugin's `Info` cutoff on the JS side *before* `JSON.stringify` + IPC, so
+  debug/trace payloads are dropped without ever being serialized or marshalled
+  (the in-app console still receives every level via its own cheap path).
+  Per-command git summaries are demoted to `debug` on the success path (failures
+  stay `warn`), so the per-switch log spam no longer crosses the bridge.
+  `verboseProviderLogging` now defaults to `false`, and verbose provider
+  payloads are truncated per string value (8 KB cap) so a chat turn no longer
+  deep-clones and ships unbounded request/response bodies only to be discarded.
 - **Area:** Logging pipeline.
 - **Impact:** **High (cheap fix, pays off everywhere).** Every
   `logDiagnostic` call `JSON.stringify`s its payload and makes one
@@ -799,6 +808,14 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-28 — App console ring buffer copies 1000 entries per line and retains fat metadata
 
+- **Status:** Resolved on 2026-08-04. The console store is now a pre-allocated
+  fixed-size ring written through a head index (O(1) per append, no per-line
+  ~1000-element clone). Subscriber notifications are coalesced per animation
+  frame so a burst of lines notifies the panel once, not once per line. Entry
+  metadata is serialized once, length-capped (2 KB), and retained only as a
+  string — the live object reference is dropped so the ring never pins large
+  provider payloads for 1000 subsequent lines. Command dispatch is demoted to
+  `debug`, matching the doc comment's claimed filtering.
 - **Area:** In-app console.
 - **Impact:** **Medium.** At steady state each log line allocates two
   ~1000-element arrays and emits to all store subscribers whether or not the
@@ -828,6 +845,19 @@ and gated settings tabs are hidden. Remaining residue:
 
 ## P03-08-29 — Disabled-AI residual churn on every workspace switch
 
+- **Status:** Resolved on 2026-08-04 (a–c). (a) The sidecar health effect's
+  disabled branch no longer includes `activeWorkspaceRoot` in its dedup key, so
+  switching workspaces while AI is off no longer writes a fresh `checkedAt`
+  timestamp per switch — the `unknown` patch is published once and the state
+  stops re-touching until AI is re-enabled. (b) The workspace chat-scope setup
+  (`setActiveWorkspaceRoot` + restore) is skipped entirely when AI is disabled
+  (the session tab is unreachable), so no empty per-workspace slice is created
+  and the chat emit fan-out stays unwired; chat-http is unaffected. (c) The 15 s
+  chat access poll now has an explicit `opencodeEnabled` gate and pauses while
+  `document.hidden` (resuming with an immediate refresh on refocus); the
+  session notification observer is gated on `opencodeEnabled` too. (d) remains
+  open — the 250 ms JS-side sidecar health poll still duplicates the native
+  Rust poller when AI is enabled.
 - **Area:** AI gating hygiene.
 - **Impact:** **Medium (pure waste).** (a) The sidecar health effect's probe
   key includes `activeWorkspaceRoot`, so every switch writes a fresh
@@ -856,6 +886,14 @@ and gated settings tabs are hidden. Remaining residue:
 
 ## P03-08-30 — Project search is strictly sequential with two IPC calls per file
 
+- **Status:** Resolved on 2026-08-04. The scan loop now fans out via
+  `mapWithConcurrency` (cap 12) so the per-file `stat` + `readTextFile` IPC
+  round-trips overlap instead of serializing — a 5k-file workspace no longer
+  pays 10k sequential awaits. The total-match cap, per-file size cap, image
+  skipping, and `onProgress` abort are preserved through shared mutable scan
+  state (safe under JS's single thread), with an `aborted` flag so a worker
+  that observes the bail signals the others to short-circuit. A Rust-side
+  `search_in_project` command (so contents never cross IPC) is deferred.
 - **Area:** Project-wide search.
 - **Impact:** **High on large workspaces.** The scan loop awaits `stat` then
   `readTextFile` per file, one file at a time — 10,000 sequential IPC
@@ -870,6 +908,14 @@ and gated settings tabs are hidden. Remaining residue:
 
 ## P03-08-31 — Search results and project replace lack virtualization, progress, and cancellation
 
+- **Status:** Resolved on 2026-08-04. The results list now caps rendered match
+  rows per file (50) with a "Show N more matches in this file" affordance, so a
+  broad query no longer mounts ~10k unvirtualized DOM rows on the initial paint
+  (file headers remain bounded by file count). Per-file collapse/expansion
+  state resets when a fresh result set lands. The project replace loop now
+  reports progress (`Replacing… i/N files`) every ~5% and honors the search
+  generation, so starting a new search or closing the panel cancels an
+  in-flight replace instead of running it to completion in the background.
 - **Area:** Search/replace UX.
 - **Impact:** **Medium.** A broad query can mount ~10k unvirtualized DOM rows
   (`ProjectSearchPanel.svelte:300`, `:316`; cap comment acknowledges it);
@@ -881,6 +927,18 @@ and gated settings tabs are hidden. Remaining residue:
 
 ## P03-08-32 — Small leak batch
 
+- **Status:** Resolved on 2026-08-04 (a, b). (a)
+  `tabCheckFreshnessGenerationByDocument` is now bounded by the same LRU cap
+  (256) as the sibling completion cache via a shared `bumpTabCheckFreshnessGeneration`
+  helper, and `clearDocumentExternalChangeState` now deletes the generation
+  entry on tab close instead of routing through the bumping invalidator (which
+  retained it). (b) `evictWorkspaceSessionHydration` now drops
+  `inFlightThreadHydrates` entries keyed under the evicted scope, closing the
+  one per-scope map that survived workspace eviction. (c) Audited: the three
+  `void listen()` registrations each already capture and invoke their unlisten
+  in a finish/dispose path (not actual leaks today; the hypothetical per-window
+  concern stands but no change was warranted). (d) deferred — workspace
+  file-catalog registry entries are arrays only and memory does not lag.
 - **Area:** Memory hygiene.
 - **Impact:** **Low.** (a) `tabCheckFreshnessGenerationByDocument` has no cap
   and one non-deleting path (`externalFileChanges.ts:57`, `:108-113`, `:200`);
@@ -942,6 +1000,18 @@ and gated settings tabs are hidden. Remaining residue:
 
 ## P03-08-T2 — Active performance-log collection with downloadable report
 
+- **Status:** Resolved on 2026-08-04. `logPerfTiming` now captures every sample
+  into a dedicated bounded in-memory ring (cap 2000, head-index O(1)) *before*
+  the log hop, so debug-level samples that the Rust plugin discards are still
+  retained for export. Collection is gated by a new
+  `settings.logSettings.collectPerfLogs` toggle (default off; the ring is
+  allocation-free while disabled and cleared on disable), mirrored into the
+  perf module reactively from `+page.svelte`. `serializePerfReport` emits JSON
+  with per-metric count/min/max/p50/p95 plus the raw samples, a stable per-run
+  id, the app version, and a caller-supplied settings snapshot;
+  `serializePerfReportMarkdown` renders the same as a table. `downloadPerfReport`
+  wires the save dialog + atomic write (the report lands on disk without
+  crossing the session-write lock). Covered by perf ring + serialize unit tests.
 - **Area:** Diagnostics.
 - **Impact:** **Medium** (unblocks measuring all fixes above).
 - **Complexity:** **M.**
@@ -973,6 +1043,12 @@ and gated settings tabs are hidden. Remaining residue:
 
 ## P03-08-T3 — Clear-logs button in the app console
 
+- **Status:** Resolved on 2026-08-04. `ConsolePanel` now has a toolbar with a
+  Clear button (wired to `clearConsoleLogs()`), a minimum-level dropdown (wired
+  to `setMinConsoleLevel()`), a Copy-visible button (writes the current ring
+  snapshot to the clipboard), and the T2 perf-report download button (disabled
+  until collection is armed). All buttons are keyboard-accessible `<button>` /
+  `<select>` elements with aria-labels.
 - **Area:** Console UI.
 - **Impact:** **Low** (quality of life).
 - **Complexity:** **S.**

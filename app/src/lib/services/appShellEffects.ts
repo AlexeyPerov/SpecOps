@@ -72,6 +72,13 @@ export interface SyncSessionTabEffectInput {
     options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
   ) => Promise<void>;
   setLastChatScopeKey: (key: string | null) => void;
+  /**
+   * P03-08-29(b): when AI is disabled, the workspace chat scope is never
+   * user-reachable (session tabs are hidden), so creating an empty per-workspace
+   * chat slice on every switch is pure waste that keeps the chat emit fan-out
+   * wired. The chat-http scope is unaffected (it has its own context id).
+   */
+  opencodeEnabled: boolean;
 }
 
 export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
@@ -87,6 +94,7 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
     ensureChatHttpSessionTab,
     restoreWorkspaceSession,
     setLastChatScopeKey,
+    opencodeEnabled,
   } = input;
 
   if (activeTab && isSessionTab(activeTab) && !isChatHttpActive) {
@@ -126,6 +134,19 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
   }
 
   if (!activeWorkspaceRoot) {
+    if (lastChatScopeKey !== null) {
+      chatStore.cancelAllGenerations(lastChatScopeKey);
+      setLastChatScopeKey(null);
+    }
+    chatStore.setActiveWorkspaceRoot(null);
+    return;
+  }
+
+  // P03-08-29(b): with AI disabled, the workspace chat scope is unreachable
+  // (session tabs are hidden) and creating an empty per-workspace slice on
+  // every switch only keeps the chat emit fan-out wired for no user benefit.
+  // Cancel any stale scope and stop — re-enabling AI re-arms the full path.
+  if (!opencodeEnabled) {
     if (lastChatScopeKey !== null) {
       chatStore.cancelAllGenerations(lastChatScopeKey);
       setLastChatScopeKey(null);
@@ -449,6 +470,28 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     setOpencodeHealth,
   } = input;
 
+  // P03-08-29(a): when AI is disabled, the health state is always `unknown`
+  // regardless of which workspace is active. Keep `activeWorkspaceRoot` OUT of
+  // the probe key in that case, otherwise every workspace switch changes the
+  // key, bypasses the dedup gate, and writes a fresh `checkedAt` timestamp —
+  // a new state object per switch that fans out through the full derived
+  // cascade (settings fingerprint, etc.) for no semantic change. Publish the
+  // `unknown` patch once and stop re-touching state until AI is re-enabled.
+  if (!opencodeEnabled) {
+    const disabledKey = ["disabled", runtimeReady, isChatHttpActive].join("|");
+    if (disabledKey === lastOpencodeSidecarProbeKey) {
+      return;
+    }
+    lastOpencodeSidecarProbeKey = disabledKey;
+    setOpencodeHealth({
+      status: "unknown",
+      source: null,
+      checkedAt: new Date().toISOString(),
+      lastErrorMessage: null,
+    });
+    return;
+  }
+
   const probeKey = [
     runtimeReady,
     workspaceLifecycleActive,
@@ -466,16 +509,6 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
   lastOpencodeSidecarProbeKey = probeKey;
 
   if (!runtimeReady || !workspaceLifecycleActive || !activeWorkspaceRoot || isChatHttpActive) {
-    return;
-  }
-
-  if (!opencodeEnabled) {
-    setOpencodeHealth({
-      status: "unknown",
-      source: null,
-      checkedAt: new Date().toISOString(),
-      lastErrorMessage: null,
-    });
     return;
   }
 
@@ -730,14 +763,25 @@ export interface SyncChatAccessMonitorEffectInput {
   isSessionTabActive: boolean;
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
+  /**
+   * P03-08-29(c): the 15 s access poll targets the AI backend. When AI is
+   * disabled the workspace chat scope is unreachable, so the poll is pure
+   * background waste — gate it off explicitly instead of relying on the
+   * session tab being inactive.
+   */
+  opencodeEnabled: boolean;
 }
 
 export function syncChatAccessMonitorEffect(input: SyncChatAccessMonitorEffectInput): void {
-  const { runtimeReady, isSessionTabActive, activeWorkspaceRoot, isChatHttpActive } = input;
+  const { runtimeReady, isSessionTabActive, activeWorkspaceRoot, isChatHttpActive, opencodeEnabled } = input;
   if (!runtimeReady) {
     return;
   }
-  syncChatAccessMonitor(isSessionTabActive && Boolean(activeWorkspaceRoot) && !isChatHttpActive);
+  // P03-08-29(c): explicit opencode-enabled gate (in addition to the
+  // session-tab-active gate) so the poll never arms while AI is off.
+  syncChatAccessMonitor(
+    opencodeEnabled && isSessionTabActive && Boolean(activeWorkspaceRoot) && !isChatHttpActive,
+  );
 }
 
 export interface SyncExternalFileWatcherEffectInput {

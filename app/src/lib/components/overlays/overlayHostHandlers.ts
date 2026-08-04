@@ -231,8 +231,27 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     let failures = 0;
     let skippedDirty = 0;
     let skippedNonUtf8 = 0;
+    let cancelled = false;
+    // P03-08-31: the replace loop is a long mutation; report progress so the
+    // status bar reflects how far along it is, and honor the search generation
+    // so starting a new search (or closing the panel) cancels an in-flight
+    // replace instead of letting it run to completion in the background.
+    const replaceGeneration = deps.bumpProjectSearchGeneration();
+    const progressInterval = Math.max(1, Math.floor(totalFiles / 20));
     try {
-      for (const result of results) {
+      for (let index = 0; index < results.length; index += 1) {
+        if (index % progressInterval === 0 && index > 0) {
+          deps.setProjectSearchStatus(
+            `Replacing… ${index}/${totalFiles} file${index === 1 ? "" : "s"}`,
+          );
+        }
+        // Cancel check: a newer search generation means the user moved on
+        // (new query, closed the panel, switched workspace).
+        if (replaceGeneration !== deps.getProjectSearchGeneration()) {
+          cancelled = true;
+          break;
+        }
+        const result = results[index]!;
         // Never silently clobber an unsaved buffer: skip files whose open
         // document is dirty across any context, and count them for status.
         const decision = decideReplaceAllForPath(result.path);
@@ -257,6 +276,13 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
         } else if (outcome.reason !== "No matches.") {
           failures += 1;
         }
+      }
+      if (cancelled) {
+        deps.setProjectSearchStatus(
+          `Replace cancelled after ${files} file${files === 1 ? "" : "s"}.`,
+        );
+        deps.notify(`Replace cancelled — ${replaced} occurrence(s) replaced before cancel.`);
+        return;
       }
       deps.setProjectSearchStatus(
         `Replaced ${replaced} occurrence(s) in ${files} file(s)${

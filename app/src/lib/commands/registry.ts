@@ -89,8 +89,12 @@ export function dispatchCommand(
     return;
   }
 
+  // P03-08-28: command dispatch fires on every keystroke-bound shortcut and
+  // palette action. It is pure routing noise for the console ring (which
+  // filters at info by default), so demote to debug — failures below are still
+  // logged at error.
   void logDiagnostic({
-    level: "info",
+    level: "debug",
     source: "frontend",
     timestamp: new Date().toISOString(),
     message: `command dispatched: ${commandId}`,

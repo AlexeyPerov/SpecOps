@@ -41,7 +41,12 @@
   } from "../lib/state/chatStore";
   import { startAppShellRuntime } from "../lib/services/appShellRuntime";
   import { setupAppShellMount } from "../lib/services/appShellPageHandlers";
-  import { elapsedMs, logPerfTiming, nowMs } from "../lib/services/perfDiagnostics";
+  import {
+    elapsedMs,
+    logPerfTiming,
+    nowMs,
+    setPerfCollectionEnabled,
+  } from "../lib/services/perfDiagnostics";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { routePathToLastActiveWindow } from "../lib/services/windowManager";
   import { registerSettingsDialogOpener } from "../lib/services/settingsDialogUi";
@@ -670,6 +675,7 @@
     isSessionTabActive;
     selectedSessionId;
     lastChatScopeKey;
+    opencodeEnabled;
     syncSessionTabEffect({
       activeTab,
       isChatHttpActive,
@@ -679,6 +685,7 @@
       isSessionTabActive,
       selectedSessionId,
       lastChatScopeKey,
+      opencodeEnabled,
       ensureChatHttpSessionTab: () => appShellHost?.api.ensureChatHttpSessionTab(),
       restoreWorkspaceSession: (root, options) =>
         appShellHost?.api.restoreWorkspaceSession(root, options) ?? Promise.resolve(),
@@ -724,6 +731,14 @@
     });
   });
 
+  // P03-08-T2: mirror the perf-log collection setting into the perf ring so
+  // capturing starts/stops exactly when the user toggles it (no allocation when
+  // off). Runs unconditionally of runtimeReady so a toggle before the runtime
+  // is live still arms the ring for the next sample.
+  $effect(() => {
+    setPerfCollectionEnabled($appSettings.logSettings.collectPerfLogs);
+  });
+
   /**
    * M6-T4/T5 — fire sound + OS notifications when an agent in the active
    * workspace finishes, requests permission/question, or errors. Reacts to
@@ -734,7 +749,11 @@
     activeRuntimeBySessionId;
     $appSettings.soundSettings;
     $appSettings.osNotificationSettings;
-    if (!runtimeReady) {
+    opencodeEnabled;
+    // P03-08-29(c): with AI disabled no agent can run, so runtime transitions
+    // never occur — skip the observer update entirely rather than rely on it
+    // being an unreachable no-op.
+    if (!runtimeReady || !opencodeEnabled) {
       return;
     }
     sessionNotificationObserver.update({
@@ -919,11 +938,13 @@
     isSessionTabActive;
     activeWorkspaceRoot;
     isChatHttpActive;
+    opencodeEnabled;
     syncChatAccessMonitorEffect({
       runtimeReady,
       isSessionTabActive,
       activeWorkspaceRoot,
       isChatHttpActive,
+      opencodeEnabled,
     });
   });
 

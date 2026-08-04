@@ -54,4 +54,15 @@ describe("chatAccessMonitor", () => {
     vi.advanceTimersByTime(CHAT_ACCESS_POLL_INTERVAL_MS);
     expect(runAccessPreflightMock).toHaveBeenCalledTimes(2);
   });
+
+  it("skips preflight while the document is hidden (P03-08-29c)", () => {
+    Object.defineProperty(document, "hidden", { value: true, configurable: true });
+    try {
+      syncChatAccessMonitor(true);
+      vi.advanceTimersByTime(CHAT_ACCESS_POLL_INTERVAL_MS * 3);
+      expect(runAccessPreflightMock).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, "hidden", { value: false, configurable: true });
+    }
+  });
 });

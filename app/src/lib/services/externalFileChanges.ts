@@ -107,10 +107,7 @@ export function resetExternalFileChangesForTests(): void {
  */
 export function invalidateTabExternalCheckFreshness(documentId?: string): void {
   if (documentId) {
-    tabCheckFreshnessGenerationByDocument.set(
-      documentId,
-      (tabCheckFreshnessGenerationByDocument.get(documentId) ?? 0) + 1,
-    );
+    bumpTabCheckFreshnessGeneration(documentId);
     tabCheckCompletedAtByDocument.delete(documentId);
     const pending = pendingTabCheckByDocument.get(documentId);
     if (pending && pending.timeoutId !== null) {
@@ -120,11 +117,12 @@ export function invalidateTabExternalCheckFreshness(documentId?: string): void {
     }
   } else {
     tabCheckCompletedAtByDocument.clear();
-    for (const [genDocumentId] of tabCheckFreshnessGenerationByDocument) {
-      tabCheckFreshnessGenerationByDocument.set(
-        genDocumentId,
-        (tabCheckFreshnessGenerationByDocument.get(genDocumentId) ?? 0) + 1,
-      );
+    // Snapshot the keys before mutating: bumpTabCheckFreshnessGeneration
+    // deletes + re-inserts the key (to refresh insertion order for LRU), which
+    // would otherwise mutate the map mid-iteration.
+    const allGenerationDocumentIds = [...tabCheckFreshnessGenerationByDocument.keys()];
+    for (const genDocumentId of allGenerationDocumentIds) {
+      bumpTabCheckFreshnessGeneration(genDocumentId);
     }
     for (const [pendingDocumentId, pending] of pendingTabCheckByDocument) {
       if (pending.timeoutId !== null) {
@@ -145,6 +143,30 @@ function recordTabCheckCompletion(documentId: string, completedAtMs: number): vo
       break;
     }
     tabCheckCompletedAtByDocument.delete(oldest);
+  }
+}
+
+/**
+ * P03-08-32(a): bump (or insert) a document's tab-check freshness generation,
+ * capped to the same LRU bound as the completion cache. Previously this map
+ * had no cap and the close path (`clearDocumentExternalChangeState`) routed
+ * through `invalidateTabExternalCheckFreshness`, which *set* a generation
+ * instead of deleting it — so every document ever opened retained an entry for
+ * the whole session. The cap bounds the map; `clearDocumentExternalChangeState`
+ * now deletes explicitly.
+ */
+function bumpTabCheckFreshnessGeneration(documentId: string): void {
+  const next = (tabCheckFreshnessGenerationByDocument.get(documentId) ?? 0) + 1;
+  // Move to the back of insertion order (most-recently-touched) so the LRU
+  // eviction below drops the oldest entry, not this one.
+  tabCheckFreshnessGenerationByDocument.delete(documentId);
+  tabCheckFreshnessGenerationByDocument.set(documentId, next);
+  while (tabCheckFreshnessGenerationByDocument.size > MAX_TAB_EXTERNAL_CHECK_FRESHNESS_ENTRIES) {
+    const oldest = tabCheckFreshnessGenerationByDocument.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    tabCheckFreshnessGenerationByDocument.delete(oldest);
   }
 }
 
@@ -233,7 +255,11 @@ export function clearDocumentExternalChangeState(
   documentId: string,
   filePath?: string | null,
 ): void {
+  // P03-08-32(a): on close, drop the freshness generation entry entirely
+  // instead of routing through `invalidateTabExternalCheckFreshness` (which
+  // bumps and retains it). Also cancel any pending tab check for this doc.
   invalidateTabExternalCheckFreshness(documentId);
+  tabCheckFreshnessGenerationByDocument.delete(documentId);
   deferredDirtyDocumentIds.delete(documentId);
   runtimeState.inFlightCheckByDocument.delete(documentId);
   runtimeState.pendingDirtyPromptByDocument.delete(documentId);

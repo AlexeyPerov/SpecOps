@@ -176,8 +176,12 @@ export function logGitCommandSummary(
   const command = `git ${args.join(" ")}`;
   const stderr = response.stderr.trim();
   const sanitizedStderr = stderr ? sanitizeGitStderrForDiagnosticLog(stderr) : "";
+  // P03-08-27: a per-command summary fires for *every* git invocation (and git
+  // runs on every tab/workspace switch when scoped to "always"). Demote the
+  // success path to `debug` so it is dropped before stringify+IPC (the Rust
+  // plugin filters at Info); failures stay at `warn` so they still surface.
   void logDiagnostic({
-    level: response.exitCode === 0 ? "info" : "warn",
+    level: response.exitCode === 0 ? "debug" : "warn",
     source: "frontend",
     message: `${command} → exit ${response.exitCode}`,
     timestamp: new Date().toISOString(),

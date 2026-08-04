@@ -10,6 +10,22 @@ vi.mock("../../services/confirmDialogUi", () => ({
   requestConfirm: vi.fn(async () => true),
 }));
 
+vi.mock("../../services/projectFileOps", () => ({
+  replaceInProjectFile: vi.fn(async () => ({
+    ok: true,
+    count: 1,
+    content: "replaced",
+    fingerprint: { mtimeMs: 0, size: 8 },
+    lineEnding: "lf",
+    hasBom: false,
+  })),
+}));
+
+vi.mock("../../services/projectReplaceSync", () => ({
+  decideReplaceAllForPath: () => ({ kind: "replace" }),
+  syncOpenDocumentAfterReplace: vi.fn(),
+}));
+
 vi.mock("../../services/fileSystem", () => ({
   openFolderDialog: vi.fn(async () => "/tmp/parent"),
 }));
@@ -259,5 +275,30 @@ describe("createOverlayHostHandlers.replaceAllInProjectWithResults", () => {
       async () => {},
     );
     expect(notify).toHaveBeenCalledWith("Nothing to replace.");
+  });
+
+  it("cancels the replace loop when the search generation changes (P03-08-31)", async () => {
+    // bump returns 1 (the replace's own generation); get returns 2, so the
+    // cancel check fires before any file is written.
+    const handlers = createOverlayHostHandlers(
+      makeDeps({
+        bumpProjectSearchGeneration: () => 1,
+        getProjectSearchGeneration: () => 2,
+      }),
+    );
+    const results: ProjectSearchResult[] = [
+      {
+        path: "/tmp/ws/a.ts",
+        matches: [{ line: 1, column: 1, length: 3, lineText: "foo", from: 0, to: 3 }],
+      } as never,
+    ];
+    await handlers.replaceAllInProjectWithResults(
+      { text: "foo", replacement: "bar", caseSensitive: false, wholeWord: false, regex: false },
+      results,
+      async () => {},
+    );
+    // Replace cancelled before writing; the projectFileOps mock should not run.
+    const { replaceInProjectFile } = await import("../../services/projectFileOps");
+    expect(vi.mocked(replaceInProjectFile)).not.toHaveBeenCalled();
   });
 });

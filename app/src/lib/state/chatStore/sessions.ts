@@ -93,6 +93,16 @@ export function evictWorkspaceSessionHydration(normalizedRootPath: string): void
     clearTimeout(timer);
     deferredIndexValidationByScope.delete(normalizedRootPath);
   }
+  // P03-08-32(b): drop in-flight thread-hydrate promises keyed under this
+  // scope. They settle on their own (the underlying read completes), but their
+  // map entries were never removed on eviction, so a workspace churn cycle
+  // (open/close many workspaces) grew this map for the whole session.
+  const prefix = `${normalizedRootPath}\x00`;
+  for (const key of inFlightThreadHydrates.keys()) {
+    if (key.startsWith(prefix)) {
+      inFlightThreadHydrates.delete(key);
+    }
+  }
 }
 
 export interface LoadWorkspaceSessionsOptions {

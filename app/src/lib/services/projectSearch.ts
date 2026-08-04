@@ -2,6 +2,7 @@ import { Text } from "@codemirror/state";
 import { collectOpenableFolderFiles } from "./folderOpenableFiles";
 import { readTextFile, stat } from "@tauri-apps/plugin-fs";
 import { isImageFilePath } from "./fileContentKind";
+import { mapWithConcurrency } from "./mapWithConcurrency";
 import {
   findAllRangesInText,
   validateSearchQuery,
@@ -22,6 +23,14 @@ export const MAX_SEARCH_FILE_BYTES = 4 * 1024 * 1024;
  * building an unbounded result set.
  */
 export const MAX_SEARCH_TOTAL_MATCHES = 10_000;
+
+/**
+ * P03-08-30: in-flight file concurrency for the project scan. Previously the
+ * loop awaited `stat` + `readTextFile` per file sequentially — 10k sequential
+ * IPC round-trips for a 5k-file workspace. A bounded fan-out (12) overlaps the
+ * IPC waits without flooding the bridge or exceeding the per-file size cap.
+ */
+const PROJECT_SEARCH_CONCURRENCY = 12;
 
 /** A single match inside a file. */
 export interface ProjectSearchMatch {
@@ -134,44 +143,71 @@ export async function searchInProject(
     options.files !== undefined
       ? options.files
       : await collectOpenableFolderFiles(workspaceRoot);
+
+  // Shared mutable scan state. JS is single-threaded, so the counters are
+  // updated atomically between awaits — no locking needed. `aborted` lets a
+  // worker that observed the onProgress bail or the match cap signal the other
+  // workers to short-circuit without each re-checking the whole file set.
   const results: ProjectSearchResult[] = [];
   let totalMatches = 0;
   let truncated = false;
-  for (const path of files) {
+  let aborted = false;
+
+  await mapWithConcurrency(files, PROJECT_SEARCH_CONCURRENCY, async (path) => {
+    if (aborted) {
+      return;
+    }
     if (options.onProgress?.(path) === false) {
-      break;
+      aborted = true;
+      return;
     }
     // Images are "openable" (they render in a preview pane) but are not text;
     // decoding them as UTF-8 just produces garbage matches.
     if (isImageFilePath(path)) {
-      continue;
+      return;
     }
     try {
       const info = await stat(path);
       if (Number(info.size) > MAX_SEARCH_FILE_BYTES) {
-        continue;
+        return;
       }
     } catch {
-      continue;
+      return;
+    }
+    if (aborted) {
+      return;
     }
     let content: string;
     try {
       content = await readTextFile(path);
     } catch {
-      continue;
+      return;
+    }
+    if (aborted) {
+      return;
     }
     const matches = computeFileMatches(content, query);
     if (matches.length === 0) {
-      continue;
+      return;
     }
     const remaining = MAX_SEARCH_TOTAL_MATCHES - totalMatches;
-    if (matches.length >= remaining) {
-      results.push({ path, matches: matches.slice(0, remaining) });
+    if (remaining <= 0) {
       truncated = true;
-      break;
+      aborted = true;
+      return;
+    }
+    if (matches.length >= remaining) {
+      // Synchronous claim of the remaining budget before another worker can
+      // read `totalMatches` — this is the only section where ordering matters,
+      // and it contains no await.
+      results.push({ path, matches: matches.slice(0, remaining) });
+      totalMatches += remaining;
+      truncated = true;
+      aborted = true;
+      return;
     }
     results.push({ path, matches });
     totalMatches += matches.length;
-  }
+  });
   return { ok: true, results, truncated };
 }

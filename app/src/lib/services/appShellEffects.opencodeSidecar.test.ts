@@ -222,6 +222,28 @@ describe("syncOpencodeSidecarEffect", () => {
     );
   });
 
+  it("does not rewrite health on every workspace switch while opencode is disabled (P03-08-29a)", () => {
+    const setOpencodeHealth = vi.fn();
+    const baseInput = {
+      runtimeReady: true,
+      workspaceLifecycleActive: true,
+      isChatHttpActive: false,
+      isSessionTabActive: true,
+      opencodeEnabled: false,
+      opencodeMode: "sidecar" as const,
+      opencodeBaseUrl: "http://127.0.0.1:4096",
+      opencodeSidecarPort: 4096,
+      setOpencodeHealth,
+    };
+    syncOpencodeSidecarEffect({ ...baseInput, activeWorkspaceRoot: "/tmp/a" });
+    syncOpencodeSidecarEffect({ ...baseInput, activeWorkspaceRoot: "/tmp/b" });
+    syncOpencodeSidecarEffect({ ...baseInput, activeWorkspaceRoot: "/tmp/c" });
+
+    // Exactly one health write (the initial `unknown`); switching roots must
+    // not churn app state with fresh `checkedAt` timestamps.
+    expect(setOpencodeHealth).toHaveBeenCalledTimes(1);
+  });
+
   it("validates URL mode and marks invalid URL as error", () => {
     const setOpencodeHealth = vi.fn();
     syncOpencodeSidecarEffect({

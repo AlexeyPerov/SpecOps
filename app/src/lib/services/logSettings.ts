@@ -1,8 +1,16 @@
 import type { LogSettings } from "../domain/contracts";
 
 export const defaultLogSettings: LogSettings = {
-  verboseProviderLogging: true,
+  // P03-08-27: verbose provider logging deep-clones full request/response
+  // payloads on every chat turn and ships them through the log pipeline even
+  // when the Rust plugin discards them (they are emitted at `debug`). Default
+  // off; opt in from Settings → Logs panel when diagnosing a provider issue.
+  verboseProviderLogging: false,
   canOpenLogsPanel: true,
+  // P03-08-T2: perf sample collection for the downloadable report. Off by
+  // default so the ring is never allocated on the hot path; turning it on in
+  // Settings captures every perf timing for export.
+  collectPerfLogs: false,
 };
 
 /** Validates and normalizes persisted log settings. */
@@ -21,5 +29,9 @@ export function normalizeLogSettings(value: unknown): LogSettings {
       typeof record.canOpenLogsPanel === "boolean"
         ? record.canOpenLogsPanel
         : defaultLogSettings.canOpenLogsPanel,
+    collectPerfLogs:
+      typeof record.collectPerfLogs === "boolean"
+        ? record.collectPerfLogs
+        : defaultLogSettings.collectPerfLogs,
   };
 }

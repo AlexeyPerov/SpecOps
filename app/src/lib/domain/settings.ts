@@ -92,6 +92,12 @@ export interface LogSettings {
   verboseProviderLogging: boolean;
   /** When enabled, the bottom logs panel can be opened from the status bar. */
   canOpenLogsPanel: boolean;
+  /**
+   * When enabled, performance timing samples are captured into a bounded
+   * in-memory ring regardless of console level, for a downloadable report.
+   * Off by default; the ring is a no-op allocation-wise when disabled.
+   */
+  collectPerfLogs: boolean;
 }
 
 /**

@@ -36,9 +36,17 @@ describe("fileWatcher", () => {
     expect(invokeMock).toHaveBeenCalledWith("sync_file_watcher_paths", { paths: [] });
   });
 
-  it("syncProjectTreeWatcher invokes sync_project_tree_watcher", async () => {
-    await syncProjectTreeWatcher("/tmp/ws");
+  it("syncProjectTreeWatcher invokes sync_project_tree_watcher with roots", async () => {
+    await syncProjectTreeWatcher(["/tmp/ws"]);
 
-    expect(invokeMock).toHaveBeenCalledWith("sync_project_tree_watcher", { root: "/tmp/ws" });
+    expect(invokeMock).toHaveBeenCalledWith("sync_project_tree_watcher", {
+      roots: ["/tmp/ws"],
+    });
+  });
+
+  it("syncProjectTreeWatcher passes an empty roots array when called with []", async () => {
+    await syncProjectTreeWatcher([]);
+
+    expect(invokeMock).toHaveBeenCalledWith("sync_project_tree_watcher", { roots: [] });
   });
 });

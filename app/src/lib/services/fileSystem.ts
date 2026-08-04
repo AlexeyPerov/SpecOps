@@ -60,6 +60,17 @@ interface WorkspaceAccessSnapshot {
 
 const WORKSPACE_ACCESS_FILE = "workspace-access.json";
 
+/**
+ * In-process memo of roots that have already passed `ensureWorkspaceReadAccess`.
+ *
+ * The workspace-access JSON is append-only (a root once granted stays granted),
+ * so a `readDir` + JSON read-modify-write on every workspace switch is pure
+ * waste for revisited roots. Once a root has been confirmed readable in this
+ * process, subsequent switches return `"ready"` without touching disk or the
+ * JSON file. Cleared only by process restart.
+ */
+const grantedWorkspaceRoots = new Set<string>();
+
 async function getWorkspaceAccessFilePath(): Promise<string> {
   const dataDir = await ensureSpecOpsDataDir();
   return join(dataDir, WORKSPACE_ACCESS_FILE);
@@ -121,7 +132,14 @@ export async function readAllowedWorkspaceRoots(): Promise<string[]> {
   return snapshot.allowedWorkspaceRoots.map((path) => normalizePathSync(path));
 }
 
-/** Lightweight read probe without persisting allowed roots (for polling / FS hooks). */
+/**
+ * Lightweight read probe without persisting allowed roots (for polling / FS hooks).
+ *
+ * Intentionally hits disk on every call — this probe exists to *detect* blocked
+ * access (e.g. a drive unmounted, permission revoked), so it must not be memoized
+ * via `grantedWorkspaceRoots` like `ensureWorkspaceReadAccess`. It is called from
+ * the project-tree root-load path on session-tab activation, not on every switch.
+ */
 export async function probeWorkspaceReadAccess(rootPath: string): Promise<WorkspaceAccessStatus> {
   const storageRootPath = normalizePathForStorage(rootPath);
   try {
@@ -134,9 +152,18 @@ export async function probeWorkspaceReadAccess(rootPath: string): Promise<Worksp
 
 export async function ensureWorkspaceReadAccess(rootPath: string): Promise<WorkspaceAccessStatus> {
   const storageRootPath = normalizePathForStorage(rootPath);
+  // A root confirmed readable earlier in this process is still readable — skip
+  // the redundant `readDir` and the workspace-access JSON read-modify-write
+  // that fired on every workspace switch. The JSON is append-only, so this
+  // memoization cannot drop a revocation that happened mid-session (there is
+  // no such code path).
+  if (grantedWorkspaceRoots.has(storageRootPath)) {
+    return "ready";
+  }
   try {
     await readDir(storageRootPath);
     await rememberWorkspaceReadAccess(storageRootPath);
+    grantedWorkspaceRoots.add(storageRootPath);
     return "ready";
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

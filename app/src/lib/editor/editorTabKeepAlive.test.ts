@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_LIVE_EDITOR_TABS_PER_PANE,
+  partitionImmediateAndDeferred,
   updateLiveEditorTabs,
 } from "./editorTabKeepAlive";
 
@@ -34,5 +35,43 @@ describe("updateLiveEditorTabs", () => {
       "a",
       "b",
     ]);
+  });
+});
+
+describe("partitionImmediateAndDeferred", () => {
+  it("mounts already-mounted tabs and the active tab immediately; defers the rest", () => {
+    const result = partitionImmediateAndDeferred(
+      ["a", "b", "c", "d"],
+      "d",
+      new Set(["a"]),
+    );
+    expect(result.immediate).toEqual(["a", "d"]);
+    expect(result.deferred).toEqual(["b", "c"]);
+  });
+
+  it("defers nothing when every desired tab is already mounted", () => {
+    const result = partitionImmediateAndDeferred(
+      ["a", "b"],
+      "a",
+      new Set(["a", "b"]),
+    );
+    expect(result.immediate).toEqual(["a", "b"]);
+    expect(result.deferred).toEqual([]);
+  });
+
+  it("promotes the active tab to immediate even when not yet mounted", () => {
+    const result = partitionImmediateAndDeferred(
+      ["a", "b", "c"],
+      "c",
+      new Set(),
+    );
+    expect(result.immediate).toEqual(["c"]);
+    expect(result.deferred).toEqual(["a", "b"]);
+  });
+
+  it("returns empty sets for an empty desired list", () => {
+    const result = partitionImmediateAndDeferred([], null, new Set(["a"]));
+    expect(result.immediate).toEqual([]);
+    expect(result.deferred).toEqual([]);
   });
 });

@@ -24,6 +24,6 @@ export async function clearFileWatcherPaths(): Promise<void> {
   await invoke("sync_file_watcher_paths", { paths: [] });
 }
 
-export async function syncProjectTreeWatcher(root: string | null): Promise<void> {
-  await invoke("sync_project_tree_watcher", { root });
+export async function syncProjectTreeWatcher(roots: readonly string[]): Promise<void> {
+  await invoke("sync_project_tree_watcher", { roots });
 }

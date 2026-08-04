@@ -131,7 +131,7 @@ describe("P7 optimization regression guardrails", () => {
 
       expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
       expect(syncWatcher).toHaveBeenCalledTimes(1);
-      expect(syncWatcher).toHaveBeenCalledWith("/repo");
+      expect(syncWatcher).toHaveBeenCalledWith(["/repo"]);
     });
 
     it("reloads once per workspace-root transition only", () => {
@@ -154,9 +154,9 @@ describe("P7 optimization regression guardrails", () => {
       );
 
       expect(loadProjectTreeRoot).toHaveBeenCalledTimes(3);
-      expect(syncWatcher).toHaveBeenNthCalledWith(1, "/repo-a");
-      expect(syncWatcher).toHaveBeenNthCalledWith(2, "/repo-b");
-      expect(syncWatcher).toHaveBeenNthCalledWith(3, "/repo-a");
+      expect(syncWatcher).toHaveBeenNthCalledWith(1, ["/repo-a"]);
+      expect(syncWatcher).toHaveBeenNthCalledWith(2, ["/repo-b"]);
+      expect(syncWatcher).toHaveBeenNthCalledWith(3, ["/repo-a"]);
     });
   });
 

@@ -41,7 +41,7 @@
   import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
   import { getEditorToolController } from "../editor/editorToolContext";
   import type { EditorToolSnapshot } from "../editor/editorToolController";
-  import { updateLiveEditorTabs } from "../editor/editorTabKeepAlive";
+  import { updateLiveEditorTabs, partitionImmediateAndDeferred } from "../editor/editorTabKeepAlive";
 
   let {
     paneId,
@@ -334,29 +334,123 @@
     updateLiveEditorTabs(liveEditorTabIds, activeTabId, openTextEditorTabIds),
   );
 
+  /**
+   * Idle-hydration of non-active keep-alive tabs.
+   *
+   * A cold context switch (entering a workspace outside the
+   * {@link MAX_MOUNTED_EDITOR_CONTEXTS} LRU) mounts a whole editor grid — up to
+   * `MAX_LIVE_EDITOR_TABS_PER_PANE × paneCount` CodeMirror views — each doing a
+   * full `EditorState.create` (document parse + extension setup). To avoid
+   * stalling the main thread, only the active tab mounts synchronously; sibling
+   * tabs in the keep-alive LRU hydrate on `requestIdleCallback` (falling back to
+   * `setTimeout(…, 0)` when idle callbacks are unavailable, e.g. in tests). If
+   * the user switches to a deferred tab before it hydrates, it is promoted
+   * synchronously by the active-tab immediate path.
+   */
+  let pendingIdleTabIds = new Set<string>();
+  let idleHydrateHandle: ReturnType<typeof requestIdle> | null = null;
+
+  function requestIdle(callback: () => void): ReturnType<typeof requestIdleCallback> | ReturnType<typeof setTimeout> {
+    if (typeof requestIdleCallback === "function") {
+      return requestIdleCallback(() => callback());
+    }
+    return setTimeout(() => callback(), 0);
+  }
+
+  function cancelIdle(handle: ReturnType<typeof requestIdle> | null): void {
+    if (handle === null) {
+      return;
+    }
+    if (typeof cancelIdleCallback === "function" && typeof handle === "number") {
+      cancelIdleCallback(handle as ReturnType<typeof requestIdleCallback>);
+    } else {
+      clearTimeout(handle as ReturnType<typeof setTimeout>);
+    }
+  }
+
+  function flushIdleHydrate(): void {
+    idleHydrateHandle = null;
+    if (pendingIdleTabIds.size === 0) {
+      return;
+    }
+    const due = [...pendingIdleTabIds];
+    pendingIdleTabIds.clear();
+    // Merge the deferred tabs into the live set. Keep ordering stable relative
+    // to the desired list so the LRU eviction order matches `updateLiveEditorTabs`.
+    untrack(() => {
+      const current = new Set(liveEditorTabIds);
+      const ordered = desiredLiveEditorTabIds.filter(
+        (tabId) => due.includes(tabId) || current.has(tabId),
+      );
+      if (
+        ordered.length !== liveEditorTabIds.length ||
+        ordered.some((tabId, index) => tabId !== liveEditorTabIds[index])
+      ) {
+        liveEditorTabIds = ordered;
+      }
+    });
+  }
+
   $effect(() => {
     const next = desiredLiveEditorTabIds;
     const current = untrack(() => liveEditorTabIds);
-    if (next.length !== current.length || next.some((tabId, index) => tabId !== current[index])) {
-      const mountedNewTab = activeTabId !== null && !current.includes(activeTabId) && next.includes(activeTabId);
-      liveEditorTabIds = next;
-      if (!mountedNewTab) {
-        return;
+    const { immediate, deferred } = partitionImmediateAndDeferred(
+      next,
+      activeTabId,
+      new Set(current),
+    );
+
+    // If a previously-deferred tab is now active (or closed), drop it from the
+    // pending idle set so it doesn't hydrate late and overwrite a newer state.
+    const nextPending = new Set<string>();
+    for (const tabId of deferred) {
+      if (pendingIdleTabIds.has(tabId)) {
+        nextPending.add(tabId);
       }
-      // Observable signal: a one-time mount cost per tab. Repeat visits to an
-      // already-live recent tab produce no such log.
-      void logPerfTiming(
-        "editor tab keep-alive slot mounted",
-        {
-          metric: "tab.activationSideEffects",
-          durationMs: 0,
-          label: "editor-keepalive-mount",
-          paneId,
-          tabId: activeTabId,
-          liveSlotCount: next.length,
-        },
-        "debug",
-      );
+    }
+    // New deferred entries (not yet pending) get scheduled.
+    const newlyDeferred = deferred.filter((tabId) => !pendingIdleTabIds.has(tabId));
+    pendingIdleTabIds = nextPending;
+
+    const immediateSet = new Set(immediate);
+    // Apply the immediate set synchronously. Preserve desired ordering.
+    const orderedImmediate = next.filter((tabId) => immediateSet.has(tabId));
+    if (
+      orderedImmediate.length !== current.length ||
+      orderedImmediate.some((tabId, index) => tabId !== current[index])
+    ) {
+      const mountedNewTab =
+        activeTabId !== null &&
+        !current.includes(activeTabId) &&
+        orderedImmediate.includes(activeTabId);
+      liveEditorTabIds = orderedImmediate;
+      if (mountedNewTab) {
+        void logPerfTiming(
+          "editor tab keep-alive slot mounted",
+          {
+            metric: "tab.activationSideEffects",
+            durationMs: 0,
+            label: "editor-keepalive-mount",
+            paneId,
+            tabId: activeTabId,
+            liveSlotCount: orderedImmediate.length,
+          },
+          "debug",
+        );
+      }
+    }
+
+    // Schedule newly-deferred tabs for idle hydration.
+    if (newlyDeferred.length > 0) {
+      for (const tabId of newlyDeferred) {
+        pendingIdleTabIds.add(tabId);
+      }
+      if (idleHydrateHandle === null) {
+        idleHydrateHandle = requestIdle(flushIdleHydrate);
+      }
+    } else if (pendingIdleTabIds.size === 0 && idleHydrateHandle !== null) {
+      cancelIdle(idleHydrateHandle);
+      idleHydrateHandle = null;
     }
   });
 

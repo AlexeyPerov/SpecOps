@@ -1,5 +1,82 @@
 # Changelog
 
+## 2026-08-04 21:20 MSK — Workspace switching performance (P03-08-11…18)
+
+Implemented the "Workspace switching" section of
+`specs/performance-review-03-08.md`: the file-watcher architecture, the
+editor cold-context remount cost, directory-cache and chat-session cache
+hygiene, and the project-tree publish storm. No feature changes.
+
+### File watcher architecture (P03-08-11, P03-08-12, P03-08-13)
+
+- `sync_file_watcher_paths` is now `#[tauri::command(async)]` +
+  `spawn_blocking`, mirroring its sibling `sync_project_tree_watcher`. The
+  blocking `watch()`/`unwatch()` diff (each call recreates the whole FSEvents
+  stream on macOS) no longer holds the main/IPC thread, so file-read and
+  session-lock IPC stay responsive while the watch set is reconciled.
+- The recursive project-tree watcher now watches **every open workspace root**
+  instead of only the active one, so a workspace switch is a diff (add/remove
+  the changed root) rather than a full unwatch + re-walk. The watcher sync
+  effect receives `openWorkspaceRoots` and passes a sorted root list so the
+  key is stable across switches.
+- The `FileIdMap::add_root` walk — which stats every entry under a recursive
+  root for rename-correlation state the app does not use — is now skipped for
+  recursive roots. The coarse path + kind emit filter handles ignored subtrees
+  without needing the cache. The best-effort `unwatch` of heavy top-level
+  subdirs (`.git`/`node_modules`/`target`) is kept for Linux inotify hygiene.
+- `watchedPathsFromState` now sorts paths before joining/truncating, so the
+  external-watcher sync key is order-independent: switching between workspaces
+  with the same open file set no longer fires a watcher-resync IPC, and the
+  `MAX_WATCHED_PATHS` truncation takes a deterministic sorted subset.
+
+### Editor cold-context remount (P03-08-14)
+
+- `MAX_MOUNTED_EDITOR_CONTEXTS` raised from 3 to 6. Parked hosts are
+  `display:none` and bounded per-pane, so the cost of a parked context is
+  memory (not CPU); a user with ≤ 6 workspaces never hits a cold remount.
+- Non-active keep-alive tabs in a freshly-mounted context now hydrate on
+  `requestIdleCallback` (fallback `setTimeout`): only the active pane's
+  selected tab mounts synchronously, and sibling tabs stagger across idle
+  frames. Switching to a deferred tab before it hydrates promotes it
+  synchronously. A cold switch into a 4-pane × 4-tab workspace now mounts 1
+  editor synchronously instead of up to 16.
+
+### Directory cache and workspace access (P03-08-15, P03-08-16)
+
+- `ensureWorkspaceReadAccess` memoizes already-granted roots in-process:
+  subsequent calls for a root confirmed readable earlier return `"ready"`
+  without a `readDir` or the workspace-access JSON read-modify-write.
+- `onBeforeRebuild` now receives the rebuilding root and calls
+  `workspaceDirectoryCache.invalidateUnder(root)` instead of `.clear()`, so
+  cached listings for other open workspaces survive a catalog rebuild in one
+  workspace.
+
+### Chat-session cache revalidation (P03-08-17)
+
+- The cache-first (`preferCachedIndex`) path schedules the deferred 750 ms
+  index re-read only when there is a persisted session missing its thread
+  entry. When every persisted session already has a thread (including `null`
+  for empty/missing files), the cache is complete and no timer is armed.
+  Workspaces with zero persisted sessions are now trivially fully hydrated
+  (the old `persistedEntries.length > 0` guard made the cache-hit branch
+  unreachable for them).
+
+### Project-tree publish storm (P03-08-18)
+
+- `publish()` passes the live state reference to the subscriber instead of
+  cloning — the subscriber only reads the snapshot, halving per-publish clones.
+- Ancestor directory loads in `ensureExpandedForActiveFile` run in parallel via
+  `Promise.all` instead of sequentially, collapsing N disk I/O awaits into
+  concurrent loads.
+
+### Tests
+
+- New `appShellHelpers` ordering/truncation tests, `invalidateUnder` cache
+  tests, `partitionImmediateAndDeferred` keep-alive tests, Rust
+  `apply_diff_recursive_multi_root_keeps_existing_roots`, plus chat-session
+  null-thread and zero-session cache-completion tests. All touched-area
+  suites green; no new type errors (32 pre-existing unchanged).
+
 ## 2026-08-03 23:15 MSK — Gate git behind the Version Control view (P03-08-T1, P03-08-06…10)
 
 Implemented the "Git executed outside the Version Control view" section of

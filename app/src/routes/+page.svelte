@@ -180,8 +180,11 @@
   const workspaceFileCatalogRegistry: WorkspaceFileCatalogRegistry =
     createWorkspaceFileCatalogRegistry({
       enumerate: cachedWorkspaceTraversal.enumerate,
-      onBeforeRebuild: () => {
-        workspaceDirectoryCache.clear();
+      onBeforeRebuild: (root) => {
+        // Invalidate only listings under the rebuilding root so cached trees
+        // for other open workspaces survive a rebuild in this one. Previously
+        // this called `.clear()`, wiping every workspace's cached listings.
+        workspaceDirectoryCache.invalidateUnder(root);
       },
     });
   let workspaceFileCatalogRevision = $state(0);
@@ -775,6 +778,7 @@
       runtimeReady,
       activeWorkspaceRoot,
       isChatHttpActive,
+      openWorkspaceRoots: workspaces.map((workspace) => workspace.rootPath),
       projectTreeController,
       loadProjectTreeRoot: () => appShellHost?.api.loadProjectTreeRoot() ?? Promise.resolve(),
     });

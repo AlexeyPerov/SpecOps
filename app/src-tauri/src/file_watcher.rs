@@ -465,9 +465,20 @@ fn apply_watcher_path_diff(
             .watch(PathBuf::from(&canonical).as_path(), mode)
         {
             Ok(()) => {
-                debouncer
-                    .cache()
-                    .add_root(PathBuf::from(&canonical), mode);
+                // The FileIdMap cache (`add_root`) walks and stats every entry
+                // under a recursive root to build rename-correlation state.
+                // This app does not rely on FileIdMap rename tracking — the
+                // debounce callback rewrites emitted paths via the
+                // `canonical_to_original` map and filters ignored subtrees via
+                // `path_has_ignored_component_below_roots`, neither of which
+                // needs the FileIdMap. Registering the cache only for individual
+                // file paths (NonRecursive) skips the 10^4–10^5 stats per
+                // workspace switch that `add_root(Recursive)` performs.
+                if matches!(mode, RecursiveMode::NonRecursive) {
+                    debouncer
+                        .cache()
+                        .add_root(PathBuf::from(&canonical), mode);
+                }
                 // F38: prune heavy subdirectories at registration so notify does
                 // not install per-dir watches (or stat every entry) under
                 // `.git`/`node_modules`/`target`. Only meaningful for a recursive
@@ -490,50 +501,69 @@ fn apply_watcher_path_diff(
     watched
 }
 
-#[tauri::command]
-pub fn sync_file_watcher_paths(
+/// Sync the set of individually-watched file paths.
+///
+/// Marked `async` (F43): `watch()`/`unwatch()` are blocking calls, and on macOS
+/// each one stops the FSEvents run-loop thread and recreates the whole stream
+/// with all N paths — so a large diff holds the watcher mutex (and the main
+/// thread, since this was previously a sync command) for the full duration.
+/// Running the diff in `spawn_blocking` keeps the main/IPC thread free to
+/// service file reads and session-lock IPC while the watch set is reconciled.
+#[tauri::command(async)]
+pub async fn sync_file_watcher_paths(
     paths: Vec<String>,
     state: State<'_, FileWatcherState>,
 ) -> Result<(), String> {
-    let mut guard = state
-        .inner
-        .lock()
-        .map_err(|error| error.to_string())?;
+    // Clone the Arc handle out of the borrowed `State` so the blocking task is
+    // `'static` and can run on the blocking-pool without escaping the lifetime
+    // of the IPC reference.
+    let inner = Arc::clone(&state.inner);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = inner.lock().map_err(|error| error.to_string())?;
 
-    ensure_debouncer(&mut guard)?;
+        ensure_debouncer(&mut guard)?;
 
-    // One deref of the guard, so the disjoint `debouncer` / `watched_paths` field
-    // borrows below are accepted.
-    let inner = &mut *guard;
-    let next_paths: HashSet<String> = paths.into_iter().collect();
-    let previous = std::mem::take(&mut inner.watched_paths);
+        // One deref of the guard, so the disjoint `debouncer` / `watched_paths` field
+        // borrows below are accepted.
+        let inner = &mut *guard;
+        let next_paths: HashSet<String> = paths.into_iter().collect();
+        let previous = std::mem::take(&mut inner.watched_paths);
 
-    let Some(debouncer) = inner.debouncer.as_mut() else {
-        // Put the bookkeeping back before bailing so state still matches the watcher.
-        inner.watched_paths = previous;
-        return Err("File watcher debouncer is not initialized".to_string());
-    };
+        let Some(debouncer) = inner.debouncer.as_mut() else {
+            // Put the bookkeeping back before bailing so state still matches the watcher.
+            inner.watched_paths = previous;
+            return Err("File watcher debouncer is not initialized".to_string());
+        };
 
-    let next_watched = apply_watcher_path_diff(
-        debouncer,
-        &previous,
-        &next_paths,
-        RecursiveMode::NonRecursive,
-        &mut inner.original_to_canonical,
-        &inner.canonical_to_original,
-    );
-    inner.watched_paths = next_watched;
-    Ok(())
+        let next_watched = apply_watcher_path_diff(
+            debouncer,
+            &previous,
+            &next_paths,
+            RecursiveMode::NonRecursive,
+            &mut inner.original_to_canonical,
+            &inner.canonical_to_original,
+        );
+        inner.watched_paths = next_watched;
+        Ok(())
+    })
+    .await
+    .map_err(|error| format!("file watcher path sync task failed: {error}"))?
 }
 
-/// Register the recursive project-tree watch.
+/// Register the recursive project-tree watch for every open workspace root.
+///
+/// Watching all open roots (not just the active one) means a workspace switch
+/// is a diff — add the newly-opened root, remove the closed one — instead of
+/// unwatching the old root and re-walking/re-stat'ing the new root on every
+/// switch (the FSEvents/inotify cost of `add_root(Recursive)` + the ignored-
+/// subdir prune).
 ///
 /// Marked `async` (F43): registering a recursive root walks and stats every
-/// entry under it (`FileIdMap::add_root`) plus the ignored-subdir prune, so a
-/// large workspace would otherwise block the UI/main thread for the whole walk.
+/// entry under it (the ignored-subdir prune), so a large workspace would
+/// otherwise block the UI/main thread for the whole walk.
 #[tauri::command(async)]
 pub async fn sync_project_tree_watcher(
-    root: Option<String>,
+    roots: Vec<String>,
     state: State<'_, FileWatcherState>,
 ) -> Result<(), String> {
     // Clone the Arc handle out of the borrowed `State` so the blocking task is
@@ -548,7 +578,7 @@ pub async fn sync_project_tree_watcher(
         ensure_debouncer(&mut guard)?;
 
         let inner = &mut *guard;
-        let next_roots: HashSet<String> = root.into_iter().collect();
+        let next_roots: HashSet<String> = roots.into_iter().collect();
         let previous = std::mem::take(&mut inner.project_tree_roots);
 
         let Some(debouncer) = inner.debouncer.as_mut() else {
@@ -639,6 +669,67 @@ mod tests {
         assert!(after.is_empty());
         assert!(original_to_canonical.is_empty());
         assert!(canonical_to_original.lock().expect("lock").is_empty());
+    }
+
+    /// Watching multiple recursive roots must not unwatch the first when the
+    /// second is added — a workspace switch is now a diff, not a full unwatch +
+    /// rewatch. Without this, every switch paid the full `add_root(Recursive)`
+    /// walk cost again (the P03-08-11 regression class).
+    #[test]
+    fn apply_diff_recursive_multi_root_keeps_existing_roots() {
+        let mut debouncer = test_debouncer();
+        let tmp = std::env::temp_dir();
+        let root_a = tmp
+            .join("spec-ops-watcher-multiroot-a")
+            .to_string_lossy()
+            .into_owned();
+        let root_b = tmp
+            .join("spec-ops-watcher-multiroot-b")
+            .to_string_lossy()
+            .into_owned();
+        std::fs::create_dir_all(&root_a).ok();
+        std::fs::create_dir_all(&root_b).ok();
+
+        let mut original_to_canonical = HashMap::new();
+        let canonical_to_original = Mutex::new(HashMap::<String, CanonicalEntry>::new());
+
+        // Register the first root.
+        let after_first = apply_watcher_path_diff(
+            &mut debouncer,
+            &set(&[]),
+            &set(&[root_a.as_str()]),
+            RecursiveMode::Recursive,
+            &mut original_to_canonical,
+            &canonical_to_original,
+        );
+        assert!(after_first.contains(&root_a));
+
+        // Add the second root without removing the first.
+        let after_second = apply_watcher_path_diff(
+            &mut debouncer,
+            &after_first,
+            &set(&[root_a.as_str(), root_b.as_str()]),
+            RecursiveMode::Recursive,
+            &mut original_to_canonical,
+            &canonical_to_original,
+        );
+        assert!(
+            after_second.contains(&root_a),
+            "adding a second recursive root must not unwatch the first"
+        );
+        assert!(after_second.contains(&root_b));
+
+        // Removing the second root keeps the first watched.
+        let after_remove_second = apply_watcher_path_diff(
+            &mut debouncer,
+            &after_second,
+            &set(&[root_a.as_str()]),
+            RecursiveMode::Recursive,
+            &mut original_to_canonical,
+            &canonical_to_original,
+        );
+        assert!(after_remove_second.contains(&root_a));
+        assert!(!after_remove_second.contains(&root_b));
     }
 
     #[test]

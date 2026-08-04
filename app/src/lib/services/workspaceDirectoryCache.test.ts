@@ -89,4 +89,48 @@ describe("createWorkspaceDirectoryCache", () => {
     expect(readDirFn).toHaveBeenCalledTimes(2);
     expect(cache.size()).toBe(1);
   });
+
+  it("invalidateUnder drops only listings at or under the prefix", async () => {
+    const readDirFn = vi.fn(async (path: string) => [
+      { name: "a.ts", isDirectory: false, isFile: true, isSymlink: false, path: `${path}/a.ts` },
+    ]);
+    const cache = createWorkspaceDirectoryCache({ readDirFn });
+
+    // Populate listings across two workspaces.
+    await cache.readDir("/ws-a");
+    await cache.readDir("/ws-a/src");
+    await cache.readDir("/ws-b");
+    await cache.readDir("/ws-b/src");
+    expect(cache.size()).toBe(4);
+
+    // Invalidate only under /ws-a — /ws-b must survive.
+    cache.invalidateUnder("/ws-a");
+    expect(cache.size()).toBe(2);
+
+    // Re-reading /ws-a hits disk; /ws-b is still cached.
+    await cache.readDir("/ws-a");
+    await cache.readDir("/ws-b/src");
+    const calls = readDirFn.mock.calls as unknown as [string][];
+    const callsByPath = calls.map((call) => call[0]);
+    expect(callsByPath.filter((path) => path === "/ws-a")).toHaveLength(2);
+    expect(callsByPath.filter((path) => path === "/ws-b/src")).toHaveLength(1);
+  });
+
+  it("invalidateUnder does not match paths that merely share a name prefix", async () => {
+    const readDirFn = vi.fn(async (path: string) => [
+      { name: "a.ts", isDirectory: false, isFile: true, isSymlink: false, path: `${path}/a.ts` },
+    ]);
+    const cache = createWorkspaceDirectoryCache({ readDirFn });
+
+    await cache.readDir("/ws");
+    await cache.readDir("/ws-backup");
+    expect(cache.size()).toBe(2);
+
+    cache.invalidateUnder("/ws");
+    // /ws-backup shares the string prefix "/ws" but is not under "/ws/".
+    expect(cache.size()).toBe(1);
+    await cache.readDir("/ws-backup");
+    const calls = readDirFn.mock.calls as unknown as [string][];
+    expect(calls.filter((call) => call[0] === "/ws-backup")).toHaveLength(1);
+  });
 });

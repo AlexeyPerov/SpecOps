@@ -6,7 +6,9 @@ import {
   computeResponsiveLayoutFlags,
   externalFileWatcherSyncKey,
   formatStatusPath,
+  truncateWatchedPaths,
   watchedPathsFromState,
+  MAX_WATCHED_PATHS,
 } from "./appShellHelpers";
 
 function domainState(overrides: {
@@ -105,6 +107,27 @@ describe("watchedPathsFromState", () => {
       documents.map((doc) => doc.filePath!).sort(),
     );
   });
+
+  it("returns paths in sorted order regardless of iteration context order", () => {
+    const state = domainState({
+      openTabs: [
+        createFileTab("tab-1", "doc-1"),
+        createFileTab("tab-2", "doc-2"),
+        createFileTab("tab-3", "doc-3"),
+      ],
+      documents: [
+        emptyDocument("doc-1", "/tmp/zebra.txt"),
+        emptyDocument("doc-2", "/tmp/apple.txt"),
+        emptyDocument("doc-3", "/tmp/mango.txt"),
+      ],
+    });
+
+    expect(watchedPathsFromState(state)).toEqual([
+      "/tmp/apple.txt",
+      "/tmp/mango.txt",
+      "/tmp/zebra.txt",
+    ]);
+  });
 });
 
 describe("externalFileWatcherSyncKey", () => {
@@ -147,6 +170,106 @@ describe("externalFileWatcherSyncKey", () => {
     });
 
     expect(externalFileWatcherSyncKey(base)).toBe(externalFileWatcherSyncKey(contentEdited));
+  });
+
+  it("is identical regardless of which workspace is active (order-independence)", () => {
+    // Two workspaces each with a file tab. The path set is the same regardless
+    // of which context is active, but allContextSnapshots iterates active-first,
+    // so without sorting the joined key would differ across switches.
+    const wsSnapshotA = {
+      documents: [emptyDocument("doc-a", "/ws/a.txt")],
+      session: {
+        editorLayout: createSinglePaneLayout([createFileTab("tab-a", "doc-a")], null),
+        lastActiveWindowId: "main",
+        windowBounds: null,
+      },
+    };
+    const wsSnapshotB = {
+      documents: [emptyDocument("doc-b", "/ws/b.txt")],
+      session: {
+        editorLayout: createSinglePaneLayout([createFileTab("tab-b", "doc-b")], null),
+        lastActiveWindowId: "main",
+        windowBounds: null,
+      },
+    };
+    const baseSettings = {
+      externalFiles: { watchExternalChanges: true },
+    } as AppDomainState["settings"];
+    const common = {
+      settings: baseSettings,
+      theme: {} as AppDomainState["theme"],
+      recentFiles: [],
+      editor: {} as AppDomainState["editor"],
+      activityRailWidthPx: 48,
+    };
+    const aActive: AppDomainState = {
+      ...common,
+      contexts: {
+        activeContextId: "ws-1",
+        notepad: {
+          documents: [],
+          session: {
+            editorLayout: createSinglePaneLayout([], null),
+            lastActiveWindowId: "main",
+            windowBounds: null,
+          },
+        },
+        chatHttp: {
+          documents: [],
+          session: {
+            editorLayout: createSinglePaneLayout([], null),
+            lastActiveWindowId: "main",
+            windowBounds: null,
+          },
+        },
+        workspaces: [
+          { id: "ws-1", rootPath: "/ws", snapshot: wsSnapshotA },
+          { id: "ws-2", rootPath: "/ws", snapshot: wsSnapshotB },
+        ],
+      },
+    };
+    const bActive: AppDomainState = {
+      ...common,
+      contexts: {
+        ...aActive.contexts,
+        activeContextId: "ws-2",
+      },
+    };
+
+    expect(externalFileWatcherSyncKey(aActive)).toBe(externalFileWatcherSyncKey(bActive));
+  });
+});
+
+describe("truncateWatchedPaths", () => {
+  it("returns the same array content when under the cap", () => {
+    const paths = ["/a", "/b", "/c"];
+    expect(truncateWatchedPaths(paths)).toEqual(["/a", "/b", "/c"]);
+  });
+
+  it("truncates to a deterministic sorted subset past the cap", () => {
+    // Generate MAX + 50 paths in non-sorted insertion order.
+    const total = MAX_WATCHED_PATHS + 50;
+    const paths: string[] = [];
+    for (let index = total - 1; index >= 0; index -= 1) {
+      paths.push(`/tmp/file-${String(index).padStart(6, "0")}.txt`);
+    }
+    const truncated = truncateWatchedPaths(paths);
+    expect(truncated).toHaveLength(MAX_WATCHED_PATHS);
+    // Deterministic: the sorted-first 500 paths.
+    const expected = [...paths].sort().slice(0, MAX_WATCHED_PATHS);
+    expect(truncated).toEqual(expected);
+  });
+
+  it("produces the same truncation regardless of input order", () => {
+    const total = MAX_WATCHED_PATHS + 10;
+    const ascending: string[] = [];
+    const descending: string[] = [];
+    for (let index = 0; index < total; index += 1) {
+      const path = `/tmp/file-${String(index).padStart(6, "0")}.txt`;
+      ascending.push(path);
+      descending.unshift(path);
+    }
+    expect(truncateWatchedPaths(ascending)).toEqual(truncateWatchedPaths(descending));
   });
 });
 

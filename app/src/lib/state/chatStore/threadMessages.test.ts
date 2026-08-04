@@ -489,6 +489,67 @@ describe("chatStore", () => {
     expect(chatStore.getMessages()).toEqual(threadA.messages);
   });
 
+  it("loadWorkspaceSessions does not schedule deferred validation when all threads are hydrated (incl. null)", async () => {
+    vi.useFakeTimers();
+    try {
+      // One session whose thread file is empty (null). After the first load,
+      // every persisted session has a thread entry (null), so the cache is
+      // complete and the deferred validation timer must NOT be armed.
+      readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({
+        version: 1,
+        sessions: [{ id: "agent-a", title: "A", lastUsedAt: "2026-05-25T00:00:00.000Z" }],
+      });
+      readSessionThreadFileSnapshotMock.mockResolvedValue(null);
+
+      chatStore.setActiveWorkspaceRoot("/work/null-thread");
+      // Full (non-incremental) load hydrates every persisted session within the
+      // await, so agent-a's thread (null) is in memory before re-entry.
+      await chatStore.loadWorkspaceSessions("/work/null-thread");
+      expect(readSessionThreadFileSnapshotMock).toHaveBeenCalledTimes(1);
+
+      // Re-entry with preferCachedIndex: no deferred timer should fire.
+      readSessionThreadFileSnapshotMock.mockClear();
+      readWorkspaceSessionsIndexSnapshotMock.mockClear();
+      await chatStore.loadWorkspaceSessions("/work/null-thread", {
+        prioritySessionIds: [],
+        preferCachedIndex: true,
+      });
+
+      // Advance past the deferred validation window — no index re-read occurs
+      // because the cache is complete (null thread counts as hydrated).
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(readWorkspaceSessionsIndexSnapshotMock).not.toHaveBeenCalled();
+      expect(readSessionThreadFileSnapshotMock).not.toHaveBeenCalled();
+    } finally {
+      chatStore.reset();
+      vi.useRealTimers();
+    }
+  });
+
+  it("loadWorkspaceSessions treats a workspace with zero persisted sessions as fully hydrated", async () => {
+    vi.useFakeTimers();
+    try {
+      // Empty index — previously `persistedEntries.length > 0` made the
+      // cache-hit branch unreachable, so every re-entry re-read the index.
+      readWorkspaceSessionsIndexSnapshotMock.mockResolvedValue({ version: 1, sessions: [] });
+      chatStore.setActiveWorkspaceRoot("/work/empty");
+      await chatStore.loadWorkspaceSessions("/work/empty");
+      expect(readWorkspaceSessionsIndexSnapshotMock).toHaveBeenCalledTimes(1);
+
+      // Re-entry: no deferred validation, no index re-read.
+      readWorkspaceSessionsIndexSnapshotMock.mockClear();
+      await chatStore.loadWorkspaceSessions("/work/empty", {
+        prioritySessionIds: [],
+        preferCachedIndex: true,
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(readWorkspaceSessionsIndexSnapshotMock).not.toHaveBeenCalled();
+    } finally {
+      chatStore.reset();
+      vi.useRealTimers();
+    }
+  });
+
   it("returns a cached index before deferred disk validation on workspace re-entry", async () => {
     vi.useFakeTimers();
     try {

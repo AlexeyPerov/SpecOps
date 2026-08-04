@@ -342,6 +342,16 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-11 — File watcher re-walks the entire workspace tree on every switch
 
+- **Status:** Resolved on 2026-08-04. The recursive project-tree watcher now
+  watches every open workspace root (not just the active one), so a workspace
+  switch is a diff — add/remove the changed root — instead of a full
+  unwatch + re-walk. The `FileIdMap::add_root` walk (which stats every entry
+  under the root) is now skipped for recursive roots entirely: the app uses
+  coarse path + kind filtering, not rename correlation, so the cache walk was
+  pure cost. The `prune_ignored_subdirectories` best-effort unwatch of heavy
+  top-level subdirs (`.git`/`node_modules`/`target`) is kept for Linux inotify
+  hygiene. Covered by a multi-root regression test asserting adding a second
+  root does not unwatch the first.
 - **Area:** Rust file watcher / workspace switching.
 - **Impact:** **High.** Exactly one recursive root is watched at a time
   (`file_watcher.rs:551`), so every switch unwatches the old workspace and
@@ -364,6 +374,11 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-12 — Watcher path sync is a synchronous main-thread command that rebuilds the whole FSEvents stream
 
+- **Status:** Resolved on 2026-08-04. `sync_file_watcher_paths` is now
+  `#[tauri::command(async)]` + `spawn_blocking`, mirroring the sibling
+  `sync_project_tree_watcher` (F43) that was already converted. The blocking
+  `watch()`/`unwatch()` diff no longer holds the main/IPC thread, so file-read
+  and session-lock IPC are serviced while the watch set is reconciled.
 - **Area:** Rust file watcher / UI thread / file opening.
 - **Impact:** **High.** `sync_file_watcher_paths` is a plain sync
   `#[tauri::command]` (`file_watcher.rs:493-527`) — it runs on the **main
@@ -390,6 +405,11 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-13 — Watcher sync key is order-dependent, so it churns on every switch
 
+- **Status:** Resolved on 2026-08-04. `watchedPathsFromState` now sorts the
+  collected paths before returning, and truncation at `MAX_WATCHED_PATHS` takes
+  a deterministic sorted subset. The sync key is now stable across switches
+  regardless of which workspace is active (the path set is order-independent),
+  eliminating the per-switch watcher-resync IPC for an identical watched set.
 - **Area:** External file watcher / effect keys.
 - **Impact:** **Medium standalone; high as the trigger for P03-08-12.**
   `watchedPathsFromState` iterates contexts active-first and joins paths in
@@ -404,6 +424,14 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-14 — Cold workspace switch rebuilds up to 16 CodeMirror views synchronously
 
+- **Status:** Resolved on 2026-08-04. `MAX_MOUNTED_EDITOR_CONTEXTS` raised from
+  3 to 6 — parked hosts are `display:none` and bounded per-pane, so a user with
+  ≤ 6 workspaces never hits a cold remount. Additionally, non-active keep-alive
+  tabs in a freshly-mounted context now hydrate on `requestIdleCallback`
+  (falling back to `setTimeout`): only the active pane's selected tab mounts
+  synchronously, and sibling tabs stagger across idle frames. Switching to a
+  deferred tab before it hydrates promotes it synchronously. Covered by
+  `partitionImmediateAndDeferred` unit tests.
 - **Area:** Workspace switching / editor lifecycle.
 - **Impact:** **High for users with more than 3 workspaces.** Switching to a
   workspace outside the 3-context keep-alive LRU
@@ -425,6 +453,12 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-15 — Workspace root is listed up to three times per switch, twice uncached
 
+- **Status:** Resolved on 2026-08-04. `ensureWorkspaceReadAccess` now memoizes
+  already-granted roots in-process: subsequent calls for a root confirmed
+  readable earlier in the session return `"ready"` without a `readDir` or the
+  workspace-access JSON read-modify-write. `probeWorkspaceReadAccess` stays a
+  raw `readDir` (it exists to detect blocked access, so it must hit disk) — now
+  documented as intentional.
 - **Area:** Workspace switching / filesystem.
 - **Impact:** **Medium** (large roots, network volumes).
   `ensureWorkspaceReadAccess` does a raw `readDir` plus a read-modify-write of
@@ -441,6 +475,13 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-16 — One catalog rebuild wipes the directory cache for every workspace
 
+- **Status:** Resolved on 2026-08-04. The `onBeforeRebuild` callback now
+  receives the rebuilding root and calls `workspaceDirectoryCache.invalidateUnder(root)`
+  instead of `.clear()`, so cached listings for other open workspaces survive a
+  rebuild in one workspace. Covered by `invalidateUnder` unit tests (scoped drop
+  + no false match on shared-name prefixes). Per-root LRU sizing (the shared
+  256-entry LRU still evicts across roots under pressure) is deferred as a
+  capacity tuning item, not a correctness bug.
 - **Area:** Directory cache / project tree.
 - **Impact:** **Medium.** Any debounced catalog rebuild in the active
   workspace clears cached listings for **all** roots
@@ -456,6 +497,15 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-17 — Chat-session cache revalidation defeats itself
 
+- **Status:** Resolved on 2026-08-04. The cache-first (`preferCachedIndex`)
+  path now schedules the deferred 750 ms index re-read only when there is a
+  genuine staleness signal — a persisted session in the in-memory index that
+  has no thread entry yet. When every persisted session already has a thread
+  entry (including `null` for empty/missing thread files), the cache is
+  complete and no timer is armed. The `allPersistedHydrated` check no longer
+  requires `persistedEntries.length > 0`, so workspaces with zero persisted
+  sessions are trivially fully hydrated and no longer re-read the index on
+  every re-entry.
 - **Area:** Workspace switching / chat metadata (runs even with AI usage
   patterns that leave sessions on disk).
 - **Impact:** **Medium.** The cache-first path always schedules a full index
@@ -474,6 +524,12 @@ per-file git calls, no status-bar/gutter git usage.
 
 ## P03-08-18 — Project-tree publish storm with double clones
 
+- **Status:** Resolved on 2026-08-04. `publish()` now passes the live state
+  reference to the subscriber instead of cloning (the subscriber only reads the
+  snapshot, never mutates it), halving the per-publish clone cost. Ancestor
+  directory loads in `ensureExpandedForActiveFile` now run in parallel via
+  `Promise.all` instead of sequentially, collapsing N sequential disk I/O
+  awaits + 2N publishes into concurrent loads with coalesced state updates.
 - **Area:** Project tree controller.
 - **Impact:** **Medium.** Every `publish()` clones the full tree state twice
   (cache + subscriber), and a single switch publishes several times; expanding

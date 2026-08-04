@@ -174,6 +174,37 @@ describe("createProjectTreeController", () => {
     expect(snapshots).toHaveLength(publishCountBefore);
   });
 
+  it("loads ancestor directories in parallel, not sequentially", async () => {
+    // Track whether two ancestor loads overlap in time. Under sequential
+    // loading, the second load starts only after the first resolves.
+    const activeLoads = new Set<string>();
+    let maxConcurrent = 0;
+    const loadDirectoryChildrenFn = vi.fn(async (_workspaceRoot: string, directoryPath: string) => {
+      activeLoads.add(directoryPath);
+      maxConcurrent = Math.max(maxConcurrent, activeLoads.size);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeLoads.delete(directoryPath);
+      if (directoryPath === "/repo/src") {
+        return [makeNode("lib", "/repo/src/lib", "directory")];
+      }
+      if (directoryPath === "/repo/src/lib") {
+        return [makeNode("main.ts", "/repo/src/lib/main.ts", "file")];
+      }
+      return [];
+    });
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+
+    await controller.loadProjectTreeRoot({
+      workspaceRoot: "/repo",
+      isSessionTabActive: false,
+    });
+    await controller.ensureExpandedForActiveFile("/repo", "/repo/src/lib/main.ts");
+
+    // Two ancestors (/repo/src and /repo/src/lib) must overlap — sequential
+    // loading would never exceed 1 concurrent load.
+    expect(maxConcurrent).toBeGreaterThanOrEqual(2);
+  });
+
   it("resets state when workspace root is missing", async () => {
     const snapshots: ProjectTreeControllerState[] = [];
     const controller = createProjectTreeController((state) => snapshots.push(state), {

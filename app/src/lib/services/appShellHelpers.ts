@@ -25,6 +25,13 @@ export const MAX_WATCHED_PATHS = 500;
  * must observe files that live in a workspace which is not currently active,
  * otherwise external edits to those background files go undetected until the
  * user switches back to that workspace.
+ *
+ * Paths are sorted before returning so the result is order-independent: which
+ * workspace is active changes the iteration order of `allContextSnapshots`, but
+ * not the underlying path set. Without sorting, the watcher sync key churned on
+ * every switch (firing a watcher-resync IPC for an identical watched set), and
+ * the `MAX_WATCHED_PATHS` truncation picked a different subset per active
+ * workspace when the total exceeded the cap (genuine watch/unwatch churn).
  */
 export function watchedPathsFromState(state: AppDomainState): string[] {
   const paths = new Set<string>();
@@ -37,18 +44,31 @@ export function watchedPathsFromState(state: AppDomainState): string[] {
       const documentState = documentById.get(tab.documentId);
       if (documentState?.filePath) {
         paths.add(documentState.filePath);
-        if (paths.size >= MAX_WATCHED_PATHS) {
-          return [...paths];
-        }
       }
     }
   }
-  return [...paths];
+  // Sort so the key (and any truncation) is deterministic across switches.
+  return [...paths].sort();
+}
+
+/**
+ * Truncate the watched path list to the defensive cap, keeping a deterministic
+ * sorted subset so re-entry to a workspace with > 500 open tabs reuses the same
+ * truncated set as the prior visit (no churn).
+ */
+export function truncateWatchedPaths(paths: readonly string[]): string[] {
+  if (paths.length <= MAX_WATCHED_PATHS) {
+    return [...paths];
+  }
+  // `paths` is expected to be pre-sorted (from `watchedPathsFromState`); sort
+  // again defensively so callers that pass an unsorted list still get a stable
+  // truncation.
+  return [...paths].sort().slice(0, MAX_WATCHED_PATHS);
 }
 
 /** Stable dedupe key for external file-watcher sync (watch flag + watched paths). */
 export function externalFileWatcherSyncKey(state: AppDomainState): string {
-  const paths = watchedPathsFromState(state);
+  const paths = truncateWatchedPaths(watchedPathsFromState(state));
   return `${state.settings.externalFiles.watchExternalChanges}:${paths.join("\0")}`;
 }
 

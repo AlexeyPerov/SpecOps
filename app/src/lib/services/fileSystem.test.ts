@@ -384,6 +384,28 @@ describe("ensureWorkspaceReadAccess", () => {
       }),
     );
   });
+
+  it("skips readDir + JSON RMW on subsequent calls for an already-granted root", async () => {
+    readDirMock.mockResolvedValue([]);
+    readTextFileMock.mockImplementation(async (path: string | URL) => {
+      const asString = String(path);
+      if (asString.endsWith("/workspace-access.json")) {
+        throw new Error("missing");
+      }
+      throw new Error(`unexpected read: ${asString}`);
+    });
+    writeTextFileMock.mockResolvedValue(undefined);
+
+    // First call: hits disk + writes the JSON.
+    await ensureWorkspaceReadAccess("/tmp/memo-workspace/");
+    expect(readDirMock).toHaveBeenCalledTimes(1);
+    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
+
+    // Second call: short-circuits — no readDir, no JSON write.
+    await ensureWorkspaceReadAccess("/tmp/memo-workspace/");
+    expect(readDirMock).toHaveBeenCalledTimes(1);
+    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("readAllowedWorkspaceRoots", () => {

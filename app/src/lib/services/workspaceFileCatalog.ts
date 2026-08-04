@@ -50,8 +50,13 @@ export interface WorkspaceFileCatalogDeps {
     options: { isCancelled: () => boolean },
   ) => Promise<EnumerateOpenableFilesResult>;
   invalidateDebounceMs?: number;
-  /** Called before a forced rebuild (refresh / debounced watcher rebuild). */
-  onBeforeRebuild?: () => void;
+  /**
+   * Called before a forced rebuild (refresh / debounced watcher rebuild), with
+   * the workspace root being rebuilt. Use this to scope invalidation to the
+   * rebuilding root only (e.g. drop directory-cache entries under that root)
+   * rather than clearing caches for every open workspace.
+   */
+  onBeforeRebuild?: (root: string) => void;
 }
 
 export interface WorkspaceFileCatalog {
@@ -187,7 +192,7 @@ export function createWorkspaceFileCatalog(
       invalidateTimer = null;
       if (!disposed && workspaceRoot) {
         debouncedRebuilds += 1;
-        onBeforeRebuild?.();
+        onBeforeRebuild?.(workspaceRoot);
         beginEnumerate(workspaceRoot);
       }
     }, invalidateDebounceMs);
@@ -376,7 +381,7 @@ export function createWorkspaceFileCatalog(
         return;
       }
       clearInvalidateTimer();
-      onBeforeRebuild?.();
+      onBeforeRebuild?.(workspaceRoot);
       beginEnumerate(workspaceRoot);
     },
 

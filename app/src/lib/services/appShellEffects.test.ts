@@ -104,7 +104,7 @@ describe("syncProjectTreeWatcherEffect", () => {
 
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
     expect(syncWatcher).toHaveBeenCalledTimes(1);
-    expect(syncWatcher).toHaveBeenCalledWith("/repo");
+    expect(syncWatcher).toHaveBeenCalledWith(["/repo"]);
   });
 
   it("does not reload when only tab/session context would have re-run the effect", () => {
@@ -127,8 +127,8 @@ describe("syncProjectTreeWatcherEffect", () => {
     syncProjectTreeWatcherEffect(makeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-b" }));
 
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(2);
-    expect(syncWatcher).toHaveBeenNthCalledWith(1, "/repo-a");
-    expect(syncWatcher).toHaveBeenNthCalledWith(2, "/repo-b");
+    expect(syncWatcher).toHaveBeenNthCalledWith(1, ["/repo-a"]);
+    expect(syncWatcher).toHaveBeenNthCalledWith(2, ["/repo-b"]);
   });
 
   it("clears watcher when leaving workspace or entering chat-http", () => {
@@ -156,8 +156,8 @@ describe("syncProjectTreeWatcherEffect", () => {
 
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
     expect(clearFilesystemChangeDebounce).toHaveBeenCalledTimes(1);
-    expect(syncWatcher).toHaveBeenNthCalledWith(1, "/repo");
-    expect(syncWatcher).toHaveBeenNthCalledWith(2, null);
+    expect(syncWatcher).toHaveBeenNthCalledWith(1, ["/repo"]);
+    expect(syncWatcher).toHaveBeenNthCalledWith(2, []);
   });
 
   it("loads root before runtimeReady but defers watcher until ready", () => {
@@ -175,7 +175,7 @@ describe("syncProjectTreeWatcherEffect", () => {
     // Root already loaded for this workspace — only the watcher starts.
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
     expect(syncWatcher).toHaveBeenCalledTimes(1);
-    expect(syncWatcher).toHaveBeenCalledWith("/repo");
+    expect(syncWatcher).toHaveBeenCalledWith(["/repo"]);
   });
 
   it("reloads root after leaving and re-entering the same workspace", () => {
@@ -218,8 +218,76 @@ describe("syncProjectTreeWatcherEffect", () => {
     );
 
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
-    expect(syncWatcher).toHaveBeenCalledWith(null);
-    expect(syncWatcher).toHaveBeenLastCalledWith("/repo");
+    expect(syncWatcher).toHaveBeenCalledWith([]);
+    expect(syncWatcher).toHaveBeenLastCalledWith(["/repo"]);
+  });
+
+  it("watches every open workspace root (multi-root)", () => {
+    const loadProjectTreeRoot = vi.fn(async () => {});
+
+    syncProjectTreeWatcherEffect(
+      makeInput({
+        loadProjectTreeRoot,
+        activeWorkspaceRoot: "/repo-a",
+        openWorkspaceRoots: ["/repo-a", "/repo-b"],
+      }),
+    );
+
+    expect(syncWatcher).toHaveBeenCalledTimes(1);
+    expect(syncWatcher).toHaveBeenCalledWith(["/repo-a", "/repo-b"]);
+  });
+
+  it("sorts multi-root keys so re-entry is a no-op", () => {
+    const loadProjectTreeRoot = vi.fn(async () => {});
+
+    // Same roots, different order — should produce the same watcher key.
+    syncProjectTreeWatcherEffect(
+      makeInput({
+        loadProjectTreeRoot,
+        activeWorkspaceRoot: "/repo-a",
+        openWorkspaceRoots: ["/repo-a", "/repo-b"],
+      }),
+    );
+    syncProjectTreeWatcherEffect(
+      makeInput({
+        loadProjectTreeRoot,
+        activeWorkspaceRoot: "/repo-b",
+        openWorkspaceRoots: ["/repo-b", "/repo-a"],
+      }),
+    );
+
+    expect(syncWatcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("diffs the watcher set when a root is added or removed", () => {
+    const loadProjectTreeRoot = vi.fn(async () => {});
+
+    syncProjectTreeWatcherEffect(
+      makeInput({
+        loadProjectTreeRoot,
+        activeWorkspaceRoot: "/repo-a",
+        openWorkspaceRoots: ["/repo-a"],
+      }),
+    );
+    syncProjectTreeWatcherEffect(
+      makeInput({
+        loadProjectTreeRoot,
+        activeWorkspaceRoot: "/repo-a",
+        openWorkspaceRoots: ["/repo-a", "/repo-b"],
+      }),
+    );
+    syncProjectTreeWatcherEffect(
+      makeInput({
+        loadProjectTreeRoot,
+        activeWorkspaceRoot: "/repo-a",
+        openWorkspaceRoots: ["/repo-a"],
+      }),
+    );
+
+    expect(syncWatcher).toHaveBeenCalledTimes(3);
+    expect(syncWatcher).toHaveBeenNthCalledWith(1, ["/repo-a"]);
+    expect(syncWatcher).toHaveBeenNthCalledWith(2, ["/repo-a", "/repo-b"]);
+    expect(syncWatcher).toHaveBeenNthCalledWith(3, ["/repo-a"]);
   });
 });
 

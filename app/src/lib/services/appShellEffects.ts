@@ -337,6 +337,12 @@ export interface SyncProjectTreeWatcherEffectInput {
   runtimeReady: boolean;
   activeWorkspaceRoot: string | null;
   isChatHttpActive: boolean;
+  /**
+   * Roots of all open workspaces, so the recursive watcher can keep every open
+   * root watched (a switch is then a diff, not a full unwatch+rewatch). When
+   * omitted, only the active workspace root is watched.
+   */
+  openWorkspaceRoots?: readonly string[];
   projectTreeController: ProjectTreeController;
   loadProjectTreeRoot: () => Promise<void>;
 }
@@ -677,6 +683,7 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
     runtimeReady,
     activeWorkspaceRoot,
     isChatHttpActive,
+    openWorkspaceRoots,
     projectTreeController,
     loadProjectTreeRoot,
   } = input;
@@ -691,7 +698,7 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
       // Left workspace entirely — allow a fresh root load on next entry.
       lastProjectTreeRootKey = null;
     }
-    void syncProjectTreeWatcher(null);
+    void syncProjectTreeWatcher([]);
     projectTreeController.clearFilesystemChangeDebounce();
     return;
   }
@@ -702,9 +709,19 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
     void loadProjectTreeRoot();
   }
 
-  if (runtimeReady && lastProjectTreeWatcherKey !== rootKey) {
-    lastProjectTreeWatcherKey = rootKey;
-    void syncProjectTreeWatcher(activeWorkspaceRoot);
+  if (runtimeReady) {
+    // Watch every open workspace root so a switch is a diff (add/remove the
+    // changed root) rather than a full unwatch+rewatch of the active root.
+    // Sorting the roots makes the key stable across switches (the same set of
+    // open roots yields the same key regardless of which is active).
+    const allRoots = openWorkspaceRoots
+      ? [...openWorkspaceRoots].map((root) => normalizePathSync(root)).sort()
+      : [rootKey];
+    const watcherKey = allRoots.join("\0");
+    if (lastProjectTreeWatcherKey !== watcherKey) {
+      lastProjectTreeWatcherKey = watcherKey;
+      void syncProjectTreeWatcher(allRoots);
+    }
   }
 }
 

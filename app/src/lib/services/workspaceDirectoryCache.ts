@@ -28,6 +28,12 @@ export interface WorkspaceDirectoryCacheDeps {
 export interface WorkspaceDirectoryCache {
   readDir(path: string): Promise<WorkspaceListEntry[]>;
   invalidate(paths: readonly string[]): void;
+  /**
+   * Drop every cached listing at or under `prefix` (a workspace root). Use this
+   * instead of {@link clear} when invalidating for a rebuild in one workspace,
+   * so cached listings for other open workspaces survive the rebuild.
+   */
+  invalidateUnder(prefix: string): void;
   clear(): void;
   dispose(): void;
   /** Current number of retained listings (for tests). */
@@ -99,6 +105,16 @@ export function createWorkspaceDirectoryCache(
         generationByKey.set(key, (generationByKey.get(key) ?? 0) + 1);
         cache.delete(key);
         inflight.delete(key);
+      }
+    },
+    invalidateUnder(prefix) {
+      const normalizedPrefix = normalizeDirPath(prefix);
+      for (const key of [...cache.keys(), ...inflight.keys()]) {
+        if (key === normalizedPrefix || key.startsWith(`${normalizedPrefix}/`)) {
+          generationByKey.set(key, (generationByKey.get(key) ?? 0) + 1);
+          cache.delete(key);
+          inflight.delete(key);
+        }
       }
     },
     clear() {

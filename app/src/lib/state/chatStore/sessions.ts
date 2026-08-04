@@ -619,7 +619,22 @@ export function createSessionsSlice(deps: {
       const existingCachedWorkspace = getSnapshot().workspaces[normalizedRootPath];
       if (options?.preferCachedIndex && existingCachedWorkspace) {
         syncSessionIdCounterFromWorkspace(existingCachedWorkspace);
-        if (!deferredIndexValidationByScope.has(normalizedRootPath)) {
+        // Only schedule a deferred index re-read when there is a genuine chance
+        // the cache is stale: a persisted session in the in-memory index that
+        // has no thread entry yet (the deferred background drain may still be
+        // running from a prior load, or a session may have been added out of
+        // band). When every persisted session already has a thread entry
+        // (including `null` for empty/missing thread files), the cache is
+        // complete and the deferred re-read is pure waste on every re-entry.
+        const hasUnhydratedPersisted = existingCachedWorkspace.sessionIndex.some(
+          (entry) =>
+            !entry.isDraft &&
+            !Object.prototype.hasOwnProperty.call(
+              existingCachedWorkspace.threadsBySessionId,
+              entry.id,
+            ),
+        );
+        if (hasUnhydratedPersisted && !deferredIndexValidationByScope.has(normalizedRootPath)) {
           const timer = setTimeout(() => {
             deferredIndexValidationByScope.delete(normalizedRootPath);
             void this.loadWorkspaceSessions(normalizedRootPath, {
@@ -639,7 +654,7 @@ export function createSessionsSlice(deps: {
           threadsDurationMs: 0,
           incremental: true,
           cacheHit: true,
-          validationDeferred: true,
+          validationDeferred: hasUnhydratedPersisted,
         });
         return;
       }
@@ -664,13 +679,18 @@ export function createSessionsSlice(deps: {
       // memory. This is the common path on a re-entry to a workspace whose
       // sessions are already cached: instead of re-walking every thread file,
       // we just refresh the session index and merge drafts.
+      //
+      // A workspace with zero persisted sessions is trivially fully hydrated —
+      // the previous `persistedEntries.length > 0` guard made the cache-hit
+      // branch unreachable for such workspaces, so every re-entry re-read the
+      // index file and (because `allPersistedHydrated` was false) fell through
+      // to the deferred read path forever.
       const incomingSignature = indexSignature(persistedEntries);
       const existingWorkspace = getSnapshot().workspaces[normalizedRootPath];
       const existingThreads = existingWorkspace?.threadsBySessionId ?? {};
       const allPersistedHydrated =
         existingWorkspace !== undefined &&
         loadedIndexSignatureByScope.get(normalizedRootPath) === incomingSignature &&
-        persistedEntries.length > 0 &&
         persistedEntries.every((entry) =>
           Object.prototype.hasOwnProperty.call(existingThreads, entry.id),
         );

@@ -217,7 +217,12 @@ export function createProjectTreeController(
 
   const publish = (): void => {
     cacheActiveState();
-    onStateChange(cloneState(state));
+    // Pass the live state reference instead of cloning for the subscriber. The
+    // subscriber (+page.svelte) just assigns it to a `$state` variable and
+    // reads it reactively — it does not mutate the snapshot, so sharing the
+    // reference avoids a full clone of the tree state on every publish (the
+    // cache clone above already preserves a frozen copy for re-entry).
+    onStateChange(state);
   };
 
   const reset = (): void => {
@@ -454,9 +459,16 @@ export function createProjectTreeController(
       return;
     }
 
-    for (const ancestorPath of ancestorsToLoad) {
-      await loadProjectTreeChildren(workspaceRoot, ancestorPath);
-    }
+    // Parallelize ancestor directory loads: each `loadProjectTreeChildren` call
+    // independently guards on `rootLoadGeneration` and the workspace root, so
+    // they are safe to run concurrently. Previously these were sequential,
+    // yielding 2 publishes per ancestor level (one to mark loading, one to
+    // store children) and N sequential awaits on disk I/O.
+    await Promise.all(
+      ancestorsToLoad.map((ancestorPath) =>
+        loadProjectTreeChildren(workspaceRoot, ancestorPath),
+      ),
+    );
   };
 
   const reloadDirectories = async (

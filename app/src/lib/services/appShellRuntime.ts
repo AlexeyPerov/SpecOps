@@ -69,7 +69,7 @@ import { initializeChatProviders } from "../ai/providers/bootstrap";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { readConsoleHeightPreference } from "./consoleTabPrefs";
-import { externalFileWatcherSyncKey, watchedPathsFromState } from "./appShellHelpers";
+import { externalFileWatcherSyncKey, truncateWatchedPaths, watchedPathsFromState } from "./appShellHelpers";
 import { loadWorkspacePreferences } from "./workspacePreferences";
 import { openDroppedPath } from "./openDroppedPath";
 
@@ -109,7 +109,7 @@ export interface AppShellRuntimeOptions {
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
   onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;
-  syncProjectTreeWatcher?: (root: string | null) => Promise<void>;
+  syncProjectTreeWatcher?: (roots: readonly string[]) => Promise<void>;
   setConsoleHeightPx: (heightPx: number) => void;
 }
 
@@ -184,7 +184,7 @@ async function startAppShellRuntimeInner(
       await clearFileWatcherPaths();
       return;
     }
-    await syncFileWatcherPaths(watchedPathsFromState(state));
+    await syncFileWatcherPaths(truncateWatchedPaths(watchedPathsFromState(state)));
   }
 
   function scheduleWindowBoundsPersistence(): void {

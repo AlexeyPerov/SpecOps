@@ -10,14 +10,22 @@ function available(...ids: ContextId[]): ReadonlySet<ContextId> {
 }
 
 describe("updateMountedEditorContexts", () => {
-  it("keeps the active context and two most recent parked contexts", () => {
-    const ids = available("notepad", "ws-1", "ws-2", "ws-3");
+  it("keeps the active context and the most recent parked contexts up to the bound", () => {
+    const ids = available("notepad", "ws-1", "ws-2", "ws-3", "ws-4", "ws-5", "ws-6");
     let mounted: ContextId[] = [];
-    for (const contextId of ["notepad", "ws-1", "ws-2", "ws-3"] as ContextId[]) {
+    for (const contextId of [
+      "notepad",
+      "ws-1",
+      "ws-2",
+      "ws-3",
+      "ws-4",
+      "ws-5",
+      "ws-6",
+    ] as ContextId[]) {
       mounted = updateMountedEditorContexts(mounted, contextId, ids);
     }
 
-    expect(mounted).toEqual(["ws-1", "ws-2", "ws-3"]);
+    expect(mounted).toEqual(["ws-1", "ws-2", "ws-3", "ws-4", "ws-5", "ws-6"]);
     expect(mounted).toHaveLength(MAX_MOUNTED_EDITOR_CONTEXTS);
   });
 

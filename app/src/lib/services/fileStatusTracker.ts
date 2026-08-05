@@ -53,6 +53,18 @@ const FILE_STATUS_DEBOUNCE_MS = 150;
  */
 const FILE_STATUS_TTL_MS = 75_000;
 
+/**
+ * P03-08-06 — maximum number of per-workspace entries retained across switches.
+ * Previously the page effect cleared the tracker on every workspace switch,
+ * guaranteeing cold A→B→A refetches. The tracker is now retained across
+ * switches (so the TTL above actually helps round-trips) and bounded by this
+ * LRU cap so a long-running session does not accumulate one entry per workspace
+ * ever opened. Map keys preserve insertion order, so re-touching a workspace
+ * moves it to the end (most-recent); the oldest is evicted when the cap is
+ * exceeded.
+ */
+const MAX_TRACKED_WORKSPACES = 8;
+
 interface FileStatusEntry {
   value: FileStatusTrackerState;
   readable: Readable<FileStatusTrackerState>;
@@ -79,6 +91,9 @@ function copyEmptyState(): FileStatusTrackerState {
 function getOrCreateEntry(workspaceRootPath: string): FileStatusEntry {
   const existing = cache.get(workspaceRootPath);
   if (existing) {
+    // LRU touch: move to most-recent so the oldest entry is evicted first.
+    cache.delete(workspaceRootPath);
+    cache.set(workspaceRootPath, existing);
     return existing;
   }
 
@@ -89,6 +104,22 @@ function getOrCreateEntry(workspaceRootPath: string): FileStatusEntry {
     readable: { subscribe: store.subscribe },
     set: store.set,
   };
+  // Enforce the LRU cap before inserting (Map iteration is insertion order, so
+  // the first key is the least-recently-used).
+  while (cache.size >= MAX_TRACKED_WORKSPACES) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) {
+      break;
+    }
+    cache.delete(oldestKey);
+    inflight.delete(oldestKey);
+    pendingFollowUp.delete(oldestKey);
+    const timer = debounceTimers.get(oldestKey);
+    if (timer) {
+      clearTimeout(timer);
+      debounceTimers.delete(oldestKey);
+    }
+  }
   cache.set(workspaceRootPath, entry);
   return entry;
 }

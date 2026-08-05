@@ -166,9 +166,11 @@ seconds" bug. Two independent audits converged on P03-08-02.
   directory mtime only when the owner record is missing. Each heartbeat
   re-verifies ownership before writing and stops itself on takeover; release
   skips removal once the lock was lost. Heartbeat refreshes also stop after
-  60 s of hold so a wedged holder's lock eventually goes stale and can be
-  broken by other windows. Covered by takeover and owned-release regression
-  tests.
+  the watchdog deadline of hold (pinned to `WRITE_CHAIN_WATCHDOG_MS`, 30 s —
+  corrected on 2026-08-05 from an earlier 60 s that kept a wedged holder's
+  lock fresh for 30 s longer than the watchdog allowed) so a wedged holder's
+  lock eventually goes stale and can be broken by other windows. Covered by
+  takeover, owned-release, and heartbeat-stop regression tests.
 - **Area:** Session write lock / multi-window correctness.
 - **Impact:** **Medium.** Two compounding bugs: (1) freshness is judged from
   the lock **directory** mtime, but the heartbeat rewrites the `owner` *file*
@@ -202,10 +204,15 @@ per-file git calls, no status-bar/gutter git usage.
   on workspace/tab switches — not on every agent turn and session change. The
   tracker now serves warm snapshots within a per-workspace TTL (75 s) without
   re-shelling-out, and mutation-driven refreshes bypass the TTL. `resolveRepoRoot`
-  is memoized per workspace path and invalidated on `git init`-class mutations,
-  collapsing the doubled `git rev-parse` per switch. The whole path is gated
-  behind the new git scope setting (P03-08-T1), so with `versionControlOnly`
-  no `git status` runs on switching when no VC tab is active.
+  is memoized per workspace path and invalidated on `git init`-class mutations
+  (and eagerly inside `initRepositoryAtWorkspaceRoot` so the post-init identity
+  probe does not read a stale not-a-repo cache entry — corrected 2026-08-05),
+  collapsing the doubled `git rev-parse` per switch. The tracker is retained
+  across switches (bounded by an 8-entry LRU, corrected 2026-08-05 from an
+  earlier eager clear-on-switch that defeated the TTL and forced cold A→B→A
+  refetches) instead of being cleared. The whole path is gated behind the new
+  git scope setting (P03-08-T1), so with `versionControlOnly` no `git status`
+  runs on switching when no VC tab is active.
 - **Area:** Project tree file badges / tab and workspace switching.
 - **Impact:** **High.** This is the log-confirmed ~200 ms of git per tab
   activation. The `$effect` at `+page.svelte:996-1017` depends on `session`
@@ -264,9 +271,15 @@ per-file git calls, no status-bar/gutter git usage.
   bounded-concurrent lane (cap 4) so multiple reads of the same repo proceed
   in parallel and a slow read no longer blocks a queued mutation (or vice
   versa). Queued commands whose `AbortSignal` already fired are rejected
-  before running instead of executing just to discard the result. The repo's
-  lane entry is evicted once both lanes settle, closing the per-repo memory
-  leak. Read timeouts are enforced Rust-side (P03-08-02).
+  before running instead of executing just to discard the result (the signal
+  is wired through `runGit` via `CancellableGitOptions.signal`, corrected
+  2026-08-05 — previously the queue supported it but `runGit` never passed one).
+  The repo's lane entry is evicted once both lanes settle (the eviction
+  callback re-checks the mutation tail it was scheduled from, corrected
+  2026-08-05 — previously a successor mutation chaining on in the same
+  microtask window could be evicted out from under a not-yet-run command,
+  breaking FIFO serialization), closing the per-repo memory leak. Read
+  timeouts are enforced Rust-side (P03-08-02).
 - **Area:** Git command queue / head-of-line blocking.
 - **Impact:** **High.** One unbounded serial promise chain per repo root
   (`gitCommandQueue.ts:13-28`): reads queue behind writes; a `fetch`/`pull`/
@@ -290,7 +303,11 @@ per-file git calls, no status-bar/gutter git usage.
 - **Status:** Resolved on 2026-08-03. The redundant `queryRemotes` calls (VC
   view probe + Tags panel mount + Tags panel refresh) collapse through a
   shared short-TTL per-repo remotes cache (`loadRemotes`, 30 s), invalidated
-  on VC mutations. The Tags panel was already lazily mounted (only when its
+  on VC mutations. The invalidation resolves the workspace path to its repo
+  root before dropping the entry (corrected 2026-08-05 — previously it
+  invalidated by workspace path while the cache is keyed by repo root, so a
+  subdirectory workspace's remotes stayed stale for the full TTL). The Tags
+  panel was already lazily mounted (only when its
   section is active), and its remote `ls-remote` probe was already opt-in via
   the "Check remote" button (F30). The mount-time probe cache (5 s TTL) was
   already in place.
@@ -317,10 +334,13 @@ per-file git calls, no status-bar/gutter git usage.
   `GIT_OPTIONAL_LOCKS=0` (env built via a unit-tested `build_effective_git_env`),
   so `git status`/`diff`/`log` skip the optional index lock and cannot contend
   with a concurrent writer. The read/write classification mirrors the frontend
-  `isWriteGitCommand`. The reader-thread cost (a) remains — the threads are
-  necessary for the byte cap — and the registered-command poll loop (b) and
-  in-queue index-lock retries (c) are deferred: `spawn_blocking` (P03-08-02)
-  plus `GIT_OPTIONAL_LOCKS=0` cover the dominant cost.
+  `isWriteGitCommand` (bare `git stash` corrected to classify as a write on
+  2026-08-05 — it is semantically `git stash push`, which takes the index lock;
+  previously the Rust side treated it as read-only). The reader-thread cost (a)
+  remains — the threads are necessary for the byte cap — and the
+  registered-command poll loop (b) and in-queue index-lock retries (c) are
+  deferred: `spawn_blocking` (P03-08-02) plus `GIT_OPTIONAL_LOCKS=0` cover the
+  dominant cost.
 - **Area:** Rust git execution.
 - **Impact:** **Medium (batch).** (a) 2–3 OS threads spawned per git command
   for stdout/stderr readers (`git.rs:266-275`, `:291-301`); (b) registered
@@ -757,7 +777,11 @@ per-file git calls, no status-bar/gutter git usage.
   persist and deleted, so neither the in-memory cache nor the growing
   `session-buffer.*.json` directory outlives the document — closing a tab frees
   its buffer immediately instead of waiting for the whole window session to be
-  removed (and the restore `readDir` no longer walks stale buffer files).
+  removed. An on-disk orphan sweep (added 2026-08-05) also enumerates the
+  window's buffer files when the in-memory cache is cold — e.g. after a
+  crash/restart — and deletes any not in the live set, so residue from a
+  previous run no longer survives until the whole window session is removed.
+  Covered by an evict-on-close test and a crash-restart orphan-sweep test.
 - **Area:** Session persistence / memory.
 - **Impact:** **Medium.** `bufferFingerprintByKey` stores the **entire
   content string** of every persisted document and is pruned only when a
@@ -958,7 +982,13 @@ and gated settings tabs are hidden. Remaining residue:
 
 ## P03-08-T1 — Setting to completely disable git (and scope it to Version Control)
 
-- **Status:** Resolved on 2026-08-03.
+- **Status:** Resolved on 2026-08-03. UI consumers (AppShell prompts and the
+  workspace-context Version Control menu item, and the editor pane's
+  VC-tab-active predicate) now honor `scope: "off"` via `isGitIntegrationEnabled`
+  rather than the raw `enabled` toggle — corrected 2026-08-05 so the menu item
+  and prompts are hidden under both kill paths, not just the master toggle.
+  The Settings panel keeps the raw toggle so the scope radios stay visible when
+  "Never" is selected.
 - **Area:** Settings / git integration.
 - **Impact:** **High** (user-facing control; also the fastest mitigation for
   P03-08-06/07 while the fixes land).

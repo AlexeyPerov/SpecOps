@@ -37,6 +37,7 @@
   import { getDocumentByIdMap } from "../services/tabDocumentLookup";
   import { appSettings } from "../state/appStateSelectors";
   import { logPerfTiming } from "../services/perfDiagnostics";
+  import { isGitIntegrationEnabled } from "../services/gitIntegrationSettings";
   import { emptySet } from "../collections/emptyCollections";
   import { getEditorWorkbenchRuntime } from "../editor/editorWorkbenchContext";
   import { getEditorToolController } from "../editor/editorToolContext";
@@ -215,7 +216,7 @@
   const isWorkspaceSettingsViewActive = $derived(activeViewTabKind === "workspace-settings");
   const isWorkspaceManagerViewActive = $derived(activeViewTabKind === "workspace-manager");
   const isVersionControlViewActive = $derived(
-    activeViewTabKind === "version-control" && $appSettings.gitIntegration.enabled,
+    activeViewTabKind === "version-control" && isGitIntegrationEnabled($appSettings.gitIntegration),
   );
 
   const documentById = $derived(getDocumentByIdMap(documents));

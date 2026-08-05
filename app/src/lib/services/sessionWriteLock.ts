@@ -71,19 +71,24 @@ const MAX_ACQUIRE_FAILURES = 3;
 /** Refresh the owner mtime this often while held, so a slow RMW is not misjudged stale. */
 const LOCK_HEARTBEAT_INTERVAL_MS = 3_000;
 /**
- * Stop refreshing the owner mtime after this long. A hold this long is not a
- * slow RMW — it is a hung operation (the watchdog fired long ago). Letting the
- * lock go stale allows other windows to break it instead of being locked out
- * indefinitely by a wedged holder.
- */
-const LOCK_MAX_HEARTBEAT_REFRESH_MS = 60_000;
-/**
  * A chained write that has not settled by now is treated as wedged: the caller
  * receives an error and the chain advances (P03-08-03). The underlying
  * operation is not cancelled — if it eventually completes, its own result is
  * simply unobserved.
  */
 export const WRITE_CHAIN_WATCHDOG_MS = 30_000;
+/**
+ * Stop refreshing the owner mtime after this long. A hold this long is not a
+ * slow RMW — it is a hung operation the watchdog has already abandoned (see
+ * {@link WRITE_CHAIN_WATCHDOG_MS}). Keeping the lock fresh any longer would
+ * hold other windows out for the full heartbeat lifetime even after the
+ * watchdog declared the write wedged. This is pinned to the watchdog deadline
+ * (not above it) so that once the watchdog fires, the owner mtime stops being
+ * refreshed and the lock goes stale within {@link LOCK_STALE_MS}, letting
+ * other windows break it instead of being locked out indefinitely by a wedged
+ * holder.
+ */
+const LOCK_MAX_HEARTBEAT_REFRESH_MS = WRITE_CHAIN_WATCHDOG_MS;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {

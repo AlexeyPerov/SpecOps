@@ -202,4 +202,48 @@ describe("heartbeat ownership (P03-08-05)", () => {
       { recursive: true },
     );
   });
+
+  it("stops refreshing the owner mtime once the watchdog deadline elapses", async () => {
+    // P03-08-05: a wedged holder must not keep the lock fresh longer than the
+    // watchdog lifetime. The heartbeat stop is pinned to the watchdog deadline
+    // so other windows can break the (now stale) lock shortly after the write
+    // was abandoned, instead of waiting the full original 60 s.
+    mockAcquirableLock();
+    let ownerBytes: Uint8Array | null = null;
+    fsMock.writeFile.mockImplementation(async (_path: unknown, bytes: unknown) => {
+      ownerBytes = bytes as Uint8Array;
+    });
+    fsMock.readFile.mockImplementation(async () => {
+      if (!ownerBytes) {
+        throw new Error("no such file");
+      }
+      return ownerBytes;
+    });
+
+    let releaseGate: (() => void) | null = null;
+    const held = withSessionWriteLock(
+      () =>
+        new Promise<string>((resolve) => {
+          releaseGate = () => resolve("held");
+        }),
+    );
+
+    // Advance just past the watchdog deadline. Heartbeats fire every
+    // LOCK_HEARTBEAT_INTERVAL_MS and stop once the hold exceeds the deadline.
+    await vi.advanceTimersByTimeAsync(WRITE_CHAIN_WATCHDOG_MS + 5_000);
+    const ownerWritesAfterDeadline = fsMock.writeFile.mock.calls.length;
+
+    // Advance well past a few more heartbeat intervals: the heartbeat must have
+    // stopped, so no further owner writes occur.
+    await vi.advanceTimersByTimeAsync(4 * 3_000);
+    expect(fsMock.writeFile.mock.calls.length).toBe(ownerWritesAfterDeadline);
+
+    // The watchdog fires at the deadline and abandons the wedged write; the
+    // held promise rejects. The heartbeat-stop claim is the write-count check
+    // above.
+    releaseGate!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(held).rejects.toThrow(/abandoned/);
+    await awaitSessionWriteLock();
+  });
 });

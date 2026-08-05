@@ -56,6 +56,14 @@ export interface CancellableGitOptions {
    * every status/log/staging command for that repo behind it.
    */
   bypassQueue?: boolean;
+  /**
+   * Optional abort signal. When the signal is already aborted before the command
+   * starts, the queued entry rejects immediately instead of running (P03-08-08).
+   * Once a command has started, aborting only discards the result — the
+   * underlying subprocess keeps running until it finishes or its Rust-side
+   * timeout/cancel fires.
+   */
+  signal?: AbortSignal;
 }
 
 /** Remote git operation context surfaced in askpass prompts. */

@@ -1,4 +1,4 @@
-import { checkGitAvailable, queryIsBareRepository, resolveRepoRoot, runGit, type GitCallScope } from "./gitService";
+import { checkGitAvailable, invalidateResolveRepoRootCache, queryIsBareRepository, resolveRepoRoot, runGit, type GitCallScope } from "./gitService";
 import { normalizeGitOutputPath, type RunGitResponse } from "./types";
 
 export type VersionControlProbeResult =
@@ -92,6 +92,15 @@ export async function initRepositoryAtWorkspaceRoot(
   if (initResponse.exitCode !== 0) {
     return initResponse;
   }
+
+  // P03-08-06: a prior badge refresh (under scope "always") may have cached a
+  // stale `{ ok: false }` repo-root result for this workspace. The "branch"-
+  // scope mutation that normally invalidates the cache is only notified by the
+  // VC view *after* this function returns, so invalidate eagerly here —
+  // otherwise the resolve below returns the stale not-a-repo answer, the local
+  // git identity config is skipped, and the probe briefly re-renders "not a
+  // repository" right after a successful init.
+  invalidateResolveRepoRootCache(workspaceRootPath);
 
   const repoResult = await resolveRepoRoot(workspaceRootPath, scope);
   if (repoResult.ok) {

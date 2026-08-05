@@ -1,4 +1,5 @@
 import { queryRemotes } from "./gitService";
+import { resolveRepoRoot } from "./gitRepo";
 import type { GitRemote } from "./types";
 import {
   subscribeVersionControlMutations,
@@ -14,6 +15,13 @@ import {
  * subprocesses. Remotes change rarely — only `git remote add`/`rename`/`rm`
  * (which the app surfaces as mutations) move them — so a short TTL collapses
  * those calls into one per repo per visit.
+ *
+ * The cache is keyed by the resolved repository root (what callers pass to
+ * `loadRemotes`), while VC mutations are notified with the workspace path.
+ * Those two differ when a workspace is opened as a subdirectory of a repo, so
+ * invalidation resolves the repo root from the workspace path (sync-cached by
+ * P03-08-06's `resolveRepoRoot`) before dropping the entry — otherwise a
+ * subdirectory workspace's remotes would stay stale for the full TTL.
  */
 const REMOTES_TTL_MS = 30_000;
 
@@ -34,8 +42,27 @@ function ensureMutationHook(): void {
   // a fetch/pull/push flow, a branch operation that updates tracking). Drop the
   // cached entry so the next read re-shells-out.
   subscribeVersionControlMutations((workspaceRootPath: string, _scope: VersionControlMutationScope) => {
-    invalidateRemotesCache(workspaceRootPath);
+    void invalidateRemotesForWorkspace(workspaceRootPath);
   });
+}
+
+/**
+ * Resolve the mutation's workspace path to its repository root and drop the
+ * cached remotes for that root. Fire-and-forget: `resolveRepoRoot` is
+ * sync-cached per workspace path (P03-08-06), so after the first resolution
+ * this completes without a subprocess. If resolution fails (not a repo), there
+ * is nothing to invalidate.
+ */
+async function invalidateRemotesForWorkspace(workspaceRootPath: string): Promise<void> {
+  const repoResult = await resolveRepoRoot(workspaceRootPath, "background").catch(() => null);
+  if (repoResult?.ok) {
+    cacheByRepoRoot.delete(repoResult.repoRoot);
+    return;
+  }
+  // Not a repository or resolution failed: also drop any entry filed directly
+  // under the workspace path (covers callers that passed the workspace path
+  // itself as the repo root when the two coincide).
+  cacheByRepoRoot.delete(workspaceRootPath);
 }
 
 /**

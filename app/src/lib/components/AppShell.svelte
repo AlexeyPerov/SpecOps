@@ -39,6 +39,7 @@
     WindowContextState,
   } from "../domain/contracts";
   import { appState } from "../state/appState";
+  import { isGitIntegrationEnabled } from "../services/gitIntegrationSettings";
   import {
     updateMountedEditorContexts,
   } from "../editor/editorContextKeepAlive";
@@ -455,7 +456,12 @@
     workspaceContextMenuEl?: HTMLDivElement | null;
   } = $props();
 
-  const gitIntegrationEnabled = $derived($appState.settings.gitIntegration.enabled);
+  // P03-08-T1: honor `scope: "off"` (equivalent to `enabled: false`) in addition
+  // to the master toggle, so prompts and the workspace-context VC menu item are
+  // hidden under both kill paths — not just the master toggle.
+  const gitIntegrationEnabled = $derived(
+    isGitIntegrationEnabled($appState.settings.gitIntegration),
+  );
 
   type MountedEditorContext = {
     contextId: ContextId;

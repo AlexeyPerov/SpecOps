@@ -10,7 +10,7 @@ import {
 import { appState } from "../state/appState";
 import { createSessionFsMock } from "../test/sessionMock";
 import * as sessionManager from "./sessionManager";
-import { persistIncrementalWindowSession } from "./sessionIncrementalPersistence";
+import { persistIncrementalWindowSession, resetIncrementalSessionPersistenceForTests } from "./sessionIncrementalPersistence";
 
 const sessionMock = createSessionFsMock();
 
@@ -926,6 +926,41 @@ describe("incremental session persistence", () => {
       key.includes("session-buffer.win-gone."),
     );
     expect(bufferKeysAfter).toHaveLength(0);
+  });
+
+  it("deletes crash-restart orphan buffer files during persist when the in-memory cache is cold (P03-08-26)", async () => {
+    // Window "win-restart" previously persisted buffers for two docs. After a
+    // crash/restart the in-memory fingerprint cache is empty, so the
+    // stale-key path cannot see those docs. Only the on-disk orphan sweep
+    // (which lists buffer files for the window and deletes any not in the live
+    // set) can clean them up. Here doc /tmp/orphan.txt was closed before the
+    // restart; its buffer file must be deleted by the next persist.
+    appState.openFileInTab("/tmp/keep.txt", "keep-payload");
+    appState.openFileInTab("/tmp/orphan.txt", "orphan-payload");
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-restart");
+
+    const orphanDoc = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/orphan.txt")!;
+    const orphanTab = getSessionTabs(appState.getActiveSession()).find(
+      (tab) => tab.kind === "file" && tab.documentId === orphanDoc.id,
+    )!;
+    appState.closeTabForce(orphanTab.id);
+
+    // Simulate a restart: clear the in-memory caches (the fingerprint map and
+    // navigation fingerprint are module-private and empty after a restart).
+    resetIncrementalSessionPersistenceForTests();
+    // Re-arm the session manager's own state so the next persist runs.
+    sessionManager.resetSessionManagerForTests();
+
+    const keepDoc = appState.getActiveDocuments().find((doc) => doc.filePath === "/tmp/keep.txt")!;
+
+    await persistIncrementalWindowSession(appState.getSnapshot(), "win-restart");
+
+    const bufferKeysAfter = [...sessionMock.diskFiles.keys()].filter((key) =>
+      key.includes("session-buffer.win-restart."),
+    );
+    // The orphan's buffer is gone; only the still-open doc's buffer survives.
+    expect(bufferKeysAfter.some((key) => key.includes(orphanDoc.id))).toBe(false);
+    expect(bufferKeysAfter.some((key) => key.includes(keepDoc.id))).toBe(true);
   });
 
   it("marks a document missing when restored without a checkpoint and its buffer is absent", async () => {

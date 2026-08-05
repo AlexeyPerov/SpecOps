@@ -1040,7 +1040,13 @@ fn is_read_only_git_args(args: &[String]) -> bool {
             rest.iter().any(|arg| matches!(arg.as_str(), "--get" | "--get-all"))
                 || rest.iter().filter(|arg| !arg.starts_with('-')).count() < 2
         }
-        "stash" => matches!(rest.first().map(String::as_str), Some("list") | None),
+        // `stash list` is the only read-only stash form. Bare `git stash`
+        // (no subcommand) is semantically `git stash push` — a mutation that
+        // takes the index lock — so it must classify as a write to match the
+        // frontend `isWriteGitCommand` (which treats anything except `list` as
+        // a write). Previously bare `stash` was misclassified as read-only and
+        // got `GIT_OPTIONAL_LOCKS=0`, contending with concurrent writers.
+        "stash" => matches!(rest.first().map(String::as_str), Some("list")),
         _ => false,
     }
 }
@@ -2674,6 +2680,10 @@ mod tests {
             vec!["commit".into(), "-m".into(), "x".into()],
             vec!["checkout".into(), "main".into()],
             vec!["stash".into(), "push".into()],
+            // Bare `git stash` is semantically `git stash push` (a mutation that
+            // takes the index lock) — must classify as a write, matching the
+            // frontend `isWriteGitCommand`.
+            vec!["stash".into()],
             vec!["fetch".into()],
             vec!["pull".into()],
             vec!["push".into()],

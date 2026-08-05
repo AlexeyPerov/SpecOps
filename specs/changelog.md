@@ -1,5 +1,98 @@
 # Changelog
 
+## 2026-08-05 08:00 MSK — Performance-review follow-up fixes (P03-08-05/06/08/09/10/26/T1)
+
+Code review of the `performance-review-03-08.md` fixes surfaced several
+correctness gaps and incomplete items. All are addressed below. No behavior
+changes beyond the fixes; regression tests added where practical.
+
+### Session write lock (P03-08-05)
+
+- The lock heartbeat stopped refreshing the owner mtime after 60 s, but the
+  write-chain watchdog abandons a wedged write at 30 s. A wedged holder
+  therefore kept its lock "fresh" against other windows for 30 s longer than
+  the watchdog allowed. The heartbeat-stop deadline is now pinned to
+  `WRITE_CHAIN_WATCHDOG_MS` (30 s), so once the watchdog fires the owner mtime
+  stops being refreshed and the lock goes stale within the normal stale window,
+  letting other windows break it. Covered by a new regression test asserting no
+  owner writes occur after the deadline.
+
+### Git command queue (P03-08-08)
+
+- **Eviction race:** when a mutation settled, the eviction callback checked
+  only `activeReads`/`readWaiters`. A successor mutation that chained onto the
+  tail in the same microtask window could be evicted out from under a
+  not-yet-run command, so a later mutation created a fresh lane and ran
+  concurrently — breaking the FIFO-serial mutation guarantee that protects
+  `.git/index.lock`. The eviction callback now captures the mutation tail it
+  was scheduled from and re-checks that the lane's current tail is still that
+  same promise before deleting the entry.
+- **AbortSignal wiring:** the queue already rejected already-aborted signals
+  before running, but `runGit` never passed one, so the feature was dead code.
+  `CancellableGitOptions` now has an optional `signal` field, threaded through
+  `runGit` to `enqueueGitCommandForRepo`, so callers can drop queued
+  not-yet-started commands on cancel.
+
+### Version Control remotes cache (P03-08-09)
+
+- The cache is keyed by the resolved repository root, but VC mutations are
+  notified with the workspace path. Those two differ when a workspace is opened
+  as a subdirectory of a repo, so invalidation missed and the remotes list
+  stayed stale for the full 30 s TTL. Invalidation now resolves the workspace
+  path to its repo root (sync-cached via P03-08-06's `resolveRepoRoot`) before
+  dropping the entry.
+
+### Git subprocess classification (P03-08-10)
+
+- Bare `git stash` (no subcommand) is semantically `git stash push` — a
+  mutation that takes the index lock — but the Rust read/write classifier
+  treated it as read-only, so it ran with `GIT_OPTIONAL_LOCKS=0` and could
+  contend with a concurrent writer. The Rust classification now matches the
+  frontend `isWriteGitCommand` (only `stash list` is read-only). Covered by a
+  new unit test case.
+
+### Incremental session persistence (P03-08-26)
+
+- On-disk orphan buffer files for closed documents were only deleted on
+  whole-window-session removal, not "during each persist" as the spec claimed.
+  After a crash/restart the in-memory fingerprint cache is empty, so stale
+  buffer files survived until the window session was removed. A cold-cache
+  on-disk orphan sweep now enumerates the window's buffer files and deletes any
+  not in the live set, so crash-restart residue is cleaned on the next persist.
+  The sweep only runs when the in-memory cache is cold to avoid a `readDir` on
+  every persist. Covered by a crash-restart regression test.
+
+### Git integration gating (P03-08-T1)
+
+- AppShell's git prompts (askpass/tag/checkout/stash) and the workspace-context
+  Version Control menu item, plus the editor pane's VC-tab-active predicate,
+  read the raw `enabled` toggle instead of `isGitIntegrationEnabled`, so with
+  `enabled: true, scope: "off"` they behaved as if git were still on. They now
+  route through `isGitIntegrationEnabled` so `scope: "off"` hides them exactly
+  like `enabled: false`. (The Settings panel keeps the raw toggle so the scope
+  radios stay visible when "Never" is selected.)
+
+### Project-tree badges (P03-08-06)
+
+- **Stale repo-root cache on init:** `initRepositoryAtWorkspaceRoot` resolved
+  the repo root before the `"branch"` mutation that invalidates the cache was
+  notified, so a stale not-a-repo entry could be read and the local git
+  identity config skipped (and the probe briefly re-rendered "not a repository"
+  after a successful init). The cache is now eagerly invalidated inside
+  `initRepositoryAtWorkspaceRoot` before resolving.
+- **A→B→A cold refetch:** the page effect cleared the file-status tracker on
+  every workspace switch, defeating the per-workspace TTL and forcing a cold
+  `git rev-parse` + `git status` refetch on every A→B→A. The tracker is now
+  retained across switches and bounded by an 8-entry LRU (with per-entry
+  touch-on-access), so recent workspaces reuse their still-current snapshot
+  without unbounded growth.
+
+### Tests
+
+- New: git-command-queue mutation serialization under burst enqueue;
+  session-write-lock heartbeat-stop at the watchdog deadline; session-manager
+  crash-restart orphan buffer sweep; Rust `git stash` write classification.
+
 ## 2026-08-05 00:20 MSK — Logging, console, disabled-AI, search, and perf reporting (P03-08-27…32, T2…T3)
 
 Implemented the remaining sections of `specs/performance-review-03-08.md`:

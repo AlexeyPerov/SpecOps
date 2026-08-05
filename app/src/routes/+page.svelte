@@ -127,7 +127,6 @@
   import {
     getFileStatusTracker,
     refreshFileStatuses,
-    clearFileStatusTracker,
   } from "../lib/services/fileStatusTracker";
   import {
     createSessionNotificationObserver,
@@ -1052,9 +1051,11 @@
     isSessionTabActive;
 
     const root = activeWorkspaceRoot;
-    if (lastFileStatusWorkspace && lastFileStatusWorkspace !== root) {
-      clearFileStatusTracker(lastFileStatusWorkspace);
-    }
+    // P03-08-06: do not clear the tracker on workspace switch. The tracker is
+    // now an LRU-bounded (MAX_TRACKED_WORKSPACES) cache with a per-workspace
+    // TTL, so A→B→A switching reuses A's still-current snapshot instead of
+    // paying a cold `git rev-parse` + `git status` refetch. The previous eager
+    // clear defeated the TTL entirely.
     lastFileStatusWorkspace = root;
 
     if (!runtimeReady || !root) {

@@ -347,8 +347,13 @@ export async function runGit(
   }
   // P03-08-08: mutations serialize per repo (index-lock safety); reads run on a
   // small concurrent lane. Classify by the same rule used for registration.
+  // Pass through an already-aborted signal so a queued (not-yet-started)
+  // command rejects immediately instead of running just to discard the result.
   const lane = isWriteGitCommand(args) ? "mutation" : "read";
-  return enqueueGitCommandForRepo(repoRoot, invoke, { lane });
+  return enqueueGitCommandForRepo(repoRoot, invoke, {
+    lane,
+    ...(options?.signal ? { signal: options.signal } : {}),
+  });
 }
 
 interface RemoteGitInvokeOptions extends CancellableGitOptions {

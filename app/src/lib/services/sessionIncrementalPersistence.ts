@@ -299,7 +299,36 @@ export async function persistIncrementalWindowSession(
     }
   }
 
-  if (!navigationChanged && changedBuffers.length === 0 && staleKeys.length === 0) {
+  // On-disk orphan sweep (P03-08-26): the in-memory `staleKeys` only cover
+  // documents the cache already tracks. After a crash/restart the cache is
+  // empty, so stale buffer files for closed documents would survive until the
+  // whole window session is removed. Run the sweep only when the in-memory
+  // cache has no entries for this window yet (the cold/post-crash state): once
+  // warm, the `staleKeys` path already covers deletions and a `readDir` per
+  // persist would be pure cost. The set of expected buffer filenames is built
+  // from the live keys; any on-disk file for this window not in the set is an
+  // orphan and is deleted.
+  const hasInMemoryEntriesForWindow = Array.from(bufferFingerprintByKey.keys()).some((key) =>
+    key.startsWith(`${windowId}\0`),
+  );
+  const needsOnDiskOrphanSweep = !hasInMemoryEntriesForWindow;
+  const windowIdPart = safeFilePart(windowId);
+  const liveBufferFileNames = needsOnDiskOrphanSweep ? new Set<string>() : null;
+  if (liveBufferFileNames) {
+    for (const key of liveKeys) {
+      const [, contextId, documentId] = key.split("\u0000") as [string, ContextId, string];
+      liveBufferFileNames.add(
+        `session-buffer.${windowIdPart}.${safeFilePart(contextId)}.${safeFilePart(documentId)}.json`,
+      );
+    }
+  }
+
+  if (
+    !navigationChanged &&
+    changedBuffers.length === 0 &&
+    staleKeys.length === 0 &&
+    !needsOnDiskOrphanSweep
+  ) {
     return;
   }
 
@@ -331,6 +360,30 @@ export async function persistIncrementalWindowSession(
         // Already absent — a concurrent persist or external cleanup removed it.
       }
       bufferFingerprintByKey.delete(key);
+    }
+
+    // On-disk orphan sweep (P03-08-26): delete buffer files for this window that
+    // are not in the live set. This handles crash-restart residue the in-memory
+    // cache cannot know about (the cache is empty after a restart). Only runs in
+    // the cold-cache state to avoid a `readDir` on every persist.
+    if (needsOnDiskOrphanSweep && liveBufferFileNames) {
+      const dataDir = await ensureSpecOpsDataDir();
+      let orphanNames: string[];
+      try {
+        orphanNames = await listBufferFilesForWindow(windowId);
+      } catch {
+        orphanNames = [];
+      }
+      for (const name of orphanNames) {
+        if (liveBufferFileNames.has(name)) {
+          continue;
+        }
+        try {
+          await remove(await join(dataDir, name));
+        } catch {
+          // Already absent — a concurrent persist or external cleanup removed it.
+        }
+      }
     }
 
     if (navigationChanged) {

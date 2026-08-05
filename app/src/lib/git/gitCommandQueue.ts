@@ -37,6 +37,14 @@ interface RepoLanes {
   activeReads: number;
   /** Queue of read waiters when the read lane is saturated. */
   readWaiters: Array<() => void>;
+  /**
+   * The mutation tail captured at the time the latest eviction callback was
+   * scheduled. Eviction re-checks that this still equals {@link mutationTail}
+   * before deleting the lane entry, so a mutation that chained on between the
+   * schedule and the settle does not get evicted out from under a not-yet-run
+   * successor (which would break FIFO serialization / index-lock safety).
+   */
+  evictionScheduledFrom: Promise<unknown> | null;
 }
 
 const lanesByRepoRoot = new Map<string, RepoLanes>();
@@ -55,6 +63,7 @@ function getOrCreateLanes(key: string): RepoLanes {
     mutationTail: Promise.resolve(),
     activeReads: 0,
     readWaiters: [],
+    evictionScheduledFrom: null,
   };
   lanesByRepoRoot.set(key, lanes);
   return lanes;
@@ -113,16 +122,41 @@ function releaseReadSlot(lanes: RepoLanes): void {
  * Drop the repo's lane entry when no mutation is pending and no read is active
  * or waiting. Checks the mutation tail asynchronously because the settled
  * promise may not have scheduled its `then` yet.
+ *
+ * P03-08-08 race guard: the eviction callback captures the mutation tail it was
+ * scheduled from and re-checks that the lane's current {@link RepoLanes.mutationTail}
+ * is still that same promise before deleting the entry. Without this, a new
+ * mutation M2 chaining onto the tail between the schedule and the settle would
+ * be evicted out from under a not-yet-run M2 (whose `fn` is still queued behind
+ * the just-settled predecessor), so a later M3 would create a fresh lane and run
+ * concurrently with M2 — breaking the FIFO-serial mutation guarantee that
+ * protects `.git/index.lock`.
  */
 function maybeEvictLanes(lanes: RepoLanes): void {
   if (lanes.activeReads !== 0 || lanes.readWaiters.length !== 0) {
     return;
   }
-  void lanes.mutationTail.then(() => {
+  // Already an eviction check pending for this tail — no need to schedule again.
+  if (lanes.evictionScheduledFrom === lanes.mutationTail) {
+    return;
+  }
+  const scheduledFrom = lanes.mutationTail;
+  lanes.evictionScheduledFrom = scheduledFrom;
+  void scheduledFrom.then(() => {
+    // Clear the scheduling marker first; if a new mutation chained on after this
+    // point it has already set a fresh `mutationTail` and scheduled its own check.
+    if (lanes.evictionScheduledFrom === scheduledFrom) {
+      lanes.evictionScheduledFrom = null;
+    }
     // Re-read in case a new command arrived between the check and the settle.
+    // The `mutationTail === scheduledFrom` check is the race guard: a mutation
+    // that chained on since we scheduled means a successor is still queued (its
+    // `fn` has not run yet), so the entry must not be evicted.
     const current = lanesByRepoRoot.get(lanes.key);
     if (
       current === lanes &&
+      current.mutationTail === scheduledFrom &&
+      current.evictionScheduledFrom === null &&
       current.activeReads === 0 &&
       current.readWaiters.length === 0
     ) {

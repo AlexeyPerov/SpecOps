@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-10 22:45 MSK — Hide markdown mode controls on empty tabs
+
+The `edit / split / preview` toolbar that belongs to markdown documents was
+appearing on empty editor tabs. The panel visibility was gated on
+`document.language === "markdown"` (i.e. the open path ends in `.md`), which an
+empty `.md` file still satisfies — so opening a zero-length markdown file, or
+clearing one down to nothing, left the controls dangling over a blank editor.
+
+- `EditorPaneContent.svelte` now passes
+  `markdownEnabled={entryView.isMarkdownDocument && entry.document.content.length > 0}`
+  to `MarkdownEditorPane`. An empty buffer forces the panel off, and
+  `MarkdownEditorPane` already collapses to plain edit mode when
+  `markdownEnabled` is false (the mode bar is hidden and `markdownViewMode`
+  resolves to `"edit"`), so preview/split are removed too. Typing the first
+  character re-enables it reactively.
+
 ## 2026-08-10 22:15 MSK — Console level filter + project-tree drag-to-folder fixes
 
 Two user-reported bugs.

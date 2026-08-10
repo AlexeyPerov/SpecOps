@@ -604,7 +604,7 @@
           {@const isEntryActive = entry.tabId === activeTabId}
           <div class="editor-tab-slot" class:editor-tab-slot-hidden={!isEntryActive}>
             <MarkdownEditorPane
-              markdownEnabled={entryView.isMarkdownDocument}
+              markdownEnabled={entryView.isMarkdownDocument && entry.document.content.length > 0}
               content={entry.document.content}
               documentId={entry.document.id}
               {paneId}

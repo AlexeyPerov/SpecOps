@@ -93,6 +93,14 @@
     notify: (message) => notify(message),
     getPaneElements: () => getPaneElements(),
     onOpenFileInPane: (filePath, paneId) => onOpenFileInPane?.(filePath, paneId),
+    // Directory-row elements for coordinate-based folder drop-target
+    // hit-testing. `pointerenter`/`pointerleave` on sibling rows are suppressed
+    // by the implicit pointer capture of an active mouse drag, so the controller
+    // resolves folder targets by hit-testing these rects instead.
+    getDropTargetElements: () =>
+      listEl
+        ? Array.from(listEl.querySelectorAll<HTMLElement>('[data-tree-kind="directory"]'))
+        : [],
     onStateChange: (next) => {
       dragState = next;
     },

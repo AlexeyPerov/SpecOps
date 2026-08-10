@@ -1,14 +1,36 @@
 <script lang="ts">
-  import { consoleLogs } from "../services/appConsole";
+  import { consoleLogs, consoleLevelRank } from "../services/appConsole";
+  import type { DiagnosticLevel } from "../domain/contracts";
   import EmptyState from "./EmptyState.svelte";
+
+  let {
+    /**
+     * Minimum level to display (live filter, independent of the append-time
+     * retention floor). Entries below this level are hidden from the list and
+     * the copy action without being dropped from the ring, so lowering the
+     * level again reveals them. Defaults to `debug` (show everything retained).
+     */
+    minLevel = "debug" as DiagnosticLevel,
+  }: {
+    minLevel?: DiagnosticLevel;
+  } = $props();
 
   const DISPLAY_MAX_ENTRIES = 250;
 
   let scrollEl = $state<HTMLDivElement | undefined>(undefined);
   let entries = $derived($consoleLogs);
-  let hiddenEntryCount = $derived(Math.max(0, entries.length - DISPLAY_MAX_ENTRIES));
+  // Live display filter: keep only entries at or above the chosen level. Applied
+  // before the display cap so the most recent N *visible* entries are rendered.
+  let levelFilteredEntries = $derived(
+    entries.filter((entry) => consoleLevelRank(entry.level) >= consoleLevelRank(minLevel)),
+  );
+  let hiddenEntryCount = $derived(
+    Math.max(0, levelFilteredEntries.length - DISPLAY_MAX_ENTRIES),
+  );
   let visibleEntries = $derived(
-    entries.length > DISPLAY_MAX_ENTRIES ? entries.slice(entries.length - DISPLAY_MAX_ENTRIES) : entries
+    levelFilteredEntries.length > DISPLAY_MAX_ENTRIES
+      ? levelFilteredEntries.slice(levelFilteredEntries.length - DISPLAY_MAX_ENTRIES)
+      : levelFilteredEntries,
   );
   let stickToBottom = $state(true);
 
@@ -36,8 +58,8 @@
     onscroll={handleScroll}
     tabindex="-1"
   >
-    {#if entries.length === 0}
-      <EmptyState variant="inline" title="No log entries yet." />
+    {#if levelFilteredEntries.length === 0}
+      <EmptyState variant="inline" title={entries.length === 0 ? "No log entries yet." : "No entries at this level."} />
     {:else}
       {#if hiddenEntryCount > 0}
         <p class="console-truncated">

@@ -10,6 +10,7 @@
   import {
     clearConsoleLogs,
     consoleLogs,
+    consoleLevelRank,
     getMinConsoleLevel,
     setMinConsoleLevel,
     type ConsoleLogEntry,
@@ -97,16 +98,19 @@
   }
 
   async function handleCopyVisible(): Promise<void> {
-    // Read the current ring snapshot (already oldest→newest).
+    // Read the current ring snapshot (already oldest→newest), then apply the
+    // same display-level filter as the panel so Copy matches what is on screen.
     let entries: ConsoleLogEntry[] = [];
     const unsubscribe = consoleLogs.subscribe((value) => {
       entries = value;
     });
     unsubscribe();
-    if (entries.length === 0) {
+    const minRank = consoleLevelRank(minLevel);
+    const visible = entries.filter((entry) => consoleLevelRank(entry.level) >= minRank);
+    if (visible.length === 0) {
       return;
     }
-    const text = entries.map((entry) => entry.text).join("\n");
+    const text = visible.map((entry) => entry.text).join("\n");
     try {
       await navigator.clipboard.writeText(text);
       copied = true;
@@ -208,7 +212,7 @@
   </div>
 
   <div class="console-content">
-    <ConsoleLogsPanel />
+    <ConsoleLogsPanel minLevel={minLevel} />
   </div>
 </section>
 

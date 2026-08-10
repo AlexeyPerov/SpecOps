@@ -18,6 +18,7 @@ function dirNode(path: string): ProjectTreeNode {
 function createController(options: {
   getWorkspaceRoot?: () => string | null;
   getPaneElements?: () => PaneDropTargetElements[];
+  getDropTargetElements?: () => HTMLElement[];
   onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
   onMove?: (sourcePath: string, destDirPath: string) => Promise<void>;
 } = {}) {
@@ -28,6 +29,7 @@ function createController(options: {
     onMove: options.onMove ?? vi.fn(),
     notify,
     getPaneElements: options.getPaneElements,
+    getDropTargetElements: options.getDropTargetElements,
     onOpenFileInPane: options.onOpenFileInPane,
     onStateChange: (next) => {
       state = next;
@@ -172,5 +174,80 @@ describe("projectTreeDrag — folder drop still takes priority", () => {
     expect(consumed).toBe(true);
     expect(onMove).toHaveBeenCalledWith("/root/a.txt", "/root/sub");
     expect(onOpenFileInPane).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Coordinate-based folder drop-target acquisition. Without this path the
+ * controller relied on element boundary events (`pointerenter`/`pointerleave`),
+ * which the implicit pointer capture of an active mouse drag suppresses — so
+ * dragging a file onto a folder was a silent no-op. These tests exercise the
+ * coordinate hit-test that resolves folder targets from directory-row rects.
+ */
+describe("projectTreeDrag — folder drop via coordinate hit-test", () => {
+  function createDirElement(path: string, rect: { left: number; top: number; right: number; bottom: number }): HTMLElement {
+    const el = document.createElement("button");
+    el.dataset.path = path;
+    el.dataset.treeKind = "directory";
+    el.getBoundingClientRect = () =>
+      ({
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.right - rect.left,
+        height: rect.bottom - rect.top,
+        x: rect.left,
+        y: rect.top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    return el;
+  }
+
+  it("acquires the folder drop target by coordinates during a drag and moves the file on drop", async () => {
+    const onMove = vi.fn();
+    const folderEl = createDirElement("/root/sub", { left: 50, top: 50, right: 250, bottom: 80 });
+    const { controller } = createController({
+      getDropTargetElements: () => [folderEl],
+      onMove,
+    });
+    controller.handlePointerDown(
+      { button: 0, pointerId: 1, clientX: 0, clientY: 0 } as PointerEvent,
+      fileNode("/root/a.txt"),
+    );
+    // Move past threshold to enter the dragging state.
+    controller.handlePointerMove({
+      pointerId: 1,
+      clientX: PROJECT_TREE_DRAG_THRESHOLD_PX + 1,
+      clientY: 0,
+    } as PointerEvent);
+    // Move over the folder rect — the controller must hit-test and acquire it.
+    controller.handlePointerMove({
+      pointerId: 1,
+      clientX: 150,
+      clientY: 65,
+    } as PointerEvent);
+    const consumed = await controller.finishDrop();
+    expect(consumed).toBe(true);
+    expect(onMove).toHaveBeenCalledWith("/root/a.txt", "/root/sub");
+  });
+
+  it("does not acquire a folder target when the pointer is not over any directory row", async () => {
+    const onMove = vi.fn();
+    const folderEl = createDirElement("/root/sub", { left: 50, top: 50, right: 250, bottom: 80 });
+    const { controller } = createController({
+      getDropTargetElements: () => [folderEl],
+      onMove,
+    });
+    dragPastThreshold(controller, fileNode("/root/a.txt"));
+    // Pointer is well outside the folder rect.
+    controller.handlePointerMove({
+      pointerId: 1,
+      clientX: 500,
+      clientY: 500,
+    } as PointerEvent);
+    const consumed = await controller.finishDrop();
+    expect(consumed).toBe(false);
+    expect(onMove).not.toHaveBeenCalled();
   });
 });

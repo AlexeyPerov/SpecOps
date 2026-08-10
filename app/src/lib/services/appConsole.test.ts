@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   appendConsoleLog,
   clearConsoleLogs,
+  consoleLevelRank,
   consoleLogs,
   resetConsoleForTests,
   setMinConsoleLevel,
@@ -111,5 +112,43 @@ describe("appConsole", () => {
     clearConsoleLogs();
     // Clear pushes synchronously so a read right after reflects the empty ring.
     expect(readConsoleMessages()).toHaveLength(0);
+  });
+
+  it("exposes a level rank for the display filter (higher = more severe)", () => {
+    expect(consoleLevelRank("debug")).toBeLessThan(consoleLevelRank("info"));
+    expect(consoleLevelRank("info")).toBeLessThan(consoleLevelRank("warn"));
+    expect(consoleLevelRank("warn")).toBeLessThan(consoleLevelRank("error"));
+  });
+
+  it("retains all retained entries in the ring regardless of the display filter", async () => {
+    // The display filter (applied in ConsoleLogsPanel) hides entries below the
+    // chosen level without removing them from the ring. The store snapshot must
+    // still carry every retained entry so the filter can reveal them again when
+    // the level is lowered. This test pins that contract: after appending a mix
+    // of levels, the store holds all of them and a client-side rank filter is
+    // what narrows the visible set.
+    appendConsoleLog({ level: "debug", source: "frontend", timestamp: new Date().toISOString(), message: "d" });
+    appendConsoleLog({ level: "info", source: "frontend", timestamp: new Date().toISOString(), message: "i" });
+    appendConsoleLog({ level: "warn", source: "frontend", timestamp: new Date().toISOString(), message: "w" });
+    await flushFrames();
+
+    let entries: { level: string; message: string }[] = [];
+    const unsubscribe = consoleLogs.subscribe((value) => {
+      entries = value.map((entry) => ({ level: entry.level, message: entry.message }));
+    });
+    unsubscribe();
+
+    // The ring retains all three; the display filter narrows client-side.
+    expect(entries.map((entry) => entry.message)).toEqual(["d", "i", "w"]);
+
+    // A "warn" display filter hides debug+info but they remain in the ring.
+    const warnRank = consoleLevelRank("warn");
+    const visibleAtWarn = entries.filter((entry) => consoleLevelRank(entry.level as never) >= warnRank);
+    expect(visibleAtWarn.map((entry) => entry.message)).toEqual(["w"]);
+
+    // Lowering to "debug" reveals them again — same ring, different filter.
+    const debugRank = consoleLevelRank("debug");
+    const visibleAtDebug = entries.filter((entry) => consoleLevelRank(entry.level as never) >= debugRank);
+    expect(visibleAtDebug.map((entry) => entry.message)).toEqual(["d", "i", "w"]);
   });
 });

@@ -36,6 +36,15 @@ export interface ProjectTreeDragControllerDeps {
    * lands on a pane and not on a folder.
    */
   onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
+  /**
+   * Live directory-row elements in the project tree, each stamped with a
+   * `data-path` attribute. Used for coordinate-based folder drop-target
+   * hit-testing during a drag. Without this the controller falls back to
+   * `setDropTarget` driven by element boundary events, which the implicit
+   * pointer capture of an active mouse drag suppresses — so folder drops would
+   * never resolve.
+   */
+  getDropTargetElements?: () => HTMLElement[];
 }
 
 function createInitialState(): ProjectTreeDragState {
@@ -49,6 +58,28 @@ function createInitialState(): ProjectTreeDragState {
     startX: 0,
     startY: 0,
   };
+}
+
+/**
+ * Hit-test a pointer position against the rendered directory-row elements and
+ * return the matching folder path (from the element's `data-path`), or `null`
+ * when no directory row contains the point. Used during an active drag because
+ * the implicit pointer capture of a pressed mouse button suppresses element
+ * boundary events (`pointerenter`/`pointerleave`) on sibling rows — so the tree
+ * cannot rely on those to acquire a folder drop target. Coordinate hit-testing
+ * mirrors how the file→pane path resolves via `hitTestPaneElements`.
+ */
+function hitTestDropTargetElements(x: number, y: number, elements: HTMLElement[]): string | null {
+  for (const element of elements) {
+    const rect = element.getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      const path = element.dataset.path;
+      if (path) {
+        return path;
+      }
+    }
+  }
+  return null;
 }
 
 export function createProjectTreeDragController(deps: ProjectTreeDragControllerDeps) {
@@ -97,6 +128,21 @@ export function createProjectTreeDragController(deps: ProjectTreeDragControllerD
     }
     if (!state.didDrag) {
       return;
+    }
+    // Coordinate-based folder drop-target hit-test. The implicit pointer
+    // capture of an active mouse drag suppresses element boundary events
+    // (`pointerenter`/`pointerleave`) on sibling rows, so folder targets are
+    // acquired by hit-testing directory-row rects here instead — mirroring how
+    // the file→pane path resolves via `hitTestPaneElements`. Applies to every
+    // node kind (both files and folders can be moved into a folder).
+    const folderElements = deps.getDropTargetElements?.() ?? [];
+    const nextDropTarget =
+      folderElements.length > 0
+        ? hitTestDropTargetElements(event.clientX, event.clientY, folderElements)
+        : null;
+    if (nextDropTarget !== state.dropTargetPath) {
+      state = { ...state, dropTargetPath: nextDropTarget };
+      emit();
     }
     // Phase 6 — track the hovered pane for the file-drop affordance. Only file
     // nodes can drop into panes (folders move between directories). The actual

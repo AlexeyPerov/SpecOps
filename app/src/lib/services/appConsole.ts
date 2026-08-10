@@ -35,6 +35,16 @@ const LEVEL_RANK: Record<DiagnosticLevel, number> = {
 };
 
 /**
+ * Numeric rank for a log level (higher = more severe). Exposed so the console
+ * UI can apply a live *display* filter on top of the append-time retention
+ * floor — the dropdown hides already-retained entries below the chosen level
+ * without discarding them from the ring.
+ */
+export function consoleLevelRank(level: DiagnosticLevel): number {
+  return LEVEL_RANK[level];
+}
+
+/**
  * Minimum level retained in the in-app console store. `debug` and below-noise
  * `info` events (e.g. every command dispatch) are dropped before they enter the
  * ring so the console surfaces signal, not keystroke-by-keystroke noise. The

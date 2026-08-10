@@ -1,5 +1,58 @@
 # Changelog
 
+## 2026-08-10 22:15 MSK — Console level filter + project-tree drag-to-folder fixes
+
+Two user-reported bugs.
+
+### Console log-level dropdown did nothing
+
+The console's minimum-level filter was applied only at append time
+(`appendConsoleLog` drops entries below `minConsoleLevel` before they enter the
+ring), so changing the Level dropdown had no effect on the already-populated
+list — it only gated future entries, and `ConsoleLogsPanel` received no filter
+prop at all.
+
+- `appConsole.ts` now exports a `consoleLevelRank(level)` helper so the
+  rendering layer can compare severity without duplicating the rank table. The
+  append-time retention floor is unchanged (it remains a noise gate).
+- `ConsoleLogsPanel` accepts a new `minLevel` prop (default `debug`) and derives
+  `visibleEntries` by filtering the ring snapshot at or above the chosen level
+  before the 250-entry display cap. Because `minLevel` comes from the parent's
+  `$state`, Svelte 5 runes re-derive the list reactively — the filter is
+  instant and entries are hidden, not deleted, so lowering the level again
+  reveals them. The empty-state copy distinguishes "no entries" from "none at
+  this level".
+- `ConsolePanel` passes `minLevel` down to `ConsoleLogsPanel`. `handleCopyVisible`
+  now applies the same display filter so Copy matches what is on screen.
+- New `appConsole` tests pin the rank order and the ring-retains-all contract
+  that the client-side filter relies on.
+
+### Dragging a file onto a folder in the project tree did nothing
+
+Folder drop-targets were acquired only via element-level
+`pointerenter`/`pointerleave` handlers on directory rows. Per the Pointer
+Events spec, a `pointerdown` implicitly captures the pointer to the target
+element for the duration of the button press, which suppresses boundary events
+on sibling elements — so while dragging a file row with the mouse held, the
+hovered folder's `pointerenter` never fired, `dropTargetPath` stayed `null`, and
+`finishDrop` returned a silent no-op. The file→pane path worked because it
+hit-tests pane elements by coordinates in `handlePointerMove`; the folder path
+lacked an equivalent.
+
+- `projectTreeDrag.ts` gains an optional `getDropTargetElements()` dep and a
+  `hitTestDropTargetElements` helper. During a drag, `handlePointerMove`
+  hit-tests the pointer coordinates against the rendered directory-row rects
+  (reading the folder path from each element's `data-path`) and updates
+  `dropTargetPath` accordingly. This mirrors the pane hit-test path and works
+  regardless of implicit pointer capture. The existing `setDropTarget`/
+  `finishDrop` logic is unchanged; the element boundary handlers remain as a
+  harmless fallback (idempotent with the coordinate path).
+- `ProjectTreeView.svelte` wires `getDropTargetElements` to the live
+  `[data-tree-kind="directory"]` elements inside the list.
+- New `projectTreeDrag` regression tests cover acquiring a folder target by
+  coordinates (move on drop) and the no-acquisition case when the pointer is
+  outside every directory row.
+
 ## 2026-08-05 08:00 MSK — Performance-review follow-up fixes (P03-08-05/06/08/09/10/26/T1)
 
 Code review of the `performance-review-03-08.md` fixes surfaced several

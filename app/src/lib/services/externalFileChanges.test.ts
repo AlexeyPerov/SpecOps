@@ -417,6 +417,37 @@ describe("scheduleTabExternalCheck", () => {
 
     expect(statMock).toHaveBeenCalledTimes(1);
   });
+
+  it("does not flag a background-workspace document as missing on the focus scan", async () => {
+    // File lives in ws-a; adding ws-b makes ws-a a background context.
+    const wsAId = appState.addWorkspace("/tmp/ws-a")!;
+    appState.openFileInTab("/tmp/ws-a/notes.md", "notes");
+    const documentId = appState.findDocumentIdByPath("/tmp/ws-a/notes.md")!;
+    appState.setDocumentDiskState(documentId, { diskFingerprint: fp1, fileMissing: false });
+    appState.addWorkspace("/tmp/ws-b");
+    expect(appState.getSnapshot().contexts.activeContextId).not.toBe(wsAId);
+
+    statMock.mockResolvedValue(fp2);
+
+    // Direct focus check on the background doc is skipped without statting.
+    await expect(checkDocumentExternalChanges(documentId, "focus")).resolves.toBe("skipped");
+    expect(statMock).not.toHaveBeenCalled();
+
+    // The full focus scan (which iterates all contexts) also leaves it untouched.
+    await runFocusExternalChecks();
+    expect(statMock).not.toHaveBeenCalled();
+
+    const wsADoc = appState.getSnapshot().contexts.workspaces
+      .find((ws) => ws.id === wsAId)!
+      .snapshot.documents.find((doc) => doc.id === documentId)!;
+    expect(wsADoc.fileMissing).toBe(false);
+
+    // A targeted watcher check on the same background doc still runs.
+    statMock.mockClear();
+    statMock.mockResolvedValue(fp1);
+    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("unchanged");
+    expect(statMock).toHaveBeenCalled();
+  });
 });
 
 describe("reloadActiveDocumentFromDisk", () => {

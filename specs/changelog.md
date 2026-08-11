@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-08-11 21:45 MSK — Persist project-tree expansion; fix workspace-switch missing-file flag and markdown widgets on missing tabs
+
+Three related project-pane and workspace-switch fixes.
+
+### Persist expanded folders per workspace
+
+Expanded project-tree folders were purely in-memory: the controller's
+`expandedPaths` survived in-session switches via an LRU cache but was lost on
+restart, so every launch reopened the tree fully collapsed. Expansion is
+inherently per-project, so it now rides along in the existing per-workspace
+`WorkspaceLayoutState` (which already persists panel width/collapse).
+
+- `WorkspaceLayoutState` gains `expandedProjectTreePaths: string[]`, defaulted
+  and normalized in `panelLayout.ts` (filters non-strings, dedupes). The session
+  snapshot is JSON, so the field round-trips automatically; the incremental
+  persistence fingerprint includes it so a toggle triggers a snapshot write.
+- The project-tree controller reports expansion changes via a new
+  `onExpandedPathsChange` dep. `+page.svelte` wires it to
+  `updateActiveWorkspaceLayout`, and the first publish after a root switch
+  establishes a baseline without firing (so a cold load's empty pre-restore set
+  cannot clobber persisted expansion).
+- A new `restoreExpandedPaths` controller method re-applies the persisted set
+  after a cold root load (idempotent — a no-op on re-entry where the in-memory
+  cache already holds the expansion; stale/deleted persisted folders reject and
+  are swallowed). `appShellProjectTreeHandlers.loadProjectTreeRoot` calls it
+  after the load resolves.
+
+### Don't flag the previous workspace's file as missing after a switch
+
+After switching workspaces, the previously-open file could show a "missing
+file" indicator. The window-focus external-change scan iterates every context,
+so a file belonging to a now-background (hidden, keep-alive) workspace got
+stat'd and could be spuriously flagged `fileMissing`. The targeted
+watcher/startup/manual checks are unaffected (they are intended to cover
+background files and have tests asserting that).
+
+- `checkDocumentExternalChangesInner` now skips a document whose owning context
+  is not the active one for the `focus` trigger only. The file is re-checked
+  when its workspace becomes active again.
+
+### Hide markdown edit/preview/split widgets on a missing tab
+
+`setDocumentDiskStateForContext` sets `fileMissing` without clearing content,
+so a flagged-missing `.md` document still had `content.length > 0` and the
+markdown mode bar stayed visible. `EditorPaneContent.svelte` now also gates
+`markdownEnabled` on `!entry.document.fileMissing`, so a missing tab (e.g. a
+genuinely deleted file kept open for its unsaved edits) hides the widgets like
+an empty tab.
+
 ## 2026-08-11 18:28 MSK — Show hidden files/folders in the project tree by default
 
 Hidden entries — dotfiles like `.gitignore` and dotdirs like `.zcode` — were

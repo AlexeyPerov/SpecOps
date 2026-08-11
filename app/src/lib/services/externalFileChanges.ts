@@ -604,7 +604,8 @@ export async function runWatcherExternalCheck(normalizedOrRawPath: string): Prom
   const normalized = normalizePathSync(normalizedOrRawPath);
   // Resolve the owning context for the watched path so a background-workspace
   // document is reloaded/marked even when its workspace is not the active
-  // context. The check itself applies disk state via the context-aware API.
+  // context. (Only the blind focus scan skips background docs — see
+  // checkDocumentExternalChangesInner.)
   const match = findDocumentByNormalizedPathAllContexts(snapshot, normalized);
   if (match) {
     await checkDocumentExternalChanges(match.documentId, "watcher");

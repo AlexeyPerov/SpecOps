@@ -179,6 +179,12 @@
     {
       probeWorkspaceReadAccessFn: probeWorkspaceReadAccess,
       loadDirectoryChildrenFn: cachedWorkspaceTraversal.loadDirectoryChildren,
+      // Persist the expanded-folder set of the loaded (active) workspace into
+      // its per-workspace layout so the tree reopens to the same state across
+      // sessions. Expansion only changes on the active/loaded root.
+      onExpandedPathsChange: (_workspaceRoot, paths) => {
+        appState.updateActiveWorkspaceLayout({ expandedProjectTreePaths: paths });
+      },
     },
   );
   const workspaceFileCatalogRegistry: WorkspaceFileCatalogRegistry =

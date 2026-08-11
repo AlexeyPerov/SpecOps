@@ -309,6 +309,17 @@ async function checkDocumentExternalChangesInner(
   const { contextId } = owner;
   let documentState = owner.document;
 
+  // The window-focus scan iterates every context. A document belonging to a
+  // non-active (background) workspace is hidden (editor keep-alive parks it
+  // with display:none), and statting it from that blind scan can spuriously
+  // flag it missing right after a workspace switch. Skip background docs for
+  // the focus trigger — the file is re-checked when its workspace becomes
+  // active again, and targeted watcher/startup/manual checks still run for any
+  // context (see runFocusExternalChecks / runWatcherExternalCheck).
+  if (trigger === "focus" && contextId !== snapshot.contexts.activeContextId) {
+    return "skipped";
+  }
+
   if (documentState.contentKind !== "text") {
     return "skipped";
   }

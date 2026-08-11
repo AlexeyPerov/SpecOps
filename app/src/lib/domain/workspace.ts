@@ -14,6 +14,11 @@ export interface WorkspaceLayoutState {
   sessionsSidebarWidthPx: number;
   projectPanelCollapsed: boolean;
   sessionsSidebarCollapsed: boolean;
+  /**
+   * Expanded project-tree folder paths persisted per workspace so the tree
+   * reopens to the same state across sessions. Absolute, normalized paths.
+   */
+  expandedProjectTreePaths: string[];
 }
 
 /**

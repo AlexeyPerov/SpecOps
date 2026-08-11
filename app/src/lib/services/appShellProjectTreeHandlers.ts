@@ -52,6 +52,12 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
         void chatStore.runAccessPreflight();
       },
     });
+    // Re-apply persisted expanded folders after a cold load. A no-op when the
+    // in-memory cache already holds this workspace's expansion (re-entry).
+    if (workspaceRoot) {
+      const persisted = appState.getActiveWorkspaceLayout().expandedProjectTreePaths ?? [];
+      await deps.projectTreeController.restoreExpandedPaths(workspaceRoot, persisted);
+    }
     void logPerfTiming("project tree root load complete", {
       metric: "projectTree.rootLoad",
       durationMs: elapsedMs(startedAt),

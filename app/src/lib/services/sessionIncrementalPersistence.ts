@@ -195,8 +195,15 @@ function navigationFingerprint(snapshot: WindowSessionSnapshot): string {
     }
     if (context.session.layout) {
       const l = context.session.layout;
+      // Include the expanded project-tree paths so a folder toggle triggers a
+      // snapshot write. Sorted/deduped for determinism; paths are joined with a
+      // separator that cannot appear inside a normalized path.
+      const expanded = [...new Set(l.expandedProjectTreePaths ?? [])]
+        .filter((path) => typeof path === "string")
+        .sort()
+        .join("\u0002");
       parts.push(
-        `lay=${l.projectPanelWidthPx}:${l.sessionsSidebarWidthPx}:${l.projectPanelCollapsed ? 1 : 0}:${l.sessionsSidebarCollapsed ? 1 : 0}`,
+        `lay=${l.projectPanelWidthPx}:${l.sessionsSidebarWidthPx}:${l.projectPanelCollapsed ? 1 : 0}:${l.sessionsSidebarCollapsed ? 1 : 0}:e=${expanded}`,
       );
     }
   };

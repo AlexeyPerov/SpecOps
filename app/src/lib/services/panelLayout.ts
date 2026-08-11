@@ -55,7 +55,27 @@ export function defaultWorkspaceLayout(): WorkspaceLayoutState {
     sessionsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
     projectPanelCollapsed: false,
     sessionsSidebarCollapsed: false,
+    expandedProjectTreePaths: [],
   };
+}
+
+/**
+ * Coerce a persisted/foreign `expandedProjectTreePaths` value into a clean
+ * deduped `string[]`. Non-strings are dropped; the result defaults to `[]`.
+ */
+function normalizeExpandedProjectTreePaths(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string" && entry.length > 0 && !seen.has(entry)) {
+      seen.add(entry);
+      result.push(entry);
+    }
+  }
+  return result;
 }
 
 export function normalizeWorkspaceLayout(
@@ -82,6 +102,9 @@ export function normalizeWorkspaceLayout(
       typeof layout.sessionsSidebarCollapsed === "boolean"
         ? layout.sessionsSidebarCollapsed
         : defaults.sessionsSidebarCollapsed,
+    expandedProjectTreePaths: normalizeExpandedProjectTreePaths(
+      layout.expandedProjectTreePaths,
+    ),
   };
 }
 

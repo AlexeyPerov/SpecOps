@@ -41,6 +41,7 @@ describe("panelLayout", () => {
       sessionsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
       projectPanelCollapsed: false,
       sessionsSidebarCollapsed: false,
+      expandedProjectTreePaths: [],
     });
   });
 
@@ -55,6 +56,28 @@ describe("panelLayout", () => {
       sessionsSidebarWidthPx: DEFAULT_PANEL_WIDTH_PX,
       projectPanelCollapsed: false,
       sessionsSidebarCollapsed: true,
+      expandedProjectTreePaths: [],
     });
+  });
+
+  it("defaults expandedProjectTreePaths to [] when absent", () => {
+    expect(normalizeWorkspaceLayout({}).expandedProjectTreePaths).toEqual([]);
+    expect(normalizeWorkspaceLayout(null).expandedProjectTreePaths).toEqual([]);
+  });
+
+  it("filters non-strings and dedupes expandedProjectTreePaths", () => {
+    expect(
+      normalizeWorkspaceLayout({
+        expandedProjectTreePaths: ["/a/b", "/a/b", "/c", 5 as unknown as string, "", "/c"],
+      }).expandedProjectTreePaths,
+    ).toEqual(["/a/b", "/c"]);
+  });
+
+  it("preserves expandedProjectTreePaths order (first occurrence)", () => {
+    expect(
+      normalizeWorkspaceLayout({
+        expandedProjectTreePaths: ["/c", "/a/b", "/d"],
+      }).expandedProjectTreePaths,
+    ).toEqual(["/c", "/a/b", "/d"]);
   });
 });

@@ -323,6 +323,7 @@ describe("computeResponsiveLayoutFlags", () => {
     sessionsSidebarWidthPx: 280,
     projectPanelCollapsed: false,
     sessionsSidebarCollapsed: false,
+    expandedProjectTreePaths: [],
   };
 
   it("does not auto-collapse when width is zero", () => {

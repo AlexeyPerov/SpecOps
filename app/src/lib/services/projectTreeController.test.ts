@@ -421,4 +421,139 @@ describe("createProjectTreeController", () => {
     expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(1);
     expect(controller.getState().showHidden).toBe(false);
   });
+
+  it("restoreExpandedPaths re-applies persisted folders and loads their children", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
+      if (dir === "/repo") {
+        return [makeNode("src", "/repo/src", "directory"), makeNode("docs", "/repo/docs", "directory")];
+      }
+      if (dir === "/repo/src") return [makeNode("main.ts", "/repo/src/main.ts", "file")];
+      if (dir === "/repo/docs") return [makeNode("readme.md", "/repo/docs/readme.md", "file")];
+      return [];
+    });
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+
+    await controller.restoreExpandedPaths("/repo", ["/repo/src", "/repo/docs"]);
+
+    const finalState = controller.getState();
+    expect([...finalState.expandedPaths].sort()).toEqual(["/repo/docs", "/repo/src"]);
+    expect(finalState.childrenByPath.get("/repo/src")?.map((n) => n.path)).toEqual([
+      "/repo/src/main.ts",
+    ]);
+    expect(finalState.childrenByPath.get("/repo/docs")?.map((n) => n.path)).toEqual([
+      "/repo/docs/readme.md",
+    ]);
+  });
+
+  it("restoreExpandedPaths is a no-op when folders are already expanded", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
+      if (dir === "/repo") return [makeNode("src", "/repo/src", "directory")];
+      if (dir === "/repo/src") return [makeNode("main.ts", "/repo/src/main.ts", "file")];
+      return [];
+    });
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+    await controller.handleToggleProjectTreeDirectory("/repo", "/repo/src");
+    loadDirectoryChildrenFn.mockClear();
+
+    await controller.restoreExpandedPaths("/repo", ["/repo/src"]);
+
+    expect(loadDirectoryChildrenFn).not.toHaveBeenCalled();
+    expect([...controller.getState().expandedPaths]).toEqual(["/repo/src"]);
+  });
+
+  it("restoreExpandedPaths ignores out-of-root, non-string, and empty entries", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
+      if (dir === "/repo") return [makeNode("src", "/repo/src", "directory")];
+      if (dir === "/repo/src") return [makeNode("main.ts", "/repo/src/main.ts", "file")];
+      return [];
+    });
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+
+    await controller.restoreExpandedPaths("/repo", [
+      "/repo/src",
+      "/outside/other",
+      5 as unknown as string,
+      "",
+    ]);
+
+    expect([...controller.getState().expandedPaths]).toEqual(["/repo/src"]);
+    expect(loadDirectoryChildrenFn).not.toHaveBeenCalledWith("/repo", "/outside/other");
+  });
+
+  it("restoreExpandedPaths does nothing before a root is loaded", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async () => []);
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+    await controller.restoreExpandedPaths("/repo", ["/repo/src"]);
+    expect(controller.getState().expandedPaths.size).toBe(0);
+  });
+
+  it("restoreExpandedPaths swallows a rejected child load for a stale persisted path", async () => {
+    const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
+      if (dir === "/repo") return [makeNode("src", "/repo/src", "directory")];
+      if (dir === "/repo/src") return [makeNode("main.ts", "/repo/src/main.ts", "file")];
+      throw new Error("ENOENT");
+    });
+    const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+
+    // /repo/gone no longer resolves; restore must not throw.
+    await expect(
+      controller.restoreExpandedPaths("/repo", ["/repo/src", "/repo/gone"]),
+    ).resolves.toBeUndefined();
+
+    const finalState = controller.getState();
+    // The good path loaded; the stale one stays expanded-but-empty.
+    expect(finalState.childrenByPath.get("/repo/src")?.map((n) => n.path)).toEqual([
+      "/repo/src/main.ts",
+    ]);
+    expect(finalState.expandedPaths.has("/repo/gone")).toBe(true);
+    expect(finalState.expandedPaths.has("/repo/src")).toBe(true);
+  });
+
+  it("fires onExpandedPathsChange when a folder is toggled for the loaded workspace", async () => {
+    const reported: { root: string; paths: string[] }[] = [];
+    const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
+      if (dir === "/repo") return [makeNode("src", "/repo/src", "directory")];
+      if (dir === "/repo/src") return [makeNode("main.ts", "/repo/src/main.ts", "file")];
+      return [];
+    });
+    const controller = createProjectTreeController(() => {}, {
+      loadDirectoryChildrenFn,
+      onExpandedPathsChange: (root, paths) =>
+        reported.push({ root, paths: [...paths].sort() }),
+    });
+
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+    // The post-load publish establishes a baseline without firing (empty set).
+    expect(reported).toEqual([]);
+
+    await controller.handleToggleProjectTreeDirectory("/repo", "/repo/src");
+
+    expect(reported).toEqual([{ root: "/repo", paths: ["/repo/src"] }]);
+  });
+
+  it("does not fire onExpandedPathsChange for restore (it re-applies persisted paths)", async () => {
+    const reported: { root: string; paths: string[] }[] = [];
+    const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
+      if (dir === "/repo") return [makeNode("src", "/repo/src", "directory")];
+      if (dir === "/repo/src") return [makeNode("main.ts", "/repo/src/main.ts", "file")];
+      return [];
+    });
+    const controller = createProjectTreeController(() => {}, {
+      loadDirectoryChildrenFn,
+      onExpandedPathsChange: (root, paths) =>
+        reported.push({ root, paths: [...paths].sort() }),
+    });
+
+    await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+    await controller.restoreExpandedPaths("/repo", ["/repo/src"]);
+
+    expect(reported).toEqual([]);
+    // A subsequent genuine toggle still fires.
+    await controller.handleToggleProjectTreeDirectory("/repo", "/repo/src"); // collapse
+    expect(reported).toEqual([{ root: "/repo", paths: [] }]);
+  });
 });

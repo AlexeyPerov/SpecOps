@@ -16,6 +16,13 @@ export interface ProjectTreeControllerDeps {
   ) => Promise<"ready" | "blocked" | "unknown">;
   /** Maximum workspace tree snapshots retained in memory. Default: 6. */
   maxCachedRoots?: number;
+  /**
+   * Fired (debounced by publish coalescing) when the expanded-folder set of the
+   * currently loaded workspace root changes, so callers can persist it per
+   * workspace. Only invoked when a root is loaded and the sorted expansion
+   * signature actually differs from the last report.
+   */
+  onExpandedPathsChange?: (workspaceRoot: string, paths: string[]) => void;
 }
 
 export interface LoadProjectTreeRootOptions {
@@ -168,6 +175,10 @@ export function createProjectTreeController(
     workspaceRoot: string | null,
     activePath: string | null,
   ) => Promise<void>;
+  restoreExpandedPaths: (
+    workspaceRoot: string | null,
+    paths: readonly string[],
+  ) => Promise<void>;
   handleFilesystemChange: (workspaceRoot: string | null, changedPath: string) => void;
   reloadDirectories: (workspaceRoot: string | null, directoryPaths: string[]) => Promise<void>;
   clearFilesystemChangeDebounce: () => void;
@@ -175,6 +186,7 @@ export function createProjectTreeController(
 } {
   const loadChildren = deps.loadDirectoryChildrenFn ?? loadDirectoryChildren;
   const probeAccess = deps.probeWorkspaceReadAccessFn;
+  const onExpandedPathsChange = deps.onExpandedPathsChange;
   let state = createInitialState();
   let lastLoadedWorkspaceRoot: string | null = null;
   /** Bumped on every root load/reset so slower in-flight loads cannot overwrite a newer workspace. */
@@ -182,6 +194,21 @@ export function createProjectTreeController(
   let filesystemChangeTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingFilesystemDirs = new Set<string>();
   const maxCachedRoots = Math.max(1, deps.maxCachedRoots ?? 6);
+  /**
+   * Last reported sorted signature of `state.expandedPaths` for the loaded
+   * workspace. Reset to `null` whenever the loaded root changes so each
+   * workspace reports its own expansion once on first publish.
+   */
+  let lastExpandedSignature: string | null = null;
+  /**
+   * Set when the loaded workspace root changes. The next publish that actually
+   * has root nodes establishes the baseline expansion signature WITHOUT firing
+   * the persistence callback — a fresh load's in-memory expansion is empty
+   * until {@link restoreExpandedPaths} re-applies the persisted set, and firing
+   * `[]` here would clobber the workspace's persisted expansion before the
+   * restore reads it.
+   */
+  let suppressNextExpandedPathsPublish = false;
   type CachedTree = {
     state: ProjectTreeControllerState;
     staleDirectories: Set<string>;
@@ -223,6 +250,33 @@ export function createProjectTreeController(
     // reference avoids a full clone of the tree state on every publish (the
     // cache clone above already preserves a frozen copy for re-entry).
     onStateChange(state);
+    notifyExpandedPathsChange();
+  };
+
+  /**
+   * Reports the loaded workspace's expanded-folder set to the persistence
+   * callback when it changes. Gated on a root being loaded and on the sorted
+   * signature differing from the last report, so the frequent publishes from
+   * child loads / refreshes do not spam the caller.
+   */
+  const notifyExpandedPathsChange = (): void => {
+    if (!onExpandedPathsChange || !lastLoadedWorkspaceRoot || state.rootNodes.length === 0) {
+      return;
+    }
+    const signature = [...state.expandedPaths].sort().join("\u0002");
+    if (suppressNextExpandedPathsPublish) {
+      // First publish after a root switch: adopt the current expansion as the
+      // baseline without firing, so a cold load does not clobber persisted
+      // expansion with the pre-restore empty set.
+      suppressNextExpandedPathsPublish = false;
+      lastExpandedSignature = signature;
+      return;
+    }
+    if (signature === lastExpandedSignature) {
+      return;
+    }
+    lastExpandedSignature = signature;
+    onExpandedPathsChange(lastLoadedWorkspaceRoot, [...state.expandedPaths]);
   };
 
   const reset = (): void => {
@@ -230,6 +284,8 @@ export function createProjectTreeController(
     rootLoadGeneration += 1;
     state = createInitialState(state.showHidden);
     lastLoadedWorkspaceRoot = null;
+    lastExpandedSignature = null;
+    suppressNextExpandedPathsPublish = false;
     publish();
   };
 
@@ -314,6 +370,12 @@ export function createProjectTreeController(
     }
 
     cacheActiveState();
+    // We are loading a different root (or force-reloading): reset so the new
+    // root's first publish reports its own expansion to the change callback
+    // instead of suppressing it as "unchanged". The suppress flag ensures that
+    // first publish adopts the baseline without firing (see notifyExpandedPathsChange).
+    lastExpandedSignature = null;
+    suppressNextExpandedPathsPublish = true;
     if (!force) {
       const cached = cachedTrees.get(normalizedWorkspaceRoot);
       if (cached) {
@@ -471,6 +533,61 @@ export function createProjectTreeController(
     );
   };
 
+  /**
+   * Re-apply a persisted set of expanded folder paths for the currently loaded
+   * workspace (cold-load restore from disk). Idempotent: paths already expanded
+   * are skipped, so re-entry to a workspace whose in-memory cache already holds
+   * the expansion is a no-op. Stale/deleted persisted folders reject and are
+   * swallowed (left expanded-but-empty, matching toggle behavior for a vanished
+   * directory) so one bad path cannot abort the rest of the restore.
+   */
+  const restoreExpandedPaths = async (
+    workspaceRoot: string | null,
+    paths: readonly string[],
+  ): Promise<void> => {
+    if (!workspaceRoot || paths.length === 0) {
+      return;
+    }
+    const normalizedRoot = normalizePathForComparison(workspaceRoot);
+    if (lastLoadedWorkspaceRoot !== normalizedRoot) {
+      return;
+    }
+    const toExpand = paths
+      .filter((path): path is string => typeof path === "string" && path.length > 0)
+      .filter((path) => isPathInsideRoot(path, workspaceRoot))
+      .filter((path) => !state.expandedPaths.has(path));
+    if (toExpand.length === 0) {
+      return;
+    }
+    const nextExpanded = new Set(state.expandedPaths);
+    for (const path of toExpand) {
+      nextExpanded.add(path);
+    }
+    const toLoad = toExpand.filter(
+      (path) => !state.childrenByPath.has(path) && !state.loadingPaths.has(path),
+    );
+    state = {
+      ...state,
+      expandedPaths: nextExpanded,
+    };
+    // Restoring re-applies paths that are already persisted, so its child-load
+    // publishes must not fire the persistence callback. Adopt the post-restore
+    // signature as the baseline; a subsequent genuine change (toggle / auto
+    // expand) will differ and fire normally.
+    lastExpandedSignature = [...nextExpanded].sort().join("\u0002");
+    if (toLoad.length === 0) {
+      publish();
+      return;
+    }
+    await Promise.all(
+      toLoad.map((path) =>
+        loadProjectTreeChildren(workspaceRoot, path).catch(() => {
+          /* persisted path no longer resolves; leave it expanded-but-empty */
+        }),
+      ),
+    );
+  };
+
   const reloadDirectories = async (
     workspaceRoot: string | null,
     directoryPaths: string[],
@@ -609,6 +726,7 @@ export function createProjectTreeController(
     handleToggleProjectTreeDirectory,
     refreshProjectTree,
     ensureExpandedForActiveFile,
+    restoreExpandedPaths,
     handleFilesystemChange,
     reloadDirectories,
     clearFilesystemChangeDebounce,

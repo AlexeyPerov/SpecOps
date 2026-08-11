@@ -25,7 +25,7 @@ export interface LoadProjectTreeRootOptions {
   force?: boolean;
 }
 
-function createInitialState(showHidden = false): ProjectTreeControllerState {
+function createInitialState(showHidden = true): ProjectTreeControllerState {
   return {
     rootNodes: [],
     childrenByPath: new Map<string, ProjectTreeNode[]>(),

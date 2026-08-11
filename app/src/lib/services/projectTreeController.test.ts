@@ -62,6 +62,13 @@ describe("directoriesToRefreshForChange", () => {
 });
 
 describe("createProjectTreeController", () => {
+  it("defaults showHidden to true so dotfiles are visible on first paint", () => {
+    const controller = createProjectTreeController(() => {}, {
+      loadDirectoryChildrenFn: vi.fn(async () => []),
+    });
+    expect(controller.getState().showHidden).toBe(true);
+  });
+
   it("publishes loading and loaded states once per child directory load", async () => {
     const snapshots: ProjectTreeControllerState[] = [];
     const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string, directoryPath: string) => {
@@ -405,12 +412,13 @@ describe("createProjectTreeController", () => {
     // Both workspaces are now cached.
     expect(controller.getCachedRootCount()).toBe(2);
 
-    controller.setShowHidden(true);
+    // Default is `true`; toggle to `false` to force a real change (and thus cache drop).
+    controller.setShowHidden(false);
     loadDirectoryChildrenFn.mockClear();
 
     // Re-entering A must reload (cache was invalidated by the toggle), not republish.
     await controller.loadProjectTreeRoot({ workspaceRoot: "/a", isSessionTabActive: false });
     expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(1);
-    expect(controller.getState().showHidden).toBe(true);
+    expect(controller.getState().showHidden).toBe(false);
   });
 });

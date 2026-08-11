@@ -118,6 +118,7 @@ describe("settings mapping", () => {
       fontSettings: { ...defaultFontSettings },
       soundSettings: { ...defaultSoundSettings },
       osNotificationSettings: { ...defaultOsNotificationSettings },
+      showHiddenFiles: false,
     });
 
     expect(toExternalFilesSettings(persisted)).toEqual({
@@ -130,6 +131,7 @@ describe("settings mapping", () => {
     });
     expect(persisted.autoClosePairs).toBe(true);
     expect(persisted.autoSuggest).toBe(false);
+    expect(persisted.showHiddenFiles).toBe(false);
   });
 });
 
@@ -152,6 +154,27 @@ describe("loadPersistedSettings", () => {
     );
 
     await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
+  });
+
+  it("defaults missing showHiddenFiles to true", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({
+        wrapLines: true,
+        zoomPercent: 100,
+      }),
+    );
+
+    const result = await loadPersistedSettings();
+    expect(result?.showHiddenFiles).toBe(true);
+  });
+
+  it("parses persisted showHiddenFiles false", async () => {
+    readTextFileMock.mockResolvedValue(
+      JSON.stringify({ ...defaultPersistedSettings, showHiddenFiles: false }),
+    );
+
+    const result = await loadPersistedSettings();
+    expect(result?.showHiddenFiles).toBe(false);
   });
 
   it("defaults missing provider settings", async () => {

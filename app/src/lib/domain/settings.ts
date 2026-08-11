@@ -289,6 +289,13 @@ export interface AppSettingsState {
   fontSettings: FontSettings;
   soundSettings: SoundSettings;
   osNotificationSettings: OsNotificationSettings;
+  /**
+   * Whether the project tree lists hidden files and folders (dotfiles like
+   * `.gitignore`, dotdirs like `.zcode`). Default true — these are common
+   * working files a developer expects to open. Heavy dirs (`.git`,
+   * `node_modules`, etc.) stay hidden regardless. Mirrored to settings.json.
+   */
+  showHiddenFiles: boolean;
   /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
   providerApiKeys: Partial<Record<string, string>>;
 }

@@ -260,6 +260,7 @@ export function settingsPersistenceFingerprint(state: AppDomainState): string {
     fontSettings: settings.fontSettings,
     soundSettings: settings.soundSettings,
     osNotificationSettings: settings.osNotificationSettings,
+    showHiddenFiles: settings.showHiddenFiles,
   });
 }
 

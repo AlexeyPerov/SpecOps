@@ -334,6 +334,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       fontSettings: snapshot.settings.fontSettings,
       soundSettings: snapshot.settings.soundSettings,
       osNotificationSettings: snapshot.settings.osNotificationSettings,
+      showHiddenFiles: snapshot.settings.showHiddenFiles,
     }),
   );
 }

@@ -201,6 +201,14 @@ describe("appState settings and editor chrome", () => {
     expect(appState.getSnapshot().settings.showFoldGutter).toBe(true);
   });
 
+  it("showHiddenFiles defaults to true and the setter / apply path update it", () => {
+    expect(appState.getSnapshot().settings.showHiddenFiles).toBe(true);
+    appState.setShowHiddenFiles(false);
+    expect(appState.getSnapshot().settings.showHiddenFiles).toBe(false);
+    appState.applyPersistedSettings({ showHiddenFiles: true });
+    expect(appState.getSnapshot().settings.showHiddenFiles).toBe(true);
+  });
+
   it("autoClosePairs defaults to true and the setter / apply path update it", () => {
     expect(appState.getSnapshot().settings.autoClosePairs).toBe(true);
     appState.setAutoClosePairs(false);

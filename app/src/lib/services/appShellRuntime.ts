@@ -382,6 +382,7 @@ async function startAppShellRuntimeInner(
         fontSettings: persistedSettings.fontSettings,
         soundSettings: persistedSettings.soundSettings,
         osNotificationSettings: persistedSettings.osNotificationSettings,
+        showHiddenFiles: persistedSettings.showHiddenFiles,
       });
       // Reflect persisted font scales on the DOM immediately so the first
       // paint uses the user's chosen sizes (applyPersistedSettings does not

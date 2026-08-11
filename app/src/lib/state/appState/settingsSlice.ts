@@ -112,6 +112,7 @@ export const defaultSettings: AppSettingsState = {
   fontSettings: { ...defaultFontSettings },
   soundSettings: { ...defaultSoundSettings },
   osNotificationSettings: { ...defaultOsNotificationSettings },
+  showHiddenFiles: true,
   providerApiKeys: {},
 };
 
@@ -228,6 +229,15 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
         },
       }));
     },
+    setShowHiddenFiles(showHiddenFiles: boolean) {
+      update((state) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          showHiddenFiles,
+        },
+      }));
+    },
     setCommandBindingOverrides(commandBindingOverrides: CommandBindingOverrides) {
       const normalized = normalizeCommandBindingOverrides(commandBindingOverrides);
       update((state) => ({
@@ -295,6 +305,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       fontSettings?: Partial<FontSettings>;
       soundSettings?: Partial<SoundSettings>;
       osNotificationSettings?: Partial<OsNotificationSettings>;
+      showHiddenFiles?: boolean;
     }) {
       update((state) => {
         let next = state;
@@ -543,6 +554,16 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
                 ...next.settings.osNotificationSettings,
                 ...partial.osNotificationSettings,
               }),
+            },
+          };
+        }
+
+        if (typeof partial.showHiddenFiles === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              showHiddenFiles: partial.showHiddenFiles,
             },
           };
         }

@@ -9,6 +9,7 @@ import {
   renameProjectEntry,
 } from "./projectFileOps";
 import { chatStore } from "../state/chatStore";
+import { appState } from "../state/appState";
 import {
   describeOpenActivePathResult,
   openActivePath,
@@ -260,6 +261,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
 
   async function toggleProjectTreeHidden(next: boolean): Promise<void> {
     deps.projectTreeController.setShowHidden(next);
+    appState.setShowHiddenFiles(next);
     await refreshProjectTree();
   }
 

@@ -91,6 +91,7 @@ export interface PersistedSettings {
   fontSettings: FontSettings;
   soundSettings: SoundSettings;
   osNotificationSettings: OsNotificationSettings;
+  showHiddenFiles: boolean;
 }
 
 const MARKDOWN_VIEW_MODES: readonly MarkdownViewMode[] = ["edit", "split", "preview"];
@@ -127,6 +128,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   fontSettings: { ...defaultFontSettings },
   soundSettings: { ...defaultSoundSettings },
   osNotificationSettings: { ...defaultOsNotificationSettings },
+  showHiddenFiles: true,
 };
 
 const FILE_NAME = "settings.json";
@@ -243,6 +245,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         osNotificationSettings: normalizeOsNotificationSettings(
           parsed.osNotificationSettings,
         ),
+        showHiddenFiles: isBoolean(parsed.showHiddenFiles)
+          ? parsed.showHiddenFiles
+          : defaultPersistedSettings.showHiddenFiles,
       };
     }
     return null;
@@ -310,6 +315,7 @@ export function toPersistedSettings(input: {
   fontSettings: FontSettings;
   soundSettings: SoundSettings;
   osNotificationSettings: OsNotificationSettings;
+  showHiddenFiles: boolean;
 }): PersistedSettings {
   const providerModelCatalogs = normalizeProviderModelCatalogs(input.providerModelCatalogs);
   return {
@@ -349,5 +355,8 @@ export function toPersistedSettings(input: {
     fontSettings: normalizeFontSettings(input.fontSettings),
     soundSettings: normalizeSoundSettings(input.soundSettings),
     osNotificationSettings: normalizeOsNotificationSettings(input.osNotificationSettings),
+    showHiddenFiles: isBoolean(input.showHiddenFiles)
+      ? input.showHiddenFiles
+      : defaultPersistedSettings.showHiddenFiles,
   };
 }

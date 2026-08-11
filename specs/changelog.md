@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-08-11 18:28 MSK — Show hidden files/folders in the project tree by default
+
+Hidden entries — dotfiles like `.gitignore` and dotdirs like `.zcode` — were
+filtered out of the project tree by default and only appeared when the
+panel-header "Hidden: On/Off" toggle was enabled (which itself reset to Off on
+every launch). As a result you could neither open `.gitignore` nor expand
+`.zcode` from the project pane: the rows simply were not there. The open and
+expand handlers had no dotfile guard of their own, so this was purely a
+visibility default plus a missing persistence hook.
+
+- The project-tree controller now defaults to `showHidden: true`
+  (`createInitialState`), mirrored in the initial `$state` in `+page.svelte` so
+  the first paint already includes dotfiles. The existing filter still hides
+  heavy directories (`.git`, `node_modules`, `target`, …) regardless of the
+  toggle, so only ordinary dotfiles/dotdirs become visible.
+- The toggle is now persisted. A new `showHiddenFiles` boolean joins
+  `AppSettingsState` / `PersistedSettings` and round-trips through
+  `settings.json` (load, save, and the persistence fingerprint), with a
+  `setShowHiddenFiles` setter on the settings slice. Flipping the panel toggle
+  calls the setter, and an `$effect` in `+page.svelte` seeds the controller from
+  the persisted value on startup and re-applies it if the setting changes
+  elsewhere (idempotent — `setShowHidden` is a no-op when unchanged).
+
 ## 2026-08-10 22:45 MSK — Hide markdown mode controls on empty tabs
 
 The `edit / split / preview` toolbar that belongs to markdown documents was

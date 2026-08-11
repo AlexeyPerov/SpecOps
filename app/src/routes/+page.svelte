@@ -166,7 +166,7 @@
     childrenByPath: new Map(),
     expandedPaths: new Set(),
     loadingPaths: new Set(),
-    showHidden: false,
+    showHidden: true,
   });
   const workspaceDirectoryCache = createWorkspaceDirectoryCache();
   const cachedWorkspaceTraversal = createCachedWorkspaceTraversal({
@@ -458,6 +458,24 @@
   const isSettingsViewActive = $derived(activeViewTabKind === "settings");
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
   const isViewTabActive = $derived(activeViewTabKind !== null);
+
+  // Seed and keep the project-tree `showHidden` flag in sync with the persisted
+  // `showHiddenFiles` setting. On startup this applies the user's choice; later
+  // changes (e.g. another window toggling it) propagate here too. Idempotent —
+  // `setShowHidden` is a no-op when the value is unchanged, and we skip the
+  // tree refresh when the controller already matches.
+  $effect(() => {
+    const desired = $appSettings.showHiddenFiles;
+    const current = untrack(() => projectTreeController.getState().showHidden);
+    if (current === desired) {
+      return;
+    }
+    projectTreeController.setShowHidden(desired);
+    void projectTreeController.refreshProjectTree(
+      appState.getWorkspaceRoot(activeContextId),
+      isSessionTabActive,
+    );
+  });
   // Notepad rail card data — reads the notepad context directly so it is
   // available regardless of which context is currently active. Most recently
   // opened file tab in append order (newest-opened last). Kept to a single

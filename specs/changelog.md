@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-08-12 02:20 MSK — Phase B: runtime-neutral session domain and persistence
+
+- Added `app/src/lib/session/`, the runtime-neutral session domain that Phase C
+  adapters produce/consume, Phase D/E hosts transport, and Phase F integrates.
+  No vendor SDK types appear in any public payload.
+- **Ids + binding + lifecycle (B-01):** branded `SpecOpsSessionId` /
+  `SpecOpsTurnId` / `NativeSessionId` (unique-symbol brands make SpecOps vs
+  native ids un-confusable at the API surface); `AgentRuntimeId`
+  (`claude|codex|opencode|cursor`); `AgentNativeBinding` + `AgentSessionRef`
+  with model/mode metadata and lifecycle statuses. Runtime binding is
+  immutable — `rebindRuntime` returns a new session id rather than mutating.
+- **Normalized turns + events (B-02):** `SessionEvent` union
+  (text/reasoning/tool/subtask/step/attachment/diff/usage/compaction/
+  permission/question/status/turn/diagnostic) + `SessionTranscript` and the
+  pure `applySessionEvent` reducer (deterministic replay). Unknown native
+  events are preserved as redacted `diagnostic` events; secret redaction
+  (bearer/API-key stripping + size bounding) runs before persistence.
+- **Persistence schema + codecs (B-03):** versioned `SessionRecord` and
+  per-workspace `SessionStoreIndex` around the native binding — no
+  provider-prefixed fields. Canonical (key-sorted, redacted) JSON encode;
+  decoders fail explicitly on corrupt input (no silent partial decode).
+- **Tests (B-04):** 37 domain/codec tests covering every union variant,
+  immutable binding, unknown→diagnostic, malformed data, and restart
+  round-trips.
+- Implementation notes: `specs/ops/01-foundation-agent-host/implementation-notes-phase-b.md`.
+- Out of scope (later phases): rewiring the live OpenCode workspace-session
+  store/UI onto the new domain (Phase F), host transport (D/E), real adapters
+  (C / 02–05). No persisted data is migrated (the new schema is additive).
+
 ## 2026-08-11 23:50 MSK — Phase A: remove standalone Chat and dormant Cloud surfaces
 
 **Breaking reset of AI state** (pre-release; no migration per repository policy):

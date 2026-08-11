@@ -1,7 +1,7 @@
 # 01 — Phase B: runtime-neutral session domain and persistence
 
-**Date:** 2026-08-11  
-**Status:** Planned  
+**Date:** 2026-08-12  
+**Status:** Done  
 **Prerequisite:** Phase A Done  
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
@@ -14,7 +14,7 @@ Do not implement host transport or a real runtime adapter.
 
 ## Tasks
 
-### AS01-B-01 — Define ids, binding and lifecycle
+### AS01-B-01 [DONE] — Define ids, binding and lifecycle
 
 Introduce runtime id, SpecOps session/turn ids, native binding, model/mode
 metadata, terminal states, timestamps, and immutable runtime rules.
@@ -22,7 +22,7 @@ metadata, terminal states, timestamps, and immutable runtime rules.
 **Acceptance:** SpecOps and native ids cannot be confused by type/API shape;
 runtime changes require creation of a new session.
 
-### AS01-B-02 — Define normalized turns and events
+### AS01-B-02 [DONE] — Define normalized turns and events
 
 Model text, reasoning, tools, subtasks, steps, attachments, diffs, usage/cost,
 compaction, questions, permissions, status, diagnostic, and unknown events.
@@ -30,7 +30,7 @@ compaction, questions, permissions, status, diagnostic, and unknown events.
 **Acceptance:** Common UI payloads contain no vendor SDK types; unknown native
 events remain representable as diagnostics.
 
-### AS01-B-03 — Replace persistence schema
+### AS01-B-03 [DONE] — Replace persistence schema
 
 Add new codecs and session-store records around the native binding and cached
 transcript. Delete legacy AI compatibility and provider-specific persisted fields.
@@ -38,7 +38,7 @@ transcript. Delete legacy AI compatibility and provider-specific persisted field
 **Acceptance:** Fresh state round-trips deterministically; corrupt records fail
 or reset explicitly without a silent partial decode.
 
-### AS01-B-04 — Domain and codec tests
+### AS01-B-04 [DONE] — Domain and codec tests
 
 Cover every union variant, immutable binding, unknown events, malformed data,
 and restart round-trips with fixed fixtures.

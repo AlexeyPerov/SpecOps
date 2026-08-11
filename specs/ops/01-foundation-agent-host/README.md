@@ -30,7 +30,7 @@ without any provider-specific type or process leaking into common frontend code.
 | ID | Item | Current state |
 | --- | ---- | ------------- |
 | AS01-A | Remove Chat and dormant Cloud product/state | Done (Phase A) |
-| AS01-B | Runtime-neutral domain and persistence | Provider-shaped |
+| AS01-B | Runtime-neutral domain and persistence | Done (Phase B) |
 | AS01-C | Adapter core, extensions, capabilities, fake runtime | Missing |
 | AS01-D | Bundled Agent Host and versioned protocol | Missing |
 | AS01-E | Tauri host/process supervision | Provider-specific |

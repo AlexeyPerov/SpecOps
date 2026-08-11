@@ -1,5 +1,4 @@
 import type { ChatThreadMetadata, ChatThreadSnapshot } from "../../domain/contracts";
-import { normalizeThreadSnapshotForScope } from "../../ai/providers/threadScopeNormalization";
 import { draftEntryTitleForScope } from "../../services/chatSessions";
 import { createThreadMetadata, cloneThread, applyMetadataPatch } from "./threadHelpers";
 import type { ChatStoreState } from "./types";
@@ -8,41 +7,9 @@ import { getOrCreateWorkspaceState, patchWorkspaceState, threadForSession } from
 
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
-function normalizeThreadForScope(
-  thread: ChatThreadSnapshot | null,
-  scopeKey: string,
-): ChatThreadSnapshot | null {
-  return normalizeThreadSnapshotForScope(thread, scopeKey);
-}
-
-function normalizeMetadataPatchForScope(
-  patch: Partial<
-    Pick<
-      ChatThreadMetadata,
-      | "mode"
-      | "provider"
-      | "summary"
-      | "selectedModelId"
-      | "connectionId"
-      | "opencodeAgentId"
-      | "opencodeProviderId"
-    >
-  >,
-  _scopeKey: string,
-): Partial<
-  Pick<
-    ChatThreadMetadata,
-    | "mode"
-    | "provider"
-    | "summary"
-    | "selectedModelId"
-    | "connectionId"
-    | "opencodeAgentId"
-    | "opencodeProviderId"
-  >
-> {
-  return patch;
-}
+type ThreadMetadataPatch = Partial<
+  Pick<ChatThreadMetadata, "summary" | "selectedModelId" | "opencodeAgentId" | "opencodeProviderId">
+>;
 
 export function createThreadMetadataSlice(deps: {
   update: ChatStoreUpdate;
@@ -63,7 +30,7 @@ export function createThreadMetadataSlice(deps: {
           ...workspace,
           threadsBySessionId: {
             ...workspace.threadsBySessionId,
-            [sessionId]: normalizeThreadForScope(cloneThread(thread), root),
+            [sessionId]: cloneThread(thread),
           },
         });
       });
@@ -95,7 +62,7 @@ export function createThreadMetadataSlice(deps: {
               sessionIndex: nextIndex,
               threadsBySessionId: {
                 ...workspace.threadsBySessionId,
-                [sessionId]: normalizeThreadForScope(cloneThread(thread), normalizedRootPath),
+                [sessionId]: cloneThread(thread),
               },
             },
           },
@@ -103,18 +70,7 @@ export function createThreadMetadataSlice(deps: {
       });
     },
     updateThreadMetadata(
-      patch: Partial<
-        Pick<
-          ChatThreadMetadata,
-          | "mode"
-          | "provider"
-          | "summary"
-          | "selectedModelId"
-          | "connectionId"
-          | "opencodeAgentId"
-          | "opencodeProviderId"
-        >
-      >,
+      patch: ThreadMetadataPatch,
       updatedAt: string = new Date().toISOString(),
       sessionId?: string,
     ): boolean {
@@ -153,8 +109,8 @@ export function createThreadMetadataSlice(deps: {
               ...workspace.threadsBySessionId,
               [targetSessionId]: {
                 metadata: applyMetadataPatch(
-                  createThreadMetadata(targetSessionId, updatedAt, root),
-                  normalizeMetadataPatchForScope(patch, root),
+                  createThreadMetadata(targetSessionId, updatedAt),
+                  patch,
                   updatedAt,
                 ),
                 messages: [],
@@ -172,7 +128,7 @@ export function createThreadMetadataSlice(deps: {
               ...thread,
               metadata: applyMetadataPatch(
                 thread.metadata,
-                normalizeMetadataPatchForScope(patch, root),
+                patch,
                 updatedAt,
               ),
             },

@@ -3,10 +3,9 @@ import { extractSessionTotals } from "../ai/chatSteps";
 import { formatCost } from "../ai/chatTokenFormat";
 
 export const DRAFT_SESSION_TITLE = "New session";
-export const DRAFT_CHAT_TITLE = "New chat";
 
-export function draftEntryTitleForScope(scopeKey: string | null | undefined): string {
-  return scopeKey === "chat-http" ? DRAFT_CHAT_TITLE : DRAFT_SESSION_TITLE;
+export function draftEntryTitleForScope(_scopeKey: string | null | undefined): string {
+  return DRAFT_SESSION_TITLE;
 }
 export const SESSION_TITLE_MAX_LENGTH = 64;
 export const SIDEBAR_LIST_TEXT_MAX_LENGTH = 32;

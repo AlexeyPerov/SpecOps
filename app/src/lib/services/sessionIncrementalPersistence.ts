@@ -97,10 +97,6 @@ async function bufferPath(
 function contextEntries(snapshot: WindowSessionSnapshot): ContextEntry[] {
   return [
     { contextId: "notepad", snapshot: snapshot.notepad },
-    { contextId: "chat-http", snapshot: snapshot.chatHttp ?? snapshot.notepad },
-    ...(snapshot.chatCloud
-      ? [{ contextId: "chat-cloud" as const, snapshot: snapshot.chatCloud }]
-      : []),
     ...snapshot.workspaces.map((workspace) => ({
       contextId: workspace.id,
       snapshot: workspace.snapshot,
@@ -130,10 +126,6 @@ function buildNavigationSnapshot(snapshot: WindowSessionSnapshot): WindowSession
   return {
     ...snapshot,
     notepad: stripContextDocuments(snapshot.notepad),
-    chatHttp: stripContextDocuments(snapshot.chatHttp ?? snapshot.notepad),
-    ...(snapshot.chatCloud
-      ? { chatCloud: stripContextDocuments(snapshot.chatCloud) }
-      : {}),
     workspaces: snapshot.workspaces.map((workspace) => ({
       ...workspace,
       snapshot: stripContextDocuments(workspace.snapshot),
@@ -208,12 +200,6 @@ function navigationFingerprint(snapshot: WindowSessionSnapshot): string {
     }
   };
   emitContext("notepad", snapshot.notepad);
-  if (snapshot.chatHttp) {
-    emitContext("chat-http", snapshot.chatHttp);
-  }
-  if (snapshot.chatCloud) {
-    emitContext("chat-cloud", snapshot.chatCloud);
-  }
   for (const workspace of snapshot.workspaces) {
     parts.push(`#ws=${workspace.id}@${workspace.rootPath}`);
     emitContext(workspace.id, workspace.snapshot);
@@ -507,20 +493,6 @@ export async function readIncrementalWindowSession(
     snapshot.notepad,
     fallback.get("notepad"),
   );
-  const chatHttp = await hydrateContextBuffers(
-    windowId,
-    "chat-http",
-    snapshot.chatHttp ?? snapshot.notepad,
-    fallback.get("chat-http"),
-  );
-  const chatCloud = snapshot.chatCloud
-    ? await hydrateContextBuffers(
-        windowId,
-        "chat-cloud",
-        snapshot.chatCloud,
-        fallback.get("chat-cloud"),
-      )
-    : undefined;
   const workspaces = await Promise.all(
     snapshot.workspaces.map(async (workspace) => ({
       ...workspace,
@@ -535,8 +507,6 @@ export async function readIncrementalWindowSession(
   return {
     ...snapshot,
     notepad,
-    chatHttp,
-    ...(chatCloud ? { chatCloud } : {}),
     workspaces,
   };
 }

@@ -22,7 +22,7 @@ import {
 import { removeTabFromPane } from "../../domain/editorLayout";
 import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
 import { createImplicitDraftPair } from "../../services/implicitDraftTab";
-import { isChatHttpContext, nextDocAndTabIds, nextTabId, patchActiveContext, patchContextById } from "./contextHelpers";
+import { nextDocAndTabIds, nextTabId, patchActiveContext, patchContextById } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 import { closeTabInPaneForceOnContext } from "./closeTabInPane";
 import { selectTabAcrossPanes } from "./closeTabInPane";
@@ -103,8 +103,10 @@ export function missingTabIdsToClose(
     .map((tab) => tab.id);
 }
 
-export function canCreateFileTabsInContext(contextId: ContextId): boolean {
-  return !isChatHttpContext(contextId);
+export function canCreateFileTabsInContext(_contextId: ContextId): boolean {
+  // File tabs can be created in every context now that the chat-only context
+  // has been removed.
+  return true;
 }
 
 export function canCreateFileTabs(state: AppDomainState): boolean {
@@ -299,10 +301,6 @@ export function closeAllSessionTabsInState(state: AppDomainState): AppDomainStat
   const notepadPatched = closeSessionTabsInContext(next.contexts.notepad);
   if (notepadPatched !== next.contexts.notepad) {
     next = { ...next, contexts: { ...next.contexts, notepad: notepadPatched } };
-  }
-  const chatHttpPatched = closeSessionTabsInContext(next.contexts.chatHttp);
-  if (chatHttpPatched !== next.contexts.chatHttp) {
-    next = { ...next, contexts: { ...next.contexts, chatHttp: chatHttpPatched } };
   }
   return next;
 }

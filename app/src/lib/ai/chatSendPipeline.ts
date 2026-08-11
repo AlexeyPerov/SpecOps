@@ -1,5 +1,4 @@
 import type { ChatMessage, ChatMessagePart, ToolCallRecord } from "../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
 import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
@@ -8,27 +7,10 @@ import {
   createWorkspaceAgentBackend,
   type WorkspaceAgentSendContext,
 } from "./backends/workspaceAgentBackend";
-import { buildThreadProviderRequest } from "./modes/prompt";
 import {
   formatRetryFailureNote,
-  PROVIDER_UNAVAILABLE_MESSAGE,
-  sanitizeUnexpectedProviderError,
   WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
 } from "./chatErrorCopy";
-import {
-  getDebugProviderSendBlockHint,
-  isDebugProviderSendBlocked,
-} from "./providers/debugProviderSettings";
-import {
-  getHttpProviderMissingConfigMessage,
-  isHttpProviderSendBlocked,
-  resolveHttpConnection,
-} from "./providers/httpConnectionSettings";
-import { validateLocalModelSelection } from "./providers/capabilityChecker";
-import { resolveComposerModelId } from "./providers/threadModelCatalog";
-import { getChatProvider } from "./providers/registry";
-import type { ChatProvider, ProviderSendRequest } from "./providers/types";
-import { isChatProviderError, streamProviderMessage } from "./chatSend";
 import {
   applyToolCompleted,
   applyToolProgress,
@@ -45,13 +27,6 @@ import {
 import { promptPermission } from "../services/permissionPrompt";
 import { promptQuestion } from "../services/questionPrompt";
 import type { WorkspacePermissionReply } from "./backends/workspaceAgentBackend";
-import type { WorkspaceAccessStatus } from "./capabilities";
-import {
-  logChatProviderPayload,
-  logChatSendComplete,
-  logChatSendFailed,
-  logChatSendStart,
-} from "./chatDiagnostics";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
 import { resolveOpencodeModelFallback } from "./opencodeCatalog";
 import { isOpencodeEnabled } from "../services/opencodeSettings";
@@ -66,9 +41,6 @@ export type SendChatMessageFailureReason =
   | "no_session"
   | "generating"
   | "preflight"
-  | "debug_disabled"
-  | "http_not_configured"
-  | "invalid_model"
   | "provider_unavailable"
   | "append_failed"
   | "provider_error";
@@ -84,23 +56,15 @@ export type SendChatMessageResult =
   | ChatTurnSuccessResult
   | { ok: false; reason: SendChatMessageFailureReason; message: string };
 
+type OpencodeBackendSendValidation = {
+  ok: true;
+  modelId: string;
+};
+
 type ProviderSendValidationFailure = {
   ok: false;
   reason: SendChatMessageFailureReason;
   message: string;
-};
-
-type ProviderSendValidationSuccess = {
-  ok: true;
-  provider: ChatProvider;
-  accessStatus: WorkspaceAccessStatus;
-  modelId: string;
-  connectionId?: string;
-};
-
-type OpencodeBackendSendValidation = {
-  ok: true;
-  modelId: string;
 };
 
 type ChatSendTargetFailure = {
@@ -112,16 +76,11 @@ type ChatSendTargetFailure = {
 type ChatSendTargetSuccess = {
   ok: true;
   root: string;
-  chatContextKind: ChatContextKind;
   activeSessionId: string;
 };
 
-export type ChatContextKind = "workspace" | "chat-http";
-
 export interface ChatSendContextOptions {
-  chatContextKind?: ChatContextKind;
-  /** Composer-assembled mentions / attachments (M3-T1..T3). Only forwarded
-   * for workspace-session sends; ignored by Chat-HTTP providers. */
+  /** Composer-assembled mentions / attachments (M3-T1..T3). */
   context?: WorkspaceAgentSendContext;
   /** Delivery mode for prompts sent while a turn is running (M3-T5). */
   queueMode?: ChatQueueMode;
@@ -259,99 +218,30 @@ function createRetryFailureNote(turnId: string, previousError: ChatTurnError): C
   };
 }
 
-function noChatScopeMessage(action: "send" | "retry"): string {
-  const contextId = appState.getSnapshot().contexts.activeContextId;
-  const isChatHttpContext = contextId === CHAT_HTTP_CONTEXT_ID;
-  if (action === "retry") {
-    return isChatHttpContext
-      ? "Open Chat and select a chat thread to retry messages."
-      : "Open a workspace to retry chat messages.";
-  }
-  return isChatHttpContext
-    ? "Open Chat and select a chat thread to send messages."
-    : "Open a workspace to send chat messages.";
-}
-
-export function resolveChatContextKind(root: string, options?: ChatSendContextOptions): ChatContextKind {
-  if (options?.chatContextKind) {
-    return options.chatContextKind;
-  }
-  return root === CHAT_HTTP_CONTEXT_ID ? "chat-http" : "workspace";
-}
-
-function isWorkspaceContextId(contextId: string): boolean {
-  return contextId.startsWith("ws-");
-}
-
-export function isWorkspaceSendBlockedWhenOpencodeDisabled(input: {
-  root: string;
-  chatContextKind: ChatContextKind;
-}): boolean {
-  if (input.chatContextKind !== "workspace" || input.root === CHAT_HTTP_CONTEXT_ID) {
-    return false;
-  }
-  const snapshot = appState.getSnapshot();
-  return !isOpencodeEnabled(snapshot.settings.opencode);
-}
-
-export function shouldUseWorkspaceAgentBackend(input: {
-  root: string;
-  chatContextKind: ChatContextKind;
-}): boolean {
-  if (input.chatContextKind !== "workspace" || input.root === CHAT_HTTP_CONTEXT_ID) {
-    return false;
-  }
-  const snapshot = appState.getSnapshot();
-  if (!isOpencodeEnabled(snapshot.settings.opencode)) {
-    return false;
-  }
-  const activeContextId = snapshot.contexts.activeContextId;
-  return isWorkspaceContextId(activeContextId);
-}
-
-function noActiveChatTargetMessage(chatContextKind: ChatContextKind): string {
-  return chatContextKind === "chat-http"
-    ? "Select or create a chat to send messages."
-    : "Could not resolve an active session.";
-}
-
-function resolveActiveSessionIdForSend(
-  sessionId: string | undefined,
-  chatContextKind: ChatContextKind,
-): string | null {
-  const resolved = sessionId ?? chatStore.getActiveSessionId();
-  if (resolved) {
-    return resolved;
-  }
-  if (chatContextKind !== "chat-http") {
-    return null;
-  }
-  return chatStore.createDraftSession();
-}
-
 export function resolveSendTarget(
   action: "send" | "retry",
   sessionId?: string,
-  options?: ChatSendContextOptions,
 ): ChatSendTargetFailure | ChatSendTargetSuccess {
   const root = chatStore.getActiveChatScopeKey();
   if (!root) {
     return {
       ok: false,
       reason: "no_workspace",
-      message: noChatScopeMessage(action),
+      message:
+        action === "retry"
+          ? "Open a workspace to retry chat messages."
+          : "Open a workspace to send chat messages.",
     };
   }
-  const chatContextKind = resolveChatContextKind(root, options);
-  const activeSessionId = resolveActiveSessionIdForSend(sessionId, chatContextKind);
+  const activeSessionId = sessionId ?? chatStore.getActiveSessionId();
   if (!activeSessionId) {
     return {
       ok: false,
       reason: "no_session",
-      message: noActiveChatTargetMessage(chatContextKind),
+      message: "Could not resolve an active session.",
     };
   }
-  return { ok: true, root, chatContextKind, activeSessionId };
+  return { ok: true, root, activeSessionId };
 }
 
 export function beginTurn(activeSessionId: string): string | null {
@@ -382,241 +272,6 @@ export async function validateOpencodeBackendSend(
 
 export function getLastRetryError(activeSessionId: string): ChatTurnError | null {
   return chatStore.getRuntimeState(activeSessionId).lastError;
-}
-
-export async function validateProviderSend(
-  activeSessionId: string,
-  options?: ChatSendContextOptions,
-): Promise<ProviderSendValidationFailure | ProviderSendValidationSuccess> {
-  const root = chatStore.getActiveChatScopeKey();
-  if (!root) {
-    return {
-      ok: false,
-      reason: "no_workspace",
-      message: noChatScopeMessage("send"),
-    };
-  }
-  const chatContextKind = resolveChatContextKind(root, options);
-  const providerId = chatStore.getActiveChatProvider(activeSessionId);
-  const appSettings = appState.getSnapshot().settings;
-  const resolvedConnection =
-    providerId === "http"
-      ? resolveHttpConnection(
-          appSettings.providerSettings,
-          appSettings.providerApiKeys,
-          chatStore.getMetadata(activeSessionId)?.connectionId,
-        )
-      : null;
-  if (providerId === "http" && !chatStore.getMetadata(activeSessionId)?.connectionId) {
-    const defaultConnectionId = resolvedConnection?.connection.id;
-    if (defaultConnectionId) {
-      chatStore.updateThreadMetadata({ connectionId: defaultConnectionId }, undefined, activeSessionId);
-    }
-  }
-  if (isDebugProviderSendBlocked(providerId, appSettings.providerSettings)) {
-    return {
-      ok: false,
-      reason: "debug_disabled",
-      message: getDebugProviderSendBlockHint(providerId),
-    };
-  }
-  if (
-    isHttpProviderSendBlocked(
-      providerId,
-      resolvedConnection?.connection ?? appSettings.providerSettings.http,
-      resolvedConnection?.apiKey ?? "",
-    )
-  ) {
-    return {
-      ok: false,
-      reason: "http_not_configured",
-      message: getHttpProviderMissingConfigMessage(),
-    };
-  }
-
-  const thread = chatStore.getActiveThreadSnapshot(activeSessionId);
-  const catalogContext = {
-    providerSettings: appSettings.providerSettings,
-    connectionId: resolvedConnection?.connection.id ?? chatStore.getMetadata(activeSessionId)?.connectionId,
-  };
-  const modelId = resolveComposerModelId({
-    thread,
-    providerId,
-    providerSettings: appSettings.providerSettings,
-    providerModelCatalogs: appSettings.providerModelCatalogs,
-    connectionId: catalogContext.connectionId,
-  });
-  const localModelValidation = validateLocalModelSelection(
-    appSettings.providerModelCatalogs,
-    providerId,
-    modelId,
-    catalogContext,
-  );
-  if (!localModelValidation.ok) {
-    return {
-      ok: false,
-      reason: "invalid_model",
-      message: `${localModelValidation.message} ${localModelValidation.recoveryHint}`,
-    };
-  }
-
-  const provider = getChatProvider(providerId);
-  if (!provider) {
-    return {
-      ok: false,
-      reason: "provider_unavailable",
-      message: PROVIDER_UNAVAILABLE_MESSAGE,
-    };
-  }
-
-  return {
-    ok: true,
-    provider,
-    accessStatus: "unknown" as WorkspaceAccessStatus,
-    modelId: localModelValidation.modelId,
-    connectionId: resolvedConnection?.connection.id,
-  };
-}
-
-export async function executeProviderTurn(params: {
-  root: string;
-  chatContextKind: ChatContextKind;
-  activeSessionId: string;
-  turnId: string;
-  provider?: ChatProvider;
-  accessStatus?: WorkspaceAccessStatus;
-  modelId: string;
-  connectionId?: string;
-  previousError?: ChatTurnError | null;
-  context?: WorkspaceAgentSendContext;
-}): Promise<SendChatMessageResult> {
-  const { root, chatContextKind, activeSessionId, turnId, modelId, connectionId, previousError } =
-    params;
-  if (shouldUseWorkspaceAgentBackend({ root, chatContextKind })) {
-    return executeWorkspaceAgentBackendTurn(params);
-  }
-  const provider = params.provider;
-  const accessStatus = params.accessStatus ?? "unknown";
-  if (!provider) {
-    abortTurn(activeSessionId, root);
-    return {
-      ok: false,
-      reason: "provider_unavailable",
-      message: PROVIDER_UNAVAILABLE_MESSAGE,
-    };
-  }
-  const abortController = new AbortController();
-  const thread = chatStore.getActiveThreadSnapshot(activeSessionId);
-  if (!thread) {
-    abortTurn(activeSessionId, root);
-    return {
-      ok: false,
-      reason: "append_failed",
-      message: "Could not prepare the active thread for generation.",
-    };
-  }
-
-  if (previousError) {
-    chatStore.appendMessage(createRetryFailureNote(turnId, previousError), {
-      sessionId: activeSessionId,
-      skipCompaction: true,
-    });
-  }
-
-  const request: ProviderSendRequest = {
-    payload: buildThreadProviderRequest(thread, root, appState.getSnapshot().settings, chatContextKind),
-    modelId,
-    connectionId,
-    turnKey: turnId,
-    accessStatus,
-    signal: abortController.signal,
-  };
-  logChatProviderPayload({
-    turnId,
-    providerId: chatStore.getActiveChatProvider(activeSessionId),
-    connectionId,
-    modelId,
-    payload: request.payload,
-  });
-
-  const assistantMessage = createAssistantPlaceholder(turnId);
-  chatStore.appendMessage(assistantMessage, { sessionId: activeSessionId, skipCompaction: true });
-  const usesStreamingProvider = Boolean(provider.streamMessage);
-  let hasScheduledStreamingPersistence = false;
-  const startedAt = Date.now();
-  const providerId = chatStore.getActiveChatProvider(activeSessionId);
-
-  logChatSendStart({
-    sessionId: activeSessionId,
-    turnId,
-    providerId,
-    connectionId,
-    modelId,
-    mode: thread.metadata.mode,
-    retry: Boolean(previousError),
-  });
-
-  try {
-    const finalContent = await streamProviderMessage(provider, request, (_delta, accumulated) => {
-      if (!chatStore.isGenerationTurnActive(root, activeSessionId, turnId)) {
-        abortController.abort();
-        throw new TurnCancelledError();
-      }
-      chatStore.updateMessageContent(assistantMessage.id, accumulated, activeSessionId, root);
-      if (usesStreamingProvider && !hasScheduledStreamingPersistence) {
-        hasScheduledStreamingPersistence = true;
-        persistSessionThreadOnce(root, activeSessionId);
-      }
-    });
-    assertTurnStillActive(root, activeSessionId, turnId);
-    chatStore.updateMessageContent(assistantMessage.id, finalContent, activeSessionId, root);
-    chatStore.compactActiveThread(activeSessionId);
-    chatStore.completeTurn(activeSessionId, root);
-    persistSessionThreadOnce(root, activeSessionId);
-    logChatSendComplete({
-      sessionId: activeSessionId,
-      turnId,
-      providerId,
-      connectionId,
-      modelId,
-      durationMs: Date.now() - startedAt,
-      contentLength: finalContent.length,
-    });
-    return { ok: true, turnId, assistantMessageId: assistantMessage.id, sessionId: activeSessionId };
-  } catch (error) {
-    if (isTurnCancelledError(error)) {
-      logChatSendFailed({
-        sessionId: activeSessionId,
-        turnId,
-        providerId,
-        connectionId,
-        modelId,
-        durationMs: Date.now() - startedAt,
-        reason: "turn cancelled",
-        cancelled: true,
-      });
-      return { ok: false, reason: "generating", message: "Response was cancelled." };
-    }
-    chatStore.removeMessage(assistantMessage.id, activeSessionId, root);
-    if (previousError) {
-      chatStore.removeMessage(`retry-note-${turnId}`, activeSessionId, root);
-    }
-    const message = isChatProviderError(error)
-      ? error.userMessage
-      : sanitizeUnexpectedProviderError(error);
-    chatStore.failTurn({ message, code: "provider_error" }, turnId, activeSessionId, root);
-    persistSessionThreadOnce(root, activeSessionId);
-    logChatSendFailed({
-      sessionId: activeSessionId,
-      turnId,
-      providerId,
-      connectionId,
-      modelId,
-      durationMs: Date.now() - startedAt,
-      reason: message,
-    });
-    return { ok: false, reason: "provider_error", message };
-  }
 }
 
 function toWorkspaceBackendErrorMessage(error: unknown): string {
@@ -684,15 +339,11 @@ async function ensureWorkspaceAgentSessionId(input: {
   return { backend, opencodeSessionId };
 }
 
-async function executeWorkspaceAgentBackendTurn(params: {
+export async function executeProviderTurn(params: {
   root: string;
-  chatContextKind: ChatContextKind;
   activeSessionId: string;
   turnId: string;
-  provider?: ChatProvider;
-  accessStatus?: WorkspaceAccessStatus;
   modelId: string;
-  connectionId?: string;
   previousError?: ChatTurnError | null;
   context?: WorkspaceAgentSendContext;
 }): Promise<SendChatMessageResult> {

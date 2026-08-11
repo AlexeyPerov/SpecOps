@@ -2,7 +2,6 @@ import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/a
 import { invoke } from "@tauri-apps/api/core";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
 import { subscribeSystemColorScheme } from "../state/appState/themeController";
 import { applyFontSettingsToDom } from "../state/appState/fontSettingsSlice";
@@ -47,7 +46,6 @@ import {
   loadPersistedSettings,
   toExternalFilesSettings,
 } from "./settingsStore";
-import { loadConnectionApiKeys } from "./providerSecretsStore";
 import {
   cancelStartupExternalChecks,
   initializeDocumentDiskState,
@@ -65,7 +63,6 @@ import {
 } from "./fileWatcher";
 import { stopOpencodeSidecar } from "./opencodeSidecar";
 import { selectTabForNormalizedPath } from "./openFileGate";
-import { initializeChatProviders } from "../ai/providers/bootstrap";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { readConsoleHeightPreference } from "./consoleTabPrefs";
@@ -342,9 +339,8 @@ async function startAppShellRuntimeInner(
     // legacy-theme migration fallback can reuse the already-parsed settings
     // instead of re-reading settings.json (only matters on first launch after
     // an upgrade that predates theme.json).
-    const [persistedSettings, connectionApiKeys, consoleHeightPx] = await Promise.all([
+    const [persistedSettings, consoleHeightPx] = await Promise.all([
       loadPersistedSettings(),
-      loadConnectionApiKeys(),
       readConsoleHeightPreference(),
       loadWorkspacePreferences().catch(() => {}),
     ]);
@@ -371,13 +367,9 @@ async function startAppShellRuntimeInner(
         defaultMarkdownViewMode: persistedSettings.defaultMarkdownViewMode,
         restrictFilesToContext: persistedSettings.restrictFilesToContext,
         opencode: persistedSettings.opencode,
-        chatHttp: persistedSettings.chatHttp,
         gitIntegration: persistedSettings.gitIntegration,
-        providerSettings: persistedSettings.providerSettings,
-        providerModelCatalogs: persistedSettings.providerModelCatalogs,
         commandBindingOverrides: persistedSettings.commandBindingOverrides,
         logSettings: persistedSettings.logSettings,
-        chatModes: persistedSettings.chatModes,
         markdownSnippets: persistedSettings.markdownSnippets,
         fontSettings: persistedSettings.fontSettings,
         soundSettings: persistedSettings.soundSettings,
@@ -389,10 +381,6 @@ async function startAppShellRuntimeInner(
       // touch the DOM; only setFontSettings does at change time).
       applyFontSettingsToDom(persistedSettings.fontSettings);
     }
-    // Batch all connection keys into one store update (one subscriber cascade)
-    // instead of N per-key updates on the startup path.
-    appState.setConnectionApiKeys(connectionApiKeys);
-    initializeChatProviders();
     options.setConsoleHeightPx(consoleHeightPx);
     await initializeLogging();
   });
@@ -438,12 +426,6 @@ async function startAppShellRuntimeInner(
   });
 
   await runSafeStartupPhase("restore-chat-scope", async () => {
-    const restoredActiveContextId = appState.getSnapshot().contexts.activeContextId;
-    if (restoredActiveContextId === CHAT_HTTP_CONTEXT_ID) {
-      chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-      await chatStore.loadWorkspaceSessions(CHAT_HTTP_CONTEXT_ID);
-      return;
-    }
     const restoredWorkspaceRoot = appState.getWorkspaceRoot();
     if (restoredWorkspaceRoot) {
       const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);

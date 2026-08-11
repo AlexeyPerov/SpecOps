@@ -7,7 +7,6 @@ import type {
   WorkspaceEntry,
 } from "../../domain/contracts";
 import {
-  CHAT_HTTP_CONTEXT_ID,
   allTabs,
   isFileTab,
   paneIdNumericSuffix,
@@ -18,7 +17,6 @@ import { normalizePathForStorage, normalizePathSync } from "../../services/diskF
 import { normalizeDocument } from "./documentHelpers";
 
 export const NOTEPAD_CONTEXT_ID: ContextId = "notepad";
-export const CHAT_HTTP_CONTEXT_KEY: ContextId = CHAT_HTTP_CONTEXT_ID;
 
 const idCounters = {
   doc: 1,
@@ -69,7 +67,6 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
     1,
     ...[
       ...contexts.notepad.documents,
-      ...contexts.chatHttp.documents,
       ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.documents),
     ].map((documentState) => Number(documentState.id.replace("doc-", "")) || 1),
   );
@@ -77,7 +74,6 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
     1,
     ...[
       ...allTabs(contexts.notepad.session.editorLayout),
-      ...allTabs(contexts.chatHttp.session.editorLayout),
       ...contexts.workspaces.flatMap((workspace) =>
         allTabs(workspace.snapshot.session.editorLayout),
       ),
@@ -90,7 +86,6 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
   // that already exist in a restored layout (duplicate ids → remount loops).
   const paneLayouts = [
     contexts.notepad.session.editorLayout,
-    contexts.chatHttp.session.editorLayout,
     ...contexts.workspaces.map((workspace) => workspace.snapshot.session.editorLayout),
   ];
   let maxPane = 0;
@@ -154,9 +149,6 @@ export function getContextSnapshotById(
   if (contextId === NOTEPAD_CONTEXT_ID) {
     return state.contexts.notepad;
   }
-  if (contextId === CHAT_HTTP_CONTEXT_KEY) {
-    return state.contexts.chatHttp;
-  }
   let cache = contextSnapshotCache.get(state);
   if (cache) {
     const cached = cache.get(contextId);
@@ -172,14 +164,6 @@ export function getContextSnapshotById(
   }
   cache.set(contextId, snapshot);
   return snapshot;
-}
-
-export function isChatHttpContext(contextId: ContextId): boolean {
-  return contextId === CHAT_HTTP_CONTEXT_KEY;
-}
-
-export function getChatHttpContextSnapshot(state: AppDomainState): ContextSnapshot {
-  return state.contexts.chatHttp;
 }
 
 export function getActiveContextSnapshot(state: AppDomainState): ContextSnapshot {
@@ -211,15 +195,6 @@ export function patchActiveContext(
       contexts: {
         ...state.contexts,
         notepad: nextSnapshot,
-      },
-    };
-  }
-  if (isChatHttpContext(contextId)) {
-    return {
-      ...state,
-      contexts: {
-        ...state.contexts,
-        chatHttp: nextSnapshot,
       },
     };
   }
@@ -293,15 +268,6 @@ export function patchContextById(
       contexts: {
         ...state.contexts,
         notepad: nextSnapshot,
-      },
-    };
-  }
-  if (isChatHttpContext(contextId)) {
-    return {
-      ...state,
-      contexts: {
-        ...state.contexts,
-        chatHttp: nextSnapshot,
       },
     };
   }
@@ -390,10 +356,10 @@ function getContextLookupIndex(state: AppDomainState): ContextLookupIndex {
 
 /**
  * Enumerates every context snapshot in a stable order: active context first
- * (so first-match lookups prefer it), then notepad, chat-http, and finally the
- * remaining workspaces. Used by the cross-context document discovery helpers
- * so file side effects (watcher checks, reload prompts, relocation, Replace All
- * sync) can find a document that lives in a workspace which is not active.
+ * (so first-match lookups prefer it), then notepad, and finally the remaining
+ * workspaces. Used by the cross-context document discovery helpers so file
+ * side effects (watcher checks, reload prompts, relocation, Replace All sync)
+ * can find a document that lives in a workspace which is not active.
  */
 export interface ContextEntry {
   id: ContextId;
@@ -413,16 +379,13 @@ export function allContextSnapshots(state: AppDomainState): ContextEntry[] {
   };
   push(contexts.activeContextId, getContextSnapshotById(state, contexts.activeContextId) ?? contexts.notepad);
   push(NOTEPAD_CONTEXT_ID, contexts.notepad);
-  if (!isChatHttpContext(contexts.activeContextId)) {
-    push(CHAT_HTTP_CONTEXT_KEY, contexts.chatHttp);
-  }
   for (const workspace of contexts.workspaces) {
     push(workspace.id, workspace.snapshot);
   }
   return entries;
 }
 
-/** Document ids across notepad, chat-http, and every workspace (for session-cache retain). */
+/** Document ids across notepad and every workspace (for session-cache retain). */
 export function collectAllOpenDocumentIds(state: AppDomainState): Set<string> {
   const ids = new Set<string>();
   for (const entry of allContextSnapshots(state)) {

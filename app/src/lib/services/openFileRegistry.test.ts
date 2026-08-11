@@ -7,8 +7,6 @@ import type {
 import { createFileTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
 import type { EditorLayout } from "../domain/contracts";
 import { createSessionFsMock } from "../test/sessionMock";
-import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
-import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
 import { defaultSettings } from "../state/appState/settingsSlice";
 import {
   applyRegistryDedupeToWindowSnapshot,
@@ -122,7 +120,6 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
   return {
     activeContextId: "notepad",
     notepad,
-    chatHttp: notepad,
     workspaces: [],
     editorPreferences: {
       zoomPercent: 100,
@@ -288,14 +285,6 @@ describe("syncOpenFileRegistryForWindow", () => {
             windowBounds: null,
           },
         },
-        chatHttp: {
-          documents: [],
-          session: {
-            editorLayout: createSinglePaneLayout([], null),
-            lastActiveWindowId: "win-a",
-            windowBounds: null,
-          },
-        },
         workspaces: [],
       },
       settings: {
@@ -355,14 +344,6 @@ describe("syncOpenFileRegistryForWindow", () => {
           ],
           session: {
             editorLayout: createSinglePaneLayout([createFileTab("tab-n", "doc-n")], "tab-n"),
-            lastActiveWindowId: "win-a",
-            windowBounds: null,
-          },
-        },
-        chatHttp: {
-          documents: [],
-          session: {
-            editorLayout: createSinglePaneLayout([], null),
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
@@ -519,14 +500,6 @@ describe("syncOpenFileRegistryForWindow", () => {
           ],
           session: {
             editorLayout: gridLayout,
-            lastActiveWindowId: "win-a",
-            windowBounds: null,
-          },
-        },
-        chatHttp: {
-          documents: [],
-          session: {
-            editorLayout: createSinglePaneLayout([], null),
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },

@@ -28,7 +28,6 @@
     layout,
     documents,
     contextId,
-    useChatTerminology = false,
     windowId,
     notify,
     onSelectTab,
@@ -46,7 +45,6 @@
     /** Editor context id, threaded to each EditorPaneView so the data-pane-*
      *  DOM attributes are namespaced per context. */
     contextId: import("../domain/contracts").ContextId;
-    useChatTerminology: boolean;
     windowId: string;
     notify: (message: string) => void;
     onSelectTab: (tabId: string) => void;
@@ -223,7 +221,6 @@
         {contextId}
         isActive={cell.pane.id === layout.activePaneId}
         canClose={canClosePane}
-        {useChatTerminology}
         {windowId}
         {notify}
         onSelectTab={onSelectTab}

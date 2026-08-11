@@ -23,7 +23,6 @@ export interface AppShellHostApi {
     workspaceRoot: string,
     options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
   ) => Promise<void>;
-  ensureChatHttpSessionTab: () => void | Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
   notifyProjectTreeFilesystemChange: (
     path: string,

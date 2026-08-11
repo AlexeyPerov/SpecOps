@@ -4,13 +4,7 @@ import {
   createFileTab,
   createSinglePaneLayout,
   getSessionSelectedTabId,
-  setActivePaneTabs,
 } from "../../domain/contracts";
-import {
-  getContextSnapshotById,
-  patchActiveContext,
-  patchContextById,
-} from "./contextHelpers";
 import { defaultSettings } from "./settingsSlice";
 
 function buildSnapshot(docId: string, tabId: string): ContextSnapshot {
@@ -48,7 +42,6 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
     contexts: {
       activeContextId,
       notepad: buildSnapshot("doc-1", "tab-1"),
-      chatHttp: buildSnapshot("doc-2", "tab-2"),
       workspaces: [
         {
           id: "ws-1",
@@ -88,50 +81,6 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
   };
 }
 
-describe("contextHelpers chat-http support", () => {
-  it("returns chat-http snapshot by context id", () => {
-    const state = buildState("notepad");
-    expect(getContextSnapshotById(state, "chat-http")).toBe(state.contexts.chatHttp);
-  });
-
-  it("patchActiveContext updates chat-http snapshot when active", () => {
-    const state = buildState("chat-http");
-    const next = patchActiveContext(state, (snapshot) => ({
-      ...snapshot,
-      session: {
-        ...snapshot.session,
-        editorLayout: setActivePaneTabs(
-          snapshot.session.editorLayout,
-          snapshot.session.editorLayout.panes[0].tabs,
-          "tab-changed",
-        ),
-      },
-    }));
-    expect(getSessionSelectedTabId(next.contexts.chatHttp.session)).toBe("tab-changed");
-    expect(getSessionSelectedTabId(next.contexts.notepad.session)).toBe("tab-1");
-    expect(getSessionSelectedTabId(next.contexts.workspaces[0]?.snapshot.session as never)).toBe(
-      "tab-3",
-    );
-  });
-
-  it("patchContextById updates chat-http snapshot by id", () => {
-    const state = buildState("notepad");
-    const next = patchContextById(state, "chat-http", (snapshot) => ({
-      ...snapshot,
-      session: {
-        ...snapshot.session,
-        editorLayout: setActivePaneTabs(
-          snapshot.session.editorLayout,
-          snapshot.session.editorLayout.panes[0].tabs,
-          "tab-patched",
-        ),
-      },
-    }));
-    expect(getSessionSelectedTabId(next.contexts.chatHttp.session)).toBe("tab-patched");
-    expect(getSessionSelectedTabId(next.contexts.notepad.session)).toBe("tab-1");
-  });
-});
-
 describe("context-aware document lookup", () => {
   function buildFileSnapshot(docId: string, tabId: string, filePath: string): ContextSnapshot {
     const snap = buildSnapshot(docId, tabId);
@@ -150,7 +99,6 @@ describe("context-aware document lookup", () => {
       contexts: {
         activeContextId,
         notepad: buildSnapshot("doc-1", "tab-1"),
-        chatHttp: buildSnapshot("doc-2", "tab-2"),
         workspaces: [
           {
             id: "ws-1",
@@ -220,15 +168,14 @@ describe("context-aware document lookup", () => {
     );
   });
 
-  it("allContextSnapshots includes notepad, chat-http, and every workspace", async () => {
+  it("allContextSnapshots includes notepad and every workspace", async () => {
     const { allContextSnapshots } = await import("./contextHelpers");
     const state = buildWorkspaceState("ws-1");
     const ids = allContextSnapshots(state).map((entry) => entry.id);
-    // Active first, then notepad, chat-http, and the two workspaces.
+    // Active first, then notepad, and the two workspaces.
     expect(ids).toContain("ws-1");
     expect(ids).toContain("ws-2");
     expect(ids).toContain("notepad");
-    expect(ids).toContain("chat-http");
     // No duplicates.
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -237,7 +184,7 @@ describe("context-aware document lookup", () => {
     const { collectAllOpenDocumentIds } = await import("./contextHelpers");
     const state = buildWorkspaceState("ws-1");
     expect(collectAllOpenDocumentIds(state)).toEqual(
-      new Set(["doc-1", "doc-2", "doc-3", "doc-4"]),
+      new Set(["doc-1", "doc-3", "doc-4"]),
     );
   });
 
@@ -248,7 +195,6 @@ describe("context-aware document lookup", () => {
       contexts: {
         activeContextId: "ws-2",
         notepad: buildSnapshot("doc-1", "tab-1"),
-        chatHttp: buildSnapshot("doc-2", "tab-2"),
         workspaces: [
           {
             id: "ws-2",

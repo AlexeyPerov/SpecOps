@@ -13,7 +13,6 @@ import {
   patchWorkspaceState,
   activeSessionId,
 } from "./workspace";
-import { normalizeThreadSnapshotForScope } from "../../ai/providers/threadScopeNormalization";
 import { cloneThread } from "./threadHelpers";
 
 /** Max concurrent thread-file reads during workspace session hydration. */
@@ -273,10 +272,10 @@ export function createSessionsSlice(deps: {
   const { update, getSnapshot, getActiveChatScopeKey } = deps;
 
   function normalizeThreadForScope(
-    scopeKey: string,
-    thread: import("../../domain/contracts").ChatThreadSnapshot | null,
-  ): import("../../domain/contracts").ChatThreadSnapshot | null {
-    return normalizeThreadSnapshotForScope(thread, scopeKey);
+    _scopeKey: string,
+    thread: ChatThreadSnapshot | null,
+  ): ChatThreadSnapshot | null {
+    return thread;
   }
 
   function syncSessionIdCounterFromWorkspace(workspace: WorkspaceSessionsState): void {

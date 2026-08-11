@@ -6,7 +6,6 @@ import type {
   WorkspaceSessionsIndexSnapshot,
 } from "../domain/contracts";
 import type { ChatScopeKey } from "../state/chatStore/types";
-import { normalizeThreadSnapshotForScope } from "../ai/providers/threadScopeNormalization";
 import { deriveSessionTitleFromThread } from "./chatSessions";
 import {
   CHAT_THREAD_VERSION,
@@ -99,8 +98,8 @@ export async function readSessionThreadFileSnapshot(
   try {
     const threadPath = await getSessionThreadFilePath(scopeKey, sessionId);
     const raw = await readTextFile(threadPath);
-    const decoded = decodeChatSessionThreadFileSnapshot(raw, scopeKey);
-    return normalizeThreadSnapshotForScope(decoded?.thread ?? null, scopeKey);
+    const decoded = decodeChatSessionThreadFileSnapshot(raw);
+    return decoded?.thread ?? null;
   } catch {
     return null;
   }

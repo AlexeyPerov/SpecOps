@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, readTextFile, remove } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
-import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import {
-  chatScopeStorageSegment,
   decodeChatSessionThreadFileSnapshot,
   decodeWorkspaceSessionsIndexSnapshot,
   deleteSessionPersistence,
@@ -55,8 +53,6 @@ function sampleThread(agentId = AGENT_ID): ChatThreadSnapshot {
     metadata: {
       sessionId: agentId,
       threadId: agentId,
-      mode: "review",
-      provider: "http",
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:01.000Z",
       summary: "summary",
@@ -71,13 +67,8 @@ function sampleThread(agentId = AGENT_ID): ChatThreadSnapshot {
       {
         id: "m-2",
         role: "system",
-        content: "provider changed",
+        content: "notice",
         createdAt: "2026-05-25T00:00:01.000Z",
-        systemEvent: {
-          type: "provider-switched",
-          fromProvider: "http",
-          toProvider: "debug-workspace",
-        },
       },
     ],
   };
@@ -98,17 +89,6 @@ describe("workspace agent path mapping", () => {
     expect(indexPath).toBe(workspaceDir + "/index.json");
     expect(threadPath).toBe(workspaceDir + "/" + AGENT_ID + ".json");
   });
-
-  it("maps chat-http scope to a literal chat/chat-http/ directory", async () => {
-    const chatHttpDir = await getWorkspaceSessionsDir(CHAT_HTTP_CONTEXT_ID);
-    const indexPath = await getWorkspaceSessionsIndexFilePath(CHAT_HTTP_CONTEXT_ID);
-    const threadPath = await getSessionThreadFilePath(CHAT_HTTP_CONTEXT_ID, AGENT_ID);
-
-    expect(chatScopeStorageSegment(CHAT_HTTP_CONTEXT_ID)).toBe("chat-http");
-    expect(chatHttpDir).toBe("/data/spec-ops/chat/chat-http");
-    expect(indexPath).toBe("/data/spec-ops/chat/chat-http/index.json");
-    expect(threadPath).toBe("/data/spec-ops/chat/chat-http/" + AGENT_ID + ".json");
-  });
 });
 
 describe("agent thread snapshot codec", () => {
@@ -123,7 +103,7 @@ describe("agent thread snapshot codec", () => {
     expect(decoded).toEqual(snapshot);
   });
 
-  it("round-trips selectedModelId metadata and model-switched system events", () => {
+  it("round-trips selectedModelId metadata", () => {
     const snapshot: ChatSessionThreadFileSnapshot = {
       version: 1,
       thread: {
@@ -132,20 +112,6 @@ describe("agent thread snapshot codec", () => {
           ...sampleThread().metadata,
           selectedModelId: "gpt-4o-mini",
         },
-        messages: [
-          ...sampleThread().messages,
-          {
-            id: "m-3",
-            role: "system",
-            content: "model changed",
-            createdAt: "2026-05-25T00:00:02.000Z",
-            systemEvent: {
-              type: "model-switched",
-              fromModel: "gpt-4o-mini",
-              toModel: "gpt-4.1",
-            },
-          },
-        ],
       },
     };
 
@@ -172,7 +138,7 @@ describe("agent thread snapshot codec", () => {
     expect(decoded).toEqual(snapshot);
   });
 
-  it("decodes legacy snapshots without selectedModelId or model-switched events", () => {
+  it("decodes legacy snapshots without selectedModelId", () => {
     const legacy = encodeChatSessionThreadFileSnapshot({
       version: 1,
       thread: sampleThread(),
@@ -180,71 +146,6 @@ describe("agent thread snapshot codec", () => {
 
     const decoded = decodeChatSessionThreadFileSnapshot(legacy);
     expect(decoded?.thread.metadata.selectedModelId).toBeUndefined();
-    expect(decoded?.thread.messages.every((message) => message.systemEvent?.type !== "model-switched")).toBe(
-      true,
-    );
-  });
-
-  it('normalizes legacy provider "glm" to "http" on decode', () => {
-    const rawLegacySnapshot = JSON.stringify({
-      version: 1,
-      thread: {
-        metadata: {
-          sessionId: AGENT_ID,
-          threadId: AGENT_ID,
-          mode: "ask",
-          provider: "glm",
-          createdAt: "2026-05-25T00:00:00.000Z",
-          updatedAt: "2026-05-25T00:00:01.000Z",
-        },
-        messages: [
-          {
-            id: "m-1",
-            role: "user",
-            content: "hello",
-            createdAt: "2026-05-25T00:00:00.000Z",
-          },
-        ],
-      },
-    });
-
-    const decoded = decodeChatSessionThreadFileSnapshot(rawLegacySnapshot);
-    expect(decoded?.thread.metadata.provider).toBe("http");
-  });
-
-  it("preserves provider-switched events when model-switched events are present", () => {
-    const snapshot: ChatSessionThreadFileSnapshot = {
-      version: 1,
-      thread: {
-        ...sampleThread(),
-        messages: [
-          sampleThread().messages[1],
-          {
-            id: "m-3",
-            role: "system",
-            content: "model changed",
-            createdAt: "2026-05-25T00:00:02.000Z",
-            systemEvent: {
-              type: "model-switched",
-              fromModel: null,
-              toModel: "gpt-4o-mini",
-            },
-          },
-        ],
-      },
-    };
-
-    const decoded = decodeChatSessionThreadFileSnapshot(encodeChatSessionThreadFileSnapshot(snapshot));
-    expect(decoded?.thread.messages[0]?.systemEvent).toEqual({
-      type: "provider-switched",
-      fromProvider: "http",
-      toProvider: "debug-workspace",
-    });
-    expect(decoded?.thread.messages[1]?.systemEvent).toEqual({
-      type: "model-switched",
-      fromModel: null,
-      toModel: "gpt-4o-mini",
-    });
   });
 
   it("rejects legacy single-thread envelopes", () => {

@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  CHAT_HTTP_CONTEXT_ID,
   createFileTab,
   createSessionTab,
-  isDebugChatProviderId,
   isFileTab,
   isSessionTab,
   normalizeTabState,
-  PRODUCT_CHAT_PROVIDER_IDS,
   tabDocumentId,
 } from "./contracts";
 import type {
@@ -16,7 +13,6 @@ import type {
   AppSessionSnapshot,
   AppSettingsState,
   ChatMessage,
-  ChatProviderId,
   CommandDefinition,
   ContextId,
   DocumentState,
@@ -36,14 +32,6 @@ describe("domain/contracts barrel", () => {
 
     const legacy = normalizeTabState({ id: "tab-3", documentId: "doc-2", pinned: true });
     expect(legacy).toEqual(createFileTab("tab-3", "doc-2", true));
-  });
-
-  it("re-exports workspace and chat constants", () => {
-    const contextId: ContextId = CHAT_HTTP_CONTEXT_ID;
-    expect(contextId).toBe("chat-http");
-    expect(PRODUCT_CHAT_PROVIDER_IDS).toContain("http");
-    expect(isDebugChatProviderId("debug-chat")).toBe(true);
-    expect(isDebugChatProviderId("http" satisfies ChatProviderId)).toBe(false);
   });
 
   it("re-exports representative type-only symbols", () => {
@@ -79,6 +67,7 @@ describe("domain/contracts barrel", () => {
       content: "hello",
       createdAt: new Date(0).toISOString(),
     };
+    const contextId: ContextId = "notepad";
     const settingsKeys: (keyof AppSettingsState)[] = ["statusBarVisible", "externalFiles"];
     const domainKeys: (keyof AppDomainState)[] = ["contexts", "settings", "theme"];
     const snapshotKeys: (keyof AppSessionSnapshot)[] = ["version", "windows"];
@@ -86,6 +75,7 @@ describe("domain/contracts barrel", () => {
     expect(definition.id).toBe(command);
     expect(tab.kind).toBe("file");
     expect(message.role).toBe("user");
+    expect(contextId).toBe("notepad");
     expect(settingsKeys).toHaveLength(2);
     expect(domainKeys).toHaveLength(3);
     expect(snapshotKeys).toHaveLength(2);

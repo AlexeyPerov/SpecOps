@@ -2,8 +2,6 @@ import type {
   ChatMessage,
   ChatMessagePart,
   ChatMessageRole,
-  ChatModeId,
-  ChatProviderId,
   ChatSessionThreadFileSnapshot,
   ChatThreadMetadata,
   ChatThreadSnapshot,
@@ -12,13 +10,6 @@ import type {
   ToolCallRecord,
   WorkspaceSessionsIndexSnapshot,
 } from "../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
-import {
-  isLegacyChatProviderId,
-  normalizeLegacyChatProviderId,
-  type LegacyChatProviderId,
-} from "../ai/providers/debugProviderSettings";
-import { isPersistedChatModeId } from "../ai/modes/chatModesSettings";
 import { readBoolean, readNumber } from "../ai/backends/wireReaders";
 
 export const CHAT_RETENTION_MAX_TURNS = 50;
@@ -64,25 +55,7 @@ function isChatMessageRole(value: unknown): value is ChatMessageRole {
   return value === "user" || value === "assistant" || value === "system";
 }
 
-function isChatModeId(value: unknown): value is ChatModeId {
-  return isPersistedChatModeId(value);
-}
-
-function normalizeParsedChatModeId(value: unknown): ChatModeId {
-  if (isChatModeId(value)) {
-    return value;
-  }
-  return "ask";
-}
-
-function normalizeLegacyProviderId(
-  provider: LegacyChatProviderId,
-  scopeKey: string,
-): ChatProviderId {
-  return normalizeLegacyChatProviderId(provider, scopeKey);
-}
-
-function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetadata | null {
+function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -96,10 +69,6 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string"
   ) {
-    return null;
-  }
-  const mode = normalizeParsedChatModeId(value.mode);
-  if (!isLegacyChatProviderId(value.provider)) {
     return null;
   }
   if (value.summary !== undefined && typeof value.summary !== "string") {
@@ -117,9 +86,6 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
   if (value.selectedModelId !== undefined && typeof value.selectedModelId !== "string") {
     return null;
   }
-  if (value.connectionId !== undefined && typeof value.connectionId !== "string") {
-    return null;
-  }
   if (value.opencodeAgentId !== undefined && typeof value.opencodeAgentId !== "string") {
     return null;
   }
@@ -129,8 +95,6 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
   return {
     sessionId: sessionIdValue,
     threadId: value.threadId,
-    mode,
-    provider: normalizeLegacyProviderId(value.provider, scopeKey),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     summary: value.summary,
@@ -138,64 +102,9 @@ function parseThreadMetadata(value: unknown, scopeKey: string): ChatThreadMetada
     lastCompactedAt: value.lastCompactedAt,
     compactedMessageCount: value.compactedMessageCount,
     selectedModelId: value.selectedModelId,
-    connectionId: value.connectionId,
     opencodeAgentId: value.opencodeAgentId,
     opencodeProviderId: value.opencodeProviderId,
   };
-}
-
-function parseProviderSwitchedEvent(
-  value: Record<string, unknown>,
-  scopeKey: string,
-): Extract<ChatMessage["systemEvent"], { type: "provider-switched" }> | undefined {
-  const fromProvider = value.fromProvider;
-  if (fromProvider !== null && !isLegacyChatProviderId(fromProvider)) {
-    return undefined;
-  }
-  if (!isLegacyChatProviderId(value.toProvider)) {
-    return undefined;
-  }
-
-  return {
-    type: "provider-switched",
-    fromProvider:
-      fromProvider === null ? null : normalizeLegacyProviderId(fromProvider, scopeKey),
-    toProvider: normalizeLegacyProviderId(value.toProvider, scopeKey),
-  };
-}
-
-function parseModelSwitchedEvent(
-  value: Record<string, unknown>,
-): Extract<ChatMessage["systemEvent"], { type: "model-switched" }> | undefined {
-  const fromModel = value.fromModel;
-  if (fromModel !== null && typeof fromModel !== "string") {
-    return undefined;
-  }
-  if (typeof value.toModel !== "string" || value.toModel.length === 0) {
-    return undefined;
-  }
-
-  return {
-    type: "model-switched",
-    fromModel,
-    toModel: value.toModel,
-  };
-}
-
-function parseSystemEvent(value: unknown, scopeKey: string): ChatMessage["systemEvent"] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  if (value.type === "provider-switched") {
-    return parseProviderSwitchedEvent(value, scopeKey);
-  }
-  if (value.type === "model-switched") {
-    return parseModelSwitchedEvent(value);
-  }
-  return undefined;
 }
 
 function isToolCallStatus(value: unknown): value is ToolCallRecord["status"] {
@@ -402,7 +311,7 @@ function parseParts(value: unknown): ChatMessagePart[] | undefined {
   return parts;
 }
 
-function parseMessage(value: unknown, scopeKey: string): ChatMessage | null {
+function parseMessage(value: unknown): ChatMessage | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -419,25 +328,24 @@ function parseMessage(value: unknown, scopeKey: string): ChatMessage | null {
     role: value.role,
     content: value.content,
     createdAt: value.createdAt,
-    systemEvent: parseSystemEvent(value.systemEvent, scopeKey),
     toolCalls: parseToolCalls(value.toolCalls),
     parts: parseParts(value.parts),
   };
 }
 
-function parseThread(value: unknown, scopeKey: string): ChatThreadSnapshot | null {
+function parseThread(value: unknown): ChatThreadSnapshot | null {
   if (!isRecord(value) || !Array.isArray(value.messages)) {
     return null;
   }
 
-  const metadata = parseThreadMetadata(value.metadata, scopeKey);
+  const metadata = parseThreadMetadata(value.metadata);
   if (!metadata) {
     return null;
   }
 
   const messages: ChatMessage[] = [];
   for (const entry of value.messages) {
-    const message = parseMessage(entry, scopeKey);
+    const message = parseMessage(entry);
     if (!message) {
       return null;
     }
@@ -497,14 +405,13 @@ function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
 
 export function decodeChatSessionThreadFileSnapshot(
   raw: string,
-  scopeKey: string = CHAT_HTTP_CONTEXT_ID,
 ): ChatSessionThreadFileSnapshot | null {
   try {
     const parsed = JSON.parse(raw) as { version?: unknown; thread?: unknown };
     if (parsed.version !== CHAT_THREAD_VERSION) {
       return null;
     }
-    const thread = parseThread(parsed.thread, scopeKey);
+    const thread = parseThread(parsed.thread);
     if (!thread) {
       return null;
     }

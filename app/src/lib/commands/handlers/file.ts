@@ -1,5 +1,5 @@
 import { appState } from "../../state/appState";
-import { CHAT_HTTP_CONTEXT_ID, getSessionActiveTab, tabDocumentId } from "../../domain/contracts";
+import { getSessionActiveTab, tabDocumentId } from "../../domain/contracts";
 import { getActiveSession } from "../../state/appState/contextHelpers";
 import { openFileDialog } from "../../services/fileSystem";
 import { renameDocumentOnDisk } from "../../services/documentRename";
@@ -23,11 +23,7 @@ import {
 } from "./fileActions";
 
 export const fileHandlers: CommandHandlerMap = {
-  "file.new": ({ notify, getState }) => {
-    if (getState().contexts.activeContextId === CHAT_HTTP_CONTEXT_ID) {
-      notify("File tabs are unavailable in Chat.");
-      return;
-    }
+  "file.new": ({ notify }) => {
     appState.createTab();
     notify("New tab created.");
   },

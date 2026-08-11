@@ -3,7 +3,6 @@
   import AppShellHost from "../lib/components/AppShellHost.svelte";
   import type { AppShellHostBound } from "../lib/components/appShellHostTypes";
   import OverlayHost from "../lib/components/overlays/OverlayHost.svelte";
-  import { isChatHttpRailVisible } from "../lib/ai/providers/chatHttpRailGating";
   import {
     activeViewKindInActivePane,
     isSessionTabActiveInActivePane,
@@ -53,7 +52,6 @@
   import type { AppDomainState } from "../lib/domain/contracts";
   import {
     allTabs,
-    CHAT_HTTP_CONTEXT_ID,
     getSessionActiveTab,
     getSessionSelectedTabId,
     isFileTab,
@@ -71,7 +69,6 @@
     type WorkspaceFileCatalogRegistry,
   } from "../lib/services/workspaceFileCatalogRegistry";
   import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
-  import { stopChatAccessMonitor } from "../lib/services/chatAccessMonitor";
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
   import { listEnabledMarkdownSnippetsMemoized } from "../lib/editor/markdownSnippetSettings";
   import { buildCommandAvailabilitySnapshot } from "../lib/commands/availability";
@@ -100,7 +97,6 @@
     requestOpencodeHealthRefresh,
     syncActiveFileTreeExpandEffect,
     syncSessionTabEffect,
-    syncChatAccessMonitorEffect,
     syncExternalFileWatcherEffect,
     syncOpencodeSidecarEffect,
     syncOpencodeToggleEffect,
@@ -260,7 +256,6 @@
   /** Stable key for external file-watcher sync; ignores non-path snapshot churn. */
   const externalWatcherSyncKey = $derived($appExternalWatcherSyncKey);
   const activeContextId = $derived($appActiveContextId);
-  const isChatHttpActive = $derived(activeContextId === CHAT_HTTP_CONTEXT_ID);
   const workspaces = $derived($appContexts.workspaces);
   /**
    * Workspaces visible in the activity rail: hidden-from-rail entries are
@@ -275,8 +270,7 @@
     normalizeWorkspaceLayoutMemoized(session.layout),
   );
   const showProjectPanel = $derived(
-    !isChatHttpActive &&
-      Boolean(activeWorkspaceRoot) &&
+    Boolean(activeWorkspaceRoot) &&
       !workspaceLayout.projectPanelCollapsed &&
       !autoProjectPanelCollapsed,
   );
@@ -388,10 +382,9 @@
     // workspace's files forever. `setActiveRoot` is idempotent (the later
     // retargeting effect reuses the same catalog), so resolving the catalog
     // for the current root directly makes the subscription order-independent.
-    const catalog =
-      activeWorkspaceRoot && !isChatHttpActive
-        ? workspaceFileCatalogRegistry.setActiveRoot(activeWorkspaceRoot)
-        : null;
+    const catalog = activeWorkspaceRoot
+      ? workspaceFileCatalogRegistry.setActiveRoot(activeWorkspaceRoot)
+      : null;
     // Refresh the Quick Open snapshot immediately on switch — a ready cached
     // catalog may never emit again, so waiting for an event would show the
     // old snapshot until the next filesystem change.
@@ -442,16 +435,9 @@
   const opencodeEnabled = $derived($appSettings.opencode.enabled);
   const opencodeSidecarPort = $derived($appSettings.opencode.sidecarPort);
   const showSessionsSidebar = $derived(
-    (isChatHttpActive || (Boolean(activeWorkspaceRoot) && opencodeEnabled)) &&
+    Boolean(activeWorkspaceRoot) &&
+      opencodeEnabled &&
       !workspaceLayout.sessionsSidebarCollapsed,
-  );
-  const chatHttpRailVisible = $derived(
-    isChatHttpRailVisible(
-      $appSettings.providerSettings,
-      $appSettings.providerApiKeys,
-      $appSettings.providerSettings.debugChat,
-      $appSettings.chatHttp,
-    ),
   );
   const sessionSelectedTabId = $derived(getSessionSelectedTabId(session));
   const activeTab = $derived(getSessionActiveTab(session));
@@ -654,7 +640,6 @@
       routePathToLastActiveWindow,
       getCurrentWebviewWindowLabel: () => getCurrentWebviewWindow().label,
       handleKeydown: (event) => appShellHost?.api.handleKeydown(event),
-      stopChatAccessMonitor,
       flushSessionBeforeUnload: () =>
         Promise.all([
           flushSessionPersistence(appState.getSnapshot(), getCurrentWebviewWindow().label),
@@ -691,8 +676,6 @@
 
   $effect(() => {
     activeTabSessionId;
-    isChatHttpActive;
-    chatHttpRailVisible;
     activeContextId;
     activeWorkspaceRoot;
     isSessionTabActive;
@@ -701,15 +684,11 @@
     opencodeEnabled;
     syncSessionTabEffect({
       activeTab,
-      isChatHttpActive,
-      chatHttpRailVisible,
       activeContextId,
       activeWorkspaceRoot,
       isSessionTabActive,
-      selectedSessionId,
       lastChatScopeKey,
       opencodeEnabled,
-      ensureChatHttpSessionTab: () => appShellHost?.api.ensureChatHttpSessionTab(),
       restoreWorkspaceSession: (root, options) =>
         appShellHost?.api.restoreWorkspaceSession(root, options) ?? Promise.resolve(),
       setLastChatScopeKey: (key) => {
@@ -795,13 +774,11 @@
     runtimeReady;
     isWorkspaceLifecycleActive();
     activeWorkspaceRoot;
-    isChatHttpActive;
     isSessionTabActive;
     syncOpencodeSidecarEffect({
       runtimeReady,
       workspaceLifecycleActive: isWorkspaceLifecycleActive(),
       activeWorkspaceRoot,
-      isChatHttpActive,
       isSessionTabActive,
       opencodeEnabled,
       opencodeMode,
@@ -821,7 +798,6 @@
         durationMs: elapsedMs(effectStartedAt),
         label: "shell-sidecar-effect",
         runtimeReady,
-        isChatHttpActive,
         isSessionTabActive,
         hasWorkspaceRoot: Boolean(activeWorkspaceRoot),
       },
@@ -834,11 +810,9 @@
     const effectStartedAt = nowMs();
     runtimeReady;
     activeWorkspaceRoot;
-    isChatHttpActive;
     syncProjectTreeWatcherEffect({
       runtimeReady,
       activeWorkspaceRoot,
-      isChatHttpActive,
       openWorkspaceRoots: workspaces.map((workspace) => workspace.rootPath),
       projectTreeController,
       loadProjectTreeRoot: () => appShellHost?.api.loadProjectTreeRoot() ?? Promise.resolve(),
@@ -850,7 +824,6 @@
         durationMs: elapsedMs(effectStartedAt),
         label: "shell-project-tree-effect",
         runtimeReady,
-        isChatHttpActive,
         hasWorkspaceRoot: Boolean(activeWorkspaceRoot),
       },
       "debug",
@@ -859,11 +832,9 @@
 
   $effect(() => {
     activeWorkspaceRoot;
-    isChatHttpActive;
     workspaces;
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot,
-      isChatHttpActive,
       openWorkspaceRoots: workspaces.map((workspace) => workspace.rootPath),
       registry: workspaceFileCatalogRegistry,
     });
@@ -888,11 +859,9 @@
 
   $effect(() => {
     documentView.activeDocumentPath;
-    isChatHttpActive;
     activeWorkspaceRoot;
     syncActiveFileTreeExpandEffect({
       activeDocumentPath: documentView.activeDocumentPath,
-      isChatHttpActive,
       activeWorkspaceRoot,
       projectTreeController,
     });
@@ -953,21 +922,6 @@
       runtimeReady,
       snapshot: untrack(() => appState.getSnapshot()),
       syncExternalFileWatcher: runtimeSyncExternalFileWatcher,
-    });
-  });
-
-  $effect(() => {
-    runtimeReady;
-    isSessionTabActive;
-    activeWorkspaceRoot;
-    isChatHttpActive;
-    opencodeEnabled;
-    syncChatAccessMonitorEffect({
-      runtimeReady,
-      isSessionTabActive,
-      activeWorkspaceRoot,
-      isChatHttpActive,
-      opencodeEnabled,
     });
   });
 
@@ -1163,9 +1117,7 @@
   {fileStatusByPath}
   {showProjectPanel}
   {showSessionsSidebar}
-  {chatHttpRailVisible}
   {isSessionTabActive}
-  {isChatHttpActive}
   {currentWindowId}
   {runtimeReady}
   {notepadOpenTabCount}

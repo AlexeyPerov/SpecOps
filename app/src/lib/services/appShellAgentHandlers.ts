@@ -1,6 +1,5 @@
 import {
   allTabs,
-  CHAT_HTTP_CONTEXT_ID,
   getSessionSelectedTabId,
   getSessionTabs,
   isFileTab,
@@ -36,13 +35,12 @@ import {
 } from "../ai/backends/opencodeSessionExport";
 
 export interface AppShellAgentHandlersDeps {
-  getIsChatHttpActive: () => boolean;
   getCurrentWindowId: () => string;
   notify: (message: string) => void;
 }
 
 export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
-  const { getIsChatHttpActive, getCurrentWindowId, notify } = deps;
+  const { getCurrentWindowId, notify } = deps;
 
   async function reconcileWorkspaceSessionMappings(normalizedRoot: string): Promise<void> {
     const snapshot = appState.getSnapshot();
@@ -113,54 +111,6 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     if (nextSessionId) {
       appState.openOrFocusSessionTab(nextSessionId);
     }
-  }
-
-  async function ensureChatHttpSessionTab(): Promise<void> {
-    if (!getIsChatHttpActive()) {
-      return;
-    }
-    const activeScope = chatStore.getActiveChatScopeKey();
-    if (activeScope !== CHAT_HTTP_CONTEXT_ID) {
-      return;
-    }
-    let sessionId = chatStore.getActiveSessionId();
-    if (!sessionId) {
-      sessionId = chatStore.createDraftSession();
-    }
-    if (!sessionId) {
-      return;
-    }
-    chatStore.setActiveSessionId(sessionId);
-    appState.setLastActiveSessionId(sessionId);
-    const sessionSnapshot = appState.getActiveSession();
-    // Chat routing follows the selected tab in the focused pane.
-    const selectedTab = getSessionTabs(sessionSnapshot).find((tab) =>
-      tab.id === getSessionSelectedTabId(sessionSnapshot),
-    );
-    const selectedMatchesChatSession =
-      selectedTab && isSessionTab(selectedTab) && selectedTab.sessionId === sessionId;
-    if (selectedMatchesChatSession) {
-      return;
-    }
-    const fileTabIds = allTabs(sessionSnapshot.editorLayout)
-      .filter((tab) => isFileTab(tab))
-      .map((tab) => tab.id);
-    if (fileTabIds.length > 0) {
-      // Closing these tabs used to bypass the dirty prompt, discarding every
-      // unsaved buffer in the active session when a chat-session tab opened.
-      // Route through the same dirty-prompt path as a user-initiated close so
-      // the user can save (or Save As) before the file tabs go away. If the
-      // user cancels, leave the file tabs in place rather than forcing the
-      // session tab over them.
-      const closed = await closeTabsWithUnsavedPrompt(fileTabIds, {
-        getWindowId: getCurrentWindowId,
-        notify,
-      }, null);
-      if (!closed) {
-        return;
-      }
-    }
-    appState.openOrFocusSessionTab(sessionId);
   }
 
   async function handleDeleteSessionFromChat(): Promise<void> {
@@ -781,7 +731,6 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     handleNewSession,
     handleSelectSession,
     handleDeleteSession,
-    ensureChatHttpSessionTab,
     handleDeleteSessionFromChat,
     restoreWorkspaceSession,
     handleCloseTab,

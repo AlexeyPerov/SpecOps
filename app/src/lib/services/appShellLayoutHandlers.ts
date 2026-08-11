@@ -14,7 +14,6 @@ export interface AppShellLayoutHandlersDeps {
   getShellMainRowWidth: () => number;
   getEditorPaneWidth: () => number;
   getActiveWorkspaceRoot: () => string | null;
-  getIsChatHttpActive: () => boolean;
   getIsSessionTabActive: () => boolean;
   getWorkspaceLayout: () => WorkspaceLayoutState;
   getConsoleOpen: () => boolean;
@@ -79,7 +78,7 @@ export function createAppShellLayoutHandlers(deps: AppShellLayoutHandlersDeps) {
   function applyResponsiveLayoutRules(): void {
     const flags = computeResponsiveLayoutFlags({
       shellMainRowWidth: deps.getShellMainRowWidth(),
-      workspaceActive: Boolean(deps.getActiveWorkspaceRoot()) && !deps.getIsChatHttpActive(),
+      workspaceActive: Boolean(deps.getActiveWorkspaceRoot()),
       isSessionTabActive: deps.getIsSessionTabActive(),
       workspaceLayout: deps.getWorkspaceLayout(),
       consoleOpen: deps.getConsoleOpen(),

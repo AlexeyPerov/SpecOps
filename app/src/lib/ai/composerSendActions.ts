@@ -24,12 +24,8 @@ export interface ComposerSendActionsDeps {
   getRetrying: () => boolean;
   setRetrying: (value: boolean) => void;
   getIsBlocked: () => boolean;
-  getIsDebugSendBlocked: () => boolean;
-  getIsHttpSendBlocked: () => boolean;
-  getIsModelSendBlocked: () => boolean;
   getIsGenerating: () => boolean;
   getIsRetryDisabled: () => boolean;
-  getChatContextKind: () => "workspace" | "chat-http";
   onInlineError: (message: string) => void;
 }
 
@@ -50,10 +46,7 @@ export function createComposerSendActions(deps: ComposerSendActionsDeps) {
       !content ||
       deps.getSubmitInFlight() ||
       deps.getRetrying() ||
-      deps.getIsBlocked() ||
-      deps.getIsDebugSendBlocked() ||
-      deps.getIsHttpSendBlocked() ||
-      deps.getIsModelSendBlocked()
+      deps.getIsBlocked()
     ) {
       return;
     }
@@ -68,7 +61,6 @@ export function createComposerSendActions(deps: ComposerSendActionsDeps) {
     deps.onInlineError("");
     try {
       const result = await sendChatMessage(content, undefined, {
-        chatContextKind: deps.getChatContextKind(),
         ...(options?.context ? { context: options.context } : {}),
       });
       if (!result.ok) {
@@ -88,7 +80,7 @@ export function createComposerSendActions(deps: ComposerSendActionsDeps) {
 
     deps.setRetrying(true);
     deps.onInlineError("");
-    const result = await retryLastChatTurn(undefined, { chatContextKind: deps.getChatContextKind() });
+    const result = await retryLastChatTurn();
     if (!result.ok) {
       deps.onInlineError(result.message);
     }

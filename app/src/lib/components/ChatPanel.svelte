@@ -1,94 +1,11 @@
-<script lang="ts" module>
-  import type { ChatModeId } from "../domain/contracts";
-
-  // Cross-mount preflight cache: ChatPanel is destroyed/recreated on every
-  // chat-tab switch (only editor tabs are keep-alive today), and without this
-  // cache the mount-time $effect re-runs runAccessPreflight + capability IPC
-  // on every visit. Entries are keyed by workspace root + a fingerprint of the
-  // provider/model/settings inputs that invalidate the result; a short TTL
-  // covers tab away-and-back without blocking real provider changes.
-  const PREFLIGHT_CACHE_TTL_MS = 15_000;
-
-  interface CachedChatPreflight {
-    fingerprint: string;
-    supportedModes: ChatModeId[];
-    checkedAt: number;
-  }
-
-  const preflightCacheByRoot = new Map<string, CachedChatPreflight>();
-
-  /** Test/helper: true when `root` has a non-expired cache entry. */
-  export function isChatPreflightCached(root: string): boolean {
-    const entry = preflightCacheByRoot.get(root);
-    if (!entry) {
-      return false;
-    }
-    return Date.now() - entry.checkedAt < PREFLIGHT_CACHE_TTL_MS;
-  }
-
-  /** Test/helper: records a successful preflight for `root`. */
-  export function markChatPreflightCached(
-    root: string,
-    fingerprint: string,
-    supportedModes: ChatModeId[],
-  ): void {
-    preflightCacheByRoot.set(root, {
-      fingerprint,
-      supportedModes: [...supportedModes],
-      checkedAt: Date.now(),
-    });
-  }
-
-  /** Test-only: clears the cross-mount preflight cache. */
-  export function clearChatPreflightCache(): void {
-    preflightCacheByRoot.clear();
-  }
-
-  function readCachedChatPreflight(
-    root: string,
-    fingerprint: string,
-  ): ChatModeId[] | null {
-    const entry = preflightCacheByRoot.get(root);
-    if (!entry) {
-      return null;
-    }
-    if (entry.fingerprint !== fingerprint) {
-      return null;
-    }
-    if (Date.now() - entry.checkedAt >= PREFLIGHT_CACHE_TTL_MS) {
-      return null;
-    }
-    return entry.supportedModes;
-  }
-</script>
-
 <script lang="ts">
   import {
-    getProviderErrorRecoveryHint,
     getAccessBlockedCopy,
-    getDebugProviderDisabledCopy,
-    getHttpMissingConfigCopy,
-    getLocalInvalidModelBlockedCopy,
     OPENCODE_DISABLED_RECOVERY,
-    PROVIDER_MISSING_CONFIG_RECOVERY,
     PROVIDER_REQUEST_FAILURE_RECOVERY,
     isComposerConfigurationError,
   } from "../ai/chatErrorCopy";
   import { WorkspaceAccessReason } from "../ai/capabilities";
-  import {
-    isDebugProviderSendBlocked,
-  } from "../ai/providers/debugProviderSettings";
-  import { listSelectableChatModes, resolveChatMode } from "../ai/modes/resolve";
-  import {
-    isHttpConnectionConfigured,
-    isHttpProviderSendBlocked,
-    resolveHttpConnection,
-  } from "../ai/providers/httpConnectionSettings";
-  import {
-    formatChatProviderLabel,
-  } from "../ai/providers/selection";
-  import { validateLocalModelSelection } from "../ai/providers/capabilityChecker";
-  import { CHAT_HTTP_CONTEXT_ID, type ChatModeId } from "../domain/contracts";
   import { appState } from "../state/appState";
   import {
     chatAccessState,
@@ -101,7 +18,7 @@
     formatCompactionNotice,
   } from "../state/chatStore";
   import { draftEntryTitleForScope } from "../services/chatSessions";
-  import { getOpencodeCatalog, refreshOpencodeCatalog } from "../ai/opencodeCatalog";
+  import { getOpencodeCatalog } from "../ai/opencodeCatalog";
   import { isOpencodeEnabled } from "../services/opencodeSettings";
   import { openSettingsDialog } from "../services/settingsDialogUi";
   import { requestConfirm } from "../services/confirmDialogUi";
@@ -113,7 +30,6 @@
   import SessionTotalBadge from "./SessionTotalBadge.svelte";
 
   interface Props {
-    chatContextKind?: "workspace" | "chat-http";
     onDeleteSession?: () => void | Promise<void>;
     /** M2-T3: fork the active session from a message into a new tab. */
     onForkSession?: (messageId?: string) => void | Promise<void>;
@@ -145,7 +61,6 @@
   }
 
   let {
-    chatContextKind = "workspace",
     onDeleteSession,
     onForkSession,
     onRevertSession,
@@ -166,7 +81,6 @@
   }: Props = $props();
 
   let inlineError = $state("");
-  let supportedModes = $state<ChatModeId[]>(["ask", "review"]);
 
   const messages = $derived($chatMessages);
   const metadata = $derived($chatMetadata);
@@ -174,67 +88,9 @@
   const isGenerating = $derived($chatIsGenerating);
   const canRetryLastTurn = $derived($chatCanRetryLastTurn);
   const lastError = $derived($chatLastError);
-  const providerSettings = $derived($appState.settings.providerSettings);
-  const providerApiKeys = $derived($appState.settings.providerApiKeys);
-  const activeConnectionId = $derived(metadata?.connectionId);
-  const resolvedHttpConnection = $derived.by(() => {
-    providerSettings;
-    providerApiKeys;
-    activeConnectionId;
-    return resolveHttpConnection(providerSettings, providerApiKeys, activeConnectionId);
-  });
-  const httpProviderSettings = $derived(
-    resolvedHttpConnection?.connection ?? providerSettings.http,
-  );
-  const httpApiKey = $derived(resolvedHttpConnection?.apiKey ?? "");
-  const providerModelCatalogs = $derived($appState.settings.providerModelCatalogs);
-  const activeMode = $derived(metadata?.mode ?? "ask");
-  const activeResolvedMode = $derived(resolveChatMode(activeMode, $appState.settings));
-  const activeProvider = $derived.by(() => {
-    metadata;
-    providerSettings;
-    httpProviderSettings;
-    httpApiKey;
-    return chatStore.getActiveChatProvider();
-  });
-  const activeModel = $derived.by(() => {
-    metadata;
-    providerModelCatalogs;
-    providerSettings;
-    activeProvider;
-    activeConnectionId;
-    return chatStore.getActiveChatModel(providerModelCatalogs, providerSettings);
-  });
+  const activeModel = $derived(metadata?.selectedModelId ?? "");
   const activeOpencodeAgentId = $derived(metadata?.opencodeAgentId ?? "");
   const activeOpencodeProviderId = $derived(metadata?.opencodeProviderId ?? "");
-  const modelCatalogContext = $derived({
-    providerSettings,
-    connectionId: activeConnectionId,
-  });
-  const isChatHttpScope = $derived(chatContextKind === "chat-http");
-  const localModelValidation = $derived.by(() => {
-    if (isChatHttpScope === false) {
-      return { ok: true as const, modelId: activeModel };
-    }
-    return validateLocalModelSelection(
-      providerModelCatalogs,
-      activeProvider,
-      activeModel,
-      modelCatalogContext,
-    );
-  });
-  const isModelSendBlocked = $derived(!localModelValidation.ok);
-  const modelBlockedCopy = $derived(
-    getLocalInvalidModelBlockedCopy(activeModel, formatChatProviderLabel(activeProvider)),
-  );
-  const isDebugSendBlocked = $derived(
-    !isChatHttpScope ? false : isDebugProviderSendBlocked(activeProvider, providerSettings),
-  );
-  const isHttpSendBlocked = $derived(
-    isChatHttpScope
-      ? isHttpProviderSendBlocked(activeProvider, httpProviderSettings, httpApiKey)
-      : false,
-  );
   const isBlocked = $derived(
     accessState.status === "blocked" &&
       accessState.reason !== WorkspaceAccessReason.MissingProviderConfig,
@@ -243,15 +99,9 @@
     accessState.status === "blocked" &&
       accessState.reason === WorkspaceAccessReason.MissingProviderConfig,
   );
-  const isChatBlockedVisible = $derived(
-    (isChatHttpScope && !$appState.settings.chatHttp.enabled) ||
-      isBlocked ||
-      isHttpSendBlocked ||
-      isDebugSendBlocked ||
-      isModelSendBlocked,
-  );
+  const isChatBlockedVisible = $derived(isBlocked);
   const isOpencodeDisabledForWorkspace = $derived(
-    !isChatHttpScope && !isOpencodeEnabled($appState.settings.opencode),
+    !isOpencodeEnabled($appState.settings.opencode),
   );
   const isEmpty = $derived(messages.length === 0);
   const emptySetupAction = $derived.by(() => {
@@ -260,9 +110,9 @@
     }
     if (isMissingProviderConfig) {
       return {
-        hint: PROVIDER_MISSING_CONFIG_RECOVERY,
-        label: "Open Providers settings",
-        onClick: () => openSettingsDialog("connections"),
+        hint: "Finish OpenCode setup and try again.",
+        label: "Open OpenCode settings",
+        onClick: () => openSettingsDialog("opencode"),
       };
     }
     if (isOpencodeDisabledForWorkspace) {
@@ -277,28 +127,23 @@
   /**
    * Cumulative cost / token totals across all assistant messages. Workspace
    * agent tabs hydrate from `session.messages` so assistant messages carry
-   * cumulative `cost` parts; chat-http/debug threads have no cost payload and
-   * this resolves to null (no badge rendered).
+   * cumulative `cost` parts.
    */
   const sessionTotals = $derived(extractSessionTotals(messages));
   const activeSessionId = $derived(chatStore.getActiveSessionId());
   const activeAgentTitle = $derived.by(() => {
     if (!activeSessionId) {
-      return isChatHttpScope ? "Chat" : "Session";
+      return "Session";
     }
-    return (
-      chatStore.getSessionTitle(activeSessionId) ??
-      draftEntryTitleForScope(isChatHttpScope ? CHAT_HTTP_CONTEXT_ID : null)
-    );
+    return chatStore.getSessionTitle(activeSessionId) ?? draftEntryTitleForScope(null);
   });
   const canDeleteSession = $derived(activeSessionId !== null);
   /**
    * M2 session actions are only meaningful for workspace agent tabs with a
-   * linked OpenCode session. Chat-http / debug threads and draft agents have
-   * no server-side session to fork / revert / share / summarize / export, so
-   * the menu is hidden entirely for them.
+   * linked OpenCode session. Draft sessions have no server-side session to
+   * fork / revert / share / summarize / export, so the menu is hidden.
    */
-  const isWorkspaceSession = $derived(chatContextKind === "workspace" && activeSessionId !== null);
+  const isWorkspaceSession = $derived(activeSessionId !== null);
   const hasSessionActions = $derived(
     isWorkspaceSession &&
       Boolean(
@@ -354,46 +199,13 @@
       void fn();
     }
   }
-  const workspaceRootPath = $derived.by(() =>
-    chatContextKind === "chat-http"
-      ? CHAT_HTTP_CONTEXT_ID
-      : chatStore.getActiveWorkspaceRoot() ?? ""
-  );
-  const opencodeCatalog = $derived.by(() => {
-    if (chatContextKind !== "workspace") {
-      return null;
-    }
-    return getOpencodeCatalog(workspaceRootPath);
-  });
+  const workspaceRootPath = $derived(chatStore.getActiveWorkspaceRoot() ?? "");
+  const opencodeCatalog = $derived(getOpencodeCatalog(workspaceRootPath));
   const compactionNotice = $derived.by(() => {
     const count = metadata?.compactedMessageCount ?? 0;
     return count > 0 ? formatCompactionNotice(count) : "";
   });
-  const httpBlockedCopy = $derived.by(() => {
-    const copy = getHttpMissingConfigCopy();
-    if (activeProvider !== "http") {
-      return copy;
-    }
-    if (!resolvedHttpConnection) {
-      return {
-        ...copy,
-        message: "No configured HTTP connection is available. Add one in Providers settings.",
-      };
-    }
-    if (
-      !isHttpConnectionConfigured(resolvedHttpConnection.connection, resolvedHttpConnection.apiKey)
-    ) {
-      return {
-        ...copy,
-        message: `Connection "${resolvedHttpConnection.connection.label}" is not fully configured.`,
-      };
-    }
-    return copy;
-  });
-  const debugBlockedCopy = $derived(getDebugProviderDisabledCopy(activeProvider));
-  const accessBlockedCopy = $derived(
-    getAccessBlockedCopy(accessState.reason, { activeProvider }),
-  );
+  const accessBlockedCopy = $derived(getAccessBlockedCopy(accessState.reason));
   const composerError = $derived.by(() => {
     if (inlineError) {
       return { message: inlineError, recoveryHint: composerErrorRecoveryHint(inlineError) };
@@ -401,77 +213,24 @@
     if (lastError && !isGenerating) {
       return {
         message: lastError.message,
-        recoveryHint: getProviderErrorRecoveryHint(lastError.message),
+        recoveryHint: PROVIDER_REQUEST_FAILURE_RECOVERY,
       };
     }
     return null;
   });
 
+  // Run workspace access preflight on mount so path/access issues surface
+  // immediately (the cache-free path; chat-http provider/model inputs no
+  // longer factor into readiness).
   $effect(() => {
-    activeProvider;
-    activeModel;
-    metadata?.mode;
-    providerSettings.debugChat.enabled;
-    providerSettings.debugWorkspace.enabled;
-    httpProviderSettings.enabled;
-    httpProviderSettings.baseUrl;
-    providerModelCatalogs;
-    httpApiKey;
-    const selectableModeIds = listSelectableChatModes($appState.settings).map((mode) => mode.id);
-    const root = chatStore.getActiveWorkspaceRoot();
-    if (!root) {
-      supportedModes = selectableModeIds;
+    workspaceRootPath;
+    if (!workspaceRootPath) {
       return;
     }
-    // Fingerprint the inputs that invalidate supportedModes / access readiness
-    // so a provider/model/settings change never reuses a stale cache entry,
-    // even inside the TTL window.
-    const fingerprint = [
-      activeProvider,
-      activeModel,
-      metadata?.mode ?? "",
-      metadata?.connectionId ?? "",
-      providerSettings.debugChat.enabled ? "1" : "0",
-      providerSettings.debugWorkspace.enabled ? "1" : "0",
-      httpProviderSettings.enabled ? "1" : "0",
-      httpProviderSettings.baseUrl ?? "",
-      httpApiKey.length > 0 ? "key" : "",
-      selectableModeIds.join(","),
-    ].join("\0");
-    const cachedModes = readCachedChatPreflight(root, fingerprint);
-    if (cachedModes) {
-      supportedModes = cachedModes;
-      return;
-    }
-    void chatStore.runAccessPreflight().then(async () => {
-      const result = await chatStore.checkActiveWorkspaceCapabilities();
-      const providerSupportedModes =
-        result.capabilities?.supportedModes && result.capabilities.supportedModes.length > 0
-          ? result.capabilities.supportedModes
-          : selectableModeIds;
-      const allowed = new Set(providerSupportedModes);
-      const nextModes = selectableModeIds.filter((modeId) => allowed.has(modeId));
-      supportedModes = nextModes;
-      markChatPreflightCached(root, fingerprint, nextModes);
-    });
+    void chatStore.runAccessPreflight();
   });
 
-  /**
-   * M13.5 — OpenCode catalog (models / providers / agents) is no longer
-   * auto-refreshed on session-tab mount. Sidecar is lazy, so the catalog
-   * stays empty until the user clicks **Refresh model list** in Settings →
-   * Workspaces → OpenCode, or sends the first message (which spawns the
-   * sidecar and pulls the catalog as part of the send pipeline). Acceptable
-   * tradeoff for not eagerly spawning the sidecar on file/editor activity.
-   */
-
   function composerErrorRecoveryHint(message: string): string {
-    if (message === httpBlockedCopy.message) {
-      return httpBlockedCopy.recoveryHint;
-    }
-    if (message === debugBlockedCopy.message) {
-      return debugBlockedCopy.recoveryHint;
-    }
     if (message === accessBlockedCopy.message || message === accessState.message) {
       return accessState.recoveryHint ?? accessBlockedCopy.recoveryHint;
     }
@@ -485,10 +244,9 @@
     if (!canDeleteSession || !activeSessionId) {
       return;
     }
-    const targetLabel = isChatHttpScope ? "chat" : "session";
     const confirmed = await requestConfirm({
-      title: `Delete ${targetLabel}`,
-      message: `Delete ${targetLabel} "${activeAgentTitle}"? This removes the ${targetLabel} and its history. This cannot be undone.`,
+      title: "Delete session",
+      message: `Delete session "${activeAgentTitle}"? This removes the session and its history. This cannot be undone.`,
       confirmLabel: "Delete",
       danger: true,
     });
@@ -503,7 +261,7 @@
   }
 </script>
 
-<section class="chat-panel" aria-label={isChatHttpScope ? "Chats panel" : "Session chat"}>
+<section class="chat-panel" aria-label="Session chat">
   <div class="chat-panel-header">
     <div class="chat-panel-title-group">
       <p class="chat-panel-title">{activeAgentTitle}</p>
@@ -628,32 +386,20 @@
           onclick={() => void deleteSession()}
           disabled={isBlocked || isGenerating}
         >
-          {isChatHttpScope ? "Delete chat" : "Delete session"}
+          Delete session
         </button>
       {/if}
     </div>
   </div>
 
   <div class="chat-panel-stack">
-    <ChatBlockedState
-      isAccessBlocked={isBlocked}
-      isChatHttpFeatureBlocked={isChatHttpScope && !$appState.settings.chatHttp.enabled}
-      isHttpBlocked={isHttpSendBlocked}
-      isDebugBlocked={isDebugSendBlocked}
-      isModelBlocked={isModelSendBlocked}
-      {activeProvider}
-      {accessBlockedCopy}
-      {httpBlockedCopy}
-      {debugBlockedCopy}
-      {modelBlockedCopy}
-    />
+    <ChatBlockedState isAccessBlocked={isBlocked} {accessBlockedCopy} />
 
     <ChatMessageList
       {messages}
       {isEmpty}
       {isGenerating}
       sessionId={activeSessionId}
-      activeModeRequiredSections={activeResolvedMode.requiredSections}
       {compactionNotice}
       sessionSummary={metadata?.summary ?? ""}
       canForkFromMessage={isWorkspaceSession && Boolean(onForkSession)}
@@ -662,9 +408,7 @@
       onRevertFromMessage={(messageId) => void onRevertSession?.(messageId)}
       emptyHint={
         emptySetupAction?.hint ??
-        (isChatHttpScope
-          ? "Send messages with your configured connection. Pick a provider, mode, and model, then send."
-          : "Send a prompt to this session. Select an OpenCode agent and model, then send.")
+        "Send a prompt to this session. Select an OpenCode agent and model, then send."
       }
       emptyActionLabel={emptySetupAction?.label}
       onEmptyAction={emptySetupAction?.onClick}
@@ -672,28 +416,12 @@
 
     <ChatComposer
       {isBlocked}
-      isDebugSendBlocked={isDebugSendBlocked}
-      isHttpSendBlocked={isHttpSendBlocked}
-      isModelSendBlocked={isModelSendBlocked}
       {isGenerating}
       {canRetryLastTurn}
-      {activeMode}
-      {activeProvider}
       {activeModel}
-      {chatContextKind}
-      {supportedModes}
-      {providerSettings}
-      {httpProviderSettings}
-      {httpApiKey}
-      {activeConnectionId}
-      {providerApiKeys}
-      {providerModelCatalogs}
       threadMessages={messages}
-      threadSummary={metadata?.summary}
-      threadId={metadata?.threadId}
       activeSessionId={activeSessionId}
       workspaceRootPath={workspaceRootPath}
-      appSettings={$appState.settings}
       {composerError}
       {opencodeCatalog}
       {activeOpencodeAgentId}

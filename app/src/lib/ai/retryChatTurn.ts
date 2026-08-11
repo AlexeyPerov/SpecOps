@@ -1,19 +1,18 @@
 import { chatStore } from "../state/chatStore";
+import { appState } from "../state/appState";
 import {
   beginTurn,
   executeProviderTurn,
   findLastUserMessage,
   getLastRetryError,
-  isWorkspaceSendBlockedWhenOpencodeDisabled,
   resolveSendTarget,
-  shouldUseWorkspaceAgentBackend,
   validateOpencodeBackendSend,
-  validateProviderSend,
   type ChatSendContextOptions,
   type ChatTurnSuccessResult,
   type SendChatMessageFailureReason,
 } from "./chatSendPipeline";
 import { OPENCODE_DISABLED_MESSAGE } from "./chatErrorCopy";
+import { isOpencodeEnabled } from "../services/opencodeSettings";
 
 export type RetryLastChatTurnFailureReason =
   | SendChatMessageFailureReason
@@ -26,9 +25,9 @@ export type RetryLastChatTurnResult =
 
 export async function retryLastChatTurn(
   sessionId?: string,
-  options?: ChatSendContextOptions,
+  _options?: ChatSendContextOptions,
 ): Promise<RetryLastChatTurnResult> {
-  const target = resolveSendTarget("retry", sessionId, options);
+  const target = resolveSendTarget("retry", sessionId);
   if (!target.ok) {
     return target;
   }
@@ -50,45 +49,13 @@ export async function retryLastChatTurn(
     };
   }
 
-  const useWorkspaceBackend = shouldUseWorkspaceAgentBackend({
-    root: target.root,
-    chatContextKind: target.chatContextKind,
-  });
-
-  if (!useWorkspaceBackend && isWorkspaceSendBlockedWhenOpencodeDisabled({
-    root: target.root,
-    chatContextKind: target.chatContextKind,
-  })) {
+  if (!isOpencodeEnabled(appState.getSnapshot().settings.opencode)) {
     return { ok: false, reason: "provider_unavailable", message: OPENCODE_DISABLED_MESSAGE };
   }
 
-  if (useWorkspaceBackend) {
-    const opencodeValidation = await validateOpencodeBackendSend(target.root, target.activeSessionId);
-    if (!opencodeValidation.ok) {
-      return opencodeValidation;
-    }
-    const previousError = getLastRetryError(target.activeSessionId);
-    const turnId = beginTurn(target.activeSessionId);
-    if (!turnId) {
-      return {
-        ok: false,
-        reason: "generating",
-        message: "Another response is already in progress.",
-      };
-    }
-    return executeProviderTurn({
-      root: target.root,
-      chatContextKind: target.chatContextKind,
-      activeSessionId: target.activeSessionId,
-      turnId,
-      modelId: opencodeValidation.modelId,
-      previousError,
-    });
-  }
-
-  const validation = await validateProviderSend(target.activeSessionId, options);
-  if (!validation.ok) {
-    return validation;
+  const opencodeValidation = await validateOpencodeBackendSend(target.root, target.activeSessionId);
+  if (!opencodeValidation.ok) {
+    return opencodeValidation;
   }
 
   const previousError = getLastRetryError(target.activeSessionId);
@@ -100,16 +67,11 @@ export async function retryLastChatTurn(
       message: "Another response is already in progress.",
     };
   }
-
   return executeProviderTurn({
     root: target.root,
-    chatContextKind: target.chatContextKind,
     activeSessionId: target.activeSessionId,
     turnId,
-    provider: validation.provider,
-    accessStatus: validation.accessStatus,
-    modelId: validation.modelId,
-    connectionId: validation.connectionId,
+    modelId: opencodeValidation.modelId,
     previousError,
   });
 }

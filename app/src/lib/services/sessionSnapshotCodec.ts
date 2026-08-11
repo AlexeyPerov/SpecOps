@@ -10,7 +10,6 @@ export function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
   return stripWindowSnapshotForSession({
     activeContextId: state.contexts.activeContextId,
     notepad: state.contexts.notepad,
-    chatHttp: state.contexts.chatHttp,
     workspaces: state.contexts.workspaces,
     editorPreferences: {
       zoomPercent: state.editor.zoomPercent,

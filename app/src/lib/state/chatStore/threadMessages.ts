@@ -64,7 +64,7 @@ export function createThreadMessagesSlice(deps: {
         }
 
         const thread = cloneThread(existingThread) ?? {
-          metadata: createThreadMetadata(sessionId, message.createdAt, root),
+          metadata: createThreadMetadata(sessionId, message.createdAt),
           messages: [],
         };
         thread.messages = [...thread.messages, { ...message }];

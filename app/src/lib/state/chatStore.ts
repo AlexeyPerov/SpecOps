@@ -1,7 +1,5 @@
 import { derived, writable } from "svelte/store";
 import type { CapabilityChecker, WorkspaceReadinessChecker } from "../ai/capabilities";
-import type { ContextId } from "../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { createAccessSlice } from "./chatStore/access";
 import {
   createSessionsSlice,
@@ -13,53 +11,37 @@ import { createRuntimeSlice, activeRuntime } from "./chatStore/runtime";
 import { createThreadsSlice } from "./chatStore/threads";
 import {
   formatCompactionNotice,
-  setDefaultThreadConnectionResolver,
-  setDefaultChatProviderResolver,
 } from "./chatStore/threadHelpers";
-import { activeThread, activeSessionId } from "./chatStore/workspace";
+import { activeThread, activeSessionId, getOrCreateWorkspaceState } from "./chatStore/workspace";
 import { defaultUnknownAccessState } from "./chatStore/access";
 import type {
   ChatAccessState,
-  ChatModelSwitchOptions,
-  ChatProviderSwitchOptions,
   ChatScopeKey,
   ChatStoreState,
   ChatThreadRuntimeState,
   ChatTurnError,
   SessionIndexEntry,
-  SwitchThreadModelResult,
-  SwitchThreadConnectionResult,
-  SwitchThreadProviderResult,
   WorkspaceSessionsState,
 } from "./chatStore/types";
 import type { ChatMessage } from "../domain/chat";
-import { normalizeWorkspaceThreadsForScope } from "../ai/providers/threadScopeNormalization";
 import {
   deriveSessionSubtitleFromThread,
   firstAssistantMessageContent,
 } from "../services/chatSessions";
-import { chatScopeKeyForContextId, isChatContextScopeKey } from "./chatStore/types";
 
 export type {
   ChatAccessState,
-  ChatModelSwitchOptions,
-  ChatProviderSwitchOptions,
   ChatScopeKey,
   ChatThreadRuntimeState,
   ChatTurnError,
-  SwitchThreadModelResult,
-  SwitchThreadConnectionResult,
-  SwitchThreadProviderResult,
   WorkspaceSessionsState,
 };
 
 export {
   createSessionId,
   formatCompactionNotice,
-  setDefaultThreadConnectionResolver,
   resetSessionIdCounterForTests,
   resetSessionHydrationForTests,
-  setDefaultChatProviderResolver,
 };
 
 const initialState: ChatStoreState = {
@@ -92,11 +74,7 @@ function createChatStore() {
   }
 
   function getActiveWorkspaceRoot(): string | null {
-    const scopeKey = getActiveChatScopeKey();
-    if (!scopeKey || isChatContextScopeKey(scopeKey)) {
-      return null;
-    }
-    return scopeKey;
+    return getActiveChatScopeKey();
   }
 
   const runtimeSlice = createRuntimeSlice({ update, getSnapshot, getActiveChatScopeKey });
@@ -131,30 +109,19 @@ function createChatStore() {
         if (state.activeChatScopeKey === scopeKey) {
           return state;
         }
-        let next: ChatStoreState = {
-          ...state,
-          activeChatScopeKey: scopeKey,
-        };
-        if (scopeKey) {
-          next = normalizeWorkspaceThreadsForScope(next, scopeKey);
+        if (!scopeKey) {
+          return { ...state, activeChatScopeKey: null };
         }
-        return next;
+        // Ensure the workspace entry exists for the active scope.
+        const { nextState } = getOrCreateWorkspaceState(state, scopeKey);
+        return { ...nextState, activeChatScopeKey: scopeKey };
       });
     },
     setActiveWorkspaceRoot(normalizedRootPath: string | null): void {
       this.setActiveChatScopeKey(normalizedRootPath);
     },
-    setActiveChatScope(contextId: ContextId): void {
-      const scopeKey = chatScopeKeyForContextId(contextId);
-      if (!scopeKey) {
-        return;
-      }
-      this.setActiveChatScopeKey(scopeKey);
-    },
     getActiveChatScopeKey,
     getActiveWorkspaceRoot,
-    setDefaultChatProviderResolver,
-    setDefaultThreadConnectionResolver,
     ...sessionsSlice,
     ...threadsSlice,
     ...runtimeSlice,
@@ -182,7 +149,7 @@ export const chatIsEmpty = derived(
 );
 export const chatAccessState = derived(chatStore, ($chatStore) => {
   const scopeKey = $chatStore.activeChatScopeKey;
-  if (!scopeKey || isChatContextScopeKey(scopeKey)) {
+  if (!scopeKey) {
     return defaultUnknownAccessState("Open a workspace to use workspace AI chat.");
   }
   return (

@@ -36,13 +36,8 @@ describe("chat retention policy constants", () => {
       {
         id: "system-1",
         role: "system",
-        content: "provider changed",
+        content: "notice",
         createdAt: "2026-05-26T00:00:03.000Z",
-        systemEvent: {
-          type: "provider-switched",
-          fromProvider: "http",
-          toProvider: "debug-workspace",
-        },
       },
       userMessage("2"),
     ];

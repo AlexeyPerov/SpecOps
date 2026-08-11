@@ -33,10 +33,6 @@ export interface AppDomainState {
 export interface WindowSessionSnapshot {
   activeContextId: ContextId;
   notepad: ContextSnapshot;
-  /** Reserved for phase-2 persistence. */
-  chatHttp?: ContextSnapshot;
-  /** Reserved for phase-2 persistence. */
-  chatCloud?: ContextSnapshot;
   workspaces: WorkspaceEntry[];
   editorPreferences: Pick<AppDomainState["editor"], "zoomPercent" | "wrapLines">;
   /**

@@ -9,9 +9,6 @@
     type SettingsDialogTab,
   } from "../../services/settingsDialogUi";
   import KeyboardShortcutsSettings from "../KeyboardShortcutsSettings.svelte";
-  import ChatModesSettingsPanel from "./ChatModesSettingsPanel.svelte";
-  import ConnectionsSettingsPanel from "./ConnectionsSettingsPanel.svelte";
-  import DebugProviderSettingsPanel from "./DebugProviderSettingsPanel.svelte";
   import DevSettingsPanel from "./DevSettingsPanel.svelte";
   import OpenCodeSettingsPanel from "./OpenCodeSettingsPanel.svelte";
   import OpenCodeConfigPanel from "./OpenCodeConfigPanel.svelte";
@@ -38,13 +35,12 @@
   let activeTab = $state<SettingsDialogTab>("editor");
   let filterQuery = $state("");
 
-  // Read only the specific settings slices this view depends on so the deep-link
+  // Read only the specific settings slice this view depends on so the deep-link
   // effect below does not re-run on every `$appState` emit (which would otherwise
   // re-snap `activeTab` and clear `filterQuery` while the user is typing).
-  const chatHttpSettings = $derived($appState.settings.chatHttp);
   const opencodeSettings = $derived($appState.settings.opencode);
 
-  const settingsSidebar = $derived(buildSettingsSidebar(chatHttpSettings, opencodeSettings));
+  const settingsSidebar = $derived(buildSettingsSidebar(opencodeSettings));
   const filteredSettingsSidebar = $derived(
     filterSettingsSidebar(settingsSidebar, filterQuery),
   );
@@ -56,12 +52,11 @@
     ),
   );
 
-  // Honour a deep-link target carried by the view tab (e.g. openSettingsDialog("connections")).
+  // Honour a deep-link target carried by the view tab (e.g. openSettingsDialog("opencode")).
   $effect(() => {
     if (subTab) {
       const resolved = resolveOpenSettingsDialogTab(
         subTab as SettingsDialogTab,
-        chatHttpSettings,
         opencodeSettings,
       );
       activeTab = resolved;
@@ -92,18 +87,6 @@
     <VersionControlSettingsPanel />
   {:else if tabId === "dev"}
     <DevSettingsPanel dialogOpen={true} />
-  {:else if tabId === "connections"}
-    <ConnectionsSettingsPanel dialogOpen={true} />
-  {:else if tabId === "chatModes"}
-    <ChatModesSettingsPanel />
-  {:else if tabId === "debugAi"}
-    <DebugProviderSettingsPanel
-      settingsScope="debugChat"
-      catalogProviderId="debug-chat"
-      title="Debug Provider"
-      note="Settings for the Chats Debug Provider. Enabled by default for development dogfooding; uncheck Enable to hide it from Chats."
-      enableLabel="Show Debug Provider in Chats"
-    />
   {:else if tabId === "opencode"}
     <OpenCodeSettingsPanel dialogOpen={true} />
   {:else if tabId === "openCodeConfig"}
@@ -122,14 +105,6 @@
     <InstructionsPanel dialogOpen={true} />
   {:else if tabId === "logs"}
     <LogsSettingsPanel />
-  {:else if tabId === "debugAgent"}
-    <DebugProviderSettingsPanel
-      settingsScope="debugWorkspace"
-      catalogProviderId="debug-workspace"
-      title="Debug Provider"
-      note="Settings for the workspace Debug Provider. Enabled by default for development dogfooding; uncheck Enable to hide it from workspace chat."
-      enableLabel="Show Debug Provider in workspace chat"
-    />
   {/if}
 {/snippet}
 

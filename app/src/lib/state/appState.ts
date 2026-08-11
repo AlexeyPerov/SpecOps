@@ -57,10 +57,6 @@ const initialState: AppDomainState = {
       documents: [buildEmptyUnsavedDocument("doc-1")],
       session: buildDefaultContextSession(),
     },
-    chatHttp: {
-      documents: [buildEmptyUnsavedDocument("doc-1")],
-      session: buildDefaultContextSession(),
-    },
     workspaces: [],
   },
   settings: defaultSettings,

@@ -32,7 +32,6 @@ describe("syncActiveFileTreeExpandEffect", () => {
       activeDocumentPath: string | null,
     ): SyncActiveFileTreeExpandEffectInput => ({
       activeDocumentPath,
-      isChatHttpActive: false,
       activeWorkspaceRoot: "/repo",
       projectTreeController: {
         ensureExpandedForActiveFile,
@@ -52,7 +51,6 @@ describe("syncActiveFileTreeExpandEffect", () => {
     const ensureExpandedForActiveFile = vi.fn(async () => {});
     const input: SyncActiveFileTreeExpandEffectInput = {
       activeDocumentPath: "/repo/src/main.ts",
-      isChatHttpActive: false,
       activeWorkspaceRoot: "/repo",
       projectTreeController: {
         ensureExpandedForActiveFile,
@@ -75,7 +73,6 @@ describe("syncActiveFileTreeExpandEffect", () => {
     const ensureExpandedForActiveFile = vi.fn(async () => {});
     const input: SyncActiveFileTreeExpandEffectInput = {
       activeDocumentPath: "/repo/moved/file.ts",
-      isChatHttpActive: false,
       activeWorkspaceRoot: "/repo",
       projectTreeController: {
         ensureExpandedForActiveFile,
@@ -108,7 +105,6 @@ describe("syncProjectTreeWatcherEffect", () => {
     return {
       runtimeReady: true,
       activeWorkspaceRoot: "/repo",
-      isChatHttpActive: false,
       projectTreeController: {
         clearFilesystemChangeDebounce,
       } as unknown as SyncProjectTreeWatcherEffectInput["projectTreeController"],
@@ -134,7 +130,7 @@ describe("syncProjectTreeWatcherEffect", () => {
     const input = makeInput({ loadProjectTreeRoot });
 
     syncProjectTreeWatcherEffect(input);
-    // Same workspace/runtime/chat-http — simulates tab churn re-invoking the effect.
+    // Same workspace/runtime — simulates tab churn re-invoking the effect.
     syncProjectTreeWatcherEffect({ ...input });
 
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
@@ -153,21 +149,18 @@ describe("syncProjectTreeWatcherEffect", () => {
     expect(syncWatcher).toHaveBeenNthCalledWith(2, ["/repo-b"]);
   });
 
-  it("clears watcher when leaving workspace or entering chat-http", () => {
+  it("clears watcher when leaving workspace", () => {
     const loadProjectTreeRoot = vi.fn(async () => {});
     const clearFilesystemChangeDebounce = vi.fn();
 
     syncProjectTreeWatcherEffect(
       makeInput({ loadProjectTreeRoot, clearFilesystemChangeDebounce }),
     );
+    // Re-running for the same workspace is a no-op.
     syncProjectTreeWatcherEffect(
-      makeInput({
-        loadProjectTreeRoot,
-        clearFilesystemChangeDebounce,
-        isChatHttpActive: true,
-      }),
+      makeInput({ loadProjectTreeRoot, clearFilesystemChangeDebounce }),
     );
-    // Redundant inactive transitions stay no-ops.
+    // Leaving the workspace clears the watcher and the filesystem debounce.
     syncProjectTreeWatcherEffect(
       makeInput({
         loadProjectTreeRoot,
@@ -219,29 +212,6 @@ describe("syncProjectTreeWatcherEffect", () => {
     );
 
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not reload root when toggling chat-http for the same workspace", () => {
-    const loadProjectTreeRoot = vi.fn(async () => {});
-    const clearFilesystemChangeDebounce = vi.fn();
-
-    syncProjectTreeWatcherEffect(
-      makeInput({ loadProjectTreeRoot, clearFilesystemChangeDebounce }),
-    );
-    syncProjectTreeWatcherEffect(
-      makeInput({
-        loadProjectTreeRoot,
-        clearFilesystemChangeDebounce,
-        isChatHttpActive: true,
-      }),
-    );
-    syncProjectTreeWatcherEffect(
-      makeInput({ loadProjectTreeRoot, clearFilesystemChangeDebounce }),
-    );
-
-    expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
-    expect(syncWatcher).toHaveBeenCalledWith([]);
-    expect(syncWatcher).toHaveBeenLastCalledWith(["/repo"]);
   });
 
   it("watches every open workspace root (multi-root)", () => {
@@ -330,7 +300,6 @@ function watcherDomainState(overrides: {
     contexts: {
       activeContextId: "notepad",
       notepad: snapshot,
-      chatHttp: snapshot,
       workspaces: [],
     },
     settings: {
@@ -502,9 +471,7 @@ describe("syncWorkspaceFileCatalogEffect", () => {
     const setActiveRoot = vi.fn();
     const ensureReady = vi.fn();
     syncWorkspaceFileCatalogEffect({
-      activeWorkspaceRoot: "/repo",
-      isChatHttpActive: false,
-      registry: { setActiveRoot, ensureReady },
+      activeWorkspaceRoot: "/repo",      registry: { setActiveRoot, ensureReady },
     });
     expect(setActiveRoot).toHaveBeenCalledTimes(1);
     expect(setActiveRoot).toHaveBeenCalledWith("/repo");
@@ -514,24 +481,18 @@ describe("syncWorkspaceFileCatalogEffect", () => {
   it("sets the registry root once per workspace and clears when inactive", () => {
     const setActiveRoot = vi.fn();
     syncWorkspaceFileCatalogEffect({
-      activeWorkspaceRoot: "/repo",
-      isChatHttpActive: false,
-      openWorkspaceRoots: ["/repo"],
+      activeWorkspaceRoot: "/repo",      openWorkspaceRoots: ["/repo"],
       registry: { setActiveRoot },
     });
     syncWorkspaceFileCatalogEffect({
-      activeWorkspaceRoot: "/repo",
-      isChatHttpActive: false,
-      openWorkspaceRoots: ["/repo"],
+      activeWorkspaceRoot: "/repo",      openWorkspaceRoots: ["/repo"],
       registry: { setActiveRoot },
     });
     expect(setActiveRoot).toHaveBeenCalledTimes(1);
     expect(setActiveRoot).toHaveBeenCalledWith("/repo");
 
     syncWorkspaceFileCatalogEffect({
-      activeWorkspaceRoot: null,
-      isChatHttpActive: false,
-      openWorkspaceRoots: [],
+      activeWorkspaceRoot: null,      openWorkspaceRoots: [],
       registry: { setActiveRoot },
     });
     expect(setActiveRoot).toHaveBeenCalledWith(null);
@@ -541,15 +502,11 @@ describe("syncWorkspaceFileCatalogEffect", () => {
     const setActiveRoot = vi.fn();
     const disposeRoot = vi.fn();
     syncWorkspaceFileCatalogEffect({
-      activeWorkspaceRoot: "/repo-a",
-      isChatHttpActive: false,
-      openWorkspaceRoots: ["/repo-a", "/repo-b"],
+      activeWorkspaceRoot: "/repo-a",      openWorkspaceRoots: ["/repo-a", "/repo-b"],
       registry: { setActiveRoot, disposeRoot },
     });
     syncWorkspaceFileCatalogEffect({
-      activeWorkspaceRoot: "/repo-a",
-      isChatHttpActive: false,
-      openWorkspaceRoots: ["/repo-a"],
+      activeWorkspaceRoot: "/repo-a",      openWorkspaceRoots: ["/repo-a"],
       registry: { setActiveRoot, disposeRoot },
     });
     expect(disposeRoot).toHaveBeenCalledTimes(1);

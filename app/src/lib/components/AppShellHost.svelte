@@ -160,9 +160,7 @@
       | null;
     showProjectPanel: boolean;
     showSessionsSidebar: boolean;
-    chatHttpRailVisible: boolean;
     isSessionTabActive: boolean;
-    isChatHttpActive: boolean;
     currentWindowId: string;
     notepadOpenTabCount: number;
     notepadRecentTabs: { tabId: string; label: string }[];
@@ -252,9 +250,7 @@
     fileStatusByPath,
     showProjectPanel,
     showSessionsSidebar,
-    chatHttpRailVisible,
     isSessionTabActive,
-    isChatHttpActive,
     currentWindowId,
     notepadOpenTabCount,
     notepadRecentTabs,
@@ -324,7 +320,6 @@
     getShellMainRowWidth: () => shellMainRowWidth,
     getEditorPaneWidth: () => editorPaneWidth,
     getActiveWorkspaceRoot: () => activeWorkspaceRoot,
-    getIsChatHttpActive: () => isChatHttpActive,
     getIsSessionTabActive: () => isSessionTabActive,
     getWorkspaceLayout: () => workspaceLayout,
     getConsoleOpen: () => consoleOpen,
@@ -360,7 +355,6 @@
   });
 
   const agentHandlers = createAppShellAgentHandlers({
-    getIsChatHttpActive: () => isChatHttpActive,
     getCurrentWindowId: () => currentWindowId,
     notify: (message) => notify(message),
   });
@@ -448,7 +442,6 @@
     openAndActivatePath: fileHandlers.openAndActivatePath,
     consumeOpenedPaths: fileHandlers.consumeOpenedPaths,
     restoreWorkspaceSession: agentHandlers.restoreWorkspaceSession,
-    ensureChatHttpSessionTab: agentHandlers.ensureChatHttpSessionTab,
     loadProjectTreeRoot: projectTreeHandlers.loadProjectTreeRoot,
     notifyProjectTreeFilesystemChange: projectTreeHandlers.notifyProjectTreeFilesystemChange,
     setupLayoutObserver: layoutHandlers.setupLayoutObserver,
@@ -721,7 +714,6 @@
     show: true,
     workspaces: railWorkspaces,
     activeContextId,
-    chatHttpRailVisible,
     opencodeEnabled,
     panelWidthPx: normalizeActivityRailWidthPx(activityRailWidthPx),
     notepadOpenTabCount,
@@ -736,10 +728,10 @@
     onSelectNotepadTab: handleSelectNotepadTab,
   }}
   sessionsSidebar={{
-    show: (Boolean(activeWorkspaceRoot) && opencodeEnabled) || isChatHttpActive,
+    show: Boolean(activeWorkspaceRoot) && opencodeEnabled,
     sessions: workspaceSessions,
     activeSessionId: selectedSessionId,
-    sidebarTitle: isChatHttpActive ? "Chats" : "Sessions",
+    sidebarTitle: "Sessions",
     collapsed: !showSessionsSidebar,
     panelWidthPx: workspaceLayout.sessionsSidebarWidthPx,
     onToggleCollapsed: layoutHandlers.toggleSessionsSidebarCollapsed,
@@ -781,7 +773,6 @@
     session,
     documents,
     activeDocument,
-    isChatHttpActive,
     workspaceRootPath: activeWorkspaceRoot,
     workspaceManager: {
       workspaces,

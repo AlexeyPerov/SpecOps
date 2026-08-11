@@ -5,7 +5,12 @@ import type {
   OpencodeProviderEntry,
   OpencodeModelEntry,
 } from "./backends/workspaceAgentBackend";
-import { listSelectableWorkspaceModels } from "./providers/selection";
+
+/** Workspace model ids are the catalog model ids (inlined; the old chat-http
+ *  selection helper was removed in Phase A). */
+function listSelectableWorkspaceModels(models: readonly OpencodeModelEntry[]): string[] {
+  return models.map((entry) => entry.id);
+}
 
 function makeCatalog(overrides: Partial<OpencodeCatalogState> = {}): OpencodeCatalogState {
   return {

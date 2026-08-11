@@ -5,7 +5,6 @@
   import { appState } from "../state/appState";
   import { chatSessionIndex } from "../state/chatStore";
   import { draftEntryTitleForScope } from "../services/chatSessions";
-  import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import { DEFAULT_UNTITLED_TITLE } from "../services/untitledTitle";
   import {
     filterVisibleTabs,
@@ -25,7 +24,6 @@
     openTabs?: TabState[];
     documents?: DocumentState[];
     selectedTabId?: string | null;
-    useChatTerminology?: boolean;
     onSelect?: (tabId: string) => void;
     onCloseTab?: (paneId: string, tabId: string) => void;
     windowId?: string;
@@ -52,7 +50,6 @@
     openTabs = [],
     documents = [],
     selectedTabId = null,
-    useChatTerminology = false,
     onSelect = (tabId: string) => appState.selectTab(tabId),
     onCloseTab = (closePaneId: string, tabId: string) => appState.closeTabForce(tabId),
     windowId = "main",
@@ -146,9 +143,7 @@
 
   const sessionTitleById = $derived(getSessionTitleById($chatSessionIndex));
 
-  const draftTabTitle = $derived(
-    draftEntryTitleForScope(useChatTerminology ? CHAT_HTTP_CONTEXT_ID : null),
-  );
+  const draftTabTitle = $derived(draftEntryTitleForScope(null));
 
   function tabTitle(tab: TabState): string {
     if (isSessionTab(tab)) {
@@ -179,7 +174,7 @@
 
   function tabTooltip(tab: TabState): string {
     if (isSessionTab(tab)) {
-      return useChatTerminology ? "Chat" : "Session";
+      return "Session";
     }
     if (isViewTab(tab)) {
       if (tab.view === "settings") {

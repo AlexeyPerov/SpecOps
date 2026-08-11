@@ -24,7 +24,6 @@
     contextId,
     isActive = false,
     canClose = false,
-    useChatTerminology = false,
     windowId,
     notify,
     onSelectTab,
@@ -52,7 +51,6 @@
     contextId: import("../domain/contracts").ContextId;
     isActive: boolean;
     canClose: boolean;
-    useChatTerminology: boolean;
     windowId: string;
     notify: (message: string) => void;
     onSelectTab: (tabId: string) => void;
@@ -123,7 +121,6 @@
         openTabs={tabs}
         {documents}
         {selectedTabId}
-        {useChatTerminology}
         {windowId}
         {notify}
         {paneId}

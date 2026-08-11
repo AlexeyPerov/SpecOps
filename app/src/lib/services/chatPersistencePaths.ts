@@ -1,6 +1,5 @@
 import { join } from "@tauri-apps/api/path";
 import { mkdir } from "@tauri-apps/plugin-fs";
-import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import type { ChatScopeKey } from "../state/chatStore/types";
 import { ensureSpecOpsDataDir } from "./appDataDir";
 import { workspaceChatPathHashKey } from "./chatPersistenceCodec";
@@ -8,11 +7,8 @@ import { workspaceChatPathHashKey } from "./chatPersistenceCodec";
 const CHAT_DIR_NAME = "chat";
 const SESSIONS_INDEX_FILE = "index.json";
 
-/** Resolves the on-disk segment under `chat/` for a chat scope key. */
+/** Resolves the on-disk segment under `chat/` for a workspace scope key. */
 export function chatScopeStorageSegment(scopeKey: ChatScopeKey): string {
-  if (scopeKey === CHAT_HTTP_CONTEXT_ID) {
-    return CHAT_HTTP_CONTEXT_ID;
-  }
   return workspaceChatPathHashKey(scopeKey);
 }
 

@@ -13,7 +13,6 @@ import { ensureWorkspaceReadAccess } from "../../services/fileSystem";
 import type { ChatAccessState, ChatStoreState } from "./types";
 import { patchWorkspaceState } from "./workspace";
 import { cloneThread } from "./threadHelpers";
-import { getDefaultChatProvider } from "./threadHelpers";
 
 export function defaultUnknownAccessState(message: string): ChatAccessState {
   return {
@@ -60,7 +59,6 @@ export function createAccessSlice(deps: {
     update,
     getSnapshot,
     getActiveWorkspaceRoot,
-    getMetadata,
     capabilityCheckerRef,
     workspaceReadinessCheckerRef,
   } = deps;
@@ -160,9 +158,8 @@ export function createAccessSlice(deps: {
     setWorkspaceReadinessChecker(checker: WorkspaceReadinessChecker | null): void {
       workspaceReadinessCheckerRef.current = checker;
     },
-    async checkActiveWorkspaceCapabilities(sessionId?: string): Promise<CapabilityCheckResult> {
+    async checkActiveWorkspaceCapabilities(_sessionId?: string): Promise<CapabilityCheckResult> {
       const rootPath = getActiveWorkspaceRoot();
-      const metadata = getMetadata(sessionId);
 
       if (!rootPath) {
         return {
@@ -173,35 +170,27 @@ export function createAccessSlice(deps: {
         };
       }
 
-      if (!metadata?.provider) {
-        const readiness = resolveWorkspaceReadinessChecker().checkReadiness(rootPath);
-        if (!readiness.ready) {
-          return {
-            status: "blocked",
-            reason: WorkspaceAccessReason.MissingProviderConfig,
-            capabilities: null,
-            message: readiness.message,
-            recoveryHint: readiness.recoveryHint,
-          };
-        }
+      // Workspace sessions run through the OpenCode backend; readiness is the
+      // only gate (no HTTP provider capability checks apply).
+      const readiness = resolveWorkspaceReadinessChecker().checkReadiness(rootPath);
+      if (!readiness.ready) {
         return {
-          status: "ready",
-          reason: WorkspaceAccessReason.Unknown,
-          capabilities: {
-            canReadWorkspaceFiles: true,
-            supportedModes: [],
-          },
-          message: "OpenCode workspace session is ready.",
+          status: "blocked",
+          reason: WorkspaceAccessReason.MissingProviderConfig,
+          capabilities: null,
+          message: readiness.message,
+          recoveryHint: readiness.recoveryHint,
         };
       }
-
-      const checker = resolveCapabilityChecker();
-      return checker.checkCapabilities({
-        provider: metadata.provider,
-        mode: metadata?.mode ?? "ask",
-        workspaceRootPath: rootPath,
-        connectionId: metadata?.connectionId,
-      });
+      return {
+        status: "ready",
+        reason: WorkspaceAccessReason.Unknown,
+        capabilities: {
+          canReadWorkspaceFiles: true,
+          supportedModes: [],
+        },
+        message: "OpenCode workspace session is ready.",
+      };
     },
     getChatAccessState(): ChatAccessState {
       const rootPath = getActiveWorkspaceRoot();

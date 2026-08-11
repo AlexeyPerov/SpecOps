@@ -1,5 +1,4 @@
-import type { ChatHttpSettings, OpencodeSettings } from "../domain/contracts";
-import { isChatHttpEnabled } from "./chatHttpSettings";
+import type { OpencodeSettings } from "../domain/contracts";
 import { isOpencodeEnabled } from "./opencodeSettings";
 import { appState } from "../state/appState";
 
@@ -9,9 +8,6 @@ export type SettingsDialogTab =
   | "appearance"
   | "versionControl"
   | "dev"
-  | "connections"
-  | "chatModes"
-  | "debugAi"
   | "opencode"
   | "openCodeConfig"
   | "providers"
@@ -20,7 +16,6 @@ export type SettingsDialogTab =
   | "permissions"
   | "commands"
   | "instructions"
-  | "debugAgent"
   | "logs";
 
 export interface SettingsTabDefinition {
@@ -61,24 +56,6 @@ const DEV_TAB = {
   id: "dev",
   label: "Dev",
   panelAriaLabel: "Developer settings (beta features and logs)",
-} as const satisfies SettingsTabDefinition;
-
-const CONNECTIONS_TAB = {
-  id: "connections",
-  label: "Providers",
-  panelAriaLabel: "HTTP provider settings",
-} as const satisfies SettingsTabDefinition;
-
-const CHAT_MODES_TAB = {
-  id: "chatModes",
-  label: "Chat modes",
-  panelAriaLabel: "Chat modes settings",
-} as const satisfies SettingsTabDefinition;
-
-const DEBUG_AI_TAB = {
-  id: "debugAi",
-  label: "Debug Provider",
-  panelAriaLabel: "Debug Provider settings for Chats",
 } as const satisfies SettingsTabDefinition;
 
 const OPENCODE_TAB = {
@@ -129,32 +106,11 @@ const INSTRUCTIONS_TAB = {
   panelAriaLabel: "OpenCode instructions and skills management",
 } as const satisfies SettingsTabDefinition;
 
-const DEBUG_AGENT_TAB = {
-  id: "debugAgent",
-  label: "Debug Provider",
-  panelAriaLabel: "Debug Provider settings for Workspaces",
-} as const satisfies SettingsTabDefinition;
-
 const LOGS_TAB = {
   id: "logs",
   label: "Logs",
   panelAriaLabel: "Logging settings",
 } as const satisfies SettingsTabDefinition;
-
-/**
- * Tabs gated behind the chat-http master toggle. When the toggle is off,
- * these tabs are hidden from the sidebar and unreachable from any panel
- * switcher / deep link.
- */
-export const CHAT_HTTP_GATED_TABS = [
-  CONNECTIONS_TAB,
-  CHAT_MODES_TAB,
-  DEBUG_AI_TAB,
-] as const satisfies readonly SettingsTabDefinition[];
-
-const CHAT_HTTP_GATED_TAB_IDS: ReadonlySet<SettingsDialogTab> = new Set(
-  CHAT_HTTP_GATED_TABS.map((tab) => tab.id),
-);
 
 /**
  * Tabs gated behind the OpenCode master toggle (the workspace-sessions beta).
@@ -170,20 +126,11 @@ export const OPENCODE_GATED_TABS = [
   PERMISSIONS_TAB,
   COMMANDS_TAB,
   INSTRUCTIONS_TAB,
-  DEBUG_AGENT_TAB,
 ] as const satisfies readonly SettingsTabDefinition[];
 
 const OPENCODE_GATED_TAB_IDS: ReadonlySet<SettingsDialogTab> = new Set(
   OPENCODE_GATED_TABS.map((tab) => tab.id),
 );
-
-/**
- * Whether a given tab id belongs to the chat-http beta subtree and should
- * only be reachable when the user has opted into the chat-http beta.
- */
-export function isChatHttpGatedTab(tab: SettingsDialogTab): boolean {
-  return CHAT_HTTP_GATED_TAB_IDS.has(tab);
-}
 
 /**
  * Whether a given tab id belongs to the OpenCode workspace-sessions beta
@@ -193,22 +140,12 @@ export function isOpencodeGatedTab(tab: SettingsDialogTab): boolean {
   return OPENCODE_GATED_TAB_IDS.has(tab);
 }
 
-/**
- * Fallback tab used when a chat-http gated tab is requested while the beta
- * is disabled. Defaults to the Dev master panel so users land on the toggle
- * rather than a missing tab.
- */
-export const DEV_FALLBACK_TAB: SettingsDialogTab = "dev";
-
 const ALL_TABS = [
   EDITOR_TAB,
   SHORTCUTS_TAB,
   APPEARANCE_TAB,
   VERSION_CONTROL_TAB,
   DEV_TAB,
-  CONNECTIONS_TAB,
-  CHAT_MODES_TAB,
-  DEBUG_AI_TAB,
   OPENCODE_TAB,
   OPENCODE_CONFIG_TAB,
   PROVIDERS_TAB,
@@ -217,47 +154,38 @@ const ALL_TABS = [
   PERMISSIONS_TAB,
   COMMANDS_TAB,
   INSTRUCTIONS_TAB,
-  DEBUG_AGENT_TAB,
   LOGS_TAB,
 ] as const satisfies readonly SettingsTabDefinition[];
 
 export const SETTINGS_TABS = ALL_TABS;
 
 /**
- * Resolve a deep-link tab against the chat-http and OpenCode beta gates. When
- * a gate is closed, its gated tabs redirect to the Dev master panel; other
- * tabs pass through unchanged.
+ * Resolve a deep-link tab against the OpenCode beta gate. When the gate is
+ * closed, its gated tabs redirect to the Dev master panel; other tabs pass
+ * through unchanged.
  */
 export function resolveOpenSettingsDialogTab(
   requested: SettingsDialogTab,
-  chatHttp: ChatHttpSettings | null | undefined,
   opencode: OpencodeSettings | null | undefined,
 ): SettingsDialogTab {
-  if (isChatHttpGatedTab(requested) && !isChatHttpEnabled(chatHttp)) {
-    return DEV_FALLBACK_TAB;
-  }
   if (isOpencodeGatedTab(requested) && !isOpencodeEnabled(opencode)) {
-    return DEV_FALLBACK_TAB;
+    return "dev";
   }
   return requested;
 }
 
 /**
  * Build the sidebar entries for the settings dialog. The Dev section always
- * contains its master toggle plus Logs; the chat-http subtree (Providers,
- * Chat modes, Debug Provider) and the Workspaces subtree (OpenCode, Config,
- * Providers, MCP servers, Agents, Permissions, Commands, Instructions, Debug
- * Provider) are appended only when their respective beta is enabled so hidden
- * tabs are not reachable from measure/layout code paths. The Workspaces
- * section is omitted entirely when OpenCode is disabled (no orphan header).
+ * contains its master toggle plus Logs; the Workspaces subtree (OpenCode,
+ * Config, Providers, MCP servers, Agents, Permissions, Commands,
+ * Instructions) is appended only when OpenCode is enabled so hidden tabs are
+ * not reachable from measure/layout code paths. The Workspaces section is
+ * omitted entirely when OpenCode is disabled (no orphan header).
  */
 export function buildSettingsSidebar(
-  chatHttp: ChatHttpSettings | null | undefined,
   opencode: OpencodeSettings | null | undefined,
 ): readonly SettingsSidebarEntry[] {
-  const devTabs: readonly SettingsTabDefinition[] = isChatHttpEnabled(chatHttp)
-    ? [DEV_TAB, LOGS_TAB, ...CHAT_HTTP_GATED_TABS]
-    : [DEV_TAB, LOGS_TAB];
+  const devTabs: readonly SettingsTabDefinition[] = [DEV_TAB, LOGS_TAB];
   const entries: SettingsSidebarEntry[] = [
     { kind: "tab", tab: EDITOR_TAB },
     { kind: "tab", tab: SHORTCUTS_TAB },
@@ -276,7 +204,6 @@ export function buildSettingsSidebar(
 }
 
 export const SETTINGS_SIDEBAR = buildSettingsSidebar(
-  { enabled: false },
   { enabled: false, mode: "sidecar", baseUrl: "", sidecarPort: 4096 },
 );
 
@@ -333,9 +260,9 @@ export function openSettingsDialog(tab: SettingsDialogTab = "editor"): void {
 function resolveAgainstCurrentAppState(tab: SettingsDialogTab): SettingsDialogTab {
   try {
     const state = appState.getSnapshot();
-    return resolveOpenSettingsDialogTab(tab, state.settings.chatHttp, state.settings.opencode);
+    return resolveOpenSettingsDialogTab(tab, state.settings.opencode);
   } catch {
-    return resolveOpenSettingsDialogTab(tab, null, null);
+    return resolveOpenSettingsDialogTab(tab, null);
   }
 }
 

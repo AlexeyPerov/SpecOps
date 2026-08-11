@@ -3,7 +3,6 @@
   import HoverTooltip from "./HoverTooltip.svelte";
   import {
     allTabs,
-    CHAT_HTTP_CONTEXT_ID,
     type ContextId,
     type WorkspaceEntry,
   } from "../domain/contracts";
@@ -32,7 +31,6 @@
   interface Props {
     workspaces?: WorkspaceEntry[];
     activeContextId?: ContextId;
-    showChatHttp?: boolean;
     /**
      * Whether the OpenCode workspace-sessions beta is enabled. When false the
      * per-workspace "Sessions" count is hidden from expanded rail cards (the
@@ -65,7 +63,6 @@
   let {
     workspaces = [],
     activeContextId = "notepad",
-    showChatHttp = false,
     opencodeEnabled = false,
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
     notepadOpenTabCount = 0,
@@ -300,35 +297,6 @@
         onclick={() => onSelectContext("notepad")}
       >
         <NotepadIcon size={16} />
-      </button>
-    </HoverTooltip>
-  {/if}
-
-  {#if showChatHttp}
-    <HoverTooltip label="Chat (beta)">
-      <button
-        class={`rail-button rail-button-chat ${activeContextId === CHAT_HTTP_CONTEXT_ID ? "rail-button-active" : ""}`}
-        type="button"
-        aria-label="Chat (beta)"
-        title="Chat (beta) — experimental HTTP chat context"
-        onclick={() => onSelectContext(CHAT_HTTP_CONTEXT_ID)}
-      >
-        <svg
-          class="rail-chat-icon"
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <path
-            d="M3.5 2.5H11.5C12.3284 2.5 13 3.17157 13 4V9C13 9.82843 12.3284 10.5 11.5 10.5H7.5L4.5 12.5V10.5H3.5C2.67157 10.5 2 9.82843 2 9V4C2 3.17157 2.67157 2.5 3.5 2.5Z"
-            stroke="currentColor"
-            stroke-width="1.2"
-            stroke-linejoin="round"
-          />
-        </svg>
       </button>
     </HoverTooltip>
   {/if}

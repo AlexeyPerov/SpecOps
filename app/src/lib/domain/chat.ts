@@ -1,64 +1,5 @@
 export type ChatMessageRole = "user" | "assistant" | "system";
 
-export type BuiltinChatModeId = "ask" | "review" | "raw";
-
-/** Built-in ids or user-defined custom mode ids (e.g. `custom-{uuid}`). */
-export type ChatModeId = BuiltinChatModeId | (string & {});
-
-export interface ChatModeContextToggles {
-  includeWorkspace: boolean;
-  includeSummary: boolean;
-}
-
-export type BuiltinChatModeToggles = Record<BuiltinChatModeId, ChatModeContextToggles>;
-
-export interface CustomChatModeDefinition {
-  id: string;
-  name: string;
-  prompt: string;
-  enabled: boolean;
-  includeWorkspace: boolean;
-  includeSummary: boolean;
-  requiredSections: string[];
-  sectionGuidance?: string;
-}
-
-export interface ChatModesSettings {
-  rawEnabled: boolean;
-  builtinToggles: BuiltinChatModeToggles;
-  customModes: CustomChatModeDefinition[];
-}
-
-export type ChatProviderId = "http" | "debug-chat" | "debug-workspace";
-
-/** MVP product providers; debug variants are dev-only and settings-gated (see M5-3). */
-export const PRODUCT_CHAT_PROVIDER_IDS = ["http"] as const satisfies readonly ChatProviderId[];
-
-export const DEBUG_CHAT_PROVIDER_IDS = [
-  "debug-chat",
-  "debug-workspace",
-] as const satisfies readonly ChatProviderId[];
-
-export function isDebugChatProviderId(provider: ChatProviderId): provider is (typeof DEBUG_CHAT_PROVIDER_IDS)[number] {
-  return provider === "debug-chat" || provider === "debug-workspace";
-}
-
-/**
- * System-only marker events persisted in chat history.
- * Provider and model switches are auditable in thread message history.
- */
-export type ChatSystemEvent =
-  | {
-      type: "provider-switched";
-      fromProvider: ChatProviderId | null;
-      toProvider: ChatProviderId;
-    }
-  | {
-      type: "model-switched";
-      fromModel: string | null;
-      toModel: string;
-    };
-
 export type ToolCallStatus = "pending" | "success" | "failure";
 
 export interface ToolCallRecord {
@@ -156,7 +97,6 @@ export interface ChatMessage {
   role: ChatMessageRole;
   content: string;
   createdAt: string;
-  systemEvent?: ChatSystemEvent;
   toolCalls?: ToolCallRecord[];
   /** Structured parts (reasoning, subtask, step, file, diff, etc.). */
   parts?: ChatMessagePart[];
@@ -165,9 +105,6 @@ export interface ChatMessage {
 export interface ChatThreadMetadata {
   sessionId: string;
   threadId: string;
-  mode: ChatModeId;
-  /** Chat HTTP/debug provider; omitted for workspace (OpenCode) threads. */
-  provider?: ChatProviderId;
   createdAt: string;
   updatedAt: string;
   summary?: string;
@@ -177,10 +114,8 @@ export interface ChatThreadMetadata {
   lastCompactedAt?: string;
   /** Cumulative count of messages removed by compaction (for UI indicators). */
   compactedMessageCount?: number;
-  /** Per-thread selected model for the active provider; omitted until explicitly set. */
+  /** Per-thread selected model; omitted until explicitly set. */
   selectedModelId?: string;
-  /** Selected HTTP connection for `provider === "http"` threads. */
-  connectionId?: string;
   /** Selected OpenCode agent (persona) for workspace threads (e.g. plan, build). */
   opencodeAgentId?: string;
   /** Selected OpenCode provider for workspace threads. */

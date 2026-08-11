@@ -21,11 +21,10 @@
  */
 
 import type { AppDomainState, ContextId, TabState } from "../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID, isSessionTab } from "../domain/contracts";
+import { isSessionTab } from "../domain/contracts";
 import type { OpencodeHealthStatus } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
-import { syncChatAccessMonitor } from "./chatAccessMonitor";
 import { normalizePathSync } from "./diskFingerprint";
 import { syncProjectTreeWatcher } from "./fileWatcher";
 import {
@@ -59,14 +58,10 @@ import { settingsPersistenceFingerprint } from "../state/appStateSelectors";
 
 export interface SyncSessionTabEffectInput {
   activeTab: TabState | undefined | null;
-  isChatHttpActive: boolean;
-  chatHttpRailVisible: boolean;
   activeContextId: ContextId;
   activeWorkspaceRoot: string | null;
   isSessionTabActive: boolean;
-  selectedSessionId: string | null;
   lastChatScopeKey: string | null;
-  ensureChatHttpSessionTab: () => void | Promise<void>;
   restoreWorkspaceSession: (
     workspaceRoot: string,
     options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
@@ -76,7 +71,7 @@ export interface SyncSessionTabEffectInput {
    * P03-08-29(b): when AI is disabled, the workspace chat scope is never
    * user-reachable (session tabs are hidden), so creating an empty per-workspace
    * chat slice on every switch is pure waste that keeps the chat emit fan-out
-   * wired. The chat-http scope is unaffected (it has its own context id).
+   * wired.
    */
   opencodeEnabled: boolean;
 }
@@ -84,20 +79,15 @@ export interface SyncSessionTabEffectInput {
 export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
   const {
     activeTab,
-    isChatHttpActive,
-    chatHttpRailVisible,
-    activeContextId,
     activeWorkspaceRoot,
     isSessionTabActive,
-    selectedSessionId,
     lastChatScopeKey,
-    ensureChatHttpSessionTab,
     restoreWorkspaceSession,
     setLastChatScopeKey,
     opencodeEnabled,
   } = input;
 
-  if (activeTab && isSessionTab(activeTab) && !isChatHttpActive) {
+  if (activeTab && isSessionTab(activeTab)) {
     if (chatStore.getActiveSessionId() !== activeTab.sessionId) {
       chatStore.setActiveSessionId(activeTab.sessionId);
       appState.setLastActiveSessionId(activeTab.sessionId);
@@ -105,32 +95,6 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
         void chatStore.runAccessPreflight();
       });
     }
-  }
-
-  if (isChatHttpActive && !chatHttpRailVisible) {
-    appState.switchContext("notepad");
-    return;
-  }
-
-  if (isChatHttpActive) {
-    selectedSessionId;
-    void ensureChatHttpSessionTab();
-  }
-
-  if (activeContextId === CHAT_HTTP_CONTEXT_ID) {
-    if (lastChatScopeKey !== CHAT_HTTP_CONTEXT_ID) {
-      if (lastChatScopeKey !== null) {
-        chatStore.cancelAllGenerations(lastChatScopeKey);
-      }
-      setLastChatScopeKey(CHAT_HTTP_CONTEXT_ID);
-      chatStore.setActiveChatScope(CHAT_HTTP_CONTEXT_ID);
-      void chatStore.loadWorkspaceSessions(CHAT_HTTP_CONTEXT_ID).then(() => {
-        void ensureChatHttpSessionTab();
-      });
-    } else {
-      void ensureChatHttpSessionTab();
-    }
-    return;
   }
 
   if (!activeWorkspaceRoot) {
@@ -323,13 +287,9 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       defaultMarkdownViewMode: snapshot.settings.defaultMarkdownViewMode,
       restrictFilesToContext: snapshot.settings.restrictFilesToContext,
       opencode: snapshot.settings.opencode,
-      chatHttp: snapshot.settings.chatHttp,
       gitIntegration: snapshot.settings.gitIntegration,
       logSettings: snapshot.settings.logSettings,
-      chatModes: snapshot.settings.chatModes,
       markdownSnippets: snapshot.settings.markdownSnippets,
-      providerSettings: snapshot.settings.providerSettings,
-      providerModelCatalogs: snapshot.settings.providerModelCatalogs,
       commandBindingOverrides: snapshot.settings.commandBindingOverrides,
       fontSettings: snapshot.settings.fontSettings,
       soundSettings: snapshot.settings.soundSettings,
@@ -358,7 +318,6 @@ export function syncOpencodeToggleEffect(input: SyncOpencodeToggleEffectInput): 
 export interface SyncProjectTreeWatcherEffectInput {
   runtimeReady: boolean;
   activeWorkspaceRoot: string | null;
-  isChatHttpActive: boolean;
   /**
    * Roots of all open workspaces, so the recursive watcher can keep every open
    * root watched (a switch is then a diff, not a full unwatch+rewatch). When
@@ -373,7 +332,6 @@ export interface SyncOpencodeSidecarEffectInput {
   runtimeReady: boolean;
   workspaceLifecycleActive: boolean;
   activeWorkspaceRoot: string | null;
-  isChatHttpActive: boolean;
   /** M13.5 — gate automatic sidecar-mode health work on session-tab active. */
   isSessionTabActive: boolean;
   opencodeEnabled: boolean;
@@ -462,7 +420,6 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     runtimeReady,
     workspaceLifecycleActive,
     activeWorkspaceRoot,
-    isChatHttpActive,
     isSessionTabActive,
     opencodeEnabled,
     opencodeMode,
@@ -479,7 +436,7 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
   // cascade (settings fingerprint, etc.) for no semantic change. Publish the
   // `unknown` patch once and stop re-touching state until AI is re-enabled.
   if (!opencodeEnabled) {
-    const disabledKey = ["disabled", runtimeReady, isChatHttpActive].join("|");
+    const disabledKey = ["disabled", runtimeReady].join("|");
     if (disabledKey === lastOpencodeSidecarProbeKey) {
       return;
     }
@@ -497,7 +454,6 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
     runtimeReady,
     workspaceLifecycleActive,
     activeWorkspaceRoot ?? "",
-    isChatHttpActive,
     isSessionTabActive,
     opencodeEnabled,
     opencodeMode,
@@ -509,7 +465,7 @@ export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput)
   }
   lastOpencodeSidecarProbeKey = probeKey;
 
-  if (!runtimeReady || !workspaceLifecycleActive || !activeWorkspaceRoot || isChatHttpActive) {
+  if (!runtimeReady || !workspaceLifecycleActive || !activeWorkspaceRoot) {
     return;
   }
 
@@ -716,14 +672,13 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
   const {
     runtimeReady,
     activeWorkspaceRoot,
-    isChatHttpActive,
     openWorkspaceRoots,
     projectTreeController,
     loadProjectTreeRoot,
   } = input;
 
-  // Gate on workspace presence and chat-http overlay — not tab/session selection.
-  if (!activeWorkspaceRoot || isChatHttpActive) {
+  // Gate on workspace presence — not tab/session selection.
+  if (!activeWorkspaceRoot) {
     if (lastProjectTreeWatcherKey === "inactive") {
       return;
     }
@@ -759,32 +714,6 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
   }
 }
 
-export interface SyncChatAccessMonitorEffectInput {
-  runtimeReady: boolean;
-  isSessionTabActive: boolean;
-  activeWorkspaceRoot: string | null;
-  isChatHttpActive: boolean;
-  /**
-   * P03-08-29(c): the 15 s access poll targets the AI backend. When AI is
-   * disabled the workspace chat scope is unreachable, so the poll is pure
-   * background waste — gate it off explicitly instead of relying on the
-   * session tab being inactive.
-   */
-  opencodeEnabled: boolean;
-}
-
-export function syncChatAccessMonitorEffect(input: SyncChatAccessMonitorEffectInput): void {
-  const { runtimeReady, isSessionTabActive, activeWorkspaceRoot, isChatHttpActive, opencodeEnabled } = input;
-  if (!runtimeReady) {
-    return;
-  }
-  // P03-08-29(c): explicit opencode-enabled gate (in addition to the
-  // session-tab-active gate) so the poll never arms while AI is off.
-  syncChatAccessMonitor(
-    opencodeEnabled && isSessionTabActive && Boolean(activeWorkspaceRoot) && !isChatHttpActive,
-  );
-}
-
 export interface SyncExternalFileWatcherEffectInput {
   runtimeReady: boolean;
   snapshot: AppDomainState;
@@ -814,7 +743,6 @@ export function syncExternalFileWatcherEffect(input: SyncExternalFileWatcherEffe
 
 export interface SyncActiveFileTreeExpandEffectInput {
   activeDocumentPath: string | null;
-  isChatHttpActive: boolean;
   activeWorkspaceRoot: string | null;
   projectTreeController: ProjectTreeController;
 }
@@ -853,8 +781,8 @@ export function resetAppShellEffectsForTests(): void {
 }
 
 export function syncActiveFileTreeExpandEffect(input: SyncActiveFileTreeExpandEffectInput): void {
-  const { activeDocumentPath, isChatHttpActive, activeWorkspaceRoot, projectTreeController } = input;
-  if (!activeDocumentPath || !activeWorkspaceRoot || isChatHttpActive) {
+  const { activeDocumentPath, activeWorkspaceRoot, projectTreeController } = input;
+  if (!activeDocumentPath || !activeWorkspaceRoot) {
     if (activeFileTreeExpandTimer) {
       clearTimeout(activeFileTreeExpandTimer);
       activeFileTreeExpandTimer = null;
@@ -929,7 +857,6 @@ export function syncResponsiveLayoutEffect(_input: SyncResponsiveLayoutEffectInp
 
 export interface SyncWorkspaceFileCatalogEffectInput {
   activeWorkspaceRoot: string | null;
-  isChatHttpActive: boolean;
   /** Roots still open in the session; catalogs for missing roots are disposed. */
   openWorkspaceRoots?: readonly string[];
   registry: {
@@ -948,7 +875,7 @@ let lastOpenWorkspaceCatalogRoots = new Set<string>();
  * workspaces do not retain enumeration state forever.
  */
 export function syncWorkspaceFileCatalogEffect(input: SyncWorkspaceFileCatalogEffectInput): void {
-  const { activeWorkspaceRoot, isChatHttpActive, registry } = input;
+  const { activeWorkspaceRoot, registry } = input;
   if (registry.disposeRoot && input.openWorkspaceRoots !== undefined) {
     const openRoots = new Set(
       input.openWorkspaceRoots.map((root) => normalizePathSync(root)),
@@ -961,7 +888,7 @@ export function syncWorkspaceFileCatalogEffect(input: SyncWorkspaceFileCatalogEf
     lastOpenWorkspaceCatalogRoots = openRoots;
   }
 
-  if (!activeWorkspaceRoot || isChatHttpActive) {
+  if (!activeWorkspaceRoot) {
     if (lastWorkspaceFileCatalogKey === "inactive") {
       return;
     }

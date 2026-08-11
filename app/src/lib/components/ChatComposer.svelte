@@ -1,34 +1,8 @@
 <script lang="ts">
-  import {
-    listSelectableChatConnections,
-    listSelectableModelsForConnection,
-    listSelectableWorkspaceModels,
-    resolveActiveChatConnectionSelection,
-  } from "../ai/providers/selection";
-  import { listSelectableChatModes } from "../ai/modes/resolve";
-  import type {
-    AppSettingsState,
-    AppProviderSettings,
-    ChatMessage,
-    ChatThreadSnapshot,
-    ChatModeId,
-    ChatProviderId,
-    HttpConnectionSettings,
-    ProviderModelCatalogs,
-  } from "../domain/contracts";
-  import { appState } from "../state/appState";
+  import type { ChatMessage } from "../domain/contracts";
   import { chatStore } from "../state/chatStore";
   import { createComposerSendActions, persistActiveThreadSnapshot } from "../ai/composerSendActions";
-  import { createComposerSelectionActions } from "../ai/composerSelectionActions";
-  import {
-    syncComposerConnectionFallback,
-    syncComposerModeFallback,
-    syncComposerModelFallback,
-  } from "../ai/composerSelectionEffects";
-  import { estimateContextWindowBudget } from "../ai/contextWindowBudget";
   import type { OpencodeCatalogState } from "../ai/opencodeCatalog";
-  import ChatConnectionPicker from "./ChatConnectionPicker.svelte";
-  import ChatModePicker from "./ChatModePicker.svelte";
   import WorkspaceCatalogPicker from "./WorkspaceCatalogPicker.svelte";
   import SlashCommandPopover from "./SlashCommandPopover.svelte";
   import MentionPicker from "./MentionPicker.svelte";
@@ -78,28 +52,12 @@
 
   interface Props {
     isBlocked: boolean;
-    isDebugSendBlocked: boolean;
-    isHttpSendBlocked: boolean;
-    isModelSendBlocked: boolean;
     isGenerating: boolean;
     canRetryLastTurn: boolean;
-    activeMode: ChatModeId;
-    activeProvider: ChatProviderId;
     activeModel: string;
-    chatContextKind: "workspace" | "chat-http";
-    supportedModes: ChatModeId[];
-    providerSettings: AppProviderSettings;
-    httpProviderSettings: HttpConnectionSettings;
-    httpApiKey: string;
-    activeConnectionId?: string;
-    providerApiKeys: Partial<Record<string, string>>;
-    providerModelCatalogs: ProviderModelCatalogs;
     threadMessages: ChatMessage[];
-    threadSummary?: string;
-    threadId?: string;
     activeSessionId?: string | null;
     workspaceRootPath: string;
-    appSettings: AppSettingsState;
     composerError: ComposerError | null;
     opencodeCatalog?: OpencodeCatalogState | null;
     activeOpencodeAgentId?: string;
@@ -114,28 +72,12 @@
 
   let {
     isBlocked,
-    isDebugSendBlocked,
-    isHttpSendBlocked,
-    isModelSendBlocked,
     isGenerating,
     canRetryLastTurn,
-    activeMode,
-    activeProvider,
     activeModel,
-    chatContextKind,
-    supportedModes,
-    providerSettings,
-    httpProviderSettings,
-    httpApiKey,
-    activeConnectionId = undefined,
-    providerApiKeys,
-    providerModelCatalogs,
     threadMessages,
-    threadSummary = undefined,
-    threadId = undefined,
     activeSessionId = null,
     workspaceRootPath,
-    appSettings,
     composerError,
     opencodeCatalog = null,
     activeOpencodeAgentId = "",
@@ -147,10 +89,6 @@
   let draft = $state("");
   let submitInFlight = $state(false);
   let retrying = $state(false);
-  let budgetEstimate = $state<{ estimatedTokens: number; estimatedLimitTokens?: number } | null>(
-    null,
-  );
-  let budgetEstimateTimer: ReturnType<typeof setTimeout> | null = null;
 
   // --- M3 composer state -------------------------------------------------
   // Popover / mention picker state. Visible flag is recomputed on every
@@ -180,18 +118,12 @@
   let queueMode = $state<ChatQueueMode>("queue");
   let lastWorkspaceForHistory = "";
 
-  const isWorkspace = $derived(chatContextKind === "workspace");
-
   const commandCatalog = $derived(getOpencodeCommands(workspaceRootPath));
   const filteredCommands = $derived(
-    isWorkspace && slashState.open
-      ? filterCommands(commandCatalog.commands, slashState.query)
-      : [],
+    slashState.open ? filterCommands(commandCatalog.commands, slashState.query) : [],
   );
   const filteredAgents = $derived(
-    isWorkspace && mentionState.open
-      ? filterMentionAgents(opencodeCatalog?.agents ?? [], mentionState.query)
-      : [],
+    mentionState.open ? filterMentionAgents(opencodeCatalog?.agents ?? [], mentionState.query) : [],
   );
   // Combined length used for keyboard navigation across files + agents.
   const mentionTotalRows = $derived(mentionFiles.length + filteredAgents.length);
@@ -202,7 +134,7 @@
   // --- M3 effects --------------------------------------------------------
   // Load slash commands once per workspace.
   $effect(() => {
-    if (!isWorkspace || workspaceRootPath.length === 0) {
+    if (workspaceRootPath.length === 0) {
       return;
     }
     // Track workspaceRootPath as a dependency.
@@ -212,7 +144,7 @@
 
   // Load prompt history once per workspace.
   $effect(() => {
-    if (!isWorkspace || workspaceRootPath.length === 0) {
+    if (workspaceRootPath.length === 0) {
       return;
     }
     if (workspaceRootPath === lastWorkspaceForHistory) {
@@ -227,7 +159,7 @@
 
   // Debounced file search for the mention picker.
   $effect(() => {
-    if (!isWorkspace || !mentionState.open) {
+    if (!mentionState.open) {
       if (mentionSearchTimer) {
         clearTimeout(mentionSearchTimer);
         mentionSearchTimer = null;
@@ -266,10 +198,6 @@
   // isGenerating transition so we deliver exactly once after the turn ends.
   let wasGenerating = false;
   $effect(() => {
-    if (!isWorkspace) {
-      wasGenerating = false;
-      return;
-    }
     if (isGenerating) {
       wasGenerating = true;
       return;
@@ -294,131 +222,28 @@
     });
   });
 
-  const availableConnections = $derived.by(() => {
-    if (isWorkspace) {
-      return [];
-    }
-    providerSettings;
-    chatContextKind;
-    httpProviderSettings.enabled;
-    httpProviderSettings.baseUrl;
-    httpApiKey;
-    return listSelectableChatConnections(providerSettings, providerApiKeys, chatContextKind);
-  });
-  const activeConnectionSelection = $derived.by(() => {
-    if (isWorkspace) {
-      return null;
-    }
-    activeProvider;
-    activeConnectionId;
-    providerSettings;
-    providerApiKeys;
-    chatContextKind;
-    return resolveActiveChatConnectionSelection(
-      activeProvider,
-      activeConnectionId,
-      providerSettings,
-      providerApiKeys,
-      chatContextKind,
-    );
-  });
-  const availableModes = $derived.by(() => {
-    if (isWorkspace) {
-      return [];
-    }
-    supportedModes;
-    return listSelectableChatModes($appState.settings).filter((mode) => supportedModes.includes(mode.id));
-  });
-  const availableModels = $derived.by(() => {
-    if (chatContextKind === "workspace" && opencodeCatalog?.status === "loaded" && opencodeCatalog.models.length > 0) {
-      return listSelectableWorkspaceModels(opencodeCatalog.models);
-    }
-    providerModelCatalogs;
-    providerSettings;
-    activeProvider;
-    activeConnectionId;
-    return listSelectableModelsForConnection(
-      providerModelCatalogs,
-      providerSettings,
-      activeProvider,
-      activeConnectionId,
-    );
-  });
-  const isModeSelectionDisabled = $derived(isGenerating || submitInFlight || retrying);
-  const isProviderSelectionDisabled = $derived(isGenerating || submitInFlight || retrying);
+  const availableModels = $derived(
+    opencodeCatalog?.status === "loaded" && opencodeCatalog.models.length > 0
+      ? opencodeCatalog.models.map((model) => model.id)
+      : [],
+  );
   const isModelSelectionDisabled = $derived(isGenerating || submitInFlight || retrying);
   const isSendDisabled = $derived(
     isBlocked ||
-      isDebugSendBlocked ||
-      isHttpSendBlocked ||
-      isModelSendBlocked ||
       isGenerating ||
       submitInFlight ||
       retrying ||
       draft.trim().length === 0,
   );
-  const composerDisabled = $derived(
-    isBlocked ||
-      isDebugSendBlocked ||
-      isHttpSendBlocked ||
-      isModelSendBlocked ||
-      isGenerating ||
-      retrying,
-  );
+  const composerDisabled = $derived(isBlocked || isGenerating || retrying);
   const isRetryDisabled = $derived(
     !canRetryLastTurn ||
       isGenerating ||
       submitInFlight ||
       retrying ||
-      isBlocked ||
-      isDebugSendBlocked ||
-      isHttpSendBlocked ||
-      isModelSendBlocked,
+      isBlocked,
   );
   const generationStatus = $derived(isGenerating ? "Generating response…" : "");
-  const composerPlaceholder = $derived(
-    chatContextKind === "chat-http" ? "Message chat" : "Message session",
-  );
-  const budgetDisplayText = $derived.by(() => {
-    if (!budgetEstimate) {
-      return "Estimating…";
-    }
-    const used = formatTokenCount(budgetEstimate.estimatedTokens);
-    if (!budgetEstimate.estimatedLimitTokens) {
-      return `~${used} tokens`;
-    }
-    return `~${used} / ${formatTokenCount(budgetEstimate.estimatedLimitTokens)}`;
-  });
-  const budgetStateClass = $derived.by(() => {
-    if (!budgetEstimate?.estimatedLimitTokens) {
-      return "";
-    }
-    const ratio = budgetEstimate.estimatedTokens / budgetEstimate.estimatedLimitTokens;
-    if (ratio >= 1) {
-      return "chat-context-budget--over";
-    }
-    if (ratio >= 0.85) {
-      return "chat-context-budget--near";
-    }
-    return "";
-  });
-
-  const selectionActions = createComposerSelectionActions({
-    getActiveMode: () => activeMode,
-    getActiveProvider: () => activeProvider,
-    getActiveModel: () => activeModel,
-    getActiveConnectionId: () => activeConnectionId,
-    getProviderSettings: () => providerSettings,
-    getProviderApiKeys: () => providerApiKeys,
-    getProviderModelCatalogs: () => providerModelCatalogs,
-    getChatContextKind: () => chatContextKind,
-    getIsModeSelectionDisabled: () => isModeSelectionDisabled,
-    getIsProviderSelectionDisabled: () => isProviderSelectionDisabled,
-    getIsModelSelectionDisabled: () => isModelSelectionDisabled,
-    onInlineError: (message) => onInlineError(message),
-  });
-
-  const { selectMode, selectConnection, selectModel } = selectionActions;
 
   function selectOpencodeAgent(agentId: string): void {
     if (agentId === activeOpencodeAgentId || isModelSelectionDisabled) {
@@ -440,6 +265,29 @@
     }
   }
 
+  function selectModel(nextModelId: string): void {
+    if (nextModelId === activeModel || isModelSelectionDisabled) {
+      return;
+    }
+    const updated = chatStore.updateThreadMetadata({ selectedModelId: nextModelId });
+    if (updated) {
+      persistActiveThreadSnapshot();
+    }
+  }
+
+  // Default the selected model to the first catalog entry once.
+  $effect(() => {
+    if (isModelSelectionDisabled) {
+      return;
+    }
+    if (!activeModel && availableModels.length > 0) {
+      const updated = chatStore.updateThreadMetadata({ selectedModelId: availableModels[0] });
+      if (updated) {
+        persistActiveThreadSnapshot();
+      }
+    }
+  });
+
   const { submitMessage, retryLastTurn } = createComposerSendActions({
     getDraft: () => draft,
     setDraft: (value) => {
@@ -454,117 +302,9 @@
       retrying = value;
     },
     getIsBlocked: () => isBlocked,
-    getIsDebugSendBlocked: () => isDebugSendBlocked,
-    getIsHttpSendBlocked: () => isHttpSendBlocked,
-    getIsModelSendBlocked: () => isModelSendBlocked,
     getIsGenerating: () => isGenerating,
     getIsRetryDisabled: () => isRetryDisabled,
-    getChatContextKind: () => chatContextKind,
     onInlineError: (message) => onInlineError(message),
-  });
-
-  $effect(() => {
-    if (isWorkspace) {
-      return;
-    }
-    activeConnectionSelection;
-    availableConnections;
-    isProviderSelectionDisabled;
-    syncComposerConnectionFallback({
-      activeConnectionSelection,
-      availableConnections,
-      isProviderSelectionDisabled,
-      selectConnection,
-    });
-  });
-
-  $effect(() => {
-    if (isWorkspace) {
-      return;
-    }
-    activeMode;
-    availableModes;
-    isModeSelectionDisabled;
-    syncComposerModeFallback({ activeMode, availableModes, isModeSelectionDisabled });
-  });
-
-  $effect(() => {
-    activeModel;
-    availableModels;
-    activeProvider;
-    activeConnectionId;
-    providerSettings;
-    providerModelCatalogs;
-    isModelSelectionDisabled;
-    if (isWorkspace) {
-      if (isModelSelectionDisabled) {
-        return;
-      }
-      if (!activeModel && availableModels.length > 0) {
-        const updated = chatStore.updateThreadMetadata({ selectedModelId: availableModels[0] });
-        if (updated) {
-          persistActiveThreadSnapshot();
-        }
-      }
-      return;
-    }
-    syncComposerModelFallback({
-      activeModel,
-      availableModels,
-      activeProvider,
-      activeConnectionId,
-      providerSettings,
-      providerModelCatalogs,
-      isModelSelectionDisabled,
-    });
-  });
-
-  $effect(() => {
-    draft;
-    threadMessages;
-    threadSummary;
-    threadId;
-    activeSessionId;
-    activeMode;
-    activeProvider;
-    activeModel;
-    activeConnectionId;
-    chatContextKind;
-    appSettings;
-    workspaceRootPath;
-
-    if (budgetEstimateTimer) {
-      clearTimeout(budgetEstimateTimer);
-    }
-
-    budgetEstimateTimer = setTimeout(() => {
-      budgetEstimate = estimateContextWindowBudget({
-        thread: {
-          metadata: {
-            sessionId: activeSessionId ?? "preview-session",
-            threadId: threadId ?? "preview-thread",
-            mode: activeMode,
-            provider: activeProvider,
-            createdAt: "",
-            updatedAt: "",
-            summary: threadSummary,
-            selectedModelId: activeModel,
-            connectionId: activeConnectionId,
-          },
-          messages: threadMessages,
-        } satisfies ChatThreadSnapshot,
-        workspaceRootPath,
-        settings: appSettings,
-        scopeKind: chatContextKind,
-        draft,
-      });
-    }, 220);
-
-    return () => {
-      if (budgetEstimateTimer) {
-        clearTimeout(budgetEstimateTimer);
-      }
-    };
   });
 
   function updateCaret(): void {
@@ -574,11 +314,6 @@
   }
 
   function refreshTriggers(): void {
-    if (!isWorkspace) {
-      slashState = { open: false, query: "" };
-      mentionState = { open: false, query: "" };
-      return;
-    }
     const slash = shouldTriggerSlashPopover(draft, caret);
     if (slash.trigger !== slashState.open || slash.query !== slashState.query) {
       slashState = { open: slash.trigger, query: slash.query };
@@ -926,13 +661,6 @@
       void submitOrEnqueue();
     }
   }
-
-  function formatTokenCount(value: number): string {
-    return new Intl.NumberFormat("en-US", {
-      notation: value >= 1000 ? "compact" : "standard",
-      maximumFractionDigits: value >= 1000 ? 1 : 0,
-    }).format(value);
-  }
 </script>
 
 <div class="chat-composer" role="group" aria-label="Chat composer">
@@ -944,83 +672,81 @@
       {/if}
     </div>
   {/if}
-  {#if isWorkspace}
-    {#if queuedItems.length > 0}
-      <div class="chat-queued-prompts" role="group" aria-label="Queued prompts">
-        <div class="chat-queued-prompts-header">
-          <span class="chat-queued-prompts-label">
-            Queued ({queuedItems.length})
-          </span>
-          <div class="chat-queued-prompts-mode" role="group" aria-label="Queue mode">
-            <button
-              type="button"
-              class={`chat-queued-mode-btn${queueMode === "queue" ? " is-active" : ""}`}
-              aria-pressed={queueMode === "queue"}
-              onclick={() => setQueueMode("queue")}
-              title="Deliver after the running turn completes"
-            >
-              Queue
-            </button>
-            <button
-              type="button"
-              class={`chat-queued-mode-btn${queueMode === "steer" ? " is-active" : ""}`}
-              aria-pressed={queueMode === "steer"}
-              onclick={() => setQueueMode("steer")}
-              title="Interrupt the running turn and append"
-            >
-              Steer
-            </button>
-          </div>
+  {#if queuedItems.length > 0}
+    <div class="chat-queued-prompts" role="group" aria-label="Queued prompts">
+      <div class="chat-queued-prompts-header">
+        <span class="chat-queued-prompts-label">
+          Queued ({queuedItems.length})
+        </span>
+        <div class="chat-queued-prompts-mode" role="group" aria-label="Queue mode">
           <button
             type="button"
-            class="chat-queued-prompts-clear"
-            onclick={clearQueued}
-            title="Clear queued prompts"
+            class={`chat-queued-mode-btn${queueMode === "queue" ? " is-active" : ""}`}
+            aria-pressed={queueMode === "queue"}
+            onclick={() => setQueueMode("queue")}
+            title="Deliver after the running turn completes"
           >
-            Clear
+            Queue
+          </button>
+          <button
+            type="button"
+            class={`chat-queued-mode-btn${queueMode === "steer" ? " is-active" : ""}`}
+            aria-pressed={queueMode === "steer"}
+            onclick={() => setQueueMode("steer")}
+            title="Interrupt the running turn and append"
+          >
+            Steer
           </button>
         </div>
-        <ul class="chat-queued-prompts-list" role="presentation">
-          {#each queuedItems as item (item.id)}
-            <li class="chat-queued-prompt-chip" title={item.prompt}>
-              <span class="chat-queued-prompt-mode">{item.mode === "steer" ? "↳" : "⏳"}</span>
-              <span class="chat-queued-prompt-text">{item.prompt}</span>
-              <button
-                type="button"
-                class="chat-queued-prompt-remove"
-                aria-label="Remove queued prompt"
-                onclick={() => removeQueued(item.id)}
-              >
-                ✕
-              </button>
-            </li>
-          {/each}
-        </ul>
+        <button
+          type="button"
+          class="chat-queued-prompts-clear"
+          onclick={clearQueued}
+          title="Clear queued prompts"
+        >
+          Clear
+        </button>
       </div>
-    {/if}
-    <AttachmentTray
-      attachments={attachments}
-      disabled={composerDisabled}
-      onAddFiles={handleAddFiles}
-      onRemove={handleRemoveAttachment}
-    />
-    {#if mentions.length > 0}
-      <ul class="chat-mentions-tray" role="group" aria-label="Mentions">
-        {#each mentions as token (token.display)}
-          <li class="chat-mention-chip">
-            <span class="chat-mention-chip-text">{token.display}</span>
+      <ul class="chat-queued-prompts-list" role="presentation">
+        {#each queuedItems as item (item.id)}
+          <li class="chat-queued-prompt-chip" title={item.prompt}>
+            <span class="chat-queued-prompt-mode">{item.mode === "steer" ? "↳" : "⏳"}</span>
+            <span class="chat-queued-prompt-text">{item.prompt}</span>
             <button
               type="button"
-              class="chat-mention-chip-remove"
-              aria-label={`Remove ${token.display}`}
-              onclick={() => removeMention(token)}
+              class="chat-queued-prompt-remove"
+              aria-label="Remove queued prompt"
+              onclick={() => removeQueued(item.id)}
             >
               ✕
             </button>
           </li>
         {/each}
       </ul>
-    {/if}
+    </div>
+  {/if}
+  <AttachmentTray
+    attachments={attachments}
+    disabled={composerDisabled}
+    onAddFiles={handleAddFiles}
+    onRemove={handleRemoveAttachment}
+  />
+  {#if mentions.length > 0}
+    <ul class="chat-mentions-tray" role="group" aria-label="Mentions">
+      {#each mentions as token (token.display)}
+        <li class="chat-mention-chip">
+          <span class="chat-mention-chip-text">{token.display}</span>
+          <button
+            type="button"
+            class="chat-mention-chip-remove"
+            aria-label={`Remove ${token.display}`}
+            onclick={() => removeMention(token)}
+          >
+            ✕
+          </button>
+        </li>
+      {/each}
+    </ul>
   {/if}
   <div class="chat-input-wrap">
     <textarea
@@ -1028,7 +754,7 @@
       rows="3"
       bind:value={draft}
       bind:this={textareaEl}
-      placeholder={composerPlaceholder}
+      placeholder="Message session"
       aria-label="Chat message"
       onkeydown={handleComposerKeydown}
       oninput={handleInput}
@@ -1036,7 +762,7 @@
       onkeyup={updateCaret}
       disabled={composerDisabled}
     ></textarea>
-    {#if isWorkspace && slashState.open}
+    {#if slashState.open}
       <div class="chat-composer-popover">
         <SlashCommandPopover
           commands={filteredCommands}
@@ -1048,7 +774,7 @@
         />
       </div>
     {/if}
-    {#if isWorkspace && mentionState.open}
+    {#if mentionState.open}
       <div class="chat-composer-popover">
         <MentionPicker
           files={mentionFiles}
@@ -1065,35 +791,16 @@
   </div>
   <div class="chat-composer-actions">
     <div class="chat-composer-toolbar">
-      {#if isWorkspace}
-        <WorkspaceCatalogPicker
-          catalog={opencodeCatalog}
-          activeAgentId={activeOpencodeAgentId}
-          activeProviderId={activeOpencodeProviderId}
-          activeModelId={activeModel}
-          disabled={isModelSelectionDisabled}
-          onSelectAgent={selectOpencodeAgent}
-          onSelectProvider={selectOpencodeProvider}
-          onSelectModel={(value) => void selectModel(value)}
-        />
-      {:else}
-        <ChatModePicker
-          {availableModes}
-          {activeMode}
-          disabled={isModeSelectionDisabled}
-          onSelectMode={selectMode}
-        />
-        <ChatConnectionPicker
-          {availableConnections}
-          {activeConnectionSelection}
-          {availableModels}
-          {activeModel}
-          connectionDisabled={isProviderSelectionDisabled}
-          modelDisabled={isModelSelectionDisabled}
-          onSelectConnection={(value) => void selectConnection(value)}
-          onSelectModel={(value) => void selectModel(value)}
-        />
-      {/if}
+      <WorkspaceCatalogPicker
+        catalog={opencodeCatalog}
+        activeAgentId={activeOpencodeAgentId}
+        activeProviderId={activeOpencodeProviderId}
+        activeModelId={activeModel}
+        disabled={isModelSelectionDisabled}
+        onSelectAgent={selectOpencodeAgent}
+        onSelectProvider={selectOpencodeProvider}
+        onSelectModel={(value) => selectModel(value)}
+      />
     </div>
     <div class="chat-composer-controls">
       {#if canRetryLastTurn}
@@ -1106,14 +813,6 @@
           {retrying ? "Retrying…" : "Retry"}
         </button>
       {/if}
-      <span
-        class={`chat-context-budget ${budgetStateClass}`.trim()}
-        role="status"
-        aria-live="polite"
-        title="Estimated input tokens (system prompt + retained history + draft)"
-      >
-        {budgetDisplayText}
-      </span>
       <button
         type="button"
         class="btn btn-primary chat-send-button"

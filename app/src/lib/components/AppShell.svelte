@@ -26,7 +26,6 @@
   import type { ProjectTreeNode } from "../services/projectTree";
   import TitleBar from "./TitleBar.svelte";
   import { untrack } from "svelte";
-  import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import type {
     ContextSnapshot,
     SessionIndexEntry,
@@ -58,7 +57,6 @@
     show: boolean;
     workspaces: WorkspaceEntry[];
     activeContextId: ContextId;
-    chatHttpRailVisible: boolean;
     opencodeEnabled: boolean;
     panelWidthPx: number;
     notepadOpenTabCount: number;
@@ -152,7 +150,6 @@
     session: SessionState;
     documents: DocumentState[];
     activeDocument: DocumentState | undefined;
-    isChatHttpActive: boolean;
     /** Active workspace root path, scoped to the workspace-settings view. */
     workspaceRootPath?: string | null;
     /** Workspace-manager view-tab wiring (list source, callbacks). */
@@ -467,7 +464,6 @@
     contextId: ContextId;
     snapshot: ContextSnapshot;
     workspaceRootPath: string | null;
-    isChatHttp: boolean;
   };
 
   const editorContextsById = $derived.by(() => {
@@ -476,28 +472,12 @@
       contextId: "notepad",
       snapshot: editor.contexts.notepad,
       workspaceRootPath: null,
-      isChatHttp: false,
     });
-    entries.set(CHAT_HTTP_CONTEXT_ID, {
-      contextId: CHAT_HTTP_CONTEXT_ID,
-      snapshot: editor.contexts.chatHttp,
-      workspaceRootPath: null,
-      isChatHttp: true,
-    });
-    if (editor.contexts.chatCloud) {
-      entries.set("chat-cloud", {
-        contextId: "chat-cloud",
-        snapshot: editor.contexts.chatCloud,
-        workspaceRootPath: null,
-        isChatHttp: false,
-      });
-    }
     for (const workspace of editor.contexts.workspaces) {
       entries.set(workspace.id, {
         contextId: workspace.id,
         snapshot: workspace.snapshot,
         workspaceRootPath: workspace.rootPath,
-        isChatHttp: false,
       });
     }
     return entries;
@@ -702,7 +682,6 @@
       <ActivityRail
         workspaces={activityRail.workspaces}
         activeContextId={activityRail.activeContextId}
-        showChatHttp={activityRail.chatHttpRailVisible}
         opencodeEnabled={activityRail.opencodeEnabled}
         panelWidthPx={activityRail.panelWidthPx}
         notepadOpenTabCount={activityRail.notepadOpenTabCount}
@@ -743,7 +722,6 @@
             layout={contextHost.snapshot.session.editorLayout}
             documents={contextHost.snapshot.documents}
             contextId={contextHost.contextId}
-            useChatTerminology={contextHost.isChatHttp}
           windowId={editor.currentWindowId}
           notify={editor.notify}
           onSelectTab={editor.onSelectTab}
@@ -762,7 +740,6 @@
               session={contextHost.snapshot.session}
               documents={contextHost.snapshot.documents}
               contextId={contextHost.contextId}
-              isChatHttpActive={contextHost.isChatHttp}
               workspaceRootPath={contextHost.workspaceRootPath}
               workspaceManagerWorkspaces={editor.workspaceManager?.workspaces ?? []}
               workspaceManagerActiveContextId={editor.workspaceManager?.activeContextId ?? "notepad"}
@@ -901,7 +878,7 @@
         type="button"
         class="status-bar-button"
         class:status-bar-button-static={!statusBar.canOpenLogsPanel}
-        class:status-bar-button-overflow={statusOverflowNeeded && !editor.isSessionTabActive && !editor.isChatHttpActive && !editor.isViewTabActive}
+        class:status-bar-button-overflow={statusOverflowNeeded && !editor.isSessionTabActive && !editor.isViewTabActive}
         disabled={!statusBar.canOpenLogsPanel}
         title={statusBar.canOpenLogsPanel
           ? consoleOpen
@@ -910,7 +887,7 @@
           : undefined}
         onclick={statusBar.onToggleConsole}
       >
-        {#if !editor.isSessionTabActive && !editor.isChatHttpActive && !editor.isViewTabActive}
+        {#if !editor.isSessionTabActive && !editor.isViewTabActive}
           <span class="status-cluster status-cluster-primary">
             <span class="status-segment">
               Ln {statusBar.cursorLine}, Col {statusBar.cursorColumn}
@@ -969,7 +946,7 @@
           {statusBar.statusPath}
         </span>
       </button>
-      {#if statusOverflowNeeded && !editor.isSessionTabActive && !editor.isChatHttpActive && !editor.isViewTabActive}
+      {#if statusOverflowNeeded && !editor.isSessionTabActive && !editor.isViewTabActive}
         <div class="status-overflow">
           <button
             type="button"

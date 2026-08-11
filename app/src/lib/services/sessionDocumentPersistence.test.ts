@@ -126,14 +126,6 @@ describe("stripWindowSnapshotForSession", () => {
           windowBounds: null,
         },
       },
-      chatHttp: {
-        documents: [baseDocument({ id: "doc-chat", filePath: "/tmp/chat.png" })],
-        session: {
-          editorLayout: createSinglePaneLayout([], "tab-chat"),
-          lastActiveWindowId: "main",
-          windowBounds: null,
-        },
-      },
       workspaces: [
         {
           id: "ws-1",
@@ -151,7 +143,6 @@ describe("stripWindowSnapshotForSession", () => {
       editorPreferences: { zoomPercent: 100, wrapLines: true },
     });
     expect(stripped.notepad.documents[0]?.content).toBe("");
-    expect(stripped.chatHttp?.documents[0]?.content).toBe("");
     expect(stripped.workspaces[0]?.snapshot.documents[0]?.contentKind).toBe("image");
   });
 

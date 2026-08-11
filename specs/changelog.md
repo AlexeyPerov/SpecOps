@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-08-11 23:50 MSK — Phase A: remove standalone Chat and dormant Cloud surfaces
+
+**Breaking reset of AI state** (pre-release; no migration per repository policy):
+the standalone HTTP Chat (beta) context and the reserved Cloud context are gone.
+Old `provider-secrets.json` HTTP-connection keys and any `chat/` thread files
+carrying HTTP provider/mode/connection metadata are ignored on load.
+
+- Removed the `chat-http` and `chat-cloud` activity-rail contexts, their
+  `WindowContextState` snapshots, restore/snapshot/sanitizer paths, and the Dev
+  "Enable Chat (beta)" gate. The activity rail is now `[Notepad] | [Workspace …]`.
+- Removed the entire HTTP provider system: provider registry/types/bootstrap,
+  the `http` / `debug-chat` / `debug-workspace` providers, OpenAI-compatible +
+  SSE adapters, HTTP connection settings, model catalogs, capability checker,
+  connection/rail gating, and the `ai/providers/` module tree.
+- Removed the chat-modes product (ask/review/raw system prompts, settings, and
+  picker) and `ChatThreadMetadata.mode` / `provider` / `connectionId`; assistant
+  system-event markers (`provider-switched` / `model-switched`) and
+  `message.systemEvent`.
+- Simplified the send pipeline to a single workspace path
+  (`chatSendPipeline` / `sendChatMessage` / `retryChatTurn`); `chatContextKind`
+  and the chat-http composer routing are gone.
+- Removed HTTP/API-key settings (`providerSettings`, `providerModelCatalogs`,
+  `providerApiKeys`, `chatHttp`, `chatModes`) from `AppSettingsState`,
+  `settingsStore`, and the settings UI (Providers / Chat modes / Debug Provider
+  Dev tabs). `providerSecretsStore` now stores only the OpenCode server password.
+- Preserved reusable workspace-session rendering (transcript primitives,
+  `ChatMessageList`, `ChatComposer`, `ToolCard`, reasoning/subtask/step/diff
+  parts) and the OpenCode backend path — these feed Phase B's runtime-neutral
+  session domain.
+- Implementation notes and the checked removal list live in
+  `specs/ops/01-foundation-agent-host/implementation-notes-phase-a.md`.
+
 ## 2026-08-11 22:35 MSK — Stop project-tree refresh/expand after drag-drop move
 
 - Dragging a file/folder to another folder in the project pane no longer makes

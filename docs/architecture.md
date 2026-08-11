@@ -11,7 +11,7 @@ SpecOps is a desktop workspace app for specs, notes, and project files. The UI i
 | `app/src/lib/domain/` | Shared types and pure helpers (`contracts.ts` barrel over `document.ts`, `workspace.ts`, `settings.ts`, `chat.ts`, `commands.ts`, `persistence.ts`) |
 | `app/src/lib/state/` | Writable stores and domain orchestration (`appState`, `chatStore`) |
 | `app/src/lib/services/` | I/O, persistence, platform, file watching, session |
-| `app/src/lib/ai/` | Chat providers, modes, send pipeline, OpenCode workspace backend |
+| `app/src/lib/ai/` | Workspace session send pipeline, OpenCode backend, transcript stream-part reducers |
 | `app/src/lib/git/` | Version Control (system `git` via Tauri) — independent of OpenCode |
 | `app/src/lib/editor/` | Editor helpers (e.g. minimap extension) |
 | `app/src/lib/components/` | UI components (including `Git*` panels) |
@@ -36,7 +36,7 @@ When a file grows past those limits, split along existing domain boundaries and 
 | --- | --- |
 | Settings UI | One panel per file under `components/settings/` |
 | App shell | `AppShell.svelte`, `appShellEffects.ts`, handler modules under `services/` |
-| State slices | `*Slice.ts` per concern (`documentTabsSlice`, `documentContentSlice`, `providerSettingsSlice`, …) |
+| State slices | `*Slice.ts` per concern (`documentTabsSlice`, `documentContentSlice`, `logSettingsSlice`, …) |
 | `chatStore` | `threadMessages.ts`, `threadMetadata.ts`, `threadProviderSelection.ts`, `agents.ts` |
 | Commands | `definitions.ts` + `handlers/{app,file,workspace,edit,view}.ts`; `registry.ts` dispatches only |
 | Services | Codecs/paths/policy in sibling modules (`chatPersistenceCodec.ts`, `sessionSnapshotCodec.ts`, `externalFileReloadPolicy.ts`, …) |
@@ -54,8 +54,8 @@ flowchart TB
     State[appState / chatStore]
   end
   subgraph ai [AI layer]
-    Send[sendChatMessage]
-    Providers[Provider registry]
+    Send[sendChatMessage / chatSendPipeline]
+    Backend[workspaceAgentBackend]
   end
   subgraph io [Services]
     FS[fileSystem / Tauri FS]
@@ -70,7 +70,7 @@ flowchart TB
   Page --> Components
   Components --> State
   State --> Send
-  Send --> Providers
+  Send --> Backend
   State --> io
   io --> native
 ```
@@ -100,11 +100,10 @@ File open/save flows go through `appState` and services (`fileSystem`, `openFile
 ### Workspace sessions (workspace-scoped)
 
 - One **session** per conversation; many sessions per workspace. (OpenCode **agent** = persona/config only — see [opencode-integration.md](./opencode-integration.md).)
-- **`chatStore`** holds in-memory threads keyed by workspace root path (phase-1 baseline; context-id scoping is planned for later phases).
+- **`chatStore`** holds in-memory threads keyed by workspace root path.
 - Threads persist under the app data dir (see [Persistence](#persistence)).
-- Modes: **`ask`** and **`review`** (system prompts in `app/src/lib/ai/modes/builtins.ts`).
 
-HTTP Chat (beta) provider integration is documented in [beta/chat-http-providers.md](./beta/chat-http-providers.md). Workspace sessions use OpenCode — see [opencode-integration.md](./opencode-integration.md).
+Workspace sessions use the OpenCode backend — see [opencode-integration.md](./opencode-integration.md). The standalone HTTP Chat (beta) context is removed.
 
 ## State layer
 
@@ -113,10 +112,10 @@ HTTP Chat (beta) provider integration is documented in [beta/chat-http-providers
 Single source of truth for:
 
 - Active context, documents, tabs, editor chrome (zoom, wrap, find/replace)
-- **`AppSettingsState`** (including HTTP provider settings and in-memory API key)
+- **`AppSettingsState`** (editor, external files, OpenCode, git integration, logs, fonts, sound, notifications)
 - Theme (builtin + custom), recent files
 
-Mutations are methods on the exported store object (e.g. `openDocument`, `setProviderApiKey`, workspace close with dirty prompts).
+Mutations are methods on the exported store object (e.g. `openDocument`, workspace close with dirty prompts).
 
 Implementation is split into colocated modules under `app/src/lib/state/appState/`:
 
@@ -126,40 +125,37 @@ Implementation is split into colocated modules under `app/src/lib/state/appState
 | `documentHelpers.ts` | Build/normalize document helpers |
 | `tabHelpers.ts` | Tab reorder and bulk-close helpers |
 | `themeController.ts` | Theme persistence, DOM application, custom-theme transforms, system color-scheme (`prefers-color-scheme`) subscription for auto mode |
-| `settingsSlice.ts` | Settings composer; composes `providerSettingsSlice`, `chatModesSettingsSlice`, `logSettingsSlice` |
+| `settingsSlice.ts` | Settings composer; composes the log/font/notification/snippet slices |
 | `documentTabsSlice.ts` | Tab lifecycle; composes `documentContentSlice`, `tabTransferSlice` |
 | `workspaceContextsSlice.ts` | Context switch, workspace open/close, session restore/snapshot |
 
 ### `chatStore` (`app/src/lib/state/chatStore.ts`)
 
-Workspace-scoped chat:
+Workspace-scoped sessions:
 
-- Agent index, per-agent `ChatThreadSnapshot`, runtime (generating, last error)
-- Access preflight (`runAccessPreflight`) — for Chat context: provider capabilities; for Workspace context: OpenCode backend readiness + workspace path readability
-- Provider/model switches append **`ChatSystemEvent`** messages to the thread
+- Session index, per-session `ChatThreadSnapshot`, runtime (generating, last error)
+- Access preflight (`runAccessPreflight`) — OpenCode backend readiness + workspace path readability
+- The standalone HTTP Chat context and its provider/model switching are removed; only workspace (OpenCode) sessions remain. Phase B replaces this store with a runtime-neutral session domain.
 
 Implementation is split into colocated modules under `app/src/lib/state/chatStore/`:
 
 | Module | Role |
 | --- | --- |
-| `agents.ts` | Agent index, drafts, titles, agent CRUD helpers |
-| `threads.ts` | Slice composer; delegates to `threadMessages.ts`, `threadMetadata.ts`, `threadProviderSelection.ts` |
+| `sessions.ts` | Session index, drafts, titles, CRUD, hydration |
+| `threads.ts` | Slice composer; delegates to `threadMessages.ts`, `threadMetadata.ts` |
 | `runtime.ts` | Generation state, placeholders, retry, cancel |
-| `access.ts` | Preflight, access loss messages, capability checker wiring |
+| `access.ts` | Preflight, access loss messages, workspace readiness wiring |
 | `workspace.ts` | Per-root workspace state patch helpers |
 | `threadHelpers.ts`, `types.ts` | Shared thread types and pure helpers |
-
-Chat providers are registered at startup via `initializeChatProviders()` in `app/src/lib/ai/providers/bootstrap.ts` (called from `+page.svelte` after settings and provider API key load).
 
 ## Send pipeline (high level)
 
 1. UI calls `sendChatMessage` / `retryLastChatTurn` (`app/src/lib/ai/sendChatMessage.ts`).
-2. **Chat context:** validates provider (debug enabled, HTTP configured), model catalog, access preflight. **Workspace context:** validates OpenCode backend readiness and model availability via OpenCode catalog.
-3. Appends user message; begins turn; builds **`ProviderRequestPayload`** via `buildThreadProviderRequest`.
-4. **`streamProviderMessage`** (`chatSend.ts`) — uses `streamMessage` when available (Debug + HTTP SSE), else buffered `sendMessage`.
-5. Updates assistant placeholder; compacts thread if needed; debounced persist.
+2. Validates OpenCode is enabled, workspace read access, and model availability via the OpenCode catalog.
+3. Appends the user message; begins the turn; ensures the OpenCode session link.
+4. Streams `workspaceAgentBackend` events into the assistant placeholder (deltas, reasoning, subtasks, steps, tool calls, permissions, questions); compacts and persists when complete.
 
-Shared prompt shape is defined in `app/src/lib/ai/providers/types.ts` so Debug and HTTP stay aligned.
+The HTTP provider path (registry, connections, model catalogs, SSE) was removed in Phase A; runtime adapters arrive in Phase C behind the Agent Host.
 
 ## Commands and menus
 
@@ -176,11 +172,11 @@ All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`)
 
 | File / area | Contents |
 | --- | --- |
-| `settings.json` | Editor, external files, `providerSettings` (HTTP + Debug), `providerModelCatalogs` (not API keys) |
-| `provider-secrets.json` | Provider API keys keyed by `ChatProviderId` (`providerSecretsStore.ts`: `loadProviderApiKey` / `saveProviderApiKey`) |
+| `settings.json` | Editor, external files, OpenCode, git-integration, log/font/sound/notification settings |
+| `provider-secrets.json` | OpenCode server password only (`providerSecretsStore.ts`: `loadOpencodeServerPassword` / `saveOpencodeServerPassword`). HTTP provider API keys were removed in Phase A. |
 | `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
 | `theme.json` | Theme mode (`auto`/`manual`) plus separate dark/light theme refs (used by `auto`), a single `manualTheme` ref (pinned by `manual`), and custom themes (v2 schema). `auto` follows the OS `prefers-color-scheme` media query, switching between the dark and light theme. Legacy v1 files (single `activeTheme`) and the pre-theme.json `settings.json` `theme` value are defensively re-seeded into the matching dark/light slot on load (not migrated). Read-only preset catalog (daylerees imports) ships in-app, not on disk |
-| `chat/{hash}/` | Per-workspace session index (`index.json`, `sessions` envelope) and per-session thread JSON (`{sessionId}.json`). M16 renamed the on-disk envelope key from `agents` → `sessions` and the in-memory id from `agentId` → `sessionId`; pre-M16 `chat/{hash}/` folders are abandoned (no migration — pre-release). |
+| `chat/{hash}/` | Per-workspace session index (`index.json`, `sessions` envelope) and per-session thread JSON (`{sessionId}.json`). |
 
 Session and chat writes are debounced. The project **does not** add backward-compatible migrations for persisted data unless explicitly requested (see agent rules below).
 
@@ -211,22 +207,14 @@ Tab ids and sidebar labels live in **`SETTINGS_TABS`** / `buildSettingsSidebar` 
 High-level layout:
 
 - Top-level: **Editor**, **Shortcuts**, **Appearance**, **Version Control**
-- **Dev** — **Enable Chat (beta)** master toggle and **Logs**; **Providers**, **Chat modes**, and **Debug Provider** tabs appear in this section only when `chatHttp.enabled`
-- **Workspaces** — **OpenCode**, **Config**, **Providers**, **MCP servers**, **Agents**, **Permissions**, **Commands**, **Instructions**, and **Debug Provider**
-
-`openSettingsDialog(tab)` resolves the requested tab against the chat-http beta gate — gated tabs redirect to `dev` when the beta is off.
-
-The two **Providers** tabs are distinct: **Settings → Dev → Providers** manages
-HTTP connections for Chat beta, while **Settings → Workspaces → Providers**
-manages OpenCode providers for the active workspace.
+- **Dev** — **Enable workspace sessions (OpenCode)** master toggle and **Logs**
+- **Workspaces** — **OpenCode**, **Config**, **Providers**, **MCP servers**, **Agents**, **Permissions**, **Commands**, **Instructions** (visible only when the OpenCode toggle is on)
 
 #### Settings and context glossary
 
 | Internal id | User-visible term | Location |
 | --- | --- | --- |
-| `chat-http` | Chat (beta) context | Enable at **Settings → Dev → Enable Chat (beta)** |
 | `ws-*` | Workspace context id pattern | Workspace sessions use **Settings → Workspaces → OpenCode** |
-| `connections` | Providers (HTTP) tab | **Settings → Dev → Providers** |
 | `providers` | Providers (OpenCode) tab | **Settings → Workspaces → Providers** |
 | `agents` | Agents (personas/config) tab | **Settings → Workspaces → Agents** |
 
@@ -239,8 +227,8 @@ Chat panel subcomponents:
 | Component | Role |
 | --- | --- |
 | `ChatMessageList.svelte` | Message rendering, review sections, system events, compaction notice |
-| `ChatComposer.svelte` | Draft input, send/retry, provider/mode/model selectors |
-| `ChatBlockedState.svelte` | Access blocked and provider config alarm UI |
+| `ChatComposer.svelte` | Draft input, send/retry, OpenCode agent/provider/model selectors, mentions, slash commands |
+| `ChatBlockedState.svelte` | Workspace access blocked UI |
 
 Tab bar: `TabBarContextMenu.svelte`, `tabDragController.ts` (reorder / tear-off).
 
@@ -272,33 +260,27 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 | New persisted field | `contracts.ts` → normalize in store/service → tests |
 | New menu action | `AppCommandId` + `registry.ts` + handler in `+page.svelte` or `appState` |
 | Workspace session / OpenCode | `workspaceAgentBackend.ts`, `chatStore`, `opencodeSidecar.ts` |
-| Chat (beta) HTTP behavior | `sendChatMessage.ts`, `chatStore.ts`, provider adapter under `ai/providers/` |
-| New HTTP LLM provider (beta) | Implement `ChatProvider`, register in `bootstrap.ts`, settings UI, catalog in `providerModelCatalog.ts` |
 | Version Control / git | `app/src/lib/git/`, `Git*` components; keep **zero** OpenCode coupling |
 | File on disk | `services/fileSystem.ts` or Tauri FS; keep paths normalized via `diskFingerprint` / workspace paths helpers |
 
 ### Patterns to preserve
 
 1. **Domain types in `contracts.ts`** — Avoid duplicating shapes in components.
-2. **Provider-agnostic prompts (Chat beta)** — Build `ProviderRequestPayload` once; adapters map to vendor APIs (see `openAiChatMessages.ts`).
-3. **Secrets separate from settings** — API keys go in `provider-secrets.json`, not `settings.json` or chat thread files.
-4. **User-facing errors** — Throw `ChatProviderError` with `userMessage` in providers; map HTTP/status in one place per provider.
-5. **Svelte 5** — Shell components (`+page.svelte`, `TabBar`, `EditorSurface`) use runes; match that style in new `.svelte` work. Load Svelte skills/MCP when editing `.svelte` files.
-6. **Minimal Rust** — Prefer TypeScript unless OS integration requires native code (file watcher, git subprocess, open-with).
-7. **Git ↔ OpenCode isolation** — Version Control must not depend on the OpenCode sidecar or workspace-agent backend.
+2. **Secrets separate from settings** — The OpenCode server password lives in `provider-secrets.json`, never in `settings.json` or thread files. (Runtime API keys arrive with the Agent Host in later phases.)
+3. **Svelte 5** — Shell components (`+page.svelte`, `TabBar`, `EditorSurface`) use runes; match that style in new `.svelte` work. Load Svelte skills/MCP when editing `.svelte` files.
+4. **Minimal Rust** — Prefer TypeScript unless OS integration requires native code (file watcher, git subprocess, open-with).
+5. **Git ↔ OpenCode isolation** — Version Control must not depend on the OpenCode sidecar or workspace-agent backend.
 
 ### Avoid
 
 - Attaching editor selection or console logs to AI context unless a planned feature explicitly requires it.
-- Implementing a `cursor` provider without a full plan (id may exist in types/catalog for future work).
-- Enabling HTTP streaming in the UI without implementing provider `streamMessage` and SSE parsing end-to-end.
 - Coupling Version Control UI or git commands to OpenCode health / `file.status`.
+- Reintroducing vendor SDK types or HTTP provider code into the WebView — runtime adapters live behind the Agent Host (phases 02–05).
 
 ### Related docs
 
 - [README.md](./README.md) — docs index (users vs contributors)
 - [opencode-integration.md](./opencode-integration.md) — workspace sessions / OpenCode
-- [beta/chat-http-providers.md](./beta/chat-http-providers.md) — HTTP Chat (beta) providers
 - [../README.md](../README.md) — product scope and dev commands
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
 - [`../specs/text-editor-parity-v3/README.md`](../specs/text-editor-parity-v3/README.md) — current public editor roadmap

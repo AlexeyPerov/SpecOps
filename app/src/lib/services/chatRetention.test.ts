@@ -36,27 +36,11 @@ function systemNotice(id: string): ChatMessage {
   };
 }
 
-function providerSwitchEvent(id: string): ChatMessage {
-  return {
-    id: `evt-${id}`,
-    role: "system",
-    content: "provider changed",
-    createdAt: `2026-05-26T00:03:${id.padStart(2, "0")}.000Z`,
-    systemEvent: {
-      type: "provider-switched",
-      fromProvider: "http",
-      toProvider: "debug-workspace",
-    },
-  };
-}
-
 function threadWithMessages(messages: ChatMessage[]): ChatThreadSnapshot {
   return {
     metadata: {
       sessionId: "agent-test",
       threadId: "agent-test",
-      mode: "ask",
-      provider: "http",
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:00.000Z",
       summary: "existing summary",
@@ -127,12 +111,12 @@ describe("chat FIFO compaction", () => {
     expect(result.thread.metadata.updatedAt).toBe("2026-05-26T12:00:00.000Z");
   });
 
-  it("drops plain system notices with oldest content but keeps provider system events", () => {
+  it("drops all system notices and removes user/assistant turns oldest-first", () => {
     const messages = [
       systemNotice("1"),
       userMessage("1"),
       assistantMessage("1"),
-      providerSwitchEvent("1"),
+      systemNotice("2"),
       userMessage("2"),
       userMessage("3"),
     ];
@@ -143,10 +127,12 @@ describe("chat FIFO compaction", () => {
       "s-1",
       "u-1",
       "a-1",
+      "s-2",
       "u-2",
     ]);
-    expect(result.messages.map((message) => message.id)).toEqual(["evt-1", "u-3"]);
-    expect(isProtectedCompactionMessage(providerSwitchEvent("1"))).toBe(true);
+    expect(result.messages.map((message) => message.id)).toEqual(["u-3"]);
+    // No system notice is protected anymore — provider/model-switch events are gone.
+    expect(isProtectedCompactionMessage(systemNotice("1"))).toBe(false);
   });
 });
 

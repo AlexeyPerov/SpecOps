@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSettingsSidebar,
-  CHAT_HTTP_GATED_TABS,
   OPENCODE_GATED_TABS,
   filterSettingsSidebar,
-  isChatHttpGatedTab,
   isOpencodeGatedTab,
   openSettingsDialog,
   registerSettingsDialogOpener,
@@ -28,8 +26,8 @@ afterEach(() => {
 });
 
 describe("settingsDialogUi", () => {
-  it("groups sidebar entries into top-level tabs and sectioned tabs (both betas off)", () => {
-    const sidebar = buildSettingsSidebar({ enabled: false }, OPENCODE_OFF);
+  it("groups sidebar entries into top-level tabs and sectioned tabs (opencode off)", () => {
+    const sidebar = buildSettingsSidebar(OPENCODE_OFF);
     const topLevelLabels = sidebar.filter((entry) => entry.kind === "tab").map(
       (entry) => entry.tab.label,
     );
@@ -47,8 +45,8 @@ describe("settingsDialogUi", () => {
   });
 
   it("exposes Workspaces section only when opencode.enabled is true", () => {
-    const onSidebar = buildSettingsSidebar({ enabled: false }, OPENCODE_ON);
-    const offSidebar = buildSettingsSidebar({ enabled: false }, OPENCODE_OFF);
+    const onSidebar = buildSettingsSidebar(OPENCODE_ON);
+    const offSidebar = buildSettingsSidebar(OPENCODE_OFF);
     const flatLabels = (sidebar: ReturnType<typeof buildSettingsSidebar>): string[] =>
       sidebar.flatMap((entry) =>
         entry.kind === "tab" ? [entry.tab.label] : entry.tabs.map((tab) => tab.label),
@@ -73,34 +71,6 @@ describe("settingsDialogUi", () => {
     );
   });
 
-  it("exposes chat-http subtabs only when chatHttp.enabled is true", () => {
-    const onSidebar = buildSettingsSidebar({ enabled: true }, OPENCODE_OFF);
-    const offSidebar = buildSettingsSidebar({ enabled: false }, OPENCODE_OFF);
-    const flatLabels = (sidebar: ReturnType<typeof buildSettingsSidebar>): string[] =>
-      sidebar.flatMap((entry) =>
-        entry.kind === "tab" ? [entry.tab.label] : entry.tabs.map((tab) => tab.label),
-      );
-
-    expect(flatLabels(onSidebar)).toEqual(
-      expect.arrayContaining(["Providers", "Chat modes", "Debug Provider"]),
-    );
-    expect(flatLabels(offSidebar)).not.toEqual(
-      expect.arrayContaining(["Providers", "Chat modes", "Debug Provider"]),
-    );
-    expect(flatLabels(offSidebar)).toEqual(expect.arrayContaining(["Dev", "Logs"]));
-  });
-
-  it("registers chat-http gated tabs by id", () => {
-    expect(isChatHttpGatedTab("connections")).toBe(true);
-    expect(isChatHttpGatedTab("chatModes")).toBe(true);
-    expect(isChatHttpGatedTab("debugAi")).toBe(true);
-    expect(CHAT_HTTP_GATED_TABS.map((tab) => tab.id)).toEqual([
-      "connections",
-      "chatModes",
-      "debugAi",
-    ]);
-  });
-
   it("registers opencode gated tabs by id", () => {
     expect(isOpencodeGatedTab("opencode")).toBe(true);
     expect(isOpencodeGatedTab("openCodeConfig")).toBe(true);
@@ -110,9 +80,6 @@ describe("settingsDialogUi", () => {
     expect(isOpencodeGatedTab("permissions")).toBe(true);
     expect(isOpencodeGatedTab("commands")).toBe(true);
     expect(isOpencodeGatedTab("instructions")).toBe(true);
-    expect(isOpencodeGatedTab("debugAgent")).toBe(true);
-    // Chat-http tabs are NOT opencode-gated.
-    expect(isOpencodeGatedTab("connections")).toBe(false);
     expect(OPENCODE_GATED_TABS.map((tab) => tab.id)).toEqual([
       "opencode",
       "openCodeConfig",
@@ -122,7 +89,6 @@ describe("settingsDialogUi", () => {
       "permissions",
       "commands",
       "instructions",
-      "debugAgent",
     ]);
   });
 
@@ -133,9 +99,6 @@ describe("settingsDialogUi", () => {
       "appearance",
       "versionControl",
       "dev",
-      "connections",
-      "chatModes",
-      "debugAi",
       "opencode",
       "openCodeConfig",
       "providers",
@@ -144,7 +107,6 @@ describe("settingsDialogUi", () => {
       "permissions",
       "commands",
       "instructions",
-      "debugAgent",
       "logs",
     ]);
   });
@@ -152,7 +114,7 @@ describe("settingsDialogUi", () => {
   it("no-ops when opener is null", () => {
     registerSettingsDialogOpener(null);
     expect(() => openSettingsDialog()).not.toThrow();
-    expect(() => openSettingsDialog("connections")).not.toThrow();
+    expect(() => openSettingsDialog("editor")).not.toThrow();
   });
 
   it("calls registered opener with default editor tab", () => {
@@ -162,34 +124,6 @@ describe("settingsDialogUi", () => {
     openSettingsDialog();
 
     expect(opener).toHaveBeenCalledWith("editor");
-  });
-
-  it("redirects chat-http gated tabs to dev when chat-http beta is off", () => {
-    const opener = vi.fn();
-    registerSettingsDialogOpener(opener);
-    appState.setChatHttpEnabled(false);
-
-    openSettingsDialog("connections");
-    openSettingsDialog("chatModes");
-    openSettingsDialog("debugAi");
-
-    expect(opener).toHaveBeenNthCalledWith(1, "dev");
-    expect(opener).toHaveBeenNthCalledWith(2, "dev");
-    expect(opener).toHaveBeenNthCalledWith(3, "dev");
-  });
-
-  it("passes chat-http gated tabs through when chat-http beta is enabled", () => {
-    const opener = vi.fn();
-    registerSettingsDialogOpener(opener);
-    appState.setChatHttpEnabled(true);
-
-    openSettingsDialog("connections");
-    openSettingsDialog("chatModes");
-    openSettingsDialog("debugAi");
-
-    expect(opener).toHaveBeenNthCalledWith(1, "connections");
-    expect(opener).toHaveBeenNthCalledWith(2, "chatModes");
-    expect(opener).toHaveBeenNthCalledWith(3, "debugAi");
   });
 
   it("redirects opencode gated tabs to dev when opencode beta is off", () => {
@@ -224,7 +158,6 @@ describe("settingsDialogUi", () => {
     const opener = vi.fn();
     registerSettingsDialogOpener(opener);
 
-    appState.setChatHttpEnabled(false);
     appState.setOpencodeEnabled(false);
     openSettingsDialog("editor");
     expect(opener).toHaveBeenLastCalledWith("editor");
@@ -241,94 +174,60 @@ describe("settingsDialogUi", () => {
     const second = vi.fn();
     registerSettingsDialogOpener(first);
     registerSettingsDialogOpener(second);
-    appState.setChatHttpEnabled(true);
+    appState.setOpencodeEnabled(true);
 
-    openSettingsDialog("connections");
+    openSettingsDialog("opencode");
 
     expect(first).not.toHaveBeenCalled();
-    expect(second).toHaveBeenCalledWith("connections");
-  });
-
-  it("redirects chat-http gated tabs to Dev when the beta is disabled", () => {
-    expect(resolveOpenSettingsDialogTab("connections", { enabled: false }, OPENCODE_ON)).toBe(
-      "dev",
-    );
-    expect(resolveOpenSettingsDialogTab("chatModes", { enabled: false }, OPENCODE_ON)).toBe("dev");
-    expect(resolveOpenSettingsDialogTab("debugAi", { enabled: false }, OPENCODE_ON)).toBe("dev");
-  });
-
-  it("passes through chat-http gated tabs when the beta is enabled", () => {
-    expect(resolveOpenSettingsDialogTab("connections", { enabled: true }, OPENCODE_ON)).toBe(
-      "connections",
-    );
-    expect(resolveOpenSettingsDialogTab("chatModes", { enabled: true }, OPENCODE_ON)).toBe(
-      "chatModes",
-    );
-    expect(resolveOpenSettingsDialogTab("debugAi", { enabled: true }, OPENCODE_ON)).toBe("debugAi");
+    expect(second).toHaveBeenCalledWith("opencode");
   });
 
   it("redirects opencode gated tabs to Dev when the beta is disabled", () => {
-    expect(resolveOpenSettingsDialogTab("opencode", { enabled: true }, OPENCODE_OFF)).toBe("dev");
-    expect(resolveOpenSettingsDialogTab("agents", { enabled: true }, OPENCODE_OFF)).toBe("dev");
-    expect(resolveOpenSettingsDialogTab("mcp", { enabled: true }, OPENCODE_OFF)).toBe("dev");
-    expect(resolveOpenSettingsDialogTab("debugAgent", { enabled: true }, OPENCODE_OFF)).toBe("dev");
+    expect(resolveOpenSettingsDialogTab("opencode", OPENCODE_OFF)).toBe("dev");
+    expect(resolveOpenSettingsDialogTab("agents", OPENCODE_OFF)).toBe("dev");
+    expect(resolveOpenSettingsDialogTab("mcp", OPENCODE_OFF)).toBe("dev");
   });
 
   it("passes through opencode gated tabs when the beta is enabled", () => {
-    expect(resolveOpenSettingsDialogTab("opencode", { enabled: false }, OPENCODE_ON)).toBe(
-      "opencode",
-    );
-    expect(resolveOpenSettingsDialogTab("agents", { enabled: false }, OPENCODE_ON)).toBe("agents");
-    expect(resolveOpenSettingsDialogTab("mcp", { enabled: false }, OPENCODE_ON)).toBe("mcp");
+    expect(resolveOpenSettingsDialogTab("opencode", OPENCODE_ON)).toBe("opencode");
+    expect(resolveOpenSettingsDialogTab("agents", OPENCODE_ON)).toBe("agents");
+    expect(resolveOpenSettingsDialogTab("mcp", OPENCODE_ON)).toBe("mcp");
   });
 
-  it("passes through genuinely non-gated tabs regardless of either beta state", () => {
-    expect(resolveOpenSettingsDialogTab("editor", { enabled: false }, OPENCODE_OFF)).toBe("editor");
-    expect(resolveOpenSettingsDialogTab("logs", { enabled: true }, OPENCODE_ON)).toBe("logs");
-    expect(resolveOpenSettingsDialogTab("versionControl", { enabled: false }, OPENCODE_OFF)).toBe(
-      "versionControl",
-    );
+  it("passes through genuinely non-gated tabs regardless of beta state", () => {
+    expect(resolveOpenSettingsDialogTab("editor", OPENCODE_OFF)).toBe("editor");
+    expect(resolveOpenSettingsDialogTab("logs", OPENCODE_ON)).toBe("logs");
+    expect(resolveOpenSettingsDialogTab("versionControl", OPENCODE_OFF)).toBe("versionControl");
   });
 
-  it("treats missing settings as the default (both betas disabled)", () => {
-    expect(resolveOpenSettingsDialogTab("connections", null, null)).toBe("dev");
-    expect(resolveOpenSettingsDialogTab("connections", undefined, undefined)).toBe("dev");
-    expect(resolveOpenSettingsDialogTab("opencode", null, null)).toBe("dev");
-    expect(resolveOpenSettingsDialogTab("opencode", undefined, undefined)).toBe("dev");
+  it("treats missing settings as the default (opencode disabled)", () => {
+    expect(resolveOpenSettingsDialogTab("opencode", null)).toBe("dev");
+    expect(resolveOpenSettingsDialogTab("opencode", undefined)).toBe("dev");
   });
 
   it("filterSettingsSidebar returns all entries for an empty query", () => {
-    const sidebar = buildSettingsSidebar({ enabled: true }, OPENCODE_ON);
+    const sidebar = buildSettingsSidebar(OPENCODE_ON);
     expect(filterSettingsSidebar(sidebar, "")).toEqual(sidebar);
     expect(filterSettingsSidebar(sidebar, "   ")).toEqual(sidebar);
   });
 
   it("filterSettingsSidebar matches tab labels case-insensitively and keeps section headers", () => {
-    const sidebar = buildSettingsSidebar({ enabled: true }, OPENCODE_ON);
+    const sidebar = buildSettingsSidebar(OPENCODE_ON);
     const filtered = filterSettingsSidebar(sidebar, "prov");
 
     expect(filtered).toEqual([
       {
         kind: "section",
-        label: "Dev",
-        tabs: [
-          expect.objectContaining({ id: "connections", label: "Providers" }),
-          expect.objectContaining({ id: "debugAi", label: "Debug Provider" }),
-        ],
-      },
-      {
-        kind: "section",
         label: "Workspaces",
         tabs: [
           expect.objectContaining({ id: "providers", label: "Providers" }),
-          expect.objectContaining({ id: "debugAgent", label: "Debug Provider" }),
         ],
       },
     ]);
   });
 
   it("filterSettingsSidebar omits sections with no matching tabs", () => {
-    const sidebar = buildSettingsSidebar({ enabled: false }, OPENCODE_OFF);
+    const sidebar = buildSettingsSidebar(OPENCODE_OFF);
     const filtered = filterSettingsSidebar(sidebar, "shortcuts");
 
     expect(filtered).toEqual([

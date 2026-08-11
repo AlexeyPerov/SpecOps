@@ -1,5 +1,3 @@
-import type { ChatModeId, ChatProviderId } from "../domain/contracts";
-
 export type WorkspaceAccessStatus = "ready" | "blocked" | "unknown";
 
 export enum WorkspaceAccessReason {
@@ -11,7 +9,7 @@ export enum WorkspaceAccessReason {
 
 export interface ProviderCapabilities {
   canReadWorkspaceFiles: boolean;
-  supportedModes: ChatModeId[];
+  supportedModes: string[];
 }
 
 export interface CapabilityCheckResult {
@@ -23,8 +21,8 @@ export interface CapabilityCheckResult {
 }
 
 export interface CapabilityCheckInput {
-  provider: ChatProviderId;
-  mode: ChatModeId;
+  provider: string;
+  mode: string;
   workspaceRootPath: string | null;
   connectionId?: string;
 }

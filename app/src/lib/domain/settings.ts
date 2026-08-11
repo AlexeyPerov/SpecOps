@@ -1,5 +1,4 @@
 import type { ActiveThemeRef, CustomThemeRecord } from "../services/themeStore";
-import type { ChatModesSettings, ChatProviderId } from "./chat";
 import type { MarkdownSnippetSettings } from "./snippets";
 import type { CommandBindingOverrides } from "./commands";
 import type { MarkdownViewMode } from "./document";
@@ -14,58 +13,6 @@ export interface ExternalFilesSettings {
   /** Max size (bytes) for opening text-editor files without a confirmation step. */
   maxOpenWithoutConfirmBytes: number;
 }
-
-/** Shared toggle for provider-scoped settings blocks. */
-export interface ProviderSettingsBase {
-  enabled: boolean;
-}
-
-/** Settings-gated development provider; scoped by chat context. */
-export interface DebugProviderSettings extends ProviderSettingsBase {
-  simulationSeed: number | null;
-  delayMsMin: number;
-  delayMsMax: number;
-  chunkCharsMin: number;
-  chunkCharsMax: number;
-  failureProbability: number;
-  failureMessage: string;
-  includeDiagnostics: boolean;
-}
-
-/** OpenAI-compatible HTTP connection transport settings (API key stored separately). */
-export interface HttpConnectionSettings extends ProviderSettingsBase {
-  baseUrl: string;
-}
-
-/** Settings-managed model list and default model for one chat provider. */
-export interface ProviderModelCatalog {
-  modelIds: string[];
-  defaultModelId: string;
-}
-
-/** Provider-scoped model catalogs keyed by chat provider id. */
-export type ProviderModelCatalogs = Partial<Record<ChatProviderId, ProviderModelCatalog>>;
-
-/** One named OpenAI-compatible HTTP provider connection. */
-export interface HttpConnection extends HttpConnectionSettings {
-  id: string;
-  label: string;
-  modelCatalog: ProviderModelCatalog;
-}
-
-/** Per-provider settings types; extend this map when adding a configured provider. */
-export interface ProviderSettingsById {
-  httpConnections?: HttpConnection[];
-  /** Preferred HTTP connection id. Falls back to first configured connection when missing/stale. */
-  defaultConnectionId?: string;
-  debugChat: DebugProviderSettings;
-  debugWorkspace: DebugProviderSettings;
-  /** Legacy singleton HTTP settings kept during M4 migration. */
-  http: HttpConnectionSettings;
-}
-
-/** In-app and persisted bundle of provider-specific settings (excludes API keys). */
-export type AppProviderSettings = ProviderSettingsById;
 
 /**
  * Theme mode. `auto` follows the OS `prefers-color-scheme` media query and
@@ -123,9 +70,9 @@ export type OpencodeTransportMode = "sidecar" | "url";
  * runs, the Sessions sidebar is hidden in workspaces, the activity-rail per-
  * workspace session counts are hidden, and the Settings → Workspaces subtree
  * (OpenCode, Config, Providers, MCP servers, Agents, Permissions, Commands,
- * Instructions, Debug Provider) is removed from the sidebar. The toggle lives
- * in Settings → Dev next to Chat (beta). Open session tabs are closed when the
- * feature is switched off so no orphan tabs remain.
+ * Instructions) is removed from the sidebar. The toggle lives in Settings →
+ * Dev. Open session tabs are closed when the feature is switched off so no
+ * orphan tabs remain.
  */
 export interface OpencodeSettings {
   enabled: boolean;
@@ -139,17 +86,6 @@ export interface OpencodeSettings {
    * values normalize to {@link defaultOpencodeSettings.sidecarPort} (4096).
    */
   sidecarPort: number;
-}
-
-/**
- * Master toggle for the experimental `chat-http` context (phase-3.5 M13).
- *
- * Disabled by default. When false, the activity-rail Chat button is hidden
- * and the Settings → Dev gated tabs (Providers, Chat modes, Debug Provider)
- * are removed from the sidebar; persisted provider configuration is untouched.
- */
-export interface ChatHttpSettings {
-  enabled: boolean;
 }
 
 /**
@@ -276,16 +212,12 @@ export interface AppSettingsState {
    */
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
-  chatHttp: ChatHttpSettings;
   gitIntegration: GitIntegrationSettings;
   opencodeHealth: OpencodeHealthState;
   commandBindingOverrides: CommandBindingOverrides;
   logSettings: LogSettings;
-  chatModes: ChatModesSettings;
   /** Markdown snippet catalog preferences (M6). */
   markdownSnippets: MarkdownSnippetSettings;
-  providerSettings: AppProviderSettings;
-  providerModelCatalogs: ProviderModelCatalogs;
   fontSettings: FontSettings;
   soundSettings: SoundSettings;
   osNotificationSettings: OsNotificationSettings;
@@ -296,6 +228,4 @@ export interface AppSettingsState {
    * `node_modules`, etc.) stay hidden regardless. Mirrored to settings.json.
    */
   showHiddenFiles: boolean;
-  /** In-memory only; loaded from providerSecretsStore, never written to settings.json. */
-  providerApiKeys: Partial<Record<string, string>>;
 }

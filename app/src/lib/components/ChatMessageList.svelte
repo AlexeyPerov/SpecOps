@@ -1,14 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import {
-    formatModelSwitchNotice,
-    formatProviderSwitchNotice,
-  } from "../ai/providers/selection";
-  import {
-    parseStructuredMessageSections,
-    type StructuredMessageSection,
-  } from "../ai/chatReviewContent";
-  import {
     buildMessageRenderSlots,
     type MessageRenderSlot,
   } from "../ai/chatMessageLayout";
@@ -42,7 +34,6 @@
     isGenerating: boolean;
     /** Active session id, used to key the scroll-restore cache. */
     sessionId?: string | null;
-    activeModeRequiredSections?: readonly string[];
     compactionNotice?: string;
     emptyHint?: string;
     emptyActionLabel?: string;
@@ -62,7 +53,6 @@
     isEmpty,
     isGenerating,
     sessionId = null,
-    activeModeRequiredSections = [],
     compactionNotice = "",
     emptyHint = "Send a message to start.",
     emptyActionLabel,
@@ -148,43 +138,8 @@
    */
   let expandedReasoning = $state<Record<string, boolean>>({});
 
-  function isProviderSwitchMessage(message: ChatMessage): boolean {
-    return message.systemEvent?.type === "provider-switched";
-  }
-
-  function isModelSwitchMessage(message: ChatMessage): boolean {
-    return message.systemEvent?.type === "model-switched";
-  }
-
-  function isSystemEventMessage(message: ChatMessage): boolean {
-    return isProviderSwitchMessage(message) || isModelSwitchMessage(message);
-  }
-
-  function messageDisplayContent(message: ChatMessage): string {
-    if (message.systemEvent?.type === "provider-switched") {
-      return formatProviderSwitchNotice(message.systemEvent);
-    }
-    if (message.systemEvent?.type === "model-switched") {
-      return formatModelSwitchNotice(message.systemEvent);
-    }
-    return message.content;
-  }
-
-  function structuredSectionsForMessage(message: ChatMessage): StructuredMessageSection[] | null {
-    if (message.role !== "assistant" || activeModeRequiredSections.length === 0) {
-      return null;
-    }
-    return parseStructuredMessageSections(message.content, activeModeRequiredSections);
-  }
-
   function isStreamingAssistantMessage(message: ChatMessage, index: number): boolean {
     return isGenerating && message.role === "assistant" && index === messages.length - 1;
-  }
-
-  function shouldRenderStructuredSections(message: ChatMessage, index: number): boolean {
-    // Keep streaming output in plain text until generation completes to avoid
-    // section layout churn while partial markdown headings arrive.
-    return !isStreamingAssistantMessage(message, index) && Boolean(structuredSectionsForMessage(message));
   }
 
   /**
@@ -197,7 +152,7 @@
   function shouldRenderMarkdown(message: ChatMessage, index: number): boolean {
     if (message.role !== "assistant") return false;
     if (isStreamingAssistantMessage(message, index)) return false;
-    if (shouldRenderStructuredSections(message, index)) return false;
+    if (isStreamingAssistantMessage(message, index)) return false;
     return message.content.trim().length > 0;
   }
 
@@ -298,33 +253,6 @@
   }
 
   /**
-   * The key of the first `text` slot, used to anchor the structured-review
-   * sections block in place of the first text segment (so non-text parts keep
-   * their positions around it). Returns an empty string when there are no text
-   * slots, in which case the structured sections render via the content
-   * fallback path instead.
-   */
-  function firstTextSlotKey(message: ChatMessage): string {
-    for (const slot of slotsFor(message)) {
-      if (slot.kind === "text") {
-        return slot.key;
-      }
-    }
-    return "";
-  }
-
-  /**
-   * Whether a single text segment should render as markdown prose. Mirrors the
-   * whole-message decision: assistant non-streaming text that isn't part of a
-   * structured-review section renders as markdown. Applied per text slot so
-   * interleaved text segments each get markdown treatment once streaming ends.
-   */
-  function shouldRenderTextSlotAsMarkdown(message: ChatMessage, index: number): boolean {
-    return shouldRenderMarkdown(message, index);
-  }
-
-
-  /**
    * Whether the per-message action toolbar should render. Only for messages
    * that aren't mid-stream and only when at least one action is wired. The
    * toolbar is hidden entirely for chat-http / debug contexts (those pass
@@ -376,12 +304,6 @@
   }
 
   function messageRoleLabel(message: ChatMessage): string {
-    if (isProviderSwitchMessage(message)) {
-      return "Provider switch";
-    }
-    if (isModelSwitchMessage(message)) {
-      return "Model switch";
-    }
     if (message.role === "assistant") {
       return "Assistant";
     }
@@ -444,7 +366,6 @@
           {@const hasTextSlots = messageHasTextSlots(message)}
           <li
             class={`chat-message chat-message-${message.role}`}
-            class:chat-message-system-event={isSystemEventMessage(message)}
             class:chat-message-streaming={isStreamingAssistantMessage(message, index)}
             data-message-id={message.id}
           >
@@ -494,25 +415,7 @@
                       onToggle={() => toggleSubtask(slot.subtask.id)}
                     />
                   {:else if slot.kind === "text"}
-                    {#if shouldRenderStructuredSections(message, index)}
-                      <!--
-                        Structured-review sections are a whole-message override that
-                        parses `message.content` as a single document. Render them in
-                        place of the first text slot (the others render nothing) so
-                        non-text parts (reasoning before the review, etc.) keep their
-                        positions and the review prose lands where the text lives.
-                      -->
-                      {#if slot.key === firstTextSlotKey(message)}
-                        <div class="chat-review-sections">
-                          {#each structuredSectionsForMessage(message) ?? [] as section (section.heading)}
-                            <section class="chat-review-section">
-                              <h3 class="chat-review-section-heading">{section.heading}</h3>
-                              <p class="chat-review-section-body">{section.body}</p>
-                            </section>
-                          {/each}
-                        </div>
-                      {/if}
-                    {:else if shouldRenderTextSlotAsMarkdown(message, index)}
+                    {#if shouldRenderMarkdown(message, index)}
                       <div class="chat-message-content chat-message-content-prose">
                         <MarkdownRenderer source={slot.text} />
                       </div>
@@ -537,16 +440,7 @@
                 {/each}
               {/if}
               {#if !hasTextSlots}
-                {#if shouldRenderStructuredSections(message, index)}
-                  <div class="chat-review-sections">
-                    {#each structuredSectionsForMessage(message) ?? [] as section (section.heading)}
-                      <section class="chat-review-section">
-                        <h3 class="chat-review-section-heading">{section.heading}</h3>
-                        <p class="chat-review-section-body">{section.body}</p>
-                      </section>
-                    {/each}
-                  </div>
-                {:else if shouldRenderMarkdown(message, index)}
+                {#if shouldRenderMarkdown(message, index)}
                   <div class="chat-message-content chat-message-content-prose">
                     <MarkdownRenderer source={message.content} />
                   </div>
@@ -555,7 +449,7 @@
                     {#if message.role === "assistant" && message.content.length === 0 && isStreamingAssistantMessage(message, index)}
                       <span class="chat-streaming-placeholder">Generating…</span>
                     {:else}
-                      {messageDisplayContent(message)}
+                      {message.content}
                       {#if isStreamingAssistantMessage(message, index)}
                         <span class="chat-streaming-cursor" aria-hidden="true"></span>
                       {/if}

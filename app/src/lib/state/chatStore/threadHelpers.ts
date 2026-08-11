@@ -1,36 +1,7 @@
 import type {
-  AppProviderSettings,
-  ChatMessage,
-  ChatProviderId,
   ChatThreadMetadata,
   ChatThreadSnapshot,
-  ProviderModelCatalogs,
 } from "../../domain/contracts";
-import { CHAT_HTTP_CONTEXT_ID } from "../../domain/contracts";
-import { normalizeProviderModelCatalogs } from "../../ai/providers/providerModelCatalog";
-import { resolveHttpConnection } from "../../ai/providers/httpConnectionSettings";
-
-export const DEFAULT_CHAT_MODE = "ask" as const;
-const DEFAULT_CHAT_PROVIDER: ChatProviderId = "http";
-
-let defaultChatProviderResolver: () => ChatProviderId = () => DEFAULT_CHAT_PROVIDER;
-let defaultThreadConnectionResolver:
-  | ((provider: ChatProviderId) => string | undefined)
-  | null = null;
-
-export function setDefaultChatProviderResolver(resolver: () => ChatProviderId): void {
-  defaultChatProviderResolver = resolver;
-}
-
-export function getDefaultChatProvider(): ChatProviderId {
-  return defaultChatProviderResolver();
-}
-
-export function setDefaultThreadConnectionResolver(
-  resolver: ((provider: ChatProviderId) => string | undefined) | null,
-): void {
-  defaultThreadConnectionResolver = resolver;
-}
 
 export function cloneThread(thread: ChatThreadSnapshot | null): ChatThreadSnapshot | null {
   if (!thread) {
@@ -38,42 +9,24 @@ export function cloneThread(thread: ChatThreadSnapshot | null): ChatThreadSnapsh
   }
   return {
     metadata: { ...thread.metadata },
-    messages: thread.messages.map((message) => ({
-      ...message,
-      systemEvent: message.systemEvent ? { ...message.systemEvent } : undefined,
-    })),
+    messages: thread.messages.map((message) => ({ ...message })),
   };
 }
 
 /**
- * Creates metadata for a new thread. When `scopeKey` is a workspace root
- * (not `chat-http`), HTTP-oriented fields (`provider`, `connectionId`) are
- * omitted — workspace threads store OpenCode-only selection state.
+ * Creates metadata for a new workspace session thread. Workspace threads store
+ * OpenCode-only selection state (agent/provider/model); runtime binding is
+ * owned by the session domain (phase B).
  */
 export function createThreadMetadata(
   sessionId: string,
   createdAt: string,
-  scopeKey?: string | null,
 ): ChatThreadMetadata {
-  const isWorkspaceScope = scopeKey != null && scopeKey !== CHAT_HTTP_CONTEXT_ID;
-  if (isWorkspaceScope) {
-    return {
-      sessionId,
-      threadId: sessionId,
-      mode: DEFAULT_CHAT_MODE,
-      createdAt,
-      updatedAt: createdAt,
-    };
-  }
-  const provider = defaultChatProviderResolver();
   return {
     sessionId,
     threadId: sessionId,
-    mode: DEFAULT_CHAT_MODE,
-    provider,
     createdAt,
     updatedAt: createdAt,
-    connectionId: defaultThreadConnectionResolver?.(provider),
   };
 }
 
@@ -82,13 +35,7 @@ export function applyMetadataPatch(
   patch: Partial<
     Pick<
       ChatThreadMetadata,
-      | "mode"
-      | "provider"
-      | "summary"
-      | "selectedModelId"
-      | "connectionId"
-      | "opencodeAgentId"
-      | "opencodeProviderId"
+      "summary" | "selectedModelId" | "opencodeAgentId" | "opencodeProviderId"
     >
   >,
   updatedAt: string,
@@ -103,28 +50,4 @@ export function applyMetadataPatch(
 export function formatCompactionNotice(compactedMessageCount: number): string {
   const label = compactedMessageCount === 1 ? "message" : "messages";
   return `${compactedMessageCount} older ${label} compacted to stay within chat retention limits.`;
-}
-
-export function resolveDefaultConnectionForProvider(
-  provider: ChatProviderId,
-  providerSettings: AppProviderSettings,
-  providerApiKeys: Partial<Record<string, string>>,
-): string | undefined {
-  if (provider !== "http") {
-    return undefined;
-  }
-  return resolveHttpConnection(providerSettings, providerApiKeys)?.connection.id;
-}
-
-export function resolveModelForConnection(
-  providerCatalogs: ProviderModelCatalogs,
-  connectionCatalog: { defaultModelId: string; modelIds: string[] },
-): string {
-  // Keep thread-selected model aligned with selected connection catalog while preserving global defaults.
-  const normalized = normalizeProviderModelCatalogs(providerCatalogs);
-  const connectionDefault = connectionCatalog.defaultModelId.trim();
-  if (connectionDefault.length > 0 && connectionCatalog.modelIds.includes(connectionDefault)) {
-    return connectionDefault;
-  }
-  return normalized.http?.defaultModelId ?? "gpt-4o-mini";
 }

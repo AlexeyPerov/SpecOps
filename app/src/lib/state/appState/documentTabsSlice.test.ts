@@ -2,10 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { allTabs, createFileTab, createSessionTab, createSinglePaneLayout, getSessionSelectedTabId, getSessionTabs, isFileTab, isSessionTab, isViewTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
-import {
-  defaultProviderModelCatalogs,
-  getProviderDefaultModelId,
-} from "../../ai/providers/providerModelCatalog";
 
 vi.mock("../../services/themeStore", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/themeStore")>();

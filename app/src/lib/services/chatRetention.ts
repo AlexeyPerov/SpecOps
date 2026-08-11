@@ -26,14 +26,12 @@ export interface ChatCompactionResult {
 /**
  * Messages removed during FIFO compaction:
  * - user and assistant messages in the oldest turn(s)
- * - plain system messages (no `systemEvent`, e.g. access-loss notices)
+ * - plain system messages (e.g. access-loss notices)
  *
- * Protected during compaction:
- * - thread metadata (handled outside the messages array)
- * - system messages carrying `systemEvent` markers (e.g. provider-switched)
+ * Thread metadata is handled outside the messages array and is not affected.
  */
-export function isProtectedCompactionMessage(message: ChatMessage): boolean {
-  return message.role === "system" && message.systemEvent !== undefined;
+export function isProtectedCompactionMessage(_message: ChatMessage): boolean {
+  return false;
 }
 
 function isDroppableCompactionMessage(message: ChatMessage): boolean {

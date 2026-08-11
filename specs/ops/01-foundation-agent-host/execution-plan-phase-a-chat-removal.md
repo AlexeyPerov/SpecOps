@@ -1,7 +1,7 @@
 # 01 — Phase A: remove Chat and dormant Cloud surfaces
 
 **Date:** 2026-08-11  
-**Status:** Planned  
+**Status:** Done  
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
 **Goal:** Remove obsolete product lanes while preserving reusable Sessions rendering.
@@ -13,7 +13,7 @@ and persistence. Do not redesign the new session domain; Phase B owns it.
 
 ## Tasks
 
-### AS01-A-01 — Characterize removal surface
+### AS01-A-01 [DONE] — Characterize removal surface
 
 Inventory context ids, rail items, routes, settings, stores, codecs, commands,
 tests, and docs tied to `chat-http` or dormant Cloud behavior. Identify generic
@@ -22,7 +22,7 @@ message/tool/composer components that Sessions still needs.
 **Acceptance:** A checked removal list exists in the implementation notes;
 reusable components are explicitly separated from product-specific state.
 
-### AS01-A-02 — Remove product UI and routing
+### AS01-A-02 [DONE] — Remove product UI and routing
 
 Delete Chat/Cloud rail entries, pages, restore routing, beta gates, composer
 routing, and Chat-only modes. Remove dead imports and product-visible strings.
@@ -30,7 +30,7 @@ routing, and Chat-only modes. Remove dead imports and product-visible strings.
 **Acceptance:** No UI path can create or open these contexts; Notepad and
 workspace navigation continue to work.
 
-### AS01-A-03 — Remove settings, runtime and persisted fields
+### AS01-A-03 [DONE] — Remove settings, runtime and persisted fields
 
 Delete HTTP connection/provider settings, API-key fields, runtime code, store
 state, snapshots, and codecs used only by Chat/Cloud. Do not add migration or
@@ -39,7 +39,7 @@ compatibility branches.
 **Acceptance:** Fresh settings/session state contains no removed fields and old
 AI data is ignored or reset according to repository policy.
 
-### AS01-A-04 — Close tests and docs
+### AS01-A-04 [DONE] — Close tests and docs
 
 Delete obsolete tests; retain or rewrite characterization coverage for reused
 rendering. Update architecture, README, feature flags, and changelog.

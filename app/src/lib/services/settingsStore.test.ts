@@ -1,11 +1,6 @@
 /** Theme persistence and migration are covered in `themeStore.test.ts`. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readTextFile, remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
-import { defaultAppProviderSettings } from "../ai/providers/appProviderSettings";
-import {
-  defaultHttpConnection,
-  DEFAULT_HTTP_CONNECTION_ID,
-} from "../ai/providers/httpConnectionSettings";
 import {
   defaultExternalFilesSettings,
   defaultPersistedSettings,
@@ -14,8 +9,6 @@ import {
   toExternalFilesSettings,
   toPersistedSettings,
 } from "./settingsStore";
-import { defaultProviderModelCatalogs } from "../ai/providers/providerModelCatalog";
-import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
 import { defaultOpencodeSettings } from "./opencodeSettings";
 import { defaultLogSettings } from "./logSettings";
 import { defaultFontSettings } from "./fontSettings";
@@ -65,55 +58,9 @@ describe("settings mapping", () => {
       autoSuggest: false,
       restrictFilesToContext: false,
       opencode: defaultOpencodeSettings,
-      chatHttp: { enabled: false },
       gitIntegration: defaultPersistedSettings.gitIntegration,
       logSettings: { ...defaultLogSettings, verboseProviderLogging: false },
-      chatModes: defaultChatModesSettings,
       markdownSnippets: defaultPersistedSettings.markdownSnippets,
-      providerSettings: {
-        httpConnections: [
-          {
-            ...defaultHttpConnection,
-            id: DEFAULT_HTTP_CONNECTION_ID,
-            label: "HTTP",
-            enabled: true,
-            baseUrl: "https://example.test/v1",
-          },
-        ],
-        defaultConnectionId: DEFAULT_HTTP_CONNECTION_ID,
-        debugChat: {
-          enabled: true,
-          simulationSeed: 7,
-          delayMsMin: 100,
-          delayMsMax: 900,
-          chunkCharsMin: 4,
-          chunkCharsMax: 20,
-          failureProbability: 0.1,
-          failureMessage: "Test failure",
-          includeDiagnostics: false,
-        },
-        debugWorkspace: {
-          enabled: true,
-          simulationSeed: 7,
-          delayMsMin: 100,
-          delayMsMax: 900,
-          chunkCharsMin: 4,
-          chunkCharsMax: 20,
-          failureProbability: 0.1,
-          failureMessage: "Test failure",
-          includeDiagnostics: false,
-        },
-        http: {
-          enabled: true,
-          baseUrl: "https://example.test/v1",
-        },
-      },
-      providerModelCatalogs: {
-        http: {
-          modelIds: ["gpt-test"],
-          defaultModelId: "gpt-test",
-        },
-      },
       commandBindingOverrides: {},
       fontSettings: { ...defaultFontSettings },
       soundSettings: { ...defaultSoundSettings },
@@ -175,108 +122,6 @@ describe("loadPersistedSettings", () => {
 
     const result = await loadPersistedSettings();
     expect(result?.showHiddenFiles).toBe(false);
-  });
-
-  it("defaults missing provider settings", async () => {
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        wrapLines: true,
-        zoomPercent: 100,
-      }),
-    );
-
-    const result = await loadPersistedSettings();
-    expect(result?.providerSettings).toEqual(defaultAppProviderSettings);
-    expect(result?.providerModelCatalogs).toEqual(defaultProviderModelCatalogs);
-    expect(result?.opencode).toEqual(defaultOpencodeSettings);
-  });
-
-      it("retains default catalogs when provider catalogs are missing", async () => {
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        wrapLines: true,
-        zoomPercent: 100,
-        providerSettings: {
-          http: {
-            enabled: true,
-            baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-          },
-        },
-      }),
-    );
-
-    const result = await loadPersistedSettings();
-    expect(result?.providerModelCatalogs).toEqual(defaultProviderModelCatalogs);
-    expect(result?.providerSettings.http.baseUrl).toBe("https://open.bigmodel.cn/api/paas/v4");
-    expect(result?.providerSettings.httpConnections?.[0]?.baseUrl).toBe(
-      "https://open.bigmodel.cn/api/paas/v4",
-    );
-  });
-
-  it("normalizes invalid provider model catalogs on load", async () => {
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        ...defaultPersistedSettings,
-        providerModelCatalogs: {
-          http: {
-            modelIds: ["", "gpt-custom", "gpt-custom"],
-            defaultModelId: "missing",
-          },
-        },
-      }),
-    );
-
-    const result = await loadPersistedSettings();
-    expect(result?.providerModelCatalogs?.http).toEqual({
-      modelIds: ["gpt-custom"],
-      defaultModelId: "gpt-custom",
-    });
-  });
-
-  it("normalizes invalid debug provider ranges on load", async () => {
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        ...defaultPersistedSettings,
-        providerSettings: {
-          http: defaultAppProviderSettings.http,
-          debug: {
-            enabled: true,
-            simulationSeed: null,
-            delayMsMin: 5000,
-            delayMsMax: 100,
-            chunkCharsMin: 64,
-            chunkCharsMax: 8,
-            failureProbability: 3,
-            failureMessage: "Fail",
-            includeDiagnostics: true,
-          },
-        },
-      }),
-    );
-
-    const result = await loadPersistedSettings();
-    expect(result?.providerSettings.debugChat).toEqual({
-      enabled: true,
-      simulationSeed: null,
-      delayMsMin: 5000,
-      delayMsMax: 5000,
-      chunkCharsMin: 64,
-      chunkCharsMax: 64,
-      failureProbability: 1,
-      failureMessage: "Fail",
-      includeDiagnostics: true,
-    });
-    expect(result?.providerSettings.debugWorkspace).toEqual({
-      enabled: true,
-      simulationSeed: null,
-      delayMsMin: 5000,
-      delayMsMax: 5000,
-      chunkCharsMin: 64,
-      chunkCharsMax: 64,
-      failureProbability: 1,
-      failureMessage: "Fail",
-      includeDiagnostics: true,
-    });
   });
 
   it("ignores legacy theme field without failing load", async () => {
@@ -473,60 +318,6 @@ describe("commandBindingOverrides persistence", () => {
  * M6-T2/T4/T5 — appearance settings (font sizes, sound, OS notifications)
  * survive the settings.json round-trip.
  */
-/**
- * M13-T1 — chat-http master toggle is opt-in only (defaults to `false`) and
- * ignores legacy settings.json files that predate the field.
- */
-describe("chatHttp master toggle persistence", () => {
-  it("defaults chatHttp.enabled to false on a fresh install", async () => {
-    readTextFileMock.mockResolvedValue(JSON.stringify(defaultPersistedSettings));
-    const result = await loadPersistedSettings();
-    expect(result?.chatHttp).toEqual({ enabled: false });
-  });
-
-  it("normalizes legacy settings.json without chatHttp to enabled=false", async () => {
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        wrapLines: true,
-        zoomPercent: 100,
-      }),
-    );
-    const result = await loadPersistedSettings();
-    expect(result?.chatHttp).toEqual({ enabled: false });
-  });
-
-  it("preserves chatHttp.enabled=true when persisted", async () => {
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        ...defaultPersistedSettings,
-        chatHttp: { enabled: true },
-      }),
-    );
-    const result = await loadPersistedSettings();
-    expect(result?.chatHttp).toEqual({ enabled: true });
-  });
-
-  it("falls back to enabled=false when persisted chatHttp has a non-boolean value", async () => {
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        ...defaultPersistedSettings,
-        chatHttp: { enabled: "yes" },
-      }),
-    );
-    const result = await loadPersistedSettings();
-    expect(result?.chatHttp).toEqual({ enabled: false });
-  });
-
-  it("toPersistedSettings round-trips chatHttp", () => {
-    const persisted = toPersistedSettings({
-      ...defaultPersistedSettings,
-      externalFiles: toExternalFilesSettings(defaultPersistedSettings),
-      chatHttp: { enabled: true },
-    });
-    expect(persisted.chatHttp).toEqual({ enabled: true });
-  });
-});
-
 describe("appearance settings persistence", () => {
   it("round-trips font, sound, and OS notification settings", async () => {
     const custom = {

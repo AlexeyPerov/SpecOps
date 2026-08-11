@@ -352,7 +352,6 @@ export async function sanitizeWindowSnapshot(
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
   const notepad = await sanitizeContext(snapshot.notepad);
-  const chatHttp = await sanitizeContext(snapshot.chatHttp ?? snapshot.notepad);
   const workspaces = [];
   for (const workspace of snapshot.workspaces) {
     // A workspace whose root folder is gone used to be dropped here. But
@@ -373,7 +372,6 @@ export async function sanitizeWindowSnapshot(
   }
   const activeContextId =
     snapshot.activeContextId === "notepad" ||
-    snapshot.activeContextId === "chat-http" ||
     workspaces.some((workspace) => workspace.id === snapshot.activeContextId)
       ? snapshot.activeContextId
       : "notepad";
@@ -382,7 +380,6 @@ export async function sanitizeWindowSnapshot(
     ...snapshot,
     activeContextId,
     notepad,
-    chatHttp,
     workspaces,
   };
 }

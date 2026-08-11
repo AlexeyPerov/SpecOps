@@ -1,9 +1,7 @@
 import type {
   AppCommandId,
   AppDomainState,
-  AppProviderSettings,
   AppSettingsState,
-  ChatHttpSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
   FontSettings,
@@ -13,22 +11,12 @@ import type {
   OpencodeHealthState,
   OpencodeSettings,
   OsNotificationSettings,
-  ProviderModelCatalogs,
   SoundSettings,
 } from "../../domain/contracts";
-import {
-  defaultAppProviderSettings,
-  normalizeAppProviderSettings,
-} from "../../ai/providers/appProviderSettings";
-import { defaultChatModesSettings, normalizeChatModesSettings } from "../../ai/modes/chatModesSettings";
 import {
   defaultMarkdownSnippetSettings,
   normalizeMarkdownSnippetSettings,
 } from "../../editor/markdownSnippetSettings";
-import {
-  defaultProviderModelCatalogs,
-  normalizeProviderModelCatalogs,
-} from "../../ai/providers/providerModelCatalog";
 import {
   normalizeCommandBindingOverrides,
 } from "../../commands/commandBindings";
@@ -46,17 +34,11 @@ import {
   normalizeOsNotificationSettings,
   normalizeSoundSettings,
 } from "../../services/notificationSettings";
-import { createChatModesSettingsSlice } from "./chatModesSettingsSlice";
 import { createFontSettingsSlice } from "./fontSettingsSlice";
 import { createLogSettingsSlice, type SettingsUpdate } from "./logSettingsSlice";
 import { createNotificationSettingsSlice } from "./notificationSettingsSlice";
-import { createProviderSettingsSlice } from "./providerSettingsSlice";
 import { createSnippetSettingsSlice } from "./snippetSettingsSlice";
 import { defaultOpencodeSettings, normalizeOpencodeSettings } from "../../services/opencodeSettings";
-import {
-  defaultChatHttpSettings,
-  normalizeChatHttpSettings,
-} from "../../services/chatHttpSettings";
 import {
   defaultGitIntegrationSettings,
   isGitIntegrationEnabled,
@@ -95,7 +77,6 @@ export const defaultSettings: AppSettingsState = {
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
-  chatHttp: defaultChatHttpSettings,
   gitIntegration: defaultGitIntegrationSettings,
   opencodeHealth: {
     status: "unknown",
@@ -105,31 +86,15 @@ export const defaultSettings: AppSettingsState = {
   },
   commandBindingOverrides: {},
   logSettings: defaultLogSettings,
-  chatModes: defaultChatModesSettings,
   markdownSnippets: defaultMarkdownSnippetSettings,
-  providerSettings: defaultAppProviderSettings,
-  providerModelCatalogs: defaultProviderModelCatalogs,
   fontSettings: { ...defaultFontSettings },
   soundSettings: { ...defaultSoundSettings },
   osNotificationSettings: { ...defaultOsNotificationSettings },
   showHiddenFiles: true,
-  providerApiKeys: {},
 };
 
 function createGeneralSettingsSlice(update: SettingsUpdate) {
   return {
-    setChatHttpEnabled(enabled: boolean) {
-      update((state) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          chatHttp: normalizeChatHttpSettings({
-            ...state.settings.chatHttp,
-            enabled,
-          }),
-        },
-      }));
-    },
     setOpencodeEnabled(enabled: boolean) {
       // Toggling the master switch clears the sidecar circuit breaker so a
       // prior failure does not block re-enable.
@@ -293,14 +258,10 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       defaultMarkdownViewMode?: MarkdownViewMode;
       restrictFilesToContext?: boolean;
       opencode?: Partial<OpencodeSettings>;
-      chatHttp?: Partial<ChatHttpSettings>;
       gitIntegration?: Partial<GitIntegrationSettings>;
       opencodeHealth?: Partial<OpencodeHealthState>;
       logSettings?: Partial<LogSettings>;
-      chatModes?: Partial<AppSettingsState["chatModes"]>;
       markdownSnippets?: Partial<AppSettingsState["markdownSnippets"]>;
-      providerSettings?: Partial<AppProviderSettings>;
-      providerModelCatalogs?: ProviderModelCatalogs;
       commandBindingOverrides?: CommandBindingOverrides;
       fontSettings?: Partial<FontSettings>;
       soundSettings?: Partial<SoundSettings>;
@@ -407,18 +368,6 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             },
           };
         }
-        if (partial.chatHttp) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              chatHttp: normalizeChatHttpSettings({
-                ...next.settings.chatHttp,
-                ...partial.chatHttp,
-              }),
-            },
-          };
-        }
         if (partial.gitIntegration) {
           next = {
             ...next,
@@ -455,18 +404,6 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             },
           };
         }
-        if (partial.chatModes) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              chatModes: normalizeChatModesSettings({
-                ...next.settings.chatModes,
-                ...partial.chatModes,
-              }),
-            },
-          };
-        }
         if (partial.markdownSnippets) {
           next = {
             ...next,
@@ -476,31 +413,6 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
                 ...next.settings.markdownSnippets,
                 ...partial.markdownSnippets,
               }),
-            },
-          };
-        }
-        const providerModelCatalogs = partial.providerModelCatalogs
-          ? normalizeProviderModelCatalogs(partial.providerModelCatalogs)
-          : normalizeProviderModelCatalogs(next.settings.providerModelCatalogs);
-
-        if (partial.providerSettings) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              providerModelCatalogs,
-              providerSettings: normalizeAppProviderSettings({
-                ...next.settings.providerSettings,
-                ...partial.providerSettings,
-              }, providerModelCatalogs),
-            },
-          };
-        } else if (partial.providerModelCatalogs) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              providerModelCatalogs,
             },
           };
         }
@@ -577,8 +489,6 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
 export function createSettingsSlice(update: SettingsUpdate) {
   return {
     ...createGeneralSettingsSlice(update),
-    ...createProviderSettingsSlice(update),
-    ...createChatModesSettingsSlice(update),
     ...createSnippetSettingsSlice(update),
     ...createLogSettingsSlice(update),
     ...createFontSettingsSlice(update),

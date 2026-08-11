@@ -53,7 +53,6 @@
     /** Editor context id — namespaces the editor host/session cache and the
      * keyed context host that owns this pane. */
     contextId,
-    isChatHttpActive = false,
     /** Active workspace root path, used by the workspace-settings view tab. */
     workspaceRootPath = null,
     /** Window-session workspaces, used by the workspace-manager view tab. */
@@ -112,7 +111,6 @@
     session: SessionState;
     documents: DocumentState[];
     contextId: ContextId;
-    isChatHttpActive: boolean;
     workspaceRootPath?: string | null;
     workspaceManagerWorkspaces?: WorkspaceEntry[];
     workspaceManagerActiveContextId?: ContextId;
@@ -543,9 +541,8 @@
     />
   {:else if isVersionControlViewActive}
     <VersionControlView workspaceRootPath={workspaceRootPath} {windowId} {notify} />
-  {:else if isChatHttpActive || isSessionTabActive}
+  {:else if isSessionTabActive}
     <ChatPanel
-      chatContextKind={isChatHttpActive ? "chat-http" : "workspace"}
       onDeleteSession={onDeleteSessionFromChat}
       {onForkSession}
       {onRevertSession}
@@ -636,7 +633,7 @@
           </div>
         {/each}
       </div>
-      {#if isActivePane && outlineOpen && documentView.isMarkdownDocument && !isSessionTabActive && !isChatHttpActive}
+      {#if isActivePane && outlineOpen && documentView.isMarkdownDocument && !isSessionTabActive}
         <MarkdownOutlinePanel
           getHost={getActiveEditorHost}
           documentId={paneDocument?.id ?? null}
@@ -657,7 +654,7 @@
     </div>
   {/if}
 
-  {#if isActivePane && documentView.isTextEditorDocument && !isSessionTabActive && !isChatHttpActive && findReplaceOpen}
+  {#if isActivePane && documentView.isTextEditorDocument && !isSessionTabActive && findReplaceOpen}
     <FindReplacePanel
       bind:findQuery={
         () => toolSnapshot.find.query,
@@ -687,7 +684,7 @@
     />
   {/if}
 
-  {#if isActivePane && documentView.isTextEditorDocument && !isSessionTabActive && !isChatHttpActive && goToOpen}
+  {#if isActivePane && documentView.isTextEditorDocument && !isSessionTabActive && goToOpen}
     <GoToLinePanel
       bind:lineValue={
         () => toolSnapshot.goToLineValue,

@@ -1,18 +1,7 @@
 import { join } from "@tauri-apps/api/path";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
-import {
-  defaultAppProviderSettings,
-  normalizeAppProviderSettings,
-} from "../ai/providers/appProviderSettings";
-import {
-  defaultProviderModelCatalogs,
-  normalizeProviderModelCatalogs,
-} from "../ai/providers/providerModelCatalog";
 import type {
-  AppProviderSettings,
-  ChatHttpSettings,
-  ChatModesSettings,
   MarkdownSnippetSettings,
   CommandBindingOverrides,
   ExternalFilesSettings,
@@ -22,10 +11,8 @@ import type {
   MarkdownViewMode,
   OpencodeSettings,
   OsNotificationSettings,
-  ProviderModelCatalogs,
   SoundSettings,
 } from "../domain/contracts";
-import { normalizeChatModesSettings } from "../ai/modes/chatModesSettings";
 import { normalizeMarkdownSnippetSettings } from "../editor/markdownSnippetSettings";
 import { normalizeCommandBindingOverrides } from "../commands/commandBindings";
 import { ensureSpecOpsDataDir } from "./appDataDir";
@@ -38,16 +25,11 @@ import {
   normalizeMaxOpenWithoutConfirmBytes,
 } from "./largeFileOpen";
 import { defaultLogSettings, normalizeLogSettings } from "./logSettings";
-import { defaultChatModesSettings } from "../ai/modes/chatModesSettings";
 import { defaultMarkdownSnippetSettings } from "../editor/markdownSnippetSettings";
 import {
   defaultOpencodeSettings,
   normalizeOpencodeSettings,
 } from "./opencodeSettings";
-import {
-  defaultChatHttpSettings,
-  normalizeChatHttpSettings,
-} from "./chatHttpSettings";
 import {
   defaultGitIntegrationSettings,
   normalizeGitIntegrationSettings,
@@ -80,13 +62,9 @@ export interface PersistedSettings {
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
-  chatHttp: ChatHttpSettings;
   gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
-  chatModes: ChatModesSettings;
   markdownSnippets: MarkdownSnippetSettings;
-  providerSettings: AppProviderSettings;
-  providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
   fontSettings: FontSettings;
   soundSettings: SoundSettings;
@@ -117,13 +95,9 @@ export const defaultPersistedSettings: PersistedSettings = {
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   opencode: defaultOpencodeSettings,
-  chatHttp: defaultChatHttpSettings,
   gitIntegration: defaultGitIntegrationSettings,
   logSettings: defaultLogSettings,
-  chatModes: defaultChatModesSettings,
   markdownSnippets: defaultMarkdownSnippetSettings,
-  providerSettings: defaultAppProviderSettings,
-  providerModelCatalogs: defaultProviderModelCatalogs,
   commandBindingOverrides: {},
   fontSettings: { ...defaultFontSettings },
   soundSettings: { ...defaultSoundSettings },
@@ -195,11 +169,6 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
     // settings.json, losing every other setting the user had.
     if (isRecord(parsed)) {
       const externalFiles = parseExternalFilesSettings(parsed as Partial<PersistedSettings>);
-      const providerModelCatalogs = normalizeProviderModelCatalogs(parsed.providerModelCatalogs);
-      const providerSettings = normalizeAppProviderSettings(
-        isRecord(parsed.providerSettings) ? parsed.providerSettings : undefined,
-        providerModelCatalogs,
-      );
       return {
         wrapLines: isBoolean(parsed.wrapLines)
           ? parsed.wrapLines
@@ -230,13 +199,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
           ? parsed.restrictFilesToContext
           : defaultPersistedSettings.restrictFilesToContext,
         opencode: normalizeOpencodeSettings(parsed.opencode),
-        chatHttp: normalizeChatHttpSettings(parsed.chatHttp),
         gitIntegration: normalizeGitIntegrationSettings(parsed.gitIntegration),
         logSettings: normalizeLogSettings(parsed.logSettings),
-        chatModes: normalizeChatModesSettings(parsed.chatModes),
         markdownSnippets: normalizeMarkdownSnippetSettings(parsed.markdownSnippets),
-        providerSettings,
-        providerModelCatalogs,
         commandBindingOverrides: normalizeCommandBindingOverrides(
           parsed.commandBindingOverrides,
         ),
@@ -304,20 +269,15 @@ export function toPersistedSettings(input: {
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   opencode: OpencodeSettings;
-  chatHttp: ChatHttpSettings;
   gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
-  chatModes: ChatModesSettings;
   markdownSnippets: MarkdownSnippetSettings;
-  providerSettings: AppProviderSettings;
-  providerModelCatalogs: ProviderModelCatalogs;
   commandBindingOverrides: CommandBindingOverrides;
   fontSettings: FontSettings;
   soundSettings: SoundSettings;
   osNotificationSettings: OsNotificationSettings;
   showHiddenFiles: boolean;
 }): PersistedSettings {
-  const providerModelCatalogs = normalizeProviderModelCatalogs(input.providerModelCatalogs);
   return {
     wrapLines: input.wrapLines,
     zoomPercent: input.zoomPercent,
@@ -344,13 +304,9 @@ export function toPersistedSettings(input: {
       ? input.restrictFilesToContext
       : defaultPersistedSettings.restrictFilesToContext,
     opencode: normalizeOpencodeSettings(input.opencode),
-    chatHttp: normalizeChatHttpSettings(input.chatHttp),
     gitIntegration: normalizeGitIntegrationSettings(input.gitIntegration),
     logSettings: normalizeLogSettings(input.logSettings),
-    chatModes: normalizeChatModesSettings(input.chatModes),
     markdownSnippets: normalizeMarkdownSnippetSettings(input.markdownSnippets),
-    providerSettings: normalizeAppProviderSettings(input.providerSettings, providerModelCatalogs),
-    providerModelCatalogs,
     commandBindingOverrides: normalizeCommandBindingOverrides(input.commandBindingOverrides),
     fontSettings: normalizeFontSettings(input.fontSettings),
     soundSettings: normalizeSoundSettings(input.soundSettings),

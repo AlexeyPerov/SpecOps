@@ -29,7 +29,7 @@ without any provider-specific type or process leaking into common frontend code.
 
 | ID | Item | Current state |
 | --- | ---- | ------------- |
-| AS01-A | Remove Chat and dormant Cloud product/state | Legacy code present |
+| AS01-A | Remove Chat and dormant Cloud product/state | Done (Phase A) |
 | AS01-B | Runtime-neutral domain and persistence | Provider-shaped |
 | AS01-C | Adapter core, extensions, capabilities, fake runtime | Missing |
 | AS01-D | Bundled Agent Host and versioned protocol | Missing |

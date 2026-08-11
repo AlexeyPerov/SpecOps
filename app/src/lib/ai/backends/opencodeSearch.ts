@@ -8,7 +8,7 @@ import { logDiagnostic } from "../../services/logging";
 /**
  * `@` mention search for the composer (M3-T2).
  *
- * Scope (per [questions.md Q12](../../specs/ops/phase-3.5/questions.md)):
+ * Scope (per `specs/archive/ops-done/phase-3.5/questions.md` Q12):
  * files (via `fs.find`) + agents (from the already-loaded OpenCode catalog).
  * MCP resources and symbols are deferred.
  *

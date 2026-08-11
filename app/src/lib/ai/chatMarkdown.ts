@@ -11,7 +11,7 @@
  * rendered. Until then, code blocks render as escaped plain text with language
  * labels; MarkdownRenderer re-renders once the highlighter is ready.
  *
- * See `specs/ops/phase-3.5/execution-plan-m1.md` (M1-T10).
+ * See `specs/archive/ops-done/phase-3.5/execution-plan-m1.md` (M1-T10).
  */
 import { marked, type Tokens } from "marked";
 import DOMPurify, { type Config as DOMPurifyConfig } from "dompurify";

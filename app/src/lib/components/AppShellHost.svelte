@@ -58,6 +58,7 @@
   } from "../services/appShellPageHandlers";
   import { createAppShellLayoutHandlers } from "../services/appShellLayoutHandlers";
   import { createAppShellProjectTreeHandlers } from "../services/appShellProjectTreeHandlers";
+  import { markActiveFileTreeExpandApplied } from "../services/appShellEffects";
   import { createWorkspaceContextMenuActions } from "../services/workspaceContextMenuController";
   import { normalizeActivityRailWidthPx } from "../services/panelLayout";
 
@@ -306,6 +307,9 @@
     onBeforeProjectTreeRefresh: () => {
       workspaceDirectoryCache.clear();
     },
+    getActiveDocumentPath: () => documentView.activeDocumentPath,
+    suppressActiveFileTreeExpand: (workspaceRoot, documentPath) =>
+      markActiveFileTreeExpandApplied(workspaceRoot, documentPath),
   });
 
   const layoutHandlers = createAppShellLayoutHandlers({

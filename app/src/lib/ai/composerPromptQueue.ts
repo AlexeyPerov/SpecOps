@@ -2,7 +2,7 @@
  * Client-side queued-prompt manager (M3-T5).
  *
  * When a turn is already running, the composer offers two delivery modes
- * (per [questions.md Q11](../../specs/ops/phase-3.5/questions.md) and the
+ * (per `specs/archive/ops-done/phase-3.5/questions.md` Q11 and the
  * execution-plan-m3 M3-T5 description):
  *
  *   - **queue**: deliver the prompt after the running turn completes.

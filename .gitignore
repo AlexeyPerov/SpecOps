@@ -64,6 +64,15 @@ TODO.md
 !/specs/optimizations-plan.md
 !/specs/optimizations-baseline.json
 !/specs/optimizations-p7-validation.json
+!/specs/archive/
+/specs/archive/*
+!/specs/archive/changelog-pre-08-26.md
+!/specs/archive/ops-done/
+!/specs/archive/ops-done/**
+!/specs/archive/ops-postponed/
+!/specs/archive/ops-postponed/**
+!/specs/ops/
+!/specs/ops/**
 !/specs/git/
 !/specs/git/**
 !/specs/text-editor/

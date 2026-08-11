@@ -30,6 +30,18 @@ export interface AppShellProjectTreeHandlersDeps {
   onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;
   /** Clears shared directory cache before a full tree refresh. */
   onBeforeProjectTreeRefresh?: () => void;
+  /**
+   * Returns the currently active document's file path (if any). Used after a
+   * drag-drop move to detect that the active document was relocated and silence
+   * the auto-reveal-active-file tree expansion for its new path.
+   */
+  getActiveDocumentPath?: () => string | null;
+  /**
+   * Marks the given path as already revealed so the debounced
+   * reveal-active-file effect skips expanding the tree to it. Called after a
+   * move that relocated the active document.
+   */
+  suppressActiveFileTreeExpand?: (workspaceRoot: string, documentPath: string) => void;
 }
 
 export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandlersDeps) {
@@ -40,6 +52,8 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     notify,
     onFilesystemChange,
     onBeforeProjectTreeRefresh,
+    getActiveDocumentPath,
+    suppressActiveFileTreeExpand,
   } = deps;
 
   async function loadProjectTreeRoot(): Promise<void> {
@@ -153,6 +167,17 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     if (!result.ok) {
       notify(result.reason);
       return;
+    }
+    // The move rewrote the active document's path (via document relocation)
+    // when the dragged entry was the active file or a folder containing it.
+    // That path change would otherwise trigger the auto-reveal-active-file
+    // effect and expand folders down to the new location — desirable when
+    // opening a file, not when moving one. Seed the effect's dedup key with
+    // the (now-current) active path so its next, debounced run is a no-op.
+    // No-op when the active document wasn't relocated (the key already matches).
+    const activePathAfterMove = getActiveDocumentPath?.() ?? null;
+    if (suppressActiveFileTreeExpand && activePathAfterMove) {
+      suppressActiveFileTreeExpand(activeWorkspaceRoot, activePathAfterMove);
     }
     notify(`Moved to ${destDirPath}`);
     await afterProjectTreeMutation(sourcePath, result.path, destDirPath);

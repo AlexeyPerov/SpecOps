@@ -1,5 +1,9 @@
 # Phase 2 — Chat context (Open WebUI tier 1)
 
+> **Superseded.** This implemented legacy lane is scheduled for removal in
+> [Agent Sessions A0](../agent-sessions/execution-plan.md#a0-product-cleanup-and-agent-host-foundation).
+> It is retained only as implementation history.
+
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md)  
 **Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m4 multiple providers](./execution-plan-m4-multiple-providers.md) → [m5 custom modes](./execution-plan-m5-custom-modes.md) → [m6 refactoring](./execution-plan-m6-refactoring.md)  

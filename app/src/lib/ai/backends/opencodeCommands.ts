@@ -10,7 +10,7 @@ import { createReactiveResourceStore } from "../opencodeResourceStore";
  * and refreshed on workspace open. Pull-only — the composer reads a snapshot
  * on each popover open.
  *
- * Behaviour (per [questions.md Q11](../../specs/ops/phase-3.5/questions.md)):
+ * Behaviour (per `specs/archive/ops-done/phase-3.5/questions.md` Q11):
  * selecting a command inserts its `template` into the composer for editing —
  * nothing is executed server-side from here.
  *

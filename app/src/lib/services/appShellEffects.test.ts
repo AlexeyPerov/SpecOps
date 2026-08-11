@@ -6,6 +6,7 @@ vi.mock("./fileWatcher", () => ({
 
 import { syncProjectTreeWatcher } from "./fileWatcher";
 import {
+  markActiveFileTreeExpandApplied,
   resetAppShellEffectsForTests,
   syncActiveFileTreeExpandEffect,
   syncExternalFileWatcherEffect,
@@ -65,6 +66,27 @@ describe("syncActiveFileTreeExpandEffect", () => {
     syncActiveFileTreeExpandEffect(input);
     vi.advanceTimersByTime(75);
     expect(ensureExpandedForActiveFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips expansion when markActiveFileTreeExpandApplied seeds the dedup key", () => {
+    // After a drag-drop move, the move handler seeds the dedup key with the
+    // relocated active-document path so the debounced reveal-active-file
+    // expansion does not expand folders down to the file's new location.
+    const ensureExpandedForActiveFile = vi.fn(async () => {});
+    const input: SyncActiveFileTreeExpandEffectInput = {
+      activeDocumentPath: "/repo/moved/file.ts",
+      isChatHttpActive: false,
+      activeWorkspaceRoot: "/repo",
+      projectTreeController: {
+        ensureExpandedForActiveFile,
+      } as unknown as SyncActiveFileTreeExpandEffectInput["projectTreeController"],
+    };
+
+    markActiveFileTreeExpandApplied("/repo", "/repo/moved/file.ts");
+
+    syncActiveFileTreeExpandEffect(input);
+    vi.advanceTimersByTime(75);
+    expect(ensureExpandedForActiveFile).not.toHaveBeenCalled();
   });
 });
 

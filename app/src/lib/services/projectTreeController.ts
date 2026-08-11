@@ -86,6 +86,15 @@ export function expandedAncestorPathsForFile(
 }
 
 const FILESYSTEM_CHANGE_DEBOUNCE_MS = 400;
+/**
+ * Cooldown during which a directory just reloaded authoritatively (e.g. by the
+ * immediate post-mutation `reloadDirectories`) is treated as fresh and skipped
+ * by the debounced filesystem-change flush. The in-app mutation path and the OS
+ * file watcher both emit a change for the same renamed path; without this guard
+ * the watcher's ~400ms-later flush would reload dirs that were just reloaded,
+ * causing the project tree to visibly re-render a second time after a drag-drop.
+ */
+const RELOAD_FRESH_COOLDOWN_MS = 500;
 
 function parentDirectoryPath(path: string): string {
   const normalized = normalizePathForComparison(path);
@@ -193,7 +202,47 @@ export function createProjectTreeController(
   let rootLoadGeneration = 0;
   let filesystemChangeTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingFilesystemDirs = new Set<string>();
+  /**
+   * Normalized directory path → timestamp of its most recent authoritative
+   * reload. Used to suppress the debounced filesystem-change flush from
+   * re-reloading directories that were just refreshed by an in-app mutation
+   * (see {@link RELOAD_FRESH_COOLDOWN_MS}).
+   */
+  const recentlyReloadedDirs = new Map<string, number>();
   const maxCachedRoots = Math.max(1, deps.maxCachedRoots ?? 6);
+
+  const markDirsFresh = (dirs: readonly string[]): void => {
+    const now = Date.now();
+    for (const dir of dirs) {
+      recentlyReloadedDirs.set(dir, now);
+    }
+  };
+
+  /**
+   * Drops directories whose most recent authoritative reload is still within
+   * the freshness cooldown, so the debounced watcher flush does not undo (and
+   * re-render) work an in-app mutation just completed. Stale entries are pruned.
+   * Returns the directories that should still be reloaded.
+   */
+  const filterFreshDirs = (dirs: readonly string[]): string[] => {
+    const now = Date.now();
+    const stale: string[] = [];
+    for (const dir of dirs) {
+      const reloadedAt = recentlyReloadedDirs.get(dir);
+      if (reloadedAt !== undefined && now - reloadedAt < RELOAD_FRESH_COOLDOWN_MS) {
+        continue;
+      }
+      stale.push(dir);
+    }
+    if (recentlyReloadedDirs.size > 64) {
+      for (const [dir, reloadedAt] of recentlyReloadedDirs) {
+        if (now - reloadedAt >= RELOAD_FRESH_COOLDOWN_MS) {
+          recentlyReloadedDirs.delete(dir);
+        }
+      }
+    }
+    return stale;
+  };
   /**
    * Last reported sorted signature of `state.expandedPaths` for the loaded
    * workspace. Reset to `null` whenever the loaded root changes so each
@@ -284,6 +333,7 @@ export function createProjectTreeController(
     rootLoadGeneration += 1;
     state = createInitialState(state.showHidden);
     lastLoadedWorkspaceRoot = null;
+    recentlyReloadedDirs.clear();
     lastExpandedSignature = null;
     suppressNextExpandedPathsPublish = false;
     publish();
@@ -597,6 +647,10 @@ export function createProjectTreeController(
     }
     const normalizedRoot = normalizePathForComparison(workspaceRoot);
     const unique = [...new Set(directoryPaths.map((path) => normalizePathForComparison(path)))];
+    // Record these directories as freshly reloaded so the debounced
+    // filesystem-change flush (which fires ~400ms later for the same paths via
+    // both the in-app notify and the OS watcher) does not re-render them.
+    markDirsFresh(unique);
     if (unique.includes(normalizedRoot)) {
       // Capture the generation before the await so a workspace switch (or a
       // manual refresh) that lands while the root listing is in flight cannot
@@ -635,8 +689,11 @@ export function createProjectTreeController(
       pendingFilesystemDirs.clear();
       return;
     }
-    const dirs = [...pendingFilesystemDirs];
+    const dirs = filterFreshDirs([...pendingFilesystemDirs]);
     pendingFilesystemDirs.clear();
+    if (dirs.length === 0) {
+      return;
+    }
     await reloadDirectories(workspaceRoot, dirs);
   };
 

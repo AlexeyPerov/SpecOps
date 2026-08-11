@@ -556,4 +556,64 @@ describe("createProjectTreeController", () => {
     await controller.handleToggleProjectTreeDirectory("/repo", "/repo/src"); // collapse
     expect(reported).toEqual([{ root: "/repo", paths: [] }]);
   });
+
+  it("skips the debounced filesystem-change reload for dirs just reloaded", async () => {
+    // After an in-app move, the mutation path does an authoritative targeted
+    // reload and then emits a filesystem change; the OS watcher emits the same.
+    // Both schedule the 400ms debounced flush, which must NOT re-render dirs
+    // that were just reloaded (the "project tree refreshes itself" jank).
+    vi.useFakeTimers();
+    try {
+      const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
+        if (dir === "/repo") return [makeNode("src", "/repo/src", "directory")];
+        return [makeNode("file.ts", "/repo/src/file.ts", "file")];
+      });
+      const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+      await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+      await controller.handleToggleProjectTreeDirectory("/repo", "/repo/src");
+      await controller.reloadDirectories("/repo", ["/repo", "/repo/src"]);
+      loadDirectoryChildrenFn.mockClear();
+
+      controller.handleFilesystemChange("/repo", "/repo/src/file.ts");
+      await vi.advanceTimersByTimeAsync(400);
+
+      expect(loadDirectoryChildrenFn).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reloads dirs via the debounced flush once the freshness cooldown elapses", async () => {
+    vi.useFakeTimers();
+    try {
+      let version = 0;
+      const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
+        if (dir === "/repo") return [makeNode("src", "/repo/src", "directory")];
+        return [makeNode(`f${version}.ts`, `/repo/src/f${version}.ts`, "file")];
+      });
+      const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+      await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+      await controller.handleToggleProjectTreeDirectory("/repo", "/repo/src");
+      await controller.reloadDirectories("/repo", ["/repo", "/repo/src"]);
+      loadDirectoryChildrenFn.mockClear();
+
+      // Advance past the 500ms freshness cooldown so the dirs are no longer
+      // considered just-reloaded, then emit a fresh external change.
+      await vi.advanceTimersByTimeAsync(600);
+      version = 1;
+      controller.handleFilesystemChange("/repo", "/repo/src/file.ts");
+      await vi.advanceTimersByTimeAsync(400);
+
+      await vi.waitFor(() =>
+        expect(loadDirectoryChildrenFn).toHaveBeenCalledWith("/repo", "/repo/src", {
+          showHidden: true,
+        }),
+      );
+      expect(controller.getState().childrenByPath.get("/repo/src")?.[0]?.path).toBe(
+        "/repo/src/f1.ts",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

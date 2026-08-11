@@ -890,6 +890,22 @@ export function syncActiveFileTreeExpandEffect(input: SyncActiveFileTreeExpandEf
   }, ACTIVE_FILE_TREE_EXPAND_DEBOUNCE_MS);
 }
 
+/**
+ * Mark the given active document path as already "revealed" so the next run of
+ * {@link syncActiveFileTreeExpandEffect} (debounced 75 ms) treats it as applied
+ * and skips expanding the tree to that file. Used after an in-app file move
+ * (drag-drop): relocating the active document rewrites its path, which would
+ * otherwise trigger the auto-reveal and expand folders down to the new
+ * location — desirable when *opening* a file, not when *moving* one you
+ * already have open.
+ */
+export function markActiveFileTreeExpandApplied(
+  workspaceRoot: string,
+  documentPath: string,
+): void {
+  lastAppliedActiveFileExpandKey = `${workspaceRoot}::${documentPath}`;
+}
+
 export interface SyncWorkspaceContextEffectInput {
   activeContextId: ContextId;
   handleActiveContextSwitch: (contextId: ContextId) => void;

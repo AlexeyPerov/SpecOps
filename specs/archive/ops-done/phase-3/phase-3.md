@@ -1,5 +1,9 @@
 # Phase 3 — OpenCode workspace UI
 
+> **Historical implementation baseline.** OpenCode shipped through this phase,
+> but its future architecture is the per-session adapter migration in
+> [Agent Sessions A3](../agent-sessions/execution-plan.md#a3-opencode-migration-to-agent-host).
+
 **Parent:** [roadmap.md](../roadmap.md)  
 **Prerequisite:** [phase-1.md](../phase-1/phase-1.md) (`WorkspaceAgentBackend` stub); phases 2 and 4 may ship in parallel but not required  
 **Execution:** [execution-plan-m1.md](./execution-plan-m1.md) → [m1-5](./execution-plan-m1-5.md) → [m2](./execution-plan-m2.md) → [m3](./execution-plan-m3.md) → [m3-5](./execution-plan-m3-5.md) (post-MVP)  

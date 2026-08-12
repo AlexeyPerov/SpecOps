@@ -33,7 +33,7 @@ without any provider-specific type or process leaking into common frontend code.
 | AS01-B | Runtime-neutral domain and persistence | Done (Phase B) |
 | AS01-C | Adapter core, extensions, capabilities, fake runtime | Done (Phase C) |
 | AS01-D | Bundled Agent Host and versioned protocol | Done (Phase D) |
-| AS01-E | Tauri host/process supervision | Provider-specific |
+| AS01-E | Tauri host/process supervision | Done (Phase E) |
 | AS01-F | Unified Sessions UX and foundation exit | Partial legacy UI |
 
 ## Outcome

@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-08-12 10:45 MSK — Phase E: Tauri supervision and process-tree cleanup
+
+The Agent Host is now a resilient, observable, fully reaped application child.
+The WebView never spawns, connects to, or imports the host or any vendor runtime;
+every UI request flows through Tauri to the host JSON-RPC bridge, and every host
+notification is forwarded as a typed Tauri event.
+
+- **Reusable host supervisor (`app/src-tauri/src/agent_host.rs`):**
+  - Monotonic process generation: at most one generation owns requests; a stale
+    stdout reader cannot resolve a request or mark health on a replacement child.
+  - Bounded stdout/stderr drainers (per-line byte ceiling + line-count cap) so a
+    chatty/broken host cannot exhaust memory or block its pipes.
+  - Pending-request correlation over a sync condvar with per-request deadlines;
+    initialize has its own shorter window.
+  - Crash-loop breaker: after repeated starts within a window, restarts are
+    refused with a typed `CrashLoop` error.
+- **Bridge commands + events:** `agent_host_start`/`stop`/`restart`/`status`/
+  `request`; the generic `agent_host_request(method, params)` is the single pipe
+  the WebView uses. Notifications are forwarded on `specops/agent-host/event`.
+  Protocol errors arrive as typed `AgentHostError::Protocol`; transport failures
+  use the remaining typed variants.
+- **Shutdown + recovery policy:** cooperative `shutdown` request → stdin close →
+  bounded grace → process-group termination (negative-pgid `kill`) → SIGKILL →
+  reap, on every path (normal quit, explicit stop, host crash, hung shutdown).
+  The group is signalled even after a cooperative leader exit so grandchildren
+  the host left behind are reaped. Wired into app `run_shutdown_cleanup`.
+- **Supervision tests (13):** real-host lifecycle + clean shutdown; crash
+  recovery; ignored/hung shutdown force-killed within a bounded window (with a
+  noisy stderr stream); grandchild process-group reaping (no orphan remains on
+  supported platforms); stale-generation isolation; bounded-line reader.
+
 ## 2026-08-12 09:00 MSK — Phases C + D: adapter contract, fake runtime, and bundled Agent Host
 
 Foundation milestone 01 can now drive a deterministic fake runtime end to end

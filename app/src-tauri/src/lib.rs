@@ -1,3 +1,4 @@
+mod agent_host;
 mod file_watcher;
 mod git;
 mod git_askpass;
@@ -7,6 +8,7 @@ mod session_fs;
 #[cfg(target_os = "macos")]
 mod dock_menu;
 
+use agent_host::AgentHostState;
 use file_watcher::FileWatcherState;
 use opencode_sidecar::OpencodeSidecarState;
 use serde::Serialize;
@@ -56,6 +58,9 @@ fn take_pending_opened_paths() -> Vec<String> {
 
 /// Stop the sidecar and reap in-flight git children. Idempotent.
 fn run_shutdown_cleanup(app_handle: &tauri::AppHandle) {
+    if let Some(host_state) = app_handle.try_state::<AgentHostState>() {
+        host_state.stop_sync();
+    }
     if let Some(sidecar_state) = app_handle.try_state::<OpencodeSidecarState>() {
         sidecar_state.stop_sync();
     }
@@ -83,6 +88,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(FileWatcherState::new())
         .manage(OpencodeSidecarState::new())
+        .manage(AgentHostState::new())
         .setup(|app| {
             git_askpass::set_git_askpass_app_handle(app.handle().clone());
             if let Some(watcher_state) = app.try_state::<FileWatcherState>() {
@@ -116,6 +122,11 @@ pub fn run() {
             opencode_sidecar::opencode_sidecar_stop,
             opencode_sidecar::opencode_sidecar_restart,
             opencode_sidecar::opencode_sidecar_status,
+            agent_host::agent_host_start,
+            agent_host::agent_host_stop,
+            agent_host::agent_host_restart,
+            agent_host::agent_host_status,
+            agent_host::agent_host_request,
             #[cfg(target_os = "macos")]
             dock_menu::refresh_dock_menu,
         ])

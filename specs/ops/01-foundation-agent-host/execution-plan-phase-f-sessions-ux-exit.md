@@ -1,11 +1,57 @@
 # 01 — Phase F: Sessions UX integration and foundation exit
 
 **Date:** 2026-08-11  
-**Status:** Planned  
+**Status:** In progress — host-client foundation landed; legacy-type purge remains  
 **Prerequisites:** Phases A–E Done  
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
 **Goal:** Deliver the runtime-neutral Sessions vertical slice through the fake host.
+
+## Progress (2026-08-12)
+
+- **Phase E Done** — Tauri supervision + IPC bridge + process-tree cleanup
+  (`app/src-tauri/src/agent_host.rs`, commands `agent_host_*`, event
+  `specops/agent-host/event`, 13 supervision tests).
+- **Phase F host-client foundation landed** — `app/src/lib/session/host/`:
+  typed `AgentHostClient` over the Tauri commands + event stream (discover /
+  auth / catalogs / sessions / turns / replies / health), and a turn reducer
+  that folds runtime-neutral `SessionEvent`s into the existing
+  `ChatMessage` part/tool model. 10 unit tests.
+
+## Remaining (full legacy purge — the bulk of F)
+
+The existing workspace Sessions UI is deeply OpenCode-coupled. The host client
+is ready to drive it, but the common code still carries provider-prefixed state
+and constructs the OpenCode backend directly. Finishing F requires:
+
+- **F-01 — Normalize domain/store/codec:** drop the `opencode*` fields from
+  `SessionIndexEntry` / `ChatThreadMetadata` (`app/src/lib/domain/chat.ts`) onto
+  the neutral phase-B binding (`runtimeId` / `nativeSessionId` / `modelId` /
+  `shareUrl` / `parentSessionId`); rewire the `chatStore` link API
+  (`sessions.ts` `SessionLinkPatch` → neutral binding), the `threadHelpers` /
+  `threadMetadata` metadata picks, and the persistence codec
+  (`chatPersistenceCodec.ts`). Cascade: `+page.svelte`, `closeTabInPane.ts`,
+  `documentTabsSlice.ts`, `sessionSnapshotSanitizer.ts`, `SessionsSidebar`,
+  `ChatPanel`, `ChatComposer`, `workspaceAgentSession.ts`,
+  `workspaceAgentHydration.ts`.
+- **F-03 — Rewire the send pipeline** (`chatSendPipeline.ts`) to drive turns
+  through `createAgentHostClient().sendTurn` + `foldSessionEvent`, replacing the
+  `createWorkspaceAgentBackend("opencode", …)` + `streamEvents` construction.
+  Re-route the agent lifecycle handlers (`appShellAgentHandlers.ts`) —
+  reconcile/rename/fork/revert/share/summarize/export — to capability-gated
+  host actions (the fake runtime advertises `fork` only; revert/share/summarize
+  hide when unsupported).
+- **F-02 — Session creation flow:** runtime → model → mode via host discovery +
+  catalogs; immutable binding after creation; "New session with…" replaces
+  runtime switching; explanatory states for unavailable catalogs/capabilities.
+- **F-04 — Regression + docs gate:** Chat/Cloud absence guard (no `opencode*`
+  session field, no `@opencode-ai/sdk` import in common UI), neutral
+  persistence round-trip, E2E fake lifecycle through the host, non-AI suites
+  green, architecture docs, breaking changelog, milestone 01 → Done.
+
+The `WorkspaceAgentBackend` / OpenCode sidecar code is intentionally left
+intact as the phase-04 adapter candidate; the purge removes its use from
+**common** UI/state/pipeline only.
 
 ## Agent handoff boundary
 

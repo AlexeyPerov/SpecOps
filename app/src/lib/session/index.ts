@@ -10,12 +10,16 @@
 export type {
   AgentRuntimeId,
   AgentRuntimeDescriptor,
+  ProductRuntimeId,
 } from "./runtime";
 export {
   AGENT_RUNTIME_IDS,
+  PRODUCT_RUNTIME_IDS,
   isAgentRuntimeId,
+  isProductRuntimeId,
   agentRuntimeDescriptor,
   allAgentRuntimeDescriptors,
+  productRuntimeDescriptors,
 } from "./runtime";
 
 export {

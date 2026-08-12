@@ -211,7 +211,7 @@ export function applySessionEvent(transcript: SessionTranscript, event: SessionE
   if (!found) {
     return transcript;
   }
-  const { index, turn } = found;
+  const { index } = found;
 
   switch (event.type) {
     case "text.delta":

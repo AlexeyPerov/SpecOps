@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-08-12 09:00 MSK — Phases C + D: adapter contract, fake runtime, and bundled Agent Host
+
+Foundation milestone 01 can now drive a deterministic fake runtime end to end
+through a secret-safe local host. No vendor SDK type appears in any common
+payload; the WebView imports no host code.
+
+- **Phase C — adapter contract + deterministic fake runtime (`app/src/lib/session/adapter/`):**
+  - **Mandatory core (C-01):** `AgentRuntimeAdapter` (describe / authenticate /
+    createSession / resumeSession / send `AsyncIterable<SessionEvent>` / cancel /
+    health + optional describeCatalog) with typed `AdapterError` codes, and
+    documented terminal-state semantics: `turn.started` first, exactly one
+    terminal event, monotonic `seq`, idempotent `cancel()`.
+  - **Capabilities + extensions (C-02):** optional `Catalog`/`Permission`/
+    `Question`/`Lifecycle`/`Checkpoint`/`Share`/`Configuration`/`Mcp`/`Skills`/
+    `Commands`/`Todos`/`Diffs`/`Diagnostics` extension interfaces with type
+    guards and a capability→extension honesty map (`inferCapabilities`); runtime
+    settings extend the UI via configuration instead of widening the core.
+  - **Deterministic fake runtime (C-03):** declarative `FakeRuntimeConfig`
+    drives scripted create/resume/stream/cancel, tools, permission/question
+    gating, error injection, unknown/malformed → redacted diagnostic coercion,
+    hang/interruption, and restart behavior — no network, clock drift, or
+    vendor binary.
+  - **Shared contract suite (C-04):** `runAdapterContractSuite(factory)` asserts
+    the universal invariants (lifecycle order, monotonic seq, terminal
+    exclusivity, cancellation, restart, capability honesty); the fake passes and
+    phases 02–05 plug real adapters in unchanged. 27 adapter tests (12 contract
+    + 15 fake-specific).
+- **Phase D — bundled Agent Host (`app/host/`):**
+  - **Host package + build (D-01):** self-contained Node package; esbuild bundles
+    to a single `dist/index.js` with injected deterministic version metadata;
+    registers the fake adapter (dev prompts `ping` / `long-running`); reports
+    `protocolVersion:1`, `name:"specops.agent-host"`, `hostVersion:"0.1.0"`.
+  - **Versioned JSON-RPC protocol (D-02):** newline-delimited JSON-RPC 2.0;
+    initialize/version negotiation (incompatible versions fail at init), discover,
+    auth, catalogs, sessions, turns, replies, cancel, events, health, shutdown;
+    message limits, timeouts, and explicit protocol error codes.
+  - **Framing, dispatch, backpressure (D-03):** eager newline framing with
+    oversized/malformed rejection and high-water reset; correlation (one response
+    per request); turn streams as `session.event` notifications with ack-first
+    ordering and pull-based backpressure; cancellation forwards `turn.cancelled`;
+    mid-stream rejection synthesizes `turn.failed`; graceful shutdown cancels and
+    awaits every active turn. stderr is never parsed as protocol.
+  - **Redaction + golden fixtures (D-04):** recursive secret redaction on all
+    stderr/error output (secret canaries never cross the diagnostic boundary);
+    golden fixtures for valid/malformed/oversized/unknown/timed-out. 48 host
+    tests (protocol, framing, dispatch, redaction, real-stdio E2E).
+- **Domain notes:** the deterministic `fake` runtime id was added to
+  `AgentRuntimeId` as dev infrastructure; the four product runtimes stay
+  first-class via `PRODUCT_RUNTIME_IDS` / `productRuntimeDescriptors()`. Two
+  unused declarations surfaced by the host's stricter `noUnusedLocals` were
+  removed from the phase B session domain.
+- Implementation notes: `implementation-notes-phase-c.md`,
+  `implementation-notes-phase-d.md`. Phases C and D marked Done in their plan
+  docs and the milestone README.
+- Out of scope (later phases): Tauri process supervision + process-tree cleanup
+  (E), Sessions UI integration + foundation exit (F), real vendor adapters
+  (02–05). No persisted data is migrated.
+
 ## 2026-08-12 02:20 MSK — Phase B: runtime-neutral session domain and persistence
 
 - Added `app/src/lib/session/`, the runtime-neutral session domain that Phase C

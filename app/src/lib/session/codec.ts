@@ -18,7 +18,6 @@ import {
   asNativeSessionId,
   asSpecOpsSessionId,
   type NativeSessionId,
-  type SpecOpsSessionId,
 } from "./ids";
 import { isAgentRuntimeId } from "./runtime";
 import { normalizeCapabilities } from "./capabilities";

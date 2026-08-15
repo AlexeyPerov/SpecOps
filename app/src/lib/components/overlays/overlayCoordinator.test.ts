@@ -215,6 +215,14 @@ describe("createOverlayCoordinator.closeAllOnWorkspaceSwitch", () => {
     coordinator.closeAllOnWorkspaceSwitch();
     expect(state.projectSearchOpen).toBe(true);
   });
+
+  it("does not patch state when every picker is already closed", () => {
+    // Reactive callers re-run on unrelated state changes; an unconditional
+    // `false` write per call would turn each re-run into a state mutation.
+    const { patchLog, coordinator } = setup();
+    coordinator.closeAllOnWorkspaceSwitch();
+    expect(patchLog.length).toBe(0);
+  });
 });
 
 describe("createOverlayCoordinator.closeMarkdownOnlyPickers", () => {

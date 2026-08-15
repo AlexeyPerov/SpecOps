@@ -647,6 +647,7 @@
     collapsed: !showProjectPanel,
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
     onRefresh: projectTreeHandlers.refreshProjectTree,
+    onOpenSearch: () => overlayHost?.api.openOverlay("projectSearch"),
     onToggleHidden: projectTreeHandlers.toggleProjectTreeHidden,
     onToggleCollapsed: layoutHandlers.toggleProjectPanelCollapsed,
     onPanelWidthChange: layoutHandlers.handleProjectPanelWidthChange,

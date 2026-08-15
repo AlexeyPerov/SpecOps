@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-08-15 23:12 MSK — Fix Find-in-Project: results wiped/cancelled, picker insta-close, stuck Searching; add project-panel search button
+
+The workspace-switch effect in `+page.svelte` called
+`closeAllOnWorkspaceSwitch()` on **every** re-run, but it re-runs far more
+often than workspace switches: the `workspaces` array identity changes on
+every active-context snapshot update (every tab open/close/activate), and the
+`getState()` reads inside the close call made all ten overlay flags effect
+dependencies too. Consequences: in-flight and finished project-search results
+were cancelled/wiped moments after landing (search "never finds anything"),
+and freshly opened modal pickers (quick open etc.) closed themselves
+instantly.
+
+- **Root fix:** the close/cancel half now fires only when `activeWorkspaceRoot`
+  actually changed, and runs untracked so overlay-flag reads never widen the
+  effect's dependency set. `closeAllOnWorkspaceSwitch` also patches only
+  flags that are actually open.
+- **Search cancellation hardening:** the generation is bumped *before*
+  awaiting the file catalog (a close/switch during the wait now aborts instead
+  of leaking a full scan for a closed panel), and `waitForReady()` waiters are
+  released when a catalog is disposed (previously they hung forever with the
+  panel stuck at "Searching…" and the Search button disabled).
+- **Search observability:** the scan reports live progress ("Searching… N
+  files" every 200 files) and the status line now includes scanned/unreadable
+  file counts (`stat`/`readTextFile` failures are counted instead of silently
+  skipped), so "No results" is distinguishable from "read everything failed".
+- **Project panel:** new search (magnifier) button in the panel header that
+  opens Find-in-Project for the active workspace — same as Cmd+Shift+F.
+- Tests: overlay coordinator (no-op patch when nothing is open),
+  `runProjectSearch` (wait-window cancellation, count/progress status), and
+  `searchInProject` (scanned/unreadable counters).
+
 ## 2026-08-15 — Milestone 01 code review: findings recorded (review round 1)
 
 Full-milestone review of the phase A–F implementation (session domain, adapter

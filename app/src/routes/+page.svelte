@@ -802,6 +802,16 @@
     );
   });
 
+  // Last root the overlay-close half has run for. This effect re-runs far more
+  // often than actual workspace switches (the workspaces array identity changes
+  // on every active-context snapshot update — every tab open/close/activate —
+  // and getState() inside closeAllOnWorkspaceSwitch reads every overlay flag,
+  // which would make them dependencies too). Running the close/cancel half on
+  // every re-run wiped in-flight/finished project-search results and
+  // insta-closed freshly opened pickers, so it must fire on a real root change
+  // only, and untracked so the overlay-flag reads never widen this effect's
+  // dependency set.
+  let lastOverlayCloseRoot: string | null | undefined;
   $effect(() => {
     activeWorkspaceRoot;
     workspaces;
@@ -814,7 +824,12 @@
     // overlay host (closeAllOnWorkspaceSwitch). The catalog-retargeting half
     // stays here because it depends on the shared catalog/registry singletons
     // the page owns.
-    overlayHost?.api.closeAllOnWorkspaceSwitch();
+    if (lastOverlayCloseRoot !== activeWorkspaceRoot) {
+      lastOverlayCloseRoot = activeWorkspaceRoot;
+      untrack(() => {
+        overlayHost?.api.closeAllOnWorkspaceSwitch();
+      });
+    }
   });
 
   // M6.2/M7.1/M7.2 — close Markdown-only pickers when the active document is no

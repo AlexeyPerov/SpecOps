@@ -441,6 +441,10 @@ export function createWorkspaceFileCatalog(
       incrementalAdds = 0;
       incrementalRemoves = 0;
       debouncedRebuilds = 0;
+      // Notify pending waitForReady() waiters *before* dropping them — the
+      // listener callback observes `disposed` and resolves; clearing first
+      // would strand those promises (and any search awaiting them) forever.
+      emit();
       listeners.clear();
     },
 

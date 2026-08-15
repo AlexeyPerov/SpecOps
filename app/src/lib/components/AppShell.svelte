@@ -98,6 +98,8 @@
     collapsed: boolean;
     panelWidthPx: number;
     onRefresh: () => void | Promise<void>;
+    /** Opens the Find-in-Project panel scoped to the active workspace. */
+    onOpenSearch?: () => void;
     onToggleHidden: (next: boolean) => void | Promise<void>;
     onToggleCollapsed: (next: boolean) => void;
     onPanelWidthChange: (widthPx: number) => void;
@@ -732,6 +734,7 @@
         collapsed={projectTree.collapsed}
         panelWidthPx={projectTree.panelWidthPx}
         onRefresh={projectTree.onRefresh}
+        onOpenSearch={projectTree.onOpenSearch}
         onToggleHidden={projectTree.onToggleHidden}
         onToggleCollapsed={projectTree.onToggleCollapsed}
         onPanelWidthChange={projectTree.onPanelWidthChange}

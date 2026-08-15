@@ -193,4 +193,29 @@ describe("searchInProject (P03-08-30 concurrency)", () => {
     if (!outcome.ok) return;
     expect(outcome.results).toHaveLength(0);
   });
+
+  it("counts scanned and unreadable files (stat/read failures surface, not vanish)", async () => {
+    readTextFileMock.mockImplementation(async (path: string | URL) => {
+      if (String(path) === "/ws/b.ts") {
+        throw new Error("read failed");
+      }
+      return "foo\n";
+    });
+    statMock.mockImplementation(async (path: string | URL) => {
+      if (String(path) === "/ws/c.ts") {
+        throw new Error("gone");
+      }
+      return { size: 10, isFile: true, isDirectory: false } as never;
+    });
+
+    const outcome = await searchInProject("/ws", lit("foo"), {
+      files: ["/ws/a.ts", "/ws/b.ts", "/ws/c.ts"],
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.scannedFiles).toBe(1);
+    expect(outcome.unreadableFiles).toBe(2);
+    expect(outcome.results.map((r) => r.path)).toEqual(["/ws/a.ts"]);
+  });
 });

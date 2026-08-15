@@ -146,18 +146,22 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
    */
   function closeAllOnWorkspaceSwitch(): void {
     const s = deps.getState();
-    const patch: Partial<OverlayState> = {
-      quickOpenOpen: false,
-      commandPaletteOpen: false,
-      headingJumpOpen: false,
-      bookmarkListOpen: false,
-    };
+    // Only patch flags that are actually open: writing `false` unconditionally
+    // makes every call a potential state write, which reactive callers must not
+    // trigger unless a picker really closes.
+    const patch: Partial<OverlayState> = {};
+    if (s.quickOpenOpen) patch.quickOpenOpen = false;
+    if (s.commandPaletteOpen) patch.commandPaletteOpen = false;
+    if (s.headingJumpOpen) patch.headingJumpOpen = false;
+    if (s.bookmarkListOpen) patch.bookmarkListOpen = false;
     // snippetInsert also clears its captured host identity.
     if (s.snippetInsertOpen) {
       patch.snippetInsertOpen = false;
       deps.clearSnippetInsertHostIdentity?.();
     }
-    deps.patch(patch);
+    if (Object.keys(patch).length > 0) {
+      deps.patch(patch);
+    }
   }
 
   /**

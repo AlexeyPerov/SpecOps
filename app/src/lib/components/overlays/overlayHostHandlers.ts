@@ -153,15 +153,30 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     }
     deps.setProjectSearchRunning(true);
     deps.setProjectSearchStatus("Searching…");
+    // Invalidate any in-flight search — including during the catalog wait — so
+    // a newer search, panel close, or workspace switch always wins.
+    const generation = deps.bumpProjectSearchGeneration();
     const registry = deps.getWorkspaceFileCatalogRegistry();
     registry.ensureReady();
     await registry.waitForReady();
-    // Invalidate any in-flight search so stale results never land.
-    const generation = deps.bumpProjectSearchGeneration();
+    if (generation !== deps.getProjectSearchGeneration()) {
+      return;
+    }
+    // Live progress so a long scan over a big workspace shows liveness instead
+    // of a frozen "Searching…" (the per-file match work runs on the main
+    // thread). Counted inside onProgress, which fires once per file.
+    let scannedCount = 0;
+    const PROGRESS_EVERY_FILES = 200;
     try {
       const outcome = await searchInProject(root, query, {
         files: registry.getActive()?.getOpenablePaths() ?? undefined,
-        onProgress: () => generation === deps.getProjectSearchGeneration(),
+        onProgress: () => {
+          scannedCount += 1;
+          if (scannedCount % PROGRESS_EVERY_FILES === 0) {
+            deps.setProjectSearchStatus(`Searching… ${scannedCount} files`);
+          }
+          return generation === deps.getProjectSearchGeneration();
+        },
       });
       if (generation !== deps.getProjectSearchGeneration()) {
         return;
@@ -175,12 +190,14 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       deps.setProjectSearchResults(results);
       const files = results.length;
       const matches = totalMatchCount(results);
+      const unreadableSuffix =
+        outcome.unreadableFiles > 0 ? `, ${outcome.unreadableFiles} unreadable` : "";
       deps.setProjectSearchStatus(
         matches === 0
-          ? "No results"
+          ? `No results (${outcome.scannedFiles} files scanned${unreadableSuffix})`
           : `${matches} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}${
               outcome.truncated ? " (capped — refine the search to see all matches)" : ""
-            }`,
+            }${unreadableSuffix}`,
       );
     } catch (error: unknown) {
       if (generation === deps.getProjectSearchGeneration()) {

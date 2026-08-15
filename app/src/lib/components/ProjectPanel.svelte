@@ -14,6 +14,7 @@
   import { emptyMap, emptySet } from "../collections/emptyCollections";
   import { startPointerDrag } from "./pointerDrag";
   import RefreshIcon from "./icons/RefreshIcon.svelte";
+  import SearchIcon from "./icons/SearchIcon.svelte";
 
   interface Props {
     workspaceRoot: string;
@@ -28,6 +29,8 @@
     collapsed?: boolean;
     panelWidthPx?: number;
     onRefresh?: () => void;
+    /** Opens the Find-in-Project panel scoped to this workspace. */
+    onOpenSearch?: () => void;
     onToggleHidden?: (next: boolean) => void;
     onToggleCollapsed?: (next: boolean) => void;
     onPanelWidthChange?: (width: number) => void;
@@ -61,6 +64,7 @@
     collapsed = false,
     panelWidthPx = DEFAULT_PROJECT_PANEL_WIDTH_PX,
     onRefresh = () => {},
+    onOpenSearch = () => {},
     onToggleHidden = () => {},
     onToggleCollapsed = () => {},
     onPanelWidthChange = () => {},
@@ -208,6 +212,14 @@
   <header class="project-panel-header">
     {#if !collapsed}
       <div class="project-panel-title" title={workspaceRoot}>{basename(workspaceRoot)}</div>
+      <button
+        class="btn btn-sm btn-ghost"
+        type="button"
+        onclick={onOpenSearch}
+        title="Find in project (Cmd+Shift+F)"
+      >
+        <SearchIcon size={14} />
+      </button>
       <button class="btn btn-sm btn-ghost" type="button" onclick={onRefresh} title="Refresh tree">
         <RefreshIcon size={14} />
       </button>

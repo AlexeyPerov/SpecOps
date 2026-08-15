@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-15 — Milestone 01 code review: findings recorded (review round 1)
+
+Full-milestone review of the phase A–F implementation (session domain, adapter
+contract + fake runtime, Agent Host package, Tauri supervision, frontend
+Sessions integration) recorded in
+[`specs/ops/01-foundation-agent-host/review-issues-1.md`](ops/01-foundation-agent-host/review-issues-1.md).
+All targeted suites are green, but the review found 3 Critical and ~29 Major
+issues concentrated in shutdown/recovery paths, binding persistence, and the
+shared contract suite; several phase acceptance criteria are only partially met.
+The issue list includes a recommended fix ordering — a stabilization backlog
+that should land before/with phase 02, since the phase-02 exit gates depend
+directly on the affected paths. No code changed in this commit.
+
 ## 2026-08-15 10:05 MSK — Phase F: Sessions UX through the Agent Host; foundation milestone 01 complete
 
 Workspace Sessions is now fully runtime-neutral: the UI, state, and send
